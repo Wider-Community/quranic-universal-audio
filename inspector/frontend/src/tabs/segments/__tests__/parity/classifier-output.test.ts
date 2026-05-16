@@ -23,4 +23,14 @@ describe('classifier output parity', () => {
   it('_classifySegCategories is no longer exported', () => {
     expect(classifyMod).toBeNull();
   });
+
+  it('history issue deltas hide Basmala + Amin', () => {
+    const delta = classifiedIssues!.deriveOpIssueDelta([
+      {
+        targets_before: [{ segment_uid: 'u1', classified_issues: ['basmala_amin'] }],
+        targets_after: [{ segment_uid: 'u1', classified_issues: [] }],
+      },
+    ]);
+    expect(delta).toEqual({ resolved: [], introduced: [], involved: [] });
+  });
 });

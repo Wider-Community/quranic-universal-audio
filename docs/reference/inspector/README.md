@@ -32,6 +32,7 @@ When this doc and a planning doc disagree on **behavior**, this doc is the contr
 |---|---|
 | [`auth-flow.md`](auth-flow.md) | HF OAuth callback URL, signed cookie payload, role resolution at session bind |
 | [`claim-endpoints.md`](claim-endpoints.md) | `/api/claim`, `/api/release`, `/api/mark-ready`, `/api/unmark-ready` contracts |
+| [`roles.md`](roles.md) | Role tiers + predicates + where role gating is enforced (state handlers / `@require_role` / edit-lock / frontend); HF vs local-dev identity; admin endpoints by tier |
 
 ### Admin (Phase 4)
 
@@ -60,6 +61,8 @@ When this doc and a planning doc disagree on **behavior**, this doc is the contr
 | Doc | What it covers |
 |---|---|
 | [`runbook.md`](runbook.md) | Operational quick-reference (rotate token, force rebuild, reading audit, etc.) |
+| [`accordion-guides.md`](accordion-guides.md) | Frontend-authored validation accordion guide templates and example records |
+| [`audio-prefetch.md`](audio-prefetch.md) | Event-driven prefetch of in-review chapter audio + peaks to `wip/<slug>/`; sweeper, audit events, VBR Xing-TOC fix |
 
 ## Convention
 
@@ -76,7 +79,7 @@ Each reference doc:
 
 `scripts/lib/verify_reference_docs.py` (lands in Phase 0) cross-checks every reference doc against the codebase:
 
-- Every event in `events.md` exists in `inspector/services/state.py` and vice versa.
+- Every event in `events.md` exists in `inspector/services/state/state.py` and vice versa.
 - Every state in `state-machine.md` exists in the SQLite CHECK constraint.
 - Every endpoint in `api-endpoints.md` has a registered Flask route.
 - Every env var in `env-vars.md` is read by code (and vice versa).

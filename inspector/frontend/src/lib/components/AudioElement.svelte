@@ -23,7 +23,7 @@
      *  emit silent zeros, per spec). The Flask audio route at
      *  `inspector/app.py::serve_audio` sends `Access-Control-Allow-Origin: *`
      *  to satisfy the CORS check even on same-origin loads. */
-    export let crossorigin: string | null = 'anonymous';
+    export let crossorigin: '' | 'anonymous' | 'use-credentials' | null = 'anonymous';
     /** Optional DOM id forwarded to the underlying <audio> element. */
     export let id: string | undefined = undefined;
     /** Show native browser controls (play/pause/scrubber). */

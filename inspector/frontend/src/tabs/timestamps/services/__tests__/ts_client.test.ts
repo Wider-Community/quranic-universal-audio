@@ -155,7 +155,7 @@ describe('assembleVerseFromShard (by_ayah)', () => {
     const shard = byAyahShard();
 
     it('builds a verse with second-scaled timings, location strings, and intervals', () => {
-        const result = assembleVerseFromShard(shard, '1:1', fakeQpc, fakeDk);
+        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk);
         expect(result).not.toBeNull();
         expect(result!.reciter).toBe('saad_al_ghamdi');
         expect(result!.chapter).toBe(1);
@@ -180,13 +180,13 @@ describe('assembleVerseFromShard (by_ayah)', () => {
     });
 
     it('time_start_ms stays 0 and time_end_ms tracks the last interval for by_ayah', () => {
-        const result = assembleVerseFromShard(shard, '1:1', fakeQpc, fakeDk);
+        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk);
         expect(result!.time_start_ms).toBe(0);
         expect(result!.time_end_ms).toBe(1100); // last interval end (ms)
     });
 
     it('returns null for an unknown verse ref', () => {
-        expect(assembleVerseFromShard(shard, '99:99', fakeQpc, fakeDk)).toBeNull();
+        expect(assembleVerseFromShard('saad_al_ghamdi', shard, '99:99', fakeQpc, fakeDk)).toBeNull();
     });
 });
 
@@ -198,7 +198,7 @@ describe('assembleVerseFromShard (by_surah)', () => {
     const shard = bySurahShard();
 
     it('subtracts the verse start offset from word/letter/interval timings', () => {
-        const result = assembleVerseFromShard(shard, '1:1', fakeQpc, fakeDk);
+        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk);
         expect(result!.audio_category).toBe('by_surah_audio');
 
         // Verse starts at 5s of the surah file → all timings shift by -5s.
@@ -243,7 +243,7 @@ describe('assembleVerseFromShard (compound refs)', () => {
             },
         };
 
-        const result = assembleVerseFromShard(compound, '37:151:3-37:152:2', fakeQpc, fakeDk);
+        const result = assembleVerseFromShard('r', compound, '37:151:3-37:152:2', fakeQpc, fakeDk);
         expect(result).not.toBeNull();
         expect(result!.verse_ref).toBe('37:151:3-37:152:2');
         expect(result!.words.map((w) => w.location)).toEqual([

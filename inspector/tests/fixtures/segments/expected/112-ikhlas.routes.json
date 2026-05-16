@@ -28,8 +28,7 @@
     "field_keys_top_level": [
       "audio_url",
       "segments",
-      "summary",
-      "verse_word_counts"
+      "summary"
     ]
   },
   "all": {
@@ -37,8 +36,7 @@
     "field_keys_top_level": [
       "audio_by_chapter",
       "pad_ms",
-      "segments",
-      "verse_word_counts"
+      "segments"
     ]
   },
   "edit_history": {

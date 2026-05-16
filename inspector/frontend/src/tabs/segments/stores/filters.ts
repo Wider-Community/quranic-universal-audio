@@ -13,6 +13,7 @@
 
 import { derived, get, writable } from 'svelte/store';
 
+import { quranRefs } from '../../../lib/refs/quran-refs';
 import type { Segment } from '../../../lib/types/domain';
 import { SEG_FILTER_FIELDS } from '../utils/data/filter-fields';
 import { countSegWords, parseSegRef } from '../utils/data/references';
@@ -107,7 +108,7 @@ export function getTimingForUid(uid: string): SegmentTiming | null {
 export function segDerivedProps(seg: SegWithDerived): SegDerivedProps {
     if (seg._derived) return seg._derived;
     const duration_s = (seg.time_end - seg.time_start) / 1000;
-    const vwc = get(segAllData)?.verse_word_counts;
+    const vwc = get(quranRefs)?.verse_word_counts;
     const num_words = countSegWords(seg.matched_ref, vwc);
     const p = parseSegRef(seg.matched_ref);
     const num_verses = p ? p.ayah_to - p.ayah_from + 1 : 0;

@@ -1,10 +1,11 @@
 import { get } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
-import type { SegValidateResponse } from '../../../../lib/types/api';
+import type { SegStatsResponse, SegValidateResponse } from '../../../../lib/types/api';
 import { selectedReciter } from '../../stores/chapter';
 import { segListElement } from '../../stores/playback';
 import { savedPreviewScroll } from '../../stores/save';
+import { setStats } from '../../stores/stats';
 import { segValidation } from '../../stores/validation';
 import { applyFiltersAndRender } from '../data/filters-apply';
 
@@ -25,5 +26,16 @@ export async function refreshValidation(): Promise<void> {
         }
     } catch (e) {
         console.error('Error refreshing validation:', e);
+    }
+}
+
+export async function refreshStats(): Promise<void> {
+    const reciter = get(selectedReciter);
+    if (!reciter) return;
+    try {
+        const data = await fetchJson<SegStatsResponse>(`/api/seg/stats/${reciter}`);
+        if (get(selectedReciter) === reciter && !data.error) setStats(data);
+    } catch (e) {
+        console.error('Error refreshing stats:', e);
     }
 }

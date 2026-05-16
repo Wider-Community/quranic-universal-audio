@@ -1,15 +1,10 @@
-<script lang="ts">
+﻿<script lang="ts">
     /**
-     * ValidationPanel — Svelte accordion panel for all 11 validation categories.
+     * ValidationPanel — Svelte accordion panel for registry-backed validation categories.
      *
      * Subscribes to `$segValidation`. Renders one <details> per non-empty
      * category using `{#each}` over a typed descriptor list.
      * Empty categories are hidden.
-     *
-     * Category order (per CLAUDE.md):
-     *   Failed Alignments, Missing Verses, Missing Words, Structural Errors,
-     *   Low Confidence, Detected Repetitions, May Require Boundary Adj,
-     *   Cross-verse, Audio Bleeding, Muqatta'at, Qalqala
      *
      * Open-state: component-local Record<string, boolean>. One-at-a-time
      * (collapseSiblingDetails semantics). Resets on chapter change.
@@ -30,30 +25,24 @@
 
     import type {
         SegValAnyItem,
-        SegValAudioBleedingItem,
         SegValidateResponse,
         SegValLowConfidenceItem,
-        SegValMissingWordsItem,
         SegValQalqalaItem,
-        SegValRepetitionItem,
     } from '../../../../lib/types/api';
+    import { activeTab } from '../../../../lib/utils/active-tab';
+    import { TAB_NAMES } from '../../../../lib/utils/constants';
     import { IssueRegistry } from '../../domain/registry';
+    import { accordionPin, clearAccordionPin, pinAccordion } from '../../stores/accordion-pin';
     import { segAllData } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
     import { segValidation, valUiLcThreshold, valUiMeasuredCardHeight,valUiOpenCategory, valUiScrollTop } from '../../stores/validation';
     import {
-        CONF_MID_THRESHOLD,
         VAL_VIRTUALIZE_THRESHOLD,
         VIRT_BUFFER_ROWS,
     } from '../../utils/constants';
-    import {
-        jumpToMissingVerseContext,
-        jumpToSegment,
-        jumpToVerse,
-    } from '../../utils/data/navigation-actions';
-    import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { filterStaleIssues } from '../../utils/validation/stale';
+    import AccordionGuideModal from './AccordionGuideModal.svelte';
     import ErrorCard from './ErrorCard.svelte';
 
     // ---- Props ----
@@ -72,6 +61,20 @@
         _prevChapter = chapter;
         openCategory = null;
         cardsScrollTop = 0;
+        clearAccordionPin();
+    }
+
+    // Clear pin when the user leaves the Segments tab (the SegmentsTab DOM
+    // stays mounted, so the accordion's `open` state persists across tab
+    // hides — we MUST explicitly drop the pin so coming back captures a
+    // fresh open-time snapshot against the latest segValidation).
+    let _prevTab: string | null = null;
+    $: {
+        const t = $activeTab;
+        if (_prevTab !== null && _prevTab === TAB_NAMES.SEGMENTS && t !== TAB_NAMES.SEGMENTS) {
+            clearAccordionPin();
+        }
+        _prevTab = t;
     }
 
     // ---- LC slider ----
@@ -82,6 +85,8 @@
     const QALQALA_LETTERS_ORDER: ReadonlyArray<string> = ['\u0642', '\u0637', '\u0628', '\u062c', '\u062f'];
     let activeQalqalaLetter: string | null = null;
     let qalqalaEndOfVerse: boolean = false;
+    let guideCategory: string | null = null;
+    let guideOpener: HTMLElement | null = null;
 
     // ---- Virtualization constants ----
     /** Fallback card height (px) before real measurement. MissingVersesCard with
@@ -219,6 +224,7 @@
         cross_verse: 'val-cross-count',
         muqattaat: 'val-cross-count',
         qalqala: 'val-cross-count',
+        basmala_amin: 'val-cross-count',
     };
     function _countClassFor(kind: string): string {
         const override = COUNT_CLASS_OVERRIDES[kind];
@@ -377,16 +383,19 @@
 
     $: _baseDescriptors = buildBaseDescriptors($segValidation, $segAllData, chapter);
     $: categories = projectVisible(_baseDescriptors, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse);
+    // Filter signature: the subset of inputs that truly narrow the item list
+    // (chapter / LC threshold / qalqala letter / end-of-verse). Lifted to
+    // top-level so the re-pin reactive can also react to sig flips while the
+    // same accordion stays open.
+    $: _filterSig = `${chapter}|${lcThreshold}|${activeQalqalaLetter ?? ''}|${qalqalaEndOfVerse}`;
     $: {
-        // Filter signature: the subset of inputs that truly narrow the item
-        // list (chapter / LC threshold / qalqala letter / end-of-verse).
-        // If none of these change, preserve each type's context-shown map so
-        // structural edits (split/merge) that republish the items array via
-        // identity shift don't reset Show Context toggles mid-edit.
-        const sig = `${chapter}|${lcThreshold}|${activeQalqalaLetter ?? ''}|${qalqalaEndOfVerse}`;
+        // If the filter sig hasn't changed for a category, preserve its
+        // context-shown map so structural edits (split/merge) that republish
+        // the items array via identity shift don't reset Show Context toggles
+        // mid-edit.
         for (const cat of categories) {
-            if (_lastFilterSig[cat.type] !== sig) {
-                _lastFilterSig[cat.type] = sig;
+            if (_lastFilterSig[cat.type] !== _filterSig) {
+                _lastFilterSig[cat.type] = _filterSig;
                 contextStateByType[cat.type]?.clear();
             }
         }
@@ -395,7 +404,27 @@
 
     // ---- Virtualization window for the open category ----
     $: openCat = categories.find((c) => c.type === openCategory) ?? null;
-    $: openTotal = openCat?.visibleItems.length ?? 0;
+    // Displayed items inside the open accordion: pinned snapshot keys (in
+    // open-time order), each rendered from live `visibleItems` when present,
+    // else from the snapshot. Keeps cards stable across autosave-driven
+    // segValidation refreshes while still letting per-item state (text,
+    // button color) flow through from the live store.
+    $: displayedItems = ((): SegValAnyItem[] => {
+        if (!openCat) return [];
+        const visible = openCat.visibleItems;
+        const pin = $accordionPin;
+        if (!pin || pin.category !== openCategory) return [...visible];
+        const liveByKey = new Map<string, SegValAnyItem>();
+        for (const it of visible) liveByKey.set(issueKey(it, openCat.type), it);
+        const out: SegValAnyItem[] = [];
+        for (const k of pin.keys) {
+            const live = liveByKey.get(k);
+            if (live) out.push(live);
+            else if (pin.items[k]) out.push(pin.items[k]!);
+        }
+        return out;
+    })();
+    $: openTotal = displayedItems.length;
     // Virtualization stays ACTIVE during editMode. To keep the editing row
     // mounted — so scrolling away doesn't evict the edit panel mid-flow —
     // we expand the slice window to include whichever card resolves to the
@@ -420,7 +449,7 @@
     // resolve via filterStaleIssues + resolveIssueSeg uid-first.
     $: editingItemIdx = ((): number => {
         if (!virtualize || !editingCoords || !openCat) return -1;
-        const items = openCat.visibleItems as ReadonlyArray<{
+        const items = displayedItems as ReadonlyArray<{
             chapter?: number;
             seg_index?: number;
             seg_indices?: number[];
@@ -451,90 +480,6 @@
     $: topSpacerPx = virtualize ? startIdx * measuredCardHeight : 0;
     $: bottomSpacerPx = virtualize ? Math.max(0, (openTotal - endIdx) * measuredCardHeight) : 0;
 
-    // ---- Item navigation button helpers ----
-    function getItemBtnClass(type: string, issue: SegValAnyItem): string {
-        if (type === 'low_confidence') {
-            return ((issue as SegValLowConfidenceItem).confidence < CONF_MID_THRESHOLD) ? 'val-conf-low' : 'val-conf-mid';
-        }
-        if (type === 'low_confidence_v2') return 'val-conf-mid';
-        if (type === 'repetitions') return 'val-rep';
-        if (type === 'cross_verse' || type === 'muqattaat' || type === 'qalqala') return 'val-cross';
-        if (type === 'audio_bleeding') return 'val-bleed';
-        if (type === 'boundary_adj') return 'val-conf-mid';
-        return 'val-error';
-    }
-
-    // Pill label reads the LIVE seg's `matched_ref` so post-edit mutations
-    // (split, ref-edit, merge) are reflected immediately — `issue.ref` is a
-    // server snapshot frozen at `/api/seg/validate` time and goes stale as
-    // soon as the user mutates the seg.  See `utils/validation/resolve-issue.ts`
-    // for the "four ref fields" rule.
-    function _liveRef(issue: SegValAnyItem, type: string, fallbackRef: string | undefined): string {
-        const seg = resolveIssueSeg(issue, type, null);
-        return seg?.matched_ref || fallbackRef || '';
-    }
-
-    function getItemBtnLabel(type: string, issue: SegValAnyItem): string {
-        const any = issue as {
-            seg_index?: number; verse_key?: string; ref?: string;
-            display_ref?: string; entry_ref?: string; matched_verse?: string;
-            chapter: number;
-        };
-        void $segAllData; // re-evaluate on seg mutations so live ref tracks
-        if (type === 'failed') return `${any.chapter}:#${any.seg_index}`;
-        if (type === 'missing_verses' || type === 'structural_errors') return any.verse_key ?? '';
-        if (type === 'missing_words') {
-            const indices = (issue as SegValMissingWordsItem).seg_indices || [];
-            return indices.length > 0 ? `${any.verse_key} #${indices.join('/#')}` : (any.verse_key ?? '');
-        }
-        if (type === 'repetitions') {
-            return _liveRef(issue, type, (issue as SegValRepetitionItem).display_ref || any.ref);
-        }
-        if (type === 'audio_bleeding') {
-            const ab = issue as SegValAudioBleedingItem;
-            return `${ab.entry_ref}\u2192${ab.matched_verse}`;
-        }
-        return _liveRef(issue, type, any.ref);
-    }
-
-    function getItemBtnTitle(type: string, issue: SegValAnyItem): string {
-        const any = issue as { msg?: string; time?: string; verse_key?: string; ref?: string; entry_ref?: string; matched_verse?: string; confidence?: number };
-        void $segAllData;
-        if (type === 'failed') return any.time ?? '';
-        if (type === 'missing_verses' || type === 'structural_errors') return any.msg ?? '';
-        if (type === 'missing_words') return any.msg ?? '';
-        if (type === 'low_confidence') return `${((any.confidence ?? 0) * 100).toFixed(1)}%`;
-        if (type === 'boundary_adj') return any.verse_key ?? '';
-        if (type === 'audio_bleeding') {
-            const ab = issue as SegValAudioBleedingItem;
-            const liveRef = _liveRef(issue, type, ab.ref);
-            return `audio ${ab.entry_ref} contains segment matching ${liveRef} (${ab.time})`;
-        }
-        if (type === 'repetitions') return (issue as SegValRepetitionItem).text;
-        return '';
-    }
-
-    function handleItemBtnClick(type: string, issue: SegValAnyItem): void {
-        const any = issue as {
-            seg_index?: number; verse_key?: string; chapter: number;
-        };
-        if (type === 'failed' || type === 'low_confidence' || type === 'low_confidence_v2' ||
-            type === 'boundary_adj' || type === 'cross_verse' || type === 'audio_bleeding' ||
-            type === 'repetitions' || type === 'muqattaat' || type === 'qalqala') {
-            if (any.seg_index != null) jumpToSegment(any.chapter, any.seg_index);
-        } else if (type === 'missing_verses') {
-            jumpToMissingVerseContext(any.chapter, any.verse_key ?? '');
-        } else if (type === 'missing_words') {
-            const mw = issue as SegValMissingWordsItem;
-            const indices = mw.seg_indices || [];
-            const first = indices[0];
-            if (first != null) jumpToSegment(any.chapter, first);
-            else jumpToVerse(any.chapter, any.verse_key ?? '');
-        } else if (type === 'structural_errors') {
-            jumpToVerse(any.chapter, any.verse_key ?? '');
-        }
-    }
-
     // ---- ErrorCard refs (window-slice array, synced to absolute Map in afterUpdate) ----
     // `windowCardRefs` holds bind:this refs for the currently rendered slice.
     // Rebuilt into `cardRefMap` in the shared afterUpdate block above so
@@ -551,7 +496,12 @@
         if (!cat) return;
         const anyShown = Array.from(cardRefMap.values()).some((c) => c?.getIsContextShown());
         const newState = !anyShown;
-        for (let i = 0; i < cat.visibleItems.length; i++) {
+        // The button is only wired on the currently-open accordion. Use the
+        // pin-aware `displayedItems.length` so indices match what the user
+        // actually sees rendered (pin may include cards that have dropped
+        // from the live `visibleItems` since open-time).
+        const total = type === openCategory ? displayedItems.length : cat.visibleItems.length;
+        for (let i = 0; i < total; i++) {
             ctxMap.set(i, newState);
         }
         for (const c of cardRefMap.values()) {
@@ -568,6 +518,64 @@
         openCategory = isOpen ? type : (openCategory === type ? null : openCategory);
     }
 
+    // Capture the open-time snapshot of visible items so autosave-driven
+    // segValidation refreshes don't yank cards out from under the user.
+    // Re-capture when `openCategory` *transitions* (open / close / switch
+    // category) — not on every reactive tick of `categories` (which republishes
+    // on each segValidation refresh).
+    //
+    // Also re-capture when openCategory is non-null but the pin store is
+    // empty: this fires when returning to the Segments tab after a leave
+    // that cleared the pin while the accordion's DOM state remained open.
+    let _prevPinCategory: string | null = null;
+    $: {
+        const next = openCategory;
+        const pinNow = $accordionPin;
+        const onSegments = $activeTab === TAB_NAMES.SEGMENTS;
+        const needsRepin = onSegments && next != null && (pinNow == null || pinNow.category !== next);
+        if (next !== _prevPinCategory || needsRepin) {
+            if (next == null) {
+                clearAccordionPin();
+            } else if (onSegments) {
+                const cat = categories.find((c) => c.type === next);
+                if (cat) pinAccordion(next, cat.visibleItems, issueKey);
+                else clearAccordionPin();
+            }
+            _prevPinCategory = next;
+        }
+    }
+
+    // When the user changes a filter (qalqala letter / end-of-verse / LC
+    // threshold), the open accordion's pinned snapshot must be re-captured
+    // against the freshly filtered list — otherwise `displayedItems` would
+    // keep rehydrating filtered-out items via `pin.items[k]`. We piggyback
+    // on `_filterSig`: when it flips, defer one microtask so `categories`
+    // has flushed under Svelte 5's batched reactivity, then re-pin from the
+    // current `cat.visibleItems`. Autosave does not change `_filterSig`, so
+    // the pin's autosave-stability guarantee is unaffected.
+    let _lastPinSig: string | null = null;
+    $: if (openCategory != null && _filterSig !== _lastPinSig) {
+        _lastPinSig = _filterSig;
+        queueMicrotask(() => {
+            const next = openCategory;
+            if (next == null) return;
+            if ($activeTab !== TAB_NAMES.SEGMENTS) return;
+            const cat = categories.find((c) => c.type === next);
+            if (cat) pinAccordion(next, cat.visibleItems, issueKey);
+        });
+    }
+
+    function openGuide(e: MouseEvent, type: string): void {
+        e.preventDefault();
+        e.stopPropagation();
+        guideCategory = type;
+        guideOpener = e.currentTarget as HTMLElement;
+    }
+
+    function closeGuide(): void {
+        guideCategory = null;
+    }
+
     // ---- Stable composite each-key for issue cards ----
     // Object-reference keying caused every ErrorCard to remount whenever
     // `$segValidation` republished (re-validate after save). A composite
@@ -582,7 +590,10 @@
         };
         if (any.segment_uid) return `${kind}:${any.segment_uid}`;
         if (any.seg_index != null) return `${kind}:${any.chapter}:${any.seg_index}`;
-        return `${kind}:${any.chapter}:${any.verse_key ?? ''}`;
+        const mw = it as { missing_words?: number[]; seg_indices?: number[] };
+        const words = mw.missing_words?.join(',') ?? '';
+        const indices = mw.seg_indices?.join(',') ?? '';
+        return `${kind}:${any.chapter}:${any.verse_key ?? ''}:${words}:${indices}`;
     }
 
     // ---- LC slider debounce ----
@@ -633,10 +644,19 @@
                 on:toggle={(e) => handleAccordionToggle(e, cat.type)}
             >
                 <summary class="val-summary">
-                    {cat.name}
-                    <span class="val-count {cat.countClass}" data-lc-count>
-                        {(cat.isLowConf || cat.isQalqala) ? cat.visibleItems.length : cat.summaryCount}
+                    <span class="val-summary-main">
+                        <span class="val-summary-title">{cat.name}</span>
+                        <span class="val-count {cat.countClass}" data-lc-count>
+                            {(cat.isLowConf || cat.isQalqala) ? cat.visibleItems.length : cat.summaryCount}
+                        </span>
                     </span>
+                    <button
+                        type="button"
+                        class="val-guide-btn"
+                        aria-label={`Open guide for ${cat.name}`}
+                        title={`Open guide for ${cat.name}`}
+                        on:click={(e) => openGuide(e, cat.type)}
+                    >?</button>
                 </summary>
 
                 <!-- LC slider (Low Confidence only) -->
@@ -684,19 +704,6 @@
                 {/if}
 
                 {#if openCategory === cat.type}
-                    <!-- Item navigation buttons (non-qalqala) -->
-                    {#if !cat.isQalqala}
-                        <div class="val-items">
-                            {#each cat.visibleItems as issue (issueKey(issue, cat.type))}
-                                <button
-                                    class="val-btn {getItemBtnClass(cat.type, issue)}"
-                                    title={getItemBtnTitle(cat.type, issue)}
-                                    on:click={() => handleItemBtnClick(cat.type, issue)}
-                                >{getItemBtnLabel(cat.type, issue)}</button>
-                            {/each}
-                        </div>
-                    {/if}
-
                     <!-- "Show All Context" + cards -->
                     <div class="val-ctx-all-row">
                         <button
@@ -713,7 +720,7 @@
                         {#if topSpacerPx > 0}
                             <div class="val-cards-spacer" style="height: {topSpacerPx}px" aria-hidden="true"></div>
                         {/if}
-                        {#each cat.visibleItems.slice(startIdx, endIdx) as issue, localIdx (issueKey(issue, cat.type))}
+                        {#each displayedItems.slice(startIdx, endIdx) as issue, localIdx (issueKey(issue, cat.type))}
                             <ErrorCard
                                 bind:this={windowCardRefs[localIdx]}
                                 category={cat.type}
@@ -729,5 +736,13 @@
                 {/if}
             </details>
         {/each}
+
+        {#if guideCategory}
+            <AccordionGuideModal
+                category={guideCategory}
+                opener={guideOpener}
+                on:close={closeGuide}
+            />
+        {/if}
     </div>
 {/if}

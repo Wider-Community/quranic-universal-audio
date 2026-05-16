@@ -1,0 +1,215 @@
+"""Segments tab data routes (/api/seg/ — read-only data endpoints)."""
+
+from flask import Blueprint, jsonify, request
+
+from config import (
+    SEG_FONT_SIZE, SEG_WORD_SPACING,
+    SEG_SCROLL_ANIM_MODE,
+    TRIM_PAD_LEFT, TRIM_PAD_RIGHT, TRIM_DIM_ALPHA,
+    SHOW_BOUNDARY_PHONEMES,
+    LOW_CONF_DEFAULT_THRESHOLD,
+    ACCORDION_CONTEXT,
+)
+from constants import (
+    MUQATTAAT_VERSES as _MUQATTAAT_VERSES,
+    QALQALA_LETTERS as _QALQALA_LETTERS,
+    STANDALONE_REFS as _STANDALONE_REFS,
+    STANDALONE_WORDS as _STANDALONE_WORDS,
+)
+from services.validation.registry import ALL_CATEGORIES
+from services import cache
+from services.state import catalog as catalog_service
+from services import state as state_service
+from services.data_loader import (
+    load_auto_split,
+    load_detailed,
+    resolve_pad,
+)
+from services.audio_meta import chapter_meta, chapter_urls, vbr_chapters_for_reciter
+from services.segments_query import get_chapter_data
+from utils.formatting import slug_to_name
+from utils.json_response import orjson_cached_response, orjson_response
+from utils.references import chapter_from_ref
+from utils.uuid7 import uuid7
+
+seg_data_bp = Blueprint("seg_data", __name__, url_prefix="/api/seg")
+
+
+@seg_data_bp.route("/config")
+def seg_config():
+    """Return display configuration for Segments tab."""
+    return orjson_response(
+        {
+            "seg_font_size": SEG_FONT_SIZE,
+            "seg_word_spacing": SEG_WORD_SPACING,
+            "seg_scroll_anim_mode": SEG_SCROLL_ANIM_MODE,
+            "trim_pad_left": TRIM_PAD_LEFT,
+            "trim_pad_right": TRIM_PAD_RIGHT,
+            "trim_dim_alpha": TRIM_DIM_ALPHA,
+            "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
+            "low_conf_default_threshold": LOW_CONF_DEFAULT_THRESHOLD,
+            "validation_categories": list(ALL_CATEGORIES),
+            "muqattaat_verses": sorted([list(t) for t in _MUQATTAAT_VERSES]),
+            "qalqala_letters": sorted(_QALQALA_LETTERS),
+            "standalone_refs": sorted([list(t) for t in _STANDALONE_REFS]),
+            "standalone_words": sorted(_STANDALONE_WORDS),
+            "accordion_context": ACCORDION_CONTEXT,
+        },
+        # Static config keyed off process restart — minute-long client cache
+        # is safe (changing a constant requires a restart anyway).
+        headers={"Cache-Control": "private, max-age=60"},
+    )
+
+
+@seg_data_bp.route("/reciters")
+def seg_reciters():
+    """List reciters tracked in the state file.
+
+    Joins ``state_service.all_rows()`` (lifecycle + visibility) with the
+    in-memory catalog snapshot. ``audio_source`` is the channel
+    (``delivery.source`` — ``mp3quran``, ``qul``, etc.); ``audio_category``
+    is the by_surah / by_ayah split the FE needs to gate per-row playback
+    routing (proxy wrap, clip vs chapter URL). Both layers are hydrated at
+    boot and live in process memory, so this endpoint does zero bucket I/O
+    per request.
+    """
+    by_slug = {
+        d.slug: (d.source, d.audio_category.value)
+        for d in catalog_service.snapshot().deliveries
+    }
+    result = [
+        {
+            "slug": row.slug,
+            "name": slug_to_name(row.slug),
+            "audio_source": by_slug.get(row.slug, ("", ""))[0],
+            "audio_category": by_slug.get(row.slug, ("", ""))[1],
+            "state": row.state.value,
+            "visibility": row.visibility.value,
+        }
+        for row in sorted(state_service.all_rows(), key=lambda r: r.slug)
+    ]
+    return orjson_response(result, headers={"Cache-Control": "private, max-age=30"})
+
+
+@seg_data_bp.route("/chapters/<reciter>")
+def seg_chapters(reciter):
+    """Return list of chapter numbers available for a reciter."""
+    entries = load_detailed(reciter)
+    if not entries:
+        return jsonify({"error": "Reciter not found"}), 404
+    chapters = sorted(set(chapter_from_ref(e["ref"]) for e in entries))
+    return jsonify(chapters)
+
+
+@seg_data_bp.route("/data/<reciter>/<int:chapter>")
+def seg_data(reciter, chapter):
+    """Return segments, audio URL, summary, and issues for a chapter.
+
+    Shards mutate on re-edit and we don't currently cache-bust this URL, so
+    we ride ETag + ``must-revalidate``: the browser always asks the server,
+    and the server returns 304 when the encoded body hasn't changed.
+    """
+    verse_filter = request.args.get("verse")
+    result = get_chapter_data(reciter, chapter, verse_filter)
+    if result is None:
+        return jsonify({"error": "Chapter not found"}), 404
+    return orjson_cached_response(result)
+
+
+@seg_data_bp.route("/all/<reciter>")
+def seg_all(reciter):
+    """Return all segments across all chapters for a reciter."""
+    entries = load_detailed(reciter)
+    if not entries:
+        return jsonify({"error": "Reciter not found"}), 404
+
+    segments = []
+    audio_by_chapter = {}
+    chapter_seg_idx = {}
+
+    for entry_idx, entry in enumerate(entries):
+        ch = chapter_from_ref(entry["ref"])
+        entry_audio = entry.get("audio", "")
+        if str(ch) not in audio_by_chapter:
+            audio_by_chapter[str(ch)] = entry_audio
+        for seg in entry.get("segments", []):
+            idx = chapter_seg_idx.get(ch, 0)
+            chapter_seg_idx[ch] = idx + 1
+            mref = seg.get("matched_ref", "")
+            seg_uid = seg.get("segment_uid") or ""
+            if not seg_uid:
+                seg_uid = uuid7()
+                seg["segment_uid"] = seg_uid
+            # `matched_text` and `audio_url` deliberately omitted:
+            # - `matched_text` is reconstructable client-side via
+            #   ``dkTextForRef($quranRefs, matched_ref)`` and is the single
+            #   biggest wire contributor (~315 KB brotli savings).
+            # - `audio_url` is redundant with the top-level
+            #   ``audio_by_chapter[chapter]`` map; every FE consumer already
+            #   falls back to it.
+            seg_dict = {
+                "chapter":      ch,
+                "entry_idx":    entry_idx,
+                "index":        idx,
+                "segment_uid":  seg_uid,
+                "time_start":   seg.get("time_start", 0),
+                "time_end":     seg.get("time_end", 0),
+                "matched_ref":  mref,
+                "confidence":   round(seg.get("confidence", 0.0), 4),
+                "entry_ref":    entry.get("ref", ""),
+            }
+            if seg.get("wrap_word_ranges"):
+                seg_dict["wrap_word_ranges"] = seg["wrap_word_ranges"]
+            if seg.get("ignored_categories"):
+                seg_dict["ignored_categories"] = seg["ignored_categories"]
+            elif seg.get("ignored"):
+                seg_dict["ignored_categories"] = ["_all"]
+            segments.append(seg_dict)
+
+    pad_left_ms, pad_right_ms, min_silence_floor_ms = resolve_pad(
+        cache.get_seg_meta(reciter)
+    )
+    # Auto-Split sidecar UID set — the FE gates the Auto Split button label on
+    # presence in this set, so seg rows whose offline alignment failed fall
+    # back to the plain Split UX instead of misleading the user. Just UIDs,
+    # not the full payload: the cursors/refs come back from a separate
+    # ``/api/seg/auto-split`` lookup at click-time, so cached in-memory and
+    # cheap (~10 ms).
+    auto_split_by_uid, _ = load_auto_split(reciter)
+    auto_split_uids = sorted(auto_split_by_uid.keys())
+    # dk_words + verse_word_counts moved off this payload to the immutable
+    # ``/api/static/quran-refs.json`` asset (fetched once per browser).
+    # Per-audio-URL duration in ms, sourced from the audio_manifest sidecar.
+    # Surfaced so the FE can clamp trim/adjust right-pad and split viewEnd
+    # against actual audio EOF — extraction sometimes leaves the last seg's
+    # time_end past the actual audio end, which (without clamping) makes the
+    # waveform fetch return truncated/empty peaks and the canvas paints blank.
+    # URL-keyed (not chapter-keyed) so by_ayah deliveries — where each ayah
+    # is its own audio file — are clamped correctly per-ayah.
+    duration_ms_by_url: dict[str, int] = {}
+    for key, url in (chapter_urls(reciter) or {}).items():
+        meta = chapter_meta(reciter, key)
+        if not isinstance(meta, dict):
+            continue
+        duration_sec = meta.get("duration_sec")
+        if isinstance(url, str) and url and isinstance(duration_sec, (int, float)) and duration_sec > 0:
+            duration_ms_by_url[url] = int(duration_sec * 1000)
+    # Per-chapter map for FE convenience (when seg.audio_url isn't set the
+    # FE falls back to audio_by_chapter[chapter]; mirror the same shape here).
+    chapter_duration_ms_by_chapter: dict[str, int] = {}
+    for ch_str, url in audio_by_chapter.items():
+        if url in duration_ms_by_url:
+            chapter_duration_ms_by_chapter[ch_str] = duration_ms_by_url[url]
+    return orjson_response({
+        "segments": segments,
+        "audio_by_chapter": audio_by_chapter,
+        "chapter_duration_ms_by_chapter": chapter_duration_ms_by_chapter,
+        "duration_ms_by_url": duration_ms_by_url,
+        "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
+        "auto_split_uids": auto_split_uids,
+        # Legacy symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.
+        "pad_ms": (pad_left_ms + pad_right_ms) // 2,
+        "pad_left_ms": pad_left_ms,
+        "pad_right_ms": pad_right_ms,
+        "min_silence_floor_ms": min_silence_floor_ms,
+    })

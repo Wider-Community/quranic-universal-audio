@@ -23,20 +23,6 @@ export const autoScrollEnabled = writable<boolean>(
     localStorage.getItem(LS_KEYS.SEG_AUTOSCROLL) !== 'false',
 );
 
-/**
- * Internal (no UI) kill-switch for next-segment audio prefetch (VBR clip
- * pre-warm + CBR chapter URL warm). When OFF, `prefetchNextSegAudio`
- * short-circuits — no speculative network calls, no resolver work, no
- * cache writes — for both main-list chapter playback and accordion sibling
- * playback. Toggle via DevTools:
- *   `localStorage.setItem('insp_seg_prefetch', 'false')` then reload.
- * Default ON.
- */
-export const prefetchEnabled = writable<boolean>(
-    localStorage.getItem(LS_KEYS.SEG_PREFETCH) !== 'false',
-);
-
-
 /** Whether continuous-play (auto-advance to next segment after one ends) is
  *  currently engaged. Short-lived — toggled per play session, not persisted. */
 export const continuousPlay = writable<boolean>(false);
@@ -45,6 +31,14 @@ export const continuousPlay = writable<boolean>(false);
  *  play-range should stop. Written when starting a segment or range; read by
  *  the rAF tick to decide when to pause. */
 export const playEndMs = writable<number>(0);
+
+/** Timestamp (ms, within the current audio source) at which the current
+ *  play-range *starts*. Written in tandem with `playEndMs` whenever a
+ *  segment is queued for playback (initial play, autoplay-advance, manual
+ *  cross-segment seek). The pinned-footer progress bar reads
+ *  `(segPort.currentTimeMs() - playStartMs) / (playEndMs - playStartMs)`
+ *  to render the per-segment scrubber. Zero when nothing is queued. */
+export const playStartMs = writable<number>(0);
 
 /** Which audio element is currently driving playback: 'main' = the main
  *  segments tab audio element, or `null` when idle. Retained as a typed

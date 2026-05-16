@@ -8,13 +8,14 @@
  */
 
 import { clearWaveformCache } from '../../../../lib/utils/waveform-cache';
-import { cacheStatus } from '../../stores/audio-cache';
+import { clearAccordionPin } from '../../stores/accordion-pin';
 import {
     reciterVbrChapters,
     segAllData,
     segCurrentIdx,
     segData,
 } from '../../stores/chapter';
+import { chapterCbrKbps } from '../../stores/chapter-meta';
 import { setPendingOp } from '../../stores/dirty';
 import {
     clearDirtyMap,
@@ -27,6 +28,7 @@ import {
     continuousPlay,
     playEndMs,
     playingSegmentIndex,
+    playStartMs,
 } from '../../stores/playback';
 import {
     clearSavePreviewData,
@@ -35,8 +37,8 @@ import {
 } from '../../stores/save';
 import { clearStats } from '../../stores/stats';
 import { clearValidation } from '../../stores/validation';
-import { clearAudioCachePollTimer } from '../playback/audio-cache-ui';
-import { clearSegPrefetchCache, disposeSegRange, stopSegAnimation } from '../playback/playback';
+import { resetHistoryLoader } from '../history/loader';
+import { disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { clearRowRegistry } from '../playback/row-registry';
 import { resetWaveformState } from '../waveform/utils';
 
@@ -45,6 +47,7 @@ export function clearPerReciterState(): void {
     segAllData.set(null);
     segData.set(null);
     reciterVbrChapters.set(new Set());
+    chapterCbrKbps.set(new Map());
     segCurrentIdx.set(-1);
     clearDirtyMap();
     clearOpLog();
@@ -53,23 +56,22 @@ export function clearPerReciterState(): void {
     clearMergeRedirects();
 
     clearValidation();
+    clearAccordionPin();
     clearStats();
 
     savedChains.set(null);
     setHistoryVisible(false);
     setHistoryData(null);
+    resetHistoryLoader();
     hidePreview();
     clearSavePreviewData();
 
-    clearSegPrefetchCache();
     clearRowRegistry();
     continuousPlay.set(false);
+    playStartMs.set(0);
     playEndMs.set(0);
     playingSegmentIndex.set(null);
     clearWaveformCache();
-
-    cacheStatus.set('hidden');
-    clearAudioCachePollTimer();
 
     disposeSegRange();
     stopSegAnimation();

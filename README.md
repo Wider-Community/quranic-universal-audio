@@ -52,8 +52,8 @@ The repository uses the following components:
 |-----------|-------------|
 | [`data/`](data/) | Reference data, audio manifests, alignment output, and timestamps, alongside schemas and documentation |
 | [`Quranic Universal Aligner`](https://huggingface.co/spaces/hetchyy/quranic-universal-aligner) | Demo running on Hugging Face GPU demonstrating, also available via [API](docs/client_api.md) |
-| [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results |
-| [`validators/`](validators/) | CLI scripts for validating audio inputs, segments, and timestamps |
+| [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results (segments + timestamps validation lives here) |
+| [`scripts/lib/audio_manifest.py`](scripts/lib/audio_manifest.py) | Pre-pipeline audio manifest validation library (URL reachability, format, coverage) |
 | [`Request Form`](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) | Community request form and system for new reciter processing |
 | [quranic-phonemizer](https://github.com/Hetchy/Quranic-Phonemizer) | External package — Qur'an-specific G2P; the foundation that allows phoneme-level alignment |
 

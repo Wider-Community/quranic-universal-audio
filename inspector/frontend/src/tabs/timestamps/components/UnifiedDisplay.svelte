@@ -13,7 +13,7 @@
      * Scoped styles use `:global()` selectors for the dynamic classes.
      */
 
-    import { onDestroy } from 'svelte';
+    import { onDestroy, untrack } from 'svelte';
     import { get } from 'svelte/store';
 
     import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
@@ -91,7 +91,15 @@
     // Waveform hover → re-run highlights. The rAF loop is stopped while paused,
     // so without this reactive trigger hover-driven previews wouldn't repaint.
     // Loop target changes also retrigger so `.loop` classes update.
-    $: ($tsWaveformHoverTime, $loopTarget, updateHighlights());
+    //
+    // `untrack` is critical here: `updateHighlights()` mutates `_prevActiveWordIdx`
+    // / `_prevActivePhonemeIdx` (top-level `let`s, which Svelte 5 legacy mode
+    // treats as reactive state). Without `untrack` the imperative reads of
+    // those fields inside `updateHighlights` would become dependencies of THIS
+    // effect, and the subsequent writes inside the same function would re-fire
+    // the effect — Svelte 5 raises `effect_update_depth_exceeded` after ~200
+    // such re-runs, which broke first-load reactivity wholesale.
+    $: ($tsWaveformHoverTime, $loopTarget, untrack(() => updateHighlights()));
 
     // ---- Pure helpers (state-free) ----
 

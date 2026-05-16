@@ -17,6 +17,11 @@ vi.mock('../../../../../lib/utils/peaks-fetch', () => ({
 vi.mock('../../../stores/chapter', () => ({
     selectedReciter: writable<string | null>('test-reciter'),
     reciterVbrChapters: writable<Set<number>>(new Set()),
+    // preview.ts now wraps CBR URLs through the audio-proxy for by_surah
+    // reciters via source.ts → reciter.ts, which reads this store. Empty
+    // array means `_isCurrentReciterBySurah()` returns false, so test
+    // assertions on raw `cbrSrc === audio_url` still hold.
+    segAllReciters: writable<Array<{ slug: string; audio_source?: string }>>([]),
 }));
 vi.mock('../../../stores/playback', () => ({
     playbackSpeed: writable<number>(1),

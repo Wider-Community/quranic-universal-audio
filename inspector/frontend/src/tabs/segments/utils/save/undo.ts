@@ -16,7 +16,7 @@ import {
     recomputeDirtyEntryFromOps,
     setChapterOps,
 } from '../../stores/dirty';
-import { pendingChainTarget } from '../../stores/edit';
+import { pendingChainTargets } from '../../stores/edit';
 import {
     buildEditChains,
     type EditChain,
@@ -25,7 +25,10 @@ import {
     setEditChains,
 } from '../../stores/history';
 import { setSavePreviewData } from '../../stores/save';
+import { clearUndoing, markUndoing } from '../../stores/undo-pending';
+import { reloadSegAll } from '../data/reciter-actions';
 import { renderEditHistoryPanel } from '../history/render';
+import { refreshValidation } from '../validation/refresh';
 import { buildSavePreviewData, hideSavePreview } from './actions';
 
 // ---------------------------------------------------------------------------
@@ -33,7 +36,7 @@ import { buildSavePreviewData, hideSavePreview } from './actions';
 // ---------------------------------------------------------------------------
 
 export async function _afterUndoSuccess(reciter: string, _opsReversed: number): Promise<void> {
-    pendingChainTarget.set(null);
+    pendingChainTargets.set([]);
 
     try {
         const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
@@ -44,22 +47,26 @@ export async function _afterUndoSuccess(reciter: string, _opsReversed: number): 
         }
     } catch (_) { /* non-critical */ }
     historyDataStale.set(true);
-    fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' }).catch(() => {});
+    // Undo invalidates validation + seg data server-side (invalidate_seg_caches
+    // runs on undo too). Validation counters depend on segAllData.segments
+    // (filterStaleIssues uses liveUids) — without reloading /seg/all the counts
+    // can lag behind the validation response. Stats are NOT refreshed here:
+    // StatsPanel lazy-fetches on accordion open.
+    void refreshValidation();
+    void reloadSegAll();
 }
 
 // ---------------------------------------------------------------------------
 // onBatchUndoClick
 // ---------------------------------------------------------------------------
 
-export async function onBatchUndoClick(batchId: string, chapter: number | null, btn: HTMLButtonElement): Promise<void> {
+export async function onBatchUndoClick(batchId: string, chapter: number | null): Promise<void> {
     const reciter = storeGet(selectedReciter);
     if (!reciter) return;
     const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
     if (!confirm(`Undo this save${chLabel}? The operations will be reversed.`)) return;
 
-    btn.disabled = true;
-    btn.textContent = 'Undoing...';
-
+    markUndoing(batchId);
     try {
         const result = await fetchJson<SegUndoBatchResponse & { error?: string; operations_reversed?: number }>(
             `/api/seg/undo-batch/${reciter}`,
@@ -73,14 +80,12 @@ export async function onBatchUndoClick(batchId: string, chapter: number | null, 
             await _afterUndoSuccess(reciter, result.operations_reversed ?? 0);
         } else {
             alert(`Undo failed: ${result.error}`);
-            btn.disabled = false;
-            btn.textContent = 'Undo';
         }
     } catch (e) {
         console.error('Undo batch failed:', e);
         alert('Undo failed \u2014 see console for details');
-        btn.disabled = false;
-        btn.textContent = 'Undo';
+    } finally {
+        clearUndoing(batchId);
     }
 }
 
@@ -88,14 +93,13 @@ export async function onBatchUndoClick(batchId: string, chapter: number | null, 
 // onOpUndoClick
 // ---------------------------------------------------------------------------
 
-export async function onOpUndoClick(batchId: string, opIds: string[], btn: HTMLButtonElement): Promise<void> {
+export async function onOpUndoClick(batchId: string, opIds: string[]): Promise<void> {
     const reciter = storeGet(selectedReciter);
     if (!reciter) return;
     if (!confirm('Undo this operation?')) return;
 
-    btn.disabled = true;
-    btn.textContent = 'Undoing...';
-
+    const opKey = `${batchId}:${opIds.join(',')}`;
+    markUndoing(opKey);
     try {
         const result = await fetchJson<SegUndoOpsResponse & { error?: string; operations_reversed?: number }>(
             `/api/seg/undo-ops/${reciter}`,
@@ -109,14 +113,12 @@ export async function onOpUndoClick(batchId: string, opIds: string[], btn: HTMLB
             await _afterUndoSuccess(reciter, result.operations_reversed ?? 0);
         } else {
             alert(`Undo failed: ${result.error}`);
-            btn.disabled = false;
-            btn.textContent = 'Undo';
         }
     } catch (e) {
         console.error('Undo op failed:', e);
         alert('Undo failed \u2014 see console for details');
-        btn.disabled = false;
-        btn.textContent = 'Undo';
+    } finally {
+        clearUndoing(opKey);
     }
 }
 
@@ -141,46 +143,52 @@ export function _getChainBatchIds(chain: EditChain): string[] {
 // onChainUndoClick
 // ---------------------------------------------------------------------------
 
-export async function onChainUndoClick(batchIds: string[], chapter: number | null, btn: HTMLButtonElement): Promise<void> {
+export async function onChainUndoClick(batchIds: string[], chapter: number | null): Promise<void> {
     const reciter = storeGet(selectedReciter);
     if (!reciter) return;
     const chLabel = chapter != null ? ` for ${surahOptionText(chapter)}` : '';
     if (!confirm(`Undo this entire split chain${chLabel}? ${batchIds.length} save(s) will be reversed in order.`)) return;
 
-    btn.disabled = true;
-    btn.textContent = 'Undoing...';
-
+    const chainKey = `chain:${batchIds.join(',')}`;
+    markUndoing(chainKey);
     let totalReversed = 0;
     let failed = false;
-    for (const batchId of batchIds) {
-        try {
-            const result = await fetchJson<SegUndoBatchResponse & { error?: string; operations_reversed?: number }>(
-                `/api/seg/undo-batch/${reciter}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ batch_id: batchId }),
-                },
-            );
-            if (result.ok) {
-                totalReversed += result.operations_reversed || 0;
-            } else {
-                alert(`Undo failed on batch ${batchIds.indexOf(batchId) + 1}/${batchIds.length}: ${result.error}`);
+    try {
+        for (const batchId of batchIds) {
+            try {
+                const result = await fetchJson<SegUndoBatchResponse & { error?: string; operations_reversed?: number }>(
+                    `/api/seg/undo-batch/${reciter}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ batch_id: batchId }),
+                    },
+                );
+                if (result.ok) {
+                    totalReversed += result.operations_reversed || 0;
+                } else {
+                    alert(`Undo failed on batch ${batchIds.indexOf(batchId) + 1}/${batchIds.length}: ${result.error}`);
+                    failed = true;
+                    break;
+                }
+            } catch (e) {
+                console.error('Chain undo failed:', e);
+                alert('Undo failed \u2014 see console for details');
                 failed = true;
                 break;
             }
-        } catch (e) {
-            console.error('Chain undo failed:', e);
-            alert('Undo failed \u2014 see console for details');
-            failed = true;
-            break;
         }
-    }
 
-    await _afterUndoSuccess(reciter, totalReversed);
-    if (failed) {
-        btn.disabled = false;
-        btn.textContent = 'Undo';
+        // Only refresh on success. Calling _afterUndoSuccess on a partial
+        // failure rebuilds the history panel against fresh server state
+        // mid-chain \u2014 visually "consuming" the failed undo, plus setting
+        // historyDataStale=true which then triggers reloadCurrentReciter()
+        // on the next hideSavePreview and can wipe still-pending ops.
+        if (!failed) {
+            await _afterUndoSuccess(reciter, totalReversed);
+        }
+    } finally {
+        clearUndoing(chainKey);
     }
 }
 
@@ -219,7 +227,7 @@ export function onPendingOpsDiscard(
     const noun = opIds.length === 1 ? 'edit' : 'edits';
     if (!confirm(`Discard ${opIds.length} ${noun}${chLabel}?`)) return;
 
-    pendingChainTarget.set(null);
+    pendingChainTargets.set([]);
 
     const opIdSet = new Set(opIds);
     const all = getChapterOps(chapter);

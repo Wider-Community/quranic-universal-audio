@@ -40,7 +40,10 @@ describe.skipIf(!registry)('registry behavior — parametrized', () => {
         } as any,
       );
       expect(result.operation).toBeTruthy();
-      expect(result.operation.op_context_category).toBe(cat);
+      // Neutral categories (basmala_amin, muqattaat) are stripped from the
+      // op_context_category since they don't represent issue gains/losses.
+      const isNeutral = cat === 'basmala_amin' || cat === 'muqattaat';
+      expect(result.operation.op_context_category).toBe(isNeutral ? null : cat);
       const updated = result.nextState.byId[`uid-${cat}`];
       expect(updated?.ignored_categories ?? []).not.toContain(cat);
     });

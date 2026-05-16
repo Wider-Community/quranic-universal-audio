@@ -2,9 +2,11 @@
     /**
      * StatsPanel — Segmentation Statistics accordion panel.
      *
-     * Subscribes to $segStats. When null, renders nothing (hidden).
-     * When data is present, renders a <details> panel with 5 histogram
-     * chart cards via StatsChart.svelte.
+     * Lazy-fetched: stats are computed server-side from a full pass over
+     * detailed.json (~0.7-1.2 s cold on production-sized reciters), so we
+     * defer the fetch until the user opens the accordion. The panel rarely
+     * gets opened during editing, and the values barely shift per edit;
+     * paying the cost on demand keeps autosave roundtrips cheap.
      *
      * Fullscreen: clicking a chart's fullscreen button sets
      * `fullscreenDist` + `fullscreenCfg`; ChartFullscreen.svelte renders
@@ -14,12 +16,23 @@
     import { segStats } from '../../stores/stats';
     import type { ChartCfg,Distribution } from '../../types/stats';
     import { CONF_HIGH_THRESHOLD, CONF_MID_THRESHOLD, SHORT_SEG_WARN_MS, VAD_MIN_SILENCE_FALLBACK_MS } from '../../utils/constants';
+    import { refreshStats } from '../../utils/validation/refresh';
     import ChartFullscreen from './ChartFullscreen.svelte';
     import StatsChart from './StatsChart.svelte';
 
     // Fullscreen overlay state — null = hidden.
     let fullscreenDist: Distribution | null = null;
     let fullscreenCfg: ChartCfg | null = null;
+
+    // Lazy-fetch state. Fetch on every open so post-save stats are fresh;
+    // server-side cache short-circuits when no save invalidated it.
+    let isLoading = false;
+    function onToggle(e: Event): void {
+        const detailsEl = e.currentTarget as HTMLDetailsElement;
+        if (!detailsEl.open) return;
+        isLoading = true;
+        void refreshStats().finally(() => { isLoading = false; });
+    }
 
     function openFullscreen(dist: Distribution, cfg: ChartCfg): void {
         fullscreenDist = dist;
@@ -95,10 +108,10 @@
     }
 </script>
 
-{#if data}
-    <details class="seg-stats-panel">
-        <summary class="seg-stats-summary">Segmentation Statistics</summary>
-        <div class="seg-stats-charts">
+<details class="seg-stats-panel" on:toggle={onToggle}>
+    <summary class="seg-stats-summary">Segmentation Statistics</summary>
+    <div class="seg-stats-charts">
+        {#if data}
             {#each charts as cfg (cfg.key)}
                 {@const dist = data.distributions?.[cfg.key]}
                 {#if dist != null}
@@ -111,9 +124,13 @@
                     />
                 {/if}
             {/each}
-        </div>
-    </details>
-{/if}
+        {:else if isLoading}
+            <div class="seg-stats-loading">Loading…</div>
+        {:else}
+            <div class="seg-stats-loading">No stats loaded.</div>
+        {/if}
+    </div>
+</details>
 
 <ChartFullscreen
     dist={fullscreenDist}

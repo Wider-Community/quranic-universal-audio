@@ -16,6 +16,8 @@
      * badges, "Reverted" badge, chapter name, formatted date, Undo/Discard.
      */
 
+    import { editGate } from '../../../../lib/actions/editGate';
+    import { editingMode } from '../../../../lib/stores/editing-mode';
     import type { EditOp } from '../../../../lib/types/domain';
     import { surahOptionText } from '../../../../lib/utils/surah-info';
     import {
@@ -25,6 +27,7 @@
         SHORT_LABELS,
         snapToSeg,
     } from '../../stores/history';
+    import { undoPending } from '../../stores/undo-pending';
     import { EDIT_OP_LABELS } from '../../utils/constants';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import {
@@ -73,6 +76,15 @@
         ? ((group[0]?.targets_before?.[0]) as HistorySnapshot | undefined) ?? null
         : null;
 
+    // Per-card expand/collapse for strip-specials cards. When expanded, each
+    // deletion op renders as its own indented SegmentRow so a maintainer can
+    // listen through every entry rather than just the representative one.
+    let stripExpanded = false;
+    $: canExpandStrip = item.type === 'strip-specials-card' && group.length > 1;
+    function toggleStripExpanded(): void {
+        if (canExpandStrip) stripExpanded = !stripExpanded;
+    }
+
     // Undo / discard handlers ------------------------------------------------
     function handleDiscardClick(e: MouseEvent): void {
         if (item.chapter == null) return;
@@ -80,13 +92,16 @@
         const opIds = (group as EditOp[]).map((op) => op.op_id);
         onPendingOpsDiscard(item.chapter, opIds, btn);
     }
-    function handleUndoClick(e: MouseEvent): void {
+    function handleUndoClick(): void {
         const bid = item.batchId;
         if (!bid) return;
-        const btn = e.currentTarget as HTMLButtonElement;
         const opIds = (group as EditOp[]).map((op) => op.op_id);
-        void onOpUndoClick(bid, opIds, btn);
+        void onOpUndoClick(bid, opIds);
     }
+    $: undoKey = item.batchId
+        ? `${item.batchId}:${(group as EditOp[]).map((op) => op.op_id).join(',')}`
+        : '';
+    $: isUndoing = undoKey ? $undoPending.has(undoKey) : false;
 </script>
 
 <div class="seg-history-batch" class:is-revert={item.isRevert}>
@@ -133,16 +148,21 @@
 
         <span class="seg-history-batch-time">{formatHistDate(item.date || null)}</span>
 
-        {#if item.isPending}
-            <button
-                class="btn btn-sm seg-history-undo-btn"
-                on:click|stopPropagation={handleDiscardClick}
-            >Discard</button>
-        {:else if mode === 'history' && item.batchId && !item.isRevert}
-            <button
-                class="btn btn-sm seg-history-undo-btn"
-                on:click|stopPropagation={handleUndoClick}
-            >Undo</button>
+        {#if $editingMode.kind !== 'view'}
+            {#if item.isPending}
+                <button
+                    class="btn btn-sm seg-history-undo-btn"
+                    use:editGate
+                    on:click|stopPropagation={handleDiscardClick}
+                >Discard</button>
+            {:else if mode === 'history' && item.batchId && !item.isRevert && primary?.op_type !== 'pipeline'}
+                <button
+                    class="btn btn-sm seg-history-undo-btn"
+                    use:editGate
+                    on:click|stopPropagation={handleUndoClick}
+                    disabled={isUndoing}
+                >{isUndoing ? 'Undoing…' : 'Undo'}</button>
+            {/if}
         {/if}
     </div>
 
@@ -155,7 +175,7 @@
                     <div class="seg-history-before">
                         {#if stripSnap}
                             <SegmentRow
-                                seg={snapToSeg(stripSnap, null)}
+                                seg={snapToSeg(stripSnap, stripSnap.chapter ?? null)}
                                 readOnly={true}
                                 showPlayBtn={true}
                                 mode="history"
@@ -165,11 +185,39 @@
                         {/if}
                     </div>
                     <div class="seg-history-after">
-                        <div class="seg-history-empty">
-                            {group.length > 1 ? `\u00d7${group.length} deleted` : '(deleted)'}
-                        </div>
+                        {#if canExpandStrip}
+                            <button
+                                type="button"
+                                class="seg-history-deleted-toggle"
+                                aria-expanded={stripExpanded}
+                                on:click|stopPropagation={toggleStripExpanded}
+                            >{stripExpanded
+                                ? `\u25be ${group.length} deletions`
+                                : `\u25b8 \u00d7${group.length} deleted`}</button>
+                        {:else}
+                            <div class="seg-history-empty">(deleted)</div>
+                        {/if}
                     </div>
                 </div>
+                {#if stripExpanded}
+                    <div class="seg-history-deleted-detail">
+                        {#each group as op (op.op_id)}
+                            {@const detailSnap = (op.targets_before?.[0]) as HistorySnapshot | undefined}
+                            {#if detailSnap}
+                                <SegmentRow
+                                    seg={snapToSeg(detailSnap, detailSnap.chapter ?? null)}
+                                    readOnly={true}
+                                    showChapter={true}
+                                    showPlayBtn={true}
+                                    mode="history"
+                                    instanceRole="history"
+                                    opId={op.op_id}
+                                    {previewCtx}
+                                />
+                            {/if}
+                        {/each}
+                    </div>
+                {/if}
             {:else if item.type === 'multi-chapter-card'}
                 <div class="seg-history-chapter-list">
                     Chapters: {(item.chapters || []).map((c) => surahOptionText(c)).join(', ')}

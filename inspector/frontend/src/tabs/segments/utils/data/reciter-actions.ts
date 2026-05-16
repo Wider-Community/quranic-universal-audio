@@ -2,19 +2,17 @@
  * Reciter-level reload action — shared by SegmentsTab's reciter-change
  * handler and the stale-data reload paths in history/save.
  *
- * Fetches chapters + validate + stats + all + edit-history in parallel and
- * mirrors the responses to Svelte stores. Chapter-select options come from
+ * Fetches the full segment corpus on the critical path, then lets validation,
+ * stats, and history populate independently. Chapter-select options come from
  * `segAllData` reactively.
  */
 
 import { get } from 'svelte/store';
 
-import { fetchJson, fetchJsonOrNull } from '../../../../lib/api';
+import { fetchJson } from '../../../../lib/api';
+import { loadQuranRefs, quranRefs } from '../../../../lib/refs/quran-refs';
 import type {
     SegAllResponse,
-    SegChaptersResponse,
-    SegEditHistoryResponse,
-    SegStatsResponse,
     SegValidateResponse,
 } from '../../../../lib/types/api';
 import { preconnectOrigins } from '../../../../lib/utils/preconnect';
@@ -27,25 +25,61 @@ import {
 } from '../../stores/chapter';
 import { activeFilters } from '../../stores/filters';
 import { savedFilterView } from '../../stores/navigation';
-import { setStats } from '../../stores/stats';
 import { setValidation } from '../../stores/validation';
-import { renderEditHistoryPanel } from '../history/render';
-import { _fetchCacheStatus, _rewriteAudioUrls } from '../playback/audio-cache-ui';
-import { indexHistoryPeaksRecords } from '../waveform/utils';
+import { startHistoryLoad } from '../history/loader';
 import { clearPerReciterState } from './clear-per-reciter-state';
-import { _isCurrentReciterBySurah } from './reciter';
+import { dkTextForRef } from './references';
 
-/** Wire shape of GET /api/seg/history-peaks/<reciter>. Loose-typed because
- *  the route is additive and we tolerate missing fields per record. */
-interface HistoryPeaksResponse {
-    records: Array<{
-        op_id?: string;
-        url?: string;
-        start_ms?: number;
-        end_ms?: number;
-        peaks?: unknown;
-        duration_ms?: number;
-    }>;
+/**
+ * Hydrate per-segment fields that the server stripped from /seg/all to save
+ * wire bytes:
+ *   - `audio_url`: re-derived from the top-level `audio_by_chapter` map.
+ *     Every consumer expects each Segment to carry its own URL, and shared
+ *     string references across segments in the same chapter cost less heap
+ *     than separately allocated strings on the wire.
+ *   - `matched_text`: re-derived via `dkTextForRef` from the global
+ *     `quran-refs.json` bundle. Display already uses `dkTextForRef`; the
+ *     in-memory copy is for save round-trip + undo snapshots + merge text
+ *     composition. If `quranRefs` is still null (offline / fetch failed),
+ *     consumers tolerate empty `matched_text` via `|| ''` fallbacks.
+ */
+function _hydrateSegAll(all: SegAllResponse): SegAllResponse {
+    const audioByChapter = all.audio_by_chapter ?? {};
+    const refs = get(quranRefs);
+    const dkWords = refs?.dk_words;
+    const vwc = refs?.verse_word_counts;
+    for (const seg of all.segments) {
+        if (!seg.audio_url) {
+            seg.audio_url = audioByChapter[String(seg.chapter)] ?? '';
+        }
+        if (!seg.matched_text && dkWords && vwc) {
+            seg.matched_text = dkTextForRef(seg.matched_ref, dkWords, vwc);
+        }
+    }
+    return all;
+}
+
+/**
+ * Re-fetch just `/seg/all` for the currently selected reciter. Lighter
+ * counterpart to `reloadCurrentReciter` — used post-save / post-undo when
+ * filters, chapter selection, and per-reciter waveform/peaks state must be
+ * preserved.
+ */
+export async function reloadSegAll(): Promise<void> {
+    const reciter = get(selectedReciter);
+    if (!reciter) return;
+    try {
+        const all = await fetchJson<SegAllResponse>(`/api/seg/all/${reciter}`);
+        if (get(selectedReciter) !== reciter) return;
+        if ('error' in all) {
+            console.error('Error loading all segments:', (all as any).error);
+            return;
+        }
+        segAllData.set(_hydrateSegAll(all));
+        reciterVbrChapters.set(new Set(all.reciter_vbr_chapters ?? []));
+    } catch (e) {
+        console.error('Error reloading seg all:', e);
+    }
 }
 
 /**
@@ -63,50 +97,38 @@ export async function reloadCurrentReciter(): Promise<void> {
     savedFilterView.set(null);
     clearPerReciterState();
 
-    // Fetch chapters + validate + stats + all + history + history-peaks in parallel.
-    const [chResult, valResult, statsResult, allResult, histResult, histPeaksResult] = await Promise.allSettled([
-        fetchJson<SegChaptersResponse>(`/api/seg/chapters/${reciter}`),
-        fetchJson<SegValidateResponse>(`/api/seg/validate/${reciter}`),
-        fetchJson<SegStatsResponse>(`/api/seg/stats/${reciter}`),
+    // Kick off the refs load in parallel; hydration tolerates a null
+    // ``quranRefs`` (matched_text stays empty for those segs and consumer
+    // fallbacks via dkTextForRef at render time fill the gap).
+    const allPromise = Promise.all([
         fetchJson<SegAllResponse>(`/api/seg/all/${reciter}`),
-        fetchJsonOrNull<SegEditHistoryResponse>(`/api/seg/edit-history/${reciter}`),
-        fetchJsonOrNull<HistoryPeaksResponse>(`/api/seg/history-peaks/${reciter}`),
-    ]);
+        loadQuranRefs(),
+    ])
+        .then(([all]) => {
+            if (get(selectedReciter) !== reciter) return;
+            if ('error' in all) {
+                console.error('Error loading all segments:', (all as any).error);
+                return;
+            }
+            segAllData.set(_hydrateSegAll(all));
+            reciterVbrChapters.set(new Set(all.reciter_vbr_chapters ?? []));
+            preconnectOrigins(Object.values(all.audio_by_chapter ?? {}));
+        })
+        .catch((e) => console.error('Error loading all segments:', e));
 
-    if (get(selectedReciter) !== reciter) return;
-    void chResult; // chapters come from segAllData in Svelte; API response kept to preserve fetch parity
+    void fetchJson<SegValidateResponse>(`/api/seg/validate/${reciter}`)
+        .then((data) => {
+            if (get(selectedReciter) === reciter) setValidation(data);
+        })
+        .catch((e) => console.error('Error loading validation:', e));
 
-    if (valResult.status === 'fulfilled') {
-        setValidation(valResult.value);
-    } else {
-        console.error('Error loading validation:', valResult.reason);
-    }
+    // Stats are lazy-fetched by StatsPanel.svelte on accordion open. Compute
+    // is ~0.7-1.2 s server-side on prod-sized reciters; paying it eagerly on
+    // every reciter switch is wasteful — the panel rarely gets opened.
 
-    if (statsResult.status === 'fulfilled') {
-        if (!statsResult.value.error) setStats(statsResult.value);
-    } else {
-        console.error('Error loading stats:', statsResult.reason);
-    }
+    // Background only. Opening History awaits the same in-flight promise and
+    // then hydrates persisted waveform peaks.
+    void startHistoryLoad(reciter);
 
-    if (allResult.status === 'fulfilled') {
-        if ('error' in allResult.value) {
-            console.error('Error loading all segments:', (allResult.value as any).error);
-        } else {
-            segAllData.set(allResult.value);
-            reciterVbrChapters.set(new Set(allResult.value.reciter_vbr_chapters ?? []));
-            _rewriteAudioUrls();
-            preconnectOrigins(Object.values(allResult.value.audio_by_chapter ?? {}));
-            if (_isCurrentReciterBySurah()) _fetchCacheStatus(reciter);
-        }
-    } else {
-        console.error('Error loading all segments:', allResult.reason);
-    }
-
-    if (histResult.status === 'fulfilled' && histResult.value) {
-        renderEditHistoryPanel(histResult.value);
-    }
-
-    if (histPeaksResult.status === 'fulfilled' && histPeaksResult.value) {
-        indexHistoryPeaksRecords(histPeaksResult.value.records);
-    }
+    await allPromise;
 }

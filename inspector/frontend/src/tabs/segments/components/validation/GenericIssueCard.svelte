@@ -2,6 +2,7 @@
     import { createEventDispatcher } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { editGate } from '../../../../lib/actions/editGate';
     import type { SegValAnyItem, SegValBoundaryAdjItem } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
     import { IssueRegistry } from '../../domain/registry';
@@ -10,6 +11,7 @@
         getChapterSegments,
         segAllData,
         selectedChapter,
+        selectedReciter,
     } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import {
@@ -19,6 +21,7 @@
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
     import { ignoreIssueOnSegment } from '../../utils/edit/ignore';
+    import { warmSeg } from '../../utils/playback/warmup';
     import { isIgnoredFor } from '../../utils/validation/classified-issues';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
@@ -132,16 +135,22 @@
             const chapterSegs = getChapterSegments(_groupChapter);
             const batches = $historyData?.batches ?? [];
             const ops = getChapterOpsSnapshot(_groupChapter);
-            let splitOpsCount = 0;
+            // Bump on any structural OR reference-mutating op so memo busts
+            // when auto-fix / edit-reference / merge / etc. change a base seg.
+            const MUTATING_OPS = new Set([
+                'split_segment', 'merge_segments', 'edit_reference',
+                'auto_fix_missing_word', 'boundary_adjustment', 'trim_segment',
+            ]);
+            let mutatingOpsCount = 0;
             for (const b of batches) {
                 for (const op of b.operations) {
-                    if (op.op_type === 'split_segment') splitOpsCount++;
+                    if (MUTATING_OPS.has(op.op_type)) mutatingOpsCount++;
                 }
             }
             for (const op of ops) {
-                if (op.op_type === 'split_segment') splitOpsCount++;
+                if (MUTATING_OPS.has(op.op_type)) mutatingOpsCount++;
             }
-            const key = `${_groupChapter}|${_boundUid}|${chapterSegs.length}|${splitOpsCount}`;
+            const key = `${_groupChapter}|${_boundUid}|${chapterSegs.length}|${mutatingOpsCount}`;
             if (key !== _splitGroupMemoKey) {
                 _splitGroupMemoKey = key;
                 _splitGroupMemoResult = getSplitGroupMembers(
@@ -185,6 +194,15 @@
         if (nextSeg) out.push(nextSeg);
         return out;
     })();
+
+    // Warm the first sibling's chapter audio at its byte offset once the
+    // card resolves a non-empty sibling list. Dedupe in `warmup.ts` swallows
+    // repeat reactive fires.
+    let _warmedOnce = false;
+    $: if (!_warmedOnce && siblings.length > 0) {
+        _warmedOnce = true;
+        warmSeg(siblings[0], get(selectedReciter));
+    }
 
     // Open default context once resolvedSeg becomes available.
     let _didAutoOpen = false;
@@ -273,6 +291,7 @@
                 title={isDirtySegment
                     ? 'Cannot ignore \u2014 this segment already has unsaved edits'
                     : 'Dismiss this issue for this category'}
+                use:editGate
                 on:click={handleIgnore}
             >{isAlreadyIgnored ? 'Ignored' : 'Ignore'}</button>
         {/if}

@@ -75,7 +75,16 @@ export interface TrimWindow {
  */
 export interface SplitData {
     seg: Segment;
-    currentSplit: number;
+    /** Cursor times (absolute ms), one per split point. Length 1 = today's
+     *  binary split (one cursor → two pieces). Length N≥2 = repetitions
+     *  auto-split (N cursors → N+1 pieces). All cursors are kept in
+     *  ascending order and constrained so neighbours cannot cross. */
+    currentSplits: number[];
+    /** Per-section refs supplied by the backend auto-split. Length =
+     *  `currentSplits.length + 1` when set. Used to seed the post-confirm
+     *  ref-edit chain so each new segment opens with its recited range
+     *  already filled in. Absent for the manual single-cursor flow. */
+    refs?: string[];
     viewStart: number;
     viewEnd: number;
     audioUrl: string;

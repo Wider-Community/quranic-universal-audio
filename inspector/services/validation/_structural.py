@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import statistics as _statistics
 
-from services.data_loader import get_word_counts, load_seg_verses
+from services.storage.data_loader import get_word_counts, load_seg_verses
 from utils.references import chapter_from_ref
 
 

@@ -15,8 +15,7 @@ export const LS_KEYS = {
     SEG_AUTOPLAY:    'insp_seg_autoplay',
     SEG_AUTOSCROLL:  'insp_seg_autoscroll',
     SEG_AUTOSAVE:    'insp_seg_autosave',
-    SEG_PREFETCH:    'insp_seg_prefetch',
-    AUD_RECITER:     'insp_aud_reciter',
+    DASH_RECITER:    'insp_dash_reciter',
 } as const;
 
 export const PLACEHOLDER_SELECT = '-- select --';
@@ -41,9 +40,9 @@ export type ScrollAnimMode = typeof SCROLL_ANIM_MODES[keyof typeof SCROLL_ANIM_M
 export const SCROLL_ANIM_DEFAULT: ScrollAnimMode = SCROLL_ANIM_MODES.HYBRID;
 
 export const TAB_NAMES = {
+    DASHBOARD: 'dashboard',
     TIMESTAMPS: 'timestamps',
     SEGMENTS: 'segments',
-    AUDIO: 'audio',
 } as const;
 export type TabName = typeof TAB_NAMES[keyof typeof TAB_NAMES];
 

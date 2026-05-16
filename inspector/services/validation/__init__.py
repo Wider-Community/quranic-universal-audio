@@ -1,31 +1,37 @@
-"""Validation engine: 11-category segment validation, chapter validation counts,
-and validation log generation.
+"""Validation engine: registry-backed segment validation + chapter counts.
 
 No Flask imports -- all functions accept parameters and return plain dicts.
 
-Public API (routes use ``from inspector.services.validation import X``):
+Public API (routes use ``from services.validation import X``):
 - ``is_ignored_for``
 - ``classify_segment``, ``classify_segment_full``, ``classify_entry``
 - ``classify_snapshot``
 - ``chapter_validation_counts``
 - ``validate_reciter_segments``
-- ``run_validation_log``
 - registry symbols (re-exported)
 """
 
 from __future__ import annotations
 
-import sys
-from collections import defaultdict
-from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
-from config import LOW_CONFIDENCE_THRESHOLD, SURAH_INFO_PATH
+from config import LOW_CONFIDENCE_THRESHOLD
 from constants import VALIDATION_CATEGORIES
-from services import cache
-from services.data_loader import get_word_counts, load_detailed, load_probe_v2
-from services.history_query import build_resolved_by_edit_index
-from services.phonemizer_service import get_canonical_phonemes
+from services.storage import cache
+from services.storage.data_loader import get_word_counts, load_detailed, load_probe_v2, load_seg_verses
+from services.activity.history_query import (
+    build_resolved_by_edit_index,
+    parse_history_for_reciter,
+    recover_strip_specials_chapter_per_op,
+)
 from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
+
+# Phonemizer is no longer loaded in the validate runtime path. The phonemic
+# side of boundary_adj is captured at backfill / extraction time via
+# ``inspector/scripts/backfill_boundary_adj.py`` (which IS the only remaining
+# consumer of quranic_phonemizer / canonical_phonemes.pkl) and persisted as
+# ``is_boundary_adj`` on every segment. The classifier reads the persisted
+# value instead of recomputing — canonical=None throughout the runtime path.
 
 from services.validation.classifier import (
     is_ignored_for,
@@ -66,12 +72,12 @@ def chapter_validation_counts(entries: list, chapter: int, meta: dict,
     is_by_ayah = is_by_ayah_source(meta.get("audio_source", ""))
 
     counts = {cat: 0 for cat in VALIDATION_CATEGORIES}
-    verse_segments: dict[tuple, list] = defaultdict(list)
+    chapter_entries = [
+        entry for entry in entries
+        if chapter_from_ref(entry["ref"]) == chapter
+    ]
 
-    for entry in entries:
-        ch = chapter_from_ref(entry["ref"])
-        if ch != chapter:
-            continue
+    for entry in chapter_entries:
         entry_ref = entry.get("ref", "")
         for seg in entry.get("segments", []):
             matched_ref = seg.get("matched_ref", "")
@@ -113,31 +119,96 @@ def chapter_validation_counts(entries: list, chapter: int, meta: dict,
                 if flags[cat]:
                     counts[cat] += 1
 
-            if s_ayah != e_ayah:
-                for ayah in range(s_ayah, e_ayah + 1):
-                    if ayah == s_ayah:
-                        wc = word_counts.get((surah, ayah), s_word)
-                        verse_segments[(surah, ayah)].append((s_word, wc))
-                    elif ayah == e_ayah:
-                        verse_segments[(surah, ayah)].append((1, e_word))
-                    else:
-                        wc = word_counts.get((surah, ayah), 1)
-                        verse_segments[(surah, ayah)].append((1, wc))
-            else:
-                verse_segments[(surah, s_ayah)].append((s_word, e_word))
-
-    for (surah, ayah), seg_list in verse_segments.items():
-        expected = word_counts.get((surah, ayah))
-        if not expected:
-            continue
-        covered = set()
-        for wf, wt in seg_list:
-            covered.update(range(wf, wt + 1))
-        missing = set(range(1, expected + 1)) - covered
-        if missing:
-            counts["missing_words"] += len(missing)
+    detail = _build_detail_lists(
+        chapter_entries, is_by_ayah, word_counts, canonical, single_word_verses,
+        probe_failed_uids=probe_failed_uids,
+    )
+    counts["missing_words"] = len(_build_missing_words(
+        detail["verse_segments"], word_counts, detail["sequence_gaps"]
+    ))
 
     return counts
+
+
+def _load_resolved_idx_cached(reciter: str) -> dict:
+    """Cache-aware wrapper for ``build_resolved_by_edit_index``.
+
+    Hoisted so the parallel fan-out below can submit it as a single callable.
+    """
+    resolved = cache.get_seg_resolved_by_edit(reciter)
+    if resolved is None:
+        resolved = build_resolved_by_edit_index(reciter)
+        cache.set_seg_resolved_by_edit(reciter, resolved)
+    return resolved
+
+
+def _deleted_basmala_chapters(reciter: str) -> set[int]:
+    """Collect chapters whose Basmala the alignment pipeline already stripped.
+
+    Per-op chapter resolution order (first hit wins):
+
+    1. **Snapshot's stamped ``chapter``** (post extraction-fix data) — exact.
+    2. **Batch's single ``chapter`` field** when set (waqf_sakt; never
+       strip_specials, which is always multi-chapter) — exact.
+    3. **``recover_strip_specials_chapter_per_op`` heuristic** — pairs op
+       groups (split on time-resets) with ``sorted(batch.chapters)``.
+       Exact when group count matches chapter count (validated on Husary:
+       117 ops, 112 chapters → 112 groups → 1:1 mapping). The recovery
+       returns ``{}`` when the heuristic disagrees with the chapter count.
+    4. **Batch's ``chapters`` list — union fallback** for legacy batches
+       where the per-op recovery refused (e.g. Raad: 74 groups vs 77
+       chapters). Credits every chapter in the union, over-counting
+       chapters that only had Isti'adha stripped. The downside: a
+       chapter that lost only an Isti'adha (no Basmala) won't get
+       flagged as missed-Basmala. We accept that mis-detect because the
+       opposite failure (flagging every chapter as missed even when the
+       pipeline did strip its Basmala) is much worse — that's what
+       legacy reciters showed before this fallback existed.
+    """
+    out: set[int] = set()
+    for batch in parse_history_for_reciter(reciter):
+        if batch.get("batch_type") != "strip_specials":
+            continue
+        batch_chapter = batch.get("chapter") if isinstance(batch.get("chapter"), int) else None
+        batch_chapters = [
+            c for c in (batch.get("chapters") or []) if isinstance(c, int) and c > 0
+        ]
+        recovered = recover_strip_specials_chapter_per_op(batch)
+        # Track ops we couldn't resolve via stamp / batch.chapter / recovery —
+        # if any Basmala op falls through, the tier-4 union fallback fires
+        # ONCE per batch (over-credit, but bounded to that batch's chapters).
+        had_basmala_op = False
+        had_unresolved_basmala = False
+        for op in batch.get("operations") or []:
+            snapshots = op.get("targets_before") or []
+            if not snapshots:
+                continue
+            snap = snapshots[0]
+            if not isinstance(snap, dict):
+                continue
+            # Treat the aligner's combined "Isti'adha+Basmala" ref as a
+            # Basmala deletion (safety net for legacy data that wasn't
+            # normalised at extraction time — new extractions rewrite the
+            # snapshot ref to "Basmala" directly).
+            if snap.get("matched_ref") not in ("Basmala", "Isti'adha+Basmala"):
+                continue
+            had_basmala_op = True
+            ch = snap.get("chapter")
+            if isinstance(ch, int) and ch > 0:
+                out.add(ch)
+                continue
+            if batch_chapter is not None:
+                out.add(batch_chapter)
+                continue
+            op_id = op.get("op_id")
+            if isinstance(op_id, str) and op_id in recovered:
+                out.add(recovered[op_id])
+                continue
+            had_unresolved_basmala = True
+
+        if had_basmala_op and had_unresolved_basmala and batch_chapters:
+            out.update(batch_chapters)
+    return out
 
 
 def validate_reciter_segments(reciter: str) -> dict:
@@ -145,29 +216,42 @@ def validate_reciter_segments(reciter: str) -> dict:
 
     Returns a plain dict suitable for ``jsonify()``.
     """
-    entries = load_detailed(reciter)
+    # Parallel I/O fan-out: four independent bucket reads. SSL recv releases
+    # the GIL, so threads cut the wall-clock cost from sum(serial) to
+    # max(slowest). Each loader caches its own result via services/cache.py,
+    # so the threads don't double-fetch. ``load_seg_verses`` populates the
+    # cache that ``_check_structural_errors`` later reads.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        f_detailed = pool.submit(load_detailed, reciter)
+        f_resolved = pool.submit(_load_resolved_idx_cached, reciter)
+        f_probe = pool.submit(load_probe_v2, reciter)
+        f_verses = pool.submit(load_seg_verses, reciter)
+        entries = f_detailed.result()
+        resolved_idx = f_resolved.result()
+        probe_failed_uids, probe_meta = f_probe.result()
+        f_verses.result()  # prime the seg_verses cache before structural pass
+
     if not entries:
         return None
 
     word_counts = get_word_counts()
-    canonical = get_canonical_phonemes(reciter)
+    # canonical=None: the phonemic side of boundary_adj is captured at backfill
+    # time onto each seg's ``is_boundary_adj`` field. Classifier short-circuits
+    # on the persisted value; legacy segs without the field fall through to
+    # compute_is_boundary_adj with canonical=None → structural side only.
+    canonical = None
     single_word_verses = {k for k, v in word_counts.items() if v == 1}
 
     meta = cache.get_seg_meta(reciter)
     is_by_ayah = is_by_ayah_source(meta.get("audio_source", ""))
 
-    # Inject resolved-by-edit categories from edit_history.jsonl. The
-    # transient ``_resolved_by_edit`` field is consulted by
-    # ``is_resolved_by_edit`` during this validate pass and stripped from
-    # every seg before returning so it never reaches disk via the cached
-    # entries list. Categories are limited to the soft set in
+    # Inject resolved-by-edit categories. The transient ``_resolved_by_edit``
+    # field is consulted by ``is_resolved_by_edit`` during this validate pass
+    # and stripped from every seg before returning so it never reaches disk
+    # via the cached entries list. Categories are limited to the soft set in
     # ``RESOLVES_BY_EDIT_CATEGORIES`` (boundary_adj / audio_bleeding /
-    # qalqala / repetitions) -- this is what makes those cards disappear
-    # from the accordion once the user has edited from them.
-    resolved_idx = cache.get_seg_resolved_by_edit(reciter)
-    if resolved_idx is None:
-        resolved_idx = build_resolved_by_edit_index(reciter)
-        cache.set_seg_resolved_by_edit(reciter, resolved_idx)
+    # repetitions) -- this is what makes those cards disappear from the
+    # accordion once the user has edited from them.
     _injected_segs: list[dict] = []
     if resolved_idx:
         for entry in entries:
@@ -177,12 +261,16 @@ def validate_reciter_segments(reciter: str) -> dict:
                     seg["_resolved_by_edit"] = resolved_idx[uid]
                     _injected_segs.append(seg)
 
-    probe_failed_uids, probe_meta = load_probe_v2(reciter)
+    deleted_basmala_chapters = _deleted_basmala_chapters(reciter)
+
     detail = _build_detail_lists(
         entries, is_by_ayah, word_counts, canonical, single_word_verses,
         probe_failed_uids=probe_failed_uids,
+        deleted_basmala_chapters=deleted_basmala_chapters,
     )
-    missing_words = _build_missing_words(detail["verse_segments"], word_counts)
+    missing_words = _build_missing_words(
+        detail["verse_segments"], word_counts, detail["sequence_gaps"]
+    )
     errors, missing_verses, stats = _check_structural_errors(reciter, entries)
 
     # Aggregate counts in registry-declared accordion order. Additive on top
@@ -201,6 +289,7 @@ def validate_reciter_segments(reciter: str) -> dict:
         "cross_verse": len(detail["cross_verse"]),
         "qalqala": len(detail["qalqala"]),
         "muqattaat": len(detail["muqattaat"]),
+        "basmala_amin": len(detail["basmala_amin"]),
     }
 
     result = {
@@ -217,6 +306,7 @@ def validate_reciter_segments(reciter: str) -> dict:
         "repetitions": detail["repetitions"],
         "muqattaat": detail["muqattaat"],
         "qalqala": detail["qalqala"],
+        "basmala_amin": detail["basmala_amin"],
         "category_counts": category_counts,
         "stats": stats,
     }
@@ -231,27 +321,6 @@ def validate_reciter_segments(reciter: str) -> dict:
     return result
 
 
-def run_validation_log(reciter_dir: Path) -> None:
-    """Run segment validation and write validation.log without printing to console."""
-    import io as _io
-    from datetime import datetime as _dt
-    from validators.validate_segments import validate_reciter, load_word_counts
-
-    wc = load_word_counts(SURAH_INFO_PATH)
-    report_path = reciter_dir / "validation.log"
-
-    buf = _io.StringIO()
-    old_stdout = sys.stdout
-    sys.stdout = buf
-    try:
-        validate_reciter(reciter_dir, wc, verbose=True)
-    finally:
-        sys.stdout = old_stdout
-
-    content = f"Generated: {_dt.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n" + buf.getvalue()
-    report_path.write_text(content, encoding="utf-8")
-
-
 __all__ = [
     "is_ignored_for",
     "is_resolved_by_edit",
@@ -263,7 +332,6 @@ __all__ = [
     "classify_snapshot",
     "chapter_validation_counts",
     "validate_reciter_segments",
-    "run_validation_log",
     "_build_detail_lists",
     "IssueDefinition",
     "IssueRegistry",

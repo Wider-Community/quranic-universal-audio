@@ -1,15 +1,6 @@
 /* ============ Segments tab ============ */
-.seg-selector-bar {
-    margin-bottom: 15px;
-    flex-wrap: wrap;
-}
-
-.seg-bar-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-left: auto;
-}
+/* Layout for reciter/surah/ayah selection + actions lives in the pinned
+   SegmentsFooter component (tabs/segments/components/footer/). */
 
 /* Audio cache panel */
 .seg-cache-panel {
@@ -80,47 +71,6 @@
 .seg-cache-status {
     font-size: 0.8rem;
     color: #7a8a9a;
-}
-
-.seg-controls {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    padding: 10px 20px;
-    margin-bottom: 15px;
-}
-.seg-controls .btn {
-    margin-left: 0;
-}
-
-.seg-controls audio {
-    display: none;
-}
-
-.seg-controls label {
-    color: #aaa;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.9rem;
-}
-
-.seg-controls select {
-    padding: 6px 10px;
-    background: #1a1a3e;
-    color: #4cc9f0;
-    border: 1px solid #333;
-    border-radius: 6px;
-    font-size: 14px;
-}
-
-#seg-autoplay-btn.seg-autoplay-on,
-#seg-autoscroll-btn.seg-autoscroll-on {
-    background: #4361ee;
-}
-#seg-autoplay-btn.seg-autoplay-off,
-#seg-autoscroll-btn.seg-autoscroll-off {
-    background: #555;
 }
 
 /* Segment list */
@@ -390,22 +340,6 @@
     padding: 0 2px;
     outline: none;
     text-align: center;
-}
-
-
-.seg-tag {
-    font-size: 0.65rem;
-    padding: 1px 6px;
-    border-radius: 4px;
-    margin-left: 6px;
-    font-weight: bold;
-    vertical-align: middle;
-}
-
-.seg-tag-missing {
-    background: rgba(244, 67, 54, 0.2);
-    color: #f44336;
-    border: 1px solid #f44336;
 }
 
 /* Loading overlay for segments */

@@ -175,10 +175,34 @@ export function _ensureWaveformObserver(): IntersectionObserver {
 // Peaks loading + polling
 // ---------------------------------------------------------------------------
 
+// Tiny stable hash (FNV-1a 32-bit, 8-char hex) over arbitrary string input.
+// Lets us append ?h=<hash> to peaks URLs so the backend can serve immutable
+// caches: when audio sources change, the hash changes, and CDN/browser see
+// a fresh URL. Backend ignores the value (purely a cache-key buster).
+function _stableHash(input: string): string {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < input.length; i++) {
+        h ^= input.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16).padStart(8, '0').slice(0, 8);
+}
+
 export function _fetchPeaks(reciter: string, chapters: Array<number | string>): void {
     if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
     if (!chapters || chapters.length === 0) return;
-    const url = `/api/seg/peaks/${reciter}?chapters=${chapters.join(',')}`;
+    // Hash over the audio URLs the response will key on — peaks per audio
+    // URL are deterministic and only change when the catalog flips a
+    // delivery's audio_source. Whole-file only; segment-range peaks live on
+    // /api/seg/segment-peaks (POST) and aren't cached here.
+    const allData = get(segAllData);
+    const audioByChapter = allData?.audio_by_chapter || {};
+    const audioForReq = chapters
+        .map(c => `${c}=${audioByChapter[String(c)] || ''}`)
+        .sort()
+        .join('|');
+    const h = _stableHash(audioForReq);
+    const url = `/api/seg/peaks/${reciter}?chapters=${chapters.join(',')}&h=${h}`;
     fetchJson<SegPeaksResponse>(url).then(data => {
         if (!get(segAllData) || get(selectedReciter) !== reciter) return;
         for (const [audioUrl, pe] of Object.entries(data.peaks || {})) {
@@ -211,12 +235,25 @@ export async function _fetchPeaksForClick(seg: Segment, chapter: number | string
 
     const { prev, next } = getAdjacentSegments(chapter, seg.index);
     const prevEnd = prev?.time_end ?? 0;
-    const nextStart = next?.time_start ?? Number.POSITIVE_INFINITY;
+    // Cap the upper bound against the authoritative audio EOF so we never
+    // ask the server to decode past EOF — extraction sometimes leaves the
+    // last seg's time_end (and the +trimPadRight pad) extending past actual
+    // audio end. An over-extended request returns truncated peaks whose
+    // effective time→index mapping doesn't match the requested span, which
+    // can collapse `_slicePeaks` to an empty slice → blank canvas.
+    // URL-keyed lookup first (covers by_ayah where each ayah is its own
+    // file), then chapter-keyed (by_surah).
+    const audioEndMs = allData.duration_ms_by_url?.[audioUrl]
+        ?? allData.chapter_duration_ms_by_chapter?.[String(chapter)];
+    const nextStart = next?.time_start
+        ?? (audioEndMs && audioEndMs > seg.time_end ? audioEndMs : Number.POSITIVE_INFINITY);
     const cfg = get(segConfig);
+    const rawEnd = Math.min(nextStart, seg.time_end + cfg.trimPadRight);
+    const cappedEnd = audioEndMs ? Math.min(rawEnd, audioEndMs) : rawEnd;
     const entry = {
         url: audioUrl,
         start_ms: Math.max(prevEnd, seg.time_start - cfg.trimPadLeft, 0),
-        end_ms: Math.min(nextStart, seg.time_end + cfg.trimPadRight),
+        end_ms: cappedEnd,
     };
 
     try {

@@ -20,10 +20,12 @@ import {
     selectedReciter,
     selectedVerse,
 } from '../../stores/chapter';
+import { chapterCbrKbps } from '../../stores/chapter-meta';
 import { segPort } from '../../stores/playback';
-import { clearSegPrefetchCache, disposeSegRange, stopSegAnimation } from '../playback/playback';
+import { disposeSegRange, stopSegAnimation } from '../playback/playback';
+import { wrapCbrSrcIfBySurah } from '../playback/source';
+import { warmChapterStart } from '../playback/warmup';
 import { _fetchChapterPeaksIfNeeded } from '../waveform/utils';
-import { _isCurrentReciterBySurah } from './reciter';
 
 /**
  * Fetch per-chapter data and update stores + imperative consumers. Handles
@@ -46,7 +48,6 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
     disposeSegRange();
     segPort.setSource(null);
     stopSegAnimation();
-    clearSegPrefetchCache();
 
     if (!reciter || !chapter) return;
 
@@ -57,11 +58,9 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
 
         // by_surah reciters need the audio-proxy wrap for CORS so Web Audio
         // can route the chapter MP3 through `MediaElementAudioSourceNode`.
-        // Compute it here and pass to the port via `cbrSrc`; the canonical
-        // `audioUrl` stays unwrapped so VBR clip-URL building uses it raw.
-        const cbrSrc = (_isCurrentReciterBySurah() && chData.audio_url && !chData.audio_url.startsWith('/api/'))
-            ? `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(chData.audio_url)}`
-            : chData.audio_url;
+        // The canonical `audioUrl` stays unwrapped so VBR clip-URL building
+        // uses it raw.
+        const cbrSrc = wrapCbrSrcIfBySurah(chData.audio_url ?? '', reciter);
 
         const chNum = parseInt(chapter);
         // Slice segments into the per-chapter list (imperative consumers
@@ -73,6 +72,11 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
         chData.segments = chapterSegs;
         segData.set(chData);
         reciterVbrChapters.set(new Set(chData.reciter_vbr_chapters ?? []));
+        chapterCbrKbps.set(new Map(
+            Object.entries(chData.chapter_bitrate_kbps ?? {})
+                .map(([k, v]) => [parseInt(k), v] as [number, number])
+                .filter(([k]) => Number.isFinite(k)),
+        ));
         _fetchChapterPeaksIfNeeded(reciter, chNum);
 
         if (chData.audio_url) {
@@ -91,6 +95,9 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
                 reciter,
                 vbr: !!chData.vbr,
             });
+            // Hide cold-FUSE / cold-CDN play-click stall by warming a 64 KB
+            // Range at byte 0 of the chapter MP3. No-op for VBR + missing-kbps.
+            warmChapterStart(reciter, chData.audio_url, chNum);
         }
     } catch (e) {
         console.error('Error loading chapter data:', e);

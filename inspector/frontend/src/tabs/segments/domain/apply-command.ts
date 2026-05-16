@@ -41,6 +41,13 @@ import type {
 } from './command';
 import { IssueRegistry } from './registry';
 
+const HISTORY_NEUTRAL_CONTEXT_CATEGORIES = new Set(['basmala_amin', 'muqattaat']);
+
+function _historyContextCategory(category: string | null | undefined): string | null {
+    if (!category || HISTORY_NEUTRAL_CONTEXT_CATEGORIES.has(category)) return null;
+    return category;
+}
+
 // ---------------------------------------------------------------------------
 // Op-type translation
 // ---------------------------------------------------------------------------
@@ -70,10 +77,6 @@ const STRUCTURAL_COMMANDS: ReadonlySet<Operation> = new Set([
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function _now(ctx?: ApplyCommandContext): string {
-    return (ctx?.now ?? (() => new Date().toISOString()))();
-}
 
 function _newUid(ctx?: ApplyCommandContext): string {
     return (ctx?.uid ?? (() => crypto.randomUUID()))();
@@ -118,17 +121,13 @@ function _baseOperation(
     ctx: ApplyCommandContext | undefined,
 ): CommandOperation {
     void targetSeg;
-    const startedAt = _now(ctx);
     const op: CommandOperation = {
         op_id: _newUid(ctx),
         op_type: OP_TYPE_BY_COMMAND[cmd.type as Operation],
-        op_context_category: cmd.contextCategory ?? cmd.sourceCategory ?? null,
+        op_context_category: _historyContextCategory(cmd.contextCategory ?? cmd.sourceCategory ?? null),
         fix_kind: cmd.fixKind ?? (cmd.type === 'ignoreIssue' ? 'ignore'
             : cmd.type === 'autoFixMissingWord' ? 'auto_fix'
             : 'manual'),
-        started_at_utc: startedAt,
-        applied_at_utc: startedAt,
-        ready_at_utc: null,
         targets_before: [],
         targets_after: [],
         type: cmd.type as Operation,
@@ -151,6 +150,7 @@ function _baseOperation(
  */
 function _resolvedFromContext(category: string | null | undefined): string[] {
     if (!category) return [];
+    if (HISTORY_NEUTRAL_CONTEXT_CATEGORIES.has(category)) return [];
     const defn = IssueRegistry[category];
     if (!defn || defn.scope !== 'per_segment') return [];
     return [category];
@@ -212,48 +212,109 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
     const target = _findSeg(state, cmd.segmentUid);
     if (!target) throw new Error(`applyCommand[split]: segment '${cmd.segmentUid}' not found`);
     const chapter = _chapterFor(target, state);
-    const splitMs = cmd.splitMs;
-    if (splitMs <= target.time_start || splitMs >= target.time_end) {
-        throw new Error(`applyCommand[split]: splitMs=${splitMs} out of range [${target.time_start}, ${target.time_end}]`);
+
+    // Normalize cursors → ascending list of cuts strictly inside the seg.
+    const cursors = (Array.isArray(cmd.splitMs) ? cmd.splitMs.slice() : [cmd.splitMs])
+        .sort((a, b) => a - b);
+    for (let i = 0; i < cursors.length; i++) {
+        const cur = cursors[i]!;
+        if (cur <= target.time_start || cur >= target.time_end) {
+            throw new Error(
+                `applyCommand[split]: splitMs=${cur} out of range `
+                + `[${target.time_start}, ${target.time_end}]`,
+            );
+        }
+        if (i > 0 && cur <= cursors[i - 1]!) {
+            throw new Error(
+                `applyCommand[split]: cursors must be strictly ascending (got ${cursors})`,
+            );
+        }
     }
 
-    const firstHalf: Segment = {
-        ..._cloneSeg(target),
-        time_end: splitMs,
-    };
-    const secondHalf: Segment = {
-        ..._cloneSeg(target),
-        segment_uid: cmd.secondHalfUid ?? _newUid(ctx),
-        index: target.index + 1,
-        time_start: splitMs,
-    };
-    if (cmd.firstRef !== undefined) firstHalf.matched_ref = cmd.firstRef;
-    if (cmd.firstText !== undefined) firstHalf.matched_text = cmd.firstText;
-    if (cmd.secondRef !== undefined) secondHalf.matched_ref = cmd.secondRef;
-    if (cmd.secondText !== undefined) secondHalf.matched_text = cmd.secondText;
+    // Per-piece ref + text resolution. The array form `cmd.refs`/`cmd.texts`
+    // wins (length must equal pieces.length); otherwise the legacy
+    // `first*`/`second*` fields apply for the N=2 case.
+    const nPieces = cursors.length + 1;
+    const refs: (string | undefined)[] = new Array(nPieces).fill(undefined);
+    const texts: (string | undefined)[] = new Array(nPieces).fill(undefined);
+    if (cmd.refs && cmd.refs.length === nPieces) {
+        for (let i = 0; i < nPieces; i++) refs[i] = cmd.refs[i];
+    } else if (nPieces === 2) {
+        refs[0] = cmd.firstRef;
+        refs[1] = cmd.secondRef;
+    }
+    if (cmd.texts && cmd.texts.length === nPieces) {
+        for (let i = 0; i < nPieces; i++) texts[i] = cmd.texts[i];
+    } else if (nPieces === 2) {
+        texts[0] = cmd.firstText;
+        texts[1] = cmd.secondText;
+    }
+
+    // Build N+1 pieces. First piece reuses parent UID; the rest take from
+    // `cmd.newUids` (or fall back to fresh UIDs). `cmd.secondHalfUid` is a
+    // single-cursor convenience kept for older callers.
+    //
+    // Drop repetition metadata from every child: a split *resolves* the
+    // multi-pass repetition into independent pieces, so the inherited
+    // `wrap_word_ranges` / `has_repeated_words` no longer describe any one
+    // piece's content. Leaving them attached re-tags clean post-split segs
+    // as repetitions and makes Auto Split feed wrong refs to MFA.
+    const pieces: Segment[] = [];
+    for (let i = 0; i < nPieces; i++) {
+        const start = i === 0 ? target.time_start : cursors[i - 1]!;
+        const end = i === nPieces - 1 ? target.time_end : cursors[i]!;
+        const piece: Segment = {
+            ..._cloneSeg(target),
+            time_start: start,
+            time_end: end,
+        };
+        delete piece.wrap_word_ranges;
+        delete piece.has_repeated_words;
+        if (i === 0) {
+            // Keep parent uid + index for piece 0.
+        } else {
+            piece.segment_uid = cmd.newUids?.[i - 1]
+                ?? (i === 1 ? cmd.secondHalfUid : undefined)
+                ?? _newUid(ctx);
+            piece.index = target.index + i;
+        }
+        if (refs[i] !== undefined) piece.matched_ref = refs[i]!;
+        if (texts[i] !== undefined) piece.matched_text = texts[i]!;
+        pieces.push(piece);
+    }
 
     const ctxCat = cmd.sourceCategory ?? cmd.contextCategory;
     const resolved = new Set<string>(_resolvedFromContext(ctxCat));
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);
     op.snapshots.before = [_snapshot(target)];
-    op.snapshots.after = [_snapshot(firstHalf), _snapshot(secondHalf)];
+    op.snapshots.after = pieces.map(_snapshot);
     op.targets_before = op.snapshots.before;
     op.targets_after = op.snapshots.after;
     op.affected_chapters = [chapter];
 
-    const firstUid = firstHalf.segment_uid ?? cmd.segmentUid;
-    const secondUid = secondHalf.segment_uid!;
+    const insertedUids = pieces.slice(1).map((p) => p.segment_uid!);
+    const byId: Record<string, Segment> = {};
+    for (const p of pieces) {
+        const u = p.segment_uid ?? cmd.segmentUid;
+        byId[u] = p;
+    }
+    const firstUid = pieces[0]!.segment_uid ?? cmd.segmentUid;
     const nextState: CommandNextState = {
-        byId: { [firstUid]: firstHalf, [secondUid]: secondHalf },
+        byId,
         affectedChapter: chapter,
-        insertedSegmentUids: [secondUid],
+        insertedSegmentUids: insertedUids,
     };
     const ids = state.idsByChapter[chapter];
     if (ids) {
         const ix = ids.indexOf(cmd.segmentUid);
         if (ix !== -1) {
-            const nextIds = [...ids.slice(0, ix), firstUid, secondUid, ...ids.slice(ix + 1)];
+            const nextIds = [
+                ...ids.slice(0, ix),
+                firstUid,
+                ...insertedUids,
+                ...ids.slice(ix + 1),
+            ];
             nextState.idsByChapter = { ...state.idsByChapter, [chapter]: nextIds };
         }
     }
@@ -264,9 +325,9 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
         validationDelta: { resolved: [...resolved], introduced: [] },
         patch: _buildPatch(
             [_snapshot(target)],
-            [_snapshot(firstHalf), _snapshot(secondHalf)],
+            pieces.map(_snapshot),
             [],
-            [secondUid],
+            insertedUids,
             [chapter],
         ),
     };
@@ -303,6 +364,11 @@ function _reduceMerge(state: ApplyCommandState, cmd: MergeCommand, ctx?: ApplyCo
         confidence: 1.0,
     };
     merged.ignored_categories = mergedIc.size ? [...mergedIc] : undefined;
+    // Merging changes the seg's matched_ref + geometry; any wrap that was
+    // scoped to ``first`` may not apply to the merged span. Drop wrap +
+    // has_repeated_words for the same reasons split and edit-ref do.
+    delete merged.wrap_word_ranges;
+    delete merged.has_repeated_words;
     const ctxCat = cmd.sourceCategory ?? cmd.contextCategory;
     const resolved = _resolvedFromContext(ctxCat);
 
@@ -369,6 +435,16 @@ function _reduceEditReference(
     next.matched_ref = cmd.matched_ref;
     if (cmd.matched_text !== undefined) next.matched_text = cmd.matched_text;
     next.confidence = 1.0;
+    // Same reasoning as the split path: changing matched_ref invalidates any
+    // wrap that was scoped to the old range. Rather than try to detect when
+    // the new ref still geometrically contains the wrap, just drop it — the
+    // bug it prevents (stale wraps re-tagging clean segs as repetitions and
+    // poisoning Auto Split) far outweighs the cost of asking the user to
+    // re-tag a real repetition seg whose ref they edited.
+    if (target.matched_ref !== cmd.matched_ref) {
+        delete next.wrap_word_ranges;
+        delete next.has_repeated_words;
+    }
     const resolved = _resolvedFromContext(cmd.sourceCategory ?? cmd.contextCategory);
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);
@@ -454,6 +530,7 @@ function _reduceIgnoreIssue(
     if (!next.ignored_categories.includes(cmd.category)) {
         next.ignored_categories.push(cmd.category);
     }
+    next.confidence = 1.0;
 
     const op = _baseOperation(cmd, target, chapter, target.index, ctx);
     op.op_context_category = cmd.category;

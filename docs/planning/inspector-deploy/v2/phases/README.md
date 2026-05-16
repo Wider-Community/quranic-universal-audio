@@ -16,12 +16,12 @@ For the *why* of any decision, jump to the detailed v2 docs in the parent folder
 
 | # | Phase | Status | Blocks |
 |---|---|---|---|
-| 1 | [Foundation](01-foundation.md) | not started | 2 |
-| 2 | [Deployable image + read-only deploy](02-deployable-image.md) | not started | 3, 4 |
+| 1 | [Foundation](01-foundation.md) | done (Phase 5 carries: repo `data/` cleanup; D19 carries: 14 legacy tests; D20 carries: legacy bucket shards) | 2 |
+| 2 | [Deployable image + read-only deploy](02-deployable-image.md) | done | 3, 4 |
 | 3 | [Auth + claim flow](03-auth-and-claims.md) | not started | 4, 5 |
 | 4 | [Save migration](04-save-migration.md) | not started | 5 |
 | 5 | [Publish pipeline](05-publish-pipeline.md) | not started | 6 |
-| 6 | [Public dashboard + reusable picker](06-public-dashboard.md) | not started | 7 |
+| 6 | [Public dashboard + reusable picker](06-public-dashboard.md) | done | 7 |
 | 7 | [Admin dashboard + cleanup](07-admin-dashboard.md) | not started | — |
 
 Phases land sequentially. Phase 2 unblocks 3 and 4 in parallel only if you have someone to split work across — solo, run sequentially. Phase 6 depends on the reciter taxonomy / catalog schema refactor landing out-of-band — the doc is intentionally taxonomy-agnostic and will be refined against the concrete schema before implementation starts.
@@ -66,6 +66,10 @@ Exact commands / smoke tests / file checks that prove acceptance.
 
 ## Reference
 - Detailed-doc cross-links for the *why*.
+
+## Outcomes 
+- After phase completion.
+- Keep concise, don't mention every single detail and function - it is just a high level overview reference for future phases.
 ```
 
 Anti-patterns:
@@ -73,6 +77,23 @@ Anti-patterns:
 - Don't enumerate every internal helper — only externally observable deliverables (endpoints, files, behaviors).
 - Don't put commit-by-commit task lists — those go in PR descriptions.
 - If a phase needs detailed plumbing notes, write a separate `phase-N-notes.md` next to it; don't bloat the contract.
+
+## Global rule — no forward-looking comments in code
+
+**Code comments describe what IS, not what WILL BE.** Future-action notes ("Phase 3 will wire this", "deferred until Phase 5", "follow-up: add ESLint rule", "will revisit when…") are noise in source files — they rot, they distract during code review, and they encode roadmap state that belongs in a roadmap doc.
+
+Anywhere you'd be tempted to write that comment, route it instead:
+
+| Kind of note | Goes in |
+|---|---|
+| "Phase N will use this" / "deferred to Phase N" | the relevant [phase doc](.) under Deliverables, Out of scope, or Outcomes |
+| "Will swap X for Y once Z lands" / one-off cleanup | [`inspector-cleanup-registry.md`](../inspector-cleanup-registry.md) |
+| "Punted; revisit if condition" | [`inspector-deferred.md`](../inspector-deferred.md) |
+| Caveat about a bug that future code must avoid | a focused unit test that fails when the assumption breaks |
+
+A comment IS welcome when it captures a non-obvious *current* invariant — "this lock is acquired around X and Y because Z" or "the partial response must not be cached because empty-complete would mask later compute." The test: would removing the comment confuse a future reader of the *current* code? If the comment only makes sense as a roadmap note, it doesn't belong in the file.
+
+Same rule for code module docstrings: describe the module's current job, not its planned trajectory.
 
 ## At plan time — write the detailed plan with help
 
@@ -103,7 +124,7 @@ Approach the detailed-plan stage like the [doc-coauthoring](../../../../.claude/
 
    When you propose a refinement/deferral/reordering/merge/split, **update this folder first** (the contract), then write the plan against the updated contract. Don't let the plan and the contract drift apart.
 
-4. **Re-read the relevant detailed docs first.** Before the plan starts, the writer should read the parts of `inspector-deployment-plan.md`, `inspector-data-storage.md`, etc. that the phase touches. Doc agents may have edited them; cached mental models go stale. The phase docs cross-link the right sections.
+4. **Re-read the relevant detailed docs first.** Before the plan starts, the writer should read the relevant parts under `v2/` that the phase touches. Doc agents may have edited them; cached mental models go stale. The phase docs cross-link the right sections.
 
 5. **Test the plan against a fresh reader.** Once the detailed plan is written, sanity-check it the way doc-coauthoring suggests: spawn a fresh agent with **only the plan + the phase contract** (no conversation context) and ask "what would you build first? what's unclear? what would you ask before starting?" — then patch the gaps.
 

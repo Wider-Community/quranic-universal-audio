@@ -1,4 +1,8 @@
 #!/usr/bin/env sh
+# Opt-in: default skip. Run with `VERIFY=1 git push`.
+# CI (inspector-deploy.yml + docker-publish.yml) gates deploys and merges via
+# the reusable inspector-checks.yml workflow.
+[ "${VERIFY:-0}" = "1" ] || exit 0
 set -e
 
 zero_hash="0000000000000000000000000000000000000000"

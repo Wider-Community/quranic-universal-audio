@@ -17,14 +17,8 @@ import type {
     SegmentsChapterSummary,
     SegReciter,
     SurahInfoMap,
-    TsBoundaryMismatch,
-    TsLargeGap,
-    TsMfaFailure,
-    TsMissingVerse,
-    TsMissingWords,
     TsReciter,
     TsVerseData,
-    TsVerseOverlap,
     VerseRef,
 } from './domain';
 
@@ -41,12 +35,16 @@ export type SurahInfoResponse = SurahInfoMap;
 
 /** GET /api/ts/config — display constants + read-path URLs. */
 export interface TsConfigResponse {
-    /** "local" (Flask serves shards) or "huggingface" (frontend reads from CDN). */
-    mode: 'local' | 'huggingface';
+    /** "local"  — Flask serves shards from on-disk timestamps tree.
+     *  "bucket" — Flask serves shards from <bucket>/published/<slug>/timestamps/. */
+    mode: 'local' | 'bucket';
     /** Full URL the frontend fetches once to populate the in-memory manifest. */
     manifest_url: string;
     /** URL template with `{reciter}` + `{chapter}` placeholders. */
     shard_url_template: string;
+    /** D20 Track B: optional URL of the v2 catalog JSON. When present, the
+     *  frontend prefers this over `manifest.reciters[]` for the dropdown. */
+    catalog_url?: string;
     unified_display_max_height: number;
     anim_highlight_color: string;
     anim_word_transition_duration: number;
@@ -76,9 +74,41 @@ export interface TsManifestReciter {
     ts_chapters: number[];
     /** Sorted list of chapters whose audio is known VBR. Optional for older HF manifests. */
     vbr_chapters?: number[];
-    validation: { boundary_mismatches: TsBoundaryMismatch[] };
     /** Build-internal payload — not relied on by the read path. */
     _build?: { shard_hashes?: Record<string, string> };
+}
+
+/** Reciter entry in the v2 catalog (`<bucket>/catalog/reciter_catalog.json`).
+ *  Mirrors `scripts.lib.schemas.ReciterEntry` — fields the Timestamps tab
+ *  dropdown uses; full schema carries optional `country`, `notes`. */
+export interface TsCatalogReciter {
+    reciter_id: string;
+    name_en: string;
+    name_ar?: string | null;
+    country?: string | null;
+    notes?: string | null;
+}
+
+/** Delivery entry in the v2 catalog. Slug uniquely identifies a delivery
+ *  (= what the legacy manifest called a "reciter slug"). Mirrors
+ *  `scripts.lib.schemas.Delivery` — only the fields the Timestamps tab
+ *  needs are typed here; pass-through fields ignored. */
+export interface TsCatalogDelivery {
+    slug: string;
+    reciter_id: string;
+    riwayah: string;
+    style: string;
+    source: string;
+    audio_category: 'by_surah' | 'by_ayah';
+}
+
+/** GET /api/static/catalog.json — slim projection of `ReciterCatalog` carrying
+ *  the fields the Timestamps tab uses. The route serves the full catalog; we
+ *  only model what's read here. */
+export interface TsCatalogResponse {
+    schema_version: number;
+    reciters: TsCatalogReciter[];
+    deliveries: TsCatalogDelivery[];
 }
 
 /** Body of `manifest.json.gz` (decompressed). */
@@ -104,8 +134,6 @@ export interface TsShardMeta {
     url_template: string;
     /** Per-verse audio URL fallback when `url_template` is empty. */
     audio_urls?: Record<string, string>;
-    /** Per-chapter slice of `mfa_failures` for the validation panel. */
-    mfa_failures?: Array<Record<string, unknown>>;
     [k: string]: unknown;
 }
 
@@ -146,22 +174,6 @@ export type TsChaptersResponse = number[] | ApiErrorBody;
 /** @deprecated Verse list now derived client-side from a chapter shard. */
 export interface TsVersesResponse {
     verses: Array<{ ref: VerseRef; audio_url: string }>;
-}
-
-/** GET /api/ts/validate/:reciter */
-export interface TsValidateResponse {
-    mfa_failures: TsMfaFailure[];
-    missing_verses: TsMissingVerse[];
-    missing_words: TsMissingWords[];
-    verse_overlaps: TsVerseOverlap[];
-    boundary_mismatches: TsBoundaryMismatch[];
-    large_gaps: TsLargeGap[];
-    meta: {
-        has_segments: boolean;
-        tolerance_ms: number;
-    };
-    /** Present when the endpoint returns an error (e.g. reciter not found). */
-    error?: string;
 }
 
 // ===========================================================================
@@ -205,12 +217,14 @@ export interface SegDataResponse {
      *  accordion prefetch to pick the clip endpoint vs chapter URL based on
      *  the next sibling's chapter. */
     reciter_vbr_chapters: number[];
+    /** Sparse {chapter -> kbps} for chapters that are CBR with a positive
+     *  bitrate. Consumed by the segments-tab audio-warmup util to compute
+     *  the byte offset of a seg's `time_start`. Absence ⇒ "don't warm"
+     *  (VBR, missing kbps, or unknown mode). Reciter-wide so cross-chapter
+     *  accordion siblings can resolve their own chapter's kbps. */
+    chapter_bitrate_kbps?: Record<number, number>;
     segments: Segment[];
     summary: SegmentsChapterSummary;
-    verse_word_counts: Record<VerseRef, number>;
-    /** Flat ``"surah:ayah:word" -> Digital Khatt text`` slice for this chapter.
-     *  Consumed by `dkTextForRef` to render row body text from `matched_ref`. */
-    dk_words: Record<string, string>;
     /** Present when the route returns 404 (reciter/chapter not found). */
     error?: string;
 }
@@ -219,14 +233,25 @@ export interface SegDataResponse {
 export interface SegAllResponse {
     segments: Segment[];
     audio_by_chapter: Record<string, string>;
+    /** Chapter → total audio duration in ms, sourced from the audio_manifest
+     *  sidecar. Used by the trim/adjust pad clamp on the last verse of a
+     *  chapter so the right-pad doesn't extend past EOF. */
+    chapter_duration_ms_by_chapter?: Record<string, number>;
+    /** Audio URL → total audio duration in ms, sourced from the audio_manifest
+     *  sidecar. URL-keyed for by_ayah deliveries where each ayah is its own
+     *  audio file. Prefer this over `chapter_duration_ms_by_chapter` when the
+     *  caller has a seg's audio_url. */
+    duration_ms_by_url?: Record<string, number>;
     /** All chapters of this reciter known VBR. Reciter-level mirror of
      *  SegDataResponse.reciter_vbr_chapters so global accordions can route
      *  cross-chapter playback before/independent of a chapter-data refresh. */
     reciter_vbr_chapters?: number[];
-    verse_word_counts: Record<VerseRef, number>;
-    /** Flat ``"surah:ayah:word" -> Digital Khatt text`` map (full corpus).
-     *  Consumed by `dkTextForRef` to render row body text from `matched_ref`. */
-    dk_words: Record<string, string>;
+    /** Segment UIDs that have a precomputed Auto Split entry in
+     *  ``<reciter>/auto_split_v1.json``. The FE checks membership before
+     *  flipping a row's button label from *Split* to *Auto Split*: when the
+     *  offline alignment failed for a seg, the entry is absent and the FE
+     *  falls back to plain manual single-cursor split UX. */
+    auto_split_uids?: string[];
     /** Legacy symmetric shim: ``(pad_left_ms + pad_right_ms) / 2``. Prefer the L/R fields. */
     pad_ms: number;
     pad_left_ms: number;
@@ -276,11 +301,6 @@ export type SegUndoOpsResponse = SegUndoBatchResponse;
 // /api/seg/* — Segments tab (validation, stats, history)
 // ===========================================================================
 
-/** POST /api/seg/trigger-validation/:reciter */
-export interface SegTriggerValidationResponse {
-    ok: true;
-}
-
 // ---------------------------------------------------------------------------
 // /api/seg/validate — per-category item shapes
 // ---------------------------------------------------------------------------
@@ -317,6 +337,8 @@ export interface SegValMissingVerseItem extends SegValItemBase {
 export interface SegValMissingWordsItem extends SegValItemBase {
     verse_key: VerseRef;
     msg?: string;
+    missing_words?: number[];
+    sequence_gap?: boolean;
     /** Client mutates entries during index-fixup. */
     seg_indices?: number[];
     auto_fix?: SegValAutoFix;
@@ -387,6 +409,11 @@ export interface SegValQalqalaItem extends SegValItemBase {
     end_of_verse: boolean;
 }
 
+export interface SegValBasmalaAminItem extends SegValItemBase {
+    seg_index: number;
+    ref: Ref;
+}
+
 /** Union of every validation item variant the panel renders. */
 export type SegValAnyItem =
     | SegValFailedItem
@@ -400,7 +427,8 @@ export type SegValAnyItem =
     | SegValAudioBleedingItem
     | SegValRepetitionItem
     | SegValMuqattaatItem
-    | SegValQalqalaItem;
+    | SegValQalqalaItem
+    | SegValBasmalaAminItem;
 
 /** GET /api/seg/validate/:reciter */
 export interface SegValidateResponse {
@@ -419,6 +447,7 @@ export interface SegValidateResponse {
     repetitions?: SegValRepetitionItem[];
     muqattaat?: SegValMuqattaatItem[];
     qalqala?: SegValQalqalaItem[];
+    basmala_amin?: SegValBasmalaAminItem[];
     [k: string]: unknown;
 }
 
@@ -471,39 +500,6 @@ export interface SegSegmentPeaksResponse {
 }
 
 // ===========================================================================
-// /api/seg/* — Audio proxy & cache
-// ===========================================================================
-
-/** GET /api/seg/audio-cache-status/:reciter.
- *  Server emits: {cached_count, total, cached_bytes, downloading, download_progress}.
- *  See `services/audio_proxy.py:50`. B20.
- */
-export interface SegAudioCacheStatusResponse {
-    total: number;
-    cached_count: number;
-    cached_bytes: number;
-    downloading: boolean;
-    download_progress: { total: number; downloaded: number; complete: boolean } | null;
-    [k: string]: unknown;
-}
-
-/** POST /api/seg/prepare-audio/:reciter */
-export interface SegPrepareAudioResponse {
-    status: 'started' | 'already_running';
-    total: number;
-    to_download?: number;
-    downloaded?: number;
-    complete?: boolean;
-    [k: string]: unknown;
-}
-
-/** DELETE /api/seg/delete-audio-cache/:reciter */
-export interface SegDeleteAudioCacheResponse {
-    ok?: boolean;
-    [k: string]: unknown;
-}
-
-// ===========================================================================
 // /api/audio/* — Audio tab
 // ===========================================================================
 
@@ -515,6 +511,10 @@ export interface AudioSourcesResponse {
 }
 
 /** GET /api/audio/surahs/:category/:source/:slug */
+export interface AudioSurahEntry {
+    url: string;
+    duration_ms: number | null;
+}
 export interface AudioSurahsResponse {
-    surahs: Record<string, string>;
+    surahs: Record<string, AudioSurahEntry>;
 }

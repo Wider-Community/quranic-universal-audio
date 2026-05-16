@@ -4,6 +4,13 @@ from __future__ import annotations
 import json
 
 
+
+import os
+
+os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+
+_HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
 def _segments_with_uid(detailed: dict, uid: str) -> list[dict]:
     return [
         s for e in detailed["entries"] for s in e["segments"]
@@ -26,10 +33,11 @@ def _seg_payload_from_fixture(fixture: dict, uid: str, **overrides) -> dict:
     return base
 
 
-def test_empty_ignored_categories_clears_persisted_ignores(load_fixture, tmp_reciter_dir, flask_client):
+def test_empty_ignored_categories_clears_persisted_ignores(load_fixture, tmp_reciter_dir, signed_in_client):
     """Segment had ['low_confidence']; save with []; reload; field is absent or []."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
     fixture = load_fixture("112-ikhlas")
     target_uid = fixture["entries"][0]["segments"][0]["segment_uid"]
@@ -39,10 +47,10 @@ def test_empty_ignored_categories_clears_persisted_ignores(load_fixture, tmp_rec
         seg_payload.append(_seg_payload_from_fixture(fixture, s["segment_uid"]))
     seg_payload[0]["ignored_categories"] = ["low_confidence"]
 
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
@@ -50,10 +58,10 @@ def test_empty_ignored_categories_clears_persisted_ignores(load_fixture, tmp_rec
     assert target.get("ignored_categories") == ["low_confidence"]
 
     seg_payload[0]["ignored_categories"] = []
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     saved2 = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
@@ -64,10 +72,11 @@ def test_empty_ignored_categories_clears_persisted_ignores(load_fixture, tmp_rec
     )
 
 
-def test_omitted_ignored_categories_preserves_existing(load_fixture, tmp_reciter_dir, flask_client):
+def test_omitted_ignored_categories_preserves_existing(load_fixture, tmp_reciter_dir, signed_in_client):
     """Segment had ['low_confidence']; save without the key (patch mode); reload; field still present."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
     fixture = load_fixture("112-ikhlas")
     target_uid = fixture["entries"][0]["segments"][0]["segment_uid"]
@@ -77,17 +86,17 @@ def test_omitted_ignored_categories_preserves_existing(load_fixture, tmp_reciter
         for s in fixture["entries"][0]["segments"]
     ]
     seg_payload[0]["ignored_categories"] = ["low_confidence"]
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     patch_payload = {"segments": [{"index": 0, "matched_ref": fixture["entries"][0]["segments"][0]["matched_ref"], "matched_text": fixture["entries"][0]["segments"][0]["matched_text"]}], "operations": []}
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(patch_payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
@@ -97,10 +106,11 @@ def test_omitted_ignored_categories_preserves_existing(load_fixture, tmp_reciter
     )
 
 
-def test_all_marker_preserved(load_fixture, tmp_reciter_dir, flask_client):
+def test_all_marker_preserved(load_fixture, tmp_reciter_dir, signed_in_client):
     """A segment with ['_all'] survives a save/reload unchanged."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
     fixture = load_fixture("112-ikhlas")
     target_uid = fixture["entries"][0]["segments"][0]["segment_uid"]
@@ -110,10 +120,10 @@ def test_all_marker_preserved(load_fixture, tmp_reciter_dir, flask_client):
         for s in fixture["entries"][0]["segments"]
     ]
     seg_payload[0]["ignored_categories"] = ["_all"]
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
@@ -121,7 +131,175 @@ def test_all_marker_preserved(load_fixture, tmp_reciter_dir, flask_client):
     assert target.get("ignored_categories") == ["_all"]
 
 
-def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, flask_client):
+def test_save_drops_wrap_when_fe_omits_it(tmp_reciter_dir, signed_in_client):
+    """Regression: a parent repetition seg used to leak wrap onto split children
+    because save_payload fell back to ``existing.get('wrap_word_ranges')`` when
+    the FE payload omitted the field. Now FE is authoritative — omit means drop.
+    """
+    reciter = "fixture_reciter"
+    legacy_path = tmp_reciter_dir.root / reciter / "detailed.json"
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_doc = {
+        "_meta": {"audio_source": "by_surah/fixture"},
+        "entries": [
+            {
+                "ref": "112",
+                "audio": "https://fixture.local/audio/112.mp3",
+                "segments": [
+                    {
+                        "time_start": 1000, "time_end": 5000,
+                        "matched_ref": "112:1:1-112:1:4",
+                        "matched_text": "x",
+                        "confidence": 1.0,
+                        "segment_uid": "uid-rep",
+                        "wrap_word_ranges": [["112:1:2", "112:1:2", "112:1:4"]],
+                        "has_repeated_words": True,
+                    }
+                ],
+            }
+        ],
+    }
+    legacy_path.write_text(json.dumps(legacy_doc), encoding="utf-8")
+    tmp_reciter_dir.seed_under_review(reciter, "test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
+
+    # FE re-saves the same seg but, simulating a post-split child, omits wrap.
+    payload = {
+        "full_replace": True,
+        "segments": [{
+            "segment_uid": "uid-rep",
+            "time_start": 1000, "time_end": 5000,
+            "matched_ref": "112:1:1-112:1:4",
+            "matched_text": "x",
+            "confidence": 1.0,
+            "phonemes_asr": "",
+            "audio_url": "https://fixture.local/audio/112.mp3",
+            # wrap_word_ranges + has_repeated_words intentionally omitted
+        }],
+        "operations": [],
+    }
+    client.post(
+        f"/api/seg/save/{reciter}/112",
+        data=json.dumps(payload),
+        headers=_HEADERS,
+    )
+    saved = json.loads(legacy_path.read_text(encoding="utf-8"))
+    seg = saved["entries"][0]["segments"][0]
+    assert "wrap_word_ranges" not in seg, (
+        f"omitted wrap should drop on save — got {seg.get('wrap_word_ranges')!r}"
+    )
+    assert "has_repeated_words" not in seg, (
+        f"omitted has_repeated_words should drop on save — got {seg.get('has_repeated_words')!r}"
+    )
+
+
+def test_save_drops_geometrically_invalid_wrap(tmp_reciter_dir, signed_in_client):
+    """Defense-in-depth: BE rejects a wrap whose geometry doesn't fit
+    matched_ref (stale-from-inheritance shape). A buggy or malicious client
+    can't poison detailed.json with wraps that would feed wrong refs to MFA.
+    """
+    reciter = "fixture_reciter"
+    legacy_path = tmp_reciter_dir.root / reciter / "detailed.json"
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_doc = {
+        "_meta": {"audio_source": "by_surah/fixture"},
+        "entries": [{
+            "ref": "112",
+            "audio": "https://fixture.local/audio/112.mp3",
+            "segments": [{
+                "time_start": 1000, "time_end": 5000,
+                "matched_ref": "112:1:1-112:1:2",
+                "matched_text": "x",
+                "confidence": 1.0,
+                "segment_uid": "uid-rep",
+            }],
+        }],
+    }
+    legacy_path.write_text(json.dumps(legacy_doc), encoding="utf-8")
+    tmp_reciter_dir.seed_under_review(reciter, "test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
+
+    # Send a wrap whose word range (3-4) lies outside matched_ref (1-2).
+    payload = {
+        "full_replace": True,
+        "segments": [{
+            "segment_uid": "uid-rep",
+            "time_start": 1000, "time_end": 5000,
+            "matched_ref": "112:1:1-112:1:2",
+            "matched_text": "x",
+            "confidence": 1.0,
+            "phonemes_asr": "",
+            "audio_url": "https://fixture.local/audio/112.mp3",
+            "wrap_word_ranges": [["112:1:3", "112:1:3", "112:1:4"]],
+            "has_repeated_words": True,
+        }],
+        "operations": [],
+    }
+    client.post(
+        f"/api/seg/save/{reciter}/112",
+        data=json.dumps(payload),
+        headers=_HEADERS,
+    )
+    saved = json.loads(legacy_path.read_text(encoding="utf-8"))
+    seg = saved["entries"][0]["segments"][0]
+    assert "wrap_word_ranges" not in seg, (
+        f"BE should drop geometrically invalid wrap — got {seg.get('wrap_word_ranges')!r}"
+    )
+    assert "has_repeated_words" not in seg, (
+        "BE should drop has_repeated_words when wrap is rejected"
+    )
+
+
+def test_save_preserves_wrap_when_fe_sends_it(tmp_reciter_dir, signed_in_client):
+    """Sanity: a real repetition seg whose FE payload includes wrap keeps it."""
+    reciter = "fixture_reciter"
+    legacy_path = tmp_reciter_dir.root / reciter / "detailed.json"
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_doc = {
+        "_meta": {"audio_source": "by_surah/fixture"},
+        "entries": [{
+            "ref": "112",
+            "audio": "https://fixture.local/audio/112.mp3",
+            "segments": [{
+                "time_start": 1000, "time_end": 5000,
+                "matched_ref": "112:1:1-112:1:4",
+                "matched_text": "x",
+                "confidence": 1.0,
+                "segment_uid": "uid-rep",
+            }],
+        }],
+    }
+    legacy_path.write_text(json.dumps(legacy_doc), encoding="utf-8")
+    tmp_reciter_dir.seed_under_review(reciter, "test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
+
+    payload = {
+        "full_replace": True,
+        "segments": [{
+            "segment_uid": "uid-rep",
+            "time_start": 1000, "time_end": 5000,
+            "matched_ref": "112:1:1-112:1:4",
+            "matched_text": "x",
+            "confidence": 1.0,
+            "phonemes_asr": "",
+            "audio_url": "https://fixture.local/audio/112.mp3",
+            "wrap_word_ranges": [["112:1:2", "112:1:2", "112:1:4"]],
+            "has_repeated_words": True,
+        }],
+        "operations": [],
+    }
+    client.post(
+        f"/api/seg/save/{reciter}/112",
+        data=json.dumps(payload),
+        headers=_HEADERS,
+    )
+    saved = json.loads(legacy_path.read_text(encoding="utf-8"))
+    seg = saved["entries"][0]["segments"][0]
+    assert seg.get("wrap_word_ranges") == [["112:1:2", "112:1:2", "112:1:4"]]
+    assert seg.get("has_repeated_words") is True
+
+
+def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, signed_in_client):
     """A segment with ignored=true (no ignored_categories) becomes ['_all'] on save."""
     reciter = "fixture_reciter"
     legacy_path = tmp_reciter_dir.root / reciter / "detailed.json"
@@ -146,6 +324,8 @@ def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, flask_client):
         ],
     }
     legacy_path.write_text(json.dumps(legacy_doc), encoding="utf-8")
+    tmp_reciter_dir.seed_under_review(reciter, "test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
 
     payload = {
         "full_replace": True,
@@ -159,10 +339,10 @@ def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, flask_client):
         ],
         "operations": [],
     }
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/112",
         data=json.dumps(payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     saved = json.loads(legacy_path.read_text(encoding="utf-8"))

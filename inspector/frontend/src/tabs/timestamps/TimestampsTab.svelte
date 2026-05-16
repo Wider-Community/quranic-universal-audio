@@ -17,7 +17,7 @@
     import { get } from 'svelte/store';
 
     import { fetchJson } from '../../lib/api';
-    import type { TsConfigResponse, TsDataResponse, TsValidateResponse } from '../../lib/types/api';
+    import type { TsConfigResponse, TsDataResponse } from '../../lib/types/api';
     import type { TsReciter } from '../../lib/types/domain';
     import { getActiveTab } from '../../lib/utils/active-tab';
     import { LS_KEYS } from '../../lib/utils/constants';
@@ -27,15 +27,16 @@
     import TimestampsControls from './components/TimestampsControls.svelte';
     import TimestampsKeyboard from './components/TimestampsKeyboard.svelte';
     import TimestampsShortcutsGuide from './components/TimestampsShortcutsGuide.svelte';
-    import TimestampsValidationPanel from './components/TimestampsValidationPanel.svelte';
     import TimestampsViewControls from './components/TimestampsViewControls.svelte';
     import TimestampsWaveform from './components/TimestampsWaveform.svelte';
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
         assembleVerseFromShard,
         audioUrlFor,
+        catalogReciterRows,
         chapterVerseRefs,
         getRandomTarget,
+        loadCatalog,
         loadChapterShard,
         loadConfig,
         loadDk,
@@ -66,7 +67,6 @@
         selectedReciter,
         selectedVerse,
         type TsVerseOption,
-        validationData,
         verses,
     } from './stores/verse';
     import { setupZoomLifecycle } from './utils/zoom';
@@ -128,15 +128,51 @@
         // reciter-change path auto-load a random verse from it. Otherwise
         // load a random verse from any reciter.
         const savedReciter = localStorage.getItem(LS_KEYS.TS_RECITER);
-        if (savedReciter) {
-            selectedReciter.set(savedReciter);
-            await onReciterChange(savedReciter, autoplay);
+        const rs = get(reciters);
+        const validSaved = savedReciter && rs.some((r) => r.slug === savedReciter)
+            ? savedReciter
+            : null;
+        if (!validSaved && savedReciter) {
+            // Drop the stale slug so we don't keep hammering 404 endpoints
+            // every reload. The user picks a fresh reciter from the list.
+            localStorage.removeItem(LS_KEYS.TS_RECITER);
+        }
+        if (validSaved) {
+            selectedReciter.set(validSaved);
+            await onReciterChange(validSaved, autoplay);
         } else {
             await loadRandomTimestamp(null, autoplay);
         }
     }
 
     async function loadReciters(): Promise<void> {
+        // D20 Track B: the catalog endpoint enriches names; the manifest is
+        // the source of truth for which reciters actually have published
+        // timestamps in the bucket. Intersect against manifest reciter keys
+        // so the dropdown only lists reciters the user can actually play.
+        try {
+            const cfg = await loadConfig();
+            if (cfg.catalog_url) {
+                const [catalog, manifest] = await Promise.all([
+                    loadCatalog(),
+                    loadManifest(),
+                ]);
+                const ready = new Set(Object.keys(manifest.reciters));
+                const rs: TsReciter[] = catalogReciterRows(catalog)
+                    .filter((row) => ready.has(row.slug))
+                    .map((row) => ({
+                        slug: row.slug,
+                        name: row.name_en,
+                        audio_source: row.source,
+                    }));
+                rs.sort((a, b) => a.name.localeCompare(b.name));
+                reciters.set(rs);
+                return;
+            }
+        } catch (e) {
+            console.warn('Catalog load failed; falling back to manifest:', e);
+        }
+
         try {
             const m = await loadManifest();
             const rs: TsReciter[] = Object.entries(m.reciters).map(([slug, b]) => ({
@@ -163,7 +199,6 @@
         verses.set([]);
         selectedVerse.set('');
         clearDisplay();
-        validationData.set(null);
         tsVbrChapters.set(new Set());
         if (!reciter) return;
 
@@ -175,34 +210,6 @@
             }
         } catch (e) {
             console.error('Error reading manifest for reciter:', e);
-        }
-
-        // Validation: HF mode can serve pre-computed boundary mismatches from
-        // the manifest. Local mode (which carries an empty array) and any
-        // in-review reciter (also empty) fall through to /api/ts/validate.
-        try {
-            const m = await loadManifest();
-            const cfg = await loadConfig();
-            const block = m.reciters[reciter];
-            const pre = block?.validation?.boundary_mismatches ?? [];
-            if (cfg.mode === 'huggingface' && pre.length > 0) {
-                validationData.set({
-                    mfa_failures: [],
-                    missing_verses: [],
-                    missing_words: [],
-                    verse_overlaps: [],
-                    boundary_mismatches: pre,
-                    large_gaps: [],
-                    meta: { has_segments: true, tolerance_ms: 0 },
-                });
-            } else {
-                const valResult = await fetchJson<TsValidateResponse>(
-                    `/api/ts/validate/${encodeURIComponent(reciter)}`,
-                );
-                if (!valResult.error) validationData.set(valResult);
-            }
-        } catch (e) {
-            console.error('Error loading validation:', e);
         }
 
         // Auto-load a random verse from this reciter so the tab always has
@@ -239,18 +246,6 @@
         }
     }
 
-    async function jumpToTsVerse(verseKey: string): Promise<void> {
-        if (!verseKey || !verseKey.includes(':')) return;
-        const chapter = verseKey.split(':')[0] ?? '';
-
-        if (get(selectedChapter) !== chapter) {
-            selectedChapter.set(chapter);
-            await onChapterChange(chapter);
-        }
-        selectedVerse.set(verseKey);
-        await onVerseChange(verseKey);
-    }
-
     async function onVerseChange(verseRef: string): Promise<void> {
         const reciter = get(selectedReciter);
         const chapter = get(selectedChapter);
@@ -271,7 +266,7 @@
                 loadDk(),
             ]);
             tsVbrChapters.set(new Set(await loadVbrChapters(reciter)));
-            const data = assembleVerseFromShard(shard, verseRef, qpc, dk);
+            const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk);
             if (!data) {
                 alert('Error: verse not found in shard');
                 return;
@@ -305,7 +300,7 @@
                 loadDk(),
             ]);
             tsVbrChapters.set(new Set(await loadVbrChapters(target.reciter)));
-            const data = assembleVerseFromShard(shard, target.verseRef, qpc, dk);
+            const data = assembleVerseFromShard(target.reciter, shard, target.verseRef, qpc, dk);
             if (!data) {
                 console.error('Random target verse missing from shard:', target);
                 return;
@@ -315,7 +310,6 @@
             if (reciterChanged) {
                 selectedReciter.set(data.reciter);
                 localStorage.setItem(LS_KEYS.TS_RECITER, data.reciter);
-                validationData.set(null);
                 try {
                     const m = await loadManifest();
                     chapters.set(m.reciters[data.reciter]?.ts_chapters ?? []);
@@ -522,8 +516,6 @@
         on:chapterChange={(e) => onChapterChange(e.detail)}
         on:verseChange={(e) => onVerseChange(e.detail)}
     />
-
-    <TimestampsValidationPanel onJump={jumpToTsVerse} />
 
     <main>
         <TimestampsAudio

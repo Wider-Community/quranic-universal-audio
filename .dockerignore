@@ -1,0 +1,85 @@
+# Build context is the repo root (one level above inspector/).
+# Docker reads .dockerignore from the build-context root, NOT from the
+# directory containing the Dockerfile — so this MUST live here, not under
+# inspector/.dockerignore (which docker silently ignores).
+#
+# Excluded paths come from inspector-data-storage.md §7.
+
+# --- Sibling Spaces / repos not needed in the inspector image ---
+.local/
+mfa_aligner/
+quranic_universal_aligner/
+reciter_requests/
+
+# --- Top-level scripts: only scripts/lib/ ships at runtime ---
+scripts/*
+!scripts/__init__.py
+!scripts/lib
+
+# --- Data: per-reciter data lives in the bucket (mounted at runtime),
+# not baked into the image. Only the four small linguistic JSON files are
+# pulled in via the explicit COPY in the Dockerfile.
+data/audio/
+data/recitation_segments/
+data/timestamps/
+data/qul_downloads/
+data/.cache/
+data/reciters_index.json
+data/riwayat.json
+data/sources.json
+data/styles.json
+data/.audio_meta.json
+data/.audio_durations.json
+data/RECITERS.md
+data/README.md
+data/**/validation.log
+data/**/beam_diff_report.txt
+data/**/*.bak
+
+# --- Repo metadata + docs ---
+.git/
+.github/
+.claude/
+.notion/
+.vscode/
+docs/
+*.md
+!inspector/CONTRIBUTING.md
+
+# --- Inspector internals not needed at runtime ---
+inspector/CLAUDE.md
+inspector/tests/
+# inspector/frontend/src/ is needed by the frontend-build stage; the runtime
+# stage explicitly COPYs dist/ from that stage and not src/, so excluding it
+# globally would only break the build.
+inspector/frontend/node_modules/
+inspector/frontend/.vite/
+inspector/frontend/dist/
+inspector/.cache/
+inspector/requirements-dev.txt
+inspector/docker-compose.yml
+inspector/.dockerignore
+
+# --- Python build artifacts ---
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+*.egg-info
+.pytest_cache/
+.mypy_cache/
+
+# --- Local env / virtualenvs ---
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# --- OS cruft ---
+.DS_Store
+Thumbs.db
+
+# --- Backups / temp ---
+*.bak
+captures/
+**/.cache/

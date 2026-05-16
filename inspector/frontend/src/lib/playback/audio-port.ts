@@ -86,6 +86,17 @@ export interface AudioPortOptions {
      *  browser plays from clip time 0 rather than seeking inside a streamed
      *  clip. Default 0. */
     defaultPadMs?: number;
+    /** Opt out of the Web Audio kill-switch (cutAudio / uncutAudio). When
+     *  true, `play`/`seekAndPlay`/`pauseAndFlush`/`uncut` skip the
+     *  `MediaElementAudioSourceNode` routing in `audio-graph.ts`. The
+     *  audible-tail bug returns at pause (~50–300 ms OS buffer), but the
+     *  `<audio>` element stays on its default sink — which means cross-
+     *  origin media plays correctly. Without this opt-out, constructing
+     *  the MediaElementSource on a cross-origin URL silently mutes
+     *  playback per the Web Audio spec. Set this for ports that play
+     *  full chapter MP3s and don't need sample-accurate end-of-region
+     *  cutoff (dashboard). Default false. */
+    disableKillSwitch?: boolean;
 }
 
 type Unsub = () => void;
@@ -122,6 +133,7 @@ export class AudioPort {
     private _source: AudioSource | null = null;
     private _window: LoadedWindow | null = null;
     private readonly defaultPadMs: number;
+    private readonly killSwitchEnabled: boolean;
 
     /** Bumped on every src swap. Pending canplay handlers compare this
      *  against the gen they captured at attach-time; mismatched gens are
@@ -149,9 +161,12 @@ export class AudioPort {
     private endedSubs = new Set<() => void>();
     private timeUpdateSubs = new Set<(fileMs: number) => void>();
     private errorSubs = new Set<(err: MediaError | null) => void>();
+    private waitingSubs = new Set<() => void>();
+    private playingSubs = new Set<() => void>();
 
     constructor(opts: AudioPortOptions = {}) {
         this.defaultPadMs = opts.defaultPadMs ?? 0;
+        this.killSwitchEnabled = !opts.disableKillSwitch;
     }
 
     // -----------------------------------------------------------------------
@@ -188,6 +203,8 @@ export class AudioPort {
         this.endedSubs.clear();
         this.timeUpdateSubs.clear();
         this.errorSubs.clear();
+        this.waitingSubs.clear();
+        this.playingSubs.clear();
     }
 
     // -----------------------------------------------------------------------
@@ -400,7 +417,7 @@ export class AudioPort {
         this.seek(fileMs);
         // Restore gain ramp before playing; matches the legacy
         // `_seekAndPlay` ordering in `audio-range.ts`.
-        uncutAudio(this.el);
+        if (this.killSwitchEnabled) uncutAudio(this.el);
         safePlay(this.el);
     }
 
@@ -409,7 +426,7 @@ export class AudioPort {
      *  no seek needed. */
     play(): void {
         if (!this.el) return;
-        uncutAudio(this.el);
+        if (this.killSwitchEnabled) uncutAudio(this.el);
         safePlay(this.el);
     }
 
@@ -421,13 +438,13 @@ export class AudioPort {
      *  (mirrors `audio-range.ts::_pauseAndFlush`). */
     pauseAndFlush(): void {
         if (!this.el) return;
-        cutAudio(this.el);
+        if (this.killSwitchEnabled) cutAudio(this.el);
         if (!this.el.paused) this.el.pause();
     }
 
     /** Restore gain to 1. Called before resuming play after a flush. */
     uncut(): void {
-        if (this.el) uncutAudio(this.el);
+        if (this.el && this.killSwitchEnabled) uncutAudio(this.el);
     }
 
     get paused(): boolean {
@@ -475,6 +492,23 @@ export class AudioPort {
     onError(cb: (err: MediaError | null) => void): Unsub {
         this.errorSubs.add(cb);
         return () => this.errorSubs.delete(cb);
+    }
+
+    /** Fires on the element's `waiting` event — playback has paused because
+     *  the next frame isn't yet available. Use for buffering indicators.
+     *  Distinct from `pause`: `pause` is user/programmatic; `waiting` is
+     *  network/decoder starvation. */
+    onWaiting(cb: () => void): Unsub {
+        this.waitingSubs.add(cb);
+        return () => this.waitingSubs.delete(cb);
+    }
+
+    /** Fires on the element's `playing` event — actual audible playback has
+     *  started or resumed. Distinct from `play`, which fires synchronously
+     *  when `.play()` is called even if the element is still loading. */
+    onPlaying(cb: () => void): Unsub {
+        this.playingSubs.add(cb);
+        return () => this.playingSubs.delete(cb);
     }
 
     // -----------------------------------------------------------------------
@@ -546,17 +580,23 @@ export class AudioPort {
         const onEnded = (): void => this._fanout(this.endedSubs);
         const onTimeUpdate = (): void => this._fanout(this.timeUpdateSubs, this.currentTimeMs());
         const onError = (): void => this._fanout(this.errorSubs, el.error);
+        const onWaiting = (): void => this._fanout(this.waitingSubs);
+        const onPlaying = (): void => this._fanout(this.playingSubs);
         el.addEventListener('play', onPlay);
         el.addEventListener('pause', onPause);
         el.addEventListener('ended', onEnded);
         el.addEventListener('timeupdate', onTimeUpdate);
         el.addEventListener('error', onError);
+        el.addEventListener('waiting', onWaiting);
+        el.addEventListener('playing', onPlaying);
         this.domListeners = [
             ['play', onPlay],
             ['pause', onPause],
             ['ended', onEnded],
             ['timeupdate', onTimeUpdate],
             ['error', onError],
+            ['waiting', onWaiting],
+            ['playing', onPlaying],
         ];
     }
 

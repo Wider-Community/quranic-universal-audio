@@ -10,7 +10,14 @@ import json
 import pytest
 
 
-def test_save_payload_carries_op_log_in_canonical_shape(flask_client, tmp_reciter_dir):
+
+import os
+
+os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+
+_HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
+def test_save_payload_carries_op_log_in_canonical_shape(signed_in_client, tmp_reciter_dir):
     """Save payload includes a per-op `command` envelope describing the discriminated union.
 
     Phase 3 introduces the `command` field on each operation (the
@@ -18,7 +25,8 @@ def test_save_payload_carries_op_log_in_canonical_shape(flask_client, tmp_recite
     this field on the history record.
     """
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
 
     payload = {
@@ -38,10 +46,10 @@ def test_save_payload_carries_op_log_in_canonical_shape(flask_client, tmp_recite
             }
         ],
     }
-    res = flask_client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
     assert res.status_code == 200
 
@@ -53,7 +61,7 @@ def test_save_payload_carries_op_log_in_canonical_shape(flask_client, tmp_recite
     assert "segmentUid" in op["command"]
 
 
-def test_history_record_reflects_command_result_metadata(flask_client, tmp_reciter_dir):
+def test_history_record_reflects_command_result_metadata(signed_in_client, tmp_reciter_dir):
     """Save handler rejects ops that lack a ``command`` envelope.
 
     Every operation in the save payload must carry a ``command`` object
@@ -61,7 +69,8 @@ def test_history_record_reflects_command_result_metadata(flask_client, tmp_recit
     missing ``command`` key must be rejected with HTTP 400.
     """
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
 
     payload = {
@@ -74,10 +83,10 @@ def test_history_record_reflects_command_result_metadata(flask_client, tmp_recit
             }
         ],
     }
-    res = flask_client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
     assert res.status_code == 400, (
         "Phase 3 must reject save payloads whose ops lack a `command` envelope"

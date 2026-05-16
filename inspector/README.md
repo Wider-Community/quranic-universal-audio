@@ -128,6 +128,8 @@ The automatic error categories are best-effort and catch most issues, but some e
 
 Every save is recorded in the edit history. You can browse past edits, filter by edit type or error category, and sort. You can use the **Undo** button to reverse any edit. It is highly recommended to review the full edit history to verify all edits are sensible and changes have been saved correctly without bugs.
 
+History loads in the background after selecting a reciter and is also fetched on demand when opened, so chapter selection is not blocked by large history files.
+
 ### Continuous refinement
 
 The first round of review (before the pull request is merged) focuses on fixing the critical issues. But improvement is ongoing — you can come back at any point to do further checks or optional edits. New edits automatically recompute timestamps and sync to the dataset.

@@ -4,10 +4,18 @@ from __future__ import annotations
 import json
 
 
-def test_segments_json_rebuild_parity(load_fixture, tmp_reciter_dir, flask_client):
+
+import os
+
+os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+
+_HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
+def test_segments_json_rebuild_parity(load_fixture, tmp_reciter_dir, signed_in_client):
     """Load detailed.json → save → segments.json key set + tuples match expected."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
 
     fixture = load_fixture("112-ikhlas")
@@ -25,10 +33,10 @@ def test_segments_json_rebuild_parity(load_fixture, tmp_reciter_dir, flask_clien
     ]
     payload = {"full_replace": True, "segments": seg_payload, "operations": []}
 
-    res = flask_client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
     assert res.status_code == 200
 
@@ -49,10 +57,11 @@ def test_segments_json_rebuild_parity(load_fixture, tmp_reciter_dir, flask_clien
             )
 
 
-def test_segments_json_meta_preserved(tmp_reciter_dir, flask_client, load_fixture):
+def test_segments_json_meta_preserved(tmp_reciter_dir, signed_in_client, load_fixture):
     """The _meta block on segments.json survives a save round-trip."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
 
     seg_path = tmp_reciter_dir.root / reciter / "segments.json"
@@ -78,10 +87,10 @@ def test_segments_json_meta_preserved(tmp_reciter_dir, flask_client, load_fixtur
         ],
         "operations": [],
     }
-    res = flask_client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
     assert res.status_code == 200
 

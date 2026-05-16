@@ -24,11 +24,16 @@
     import { onDestroy,onMount } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { editGate } from '../../../../lib/actions/editGate';
+    import { fetchJsonOrNull } from '../../../../lib/api';
+    import { quranRefs } from '../../../../lib/refs/quran-refs';
     import type { Segment } from '../../../../lib/types/domain';
     import {
+        autoSplitUids,
         getAdjacentSegments,
         segAllData,
         selectedChapter,
+        selectedReciter,
         selectedVerse,
     } from '../../stores/chapter';
     import { dirtyTick, isIndexDirty } from '../../stores/dirty';
@@ -64,6 +69,7 @@
         dkTextForRef,
         formatRef,
         formatTimeMs,
+        isCrossVerse,
     } from '../../utils/data/references';
     import { deleteSegment } from '../../utils/edit/delete';
     import { enterEditWithBuffer } from '../../utils/edit/enter';
@@ -72,6 +78,7 @@
     import { playFromSegment } from '../../utils/playback/playback';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
+    import { warmSeg } from '../../utils/playback/warmup';
     import { getConfClass } from '../../utils/validation/conf-class';
     import { _ensureWaveformObserver } from '../../utils/waveform/utils';
     import ReferenceEditor from '../edit/ReferenceEditor.svelte';
@@ -88,7 +95,6 @@
     export let showGotoBtn: boolean = false;
     export let isContext: boolean = false;
     export let contextLabel: string = '';
-    export let missingWordSegIndices: Set<number> | null = null;
     export let isNeighbour: boolean = false;
     /** Provisioning slot — overlay applied in history mode. */
     export let splitHL: SplitHighlight | null = null;
@@ -224,7 +230,6 @@
         : (adj.next.audio_url && seg.audio_url && adj.next.audio_url !== seg.audio_url)
         ? 'Cannot merge segments from different audio files'
         : '';
-    $: showMissingTag = !!missingWordSegIndices && missingWordSegIndices.has(seg.index);
     // Live ref-edit preview ref. ReferenceEditor dispatches the normalized ref
     // on every keystroke; the body re-renders synchronously through the same
     // `dkTextForRef` lookup the persisted row uses. `null` = no preview /
@@ -240,12 +245,20 @@
     $: changedConf = !!changedFields?.has('conf');
     $: bodyRef = previewState?.ref ?? seg.matched_ref;
     $: bodyText = (() => {
-        const text = dkTextForRef(bodyRef, $segAllData?.dk_words, $segAllData?.verse_word_counts);
-        if (!text) return seg.matched_ref ? '(no text)' : '(no match)';
-        return _addVerseMarkers(text, bodyRef, $segAllData?.verse_word_counts) || text;
+        const text = dkTextForRef(bodyRef, $quranRefs?.dk_words, $quranRefs?.verse_word_counts);
+        if (!text) {
+            // Special segs (Basmala/Isti'adha/Amin/Takbir/...) carry their
+            // Arabic text on the snapshot but have non-Quran-ref matched_refs,
+            // so the dk_words lookup is empty. Fall back to matched_text.
+            if (seg.matched_text) return seg.matched_text;
+            return seg.matched_ref ? '(no text)' : '(no match)';
+        }
+        return _addVerseMarkers(text, bodyRef, $quranRefs?.verse_word_counts) || text;
     })();
     $: confText = (void segStoreTick, seg.matched_ref ? ((seg.confidence ?? 0) * 100).toFixed(1) + '%' : 'FAIL');
-    $: indexLabel = showChapter ? `${seg.chapter}:#${seg.index}` : `#${seg.index}`;
+    $: indexLabel = (showChapter && seg.chapter != null)
+        ? `${seg.chapter}:#${seg.index}`
+        : `#${seg.index}`;
 
     // ---------------------------------------------------------------------
     // Playback highlight + jump target (store-driven)
@@ -395,10 +408,16 @@
             }
         }
         if (!canvasEl) return;
+        // Capture the canvas reference for the cleanup closure. `canvasEl`
+        // is a `bind:this` binding that Svelte may null out before the
+        // onMount destructor runs (depending on unmount path), which made
+        // `observer.unobserve(canvasEl!)` throw "parameter 1 is not of
+        // type 'Element'" when an accordion card unmounted.
+        const observedCanvas = canvasEl;
         const observer = _ensureWaveformObserver();
-        observer.observe(canvasEl);
+        observer.observe(observedCanvas);
         return () => {
-            observer.unobserve(canvasEl!);
+            observer.unobserve(observedCanvas);
         };
     });
 
@@ -433,6 +452,10 @@
         }
         _unsubPreviewActive?.();
         _unsubPreviewPlaying?.();
+        if (_hoverWarmTimer) {
+            clearTimeout(_hoverWarmTimer);
+            _hoverWarmTimer = null;
+        }
     });
 
     // ---------------------------------------------------------------------
@@ -443,6 +466,26 @@
         e.stopPropagation();
         if (!previewCtx) return;
         previewCtx.toggle(rowPreviewUid);
+    }
+
+    // Hover-warm — fires 150 ms after the cursor enters the play button.
+    // Hides cold-FUSE / cold-page-cache stall on the click that follows,
+    // especially valuable for same-chapter-far-time seg plays (which the
+    // browser's forward buffer doesn't already cover). No-op on VBR +
+    // missing-kbps via `warmSeg`'s skip rules.
+    let _hoverWarmTimer: ReturnType<typeof setTimeout> | null = null;
+    function onPlayHover(): void {
+        if (readOnly || _hoverWarmTimer) return;
+        _hoverWarmTimer = setTimeout(() => {
+            _hoverWarmTimer = null;
+            warmSeg(seg, get(selectedReciter));
+        }, 150);
+    }
+    function onPlayLeave(): void {
+        if (_hoverWarmTimer) {
+            clearTimeout(_hoverWarmTimer);
+            _hoverWarmTimer = null;
+        }
     }
 
     function onPlayClick(e: MouseEvent): void {
@@ -493,9 +536,47 @@
         enterEditWithBuffer(seg, rowEl, 'trim', validationCategory, _mountId, rowChapter);
     }
 
-    function onSplitClick(e: MouseEvent): void {
+    /** Cross-verse + repetitions accordions swap `Split` for `Auto Split` —
+     *  but only when the offline pre-compute (``auto_split_v1.json``) has an
+     *  entry for this seg's uid. Misses keep the plain *Split* UX, matching
+     *  what a non-candidate row has always shown. The runtime endpoint hit
+     *  on click is now a pure sidecar lookup (~10 ms vs the prior 5–15 s MFA
+     *  Space round trip). */
+    $: isAutoSplitCandidate = (validationCategory === 'cross_verse' && isCrossVerse(seg.matched_ref))
+        || (validationCategory === 'repetitions' && !!(seg as any).wrap_word_ranges);
+    $: isAutoSplit = isAutoSplitCandidate
+        && !!seg.segment_uid
+        && $autoSplitUids.has(seg.segment_uid);
+
+    async function onSplitClick(e: MouseEvent): Promise<void> {
         e.stopPropagation();
-        enterEditWithBuffer(seg, rowEl, 'split', validationCategory, _mountId, rowChapter);
+        let initialSplits: number[] | null = null;
+        let initialRefs: string[] | null = null;
+        if (isAutoSplit) {
+            const reciter = get(selectedReciter);
+            if (reciter) {
+                const resp = await fetchJsonOrNull<{
+                    cursors: number[] | null;
+                    refs: string[] | null;
+                }>(
+                    `/api/seg/auto-split/${encodeURIComponent(reciter)}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            segment_uid: seg.segment_uid,
+                            chapter: rowChapter,
+                        }),
+                    },
+                );
+                initialSplits = resp?.cursors ?? null;
+                initialRefs = resp?.refs ?? null;
+            }
+        }
+        enterEditWithBuffer(
+            seg, rowEl, 'split', validationCategory, _mountId, rowChapter,
+            initialSplits, initialRefs,
+        );
     }
 
     function onMergePrevClick(e: MouseEvent): void {
@@ -643,7 +724,7 @@
                 {#if showPlayBtn || showGotoBtn}
                     <div class="seg-row-play-actions">
                         {#if showPlayBtn}
-                            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick}>{playGlyph}</button>
+                            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick} on:mouseenter={onPlayHover} on:mouseleave={onPlayLeave}>{playGlyph}</button>
                         {/if}
                         {#if showGotoBtn}
                             <button class="btn btn-sm seg-card-goto-btn" on:click={onGotoClick}>Go to</button>
@@ -653,18 +734,20 @@
 
                 {#if !isContext}
                     <div class="seg-actions">
-                        <button class="btn btn-sm btn-adjust" on:click={onAdjustClick}>Adjust</button>
+                        <button class="btn btn-sm btn-adjust" use:editGate on:click={onAdjustClick}>Adjust</button>
                         <button class="btn btn-sm btn-merge-prev"
                             disabled={mergePrevDisabled}
                             title={mergePrevTitle}
+                            use:editGate
                             on:click={onMergePrevClick}>Merge &uarr;</button>
-                        <button class="btn btn-sm btn-delete" on:click={onDeleteClick}>Delete</button>
-                        <button class="btn btn-sm btn-split" on:click={onSplitClick}>Split</button>
+                        <button class="btn btn-sm btn-delete" use:editGate on:click={onDeleteClick}>Delete</button>
+                        <button class="btn btn-sm btn-split" use:editGate on:click={onSplitClick}>{isAutoSplit ? 'Auto Split' : 'Split'}</button>
                         <button class="btn btn-sm btn-merge-next"
                             disabled={mergeNextDisabled}
                             title={mergeNextTitle}
+                            use:editGate
                             on:click={onMergeNextClick}>Merge &darr;</button>
-                        <button class="btn btn-sm btn-edit-ref" on:click={onEditRefClick}>Edit Ref</button>
+                        <button class="btn btn-sm btn-edit-ref" use:editGate on:click={onEditRefClick}>Edit Ref</button>
                     </div>
                 {/if}
             </div>
@@ -680,13 +763,10 @@
                     <ReferenceEditor {seg} on:preview={(e) => previewState = e.detail} />
                 {:else}
                     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-                    <span class="seg-text-ref" class:seg-history-changed={changedRef} on:click={onRefTextClick}>{formatRef(seg.matched_ref, $segAllData?.verse_word_counts)}</span>
+                    <span class="seg-text-ref" class:seg-history-changed={changedRef} use:editGate on:click={onRefTextClick}>{formatRef(seg.matched_ref, $quranRefs?.verse_word_counts)}</span>
                 {/if}
                 <span class="seg-text-sep">|</span>
                 <span class="seg-text-conf {confClass}" class:seg-history-changed={changedConf}>{confText}</span>
-                {#if showMissingTag}
-                    <span class="seg-tag seg-tag-missing">Missing words</span>
-                {/if}
             </div>
             <div class="seg-text-times" class:seg-history-changed={changedDur} title={durTitle}>
                 <TimeRange

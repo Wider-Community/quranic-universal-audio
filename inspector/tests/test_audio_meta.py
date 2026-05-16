@@ -1,88 +1,94 @@
-"""Smoke + unit tests for ``services.audio_meta``.
+"""Tests for ``services.audio_meta`` — sidecar-backed VBR lookups.
 
-Covers the per-reciter VBR chapter listing used by the chapter-data API to
-ship the encoding map down to the frontend (driving cross-chapter accordion
-prefetch routing).
+The sidecar lives at ``catalog/audio_manifest/<slug>.json`` and the per-chapter
+entry carries ``bitrate_mode`` ("vbr" | "cbr"), plus the URL used for the
+reverse-lookup that powers the audio-proxy short-circuit.
 """
 from __future__ import annotations
-
-import json
 
 import pytest
 
 
 @pytest.fixture
-def tmp_audio_meta(tmp_path, monkeypatch):
-    """Point ``services.audio_meta`` and the cache at a tmp file we control.
-
-    Yields a ``write(doc)`` helper so each test can stage its own audio_meta
-    payload and exercise the loader against it.
+def stage(monkeypatch):
+    """Yield a helper that stuffs a sidecar dict into ``_SIDECAR_CACHE`` so
+    the bucket read is bypassed entirely. Each test stages its own payload.
     """
     from services import audio_meta as audio_meta_mod
-    from services import cache as cache_mod
 
-    path = tmp_path / ".audio_meta.json"
-    monkeypatch.setattr(audio_meta_mod, "AUDIO_META_PATH", path, raising=True)
-    # Reset the singleton mtime cache so the new path is read fresh each test.
-    cache_mod._audio_meta_doc.clear()
+    audio_meta_mod._SIDECAR_CACHE.clear()
 
-    def _write(doc: dict) -> None:
-        path.write_text(json.dumps(doc), encoding="utf-8")
+    def _set(slug: str, chapters: dict) -> None:
+        audio_meta_mod._SIDECAR_CACHE[slug] = {"chapters": chapters}
 
-    yield type("Helper", (), {"write": staticmethod(_write), "path": path})
+    yield _set
 
-    cache_mod._audio_meta_doc.clear()
+    audio_meta_mod._SIDECAR_CACHE.clear()
 
 
-def test_vbr_chapters_for_reciter_returns_sorted_chapter_numbers(tmp_audio_meta):
+def test_vbr_chapters_for_reciter_returns_sorted_chapter_numbers(stage):
     from services.audio_meta import vbr_chapters_for_reciter
 
-    tmp_audio_meta.write({
-        "_schema": 1,
-        "alghazali": {
-            "by_chapter": {
-                "76": {"vbr": True, "url": "u76"},
-                "1": {"vbr": True, "url": "u1"},
-                "100": {"vbr": True, "url": "u100"},
-            },
-        },
+    stage("alghazali", {
+        "76": {"url": "u76", "bitrate_mode": "vbr"},
+        "1": {"url": "u1", "bitrate_mode": "vbr"},
+        "100": {"url": "u100", "bitrate_mode": "vbr"},
     })
     assert vbr_chapters_for_reciter("alghazali") == [1, 76, 100]
 
 
-def test_vbr_chapters_for_reciter_skips_non_vbr_entries(tmp_audio_meta):
+def test_vbr_chapters_for_reciter_skips_non_vbr_entries(stage):
     from services.audio_meta import vbr_chapters_for_reciter
 
-    # Only chapters with ``vbr: True`` should be reported. The artifact may
-    # in principle carry CBR entries (e.g. for legacy reasons) — defensively
-    # filter them out so the frontend's ``Set`` membership check is exact.
-    tmp_audio_meta.write({
-        "alghazali": {
-            "by_chapter": {
-                "1": {"vbr": True, "url": "u1"},
-                "2": {"vbr": False, "url": "u2"},
-                "3": {"url": "u3"},
-            },
-        },
+    stage("alghazali", {
+        "1": {"url": "u1", "bitrate_mode": "vbr"},
+        "2": {"url": "u2", "bitrate_mode": "cbr"},
+        "3": {"url": "u3"},
     })
     assert vbr_chapters_for_reciter("alghazali") == [1]
 
 
-def test_vbr_chapters_for_reciter_unknown_reciter_returns_empty(tmp_audio_meta):
+def test_vbr_chapters_for_reciter_unknown_reciter_returns_empty(stage):
     from services.audio_meta import vbr_chapters_for_reciter
 
-    tmp_audio_meta.write({"alghazali": {"by_chapter": {"1": {"vbr": True}}}})
+    stage("alghazali", {"1": {"url": "u1", "bitrate_mode": "vbr"}})
     assert vbr_chapters_for_reciter("nonexistent_reciter") == []
 
 
-def test_vbr_chapters_for_reciter_missing_artifact_returns_empty(tmp_audio_meta, monkeypatch):
-    from services import audio_meta as audio_meta_mod
+def test_vbr_chapters_for_reciter_missing_sidecar_returns_empty():
     from services.audio_meta import vbr_chapters_for_reciter
 
-    # Repoint at a non-existent path; loader hits FileNotFoundError and
-    # returns None, the helper degrades gracefully to an empty list.
-    monkeypatch.setattr(
-        audio_meta_mod, "AUDIO_META_PATH", tmp_audio_meta.path.parent / "nope.json",
-        raising=True,
-    )
-    assert vbr_chapters_for_reciter("alghazali") == []
+    # No fixture → empty cache, sidecar read returns None via the bucket
+    # backend's NotFound — function degrades to an empty list.
+    assert vbr_chapters_for_reciter("never-staged") == []
+
+
+def test_is_vbr_and_is_vbr_for_url(stage):
+    from services.audio_meta import is_vbr, is_vbr_for_url
+
+    stage("rec", {
+        "1": {"url": "https://cdn/1.mp3", "bitrate_mode": "vbr"},
+        "2": {"url": "https://cdn/2.mp3", "bitrate_mode": "cbr"},
+    })
+    assert is_vbr("rec", 1) is True
+    assert is_vbr("rec", 2) is False
+    assert is_vbr("rec", 99) is False
+    assert is_vbr_for_url("rec", "https://cdn/1.mp3") is True
+    assert is_vbr_for_url("rec", "https://cdn/2.mp3") is False
+    assert is_vbr_for_url("rec", "https://cdn/unknown.mp3") is False
+
+
+def test_chapter_for_url_and_chapter_urls(stage):
+    from services.audio_meta import chapter_for_url, chapter_urls
+
+    stage("rec", {
+        "1": {"url": "https://cdn/1.mp3", "bitrate_mode": "cbr"},
+        "5:3": {"url": "https://cdn/5_3.mp3"},
+    })
+    assert chapter_for_url("rec", "https://cdn/1.mp3") == "1"
+    assert chapter_for_url("rec", "https://cdn/5_3.mp3") == "5:3"
+    assert chapter_for_url("rec", "missing") is None
+    assert chapter_urls("rec") == {
+        "1": "https://cdn/1.mp3",
+        "5:3": "https://cdn/5_3.mp3",
+    }

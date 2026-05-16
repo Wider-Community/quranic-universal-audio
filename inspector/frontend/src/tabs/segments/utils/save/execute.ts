@@ -6,6 +6,9 @@
 import { get as storeGet } from 'svelte/store';
 
 import { fetchJson, fetchJsonOrNull } from '../../../../lib/api';
+import { SIGN_IN_MESSAGES } from '../../../../lib/sign-in-messages';
+import { openSignInModal } from '../../../../lib/stores/sign-in-modal';
+import { pushToast } from '../../../../lib/stores/toast';
 import type { SegEditHistoryResponse, SegSaveResponse } from '../../../../lib/types/api';
 import type { EditOp, Segment } from '../../../../lib/types/domain';
 import {
@@ -27,12 +30,15 @@ export { buildPayloadFromCommandResult } from './payload';
 // Payload types
 // ---------------------------------------------------------------------------
 
+// Note: matched_text is intentionally omitted from save payloads. The server
+// derives it from matched_ref via dk_words (services/quran_refs.py::
+// dk_text_for_ref) so detailed.json's matched_text stays consistent with the
+// canonical reference text.
 interface SaveSegmentPayloadFull {
     segment_uid: string;
     time_start: number;
     time_end: number;
     matched_ref: string;
-    matched_text: string;
     confidence: number;
     phonemes_asr: string;
     audio_url: string;
@@ -45,7 +51,6 @@ interface SaveSegmentPayloadPatch {
     index: number;
     segment_uid: string;
     matched_ref: string;
-    matched_text: string;
     confidence: number;
     ignored_categories?: string[];
 }
@@ -142,6 +147,11 @@ export async function executeSave(isAutoSave = false): Promise<void> {
         // Snapshot the operations and build payloads BEFORE yielding to network IO
         // so that concurrent edits arriving during the fetch don't get mixed in.
         const pendingSaves = [];
+        // Successfully-saved (chapter, ops) tuples that still need their pending
+        // ops cleared from the op log. Held back until edit-history has been
+        // refreshed so the op is always reachable in either pending OR batches
+        // — never in neither.
+        const pendingClears: Array<{ ch: number; ops: EditOp[] }> = [];
 
         for (const [ch, entry] of getDirtyMap()) {
             const chOps = [...getChapterOps(ch)]; // copy array of current ops
@@ -163,7 +173,6 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                             time_start: s.time_start,
                             time_end: s.time_end,
                             matched_ref: s.matched_ref,
-                            matched_text: s.matched_text,
                             confidence: s.confidence,
                             phonemes_asr: s.phonemes_asr || '',
                             audio_url: s.audio_url || '',
@@ -184,7 +193,6 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                             index: seg.index,
                             segment_uid: seg.segment_uid || '',
                             matched_ref: seg.matched_ref,
-                            matched_text: seg.matched_text,
                             confidence: seg.confidence,
                             ignored_categories: seg.ignored_categories ?? [],
                         };
@@ -205,55 +213,109 @@ export async function executeSave(isAutoSave = false): Promise<void> {
             pendingSaves.push({ chapter: ch, payload, ops: chOps });
         }
 
-        // Execute network requests for captured snapshots
+        // Execute network requests for captured snapshots.
+        // We use raw `fetch` so non-2xx responses surface a visible toast —
+        // `fetchJson` swallows the HTTP status and the UI was failing silently
+        // (Saving... stuck because dirty state never cleared on a 403/500).
         for (const { chapter: ch, payload, ops } of pendingSaves) {
-            const result = await fetchJson<SegSaveResponse & { error?: string }>(
-                `/api/seg/save/${reciter}/${ch}`,
-                {
+            let res: Response;
+            try {
+                res = await fetch(`/api/seg/save/${reciter}/${ch}`, {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
-                },
-            );
-            if (!result.ok) {
-                console.error(`Save error (ch ${ch}):`, result.error);
+                });
+            } catch (e) {
+                console.error(`Save network error (ch ${ch}):`, e);
+                pushToast({
+                    kind: 'error',
+                    text: `Save failed (network). Check your connection and try again.`,
+                    ttl: 6000,
+                });
                 allOk = false;
                 break;
             }
-            // Safely clear only the operations we just saved
-            clearSavedOps(ch, ops);
+            if (!res.ok) {
+                let errMsg = `Save failed (${res.status})`;
+                try {
+                    const body = await res.json() as { error?: string };
+                    if (body?.error) errMsg = `Save failed: ${body.error}`;
+                } catch { /* non-JSON body */ }
+                console.error(`Save error (ch ${ch}, ${res.status}):`, errMsg);
+                if (res.status === 401) {
+                    openSignInModal(null, SIGN_IN_MESSAGES.save);
+                } else {
+                    pushToast({ kind: 'error', text: errMsg, ttl: 6000 });
+                }
+                allOk = false;
+                break;
+            }
+            let result: SegSaveResponse & { error?: string };
+            try {
+                result = await res.json() as SegSaveResponse & { error?: string };
+            } catch {
+                pushToast({
+                    kind: 'error',
+                    text: 'Save returned a malformed response.',
+                    ttl: 6000,
+                });
+                allOk = false;
+                break;
+            }
+            if (!result.ok) {
+                console.error(`Save error (ch ${ch}):`, result.error);
+                pushToast({
+                    kind: 'error',
+                    text: result.error || 'Save failed (unknown error).',
+                    ttl: 6000,
+                });
+                allOk = false;
+                break;
+            }
+            // Defer clearSavedOps until after edit-history has refreshed.
+            // Otherwise there's a transient window where the in-flight split
+            // op is gone from the op log (cleared here) but not yet in
+            // historyData.batches (history fetch still pending), and
+            // getSplitGroupMembers returns only the parent UID — making the
+            // second child blink out of an open accordion card mid-save.
+            pendingClears.push({ ch, ops });
             savedChanges += ops.length;
             savedChapters++;
         }
 
-        if (allOk && savedChapters > 0) {
-            const msg = savedChapters > 1
-                ? `Saved ${savedChanges} changes across ${savedChapters} chapters`
-                : `Saved ${savedChanges} change${savedChanges !== 1 ? 's' : ''}`;
-            saveButtonLabel.set(msg);
-            setTimeout(() => { saveButtonLabel.set('Save'); }, 2500);
-            
-            fetchJson(`/api/seg/trigger-validation/${reciter}`, { method: 'POST' })
-                .then(() => {
-                    if (!isCurrentRunAutoSave) {
-                        return refreshValidation();
-                    }
-                })
-                .catch((err: unknown) => { console.warn('trigger-validation failed:', err); });
-            
+        if (savedChapters > 0) {
+            if (allOk) {
+                const msg = savedChapters > 1
+                    ? `Saved ${savedChanges} changes across ${savedChapters} chapters`
+                    : `Saved ${savedChanges} change${savedChanges !== 1 ? 's' : ''}`;
+                saveButtonLabel.set(msg);
+                setTimeout(() => { saveButtonLabel.set('Save'); }, 2500);
+            } else {
+                saveButtonLabel.set('Save');
+            }
+
+            // Refresh edit-history FIRST, then atomically apply the
+            // deferred pending-op clears alongside the history render.
+            // Order matters: clearSavedOps bumps dirtyTick which is a
+            // dependency in the validation-card memo for splits — if
+            // batches haven't received the new op yet, getSplitGroupMembers
+            // returns only the parent UID and the second child blinks out.
             try {
                 const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
                     `/api/seg/edit-history/${reciter}`,
                 );
-                if (hist) {
-                    renderEditHistoryPanel(hist);
-                }
+                if (hist) renderEditHistoryPanel(hist);
             } catch (_) { /* non-critical */ }
-        } else if (allOk && savedChapters === 0) {
-            // Nothing to save
-            saveButtonLabel.set('Save');
+            for (const { ch, ops } of pendingClears) clearSavedOps(ch, ops);
+
+            // Validation refresh fires after — it no longer races the history
+            // refresh. Stats are NOT refreshed here: StatsPanel lazy-fetches
+            // on accordion open (compute is ~0.7-1.2 s server-side on prod-sized
+            // reciters and the panel rarely gets opened during editing).
+            void refreshValidation().catch((e) => console.error('Error refreshing validation:', e));
         } else {
-            // Error occurred
+            // Nothing saved (either nothing to save or error before first commit)
             saveButtonLabel.set('Save');
         }
     } catch (e) {

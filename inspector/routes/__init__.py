@@ -1,17 +1,50 @@
-"""Inspector route blueprints."""
+"""Inspector route blueprints.
+
+Blueprints are organised into domain subpackages (``auth``, ``admin``,
+``claims``, ``segments``, ``audio``, ``public``, ``timestamps``). The shared
+``_admin_helpers`` module stays at the package root since it's referenced by
+both admin/ and claims/ routes.
+
+``audio_proxy_bp`` is registered unconditionally because ``source.ts`` routes
+by_surah audio through ``/api/seg/audio-proxy/<reciter>?url=...`` and that
+route is the only thing standing between the user and broken playback. The
+proxy degrades to a 302 redirect to the origin CDN when no cache file exists,
+so the cost in deployed mode is one extra hop and no background workers run
+unless the user explicitly POSTs to ``/prepare-audio``.
+"""
 
 
 def register_blueprints(app):
     """Register all route blueprints on the Flask app."""
-    from routes.timestamps import ts_bp
-    from routes.segments_data import seg_data_bp
-    from routes.segments_edit import seg_edit_bp
-    from routes.segments_validation import seg_val_bp
-    from routes.peaks import peaks_bp
-    from routes.audio_proxy import audio_proxy_bp
-    from routes.audio_metadata import audio_meta_bp
-    from routes.segment_clip import segment_clip_bp
+    from routes.admin.access import access_admin_bp
+    from routes.admin.actions import admin_actions_bp
+    from routes.admin.activity import admin_activity_bp, public_activity_admin_bp
+    from routes.admin.reconcile import admin_reconcile_bp
+    from routes.auth.auth import auth_bp
+    from routes.auth.health import health_bp
+    from routes.claims.claims import claims_bp
+    from routes.claims.requests import requests_bp
+    from routes.public.public import public_bp
+    from routes.public.static import static_bp
+    from routes.timestamps.timestamps import ts_bp
+    from routes.segments.data import seg_data_bp
+    from routes.segments.edit import seg_edit_bp
+    from routes.segments.validation import seg_val_bp
+    from routes.segments.peaks import peaks_bp
+    from routes.audio.proxy import audio_proxy_bp
+    from routes.audio.metadata import audio_meta_bp
+    from routes.audio.clip import segment_clip_bp
 
+    app.register_blueprint(health_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(claims_bp)
+    app.register_blueprint(public_bp)
+    app.register_blueprint(access_admin_bp)
+    app.register_blueprint(admin_actions_bp)
+    app.register_blueprint(admin_activity_bp)
+    app.register_blueprint(public_activity_admin_bp)
+    app.register_blueprint(admin_reconcile_bp)
+    app.register_blueprint(requests_bp)
     app.register_blueprint(ts_bp)
     app.register_blueprint(seg_data_bp)
     app.register_blueprint(seg_edit_bp)
@@ -20,3 +53,11 @@ def register_blueprints(app):
     app.register_blueprint(audio_proxy_bp)
     app.register_blueprint(audio_meta_bp)
     app.register_blueprint(segment_clip_bp)
+    app.register_blueprint(static_bp)
+
+    # Dev-only blueprint. Registered unconditionally so the route exists for
+    # tests that flip ``INSPECTOR_DEV_MODE`` at runtime; the handler itself
+    # returns 404 when dev mode is off. Keeps Flask's setup-finished contract
+    # intact without sacrificing prod surface (one no-op route).
+    from routes.auth.dev import dev_bp
+    app.register_blueprint(dev_bp)

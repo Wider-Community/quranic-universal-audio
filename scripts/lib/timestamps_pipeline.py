@@ -6,6 +6,8 @@ surah audio, slices segments, sends batches through a caller-provided MFA
 backend, and writes timestamps.json / timestamps_full.json.
 """
 
+from __future__ import annotations
+
 import argparse
 import io
 import json
@@ -23,9 +25,10 @@ import wave
 from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -244,6 +247,7 @@ def download_audio(url: str) -> Path:
 
 def load_audio_int16(path: Path) -> np.ndarray:
     """Load audio as 16kHz mono int16 via ffmpeg."""
+    import numpy as np
     cmd = [
         "ffmpeg", "-i", str(path),
         "-f", "s16le", "-acodec", "pcm_s16le",

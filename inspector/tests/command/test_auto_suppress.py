@@ -19,9 +19,16 @@ import pytest
 from tests.conftest import PER_SEGMENT_CATEGORIES
 
 
+
+import os
+
+os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+
+_HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
 @pytest.mark.parametrize("category", PER_SEGMENT_CATEGORIES, ids=PER_SEGMENT_CATEGORIES)
 def test_edit_from_card_does_not_write_ignored_categories(
-    category, flask_client, tmp_reciter_dir, load_fixture
+    category, signed_in_client, tmp_reciter_dir, load_fixture
 ):
     """Save with op_context_category set must not mutate ignored_categories.
 
@@ -31,7 +38,8 @@ def test_edit_from_card_does_not_write_ignored_categories(
     persists to disk via the save handler.
     """
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
     fixture = load_fixture("112-ikhlas")
     target_uid = fixture["entries"][0]["segments"][0]["segment_uid"]
@@ -67,10 +75,10 @@ def test_edit_from_card_does_not_write_ignored_categories(
         ],
     }
 
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
@@ -83,7 +91,7 @@ def test_edit_from_card_does_not_write_ignored_categories(
 
 
 def test_explicit_ignore_payload_still_persists(
-    flask_client, tmp_reciter_dir, load_fixture
+    signed_in_client, tmp_reciter_dir, load_fixture
 ):
     """When the payload explicitly carries ``ignored_categories``, it persists.
 
@@ -93,7 +101,8 @@ def test_explicit_ignore_payload_still_persists(
     persist an ignore.
     """
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
     fixture = load_fixture("112-ikhlas")
     target_uid = fixture["entries"][0]["segments"][0]["segment_uid"]
@@ -129,10 +138,10 @@ def test_explicit_ignore_payload_still_persists(
         ],
     }
 
-    flask_client.post(
+    client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))

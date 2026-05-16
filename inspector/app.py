@@ -13,22 +13,151 @@ import sys
 from pathlib import Path
 
 # Ensure the repo root (parent of inspector/) is on sys.path so that
-# `from validators.X import Y` resolves to the sibling `validators/` package
-# when the app is launched via `python3 inspector/app.py` from the repo root.
-# Inside Docker the WORKDIR is /app and both /app/inspector/ and /app/validators/
-# are present at that level, so this insert is also correct there.
+# `from scripts.lib.X import Y` resolves to the sibling `scripts/lib/` package
+# (e.g. `boundary_check`, used by the timestamps validator) when the app is
+# launched via `python3 inspector/app.py` from the repo root. Inside Docker
+# the WORKDIR is /app and both /app/inspector/ and /app/scripts/ are present
+# at that level, so this insert is also correct there.
 _REPO_ROOT = Path(__file__).parent.parent.resolve()
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from flask import Flask, jsonify, send_file, send_from_directory
-from werkzeug.exceptions import HTTPException
+# Local dev: hydrate process env from `<repo>/.env` if present. Production
+# (HF Space) gets its secrets from Space settings and the file is absent.
+# Keys already in the process env win (shell `export` beats the file).
+def _load_dotenv_for_local_dev() -> None:
+    env_path = _REPO_ROOT / ".env"
+    if not env_path.exists():
+        return
+    try:
+        for raw in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k = k.strip()
+            v = v.strip().strip('"').strip("'")
+            if k and k not in os.environ:
+                os.environ[k] = v
+    except OSError:
+        pass
 
-from config import (AUDIO_PATH, AUDIO_MIME_TYPES, CACHE_DIR, DEFAULT_PORT,
+
+_load_dotenv_for_local_dev()
+
+
+# Auto-enable dev-mode auth bypass when running locally outside pytest.
+# Tri-state env var: unset → auto-detect; "1" → force on; "0" → force off.
+# Auto-detect: on iff INSPECTOR_BEHIND_PROXY != "1" AND not running under
+# pytest (mirrors the audio-prefetch gate at module-load below). HF Space
+# deploys set INSPECTOR_BEHIND_PROXY=1, so they never auto-enable.
+if "INSPECTOR_DEV_MODE" not in os.environ:
+    if (os.environ.get("INSPECTOR_BEHIND_PROXY") != "1"
+            and "pytest" not in sys.modules):
+        os.environ["INSPECTOR_DEV_MODE"] = "1"
+
+
+# Local dev: auto-mount the HF bucket via hf-mount so reads hit a local
+# FUSE cache (~50-500x faster than going through hffs.cat_file every call).
+# Skipped behind the deployed proxy (Space attaches its own mount), in
+# pytest, on filesystem-backend mode, when the user pre-set
+# INSPECTOR_BUCKET_MOUNT, or when INSPECTOR_AUTO_MOUNT=0. Failures degrade
+# silently to the API path — never blocks boot.
+def _auto_mount_dev_bucket() -> None:
+    if os.environ.get("INSPECTOR_BEHIND_PROXY") == "1":
+        return
+    if "pytest" in sys.modules:
+        return
+    if os.environ.get("INSPECTOR_AUTO_MOUNT") == "0":
+        return
+    if os.environ.get("INSPECTOR_BUCKET_MOUNT"):
+        return
+    if os.environ.get("INSPECTOR_BACKEND", "bucket").lower() != "bucket":
+        return
+
+    import shutil
+    import subprocess
+    import time
+
+    hf_mount = shutil.which("hf-mount")
+    if not hf_mount:
+        for cand in ("~/bin/hf-mount", "/usr/local/bin/hf-mount",
+                     "/opt/homebrew/bin/hf-mount"):
+            p = Path(cand).expanduser()
+            if p.exists():
+                hf_mount = str(p)
+                break
+    if not hf_mount:
+        return
+
+    bucket = os.environ.get(
+        "INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket-dev"
+    )
+    mount_dir = (Path.home() / ".cache" / "inspector-hf-mount"
+                 / bucket.replace("/", "_"))
+    mount_dir.mkdir(parents=True, exist_ok=True)
+
+    def _activate() -> None:
+        os.environ["INSPECTOR_BUCKET_MOUNT"] = str(mount_dir)
+        # The mount handles read-after-write internally; force_flush adds a
+        # redundant API upload after every save (Space behaviour), which
+        # roughly doubles small-file write latency. Off by default locally
+        # — durability still arrives via the daemon's debounced flush.
+        if "INSPECTOR_FORCE_FLUSH_ON_SAVE" not in os.environ:
+            os.environ["INSPECTOR_FORCE_FLUSH_ON_SAVE"] = "0"
+
+    if os.path.ismount(str(mount_dir)):
+        _activate()
+        return
+
+    try:
+        result = subprocess.run(
+            [hf_mount, "start", "--fuse", "--", "--advanced-writes",
+             "bucket", bucket, str(mount_dir)],
+            timeout=30, capture_output=True, text=True,
+        )
+    except Exception:  # noqa: BLE001
+        return
+
+    for _ in range(50):
+        if os.path.ismount(str(mount_dir)):
+            _activate()
+            return
+        time.sleep(0.1)
+
+    # Mount didn't come up — leave env unset; BucketBackend falls back to API.
+    if result.returncode != 0:
+        sys.stderr.write(
+            f"[inspector] hf-mount auto-start failed (exit {result.returncode}): "
+            f"{result.stderr.strip()[:200]}\n"
+        )
+
+
+_auto_mount_dev_bucket()
+
+
+from flask import Flask, jsonify, send_from_directory
+from flask_compress import Compress
+from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+from config import (CACHE_DIR, DEFAULT_PORT,
                     FLASK_DEV_VALUE, FLASK_ENV_VAR, SERVER_HOST)
 from routes import register_blueprints
+from services import access as access_service
+from services import activity_state as activity_state_service
+from services import auto_detect as auto_detect_service
+from services import pending_requests as pending_requests_service
+from services import audit as audit_service
+from services import auth as auth_service
+from services import catalog as catalog_service
+from services import state as state_service
 from services.data_loader import load_surah_info_lite
-from services.phonemizer_service import get_phonemizer, has_phonemizer
+# Phonemizer was eagerly initialized here. It's now imported lazily inside
+# inspector/scripts/backfill_boundary_adj.py (the only remaining consumer).
+from services.secrets_guard import MissingSecret, get_session_secret
+from services.state.state import InvalidTransition, NotAuthorizedForTransition, UnknownReciter
+from utils.json_response import orjson_response
 
 
 # ---------------------------------------------------------------------------
@@ -66,14 +195,207 @@ def _configure_logging() -> None:
 _configure_logging()
 logger = logging.getLogger("inspector")
 
+if auth_service.is_dev_mode():
+    logger.warning(
+        "INSPECTOR_DEV_MODE=1 — synthetic dev user active, OAuth bypassed. "
+        "Default role 'owner'; flip via the in-app role switcher or the "
+        "'inspector_dev_role' cookie."
+    )
+
 _HERE = Path(__file__).parent.resolve()
 FRONTEND_DIST = _HERE / "frontend" / "dist"
+
+
+# Single-process invariant: state_store, per-slug threading.Lock, signed-
+# cookie session verification, and the role cache all assume one worker.
+# Boot fails if any multi-worker signal is set.
+def _assert_single_worker() -> None:
+    """Refuse to boot under any multi-worker config.
+
+    Three independent signals are sniffed at import time because gunicorn's
+    `-w` flag isn't on the env at fork time:
+
+    1. ``GUNICORN_CMD_ARGS`` / ``GUNICORN_WORKERS`` / ``WEB_CONCURRENCY`` env
+       vars — the standard gunicorn-recognised env knobs.
+    2. ``sys.argv`` of the loader process — catches `gunicorn -w 2 ...`.
+    3. (Future) a post-fork hook inside gunicorn — not currently wired.
+
+    Any signal of >1 worker → loud RuntimeError.
+    """
+    suspects = [
+        os.environ.get("GUNICORN_WORKERS"),
+        os.environ.get("WEB_CONCURRENCY"),
+        os.environ.get("GUNICORN_CMD_ARGS"),
+    ]
+    for raw in suspects:
+        if not raw:
+            continue
+        for token in raw.replace("=", " ").split():
+            if token.isdigit() and int(token) > 1:
+                raise RuntimeError(
+                    f"Inspector requires a single worker (saw {token!r} via env)."
+                )
+    argv = list(sys.argv)
+    for i, a in enumerate(argv):
+        if a in ("-w", "--workers") and i + 1 < len(argv):
+            try:
+                n = int(argv[i + 1])
+            except ValueError:
+                continue
+            if n > 1:
+                raise RuntimeError(
+                    f"Inspector requires -w 1 (got -w {n})."
+                )
+        elif a.startswith("--workers="):
+            try:
+                n = int(a.split("=", 1)[1])
+            except ValueError:
+                continue
+            if n > 1:
+                raise RuntimeError(
+                    f"Inspector requires --workers=1 (got {a})."
+                )
+
+
+_assert_single_worker()
+
+# Ensure the cache dir exists at import time so gunicorn workers don't race
+# on first peaks request. Local dev hits the same code path via __main__.
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Flask's built-in static handler serves everything under FRONTEND_DIST at
 # the site root (`/assets/<hash>.js`, `/fonts/DigitalKhattV2.otf`, …). The
 # `/` route below handles index.html explicitly.
 app = Flask(__name__, static_folder=str(FRONTEND_DIST), static_url_path="")
+
+# Gzip (and brotli when the client advertises it) every JSON response over
+# ~500 bytes. Pre-gzipped octet-stream bodies (Timestamps shards) fall outside
+# the default MIME allow-list, so they're left untouched — no double-compress.
+Compress(app)
+
+# Behind HF Spaces' TLS-terminating proxy the X-Forwarded-* headers carry
+# the real scheme/host/client; ProxyFix tells werkzeug to trust one hop so
+# request.url_root reflects the public https URL (load-bearing for the
+# OAuth redirect_uri). Gated by env so local dev / docker-compose runs
+# without proxy headers are unaffected.
+if os.environ.get("INSPECTOR_BEHIND_PROXY") == "1":
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# Flask's signed-cookie session is used by Authlib for the short-lived
+# OAuth state between /authorize and /callback. Our identity cookie is
+# separate (see services/auth.py). Both signed with the same secret.
+try:
+    app.secret_key = get_session_secret()
+except MissingSecret as e:
+    # Local dev / test paths may not have the secret seeded. Anyone hitting
+    # an OAuth route gets a 503 from auth_service.is_oauth_configured().
+    logger.warning("INSPECTOR_SESSION_SECRET unavailable: %s", e)
+
+# HF Spaces renders the app inside an iframe under huggingface.co. The
+# OAuth round-trip (authorize → callback) is iframe-scoped, so the Flask
+# session cookie carrying the OAuth state must use SameSite=None;Secure
+# to survive the cross-site iframe navigation. Without these, Authlib
+# raises MismatchingStateError on the callback because the cookie never
+# came back. Locally the app runs over plain HTTP where SameSite=None
+# requires Secure (browsers reject otherwise), so fall back to Lax there.
+_behind_proxy = os.environ.get("INSPECTOR_BEHIND_PROXY") == "1"
+app.config["SESSION_COOKIE_SAMESITE"] = "None" if _behind_proxy else "Lax"
+app.config["SESSION_COOKIE_SECURE"] = _behind_proxy
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+
+# Register the HF OAuth provider with Authlib so the auth routes can
+# resolve oauth.huggingface at request time.
+auth_service.init_oauth(app)
+
 register_blueprints(app)
+
+
+# ---------------------------------------------------------------------------
+# Bucket-resident stores: hydrate on import so both `python3 inspector/app.py`
+# and `gunicorn inspector.app:app` follow the same path. Errors degrade to
+# empty in-memory stores + a warning — the app still boots so contributors
+# get a clear "no reciters yet" page rather than a hard 500.
+# ---------------------------------------------------------------------------
+
+def _hydrate_bucket_stores() -> None:
+    for label, fn in (
+        ("access", access_service.hydrate),
+        ("state", state_service.hydrate),
+        ("catalog", catalog_service.hydrate),
+        ("activity_state", activity_state_service.hydrate),
+        ("pending_requests", pending_requests_service.hydrate),
+    ):
+        try:
+            fn()
+        except Exception as e:  # noqa: BLE001 — log and continue
+            logger.warning(
+                "%s store hydrate failed (%s); continuing with empty in-memory model",
+                label,
+                e,
+            )
+
+    try:
+        audit_service.ensure_meta_initialized()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("audit ensure_meta_initialized failed: %s", e)
+
+    # Wire the audio prefetch lifecycle: post-transition hook fires the queue,
+    # the sweeper daemon enforces the 1-week post-RELEASED TTL, and the boot
+    # scan re-enqueues any AWAITING_REVIEW slug whose `_done.json` sentinel
+    # never landed (e.g. Space rebooted mid-job).
+    #
+    # Opt-in via ``INSPECTOR_AUDIO_PREFETCH=1`` (Dockerfile sets it). Local
+    # dev runs (``python3 inspector/app.py``) leave it unset so background
+    # workers don't hammer the dev bucket on every restart. Tests skip via
+    # the pytest guard.
+    # Auto-detect reconciler: server-side acceptance of pending requests.
+    # ``hydrate_initial_seen`` ALWAYS runs at boot — it's idempotent and only
+    # fires alignment_completed for slugs already stuck in AWAITING_ALIGNMENT
+    # despite having ``wip/<slug>/`` files. Without this, a reciter uploaded
+    # while the server was down (or before deploy of the auto-detect feature)
+    # stays in AWAITING_ALIGNMENT forever, causing the dashboard row, detail
+    # modal, and segments combobox to all disagree about its bucket.
+    #
+    # The 60s background polling loop stays opt-in via ``INSPECTOR_AUTO_DETECT=1``
+    # because dev environments don't want a CPU loop hammering the bucket.
+    # Tests skip both via the pytest guard.
+    if "pytest" not in sys.modules:
+        try:
+            auto_detect_service.hydrate_initial_seen()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("auto_detect hydrate_initial_seen failed: %s", e)
+        if os.environ.get("INSPECTOR_AUTO_DETECT") == "1":
+            try:
+                interval = int(os.environ.get("INSPECTOR_AUTO_DETECT_INTERVAL_S", "60"))
+                auto_detect_service.start_background_loop(interval_seconds=interval)
+                logger.info(
+                    "auto_detect: background loop scheduled (interval=%ss)", interval,
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("auto_detect background loop wiring failed: %s", e)
+
+    if "pytest" not in sys.modules and os.environ.get("INSPECTOR_AUDIO_PREFETCH") == "1":
+        try:
+            from services import audio_prefetch
+
+            state_service.register_transition_hook(audio_prefetch.on_state_transition)
+            audio_prefetch.start_cleanup_daemon()
+            # Boot-resume is opt-in: a fresh Space with many awaiting_review
+            # rows would otherwise enqueue the entire backlog and peg CPU on
+            # ffmpeg remux for hours. Operators flip this on after confirming
+            # the queue is shaped right for the deploy.
+            if os.environ.get("AUDIO_PREFETCH_RESUME_ON_BOOT") == "1":
+                resumed = audio_prefetch.resume_orphaned()
+                if resumed:
+                    logger.info(
+                        "audio_prefetch: re-enqueued %d orphaned slug(s) at boot",
+                        resumed,
+                    )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("audio_prefetch wiring failed: %s", e)
+
+
+_hydrate_bucket_stores()
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +406,21 @@ register_blueprints(app)
 def _handle_http_exception(e: HTTPException):
     """Return the canonical ``{error: <description>}`` envelope with the HTTP status."""
     return jsonify({"error": e.description}), e.code
+
+
+@app.errorhandler(UnknownReciter)
+def _handle_unknown_reciter(e: UnknownReciter):
+    return jsonify({"error": f"unknown reciter: {e}"}), 404
+
+
+@app.errorhandler(InvalidTransition)
+def _handle_invalid_transition(e: InvalidTransition):
+    return jsonify({"error": str(e)}), 400
+
+
+@app.errorhandler(NotAuthorizedForTransition)
+def _handle_not_authorized_transition(e: NotAuthorizedForTransition):
+    return jsonify({"error": str(e)}), 403
 
 
 @app.errorhandler(Exception)
@@ -118,27 +455,11 @@ def index():
 @app.route("/api/surah-info")
 def get_surah_info():
     """Return lightweight surah metadata."""
-    return jsonify(load_surah_info_lite())
-
-
-@app.route("/audio/<reciter>/<filename>")
-def serve_audio(reciter, filename):
-    """Serve audio files.
-
-    Sends `Access-Control-Allow-Origin: *` so the frontend can mark the
-    `<audio>` element with `crossorigin="anonymous"`. That CORS tag is
-    required for Web Audio's `MediaElementAudioSourceNode` to emit real
-    samples (the GainNode kill-switch in `lib/playback/audio-graph.ts`
-    needs it to silence the OS sink at segment boundaries). Without it
-    the spec mandates the source emits silence even on same-origin loads.
-    """
-    audio_path = AUDIO_PATH / reciter / filename
-    if not audio_path.exists():
-        return jsonify({"error": "Audio file not found"}), 404
-    mime_type = AUDIO_MIME_TYPES.get(audio_path.suffix.lower(), "audio/mpeg")
-    response = send_file(audio_path, mimetype=mime_type)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    return response
+    # Pure Quran-structure constants — never change without a redeploy.
+    return orjson_response(
+        load_surah_info_lite(),
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -159,13 +480,11 @@ if __name__ == "__main__":
             FRONTEND_DIST / "index.html",
         )
 
-    # Eagerly initialize phonemizer
-    if has_phonemizer():
-        logger.info("Initializing phonemizer...")
-        get_phonemizer()
-        logger.info("Phonemizer ready.")
-    else:
-        logger.info("Phonemizer not available (reference resolution disabled)")
+    # Phonemizer is no longer used by the validate runtime path; the phonemic
+    # side of boundary_adj is captured at backfill / extraction time and
+    # persisted as ``is_boundary_adj`` on every segment. The remaining
+    # consumer is ``inspector/scripts/backfill_boundary_adj.py`` (offline)
+    # which imports lazily on demand.
 
     # Timestamp data loads lazily on first request now (per-reciter cache in
     # services/data_loader.py). The earlier eager preload pinned ~22 MB *

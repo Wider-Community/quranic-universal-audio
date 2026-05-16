@@ -92,9 +92,6 @@ export interface EditOp {
     op_type: string;
     op_context_category: string | null;
     fix_kind: string | null;
-    started_at_utc: string; // ISO8601
-    applied_at_utc: string | null;
-    ready_at_utc: string | null;
     targets_before: Array<Record<string, unknown>>;
     targets_after: Array<Record<string, unknown>>;
     /** Set on merge ops — `'prev'` or `'next'`. */
@@ -103,21 +100,6 @@ export interface EditOp {
      *  path (which inverts it client-side) and by the save payload (server records
      *  it on the history entry for batch undo). */
     patch?: EditOpPatch;
-}
-
-/** Validation summary snapshot — server records before/after each save. */
-export interface ValidationSummarySnapshot {
-    failed?: number;
-    missing_verses?: number;
-    missing_words?: number;
-    structural_errors?: number;
-    low_confidence?: number;
-    cross_verse?: number;
-    repetitions?: number;
-    boundary_adj?: number;
-    muqattaat?: number;
-    qalqala?: number;
-    [k: string]: unknown;
 }
 
 /** Edit history batch as returned by /api/seg/edit-history. */
@@ -129,8 +111,6 @@ export interface HistoryBatch {
     chapters?: number[];
     save_mode: string | null;
     is_revert: boolean;
-    validation_summary_before: ValidationSummarySnapshot | null;
-    validation_summary_after: ValidationSummarySnapshot | null;
     operations: EditOp[];
     reverted_op_ids?: string[];
 }
@@ -186,7 +166,12 @@ export interface TsReciter {
 export interface SegReciter {
     slug: string;
     name: string;
+    /** Channel — `mp3quran`, `qul`, `everyayah`, etc. NOT a by_surah/by_ayah
+     *  signal (that's `audio_category`). */
     audio_source: string;
+    /** by_surah → one MP3 per chapter; by_ayah → one MP3 per verse. Drives
+     *  per-row playback routing (clip-vs-chapter URL, proxy wrap). */
+    audio_category: 'by_surah' | 'by_ayah';
 }
 
 // ---------------------------------------------------------------------------
@@ -234,59 +219,6 @@ export interface TsVerseData {
     time_end_ms: number;
     intervals: PhonemeInterval[];
     words: TsWord[];
-}
-
-// ---------------------------------------------------------------------------
-// Validation error rows (ts tab)
-// ---------------------------------------------------------------------------
-
-export interface TsMfaFailure {
-    verse_key: string;
-    chapter: number;
-    ref: string;
-    seg: string;
-    error: string;
-    diff_ms: number;
-    label: string;
-}
-
-export interface TsMissingWords {
-    verse_key: string;
-    chapter: number;
-    missing: Array<string | Record<string, unknown>>;
-    count: number;
-    diff_ms: number;
-    label: string;
-}
-
-export interface TsBoundaryMismatch {
-    verse_key: string;
-    chapter: number;
-    side: string;
-    diff_ms: number;
-    label: string;
-}
-
-export interface TsMissingVerse {
-    verse_key: string;
-    chapter: number;
-    label: string;
-}
-
-export interface TsVerseOverlap {
-    verse_key: string;
-    chapter: number;
-    prev_verse_key: string;
-    overlap_ms: number;
-    label: string;
-}
-
-export interface TsLargeGap {
-    verse_key: string;
-    chapter: number;
-    prev_verse_key: string;
-    gap_ms: number;
-    label: string;
 }
 
 // ---------------------------------------------------------------------------

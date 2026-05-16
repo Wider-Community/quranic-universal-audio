@@ -75,15 +75,16 @@ export function createOp(opType: string, { contextCategory = null, fixKind = 'ma
         op_type: opType,
         op_context_category: contextCategory,
         fix_kind: fixKind,
-        started_at_utc: new Date().toISOString(),
-        applied_at_utc: null,
-        ready_at_utc: null,
         targets_before: [],
         targets_after: [],
     };
 }
 
 export function snapshotSeg(seg: Segment): SegSnapshot {
+    // matched_text is derivable from matched_ref + dk_words server-side
+    // (see services/quran_refs.py::dk_text_for_ref). Dropping it from new
+    // snapshots saves ~200-600 B per snapshot; legacy records on disk still
+    // carry it and pass through unchanged via apply_inverse_patch hydration.
     const snap: SegSnapshot = {
         segment_uid: seg.segment_uid || null,
         index_at_save: seg.index,
@@ -91,7 +92,6 @@ export function snapshotSeg(seg: Segment): SegSnapshot {
         time_start: seg.time_start,
         time_end: seg.time_end,
         matched_ref: seg.matched_ref || '',
-        matched_text: seg.matched_text || '',
         confidence: seg.confidence ?? 0,
     };
     if (seg.has_repeated_words) snap.has_repeated_words = true;
@@ -104,7 +104,6 @@ export function snapshotSeg(seg: Segment): SegSnapshot {
 }
 
 export function finalizeOp(chapter: number, op: EditOp): void {
-    op.ready_at_utc = new Date().toISOString();
     if (!_opLog.has(chapter)) _opLog.set(chapter, []);
     _opLog.get(chapter)!.push(op);
     _pendingOp = null;

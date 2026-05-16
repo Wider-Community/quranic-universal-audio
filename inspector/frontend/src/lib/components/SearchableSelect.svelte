@@ -8,6 +8,7 @@
     import { createEventDispatcher, onMount } from 'svelte';
 
     import type { SelectOption } from '../types/ui';
+    import { match } from '../utils/fuzzy-match';
 
     export let options: SelectOption[] = [];
     export let value = '';
@@ -25,28 +26,16 @@
 
     // Sync input display text when value prop changes from outside
     $: {
-        const match = options.find(o => o.value === value);
-        if (!isOpen) inputValue = match ? match.label : '';
+        const matched = options.find(o => o.value === value);
+        if (!isOpen) inputValue = matched ? matched.label : '';
     }
 
     // Re-filter when options change
     $: if (options) filter(inputValue);
 
-    function normalizeArabic(str: string): string {
-        return str
-            .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, '')
-            .replace(/[أإآٱ]/g, 'ا')
-            .replace(/ة/g, 'ه')
-            .replace(/ى/g, 'ي');
-    }
-
     function filter(q: string): void {
-        const norm = normalizeArabic(q.toLowerCase());
-        filtered = norm
-            ? options.filter(o =>
-                normalizeArabic(o.label.toLowerCase()).includes(norm) ||
-                normalizeArabic((o.group ?? '').toLowerCase()).includes(norm)
-            )
+        filtered = q
+            ? options.filter(o => match(o.label, q) || match(o.group ?? '', q))
             : [...options];
         highlightIdx = -1;
     }
@@ -60,8 +49,8 @@
     function close(): void {
         isOpen = false;
         highlightIdx = -1;
-        const match = options.find(o => o.value === value);
-        inputValue = match ? match.label : '';
+        const matched = options.find(o => o.value === value);
+        inputValue = matched ? matched.label : '';
     }
 
     function pick(opt: SelectOption): void {

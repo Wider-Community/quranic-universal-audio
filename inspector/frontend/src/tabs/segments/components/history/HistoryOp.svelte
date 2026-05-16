@@ -11,11 +11,14 @@
 
     import { afterUpdate } from 'svelte';
 
+    import { editGate } from '../../../../lib/actions/editGate';
+    import { editingMode } from '../../../../lib/stores/editing-mode';
     import type { EditOp } from '../../../../lib/types/domain';
     import {
         type HistorySnapshot,
         snapToSeg,
     } from '../../stores/history';
+    import { undoPending } from '../../stores/undo-pending';
     import type { MergeHighlight, TrimHighlight } from '../../types/segments-waveform';
     import { EDIT_OP_LABELS } from '../../utils/constants';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
@@ -113,11 +116,12 @@
         return hl;
     })();
 
-    function handleOpUndoClick(e: MouseEvent): void {
+    function handleOpUndoClick(): void {
         if (!batchId) return;
-        const btn = e.currentTarget as HTMLButtonElement;
-        void onOpUndoClick(batchId, group.map((op) => op.op_id), btn);
+        void onOpUndoClick(batchId, group.map((op) => op.op_id));
     }
+    $: opUndoKey = batchId ? `${batchId}:${group.map((op) => op.op_id).join(',')}` : '';
+    $: isOpUndoing = opUndoKey ? $undoPending.has(opUndoKey) : false;
 
     // Bound card refs driving HistoryArrows ---------------------------------
     let beforeCardEls: (HTMLElement | undefined)[] = [];
@@ -154,11 +158,13 @@
             {#each fixKinds as fk}
                 <span class="seg-history-op-fix-kind">{fk}</span>
             {/each}
-            {#if batchId}
+            {#if batchId && $editingMode.kind !== 'view' && primary?.op_type !== 'pipeline'}
                 <button
                     class="btn btn-sm seg-history-op-undo-btn"
+                    use:editGate
                     on:click|stopPropagation={handleOpUndoClick}
-                >Undo</button>
+                    disabled={isOpUndoing}
+                >{isOpUndoing ? 'Undoing…' : 'Undo'}</button>
             {/if}
         </div>
     {/if}

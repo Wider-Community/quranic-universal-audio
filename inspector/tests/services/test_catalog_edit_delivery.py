@@ -1,0 +1,185 @@
+"""Tests for ``services.catalog.edit_delivery`` — the per-delivery counterpart
+to ``edit_reciter``. Used by ``services.pending_requests.apply_and_clear``
+to apply requester-proposed catalog changes, and by future admin
+catalog-edit routes.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+import pytest
+
+from scripts.lib.schemas import (
+    Actor,
+    AudioCategory,
+    Channel,
+    Delivery,
+    ReciterCatalog,
+    ReciterEntry,
+    RecordingContext,
+    Riwayah,
+    Role,
+    Source,
+    Style,
+    Vocab,
+)
+
+
+@pytest.fixture
+def fresh_catalog(tmp_path, monkeypatch):
+    from services import catalog as catalog_service
+    from services import hf_bucket as _hf_bucket
+    from services import storage_paths
+
+    monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))
+    backend = _hf_bucket.FilesystemBackend(tmp_path)
+    _hf_bucket.set_backend(backend)
+
+    catalog = ReciterCatalog(
+        vocab=Vocab(
+            riwayat=[
+                Riwayah(slug="hafs", short="H", name="Hafs"),
+                Riwayah(slug="warsh", short="W", name="Warsh"),
+            ],
+            styles=[
+                Style(slug="murattal", short="M", name="Murattal"),
+                Style(slug="mujawwad", short="J", name="Mujawwad"),
+            ],
+            sources=[Source(slug="src1", name="Source One")],
+            channels=[Channel(slug="ch1", short="c1", name="Channel One")],
+            recording_contexts=[
+                RecordingContext(slug="studio", name="Studio"),
+                RecordingContext(slug="broadcast", name="Broadcast"),
+            ],
+        ),
+        reciters=[
+            ReciterEntry(reciter_id="rec_a", name_en="Reciter A"),
+        ],
+        deliveries=[
+            Delivery(
+                slug="rec_a",
+                reciter_id="rec_a",
+                riwayah="hafs",
+                style="murattal",
+                recording_context="studio",
+                recording_year=2010,
+                source="src1",
+                channel="ch1",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=datetime.now(timezone.utc),
+                added_by_hf_id="seed",
+            ),
+        ],
+    )
+    backend.write_json_atomic(
+        storage_paths.catalog_path(), catalog.model_dump(mode="json"),
+    )
+    catalog_service.hydrate()
+
+    yield catalog_service, backend
+
+    _hf_bucket.reset_backend()
+
+
+def _actor(role: str = "maintainer") -> Actor:
+    return Actor(hf_user_id="u-1", login_at_time="alice", role=Role(role))
+
+
+def test_edit_delivery_updates_fields(fresh_catalog, monkeypatch):
+    catalog_service, _ = fresh_catalog
+    from services import audit as audit_service
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+
+    catalog_service.edit_delivery(
+        actor=_actor(),
+        slug="rec_a",
+        riwayah="warsh",
+        recording_year=2020,
+    )
+    d = catalog_service.find_delivery("rec_a")
+    assert d is not None
+    assert d.riwayah == "warsh"
+    assert d.recording_year == 2020
+    assert d.style == "murattal"  # untouched
+
+
+def test_edit_delivery_no_op_when_values_unchanged(fresh_catalog, monkeypatch):
+    catalog_service, _ = fresh_catalog
+    from services import audit as audit_service
+    calls = []
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: calls.append(kw))
+
+    catalog_service.edit_delivery(
+        actor=_actor(),
+        slug="rec_a",
+        riwayah="hafs",  # same as current
+    )
+    assert calls == []  # nothing audited for a no-op
+
+
+def test_edit_delivery_rejects_unknown_slug(fresh_catalog):
+    catalog_service, _ = fresh_catalog
+    with pytest.raises(catalog_service.InvalidCatalogChange):
+        catalog_service.edit_delivery(actor=_actor(), slug="nope", riwayah="warsh")
+
+
+def test_edit_delivery_rejects_contributor(fresh_catalog):
+    catalog_service, _ = fresh_catalog
+    with pytest.raises(catalog_service.NotAuthorizedForCatalog):
+        catalog_service.edit_delivery(
+            actor=_actor(role="contributor"),
+            slug="rec_a",
+            riwayah="warsh",
+        )
+
+
+def test_edit_delivery_rejects_unknown_riwayah(fresh_catalog, monkeypatch):
+    catalog_service, _ = fresh_catalog
+    from services import audit as audit_service
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+
+    with pytest.raises(catalog_service.InvalidCatalogChange):
+        catalog_service.edit_delivery(
+            actor=_actor(),
+            slug="rec_a",
+            riwayah="not_in_vocab",
+        )
+
+
+def test_edit_delivery_audit_record_shape(fresh_catalog, monkeypatch):
+    catalog_service, _ = fresh_catalog
+    from services import audit as audit_service
+    calls = []
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: calls.append(kw))
+
+    catalog_service.edit_delivery(
+        actor=_actor(),
+        slug="rec_a",
+        recording_context="broadcast",
+        reason="proposed update",
+    )
+    assert len(calls) == 1
+    rec = calls[0]
+    assert rec["event"] == "catalog.edited"
+    assert rec["slug"] == "rec_a"
+    assert rec["payload"]["kind"] == "delivery"
+    assert rec["payload"]["slug"] == "rec_a"
+    assert rec["payload"]["patch"]["recording_context"] == {
+        "from": "studio",
+        "to": "broadcast",
+    }
+    assert rec["reason"] == "proposed update"
+
+
+def test_edit_delivery_persists_to_bucket(fresh_catalog, monkeypatch):
+    catalog_service, backend = fresh_catalog
+    from services import audit as audit_service
+    from services import storage_paths
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+
+    catalog_service.edit_delivery(actor=_actor(), slug="rec_a", riwayah="warsh")
+    raw = backend.read_json(storage_paths.catalog_path())
+    d = next(d for d in raw["deliveries"] if d["slug"] == "rec_a")
+    assert d["riwayah"] == "warsh"

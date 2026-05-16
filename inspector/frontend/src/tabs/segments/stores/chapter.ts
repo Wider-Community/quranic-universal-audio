@@ -10,6 +10,7 @@ import type {
     SegDataResponse,
 } from '../../../lib/types/api';
 import type { Segment,SegReciter } from '../../../lib/types/domain';
+import { playingSegmentIndex } from './playback';
 
 /** Alias for clarity — `SegDataResponse` may be mutated with a proxy URL. */
 export type SegDataState = SegDataResponse;
@@ -32,6 +33,17 @@ export const selectedVerse = writable<string>('');
 
 /** Full reciter corpus (segments across all chapters). */
 export const segAllData = writable<SegAllResponse | null>(null);
+
+/** Set of ``segment_uid``s with a precomputed Auto Split sidecar entry. The
+ *  *Auto Split* button only renders for rows whose seg uid is in this set;
+ *  others fall back to plain *Split*. Derived from ``segAllData.auto_split_uids``
+ *  on every load — empty set means the reciter has no sidecar yet (extraction
+ *  hasn't run, or the dev bucket is missing the file), in which case every
+ *  candidate seg keeps the manual Split UX. */
+export const autoSplitUids = derived(
+    segAllData,
+    ($all) => new Set<string>($all?.auto_split_uids ?? []),
+);
 
 /** Per-chapter loaded data (audio_url, pad fields, segments). */
 export const segData = writable<SegDataState | null>(null);
@@ -197,3 +209,24 @@ export const verseOptions = derived(currentChapterSegments, ($segs) => {
     }
     return [...verses].sort((a, b) => a - b);
 });
+
+/** Verse currently being played back — derived from `playingSegmentIndex`
+ *  by parsing the segment's `matched_ref` ("37:151:3" or compound
+ *  "37:151:3-37:152:2") and taking the start verse number. `null` when
+ *  nothing is playing. Read by the footer's Surah/Ayah cells so they can
+ *  paint accent-coloured while audio is in-flight, without overwriting
+ *  the user's `selectedVerse` filter. */
+export const livePlayingVerse = derived(
+    [playingSegmentIndex, segAllData],
+    ([$active, $all]): { chapter: number; verse: number } | null => {
+        if (!$active || !$all?.segments) return null;
+        const seg = $all.segments.find(
+            (s) => s.chapter === $active.chapter && s.index === $active.index,
+        );
+        if (!seg?.matched_ref) return null;
+        const startParts = seg.matched_ref.split('-')[0]?.split(':');
+        if (!startParts || startParts.length < 2 || startParts[1] == null) return null;
+        const v = parseInt(startParts[1]);
+        return Number.isFinite(v) ? { chapter: $active.chapter, verse: v } : null;
+    },
+);

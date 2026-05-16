@@ -33,9 +33,11 @@ export interface FilteredItemSummary {
 export const SHORT_LABELS: Record<string, string> = {
     failed: 'fail', low_confidence: 'low conf', low_confidence_v2: 'low conf',
     boundary_adj: 'boundary', cross_verse: 'cross', missing_words: 'gaps',
-    audio_bleeding: 'bleed', repetitions: 'reps', muqattaat: 'muqattaat',
+    audio_bleeding: 'bleed', repetitions: 'reps',
     qalqala: 'qalqala',
 };
+
+const HISTORY_NEUTRAL_CATEGORIES = new Set(['basmala_amin', 'muqattaat']);
 
 export function versesFromRef(ref: string | null | undefined): string[] {
     if (!ref) return [];
@@ -157,7 +159,13 @@ export function itemMatchesOpFilter(item: OpFlatItem, opTypes: Set<string>): boo
 }
 
 export function itemMatchesCatFilter(item: OpFlatItem, cats: Set<string>): boolean {
-    for (const op of item.group) { if (op.op_context_category && cats.has(op.op_context_category)) return true; }
+    for (const op of item.group) {
+        if (
+            op.op_context_category &&
+            !HISTORY_NEUTRAL_CATEGORIES.has(op.op_context_category) &&
+            cats.has(op.op_context_category)
+        ) return true;
+    }
     const delta = deriveOpIssueDelta(item.group);
     for (const cat of cats) { if (delta.involved.includes(cat)) return true; }
     return false;
@@ -169,7 +177,13 @@ export function chainMatchesOpFilter(chain: EditChain, opTypes: Set<string>): bo
 
 export function chainMatchesCatFilter(chain: EditChain, cats: Set<string>): boolean {
     const ops = chain.ops.map(co => co.op);
-    for (const op of ops) { if (op.op_context_category && cats.has(op.op_context_category)) return true; }
+    for (const op of ops) {
+        if (
+            op.op_context_category &&
+            !HISTORY_NEUTRAL_CATEGORIES.has(op.op_context_category) &&
+            cats.has(op.op_context_category)
+        ) return true;
+    }
     const delta = deriveOpIssueDelta(ops);
     for (const cat of cats) { if (delta.involved.includes(cat)) return true; }
     return false;

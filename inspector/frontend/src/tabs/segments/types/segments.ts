@@ -16,6 +16,9 @@ export interface HistorySnapshot {
     index_at_save?: number;
     segment_uid?: string;
     audio_url?: string;
+    /** Chapter (surah) the snapshot belongs to. Stamped by extraction on
+     *  pipeline-op snapshots; may be undefined on legacy records. */
+    chapter?: number;
     time_start: number;
     time_end: number;
     matched_ref?: string;
@@ -122,8 +125,16 @@ export type RafHandle = number;
 // Preview loop mode
 // ---------------------------------------------------------------------------
 
-/** `_previewLooping` is a trivalued flag: false, or one of the three loop keys. */
-export type PreviewLoopMode = false | 'trim' | 'split-left' | 'split-right';
+/** `_previewLooping` flag. ``split-left`` / ``split-right`` cover the
+ *  binary (single-cursor) split; ``split-region-{i}`` covers the N≥2
+ *  multi-cursor split (region ``i`` runs between cursor ``i-1`` and
+ *  cursor ``i``, with seg endpoints as sentinels). */
+export type PreviewLoopMode =
+    | false
+    | 'trim'
+    | 'split-left'
+    | 'split-right'
+    | `split-region-${number}`;
 
 // ---------------------------------------------------------------------------
 // Classification / ops

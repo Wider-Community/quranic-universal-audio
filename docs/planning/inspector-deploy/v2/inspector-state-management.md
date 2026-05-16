@@ -31,7 +31,9 @@ The on-bucket file is a JSON object with `schema_version`, `writer_version`, and
       "marked_ready": false,                    // bool; supersedes ready_for_merge state (see §4)
       "visibility": "public",                   // enum: 'public' | 'discarded'  (archived deferred)
       "visibility_reason": null,
-      "last_save_at": "2026-05-08T14:25:01Z"
+      "last_save_at": "2026-05-08T14:25:01Z",
+      "timestamps_job_ids": ["job_a1b2"],        // append-on-refresh; tracks every MFA TS job dispatched
+      "revision_in_progress": null               // sub-struct only when unlocked for re-revision; see §4
     }
   ]
 }
@@ -40,7 +42,7 @@ The on-bucket file is a JSON object with `schema_version`, `writer_version`, and
 The pydantic model:
 
 ```python
-# inspector/schemas/state.py
+# scripts/lib/schemas/state.py  (cross-consumer location; see cleanup-registry §10)
 class Visibility(str, Enum):
     PUBLIC = "public"
     DISCARDED = "discarded"
@@ -51,7 +53,16 @@ class ReciterState(str, Enum):
     AWAITING_REVIEW     = "awaiting_review"
     UNDER_REVIEW        = "under_review"
     AWAITING_TIMESTAMPS = "awaiting_timestamps"
+    RELEASED            = "released"
     COMPLETED           = "completed"
+
+class RevisionContext(BaseModel):
+    """Set on admin.unlocked_for_revision; cleared on re-publish.
+    Lets the publish endpoint auto-restore the row to its prior state."""
+    unlocked_from_state: Literal["released", "completed"]
+    unlocked_at: datetime
+    unlocked_by_hf_id: str
+    original_assignee_hf_id: str | None  # to re-credit on re-publish
 
 class ReciterRow(BaseModel):
     slug: str
@@ -64,6 +75,8 @@ class ReciterRow(BaseModel):
     visibility: Visibility = Visibility.PUBLIC
     visibility_reason: str | None = None
     last_save_at: datetime | None = None
+    timestamps_job_ids: list[str] = []                       # append-on-refresh
+    revision_in_progress: RevisionContext | None = None      # see §4 unlock flow
 
 class ReciterStateFile(BaseModel):
     schema_version: int
@@ -166,7 +179,7 @@ Same reasoning as state (§2): pydantic models at the service boundary handle va
 1. v2's architectural shift is "no per-reciter PRs." Keeping catalog on GitHub PRs means a PR-creation token + auto-merge workflow + PR review queue, just for catalog edits.
 2. The same Inspector-as-sole-writer pattern works for catalog. Maintainer+ role required for `catalog.added` / `catalog.edited` events; immutable fields (`slug`, `reciter_id`) rejected by the validator.
 
-`data/inspector_roles.json` (the role file, see §9) **stays on GitHub** — it governs *who can edit*, not *what's edited*. CODEOWNERS-gated PR review is the right gate for role mutations.
+`<bucket>/access/inspector_roles.json` (the role file, see §9) lives **on the same private bucket** as state + catalog + audit — Inspector is sole writer; bootstrap via hand-seed.
 
 ### Catalog read paths
 
@@ -179,9 +192,19 @@ Same reasoning as state (§2): pydantic models at the service boundary handle va
 
 ### Design principle: slug is opaque, catalog is structured
 
-The slug is just a unique ID string. **No parser ever extracts semantic meaning from it.** All dimensions that matter — name, riwayah, style, source, year, variant grouping — are catalog fields. Adding a new dimension later is a pydantic schema bump + version migration, never a slug reshape.
+The slug is just a unique ID string. **No parser ever extracts semantic meaning from it.** All dimensions that matter — name, riwayah, style, source, channel, year, variant — are catalog fields. Adding a new dimension later is a pydantic schema bump + version migration, never a slug reshape.
 
-### Schema sketch
+### Schema reference
+
+**The canonical schema reference is [`../../reference/reciter-catalog.md`](../../reference/reciter-catalog.md)** — the live source for vocab shapes, `reciters[]`, `deliveries[]`, sidecars, slug convention, naming style guide, and workflows. The sketch below in this section is historical (pre-dedup-pass) and **does not match what ships**. When implementing Phase 0 schemas at `scripts/lib/schemas/`, mirror the reference doc, not this section.
+
+Key v2-specific concerns that the reference doc does not cover (these still apply):
+
+- **Inspector is sole writer.** Maintainer+ role required for `catalog.added` / `catalog.edited` events. Immutable fields (`slug`, `reciter_id`) rejected by `services/catalog.py::_validate`. Direct mutation outside Inspector forbidden by convention post-cutover.
+- **Same write semantics as state file**: per-slug `threading.Lock`, atomic-write-then-rename to bucket mount, direct `huggingface_hub.upload_file()` per write for durability beyond the mount flush window.
+- **Browser catalog access** — Inspector backend serves a cached copy via `/api/static/catalog.json`; browser fetches once on app load.
+
+### Historical schema sketch (do not implement — see reference doc)
 
 ONE file consolidates: vocab (riwayat, styles, audio sources) + reciters list + aliases. Replaces `data/riwayat.json`, `data/sources.json`, `data/styles.json`, the 381 per-reciter audio manifests under `data/audio/<cat>/<src>/<slug>.json`, and the previously-planned catalog SQLite.
 
@@ -233,7 +256,7 @@ ONE file consolidates: vocab (riwayat, styles, audio sources) + reciters list + 
 }
 ```
 
-The pydantic model lives at `inspector/schemas/catalog.py`:
+The pydantic model lives at `scripts/lib/schemas/catalog.py` (cross-consumer):
 
 ```python
 class AudioCategory(str, Enum):
@@ -361,16 +384,15 @@ After cutover, all subsequent transitions go through `state.py::transition()` �
 
 ### Audio metadata sidecars on the bucket
 
-- `<bucket>/catalog/audio_meta.json` — VBR + ffprobe cache (was `data/.audio_meta.json`).
-- `<bucket>/catalog/audio_durations.json` — duration cache (was `data/.audio_durations.json`).
+Per-delivery sidecars at `<bucket>/catalog/audio_manifest/<slug>.json` — one per delivery — carry the per-chapter URL map + (size_bytes, duration_sec, bitrate_kbps) when probed. The `_meta.checksum` field inside each sidecar invalidates re-probes. Schema details in [`../../reference/reciter-catalog.md`](../../reference/reciter-catalog.md) §4.
 
-Both are written by maintainer scripts (running `huggingface_hub`-based CLI tools) and read-only at Inspector runtime.
+The legacy v1 `data/.audio_meta.json` and `data/.audio_durations.json` caches are **deprecated** — equivalent data now lives in the delivery row (totals, mode) and per-chapter sidecars (per-file metrics). Deletion is in Phase 1 cleanup.
 
 ## 4. State machine
 
 ### Lifecycle states
 
-Six lifecycle phases. **`ready_for_merge` is NOT a state** — it's a `marked_ready: bool` field on `under_review` rows. **`discarded` is NOT a state** — it's `visibility: 'discarded'` orthogonal to lifecycle.
+Seven lifecycle phases. **`ready_for_merge` is NOT a state** — it's a `marked_ready: bool` field on `under_review` rows. **`discarded` is NOT a state** — it's `visibility: 'discarded'` orthogonal to lifecycle. The `released → completed` split is a deliberate maintainer-gated step: `released` = files+TS visible publicly via Inspector; `completed` = also in HF dataset.
 
 | State | Definition | Editable | Required fields | Forbidden fields |
 |---|---|---|---|---|
@@ -379,7 +401,8 @@ Six lifecycle phases. **`ready_for_merge` is NOT a state** — it's a `marked_re
 | `awaiting_review` | Alignment done. Bucket entry exists. No reviewer claimed. | No (claimable) | none | `assignee_hf_id` null |
 | `under_review` | A reviewer has claimed. `marked_ready` may be false or true. | Yes (assignee only, **and** `marked_ready == false`) | `assignee_hf_id`, `assignee_login`, `assignee_since` | none |
 | `awaiting_timestamps` | Publish triggered. Bucket move done. TS data not yet written. | No | none | `assignee_hf_id` null |
-| `completed` | Segments + TS both in `published/<slug>/`, in sync. | No | none | `assignee_hf_id` null |
+| `released` | Files + TS in `published/<slug>/`, in sync. Visible publicly via Inspector. **Not yet in HF dataset.** | No (admin direct-edit only via `published.edited`) | none | `assignee_hf_id` null |
+| `completed` | Also published to HF dataset. | No (admin direct-edit only) | none | `assignee_hf_id` null |
 
 **`marked_ready` semantics (boolean field on `under_review` rows):**
 - `marked_ready == false`: reviewer is editing. Saves accepted.
@@ -404,9 +427,13 @@ Six lifecycle phases. **`ready_for_merge` is NOT a state** — it's a `marked_re
 # Lifecycle (reciter.*)
 reciter.alignment_completed       # pipeline finished, bucket entry seeded
 reciter.published                 # maintainer published — synchronous in-process bucket move
-reciter.timestamps_completed      # TS data written into published/<slug>/
+reciter.timestamps_completed      # TS data written into published/<slug>/  -> released
+reciter.dataset_published         # released → completed; dispatches sync-dataset rebuild
+reciter.removed_from_dataset      # completed → released; dispatches dataset rebuild dropping slug
+reciter.unpublished               # released | completed → awaiting_review; moves published/ → wip/
 reciter.merge_rejected            # maintainer flipped marked_ready=false on a ready entry; assignee retained
 reciter.seeded                    # one-shot cutover seed
+published.edited                  # maintainer direct-edit save on a released/completed reciter (per save batch)
 
 # Visibility (orthogonal — not lifecycle transitions)
 reciter.discarded                 # admin set visibility='discarded' (any lifecycle state)
@@ -422,6 +449,13 @@ claim.reassigned                  # admin override
 
 # Discrete admin overrides
 admin.force_set_state             # direct state field write — narrow allowed pairs only
+admin.unlocked_for_revision       # released | completed → awaiting_review; copies published/ → wip/; sets revision_in_progress
+admin.batch_timestamps_refresh    # re-enqueues MFA timestamps job(s); appends to timestamps_job_ids
+
+# Access (access.*)  — roles file on the bucket, see §9
+access.role_granted               # admin elevated a user
+access.role_revoked               # admin demoted/removed a user
+access.role_updated               # any other mutation (login refresh, etc.)
 
 # Catalog (catalog.*)
 catalog.added                     # new entry in catalog
@@ -467,7 +501,7 @@ The admin-perms doc lists these explicitly under "Deferred admin actions" so end
 
 ### Transition matrix (canonical — single source for `state.py`)
 
-Lifecycle states = `catalogued`, `awaiting_alignment`, `awaiting_review`, `under_review`, `awaiting_timestamps`, `completed` (six total). `marked_ready` and `visibility` are orthogonal fields.
+Lifecycle states = `catalogued`, `awaiting_alignment`, `awaiting_review`, `under_review`, `awaiting_timestamps`, `released`, `completed` (seven total). `marked_ready` and `visibility` are orthogonal fields. `timestamps_job_ids` and `revision_in_progress` are append/set columns documented in §2.
 
 | Event | From state(s) | To state | Other field changes | Actor role | Side effects |
 |---|---|---|---|---|---|
@@ -480,12 +514,18 @@ Lifecycle states = `catalogued`, `awaiting_alignment`, `awaiting_review`, `under
 | `reciter.unmarked_ready` | `under_review` | (same) | `marked_ready = false` | claim-holder | — |
 | `reciter.merge_rejected` | `under_review` (with `marked_ready = true`) | (same) | `marked_ready = false` (assignee retained) | maintainer+ | Reason required ≥10 chars |
 | `reciter.published` | `under_review` (with `marked_ready = true`) | `awaiting_timestamps` | clear assignee_*; `marked_ready = false` | maintainer+ | Synchronous in-process: bucket move `wip/<slug>/` → `published/<slug>/`; fire `repository_dispatch reciter.completed`; enqueue ONE timestamps HF Job |
-| `reciter.timestamps_completed` | `awaiting_timestamps` | `completed` | — | system (job callback via `POST /api/internal/job-completed`) | TS HF Job confirmed |
+| `reciter.timestamps_completed` | `awaiting_timestamps` | `released` | append job_id to `timestamps_job_ids` | system (job callback via `POST /api/internal/job-completed`) | TS HF Job confirmed; reciter now visible publicly via Inspector but not yet in HF dataset |
+| `reciter.dataset_published` | `released` | `completed` | — | maintainer+ (single via `POST /api/admin/publish-to-dataset/<slug>`, batch via `POST /api/admin/publish-to-dataset` with `{slugs:[...]}`) | Fires `repository_dispatch sync-dataset.yml` to add slug to HF dataset |
+| `reciter.removed_from_dataset` | `completed` | `released` | — | maintainer+ (reason ≥10 chars) | Dispatches dataset rebuild dropping slug; bucket files retained |
+| `reciter.unpublished` | `released`, `completed` | `awaiting_review` | clear assignee_*; if was `completed`, also dispatch dataset rebuild | maintainer+ (reason ≥10 chars + typed `unpublish <slug>` confirmation) | Moves `<bucket>/published/<slug>/` → `<bucket>/wip/<slug>/` |
+| `admin.unlocked_for_revision` | `released`, `completed` | `awaiting_review` | set `revision_in_progress = {unlocked_from_state, unlocked_at, unlocked_by_hf_id, original_assignee_hf_id}`; clear assignee_*; `marked_ready = false` | maintainer+ (reason ≥10 chars) | Copies `published/<slug>/` → `wip/<slug>/` (published files retained so public continues seeing the current version) |
+| `published.edited` | `released`, `completed` | (same) | — | maintainer+ | Direct edit on a published reciter; saves write to `published/<slug>/`; emitted per save batch; disallowed during `awaiting_timestamps` |
+| `admin.batch_timestamps_refresh` | `released`, `completed` | (same) | append new job_id(s) to `timestamps_job_ids` | maintainer+ (reason in payload) | Re-enqueues MFA timestamps job(s); single-slug or batch via `POST /api/admin/refresh-timestamps[/<slug>]` |
 | `reciter.discarded` | (any) | (same) | `visibility = 'discarded'`, `visibility_reason = ...` | maintainer+ | Typed confirmation phrase + reason ≥10 chars |
 | `reciter.undiscarded` | (any with `visibility = 'discarded'`) | (same) | `visibility = 'public'` | maintainer+ | — |
 | `claim.force_released` | `under_review` | `awaiting_review` | clear assignee_*; `marked_ready = false` | maintainer+ | Reason required |
 | `claim.reassigned` | `awaiting_review`, `under_review` | `under_review` | set new assignee_* (HF API resolved per admin §5.2); `marked_ready = false` | maintainer+ | Reason required |
-| `admin.force_set_state` | (narrow allowed pairs) | (specified) | — | maintainer+ | Allowed transitions: `catalogued ↔ awaiting_alignment` (maintainer-triggered alignment until Inspector-native intake lands), `awaiting_alignment ↔ awaiting_review`, `awaiting_timestamps ↔ completed`. Other targets return 400. |
+| `admin.force_set_state` | (narrow allowed pairs) | (specified) | — | maintainer+ | Allowed pairs: `catalogued ↔ awaiting_alignment`, `awaiting_alignment ↔ awaiting_review`, `awaiting_timestamps ↔ released`, `released ↔ completed` (alternative to `reciter.dataset_published` / `reciter.removed_from_dataset` for force-correction without dispatching dataset rebuild), `under_review → awaiting_review` (alternative to `claim.force_released`). Other pairs return 400. |
 | `reciter.seeded` | (no row) | (specified) | initial values per cutover spec | manual (one-shot) | One-time only |
 
 **Notes:**
@@ -727,12 +767,12 @@ For Phase 3, polling is sufficient.
 | Concept | v1 | v2 |
 |---|---|---|
 | User identity | GitHub OAuth (login + id) | HF OAuth (`hf_user_id` canonical, login is display-only) |
-| Maintainer / owner membership | GitHub team via App API | **One file: `data/inspector_roles.json`** on GitHub (CODEOWNERS-gated) |
-| Role cache | 60 s | 60 s |
+| Maintainer / owner membership | GitHub team via App API | **One bucket file: `<bucket>/access/inspector_roles.json`** — Inspector is the sole writer (same pattern as state + catalog). |
+| Role cache | 60 s | In-memory, replaced atomically on every write (Inspector is sole writer; no external authority to refresh from). |
 
-### Single roles file
+### Single roles file on the bucket
 
-`data/inspector_roles.json` consolidates owners + maintainers into one file. Earlier drafts had two parallel files (`inspector_owners.json` + `inspector_maintainers.json`); collapsing eliminates two failure modes (one file present, the other not) and makes "promote to owner" a single-row edit.
+`<bucket>/access/inspector_roles.json` consolidates owners + maintainers. Lives on the private HF bucket alongside state + catalog + audit — same sole-writer pattern via `services/access.py`. **Not on GitHub** — the previous draft put it there for CODEOWNERS-gated review, but the costs (public list of maintainer HF IDs, weak coupling with the rest of v2 which is HF-resident, external availability dependency) outweighed the benefits. Mutations are audited and reversible from the bucket audit log.
 
 Schema:
 
@@ -755,29 +795,57 @@ Schema:
 
 **Why `hf_user_id` canonical:** if an owner renames themselves on HF, `login`-based lookup silently revokes their role. The lookup is `member.hf_user_id == user.hf_user_id`, never `login`.
 
-**Why soft-delete:** historical role membership stays queryable. "Who was an owner when X bad action happened?" doesn't require `git blame` of the file — it's a JSON scan.
+**Why soft-delete:** historical role membership stays queryable. "Who was an owner when X bad action happened?" is a JSON scan over the current file + a tail-grep over `<bucket>/audit/<YYYY>-<MM>.jsonl` for `access.*` events.
 
 ### Backend resolution
 
 ```python
 def resolve_role(user: AuthenticatedUser) -> Role:
     member = next(
-        (m for m in MEMBERS_CACHE
+        (m for m in ACCESS_STORE.values()
          if m.hf_user_id == user.hf_user_id and m.removed_at is None),
         None,
     )
     return member.role if member else Role.CONTRIBUTOR
 ```
 
-Cache: 60 s. Source: GitHub raw (`https://raw.githubusercontent.com/<owner>/<repo>/main/data/inspector_roles.json`). Refreshed in the request path (cache miss → fetch). Fallback: snapshot baked into the Space image at build time; live wins on next refresh.
+`ACCESS_STORE` is an in-memory dict hydrated from the bucket file at startup, replaced atomically on every write (Inspector is sole writer, so the cache is correct by construction). No GitHub-raw refresh, no per-request fetch, no force-refresh endpoint needed.
 
-Owners can additionally call `POST /api/admin/refresh-roles` to force-refresh.
+### Admin endpoints
 
-### Why GitHub for the roles file (not the bucket)
+- `POST /api/admin/access/grant` — body `{hf_user_id, login, role, reason}`. Reason ≥10 chars. Owner-only when granting `owner`; maintainer+ for `maintainer`. Audit event: `access.role_granted`.
+- `POST /api/admin/access/revoke` — body `{hf_user_id, reason}`. Soft-delete via `removed_at` + `removed_by_hf_id`. Audit event: `access.role_revoked`.
+- `POST /api/admin/access/update` — body `{hf_user_id, login?, role?}`. Used for login-cache refresh or role tier change. Audit event: `access.role_updated`.
 
-Roles govern *who can edit*, not *what's edited*. CODEOWNERS-gated PR review is the right gate for security-critical role changes (existing owners must approve). The bucket is the right place for *content*; GitHub is the right place for *permissions*.
+### Bootstrap
 
-The HF OAuth `hf_oauth_authorized_org` setting can additionally restrict who can sign in at all — useful if Inspector is for org-internal contributors only. Default unset (public).
+First owner is hand-uploaded at Phase 0 setup time:
+
+```bash
+# One-shot bootstrap — only needed once per env.
+python -c "
+from huggingface_hub import upload_file
+import json
+seed = {'schema_version': 1, 'members': [
+  {'hf_user_id': '<your_hf_user_id>', 'login': '<your_login>',
+   'role': 'owner', 'added_at': '<iso>', 'added_by_hf_id': 'bootstrap',
+   'removed_at': None, 'removed_by_hf_id': None}
+]}
+upload_file(
+  path_or_fileobj=json.dumps(seed, indent=2).encode(),
+  path_in_repo='access/inspector_roles.json',
+  repo_id='hetchyy/quranic-inspector-bucket-dev',
+  repo_type='dataset',
+  commit_message='Bootstrap: seed first owner',
+)
+"
+```
+
+After bootstrap, all role mutations go through Inspector admin endpoints. Documented step in [`inspector-deploy-runbook.md`](inspector-deploy-runbook.md).
+
+### Org-level OAuth gate (optional)
+
+The HF OAuth `hf_oauth_authorized_org` setting can additionally restrict who can sign in at all — useful if Inspector is for org-internal contributors only. Default unset (public sign-in).
 
 ## 10. Downstream consumers and producers
 
@@ -821,7 +889,7 @@ A new scheduled `bucket-data-hygiene.yml` GH Action runs validators (`validate_s
 **In scope:**
 - Land `scripts/lib/reciter_task.py` (slug resolver against catalog + state).
 - Land `scripts/lib/reciter_state.py` — bucket-aware state file parser, used by `list_reciters.py` and other GH Action scripts.
-- Land `inspector/schemas/` (pydantic models for state, catalog, audit, edit_history v2).
+- Land `scripts/lib/schemas/` (pydantic models for state, catalog, audit, edit_history v2).
 - Land `inspector/services/state.py` (state machine + JSON persistence + audit log; per-slug `threading.Lock`; per-write `huggingface_hub.upload_file()`).
 - Land `inspector/services/catalog.py` (mirrors `state.py` write pattern; vocab + reciters + aliases in one file).
 - Land `inspector/services/hf_bucket.py` (mount path resolver + write helpers + atomic-write-then-rename).

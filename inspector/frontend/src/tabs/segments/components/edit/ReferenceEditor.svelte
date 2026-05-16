@@ -16,12 +16,12 @@
     import { createEventDispatcher,onMount } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { quranRefs } from '../../../../lib/refs/quran-refs';
     import type { Segment } from '../../../../lib/types/domain';
-    import { segAllData } from '../../stores/chapter';
     import { setPendingOp } from '../../stores/dirty';
     import {
         clearEdit,
-        pendingChainTarget,
+        pendingChainTargets,
     } from '../../stores/edit';
     import {
         _normalizeRef,
@@ -42,7 +42,7 @@
     }>();
 
     let inputEl: HTMLInputElement | undefined;
-    let value = consumePendingInitialValue() ?? formatRef(seg.matched_ref, get(segAllData)?.verse_word_counts);
+    let value = consumePendingInitialValue() ?? formatRef(seg.matched_ref, get(quranRefs)?.verse_word_counts);
     let committed = false;
     let invalid = false;
 
@@ -54,7 +54,7 @@
         const currentVal = value.trim();
         const vwc = getVerseWordCounts();
         const normalized = _normalizeRef(currentVal, vwc);
-        const dk = $segAllData?.dk_words;
+        const dk = $quranRefs?.dk_words;
         if (normalized && dkTextForRef(normalized, dk, vwc)) {
             dispatch('preview', { ref: normalized });
         } else {
@@ -95,7 +95,10 @@
         if (committed) return;
         committed = true;
         setPendingOp(null);
-        pendingChainTarget.set(null);
+        // Cancelling one ref edit aborts the full split-chain — user can
+        // Edit Ref manually on the remaining pieces. Clearing the whole
+        // queue prevents a stale handoff fire when the next clearEdit lands.
+        pendingChainTargets.set([]);
         clearEdit();
         dispatch('preview', null);
     }

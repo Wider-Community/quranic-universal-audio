@@ -19,6 +19,7 @@ import {
 } from '../../stores/history';
 import { reloadCurrentReciter } from '../data/reciter-actions';
 import { refreshValidation } from '../validation/refresh';
+import { ensureHistoryReady } from './loader';
 
 // ---------------------------------------------------------------------------
 // showHistoryView
@@ -28,6 +29,7 @@ export function showHistoryView(): void {
     clearFilters();
     setSortMode('time');
     setHistoryVisible(true);
+    void ensureHistoryReady();
 }
 
 // ---------------------------------------------------------------------------

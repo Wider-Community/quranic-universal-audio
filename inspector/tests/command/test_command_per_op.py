@@ -6,6 +6,13 @@ import json
 import pytest
 
 
+
+import os
+
+os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+
+_HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
 OP_TYPES = ["trim", "split", "merge", "edit_reference", "delete", "ignore_issue"]
 
 
@@ -25,7 +32,7 @@ def _payload_with_command(op_type: str, chapter: int) -> dict:
 
 
 @pytest.mark.parametrize("op_type", OP_TYPES, ids=OP_TYPES)
-def test_command_save_round_trip(op_type, flask_client, tmp_reciter_dir):
+def test_command_save_round_trip(op_type, signed_in_client, tmp_reciter_dir):
     """Save handler rejects ops whose ``command.type`` does not match ``op.type``.
 
     Every operation must carry a ``command`` envelope and its ``type``
@@ -34,16 +41,17 @@ def test_command_save_round_trip(op_type, flask_client, tmp_reciter_dir):
     history record.
     """
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
 
     payload = _payload_with_command(op_type, chapter)
     payload["operations"][0]["command"]["type"] = "WRONG_TYPE"
 
-    res = flask_client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
     assert res.status_code == 400, (
         "Phase 3 must reject ops whose `command.type` differs from `op.type`"

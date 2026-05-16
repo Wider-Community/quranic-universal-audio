@@ -2,3 +2,9 @@ node_modules/
 dist/
 .vite/
 *.log
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+vite.config.ts.timestamp-*
+design/

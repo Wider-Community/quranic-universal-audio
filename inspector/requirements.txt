@@ -1,3 +1,24 @@
 flask
+# gzip/brotli middleware. Default config (min-size 500, MIME allow-list incl.
+# application/json + text/*) covers every JSON route. Pre-gzipped octet-stream
+# bodies (Timestamps shards in routes/timestamps.py) are outside the allow-list
+# so they're skipped — no double-compression.
+flask-compress>=1.14
 quranic-phonemizer>=2.2
 orjson
+pydantic>=2.10
+# v2 uses the bucket API (batch_bucket_files, list_bucket_tree,
+# download_bucket_files, hffs); these landed in huggingface_hub 1.8.0.
+huggingface_hub>=1.10
+# Production WSGI server. Gunicorn must be -w 1 (single worker) — every
+# in-memory structure (state_store, per-slug mutex, signed-cookie verification,
+# role cache) assumes single-process. Multi-worker requires a shared
+# coordinator that v2 does not include. See app.py startup assertion.
+gunicorn>=22.0
+# OAuth + signed-cookie session for Phase 3. Bundled now to avoid a second
+# image rebuild between Phase 2 and Phase 3.
+authlib>=1.3
+itsdangerous>=2.2
+# Authlib's Flask integration imports requests_client which depends on
+# requests; not pulled transitively by `pip install authlib` so we list it.
+requests>=2.31

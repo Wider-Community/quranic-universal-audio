@@ -1,6 +1,8 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
+    import { get } from 'svelte/store';
 
+    import { editGate } from '../../../../lib/actions/editGate';
     import type { SegValAutoFix,SegValMissingWordsItem } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
     import {
@@ -8,6 +10,7 @@
         getChapterSegments,
         getSegByChapterIndex,
         segAllData,
+        selectedReciter,
     } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import {
@@ -16,6 +19,7 @@
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
     import { autoFixMissingWord } from '../../utils/edit/auto-fix';
+    import { warmSeg } from '../../utils/playback/warmup';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
     import SegmentRow from '../list/SegmentRow.svelte';
 
@@ -28,10 +32,8 @@
     let showContext = false;
 
     $: ctxMode = $segConfig.accordionContext?.['missing_words'] ?? 'hidden';
+    $: ctxDefaultOpen = ctxMode !== 'hidden';
     $: ctxNextOnly = ctxMode === 'next_only';
-
-    // Missing-word segment tag set for SegmentRow display.
-    $: missingWordSegIndices = new Set<number>(item.seg_indices ?? []);
 
     // Segments in the gap range. Subscribes to segAllData so the list
     // re-derives after split/merge mutates indices in place. For each base
@@ -61,16 +63,24 @@
             const base = getSegByChapterIndex(item.chapter, idx);
             baseUids.push(base?.segment_uid ?? `_${idx}`);
         }
-        let splitOpsCount = 0;
+        // Bump on any structural OR reference-mutating op so memo busts when
+        // auto-fix / edit-reference / merge / boundary-adjust change a base
+        // seg under us. Was counting split_segment only, leaving stale
+        // Segment object refs in the cached output for non-split mutations.
+        const MUTATING_OPS = new Set([
+            'split_segment', 'merge_segments', 'edit_reference',
+            'auto_fix_missing_word', 'boundary_adjustment', 'trim_segment',
+        ]);
+        let mutatingOpsCount = 0;
         for (const b of batches) {
             for (const op of b.operations) {
-                if (op.op_type === 'split_segment') splitOpsCount++;
+                if (MUTATING_OPS.has(op.op_type)) mutatingOpsCount++;
             }
         }
         for (const op of ops) {
-            if (op.op_type === 'split_segment') splitOpsCount++;
+            if (MUTATING_OPS.has(op.op_type)) mutatingOpsCount++;
         }
-        const key = `${item.chapter}|${(item.seg_indices ?? []).join(',')}|${baseUids.join(',')}|${chapterSegs.length}|${splitOpsCount}`;
+        const key = `${item.chapter}|${(item.seg_indices ?? []).join(',')}|${baseUids.join(',')}|${chapterSegs.length}|${mutatingOpsCount}`;
         if (key !== _segRangeMemoKey) {
             _segRangeMemoKey = key;
             const out: Segment[] = [];
@@ -92,6 +102,12 @@
         }
     }
     $: segmentsInRange = _segRangeMemoResult;
+
+    let _didAutoOpen = false;
+    $: if (segmentsInRange.length > 0 && ctxDefaultOpen && !_didAutoOpen) {
+        showContext = true;
+        _didAutoOpen = true;
+    }
 
     // Context neighbours: prev of first / next of last. Guard against the
     // neighbour being itself a split-group member (already rendered inline).
@@ -123,6 +139,15 @@
         if (nextSeg) out.push(nextSeg);
         return out;
     })();
+
+    // Warm the first sibling's chapter audio at its byte offset once the
+    // card resolves a non-empty sibling list. Dedupe in `warmup.ts` keeps
+    // repeat reactive fires from spamming the network.
+    let _warmedOnce = false;
+    $: if (!_warmedOnce && siblings.length > 0) {
+        _warmedOnce = true;
+        warmSeg(siblings[0], get(selectedReciter));
+    }
 
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
     export function getIsContextShown(): boolean { return showContext; }
@@ -163,7 +188,6 @@
             showGotoBtn={true}
             showPlayBtn={true}
             showChapter={true}
-            missingWordSegIndices={missingWordSegIndices}
             validationCategory="missing_words"
             accordionSiblings={siblings}
         />
@@ -183,17 +207,20 @@
             <button
                 class="val-action-btn"
                 title="Extend segment ref to cover the missing word"
+                use:editGate
                 on:click={() => handleAutoFix(item.auto_fix)}
             >Auto Fill</button>
         {:else if item.auto_fix_up && item.auto_fix_down}
             <button
                 class="val-action-btn"
                 title="Extend previous segment to cover the missing word"
+                use:editGate
                 on:click={() => handleAutoFix(item.auto_fix_up)}
             >Auto Fill Up</button>
             <button
                 class="val-action-btn"
                 title="Extend next segment to cover the missing word"
+                use:editGate
                 on:click={() => handleAutoFix(item.auto_fix_down)}
             >Auto Fill Down</button>
         {/if}

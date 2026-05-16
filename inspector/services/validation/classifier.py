@@ -6,7 +6,6 @@ trigger?" — consumed by:
 - ``services.validation.detail._build_detail_lists`` (response building).
 - ``services.validation.chapter_validation_counts`` (count rollups).
 - ``services.validation.snapshot_classifier`` (history snapshots).
-- ``validators.validate_segments`` (the CLI report).
 
 Public surface
 --------------
@@ -50,7 +49,8 @@ from typing import Any
 
 from config import BOUNDARY_TAIL_K, LOW_CONFIDENCE_DETAIL_THRESHOLD, LOW_CONFIDENCE_THRESHOLD
 from constants import MUQATTAAT_VERSES, QALQALA_LETTERS, STANDALONE_REFS, STANDALONE_WORDS
-from services.phoneme_matching import tail_phoneme_mismatch
+from services.segments.phoneme_matching import tail_phoneme_mismatch
+from services.reference.quran_refs import dk_text_for_ref
 from utils.arabic_text import last_arabic_letter, strip_quran_deco
 from utils.references import seg_belongs_to_entry
 
@@ -105,6 +105,47 @@ def is_suppressed_for(seg: dict, category: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def compute_is_boundary_adj(
+    seg: dict,
+    surah: int,
+    s_ayah: int,
+    s_word: int,
+    e_word: int,
+    single_word_verses: set,
+    canonical: dict | None,
+) -> bool:
+    """Raw boundary-adjustment computation — NO suppression check.
+
+    Used by every writer that persists the field (save.py, backfill script,
+    extraction pipeline) AND by ``_check_boundary_adj`` as the fall-through
+    path. Splitting the suppression check out lets us persist a value that
+    matches across all writers regardless of runtime ignore state.
+
+    Structural side: one-word segment outside the muqattaʼat / single-word
+    verse / standalone-ref / standalone-word allow-list.
+
+    Phoneme side: when ``canonical`` is available and the seg has ASR
+    phonemes, last ``BOUNDARY_TAIL_K`` ASR phonemes diverge from the
+    canonical tail — heuristic for word-boundary drift.
+    """
+    if (surah, s_ayah) in MUQATTAAT_VERSES:
+        return False
+    if (surah, s_ayah) in single_word_verses:
+        return False
+
+    if s_word == e_word and (surah, s_ayah, s_word) not in STANDALONE_REFS:
+        text = seg.get("matched_text") or dk_text_for_ref(seg.get("matched_ref"))
+        if strip_quran_deco(text) not in STANDALONE_WORDS:
+            return True
+
+    if canonical and seg.get("phonemes_asr"):
+        matched_ref = seg.get("matched_ref", "")
+        if tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref, canonical, BOUNDARY_TAIL_K):
+            return True
+
+    return False
+
+
 def _check_boundary_adj(
     seg: dict,
     surah: int,
@@ -114,35 +155,21 @@ def _check_boundary_adj(
     single_word_verses: set,
     canonical: dict | None,
 ) -> bool:
-    """Apply the boundary-adjustment rule to one segment.
+    """Apply boundary-adjustment, honoring runtime suppression.
 
-    The structural side fires when a one-word segment lands at a position that
-    isn't a single-word verse, isn't a muqattaʼat opener, isn't on the
-    standalone-ref allow-list, and the matched text isn't a standalone word.
-
-    The phoneme side fires when ``canonical`` phonemes are available and the
-    last ``BOUNDARY_TAIL_K`` ASR phonemes diverge from the canonical tail —
-    a heuristic for word-boundary drift the structural rule alone misses.
+    Reads the persisted ``is_boundary_adj`` field when present — stamped at
+    save / backfill / extraction time via ``compute_is_boundary_adj``.
+    Legacy segs without the field fall through to a fresh computation. The
+    suppression check is applied here (the persisted value is the raw
+    rule output; suppression layers on top).
     """
     if is_suppressed_for(seg, "boundary_adj"):
         return False
-    if (surah, s_ayah) in MUQATTAAT_VERSES:
-        return False
-    if (surah, s_ayah) in single_word_verses:
-        return False
-
-    is_boundary = False
-    if s_word == e_word:
-        if (surah, s_ayah, s_word) not in STANDALONE_REFS:
-            if strip_quran_deco(seg.get("matched_text", "")) not in STANDALONE_WORDS:
-                is_boundary = True
-
-    if not is_boundary and canonical and seg.get("phonemes_asr"):
-        matched_ref = seg.get("matched_ref", "")
-        if tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref, canonical, BOUNDARY_TAIL_K):
-            is_boundary = True
-
-    return is_boundary
+    if "is_boundary_adj" in seg:
+        return bool(seg["is_boundary_adj"])
+    return compute_is_boundary_adj(
+        seg, surah, s_ayah, s_word, e_word, single_word_verses, canonical,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -257,10 +284,19 @@ def classify_flags(
         if not is_ignored_for(seg, "muqattaat"):
             result["muqattaat"] = True
 
-    last_letter = last_arabic_letter(seg.get("matched_text", ""))
-    if last_letter and last_letter in QALQALA_LETTERS and not is_suppressed_for(seg, "qalqala"):
+    # Persisted-field short-circuit: ``qalqala_letter`` is stamped at save /
+    # extraction time via ``services.qalqala.compute_qalqala_letter`` (the
+    # same helper this fall-through path uses for legacy segs without the
+    # field — so the value is byte-equivalent either way). Persisted value
+    # is a single Arabic letter (one of ``QALQALA_LETTERS``) or ``None``.
+    if "qalqala_letter" in seg:
+        qalqala_letter = seg["qalqala_letter"]
+    else:
+        from services.qalqala import compute_qalqala_letter  # local import: avoid cycle at module load
+        qalqala_letter = compute_qalqala_letter(seg)
+    if qalqala_letter and not is_suppressed_for(seg, "qalqala"):
         result["qalqala"] = True
-        result["qalqala_letter"] = last_letter
+        result["qalqala_letter"] = qalqala_letter
 
     return result
 

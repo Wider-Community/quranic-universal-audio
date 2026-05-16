@@ -2,20 +2,16 @@
     /**
      * SplitPanel — Svelte-rendered inline chrome for split-mode edit.
      *
-     * Mounted by SegmentRow inside `.seg-left` when that row is the active
-     * edit target (see SegmentRow `isEditingThisRow && $editMode === 'split'`).
-     * Renders Cancel | Play Left | step-pair | Play Right | Split plus the
-     * L/R duration readout driven by the `splitState` store that
-     * `edit-split.ts` mirrors from the canvas drag handler.
+     * Two layouts driven by `splitState.currentSplits.length`:
      *
-     * Steppers nudge the split cursor by `EDIT_NUDGE_MS` (default 50 ms) via
-     * `nudgeSplitBoundary`, the same code path a drag uses — so the canvas
-     * cursor, the L/R readout, and the panel state stay in lock-step. Buttons
-     * disable when the next nudge would be clamped against the seg edge +
-     * EDIT_MIN_DURATION_MS gap.
-     *
-     * The imperative parts — waveform draw, drag math, pointer cursor — stay
-     * on the canvas (`edit-split.ts::setupSplitDragHandle`).
+     * - N=1 (binary split, today's default) → ``Cancel | Play Left | < | >
+     *   | Play Right | Split``. Steppers nudge via `nudgeSplitBoundary`.
+     * - N≥2 (multi-cursor, repetition auto-split) → ``Cancel | [1] [2] …
+     *   [N+1] | Split``. Each ``[i]`` loops region i (0-indexed) via
+     *   `previewSplitRegion`. No steppers — there's no obvious "the
+     *   cursor" to step in multi mode; users drag the cursor lines
+     *   directly. Click-to-seek on the canvas is also disabled in this
+     *   mode (see split.ts `onMouseup`).
      */
 
     import { get } from 'svelte/store';
@@ -25,29 +21,33 @@
     import type { SegCanvas } from '../../types/segments-waveform';
     import { EDIT_MIN_DURATION_MS, EDIT_NUDGE_MS } from '../../utils/constants';
     import { exitEditMode } from '../../utils/edit/common';
-    import { confirmSplit, nudgeSplitBoundary, previewSplitAudio } from '../../utils/edit/split';
+    import {
+        confirmSplit,
+        nudgeSplitBoundary,
+        previewSplitAudio,
+        previewSplitRegion,
+    } from '../../utils/edit/split';
 
     export let seg: Segment;
     export let canvas: SegCanvas;
 
     function onConfirm(): void {
-        // Thread the initiating row's mountId through to confirmSplit so the
-        // chained first-half ref-edit stays pinned to the accordion row that
-        // started the split (not the main-list twin). Reads editingMountId
-        // live at click time rather than caching in a prop — covers both
-        // accordion (mountId = row's _mountId) and main-list (same) paths.
         const mountId = get(editingMountId);
         confirmSplit(seg, canvas, mountId);
     }
 
-    // Stepper-disable gates. Disable when the next press would clamp to the
-    // same position (`EDIT_MIN_DURATION_MS` away from the seg boundary). The
-    // L/R readout that used to live here was dropped — same treatment the
-    // trim panel got for its duration text: the row-level time display now
-    // owns that info, this panel stays compact.
     $: ss = $splitState;
-    $: splitBackDisabled = !ss || ss.currentSplit <= ss.seg.time_start + EDIT_MIN_DURATION_MS;
-    $: splitFwdDisabled  = !ss || ss.currentSplit >= ss.seg.time_end   - EDIT_MIN_DURATION_MS;
+    $: cursorCount = ss?.currentSplits.length ?? 0;
+    $: isBinary = cursorCount === 1;
+    $: regionCount = cursorCount + 1;
+    $: regions = Array.from({ length: regionCount }, (_, i) => i);
+
+    // Stepper-disable gates apply in binary mode only.
+    $: firstSplit = ss?.currentSplits[0];
+    $: splitBackDisabled = !isBinary || !ss || firstSplit === undefined
+        || firstSplit <= ss.seg.time_start + EDIT_MIN_DURATION_MS;
+    $: splitFwdDisabled = !isBinary || !ss || firstSplit === undefined
+        || firstSplit >= ss.seg.time_end - EDIT_MIN_DURATION_MS;
 
     function nudgeSplitBack(): void { nudgeSplitBoundary(-EDIT_NUDGE_MS); }
     function nudgeSplitFwd():  void { nudgeSplitBoundary( EDIT_NUDGE_MS); }
@@ -56,17 +56,34 @@
 <div class="seg-edit-inline">
     <div class="seg-edit-buttons">
         <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>Cancel</button>
-        <button class="btn btn-sm btn-preview" on:click={() => previewSplitAudio('left', canvas)}>Play Left</button>
-        <button class="btn btn-sm seg-split-step"
-            title="Move split back {EDIT_NUDGE_MS} ms"
-            disabled={splitBackDisabled}
-            on:click={nudgeSplitBack}>&lt;</button>
-        <button class="btn btn-sm seg-split-step"
-            title="Move split forward {EDIT_NUDGE_MS} ms"
-            disabled={splitFwdDisabled}
-            on:click={nudgeSplitFwd}>&gt;</button>
-        <button class="btn btn-sm btn-preview" on:click={() => previewSplitAudio('right', canvas)}>Play Right</button>
+        {#if isBinary}
+            <button class="btn btn-sm btn-preview" on:click={() => previewSplitAudio('left', canvas)}>Play Left</button>
+            <button class="btn btn-sm seg-split-step"
+                title="Move split back {EDIT_NUDGE_MS} ms"
+                disabled={splitBackDisabled}
+                on:click={nudgeSplitBack}>&lt;</button>
+            <button class="btn btn-sm seg-split-step"
+                title="Move split forward {EDIT_NUDGE_MS} ms"
+                disabled={splitFwdDisabled}
+                on:click={nudgeSplitFwd}>&gt;</button>
+            <button class="btn btn-sm btn-preview" on:click={() => previewSplitAudio('right', canvas)}>Play Right</button>
+        {:else}
+            {#each regions as i}
+                <button
+                    class="btn btn-sm btn-preview seg-split-region"
+                    title="Play region {i + 1} on loop"
+                    on:click={() => previewSplitRegion(i, canvas)}
+                >{i + 1}</button>
+            {/each}
+        {/if}
         <button class="btn btn-sm btn-confirm" on:click={onConfirm}>Split</button>
         <span class="seg-edit-status">{$editStatusText}</span>
     </div>
 </div>
+
+<style>
+    .seg-split-region {
+        min-width: 1.6em;
+        padding: 0 0.4em;
+    }
+</style>

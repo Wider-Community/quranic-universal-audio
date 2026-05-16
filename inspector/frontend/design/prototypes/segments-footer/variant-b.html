@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Variant B — Three-cluster centered</title>
+    <link rel="stylesheet" href="../../../src/styles/tokens.css" />
+    <link rel="stylesheet" href="./shared.css" />
+    <style>
+        /* Variant B — Surah/Ayah stay viewport-centered (absolute positioned).
+         * Transport flanks identity on the left; speed + auto-toggles flank save on the right.
+         */
+        .vb .row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--s-3);
+            position: relative;
+        }
+        .vb .zone-transport {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            padding: 2px;
+            background: var(--panel-2);
+            border: 1px solid var(--border-quiet);
+            border-radius: var(--r-2);
+        }
+        .vb .zone-transport .transport {
+            border: 0;
+            background: transparent;
+            border-radius: var(--r-1);
+        }
+        .vb .zone-transport .transport.play {
+            border-radius: 50%;
+            background: var(--accent);
+            color: var(--accent-fg);
+        }
+        .vb .zone-transport .transport.play.loading {
+            background: transparent;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+        }
+        .vb .zone-transport .transport:hover:not(:disabled) {
+            background: var(--elevated);
+            border: 0;
+        }
+        .vb .zone-transport .transport.play:hover { background: var(--accent-strong); }
+
+        /* The left half (identity + transport) and right half (prefs + save)
+         * use flex grow so they balance space around the centered location. */
+        .vb .left-half {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--s-3);
+        }
+        .vb .right-half {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--s-3);
+        }
+    </style>
+</head>
+<body>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <defs>
+            <symbol id="i-play" viewBox="0 0 16 16"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></symbol>
+            <symbol id="i-pause" viewBox="0 0 16 16"><path d="M4 3h3v10H4zM9 3h3v10H9z" fill="currentColor"/></symbol>
+            <symbol id="i-prev" viewBox="0 0 16 16"><path d="M5 3v10H4V3h1zm8 0v10l-7-5 7-5z" fill="currentColor"/></symbol>
+            <symbol id="i-next" viewBox="0 0 16 16"><path d="M11 3v10h1V3h-1zM3 3v10l7-5-7-5z" fill="currentColor"/></symbol>
+            <symbol id="i-spin" viewBox="0 0 16 16"><path d="M8 2a6 6 0 016 6h-1.5a4.5 4.5 0 00-4.5-4.5V2z" fill="currentColor"/></symbol>
+            <symbol id="i-repeat" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a1 1 0 011-1h7"/><path d="M9 2l2 2-2 2"/><path d="M13 9v2a1 1 0 01-1 1H5"/><path d="M7 14l-2-2 2-2"/></symbol>
+            <symbol id="i-scroll" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v9"/><path d="M5 9l3 3 3-3"/><path d="M3 14h10"/></symbol>
+            <symbol id="i-history" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a5 5 0 105-5 5 5 0 00-4 2"/><path d="M3 3v2.5h2.5"/><path d="M8 6v2.5l1.5 1"/></symbol>
+            <symbol id="i-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></symbol>
+            <symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></symbol>
+            <symbol id="i-close" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+        </defs>
+    </svg>
+
+    <div class="proto-page vb">
+        <div class="proto-header">
+            <div>
+                <h1>Variant B — Three-cluster centered</h1>
+                <div class="sub">SHAPE / SEGMENTS FOOTER / DIRECTION B</div>
+            </div>
+            <nav class="variant-nav">
+                <a href="./index.html">← Index</a>
+                <a href="./variant-a.html">A</a>
+                <a href="./variant-b.html" class="current">B</a>
+                <a href="./variant-c.html">C</a>
+            </nav>
+        </div>
+
+        <p class="proto-caption">
+            Surah / Ayah remain <strong>pinned dead-center</strong> via absolute positioning
+            (your earlier ask). Transport pill sits next to identity on the left;
+            speed + auto-toggle group sits next to save on the right. Navigation
+            keeps its prime spot. The transport pill is more compact than Variant A
+            since location lives outside it.
+        </p>
+
+        <!-- ─── ROW 1: No reciter ─────────────────────────────── -->
+        <div class="proto-row">
+            <div class="row-label">
+                <span class="row-num">01</span>
+                <span>No reciter</span>
+                <span class="row-note">— transport, location and preferences all ghosted</span>
+            </div>
+            <div class="f">
+                <div class="progress"><div class="fill" style="width: 0;"></div></div>
+                <div class="row">
+                    <div class="left-half">
+                        <span class="chip empty">Pick a reciter →</span>
+                        <div class="zone-transport">
+                            <button class="transport" disabled><svg><use href="#i-prev"/></svg></button>
+                            <button class="transport play" disabled><svg><use href="#i-play"/></svg></button>
+                            <button class="transport" disabled><svg><use href="#i-next"/></svg></button>
+                        </div>
+                    </div>
+                    <div class="zone-center-abs">
+                        <div class="loc-group">
+                            <button class="loc-trigger" disabled>
+                                <span class="loc-label">Surah</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                            <button class="loc-trigger" disabled>
+                                <span class="loc-label">Ayah</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="right-half">
+                        <div class="pref-group">
+                            <button class="speed-pill" disabled>1.0×</button>
+                            <button class="pref" disabled><svg><use href="#i-repeat"/></svg></button>
+                            <button class="pref" disabled><svg><use href="#i-scroll"/></svg></button>
+                        </div>
+                        <button class="btn ghost" disabled><svg style="width:14px;height:14px"><use href="#i-history"/></svg></button>
+                        <div class="save-cluster">
+                            <button class="btn saved" disabled>✓ Saved</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── ROW 2: Paused, claim-eligible ───────────────────── -->
+        <div class="proto-row">
+            <div class="row-label">
+                <span class="row-num">02</span>
+                <span>Paused · claim-eligible · clean</span>
+            </div>
+            <div class="f">
+                <div class="progress"><div class="fill" style="width: 0;"></div></div>
+                <div class="row">
+                    <div class="left-half">
+                        <span class="chip">
+                            <span class="country">🇸🇦</span>
+                            <span class="names">
+                                <span class="name-en">Mishary Rashid Alafasy</span>
+                                <span class="name-ar">مشاري راشد العفاسي</span>
+                            </span>
+                        </span>
+                        <span class="pill available">Available</span>
+                        <button class="btn primary">Claim</button>
+                        <div class="zone-transport">
+                            <button class="transport"><svg><use href="#i-prev"/></svg></button>
+                            <button class="transport play"><svg><use href="#i-play"/></svg></button>
+                            <button class="transport"><svg><use href="#i-next"/></svg></button>
+                        </div>
+                    </div>
+                    <div class="zone-center-abs">
+                        <div class="loc-group">
+                            <button class="loc-trigger has-value">
+                                <span class="loc-label">Surah</span>
+                                <span class="loc-value">37</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                            <button class="loc-trigger">
+                                <span class="loc-label">Ayah</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="right-half">
+                        <div class="pref-group">
+                            <button class="speed-pill">1.0×</button>
+                            <button class="pref" title="Auto-play"><svg><use href="#i-repeat"/></svg></button>
+                            <button class="pref" title="Auto-scroll"><svg><use href="#i-scroll"/></svg></button>
+                        </div>
+                        <button class="btn ghost"><svg style="width:14px;height:14px"><use href="#i-history"/></svg></button>
+                        <div class="save-cluster">
+                            <button class="btn saved">✓ Saved</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── ROW 3: Playing, claim-held, autoscroll on ─────── -->
+        <div class="proto-row">
+            <div class="row-label">
+                <span class="row-num">03</span>
+                <span>Playing · claim-held · auto-scroll ON · clean</span>
+                <span class="row-note">— centered location pickers turn accent-coloured to show live tracking</span>
+            </div>
+            <div class="f">
+                <div class="progress"><div class="fill" style="width: 42%;"></div></div>
+                <div class="row">
+                    <div class="left-half">
+                        <span class="chip">
+                            <span class="country">🇸🇦</span>
+                            <span class="names">
+                                <span class="name-en">Mishary Rashid Alafasy</span>
+                                <span class="name-ar">مشاري راشد العفاسي</span>
+                            </span>
+                        </span>
+                        <span class="pill under-review">Under review</span>
+                        <button class="btn">Unclaim</button>
+                        <button class="btn primary">Mark ready</button>
+                        <div class="zone-transport">
+                            <button class="transport"><svg><use href="#i-prev"/></svg></button>
+                            <button class="transport play"><svg><use href="#i-pause"/></svg></button>
+                            <button class="transport"><svg><use href="#i-next"/></svg></button>
+                        </div>
+                    </div>
+                    <div class="zone-center-abs">
+                        <div class="loc-group">
+                            <button class="loc-trigger has-value live">
+                                <span class="loc-label">Surah</span>
+                                <span class="loc-value">37</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                            <button class="loc-trigger has-value live">
+                                <span class="loc-label">Ayah</span>
+                                <span class="loc-value">151</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="right-half">
+                        <div class="pref-group">
+                            <button class="speed-pill">1.0×</button>
+                            <button class="pref" title="Auto-play"><svg><use href="#i-repeat"/></svg></button>
+                            <button class="pref on" title="Auto-scroll on"><svg><use href="#i-scroll"/></svg></button>
+                        </div>
+                        <button class="btn ghost"><svg style="width:14px;height:14px"><use href="#i-history"/></svg></button>
+                        <div class="save-cluster">
+                            <button class="btn saved">✓ Saved</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── ROW 4: Loading ─────────────────────────────────── -->
+        <div class="proto-row">
+            <div class="row-label">
+                <span class="row-num">04</span>
+                <span>Loading · claim-held · dirty · all autos on</span>
+            </div>
+            <div class="f">
+                <div class="progress"><div class="fill pulse" style="width: 12%;"></div></div>
+                <div class="row">
+                    <div class="left-half">
+                        <span class="chip">
+                            <span class="country">🇸🇦</span>
+                            <span class="names">
+                                <span class="name-en">Mishary Rashid Alafasy</span>
+                                <span class="name-ar">مشاري راشد العفاسي</span>
+                            </span>
+                        </span>
+                        <span class="pill under-review">Under review</span>
+                        <button class="btn">Unclaim</button>
+                        <button class="btn primary">Mark ready</button>
+                        <div class="zone-transport">
+                            <button class="transport"><svg><use href="#i-prev"/></svg></button>
+                            <button class="transport play loading"><svg><use href="#i-spin"/></svg></button>
+                            <button class="transport"><svg><use href="#i-next"/></svg></button>
+                        </div>
+                    </div>
+                    <div class="zone-center-abs">
+                        <div class="loc-group">
+                            <button class="loc-trigger has-value live">
+                                <span class="loc-label">Surah</span>
+                                <span class="loc-value">37</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                            <button class="loc-trigger has-value live">
+                                <span class="loc-label">Ayah</span>
+                                <span class="loc-value">152</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="right-half">
+                        <div class="pref-group">
+                            <button class="speed-pill boosted">1.25×</button>
+                            <button class="pref on" title="Auto-play on"><svg><use href="#i-repeat"/></svg></button>
+                            <button class="pref on" title="Auto-scroll on"><svg><use href="#i-scroll"/></svg></button>
+                        </div>
+                        <button class="btn ghost"><svg style="width:14px;height:14px"><use href="#i-history"/></svg></button>
+                        <div class="save-cluster">
+                            <button class="btn save dirty">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── ROW 5: Autosave running ───────────────────────── -->
+        <div class="proto-row">
+            <div class="row-label">
+                <span class="row-num">05</span>
+                <span>Playing · auto-save running</span>
+            </div>
+            <div class="f">
+                <div class="progress"><div class="fill" style="width: 68%;"></div></div>
+                <div class="row">
+                    <div class="left-half">
+                        <span class="chip">
+                            <span class="country">🇸🇦</span>
+                            <span class="names">
+                                <span class="name-en">Mishary Rashid Alafasy</span>
+                                <span class="name-ar">مشاري راشد العفاسي</span>
+                            </span>
+                        </span>
+                        <span class="pill under-review">Under review</span>
+                        <button class="btn">Unclaim</button>
+                        <button class="btn primary">Mark ready</button>
+                        <div class="zone-transport">
+                            <button class="transport"><svg><use href="#i-prev"/></svg></button>
+                            <button class="transport play"><svg><use href="#i-pause"/></svg></button>
+                            <button class="transport"><svg><use href="#i-next"/></svg></button>
+                        </div>
+                    </div>
+                    <div class="zone-center-abs">
+                        <div class="loc-group">
+                            <button class="loc-trigger has-value live">
+                                <span class="loc-label">Surah</span>
+                                <span class="loc-value">37</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                            <button class="loc-trigger has-value live">
+                                <span class="loc-label">Ayah</span>
+                                <span class="loc-value">153</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="right-half">
+                        <div class="pref-group">
+                            <button class="speed-pill">1.0×</button>
+                            <button class="pref on" title="Auto-play on"><svg><use href="#i-repeat"/></svg></button>
+                            <button class="pref on" title="Auto-scroll on"><svg><use href="#i-scroll"/></svg></button>
+                        </div>
+                        <button class="btn ghost"><svg style="width:14px;height:14px"><use href="#i-history"/></svg></button>
+                        <div class="save-cluster">
+                            <button class="btn save auto-saving">Auto-saving…</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── ROW 6: Save preview confirm ───────────────────── -->
+        <div class="proto-row">
+            <div class="row-label">
+                <span class="row-num">06</span>
+                <span>Save preview · awaiting confirm</span>
+            </div>
+            <div class="f">
+                <div class="progress"><div class="fill" style="width: 32%;"></div></div>
+                <div class="row">
+                    <div class="left-half">
+                        <span class="chip">
+                            <span class="country">🇸🇦</span>
+                            <span class="names">
+                                <span class="name-en">Mishary Rashid Alafasy</span>
+                                <span class="name-ar">مشاري راشد العفاسي</span>
+                            </span>
+                        </span>
+                        <span class="pill under-review">Under review</span>
+                        <button class="btn">Unclaim</button>
+                        <button class="btn primary">Mark ready</button>
+                        <div class="zone-transport">
+                            <button class="transport"><svg><use href="#i-prev"/></svg></button>
+                            <button class="transport play"><svg><use href="#i-pause"/></svg></button>
+                            <button class="transport"><svg><use href="#i-next"/></svg></button>
+                        </div>
+                    </div>
+                    <div class="zone-center-abs">
+                        <div class="loc-group">
+                            <button class="loc-trigger has-value live">
+                                <span class="loc-label">Surah</span>
+                                <span class="loc-value">37</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                            <button class="loc-trigger has-value live">
+                                <span class="loc-label">Ayah</span>
+                                <span class="loc-value">151</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="right-half">
+                        <div class="confirm-row">
+                            <span class="label">Save 14 edits?</span>
+                            <button class="btn ghost"><svg style="width:12px;height:12px"><use href="#i-close"/></svg> Cancel</button>
+                            <button class="btn primary"><svg style="width:12px;height:12px"><use href="#i-check"/></svg> Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── ROW 7: Mark-ready confirm ─────────────────────── -->
+        <div class="proto-row">
+            <div class="row-label">
+                <span class="row-num">07</span>
+                <span>Mark-ready confirm</span>
+            </div>
+            <div class="f">
+                <div class="progress"><div class="fill" style="width: 0;"></div></div>
+                <div class="row">
+                    <div class="left-half">
+                        <span class="chip">
+                            <span class="country">🇸🇦</span>
+                            <span class="names">
+                                <span class="name-en">Mishary Rashid Alafasy</span>
+                                <span class="name-ar">مشاري راشد العفاسي</span>
+                            </span>
+                        </span>
+                        <span class="pill under-review">Under review</span>
+                        <div class="confirm-row">
+                            <span class="label">Mark ready for review?</span>
+                            <button class="btn ghost"><svg style="width:12px;height:12px"><use href="#i-close"/></svg></button>
+                            <button class="btn primary"><svg style="width:12px;height:12px"><use href="#i-check"/></svg> Confirm</button>
+                        </div>
+                        <div class="zone-transport">
+                            <button class="transport"><svg><use href="#i-prev"/></svg></button>
+                            <button class="transport play"><svg><use href="#i-play"/></svg></button>
+                            <button class="transport"><svg><use href="#i-next"/></svg></button>
+                        </div>
+                    </div>
+                    <div class="zone-center-abs">
+                        <div class="loc-group">
+                            <button class="loc-trigger has-value">
+                                <span class="loc-label">Surah</span>
+                                <span class="loc-value">37</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                            <button class="loc-trigger has-value">
+                                <span class="loc-label">Ayah</span>
+                                <span class="loc-value">151</span>
+                                <span class="caret"><svg><use href="#i-caret"/></svg></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="right-half">
+                        <div class="pref-group">
+                            <button class="speed-pill">1.0×</button>
+                            <button class="pref"><svg><use href="#i-repeat"/></svg></button>
+                            <button class="pref"><svg><use href="#i-scroll"/></svg></button>
+                        </div>
+                        <button class="btn ghost"><svg style="width:14px;height:14px"><use href="#i-history"/></svg></button>
+                        <div class="save-cluster">
+                            <button class="btn saved">✓ Saved</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="section">At narrow viewport (1100px)</h2>
+        <p class="proto-caption">
+            Critical question for Variant B: do the side clusters collide with the
+            absolutely-centered location group? On 1100px the right-half compresses
+            tightest because identity has the most content (chip + pill + 2 actions + transport).
+        </p>
+        <div class="viewport-narrow">
+            <div class="proto-row">
+                <div class="row-label">
+                    <span class="row-num">08</span>
+                    <span>Playing · claim-held · 1100px width</span>
+                </div>
+                <div class="f">
+                    <div class="progress"><div class="fill" style="width: 42%;"></div></div>
+                    <div class="row">
+                        <div class="left-half">
+                            <span class="chip">
+                                <span class="country">🇸🇦</span>
+                                <span class="names">
+                                    <span class="name-en">Mishary Alafasy</span>
+                                    <span class="name-ar">مشاري العفاسي</span>
+                                </span>
+                            </span>
+                            <div class="zone-transport">
+                                <button class="transport"><svg><use href="#i-prev"/></svg></button>
+                                <button class="transport play"><svg><use href="#i-pause"/></svg></button>
+                                <button class="transport"><svg><use href="#i-next"/></svg></button>
+                            </div>
+                        </div>
+                        <div class="zone-center-abs">
+                            <div class="loc-group">
+                                <button class="loc-trigger has-value live">
+                                    <span class="loc-label">S</span>
+                                    <span class="loc-value">37</span>
+                                </button>
+                                <button class="loc-trigger has-value live">
+                                    <span class="loc-label">A</span>
+                                    <span class="loc-value">151</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="right-half">
+                            <div class="pref-group">
+                                <button class="speed-pill">1.0×</button>
+                                <button class="pref on"><svg><use href="#i-scroll"/></svg></button>
+                            </div>
+                            <div class="save-cluster">
+                                <button class="btn save dirty">Save</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

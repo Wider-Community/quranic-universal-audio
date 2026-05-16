@@ -2,13 +2,18 @@
 from __future__ import annotations
 
 import json
+import os
+
 import pytest
 
+os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+
+_HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
 COMMAND_TYPES = ["trim", "split", "merge", "edit_reference", "delete", "ignore_issue"]
 
 
-def _save_with_patch(flask_client, reciter, chapter, op_type, patch):
+def _save_with_patch(client, reciter, chapter, op_type, patch):
     payload = {
         "full_replace": True,
         "segments": [],
@@ -21,15 +26,15 @@ def _save_with_patch(flask_client, reciter, chapter, op_type, patch):
             }
         ],
     }
-    return flask_client.post(
+    return client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
 
 @pytest.mark.parametrize("op_type", COMMAND_TYPES, ids=COMMAND_TYPES)
-def test_command_produces_complete_patch(op_type, flask_client, tmp_reciter_dir):
+def test_command_produces_complete_patch(op_type, signed_in_client, tmp_reciter_dir):
     """For each op, the backend validates the patch shape and rejects malformed ones.
 
     Phase 5 contract: when an op carries a `patch` envelope, the save
@@ -40,7 +45,8 @@ def test_command_produces_complete_patch(op_type, flask_client, tmp_reciter_dir)
     must reject it (HTTP 400).
     """
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     chapter = 112
 
     bad_patch = {
@@ -48,7 +54,7 @@ def test_command_produces_complete_patch(op_type, flask_client, tmp_reciter_dir)
         "after": [{"segment_uid": "uid-1"}],
         # missing removedIds, insertedIds, affectedChapterIds
     }
-    res = _save_with_patch(flask_client, reciter, chapter, op_type, bad_patch)
+    res = _save_with_patch(client, reciter, chapter, op_type, bad_patch)
     assert res.status_code == 400, (
         "Phase 5 must reject patch envelopes missing required fields"
     )
@@ -65,10 +71,11 @@ def test_command_produces_complete_patch(op_type, flask_client, tmp_reciter_dir)
 #   test_undo_batch_patch_records
 
 
-def test_inverse_patch_restores_ignored_categories(flask_client, tmp_reciter_dir):
+def test_inverse_patch_restores_ignored_categories(signed_in_client, tmp_reciter_dir):
     """Segments with ignored_categories are fully restored on undo."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "113-falaq")
+    tmp_reciter_dir.install(reciter, "113-falaq", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
 
     pre = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
     target = pre["entries"][0]["segments"][0]
@@ -81,14 +88,14 @@ def test_inverse_patch_restores_ignored_categories(flask_client, tmp_reciter_dir
         "insertedIds": [],
         "affectedChapterIds": [113],
     }
-    _save_with_patch(flask_client, reciter, 113, "ignore_issue", patch)
+    _save_with_patch(client, reciter, 113, "ignore_issue", patch)
 
     history_path = tmp_reciter_dir.root / reciter / "edit_history.jsonl"
     last = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])
-    flask_client.post(
+    client.post(
         f"/api/seg/undo-batch/{reciter}",
         data=json.dumps({"batch_id": last["batch_id"]}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     post = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
@@ -96,10 +103,11 @@ def test_inverse_patch_restores_ignored_categories(flask_client, tmp_reciter_dir
     assert restored.get("ignored_categories") == target["ignored_categories"]
 
 
-def test_inverse_patch_handles_inserted_and_removed_ids(flask_client, tmp_reciter_dir):
+def test_inverse_patch_handles_inserted_and_removed_ids(signed_in_client, tmp_reciter_dir):
     """Split (inserts) and delete (removes) round-trip correctly."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
 
     pre = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
     seg0 = pre["entries"][0]["segments"][0]
@@ -116,14 +124,14 @@ def test_inverse_patch_handles_inserted_and_removed_ids(flask_client, tmp_recite
         "insertedIds": [new_uid_a, new_uid_b],
         "affectedChapterIds": [112],
     }
-    _save_with_patch(flask_client, reciter, 112, "split", patch)
+    _save_with_patch(client, reciter, 112, "split", patch)
 
     history_path = tmp_reciter_dir.root / reciter / "edit_history.jsonl"
     last = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])
-    flask_client.post(
+    client.post(
         f"/api/seg/undo-batch/{reciter}",
         data=json.dumps({"batch_id": last["batch_id"]}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
 
     post = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
@@ -133,14 +141,15 @@ def test_inverse_patch_handles_inserted_and_removed_ids(flask_client, tmp_recite
     assert new_uid_b not in uids
 
 
-def test_legacy_record_falls_back_to_field_restore(flask_client, tmp_reciter_dir):
+def test_legacy_record_falls_back_to_field_restore(signed_in_client, tmp_reciter_dir):
     """Undo a record without a patch field still works via the existing field-restore path."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
 
-    res = flask_client.post(
+    res = client.post(
         f"/api/seg/undo-batch/{reciter}",
         data=json.dumps({"batch_id": "no-such-batch"}),
-        content_type="application/json",
+        headers=_HEADERS,
     )
     assert res.status_code in (200, 400, 404)

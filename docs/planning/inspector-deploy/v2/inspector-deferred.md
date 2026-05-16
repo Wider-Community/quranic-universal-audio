@@ -224,25 +224,221 @@ Either way, both source and destination live in the **same private bucket** — 
 
 ---
 
-## D14 — Inspector-native reciter-request flow
+## D19 — 14 legacy-pattern test failures from Phase 1 fixture migration
 
-**What.** A "Request a reciter" surface inside the Inspector UI itself. Anonymous (or signed-in) users submit a request through Inspector; maintainers approve from the admin dashboard; approval writes the catalog row + initial state in the same path the existing admin endpoints use.
+**What.** Phase 1's call-site migration moved per-reciter IO behind `services/data_dir` + the storage backend, and the conftest fixture was rewritten to install a `FilesystemBackend` rooted at `tmp_path`. That brought 138/152 inspector tests green, but 14 tests still fail because they bypass the conftest fixture and bake in legacy patterns:
 
-This is the longer-term sibling to D2: D2 is about decommissioning the existing Reciter Requests Space (which is happening in v2 cleanup); D14 is about replacing the bridge with a first-class native flow.
+- `tests/classifier/test_resolved_by_edit.py` (6) — directly `monkeypatch.setattr("services.history_query.RECITATION_SEGMENTS_PATH", tmp_path)` on a module-level constant that no longer exists in `history_query.py`
+- `tests/classifier/test_classify_parity.py` (3) — spawn subprocesses that hand-build classifier inputs; need `INSPECTOR_BACKEND=filesystem` + `INSPECTOR_FILESYSTEM_ROOT` env wired into the subprocess and a fixture written under the bucket-shape layout
+- `tests/test_audio_meta.py` (4) — write directly to `AUDIO_META_PATH` on the local filesystem (now moved to `<bucket>/catalog/audio_meta.json`)
+- `tests/persistence/test_uid_backfill.py::test_uid_deterministic_across_processes` (1) — subprocess hand-builds `<INSPECTOR_DATA_DIR>/recitation_segments/<slug>/detailed.json` and calls `load_detailed`; needs the bucket-shape layout + backend env
 
-**Why deferred.** v2 ships with GH issues + maintainer manual `POST /api/admin/catalog/add` as the lightweight transitional intake. Building the Inspector-native form requires:
-- Public-facing form UX (anonymous submission flow, captcha or HF-OAuth-gate decision)
-- Maintainer review queue UI
-- Permission model for "approve catalog add"
-- Migration of any in-flight GH issues to the new flow once it lands
+**Why deferred.** Each is a small individual rewrite (5–15 min) but compounding to a focused test-cleanup pass. The 138 passing tests cover all critical Phase 1 paths (state machine, storage backend, route smokes, save flow gates). Phase 2 deploy is not blocked — these are unit tests that happen to encode the v1 storage layout in their setup code, not regression tests of the deployed behavior.
 
-None of these block v2.
+**Trigger to revisit.** Either:
+- Before Phase 2 deploy if CI gating on a 100% green inspector suite is required for the upload pipeline (pre-push hook from `inspector-deploy.yml`)
+- Or opportunistically when the surrounding code area is next touched (e.g. `test_resolved_by_edit.py` gets rewritten when the resolved-by-edit classifier is next modified)
 
-**Trigger to revisit.** After v2 stabilizes AND request volume justifies investing in a dedicated flow, OR a maintainer reports the GH-issue intake as a real bottleneck.
+**Affected if never done.** 14 tests stay red. Each remaining failure has a clear "expected behavior under v1 layout" annotation in the test name; ignoring them is low-risk for as long as no one regresses the underlying behavior elsewhere.
 
-**Affected if never done.** New reciter requests live as GH issues forever; maintainer manually triages. Workable; mild operational friction.
+**Cross-refs.** [`phases/01-foundation.md`](phases/01-foundation.md) Outcomes log (Tests — partial migration); the commit that left them red is `7dca3422` on `dev`.
 
-**Cross-refs.** [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md) §2 (workflow inventory; the forward webhook is removed in v2 cleanup).
+---
+
+## D20 — Legacy CDN shards on the dev bucket (timestamps tab + universal aligner Preload)
+
+**What.** The dev bucket `hetchyy/quranic-inspector-bucket-dev` carries a pre-v2 layout at the root:
+
+- `manifest.json.gz` — top-level manifest (~60 KB): `dataset_base_url`, `shard_url_template`, `segments_shard_url_template`, `resources`, `reciters[<slug>] = {audio_category, url_template, riwayah, name_en, name_ar, …}`, `_build`
+- `segments/<slug>/<chapter>.json.gz` — per-chapter gzipped segments shards
+- `timestamps/<slug>/<chapter>.json.gz` — per-chapter gzipped timestamps shards
+
+Built by `scripts/lib/segments_shards.py` + `scripts/lib/timestamps_shards.py` as a *CDN-format projection* of `data/recitation_segments/<slug>/{segments,detailed}.json` + `data/timestamps/<slug>/timestamps.json`.
+
+**Active consumers (verified):**
+
+- ~~Inspector's deployed timestamps tab when `INSPECTOR_TS_SOURCE=huggingface`.~~ **Removed in Phase 2.** Inspector reads timestamps from `<bucket>/published/<slug>/timestamps/<chapter>.json` via its own backend now (`INSPECTOR_TS_SOURCE=bucket`). Legal `INSPECTOR_TS_SOURCE` values are `local | bucket`; `huggingface` raises at config load.
+- **Universal aligner Space (`.local/spaces/quranic_universal_aligner/`) Preload mode** — reads directly from this bucket via `PRELOAD_BUCKET_ID` (defaults to `hetchyy/quranic-inspector-bucket-dev`). `src/preload/manifest_client.py` opens `manifest.json.gz` + shards via `huggingface_hub.hffs`; `repo_loader.py::build_segment_infos` slices the per-chapter segments shard into UI cards. The Preload reciter dropdown, the per-chapter segment cards, and the chapter-audio prewarm all flow from this bucket.
+
+### Schema diff: aligner shards vs v2 `published/<slug>/segments.json`
+
+The aligner shards are **not a slice of `segments.json`** — they're a different shape that the v2 layout doesn't expose:
+
+| Field | Aligner segments shard (`segments/<slug>/<chapter>.json.gz`) | v2 `published/<slug>/segments.json` |
+|---|---|---|
+| Granularity | One shard **per chapter** | Whole file per reciter |
+| Body | `segments[] = [{matched_ref, time_start, time_end, confidence}, …]` (per-segment list) | `{<verse_ref>: [[start_word, end_word, t_from, t_to], …]}` (verse-aggregated tuples) |
+| `_meta.audio_url` | Chapter-level URL (by_surah) | Reciter-level only |
+| `_meta.audio_urls` | Per-ayah URL map (by_ayah) | Absent — sidecar carries it |
+| `_meta.{schema_version, reciter, chapter, audio_category}` | Present | Absent |
+
+The per-segment list with `matched_ref` matches `published/<slug>/detailed.json` entries filtered by chapter, not `segments.json`. Phase 6's `published/<slug>/timestamps/<chapter>.json` *does* land per-chapter and would replace the timestamps shard, but **no v2 path replaces the segments shard** without a per-chapter slice of `detailed.json` (5 MB whole file today). Same conclusion for the per-ayah audio URL map: today it lives in the legacy shard `_meta`, in v2 it lives in `<bucket>/catalog/audio_manifest/<slug>.json` (per-delivery sidecar, populated when bulk probe completes).
+
+### Migration options
+
+- *Option A — keep the shards; rewire the builder.* Read from v2 paths but keep producing the same shard layout. Aligner + TS tab stay as-is. Lowest churn but **two source-of-truth shapes on the same bucket forever**.
+- *Option B — clients read v2 paths directly.* Drop the shards. Aligner Preload + Inspector TS tab refactor to read from v2 catalog + sidecars + `published/<slug>/segments.json` + per-chapter `published/<slug>/timestamps/<chapter>.json`. Drop `scripts/lib/{segments,timestamps}_shards.py` + `manifest_client.py`.
+- *Option C — Inspector backend serves on-demand shards.* Half-measure; aligner is a standalone HF Space that can't depend on Inspector backend uptime. Rejected.
+
+**Recommendation: Option B.** The shard layout is a v1 artifact that exists because the source data (`data/recitation_segments/<slug>/segments.json` + `data/timestamps/<slug>/timestamps.json`) was repo-tracked + whole-file. v2 already publishes the same content under `<bucket>/published/<slug>/` with the catalog + sidecars carrying the metadata side. Keeping the shards is duplicate state by a different name.
+
+#### Why Option B works
+
+- **Reciter dropdown info** — comes from `<bucket>/catalog/reciter_catalog.json` (`reciters[]` + `deliveries[]` joined on `reciter_id` gives every field the legacy `manifest.reciters[<slug>]` block carried: `name_en`, `name_ar`, `riwayah`, `style`, `audio_category`).
+- **Per-chapter audio URL** — comes from the per-delivery sidecar `<bucket>/catalog/audio_manifest/<slug>.json::chapters[<n>].url`. Replaces `manifest.reciters[<slug>].url_template` + the legacy seg shard's `_meta.audio_url` / `_meta.audio_urls`. Covers both `by_surah` and `by_ayah` cleanly (`by_ayah` keys are `"<surah>:<ayah>"`).
+- **Segments shape** — the aligner today reads `segments[] = [{matched_ref, time_start, time_end, confidence}, …]`. From v2 `segments.json`:
+  - `matched_ref` derives from the verse-ref key + tuple's `[start_word, end_word]` (~5 lines: key `"1:2"` + tuple `[1, 4, 6730, 12280]` → `"1:2:1-1:2:4"`; cross-verse keys are already in the canonical ref shape).
+  - `time_start` / `time_end` = `t_from` / `t_to` from the tuple.
+  - `confidence` — drop. Aligner Preload UI shows it as a per-card score badge; without it every card renders in high-conf colour. Acceptable UX trade.
+- **Whole-file `segments.json` size** — 340 KB avg / 386 KB max (data-storage §8). Cold fetch of the whole file vs cold fetch of a single per-chapter shard (~5–200 KB) is roughly comparable; **warm-cache wins are bigger for whole-file** (one fetch covers the whole reciter). LRU shrinks to per-reciter keys instead of per-(reciter, chapter).
+- **Timestamps still per-chapter** — `timestamps.json` whole-file is 5–25 MB per reciter; per-chapter sharding stays. Phase 6 publish pipeline already lands `<bucket>/published/<slug>/timestamps/<chapter>.json` per-chapter via the HF Job. Drop-in for the legacy `timestamps/<slug>/<chapter>.json.gz` after un-gzipping (or keep gzip via `Content-Encoding`).
+
+#### Dependent work (two parallel tracks)
+
+**Track A — universal aligner Preload migration** (owned by the aligner Space):
+
+- `.local/spaces/quranic_universal_aligner/src/preload/manifest_client.py` — replace `_bucket_read("manifest.json.gz")` with a catalog fetch (read `<bucket>/catalog/reciter_catalog.json` + the per-slug sidecar `<bucket>/catalog/audio_manifest/<slug>.json`). Drop the gzipped-shard fetch + LRU; replace with whole-file `<bucket>/published/<slug>/segments.json` (whole-reciter LRU) + per-chapter `<bucket>/published/<slug>/timestamps/<chapter>.json` (per-chapter LRU, same shape as today).
+- `.local/spaces/quranic_universal_aligner/src/preload/repo_loader.py::build_segment_infos` — slice the whole-reciter `segments.json` by chapter (filter verse keys), derive `matched_ref` from key + word indices, drop `match_score` from `SegmentInfo`.
+- Aligner UI — drop the confidence badge from the card.
+- `PRELOAD_BUCKET_ID` env stays; the bucket is the same, only the layout it reads changes.
+- **Three cascading dropdowns:** Reciter → Mushaf → Source. Reciter dropdown is always shown (`catalog.reciters[]`, 422 entries, typeahead on `name_en + name_ar`). Mushaf dropdown appears only when group-by `(riwayah, style, recording_year, variant_label)` over the reciter's deliveries gives >1 row; label built from the dimensions that vary inside that reciter ("Hafs Murattal", "Hafs Mujawwad", "Warsh Murattal"). Source dropdown appears only when the selected Mushaf has >1 delivery; user picks the source/channel/bitrate. **No top-level riwayah filter** — the riwayah surfaces inside Mushaf labels. **No auto-pick** — when there's only 1 source, the Source dropdown hides; when there's >1, the user always chooses.
+
+**Track B — Inspector deployed timestamps-tab data layer** (minimal scope — keep current UX):
+
+- Replace the manifest.json.gz fetch with a catalog read served by Inspector backend at `/api/static/catalog.json` (in-memory catalog snapshot via `services/catalog.snapshot()`).
+- Frontend `inspector/frontend/src/tabs/timestamps/services/ts_client.ts` — replace `loadManifest()` with `loadCatalog()`. Keep `loadChapterShard()` for now (shards still fetch from the public dataset; their migration to v2 paths is Phase 6 work).
+- `routes/timestamps.py::ts_config` — add `catalog_url: "/api/static/catalog.json"` alongside existing `manifest_url` for a soft transition.
+- **No cascading dropdowns in the TS tab.** Same flat reciter list the tab has today, just sourced from the catalog instead of the manifest. The Mushaf/Source UX from Track A is aligner-only.
+- Track B unblocks the legacy `<bucket>/manifest.json.gz` deletion (since the TS tab no longer reads from there).
+
+**Decommission (Phase 11 cleanup):**
+
+- `scripts/lib/segments_shards.py`, `scripts/lib/timestamps_shards.py` deleted.
+- `<bucket>/manifest.json.gz`, `<bucket>/segments/<slug>/`, `<bucket>/timestamps/<slug>/` deleted.
+- `INSPECTOR_TS_HF_DATASET_BASE_URL` env var dropped from `inspector/config.py` (no external dataset URL needed).
+
+**Trigger to revisit.** Catalog promotion lands (real `reciters[]` + `deliveries[]` + sidecars in `<bucket>/catalog/`). At that point Track A can start immediately; Track B starts after Phase 6 lands per-chapter timestamps.
+
+**Affected if never done.** Two parallel layouts on the bucket; aligner + Inspector TS tab keep depending on the shard builders being maintained. Not catastrophic, just ongoing tax.
+
+**Cross-refs.** [`phases/01-foundation.md`](phases/01-foundation.md) Outcomes; [`phases/05-publish-pipeline.md`](phases/05-publish-pipeline.md) (Phase 6 lands per-chapter timestamps that unblock Track B); [`phases/11-cleanup-and-docs.md`](phases/11-cleanup-and-docs.md) (decommission step); `inspector/routes/timestamps.py`; `inspector/services/ts_local.py`; `inspector/frontend/src/tabs/timestamps/services/ts_client.ts`; `scripts/lib/{segments,timestamps}_shards.py`; aligner consumer at `.local/spaces/quranic_universal_aligner/src/preload/{manifest_client,repo_loader}.py` (Track A target).
+
+---
+
+## D21 — Peaks hash must fold in segment boundaries if per-segment peaks ever surface on `/api/seg/peaks/`
+
+**What.** Today `/api/seg/peaks/<reciter>` returns whole-file peaks per audio URL only; segment-range peaks live on `POST /api/seg/segment-peaks` and aren't covered by the cache layer. The frontend appends `?h=<8-char-FNV-1a>` over `audio_by_chapter` to bust the immutable cache when the catalog flips an audio source. If a future schema ever extends `/api/seg/peaks/` to include per-segment peaks, the hash MUST also fold in segment boundaries, otherwise reviewer edits would silently serve stale waveform shapes for a year (`immutable, max-age=31536000`).
+
+**Why deferred.** No work to do until the schema changes; ship-time correctness is fine for the current whole-file response.
+
+**Trigger to revisit.** Anyone proposing to surface per-segment peaks (or any segment-boundary-derived data) on the `/api/seg/peaks/<reciter>` GET endpoint.
+
+**Affected if never done.** Self-healing — adding the new payload without updating the hash is the regression; the existing whole-file flow stays correct.
+
+**Cross-refs.** `inspector/frontend/src/tabs/segments/utils/waveform/utils.ts` (`_fetchPeaks`), `inspector/routes/peaks.py::seg_peaks`.
+
+---
+
+## D22 — Multi-worker scale-out (gunicorn `-w >1`)
+
+**What.** Inspector hard-asserts a single worker at import time (`inspector/app.py::_assert_single_worker`). Every in-memory structure — `state_store`, per-slug `threading.Lock`, signed-cookie session verification, role cache — assumes one process. Multi-worker scale-out is unsupported.
+
+**Why deferred.** Phase 2 perf budget is met by one gthread worker on free CPU-basic. Multi-worker would require a shared coordinator (Redis or bucket-side optimistic concurrency) for the per-slug lock and a shared cache for parsed state — a separate work item that doesn't pay off until measured saturation.
+
+**Trigger to revisit.** Sustained CPU saturation on the Space (>70% over a 15-minute window during peak browse), OR a third concurrent reviewer reporting save-flow contention (Phase 4+).
+
+**Affected if never done.** Single-Space replica caps at ~50 concurrent reviewers per the data-storage perf budget. Beyond that, the in-process lock becomes a bottleneck.
+
+**Cross-refs.** [`inspector-data-storage.md`](inspector-data-storage.md) §11 (scale triggers), `inspector/app.py::_assert_single_worker`, `inspector/Dockerfile` CMD.
+
+---
+
+## D23 — Replace personal HF token with a `hetchyy-bot` org token
+
+**What.** `setup_space.py` seeds `INSPECTOR_HF_TOKEN` from the operator's local `.env`. That's a personal user token with the operator's full permissions on every HF resource they own. Mint a dedicated `hetchyy-bot` org token scoped to the bucket repo only and update the Space secret.
+
+**Why deferred.** The dev Space is private and not a high-value target; the operator's token is already in their `.env` so reusing it had zero ceremony. Need to coordinate creating the bot account / fine-grained token before prod cutover, which is itself gated on Phase 3 sign-off.
+
+**Trigger to revisit.** Before prod Space cutover (Phase 3 sign-off).
+
+**Affected if never done.** Single Space compromise = full operator HF account compromise. Acceptable risk on a private dev Space; not acceptable on public prod.
+
+**Cross-refs.** `scripts/inspector_v2_seed/setup_space.py:198`, [`inspector-deploy-runbook.md`](inspector-deploy-runbook.md) §2.
+
+---
+
+## D24 — Replace `INSPECTOR_GITHUB_DISPATCH_TOKEN` placeholder before publish flow ships
+
+**What.** `setup_space.py` seeds `INSPECTOR_GITHUB_DISPATCH_TOKEN` with the literal `PLACEHOLDER_REPLACE_BEFORE_PHASE_5` so the Space-secret slot exists. Replace with a fine-grained PAT (`actions: write` on `Wider-Community/quranic-universal-audio`) before the publish flow attempts to fire `repository_dispatch reciter.completed`. `services/secrets_guard.py::get_dispatch_token` raises if the placeholder is still in place, so the failure mode is loud.
+
+**Why deferred.** The token isn't read at runtime in Phase 2; the slot ships now so Phase 5 deploys don't need a Space-secret edit step.
+
+**Trigger to revisit.** Before Phase 5 publish-pipeline work lands.
+
+**Affected if never done.** `POST /api/admin/publish/<slug>` raises `MissingSecret` instead of firing the GitHub workflows that regenerate `RECITERS.md` (`update-reciters.yml`) and per-reciter Release zips (`release.yml`).
+
+**Cross-refs.** [`inspector-publish-pipeline.md`](inspector-publish-pipeline.md), [`inspector-data-storage.md`](inspector-data-storage.md) §6 (env table), `inspector/services/secrets_guard.py::get_dispatch_token`, `scripts/inspector_v2_seed/setup_space.py`.
+
+---
+
+## D25 — Writable `HOME` for the inspector container user
+
+**What.** The inspector user in the Docker image is created with `adduser -H` (no home dir), so `huggingface_hub.login()` raises `Permission denied: '/home/inspector'` on boot. Reads work fine because `BucketBackend` falls through to per-call `token=` auth, but Xet *writes* fail because the Xet client requires the local huggingface token cache. Phase 2 is read-only so this doesn't bite; Phase 4 saves do.
+
+**Why deferred.** Read-only Phase 2 + Phase 3 don't exercise the write path. Fix is a one-line Dockerfile change (drop `-H` or set `HOME=/tmp`) but bundling with the Phase 4 save migration keeps the deploy churn focused.
+
+**Trigger to revisit.** First Phase 4 save attempt against the deployed Space.
+
+**Affected if never done.** Save flow returns 503 at the Xet upload step. Phase 4 deploy hard-blocks on it.
+
+**Cross-refs.** `inspector/Dockerfile` (`RUN addgroup … adduser -H`), `inspector/services/hf_bucket.py::BucketBackend.__init__` (the `huggingface_hub.login()` call that fails).
+
+---
+
+## D26 — TS audio leak on transition (next / random plays past end before swap)
+
+**What.** When the Timestamps tab transitions to the next or a random verse via the autoNext / next / random buttons, the previous audio plays for an extra fraction of a second past its `time_end` before the new track's `canplay` fires and `_swapTo` lands the new src. Audible as a blip of the wrong audio at every transition.
+
+**Why deferred.** Race lives in the `audio-port.ts` `loadCovering → _swapTo → ready` path — `inspector/frontend/src/lib/playback/`. Phase 2 didn't touch any file under `lib/playback/`; the regression predates v2 (likely visible since the AudioPort migration commits — see `git log inspector/frontend/src/lib/playback/audio-port.ts`). Fixing requires either (a) pausing the element synchronously before swapping `el.src`, or (b) gating the new `play()` on the new element's `canplay`. Either is a focused Phase-3-or-later cleanup, not a Phase 2 deliverable.
+
+**Trigger to revisit.** Any TS-tab UX work, or before Phase 6 catalog-published reciters land (the more reciters become playable, the more the user notices).
+
+**Affected if never done.** Audible artifact on every TS-tab transition. Cosmetic — playback resumes correctly on the new track within a few hundred ms.
+
+**Cross-refs.** `inspector/frontend/src/lib/playback/audio-port.ts` (`_swapTo`, `loadCovering`), `inspector/frontend/src/tabs/timestamps/components/TimestampsAudio.svelte` (transition triggers), `inspector/frontend/src/tabs/timestamps/TimestampsTab.svelte` (autoNext dispatcher).
+
+---
+
+## D27 — Re-sync bucket from upstream before re-running `migrate_bucket_meta.py`
+
+**What.** The current dev-bucket snapshot was seeded from the repo `data/` tree at the time of the Phase 1 cutover. Two sources have drifted since then and should be reconciled before the next data-hygiene pass:
+
+1. **wip reciters** — each wip slug had its own per-reciter PR branch in `Wider-Community/quranic-universal-audio` with the latest reviewer edits (segments + detailed + edit_history) as of pre-cutover. The bucket's `wip/<slug>/...` files came from a snapshot of `main` at seed time, not from those PR branches. Sync each wip slug's bucket subtree from its PR branch head so the bucket carries the reviewer's actual in-review state, not the stale main-branch copy. Open a small reconciliation PR per slug (or one PR with per-slug commits) so the diff is auditable before upload.
+2. **catalog + audio_manifest sidecars** — `catalog/reciter_catalog.json` and the 864 `catalog/audio_manifest/<slug>.json` sidecars were promoted from `.local/dedup/` in Phase 1. The `.local/dedup/` build pipeline has had follow-up runs (corrections, additional audio probing for `by_ayah` deliveries, channel inference fixes) — those need to land on the bucket too via a fresh `scripts/inspector_v2_seed/promote_catalog.py` run.
+
+After both syncs land, re-run `python -m scripts.inspector_v2_seed.migrate_bucket_meta --apply` so the canonical-slug fix is applied to the freshly-synced data. The migration script is idempotent; running it on already-canonical files is a no-op, so this step is safe to re-run as often as needed.
+
+**Why deferred.** The current bucket data is good enough for Phase 2's read-only surface to function — the catalog displays 422 reciters, the timestamps tab serves 6 published reciters with canonical `_meta.reciter`, and editing-bound writes don't ship until later phases. The sync is a hygiene pass that pays off when the first reviewer claims a wip slug and finds their in-progress edits are missing (Phase 4) or when a maintainer notices a stale catalog entry. Not user-visible until then.
+
+**Trigger to revisit.** First Phase-3 reviewer claim against a wip slug whose PR branch carried newer edits than the bucket; or a catalog-correction request from a maintainer.
+
+**Affected if never done.** wip reviewers lose the deltas between Phase-1-seed-time and cutover. Catalog stays at the Phase-1 stub state. Both are recoverable later via the same sync + migration workflow — nothing is destroyed.
+
+**Cross-refs.** `scripts/inspector_v2_seed/seed_reciter_data.py` (original wip seed), `scripts/inspector_v2_seed/promote_catalog.py` (catalog promotion), `scripts/inspector_v2_seed/migrate_bucket_meta.py` (slug-canonicalisation pass), `.local/dedup/` (catalog source pipeline).
+
+---
+
+## D29 — Maintainer edit on `released`/`completed` (`published.edited` route surface)
+
+**What.** State machine handler `_h_published_edited` already exists in `inspector/services/state.py` for the `published.edited` event — fires when an admin edits a reciter that has moved past `under_review`. Phase 3's `require_edit_lock` decorator rejects every save where `row.state != UNDER_REVIEW`, which means there is **no route surface** for maintainers to perform this edit. The handler is reachable only via direct service-layer call.
+
+**Why deferred.** Phase 3 ships the contributor flow + maintainer-on-active-claim override. Adding a separate `/api/admin/published/edit/<slug>/<chapter>` route surface needs UI to drive it (a "Re-open for revision" affordance in the admin dashboard, plus a corresponding banner), which is squarely Phase 7 admin-dashboard work. Trying to wire it now means landing a route with no caller and no UI affordance — pure dead weight until Phase 7.
+
+**Trigger to revisit.** Phase 7 (admin dashboard). The dashboard's "completed reciters" panel grows a "Re-open for revision" button → POST `/api/admin/state/unlock-for-revision/<slug>` (transitions via `admin.unlocked_for_revision`) → opens an admin-only edit session → POST `/api/admin/published/edit/<slug>/<chapter>` for save → "Re-publish" closes the loop. State machine already supports the lifecycle (`revision_in_progress` sub-struct on the row).
+
+**Affected if never done.** Maintainers cannot edit completed reciters via the UI. Manual workaround: edit the bucket file directly via `huggingface_hub`, or `force_set_state` the row back to `under_review` (allowed pair in Phase 4), edit, mark-ready, publish.
+
+**Cross-refs.** `inspector/services/state.py::_h_published_edited`, `phases/03-auth-and-claims.md` (Out of scope), `phases/07-admin-dashboard.md`.
 
 ---
 

@@ -122,27 +122,32 @@ export const editStatusText = derivedEq(_editState, ($s) => $s.statusText);
 // Pending split-chain target — standalone writable (not part of edit state).
 // ---------------------------------------------------------------------------
 
-/** Pending split-chain target — stashed by `confirmSplit` after kicking off
- *  the first half's ref-edit, so that `commitRefEdit` can hand off directly to
- *  the second half without any reactive-store intermediary. The consumer
- *  (`commitRefEdit` success path) reads-and-clears; cancel/Escape paths call
- *  `pendingChainTarget.set(null)` to abort the chain.
+/** Pending split-chain queue — stashed by `confirmSplit` after kicking off
+ *  the first piece's ref-edit, so that `commitRefEdit` can hand off
+ *  sequentially to the remaining pieces without any reactive-store
+ *  intermediary. A binary split (N=2 pieces) puts one entry on the queue; a
+ *  repetition auto-split (N≥3 pieces) puts N-1 entries. The consumer
+ *  (`commitRefEdit` success path) shifts the head and re-enters
+ *  `beginRefEdit`; cancel/Escape paths clear the queue to abort the chain.
  *
  *  Direct handoff replaces the prior reactive two-store chain pattern —
- *  eliminates a subscriber race where the secondHalf's SegmentRow would
+ *  eliminates a subscriber race where the next piece's SegmentRow would
  *  sometimes observe the chain store settling before `$editMode` dropped to
- *  null, dropping the chained edit entirely. */
-/**
- * `originalEndRef` is the END endpoint of the pre-split segment's ref
- * (`s:v:w` form), captured at split time so the chain handoff can rebuild
- * the second half's ref as `(advance(committedFirstEnd))-(originalEndRef)`
- * regardless of how the user edits the first half.
+ *  null, dropping the chained edit entirely.
+ *
+ *  `originalEndRef` on each entry is the END endpoint of the pre-split
+ *  segment's ref (`s:v:w` form), captured at split time so the chain
+ *  handoff can rebuild the trailing piece's ref as
+ *  `(advance(committedPrevEnd))-(originalEndRef)` regardless of how the
+ *  user edits earlier pieces.
  */
-export const pendingChainTarget = writable<{
+export interface ChainTarget {
     seg: Segment;
     category: string | null;
     originalEndRef: string | null;
-} | null>(null);
+}
+
+export const pendingChainTargets = writable<ChainTarget[]>([]);
 
 // ---------------------------------------------------------------------------
 // Setters — all writes route through a single `_editState.update(...)`.

@@ -8,7 +8,7 @@
      * pure-function data builder (not a post-render DOM walk).
      */
 
-    import { afterUpdate } from 'svelte';
+    import { afterUpdate, untrack } from 'svelte';
     import { get } from 'svelte/store';
 
     import type { TsWord } from '../../../lib/types/domain';
@@ -48,10 +48,11 @@
     // Reactive structural data
     $: structure = buildStructure($loadedVerse?.data.words ?? []);
 
-    // Reset animation cache / state on structure change
+    // Reset animation cache index on structure change. The cache rebuild +
+    // class/opacity sweep happen in `afterUpdate` below, once Svelte has
+    // committed the new `{#each}` DOM nodes.
     $: structure, (_lastWordIdx = -1);
     $: structure, (_lastCharIdx = -1);
-    $: structure, (_charsReindexed = false);
 
     // ---- Pure data builder ----
 
@@ -167,16 +168,28 @@
     let _charCache: Cache | null = null;
     let _lastWordIdx = -1;
     let _lastCharIdx = -1;
-    let _charsReindexed = false;
-
-    // Rebuild caches once the DOM reflects the latest structure
+    // Rebuild caches + clear stale highlight classes once the DOM reflects the
+    // latest structure. Previously this used a `_charsReindexed` flag that
+    // deferred the class/opacity sweep to a `$:` block — but in Svelte 5
+    // legacy mode that block formed a write-back loop with this hook
+    // (`afterUpdate` writes the flag true, the reactive's outer condition
+    // tracks it, the reactive's body writes it false, `afterUpdate` re-fires
+    // → `effect_update_depth_exceeded`). `afterUpdate` already runs after
+    // Svelte's DOM commit, so doing the cleanup here directly is functionally
+    // identical without the cycle.
     afterUpdate(() => {
         if (!rootEl) return;
         _wordCache = indexCache(rootEl, '.anim-word');
         _charCache = indexCache(rootEl, '.anim-char');
         _lastWordIdx = -1;
         _lastCharIdx = -1;
-        _charsReindexed = true;
+        rootEl
+            .querySelectorAll<HTMLElement>('.anim-word, .anim-char')
+            .forEach((el) => {
+                el.classList.remove('active', 'reached');
+                el.style.removeProperty('opacity');
+            });
+        updateHighlights();
         _applyLoopClasses();
     });
 
@@ -349,38 +362,30 @@
         if (item) item.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    // Granularity-change housekeeping: clear highlights + opacity when mode
-    // switches. Reactive statement guards re-entry during initial build.
-    $: if (_charsReindexed && rootEl) {
-        rootEl
-            .querySelectorAll<HTMLElement>('.anim-word, .anim-char')
-            .forEach((el) => {
-                el.classList.remove('active', 'reached');
-                el.style.removeProperty('opacity');
-            });
-        _lastWordIdx = -1;
-        _lastCharIdx = -1;
-        // Pick up new position
-        updateHighlights();
-        _charsReindexed = false;
-    }
-
-    // Also watch granularity toggles while the cache is stable (no rebuild)
+    // Granularity-toggle housekeeping while the cache is stable (no rebuild).
+    // The body writes `_prevGranularity` (reactive in Svelte 5 legacy mode),
+    // which retriggers this effect once — but the condition then evaluates
+    // false and the body skips, so this is bounded (no afterUpdate write-back
+    // loop like the old `_charsReindexed` had). `untrack` is still useful to
+    // keep `updateHighlights`' state reads from being added to this effect's
+    // dependencies.
     let _prevGranularity = get(granularity);
     $: {
         if ($granularity !== _prevGranularity) {
-            _prevGranularity = $granularity;
-            if (rootEl) {
-                rootEl
-                    .querySelectorAll<HTMLElement>('.anim-word, .anim-char')
-                    .forEach((el) => {
-                        el.classList.remove('active', 'reached');
-                        el.style.removeProperty('opacity');
-                    });
-                _lastWordIdx = -1;
-                _lastCharIdx = -1;
-                updateHighlights();
-            }
+            untrack(() => {
+                _prevGranularity = $granularity;
+                if (rootEl) {
+                    rootEl
+                        .querySelectorAll<HTMLElement>('.anim-word, .anim-char')
+                        .forEach((el) => {
+                            el.classList.remove('active', 'reached');
+                            el.style.removeProperty('opacity');
+                        });
+                    _lastWordIdx = -1;
+                    _lastCharIdx = -1;
+                    updateHighlights();
+                }
+            });
         }
     }
 

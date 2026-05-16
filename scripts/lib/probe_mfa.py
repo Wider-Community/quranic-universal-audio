@@ -102,6 +102,7 @@ def run_probe(
     reciter_dir: Path,
     *,
     mfa_app_path: Path,
+    audio_dir: Path | None = None,
     beam: int = DEFAULT_PROBE_BEAM,
     method: str = DEFAULT_METHOD,
     padding: str = DEFAULT_PADDING,
@@ -115,6 +116,12 @@ def run_probe(
     UIDs for every probable segment, and runs alignment in parallel via a
     download ThreadPool feeding a process pool of MFA workers.
 
+    When ``audio_dir`` is provided, chapter audio is read from
+    ``<audio_dir>/<chapter>.mp3`` instead of the URL/path in ``detailed.json``
+    — this is the Katana fast-path, since extraction's audio_persist post-pass
+    has already written the per-chapter MP3s right there. Falls back to the
+    ``detailed.json`` source per-chapter when a file is missing.
+
     Returns the sidecar path on success, or ``None`` when ``detailed.json``
     is missing.
     """
@@ -122,6 +129,11 @@ def run_probe(
     detailed_path = reciter_dir / "detailed.json"
     if not detailed_path.exists():
         log.error("detailed.json not found in %s", reciter_dir)
+        return None
+
+    audio_dir = Path(audio_dir).resolve() if audio_dir else None
+    if audio_dir is not None and not audio_dir.is_dir():
+        log.error("audio_dir does not exist or is not a directory: %s", audio_dir)
         return None
 
     with open(detailed_path, encoding="utf-8") as f:
@@ -144,8 +156,14 @@ def run_probe(
         if chapter is None or not audio_src:
             log.warning("Chapter %s: missing chapter/audio; skipping", ref)
             return 0
+        local_mp3 = audio_dir / f"{chapter}.mp3" if audio_dir else None
         try:
-            if _is_url(audio_src):
+            if local_mp3 is not None and local_mp3.is_file():
+                audio_int16 = load_audio_int16(local_mp3)
+            elif _is_url(audio_src):
+                if local_mp3 is not None:
+                    log.warning("Chapter %s: local %s missing; falling back to URL",
+                                ref, local_mp3)
                 audio_file = download_audio(audio_src)
                 audio_int16 = load_audio_int16(audio_file)
                 audio_file.unlink(missing_ok=True)

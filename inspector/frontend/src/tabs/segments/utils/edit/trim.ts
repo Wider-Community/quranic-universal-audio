@@ -64,6 +64,20 @@ export { _ensureTrimBaseCache, drawTrimWaveform };
  * duplicating the neighbor-lookup logic. Pure — no store writes, no side
  * effects on `seg`.
  */
+/** Resolve the authoritative audio EOF (ms) for a seg from the audio_manifest
+ *  sidecar — URL-keyed first (covers by_ayah deliveries) then chapter-keyed
+ *  (covers by_surah). Returns undefined when no sidecar info is available. */
+export function getAudioEndMsForSeg(seg: Segment): number | undefined {
+    const allData = get(segAllData);
+    if (!allData) return undefined;
+    const chapterKey = String(seg.chapter ?? 0);
+    const audioUrl = seg.audio_url || allData.audio_by_chapter?.[chapterKey] || '';
+    if (audioUrl && allData.duration_ms_by_url?.[audioUrl]) {
+        return allData.duration_ms_by_url[audioUrl];
+    }
+    return allData.chapter_duration_ms_by_chapter?.[chapterKey];
+}
+
 export function computeTrimBounds(
     seg: Segment,
     chapterSegs: Segment[],
@@ -72,13 +86,29 @@ export function computeTrimBounds(
 ): { windowStart: number; windowEnd: number; audioUrl: string } {
     const segIdx = chapterSegs.findIndex((s) => s.index === seg.index);
     const prevEnd = segIdx > 0 ? (chapterSegs[segIdx - 1]?.time_end ?? 0) : 0;
-    const audioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(seg.chapter ?? 0)] || '';
+    const chapterKey = String(seg.chapter ?? 0);
+    const allData = get(segAllData);
+    const audioUrl = seg.audio_url || allData?.audio_by_chapter?.[chapterKey] || '';
     const fallbackPad = Math.max(1000, cfg.trimPadRight);
-    const nextStart = segIdx >= 0 && segIdx < chapterSegs.length - 1
-        ? (chapterSegs[segIdx + 1]?.time_start ?? seg.time_end + fallbackPad)
-        : (peaksDurationMs || seg.time_end + fallbackPad);
+    // Authoritative audio EOF from the audio_manifest sidecar — beats both
+    // the per-URL peaks duration (only populated after whole-chapter peaks
+    // load) and `seg.time_end + fallbackPad` (which can run past actual EOF
+    // for the last verse and produce an empty waveform draw).
+    const audioEndMs = getAudioEndMsForSeg(seg);
+    const isLastSeg = segIdx >= 0 && segIdx >= chapterSegs.length - 1;
+    let nextStart: number;
+    if (!isLastSeg) {
+        nextStart = chapterSegs[segIdx + 1]?.time_start ?? seg.time_end + fallbackPad;
+    } else if (audioEndMs && audioEndMs > seg.time_end) {
+        nextStart = audioEndMs;
+    } else if (peaksDurationMs && peaksDurationMs > seg.time_end) {
+        nextStart = peaksDurationMs;
+    } else {
+        nextStart = seg.time_end + fallbackPad;
+    }
     const windowStart = Math.max(prevEnd, seg.time_start - cfg.trimPadLeft);
-    const windowEnd = Math.min(nextStart, seg.time_end + cfg.trimPadRight);
+    let windowEnd = Math.min(nextStart, seg.time_end + cfg.trimPadRight);
+    if (audioEndMs && windowEnd > audioEndMs) windowEnd = audioEndMs;
     return { windowStart, windowEnd, audioUrl };
 }
 

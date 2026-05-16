@@ -22,7 +22,6 @@ What stays on GitHub:
 - Reciter request issues (intake queue) — body marker `<!-- reciter-task: slug=... schema=1 -->`
 - `RECITERS.md` regeneration
 - Per-reciter GitHub Release zips (consumer-facing offline distribution)
-- `data/inspector_roles.json` (role mgmt)
 
 What moves to HF:
 - All per-reciter editable data (bucket `wip/<slug>/`)

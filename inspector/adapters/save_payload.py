@@ -8,8 +8,10 @@ adapter internally; the route shape is unchanged (MUST-1).
 
 from __future__ import annotations
 
+from services.reference.quran_refs import dk_text_for_ref
 from services.validation.registry import filter_persistent_ignores
 from utils.references import normalize_ref
+from utils.repetitions import is_wrap_consistent
 
 
 def make_seg(
@@ -37,22 +39,40 @@ def make_seg(
 
     phonemes = s.get("phonemes_asr", "") or existing.get("phonemes_asr", "")
     seg_uid = s.get("segment_uid", "") or existing.get("segment_uid", "")
+    matched_ref = normalize_ref(s.get("matched_ref", ""), word_counts)
+    # The FE stopped echoing matched_text; derive from dk_words so detailed.json
+    # keeps the documented schema field consistent with matched_ref. Fall back
+    # to a payload value if a legacy client still sends one.
+    matched_text = s.get("matched_text") or dk_text_for_ref(matched_ref)
 
     result: dict = {
         "segment_uid": seg_uid,
         "time_start": s.get("time_start", 0),
         "time_end": s.get("time_end", 0),
-        "matched_ref": normalize_ref(s.get("matched_ref", ""), word_counts),
-        "matched_text": s.get("matched_text", ""),
+        "matched_ref": matched_ref,
+        "matched_text": matched_text,
         "confidence": s.get("confidence", 0.0),
         "phonemes_asr": phonemes,
     }
 
-    wrap = s.get("wrap_word_ranges") or existing.get("wrap_word_ranges")
-    if wrap:
+    # Repetition metadata is FE-authoritative on full_replace: the FE knows
+    # whether a seg currently represents a multi-pass reading (split resolves
+    # repetitions into independent children, ref-edits can change the picture
+    # entirely). Falling back to ``existing`` here let the parent's wrap leak
+    # into split children, re-tagging them as repetitions and feeding wrong
+    # refs to MFA on Auto Split. Trust the payload — if the FE omits the
+    # field, drop it.
+    #
+    # Defense-in-depth geometry check: if a (current or future) client sends
+    # a wrap that doesn't fit the matched_ref (stale wrap from inheritance,
+    # or corrupted jump_to/from/end ordering), drop it rather than persist
+    # bad data. The check uses the same predicate as the cleanup script so
+    # behaviour stays consistent.
+    wrap = s.get("wrap_word_ranges")
+    if wrap and is_wrap_consistent(matched_ref, wrap, word_counts):
         result["wrap_word_ranges"] = wrap
-    if s.get("has_repeated_words") or existing.get("has_repeated_words"):
-        result["has_repeated_words"] = True
+        if s.get("has_repeated_words"):
+            result["has_repeated_words"] = True
 
     if "ignored_categories" in s:
         ic = filter_persistent_ignores(s.get("ignored_categories") or [])

@@ -52,7 +52,7 @@ The catalog SQLite contains three tables — `reciters`, `audio_sources`, `recit
 | File | Storage | Doc | Phase |
 |---|---|---|---|
 | `data/audio_catalog.json.gz` | server image | [`audio-catalog.md`](audio-catalog.md) | 1 |
-| `data/inspector_roles.json` | GitHub raw | [`roles.md`](roles.md) | 0 |
+| `<bucket>/access/inspector_roles.json` | HF bucket | [`roles.md`](roles.md) | 0 |
 | `data/surah_info.json` | server image | [`surah-info.md`](surah-info.md) | 0 |
 | `data/qpc_hafs.json` | server image + HF `_resources/` | [`qpc-hafs.md`](qpc-hafs.md) | 0 |
 | `data/digital_khatt_v2_script.json` | server image + HF `_resources/` | [`digital-khatt.md`](digital-khatt.md) | 0 |

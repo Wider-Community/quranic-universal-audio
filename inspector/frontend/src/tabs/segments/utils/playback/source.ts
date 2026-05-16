@@ -21,7 +21,26 @@ import { get } from 'svelte/store';
 import type { AudioSource } from '../../../../lib/playback/audio-port';
 import type { Segment } from '../../../../lib/types/domain';
 import { reciterVbrChapters, selectedReciter } from '../../stores/chapter';
-import { _isCurrentReciterBySurah } from '../data/reciter';
+
+/** Wrap a cross-origin chapter MP3 URL in the same-origin audio-proxy.
+ *  Required when the resulting `<audio>` is routed through Web Audio's
+ *  `MediaElementAudioSourceNode` (kill-switch enabled ports) — the CDN
+ *  response carries no `Access-Control-Allow-Origin`, so a cross-origin src
+ *  on a `crossorigin="anonymous"` element makes the source node output
+ *  zeroes. The proxy streams same-origin with `ACAO: *`.
+ *
+ *  Earlier this gated on `_isCurrentReciterBySurah()` reading
+ *  `audio_source.startsWith('by_surah')`, but the actual values served by
+ *  `/api/seg/reciters` are channel names (`mp3quran`, `qul`, etc.) — the
+ *  check always returned false, so every cross-origin CBR URL went raw to
+ *  the audio element and played silently. Switching to a URL-pattern check
+ *  is the correct condition: same-origin `/api/...` paths are pass-through;
+ *  anything else (http:, https:, protocol-relative) needs the proxy wrap. */
+export function wrapCbrSrcIfBySurah(audioUrl: string, reciter: string | null): string {
+    if (!reciter || !audioUrl) return audioUrl;
+    if (audioUrl.startsWith('/api/')) return audioUrl;
+    return `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`;
+}
 
 /** Resolve the AudioPort source descriptor for a segment.
  *
@@ -43,8 +62,6 @@ export function resolveSegSource(seg: Segment, chapterOverride?: number | null):
     if (!reciter || !seg.audio_url) return null;
     const chapter = chapterOverride ?? seg.chapter ?? 0;
     const vbr = chapter > 0 && (get(reciterVbrChapters)?.has(chapter) ?? false);
-    const cbrSrc = (_isCurrentReciterBySurah() && !seg.audio_url.startsWith('/api/'))
-        ? `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(seg.audio_url)}`
-        : seg.audio_url;
+    const cbrSrc = wrapCbrSrcIfBySurah(seg.audio_url, reciter);
     return { audioUrl: seg.audio_url, cbrSrc, reciter, vbr };
 }

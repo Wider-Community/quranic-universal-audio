@@ -2,7 +2,7 @@
 
 > Public landing surface. A new `/dashboard` tab (default on first visit, last-visited persisted) serves anonymous + signed-in users a unified view: hero stats, available-to-claim strip, recent activity, all-reciters table. A taxonomy-agnostic `ReciterPicker` ships and replaces the segments-tab dropdown.
 
-**Status:** not started
+**Status:** done (2026-05-13)
 **Depends on:** Phase 5 (Publish pipeline) complete; reciter taxonomy / catalog schema refactor landed out-of-band
 **Blocks:** Phase 7
 
@@ -150,7 +150,41 @@ curl -fsSI $SPACE/api/public/reciter/saad_al_ghamdi | grep -i cache-control  # p
 
 ## Reference
 
+- [`phase-6-implementation-notes.md`](phase-6-implementation-notes.md) — slice-by-slice implementation plan, reuse map, token migration strategy, testing strategy
+- Mockups (high-fi, design exploration) — [`inspector/frontend/design/`](../../../../inspector/frontend/design/) (5 HTML files + shared tokens + components)
 - [`inspector-state-management.md`](../inspector-state-management.md) §4 — internal state machine + events feeding the public mapping
 - [`inspector-admin-perms.md`](../inspector-admin-perms.md) §6 — admin dashboard panel shapes (Phase 7 extends Phase 6 widgets)
 - [`inspector-deployment-plan.md`](../inspector-deployment-plan.md) §4 — auth surface (signed-in claim CTA behavior)
 - [`inspector-data-storage.md`](../inspector-data-storage.md) §8 — audit log layout (source for activity feed + detail-page timeline)
+
+## Outcomes
+
+Shipped 2026-05-13 in twelve sequential slices on `dev` (commits `2d94bb40` → `66380f6b`). Tab order is now **Dashboard · Timestamps · Segments**; Audio tab decommissioned.
+
+**Public APIs:** `/api/public/{stats, reciters, reciter/<id>, activity}`. All assignee fields stripped at the service layer (`services/public_state.py`, `services/public_activity.py`); slug appears only as an internal ID, never rendered. Reciter-list `limit` cap is 500 (raised from 200) so the dashboard fetches the full catalog in one round trip.
+
+**Six-bucket taxonomy** computed at the reciter level: `available_for_request · requested · available_for_review · under_review · publishing · published`. `primary_bucket` = most-progressed across the reciter's deliveries. Mutually exclusive in `/stats`. Internal states `UNDER_REVIEW + marked_ready` and `AWAITING_TIMESTAMPS` both collapse to `publishing`.
+
+**Activity feed allowlist (`services/public_activity.py`):** `catalog.added`, `reciter.alignment_completed`, `reciter.claimed`, `reciter.marked_ready`, `reciter.timestamps_completed`, plus state transitions into `awaiting_alignment` (surface as "requested"). Every other audit event — `claim.force_released`, `claim.reassigned`, `admin.force_set_state`, `reciter.discarded`, role changes, unmarked-ready, intermediate publishes — is redacted before reaching the route layer.
+
+**Shared utilities** (`inspector/frontend/src/lib/utils/`): `fuzzy-match.ts` (Arabic-normalizing matcher, single canonical impl — `SearchableSelect` consumes it), `facets.ts` (sibling-axis count semantics), `visible-poll.ts` (Page Visibility-aware polling with resolve-time discard), `relative-time.ts`. Backend twin: `services/search_normalize.py` for symmetric server-side search.
+
+**Reusable primitives** (`inspector/frontend/src/lib/components/`): `StatePill`, `CoveragePill`, `FilterPill`, `ReciterRow`, `DeliveriesTable`, `Modal` (focus-trap + body-scroll-lock).
+
+**ReciterPicker** (`inspector/frontend/src/lib/components/picker/`): modal + inline modes; schema-descriptor-driven from `buildSchemaDescriptor(reciters)` so no taxonomy literals exist in picker code; powers Dashboard secondary rail, segments-tab chip, and BottomPlayer chip. `onSelect` contract emits `{kind: 'reciter', reciter, delivery: Delivery | null}` — `null` only for 0-delivery (`requested` / `available_for_request`) rows.
+
+**Dashboard tab** (`inspector/frontend/src/tabs/dashboard/`): default first-time landing surface. Six centered bucket-count cards (Standfirst), faceted filter rail, `AvailableToClaimStrip` (top-5), `CatalogTable` with inline delivery expansion, `ActivityRail` polling at 30 s while visible. List ↔ detail toggle uses the App-shell `hidden` pattern at the view level — back-navigation preserves filter state because both views stay mounted.
+
+**Detail page** (`/api/public/reciter/<reciter_id>` + `ReciterDetail.svelte`): full deliveries table, six-bucket `Timeline` highlighting current state, side-rail `FactsList` that **omits null fields entirely** (no "Unknown" / "—" placeholders). 404 + retry states wired.
+
+**BottomPlayer** (`inspector/frontend/src/lib/components/player/`): Dashboard-scoped, sticky at the tab bottom, hidden by the App-shell `hidden` cascade when Dashboard is inactive. Owns a new `dashPort = new AudioPort()` (per-tab pattern, no global). Tab leave pauses; tab return preserves position but does NOT auto-resume — user must press play. Source swap mid-playback (reciter / delivery / surah change) resets position to 0 and auto-resumes if `isPlaying` was true. Persists `{deliverySlug, surahNum, speed}` to `insp_dash_reciter`. Surah popover wraps `SearchableSelect` via `surahOptionText()` (same row format as elsewhere); SpeedPopover reuses `SPEEDS`.
+
+**Segments-tab chip swap** (`tabs/segments/components/header/`): `ReciterContextChip` + `BrowseByStateStrip` replace the bare-select reciter dropdown. Both open `ReciterPicker` (chip → `under_review` pre-filter, strip → clicked bucket). Existing chapter + verse `SearchableSelect`s unchanged.
+
+**App-shell hygiene:** `localStorage` keys starting with `insp_aud_` are swept once on boot so the dead Audio tab leaves no zombies. Returning visitors with `insp_active_tab='audio'` fall through to Dashboard via the existing `validTabs` guard.
+
+**Slug exposure** (Slice 0): three pre-Phase-6 leaks fixed — `ReviewerBanner` (`row.slug` → `row.name ?? row.slug`), claims-client 409 toast (`existing_claim_name` + `target_name` enrichment), reciter-task row payload (`name` field added via `catalog_service.display_name(slug)`).
+
+**HistoryFilters refactor onto `facets.ts`** was deferred — the existing logic threads through `deriveOpIssueDelta` + chain/item polymorphism that doesn't benefit from the generic helper, so a refactor would have added adapters rather than removed duplication. Recorded in [`inspector-deferred.md`](../inspector-deferred.md) if a third consumer ever appears.
+
+**Tests:** ~70 new tests cover services + routes (`test_public_state.py`, `test_public_activity.py`, `test_search_normalize.py`, `test_route_public.py`), utilities (`fuzzy-match`, `facets`, `visible-poll`, `relative-time`, `schema-descriptor`), and the `Modal` focus-trap surface.

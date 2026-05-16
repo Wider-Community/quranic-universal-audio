@@ -1,0 +1,190 @@
+/* ============ CombinationPicker + Segments header/action-bar ============ */
+
+.picker-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--s-4);
+    padding: var(--s-3) var(--s-6);
+    border-bottom: 1px solid var(--border-quiet);
+    flex-shrink: 0;
+    min-height: 40px;
+}
+/* Pull state-tab pill row up to the same 32px capsule height as the
+   search input so they sit on the same baseline inside .picker-controls.
+   `combination-picker.css` is a plain stylesheet so no :global wrapper. */
+.picker-controls .tabs {
+    align-items: center;
+    min-height: 32px;
+    padding: 0;
+    border-bottom: none;
+}
+
+/* CombinationPicker-only override of the shared PickerFilterRail:
+   stack pills one per row with the count flush right. The dashboard
+   uses the same component but keeps the default wrap layout. */
+.picker .rail .pills {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+}
+.picker .rail .pill {
+    justify-content: space-between;
+}
+
+.picker-section-head {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-3) var(--s-6) var(--s-1);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+.picker-section-head .head-count {
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+.picker-section-head.mine-head {
+    color: var(--accent);
+}
+.picker-section-head .mine-dot,
+.mine-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+/* Bucket-coloured dot used as a quiet section-head marker on the picker. */
+.state-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-faint);
+}
+.state-dot-available_for_review { background: var(--state-available-fg, var(--text-muted)); }
+.state-dot-under_review { background: var(--state-under-review-fg, var(--accent)); }
+.state-dot-published { background: var(--state-published-fg, var(--text-secondary)); }
+
+/* The row is now `[ReciterChip flex:1] [row-figures auto]`.
+   The chip handles country circle + names + delivery meta + state pill;
+   row-figures stays as the right-side coverage/duration block. */
+.combo-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--s-4);
+    padding: var(--s-3) var(--s-6);
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    text-align: left;
+    transition: background var(--t-fast);
+}
+.combo-row:hover { background: var(--panel); }
+.combo-row.focused { background: var(--accent-tint-soft); }
+
+/* Chip claims the leading flex space; truncate gracefully so long
+   names + arabic + meta + pill never push the figures off-screen. */
+.combo-row > :first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.combo-row .row-figures {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    color: var(--text-secondary);
+    font-size: var(--fs-meta);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.combo-row .name-ar {
+    color: var(--text-muted);
+    font-size: var(--fs-meta);
+    direction: rtl;
+    unicode-bidi: isolate;
+}
+.combo-row .country {
+    color: var(--text-faint);
+    font-size: var(--fs-meta);
+}
+
+/* ---------- Action-bar buttons ----------
+   Used by ClaimButton and any inline buttons reused from outside the
+   pinned SegmentsFooter (which defines its own scoped action styles). */
+.seg-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-2);
+    padding: var(--s-2) var(--s-4);
+    background: var(--panel);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-2);
+    font-size: var(--fs-body);
+    cursor: pointer;
+    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.seg-btn:hover:not(:disabled) {
+    background: var(--panel-2);
+    border-color: var(--border-strong);
+}
+.seg-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.seg-btn.lg {
+    padding: var(--s-3) var(--s-5);
+    font-size: var(--fs-row);
+}
+.seg-btn.primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
+}
+.seg-btn.primary:hover:not(:disabled) {
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
+}
+.seg-btn.success {
+    color: var(--state-published-fg);
+    background: transparent;
+    border-color: var(--border-default);
+}
+
+/* Segmented toggle (Auto-save: Off | On). */
+.seg-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-2);
+    overflow: hidden;
+    background: var(--panel);
+}
+.seg-toggle .opt {
+    background: transparent;
+    color: var(--text-muted);
+    border: 0;
+    padding: var(--s-2) var(--s-3);
+    font-size: var(--fs-meta);
+    cursor: pointer;
+    transition: background var(--t-fast), color var(--t-fast);
+}
+.seg-toggle .opt + .opt {
+    border-left: 1px solid var(--border-default);
+}
+.seg-toggle .opt:hover { color: var(--text-primary); }
+.seg-toggle .opt.on {
+    background: var(--accent-tint);
+    color: var(--accent);
+}
+

@@ -30,13 +30,11 @@
     const DEBOUNCE_MS = 150;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-    function onFieldChange(e: Event): void {
-        filter.field = (e.currentTarget as HTMLSelectElement).value;
+    function onFieldChange(): void {
         dispatch('change');
     }
 
-    function onOpChange(e: Event): void {
-        filter.op = (e.currentTarget as HTMLSelectElement).value;
+    function onOpChange(): void {
         dispatch('change');
     }
 
@@ -64,13 +62,13 @@
 </script>
 
 <div class="seg-filter-row">
-    <select class="seg-filter-field" value={filter.field} on:change={onFieldChange}>
-        {#each SEG_FILTER_FIELDS as f}
+    <select class="seg-filter-field" bind:value={filter.field} on:change={onFieldChange}>
+        {#each SEG_FILTER_FIELDS as f (f.value)}
             <option value={f.value}>{f.label}</option>
         {/each}
     </select>
-    <select class="seg-filter-op" value={filter.op} on:change={onOpChange}>
-        {#each SEG_FILTER_OPS as op}
+    <select class="seg-filter-op" bind:value={filter.op} on:change={onOpChange}>
+        {#each SEG_FILTER_OPS as op (op)}
             <option value={op}>{op}</option>
         {/each}
     </select>

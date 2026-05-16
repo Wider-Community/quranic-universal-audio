@@ -2,9 +2,17 @@ import { get } from 'svelte/store';
 
 import { segAllReciters, selectedReciter } from '../../stores/chapter';
 
-/** Returns true if the current reciter uses by_surah audio source. */
+/** True when the current reciter serves one MP3 per chapter (by_surah).
+ *  False for by_ayah (per-verse MP3s) and for unknown reciters.
+ *
+ *  Reads `audio_category` from the catalog-backed `/api/seg/reciters`
+ *  payload. The previous implementation gated on `audio_source` (the
+ *  *channel* — `mp3quran`, `qul`, etc.) with a `startsWith('by_surah')`
+ *  check that never matched any real value, so this function silently
+ *  returned false for every reciter and the CBR proxy-wrap downstream
+ *  never fired. */
 export function _isCurrentReciterBySurah(): boolean {
     const reciter = get(selectedReciter);
     const info = get(segAllReciters).find(r => r.slug === reciter);
-    return !!(info && info.audio_source && info.audio_source.startsWith('by_surah'));
+    return info?.audio_category === 'by_surah';
 }

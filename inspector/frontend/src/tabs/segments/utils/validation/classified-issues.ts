@@ -18,6 +18,11 @@
 
 import type { EditOp } from '../../../../lib/types/domain';
 
+// Categories that exist in the accordion for review/awareness but should
+// NOT surface as history-delta pills (`+cat` / `−cat`) on edit cards. They
+// represent display-only flags or context, not gains/losses from an edit.
+const HISTORY_NEUTRAL_CATEGORIES = new Set(['basmala_amin', 'muqattaat']);
+
 /** Loose snapshot shape — anything carrying the optional field qualifies. */
 export interface ClassifiableSnap {
     classified_issues?: string[];
@@ -28,7 +33,7 @@ export interface ClassifiableSnap {
 /** Read the `classified_issues` array off a snapshot (or empty list). */
 export function classifiedIssuesOf(snap: ClassifiableSnap | null | undefined): string[] {
     if (!snap || !Array.isArray(snap.classified_issues)) return [];
-    return [...snap.classified_issues];
+    return snap.classified_issues.filter((cat) => !HISTORY_NEUTRAL_CATEGORIES.has(cat));
 }
 
 /** Check whether a segment-like record opts out of a category.

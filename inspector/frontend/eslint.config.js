@@ -16,12 +16,8 @@ export default [
             'import': importPlugin,
         },
         settings: {
-            // eslint-plugin-import needs both a TS resolver (to follow
-            // extensionless `./foo` → `./foo.ts`) AND an `import/parsers`
-            // setting that maps `.ts` to `@typescript-eslint/parser` so the
-            // plugin can parse the import graph. Without BOTH, the
-            // `import/no-cycle` rule silently reports zero findings even
-            // when cycles exist.
+            // `import/no-cycle` silently reports zero findings without BOTH
+            // the TS resolver AND the `import/parsers` map.
             'import/resolver': {
                 typescript: {
                     project: './tsconfig.json',
@@ -33,7 +29,6 @@ export default [
             },
         },
         rules: {
-            // Migration tolerance — tightened in final cleanup pass.
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-unused-vars': ['warn', {
                 argsIgnorePattern: '^_',
@@ -43,34 +38,28 @@ export default [
             }],
             '@typescript-eslint/ban-ts-comment': 'warn',
             'no-unused-vars': 'off',
-            // Import hygiene rules.
             'simple-import-sort/imports': 'error',
             '@typescript-eslint/consistent-type-imports': ['error', {
                 prefer: 'type-imports',
                 fixStyle: 'separate-type-imports',
             }],
-            // All segments-tab cycles resolved. Ceiling is now 0; any new cycle breaks CI.
             'import/no-cycle': 'error',
         },
     },
-    // Svelte-specific config — uses the flat/recommended preset from eslint-plugin-svelte.
-    // Covers .svelte files only; TS rules above apply to .ts files.
     ...sveltePlugin.configs['flat/recommended'],
     {
         files: ['**/*.svelte'],
         languageOptions: {
             parserOptions: {
-                // Parse <script lang="ts"> with the TS parser (required for type syntax).
                 parser: tseslint.parser,
             },
         },
         rules: {
-            // Type-aware @typescript-eslint rules need parserOptions.project; wiring project
-            // on .svelte breaks other rules on Svelte's AST — keep this rule for .ts only.
+            // Wiring parserOptions.project on .svelte breaks other rules; keep type-imports for .ts only.
             '@typescript-eslint/consistent-type-imports': 'off',
-            // Reactive `$:` blocks use expression statements; TS rule flags them as unused.
+            // Reactive `$:` blocks are expression statements; the TS rule flags them.
             '@typescript-eslint/no-unused-expressions': 'off',
-            // @typescript-eslint/no-unused-vars crashes on Svelte AST (Program:exit); use core rule.
+            // The TS variant crashes on Svelte AST; the core rule is safe.
             '@typescript-eslint/no-unused-vars': 'off',
             'no-unused-vars': ['warn', {
                 argsIgnorePattern: '^_',
@@ -78,10 +67,9 @@ export default [
                 caughtErrorsIgnorePattern: '^_',
                 destructuredArrayIgnorePattern: '^_',
             }],
-            // Typescript resolves symbols; core no-undef false-positives on DOM types etc.
+            // TS resolves symbols; the core rule false-positives on DOM globals.
             'no-undef': 'off',
-            // Disable import/no-cycle for .svelte — the Svelte compiler generates
-            // synthetic imports that confuse the cycle detector.
+            // Svelte's synthetic imports confuse the cycle detector.
             'import/no-cycle': 'off',
         },
     },

@@ -6,6 +6,13 @@ import json
 import pytest
 
 
+
+import os
+
+os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+
+_HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
 KNOWN_SEGMENT_FIELDS = {
     "segment_uid",
     "time_start",
@@ -30,10 +37,11 @@ def _segments(detailed: dict) -> list[dict]:
     return out
 
 
-def test_detailed_json_round_trip_preserves_known_fields(load_fixture, tmp_reciter_dir, flask_client):
+def test_detailed_json_round_trip_preserves_known_fields(load_fixture, tmp_reciter_dir, signed_in_client):
     """Load fixture → save back → load → known fields equal."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
 
     fixture = load_fixture("112-ikhlas")
     chapter = 112
@@ -51,10 +59,10 @@ def test_detailed_json_round_trip_preserves_known_fields(load_fixture, tmp_recit
         })
     payload = {"full_replace": True, "segments": seg_payload, "operations": []}
 
-    res = flask_client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(payload),
-        content_type="application/json",
+        headers=_HEADERS,
     )
     assert res.status_code == 200
 
@@ -81,12 +89,13 @@ def test_detailed_json_no_field_removed(load_fixture):
         )
 
 
-def test_detailed_json_additive_only_classified_issues_optional(load_fixture, tmp_reciter_dir, flask_client):
+def test_detailed_json_additive_only_classified_issues_optional(load_fixture, tmp_reciter_dir, signed_in_client):
     """Phase 2: validation responses carry classified_issues — but it must NOT be persisted to detailed.json (MAY-10)."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
 
-    res = flask_client.get(f"/api/seg/validate/{reciter}")
+    res = client.get(f"/api/seg/validate/{reciter}")
     assert res.status_code == 200
 
     on_disk = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))

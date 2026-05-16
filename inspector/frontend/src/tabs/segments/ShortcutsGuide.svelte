@@ -1,3 +1,5 @@
+<script lang="ts"></script>
+
 <details class="shortcuts-guide">
     <summary class="shortcuts-guide-summary">Shortcuts &amp; Guide</summary>
     <div class="shortcuts-guide-body">

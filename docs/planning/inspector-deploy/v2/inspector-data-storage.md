@@ -20,7 +20,7 @@ Two tiers: **server-image** (baked into the Docker image, slim static set) and *
 | `data/qpc_hafs.json` | static | server-image | n/a | ~11 MB; also published to HF `_resources/` for TS-tab browser fetches in local mode |
 | `data/digital_khatt_v2_script.json` | static | server-image | n/a | ~9.5 MB; same dual-publishing |
 | `data/phoneme_sub_costs.json` | static | server-image | n/a | Boundary check input |
-| `data/inspector_roles.json` | role mgmt | **GitHub raw**; cached in-memory (60s); baked snapshot fallback | manual PRs to GitHub (CODEOWNERS-gated) | Single consolidated file. `hf_user_id` canonical. Schema in [`inspector-state-management.md`](inspector-state-management.md) §9. |
+| `<bucket>/access/inspector_roles.json` | role mgmt | bucket mount; in-memory cache hydrated at startup + replaced on every write | Inspector backend (sole writer; via `services/access.py`) | Single consolidated file. `hf_user_id` canonical. Bootstrap via hand-seed at Phase 0. Schema in [`inspector-state-management.md`](inspector-state-management.md) §9. |
 | `<bucket>/catalog/reciter_catalog.json` | curated metadata (single file: vocab + reciters + aliases + audio source templates) | bucket mount (parsed via pydantic) | Inspector backend (sole writer; via `services/catalog.py`) | Plain JSON. Replaces `data/{riwayat,sources,styles}.json` + `data/audio/<cat>/<src>/<slug>.json` (381 manifests) + `data/reciter_catalog.json`. Schema in [`inspector-state-management.md`](inspector-state-management.md) §3. |
 | `<bucket>/catalog/audio_meta.json` | VBR + ffprobe cache | bucket mount | Inspector backend / maintainer scripts | Was `data/.audio_meta.json` |
 | `<bucket>/catalog/audio_durations.json` | duration cache | bucket mount | Inspector backend / maintainer scripts | Was `data/.audio_durations.json` |
@@ -218,7 +218,7 @@ Multi-replica Space scaling (when needed): the in-process lock moves to bucket-s
 
 | Env var | Default (deployed) | Default (local) | Purpose |
 |---|---|---|---|
-| `INSPECTOR_TS_SOURCE` | `huggingface` | `local` | Picks `services/ts_local.py` (off in deployed) vs HF CDN |
+| `INSPECTOR_TS_SOURCE` | `bucket` | `local` | Bucket reads `<bucket>/published/<slug>/timestamps/...` via backend; local serves shards from `data/timestamps/` on disk. The legacy `huggingface` value (frontend → HF dataset CDN direct) was removed in Phase 2 — Inspector reads timestamps through its own backend in v2. |
 | `INSPECTOR_DATA_DIR` | `/app/data` | `/data` (via bind mount) | Static reference data location |
 | `INSPECTOR_QUA_DATA_PATH` | `/app/data` | `/data` | Linguistic data location read by `services/data_loader.py` |
 | `INSPECTOR_BUCKET_MOUNT` | `/data/inspector-bucket` | unused | Single private bucket mount for state, catalog, audit, wip, published |
@@ -229,7 +229,7 @@ Multi-replica Space scaling (when needed): the in-process lock moves to bucket-s
 | `INSPECTOR_PARSED_CACHE_BYTES` | `134217728` (128 MB) | unused | Parsed seg cache cap |
 | `INSPECTOR_SESSION_SECRET` | secret | unset | Signing key for the self-contained signed-cookie session (Flask `itsdangerous`) |
 | `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` | auto-injected by `hf_oauth: true` | unset | HF OAuth client credentials |
-| `INSPECTOR_AUDIO_PROXY_ENABLED` | `0` | `1` | Local mode keeps audio proxy |
+| ~~`INSPECTOR_AUDIO_PROXY_ENABLED`~~ | retired | retired | The audio proxy blueprint stays registered in every mode because `source.ts` routes by_surah audio through `/api/seg/audio-proxy/<reciter>?url=...`. The route degrades to a 302 redirect when no cache file exists; background download workers run only on explicit `POST /prepare-audio`. |
 | `INSPECTOR_GITHUB_OWNER`, `INSPECTOR_GITHUB_REPO` | repo coords | unused | For GitHub raw fetches of `inspector_roles.json` |
 | `INSPECTOR_GITHUB_DISPATCH_TOKEN` | secret (bot account) | unset | Tiny GitHub PAT used to fire `repository_dispatch reciter.completed`. Minted from `hetchyy-bot` GitHub account, fine-grained PAT scoped to the project repo with `actions: write` only |
 | `INSPECTOR_JOB_CALLBACK_SECRET` | secret | unset | Bearer token (constant-time compare) for `/api/internal/job-completed` (HF Job callback). Single secret — no `_PREV` rotation slot |
@@ -263,7 +263,7 @@ The repo's `inspector/Dockerfile` is built with **repo root as context**. The Sp
 ```dockerfile
 ENV INSPECTOR_DATA_DIR=/app/data \
     INSPECTOR_QUA_DATA_PATH=/app/data \
-    INSPECTOR_TS_SOURCE=huggingface \
+    INSPECTOR_TS_SOURCE=bucket \
     INSPECTOR_AUDIO_PROXY_ENABLED=0 \
     INSPECTOR_CACHE_DIR=/tmp/inspector-cache \
     INSPECTOR_BUCKET_MOUNT=/data/inspector-bucket \
@@ -322,7 +322,7 @@ data/surah_info.json
 data/qpc_hafs.json
 data/digital_khatt_v2_script.json
 data/phoneme_sub_costs.json
-data/inspector_roles.json     # baked snapshot fallback for offline boot; live copy fetched from GitHub raw at runtime
+                              # (no inspector_roles.json in image — bucket-resident, see state-management §9)
 ```
 
 ### No audio catalog build step
@@ -456,13 +456,13 @@ Maps onto the parent doc's [§10 phased migration](inspector-deployment-plan.md)
 
 **In scope:**
 - Create the dev + prod single private HF buckets (one per env).
-- Implement `inspector/schemas/` (pydantic models for state, catalog, audit, edit_history v2).
+- Implement `scripts/lib/schemas/` (pydantic models for state, catalog, audit, edit_history v2; cross-consumer location).
 - Implement `inspector/services/hf_bucket.py` (mount path resolver, write helpers, direct-upload wrapper).
 - Implement `inspector/services/state.py` (state machine + JSON persistence + audit append; per-slug `threading.Lock`).
 - Implement `inspector/services/catalog.py` (mirrors `state.py` — same write pattern, validation, audit; merges riwayat/styles/audio_sources/reciters/aliases).
 - Implement `inspector/services/data_dir.py::resolve(slug)` per-mode data dir resolver.
 - **Manually seed** at v2 cutover (~15 reciters): hand-author `<bucket>/state/reciter_state.json` and `<bucket>/catalog/reciter_catalog.json` per [`inspector-state-management.md`](inspector-state-management.md) §3 mapping rules. No script — too few rows.
-- Land `data/inspector_roles.json` (consolidated owners + maintainers).
+- Hand-seed `<bucket>/access/inspector_roles.json` (consolidated owners + maintainers; one-shot bootstrap at Phase 0 — see [`inspector-state-management.md`](inspector-state-management.md) §9 bootstrap section).
 
 **Acceptance:**
 - Dev bucket mounts successfully into a one-off test Space.
@@ -515,7 +515,7 @@ Maps onto the parent doc's [§10 phased migration](inspector-deployment-plan.md)
 **In scope:**
 - HF OAuth via `hf_oauth: true` Space frontmatter.
 - `/api/auth/login`, `/api/auth/callback`, `/api/auth/logout`.
-- Self-contained signed-cookie session (Flask `itsdangerous`) carrying `{login, hf_user_id, role, expires_at, csrf}`. No server-side session store.
+- Self-contained signed-cookie session (Flask `itsdangerous`) carrying `{login, hf_user_id, iat}`. No `role` (resolved fresh per request via `access.resolve_role`), no `csrf` (Origin/Referer check + SameSite=Lax). No server-side session store.
 - `/api/me` endpoint.
 - `/api/claim`, `/api/release`, `/api/mark-ready`, `/api/unmark-ready` write directly to bucket state file (synchronous, no dispatch).
 - Per-slug `threading.Lock` (single lock per slug; no `(slug, login)` sub-mutex).
