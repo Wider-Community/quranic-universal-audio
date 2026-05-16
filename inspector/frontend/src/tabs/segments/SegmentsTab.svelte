@@ -94,6 +94,12 @@
         // unclaim flips it back). Without this, the pill stays stale until
         // a manual reload.
         void resolveContextFromSlug(slug);
+        // The dashboard row + segments combobox both subscribe to
+        // `catalogData` (loaded once at app boot). A claim/unclaim doesn't
+        // invalidate that cache automatically, so cross-surface state would
+        // diverge until the next manual reload. Force a refetch here so
+        // every surface lands the new bucket without a page refresh.
+        void loadCatalog(true);
     }
 
     // Re-sync editing mode whenever the currentUser store updates (e.g.

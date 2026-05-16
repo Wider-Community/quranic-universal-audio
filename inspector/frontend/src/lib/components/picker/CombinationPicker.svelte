@@ -60,8 +60,14 @@
         cancel: void;
     }>();
 
-    let reciters: PublicReciter[] = [];
-    let stats: BucketCounts | null = null;
+    // Subscribe reactively to `catalogData` so the picker re-renders when
+    // a claim/unclaim triggers `loadCatalog(true)` elsewhere (e.g. from
+    // SegmentsTab._refreshTask). The previous imperative `reciters = snap`
+    // assignment after `await loadCatalog()` froze the picker at open-time
+    // state — claiming Husary while the picker was open left it filtered
+    // out by `allowedBuckets` until the user closed and reopened.
+    $: reciters = $catalogData.reciters;
+    $: stats = $catalogData.stats;
     let descriptor: SchemaDescriptor | null = null;
     let loading = true;
     let error: string | null = null;
@@ -94,9 +100,9 @@
             if (snap.error) {
                 throw new Error(snap.error);
             }
-            reciters = snap.reciters;
-            stats = snap.stats;
-            const allDeliveries = reciters.flatMap((r) => r.deliveries);
+            // `reciters` / `stats` flow through the reactive `$:` bindings
+            // above; we only need to (re)build the descriptor here.
+            const allDeliveries = snap.reciters.flatMap((r) => r.deliveries);
             descriptor = buildSchemaDescriptor(allDeliveries);
             for (const axis of descriptor.axes) {
                 activeFilters[axis.key] = new Set();
