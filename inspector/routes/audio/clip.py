@@ -96,11 +96,13 @@ def seg_segment_clip(reciter):
         return jsonify({"error": "ffmpeg not available"}), 500
 
     def _generate():
+        bytes_yielded = 0
         try:
             while True:
                 chunk = proc.stdout.read(STREAM_CHUNK_BYTES)
                 if not chunk:
                     break
+                bytes_yielded += len(chunk)
                 yield chunk
             try:
                 proc.wait(timeout=FFMPEG_FULL_TIMEOUT)
@@ -108,12 +110,27 @@ def seg_segment_clip(reciter):
                 proc.kill()
                 logger.warning("segment_clip ffmpeg timed out: cmd=%s", shlex.join(cmd))
         finally:
+            # Drain stderr so we can diagnose silent failures (most common:
+            # codec not available in the deployed static ffmpeg → 200/0).
+            stderr_tail = b""
+            try:
+                if proc.stderr and not proc.stderr.closed:
+                    stderr_tail = proc.stderr.read() or b""
+            except (OSError, ValueError):
+                pass
             if proc.stdout:
                 proc.stdout.close()
             if proc.stderr:
                 proc.stderr.close()
             if proc.poll() is None:
                 proc.kill()
+            rc = proc.returncode
+            if bytes_yielded == 0 or (rc is not None and rc != 0):
+                logger.warning(
+                    "segment_clip ffmpeg produced %d bytes (rc=%s) cmd=%s stderr=%r",
+                    bytes_yielded, rc, shlex.join(cmd),
+                    stderr_tail.decode("utf-8", errors="replace")[-500:],
+                )
 
     headers = {
         "Content-Type": "audio/mpeg",
