@@ -34,11 +34,13 @@ from utils.references import chapter_from_ref, normalize_ref
 from utils.uuid7 import uuid7
 
 # Categories that should not surface in the History panel's per-op
-# "classified_issues" deltas — ``basmala_amin`` is informational only
-# (the reciter started/ended a verse with the basmala / amin convention)
-# and would otherwise show up as a noisy +/- flag on every edit that
-# touches a verse boundary.
-HISTORY_NEUTRAL_CATEGORIES = frozenset({"basmala_amin"})
+# "classified_issues" deltas. They exist in the validation accordion for
+# review/awareness but represent display-only context, not gains/losses
+# from an edit.
+#   - ``basmala_amin`` flags verse-boundary basmala / amin conventions and
+#     would otherwise show up as a noisy +/- pill on every boundary edit.
+#   - ``muqattaat`` flags huruf-muqattaʼat verse openings — display-only.
+HISTORY_NEUTRAL_CATEGORIES = frozenset({"basmala_amin", "muqattaat"})
 
 
 def _history_visible_categories(categories: list[str]) -> list[str]:

@@ -30,7 +30,7 @@
     import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../utils/constants';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
 
-    const HISTORY_NEUTRAL_CATEGORIES = new Set(['basmala_amin']);
+    const HISTORY_NEUTRAL_CATEGORIES = new Set(['basmala_amin', 'muqattaat']);
     const historyCategory = (cat: string | null | undefined): string | null =>
         cat && !HISTORY_NEUTRAL_CATEGORIES.has(cat) ? cat : null;
 
