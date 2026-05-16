@@ -20,13 +20,12 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 
 from config import DK_SCRIPT_PATH, QPC_HAFS_PATH
+from scripts.lib.schemas import ReciterCatalog
 from scripts.lib.timestamps_shards import SCHEMA_VERSION, derive_url_template
 from services.storage import data_dir
 from services.state import catalog as catalog_service
 from services.state import state as state_service
-from services.audio.audio_meta import vbr_chapters_for_reciter
-from services.storage.hf_bucket import StorageNotFound, get_backend
-from services.storage import storage_paths
+from services.audio.audio_meta import chapter_urls, vbr_chapters_for_reciter
 from utils.formatting import slug_to_name
 
 log = logging.getLogger("inspector")
@@ -84,37 +83,15 @@ def _bucket_completed_reciters() -> list[str]:
     return out
 
 
-def _bucket_url_template(slug: str, audio_category: str) -> str:
-    """Resolve the audio URL template from the bucket audio_manifest sidecar.
+def _url_template(slug: str, audio_category: str) -> str:
+    """Resolve the audio URL template from the in-memory audio_manifest sidecar cache.
 
-    The v2 sidecar shape is ``{schema_version, slug, _meta, chapters: {ch: {url, ...}}}``.
-    ``derive_url_template`` expects a flat ``{chapter: url}`` dict so flatten
-    before calling. Returns ``""`` when the sidecar is absent or the template
-    can't be derived — callers degrade gracefully (no audio playback URL).
+    ``audio_meta.chapter_urls`` reads through ``_SIDECAR_CACHE`` — first hit
+    per slug pays the bucket read, subsequent hits are dict lookups. Returns
+    ``""`` when the sidecar is absent or the template can't be derived —
+    callers degrade gracefully (no audio playback URL).
     """
-    try:
-        raw = get_backend().read_json(storage_paths.audio_manifest_path(slug))
-    except StorageNotFound:
-        log.warning("timestamps: audio_manifest sidecar missing for %s", slug)
-        return ""
-    if not isinstance(raw, dict):
-        log.warning(
-            "timestamps: audio_manifest sidecar for %s is not a dict (got %s)",
-            slug, type(raw).__name__,
-        )
-        return ""
-    chapters = raw.get("chapters")
-    if not isinstance(chapters, dict):
-        log.warning(
-            "timestamps: audio_manifest sidecar for %s missing 'chapters' map "
-            "(top-level keys: %s)",
-            slug, list(raw.keys())[:8],
-        )
-        return ""
-    flat: dict[str, str] = {}
-    for k, v in chapters.items():
-        if isinstance(v, dict) and isinstance(v.get("url"), str):
-            flat[str(k)] = v["url"]
+    flat = chapter_urls(slug)
     if not flat:
         log.warning("timestamps: no chapter URLs derivable from sidecar for %s", slug)
         return ""
@@ -127,15 +104,21 @@ def _bucket_url_template(slug: str, audio_category: str) -> str:
     return template
 
 
-def _bucket_reciter_block(slug: str, ts_chapters: list[int]) -> dict | None:
+def _bucket_reciter_block(
+    slug: str,
+    ts_chapters: list[int],
+    catalog: ReciterCatalog,
+) -> dict | None:
     """Compose a manifest reciter block for a bucket-mode reciter.
 
     Joins the catalog (display + delivery metadata) with the audio_manifest
     sidecar (URL template) and the precomputed VBR chapter list. Falls back
     to slug-derived defaults when the catalog has no delivery for ``slug``.
+
+    The caller passes one shared ``catalog`` snapshot so the manifest build
+    doesn't re-snapshot (deep-copy) per reciter inside ``_ensure_built``.
     """
-    catalog = catalog_service.snapshot()
-    delivery = next((d for d in catalog.deliveries if d.slug == slug), None)
+    delivery = catalog.find_delivery(slug)
     reciter = (
         catalog.find_reciter(delivery.reciter_id) if delivery is not None else None
     )
@@ -156,7 +139,7 @@ def _bucket_reciter_block(slug: str, ts_chapters: list[int]) -> dict | None:
         "style": style,
         "source": source,
         "audio_category": audio_category,
-        "url_template": _bucket_url_template(slug, audio_category),
+        "url_template": _url_template(slug, audio_category),
         "ts_chapters": ts_chapters,
         "vbr_chapters": vbr_chapters_for_reciter(slug),
     }
@@ -174,12 +157,13 @@ def _ensure_built() -> None:
     with _lock:
         if _built:
             return
+        catalog = catalog_service.snapshot()
         reciters_block: dict[str, dict] = {}
         for slug in _bucket_completed_reciters():
             chapters = data_dir.list_published_timestamps_chapters(slug)
             if not chapters:
                 continue
-            block = _bucket_reciter_block(slug, chapters)
+            block = _bucket_reciter_block(slug, chapters, catalog)
             if block is not None:
                 reciters_block[slug] = block
 
