@@ -60,13 +60,29 @@ function _pruneExpired(nowMs: number): void {
 
 function _fire(reciter: string, audioUrl: string, byteStart: number): void {
     const proxyUrl = `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`;
-    // `priority: 'low'` is a browser hint (RequestPriority); not in all TS lib
-    // versions. Cast through `any` keeps the option without a global lib bump.
-    const init: RequestInit & { priority?: string } = {
+    const startedAt = performance.now();
+    // Verbose-mode trace — flip via `localStorage.insp_warmup_log = 'true'` to
+    // confirm the warmup is firing in production. The win is server-side OS
+    // page cache (the audio element's open-ended Range hits warm pages after
+    // this completes), so the visible signal is the response time on this
+    // request — if it's slow, the user's eventual play TTFB shows the same
+    // cost; if it's fast, the play TTFB is fast for "free".
+    const trace = (typeof localStorage !== 'undefined'
+        && localStorage.getItem('insp_warmup_log') === 'true');
+    if (trace) {
+        // eslint-disable-next-line no-console
+        console.log(`[warmup] fire ${audioUrl} bytes=${byteStart}-${byteStart + WARMUP_BYTES - 1}`);
+    }
+    fetch(proxyUrl, {
         headers: { Range: `bytes=${byteStart}-${byteStart + WARMUP_BYTES - 1}` },
-        priority: 'low',
-    };
-    fetch(proxyUrl, init as RequestInit).catch(() => {});
+    })
+        .then((r) => {
+            if (trace) {
+                // eslint-disable-next-line no-console
+                console.log(`[warmup] done ${audioUrl} bytes=${byteStart} → ${r.status} in ${Math.round(performance.now() - startedAt)}ms`);
+            }
+        })
+        .catch(() => {});
 }
 
 function _warmAtByte(

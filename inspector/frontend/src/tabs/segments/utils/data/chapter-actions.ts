@@ -95,16 +95,20 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
                 reciter,
                 vbr: !!chData.vbr,
             });
-            // Hide cold-FUSE / cold-CDN play-click stall by warming a 64 KB
-            // Range. Prefer the first seg's byte offset (covers the byte range
-            // the audio element will fetch on "play first seg" — byte 0 alone
-            // misses if seg[0].time_start nudges the start past 65 KB at high
-            // bitrates) and fall back to byte 0 when no segs are loaded yet.
+            // Hide cold-FUSE / cold-CDN play-click stall by warming TWO
+            // byte ranges:
+            //   1. bytes=0-65535 — the audio element's initial fetch on
+            //      .play() typically starts at byte 0 (ID3 header + first
+            //      MP3 frames). Warming this primes the OS page cache for
+            //      the metadata read that gates `canplay`.
+            //   2. bytes around seg[0].time_start — only fires when seg[0]
+            //      sits past the 64 KB window above (skipped via dedupe
+            //      otherwise). Covers long surahs where the user clicks
+            //      play on the first seg at e.g. t=2min.
             // No-op for VBR + missing-kbps chapters.
+            warmChapterStart(reciter, chData.audio_url, chNum);
             if (chapterSegs.length > 0) {
                 warmSeg(chapterSegs[0], reciter);
-            } else {
-                warmChapterStart(reciter, chData.audio_url, chNum);
             }
         }
     } catch (e) {
