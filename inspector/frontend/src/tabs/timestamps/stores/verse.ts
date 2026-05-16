@@ -8,7 +8,6 @@
 
 import { derived, writable } from 'svelte/store';
 
-import type { TsValidateResponse } from '../../../lib/types/api';
 import type { TsReciter, TsVerseData } from '../../../lib/types/domain';
 import type { SelectOption } from '../../../lib/types/ui';
 import { surahOptionText } from '../../../lib/utils/surah-info';
@@ -51,13 +50,6 @@ export const selectedVerse = writable<string>('');
 
 /** Currently-loaded verse data (null before first load). */
 export const loadedVerse = writable<TsLoadedVerse | null>(null);
-
-// ---------------------------------------------------------------------------
-// Validation data
-// ---------------------------------------------------------------------------
-
-/** Validation data for the current reciter. null = hidden panel. */
-export const validationData = writable<TsValidateResponse | null>(null);
 
 // ---------------------------------------------------------------------------
 // Derived dropdown options

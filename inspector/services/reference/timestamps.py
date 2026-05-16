@@ -159,7 +159,6 @@ def _bucket_reciter_block(slug: str, ts_chapters: list[int]) -> dict | None:
         "url_template": _bucket_url_template(slug, audio_category),
         "ts_chapters": ts_chapters,
         "vbr_chapters": vbr_chapters_for_reciter(slug),
-        "validation": {"boundary_mismatches": []},
     }
 
 

@@ -217,59 +217,6 @@ export interface TsVerseData {
 }
 
 // ---------------------------------------------------------------------------
-// Validation error rows (ts tab)
-// ---------------------------------------------------------------------------
-
-export interface TsMfaFailure {
-    verse_key: string;
-    chapter: number;
-    ref: string;
-    seg: string;
-    error: string;
-    diff_ms: number;
-    label: string;
-}
-
-export interface TsMissingWords {
-    verse_key: string;
-    chapter: number;
-    missing: Array<string | Record<string, unknown>>;
-    count: number;
-    diff_ms: number;
-    label: string;
-}
-
-export interface TsBoundaryMismatch {
-    verse_key: string;
-    chapter: number;
-    side: string;
-    diff_ms: number;
-    label: string;
-}
-
-export interface TsMissingVerse {
-    verse_key: string;
-    chapter: number;
-    label: string;
-}
-
-export interface TsVerseOverlap {
-    verse_key: string;
-    chapter: number;
-    prev_verse_key: string;
-    overlap_ms: number;
-    label: string;
-}
-
-export interface TsLargeGap {
-    verse_key: string;
-    chapter: number;
-    prev_verse_key: string;
-    gap_ms: number;
-    label: string;
-}
-
-// ---------------------------------------------------------------------------
 // Surah info (cross-tab)
 // ---------------------------------------------------------------------------
 

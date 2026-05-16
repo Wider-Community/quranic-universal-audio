@@ -27,7 +27,6 @@
     import TimestampsControls from './components/TimestampsControls.svelte';
     import TimestampsKeyboard from './components/TimestampsKeyboard.svelte';
     import TimestampsShortcutsGuide from './components/TimestampsShortcutsGuide.svelte';
-    import TimestampsValidationPanel from './components/TimestampsValidationPanel.svelte';
     import TimestampsViewControls from './components/TimestampsViewControls.svelte';
     import TimestampsWaveform from './components/TimestampsWaveform.svelte';
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
@@ -68,7 +67,6 @@
         selectedReciter,
         selectedVerse,
         type TsVerseOption,
-        validationData,
         verses,
     } from './stores/verse';
     import { setupZoomLifecycle } from './utils/zoom';
@@ -201,7 +199,6 @@
         verses.set([]);
         selectedVerse.set('');
         clearDisplay();
-        validationData.set(null);
         tsVbrChapters.set(new Set());
         if (!reciter) return;
 
@@ -247,18 +244,6 @@
             console.error('Error loading chapter shard:', e);
             verses.set([]);
         }
-    }
-
-    async function jumpToTsVerse(verseKey: string): Promise<void> {
-        if (!verseKey || !verseKey.includes(':')) return;
-        const chapter = verseKey.split(':')[0] ?? '';
-
-        if (get(selectedChapter) !== chapter) {
-            selectedChapter.set(chapter);
-            await onChapterChange(chapter);
-        }
-        selectedVerse.set(verseKey);
-        await onVerseChange(verseKey);
     }
 
     async function onVerseChange(verseRef: string): Promise<void> {
@@ -325,7 +310,6 @@
             if (reciterChanged) {
                 selectedReciter.set(data.reciter);
                 localStorage.setItem(LS_KEYS.TS_RECITER, data.reciter);
-                validationData.set(null);
                 try {
                     const m = await loadManifest();
                     chapters.set(m.reciters[data.reciter]?.ts_chapters ?? []);
@@ -532,8 +516,6 @@
         on:chapterChange={(e) => onChapterChange(e.detail)}
         on:verseChange={(e) => onVerseChange(e.detail)}
     />
-
-    <TimestampsValidationPanel onJump={jumpToTsVerse} />
 
     <main>
         <TimestampsAudio

@@ -46,7 +46,6 @@ state — `/tmp/inspector-cache` survives only as long as the container.
 | Variable                          | Default | Purpose                                                                              |
 |-----------------------------------|---------|--------------------------------------------------------------------------------------|
 | `INSPECTOR_TS_SOURCE`             | `bucket` (Space) / `local` (compose) | `local` slices `data/timestamps/by_*/*/timestamps_full.json` on disk; `bucket` reads `<bucket>/published/<slug>/timestamps/<chapter>.json`. The legacy `huggingface` value (FE→HF dataset CDN direct) is removed. |
-| `INSPECTOR_TS_VALIDATE_ENABLED`   | `1` (local) / `0` (Space) | When `0`, `/api/ts/validate/<reciter>` returns 410. The route depends on the on-disk timestamps tree which doesn't exist in the bucket layout. |
 
 ## Authentication
 

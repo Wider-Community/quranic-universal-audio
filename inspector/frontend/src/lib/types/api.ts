@@ -17,14 +17,8 @@ import type {
     SegmentsChapterSummary,
     SegReciter,
     SurahInfoMap,
-    TsBoundaryMismatch,
-    TsLargeGap,
-    TsMfaFailure,
-    TsMissingVerse,
-    TsMissingWords,
     TsReciter,
     TsVerseData,
-    TsVerseOverlap,
     VerseRef,
 } from './domain';
 
@@ -80,7 +74,6 @@ export interface TsManifestReciter {
     ts_chapters: number[];
     /** Sorted list of chapters whose audio is known VBR. Optional for older HF manifests. */
     vbr_chapters?: number[];
-    validation: { boundary_mismatches: TsBoundaryMismatch[] };
     /** Build-internal payload — not relied on by the read path. */
     _build?: { shard_hashes?: Record<string, string> };
 }
@@ -141,8 +134,6 @@ export interface TsShardMeta {
     url_template: string;
     /** Per-verse audio URL fallback when `url_template` is empty. */
     audio_urls?: Record<string, string>;
-    /** Per-chapter slice of `mfa_failures` for the validation panel. */
-    mfa_failures?: Array<Record<string, unknown>>;
     [k: string]: unknown;
 }
 
@@ -183,22 +174,6 @@ export type TsChaptersResponse = number[] | ApiErrorBody;
 /** @deprecated Verse list now derived client-side from a chapter shard. */
 export interface TsVersesResponse {
     verses: Array<{ ref: VerseRef; audio_url: string }>;
-}
-
-/** GET /api/ts/validate/:reciter */
-export interface TsValidateResponse {
-    mfa_failures: TsMfaFailure[];
-    missing_verses: TsMissingVerse[];
-    missing_words: TsMissingWords[];
-    verse_overlaps: TsVerseOverlap[];
-    boundary_mismatches: TsBoundaryMismatch[];
-    large_gaps: TsLargeGap[];
-    meta: {
-        has_segments: boolean;
-        tolerance_ms: number;
-    };
-    /** Present when the endpoint returns an error (e.g. reciter not found). */
-    error?: string;
 }
 
 // ===========================================================================
