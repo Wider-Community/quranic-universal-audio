@@ -147,6 +147,11 @@ export async function executeSave(isAutoSave = false): Promise<void> {
         // Snapshot the operations and build payloads BEFORE yielding to network IO
         // so that concurrent edits arriving during the fetch don't get mixed in.
         const pendingSaves = [];
+        // Successfully-saved (chapter, ops) tuples that still need their pending
+        // ops cleared from the op log. Held back until edit-history has been
+        // refreshed so the op is always reachable in either pending OR batches
+        // — never in neither.
+        const pendingClears: Array<{ ch: number; ops: EditOp[] }> = [];
 
         for (const [ch, entry] of getDirtyMap()) {
             const chOps = [...getChapterOps(ch)]; // copy array of current ops
@@ -268,8 +273,13 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                 allOk = false;
                 break;
             }
-            // Safely clear only the operations we just saved
-            clearSavedOps(ch, ops);
+            // Defer clearSavedOps until after edit-history has refreshed.
+            // Otherwise there's a transient window where the in-flight split
+            // op is gone from the op log (cleared here) but not yet in
+            // historyData.batches (history fetch still pending), and
+            // getSplitGroupMembers returns only the parent UID — making the
+            // second child blink out of an open accordion card mid-save.
+            pendingClears.push({ ch, ops });
             savedChanges += ops.length;
             savedChapters++;
         }
@@ -285,21 +295,24 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                 saveButtonLabel.set('Save');
             }
 
-            // Refresh validation, history, and stats whenever ANY chapter
-            // saved — autosave and partial-success runs both need it so the
-            // UI doesn't keep showing pre-edit counts and history rows.
-            // Each fetch has its own try/catch so a single hiccup doesn't
-            // skip the others.
-            void refreshValidation().catch((e) => console.error('Error refreshing validation:', e));
-            void refreshStats().catch((e) => console.error('Error refreshing stats:', e));
+            // Refresh edit-history FIRST, then atomically apply the
+            // deferred pending-op clears alongside the history render.
+            // Order matters: clearSavedOps bumps dirtyTick which is a
+            // dependency in the validation-card memo for splits — if
+            // batches haven't received the new op yet, getSplitGroupMembers
+            // returns only the parent UID and the second child blinks out.
             try {
                 const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
                     `/api/seg/edit-history/${reciter}`,
                 );
-                if (hist) {
-                    renderEditHistoryPanel(hist);
-                }
+                if (hist) renderEditHistoryPanel(hist);
             } catch (_) { /* non-critical */ }
+            for (const { ch, ops } of pendingClears) clearSavedOps(ch, ops);
+
+            // Validation and stats can fire after — they no longer race
+            // the history refresh.
+            void refreshValidation().catch((e) => console.error('Error refreshing validation:', e));
+            void refreshStats().catch((e) => console.error('Error refreshing stats:', e));
         } else {
             // Nothing saved (either nothing to save or error before first commit)
             saveButtonLabel.set('Save');
