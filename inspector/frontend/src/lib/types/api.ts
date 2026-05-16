@@ -256,6 +256,11 @@ export interface SegAllResponse {
      *  sidecar. Used by the trim/adjust pad clamp on the last verse of a
      *  chapter so the right-pad doesn't extend past EOF. */
     chapter_duration_ms_by_chapter?: Record<string, number>;
+    /** Audio URL → total audio duration in ms, sourced from the audio_manifest
+     *  sidecar. URL-keyed for by_ayah deliveries where each ayah is its own
+     *  audio file. Prefer this over `chapter_duration_ms_by_chapter` when the
+     *  caller has a seg's audio_url. */
+    duration_ms_by_url?: Record<string, number>;
     /** All chapters of this reciter known VBR. Reciter-level mirror of
      *  SegDataResponse.reciter_vbr_chapters so global accordions can route
      *  cross-chapter playback before/independent of a chapter-data refresh. */

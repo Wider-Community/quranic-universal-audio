@@ -24,7 +24,7 @@ from services.data_loader import (
     load_detailed,
     resolve_pad,
 )
-from services.audio_meta import chapter_meta, vbr_chapters_for_reciter
+from services.audio_meta import chapter_meta, chapter_urls, vbr_chapters_for_reciter
 from services.segments_query import get_chapter_data
 from utils.formatting import slug_to_name
 from utils.json_response import orjson_cached_response, orjson_response
@@ -186,20 +186,32 @@ def seg_all(reciter):
     auto_split_uids = sorted(auto_split_by_uid.keys())
     # dk_words + verse_word_counts moved off this payload to the immutable
     # ``/api/static/quran-refs.json`` asset (fetched once per browser).
-    # Per-chapter duration in ms, sourced from the audio_manifest sidecar.
-    # Surfaced so the FE can clamp trim/adjust right-pad against the actual
-    # chapter end for the last segment (otherwise we pad past EOF and the
-    # waveform draw silently fails on the over-extended window).
+    # Per-audio-URL duration in ms, sourced from the audio_manifest sidecar.
+    # Surfaced so the FE can clamp trim/adjust right-pad and split viewEnd
+    # against actual audio EOF — extraction sometimes leaves the last seg's
+    # time_end past the actual audio end, which (without clamping) makes the
+    # waveform fetch return truncated/empty peaks and the canvas paints blank.
+    # URL-keyed (not chapter-keyed) so by_ayah deliveries — where each ayah
+    # is its own audio file — are clamped correctly per-ayah.
+    duration_ms_by_url: dict[str, int] = {}
+    for key, url in (chapter_urls(reciter) or {}).items():
+        meta = chapter_meta(reciter, key)
+        if not isinstance(meta, dict):
+            continue
+        duration_sec = meta.get("duration_sec")
+        if isinstance(url, str) and url and isinstance(duration_sec, (int, float)) and duration_sec > 0:
+            duration_ms_by_url[url] = int(duration_sec * 1000)
+    # Per-chapter map for FE convenience (when seg.audio_url isn't set the
+    # FE falls back to audio_by_chapter[chapter]; mirror the same shape here).
     chapter_duration_ms_by_chapter: dict[str, int] = {}
-    for ch_str in audio_by_chapter:
-        meta = chapter_meta(reciter, ch_str)
-        duration_sec = meta.get("duration_sec") if isinstance(meta, dict) else None
-        if isinstance(duration_sec, (int, float)) and duration_sec > 0:
-            chapter_duration_ms_by_chapter[ch_str] = int(duration_sec * 1000)
+    for ch_str, url in audio_by_chapter.items():
+        if url in duration_ms_by_url:
+            chapter_duration_ms_by_chapter[ch_str] = duration_ms_by_url[url]
     return orjson_response({
         "segments": segments,
         "audio_by_chapter": audio_by_chapter,
         "chapter_duration_ms_by_chapter": chapter_duration_ms_by_chapter,
+        "duration_ms_by_url": duration_ms_by_url,
         "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
         "auto_split_uids": auto_split_uids,
         # Legacy symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.

@@ -53,6 +53,7 @@ import { _fetchPeaksForClick } from '../waveform/utils';
 import { _playRange, exitEditMode, finalizeEdit } from './common';
 import { beginRefEdit, pickProgrammaticMountId } from './reference';
 import { applySplitWheelZoom } from './split-zoom';
+import { getAudioEndMsForSeg } from './trim';
 
 function _suggestSplitRefs(ref: Parameters<typeof _suggestSplitRefsLib>[0]): ReturnType<typeof _suggestSplitRefsLib> {
     return _suggestSplitRefsLib(ref, getVerseWordCounts());
@@ -109,6 +110,14 @@ export function enterSplitMode(
 
     const chapter = seg.chapter || parseInt(get(selectedChapter));
     const splitAudioUrl = seg.audio_url || get(segAllData)?.audio_by_chapter?.[String(chapter)] || '';
+    // Cap viewEnd against the authoritative audio EOF — extraction sometimes
+    // leaves the last seg's time_end past actual audio EOF, and then asking
+    // for peaks for that range returns truncated/empty data and the canvas
+    // paints blank. Mirrors the trim-window clamp.
+    const audioEndMs = getAudioEndMsForSeg({ ...seg, chapter });
+    const cappedViewEnd = audioEndMs && audioEndMs > seg.time_start
+        ? Math.min(seg.time_end, audioEndMs)
+        : seg.time_end;
     // Init view = full segment range (no zoom). Reset on every entry — zoom
     // state is intentionally not preserved across edit sessions, mirroring
     // trim mode's wheel-zoom semantics.
@@ -117,7 +126,7 @@ export function enterSplitMode(
         refs: initialRefs && initialRefs.length === currentSplits.length + 1
             ? initialRefs.slice()
             : undefined,
-        viewStart: seg.time_start, viewEnd: seg.time_end,
+        viewStart: seg.time_start, viewEnd: cappedViewEnd,
         audioUrl: splitAudioUrl,
     };
     setSplitState({ ...canvas._splitData });
