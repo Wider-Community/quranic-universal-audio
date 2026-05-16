@@ -45,20 +45,12 @@ def _row(slug: str, *, state: str = "awaiting_review",
     )
 
 
-def _stub_persist(monkeypatch):
-    """Stop _persist_row from trying to hit a bucket backend during tests."""
-    from services import state as state_service
-
-    monkeypatch.setattr(
-        state_service,
-        "_persist_row",
-        lambda row, *, replace_existing: None,
-    )
-    # ``state.transition`` also calls ``audit.append`` after the handler;
-    # stub it so the test doesn't touch the audit storage backend either.
-    from services import audit as audit_service
-
-    monkeypatch.setattr(audit_service, "append", lambda **kw: None)
+# NOTE: claim/release/mark-ready tests use the `state_persistence` fixture
+# (defined in tests/conftest.py) so state transitions persist through a real
+# FilesystemBackend. The legacy `_stub_persist` mock pattern stripped both the
+# bucket write AND the in-memory _state_file update, forcing each test to
+# manually re-seed state between requests; real persistence makes that hack
+# unnecessary and exercises the actual write/read seam that production hits.
 
 
 # ---------------------------------------------------------------------------
@@ -66,8 +58,7 @@ def _stub_persist(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_claim_anonymous_returns_401(flask_client, monkeypatch):
-    _stub_persist(monkeypatch)
+def test_claim_anonymous_returns_401(flask_client, state_persistence):
     _replace_state([_row("test_slug", state="awaiting_review")])
     resp = flask_client.post(
         "/api/claim/test_slug",
@@ -76,8 +67,7 @@ def test_claim_anonymous_returns_401(flask_client, monkeypatch):
     assert resp.status_code == 401
 
 
-def test_claim_happy_path(signed_in_client, monkeypatch):
-    _stub_persist(monkeypatch)
+def test_claim_happy_path(signed_in_client, state_persistence):
     _replace_state([_row("test_slug", state="awaiting_review")])
 
     client, user = signed_in_client(hf_user_id="u-1", login="alice")
@@ -92,8 +82,35 @@ def test_claim_happy_path(signed_in_client, monkeypatch):
     assert body["assignee_login"] == "alice"
 
 
-def test_claim_one_claim_per_user_returns_409(signed_in_client, monkeypatch):
-    _stub_persist(monkeypatch)
+def test_claim_persists_across_requests(signed_in_client, state_persistence):
+    """Claim → second request sees the new state without manual re-seed.
+
+    Catches the class of regressions where _persist_row drops a write
+    silently — the legacy `_stub_persist` fixture masked this because it
+    skipped persistence entirely AND required tests to re-seed state
+    manually between requests.
+    """
+    _replace_state([_row("test_slug", state="awaiting_review")])
+
+    client, _ = signed_in_client(hf_user_id="u-1", login="alice")
+    resp1 = client.post(
+        "/api/claim/test_slug",
+        headers={"Origin": "http://localhost"},
+    )
+    assert resp1.status_code == 200
+
+    # Second request reads the post-claim state from _state_file.
+    resp2 = client.get("/api/reciter-task/test_slug")
+    assert resp2.status_code == 200
+    body = json.loads(resp2.data)
+    assert body["row"]["state"] == "under_review"
+    assert body["row"]["assignee_hf_id"] == "u-1"
+    # Predicates flipped correctly for the claimant.
+    assert body["predicates"]["can_release"] is True
+    assert body["predicates"]["can_claim"] is False  # already holds
+
+
+def test_claim_one_claim_per_user_returns_409(signed_in_client, state_persistence):
     _replace_state([
         _row("other", state="under_review", assignee_hf_id="u-1"),
         _row("target", state="awaiting_review"),
@@ -116,8 +133,7 @@ def test_claim_one_claim_per_user_returns_409(signed_in_client, monkeypatch):
     assert "target_name" in body
 
 
-def test_claim_discarded_returns_400(signed_in_client, monkeypatch):
-    _stub_persist(monkeypatch)
+def test_claim_discarded_returns_400(signed_in_client, state_persistence):
     _replace_state([_row("test_slug", state="awaiting_review", visibility="discarded")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
@@ -128,8 +144,7 @@ def test_claim_discarded_returns_400(signed_in_client, monkeypatch):
     assert resp.status_code == 400
 
 
-def test_claim_already_under_review_returns_400(signed_in_client, monkeypatch):
-    _stub_persist(monkeypatch)
+def test_claim_already_under_review_returns_400(signed_in_client, state_persistence):
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="other-user")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
@@ -140,9 +155,8 @@ def test_claim_already_under_review_returns_400(signed_in_client, monkeypatch):
     assert resp.status_code == 400
 
 
-def test_claim_missing_origin_returns_403(signed_in_client, monkeypatch):
+def test_claim_missing_origin_returns_403(signed_in_client, state_persistence):
     """CSRF defense — POST without matching Origin/Referer is rejected."""
-    _stub_persist(monkeypatch)
     _replace_state([_row("test_slug", state="awaiting_review")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
@@ -155,8 +169,7 @@ def test_claim_missing_origin_returns_403(signed_in_client, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_release_happy_path(signed_in_client, monkeypatch):
-    _stub_persist(monkeypatch)
+def test_release_happy_path(signed_in_client, state_persistence):
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
@@ -170,8 +183,7 @@ def test_release_happy_path(signed_in_client, monkeypatch):
     assert body["assignee_hf_id"] is None
 
 
-def test_release_non_assignee_returns_403(signed_in_client, monkeypatch):
-    _stub_persist(monkeypatch)
+def test_release_non_assignee_returns_403(signed_in_client, state_persistence):
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="other")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
@@ -182,11 +194,10 @@ def test_release_non_assignee_returns_403(signed_in_client, monkeypatch):
     assert resp.status_code == 403
 
 
-def test_release_maintainer_can_force_release(signed_in_client, monkeypatch):
+def test_release_maintainer_can_force_release(signed_in_client, state_persistence):
     """Maintainers can release someone else's claim through the normal
     release route (the dedicated force-release endpoint with reason
     lands in Phase 4)."""
-    _stub_persist(monkeypatch)
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="other")])
 
     client, _ = signed_in_client(hf_user_id="u-mod", login="mod", role="maintainer")
@@ -202,8 +213,7 @@ def test_release_maintainer_can_force_release(signed_in_client, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_mark_unmark_round_trip(signed_in_client, monkeypatch):
-    _stub_persist(monkeypatch)
+def test_mark_unmark_round_trip(signed_in_client, state_persistence):
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
@@ -215,15 +225,9 @@ def test_mark_unmark_round_trip(signed_in_client, monkeypatch):
     assert resp1.status_code == 200
     assert json.loads(resp1.data)["marked_ready"] is True
 
-    # Reseed: state-machine doesn't actually mutate _state_file because we
-    # stubbed _persist_row; the handler returns the new row but state_store
-    # stays the same. So manually flip marked_ready=True before unmark.
-    _replace_state([_row(
-        "test_slug",
-        state="under_review",
-        assignee_hf_id="u-1",
-        marked_ready=True,
-    )])
+    # State persists across requests via the FilesystemBackend, so the
+    # mark_ready=True flip from resp1 is already in _state_file when we hit
+    # unmark-ready below — no manual reseed needed.
 
     resp2 = client.post(
         "/api/unmark-ready/test_slug",
@@ -233,8 +237,7 @@ def test_mark_unmark_round_trip(signed_in_client, monkeypatch):
     assert json.loads(resp2.data)["marked_ready"] is False
 
 
-def test_mark_ready_non_assignee_returns_403(signed_in_client, monkeypatch):
-    _stub_persist(monkeypatch)
+def test_mark_ready_non_assignee_returns_403(signed_in_client, state_persistence):
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="other")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
@@ -332,9 +335,8 @@ def test_reciter_task_predicates_marked_ready_frozen(signed_in_client):
 # ---------------------------------------------------------------------------
 
 
-def test_owner_can_claim_multiple_reciters(signed_in_client, monkeypatch):
+def test_owner_can_claim_multiple_reciters(signed_in_client, state_persistence):
     """Owner bypasses the one-claim-per-user policy."""
-    _stub_persist(monkeypatch)
     _replace_state([
         _row("already_claimed", state="under_review", assignee_hf_id="u-owner"),
         _row("second_target", state="awaiting_review"),

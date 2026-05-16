@@ -186,11 +186,52 @@ def signed_in_client(monkeypatch):
         access_service._store = RolesFile()  # type: ignore[attr-defined]
 
 
+@pytest.fixture
+def state_persistence(tmp_path, monkeypatch):
+    """Per-test FilesystemBackend so state mutations persist across requests.
+
+    Replaces the legacy `_stub_persist` pattern (which mocked
+    `state._persist_row` to a no-op): instead of forcing tests to manually
+    `_replace_state(...)` between requests to simulate persistence, this
+    fixture wires a real bucket backend rooted at a tmp dir. State
+    transitions go through `_persist_row` for real — the in-memory
+    `_state_file` global is updated AND the JSON is written to tmp_path.
+    Subsequent GETs read the persisted state for free.
+
+    Also re-hydrates the catalog + access stores against the empty backend
+    so prior test bleed-through can't pin stale rows. Stubs `audit.append`
+    so we don't write to the audit log per claim/release.
+
+    Yields the FilesystemBackend so individual tests can inspect what
+    landed on disk if needed.
+    """
+    from services import access as access_service
+    from services import audit as audit_service
+    from services import catalog as catalog_service
+    from services import hf_bucket as _hf_bucket
+    from services import state as state_service
+
+    monkeypatch.setenv("INSPECTOR_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("INSPECTOR_BACKEND", "filesystem")
+    monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))
+
+    backend = _hf_bucket.FilesystemBackend(tmp_path)
+    _hf_bucket.set_backend(backend)
+    state_service.hydrate()
+    catalog_service.hydrate()
+    access_service.hydrate()
+
+    monkeypatch.setattr(audit_service, "append", lambda **kw: None)
+
+    yield backend
+
+    _hf_bucket.reset_backend()
+
+
 _SEG_CACHE_NAMES = (
     "_seg",
     "_seg_meta",
     "_seg_verses",
-    "_seg_reciters",
 )
 
 

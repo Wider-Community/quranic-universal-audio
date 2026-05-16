@@ -349,19 +349,30 @@ def _hydrate_bucket_stores() -> None:
     # workers don't hammer the dev bucket on every restart. Tests skip via
     # the pytest guard.
     # Auto-detect reconciler: server-side acceptance of pending requests.
-    # Off by default in dev (devs trigger it manually via /api/admin/reconcile);
-    # on by default in deployed (Dockerfile sets INSPECTOR_AUTO_DETECT=1).
-    # Tests skip via the pytest guard.
-    if "pytest" not in sys.modules and os.environ.get("INSPECTOR_AUTO_DETECT") == "1":
+    # ``hydrate_initial_seen`` ALWAYS runs at boot — it's idempotent and only
+    # fires alignment_completed for slugs already stuck in AWAITING_ALIGNMENT
+    # despite having ``wip/<slug>/`` files. Without this, a reciter uploaded
+    # while the server was down (or before deploy of the auto-detect feature)
+    # stays in AWAITING_ALIGNMENT forever, causing the dashboard row, detail
+    # modal, and segments combobox to all disagree about its bucket.
+    #
+    # The 60s background polling loop stays opt-in via ``INSPECTOR_AUTO_DETECT=1``
+    # because dev environments don't want a CPU loop hammering the bucket.
+    # Tests skip both via the pytest guard.
+    if "pytest" not in sys.modules:
         try:
             auto_detect_service.hydrate_initial_seen()
-            interval = int(os.environ.get("INSPECTOR_AUTO_DETECT_INTERVAL_S", "60"))
-            auto_detect_service.start_background_loop(interval_seconds=interval)
-            logger.info(
-                "auto_detect: background loop scheduled (interval=%ss)", interval,
-            )
         except Exception as e:  # noqa: BLE001
-            logger.warning("auto_detect wiring failed: %s", e)
+            logger.warning("auto_detect hydrate_initial_seen failed: %s", e)
+        if os.environ.get("INSPECTOR_AUTO_DETECT") == "1":
+            try:
+                interval = int(os.environ.get("INSPECTOR_AUTO_DETECT_INTERVAL_S", "60"))
+                auto_detect_service.start_background_loop(interval_seconds=interval)
+                logger.info(
+                    "auto_detect: background loop scheduled (interval=%ss)", interval,
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("auto_detect background loop wiring failed: %s", e)
 
     if "pytest" not in sys.modules and os.environ.get("INSPECTOR_AUDIO_PREFETCH") == "1":
         try:
