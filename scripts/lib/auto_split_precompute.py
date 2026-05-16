@@ -243,6 +243,7 @@ def run_precompute(
     reciter_dir: Path,
     *,
     mfa_app_path: Path,
+    audio_dir: Path | None = None,
     repo_root: Path | None = None,
     beam: int = DEFAULT_BEAM,
     method: str = DEFAULT_METHOD,
@@ -257,6 +258,12 @@ def run_precompute(
     repetition candidate, slices its audio, batched-aligns through a local
     Kalpy MFA process pool, and writes ``<reciter_dir>/auto_split_v1.json``.
 
+    When ``audio_dir`` is provided, chapter audio is read from
+    ``<audio_dir>/<chapter>.mp3`` instead of the URL/path in ``detailed.json``
+    — this is the Katana fast-path, since extraction's audio_persist post-pass
+    has already written the per-chapter MP3s right there. Falls back to the
+    ``detailed.json`` source per-chapter when a file is missing.
+
     Returns the sidecar path on success, or ``None`` when ``detailed.json``
     is missing.
     """
@@ -264,6 +271,11 @@ def run_precompute(
     detailed_path = reciter_dir / "detailed.json"
     if not detailed_path.exists():
         log.error("detailed.json not found in %s", reciter_dir)
+        return None
+
+    audio_dir = Path(audio_dir).resolve() if audio_dir else None
+    if audio_dir is not None and not audio_dir.is_dir():
+        log.error("audio_dir does not exist or is not a directory: %s", audio_dir)
         return None
 
     repo_root = repo_root or _REPO_ROOT
@@ -300,8 +312,14 @@ def run_precompute(
         if not cand_descriptors:
             return 0
 
+        local_mp3 = audio_dir / f"{chapter}.mp3" if audio_dir else None
         try:
-            if _is_url(audio_src):
+            if local_mp3 is not None and local_mp3.is_file():
+                audio_int16 = load_audio_int16(local_mp3)
+            elif _is_url(audio_src):
+                if local_mp3 is not None:
+                    log.warning("Chapter %s: local %s missing; falling back to URL",
+                                ref, local_mp3)
                 audio_file = download_audio(audio_src)
                 audio_int16 = load_audio_int16(audio_file)
                 audio_file.unlink(missing_ok=True)
@@ -490,6 +508,10 @@ def _main(argv: list[str] | None = None) -> int:
                    help="Directory containing detailed.json.")
     p.add_argument("--mfa-app-path", required=True, type=Path,
                    help="Path to the local MFA aligner module.")
+    p.add_argument("--audio-dir", type=Path, default=None,
+                   help="Optional dir holding per-chapter MP3s named <chapter>.mp3 "
+                        "(extraction's audio_persist output). Read from local file "
+                        "instead of the URL in detailed.json; falls back to URL on miss.")
     p.add_argument("--beam", type=int, default=DEFAULT_BEAM)
     p.add_argument("--method", default=DEFAULT_METHOD)
     p.add_argument("--padding", default=DEFAULT_PADDING)
@@ -509,6 +531,7 @@ def _main(argv: list[str] | None = None) -> int:
     sidecar = run_precompute(
         args.reciter_dir,
         mfa_app_path=args.mfa_app_path,
+        audio_dir=args.audio_dir,
         repo_root=args.repo_root,
         beam=args.beam,
         method=args.method,
