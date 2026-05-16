@@ -361,11 +361,26 @@ export class AudioPort {
     prewarm(): Promise<void> {
         if (!this.el || !this._source) return Promise.resolve();
         if (this._source.vbr) return Promise.resolve();
+        const startedAt = performance.now();
+        const trace = (typeof localStorage !== 'undefined'
+            && localStorage.getItem('insp_warmup_log') === 'true');
+        if (trace) {
+            // eslint-disable-next-line no-console
+            console.log(`[prewarm] fire ${this._source.audioUrl}`);
+        }
         // loadCovering(0, 0) builds the CBR window {start:0, end:Infinity}
         // and triggers _swapTo, which writes el.src + el.load() and adds
         // the canplay listener. After this resolves, _window covers any
         // future play call → fast path 1.
         const { ready } = this.loadCovering(0, 0);
+        if (trace) {
+            ready
+                .then(() => {
+                    // eslint-disable-next-line no-console
+                    console.log(`[prewarm] canplay in ${Math.round(performance.now() - startedAt)}ms; ready=${this.el?.readyState}`);
+                })
+                .catch(() => {});
+        }
         return ready;
     }
 

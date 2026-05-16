@@ -51,6 +51,33 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
 
     if (!reciter || !chapter) return;
 
+    // EAGER PREWARM — start the audio element load BEFORE the chapter-data
+    // fetch. The audio URL is already known from `segAllData.audio_by_chapter`
+    // (loaded on reciter switch). Setting source + prewarm now starts the
+    // browser's fetch + decode + canplay pipeline in parallel with the
+    // chapter-data fetch (~300-500 ms), giving the user noticeably more head
+    // start before they click play.
+    //
+    // Skip when we don't yet know audio_url OR the reciter is VBR (clip URL
+    // is per-seg, no chapter-level prewarm available). Both fall through to
+    // the post-fetch setSource path below.
+    const eagerAll = get(segAllData);
+    const chNumEager = parseInt(chapter);
+    const eagerAudioUrl = eagerAll?.audio_by_chapter?.[String(chNumEager)] ?? '';
+    const eagerVbr = (eagerAll?.reciter_vbr_chapters ?? []).includes(chNumEager);
+    let eagerPrewarmFired = false;
+    if (eagerAudioUrl && !eagerVbr) {
+        const eagerCbrSrc = wrapCbrSrcIfBySurah(eagerAudioUrl, reciter);
+        segPort.setSource({
+            audioUrl: eagerAudioUrl,
+            cbrSrc: eagerCbrSrc,
+            reciter,
+            vbr: false,
+        });
+        segPort.prewarm();
+        eagerPrewarmFired = true;
+    }
+
     try {
         const chData = await fetchJson<SegDataResponse>(`/api/seg/data/${reciter}/${chapter}`);
         if (get(selectedReciter) !== reciter || get(selectedChapter) !== chapter) return;
@@ -86,34 +113,31 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
             preconnectOrigins(
                 Object.values(get(segAllData)?.audio_by_chapter ?? {}),
             );
-            // Bind the logical source to the port. CBR plays don't actually
-            // load `<audio>.src` until the first `loadCovering` (port owns
-            // that). VBR clips swap src per-segment via the same path.
+            // Re-bind only when the audio URL differs from the eager prewarm
+            // (rare — eagerAudioUrl came from `segAllData.audio_by_chapter`
+            // which the chapter-data response matches in practice). When they
+            // agree AND the prewarm already fired, the port's same-source
+            // check makes setSource a no-op anyway. The redundant call is
+            // harmless and keeps the post-fetch invariant.
+            //
+            // For VBR we still need the server-side OS page-cache warmup; the
+            // segment-clip route reads from the same chapter file, so a
+            // byte-Range warmup of seg[0] gets the segment-clip ffmpeg call's
+            // first disk read on a warm page cache. Eager prewarm above skipped
+            // for VBR — this is where the VBR path actually runs.
             segPort.setSource({
                 audioUrl: chData.audio_url,
                 cbrSrc,
                 reciter,
                 vbr: !!chData.vbr,
             });
-            // Pre-warm the audio element so its `el.src = url; el.load()`
-            // canplay event fires BEFORE the user clicks play. Without this,
-            // the first-seg play click visibly stalls while the browser
-            // fetches metadata + parses MP3 header + decoder warms; with it,
-            // the eventual `loadCovering` short-circuits (fast-path 1) and
-            // the play feels as instant as the "seg N → N+1" case.
-            //
-            // VBR is a different story — clip URLs are per-segment so a
-            // chapter-level prewarm is wrong. For VBR we still need the
-            // server-side OS page-cache warmup, since the segment-clip route
-            // reads from the same chapter file. The byte-Range warmup of
-            // seg[0] gets the segment-clip ffmpeg call's first disk read on
-            // a warm page cache.
             if (chData.vbr) {
                 warmChapterStart(reciter, chData.audio_url, chNum);
                 if (chapterSegs.length > 0) {
                     warmSeg(chapterSegs[0], reciter);
                 }
-            } else {
+            } else if (!eagerPrewarmFired) {
+                // Fallback: eager path skipped (segAllData not loaded yet).
                 segPort.prewarm();
             }
         }
