@@ -22,6 +22,7 @@ from services.storage.data_loader import get_word_counts, load_detailed, load_pr
 from services.activity.history_query import (
     build_resolved_by_edit_index,
     parse_history_for_reciter,
+    recover_strip_specials_chapter_per_op,
 )
 from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
 
@@ -144,20 +145,40 @@ def _load_resolved_idx_cached(reciter: str) -> dict:
 def _deleted_basmala_chapters(reciter: str) -> set[int]:
     """Collect chapters whose Basmala the alignment pipeline already stripped.
 
-    Walks ``edit_history.jsonl`` once, looking for ``strip_specials`` batches
-    and picking only the operations whose deleted snapshot has
-    ``matched_ref == "Basmala"`` — the batch-level ``chapters`` field is the
-    union across ALL special refs (Basmala + Isti'adha + …) and would
-    over-credit a chapter that lost only an Isti'adha. Per-op chapter is taken
-    from the snapshot's stamped ``chapter`` field (added by the extraction
-    fix); older snapshots fall back to the batch-level ``chapter`` if the
-    batch is single-chapter.
+    Per-op chapter resolution order (first hit wins):
+
+    1. **Snapshot's stamped ``chapter``** (post extraction-fix data) — exact.
+    2. **Batch's single ``chapter`` field** when set (waqf_sakt; never
+       strip_specials, which is always multi-chapter) — exact.
+    3. **``recover_strip_specials_chapter_per_op`` heuristic** — pairs op
+       groups (split on time-resets) with ``sorted(batch.chapters)``.
+       Exact when group count matches chapter count (validated on Husary:
+       117 ops, 112 chapters → 112 groups → 1:1 mapping). The recovery
+       returns ``{}`` when the heuristic disagrees with the chapter count.
+    4. **Batch's ``chapters`` list — union fallback** for legacy batches
+       where the per-op recovery refused (e.g. Raad: 74 groups vs 77
+       chapters). Credits every chapter in the union, over-counting
+       chapters that only had Isti'adha stripped. The downside: a
+       chapter that lost only an Isti'adha (no Basmala) won't get
+       flagged as missed-Basmala. We accept that mis-detect because the
+       opposite failure (flagging every chapter as missed even when the
+       pipeline did strip its Basmala) is much worse — that's what
+       legacy reciters showed before this fallback existed.
     """
     out: set[int] = set()
     for batch in parse_history_for_reciter(reciter):
         if batch.get("batch_type") != "strip_specials":
             continue
         batch_chapter = batch.get("chapter") if isinstance(batch.get("chapter"), int) else None
+        batch_chapters = [
+            c for c in (batch.get("chapters") or []) if isinstance(c, int) and c > 0
+        ]
+        recovered = recover_strip_specials_chapter_per_op(batch)
+        # Track ops we couldn't resolve via stamp / batch.chapter / recovery —
+        # if any Basmala op falls through, the tier-4 union fallback fires
+        # ONCE per batch (over-credit, but bounded to that batch's chapters).
+        had_basmala_op = False
+        had_unresolved_basmala = False
         for op in batch.get("operations") or []:
             snapshots = op.get("targets_before") or []
             if not snapshots:
@@ -167,11 +188,22 @@ def _deleted_basmala_chapters(reciter: str) -> set[int]:
                 continue
             if snap.get("matched_ref") != "Basmala":
                 continue
+            had_basmala_op = True
             ch = snap.get("chapter")
             if isinstance(ch, int) and ch > 0:
                 out.add(ch)
-            elif batch_chapter is not None:
+                continue
+            if batch_chapter is not None:
                 out.add(batch_chapter)
+                continue
+            op_id = op.get("op_id")
+            if isinstance(op_id, str) and op_id in recovered:
+                out.add(recovered[op_id])
+                continue
+            had_unresolved_basmala = True
+
+        if had_basmala_op and had_unresolved_basmala and batch_chapters:
+            out.update(batch_chapters)
     return out
 
 
