@@ -166,7 +166,12 @@ export interface TsReciter {
 export interface SegReciter {
     slug: string;
     name: string;
+    /** Channel — `mp3quran`, `qul`, `everyayah`, etc. NOT a by_surah/by_ayah
+     *  signal (that's `audio_category`). */
     audio_source: string;
+    /** by_surah → one MP3 per chapter; by_ayah → one MP3 per verse. Drives
+     *  per-row playback routing (clip-vs-chapter URL, proxy wrap). */
+    audio_category: 'by_surah' | 'by_ayah';
 }
 
 // ---------------------------------------------------------------------------

@@ -66,16 +66,23 @@ def seg_reciters():
     """List reciters tracked in the state file.
 
     Joins ``state_service.all_rows()`` (lifecycle + visibility) with the
-    in-memory catalog snapshot (``delivery.source`` → ``audio_source``).
-    Both layers are hydrated at boot and live in process memory, so this
-    endpoint does zero bucket I/O per request.
+    in-memory catalog snapshot. ``audio_source`` is the channel
+    (``delivery.source`` — ``mp3quran``, ``qul``, etc.); ``audio_category``
+    is the by_surah / by_ayah split the FE needs to gate per-row playback
+    routing (proxy wrap, clip vs chapter URL). Both layers are hydrated at
+    boot and live in process memory, so this endpoint does zero bucket I/O
+    per request.
     """
-    by_slug = {d.slug: d.source for d in catalog_service.snapshot().deliveries}
+    by_slug = {
+        d.slug: (d.source, d.audio_category.value)
+        for d in catalog_service.snapshot().deliveries
+    }
     result = [
         {
             "slug": row.slug,
             "name": slug_to_name(row.slug),
-            "audio_source": by_slug.get(row.slug, ""),
+            "audio_source": by_slug.get(row.slug, ("", ""))[0],
+            "audio_category": by_slug.get(row.slug, ("", ""))[1],
             "state": row.state.value,
             "visibility": row.visibility.value,
         }
