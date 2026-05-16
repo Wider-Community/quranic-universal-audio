@@ -28,6 +28,7 @@ import {
     segCurrentIdx,
     segData,
     selectedChapter,
+    selectedReciter,
 } from '../../stores/chapter';
 import { editMode } from '../../stores/edit';
 import { displayedSegments } from '../../stores/filters';
@@ -46,28 +47,23 @@ import {
 } from '../../stores/playback';
 import { drawSegPlayhead, drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 import { _fetchPeaksForClick } from '../waveform/utils';
-import { nextDisplayedSeg, prefetchNextSegAudio } from './prefetch';
 import { buildSegPolicy } from './range-spec';
+import { nextDisplayedSeg, nextSiblingSeg } from './resolvers';
 import { getRowEntriesFor } from './row-registry';
 import { resolveSegSource } from './source';
+import { warmSeg } from './warmup';
 
 // ---------------------------------------------------------------------------
 // Module-local state
 // ---------------------------------------------------------------------------
 
 let _segRange: AudioRange | null = null;
-let _segPrefetchCache: Record<string, Promise<unknown>> = {};
 
 /** Last drawn (chapter, index) pair so the animation loop can erase the
  *  playhead on the previous row when playback advances. Carries the chapter
  *  so cross-chapter advance (accordion -> another chapter's row) erases from
  *  the right canvas. */
 let _prevPlaying: { chapter: number; index: number } | null = null;
-
-/** Reset the per-reciter prefetch cache (called by reciter/chapter reset). */
-export function clearSegPrefetchCache(): void {
-    _segPrefetchCache = {};
-}
 
 /** Reset playhead draw-state refs so the draw layer does not point to nodes
  *  destroyed by the next {#each} reconciliation. Called by filters-apply.ts
@@ -148,7 +144,9 @@ function _onRangeBoundary(ev: { reason: string }): void {
         segCurrentIdx.set(next.index);
         playStartMs.set(next.time_start);
         playEndMs.set(next.time_end);
-        prefetchNextSegAudio(displayed, next.index, _curChapterUrl(), _segPrefetchCache);
+        // Warm next-next so a subsequent auto-advance is also instant.
+        const nextNext = nextDisplayedSeg(displayed, next.index);
+        warmSeg(nextNext, get(selectedReciter), next);
         if (nextChapter) void _fetchPeaksForClick(next, nextChapter);
     }
 }
@@ -247,18 +245,15 @@ export function playFromSegment(
         origin: isAccordionPlay ? 'accordion' : 'main',
     });
 
-    // Accordion plays prefetch their card's next *sibling* (list position,
-    // possibly cross-chapter); main-list plays prefetch the next displayed
-    // segment by `Segment.index + 1`. The fourth arg is the chapter pointer
-    // — non-null switches `prefetchNextSegAudio` to the sibling resolver.
-    if (isAccordionPlay && opts?.accordionSiblings) {
-        prefetchNextSegAudio(
-            opts.accordionSiblings, segIndex, _curChapterUrl(),
-            _segPrefetchCache, resolvedChapter,
-        );
-    } else {
-        prefetchNextSegAudio(displayed, segIndex, _curChapterUrl(), _segPrefetchCache);
-    }
+    // Accordion plays warm their card's next *sibling* (list position,
+    // possibly cross-chapter); main-list plays warm the next displayed
+    // segment by `Segment.index + 1`. Warmup no-ops on VBR + missing-kbps
+    // (the segment-clip route handles VBR per-seg separately).
+    const reciter = get(selectedReciter);
+    const nextSeg = isAccordionPlay && opts?.accordionSiblings
+        ? nextSiblingSeg(opts.accordionSiblings, resolvedChapter, segIndex)
+        : nextDisplayedSeg(displayed, segIndex);
+    warmSeg(nextSeg, reciter, seg);
 
     // Fetch waveform peaks on-demand via ffmpeg HTTP Range (brief delay expected).
     void _fetchPeaksForClick(seg, resolvedChapter);
@@ -363,8 +358,9 @@ export function onSegTimeUpdate(fileMs?: number): void {
         // active pair so the playhead and class:playing follow.
         setPlayingSegment({ chapter: nextCurrentChapter, index: nextCurrentIdx });
         if (displayed) {
-            prefetchNextSegAudio(displayed, nextCurrentIdx, currentSrc, _segPrefetchCache);
             const curSeg = displayed.find(s => s.index === nextCurrentIdx);
+            const nextSeg = nextDisplayedSeg(displayed, nextCurrentIdx);
+            warmSeg(nextSeg, get(selectedReciter), curSeg ?? null);
             if (curSeg) {
                 const chapterForPeaks = curSeg.chapter ?? (get(selectedChapter) ? parseInt(get(selectedChapter)) : 0);
                 if (chapterForPeaks) void _fetchPeaksForClick(curSeg, chapterForPeaks);

@@ -1,9 +1,11 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
+    import { get } from 'svelte/store';
 
     import type { SegValMissingVerseItem } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
-    import { getAdjacentSegments, segAllData } from '../../stores/chapter';
+    import { getAdjacentSegments, segAllData, selectedReciter } from '../../stores/chapter';
+    import { warmSeg } from '../../utils/playback/warmup';
     import { findMissingVerseBoundarySegments } from '../../utils/validation/missing-verse-context';
     import SegmentRow from '../list/SegmentRow.svelte';
 
@@ -46,6 +48,16 @@
         if (afterCtx) out.push(afterCtx);
         return out;
     })();
+
+    // Warm the first sibling's chapter audio at byte-offset for its
+    // `time_start` once the card resolves a non-empty sibling list. Hides
+    // cold-FUSE / cold-CDN stall when the reviewer plays the first row.
+    // Dedupe in `warmup.ts` prevents repeat fires across re-derives.
+    let _warmedOnce = false;
+    $: if (!_warmedOnce && siblings.length > 0) {
+        _warmedOnce = true;
+        warmSeg(siblings[0], get(selectedReciter));
+    }
 
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
     export function getIsContextShown(): boolean { return showContext; }

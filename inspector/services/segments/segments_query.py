@@ -7,7 +7,11 @@ import statistics
 
 from config import LOW_CONFIDENCE_RED, LOW_CONFIDENCE_THRESHOLD
 from services.storage import cache
-from services.audio.audio_meta import is_vbr, vbr_chapters_for_reciter
+from services.audio.audio_meta import (
+    chapter_bitrate_kbps_for_reciter,
+    is_vbr,
+    vbr_chapters_for_reciter,
+)
 from services.storage.data_loader import (
     get_word_counts,
     load_detailed,
@@ -126,6 +130,11 @@ def get_chapter_data(reciter: str, chapter: int,
         "audio_url": audio_url,
         "vbr": is_vbr(reciter, chapter),
         "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
+        # Sparse {chapter -> kbps} for CBR chapters with a positive bitrate.
+        # Consumed by the segments-tab audio-warmup util to compute the byte
+        # offset of a seg's `time_start` and warm a 64 KB Range ahead of
+        # play. Absence ⇒ "don't warm" (VBR, missing kbps, or unknown mode).
+        "chapter_bitrate_kbps": chapter_bitrate_kbps_for_reciter(reciter),
         "segments": segments,
         "summary": summary,
     }

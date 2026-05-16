@@ -34,6 +34,7 @@ import type { SegCanvas } from '../../types/segments-waveform';
 import { drawSegPlayhead } from '../waveform/draw-seg';
 import { _findCoveringPeaks } from '../waveform/peaks-cache';
 import { indexSegPeaksBulk, redrawPeaksWaveforms } from '../waveform/utils';
+import { wrapCbrSrcIfBySurah } from './source';
 
 export interface PreviewActiveSeg {
     /** Stable per-row id minted by the caller (chapter:index:start:end). */
@@ -312,9 +313,16 @@ export function createPreviewPlaybackContext(opts: { persistPeaks?: boolean } = 
         const reciter = get(selectedReciter);
         const isVbr = row.chapter != null
             && (get(reciterVbrChapters)?.has(row.chapter) ?? false);
+        // by_surah chapter URLs MUST be wrapped through the audio-proxy: the
+        // per-panel port has the Web Audio kill-switch enabled, and a raw
+        // cross-origin CDN src on a `crossorigin="anonymous"` element makes
+        // `MediaElementAudioSourceNode` output zeroes (no ACAO header from
+        // the CDN). Same wrap chapter-actions.ts applies for main playback;
+        // before this History rows skipped it and silently played zeroes
+        // after 767bb9a7 enriched their `audio_url` from null → CDN.
         port.setSource({
             audioUrl: row.audioUrl,
-            cbrSrc: row.audioUrl,
+            cbrSrc: wrapCbrSrcIfBySurah(row.audioUrl, reciter),
             reciter: reciter || null,
             vbr: isVbr,
         });

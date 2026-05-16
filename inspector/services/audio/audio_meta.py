@@ -103,6 +103,38 @@ def vbr_chapters_for_reciter(reciter: str) -> list[int]:
     return out
 
 
+def chapter_bitrate_kbps_for_reciter(reciter: str) -> dict[str, int]:
+    """{chapter -> bitrate_kbps} for chapters that are CBR with a positive kbps.
+
+    Shipped to the frontend so the segments-tab audio-warmup util can compute
+    a chapter byte offset from a seg's ``time_start`` and warm a 64 KB Range
+    ahead of the user's play click. Absence from this map (VBR, missing kbps,
+    unknown mode) is the no-op signal — keep the wire payload sparse.
+
+    Non-integer keys (by_ayah ``"<s>:<a>"``) are skipped — only by_surah
+    deliveries expose chapter-level bitrate today.
+
+    Keys are string-typed for orjson compatibility (it rejects int dict keys);
+    the FE parses them back to int.
+    """
+    out: dict[str, int] = {}
+    for k, entry in _chapters(reciter).items():
+        if not isinstance(entry, dict):
+            continue
+        mode = (entry.get("bitrate_mode") or "").lower()
+        if mode != "cbr":
+            continue
+        kbps = entry.get("bitrate_kbps")
+        if not isinstance(kbps, (int, float)) or kbps <= 0:
+            continue
+        try:
+            ch_int = int(k)
+        except (TypeError, ValueError):
+            continue
+        out[str(ch_int)] = int(kbps)
+    return out
+
+
 def chapter_for_url(reciter: str, url: str) -> str | None:
     """Reverse-lookup the chapter key for a URL — used by the audio-proxy
     short-circuit. Returns the raw sidecar key (``"1"``..``"114"`` or

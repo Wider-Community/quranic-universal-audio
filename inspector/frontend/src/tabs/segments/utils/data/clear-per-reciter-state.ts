@@ -15,6 +15,7 @@ import {
     segCurrentIdx,
     segData,
 } from '../../stores/chapter';
+import { chapterCbrKbps } from '../../stores/chapter-meta';
 import { setPendingOp } from '../../stores/dirty';
 import {
     clearDirtyMap,
@@ -37,7 +38,7 @@ import {
 import { clearStats } from '../../stores/stats';
 import { clearValidation } from '../../stores/validation';
 import { resetHistoryLoader } from '../history/loader';
-import { clearSegPrefetchCache, disposeSegRange, stopSegAnimation } from '../playback/playback';
+import { disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { clearRowRegistry } from '../playback/row-registry';
 import { resetWaveformState } from '../waveform/utils';
 
@@ -46,6 +47,7 @@ export function clearPerReciterState(): void {
     segAllData.set(null);
     segData.set(null);
     reciterVbrChapters.set(new Set());
+    chapterCbrKbps.set(new Map());
     segCurrentIdx.set(-1);
     clearDirtyMap();
     clearOpLog();
@@ -64,7 +66,6 @@ export function clearPerReciterState(): void {
     hidePreview();
     clearSavePreviewData();
 
-    clearSegPrefetchCache();
     clearRowRegistry();
     continuousPlay.set(false);
     playStartMs.set(0);

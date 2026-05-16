@@ -23,6 +23,23 @@ import type { Segment } from '../../../../lib/types/domain';
 import { reciterVbrChapters, selectedReciter } from '../../stores/chapter';
 import { _isCurrentReciterBySurah } from '../data/reciter';
 
+/** Wrap a raw CDN chapter URL in the same-origin audio-proxy for `by_surah`
+ *  reciters. Required when the resulting `<audio>` is routed through Web
+ *  Audio's `MediaElementAudioSourceNode` (kill-switch enabled ports) — the
+ *  CDN response carries no `Access-Control-Allow-Origin`, so a cross-origin
+ *  src with `crossorigin="anonymous"` makes the source node output zeroes.
+ *  The proxy streams same-origin with `ACAO: *`.
+ *
+ *  No-op when the URL is already a same-origin `/api/...` path, when there's
+ *  no active reciter, or when the active reciter is `by_ayah` (those URLs
+ *  point at the local Flask server already). */
+export function wrapCbrSrcIfBySurah(audioUrl: string, reciter: string | null): string {
+    if (!reciter || !audioUrl) return audioUrl;
+    if (audioUrl.startsWith('/api/')) return audioUrl;
+    if (!_isCurrentReciterBySurah()) return audioUrl;
+    return `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`;
+}
+
 /** Resolve the AudioPort source descriptor for a segment.
  *
  *  Mirrors `loadChapterData`'s `setSource(...)` but per-row instead of
@@ -43,8 +60,6 @@ export function resolveSegSource(seg: Segment, chapterOverride?: number | null):
     if (!reciter || !seg.audio_url) return null;
     const chapter = chapterOverride ?? seg.chapter ?? 0;
     const vbr = chapter > 0 && (get(reciterVbrChapters)?.has(chapter) ?? false);
-    const cbrSrc = (_isCurrentReciterBySurah() && !seg.audio_url.startsWith('/api/'))
-        ? `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(seg.audio_url)}`
-        : seg.audio_url;
+    const cbrSrc = wrapCbrSrcIfBySurah(seg.audio_url, reciter);
     return { audioUrl: seg.audio_url, cbrSrc, reciter, vbr };
 }

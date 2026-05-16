@@ -78,6 +78,7 @@
     import { playFromSegment } from '../../utils/playback/playback';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
+    import { warmSeg } from '../../utils/playback/warmup';
     import { getConfClass } from '../../utils/validation/conf-class';
     import { _ensureWaveformObserver } from '../../utils/waveform/utils';
     import ReferenceEditor from '../edit/ReferenceEditor.svelte';
@@ -451,6 +452,10 @@
         }
         _unsubPreviewActive?.();
         _unsubPreviewPlaying?.();
+        if (_hoverWarmTimer) {
+            clearTimeout(_hoverWarmTimer);
+            _hoverWarmTimer = null;
+        }
     });
 
     // ---------------------------------------------------------------------
@@ -461,6 +466,26 @@
         e.stopPropagation();
         if (!previewCtx) return;
         previewCtx.toggle(rowPreviewUid);
+    }
+
+    // Hover-warm — fires 150 ms after the cursor enters the play button.
+    // Hides cold-FUSE / cold-page-cache stall on the click that follows,
+    // especially valuable for same-chapter-far-time seg plays (which the
+    // browser's forward buffer doesn't already cover). No-op on VBR +
+    // missing-kbps via `warmSeg`'s skip rules.
+    let _hoverWarmTimer: ReturnType<typeof setTimeout> | null = null;
+    function onPlayHover(): void {
+        if (readOnly || _hoverWarmTimer) return;
+        _hoverWarmTimer = setTimeout(() => {
+            _hoverWarmTimer = null;
+            warmSeg(seg, get(selectedReciter));
+        }, 150);
+    }
+    function onPlayLeave(): void {
+        if (_hoverWarmTimer) {
+            clearTimeout(_hoverWarmTimer);
+            _hoverWarmTimer = null;
+        }
     }
 
     function onPlayClick(e: MouseEvent): void {
@@ -699,7 +724,7 @@
                 {#if showPlayBtn || showGotoBtn}
                     <div class="seg-row-play-actions">
                         {#if showPlayBtn}
-                            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick}>{playGlyph}</button>
+                            <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick} on:mouseenter={onPlayHover} on:mouseleave={onPlayLeave}>{playGlyph}</button>
                         {/if}
                         {#if showGotoBtn}
                             <button class="btn btn-sm seg-card-goto-btn" on:click={onGotoClick}>Go to</button>

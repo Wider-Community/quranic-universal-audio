@@ -217,6 +217,12 @@ export interface SegDataResponse {
      *  accordion prefetch to pick the clip endpoint vs chapter URL based on
      *  the next sibling's chapter. */
     reciter_vbr_chapters: number[];
+    /** Sparse {chapter -> kbps} for chapters that are CBR with a positive
+     *  bitrate. Consumed by the segments-tab audio-warmup util to compute
+     *  the byte offset of a seg's `time_start`. Absence ⇒ "don't warm"
+     *  (VBR, missing kbps, or unknown mode). Reciter-wide so cross-chapter
+     *  accordion siblings can resolve their own chapter's kbps. */
+    chapter_bitrate_kbps?: Record<number, number>;
     segments: Segment[];
     summary: SegmentsChapterSummary;
     /** Present when the route returns 404 (reciter/chapter not found). */
