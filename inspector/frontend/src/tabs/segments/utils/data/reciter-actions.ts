@@ -13,7 +13,6 @@ import { fetchJson } from '../../../../lib/api';
 import { loadQuranRefs, quranRefs } from '../../../../lib/refs/quran-refs';
 import type {
     SegAllResponse,
-    SegStatsResponse,
     SegValidateResponse,
 } from '../../../../lib/types/api';
 import { preconnectOrigins } from '../../../../lib/utils/preconnect';
@@ -26,7 +25,6 @@ import {
 } from '../../stores/chapter';
 import { activeFilters } from '../../stores/filters';
 import { savedFilterView } from '../../stores/navigation';
-import { setStats } from '../../stores/stats';
 import { setValidation } from '../../stores/validation';
 import { startHistoryLoad } from '../history/loader';
 import { clearPerReciterState } from './clear-per-reciter-state';
@@ -124,11 +122,9 @@ export async function reloadCurrentReciter(): Promise<void> {
         })
         .catch((e) => console.error('Error loading validation:', e));
 
-    void fetchJson<SegStatsResponse>(`/api/seg/stats/${reciter}`)
-        .then((data) => {
-            if (get(selectedReciter) === reciter && !data.error) setStats(data);
-        })
-        .catch((e) => console.error('Error loading stats:', e));
+    // Stats are lazy-fetched by StatsPanel.svelte on accordion open. Compute
+    // is ~0.7-1.2 s server-side on prod-sized reciters; paying it eagerly on
+    // every reciter switch is wasteful — the panel rarely gets opened.
 
     // Background only. Opening History awaits the same in-flight promise and
     // then hydrates persisted waveform peaks.

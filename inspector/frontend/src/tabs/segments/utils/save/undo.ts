@@ -28,7 +28,7 @@ import { setSavePreviewData } from '../../stores/save';
 import { clearUndoing, markUndoing } from '../../stores/undo-pending';
 import { reloadSegAll } from '../data/reciter-actions';
 import { renderEditHistoryPanel } from '../history/render';
-import { refreshStats, refreshValidation } from '../validation/refresh';
+import { refreshValidation } from '../validation/refresh';
 import { buildSavePreviewData, hideSavePreview } from './actions';
 
 // ---------------------------------------------------------------------------
@@ -47,12 +47,12 @@ export async function _afterUndoSuccess(reciter: string, _opsReversed: number): 
         }
     } catch (_) { /* non-critical */ }
     historyDataStale.set(true);
-    // Undo invalidates validation, seg data, and stats server-side
-    // (invalidate_seg_caches runs on undo too). Validation counters depend
-    // on segAllData.segments (filterStaleIssues uses liveUids) — without
-    // reloading /seg/all the counts can lag behind the validation response.
+    // Undo invalidates validation + seg data server-side (invalidate_seg_caches
+    // runs on undo too). Validation counters depend on segAllData.segments
+    // (filterStaleIssues uses liveUids) — without reloading /seg/all the counts
+    // can lag behind the validation response. Stats are NOT refreshed here:
+    // StatsPanel lazy-fetches on accordion open.
     void refreshValidation();
-    void refreshStats();
     void reloadSegAll();
 }
 

@@ -22,7 +22,7 @@ import {
 } from '../../stores/dirty';
 import { saveButtonLabel } from '../../stores/save';
 import { renderEditHistoryPanel } from '../history/render';
-import { refreshStats, refreshValidation } from '../validation/refresh';
+import { refreshValidation } from '../validation/refresh';
 import { collectOpPeaks, type OpPeakRecord } from '../waveform/op-peaks';
 export { buildPayloadFromCommandResult } from './payload';
 
@@ -309,10 +309,11 @@ export async function executeSave(isAutoSave = false): Promise<void> {
             } catch (_) { /* non-critical */ }
             for (const { ch, ops } of pendingClears) clearSavedOps(ch, ops);
 
-            // Validation and stats can fire after — they no longer race
-            // the history refresh.
+            // Validation refresh fires after — it no longer races the history
+            // refresh. Stats are NOT refreshed here: StatsPanel lazy-fetches
+            // on accordion open (compute is ~0.7-1.2 s server-side on prod-sized
+            // reciters and the panel rarely gets opened during editing).
             void refreshValidation().catch((e) => console.error('Error refreshing validation:', e));
-            void refreshStats().catch((e) => console.error('Error refreshing stats:', e));
         } else {
             // Nothing saved (either nothing to save or error before first commit)
             saveButtonLabel.set('Save');
