@@ -1,6 +1,5 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
-    import { get } from 'svelte/store';
 
     import { editGate } from '../../../../lib/actions/editGate';
     import type { SegValAutoFix,SegValMissingWordsItem } from '../../../../lib/types/api';
@@ -10,7 +9,6 @@
         getChapterSegments,
         getSegByChapterIndex,
         segAllData,
-        selectedReciter,
     } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import {
@@ -19,7 +17,6 @@
     } from '../../stores/dirty';
     import { historyData } from '../../stores/history';
     import { autoFixMissingWord } from '../../utils/edit/auto-fix';
-    import { warmSeg } from '../../utils/playback/warmup';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
     import SegmentRow from '../list/SegmentRow.svelte';
 
@@ -139,15 +136,6 @@
         if (nextSeg) out.push(nextSeg);
         return out;
     })();
-
-    // Warm the first sibling's chapter audio at its byte offset once the
-    // card resolves a non-empty sibling list. Dedupe in `warmup.ts` keeps
-    // repeat reactive fires from spamming the network.
-    let _warmedOnce = false;
-    $: if (!_warmedOnce && siblings.length > 0) {
-        _warmedOnce = true;
-        warmSeg(siblings[0], get(selectedReciter));
-    }
 
     // ---- Public interface (forwarded from ErrorCard dispatcher) ----
     export function getIsContextShown(): boolean { return showContext; }

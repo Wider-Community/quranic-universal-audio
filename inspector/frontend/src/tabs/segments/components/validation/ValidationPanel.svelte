@@ -33,14 +33,17 @@
     import { TAB_NAMES } from '../../../../lib/utils/constants';
     import { IssueRegistry } from '../../domain/registry';
     import { accordionPin, clearAccordionPin, pinAccordion } from '../../stores/accordion-pin';
-    import { segAllData } from '../../stores/chapter';
+    import { segAllData, selectedReciter } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
+    import { playingSegmentIndex } from '../../stores/playback';
     import { segValidation, valUiLcThreshold, valUiMeasuredCardHeight,valUiOpenCategory, valUiScrollTop } from '../../stores/validation';
     import {
         VAL_VIRTUALIZE_THRESHOLD,
         VIRT_BUFFER_ROWS,
     } from '../../utils/constants';
+    import { warmSeg } from '../../utils/playback/warmup';
+    import { resolveCardLeadSeg } from '../../utils/validation/card-lead-seg';
     import { filterStaleIssues } from '../../utils/validation/stale';
     import AccordionGuideModal from './AccordionGuideModal.svelte';
     import ErrorCard from './ErrorCard.svelte';
@@ -425,6 +428,87 @@
         return out;
     })();
     $: openTotal = displayedItems.length;
+
+    // ---- Card-transition audio warmup ----
+    //
+    // Reviewers work through accordion cards in order. Each card's "lead seg"
+    // (resolved per-type — see resolveCardLeadSeg) is what the reviewer
+    // typically plays first. Cross-card transitions frequently span chapters
+    // (e.g. missing_words[0]=4:127 → [1]=6:73), so the browser's forward
+    // buffer can never cover the next card's audio. The chapter-load + hover
+    // + within-card-next-sibling warmups can't help either — they're scoped
+    // to a single chapter.
+    //
+    // Strategy:
+    //   1. On category open / displayedItems change → warm card[0]'s lead.
+    //   2. On `playingSegmentIndex` change → find which card holds the now-
+    //      playing seg, and warm card[N+1]'s lead. Idempotent via warmup.ts
+    //      dedupe so re-fires within 30 s are free.
+    //
+    // The (chapter, index) → card-index map rebuilds on every displayedItems
+    // identity change. O(N · indices-per-card) but N is bounded by the
+    // accordion's visible card count.
+    let _cardOwnerByChIdx: Map<string, number> = new Map();
+    $: {
+        const m = new Map<string, number>();
+        const items = displayedItems;
+        const kind = openCategory;
+        if (kind) {
+            for (let i = 0; i < items.length; i++) {
+                const it = items[i] as {
+                    chapter?: number;
+                    seg_index?: number;
+                    seg_indices?: number[];
+                };
+                if (it?.chapter == null) continue;
+                const indices = it.seg_indices ?? (it.seg_index != null ? [it.seg_index] : []);
+                for (const idx of indices) {
+                    const key = `${it.chapter}:${idx}`;
+                    if (!m.has(key)) m.set(key, i);
+                }
+            }
+        }
+        _cardOwnerByChIdx = m;
+    }
+
+    // Card-0 warmup on category open / re-pin. Fires once per (category, item-0).
+    let _lastCard0Key: string | null = null;
+    $: {
+        const kind = openCategory;
+        const first = displayedItems[0];
+        const key = kind && first ? `${kind}|${(first as { chapter?: number }).chapter ?? ''}|${(first as { seg_index?: number; verse_key?: string }).seg_index ?? (first as { verse_key?: string }).verse_key ?? ''}` : null;
+        if (key && first && kind && key !== _lastCard0Key) {
+            _lastCard0Key = key;
+            const lead = resolveCardLeadSeg(first, kind);
+            if (lead) warmSeg(lead, $selectedReciter);
+        } else if (!key) {
+            _lastCard0Key = null;
+        }
+    }
+
+    // Next-card warmup driven by playingSegmentIndex. When the playing seg
+    // first belongs to card N (where the previous play was in card N-1 or no
+    // card), warm card[N+1]'s lead so by the time the reviewer scrolls to
+    // it and clicks, the byte range is already on its way.
+    let _lastPlayedCardIdx = -1;
+    $: {
+        const playing = $playingSegmentIndex;
+        if (!playing || !openCategory) {
+            _lastPlayedCardIdx = -1;
+        } else {
+            const key = `${playing.chapter}:${playing.index}`;
+            const owner = _cardOwnerByChIdx.get(key);
+            if (owner != null && owner !== _lastPlayedCardIdx) {
+                _lastPlayedCardIdx = owner;
+                const nextItem = displayedItems[owner + 1];
+                if (nextItem) {
+                    const lead = resolveCardLeadSeg(nextItem, openCategory);
+                    if (lead) warmSeg(lead, $selectedReciter);
+                }
+            }
+        }
+    }
+
     // Virtualization stays ACTIVE during editMode. To keep the editing row
     // mounted — so scrolling away doesn't evict the edit panel mid-flow —
     // we expand the slice window to include whichever card resolves to the
