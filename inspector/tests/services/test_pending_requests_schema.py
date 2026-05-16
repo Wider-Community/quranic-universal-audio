@@ -12,6 +12,8 @@ from pydantic import ValidationError
 
 from scripts.lib.schemas import (
     Actor,
+    ArchivedRequest,
+    ArchivedRequestsFile,
     PendingRequest,
     PendingRequestsFile,
     ProposedEdits,
@@ -167,3 +169,73 @@ def test_pending_requests_file_with_entries():
 def test_pending_requests_file_rejects_unknown_field():
     with pytest.raises(ValidationError):
         PendingRequestsFile(extra_field="x")
+
+
+# ---------------------------------------------------------------------------
+# ArchivedRequest / ArchivedRequestsFile
+# ---------------------------------------------------------------------------
+
+
+def test_archived_request_inherits_pending_fields():
+    ar = ArchivedRequest(
+        slug="test_reciter",
+        submitted_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        requester=_actor(),
+        proposed_edits=ProposedEdits(name_en="Updated"),
+        comments="hi",
+        auto_claim=True,
+        archived_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        transitioned_by=_actor(hf_user_id="system", login="system", role="owner"),
+    )
+    assert ar.reason is None
+    assert ar.auto_claim is True
+    assert ar.proposed_edits.name_en == "Updated"
+
+
+def test_archived_request_round_trips_through_json():
+    ar = ArchivedRequest(
+        slug="test_reciter",
+        submitted_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        requester=_actor(),
+        proposed_edits=ProposedEdits(country="EG"),
+        comments=None,
+        archived_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        transitioned_by=_actor(hf_user_id="admin-1", login="admin", role="maintainer"),
+        reason="please clarify",
+    )
+    raw = ar.model_dump(mode="json")
+    rt = ArchivedRequest.model_validate(raw)
+    assert rt == ar
+
+
+def test_archived_requests_file_empty_default():
+    f = ArchivedRequestsFile()
+    assert f.schema_version == 1
+    assert f.by_slug == {}
+
+
+def test_archived_requests_file_multiple_entries_per_slug():
+    ar1 = ArchivedRequest(
+        slug="test_reciter",
+        submitted_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        requester=_actor(),
+        archived_at=datetime(2026, 1, 5, tzinfo=timezone.utc),
+        transitioned_by=_actor(hf_user_id="admin", login="admin", role="maintainer"),
+        reason="reason one",
+    )
+    ar2 = ArchivedRequest(
+        slug="test_reciter",
+        submitted_at=datetime(2026, 1, 10, tzinfo=timezone.utc),
+        requester=_actor(),
+        archived_at=datetime(2026, 1, 15, tzinfo=timezone.utc),
+        transitioned_by=_actor(hf_user_id="admin", login="admin", role="maintainer"),
+        reason="reason two",
+    )
+    f = ArchivedRequestsFile(by_slug={"test_reciter": [ar1, ar2]})
+    rt = ArchivedRequestsFile.model_validate(f.model_dump(mode="json"))
+    assert len(rt.by_slug["test_reciter"]) == 2
+
+
+def test_archived_requests_file_rejects_unknown_field():
+    with pytest.raises(ValidationError):
+        ArchivedRequestsFile(extra_field="x")

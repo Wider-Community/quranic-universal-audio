@@ -148,6 +148,7 @@ from services import access as access_service
 from services import activity_state as activity_state_service
 from services import auto_detect as auto_detect_service
 from services import pending_requests as pending_requests_service
+from services import request_archive as request_archive_service
 from services import audit as audit_service
 from services import auth as auth_service
 from services import catalog as catalog_service
@@ -324,6 +325,7 @@ def _hydrate_bucket_stores() -> None:
         ("catalog", catalog_service.hydrate),
         ("activity_state", activity_state_service.hydrate),
         ("pending_requests", pending_requests_service.hydrate),
+        ("request_archive", request_archive_service.hydrate),
     ):
         try:
             fn()
@@ -364,25 +366,6 @@ def _hydrate_bucket_stores() -> None:
             auto_detect_service.hydrate_initial_seen()
         except Exception as e:  # noqa: BLE001
             logger.warning("auto_detect hydrate_initial_seen failed: %s", e)
-
-        # Drop pending entries whose state row has already advanced past
-        # AWAITING_ALIGNMENT — runs AFTER hydrate_initial_seen so any
-        # catch-up alignment_completed transitions have first chance to
-        # clear them via apply_and_clear. Anything still orphaned at this
-        # point is real drift (legacy data, crashed write, or a manual
-        # admin state override) and gets pruned + logged.
-        try:
-            dropped = pending_requests_service.reconcile_with_state()
-            if dropped:
-                logger.info(
-                    "pending_requests: reconcile_with_state dropped %d orphan entry/entries at boot",
-                    dropped,
-                )
-        except Exception as e:  # noqa: BLE001
-            logger.warning(
-                "pending_requests reconcile_with_state failed: %s", e
-            )
-
         if os.environ.get("INSPECTOR_AUTO_DETECT") == "1":
             try:
                 interval = int(os.environ.get("INSPECTOR_AUTO_DETECT_INTERVAL_S", "60"))

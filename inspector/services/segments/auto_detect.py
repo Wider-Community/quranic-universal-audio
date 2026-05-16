@@ -25,7 +25,7 @@ longer in ``AWAITING_ALIGNMENT``, so durability isn't needed.
 The audit record carries a synthetic system actor (``hf_user_id="system"``,
 role=owner). This is also the actor that subsequently calls
 ``catalog.edit_reciter`` / ``catalog.edit_delivery`` via
-``pending_requests.apply_and_clear`` — owner role is required by those
+``pending_requests.apply_and_archive_completed`` — owner role is required by those
 mutations.
 """
 

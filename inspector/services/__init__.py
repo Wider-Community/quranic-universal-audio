@@ -15,7 +15,7 @@ from __future__ import annotations
 import sys as _sys
 
 from .auth import access, auth, hf_users, permissions, predicates, secrets_guard
-from .state import audit, catalog, pending_requests, state
+from .state import audit, catalog, pending_requests, request_archive, state
 from .storage import cache, data_dir, data_loader, hf_bucket, storage_paths
 from .audio import (
     audio_fetch,
@@ -61,6 +61,7 @@ _LEGACY_ALIASES = {
     "audit": audit,
     "catalog": catalog,
     "pending_requests": pending_requests,
+    "request_archive": request_archive,
     "state": state,
     "cache": cache,
     "data_dir": data_dir,

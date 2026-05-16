@@ -1,7 +1,7 @@
 """Tests for ``services/pending_requests`` — the 6th bucket store.
 
 Same hydrate / snapshot / write-through pattern as the existing four,
-plus an ``apply_and_clear`` method that applies the user's proposed
+plus an ``apply_and_archive_completed`` method that applies the user's proposed
 edits to the catalog at auto-acceptance time.
 """
 
@@ -29,6 +29,7 @@ def fresh_pending(tmp_path, monkeypatch):
     """Per-test FilesystemBackend so each test starts with a clean store."""
     from services import hf_bucket as _hf_bucket
     from services import pending_requests as pending_requests_service
+    from services import request_archive as request_archive_service
 
     monkeypatch.setenv("INSPECTOR_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("INSPECTOR_BACKEND", "filesystem")
@@ -37,6 +38,7 @@ def fresh_pending(tmp_path, monkeypatch):
     backend = _hf_bucket.FilesystemBackend(tmp_path)
     _hf_bucket.set_backend(backend)
     pending_requests_service.hydrate()
+    request_archive_service.hydrate()
 
     yield pending_requests_service, backend
 
@@ -154,13 +156,13 @@ def test_clear_is_idempotent(fresh_pending):
 
 
 # ---------------------------------------------------------------------------
-# apply_and_clear
+# apply_and_archive_completed
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
 def seeded_catalog(fresh_pending, monkeypatch):
-    """Install a small catalog so apply_and_clear has something to patch."""
+    """Install a small catalog so apply_and_archive_completed has something to patch."""
     from datetime import datetime as _dt, timezone as _tz
 
     from scripts.lib.schemas import (
@@ -229,10 +231,33 @@ def seeded_catalog(fresh_pending, monkeypatch):
     return fresh_pending
 
 
-def test_apply_and_clear_applies_reciter_fields(seeded_catalog, monkeypatch):
+def _system_actor() -> Actor:
+    return _actor(hf_user_id="system", login="system", role="owner")
+
+
+def _completed_for(svc_request_archive, slug: str):
+    return svc_request_archive.get_for_slug(
+        slug, svc_request_archive.ArchiveKind.COMPLETED,
+    )
+
+
+def _returned_for(svc_request_archive, slug: str):
+    return svc_request_archive.get_for_slug(
+        slug, svc_request_archive.ArchiveKind.RETURNED,
+    )
+
+
+def _discarded_for(svc_request_archive, slug: str):
+    return svc_request_archive.get_for_slug(
+        slug, svc_request_archive.ArchiveKind.DISCARDED,
+    )
+
+
+def test_apply_and_archive_completed_applies_reciter_fields(seeded_catalog, monkeypatch):
     svc, _ = seeded_catalog
     from services import audit as audit_service
     from services import catalog as catalog_service
+    from services import request_archive as request_archive_service
 
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
@@ -243,8 +268,8 @@ def test_apply_and_clear_applies_reciter_fields(seeded_catalog, monkeypatch):
         comments=None,
     )
 
-    actor = _actor(hf_user_id="system", login="system", role="owner")
-    svc.apply_and_clear("test_reciter", actor=actor)
+    actor = _system_actor()
+    svc.apply_and_archive_completed("test_reciter", actor=actor)
 
     reciter = catalog_service.find_reciter("test_reciter")
     assert reciter is not None
@@ -252,11 +277,20 @@ def test_apply_and_clear_applies_reciter_fields(seeded_catalog, monkeypatch):
     assert reciter.country == "SA"
     assert svc.get("test_reciter") is None
 
+    archived = _completed_for(request_archive_service, "test_reciter")
+    assert len(archived) == 1
+    entry = archived[0]
+    assert entry.proposed_edits.name_en == "New Name"
+    assert entry.transitioned_by.hf_user_id == "system"
+    assert entry.reason is None
+    assert entry.archived_at is not None
 
-def test_apply_and_clear_applies_delivery_fields(seeded_catalog, monkeypatch):
+
+def test_apply_and_archive_completed_applies_delivery_fields(seeded_catalog, monkeypatch):
     svc, _ = seeded_catalog
     from services import audit as audit_service
     from services import catalog as catalog_service
+    from services import request_archive as request_archive_service
 
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
@@ -272,8 +306,8 @@ def test_apply_and_clear_applies_delivery_fields(seeded_catalog, monkeypatch):
         comments=None,
     )
 
-    actor = _actor(hf_user_id="system", login="system", role="owner")
-    svc.apply_and_clear("test_reciter", actor=actor)
+    actor = _system_actor()
+    svc.apply_and_archive_completed("test_reciter", actor=actor)
 
     delivery = catalog_service.find_delivery("test_reciter")
     assert delivery is not None
@@ -282,47 +316,54 @@ def test_apply_and_clear_applies_delivery_fields(seeded_catalog, monkeypatch):
     assert delivery.recording_context == "broadcast"
     assert delivery.recording_year == 2020
     assert svc.get("test_reciter") is None
+    assert len(_completed_for(request_archive_service, "test_reciter")) == 1
 
 
-def test_apply_and_clear_noop_when_no_pending(seeded_catalog, monkeypatch):
+def test_apply_and_archive_completed_noop_when_no_pending(seeded_catalog, monkeypatch):
     svc, _ = seeded_catalog
     from services import audit as audit_service
+    from services import request_archive as request_archive_service
 
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
-    actor = _actor(hf_user_id="system", login="system", role="owner")
-    svc.apply_and_clear("test_reciter", actor=actor)  # no entry; should not raise
+    actor = _system_actor()
+    svc.apply_and_archive_completed("test_reciter", actor=actor)  # no entry
     assert svc.get("test_reciter") is None
+    assert _completed_for(request_archive_service, "test_reciter") == []
 
 
-def test_apply_and_clear_with_empty_edits_just_clears(seeded_catalog, monkeypatch):
-    """Submission with no proposed edits should still be cleared on accept."""
+def test_apply_and_archive_completed_with_empty_edits_still_archives(seeded_catalog, monkeypatch):
+    """Submission with no proposed edits is still archived on accept."""
     svc, _ = seeded_catalog
     from services import audit as audit_service
+    from services import request_archive as request_archive_service
 
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     svc.submit("test_reciter", requester=_actor(), edits=_edits(), comments="hi")
-    actor = _actor(hf_user_id="system", login="system", role="owner")
-    svc.apply_and_clear("test_reciter", actor=actor)
+    actor = _system_actor()
+    svc.apply_and_archive_completed("test_reciter", actor=actor)
     assert svc.get("test_reciter") is None
+    archived = _completed_for(request_archive_service, "test_reciter")
+    assert len(archived) == 1
+    assert archived[0].comments == "hi"
 
 
-def test_apply_and_clear_warns_on_riwayah_style_conflict(seeded_catalog, monkeypatch):
+def test_apply_and_archive_completed_warns_on_riwayah_style_conflict(seeded_catalog, monkeypatch):
     """Proposed (riwayah, style) matching another delivery of the same reciter
-    emits a non-blocking audit warning. The edit still applies and clears."""
+    emits a non-blocking audit warning. The edit still applies and archives."""
     svc, _ = seeded_catalog
     from datetime import datetime as _dt, timezone as _tz
 
     from scripts.lib.schemas import AudioCategory, Delivery
     from services import audit as audit_service
     from services import catalog as catalog_service
+    from services import request_archive as request_archive_service
 
     calls: list[dict] = []
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: calls.append(kw))
 
-    # Seed a second delivery for the same reciter so a conflict is possible.
-    actor = _actor(hf_user_id="system", login="system", role="owner")
+    actor = _system_actor()
     catalog_service.add_delivery(
         actor=actor,
         delivery=Delivery(
@@ -343,103 +384,109 @@ def test_apply_and_clear_warns_on_riwayah_style_conflict(seeded_catalog, monkeyp
     svc.submit(
         "test_reciter",
         requester=_actor(),
-        edits=_edits(riwayah="warsh", style="mujawwad"),  # conflicts with the new row
+        edits=_edits(riwayah="warsh", style="mujawwad"),
         comments=None,
     )
-    svc.apply_and_clear("test_reciter", actor=actor)
+    svc.apply_and_archive_completed("test_reciter", actor=actor)
 
     events = [c["event"] for c in calls]
     assert "catalog.conflict_warning" in events
     assert svc.get("test_reciter") is None
+    assert len(_completed_for(request_archive_service, "test_reciter")) == 1
 
 
 # ---------------------------------------------------------------------------
-# reconcile_with_state
+# archive_returned / archive_discarded
 # ---------------------------------------------------------------------------
 
 
-def test_reconcile_with_state_drops_entries_past_awaiting_alignment(
-    fresh_pending, monkeypatch
-):
-    """Entry whose state row already advanced (e.g. crashed clear after
-    state persisted) must be dropped — that's the user-reported bug.
-    """
-    from datetime import datetime as _dt, timezone as _tz
+def test_archive_returned_moves_pending_into_returned(fresh_pending):
+    svc, _ = fresh_pending
+    from services import request_archive as request_archive_service
 
-    from scripts.lib.schemas import ReciterRow, ReciterState
-    from services import pending_requests as svc_module
-    from services import state as state_service
-
-    svc, backend = fresh_pending
-    svc.submit("test_reciter", requester=_actor(), edits=_edits(), comments=None)
-
-    fake_row = ReciterRow(
-        slug="test_reciter",
-        state=ReciterState.AWAITING_REVIEW,
-        state_since=_dt.now(_tz.utc),
+    svc.submit(
+        "test_reciter",
+        requester=_actor(),
+        edits=_edits(name_en="Proposed Name"),
+        comments="please fix the name",
     )
-    monkeypatch.setattr(state_service, "get_row", lambda slug: fake_row if slug == "test_reciter" else None)
 
-    dropped = svc_module.reconcile_with_state()
-    assert dropped == 1
+    admin = _actor(hf_user_id="admin-1", login="admin", role="maintainer")
+    svc.archive_returned(
+        "test_reciter",
+        reason="please clarify the recording context",
+        by_actor=admin,
+    )
+
     assert svc.get("test_reciter") is None
+    archived = _returned_for(request_archive_service, "test_reciter")
+    assert len(archived) == 1
+    entry = archived[0]
+    assert entry.proposed_edits.name_en == "Proposed Name"
+    assert entry.comments == "please fix the name"
+    assert entry.reason == "please clarify the recording context"
+    assert entry.transitioned_by.hf_user_id == "admin-1"
 
-    # Persisted to disk, not just in-memory.
-    from services import storage_paths
-    raw = backend.read_json(storage_paths.pending_requests_path())
-    assert "test_reciter" not in raw["by_slug"]
 
-
-def test_reconcile_with_state_keeps_awaiting_alignment_entries(
-    fresh_pending, monkeypatch
-):
-    """Active requests (state == AWAITING_ALIGNMENT) must NOT be touched."""
-    from scripts.lib.schemas import ReciterRow, ReciterState
-    from services import pending_requests as svc_module
-    from services import state as state_service
-
+def test_archive_returned_noop_when_no_pending(fresh_pending):
     svc, _ = fresh_pending
-    svc.submit("active_reciter", requester=_actor(), edits=_edits(), comments=None)
+    from services import request_archive as request_archive_service
 
-    from datetime import datetime as _dt, timezone as _tz
+    admin = _actor(hf_user_id="admin-1", login="admin", role="maintainer")
+    svc.archive_returned("nonexistent", reason="x" * 10, by_actor=admin)
+    assert _returned_for(request_archive_service, "nonexistent") == []
 
-    fake_row = ReciterRow(
-        slug="active_reciter",
-        state=ReciterState.AWAITING_ALIGNMENT,
-        state_since=_dt.now(_tz.utc),
+
+def test_archive_returned_then_resubmit_keeps_history(fresh_pending):
+    """A slug can be returned, re-requested, returned again — both archive
+    entries should be preserved in chronological order."""
+    svc, _ = fresh_pending
+    from services import request_archive as request_archive_service
+
+    admin = _actor(hf_user_id="admin-1", login="admin", role="maintainer")
+
+    svc.submit("test_reciter", requester=_actor(), edits=_edits(name_en="V1"), comments=None)
+    svc.archive_returned("test_reciter", reason="reason one  ", by_actor=admin)
+
+    svc.submit("test_reciter", requester=_actor(), edits=_edits(name_en="V2"), comments=None)
+    svc.archive_returned("test_reciter", reason="reason two  ", by_actor=admin)
+
+    archived = _returned_for(request_archive_service, "test_reciter")
+    assert len(archived) == 2
+    assert archived[0].proposed_edits.name_en == "V1"
+    assert archived[1].proposed_edits.name_en == "V2"
+
+
+def test_archive_discarded_moves_pending_into_discarded(fresh_pending):
+    svc, _ = fresh_pending
+    from services import request_archive as request_archive_service
+
+    svc.submit(
+        "test_reciter",
+        requester=_actor(),
+        edits=_edits(name_en="Discard me"),
+        comments=None,
     )
-    monkeypatch.setattr(state_service, "get_row", lambda slug: fake_row)
 
-    dropped = svc_module.reconcile_with_state()
-    assert dropped == 0
-    assert svc.get("active_reciter") is not None
+    admin = _actor(hf_user_id="admin-1", login="admin", role="maintainer")
+    svc.archive_discarded(
+        "test_reciter",
+        reason="duplicate of an existing delivery",
+        by_actor=admin,
+    )
+
+    assert svc.get("test_reciter") is None
+    archived = _discarded_for(request_archive_service, "test_reciter")
+    assert len(archived) == 1
+    entry = archived[0]
+    assert entry.reason == "duplicate of an existing delivery"
+    assert entry.transitioned_by.hf_user_id == "admin-1"
 
 
-def test_reconcile_with_state_drops_entries_with_no_state_row(
-    fresh_pending, monkeypatch
-):
-    """No state row at all → orphan (the request was submitted but the row
-    was deleted out from under it somehow). Drop it.
-    """
-    from services import pending_requests as svc_module
-    from services import state as state_service
-
+def test_archive_discarded_noop_when_no_pending(fresh_pending):
     svc, _ = fresh_pending
-    svc.submit("ghost_reciter", requester=_actor(), edits=_edits(), comments=None)
+    from services import request_archive as request_archive_service
 
-    monkeypatch.setattr(state_service, "get_row", lambda slug: None)
-
-    dropped = svc_module.reconcile_with_state()
-    assert dropped == 1
-    assert svc.get("ghost_reciter") is None
-
-
-def test_reconcile_with_state_is_noop_when_clean(fresh_pending, monkeypatch):
-    """No orphans means no disk write."""
-    from services import pending_requests as svc_module
-    from services import state as state_service
-
-    svc, _ = fresh_pending
-    monkeypatch.setattr(state_service, "get_row", lambda slug: None)
-    assert svc_module.reconcile_with_state() == 0
-    assert svc.snapshot().by_slug == {}
+    admin = _actor(hf_user_id="admin-1", login="admin", role="maintainer")
+    svc.archive_discarded("nonexistent", reason="x" * 10, by_actor=admin)
+    assert _discarded_for(request_archive_service, "nonexistent") == []

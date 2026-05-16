@@ -518,8 +518,8 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
             f"alignment_completed requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
 
-    # Capture the auto_claim requester (if any) BEFORE apply_and_clear
-    # wipes the pending entry.
+    # Capture the auto_claim requester (if any) BEFORE apply_and_archive_completed
+    # archives + clears the pending entry.
     # Imported here (not at module top) to avoid a circular import:
     # pending_requests → catalog → audit; audit doesn't touch state.
     from . import pending_requests as _pending_requests
@@ -528,7 +528,7 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
         with _auto_claim_lock:
             _AUTO_CLAIM_QUEUE[slug] = pending.requester
 
-    _pending_requests.apply_and_clear(slug, actor=actor)
+    _pending_requests.apply_and_archive_completed(slug, actor=actor)
 
     return _replace(
         before,
@@ -620,8 +620,10 @@ def _h_requested(slug, before, actor, payload, reason):
 def _h_request_rejected_soft(slug, before, actor, payload, reason):
     """Admin sends a pending request back. Row returns to CATALOGUED.
 
-    Pending edits are discarded; the requester can submit again. Reason is
-    required and lands in the audit record for accountability.
+    The pending entry moves to ``requests/returned.json`` (with the
+    admin's reason) so the requester can recover what they originally
+    asked for and resubmit a corrected version. Reason is required and
+    also lands in the audit record for accountability.
     """
     if before is None:
         raise UnknownReciter(slug)
@@ -630,10 +632,10 @@ def _h_request_rejected_soft(slug, before, actor, payload, reason):
             f"request_rejected_soft requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
     _require_maintainer(actor)
-    _require_reason(reason, "request_rejected_soft")
+    norm_reason = _require_reason(reason, "request_rejected_soft")
 
     from . import pending_requests as _pending_requests
-    _pending_requests.clear(slug)
+    _pending_requests.archive_returned(slug, reason=norm_reason, by_actor=actor)
 
     return _replace(
         before,
@@ -659,7 +661,7 @@ def _h_request_rejected_hard(slug, before, actor, payload, reason):
     norm_reason = _require_reason(reason, "request_rejected_hard")
 
     from . import pending_requests as _pending_requests
-    _pending_requests.clear(slug)
+    _pending_requests.archive_discarded(slug, reason=norm_reason, by_actor=actor)
 
     return _replace(
         before,

@@ -55,6 +55,21 @@ def pending_requests_path() -> str:
     return "requests/pending.json"
 
 
+def completed_requests_path() -> str:
+    """Archive of accepted requests — written when ``reciter.alignment_completed`` fires."""
+    return "requests/completed.json"
+
+
+def returned_requests_path() -> str:
+    """Archive of soft-rejected requests — written when ``reciter.request_rejected_soft`` fires."""
+    return "requests/returned.json"
+
+
+def discarded_requests_path() -> str:
+    """Archive of hard-rejected requests — written when ``reciter.request_rejected_hard`` fires."""
+    return "requests/discarded.json"
+
+
 def reciter_dir(slug: str, kind: WipOrPublished) -> str:
     return f"{kind}/{slug}"
 

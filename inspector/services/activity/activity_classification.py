@@ -73,7 +73,7 @@ ADMIN_ONLY_EVENTS: dict[str, str] = {
 # (vs. "developer added a new event and forgot to classify it").
 HIDDEN_EVENTS: frozenset[str] = frozenset({
     "catalog.edited",
-    # Non-blocking warning emitted by ``services.pending_requests.apply_and_clear``
+    # Non-blocking warning emitted by ``services.pending_requests.apply_and_archive_completed``
     # when a requester's proposed (riwayah, style) matches another delivery of
     # the same reciter. Visible in the audit log for debugging only.
     "catalog.conflict_warning",

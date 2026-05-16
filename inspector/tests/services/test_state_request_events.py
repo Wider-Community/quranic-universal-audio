@@ -89,6 +89,7 @@ def state_env(tmp_path, monkeypatch):
     from services import catalog as catalog_service
     from services import hf_bucket as _hf_bucket
     from services import pending_requests as pending_requests_service
+    from services import request_archive as request_archive_service
     from services import state as state_service
     from services import storage_paths
 
@@ -119,6 +120,7 @@ def state_env(tmp_path, monkeypatch):
     catalog_service.hydrate()
     state_service.hydrate()
     pending_requests_service.hydrate()
+    request_archive_service.hydrate()
 
     yield state_service, pending_requests_service, catalog_service, backend
 
@@ -345,6 +347,16 @@ def test_reject_soft_happy_path(state_env, monkeypatch):
     assert row.visibility == Visibility.PUBLIC
     assert pending_service.get("test_reciter") is None
 
+    # Archive: entry moves into returned.json with reason + admin actor.
+    from services import request_archive as request_archive_service
+    archived = request_archive_service.get_for_slug(
+        "test_reciter", request_archive_service.ArchiveKind.RETURNED,
+    )
+    assert len(archived) == 1
+    assert archived[0].reason == "not a priority right now"
+    assert archived[0].proposed_edits.name_en == "New Name"
+    assert archived[0].transitioned_by.role == "maintainer"
+
 
 def test_reject_soft_rejects_non_admin(state_env, monkeypatch):
     state_service, _ = _seed_awaiting_alignment_with_pending(state_env, monkeypatch)
@@ -404,6 +416,14 @@ def test_reject_hard_happy_path(state_env, monkeypatch):
     assert row.visibility == Visibility.DISCARDED
     assert row.visibility_reason == "duplicate of an already-published reciter"
     assert pending_service.get("test_reciter") is None
+
+    from services import request_archive as request_archive_service
+    archived = request_archive_service.get_for_slug(
+        "test_reciter", request_archive_service.ArchiveKind.DISCARDED,
+    )
+    assert len(archived) == 1
+    assert archived[0].reason == "duplicate of an already-published reciter"
+    assert archived[0].transitioned_by.role == "maintainer"
 
 
 def test_reject_hard_rejects_non_admin(state_env, monkeypatch):
@@ -475,6 +495,15 @@ def test_alignment_completed_applies_pending_edits(state_env, monkeypatch):
     assert delivery is not None
     assert delivery.recording_year == 2022
     assert pending_service.get("test_reciter") is None
+
+    from services import request_archive as request_archive_service
+    archived = request_archive_service.get_for_slug(
+        "test_reciter", request_archive_service.ArchiveKind.COMPLETED,
+    )
+    assert len(archived) == 1
+    assert archived[0].proposed_edits.name_en == "Approved Name"
+    assert archived[0].reason is None
+    assert archived[0].transitioned_by.hf_user_id == "system"
 
 
 def test_alignment_completed_auto_claims_when_flag_set(state_env, monkeypatch):

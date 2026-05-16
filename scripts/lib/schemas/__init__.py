@@ -29,6 +29,8 @@ from .catalog import (
 )
 from .edit_history import EditHistoryBatch, parse_edit_history_line
 from .pending_requests import (
+    ArchivedRequest,
+    ArchivedRequestsFile,
     PendingRequest,
     PendingRequestsFile,
     ProposedEdits,
@@ -44,6 +46,8 @@ from .state import (
 __all__ = [
     "ActivityState",
     "Actor",
+    "ArchivedRequest",
+    "ArchivedRequestsFile",
     "AudioCategory",
     "AudioManifestSidecar",
     "AuditRecord",

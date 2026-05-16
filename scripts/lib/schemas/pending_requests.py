@@ -131,3 +131,53 @@ class PendingRequestsFile(BaseModel):
 
     schema_version: int = 1
     by_slug: dict[str, PendingRequest] = Field(default_factory=dict)
+
+
+class ArchivedRequest(PendingRequest):
+    """Terminal-state snapshot of a request.
+
+    Inherits the original ``PendingRequest`` fields verbatim (slug,
+    submitted_at, requester, proposed_edits, comments, auto_claim) plus
+    archival metadata. Written once at the moment the request leaves
+    ``pending.json`` — never mutated afterwards.
+
+    Stored in one of three sibling files:
+
+    - ``requests/completed.json`` — accepted (``reciter.alignment_completed``)
+    - ``requests/returned.json``  — soft-rejected; ``reason`` carries the
+      admin's send-back justification.
+    - ``requests/discarded.json`` — hard-rejected; ``reason`` carries the
+      admin's discard justification.
+
+    The audit log remains the source of truth; archive files are
+    denormalized per-slug indexes for fast lifecycle queries (avoid
+    scanning month-wide JSONL partitions).
+    """
+
+    archived_at: datetime
+    transitioned_by: Actor = Field(
+        description=(
+            "Actor who fired the terminal transition. Synthetic ``system`` "
+            "actor for auto-detect; the admin actor for rejects."
+        ),
+    )
+    reason: str | None = Field(
+        default=None,
+        description=(
+            "Admin's reason for the terminal transition. Required for "
+            "returned/discarded; always ``None`` for completed."
+        ),
+    )
+
+
+class ArchivedRequestsFile(BaseModel):
+    """Top-level schema for ``requests/{completed,returned,discarded}.json``.
+
+    Keyed by slug, with a list of entries — a slug can appear multiple
+    times if it was returned, re-requested, returned again, etc.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: int = 1
+    by_slug: dict[str, list[ArchivedRequest]] = Field(default_factory=dict)
