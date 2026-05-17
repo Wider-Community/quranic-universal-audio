@@ -6,7 +6,6 @@ Public API (routes use ``from services.validation import X``):
 - ``is_ignored_for``
 - ``classify_segment``, ``classify_segment_full``, ``classify_entry``
 - ``classify_snapshot``
-- ``chapter_validation_counts``
 - ``validate_reciter_segments``
 - registry symbols (re-exported)
 """
@@ -15,8 +14,6 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 
-from config import LOW_CONFIDENCE_THRESHOLD
-from constants import VALIDATION_CATEGORIES
 from services.storage import cache
 from services.storage.data_loader import (
     get_word_counts,
@@ -29,7 +26,7 @@ from services.activity.history_query import (
     build_resolved_by_edit_index,
     build_split_group_index,
 )
-from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
+from utils.references import is_by_ayah_source
 
 # Phonemizer is no longer loaded in the validate runtime path. The phonemic
 # side of boundary_adj is captured at backfill / extraction time via
@@ -66,73 +63,6 @@ from services.validation.registry import (
 )
 
 ISSUE_REGISTRY = IssueRegistry
-
-
-def chapter_validation_counts(entries: list, chapter: int, meta: dict,
-                              canonical: dict | None = None,
-                              probe_failed_uids: set | None = None) -> dict:
-    """Count validation issues for a single chapter.  Returns ``{category: count}``."""
-    word_counts = get_word_counts()
-    single_word_verses = {k for k, v in word_counts.items() if v == 1}
-    is_by_ayah = is_by_ayah_source(meta.get("audio_source", ""))
-
-    counts = {cat: 0 for cat in VALIDATION_CATEGORIES}
-    chapter_entries = [
-        entry for entry in entries
-        if chapter_from_ref(entry["ref"]) == chapter
-    ]
-
-    for entry in chapter_entries:
-        entry_ref = entry.get("ref", "")
-        for seg in entry.get("segments", []):
-            matched_ref = seg.get("matched_ref", "")
-            if not matched_ref:
-                counts["failed"] += 1
-                continue
-
-            parts = matched_ref.split("-")
-            if len(parts) != 2:
-                if is_by_ayah and ":" in entry_ref and not seg_belongs_to_entry(matched_ref, entry_ref):
-                    counts["audio_bleeding"] += 1
-                if seg.get("wrap_word_ranges"):
-                    counts["repetitions"] += 1
-                if seg.get("confidence", 0.0) < LOW_CONFIDENCE_THRESHOLD:
-                    counts["low_confidence"] += 1
-                if probe_failed_uids and seg.get("segment_uid") in probe_failed_uids:
-                    counts["low_confidence_v2"] += 1
-                continue
-            sp = parts[0].split(":")
-            ep = parts[1].split(":")
-            if len(sp) != 3 or len(ep) != 3:
-                continue
-            try:
-                surah, s_ayah, s_word = int(sp[0]), int(sp[1]), int(sp[2])
-                e_ayah, e_word = int(ep[1]), int(ep[2])
-            except (ValueError, IndexError):
-                continue
-
-            flags = classify_flags(
-                seg, entry_ref, is_by_ayah,
-                surah, s_ayah, e_ayah, s_word, e_word,
-                single_word_verses, canonical,
-                probe_failed_uids=probe_failed_uids,
-            )
-
-            for cat in ("audio_bleeding", "repetitions", "low_confidence",
-                        "low_confidence_v2", "cross_verse", "boundary_adj",
-                        "muqattaat", "qalqala"):
-                if flags[cat]:
-                    counts[cat] += 1
-
-    detail = _build_detail_lists(
-        chapter_entries, is_by_ayah, word_counts, canonical, single_word_verses,
-        probe_failed_uids=probe_failed_uids,
-    )
-    counts["missing_words"] = len(_build_missing_words(
-        detail["verse_segments"], word_counts, detail["sequence_gaps"]
-    ))
-
-    return counts
 
 
 def _load_resolved_idx_cached(reciter: str) -> dict:
@@ -291,7 +221,6 @@ __all__ = [
     "classify_segment_full",
     "classify_entry",
     "classify_snapshot",
-    "chapter_validation_counts",
     "validate_reciter_segments",
     "_build_detail_lists",
     "IssueDefinition",

@@ -374,32 +374,6 @@ def test_missing_words_splits_cross_verse_partial_forward_jump():
     ]
 
 
-def test_chapter_validation_counts_uses_sequence_gap_missing_words():
-    """Summary/history counts use the same Missing Words path as the accordion."""
-    from services.validation import chapter_validation_counts  # type: ignore
-    from services.data_loader import get_word_counts  # type: ignore
-
-    entries = [{
-        "ref": "1",
-        "segments": [
-            {"matched_ref": "1:1:1-1:1:10", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:1:5-1:1:7", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:1:11-1:1:15", "matched_text": "x", "confidence": 1.0},
-        ],
-    }]
-    word_counts = get_word_counts()
-    original = word_counts.copy()
-    word_counts.clear()
-    word_counts[(1, 1)] = 15
-    try:
-        counts = chapter_validation_counts(entries, 1, {})
-    finally:
-        word_counts.clear()
-        word_counts.update(original)
-
-    assert counts["missing_words"] == 1
-
-
 def test_missing_words_orders_sequence_gaps_by_quran_position():
     entries = [{
         "ref": "1",

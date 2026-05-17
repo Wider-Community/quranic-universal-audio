@@ -4,7 +4,6 @@ The single source of truth for "which validation categories does this segment
 trigger?" — consumed by:
 
 - ``services.validation.detail._build_detail_lists`` (response building).
-- ``services.validation.chapter_validation_counts`` (count rollups).
 - ``services.validation.snapshot_classifier`` (history snapshots).
 
 Public surface
