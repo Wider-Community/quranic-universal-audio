@@ -27,7 +27,6 @@ from services.storage import cache, data_dir
 from services.storage.data_loader import get_word_counts, load_detailed, load_probe_v2
 from services.audio.peaks_history import append_peaks_records
 from services.segments.qalqala import compute_qalqala_letter
-from services.reference.quran_refs import dk_text_for_ref
 from services.validation.registry import filter_persistent_ignores
 from services.validation.snapshot_classifier import classify_snapshot
 from utils.references import chapter_from_ref, normalize_ref
@@ -389,10 +388,9 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
         if idx is not None and 0 <= idx < len(flat_segments):
             ref = normalize_ref_with_wc(upd.get("matched_ref", ""))
             flat_segments[idx]["matched_ref"] = ref
-            # FE no longer echoes matched_text; derive from dk_words so the
-            # disk schema stays consistent with the new ref. Legacy clients
-            # that still send a value override the derivation.
-            flat_segments[idx]["matched_text"] = upd.get("matched_text") or dk_text_for_ref(ref)
+            # Migration #5: matched_text no longer persisted on save —
+            # Inspector consumers derive from matched_ref via dk_text_for_ref.
+            flat_segments[idx].pop("matched_text", None)
             if "confidence" in upd:
                 flat_segments[idx]["confidence"] = upd["confidence"]
             if "ignored_categories" in upd:

@@ -352,3 +352,60 @@ def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, signed_in_clien
     assert seg.get("ignored_categories") == ["_all"], (
         f"legacy ignored=true must migrate to ['_all'] on save; got {seg.get('ignored_categories')!r}"
     )
+
+
+def test_save_drops_matched_text_from_disk(tmp_reciter_dir, signed_in_client):
+    """Migration #5: save must NOT persist matched_text into detailed.json.
+
+    Inspector consumers derive verse text from matched_ref via
+    services/reference/quran_refs.py::dk_text_for_ref. If a regression
+    were to re-emit the field at save, the slim-shape contract breaks
+    and disk bytes grow unnecessarily. This test catches that.
+    """
+    reciter = "fixture_reciter"
+    legacy_path = tmp_reciter_dir.root / reciter / "detailed.json"
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    # On-disk fixture already carries matched_text (pre-migration data) —
+    # we want to assert it gets STRIPPED on save, not preserved.
+    legacy_doc = {
+        "_meta": {"audio_source": "by_surah/fixture"},
+        "entries": [{
+            "ref": "112",
+            "segments": [{
+                "segment_uid": "uid-mt",
+                "time_start": 1000, "time_end": 5000,
+                "matched_ref": "112:1:1-112:1:4",
+                "matched_text": "legacy-on-disk-value",
+                "confidence": 1.0,
+            }],
+        }],
+    }
+    legacy_path.write_text(json.dumps(legacy_doc), encoding="utf-8")
+    tmp_reciter_dir.seed_under_review(reciter, "test-user-1")
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
+
+    # FE payload does NOT carry matched_text (Migration #5 contract).
+    payload = {
+        "full_replace": True,
+        "segments": [{
+            "segment_uid": "uid-mt",
+            "time_start": 1000, "time_end": 5000,
+            "matched_ref": "112:1:1-112:1:4",
+            "confidence": 1.0,
+            "phonemes_asr": "",
+            "audio_url": "https://fixture.local/audio/112.mp3",
+        }],
+        "operations": [],
+    }
+    client.post(
+        f"/api/seg/save/{reciter}/112",
+        data=json.dumps(payload),
+        headers=_HEADERS,
+    )
+    saved = json.loads(legacy_path.read_text(encoding="utf-8"))
+    seg = saved["entries"][0]["segments"][0]
+    assert "matched_text" not in seg, (
+        f"Migration #5 contract violation: matched_text persisted on save "
+        f"(got {seg.get('matched_text')!r}). Inspector consumers derive it "
+        f"from matched_ref via dk_text_for_ref."
+    )
