@@ -16,16 +16,11 @@ SURAH_INFO_PATH = DATA_DIR / "surah_info.json"
 # ``data_dir`` (bucket-resolved).
 RECITATION_SEGMENTS_PATH = DATA_DIR / "recitation_segments"
 
-# Optional sibling-project linguistic data (qpc_hafs, digital_khatt, phoneme_sub_costs).
-# Each consumer in services/ gracefully degrades to an empty set/dict if the file is
-# missing, so these paths are advisory rather than required. Override the base dir via
-# INSPECTOR_QUA_DATA_PATH for standalone / Docker deployments.
+# Bundled linguistic data (qpc_hafs, digital_khatt, phoneme_sub_costs) lives in
+# the repo's ``data/`` dir alongside ``surah_info.json``. Override the base dir
+# via INSPECTOR_QUA_DATA_PATH for standalone / Docker deployments.
 _QUA_DATA_OVERRIDE = os.getenv("INSPECTOR_QUA_DATA_PATH")
-_QUA_DATA = (
-    Path(_QUA_DATA_OVERRIDE)
-    if _QUA_DATA_OVERRIDE
-    else _REPO / ".local" / "spaces" / "quranic_universal_aligner" / "data"
-)
+_QUA_DATA = Path(_QUA_DATA_OVERRIDE) if _QUA_DATA_OVERRIDE else DATA_DIR
 QPC_HAFS_PATH = _QUA_DATA / "qpc_hafs.json"
 DK_SCRIPT_PATH = _QUA_DATA / "digital_khatt_v2_script.json"
 PHONEME_SUB_COSTS_PATH = _QUA_DATA / "phoneme_sub_costs.json"
