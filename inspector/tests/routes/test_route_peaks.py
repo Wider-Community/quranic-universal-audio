@@ -119,3 +119,30 @@ def test_peaks_response_cache_evicted_by_invalidate_seg_caches(flask_client, tmp
 def test_peaks_unknown_reciter_returns_404(flask_client, tmp_reciter_dir):
     res = flask_client.get("/api/seg/peaks/does_not_exist?chapters=1")
     assert res.status_code == 404
+
+
+def test_peaks_no_lock_deadlock_on_misses(flask_client, tmp_reciter_dir):
+    """Regression: the route fans bucket reads through ThreadPoolExecutor and
+    populates the per-URL cache via ``set_peaks_for_url``, which acquires
+    ``cache.get_peaks_lock()`` internally. The route MUST NOT wrap that call
+    in another ``with lock`` block — ``threading.Lock`` is non-reentrant, so
+    that pattern deadlocks the worker thread and the request hangs forever.
+
+    Caught live during E2E verification on a freshly-migrated husary bucket:
+    every ``/api/seg/peaks/<reciter>`` request hung at 60s with 0 bytes
+    returned. Healthz + other routes worked fine. This test installs slim
+    peaks across two chapters so the route exercises the cache-set codepath
+    and asserts the response arrives within a reasonable wall-clock budget.
+    """
+    import time
+    reciter = "fixture_reciter"
+    tmp_reciter_dir.install(reciter, "112-ikhlas")
+    _install_slim_peaks(tmp_reciter_dir.backend, reciter, chapter=112)
+
+    t0 = time.perf_counter()
+    res = flask_client.get(f"/api/seg/peaks/{reciter}?chapters=112")
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    assert res.status_code == 200, res.get_data()
+    # Generous bound — local FilesystemBackend reads are sub-ms; if this is
+    # over 1s we're back in the deadlock regime.
+    assert elapsed_ms < 1000, f"route took {elapsed_ms:.0f} ms — likely lock contention"

@@ -95,9 +95,11 @@ def seg_peaks(reciter):
 
     # In-process per-URL cache (used by ``seg_segment_peaks`` slicer too).
     # Hydrate from it first, then fan-out bucket reads for misses.
-    lock = cache.get_peaks_lock()
-    with lock:
-        per_url = cache.get_peaks_cache(reciter)
+    # ``cache.get_peaks_lock()`` is a non-reentrant Lock and ``set_peaks_for_url``
+    # takes it internally — so we MUST NOT wrap the set call in another
+    # ``with lock`` block (that would deadlock the same thread). The lock
+    # bookkeeping lives inside the cache helpers themselves.
+    per_url = cache.get_peaks_cache(reciter)
     result: dict[str, dict] = {u: per_url[u] for u in target_urls if u in per_url}
 
     misses = [u for u in target_urls if u not in result]
@@ -109,8 +111,7 @@ def seg_peaks(reciter):
             for url, peaks in pool.map(_read, misses):
                 if peaks is not None:
                     result[url] = peaks
-                    with lock:
-                        cache.set_peaks_for_url(reciter, url, peaks)
+                    cache.set_peaks_for_url(reciter, url, peaks)
 
     # ``complete`` is preserved on the wire for FE back-compat, but always
     # True now: there's no background compute path that fills in missing
