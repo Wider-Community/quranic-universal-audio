@@ -2,8 +2,8 @@
 
 Schema: each segment under ``entries[*].segments[*]`` gets a new field
 ``qalqala_letter: str | None``:
-- a single Arabic letter when the seg's matched_text's last Arabic letter is
-  one of the qalqala letters (ق ط ب ج د)
+- a single Arabic letter when the seg's text (derived from ``matched_ref``
+  via ``dk_text_for_ref``) ends in one of the qalqala letters (ق ط ب ج د)
 - ``None`` when the last letter is not a qalqala letter (or no letter exists)
 
 Computed by reusing ``utils.arabic_text.last_arabic_letter`` + the qalqala

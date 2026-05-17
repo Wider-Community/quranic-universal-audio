@@ -10,6 +10,7 @@ configured bucket and audits every file we expect to find there:
 * ``edit_history_peaks.jsonl`` -> ``parse_peaks_record`` (per JSONL row)
 * ``low_confidence_v2.json``   -> structural check (``failures`` is list[str])
 * ``auto_split_v1.json``       -> structural check (``by_uid`` dict of slim entries)
+* ``pipeline_meta.json``       -> ``PipelineMeta`` (pydantic v2)
 * ``audio/_done.json``         -> sentinel parse
 * ``audio/<ch>.mp3``           -> existence + non-empty
 * ``peaks/<ch>.json.gz``       -> ``unpack_slim`` round-trip
@@ -316,6 +317,35 @@ def _audit_auto_split_v1(backend, path: str) -> FileResult:
                       items_ok=len(by_uid), items_total=len(by_uid))
 
 
+def _audit_pipeline_meta(backend, path: str) -> FileResult:
+    """``pipeline_meta.json`` — extraction-time facts (Inspector hard-fails
+    on missing/invalid sidecar). Validated via the canonical Pydantic model."""
+    from scripts.lib.schemas import PipelineMeta
+
+    try:
+        raw = backend.read_bytes(path)
+    except Exception as e:
+        return FileResult(path, "missing", str(e))
+
+    size = len(raw)
+    try:
+        doc = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return FileResult(path, "error", f"invalid JSON: {e}", size=size)
+
+    try:
+        validated = PipelineMeta.model_validate(doc)
+    except Exception as e:
+        return FileResult(path, "error", f"schema fail: {e}", size=size)
+
+    n_ch = len(validated.deleted_basmala_chapters)
+    return FileResult(
+        path, "ok",
+        f"deleted_basmala_chapters={n_ch} @ {validated.generated_at}",
+        size=size, items_ok=n_ch, items_total=n_ch,
+    )
+
+
 def _audit_done_sentinel(backend, path: str) -> FileResult:
     try:
         raw = backend.read_bytes(path)
@@ -383,6 +413,10 @@ _TOP_LEVEL_AUDITORS: list[tuple[str, Callable, bool]] = [
     ("edit_history_peaks.jsonl", _audit_peaks_history, False),
     ("low_confidence_v2.json", _audit_low_confidence_v2, False),
     ("auto_split_v1.json", _audit_auto_split_v1, False),
+    # pipeline_meta.json is required: Inspector hard-fails on missing sidecar
+    # to make backfill a deploy gate. Older reciters need
+    # scripts/backfill_deleted_basmala.py.
+    ("pipeline_meta.json", _audit_pipeline_meta, True),
     ("audio/_done.json", _audit_done_sentinel, False),
 ]
 

@@ -27,6 +27,8 @@ from .catalog import (
     Vocab,
 )
 from .edit_history import EditHistoryBatch, EditOperation, parse_edit_history_line
+from .pipeline_meta import PipelineMeta
+from .segment import DetailedSegment
 from .state import (
     ReciterRow,
     ReciterState,
@@ -265,6 +267,29 @@ def smoke() -> int:
         parsed = parse_edit_history_line(v1_batch_with_chain)
         assert parsed is not None and parsed.batch_id == "batch_legacy"
         print("ok  parse_edit_history_line drops legacy file_hash_after")
+
+        # 7. PipelineMeta (extraction-time sidecar)
+        pmeta = PipelineMeta(
+            generated_at="2026-05-18T00:00:00Z",
+            deleted_basmala_chapters=[2, 3, 5, 17],
+        )
+        _round_trip("PipelineMeta", pmeta)
+
+        # 8. DetailedSegment — dead-field stripper (matched_text / phonemes_asr
+        # were dropped in migration #5; the schema strips them on read so
+        # legacy snapshots embedded in edit_history.jsonl don't burn requests).
+        legacy_raw = {
+            "time_start": 0,
+            "time_end": 1000,
+            "matched_ref": "1:1:1-1:1:4",
+            "matched_text": "legacy",
+            "phonemes_asr": "legacy",
+        }
+        stripped = DetailedSegment.model_validate(legacy_raw)
+        dumped = stripped.model_dump(exclude_none=True)
+        assert "matched_text" not in dumped, "matched_text leaked through schema"
+        assert "phonemes_asr" not in dumped, "phonemes_asr leaked through schema"
+        print("ok  DetailedSegment strips matched_text + phonemes_asr")
 
         print("smoke: all checks passed")
         return 0
