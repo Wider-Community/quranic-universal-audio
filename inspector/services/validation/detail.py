@@ -27,51 +27,17 @@ from services.validation.classifier import (
 from services.validation.registry import PER_SEGMENT_CATEGORIES
 
 
-# Precomputed ``(surah, ayah) -> cumulative-words-before-this-ayah`` map.
-# Keyed by ``id(word_counts)`` because ``get_word_counts()`` returns a process
-# singleton — a single entry suffices for the lifetime of the dict. Building
-# the table is O(N_verses) once instead of O(ayah) per ``_word_ord`` call,
-# which was ~1.5s self-time in the per-segment classifier loop.
-#
-# The value tuple is ``(offsets, fingerprint)``. ``fingerprint`` is a cheap
-# content signature (length + first/last entry); a stale id hit (Python
-# recycles ids after GC) fails the fingerprint check and we recompute. This
-# matters in tests where each call passes a fresh ``word_counts`` dict and
-# id collisions are routine.
-_SURAH_OFFSETS_CACHE: dict[
-    int, tuple[dict[tuple[int, int], int], tuple]
-] = {}
-
-
-def _wc_fingerprint(word_counts: dict[tuple[int, int], int]) -> tuple:
-    """Return a cheap content signature for ``word_counts``.
-
-    Used to detect ``id``-recycle collisions after GC: two short-lived dicts
-    can share an id but rarely share length + first/last items.
-    """
-    if not word_counts:
-        return (0,)
-    it = iter(word_counts.items())
-    first = next(it)
-    last = first
-    for last in it:
-        pass
-    return (len(word_counts), first, last)
-
-
-def _surah_offsets(word_counts: dict[tuple[int, int], int]) -> dict[tuple[int, int], int]:
+def _compute_surah_offsets(
+    word_counts: dict[tuple[int, int], int],
+) -> dict[tuple[int, int], int]:
     """Return ``(surah, ayah) -> sum(word_counts[(surah, v)] for v in 1..ayah-1)``.
 
-    Preserves the original ``_word_ord`` semantics: only contiguous prefixes
-    from ayah=1 get an entry — if there's a gap in ``word_counts`` for a
-    surah, the post-gap ayahs are omitted so ``_word_ord`` returns None for
-    them (matching the prior ``for verse in range(1, ayah)`` behavior).
+    Computed once per ``_build_detail_lists`` call and passed down — no cache.
+    For the production singleton (~6 236 entries) this is ~1 ms; for synthetic
+    test dicts (≤ 100 entries) it's negligible. Only contiguous prefixes from
+    ayah=1 get an entry — if there's a gap in ``word_counts`` for a surah,
+    post-gap ayahs are omitted so ``_word_ord`` returns None for them.
     """
-    key = id(word_counts)
-    fp = _wc_fingerprint(word_counts)
-    cached = _SURAH_OFFSETS_CACHE.get(key)
-    if cached is not None and cached[1] == fp:
-        return cached[0]
     by_surah: dict[int, dict[int, int]] = {}
     for (surah, ayah), wc in word_counts.items():
         by_surah.setdefault(surah, {})[ayah] = wc
@@ -83,7 +49,6 @@ def _surah_offsets(word_counts: dict[tuple[int, int], int]) -> dict[tuple[int, i
             offsets[(surah, ayah)] = running
             running += ayah_to_wc[ayah]
             ayah += 1
-    _SURAH_OFFSETS_CACHE[key] = (offsets, fp)
     return offsets
 
 
@@ -92,13 +57,14 @@ def _word_ord(
     ayah: int,
     word: int,
     word_counts: dict[tuple[int, int], int],
+    offsets: dict[tuple[int, int], int],
 ) -> int | None:
     """Return 1-based word ordinal within a surah, or None if out of range.
 
-    Uses the precomputed ``_surah_offsets`` table — O(1) per call vs the
-    prior O(ayah) prefix-sum walk.
+    ``offsets`` is the precomputed prefix-sum table from
+    ``_compute_surah_offsets`` — hoist it once at the top of
+    ``_build_detail_lists`` and pass it down.
     """
-    offsets = _surah_offsets(word_counts)
     base = offsets.get((surah, ayah))
     if base is None:
         return None
@@ -173,6 +139,13 @@ def _build_detail_lists(
     Pass ``None`` to skip the augmentation entirely (preserves the legacy
     per-chapter-counts code path).
     """
+    # Precompute surah-offsets table once per validate pass. Used by every
+    # ``_word_ord`` call below to convert (surah, ayah, word) refs into a
+    # surah-local 1-based word ordinal in O(1). Computing it inline (~1 ms
+    # over the ~6 236-entry singleton) is cheaper than the cache dance the
+    # prior implementation needed to defend against test ``id()`` reuse.
+    offsets = _compute_surah_offsets(word_counts)
+
     failed: list[dict] = []
     low_confidence: list[dict] = []
     low_confidence_v2: list[dict] = []
@@ -283,8 +256,8 @@ def _build_detail_lists(
             except (ValueError, IndexError):
                 continue
 
-            start_ord = _word_ord(surah, s_ayah, s_word, word_counts)
-            end_ord = _word_ord(surah, e_ayah, e_word, word_counts)
+            start_ord = _word_ord(surah, s_ayah, s_word, word_counts, offsets)
+            end_ord = _word_ord(surah, e_ayah, e_word, word_counts, offsets)
             if start_ord is not None and end_ord is not None:
                 prev_end = prev_end_by_surah.get(surah)
                 if prev_end is not None and start_ord > prev_end + 1:
