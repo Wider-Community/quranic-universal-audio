@@ -38,7 +38,7 @@ _OP_DEAD_FIELDS: set[str] = {
     "affected_chapters", "command", "merge_direction",
     "op_context_category", "patch", "snapshots", "targetSegmentIndex",
     # v0 user-edit op aliases (replaced by kind/op_type)
-    "type", "value", "field",
+    "type", "value", "field", "op",
 }
 
 # Legacy batch-level fields. The v1 genesis shape used a different vocab
