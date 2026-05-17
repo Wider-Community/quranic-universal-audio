@@ -42,6 +42,8 @@
         VAL_VIRTUALIZE_THRESHOLD,
         VIRT_BUFFER_ROWS,
     } from '../../utils/constants';
+    import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
+    import { wrapCbrSrcIfBySurah } from '../../utils/playback/source';
     import { warmSeg } from '../../utils/playback/warmup';
     import { resolveCardLeadSeg } from '../../utils/validation/card-lead-seg';
     import { filterStaleIssues } from '../../utils/validation/stale';
@@ -471,6 +473,31 @@
         _cardOwnerByChIdx = m;
     }
 
+    // Resolve a card's lead seg to the audio-proxy-wrapped URL that the
+    // primary `<audio>` element will later load. The shadow element fetches
+    // this URL so the browser HTTP cache is warm by the time the user clicks
+    // play. For VBR chapters the seg-clip URL is per-segment and the shadow
+    // can't pre-cache that — fall back to the byte-Range warmup, which still
+    // primes the server-side ffmpeg read.
+    function _warmAccordionLead(lead: ReturnType<typeof resolveCardLeadSeg>): void {
+        if (!lead) return;
+        const reciter = $selectedReciter;
+        if (!reciter) return;
+        const audioUrl = lead.audio_url
+            ?? $segAllData?.audio_by_chapter?.[String(lead.chapter)]
+            ?? '';
+        if (!audioUrl) return;
+        const isVbr = lead.chapter != null
+            && (lead.chapter as number) > 0
+            && ($segAllData?.reciter_vbr_chapters ?? []).includes(lead.chapter as number);
+        if (isVbr) {
+            warmSeg(lead, reciter);
+            return;
+        }
+        const wrapped = wrapCbrSrcIfBySurah(audioUrl, reciter);
+        shadowPrewarm(wrapped);
+    }
+
     // Card-0 warmup on category open / re-pin. Fires once per (category, item-0).
     let _lastCard0Key: string | null = null;
     $: {
@@ -479,8 +506,7 @@
         const key = kind && first ? `${kind}|${(first as { chapter?: number }).chapter ?? ''}|${(first as { seg_index?: number; verse_key?: string }).seg_index ?? (first as { verse_key?: string }).verse_key ?? ''}` : null;
         if (key && first && kind && key !== _lastCard0Key) {
             _lastCard0Key = key;
-            const lead = resolveCardLeadSeg(first, kind);
-            if (lead) warmSeg(lead, $selectedReciter);
+            _warmAccordionLead(resolveCardLeadSeg(first, kind));
         } else if (!key) {
             _lastCard0Key = null;
         }
@@ -488,8 +514,11 @@
 
     // Next-card warmup driven by playingSegmentIndex. When the playing seg
     // first belongs to card N (where the previous play was in card N-1 or no
-    // card), warm card[N+1]'s lead so by the time the reviewer scrolls to
-    // it and clicks, the byte range is already on its way.
+    // card), warm card[N+1]'s lead so by the time the reviewer scrolls to it
+    // and clicks, the shadow audio element has already filled the browser
+    // HTTP cache for the next chapter. The primary segPort's eventual swap
+    // hits the warm cache → near-instant canplay (same path as in-chapter
+    // chapter-load prewarm).
     let _lastPlayedCardIdx = -1;
     $: {
         const playing = $playingSegmentIndex;
@@ -502,8 +531,7 @@
                 _lastPlayedCardIdx = owner;
                 const nextItem = displayedItems[owner + 1];
                 if (nextItem) {
-                    const lead = resolveCardLeadSeg(nextItem, openCategory);
-                    if (lead) warmSeg(lead, $selectedReciter);
+                    _warmAccordionLead(resolveCardLeadSeg(nextItem, openCategory));
                 }
             }
         }
