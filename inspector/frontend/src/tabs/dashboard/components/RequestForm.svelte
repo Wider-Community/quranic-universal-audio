@@ -454,6 +454,10 @@
             <span class="auto-claim-hint">
                 If unchecked, another contributor can claim the reviewing.
             </span>
+            <span class="auto-claim-hint">
+                You can hold one claim at a time — if you already have one
+                when alignment completes, this auto-claim is skipped.
+            </span>
         </span>
     </label>
 

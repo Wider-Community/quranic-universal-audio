@@ -559,11 +559,15 @@ def test_alignment_completed_skips_auto_claim_when_other_claim_held(
     state_env, monkeypatch, tmp_path,
 ):
     """auto_claim=True but requester already holds another active claim:
-    skip silently, row stays in AWAITING_REVIEW for someone else to grab."""
+    skip silently, row stays in AWAITING_REVIEW for someone else to grab.
+    A ``reciter.auto_claim_skipped`` audit record is written so the skip
+    is forensically inspectable."""
     state_service, _, _, backend = state_env
     from services import audit as audit_service
     from services import storage_paths
-    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+
+    audit_calls: list[dict] = []
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: audit_calls.append(kw))
 
     # Seed an existing claim for the requester on a different slug.
     rows = ReciterStateFile(
@@ -605,6 +609,71 @@ def test_alignment_completed_skips_auto_claim_when_other_claim_held(
     # row stays in AWAITING_REVIEW for a different contributor.
     assert row.state == ReciterState.AWAITING_REVIEW
     assert row.assignee_hf_id is None
+
+    skip_records = [c for c in audit_calls if c.get("event") == "reciter.auto_claim_skipped"]
+    assert len(skip_records) == 1
+    skip = skip_records[0]
+    assert skip["slug"] == "test_reciter"
+    assert skip["actor"].hf_user_id == "u-req"
+    assert skip["payload"]["reason"] == "other_active_claim"
+    assert skip["payload"]["existing_claim_slug"] == "other_reciter"
+
+
+def test_owner_auto_claim_bypasses_one_claim_limit(
+    state_env, monkeypatch, tmp_path,
+):
+    """Owners are exempt from the one-claim-per-user rule (matches
+    can_claim + the /api/claim route): an owner who already holds a claim
+    should still get auto-claimed on a second request, and NO skip audit
+    is emitted."""
+    state_service, _, _, backend = state_env
+    from services import audit as audit_service
+    from services import storage_paths
+
+    audit_calls: list[dict] = []
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: audit_calls.append(kw))
+
+    rows = ReciterStateFile(
+        reciters=[
+            ReciterRow(
+                slug="test_reciter",
+                state=ReciterState.CATALOGUED,
+                state_since=datetime.now(timezone.utc),
+            ),
+            ReciterRow(
+                slug="other_reciter",
+                state=ReciterState.UNDER_REVIEW,
+                state_since=datetime.now(timezone.utc),
+                assignee_hf_id="u-owner",
+                assignee_login="alice",
+                assignee_since=datetime.now(timezone.utc),
+            ),
+        ]
+    )
+    backend.write_json_atomic(
+        storage_paths.state_path(), rows.model_dump(mode="json"),
+    )
+    state_service.hydrate()
+
+    owner = _actor(hf_user_id="u-owner", role="owner")
+    state_service.transition(
+        "test_reciter",
+        "reciter.requested",
+        actor=owner,
+        payload={"proposed_edits": {}, "comments": None, "auto_claim": True},
+    )
+    system = Actor(hf_user_id="system", login_at_time="system", role=Role.OWNER)
+    state_service.transition(
+        "test_reciter", "reciter.alignment_completed", actor=system,
+    )
+    row = state_service.get_row("test_reciter")
+    assert row is not None
+    # Owner exempt: auto-claim proceeded despite the other UNDER_REVIEW row.
+    assert row.state == ReciterState.UNDER_REVIEW
+    assert row.assignee_hf_id == "u-owner"
+
+    skip_records = [c for c in audit_calls if c.get("event") == "reciter.auto_claim_skipped"]
+    assert skip_records == []
 
 
 def test_alignment_completed_noop_when_no_pending(state_env, monkeypatch):
