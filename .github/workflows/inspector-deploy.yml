@@ -1,12 +1,8 @@
 name: Deploy Inspector
 
-# Phase 2: dev branch only. Prod cutover (push to main → prod Space) is
-# gated on Phase 3 sign-off; the trigger lives below in commented form so
-# the wiring is one PR away when ready.
-
 on:
   push:
-    branches: [dev]
+    branches: [dev, main]
     paths:
       - "inspector/**"
       - "scripts/lib/**"
@@ -19,6 +15,12 @@ on:
       - ".dockerignore"
       - ".github/workflows/inspector-deploy.yml"
   workflow_dispatch:
+    inputs:
+      env:
+        description: "Target Space (auto follows the branch: dev→dev, main→prod)."
+        type: choice
+        options: [auto, dev, prod]
+        default: auto
 
 concurrency:
   # Avoid two pushes deploying simultaneously — the Hub upload is idempotent
@@ -53,6 +55,11 @@ jobs:
       - name: Resolve target environment
         id: env
         run: |
+          INPUT="${{ inputs.env }}"
+          if [ -n "$INPUT" ] && [ "$INPUT" != "auto" ]; then
+            echo "env=$INPUT" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           case "${GITHUB_REF_NAME}" in
             dev)  echo "env=dev"  >> "$GITHUB_OUTPUT" ;;
             main) echo "env=prod" >> "$GITHUB_OUTPUT" ;;
@@ -64,13 +71,3 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python scripts/upload_inspector.py "${{ steps.env.outputs.env }}"
-
-# --- Prod trigger (gated on Phase 3 sign-off) ---
-# Uncomment when prod cutover is approved. Until then, prod deploys are
-# manual: run `python scripts/upload_inspector.py prod` from a maintainer
-# laptop with HF_TOKEN exported.
-#
-# on:
-#   push:
-#     branches: [main]
-#     paths: [...same as above...]
