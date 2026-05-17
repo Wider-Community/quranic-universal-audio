@@ -287,7 +287,7 @@ def edit_delivery(
 ) -> Delivery:
     """Mutate a delivery row in place. ``slug`` and ``reciter_id`` are immutable.
 
-    Used by ``services.pending_requests.apply_and_clear`` to apply the
+    Used by ``services.pending_requests.apply_and_archive_completed`` to apply the
     requester's proposed edits at auto-acceptance time, and by future
     admin catalog-edit routes. Fields left ``None`` are not touched. The
     catalog model_validator enforces FK invariants (riwayah, style,

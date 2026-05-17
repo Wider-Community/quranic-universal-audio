@@ -135,6 +135,5 @@ export function snapToSeg(snap: HistorySnapshot, chapter: number | null): Segmen
         matched_ref: snap.matched_ref || '', matched_text: snap.matched_text || '',
         confidence: snap.confidence ?? 0,
         ...(snap.wrap_word_ranges ? { wrap_word_ranges: snap.wrap_word_ranges } : {}),
-        ...(snap.has_repeated_words ? { has_repeated_words: true } : {}),
     };
 }

@@ -1,5 +1,5 @@
 """Tests for ``services.catalog.edit_delivery`` — the per-delivery counterpart
-to ``edit_reciter``. Used by ``services.pending_requests.apply_and_clear``
+to ``edit_reciter``. Used by ``services.pending_requests.apply_and_archive_completed``
 to apply requester-proposed catalog changes, and by future admin
 catalog-edit routes.
 """

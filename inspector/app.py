@@ -141,13 +141,14 @@ from flask_compress import Compress
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from config import (CACHE_DIR, DEFAULT_PORT,
+from config import (DEFAULT_PORT,
                     FLASK_DEV_VALUE, FLASK_ENV_VAR, SERVER_HOST)
 from routes import register_blueprints
 from services import access as access_service
 from services import activity_state as activity_state_service
 from services import auto_detect as auto_detect_service
 from services import pending_requests as pending_requests_service
+from services import request_archive as request_archive_service
 from services import audit as audit_service
 from services import auth as auth_service
 from services import catalog as catalog_service
@@ -259,10 +260,6 @@ def _assert_single_worker() -> None:
 
 _assert_single_worker()
 
-# Ensure the cache dir exists at import time so gunicorn workers don't race
-# on first peaks request. Local dev hits the same code path via __main__.
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
 # Flask's built-in static handler serves everything under FRONTEND_DIST at
 # the site root (`/assets/<hash>.js`, `/fonts/DigitalKhattV2.otf`, …). The
 # `/` route below handles index.html explicitly.
@@ -324,6 +321,7 @@ def _hydrate_bucket_stores() -> None:
         ("catalog", catalog_service.hydrate),
         ("activity_state", activity_state_service.hydrate),
         ("pending_requests", pending_requests_service.hydrate),
+        ("request_archive", request_archive_service.hydrate),
     ):
         try:
             fn()
@@ -469,8 +467,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Alignment Inspector Server")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Port to run on")
     args = parser.parse_args()
-
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     if not (FRONTEND_DIST / "index.html").exists():
         logger.warning(

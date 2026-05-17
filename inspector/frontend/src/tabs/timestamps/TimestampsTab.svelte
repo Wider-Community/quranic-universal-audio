@@ -376,15 +376,13 @@
         selectedChapter.set(String(data.chapter));
         selectedVerse.set(data.verse_ref);
 
-        // For per-surah audio (large files) route playback through the local
-        // audio-proxy so the Flask layer can disk-cache + Range-serve. Local
-        // mode keeps the proxy; HF mode plays the origin URL direct since
-        // there's no Flask layer to disk-cache through.
-        const cfg = get(tsConfig);
-        const useProxy = (cfg?.mode ?? 'local') === 'local';
+        // Route per-surah audio through audio-proxy so the bucket-mounted
+        // file (deployed NFS or local FUSE auto-mount) is served via
+        // sendfile + Range/304. Falls through to a CDN stream-through inside
+        // the proxy when the chapter isn't prefetched. Sending the browser
+        // straight at the CDN URL wastes the prefetch and bills upstream.
         const playUrl = (data.audio_category === 'by_surah_audio'
             && data.audio_url
-            && useProxy
             && !data.audio_url.startsWith('/api/'))
             ? `/api/seg/audio-proxy/${data.reciter}?url=${encodeURIComponent(data.audio_url)}`
             : data.audio_url;

@@ -73,10 +73,16 @@ ADMIN_ONLY_EVENTS: dict[str, str] = {
 # (vs. "developer added a new event and forgot to classify it").
 HIDDEN_EVENTS: frozenset[str] = frozenset({
     "catalog.edited",
-    # Non-blocking warning emitted by ``services.pending_requests.apply_and_clear``
+    # Non-blocking warning emitted by ``services.pending_requests.apply_and_archive_completed``
     # when a requester's proposed (riwayah, style) matches another delivery of
     # the same reciter. Visible in the audit log for debugging only.
     "catalog.conflict_warning",
+    # Recorded by the auto-claim hook when an alignment_completed transition
+    # would otherwise have claimed for the requester, but they already hold
+    # another UNDER_REVIEW slug (or were demoted). Hidden from both rails —
+    # the audit log carries the forensic trail; promote to admin_only or
+    # public if/when a UI surface is added.
+    "reciter.auto_claim_skipped",
     "reciter.seeded",
     "reciter.timestamps_completed",
     "published.edited",

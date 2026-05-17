@@ -236,7 +236,7 @@ def test_reconcile_applies_pending_edits(auto_detect_env):
 
 def test_system_actor_is_owner_role(auto_detect_env):
     """The synthetic actor must carry owner role so it passes the catalog
-    edit gates triggered by ``apply_and_clear``."""
+    edit gates triggered by ``apply_and_archive_completed``."""
     svc, _, _ = auto_detect_env
     assert svc.SYSTEM_ACTOR.hf_user_id == "system"
     # Role is stored as a string due to use_enum_values=True on Actor.

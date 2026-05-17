@@ -18,6 +18,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify
 
 from services import auth as auth_service
+from services import auto_detect as auto_detect_service
 from services import state as state_service
 
 health_bp = Blueprint("health", __name__)
@@ -54,6 +55,10 @@ def healthz():
         "reciters_count": len(rows),
         "oauth_configured": auth_service.is_oauth_configured(),
         "commit": os.environ.get("INSPECTOR_COMMIT_SHA", "unknown"),
+        # Surface auto_detect status so a regression like "no background
+        # loop running in prod" is visible from /healthz rather than only
+        # via a state-vs-wip mismatch hours/days later.
+        "auto_detect_loop": auto_detect_service.is_background_loop_running(),
     }
     # Return 503 in deployed mode (mount configured) so probes fail loud.
     # Local mode has no mount and would always 503 — keep it 200 there.

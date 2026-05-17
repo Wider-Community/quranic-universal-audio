@@ -49,3 +49,42 @@ jobs:
         run: |
           pip install -r requirements.txt -r requirements-dev.txt
           python -m pytest
+
+  schema-codegen-check:
+    # Verifies inspector/frontend/src/lib/types/generated/schemas.ts is in
+    # lockstep with scripts/lib/schemas/. If a backend pydantic schema
+    # changes and the dev forgot to regen the FE types, this job fails
+    # with `git diff --exit-code` on the generated file. See
+    # docs/reference/migrate_wip.md §5 and inspector/scripts/regen_fe_types.py.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: inspector/requirements-dev.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: inspector/frontend/package-lock.json
+
+      - name: Install codegen deps
+        run: |
+          pip install -r inspector/requirements-dev.txt
+          cd inspector/frontend && npm ci
+
+      - name: Regenerate FE types
+        run: python inspector/scripts/regen_fe_types.py
+
+      - name: Verify no drift in generated/schemas.ts
+        run: |
+          if ! git diff --exit-code -- inspector/frontend/src/lib/types/generated/schemas.ts; then
+            echo "::error::Generated FE types are out of sync. Run:"
+            echo "::error::  python inspector/scripts/regen_fe_types.py"
+            echo "::error::and commit the result."
+            exit 1
+          fi

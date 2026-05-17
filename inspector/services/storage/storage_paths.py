@@ -55,6 +55,21 @@ def pending_requests_path() -> str:
     return "requests/pending.json"
 
 
+def completed_requests_path() -> str:
+    """Archive of accepted requests — written when ``reciter.alignment_completed`` fires."""
+    return "requests/completed.json"
+
+
+def returned_requests_path() -> str:
+    """Archive of soft-rejected requests — written when ``reciter.request_rejected_soft`` fires."""
+    return "requests/returned.json"
+
+
+def discarded_requests_path() -> str:
+    """Archive of hard-rejected requests — written when ``reciter.request_rejected_hard`` fires."""
+    return "requests/discarded.json"
+
+
 def reciter_dir(slug: str, kind: WipOrPublished) -> str:
     return f"{kind}/{slug}"
 
@@ -108,13 +123,51 @@ def prefetched_audio_path(slug: str, chapter: str | int) -> str:
     return f"wip/{slug}/audio/{chapter}.mp3"
 
 
+def _peaks_root(slug: str) -> str:
+    """Resolve the bucket root (``wip`` vs ``published``) for ``slug``.
+
+    Reciter state determines which subtree owns the peaks file. Lazy import
+    keeps this module free of the ``data_dir → storage_paths`` cycle
+    (``data_dir`` imports us at module load).
+    """
+    from . import data_dir
+    return data_dir.kind_for(slug)  # "wip" or "published"
+
+
 def prefetched_peaks_dir(slug: str) -> str:
-    return f"wip/{slug}/peaks"
+    return f"{_peaks_root(slug)}/{slug}/peaks"
 
 
 def prefetched_peaks_path(slug: str, chapter: str | int) -> str:
-    """Peaks JSON paired with the prefetched audio for fast first paint."""
-    return f"wip/{slug}/peaks/{chapter}.json"
+    """Slim packed peaks (gzipped) paired with the prefetched audio.
+
+    Schema v3 format produced by ``services/audio/peaks_slim.py::pack_slim``:
+    int8-quantized, decimated to ``PEAKS_SLIM_BPS=10`` bps, JSON-wrapped,
+    gzipped. Reader (``audio_fetch.read_prefetched_peaks``) inflates via
+    ``unpack_slim`` so downstream consumers see a standard
+    ``{duration_ms, peaks: list[list[float]]}`` dict.
+
+    Path is state-aware: ``wip/<slug>/...`` for in-flight reciters,
+    ``published/<slug>/...`` once they ship. No fallback — the kind lookup
+    is single-source-of-truth (``data_dir.kind_for``).
+
+    Pre-v3 files (``<chapter>.json``) are migrated to ``.json.gz`` by
+    ``scripts/backfill_peaks_slim.py`` and originals are renamed to
+    ``.json.bak`` for rollback.
+    """
+    return f"{_peaks_root(slug)}/{slug}/peaks/{chapter}.json.gz"
+
+
+def prefetched_peaks_legacy_path(slug: str, chapter: str | int) -> str:
+    """Pre-v3 path (``<chapter>.json``). Used only by the backfill + rollback
+    scripts -- runtime reads go through ``prefetched_peaks_path`` (v3 .gz)."""
+    return f"{_peaks_root(slug)}/{slug}/peaks/{chapter}.json"
+
+
+def prefetched_peaks_backup_path(slug: str, chapter: str | int) -> str:
+    """Backup name used during dev-bucket migration. Originals get renamed
+    here so rollback can restore them. Cleaned up after prod cutover."""
+    return f"{_peaks_root(slug)}/{slug}/peaks/{chapter}.json.bak"
 
 
 def prefetch_done_marker_path(slug: str) -> str:

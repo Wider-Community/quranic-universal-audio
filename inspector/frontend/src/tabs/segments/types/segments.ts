@@ -25,7 +25,6 @@ export interface HistorySnapshot {
     matched_text?: string;
     confidence?: number;
     wrap_word_ranges?: unknown;
-    has_repeated_words?: boolean;
     [k: string]: unknown;
 }
 

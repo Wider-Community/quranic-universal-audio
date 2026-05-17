@@ -8,8 +8,9 @@ thread pool. Each call:
    ``<audio>.currentTime`` seek lands on the correct frame — the inspector
    then serves the remuxed file directly with no clip-route involvement.
 3. Uploads the (possibly remuxed) MP3 to ``wip/<slug>/audio/<chapter>.mp3``.
-4. Computes waveform peaks from the local temp file and uploads the JSON to
-   ``wip/<slug>/peaks/<chapter>.json``.
+4. Computes waveform peaks from the local temp file, packs to the slim shape
+   (int8-quantized, decimated, gzipped via ``peaks_slim.pack_slim``), and
+   uploads to ``wip/<slug>/peaks/<chapter>.json.gz``.
 
 No Flask imports. The module is callable from any thread that holds neither
 a per-slug nor the global write-lock; the bucket backend serializes its own
@@ -29,7 +30,8 @@ from dataclasses import dataclass
 
 from config import FFMPEG_FULL_TIMEOUT
 from . import audio_meta
-from .peaks import compute_audio_peaks, is_current_schema
+from .peaks import compute_audio_peaks
+from .peaks_slim import pack_slim, unpack_slim
 from services.storage import storage_paths
 from services.storage.hf_bucket import get_backend
 
@@ -161,8 +163,8 @@ def _recompute_peaks_for_existing_audio(
         if not peaks:
             return None
         try:
-            backend.write_json_atomic(peaks_path, peaks)
-        except Exception as e:  # noqa: BLE001
+            backend.write_bytes_atomic(peaks_path, pack_slim(peaks))
+        except (OSError, ValueError) as e:
             logger.warning("peaks recompute: upload failed for %s/%s: %s",
                            slug, chapter, e)
             return None
@@ -201,23 +203,19 @@ def fetch_and_persist_chapter(
     peaks_path = storage_paths.prefetched_peaks_path(slug, chapter)
 
     if not force and backend.exists(audio_path) and backend.exists(peaks_path):
-        # Audio is fine to keep -- the bytes never went stale. But pre-v2
-        # peaks were bucketed with an integer block size that dropped the
-        # trailing samples and made the FE draw a stretched timeline; when
-        # only peaks are stale, recompute against the existing audio bytes
-        # instead of re-downloading the chapter.
-        try:
-            existing_peaks = backend.read_json(peaks_path)
-        except Exception:  # noqa: BLE001
-            existing_peaks = None
-        if is_current_schema(existing_peaks):
+        # Audio bytes never go stale. Peaks can — v3 is the current shape
+        # (``services/audio/peaks_slim.py``); pre-v3 entries return None from
+        # ``read_prefetched_peaks`` so we drop into the recompute-against-
+        # existing-audio path instead of re-downloading the chapter.
+        existing_peaks = read_prefetched_peaks(slug, url)
+        if existing_peaks is not None:
             size = len(backend.read_bytes(audio_path))
             return ChapterArtifact(
                 chapter=chapter,
                 audio_path=audio_path,
                 peaks_path=peaks_path,
                 bytes_written=size,
-                duration_ms=None,
+                duration_ms=existing_peaks.get("duration_ms"),
                 ffmpeg_remuxed=False,
             )
         artifact = _recompute_peaks_for_existing_audio(slug, chapter, audio_path, peaks_path)
@@ -247,8 +245,8 @@ def fetch_and_persist_chapter(
         duration_ms = peaks.get("duration_ms") if peaks else None
         if peaks:
             try:
-                backend.write_json_atomic(peaks_path, peaks)
-            except Exception as e:  # noqa: BLE001
+                backend.write_bytes_atomic(peaks_path, pack_slim(peaks))
+            except (OSError, ValueError) as e:
                 # Audio is up; peaks failure is recoverable on first /peaks request.
                 logger.warning("peaks upload failed for %s/%s: %s", slug, chapter, e)
                 peaks_path = None  # signal "not persisted"
@@ -350,13 +348,19 @@ def read_prefetched_audio_local_path(slug: str, url: str):
 
 
 def read_prefetched_peaks(slug: str, url: str) -> dict | None:
-    """Return the prefetched peaks JSON for ``url`` if present in the bucket.
+    """Return the prefetched peaks for ``url`` as an unpacked dict.
 
-    Returns ``None`` for missing files AND for entries that predate the
-    current peaks schema -- v1 had a bucketer fencepost that left peaks
-    arrays advertising more duration than they actually covered, so stale
-    files would render visibly drifted on the FE. Falling through to
-    ``None`` lets the route's compute path rebuild a v2 entry on demand.
+    Reads the v3 slim packed gzip blob from
+    ``wip/<slug>/peaks/<chapter>.json.gz`` and inflates it via
+    ``unpack_slim`` so callers see the familiar
+    ``{schema_version, duration_ms, peaks: list[list[float]], bps}`` shape.
+
+    Returns ``None`` for:
+    - Unknown URL (not in the catalog manifest).
+    - Missing file (chapter never prefetched, or backfill not yet run).
+    - Pre-v3 file or corrupt blob (``unpack_slim`` returns None) — caller
+      treats this as a cache miss; the prefetch worker re-bakes via
+      ``fetch_and_persist_chapter``.
     """
     chapter = audio_meta.chapter_for_url(slug, url)
     if chapter is None:
@@ -364,9 +368,7 @@ def read_prefetched_peaks(slug: str, url: str) -> dict | None:
     path = storage_paths.prefetched_peaks_path(slug, chapter)
     backend = get_backend()
     try:
-        peaks = backend.read_json(path)
+        blob = backend.read_bytes(path)
     except Exception:  # noqa: BLE001
         return None
-    if not is_current_schema(peaks):
-        return None
-    return peaks  # type: ignore[return-value]
+    return unpack_slim(blob)

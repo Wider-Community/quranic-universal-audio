@@ -108,18 +108,15 @@ def test_compute_audio_peaks_drift_was_zeroed_out():
     )
 
 
-def test_compute_segment_peaks_emits_v2_schema(monkeypatch, tmp_path):
-    """`compute_segment_peaks` must label its results with the current
-    schema so disk-cache / covering-cache reads can lazily invalidate v1
-    entries."""
+def test_compute_segment_peaks_emits_v2_schema(monkeypatch):
+    """`compute_segment_peaks` must label its results with the current schema
+    so covering-cache reads (in-memory) can lazily invalidate v1 entries."""
     import services.audio.audio_source as audio_source
     import services.audio.peaks as peaks_mod
 
     # Hermetic decode -- 8000 samples → 1 sec, peaks_per_sec=30 ⇒ 10 buckets.
     pcm = struct.pack("<8000h", *([5000] * 8000))
 
-    monkeypatch.setattr(peaks_mod, "peaks_cache_path",
-                        lambda r, k: tmp_path / "p.json")
     monkeypatch.setattr(audio_source, "resolve",
                         lambda r, u: audio_source.AudioSource(
                             cdn_url=u, data=b"\x00\x00", path=None,

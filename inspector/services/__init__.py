@@ -15,7 +15,7 @@ from __future__ import annotations
 import sys as _sys
 
 from .auth import access, auth, hf_users, permissions, predicates, secrets_guard
-from .state import audit, catalog, pending_requests, state
+from .state import audit, catalog, pending_requests, request_archive, state
 from .storage import cache, data_dir, data_loader, hf_bucket, storage_paths
 from .audio import (
     audio_fetch,
@@ -25,6 +25,7 @@ from .audio import (
     peaks,
     peaks_backfill,
     peaks_history,
+    peaks_slim,
 )
 from .activity import (
     activity_classification,
@@ -39,7 +40,6 @@ from .segments import (
     auto_detect,
     auto_split,
     phoneme_matching,
-    phonemizer_service,
     qalqala,
     save,
     segments_query,
@@ -61,6 +61,7 @@ _LEGACY_ALIASES = {
     "audit": audit,
     "catalog": catalog,
     "pending_requests": pending_requests,
+    "request_archive": request_archive,
     "state": state,
     "cache": cache,
     "data_dir": data_dir,
@@ -84,7 +85,6 @@ _LEGACY_ALIASES = {
     "auto_detect": auto_detect,
     "auto_split": auto_split,
     "phoneme_matching": phoneme_matching,
-    "phonemizer_service": phonemizer_service,
     "qalqala": qalqala,
     "save": save,
     "segments_query": segments_query,

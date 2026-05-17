@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Optional
 
 from . import audio_fetch, audio_meta
-from services.storage import cache
 
 
 @dataclass(frozen=True)
@@ -23,11 +22,11 @@ class AudioSource:
     """Resolved location + metadata for one chapter URL.
 
     Exactly one of ``data`` / ``path`` is populated when the chapter is on
-    the bucket or on local disk; both are ``None`` for CDN-only chapters.
-    Callers prefer ``data`` (bucket bytes — already in memory after the read)
-    over ``path`` (disk, ffmpeg can mmap), and fall back to ``cdn_url`` —
-    ffmpeg can fetch HTTPS directly via its built-in HTTP protocol when no
-    local bytes are available.
+    the bucket; both are ``None`` for CDN-only chapters. Callers prefer
+    ``path`` (bucket-mounted file, ffmpeg can mmap, send_file uses sendfile)
+    over ``data`` (in-memory bytes, local-dev no-mount fallback), and fall
+    back to ``cdn_url`` — ffmpeg can fetch HTTPS directly via its built-in
+    HTTP protocol when no local bytes are available.
     """
 
     cdn_url: str
@@ -46,7 +45,7 @@ class AudioSource:
 def resolve(reciter: str, url: str) -> AudioSource:
     """Return the best available source for ``url`` under ``reciter``.
 
-    Priority: bucket prefetched bytes → disk-cached file → CDN URL.
+    Priority: bucket-prefetched local path → bucket-prefetched bytes → CDN URL.
     """
     chapter_key = audio_meta.chapter_for_url(reciter, url)
     meta = audio_meta.chapter_meta_for_url(reciter, url)
@@ -55,18 +54,11 @@ def resolve(reciter: str, url: str) -> AudioSource:
 
     # Prefer a real local path so callers can stream via send_file/sendfile
     # (Range, ETag, 304). The bytes fallback is only for local-dev when no
-    # mount or disk shadow is available.
+    # mount is available.
     local = audio_fetch.read_prefetched_audio_local_path(reciter, url)
     if local is not None:
         return AudioSource(
             cdn_url=url, data=None, path=local,
-            vbr=vbr, bitrate_kbps=bitrate_kbps, chapter_key=chapter_key,
-        )
-
-    disk = cache.audio_cache_path(reciter, url)
-    if disk.exists():
-        return AudioSource(
-            cdn_url=url, data=None, path=disk,
             vbr=vbr, bitrate_kbps=bitrate_kbps, chapter_key=chapter_key,
         )
 

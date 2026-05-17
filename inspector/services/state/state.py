@@ -344,9 +344,14 @@ def _auto_claim_hook(
     request was submitted with ``auto_claim=True``, fire a follow-up
     ``reciter.claimed`` on the requester's behalf.
 
-    Skips silently if the user already holds another active claim — the
-    one-claim-per-user invariant takes precedence; they can claim manually
-    later from the dashboard.
+    Owner exemption: owners may hold multiple simultaneous claims (matches
+    the policy gate in ``services.auth.predicates.can_claim`` and the
+    manual ``/api/claim/<slug>`` route), so the one-claim check below is
+    skipped for them.
+
+    For non-owners holding another active claim, an audit record
+    (``reciter.auto_claim_skipped``) is appended so the skip is
+    inspectable later instead of being a silent INFO log only.
     """
     if event != "reciter.alignment_completed":
         return
@@ -354,13 +359,40 @@ def _auto_claim_hook(
         requester = _AUTO_CLAIM_QUEUE.pop(new_row.slug, None)
     if requester is None:
         return
-    if has_other_active_claim(requester.hf_user_id):
+
+    existing_claim_slug: str | None = None
+    if not permissions.is_owner(requester):
+        existing_claim_slug = next(
+            (
+                r.slug for r in all_rows()
+                if r.state == ReciterState.UNDER_REVIEW
+                and r.assignee_hf_id == requester.hf_user_id
+                and r.slug != new_row.slug
+            ),
+            None,
+        )
+    if existing_claim_slug is not None:
         logger.info(
-            "auto_claim: %s already has an active claim; skipping auto-claim "
-            "of %s",
+            "auto_claim: %s already holds claim on %s; skipping auto-claim of %s",
             requester.hf_user_id,
+            existing_claim_slug,
             new_row.slug,
         )
+        try:
+            audit.append(
+                event="reciter.auto_claim_skipped",
+                actor=requester,
+                slug=new_row.slug,
+                payload={
+                    "reason": "other_active_claim",
+                    "existing_claim_slug": existing_claim_slug,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "auto_claim: failed to write skip audit for slug=%s",
+                new_row.slug,
+            )
         return
     try:
         transition(
@@ -518,8 +550,8 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
             f"alignment_completed requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
 
-    # Capture the auto_claim requester (if any) BEFORE apply_and_clear
-    # wipes the pending entry.
+    # Capture the auto_claim requester (if any) BEFORE apply_and_archive_completed
+    # archives + clears the pending entry.
     # Imported here (not at module top) to avoid a circular import:
     # pending_requests → catalog → audit; audit doesn't touch state.
     from . import pending_requests as _pending_requests
@@ -528,7 +560,7 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
         with _auto_claim_lock:
             _AUTO_CLAIM_QUEUE[slug] = pending.requester
 
-    _pending_requests.apply_and_clear(slug, actor=actor)
+    _pending_requests.apply_and_archive_completed(slug, actor=actor)
 
     return _replace(
         before,
@@ -620,8 +652,10 @@ def _h_requested(slug, before, actor, payload, reason):
 def _h_request_rejected_soft(slug, before, actor, payload, reason):
     """Admin sends a pending request back. Row returns to CATALOGUED.
 
-    Pending edits are discarded; the requester can submit again. Reason is
-    required and lands in the audit record for accountability.
+    The pending entry moves to ``requests/returned.json`` (with the
+    admin's reason) so the requester can recover what they originally
+    asked for and resubmit a corrected version. Reason is required and
+    also lands in the audit record for accountability.
     """
     if before is None:
         raise UnknownReciter(slug)
@@ -630,10 +664,10 @@ def _h_request_rejected_soft(slug, before, actor, payload, reason):
             f"request_rejected_soft requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
     _require_maintainer(actor)
-    _require_reason(reason, "request_rejected_soft")
+    norm_reason = _require_reason(reason, "request_rejected_soft")
 
     from . import pending_requests as _pending_requests
-    _pending_requests.clear(slug)
+    _pending_requests.archive_returned(slug, reason=norm_reason, by_actor=actor)
 
     return _replace(
         before,
@@ -659,7 +693,7 @@ def _h_request_rejected_hard(slug, before, actor, payload, reason):
     norm_reason = _require_reason(reason, "request_rejected_hard")
 
     from . import pending_requests as _pending_requests
-    _pending_requests.clear(slug)
+    _pending_requests.archive_discarded(slug, reason=norm_reason, by_actor=actor)
 
     return _replace(
         before,

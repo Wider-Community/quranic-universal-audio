@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from config import AUDIO_CACHE_MAX_AGE, FFMPEG_FULL_TIMEOUT
-from services import cache
+from services import audio_source
 from services.data_loader import load_detailed
 
 logger = logging.getLogger(__name__)
@@ -67,12 +67,12 @@ def seg_segment_clip(reciter):
     if parsed.scheme not in ("http", "https"):
         return jsonify({"error": "url must be http or https"}), 400
 
-    # Prefer the local cached file when audio_proxy has already pulled it down.
-    # ffmpeg can fetch the URL directly (image ships with HTTPS support), but
-    # local read drops seek/decode from ~0.7 s to ~0.15 s — significant when
-    # the user is rapid-clicking through Alghazali.
-    local_path = cache.audio_cache_path(reciter, url)
-    source = str(local_path) if local_path.exists() else url
+    # Prefer the bucket-prefetched chapter file when present. ffmpeg can fetch
+    # the URL directly (image ships with HTTPS support), but local read drops
+    # seek/decode from ~0.7 s to ~0.15 s and avoids hitting the CDN on every
+    # rapid-click. audio_source.resolve walks bucket-prefetched → CDN.
+    src = audio_source.resolve(reciter, url)
+    source = str(src.path) if src.path is not None else url
 
     start_sec = start_ms / 1000.0
     duration_sec = (end_ms - start_ms) / 1000.0

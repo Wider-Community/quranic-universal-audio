@@ -143,7 +143,7 @@ def test_request_reject_events_admin_only(event, expected_kind):
 
 
 def test_catalog_conflict_warning_is_hidden():
-    """The non-blocking conflict signal emitted by apply_and_clear must not
+    """The non-blocking conflict signal emitted by apply_and_archive_completed must not
     surface on either rail."""
     from services import activity_classification as ac
 

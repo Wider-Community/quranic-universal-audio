@@ -43,7 +43,6 @@ interface SaveSegmentPayloadFull {
     phonemes_asr: string;
     audio_url: string;
     wrap_word_ranges?: unknown;
-    has_repeated_words?: boolean;
     ignored_categories?: string[];
 }
 
@@ -179,7 +178,6 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                             ignored_categories: s.ignored_categories ?? [],
                         };
                         if (s.wrap_word_ranges) o.wrap_word_ranges = s.wrap_word_ranges;
-                        if (s.has_repeated_words) o.has_repeated_words = true;
                         return o;
                     }),
                     operations: chOps,

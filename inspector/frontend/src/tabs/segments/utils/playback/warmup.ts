@@ -27,8 +27,22 @@
  * are swallowed.
  */
 
+import { get } from 'svelte/store';
+
 import type { Segment } from '../../../../lib/types/domain';
+import { segAllData } from '../../stores/chapter';
 import { cbrKbpsForChapter } from '../../stores/chapter-meta';
+
+/** Main-list segs from `/api/seg/all/<reciter>` deliberately omit `audio_url`
+ *  to save wire bytes; every FE consumer falls back to the top-level
+ *  `audio_by_chapter[chapter]` map. Mirror that here so the hover and
+ *  next-seg triggers don't silently no-op on main-list segs. */
+function _segAudioUrl(seg: Segment): string {
+    if (seg.audio_url) return seg.audio_url;
+    const chapter = seg.chapter;
+    if (chapter == null) return '';
+    return get(segAllData)?.audio_by_chapter?.[String(chapter)] ?? '';
+}
 
 const WARMUP_BYTES = 65536;            // 64 KB
 const DEDUPE_WINDOW_MS = 30_000;
@@ -46,13 +60,29 @@ function _pruneExpired(nowMs: number): void {
 
 function _fire(reciter: string, audioUrl: string, byteStart: number): void {
     const proxyUrl = `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`;
-    // `priority: 'low'` is a browser hint (RequestPriority); not in all TS lib
-    // versions. Cast through `any` keeps the option without a global lib bump.
-    const init: RequestInit & { priority?: string } = {
+    const startedAt = performance.now();
+    // Verbose-mode trace — flip via `localStorage.insp_warmup_log = 'true'` to
+    // confirm the warmup is firing in production. The win is server-side OS
+    // page cache (the audio element's open-ended Range hits warm pages after
+    // this completes), so the visible signal is the response time on this
+    // request — if it's slow, the user's eventual play TTFB shows the same
+    // cost; if it's fast, the play TTFB is fast for "free".
+    const trace = (typeof localStorage !== 'undefined'
+        && localStorage.getItem('insp_warmup_log') === 'true');
+    if (trace) {
+         
+        console.log(`[warmup] fire ${audioUrl} bytes=${byteStart}-${byteStart + WARMUP_BYTES - 1}`);
+    }
+    fetch(proxyUrl, {
         headers: { Range: `bytes=${byteStart}-${byteStart + WARMUP_BYTES - 1}` },
-        priority: 'low',
-    };
-    fetch(proxyUrl, init as RequestInit).catch(() => {});
+    })
+        .then((r) => {
+            if (trace) {
+                 
+                console.log(`[warmup] done ${audioUrl} bytes=${byteStart} → ${r.status} in ${Math.round(performance.now() - startedAt)}ms`);
+            }
+        })
+        .catch(() => {});
 }
 
 function _warmAtByte(
@@ -84,17 +114,21 @@ export function warmSeg(
     reciter: string,
     current?: Segment | null,
 ): void {
-    if (!seg || !reciter || !seg.audio_url) return;
+    if (!seg || !reciter) return;
     const chapter = seg.chapter;
     if (chapter == null) return;
+    const audioUrl = _segAudioUrl(seg);
+    if (!audioUrl) return;
+    const currentUrl = current ? _segAudioUrl(current) : '';
     if (current
-        && current.audio_url === seg.audio_url
+        && currentUrl
+        && currentUrl === audioUrl
         && seg.time_start - current.time_end < PROXIMITY_GAP_MS) return;
     const kbps = cbrKbpsForChapter(chapter);
     if (!kbps) return;
     const bytesPerSec = kbps * 125;
     const byteStart = Math.max(0, Math.floor((seg.time_start / 1000) * bytesPerSec));
-    _warmAtByte(reciter, seg.audio_url, byteStart);
+    _warmAtByte(reciter, audioUrl, byteStart);
 }
 
 /** Warm bytes 0–65535 of a chapter MP3 — used by the chapter-load trigger

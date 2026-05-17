@@ -67,7 +67,6 @@ describe.skipIf(!applyCommand)('command/split', () => {
           segment_uid: 'uid-rep',
           matched_ref: '48:29:1-48:29:24',
           wrap_word_ranges: [['48:29:11', '48:29:11', '48:29:24']] as any,
-          has_repeated_words: true,
         }),
       },
       idsByChapter: { 1: ['uid-rep'] },
@@ -79,7 +78,6 @@ describe.skipIf(!applyCommand)('command/split', () => {
     const out = Object.values(r.nextState.byId ?? r.nextState)[0] as any;
     expect(out.matched_ref).toBe('48:29:1-48:29:3');
     expect(out.wrap_word_ranges).toBeUndefined();
-    expect(out.has_repeated_words).toBeUndefined();
   });
 
   it('confirmReference (no ref change) preserves wrap', () => {
@@ -91,7 +89,6 @@ describe.skipIf(!applyCommand)('command/split', () => {
           segment_uid: 'uid-rep',
           matched_ref: '48:29:1-48:29:24',
           wrap_word_ranges: [['48:29:11', '48:29:11', '48:29:24']] as any,
-          has_repeated_words: true,
         }),
       },
       idsByChapter: { 1: ['uid-rep'] },
@@ -103,7 +100,6 @@ describe.skipIf(!applyCommand)('command/split', () => {
     } as any);
     const out = Object.values(r.nextState.byId ?? r.nextState)[0] as any;
     expect(out.wrap_word_ranges).toEqual([['48:29:11', '48:29:11', '48:29:24']]);
-    expect(out.has_repeated_words).toBe(true);
   });
 
   it('merge drops wrap from both segs', () => {
@@ -115,7 +111,6 @@ describe.skipIf(!applyCommand)('command/split', () => {
           segment_uid: 'uid-a',
           matched_ref: '48:29:1-48:29:11',
           wrap_word_ranges: [['48:29:5', '48:29:5', '48:29:11']] as any,
-          has_repeated_words: true,
         }),
         'uid-b': makeSegment(1, 2000, 4000, {
           segment_uid: 'uid-b',
@@ -130,10 +125,9 @@ describe.skipIf(!applyCommand)('command/split', () => {
     } as any);
     const merged = Object.values(r.nextState.byId ?? r.nextState)[0] as any;
     expect(merged.wrap_word_ranges).toBeUndefined();
-    expect(merged.has_repeated_words).toBeUndefined();
   });
 
-  it('drops wrap_word_ranges and has_repeated_words from every child', () => {
+  it('drops wrap_word_ranges from every child', () => {
     // Regression: a parent repetition seg used to leak its wrap onto every
     // split child, re-tagging post-split clean segs as repetitions and
     // making Auto Split feed the wrong refs to MFA.
@@ -143,7 +137,6 @@ describe.skipIf(!applyCommand)('command/split', () => {
           segment_uid: 'uid-rep',
           matched_ref: '48:29:1-48:29:24',
           wrap_word_ranges: [['48:29:11', '48:29:11', '48:29:24']] as any,
-          has_repeated_words: true,
         }),
       },
       idsByChapter: { 1: ['uid-rep'] },
@@ -156,7 +149,6 @@ describe.skipIf(!applyCommand)('command/split', () => {
     expect(pieces.length).toBe(2);
     for (const p of pieces) {
       expect(p.wrap_word_ranges).toBeUndefined();
-      expect(p.has_repeated_words).toBeUndefined();
     }
   });
 });

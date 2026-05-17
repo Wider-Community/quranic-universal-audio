@@ -10,21 +10,36 @@ the hash changes, which is a fresh cache key.
 - ``?h=`` absent → ``public, max-age=86400`` (1 day fallback for ad-hoc/dev).
 
 The backend ignores the value of ``h``; it's purely a cache-buster.
+
+Performance shape (post slim-peaks migration):
+
+- Peaks files on the bucket are slim packed (``services/audio/peaks_slim.py``,
+  ~21 KiB / chapter avg, 40× smaller than the legacy v2 float-JSON).
+- The route just reads the requested chapters in parallel (ThreadPool×8) and
+  responds. No compute path — files either exist or they don't, and missing
+  ones are filled later by the prefetch fallback writer.
+- In-memory ``_PEAKS_RESPONSE_CACHE`` (LRU 50) deduplicates repeat identical
+  requests; ``invalidate_seg_caches`` evicts on save/undo.
 """
-import threading
+from concurrent.futures import ThreadPoolExecutor
 
-from flask import Blueprint, jsonify, request
+import orjson
+from flask import Blueprint, Response, jsonify, request
 
+from config import PEAKS_SCHEMA_VERSION
 from services import audio_fetch, audio_source, cache
 from services.data_loader import load_detailed
-from config import PEAKS_SCHEMA_VERSION
-from services.peaks import (compute_segment_peaks, get_peaks_for_reciter,
-                            is_current_schema)
+from services.peaks import compute_segment_peaks
 from services.peaks_history import append_peaks_records, load_peaks_records
 from utils.decorators import require_edit_lock, require_same_origin
 from utils.references import chapter_from_ref
 
 peaks_bp = Blueprint("peaks", __name__, url_prefix="/api/seg")
+
+# Bucket read fan-out for multi-chapter requests. Bucket reads release the GIL
+# (FUSE I/O), so threads are the right primitive. Worst-case 114-chapter
+# request: 114 reads ÷ 8 workers × ~3 ms warm/file ≈ ~45 ms.
+_PEAKS_READ_WORKERS = 8
 
 
 def _peaks_cache_headers() -> dict[str, str]:
@@ -36,73 +51,93 @@ def _peaks_cache_headers() -> dict[str, str]:
 
 @peaks_bp.route("/peaks/<reciter>")
 def seg_peaks(reciter):
-    """Return pre-computed waveform peaks for a reciter's audio files."""
+    """Return pre-computed waveform peaks for a reciter's audio files.
+
+    Reads slim packed peaks (``wip/<slug>/peaks/<chapter>.json.gz``) for
+    every URL in the requested chapters, inflated by
+    ``audio_fetch.read_prefetched_peaks``. Response shape preserved from the
+    pre-migration route -- FE consumers (``_fetchPeaks`` /
+    ``setWaveformPeaks``) see the same ``{peaks: {<url>: {...}}, complete}``
+    contract.
+    """
     entries = load_detailed(reciter)
     if not entries:
         return jsonify({"error": "Reciter not found"}), 404
 
     chapters_param = request.args.get("chapters", "")
-    chapter_filter = None
+    chapter_filter: set[int] | None = None
     if chapters_param:
         try:
             chapter_filter = {int(c) for c in chapters_param.split(",") if c.strip()}
         except ValueError:
             pass
 
-    cached_only = request.args.get("cached_only", "").lower() == "true"
+    # Build the (reciter, sorted_chapter_tuple) cache key. Use the FILTER
+    # itself rather than the URL set so cache keys stay compact and stable
+    # across detailed.json mutations that don't actually change peaks.
+    chapter_key = tuple(sorted(chapter_filter)) if chapter_filter else ()
+    cached_bytes = cache.get_peaks_response_cache(reciter, chapter_key)
+    if cached_bytes is not None:
+        # Skip jsonify entirely — bytes are already serialized JSON ready to
+        # send. For the worst chapter (husary ch2, 119k peak tuples) this
+        # avoids ~1.5-2s of jsonify CPU per hit. flask-compress still
+        # negotiates Content-Encoding per request.
+        response = Response(cached_bytes, mimetype="application/json")
+        for k, v in _peaks_cache_headers().items():
+            response.headers[k] = v
+        return response
 
-    target_urls = set()
+    target_urls: list[str] = []
+    seen: set[str] = set()
     for entry in entries:
         ch = chapter_from_ref(entry["ref"])
-        if chapter_filter and ch not in chapter_filter:
+        if chapter_filter is not None and ch not in chapter_filter:
             continue
         url = entry.get("audio", "")
-        if url:
-            target_urls.add(url)
+        if url and url not in seen:
+            seen.add(url)
+            target_urls.append(url)
 
-    lock = cache.get_peaks_lock()
-    with lock:
-        cached = cache.get_peaks_cache(reciter)
-    # Filter pre-v2 entries out -- the in-memory cache can still hold them
-    # from before a schema bump (long-running process, no restart yet), and
-    # the v1 bucketer's stretched timeline would otherwise leak past the
-    # invalidations in `read_prefetched_peaks`.
-    result = {u: cached[u] for u in target_urls if u in cached and is_current_schema(cached[u])}
+    # In-process per-URL cache (used by ``seg_segment_peaks`` slicer too).
+    # Hydrate from it first, then fan-out bucket reads for misses.
+    # ``cache.get_peaks_lock()`` is a non-reentrant Lock and ``set_peaks_for_url``
+    # takes it internally — so we MUST NOT wrap the set call in another
+    # ``with lock`` block (that would deadlock the same thread). The lock
+    # bookkeeping lives inside the cache helpers themselves.
+    per_url = cache.get_peaks_cache(reciter)
+    result: dict[str, dict] = {u: per_url[u] for u in target_urls if u in per_url}
 
-    # Short-circuit: if the prefetch worker already wrote peaks JSON to the
-    # bucket for any of the remaining URLs, hydrate from there. Misses fall
-    # through to the in-memory cache + background compute path below.
-    for url in target_urls - result.keys():
-        peaks = audio_fetch.read_prefetched_peaks(reciter, url)
-        if peaks is not None:
-            result[url] = peaks
-            with lock:
-                cache.set_peaks_for_url(reciter, url, peaks)
+    misses = [u for u in target_urls if u not in result]
+    if misses:
+        def _read(url: str) -> tuple[str, dict | None]:
+            return url, audio_fetch.read_prefetched_peaks(reciter, url)
 
-    complete = len(result) >= len(target_urls)
+        with ThreadPoolExecutor(max_workers=_PEAKS_READ_WORKERS) as pool:
+            for url, peaks in pool.map(_read, misses):
+                if peaks is not None:
+                    result[url] = peaks
+                    cache.set_peaks_for_url(reciter, url, peaks)
 
-    cache_key = f"{reciter}:{chapters_param}"
-    if not complete and not cached_only and not cache.is_peaks_computing(cache_key):
-        cache.add_peaks_computing(cache_key)
-
-        def _bg():
-            try:
-                get_peaks_for_reciter(reciter, chapter_filter)
-            finally:
-                cache.discard_peaks_computing(cache_key)
-
-        threading.Thread(target=_bg, daemon=True).start()
-
-    response = jsonify({"peaks": result, "complete": complete})
-    # Only emit `immutable, max-age=…` when the response is BOTH complete AND
-    # non-empty. An empty `complete=true` response (e.g. reciter has no audio
-    # URLs at all) under `immutable` would forever poison the cache: peaks
-    # that compute later in the background would be invisible. Falling back
-    # to `no-store` for the empty-complete case keeps clients honest.
-    if complete and result:
+    # ``complete`` is preserved on the wire for FE back-compat, but always
+    # True now: there's no background compute path that fills in missing
+    # peaks after the fact. A URL missing from ``result`` means its slim
+    # file is genuinely absent (chapter wasn't prefetched, or extraction
+    # failed for it) and the FE falls through to ``/segment-peaks`` POST
+    # per-segment as it does for non-prewarmed reciters today.
+    body = {"peaks": result, "complete": True}
+    # Serialize once via orjson (~3× faster than stdlib json on big payloads)
+    # and cache the bytes so warm requests skip both jsonify and the
+    # orjson encode entirely. flask-compress runs on top per-request.
+    body_bytes = orjson.dumps(body)
+    if result:
+        cache.set_peaks_response_cache(reciter, chapter_key, body_bytes)
+    response = Response(body_bytes, mimetype="application/json")
+    if result:
         for k, v in _peaks_cache_headers().items():
             response.headers[k] = v
     else:
+        # Empty response shouldn't poison a long-lived cache; if peaks
+        # arrive later via prefetch, the client should retry.
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -111,14 +146,15 @@ def seg_peaks(reciter):
 def seg_segment_peaks(reciter):
     """Fetch peaks for individual segments.
 
-    Three sources, in order:
+    Two sources, in order:
 
     1. Slice the prefetched chapter-peaks JSON if present — free, ~O(N) array
        slice. Honours an optional per-segment ``pad_ms`` so split / auto-split
        scrubbers can show neighbour samples beyond the segment boundary
        (clamped to ``[0, duration_ms]``).
-    2. Compute via ffmpeg-on-local-bytes (resolver bucket/disk hit).
-    3. HTTP Range decode against the CDN URL (CBR-correct fallback).
+    2. ffmpeg-decode the segment via ``compute_segment_peaks`` — no caching,
+       per request. ``cached_only=true`` in the body skips this fallback so
+       the client gets only bucket-resident peaks.
     """
     body = request.get_json(silent=True) or {}
     segments = body.get("segments", [])
@@ -144,12 +180,14 @@ def seg_segment_peaks(reciter):
             results[key] = sliced
             continue
 
+        if cached_only:
+            continue
+
         data = compute_segment_peaks(
             url,
             max(0, start_ms - pad_ms),
             end_ms + pad_ms,
             reciter,
-            cached_only=cached_only,
             chapter=chapter,
         )
         if data:
@@ -185,11 +223,21 @@ def _slice_chapter_peaks(chapter_peaks: dict | None, start_ms: int, end_ms: int,
     if end_idx == start_idx:
         end_idx = min(n, start_idx + 1)
 
+    # Report the slice's ACTUAL time span (not the requested ``[lo, hi]``
+    # window). Renderers compute pps from these fields; mismatched values
+    # drift canvas mapping by up to one bucket per side -- invisible at
+    # 30 bps, visible at 10 bps post slim-peaks migration. Keeping
+    # ``peaks.length == duration_ms * pps`` exact downstream avoids the
+    # bug entirely. Index → time conversion uses the source duration's
+    # density (``n / duration_ms``) since we sliced against it.
+    pps = n / duration_ms
+    slice_start_ms = start_idx / pps
+    slice_end_ms = end_idx / pps
     return {
         "schema_version": PEAKS_SCHEMA_VERSION,
-        "start_ms": lo,
-        "end_ms": hi,
-        "duration_ms": hi - lo,
+        "start_ms": slice_start_ms,
+        "end_ms": slice_end_ms,
+        "duration_ms": slice_end_ms - slice_start_ms,
         "peaks": peaks[start_idx:end_idx],
     }
 

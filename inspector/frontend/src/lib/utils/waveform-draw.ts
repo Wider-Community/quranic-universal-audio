@@ -58,11 +58,38 @@ export function drawWaveformPeaks(
     if (!peaks || peaks.length === 0) return;
 
     // Apply sub-range slicing when all three range params are present.
+    //
+    // The slice's *actual* time span is wider than [startMs, endMs] by up
+    // to one bucket per side because i0/i1 snap to integer indices
+    // (floor/ceil). Pre-slim that was a 33 ms error (30 bps); post-slim
+    // it's 100 ms per side (10 bps), which is visually obvious — a
+    // ~150 ms silence in a 600 ms segment ends up drawn against the wrong
+    // pixel column. Fix: drive the canvas-pixel → peak-index mapping from
+    // the REQUESTED [startMs, endMs] window using the FULL peaks array's
+    // density (peaks.length / totalDurationMs), translating into the
+    // slice's local index space afterwards. The slice itself is still
+    // cheap to compute because it scopes the maxAmp scan; the change is
+    // purely in how pixels map to peak indices.
     let drawPeaks = peaks;
+    let pixelToFullIdx: (x: number) => number;
     if (startMs !== undefined && endMs !== undefined && totalDurationMs !== undefined && totalDurationMs > 0) {
-        const i0 = Math.floor(peaks.length * startMs / totalDurationMs);
-        const i1 = Math.ceil(peaks.length * endMs / totalDurationMs);
+        const peaksPerMs = peaks.length / totalDurationMs;
+        const i0 = Math.floor(startMs * peaksPerMs);
+        const i1 = Math.ceil(endMs * peaksPerMs);
         drawPeaks = peaks.slice(i0, i1);
+        // Map canvas x ∈ [0, width-1] linearly across [startMs, endMs] in
+        // absolute time, then into a fractional index inside the slice.
+        // No bucket snapping — each canvas pixel reads the peak at its
+        // true time position.
+        pixelToFullIdx = (x) => {
+            const tMs = startMs + (x / Math.max(1, width - 1)) * (endMs - startMs);
+            return tMs * peaksPerMs - i0;
+        };
+    } else {
+        // Full-array render: legacy linear mapping over the whole peaks
+        // array, identical to the pre-fix behaviour for non-sub-ranged
+        // callers (chapter overviews etc.).
+        pixelToFullIdx = (x) => (x / Math.max(1, width - 1)) * (peaks.length - 1);
     }
 
     if (drawPeaks.length === 0) return;
@@ -78,9 +105,11 @@ export function drawWaveformPeaks(
     const scale = maxAmp < WAVEFORM_SILENCE_THRESHOLD ? halfH * 0.9 : halfH / maxAmp;
 
     function sampleAt(arr: PeakBucket[], idx: number, component: 0 | 1): number {
-        const fi = (idx / buckets) * (arr.length - 1);
+        const fi = pixelToFullIdx(idx);
+        if (fi < 0) return arr[0]?.[component] ?? 0;
+        if (fi >= arr.length - 1) return arr[arr.length - 1]?.[component] ?? 0;
         const lo = Math.floor(fi);
-        const hi = Math.min(lo + 1, arr.length - 1);
+        const hi = lo + 1;
         const t = fi - lo;
         return (arr[lo]?.[component] ?? 0) * (1 - t) + (arr[hi]?.[component] ?? 0) * t;
     }

@@ -247,6 +247,25 @@ def _invalidate_seg_caches(reciter: str | None = None):
             continue
         if hasattr(obj, "clear"):
             obj.clear()
+    # Reset the route-level peaks LRU response cache so successive tests
+    # don't see a stale body from a prior test's request shape.
+    clearer = getattr(_cache, "clear_peaks_response_cache", None)
+    if callable(clearer):
+        clearer()
+    # Also drop the per-URL parsed peaks cache so a missing-file test
+    # doesn't see a hit from a sibling test that installed peaks.
+    peaks_url_cache = getattr(_cache, "_PEAKS_CACHE", None)
+    if isinstance(peaks_url_cache, dict):
+        peaks_url_cache.clear()
+    # Drop the audio_meta sidecar cache too — different tests install
+    # different fixtures and the cache is keyed only by slug, so leftover
+    # entries pin a stale chapter→URL map across tests.
+    try:
+        from services.audio import audio_meta as _audio_meta
+        if isinstance(getattr(_audio_meta, "_SIDECAR_CACHE", None), dict):
+            _audio_meta._SIDECAR_CACHE.clear()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @pytest.fixture

@@ -23,6 +23,7 @@
     import { afterUpdate, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import type {
         SegValAnyItem,
         SegValidateResponse,
@@ -31,17 +32,23 @@
     } from '../../../../lib/types/api';
     import { activeTab } from '../../../../lib/utils/active-tab';
     import { TAB_NAMES } from '../../../../lib/utils/constants';
+    import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
     import { IssueRegistry } from '../../domain/registry';
     import { accordionPin, clearAccordionPin, pinAccordion } from '../../stores/accordion-pin';
-    import { segAllData } from '../../stores/chapter';
+    import { segAllData, selectedReciter } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
+    import { playingSegmentIndex } from '../../stores/playback';
     import { segValidation, valUiLcThreshold, valUiMeasuredCardHeight,valUiOpenCategory, valUiScrollTop } from '../../stores/validation';
     import {
         VAL_VIRTUALIZE_THRESHOLD,
         VIRT_BUFFER_ROWS,
     } from '../../utils/constants';
+    import { wrapCbrSrcIfBySurah } from '../../utils/playback/source';
+    import { warmSeg } from '../../utils/playback/warmup';
+    import { resolveCardLeadSeg } from '../../utils/validation/card-lead-seg';
     import { filterStaleIssues } from '../../utils/validation/stale';
+    import { _fetchPeaks } from '../../utils/waveform/utils';
     import AccordionGuideModal from './AccordionGuideModal.svelte';
     import ErrorCard from './ErrorCard.svelte';
 
@@ -425,6 +432,151 @@
         return out;
     })();
     $: openTotal = displayedItems.length;
+
+    // ---- Card-transition audio warmup ----
+    //
+    // Reviewers work through accordion cards in order. Each card's "lead seg"
+    // (resolved per-type — see resolveCardLeadSeg) is what the reviewer
+    // typically plays first. Cross-card transitions frequently span chapters
+    // (e.g. missing_words[0]=4:127 → [1]=6:73), so the browser's forward
+    // buffer can never cover the next card's audio. The chapter-load + hover
+    // + within-card-next-sibling warmups can't help either — they're scoped
+    // to a single chapter.
+    //
+    // Strategy:
+    //   1. On category open / displayedItems change → warm card[0]'s lead.
+    //   2. On `playingSegmentIndex` change → find which card holds the now-
+    //      playing seg, and warm card[N+1]'s lead. Idempotent via warmup.ts
+    //      dedupe so re-fires within 30 s are free.
+    //
+    // The (chapter, index) → card-index map rebuilds on every displayedItems
+    // identity change. O(N · indices-per-card) but N is bounded by the
+    // accordion's visible card count.
+    let _cardOwnerByChIdx: Map<string, number> = new Map();
+    $: {
+        const m = new Map<string, number>();
+        const items = displayedItems;
+        const kind = openCategory;
+        if (kind) {
+            for (let i = 0; i < items.length; i++) {
+                const it = items[i] as {
+                    chapter?: number;
+                    seg_index?: number;
+                    seg_indices?: number[];
+                };
+                if (it?.chapter == null) continue;
+                const indices = it.seg_indices ?? (it.seg_index != null ? [it.seg_index] : []);
+                for (const idx of indices) {
+                    const key = `${it.chapter}:${idx}`;
+                    if (!m.has(key)) m.set(key, i);
+                }
+            }
+        }
+        _cardOwnerByChIdx = m;
+    }
+
+    // Resolve a card's lead seg to the audio-proxy-wrapped URL that the
+    // primary `<audio>` element will later load. The shadow element fetches
+    // this URL so the browser HTTP cache is warm by the time the user clicks
+    // play. For VBR chapters the seg-clip URL is per-segment and the shadow
+    // can't pre-cache that — fall back to the byte-Range warmup, which still
+    // primes the server-side ffmpeg read.
+    function _warmAccordionLead(lead: ReturnType<typeof resolveCardLeadSeg>): void {
+        if (!lead) return;
+        const reciter = $selectedReciter;
+        if (!reciter) return;
+        const audioUrl = lead.audio_url
+            ?? $segAllData?.audio_by_chapter?.[String(lead.chapter)]
+            ?? '';
+        if (!audioUrl) return;
+        const isVbr = lead.chapter != null
+            && (lead.chapter as number) > 0
+            && ($segAllData?.reciter_vbr_chapters ?? []).includes(lead.chapter as number);
+        if (isVbr) {
+            warmSeg(lead, reciter);
+            return;
+        }
+        const wrapped = wrapCbrSrcIfBySurah(audioUrl, reciter);
+        shadowPrewarm(wrapped);
+    }
+
+    /**
+     * Pre-fetch chapter-overview peaks for every chapter represented in the
+     * currently-open accordion. One batched request via ``_fetchPeaks`` —
+     * populates ``getWaveformPeaks(url)`` cache so per-card canvases
+     * (including not-yet-scrolled-into-view context cards) paint in-memory
+     * via slice instead of paying ~1s ffmpeg per Play click via
+     * ``/segment-peaks`` POST. Reuses the same chapter-extraction approach
+     * as ``_warmAccordionLead`` but covers the full ``displayedItems`` list,
+     * not just the lead card.
+     *
+     * Dedup: chapters already cached (any prior fetch / chapter pick already
+     * populated this entry) are filtered out — sending only the misses. The
+     * route's own LRU response cache absorbs repeat opens of the same
+     * accordion across the session.
+     *
+     * Wire/CPU bound: a typical 5-15-chapter accordion is ~100 KiB-1 MiB on
+     * the wire and ~300-700 ms server-side. Big-N categories like Qalqala
+     * (663 segs across many chapters) may approach the all-114 envelope —
+     * the dedup gate keeps that to the chapters not yet seen this session.
+     */
+    function _prefetchAccordionPeaks(): void {
+        const reciter = $selectedReciter;
+        if (!reciter || !openCategory) return;
+        const audioByChapter = $segAllData?.audio_by_chapter ?? {};
+        const wanted = new Set<number>();
+        for (const item of displayedItems) {
+            const lead = resolveCardLeadSeg(item, openCategory);
+            if (!lead || lead.chapter == null) continue;
+            const url = lead.audio_url ?? audioByChapter[String(lead.chapter)] ?? '';
+            if (!url) continue;
+            if (getWaveformPeaks(url)?.peaks?.length) continue;
+            wanted.add(lead.chapter as number);
+        }
+        if (wanted.size === 0) return;
+        _fetchPeaks(reciter, Array.from(wanted).sort((a, b) => a - b));
+    }
+
+    // Card-0 warmup on category open / re-pin. Fires once per (category, item-0).
+    let _lastCard0Key: string | null = null;
+    $: {
+        const kind = openCategory;
+        const first = displayedItems[0];
+        const key = kind && first ? `${kind}|${(first as { chapter?: number }).chapter ?? ''}|${(first as { seg_index?: number; verse_key?: string }).seg_index ?? (first as { verse_key?: string }).verse_key ?? ''}` : null;
+        if (key && first && kind && key !== _lastCard0Key) {
+            _lastCard0Key = key;
+            _warmAccordionLead(resolveCardLeadSeg(first, kind));
+            _prefetchAccordionPeaks();
+        } else if (!key) {
+            _lastCard0Key = null;
+        }
+    }
+
+    // Next-card warmup driven by playingSegmentIndex. When the playing seg
+    // first belongs to card N (where the previous play was in card N-1 or no
+    // card), warm card[N+1]'s lead so by the time the reviewer scrolls to it
+    // and clicks, the shadow audio element has already filled the browser
+    // HTTP cache for the next chapter. The primary segPort's eventual swap
+    // hits the warm cache → near-instant canplay (same path as in-chapter
+    // chapter-load prewarm).
+    let _lastPlayedCardIdx = -1;
+    $: {
+        const playing = $playingSegmentIndex;
+        if (!playing || !openCategory) {
+            _lastPlayedCardIdx = -1;
+        } else {
+            const key = `${playing.chapter}:${playing.index}`;
+            const owner = _cardOwnerByChIdx.get(key);
+            if (owner != null && owner !== _lastPlayedCardIdx) {
+                _lastPlayedCardIdx = owner;
+                const nextItem = displayedItems[owner + 1];
+                if (nextItem) {
+                    _warmAccordionLead(resolveCardLeadSeg(nextItem, openCategory));
+                }
+            }
+        }
+    }
+
     // Virtualization stays ACTIVE during editMode. To keep the editing row
     // mounted — so scrolling away doesn't evict the edit panel mid-flow —
     // we expand the slice window to include whichever card resolves to the

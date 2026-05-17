@@ -20,6 +20,14 @@ class Role(str, Enum):
     CONTRIBUTOR = "contributor"  # default; not stored in the roles file
     MAINTAINER = "maintainer"
     OWNER = "owner"
+    # Pipeline-internal principal — only ever stamped onto edit-history
+    # batches written by the offline extraction pipeline
+    # (`.local/extraction/segments/post_passes.py`). Never a real user
+    # identity; never appears in the roles file. Inspector readers
+    # display it as "pipeline" in History attribution; authorization
+    # predicates never see it because the pipeline writes directly to
+    # the bucket, not through the HTTP request path.
+    PIPELINE = "pipeline"
 
 
 # Roles that appear in the file. CONTRIBUTOR is the default for any authenticated

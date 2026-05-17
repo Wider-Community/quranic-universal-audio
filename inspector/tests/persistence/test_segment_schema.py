@@ -1,0 +1,254 @@
+"""Round-trip tests for the shared ``DetailedSegment`` Pydantic schema.
+
+Schema lives at ``scripts/lib/schemas/segment.py``. Both the offline
+extraction pipeline and the Inspector save flow round-trip through it —
+these tests assert the model parses every legitimate seg shape we
+encounter on disk + that ``model_dump(exclude_none=True)`` produces the
+slim emission shape Migration #5 specifies.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from scripts.lib.schemas import (
+    DetailedDocument,
+    DetailedSegment,
+    parse_detailed_segment,
+)
+
+
+# -- Sample seg shapes --------------------------------------------------
+
+
+def _slim_seg() -> dict:
+    """Post-#5 slim shape — what the writer should emit going forward."""
+    return {
+        "time_start": 430,
+        "time_end": 4440,
+        "matched_ref": "1:1:1-1:1:4",
+        "confidence": 1.0,
+        "qalqala_letter": None,
+        "is_boundary_adj": False,
+    }
+
+
+def _legacy_seg() -> dict:
+    """Pre-#5 bloated shape — what's on disk for existing reciters today.
+
+    Includes the fields Migration #5 drops: ``matched_text``,
+    ``phonemes_asr``, ``has_repeated_words``. Schema MUST parse this
+    cleanly via ``extra="allow"``.
+    """
+    return {
+        "time_start": 430,
+        "time_end": 4440,
+        "matched_ref": "1:1:1-1:1:4",
+        "matched_text": "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيم",
+        "phonemes_asr": "b i s m i ll a: h i rˤrˤ aˤ ħ m a: n i rˤrˤ aˤ ħ i: m",
+        "confidence": 1.0,
+        "qalqala_letter": None,
+        "is_boundary_adj": False,
+        "has_repeated_words": False,
+    }
+
+
+def _failed_alignment_seg() -> dict:
+    """A seg the DP aligner couldn't match — confidence 0, ref empty."""
+    return {
+        "time_start": 12000,
+        "time_end": 13500,
+        "matched_ref": "",
+        "confidence": 0.0,
+    }
+
+
+def _wrap_seg() -> dict:
+    """Seg with repetition geometry — wrap_word_ranges is the only field
+    that drives the ``repetitions`` validation category."""
+    return {
+        "time_start": 1000,
+        "time_end": 5000,
+        "matched_ref": "2:30:1-2:30:24",
+        "confidence": 0.95,
+        "qalqala_letter": "ق",
+        "is_boundary_adj": True,
+        "wrap_word_ranges": [["2:30:11", "2:30:11", "2:30:24"]],
+        "segment_uid": "019e32bb-bef6-7132-b006-72aa4ee485cb",
+    }
+
+
+# -- Validation tests ---------------------------------------------------
+
+
+def test_slim_seg_validates():
+    m = DetailedSegment.model_validate(_slim_seg())
+    assert m.time_start == 430
+    assert m.matched_ref == "1:1:1-1:1:4"
+    assert m.confidence == 1.0
+    assert m.matched_text is None
+    assert m.phonemes_asr is None
+
+
+def test_legacy_seg_validates_via_extra_allow():
+    """Bloated shape must parse — readers tolerate legacy fields."""
+    m = DetailedSegment.model_validate(_legacy_seg())
+    assert m.matched_text == "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيم"
+    assert m.phonemes_asr is not None
+    # has_repeated_words is the tautology field — tolerated via extra="allow"
+    # but not in the model schema. It should round-trip via model_extra.
+    assert "has_repeated_words" in (m.model_extra or {})
+
+
+def test_failed_alignment_seg_validates():
+    m = DetailedSegment.model_validate(_failed_alignment_seg())
+    assert m.matched_ref == ""
+    assert m.confidence == 0.0
+
+
+def test_wrap_seg_validates():
+    m = DetailedSegment.model_validate(_wrap_seg())
+    assert m.wrap_word_ranges is not None
+    assert m.qalqala_letter == "ق"
+    assert m.is_boundary_adj is True
+    assert m.segment_uid is not None
+
+
+def test_time_end_before_time_start_fails():
+    """time_end < time_start is corrupt data — must raise."""
+    with pytest.raises(ValueError, match="time_end .* must be >= time_start"):
+        DetailedSegment.model_validate({
+            "time_start": 5000,
+            "time_end": 4000,
+            "matched_ref": "1:1:1",
+            "confidence": 1.0,
+        })
+
+
+def test_confidence_out_of_range_fails():
+    with pytest.raises(ValueError):
+        DetailedSegment.model_validate({
+            "time_start": 0,
+            "time_end": 1000,
+            "matched_ref": "1:1:1",
+            "confidence": 1.5,  # out of [0, 1]
+        })
+
+
+# -- Round-trip emission tests ----------------------------------------
+
+
+def test_slim_seg_emits_slim_shape():
+    """``model_dump(exclude_none=True)`` drops absent optional fields.
+
+    This is what Migration #5 specifies the new writer must emit.
+    """
+    seg = _slim_seg()
+    m = DetailedSegment.model_validate(seg)
+    out = m.model_dump(exclude_none=True)
+
+    # qalqala_letter is None in input — exclude_none drops it. But the
+    # default is also None, so excluded.
+    assert "qalqala_letter" not in out
+    # is_boundary_adj=False is the default; with exclude_none it stays
+    # (None vs False distinction). Migration #5 emits it anyway since it
+    # IS persisted; verify it's there.
+    assert out["is_boundary_adj"] is False
+    # The four banned-or-deferred-drop fields are absent from input + None
+    # default → must be absent from output.
+    for banned in ("matched_text", "phonemes_asr",
+                   "wrap_word_ranges", "segment_uid"):
+        assert banned not in out, f"{banned} leaked into slim emission"
+
+
+def test_legacy_seg_re_emits_with_legacy_fields_via_extra():
+    """When the writer round-trips a legacy seg, the legacy fields
+    should propagate so we don't accidentally lose data. The Migration #5
+    one-shot migration script strips them deliberately; transparent
+    round-trip preserves them."""
+    seg = _legacy_seg()
+    m = DetailedSegment.model_validate(seg)
+    out = m.model_dump(exclude_none=True)
+
+    # matched_text is a declared optional field — present in input, so
+    # present in output (exclude_none lets non-None values through).
+    assert out["matched_text"] == seg["matched_text"]
+    # has_repeated_words came in via extra="allow" — round-trips through
+    # model_extra.
+    assert (m.model_extra or {}).get("has_repeated_words") is False
+
+
+def test_parse_detailed_segment_helper():
+    """Module-level helper used by extraction + inspector both."""
+    m = parse_detailed_segment(_slim_seg())
+    assert isinstance(m, DetailedSegment)
+
+
+# -- Document-level tests -----------------------------------------------
+
+
+def test_detailed_document_with_alias_meta():
+    """``_meta`` JSON key maps to ``.meta`` Python attribute via alias."""
+    raw = {
+        "_meta": {
+            "pad_left_ms": 150,
+            "pad_right_ms": 500,
+            "min_silence_floor_ms": 40,
+            "audio_source": "qul",
+        },
+        "entries": [
+            {"ref": "1", "segments": [_slim_seg()]},
+            {"ref": "2", "segments": [_legacy_seg()]},
+        ],
+    }
+    doc = DetailedDocument.model_validate(raw)
+    assert doc.meta.pad_left_ms == 150
+    assert doc.meta.audio_source == "qul"
+    assert len(doc.entries) == 2
+
+    # Round-trip via by_alias=True to get _meta back in the JSON output.
+    out = doc.model_dump(by_alias=True, exclude_none=True)
+    assert "_meta" in out and "meta" not in out
+
+
+def test_entry_with_legacy_audio_field():
+    """``entry.audio`` is being dropped in Migration #5; tolerance check."""
+    raw = {
+        "_meta": {},
+        "entries": [
+            {
+                "ref": "75",
+                "audio": "https://audio-cdn.tarteel.ai/quran/surah/abuBakrAlShatri/murattal/mp3/075.mp3",  # legacy
+                "segments": [_slim_seg()],
+            },
+        ],
+    }
+    doc = DetailedDocument.model_validate(raw)
+    # entry.audio survives via extra="allow"; new code shouldn't depend
+    # on it but legacy on-disk data still has it.
+    entry = doc.entries[0]
+    assert (entry.model_extra or {}).get("audio") is not None
+
+
+# -- Real on-disk sample (optional; runs if a fixture is available) ----
+
+
+@pytest.mark.parametrize("fixture_name", [
+    "112-ikhlas.detailed.json",
+    "113-falaq.detailed.json",
+])
+def test_on_disk_fixture_validates(fixture_name):
+    """Validate the shipped fixtures parse via the schema — protects
+    against schema regressions that would break tests using fixtures."""
+    fixture_path = (
+        Path(__file__).parents[2] / "tests" / "fixtures" / "segments" / fixture_name
+    )
+    if not fixture_path.is_file():
+        pytest.skip(f"fixture missing: {fixture_path}")
+    raw = json.loads(fixture_path.read_text(encoding="utf-8"))
+    doc = DetailedDocument.model_validate(raw)
+    assert len(doc.entries) >= 1
+    total_segs = sum(len(e.segments) for e in doc.entries)
+    assert total_segs >= 1

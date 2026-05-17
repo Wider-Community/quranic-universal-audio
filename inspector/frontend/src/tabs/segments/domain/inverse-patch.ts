@@ -41,7 +41,6 @@ function _segFromSnapshot(snap: Record<string, unknown>): Segment {
     if (snap.chapter != null) seg.chapter = snap.chapter as number;
     if (snap.entry_ref) seg.entry_ref = snap.entry_ref as string;
     if (snap.phonemes_asr) seg.phonemes_asr = snap.phonemes_asr as string;
-    if (snap.has_repeated_words) seg.has_repeated_words = true;
     if (snap.wrap_word_ranges) seg.wrap_word_ranges = snap.wrap_word_ranges;
     if (Array.isArray(snap.ignored_categories) && snap.ignored_categories.length > 0) {
         seg.ignored_categories = [...(snap.ignored_categories as string[])];

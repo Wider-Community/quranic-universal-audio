@@ -4,12 +4,9 @@ Every mutable cache variable lives here with getter/setter/invalidation
 functions.  No other module uses ``global`` for cache variables.
 """
 
-import hashlib
 import threading
-from pathlib import Path
-from typing import Any, Generic, TypeVar
-
-from config import CACHE_DIR, TEMP_AUDIO_SUFFIX
+from collections import OrderedDict
+from typing import Generic, TypeVar
 
 _T = TypeVar("_T")
 
@@ -157,7 +154,19 @@ def set_seg_stats_cache(reciter: str, value: dict) -> None:
 
 
 def invalidate_seg_caches(reciter: str) -> None:
-    """Remove all segment-related caches for *reciter* and reset reciters list."""
+    """Remove all segment-related caches for *reciter* and reset reciters list.
+
+    Deliberately does NOT touch the peaks LRU response cache. Saves modify
+    segments.json / edit_history.jsonl only — peaks files are tied to the
+    audio bytes and never change as a side effect of edits, so the cached
+    peaks response stays valid across any number of segment saves.
+    Evicting it here would cost a ~500 ms cold miss on every autosave
+    (every few seconds) for nothing. The LRU still naturally evicts under
+    pressure (50-entry global ceiling) and on process restart; that's the
+    right granularity for a file that genuinely never changes mid-session.
+    Add an explicit ``pop_reciter_peaks_response_cache`` call wherever a
+    future code path actually rewrites peaks on the bucket.
+    """
     _seg.pop(reciter)
     _seg_meta.pop(reciter)
     _seg_verses.pop(reciter)
@@ -216,28 +225,61 @@ def discard_peaks_computing(key: str) -> None:
     _PEAKS_COMPUTING.discard(key)
 
 
-# Phonemizer singleton
-_phonemizer: _SingletonCache[Any] = _SingletonCache()
+# Peaks response cache — bounded-LRU for /api/seg/peaks GET responses.
+#
+# Keyed by (reciter, sorted_chapter_tuple). Value is the SERIALIZED JSON body
+# (bytes) ready to send. Caching bytes (not the parsed dict) skips re-running
+# jsonify on every hit -- for the worst chapter (husary ch2, 119k peak tuples)
+# jsonify costs ~1.5-2s of single-worker CPU, so caching the dict and
+# re-serializing made warm requests indistinguishable from cold ones in
+# practice. Compression (flask-compress) runs on top of this, but the cache
+# stays at the JSON-bytes layer so Vary/Accept-Encoding negotiation still
+# works correctly per request.
+#
+# Eviction is global (not per-reciter) so we cap total RAM regardless of how
+# many reciters a user browses in one session. ~50 entries × avg ~200 KiB
+# uncompressed bytes ≈ ~10 MiB ceiling.
+#
+# Invalidated by reciter via ``pop_reciter_peaks_response_cache``, which is
+# wired into ``invalidate_seg_caches`` -- save / undo flows drop every cached
+# response for the edited reciter so the next request re-reads the bucket.
+_PEAKS_RESPONSE_CACHE: "OrderedDict[tuple[str, tuple], bytes]" = OrderedDict()
+_PEAKS_RESPONSE_MAX = 50
+_PEAKS_RESPONSE_LOCK = threading.Lock()
 
 
-def get_phonemizer_singleton() -> Any:
-    return _phonemizer.get()
+def get_peaks_response_cache(reciter: str, chapters: tuple) -> bytes | None:
+    """Return the cached serialized response bytes for ``(reciter, chapters)``."""
+    key = (reciter, chapters)
+    with _PEAKS_RESPONSE_LOCK:
+        if key in _PEAKS_RESPONSE_CACHE:
+            _PEAKS_RESPONSE_CACHE.move_to_end(key)  # LRU touch
+            return _PEAKS_RESPONSE_CACHE[key]
+    return None
 
 
-def set_phonemizer_singleton(phonemizer: Any) -> None:
-    _phonemizer.set(phonemizer)
+def set_peaks_response_cache(reciter: str, chapters: tuple, value: bytes) -> None:
+    """Store serialized response bytes. Evicts oldest entries when full."""
+    key = (reciter, chapters)
+    with _PEAKS_RESPONSE_LOCK:
+        _PEAKS_RESPONSE_CACHE[key] = value
+        _PEAKS_RESPONSE_CACHE.move_to_end(key)
+        while len(_PEAKS_RESPONSE_CACHE) > _PEAKS_RESPONSE_MAX:
+            _PEAKS_RESPONSE_CACHE.popitem(last=False)
 
 
-# Canonical phonemes
-_canonical_phonemes: _KeyedCache[dict[str, list[str]]] = _KeyedCache()
+def pop_reciter_peaks_response_cache(reciter: str) -> None:
+    """Drop every cached response keyed by ``reciter`` (any chapter set)."""
+    with _PEAKS_RESPONSE_LOCK:
+        stale = [k for k in _PEAKS_RESPONSE_CACHE if k[0] == reciter]
+        for k in stale:
+            _PEAKS_RESPONSE_CACHE.pop(k, None)
 
 
-def get_canonical_phonemes_cache(reciter: str):
-    return _canonical_phonemes.get(reciter)
-
-
-def set_canonical_phonemes_cache(reciter: str, data: dict) -> None:
-    _canonical_phonemes.set(reciter, data)
+def clear_peaks_response_cache() -> None:
+    """Drop every cached response. Used by tests to prevent cross-test bleed."""
+    with _PEAKS_RESPONSE_LOCK:
+        _PEAKS_RESPONSE_CACHE.clear()
 
 
 # Phoneme substitution pairs (lazy singleton)
@@ -365,10 +407,3 @@ def get_surah_info_lite_cache():
 
 def set_surah_info_lite_cache(data: dict) -> None:
     _surah_info_lite.set(data)
-
-
-def audio_cache_path(reciter: str, url: str) -> Path:
-    """Return disk cache path for an audio URL under the reciter's cache dir."""
-    ext = Path(url.split("?")[0].split("#")[0]).suffix or TEMP_AUDIO_SUFFIX
-    url_hash = hashlib.sha256(url.encode()).hexdigest()[:32]
-    return CACHE_DIR / reciter / "audio" / f"{url_hash}{ext}"

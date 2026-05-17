@@ -16,11 +16,6 @@ SURAH_INFO_PATH = DATA_DIR / "surah_info.json"
 # ``data_dir`` (bucket-resolved).
 RECITATION_SEGMENTS_PATH = DATA_DIR / "recitation_segments"
 
-# Cache directory — defaults under DATA_DIR so peak/audio/phoneme caches survive
-# container restarts when the data directory is a persistent volume.
-# Override via INSPECTOR_CACHE_DIR if a volatile / separate cache location is preferred.
-CACHE_DIR = Path(os.environ.get("INSPECTOR_CACHE_DIR", str(DATA_DIR / ".cache"))).resolve()
-
 # Optional sibling-project linguistic data (qpc_hafs, digital_khatt, phoneme_sub_costs).
 # Each consumer in services/ gracefully degrades to an empty set/dict if the file is
 # missing, so these paths are advisory rather than required. Override the base dir via
@@ -121,9 +116,6 @@ AUDIO_CACHE_MAX_AGE = 31_536_000
 # Confidence thresholds
 LOW_CONFIDENCE_RED = 0.60           # below this = red highlight ("below_60" stat)
 
-# Temp audio suffix fallback for cache paths derived from URLs without an extension.
-TEMP_AUDIO_SUFFIX = ".mp3"
-
 # Peaks (ffmpeg) — waveform peak extraction defaults (services/peaks.py)
 PEAKS_FFMPEG_SAMPLE_RATE = 8000          # Hz — ffmpeg resample target for peak computation
 PEAKS_PCM_NORMALIZER = 32768.0           # divisor that maps int16 PCM → [-1, 1] float
@@ -135,7 +127,15 @@ PEAKS_WORKER_COUNT = 8                   # ThreadPoolExecutor workers for parall
 # (~2 s offset 15 min in, ~17 s offset at end-of-file for a ~115 min surah).
 # v2 uses a float stride so every sample is bucketed; the read path treats
 # missing/old version as a cache miss so existing peaks lazily recompute.
-PEAKS_SCHEMA_VERSION = 2
+#
+# v3 introduces the slim packed shape (int8-quantized, decimated, gzipped) at
+# ``wip/<slug>/peaks/<chapter>.json.gz``. See ``services/audio/peaks_slim.py``
+# for the format. Pre-v3 ``.json`` files are migrated by
+# ``scripts/backfill_peaks_slim.py`` and preserved as ``.json.bak`` for
+# rollback. Reader (``audio_fetch.read_prefetched_peaks``) inflates v3 blobs
+# into a ``peaks: list[list[float]]`` dict so the existing slicers
+# (``_slice_chapter_peaks``) work unchanged.
+PEAKS_SCHEMA_VERSION = 3
 
 # Audio-cache background download (routes/audio_proxy.py)
 AUDIO_DL_WORKER_COUNT = 8                # concurrent audio-file download workers for by_surah cache warmup

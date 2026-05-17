@@ -8,7 +8,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { SegAllResponse } from '../../../../../lib/types/api';
 import type { Segment } from '../../../../../lib/types/domain';
+import { segAllData } from '../../../stores/chapter';
 import { chapterCbrKbps } from '../../../stores/chapter-meta';
 import { _resetWarmedRecentlyForTest, warmChapterStart, warmSeg } from '../warmup';
 
@@ -40,6 +42,7 @@ afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
     chapterCbrKbps.set(new Map());
+    segAllData.set(null);
 });
 
 describe('warmSeg — byte formula', () => {
@@ -63,10 +66,14 @@ describe('warmSeg — byte formula', () => {
         expect(url).toContain(encodeURIComponent('https://cdn.example/file with spaces.mp3'));
     });
 
-    it('passes `priority: low` hint', () => {
+    it('does not pass `priority: low` hint', () => {
+        // Dropped — Chrome was deferring the warmup behind other low-priority
+        // work, so the cold-FUSE warm never completed before the user click.
+        // Server-side FUSE warmup is the real win; we want the fetch to run
+        // at default priority so it actually finishes promptly.
         warmSeg(makeSeg(), 'r');
         const init = fetchMock.mock.calls[0]?.[1] as RequestInit & { priority?: string };
-        expect(init.priority).toBe('low');
+        expect(init.priority).toBeUndefined();
     });
 });
 
@@ -160,6 +167,43 @@ describe('warmSeg — fire-and-forget', () => {
     it('does not throw when fetch rejects', () => {
         fetchMock.mockReturnValueOnce(Promise.reject(new Error('boom')));
         expect(() => warmSeg(makeSeg(), 'r')).not.toThrow();
+    });
+});
+
+describe('warmSeg — audio_url fallback to segAllData.audio_by_chapter', () => {
+    // Main-list segs (/api/seg/all/<reciter>) deliberately omit `audio_url`
+    // to save wire bytes; FE consumers fall back to `audio_by_chapter[chapter]`.
+    // The warmup util must apply the same fallback or the hover + play-next-seg
+    // triggers silently no-op on every main-list row.
+    it('fires when seg.audio_url is empty but audio_by_chapter has a URL', () => {
+        segAllData.set({
+            segments: [],
+            audio_by_chapter: { '1': 'http://x/ch1.mp3' },
+        } as unknown as SegAllResponse);
+        warmSeg({ chapter: 1, audio_url: '', time_start: 0, time_end: 1000 } as Segment, 'r');
+        expect(fetchMock).toHaveBeenCalledOnce();
+        const url = fetchMock.mock.calls[0]?.[0] as string;
+        expect(url).toContain(encodeURIComponent('http://x/ch1.mp3'));
+    });
+
+    it('no-op when both seg.audio_url and audio_by_chapter miss', () => {
+        segAllData.set({
+            segments: [],
+            audio_by_chapter: {},
+        } as unknown as SegAllResponse);
+        warmSeg({ chapter: 1, audio_url: '', time_start: 0, time_end: 1000 } as Segment, 'r');
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('proximity skip works via fallback URLs on both seg + current', () => {
+        segAllData.set({
+            segments: [],
+            audio_by_chapter: { '1': 'http://x/ch1.mp3' },
+        } as unknown as SegAllResponse);
+        const current = { chapter: 1, audio_url: '', time_start: 0, time_end: 5_000 } as Segment;
+        const closeNext = { chapter: 1, audio_url: '', time_start: 10_000, time_end: 12_000 } as Segment;
+        warmSeg(closeNext, 'r', current);
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 });
 

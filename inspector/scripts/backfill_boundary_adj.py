@@ -15,10 +15,21 @@ Parallel-then-promote flow (same shape as backfill_qalqala_letter.py):
    ``bench/ground_truth/<slug>.json``; abort on drift.
 5. On byte-equivalent match: atomically promote to ``wip/<slug>/detailed.json``.
 
-After this backfill completes for all reciters, Change 7 can drop the
-``canonical_phonemes`` pkl + ``quranic_phonemizer`` dependency from the
-Inspector runtime — the persisted ``is_boundary_adj`` already captures
-the phonemic-side detections at backfill time.
+The Inspector runtime never reads canonical phonemes — the persisted
+``is_boundary_adj`` already captures the phonemic-side detections at
+backfill time. This script is the sole ``quranic_phonemizer`` consumer
+in the project and rebuilds canonical phonemes in-memory on each
+invocation; no on-disk cache.
+
+``quranic_phonemizer`` is NOT in ``inspector/requirements.txt`` — the
+runtime image doesn't need it. Install locally before running:
+
+    pip install quranic-phonemizer
+
+If the package is missing, the script still runs but produces
+``is_boundary_adj`` from structural rules only (the phonemic side is
+skipped). Use that for spot fixes; for real backfills, install the
+package.
 
 Usage:
     python inspector/scripts/backfill_boundary_adj.py --slug bandar_baleela_mp3quran
@@ -43,13 +54,48 @@ if str(_INSPECTOR) not in sys.path:
 from adapters.detailed_json import load_entries_from_bytes  # noqa: E402
 from services import cache, data_dir  # noqa: E402
 from services import state as state_service  # noqa: E402
-from services.data_loader import get_word_counts  # noqa: E402
+from services.data_loader import get_word_counts, load_detailed  # noqa: E402
 from services.hf_bucket import get_backend  # noqa: E402
-from services.phonemizer_service import get_canonical_phonemes  # noqa: E402
 from services.validation import validate_reciter_segments  # noqa: E402
 from services.validation.classifier import compute_is_boundary_adj  # noqa: E402
 
+try:
+    from quranic_phonemizer import Phonemizer  # noqa: E402
+    _HAS_PHONEMIZER = True
+except Exception:
+    _HAS_PHONEMIZER = False
+
 _BACKFILL_DIR = "archive/backfill"
+_PHONEMIZER_SINGLETON: object | None = None
+
+
+def _build_canonical_phonemes(slug: str) -> dict[str, list[str]] | None:
+    """Phonemize the entire Quran with this reciter's segment-end stop refs.
+
+    Returns ``{word_location_key: [phoneme, ...]}`` or ``None`` if the
+    phonemizer isn't installed / no segments are loaded. Recomputed per
+    backfill invocation; this script is offline and runs once per slug so
+    caching across runs is not worth the disk dependency.
+    """
+    global _PHONEMIZER_SINGLETON
+    if not _HAS_PHONEMIZER:
+        return None
+    entries = load_detailed(slug)
+    if not entries:
+        return None
+    stop_refs: set[str] = set()
+    for entry in entries:
+        for seg in entry.get("segments", []):
+            matched_ref = seg.get("matched_ref", "")
+            if not matched_ref:
+                continue
+            parts = matched_ref.split("-")
+            if len(parts) == 2:
+                stop_refs.add(parts[1])
+    if _PHONEMIZER_SINGLETON is None:
+        _PHONEMIZER_SINGLETON = Phonemizer()
+    result = _PHONEMIZER_SINGLETON.phonemize(ref="1-114", stop_refs=list(stop_refs))
+    return {word.location.location_key: word.get_phonemes() for word in result._words}
 
 
 def _stamp_entries(entries: list[dict], single_word_verses: set, canonical: dict | None) -> tuple[int, int]:
@@ -122,7 +168,7 @@ def process_slug(slug: str, *, dry_run: bool) -> dict:
     meta, entries = load_entries_from_bytes(raw)
     word_counts = get_word_counts()
     single_word_verses = {k for k, v in word_counts.items() if v == 1}
-    canonical = get_canonical_phonemes(slug)  # may be None when pkl is missing
+    canonical = _build_canonical_phonemes(slug)  # None if phonemizer missing
 
     n_segs, n_fires = _stamp_entries(entries, single_word_verses, canonical)
     augmented_doc = {"_meta": meta or {}, "entries": entries}

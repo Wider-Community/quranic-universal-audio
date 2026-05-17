@@ -1,15 +1,17 @@
 """Pending request service — bucket-resident store for open user requests.
 
 Sixth bucket store (alongside state, access, catalog, audit, activity_state).
-Same hydrate / snapshot / atomic-write pattern as the rest; ``apply_and_clear``
-is the only departure — it applies the requester's proposed edits to the
-catalog when an admin auto-accepts (i.e. the alignment pipeline produces
-files under ``wip/<slug>/``).
+Same hydrate / snapshot / atomic-write pattern as the rest. Terminal-state
+transitions move entries out of ``requests/pending.json`` and into one of
+three sibling archive files via ``services.state.request_archive``:
+
+- ``apply_and_archive_completed`` (called from ``reciter.alignment_completed``)
+- ``archive_returned``            (called from ``reciter.request_rejected_soft``)
+- ``archive_discarded``           (called from ``reciter.request_rejected_hard``)
 
 The audit log is the authoritative record. This sidecar is a denormalized
-index of "what's pending" for fast review. If the file goes missing, the
-data is recoverable by replaying ``audit/<YYYY>-<MM>.jsonl`` for
-``reciter.requested`` events that don't have a downstream accept/reject.
+"what's pending right now" index for fast review; the archive files are
+its per-slug history counterparts.
 """
 
 from __future__ import annotations
@@ -20,12 +22,13 @@ from datetime import datetime, timezone
 
 from scripts.lib.schemas import (
     Actor,
+    ArchivedRequest,
     PendingRequest,
     PendingRequestsFile,
     ProposedEdits,
 )
 
-from . import audit, catalog as catalog_service
+from . import audit, catalog as catalog_service, request_archive
 from services.storage import storage_paths
 from services.storage.hf_bucket import StorageNotFound, get_backend
 
@@ -143,8 +146,35 @@ def clear(slug: str) -> None:
         _store = new_store
 
 
-def apply_and_clear(slug: str, *, actor: Actor) -> None:
-    """Apply the pending request's proposed edits to the catalog, then clear.
+def _archive(
+    pending: PendingRequest,
+    *,
+    kind: request_archive.ArchiveKind,
+    transitioned_by: Actor,
+    reason: str | None,
+) -> None:
+    """Build an ``ArchivedRequest`` from ``pending`` and append it to ``kind``.
+
+    Pure plumbing — callers wrap their own clear() so the pending file and
+    the archive file move in lockstep with the state transition.
+    """
+    entry = ArchivedRequest(
+        slug=pending.slug,
+        submitted_at=pending.submitted_at,
+        requester=pending.requester,
+        proposed_edits=pending.proposed_edits,
+        comments=pending.comments,
+        auto_claim=pending.auto_claim,
+        archived_at=datetime.now(timezone.utc),
+        transitioned_by=transitioned_by,
+        reason=reason,
+    )
+    request_archive.append(kind, entry)
+
+
+def apply_and_archive_completed(slug: str, *, actor: Actor) -> None:
+    """Apply the pending request's proposed edits to the catalog, archive
+    it as ``completed``, then clear from pending.
 
     Called from the dispatcher when ``reciter.alignment_completed`` fires —
     either via the server-side auto-detect reconciler (system actor) or a
@@ -154,6 +184,12 @@ def apply_and_clear(slug: str, *, actor: Actor) -> None:
     Conflict detection (proposed ``(riwayah, style)`` matching another
     delivery of the same reciter) emits a non-blocking ``catalog.conflict_warning``
     audit record. The edits still apply.
+
+    Archive write happens *after* catalog edits so the archived entry
+    reflects exactly what the original request asked for; failures inside
+    ``catalog_service.edit_*`` are logged but do not block the archive +
+    clear path (matches the docstring contract of "the pending entry is
+    cleared regardless of whether edits applied cleanly").
     """
     pending = get(slug)
     if pending is None:
@@ -238,13 +274,71 @@ def apply_and_clear(slug: str, *, actor: Actor) -> None:
                         slug,
                     )
 
+    _archive(
+        pending,
+        kind=request_archive.ArchiveKind.COMPLETED,
+        transitioned_by=actor,
+        reason=None,
+    )
+    clear(slug)
+
+
+def archive_returned(slug: str, *, reason: str, by_actor: Actor) -> None:
+    """Archive the pending entry for ``slug`` into ``returned.json``, then clear.
+
+    Called from ``_h_request_rejected_soft``. ``reason`` is the admin's
+    send-back justification (already normalized + length-checked by the
+    state handler's ``_require_reason``).
+
+    Pending edits are preserved verbatim in the archive entry — the
+    requester can use ``requests/returned.json`` to recover what they
+    originally asked for and resubmit a corrected version.
+
+    No-op if no pending entry exists (the state handler enforces
+    AWAITING_ALIGNMENT before calling, so the entry should always be
+    present; the no-op is defense-in-depth).
+    """
+    pending = get(slug)
+    if pending is None:
+        return
+    _archive(
+        pending,
+        kind=request_archive.ArchiveKind.RETURNED,
+        transitioned_by=by_actor,
+        reason=reason,
+    )
+    clear(slug)
+
+
+def archive_discarded(slug: str, *, reason: str, by_actor: Actor) -> None:
+    """Archive the pending entry for ``slug`` into ``discarded.json``, then clear.
+
+    Called from ``_h_request_rejected_hard``. ``reason`` is the admin's
+    discard justification (already normalized + length-checked by the
+    state handler).
+
+    The row's ``visibility`` flips to DISCARDED in the state handler;
+    this archive complements that by preserving the original request
+    payload for forensics.
+    """
+    pending = get(slug)
+    if pending is None:
+        return
+    _archive(
+        pending,
+        kind=request_archive.ArchiveKind.DISCARDED,
+        transitioned_by=by_actor,
+        reason=reason,
+    )
     clear(slug)
 
 
 __all__ = [
     "PendingRequestsError",
     "RequestAlreadyPending",
-    "apply_and_clear",
+    "apply_and_archive_completed",
+    "archive_discarded",
+    "archive_returned",
     "clear",
     "get",
     "hydrate",

@@ -27,11 +27,21 @@ from .catalog import (
     Style,
     Vocab,
 )
-from .edit_history import EditHistoryBatch, parse_edit_history_line
+from .edit_history import EditHistoryBatch, EditOperation, parse_edit_history_line
+from .peaks_history import PeaksRecord, parse_peaks_record
 from .pending_requests import (
+    ArchivedRequest,
+    ArchivedRequestsFile,
     PendingRequest,
     PendingRequestsFile,
     ProposedEdits,
+)
+from .segment import (
+    DetailedDocument,
+    DetailedEntry,
+    DetailedMeta,
+    DetailedSegment,
+    parse_detailed_segment,
 )
 from .state import (
     ReciterRow,
@@ -44,14 +54,22 @@ from .state import (
 __all__ = [
     "ActivityState",
     "Actor",
+    "ArchivedRequest",
+    "ArchivedRequestsFile",
     "AudioCategory",
     "AudioManifestSidecar",
     "AuditRecord",
     "Channel",
     "ChapterEntry",
     "Delivery",
+    "DetailedDocument",
+    "DetailedEntry",
+    "DetailedMeta",
+    "DetailedSegment",
     "EditHistoryBatch",
+    "EditOperation",
     "Member",
+    "PeaksRecord",
     "PendingRequest",
     "PendingRequestsFile",
     "ProposedEdits",
@@ -70,5 +88,7 @@ __all__ = [
     "Style",
     "Visibility",
     "Vocab",
+    "parse_detailed_segment",
     "parse_edit_history_line",
+    "parse_peaks_record",
 ]

@@ -42,25 +42,93 @@ def _strip_quran_markers(text: str) -> str:
     return "".join(ch for ch in text if ch not in _QURAN_MARKERS)
 
 
-def _cross_verse_text(matched_ref: str, matched_text: str,
+def _text_for_ref(matched_ref: str, dk_words: dict, surah_info: dict) -> str:
+    """Derive the Arabic text for a canonical ``surah:ayah:word-surah:ayah:word``
+    matched_ref from the Digital Khatt word map.
+
+    Mirror of ``inspector/services/reference/quran_refs.py::dk_text_for_ref``
+    so the HF dataset rebuild produces byte-equivalent text to what the
+    Inspector renders from the same ref. As of Migration #5 the extractor
+    no longer writes ``matched_text`` to ``detailed.json``; this helper is
+    the canonical replacement.
+
+    ``dk_words`` is the flat ``{"<surah>:<ayah>:<word>": {"text": "...", ...}}``
+    map from ``data/qpc_hafs.json``. ``surah_info`` carries the per-verse
+    ``num_words`` count used to wrap to the next ayah.
+
+    Returns ``""`` for malformed input so callers can short-circuit on falsy.
+    """
+    if not matched_ref or "-" not in matched_ref:
+        return ""
+    start, _, end = matched_ref.partition("-")
+    s_parts = start.split(":")
+    e_parts = end.split(":")
+    if len(s_parts) != 3 or len(e_parts) != 3:
+        return ""
+    try:
+        s_su, s_ay, s_w = int(s_parts[0]), int(s_parts[1]), int(s_parts[2])
+        e_su, e_ay, e_w = int(e_parts[0]), int(e_parts[1]), int(e_parts[2])
+    except ValueError:
+        return ""
+
+    # Segments don't cross surahs in practice; mirror the FE / inspector
+    # assumption.
+    su = s_su
+    su_key = str(su)
+    surah_meta = surah_info.get(su_key)
+    if not surah_meta:
+        return ""
+    verses = surah_meta.get("verses", [])
+
+    words: list[str] = []
+    ay, w = s_ay, s_w
+    # Guard against malformed refs that would loop forever.
+    max_iters = 1000
+    while (su, ay, w) <= (e_su, e_ay, e_w) and max_iters > 0:
+        entry = dk_words.get(f"{su}:{ay}:{w}")
+        if entry:
+            text = entry.get("text") if isinstance(entry, dict) else entry
+            if text:
+                words.append(text)
+        w += 1
+        # Wrap to next ayah when we've exhausted this one's words.
+        verse_idx = ay - 1
+        max_w = (
+            verses[verse_idx].get("num_words", 0)
+            if 0 <= verse_idx < len(verses)
+            else 0
+        )
+        if w > max_w:
+            w = 1
+            ay += 1
+        max_iters -= 1
+    return " ".join(words)
+
+
+def _cross_verse_text(matched_ref: str, full_text: str,
                       target_ayah: int, surah_info: dict, surah_num: str) -> str:
-    """Extract only the target verse's words from a cross-verse segment's text.
+    """Slice only the target verse's words from a cross-verse segment's text.
 
     For ref '37:151:3-37:152:2' with 5 words of text, target_ayah=152
     returns the last 2 words (37:152's portion).
+
+    ``full_text`` is the FULL text spanned by the matched_ref — typically
+    produced by ``_text_for_ref(matched_ref, dk_words, surah_info)``.
+    The legacy code path passed ``det_seg["matched_text"]`` here; after
+    Migration #5 the caller derives it from dk_words instead.
     """
     parts = matched_ref.split("-")
     if len(parts) != 2:
-        return matched_text
+        return full_text
     try:
         sp = parts[0].split(":")
         ep = parts[1].split(":")
         s_ayah, s_word = int(sp[1]), int(sp[2])
         e_ayah, e_word = int(ep[1]), int(ep[2])
     except (ValueError, IndexError):
-        return matched_text
+        return full_text
 
-    words = matched_text.split()
+    words = full_text.split()
     if target_ayah == s_ayah:
         # Target is the starting verse — take first N words
         total = surah_info[surah_num]["verses"][s_ayah - 1]["num_words"]
@@ -69,7 +137,7 @@ def _cross_verse_text(matched_ref: str, matched_text: str,
     elif target_ayah == e_ayah:
         # Target is the ending verse — take last N words
         return " ".join(words[-e_word:]) if e_word > 0 else ""
-    return matched_text
+    return full_text
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
@@ -151,6 +219,7 @@ def load_data(slug, audio_type):
     detailed_path = ROOT / "data" / "recitation_segments" / slug / "detailed.json"
     segments_path = ROOT / "data" / "recitation_segments" / slug / "segments.json"
     surah_info_path = ROOT / "data" / "surah_info.json"
+    qpc_hafs_path = ROOT / "data" / "qpc_hafs.json"
 
     log.info("Loading data for %s...", slug)
     with open(ts_path) as f:
@@ -161,6 +230,11 @@ def load_data(slug, audio_type):
         segments = json.load(f)
     with open(surah_info_path) as f:
         surah_info = json.load(f)
+    # dk_words is the Digital Khatt word map keyed by "surah:ayah:word".
+    # Used by _text_for_ref to derive per-segment Arabic text from matched_ref
+    # — replaces reading the now-dropped (Migration #5) det_seg["matched_text"].
+    with open(qpc_hafs_path) as f:
+        dk_words = json.load(f)
 
     # timestamps_full.json carries per-verse `verse_start_ms` / `verse_end_ms`
     # derived from accepted home segs (incl. leading/trailing silence captured
@@ -243,13 +317,14 @@ def load_data(slug, audio_type):
                     if vref not in detailed_by_ref:
                         detailed_by_ref[vref] = entry
 
-    return timestamps, detailed_by_ref, segments, surah_info, letter_data
+    return timestamps, detailed_by_ref, segments, surah_info, letter_data, dk_words
 
 
 # ---------------------------------------------------------------------------
 # Row building
 # ---------------------------------------------------------------------------
-def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=None):
+def build_rows(timestamps, detailed_by_ref, segments, surah_info,
+               letter_data=None, dk_words=None):
     """Build row metadata (without audio bytes) in canonical verse order.
 
     Clip boundaries are defined by word timestamps (deduplicated, canonical).
@@ -310,7 +385,17 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=No
                 if t_end <= clip_start or t_start >= clip_end:
                     continue  # outside clip
                 mref = det_seg.get("matched_ref", "")
-                seg_text = det_seg.get("matched_text", "")
+                # Migration #5: derive seg text from dk_words via matched_ref
+                # instead of reading det_seg["matched_text"] (which the
+                # extractor no longer writes). Fall back to the legacy
+                # field for pre-#5 on-disk data that still carries it —
+                # so the rebuild stays correct across the transition.
+                if dk_words:
+                    seg_text = _text_for_ref(mref, dk_words, surah_info)
+                    if not seg_text:
+                        seg_text = det_seg.get("matched_text", "")
+                else:
+                    seg_text = det_seg.get("matched_text", "")
                 if "-" in mref:
                     rp = mref.split("-")
                     if len(rp) == 2:
@@ -656,8 +741,8 @@ def push_reciter(slug, audio_type, full_rebuild=False):
     """Build and push a reciter to the HF dataset."""
     is_surah = "by_surah" in audio_type
 
-    timestamps, detailed_by_ref, segments, surah_info, letter_data = load_data(slug, audio_type)
-    rows = build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data)
+    timestamps, detailed_by_ref, segments, surah_info, letter_data, dk_words = load_data(slug, audio_type)
+    rows = build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data, dk_words)
     log.info("Built %d rows for %s", len(rows), slug)
 
     if SAMPLE_PCT > 0:

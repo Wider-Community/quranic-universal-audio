@@ -18,14 +18,20 @@ KNOWN_SEGMENT_FIELDS = {
     "time_start",
     "time_end",
     "matched_ref",
-    "matched_text",
     "confidence",
+    # phonemes_asr is default-off post-Migration #5 (--with-phonemes-asr opt-in);
+    # listed in the allow-list so legacy fixtures that still carry it parse cleanly.
     "phonemes_asr",
     "wrap_word_ranges",
-    "has_repeated_words",
+    "qalqala_letter",     # persisted classifier optimisation (migrate_wip §2)
+    "is_boundary_adj",    # persisted classifier optimisation (migrate_wip §2)
     "ignored_categories",
     "ignored",
     "audio_url",
+    # matched_text + has_repeated_words removed by Migration #5 — listed as
+    # allowed strictly for legacy-fixture tolerance via the same allow-set.
+    "matched_text",
+    "has_repeated_words",
 }
 
 
