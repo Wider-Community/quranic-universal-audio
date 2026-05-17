@@ -78,6 +78,8 @@
     import { playFromSegment } from '../../utils/playback/playback';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
+    import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
+    import { wrapCbrSrcIfBySurah } from '../../utils/playback/source';
     import { warmSeg } from '../../utils/playback/warmup';
     import { getConfClass } from '../../utils/validation/conf-class';
     import { _ensureWaveformObserver } from '../../utils/waveform/utils';
@@ -468,18 +470,42 @@
         previewCtx.toggle(rowPreviewUid);
     }
 
-    // Hover-warm — fires 150 ms after the cursor enters the play button.
-    // Hides cold-FUSE / cold-page-cache stall on the click that follows,
-    // especially valuable for same-chapter-far-time seg plays (which the
-    // browser's forward buffer doesn't already cover). No-op on VBR +
-    // missing-kbps via `warmSeg`'s skip rules.
+    // Hover-warm — fires ~80 ms after the cursor enters the play button.
+    // Two warmups in parallel:
+    //   1. `shadowPrewarm(cbrSrc)` fills the browser HTTP cache for the
+    //      chapter MP3 on a hidden <audio>. Covers cross-chapter clicks
+    //      that the panel-level next-card prediction missed (user jumped
+    //      to a non-sequential card or played a row in a different
+    //      chapter from the main list). When user clicks play, the
+    //      primary <audio>'s el.load() hits the warm cache → fast canplay.
+    //   2. `warmSeg(seg)` fetches a 64 KB Range around the seg's byte
+    //      offset. Primes the server-side OS page cache for the mid-file
+    //      seek the audio element will issue when it seeks to seg.time_start.
+    //      Hides the "readyState=4 but TTFB 600 ms" case where the chapter
+    //      is loaded but the seek target byte range isn't.
+    // 80 ms (down from 150) catches more "hover-then-click-fast" cases.
+    // Mouseleave cancels the timer if user moves off without clicking.
     let _hoverWarmTimer: ReturnType<typeof setTimeout> | null = null;
     function onPlayHover(): void {
         if (readOnly || _hoverWarmTimer) return;
         _hoverWarmTimer = setTimeout(() => {
             _hoverWarmTimer = null;
-            warmSeg(seg, get(selectedReciter));
-        }, 150);
+            const reciter = get(selectedReciter);
+            if (!reciter) return;
+            // Server-side byte-Range warmup at seg's byte offset.
+            warmSeg(seg, reciter);
+            // Browser HTTP cache warmup for the chapter MP3 (cross-chapter
+            // jumps). Skip VBR — clip URL is per-seg and shadow can't
+            // precache that.
+            const audioUrl = seg.audio_url
+                ?? get(segAllData)?.audio_by_chapter?.[String(seg.chapter ?? rowChapter)]
+                ?? '';
+            const ch = seg.chapter ?? rowChapter;
+            const isVbr = ch != null && ($segAllData?.reciter_vbr_chapters ?? []).includes(ch as number);
+            if (audioUrl && !isVbr) {
+                shadowPrewarm(wrapCbrSrcIfBySurah(audioUrl, reciter));
+            }
+        }, 80);
     }
     function onPlayLeave(): void {
         if (_hoverWarmTimer) {
