@@ -26,6 +26,7 @@
 
     import { editGate } from '../../../../lib/actions/editGate';
     import { fetchJsonOrNull } from '../../../../lib/api';
+    import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import { quranRefs } from '../../../../lib/refs/quran-refs';
     import type { Segment } from '../../../../lib/types/domain';
     import {
@@ -78,7 +79,6 @@
     import { playFromSegment } from '../../utils/playback/playback';
     import type { PreviewPlaybackContext } from '../../utils/playback/preview';
     import { deregisterRow, registerRow } from '../../utils/playback/row-registry';
-    import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import { wrapCbrSrcIfBySurah } from '../../utils/playback/source';
     import { warmSeg } from '../../utils/playback/warmup';
     import { getConfClass } from '../../utils/validation/conf-class';

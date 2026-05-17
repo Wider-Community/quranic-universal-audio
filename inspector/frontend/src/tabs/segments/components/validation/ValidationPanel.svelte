@@ -23,6 +23,7 @@
     import { afterUpdate, onDestroy } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import type {
         SegValAnyItem,
         SegValidateResponse,
@@ -42,7 +43,6 @@
         VAL_VIRTUALIZE_THRESHOLD,
         VIRT_BUFFER_ROWS,
     } from '../../utils/constants';
-    import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import { wrapCbrSrcIfBySurah } from '../../utils/playback/source';
     import { warmSeg } from '../../utils/playback/warmup';
     import { resolveCardLeadSeg } from '../../utils/validation/card-lead-seg';
