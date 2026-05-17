@@ -232,11 +232,29 @@ _SEG_CACHE_NAMES = (
     "_seg",
     "_seg_meta",
     "_seg_verses",
+    "_seg_resolved_by_edit",
+    "_seg_probe_v2",
+    "_seg_auto_split",
+    "_seg_pipeline_meta",
+    "_seg_history_batches",
+    "_seg_split_group_index",
+    "_seg_edit_history",
+    "_seg_history_peaks",
+    "_seg_validate_result",
+    "_seg_stats_result",
 )
 
 
 def _invalidate_seg_caches(reciter: str | None = None):
-    """Invalidate the segment-related caches that may pin pre-redirect data."""
+    """Invalidate every per-reciter segment cache so a previous test's slug
+    can't leak parsed JSONL / derived indices into the next test.
+
+    The new edit-history-derived caches (``_seg_history_batches``,
+    ``_seg_split_group_index``) are NOT touched by the production save/undo
+    invalidation (they're append-on-save by design) — but in tests we want
+    full eviction between cases because tests reuse the ``fixture_reciter``
+    slug across distinct ``tmp_path``s.
+    """
     try:
         from services import cache as _cache
     except Exception:
