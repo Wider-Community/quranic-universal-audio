@@ -49,7 +49,7 @@ def _install_slim_peaks(backend, reciter: str, chapter: int, n_peaks: int = 60) 
     # Reset audio_meta's process-level sidecar cache so the new manifest
     # is picked up by this test run.
     from services.audio import audio_meta
-    audio_meta._SIDECAR_CACHE.clear()
+    audio_meta._clear_for_test()
 
 
 def test_peaks_returns_slim_int8_envelope(flask_client, tmp_reciter_dir):

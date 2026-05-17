@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from services.storage import cache
 from services.storage.data_loader import (
+    get_single_word_verses,
     get_word_counts,
     load_detailed,
     load_pipeline_meta,
@@ -123,7 +124,7 @@ def validate_reciter_segments(reciter: str) -> dict:
     # on the persisted value; legacy segs without the field fall through to
     # compute_is_boundary_adj with canonical=None → structural side only.
     canonical = None
-    single_word_verses = {k for k, v in word_counts.items() if v == 1}
+    single_word_verses = get_single_word_verses()
 
     meta = cache.get_seg_meta(reciter)
     is_by_ayah = is_by_ayah_source(meta.get("audio_source", ""))

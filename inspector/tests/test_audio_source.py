@@ -17,7 +17,7 @@ def stub_env(monkeypatch):
     """
     from services import audio_fetch, audio_meta, audio_source
 
-    audio_meta._SIDECAR_CACHE.clear()
+    audio_meta._clear_for_test()
 
     state: dict = {"bucket": None, "local_path": None}
 
@@ -35,9 +35,9 @@ def stub_env(monkeypatch):
 
 def test_bucket_local_path_wins(stub_env, tmp_path):
     state, audio_source, audio_meta = stub_env
-    audio_meta._SIDECAR_CACHE["rec"] = {
+    audio_meta._stage_for_test("rec", {
         "chapters": {"1": {"url": "https://cdn/1.mp3", "bitrate_mode": "cbr"}},
-    }
+    })
     p = tmp_path / "1.mp3"
     p.write_bytes(b"x")
     state["local_path"] = p
@@ -50,10 +50,10 @@ def test_bucket_local_path_wins(stub_env, tmp_path):
 
 def test_bucket_bytes_win(stub_env):
     state, audio_source, audio_meta = stub_env
-    audio_meta._SIDECAR_CACHE["rec"] = {
+    audio_meta._stage_for_test("rec", {
         "chapters": {"1": {"url": "https://cdn/1.mp3", "bitrate_mode": "vbr",
                             "bitrate_kbps": 96}},
-    }
+    })
     state["bucket"] = b"PREFETCHED"
 
     src = audio_source.resolve("rec", "https://cdn/1.mp3")
@@ -67,9 +67,9 @@ def test_bucket_bytes_win(stub_env):
 
 def test_cdn_only_when_nothing_local(stub_env):
     state, audio_source, audio_meta = stub_env
-    audio_meta._SIDECAR_CACHE["rec"] = {
+    audio_meta._stage_for_test("rec", {
         "chapters": {"1": {"url": "https://cdn/1.mp3", "bitrate_mode": "cbr"}},
-    }
+    })
 
     src = audio_source.resolve("rec", "https://cdn/1.mp3")
     assert src.data is None
@@ -80,7 +80,7 @@ def test_cdn_only_when_nothing_local(stub_env):
 
 def test_unknown_url_yields_blank_metadata(stub_env):
     _, audio_source, audio_meta = stub_env
-    audio_meta._SIDECAR_CACHE["rec"] = {"chapters": {}}
+    audio_meta._stage_for_test("rec", {"chapters": {}})
 
     src = audio_source.resolve("rec", "https://cdn/unknown.mp3")
     assert src.vbr is False
