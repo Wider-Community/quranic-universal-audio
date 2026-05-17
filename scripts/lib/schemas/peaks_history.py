@@ -15,8 +15,11 @@ Migration #5 changes:
     dropped in migration #4).
   - Migrates peaks payload from ``list[list[float]]`` JSON to int8-b64
     encoded blob (mirror of ``services/audio/peaks_slim.py::pack_slim``).
-    The legacy ``peaks`` field is kept as a read-only fallback during the
-    transition window so old records continue to parse.
+    The legacy ``peaks`` shape is **no longer accepted** — existing bucket
+    records must be migrated via ``migrate_wip5_in_place.py`` (the script
+    handles both Katana scratch and bucket paths). The Inspector reads
+    ``peaks_b64`` exclusively and inflates server-side for FE consumers
+    that still expect ``list[list[float]]``.
 
 Authoritative spec: ``docs/reference/migrate_wip.md`` §5.
 """
@@ -29,21 +32,24 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PeaksRecord(BaseModel):
-    """One pipeline-op waveform slice.
+    """One pipeline-op waveform slice. Migration #5 canonical shape.
 
-    Required:
+    All fields required:
       - ``op_id`` — the originating op's ``op_id`` in ``edit_history.jsonl``.
         Primary join key + backfill idempotency dedup key.
       - ``url`` — canonical (proxy-stripped) chapter audio URL. Covering-
         range cache key in the FE waveform layer.
       - ``start_ms`` / ``end_ms`` — bounding box covering all snapshots in
         the op (min/max over targets_before + targets_after).
+      - ``bps`` + ``peaks_b64`` — peaks payload. Base64 of n×2 int8s at the
+        given buckets-per-second density. Mirrors
+        ``inspector/services/audio/peaks_slim.py::pack_slim``'s int8
+        quantisation; ``peaks_history.py::_inflate_peaks_b64`` is the
+        inverse for FE consumers that expect ``list[list[float]]``.
 
-    Peaks payload — at least ONE form must be present:
-      - ``peaks_b64`` + ``bps`` — new canonical encoding (post-#5). Base64
-        of n×2 int8s at the given buckets-per-second density.
-      - ``peaks`` — legacy ``list[list[float]]`` shape; back-compat for
-        old records during transition.
+    The pre-Migration #5 ``peaks: list[list[float]]`` shape is not
+    accepted — existing bucket records must be re-encoded via the
+    one-shot migration script before this schema sees them.
     """
 
     model_config = ConfigDict(extra="allow")
@@ -52,13 +58,8 @@ class PeaksRecord(BaseModel):
     url: str = Field(..., min_length=1)
     start_ms: int = Field(..., ge=0)
     end_ms: int = Field(..., ge=0)
-
-    # === New canonical encoding (post-#5) ===
-    bps: int | None = Field(None, ge=1)
-    peaks_b64: str | None = None
-
-    # === Legacy back-compat (writers no longer emit) ===
-    peaks: list[list[float]] | None = None
+    bps: int = Field(..., ge=1)
+    peaks_b64: str = Field(..., min_length=1)
 
     @model_validator(mode="after")
     def _validate_shape(self) -> "PeaksRecord":
@@ -66,13 +67,6 @@ class PeaksRecord(BaseModel):
             raise ValueError(
                 f"end_ms ({self.end_ms}) must be > start_ms ({self.start_ms})"
             )
-        if self.peaks_b64 is None and self.peaks is None:
-            raise ValueError(
-                "record must carry peaks payload — either `peaks_b64` (new) "
-                "or `peaks` (legacy back-compat)"
-            )
-        if self.peaks_b64 is not None and self.bps is None:
-            raise ValueError("`peaks_b64` requires `bps` density tag")
         return self
 
 
@@ -80,8 +74,8 @@ def parse_peaks_record(raw: dict[str, Any]) -> PeaksRecord:
     """Parse one ``edit_history_peaks.jsonl`` line dict.
 
     Tolerates legacy fields (``batch_id``, ``duration_ms``,
-    ``saved_at_utc``) via ``extra="allow"``. New writers should serialise
-    via ``record.model_dump(exclude_none=True)`` to omit absent optional
-    fields.
+    ``saved_at_utc``) via ``extra="allow"``. Rejects pre-Migration #5
+    records that carry ``peaks: list[list[float]]`` without ``peaks_b64``
+    — those need the in-place migration script first.
     """
     return PeaksRecord.model_validate(raw)

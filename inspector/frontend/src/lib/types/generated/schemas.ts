@@ -12,7 +12,7 @@
 /* Do not modify it by hand - just update the pydantic models and then re-run the script
 */
 
-export type Role = "contributor" | "maintainer" | "owner";
+export type Role = "contributor" | "maintainer" | "owner" | "pipeline";
 
 /**
  * Whole ``detailed.json`` document.
@@ -175,29 +175,31 @@ export interface EditOperation {
   [k: string]: unknown;
 }
 /**
- * One pipeline-op waveform slice.
+ * One pipeline-op waveform slice. Migration #5 canonical shape.
  *
- * Required:
+ * All fields required:
  *   - ``op_id`` — the originating op's ``op_id`` in ``edit_history.jsonl``.
  *     Primary join key + backfill idempotency dedup key.
  *   - ``url`` — canonical (proxy-stripped) chapter audio URL. Covering-
  *     range cache key in the FE waveform layer.
  *   - ``start_ms`` / ``end_ms`` — bounding box covering all snapshots in
  *     the op (min/max over targets_before + targets_after).
+ *   - ``bps`` + ``peaks_b64`` — peaks payload. Base64 of n×2 int8s at the
+ *     given buckets-per-second density. Mirrors
+ *     ``inspector/services/audio/peaks_slim.py::pack_slim``'s int8
+ *     quantisation; ``peaks_history.py::_inflate_peaks_b64`` is the
+ *     inverse for FE consumers that expect ``list[list[float]]``.
  *
- * Peaks payload — at least ONE form must be present:
- *   - ``peaks_b64`` + ``bps`` — new canonical encoding (post-#5). Base64
- *     of n×2 int8s at the given buckets-per-second density.
- *   - ``peaks`` — legacy ``list[list[float]]`` shape; back-compat for
- *     old records during transition.
+ * The pre-Migration #5 ``peaks: list[list[float]]`` shape is not
+ * accepted — existing bucket records must be re-encoded via the
+ * one-shot migration script before this schema sees them.
  */
 export interface PeaksRecord {
   op_id: string;
   url: string;
   start_ms: number;
   end_ms: number;
-  bps?: number | null;
-  peaks_b64?: string | null;
-  peaks?: number[][] | null;
+  bps: number;
+  peaks_b64: string;
   [k: string]: unknown;
 }

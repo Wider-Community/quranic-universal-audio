@@ -47,12 +47,11 @@ def normalize_audio_url(url: str) -> str:
 def _validate_record(rec: dict) -> str | None:
     """Return an error string if ``rec`` is malformed, else None.
 
-    Migration #5: ``duration_ms``, ``batch_id``, ``saved_at_utc`` are no
-    longer required (callers derive ``duration = end_ms - start_ms``). The
-    peaks payload may be EITHER ``peaks`` (legacy ``list[list[float]]``)
-    OR ``peaks_b64`` + ``bps`` (new int8-b64 encoding) — at least one form
-    must be present. See ``scripts/lib/schemas/peaks_history.py`` for the
-    full Pydantic-enforced contract.
+    Migration #5 canonical shape: ``{op_id, url, start_ms, end_ms, bps,
+    peaks_b64}``. The pre-#5 ``peaks: list[list[float]]`` shape is no
+    longer accepted; existing bucket records were re-encoded via
+    ``migrate_wip5_in_place.py``. See
+    ``scripts/lib/schemas/peaks_history.py`` for the canonical contract.
     """
     op_id = rec.get("op_id")
     if not isinstance(op_id, str) or not op_id:
@@ -66,18 +65,11 @@ def _validate_record(rec: dict) -> str | None:
             return f"missing/invalid {k}"
     if rec["end_ms"] <= rec["start_ms"]:
         return "end_ms must be > start_ms"
-    peaks = rec.get("peaks")
     peaks_b64 = rec.get("peaks_b64")
-    if peaks_b64 is not None:
-        if not isinstance(peaks_b64, str) or not peaks_b64:
-            return "invalid peaks_b64"
-        if not isinstance(rec.get("bps"), int) or rec["bps"] < 1:
-            return "peaks_b64 requires bps tag"
-    elif peaks is not None:
-        if not isinstance(peaks, list) or not peaks:
-            return "missing/invalid peaks"
-    else:
-        return "record must carry peaks payload (peaks or peaks_b64)"
+    if not isinstance(peaks_b64, str) or not peaks_b64:
+        return "missing/invalid peaks_b64"
+    if not isinstance(rec.get("bps"), int) or rec["bps"] < 1:
+        return "peaks_b64 requires bps density tag"
     return None
 
 
@@ -88,12 +80,12 @@ def append_peaks_records(
 ) -> int:
     """Append per-op peak records for *reciter*. Returns count written.
 
-    Migration #5 slim shape: each record carries ``op_id``, ``url``,
-    ``start_ms``, ``end_ms``, and a peaks payload (``peaks_b64`` + ``bps``
-    preferred; ``peaks`` accepted for back-compat). ``batch_id``,
-    ``duration_ms``, ``saved_at_utc`` are no longer written — consumers
-    derive duration from ``end_ms - start_ms`` and don't filter by
-    batch_id (op_id is the join key).
+    Migration #5 canonical shape: ``{op_id, url, start_ms, end_ms, bps,
+    peaks_b64}``. Callers must provide the int8-b64 encoded peaks; legacy
+    ``peaks: list[list[float]]`` inputs are rejected by ``_validate_record``.
+    See ``services.audio.peaks_backfill::_encode_peaks_b64`` for the
+    encoder; pre-existing bucket records were migrated by
+    ``migrate_wip5_in_place.py``.
 
     Malformed records are skipped silently — partial persistence is fine
     because consumers fall through to compute-on-play via the runtime
@@ -111,14 +103,9 @@ def append_peaks_records(
             "url": normalize_audio_url(rec.get("url", "")),
             "start_ms": rec.get("start_ms"),
             "end_ms": rec.get("end_ms"),
+            "bps": rec.get("bps"),
+            "peaks_b64": rec.get("peaks_b64"),
         }
-        # Peaks payload: prefer new (peaks_b64 + bps); fall back to legacy.
-        peaks_b64 = rec.get("peaks_b64")
-        if peaks_b64 is not None:
-            line["bps"] = rec.get("bps")
-            line["peaks_b64"] = peaks_b64
-        elif rec.get("peaks") is not None:
-            line["peaks"] = rec["peaks"]
         err = _validate_record(line)
         if err:
             continue
@@ -134,16 +121,14 @@ _PEAKS_INT8_SCALE = 127
 
 
 def _inflate_peaks_b64(rec: dict) -> dict:
-    """Inflate a Migration #5 slim record (``peaks_b64`` + ``bps``) into the
-    legacy ``peaks: list[list[float]]`` shape the FE expects.
+    """Inflate a canonical record (``peaks_b64`` + ``bps``) into the
+    ``peaks: list[list[float]]`` shape FE consumers expect.
 
-    Idempotent for legacy records that already carry ``peaks``. Returns a
-    shallow copy with the inflated peaks field — never mutates the input.
-    Falls back to the empty list on decode failure so a single corrupt
-    record doesn't sink the whole response.
+    Returns a shallow copy with the ``peaks`` field added. On decode
+    failure (corrupt b64, odd byte count) returns the input untouched so
+    a single bad record doesn't sink the whole response — but the schema
+    validator should have caught any malformed input upstream.
     """
-    if rec.get("peaks") is not None:
-        return rec
     b64 = rec.get("peaks_b64")
     if not isinstance(b64, str) or not b64:
         return rec

@@ -27,7 +27,7 @@ from .catalog import (
     Style,
     Vocab,
 )
-from .edit_history import EditHistoryBatch, parse_edit_history_line
+from .edit_history import EditHistoryBatch, EditOperation, parse_edit_history_line
 from .peaks_history import PeaksRecord, parse_peaks_record
 from .pending_requests import (
     ArchivedRequest,
@@ -67,6 +67,7 @@ __all__ = [
     "DetailedMeta",
     "DetailedSegment",
     "EditHistoryBatch",
+    "EditOperation",
     "Member",
     "PeaksRecord",
     "PendingRequest",

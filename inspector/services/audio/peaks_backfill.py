@@ -19,6 +19,7 @@ every new alignment-completed transition.
 
 from __future__ import annotations
 
+import base64
 import logging
 from typing import Iterable
 
@@ -35,6 +36,33 @@ from services.storage.data_loader import load_detailed
 from utils.references import chapter_from_ref
 
 logger = logging.getLogger(__name__)
+
+# Mirror of ``.local/extraction/segments/audio_persist.py::_encode_peaks_b64``
+# and ``peaks_slim.py``'s int8 quantisation. Kept inline (1 line of
+# constants) so this runtime backfill writer can't drift from the offline
+# pipeline writer — the contract is value-level, not module-level.
+_PEAKS_INT8_SCALE = 127
+_PEAKS_SLIM_BPS = 10
+
+
+def _encode_peaks_b64(peaks: list[list[float]]) -> tuple[str, int]:
+    """Encode a ``list[[mn, mx], ...]`` slice as int8-quantised b64.
+
+    Returns ``(peaks_b64, bps)``. Matches the offline writer byte-for-
+    byte so a record written by either path is indistinguishable.
+    """
+    import numpy as np  # noqa: PLC0415 — keep top-level cold for non-backfill paths
+    arr = np.asarray(peaks, dtype=np.float32)
+    if arr.ndim != 2 or arr.shape[1] != 2:
+        raise ValueError(
+            f"_encode_peaks_b64: expected shape (N, 2), got {arr.shape}"
+        )
+    i8 = np.clip(
+        np.round(arr * _PEAKS_INT8_SCALE),
+        -_PEAKS_INT8_SCALE,
+        _PEAKS_INT8_SCALE,
+    ).astype(np.int8)
+    return base64.b64encode(i8.tobytes()).decode("ascii"), _PEAKS_SLIM_BPS
 
 
 def _audio_url_by_chapter(reciter: str) -> dict[int, str]:
@@ -229,16 +257,18 @@ def backfill_pipeline_peaks(reciter: str) -> int:
                 "peaks_backfill[%s]: empty peaks for op %s", reciter, op_id,
             )
             continue
-        # Migration #5: ``duration_ms`` no longer persisted (consumers
-        # derive ``end_ms - start_ms``). ``append_peaks_records`` drops
-        # the field anyway; we elide it here so the record dict stays
-        # honest about what gets written.
+        # Migration #5 canonical shape: peaks_b64 + bps tag (int8
+        # quantised). ``data["peaks"]`` from compute_segment_peaks is the
+        # raw float ``list[[mn, mx], ...]`` — encode it via the shared
+        # helper so this writer matches the offline writer exactly.
+        peaks_b64, bps = _encode_peaks_b64(data["peaks"])
         record = {
             "op_id": op_id,
             "url": url,
             "start_ms": rng[0],
             "end_ms": rng[1],
-            "peaks": data["peaks"],
+            "bps": bps,
+            "peaks_b64": peaks_b64,
         }
         by_batch.setdefault(batch.get("batch_id"), []).append(record)
 

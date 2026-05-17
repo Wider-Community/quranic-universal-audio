@@ -3,9 +3,10 @@
 Schema lives at ``scripts/lib/schemas/peaks_history.py``. Both writers
 (offline extraction's ``audio_persist.write_edit_history_peaks`` and
 runtime Inspector's ``peaks_backfill.backfill_pipeline_peaks``) round-
-trip through it — these tests assert the model parses every legitimate
-record shape we encounter on disk + that ``model_dump(exclude_none=True)``
-produces the slim emission shape Migration #5 specifies.
+trip through it — these tests assert the canonical Migration #5 shape
+(``peaks_b64`` + ``bps``) is the only one accepted, and that the
+pre-#5 ``peaks: list[list[float]]`` shape is rejected so a stale
+on-disk record can't ride into the live cache.
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ from scripts.lib.schemas import PeaksRecord, parse_peaks_record
 
 
 def _slim_record() -> dict:
-    """Post-#5 slim shape with int8-b64 packed peaks."""
+    """Canonical Migration #5 shape — int8-b64 packed peaks."""
     # 3 buckets × 2 (min,max) int8s = 6 bytes
     blob = bytes([-3 & 0xFF, 5, -2 & 0xFF, 4, -1 & 0xFF, 3])
     return {
@@ -34,7 +35,10 @@ def _slim_record() -> dict:
 
 
 def _legacy_record() -> dict:
-    """Pre-#5 bloated shape: list[list[float]] peaks + 3 dead fields."""
+    """Pre-#5 bloated shape — REJECTED by schema. Existing bucket
+    records in this shape must be re-encoded via
+    ``migrate_wip5_in_place.py`` before they reach the validator.
+    """
     return {
         "op_id": "019e32c1-0758-7ad0-9234-02dd45f78d53",
         "batch_id": "019e32c1-07d1-739e-be84-94514b5b90f8",
@@ -54,37 +58,39 @@ def test_slim_record_validates():
     m = PeaksRecord.model_validate(_slim_record())
     assert m.op_id.startswith("019e32c1")
     assert m.bps == 10
-    assert m.peaks_b64 is not None
-    assert m.peaks is None  # only peaks_b64 in this shape
+    assert m.peaks_b64
     assert m.end_ms > m.start_ms
 
 
-def test_legacy_record_validates_via_extra_allow():
-    m = PeaksRecord.model_validate(_legacy_record())
-    assert m.peaks is not None
-    assert len(m.peaks) == 3
-    assert m.peaks_b64 is None
-    # Legacy fields tolerated via extra="allow"
-    extras = m.model_extra or {}
-    assert extras.get("batch_id") is not None
-    assert extras.get("duration_ms") == 9050
-    assert extras.get("saved_at_utc") is not None
+def test_legacy_record_rejected():
+    """Pre-#5 ``peaks: list[list[float]]`` shape must NOT validate.
+
+    The schema requires ``peaks_b64`` + ``bps``; legacy records have
+    neither and would slip through with an unguarded validator. The
+    migration script re-encodes such records before they hit the cache.
+    """
+    with pytest.raises(ValueError):
+        PeaksRecord.model_validate(_legacy_record())
 
 
-def test_record_with_no_peaks_payload_fails():
-    """A record without either peaks_b64 OR peaks is corrupt."""
+def test_record_missing_peaks_b64_fails():
     rec = _slim_record()
     rec.pop("peaks_b64")
-    rec.pop("bps")
-    with pytest.raises(ValueError, match="must carry peaks payload"):
+    with pytest.raises(ValueError):
         PeaksRecord.model_validate(rec)
 
 
-def test_peaks_b64_without_bps_fails():
-    """peaks_b64 needs the density tag — bps is non-optional alongside."""
+def test_record_missing_bps_fails():
     rec = _slim_record()
     rec.pop("bps")
-    with pytest.raises(ValueError, match=r"`peaks_b64` requires `bps` density tag"):
+    with pytest.raises(ValueError):
+        PeaksRecord.model_validate(rec)
+
+
+def test_record_with_empty_peaks_b64_fails():
+    rec = _slim_record()
+    rec["peaks_b64"] = ""
+    with pytest.raises(ValueError):
         PeaksRecord.model_validate(rec)
 
 
@@ -95,33 +101,40 @@ def test_inverted_time_range_fails():
         PeaksRecord.model_validate(rec)
 
 
+def test_bps_must_be_positive():
+    rec = _slim_record()
+    rec["bps"] = 0
+    with pytest.raises(ValueError):
+        PeaksRecord.model_validate(rec)
+
+
 # -- Round-trip emission tests ----------------------------------------
 
 
-def test_slim_record_emits_slim_shape():
-    """exclude_none drops absent legacy ``peaks`` field."""
+def test_slim_record_emits_canonical_shape():
+    """``model_dump(exclude_none=True)`` should emit exactly the 6
+    canonical fields. Legacy fields never leak."""
     m = PeaksRecord.model_validate(_slim_record())
     out = m.model_dump(exclude_none=True)
-    # The new canonical encoding fields are present:
-    assert "peaks_b64" in out and "bps" in out
-    # The legacy fields are absent (none in input, none in default):
+    assert set(out.keys()) >= {
+        "op_id", "url", "start_ms", "end_ms", "bps", "peaks_b64",
+    }
+    # Pre-#5 legacy keys must not appear:
     for banned in ("peaks", "batch_id", "duration_ms", "saved_at_utc"):
-        assert banned not in out, f"{banned} leaked into slim emission"
+        assert banned not in out, f"{banned} leaked into canonical emission"
 
 
-def test_legacy_record_round_trips_legacy_fields_via_extra():
-    """When a writer re-emits a legacy record (e.g. the migration script
-    reads + writes), the legacy fields propagate via extra."""
-    m = PeaksRecord.model_validate(_legacy_record())
-    out = m.model_dump(exclude_none=True)
-    # peaks (declared optional, value present) survives
-    assert "peaks" in out
-    # batch_id / duration_ms / saved_at_utc came in via extra="allow" —
-    # they're in model_extra, NOT in model_dump output by default. The
-    # migration script's job is to drop them explicitly; round-trip
-    # default doesn't preserve extras in model_dump.
+def test_record_with_legacy_fields_tolerated_on_read_when_canonical_payload_present():
+    """A record that carries the canonical payload AND extra legacy
+    fields (e.g. mid-migration partially-rewritten record) validates
+    cleanly and exposes the legacy keys via ``model_extra``."""
+    rec = _slim_record()
+    rec["batch_id"] = "legacy-batch"
+    rec["duration_ms"] = 4090
+    m = PeaksRecord.model_validate(rec)
     extras = m.model_extra or {}
-    assert "batch_id" in extras
+    assert extras.get("batch_id") == "legacy-batch"
+    assert extras.get("duration_ms") == 4090
 
 
 def test_parse_peaks_record_helper():
