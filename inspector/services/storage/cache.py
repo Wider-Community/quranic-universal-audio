@@ -156,12 +156,16 @@ def set_seg_stats_cache(reciter: str, value: dict) -> None:
 def invalidate_seg_caches(reciter: str) -> None:
     """Remove all segment-related caches for *reciter* and reset reciters list.
 
-    Also evicts every ``/api/seg/peaks`` response cached for this reciter so
-    the next request re-reads the bucket. Peaks files themselves don't change
-    on a typical edit, but the cached *response body* may include URL keys
-    that depend on segment state (boundary hashes affect ``?h=``); cleanest
-    semantics is "any change to this reciter invalidates everything keyed by
-    it".
+    Deliberately does NOT touch the peaks LRU response cache. Saves modify
+    segments.json / edit_history.jsonl only — peaks files are tied to the
+    audio bytes and never change as a side effect of edits, so the cached
+    peaks response stays valid across any number of segment saves.
+    Evicting it here would cost a ~500 ms cold miss on every autosave
+    (every few seconds) for nothing. The LRU still naturally evicts under
+    pressure (50-entry global ceiling) and on process restart; that's the
+    right granularity for a file that genuinely never changes mid-session.
+    Add an explicit ``pop_reciter_peaks_response_cache`` call wherever a
+    future code path actually rewrites peaks on the bucket.
     """
     _seg.pop(reciter)
     _seg_meta.pop(reciter)
@@ -173,7 +177,6 @@ def invalidate_seg_caches(reciter: str) -> None:
     _seg_history_peaks.pop(reciter)
     _seg_validate_result.pop(reciter)
     _seg_stats_result.pop(reciter)
-    pop_reciter_peaks_response_cache(reciter)
 
 
 # Peaks (thread-safe — manually coded)

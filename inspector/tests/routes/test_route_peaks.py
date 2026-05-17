@@ -110,9 +110,14 @@ def test_peaks_response_cache_returns_same_body_on_repeat(flask_client, tmp_reci
     assert res1.get_data() == res2.get_data()
 
 
-def test_peaks_response_cache_evicted_by_invalidate_seg_caches(flask_client, tmp_reciter_dir):
-    """``invalidate_seg_caches`` is wired to ``pop_reciter_peaks_response_cache``;
-    after invalidation the route re-reads the bucket."""
+def test_peaks_response_cache_survives_invalidate_seg_caches(flask_client, tmp_reciter_dir):
+    """``invalidate_seg_caches`` is fired from save/undo (every few seconds
+    during autosave). The peaks LRU response cache MUST survive that path —
+    peaks files are tied to immutable audio bytes and never change on a
+    segment edit, so evicting them on save would cost a ~500ms cold miss
+    every few seconds for nothing. The LRU still evicts under its own
+    pressure (50-entry global cap) and on process restart.
+    """
     from services.storage.cache import (
         get_peaks_response_cache,
         invalidate_seg_caches,
@@ -127,11 +132,17 @@ def test_peaks_response_cache_evicted_by_invalidate_seg_caches(flask_client, tmp
     assert res.status_code == 200
     cached = get_peaks_response_cache(reciter, (112,))
     assert cached is not None
-    # Cache now stores SERIALIZED BYTES (not the parsed dict) so warm
-    # requests skip jsonify entirely on the hot path.
     assert isinstance(cached, (bytes, bytearray))
 
+    # Save/undo path: peaks cache MUST stay warm.
     invalidate_seg_caches(reciter)
+    still_cached = get_peaks_response_cache(reciter, (112,))
+    assert still_cached is not None
+    assert still_cached == cached  # byte-identical, no rebuild
+
+    # Manual cache pop is still available for explicit peaks rebuilds.
+    from services.storage.cache import pop_reciter_peaks_response_cache
+    pop_reciter_peaks_response_cache(reciter)
     assert get_peaks_response_cache(reciter, (112,)) is None
 
 
