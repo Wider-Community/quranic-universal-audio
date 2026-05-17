@@ -27,29 +27,58 @@ from .audit import Actor
 class EditOperation(BaseModel):
     """One operation in a batch. Shape is intentionally permissive — the
     save flow owns the operation vocabulary (trim, split, merge, delete,
-    etc.) and stores per-op payloads keyed by ``kind``.
+    etc.) and stores per-op payloads keyed by ``kind`` (user-driven) or
+    ``op_type`` (pipeline-driven, written by ``.local/extraction/segments/
+    post_passes.py``).
+
+    Migration #5: pipeline ops carry ``op_type`` + ``fix_kind`` (no
+    ``kind`` — that's a user-edit-only field set by the FE command store).
+    ``kind`` is therefore optional. At least one of ``kind`` /
+    ``op_type`` must be present for the op to be meaningful, but readers
+    handle either via ``extra="allow"``.
     """
 
     model_config = ConfigDict(extra="allow")
 
     op_id: str = Field(..., min_length=1)
-    kind: str = Field(..., min_length=1)
+    kind: str | None = None  # user-driven; absent for pipeline ops
+    op_type: str | None = None  # pipeline-driven; absent for user ops
 
 
 class EditHistoryBatch(BaseModel):
+    """One JSONL line in ``edit_history.jsonl`` — a batch of operations.
+
+    Migration #5 reality-check: both writers (Inspector save +
+    `.local/extraction/segments/post_passes.py`) stamp the timestamp as
+    ``saved_at_utc`` (string), NOT ``ts`` (datetime). Both writers
+    historically wrote ``schema_version: 1``, not ``2``. The schema is
+    permissive on both axes so the actual on-disk shape parses without
+    a schema bump:
+
+    - ``ts`` is optional; ``saved_at_utc`` lands via ``extra="allow"``.
+    - ``schema_version`` defaults to ``1`` matching the literal both
+      writers emit; readers can bump to ``2`` later in a separate
+      migration once both writers are updated together.
+    - ``actor`` is optional — Inspector save writes it; the pipeline
+      now also writes it (constant ``{"hf_user_id": "pipeline", ...}``)
+      but legacy pre-#5 pipeline batches don't have it.
+    """
+
     model_config = ConfigDict(extra="allow")  # tolerate legacy fields on read
 
-    schema_version: int = 2
+    schema_version: int = 1
     batch_id: str = Field(..., min_length=1)
-    ts: datetime
-    actor: Actor
+    ts: datetime | None = None
+    actor: Actor | None = None
     operations: list[EditOperation] = Field(default_factory=list)
 
     # Optional cross-batch fields used by undo / revert filtering.
     reverts_batch_id: str | None = None
     reverts_op_ids: list[str] = Field(default_factory=list)
 
-    # In-app history viewer uses these counts; safe to default to {} on read.
+    # Legacy pre-Migration #5 fields — both writers stopped emitting these
+    # in Inspector save (commit b8aa414) and in extraction (Migration #5).
+    # Kept as optional so on-disk legacy batches parse.
     validation_summary_before: dict[str, Any] = Field(default_factory=dict)
     validation_summary_after: dict[str, Any] = Field(default_factory=dict)
 

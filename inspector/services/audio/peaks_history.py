@@ -130,6 +130,38 @@ def append_peaks_records(
     return written
 
 
+_PEAKS_INT8_SCALE = 127
+
+
+def _inflate_peaks_b64(rec: dict) -> dict:
+    """Inflate a Migration #5 slim record (``peaks_b64`` + ``bps``) into the
+    legacy ``peaks: list[list[float]]`` shape the FE expects.
+
+    Idempotent for legacy records that already carry ``peaks``. Returns a
+    shallow copy with the inflated peaks field — never mutates the input.
+    Falls back to the empty list on decode failure so a single corrupt
+    record doesn't sink the whole response.
+    """
+    if rec.get("peaks") is not None:
+        return rec
+    b64 = rec.get("peaks_b64")
+    if not isinstance(b64, str) or not b64:
+        return rec
+    try:
+        import base64
+        raw = base64.b64decode(b64)
+        import numpy as np  # noqa: PLC0415
+        i8 = np.frombuffer(raw, dtype=np.int8)
+        if i8.size == 0 or i8.size % 2 != 0:
+            return rec
+        peaks_f = (i8.astype(np.float32) / _PEAKS_INT8_SCALE).reshape(-1, 2)
+        out = dict(rec)
+        out["peaks"] = peaks_f.tolist()
+        return out
+    except Exception:  # noqa: BLE001
+        return rec
+
+
 def load_peaks_records(
     reciter: str,
     exclude_op_ids: set[str] | None = None,
@@ -138,6 +170,11 @@ def load_peaks_records(
 
     Silently skips malformed records, mirroring
     ``services.history_query.parse_history_file``.
+
+    Migration #5: records written by the offline pipeline now carry
+    ``peaks_b64`` + ``bps`` instead of ``peaks: list[list[float]]``.
+    Inflate at read time so the FE wire shape (and the in-memory
+    ``peaks`` list) is stable across the transition.
     """
     excluded = exclude_op_ids or set()
     out: list[dict] = []
@@ -150,7 +187,7 @@ def load_peaks_records(
             continue
         if rec.get("op_id") in excluded:
             continue
-        out.append(rec)
+        out.append(_inflate_peaks_b64(rec))
     if not excluded:
         cache.set_seg_history_peaks(reciter, out)
     return out

@@ -110,11 +110,29 @@ export interface DetailedSegment {
   segment_uid?: string | null;
   [k: string]: unknown;
 }
+/**
+ * One JSONL line in ``edit_history.jsonl`` — a batch of operations.
+ *
+ * Migration #5 reality-check: both writers (Inspector save +
+ * `.local/extraction/segments/post_passes.py`) stamp the timestamp as
+ * ``saved_at_utc`` (string), NOT ``ts`` (datetime). Both writers
+ * historically wrote ``schema_version: 1``, not ``2``. The schema is
+ * permissive on both axes so the actual on-disk shape parses without
+ * a schema bump:
+ *
+ * - ``ts`` is optional; ``saved_at_utc`` lands via ``extra="allow"``.
+ * - ``schema_version`` defaults to ``1`` matching the literal both
+ *   writers emit; readers can bump to ``2`` later in a separate
+ *   migration once both writers are updated together.
+ * - ``actor`` is optional — Inspector save writes it; the pipeline
+ *   now also writes it (constant ``{"hf_user_id": "pipeline", ...}``)
+ *   but legacy pre-#5 pipeline batches don't have it.
+ */
 export interface EditHistoryBatch {
   schema_version?: number;
   batch_id: string;
-  ts: string;
-  actor: Actor;
+  ts?: string | null;
+  actor?: Actor | null;
   operations?: EditOperation[];
   reverts_batch_id?: string | null;
   reverts_op_ids?: string[];
@@ -140,11 +158,20 @@ export interface Actor {
 /**
  * One operation in a batch. Shape is intentionally permissive — the
  * save flow owns the operation vocabulary (trim, split, merge, delete,
- * etc.) and stores per-op payloads keyed by ``kind``.
+ * etc.) and stores per-op payloads keyed by ``kind`` (user-driven) or
+ * ``op_type`` (pipeline-driven, written by ``.local/extraction/segments/
+ * post_passes.py``).
+ *
+ * Migration #5: pipeline ops carry ``op_type`` + ``fix_kind`` (no
+ * ``kind`` — that's a user-edit-only field set by the FE command store).
+ * ``kind`` is therefore optional. At least one of ``kind`` /
+ * ``op_type`` must be present for the op to be meaningful, but readers
+ * handle either via ``extra="allow"``.
  */
 export interface EditOperation {
   op_id: string;
-  kind: string;
+  kind?: string | null;
+  op_type?: string | null;
   [k: string]: unknown;
 }
 /**
