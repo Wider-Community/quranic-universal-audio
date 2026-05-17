@@ -12,30 +12,51 @@ writer/reader drift we discovered in migration #4 + #5 (see
 wraps a per-chapter group; ``DetailedSegment`` is the atomic unit and
 where 99% of the bytes live.
 
-Forward-compat reads: ``extra="allow"`` tolerates unknown legacy fields.
-Writers should serialise with ``model_dump(exclude_none=True)`` so
-optional fields with no value don't land as ``null`` in the JSON.
+Extras handling (Migration #5 single-source-of-truth principle):
+- ``extra="forbid"`` on every model + a pre-validator (`strip_and_warn`)
+  that surfaces every unknown field with appropriate severity.
+- Known-legacy fields go into ``DEAD_FIELDS`` and log at INFO when
+  stripped on read.
+- Anything else unknown logs at WARNING — surfaces writer/schema drift.
 
-Dead-field rejection: ``matched_text`` and ``phonemes_asr`` were dropped
-in migration #5 and are NEVER valid on a seg or snapshot. The pre-validator
-logs and strips them if encountered (soft rejection on read; hard rejection
-should happen at write paths — extraction and save).
+Writers emit via ``model_dump(exclude_none=True)`` so optional fields with
+no value don't land as ``null`` in the JSON. Snapshot fields (``chapter``,
+``audio_url``, ``index_at_save``) used inside edit-history operations
+DO NOT live on a persisted seg and are explicitly in ``DEAD_FIELDS``
+for the DetailedSegment model — they're modelled separately on
+``SegSnapshot`` for op payloads.
 
 Authoritative spec: ``docs/reference/migrate_wip.md`` §5.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-_log = logging.getLogger(__name__)
+from ._extras import strip_and_warn
 
-# Fields removed in migration #5. The schema actively strips them on read
-# (with a warning) and writers must never emit them.
-_DEAD_FIELDS = ("matched_text", "phonemes_asr")
+
+# Fields actively stripped on read with INFO-level "legacy" warning. Writers
+# must never emit these. The set covers every legacy attribute we've seen
+# on real prod buckets (see the audit survey, May 2026).
+_SEG_DEAD_FIELDS: set[str] = {
+    # Migration #5 — derivable / never persisted
+    "matched_text", "phonemes_asr", "has_repeated_words",
+    # Migration #5 — moved to _meta.ignored_categories
+    "ignored_categories", "ignored",
+    # Snapshot-only fields; do not belong on a persisted seg
+    "audio_url", "chapter", "entry_ref", "index_at_save", "display_text",
+}
+
+_ENTRY_DEAD_FIELDS: set[str] = {
+    # Migration #5 — chapter audio URL now sourced from
+    # catalog/audio_manifest/<slug>.json::chapters[ch].url
+    "audio",
+}
+
+_META_DEAD_FIELDS: set[str] = set()  # no known-dead fields on _meta
 
 
 class DetailedSegment(BaseModel):
@@ -65,7 +86,7 @@ class DetailedSegment(BaseModel):
         extraction output.
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     # === Always-present (every writer) ===
     time_start: int = Field(..., ge=0)
@@ -83,21 +104,13 @@ class DetailedSegment(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _strip_dead_fields(cls, data: Any) -> Any:
-        """Soft-reject migration #5 dead fields on read.
-
-        Snapshots embedded in ``edit_history.jsonl`` may still carry these
-        on legacy buckets that escaped ``migrate_wip5_in_place.py``. We log
-        and strip rather than raise so reads don't burn requests. Hard
-        rejection must happen at write paths (extraction + save), which
-        never construct these fields in the first place after migration #5.
-        """
-        if isinstance(data, dict):
-            for dead in _DEAD_FIELDS:
-                if dead in data:
-                    _log.warning("dropped legacy field %r during seg parse", dead)
-                    data = {k: v for k, v in data.items() if k != dead}
-        return data
+    def _surface_extras(cls, data: Any) -> Any:
+        return strip_and_warn(
+            data,
+            declared=set(cls.model_fields),
+            dead=_SEG_DEAD_FIELDS,
+            model_name="DetailedSegment",
+        )
 
     @model_validator(mode="after")
     def _validate_time_range(self) -> "DetailedSegment":
@@ -114,15 +127,24 @@ class DetailedEntry(BaseModel):
 
     ``audio`` (per-chapter URL) was a duplicated source of truth with
     ``catalog/audio_manifest/<slug>.json::chapters[ch].url`` and was
-    dropped in migration #5. Legacy on-disk data still has it; readers
-    consume it via ``extra="allow"`` until those readers migrate to
-    ``services.audio.audio_meta.chapter_urls(slug)[ch]``.
+    dropped in migration #5. Legacy on-disk data still has it; the
+    pre-validator strips it with an INFO-level warning.
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     ref: str = Field(..., min_length=1)
     segments: list[DetailedSegment] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _surface_extras(cls, data: Any) -> Any:
+        return strip_and_warn(
+            data,
+            declared=set(cls.model_fields),
+            dead=_ENTRY_DEAD_FIELDS,
+            model_name="DetailedEntry",
+        )
 
 
 class DetailedMeta(BaseModel):
@@ -134,7 +156,7 @@ class DetailedMeta(BaseModel):
     resolve_pad``; the rest is provenance.
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     created_at: str | None = None  # ISO-8601 timestamp; informational
     asr_model: str | None = None
@@ -146,6 +168,23 @@ class DetailedMeta(BaseModel):
     min_silence_floor_ms: int | None = None
     audio_source: str | None = None  # downstream consumers depend on this
 
+    # Migration tracking for the pad_left/pad_right split (consumed by
+    # ``services/storage/data_loader.py::resolve_pad``). Stamped by the
+    # pad backfill, never by extraction directly.
+    pad_ms: int | None = None  # legacy single-value pad (pre-split)
+    pad_migrated_at: str | None = None
+    pad_migrated_from_pad_ms: int | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _surface_extras(cls, data: Any) -> Any:
+        return strip_and_warn(
+            data,
+            declared=set(cls.model_fields),
+            dead=_META_DEAD_FIELDS,
+            model_name="DetailedMeta",
+        )
+
 
 class DetailedDocument(BaseModel):
     """Whole ``detailed.json`` document.
@@ -156,18 +195,36 @@ class DetailedDocument(BaseModel):
     JSON I/O. Use ``model_dump(by_alias=True)`` when serialising.
     """
 
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     meta: DetailedMeta = Field(default_factory=DetailedMeta, alias="_meta")
     entries: list[DetailedEntry] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _surface_extras(cls, data: Any) -> Any:
+        # ``_meta`` alias is the only non-Python field name; preserve it
+        # before stripping unknowns. The alias resolution happens *after*
+        # this pre-validator, so ``_meta`` looks "unknown" to our set
+        # check — handle it explicitly.
+        if not isinstance(data, dict):
+            return data
+        declared = set(DetailedDocument.model_fields)
+        declared.add("_meta")  # JSON-side alias for `meta`
+        return strip_and_warn(
+            data,
+            declared=declared,
+            dead=set(),
+            model_name="DetailedDocument",
+        )
 
 
 def parse_detailed_segment(raw: dict[str, Any]) -> DetailedSegment:
     """Parse one seg dict (e.g. from inside ``entries[i].segments``).
 
-    The pre-validator strips migration #5 dead fields (``matched_text``,
-    ``phonemes_asr``) with a warning. New writers must serialise via
-    ``seg.model_dump(exclude_none=True)`` to omit optional fields with no
-    value (so they don't land as ``null`` in JSON).
+    The pre-validator surfaces extras (legacy → INFO, unknown → WARNING)
+    and strips both classes before pydantic field validation. New writers
+    must serialise via ``seg.model_dump(exclude_none=True)`` to omit
+    optional fields with no value (so they don't land as ``null``).
     """
     return DetailedSegment.model_validate(raw)
