@@ -11,7 +11,6 @@ import threading
 
 from config import RECITATION_SEGMENTS_PATH as _DEFAULT_RECITATION_SEGMENTS_PATH
 from services.storage import cache, data_dir
-from utils.references import chapter_from_ref
 
 logger = logging.getLogger(__name__)
 
@@ -69,84 +68,12 @@ def parse_history_for_reciter(reciter: str) -> list[dict]:
     return list(data_dir.iter_edit_history(reciter))
 
 
-_CHAPTER_TIME_RESET_TOLERANCE_MS = 500
-
-
-def recover_strip_specials_chapter_per_op(batch: dict) -> dict[str, int]:
-    """Per-op chapter recovery for a legacy ``strip_specials`` batch.
-
-    Use case: snapshots written by the extraction pipeline prior to the
-    chapter-stamping fix have ``chapter: null`` on every op, but the batch
-    still carries ``chapters: [...]`` (the union of every chapter the
-    post-pass touched). We can recover per-op chapter by exploiting two
-    pipeline invariants:
-
-    1. ``strip_special_segments`` iterates entries in detailed.json order
-       (which is surah order for by-surah reciters), then iterates each
-       entry's segs in time order. So within one chapter's contributions
-       the op timestamps are monotonically increasing, and between
-       chapters time resets toward zero (each chapter's audio is a
-       separate per-chapter MP3, time-local).
-    2. ``batch.chapters`` is sorted by the writer.
-
-    Algorithm: walk ops; whenever ``op.time_start`` drops well below the
-    previous op's ``time_end``, that's a chapter boundary. Group ops by
-    those boundaries; pair group N with ``sorted(chapters)[N]``.
-
-    Returns ``{op_id: chapter}`` for every resolvable op. Returns ``{}``
-    when:
-      - batch isn't ``strip_specials`` (waqf_sakt is single-chapter via
-        ``batch.chapter``);
-      - the batch has no ``chapters`` list;
-      - group count ≠ chapter count (heuristic disagrees — refuse to
-        guess; the caller falls back to its own resolution path).
-
-    Validated on legacy Husary data: 117 ops + 112 batch.chapters yields
-    112 groups → exact 1:1 mapping.
-    """
-    if batch.get("batch_type") != "strip_specials":
-        return {}
-    chapters = sorted(
-        c for c in (batch.get("chapters") or []) if isinstance(c, int) and c > 0
-    )
-    if not chapters:
-        return {}
-
-    ops = batch.get("operations") or []
-    groups: list[list[dict]] = []
-    current: list[dict] = []
-    prev_end = -1
-    for op in ops:
-        snap = (op.get("targets_before") or [{}])[0]
-        if not isinstance(snap, dict):
-            continue
-        t0 = snap.get("time_start")
-        t1 = snap.get("time_end")
-        if not isinstance(t0, (int, float)) or not isinstance(t1, (int, float)):
-            continue
-        if current and t0 < prev_end - _CHAPTER_TIME_RESET_TOLERANCE_MS:
-            groups.append(current)
-            current = []
-        current.append(op)
-        prev_end = t1
-    if current:
-        groups.append(current)
-
-    if len(groups) != len(chapters):
-        logger.warning(
-            "recover_strip_specials_chapter_per_op: heuristic group count "
-            "%d ≠ batch.chapters count %d for batch %s; aborting recovery",
-            len(groups), len(chapters), batch.get("batch_id"),
-        )
-        return {}
-
-    out: dict[str, int] = {}
-    for group, ch in zip(groups, chapters):
-        for op in group:
-            op_id = op.get("op_id")
-            if isinstance(op_id, str):
-                out[op_id] = ch
-    return out
+# ``recover_strip_specials_chapter_per_op`` (heuristic chapter recovery for
+# legacy strip_specials batches without snapshot ``chapter`` stamps) was
+# removed when Migration #5 made the stamp mandatory at extraction time.
+# If you're hitting "chapter is null" issues, the data pre-dates Migration #5
+# — fix the source by running ``.local/extraction/scripts/migrate_wip5_in_place.py``
+# on the slug or by re-extracting. Don't reintroduce the heuristic.
 
 
 def _merge_batches_sharing_batch_id(batches: list[dict]) -> list[dict]:
@@ -271,27 +198,14 @@ def _enrich_snapshot_audio_urls(reciter: str, batches: list[dict]) -> None:
         ch = snap.get("chapter")
         if isinstance(ch, int) and ch > 0:
             return ch
-        ref = snap.get("matched_ref", "")
-        if isinstance(ref, str) and ref and ":" in ref:
-            ch = chapter_from_ref(ref)
-            if ch:
-                return ch
-        bch = batch.get("chapter")
-        if isinstance(bch, int) and bch > 0:
-            return bch
-        bchs = batch.get("chapters") or []
-        if len(bchs) == 1 and isinstance(bchs[0], int):
-            return bchs[0]
-        # Last resort: strip_specials per-op chapter recovery via the
-        # time-reset heuristic. Caller passes the recovered map so we
-        # compute it once per batch, not per snapshot.
-        if op_id and op_id in recovered:
-            return recovered[op_id]
+        # Migration #5 contract: every snap carries ``chapter``. The
+        # tier-2/3/4 legacy fallbacks (matched_ref parse, batch.chapter,
+        # single-chapter batch.chapters, time-reset recovery) were
+        # removed. Returning None when the stamp is missing pushes the
+        # data fix back to extraction / migrate_wip5_in_place.
         return None
 
     for batch in batches:
-        # Compute strip-specials per-op chapter recovery once per batch.
-        recovered = recover_strip_specials_chapter_per_op(batch)
         for op in batch.get("operations") or []:
             op_id = op.get("op_id") if isinstance(op.get("op_id"), str) else None
             for key in ("targets_before", "targets_after"):
@@ -300,17 +214,12 @@ def _enrich_snapshot_audio_urls(reciter: str, batches: list[dict]) -> None:
                         continue
                     if snap.get("audio_url"):
                         continue
-                    ch = _snap_chapter(snap, batch, recovered, op_id)
+                    ch = _snap_chapter(snap, batch, None, op_id)
                     if ch is None:
                         continue
                     url = by_chapter.get(ch)
                     if url:
                         snap["audio_url"] = url
-                    # Also stamp the chapter on the snapshot so downstream
-                    # consumers (frontend, peaks backfill) don't need to
-                    # re-derive it.
-                    if not isinstance(snap.get("chapter"), int):
-                        snap["chapter"] = ch
 
 
 def _load_edit_history_from_records(

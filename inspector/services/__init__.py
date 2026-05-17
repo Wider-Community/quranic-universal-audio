@@ -23,7 +23,6 @@ from .audio import (
     audio_prefetch,
     audio_source,
     peaks,
-    peaks_backfill,
     peaks_history,
     peaks_slim,
 )
@@ -73,7 +72,6 @@ _LEGACY_ALIASES = {
     "audio_prefetch": audio_prefetch,
     "audio_source": audio_source,
     "peaks": peaks,
-    "peaks_backfill": peaks_backfill,
     "peaks_history": peaks_history,
     "activity_classification": activity_classification,
     "activity_state": activity_state,
