@@ -197,6 +197,16 @@ def start_background_loop(interval_seconds: int = 60) -> threading.Thread:
     return t
 
 
+def is_background_loop_running() -> bool:
+    """Return True iff a background reconcile thread is alive.
+
+    Surfaced via ``/healthz`` so a misconfigured deploy (no
+    ``INSPECTOR_AUTO_DETECT=1``, so no periodic polling) is visible
+    instead of silently failing to react to new ``wip/`` uploads.
+    """
+    return _background_thread is not None and _background_thread.is_alive()
+
+
 def _reset_seen_for_tests() -> None:
     """Tests only — reset the seen set so each test starts clean."""
     with _seen_lock:
@@ -206,6 +216,7 @@ def _reset_seen_for_tests() -> None:
 __all__ = [
     "SYSTEM_ACTOR",
     "hydrate_initial_seen",
+    "is_background_loop_running",
     "reconcile_once",
     "start_background_loop",
 ]
