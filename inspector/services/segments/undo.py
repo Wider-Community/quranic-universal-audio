@@ -295,6 +295,9 @@ def _append_revert_record(reciter: str, target_batch_id: str,
     if chapters:
         revert["chapters"] = chapters
     data_dir.append_edit_history(reciter, revert)
+    # Keep the cached parsed list in step with disk so the next reader
+    # doesn't re-parse the JSONL just to see this revert.
+    cache.append_history_batch(reciter, revert)
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +376,13 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
         actor=actor,
     )
 
-    cache.invalidate_seg_caches(reciter)
+    # Surgical eviction. Derived edit-history indices (split-group, resolved-
+    # by-edit) can't be modelled incrementally on revert — pop them so the
+    # next reader rebuilds from the cached batch list (in-memory walk, no
+    # I/O). Auto-split needs eviction because undo can re-introduce uids.
+    cache.pop_seg_caches_affected_by_segment_edit(reciter)
+    cache.pop_seg_split_group_index(reciter)
+    cache.pop_seg_auto_split(reciter)
     return {"ok": True, "operations_reversed": len(operations)}
 
 
@@ -457,5 +466,8 @@ def undo_ops(
         reverts_op_ids=list(requested_op_ids),
     )
 
-    cache.invalidate_seg_caches(reciter)
+    # Surgical eviction (see undo_batch for rationale).
+    cache.pop_seg_caches_affected_by_segment_edit(reciter)
+    cache.pop_seg_split_group_index(reciter)
+    cache.pop_seg_auto_split(reciter)
     return {"ok": True, "operations_reversed": len(ops_to_undo)}

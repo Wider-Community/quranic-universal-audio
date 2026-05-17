@@ -442,10 +442,41 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     if isinstance(op_peaks, list) and op_peaks:
         append_peaks_records(reciter, op_peaks, batch_id=batch["batch_id"])
 
-    # Invalidate cache
-    cache.invalidate_seg_caches(reciter)
+    # Surgical cache invalidation. Edit-history-derived caches survive
+    # the autosave warm path by being appended/extended in place; auto-split
+    # only evicts when the uid set changed; pipeline_meta is immutable.
+    cache.pop_seg_caches_affected_by_segment_edit(reciter)
+    cache.append_history_batch(reciter, batch)
+    _extend_split_group_index_on_save(reciter, batch)
+    if cache.batch_changes_segment_set(batch):
+        cache.pop_seg_auto_split(reciter)
 
     return {"ok": True}
+
+
+def _extend_split_group_index_on_save(reciter: str, batch: dict) -> None:
+    """If the freshly-saved batch contains split_segment ops, extend the
+    cached index in place so the next validate doesn't have to rebuild it.
+
+    No-op if the cache is empty (next read will build from the cached batch
+    list which already includes this batch). No-op if the batch has no
+    split ops.
+    """
+    cached = cache.get_seg_split_group_index(reciter)
+    if cached is None:
+        return
+    has_split = any(
+        op.get("op_type") == "split_segment" or op.get("kind") == "split_segment"
+        for op in batch.get("operations") or []
+    )
+    if not has_split:
+        return
+    # Cheapest correct path: pop and let the next reader rebuild from the
+    # cached (already-appended) batch list. The rebuild walks an in-memory
+    # list, no I/O. Pre-computing the new closure inline would require
+    # re-running the fixpoint over an existing index plus the new ops — same
+    # cost as a full rebuild for typical batch sizes, but with more code.
+    cache.pop_seg_split_group_index(reciter)
 
 
 def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) -> dict:

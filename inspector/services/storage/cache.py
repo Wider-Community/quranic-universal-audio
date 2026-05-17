@@ -68,6 +68,16 @@ _seg_auto_split: _KeyedCache[tuple[dict[str, dict], dict | None]] = _KeyedCache(
 # pipeline_meta.json sidecar — extraction-time facts (deleted_basmala_chapters,
 # generated_at, ...). Immutable post-extraction; NEVER invalidated by save.
 _seg_pipeline_meta: _KeyedCache[dict] = _KeyedCache()
+# Parsed edit_history.jsonl batches (list[dict]). Filled lazily on first read;
+# every save APPENDS the new batch (no full re-parse). Undo also appends a
+# revert batch. The cache slot itself is never popped on save/undo — only on
+# process restart or explicit invalidation.
+_seg_history_batches: _KeyedCache[list[dict]] = _KeyedCache()
+# Derived index: uid → list of transitive split-descendant uids. Pure function
+# of _seg_history_batches. Filled lazily; **extended on save** when the saved
+# batch contains split_segment ops, **popped on undo** (revert negates prior
+# ops; incremental append can't model removal — rebuild from cached list).
+_seg_split_group_index: _KeyedCache[dict[str, list[str]]] = _KeyedCache()
 _seg_edit_history: _KeyedCache[dict] = _KeyedCache()
 _seg_history_peaks: _KeyedCache[list[dict]] = _KeyedCache()
 # Validation + stats results — recomputed only on cache miss; cleared by
@@ -137,6 +147,52 @@ def pop_seg_pipeline_meta(reciter: str) -> None:
     _seg_pipeline_meta.pop(reciter)
 
 
+# ---------------------------------------------------------------------------
+# Edit-history-derived caches (incremental on save, pop+rebuild on undo)
+# ---------------------------------------------------------------------------
+
+
+def get_seg_history_batches(reciter: str) -> list[dict] | None:
+    return _seg_history_batches.get(reciter)
+
+
+def set_seg_history_batches(reciter: str, batches: list[dict]) -> None:
+    _seg_history_batches.set(reciter, batches)
+
+
+def append_history_batch(reciter: str, batch: dict) -> None:
+    """Append a freshly-saved batch to the cached parsed list.
+
+    No-op if the cache is empty for this reciter (next read will populate
+    it from disk and naturally include the new batch). Save's append-then-
+    notify ordering guarantees the batch is already on disk before this
+    fires, so a cold reader sees a consistent picture either way.
+    """
+    cached = _seg_history_batches.get(reciter)
+    if cached is None:
+        return
+    _seg_history_batches.set(reciter, [*cached, batch])
+
+
+def pop_seg_history_batches(reciter: str) -> None:
+    _seg_history_batches.pop(reciter)
+
+
+def get_seg_split_group_index(reciter: str) -> dict[str, list[str]] | None:
+    return _seg_split_group_index.get(reciter)
+
+
+def set_seg_split_group_index(
+    reciter: str, index: dict[str, list[str]],
+) -> None:
+    _seg_split_group_index.set(reciter, index)
+
+
+def pop_seg_split_group_index(reciter: str) -> None:
+    """Pop on undo — revert ops can't be modelled incrementally."""
+    _seg_split_group_index.pop(reciter)
+
+
 def get_seg_edit_history(reciter: str) -> dict | None:
     return _seg_edit_history.get(reciter)
 
@@ -198,6 +254,53 @@ def invalidate_seg_caches(reciter: str) -> None:
     _seg_edit_history.pop(reciter)
     _seg_history_peaks.pop(reciter)
     _seg_validate_result.pop(reciter)
+    _seg_stats_result.pop(reciter)
+    # _seg_history_batches and _seg_split_group_index are NOT popped here —
+    # callers that mean it (save / undo) use the surgical helpers below so
+    # the parsed list survives autosave warm paths.
+
+
+def pop_seg_caches_affected_by_segment_edit(reciter: str) -> None:
+    """Surgical eviction of caches a segment edit invalidates.
+
+    Excludes:
+    - ``_seg_pipeline_meta`` — extraction-time, immutable.
+    - ``_seg_history_batches`` — appended in place (no re-parse).
+    - ``_seg_split_group_index`` — extended in place on save; explicitly
+      popped on undo via ``pop_seg_split_group_index``.
+    - ``_seg_auto_split`` — only invalidated when the uid set changes;
+      callers gate the pop on ``batch_changes_segment_set``.
+
+    Callers should follow with ``append_history_batch`` (and, on save,
+    ``set_seg_split_group_index`` to extend the index incrementally).
+    """
+    _seg.pop(reciter)
+    _seg_meta.pop(reciter)
+    _seg_verses.pop(reciter)
+    _seg_resolved_by_edit.pop(reciter)
+    _seg_probe_v2.pop(reciter)
+    _seg_edit_history.pop(reciter)
+    _seg_history_peaks.pop(reciter)
+    _seg_validate_result.pop(reciter)
+    _seg_stats_result.pop(reciter)
+
+
+def batch_changes_segment_set(batch: dict) -> bool:
+    """True when at least one op in ``batch`` mutates the seg uid set.
+
+    Used to decide whether ``_seg_auto_split`` needs eviction — split / merge /
+    auto-fix create new uids, trim / ref-edit do not.
+    """
+    _MUTATING_OPS = {
+        "split_segment",
+        "merge_segments",
+        "auto_fix_missing_word",
+        "delete_segment",
+    }
+    for op in batch.get("operations") or []:
+        if op.get("op_type") in _MUTATING_OPS or op.get("kind") in _MUTATING_OPS:
+            return True
+    return False
     _seg_stats_result.pop(reciter)
 
 

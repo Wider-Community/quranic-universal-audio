@@ -48,10 +48,18 @@ def _history_lock(reciter: str) -> threading.Lock:
 def parse_history_for_reciter(reciter: str) -> list[dict]:
     """Read every batch record from a reciter's edit_history.jsonl.
 
-    Shared by undo.py (which needs raw records for batch lookup) and
-    load_edit_history (which applies further filtering for the UI).
+    Cache-aware: subsequent calls in the same process return the cached
+    parsed list without re-touching disk. Save appends to the cached list
+    (no re-parse); undo also appends a revert batch.
+
+    Shared by undo.py (which needs raw records for batch lookup),
+    load_edit_history (which applies further filtering for the UI), and
+    build_split_group_index / build_resolved_by_edit_index (derived indices).
     Returns an empty list when the file is absent.
     """
+    cached = cache.get_seg_history_batches(reciter)
+    if cached is not None:
+        return cached
     if RECITATION_SEGMENTS_PATH != _DEFAULT_RECITATION_SEGMENTS_PATH:
         import orjson
 
@@ -64,8 +72,11 @@ def parse_history_for_reciter(reciter: str) -> list[dict]:
                 line = raw.strip()
                 if line:
                     out.append(orjson.loads(line))
+        cache.set_seg_history_batches(reciter, out)
         return out
-    return list(data_dir.iter_edit_history(reciter))
+    batches = list(data_dir.iter_edit_history(reciter))
+    cache.set_seg_history_batches(reciter, batches)
+    return batches
 
 
 # ``recover_strip_specials_chapter_per_op`` (heuristic chapter recovery for
@@ -322,6 +333,81 @@ def _load_edit_history_from_records(
     if cache_result:
         cache.set_seg_edit_history(reciter, result)
     return result
+
+
+_SPLIT_GROUP_MAX_PASSES = 32  # mirrors frontend/.../utils/constants.ts
+
+
+def build_split_group_index(reciter: str) -> dict[str, list[str]]:
+    """Build ``{root_uid: [descendant_uid, ...]}`` for every committed split.
+
+    Walks every ``split_segment`` op in the cached edit-history batches and
+    runs a fixpoint that transitively closes parent→children chains. For
+    each uid that's been split (directly or via a descendant), the value
+    lists ALL descendants reachable through committed splits.
+
+    Backend supplies this on validation issue items as ``split_group_uids``
+    so the frontend doesn't need to walk ``$historyData`` to render the
+    accordion card with all split descendants. FE-side fixpoint still runs
+    over the uncommitted op log.
+
+    Cache-aware via ``cache.get_seg_split_group_index``. Pure function of
+    ``parse_history_for_reciter(reciter)`` so save can extend it
+    incrementally without re-parsing the JSONL.
+    """
+    cached = cache.get_seg_split_group_index(reciter)
+    if cached is not None:
+        return cached
+
+    batches = parse_history_for_reciter(reciter)
+    # Build parent → children adjacency from every split_segment op.
+    children_of: dict[str, list[str]] = {}
+    for batch in batches:
+        for op in batch.get("operations") or []:
+            if op.get("op_type") != "split_segment" and op.get("kind") != "split_segment":
+                continue
+            parents = op.get("targets_before") or []
+            kids = op.get("targets_after") or []
+            for p in parents:
+                if not isinstance(p, dict):
+                    continue
+                p_uid = p.get("segment_uid")
+                if not p_uid:
+                    continue
+                bucket = children_of.setdefault(p_uid, [])
+                for c in kids:
+                    if not isinstance(c, dict):
+                        continue
+                    c_uid = c.get("segment_uid")
+                    if c_uid and c_uid not in bucket:
+                        bucket.append(c_uid)
+
+    # Transitive closure: for every uid that has children, walk descendants
+    # to the full set with a guarded fixpoint (revert-removable cycles are
+    # impossible in append-only history, but the guard is cheap).
+    out: dict[str, list[str]] = {}
+    for root_uid in children_of:
+        group: list[str] = []
+        seen: set[str] = {root_uid}
+        frontier = [root_uid]
+        for _ in range(_SPLIT_GROUP_MAX_PASSES):
+            grew = False
+            next_frontier: list[str] = []
+            for uid in frontier:
+                for child in children_of.get(uid, ()):
+                    if child not in seen:
+                        seen.add(child)
+                        group.append(child)
+                        next_frontier.append(child)
+                        grew = True
+            if not grew:
+                break
+            frontier = next_frontier
+        if group:
+            out[root_uid] = group
+
+    cache.set_seg_split_group_index(reciter, out)
+    return out
 
 
 def build_resolved_by_edit_index(reciter: str) -> dict[str, set[str]]:
