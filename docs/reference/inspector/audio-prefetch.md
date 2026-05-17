@@ -9,7 +9,7 @@ Background pipeline that lands every chapter MP3 + waveform peaks on the bucket 
 | Path | Contents |
 |---|---|
 | `wip/<slug>/audio/<chapter>.mp3` | Prefetched chapter audio. VBR chapters carry an ffmpeg-injected Xing TOC so the browser seeks correctly. |
-| `wip/<slug>/peaks/<chapter>.json` | `{duration_ms, peaks}` paired with each MP3. |
+| `wip/<slug>/peaks/<chapter>.json.gz` | Slim packed waveform peaks (schema v3, int8 + gzip) paired with each MP3. See [peaks.md](./peaks.md) for the envelope and the FE consumer chain. |
 | `wip/<slug>/audio/_done.json` | Sentinel written atomically last; presence ⇒ prefetch completed in full. |
 
 Chapter keys follow the audio-manifest sidecar (`"1"`..`"114"` for `by_surah`, `"<surah>:<ayah>"` for `by_ayah`). `by_ayah` deliveries are not prefetched today.
@@ -33,7 +33,7 @@ Per-chapter pipeline (`inspector/services/audio_fetch.py::fetch_and_persist_chap
 1. HTTP-stream the upstream URL → temp file.
 2. If `audio_meta.is_vbr_for_url` ⇒ run `ffmpeg -c:a copy -bsf:a mp3_to_xing`. Failure falls back to the un-remuxed bytes (logged).
 3. `write_bytes_atomic` the MP3 to `wip/<slug>/audio/<chapter>.mp3`.
-4. `compute_audio_peaks` on the local temp → `write_json_atomic` to `wip/<slug>/peaks/<chapter>.json`.
+4. `compute_audio_peaks` on the local temp → `pack_slim` → `write_bytes_atomic` to `wip/<slug>/peaks/<chapter>.json.gz`.
 
 `_done.json` is only written when every chapter succeeded. Partial failures leave the sentinel absent so the next trigger fills the gaps.
 
@@ -71,7 +71,7 @@ Audio (`routes/audio/proxy.py::seg_audio_proxy`) lookup order:
 1. `wip/<slug>/audio/<chapter>.mp3` — bucket prefetch.
 2. CDN stream-through for slugs the prefetch hasn't reached yet.
 
-Peaks (`routes/segments/peaks.py::seg_peaks`) checks the in-memory cache, then reads `wip/<slug>/peaks/<chapter>.json.gz` from the bucket. Missing slim files compute on-demand into the in-memory cache only — runtime never writes peaks back to the bucket. Bucket peaks are produced offline.
+Peaks (`routes/segments/peaks.py::seg_peaks`) checks the in-memory cache, then reads `<wip|published>/<slug>/peaks/<chapter>.json.gz` from the bucket and emits the slim int8 envelope verbatim. Missing files drop out of the response — the FE falls through to the per-segment ffmpeg fallback. See [peaks.md](./peaks.md) for the full serving model.
 
 ## Admin re-trigger
 

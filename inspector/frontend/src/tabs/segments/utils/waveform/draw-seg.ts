@@ -6,13 +6,14 @@ import {
     WAVEFORM_BG_COLOR,
     WAVEFORM_DIM_OVERLAY_COLOR,
 } from '../../../../lib/utils/constants';
+import { viewPeaks } from '../../../../lib/utils/peaks-view';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
 import { drawWaveformPeaks } from '../../../../lib/utils/waveform-draw';
 import { segAllData } from '../../stores/chapter';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { _findCoveringPeaks } from './peaks-cache';
 
-type Peaks = PeakBucket[];
+type Peaks = PeakBucket[] | Int8Array;
 
 /**
  * Draw a waveform from a full peaks array for a sub-range [startMs, endMs].
@@ -224,17 +225,29 @@ function _slicePeaks(
     buckets: number,
 ): SlicedPeaks | null {
     let pe: AudioPeaks | undefined = getWaveformPeaks(audioUrl);
-    if (!pe?.peaks?.length) {
+    if (!pe?.peaks) {
         pe = _findCoveringPeaks(audioUrl, startMs, endMs) ?? undefined;
     }
-    if (!pe?.peaks?.length) return null;
-    const peaks = pe.peaks;
+    if (!pe) return null;
+    // Shape-agnostic length: PeakBucket[] uses .length; Int8Array(2N) uses
+    // length >> 1 since values are interleaved (mn, mx) bytes.
+    const peaksLen = pe.peaks instanceof Int8Array
+        ? pe.peaks.length >> 1
+        : (pe.peaks?.length ?? 0);
+    if (peaksLen === 0) return null;
     const rs = pe.start_ms ?? 0;
-    const pps = peaks.length / pe.duration_ms;
+    const pps = peaksLen / pe.duration_ms;
     const startIdx = Math.max(0, Math.floor((startMs - rs) * pps));
-    const endIdx = Math.min(peaks.length, Math.ceil((endMs - rs) * pps));
-    const slice = peaks.slice(startIdx, endIdx);
-    if (slice.length === 0) return null;
+    const endIdx = Math.min(peaksLen, Math.ceil((endMs - rs) * pps));
+    // Zero-copy slice in BYTES for Int8Array (factor of 2 because each
+    // bucket is 2 bytes); Array.slice for the nested shape.
+    const slice = pe.peaks instanceof Int8Array
+        ? pe.peaks.subarray(startIdx * 2, endIdx * 2)
+        : pe.peaks.slice(startIdx, endIdx);
+    const sliceLen = slice instanceof Int8Array ? slice.length >> 1 : slice.length;
+    if (sliceLen === 0) return null;
+    const view = viewPeaks(slice);
+    if (!view) return null;
     const maxVals = new Float32Array(buckets);
     const minVals = new Float32Array(buckets);
     // Map canvas bucket i ∈ [0, buckets) to slice-local fractional index
@@ -248,16 +261,16 @@ function _slicePeaks(
         const tMs = startMs + frac * (endMs - startMs);
         return (tMs - rs) * pps - startIdx;
     };
-    if (slice.length >= buckets) {
+    if (sliceLen >= buckets) {
         for (let i = 0; i < buckets; i++) {
             const from = Math.max(0, Math.floor(sliceIdxForFrac(i / buckets)));
-            const to = Math.min(slice.length, Math.ceil(sliceIdxForFrac((i + 1) / buckets)));
+            const to = Math.min(sliceLen, Math.ceil(sliceIdxForFrac((i + 1) / buckets)));
             let mx = -1, mn = 1;
             for (let j = from; j < to; j++) {
-                const bk = slice[j];
-                if (!bk) continue;
-                if (bk[1] > mx) mx = bk[1];
-                if (bk[0] < mn) mn = bk[0];
+                const bMax = view.max(j);
+                const bMin = view.min(j);
+                if (bMax > mx) mx = bMax;
+                if (bMin < mn) mn = bMin;
             }
             // Empty span (e.g. canvas bucket smaller than one peak bucket
             // at the edges) — fall through to silence so the canvas
@@ -269,18 +282,15 @@ function _slicePeaks(
     } else {
         for (let i = 0; i < buckets; i++) {
             const fi = sliceIdxForFrac((buckets > 1 ? i / (buckets - 1) : 0));
-            if (fi < 0 || fi > slice.length - 1) {
+            if (fi < 0 || fi > sliceLen - 1) {
                 minVals[i] = 0; maxVals[i] = 0;
                 continue;
             }
             const lo = Math.floor(fi);
-            const hi = Math.min(lo + 1, slice.length - 1);
+            const hi = Math.min(lo + 1, sliceLen - 1);
             const t = fi - lo;
-            const loBk = slice[lo];
-            const hiBk = slice[hi];
-            if (!loBk || !hiBk) continue;
-            minVals[i] = loBk[0] * (1 - t) + hiBk[0] * t;
-            maxVals[i] = loBk[1] * (1 - t) + hiBk[1] * t;
+            minVals[i] = view.min(lo) * (1 - t) + view.min(hi) * t;
+            maxVals[i] = view.max(lo) * (1 - t) + view.max(hi) * t;
         }
     }
     return { maxVals, minVals };

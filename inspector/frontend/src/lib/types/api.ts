@@ -187,7 +187,6 @@ export interface SegConfigResponse {
     trim_pad_left: number;
     trim_pad_right: number;
     trim_dim_alpha: number;
-    show_boundary_phonemes: boolean;
     low_conf_default_threshold: number;
     validation_categories: string[];
     muqattaat_verses: Array<[number, number]>;
@@ -246,12 +245,6 @@ export interface SegAllResponse {
      *  SegDataResponse.reciter_vbr_chapters so global accordions can route
      *  cross-chapter playback before/independent of a chapter-data refresh. */
     reciter_vbr_chapters?: number[];
-    /** Segment UIDs that have a precomputed Auto Split entry in
-     *  ``<reciter>/auto_split_v1.json``. The FE checks membership before
-     *  flipping a row's button label from *Split* to *Auto Split*: when the
-     *  offline alignment failed for a seg, the entry is absent and the FE
-     *  falls back to plain manual single-cursor split UX. */
-    auto_split_uids?: string[];
     /** Legacy symmetric shim: ``(pad_left_ms + pad_right_ms) / 2``. Prefer the L/R fields. */
     pad_ms: number;
     pad_left_ms: number;
@@ -369,8 +362,6 @@ export interface SegValBoundaryAdjItem extends SegValItemBase {
     seg_index: number;
     ref: Ref;
     verse_key: VerseRef;
-    gt_tail?: string;
-    asr_tail?: string;
 }
 
 export interface SegValCrossVerseItem extends SegValItemBase {
@@ -448,6 +439,10 @@ export interface SegValidateResponse {
     muqattaat?: SegValMuqattaatItem[];
     qalqala?: SegValQalqalaItem[];
     basmala_amin?: SegValBasmalaAminItem[];
+    /** Precomputed split-group closures keyed by root uid. Lets accordion
+     *  cards expand to show the full split chain without subscribing to
+     *  the (lazily-fetched) edit-history store. */
+    split_group_index?: Record<string, string[]>;
     [k: string]: unknown;
 }
 
@@ -482,16 +477,23 @@ export interface SegEditHistoryResponse {
 // /api/seg/* — Segments tab (peaks)
 // ===========================================================================
 
-/** GET /api/seg/peaks/:reciter?chapters=1,2,3&cached_only=true */
+/** GET /api/seg/peaks/:reciter?chapters=1,2,3
+ *
+ * Returns slim-int8 chapter-overview peaks per audio URL:
+ * `{ peaks: { [url]: { q:'int8', n, peaks_b64, bps, duration_ms } } }`.
+ * `complete` is always true — the route has no background-compute path.
+ * See `docs/reference/inspector/peaks.md`. */
 export interface SegPeaksResponse {
     peaks: Record<string, AudioPeaks>;
     complete: boolean;
 }
 
-/** POST /api/seg/segment-peaks/:reciter */
+/** POST /api/seg/segment-peaks/:reciter
+ *
+ * Single-tier fallback for when chapter peaks aren't loaded: ffmpeg + HTTP
+ * Range decode per segment, returns HD float ``PeakBucket[]`` at 30 bps. */
 export interface SegSegmentPeaksRequest {
-    segments: Array<{ url: string; start_ms: number; end_ms: number; chapter?: number }>;
-    cached_only?: boolean;
+    segments: Array<{ url: string; start_ms: number; end_ms: number; chapter?: number; pad_ms?: number }>;
 }
 
 export interface SegSegmentPeaksResponse {

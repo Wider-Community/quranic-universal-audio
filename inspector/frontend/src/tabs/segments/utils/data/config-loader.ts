@@ -13,7 +13,6 @@ type SegConfigApiResponse = {
     trim_pad_left?: number;
     trim_pad_right?: number;
     trim_dim_alpha?: number;
-    show_boundary_phonemes?: boolean;
     validation_categories?: string[];
     low_conf_default_threshold?: number;
     muqattaat_verses?: Array<[number, number]>;
@@ -41,7 +40,6 @@ export async function loadSegConfig(): Promise<{ fontSize: string; wordSpacing: 
             standaloneRefs: cfg.standalone_refs ? new Set(cfg.standalone_refs.map(([s, a, w]) => `${s}:${a}:${w}`)) : null,
             standaloneWords: cfg.standalone_words ? new Set(cfg.standalone_words) : null,
             lcDefaultThreshold: cfg.low_conf_default_threshold ?? 80,
-            showBoundaryPhonemes: cfg.show_boundary_phonemes ?? true,
             accordionContext: cfg.accordion_context ?? null,
             trimPadLeft: cfg.trim_pad_left ?? 500,
             trimPadRight: cfg.trim_pad_right ?? 500,

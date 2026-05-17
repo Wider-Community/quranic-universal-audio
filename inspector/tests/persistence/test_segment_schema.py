@@ -36,11 +36,14 @@ def _slim_seg() -> dict:
 
 
 def _legacy_seg() -> dict:
-    """Pre-#5 bloated shape — what's on disk for existing reciters today.
+    """Pre-#5 bloated shape — what stale on-disk data or snapshots
+    embedded in legacy ``edit_history.jsonl`` may still contain.
 
-    Includes the fields Migration #5 drops: ``matched_text``,
-    ``phonemes_asr``, ``has_repeated_words``. Schema MUST parse this
-    cleanly via ``extra="allow"``.
+    ``matched_text`` + ``phonemes_asr`` were dropped in Migration #5 and
+    the schema now actively strips them on read (with a warning log) so
+    they can't sneak back into the typed surface. ``has_repeated_words``
+    is the tautology field — never modelled, tolerated via ``extra="allow"``
+    so unknown keys don't break parsing.
     """
     return {
         "time_start": 430,
@@ -88,18 +91,28 @@ def test_slim_seg_validates():
     assert m.time_start == 430
     assert m.matched_ref == "1:1:1-1:1:4"
     assert m.confidence == 1.0
-    assert m.matched_text is None
-    assert m.phonemes_asr is None
+    # matched_text and phonemes_asr were dropped in Migration #5 — the
+    # attributes no longer exist on the model.
+    assert not hasattr(m, "matched_text")
+    assert not hasattr(m, "phonemes_asr")
 
 
-def test_legacy_seg_validates_via_extra_allow():
-    """Bloated shape must parse — readers tolerate legacy fields."""
+def test_legacy_seg_strips_dead_fields_on_read(caplog):
+    """Legacy seg shape (pre-#5) must parse cleanly with every dead and
+    unknown field stripped by the pre-validator. ``model_extra`` should be
+    empty (extras handling = warn-then-strip, not silent-allow)."""
+    import logging
+    caplog.set_level(logging.INFO, logger="scripts.lib.schemas._extras")
     m = DetailedSegment.model_validate(_legacy_seg())
-    assert m.matched_text == "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيم"
-    assert m.phonemes_asr is not None
-    # has_repeated_words is the tautology field — tolerated via extra="allow"
-    # but not in the model schema. It should round-trip via model_extra.
-    assert "has_repeated_words" in (m.model_extra or {})
+    # Dead fields are gone — neither typed attributes nor extras.
+    assert not hasattr(m, "matched_text")
+    assert not hasattr(m, "phonemes_asr")
+    assert not hasattr(m, "has_repeated_words")
+    assert (m.model_extra or {}) == {}
+    # And the pre-validator logged the strip at INFO level (legacy class).
+    msgs = " ".join(r.getMessage() for r in caplog.records)
+    assert "matched_text" in msgs and "phonemes_asr" in msgs
+    assert "has_repeated_words" in msgs
 
 
 def test_failed_alignment_seg_validates():
@@ -163,21 +176,16 @@ def test_slim_seg_emits_slim_shape():
         assert banned not in out, f"{banned} leaked into slim emission"
 
 
-def test_legacy_seg_re_emits_with_legacy_fields_via_extra():
-    """When the writer round-trips a legacy seg, the legacy fields
-    should propagate so we don't accidentally lose data. The Migration #5
-    one-shot migration script strips them deliberately; transparent
-    round-trip preserves them."""
+def test_dead_fields_dont_round_trip():
+    """Round-tripping a legacy seg through the schema strips every dead +
+    unknown field — they all get warn-then-stripped by the pre-validator
+    so emitted JSON is clean."""
     seg = _legacy_seg()
     m = DetailedSegment.model_validate(seg)
     out = m.model_dump(exclude_none=True)
 
-    # matched_text is a declared optional field — present in input, so
-    # present in output (exclude_none lets non-None values through).
-    assert out["matched_text"] == seg["matched_text"]
-    # has_repeated_words came in via extra="allow" — round-trips through
-    # model_extra.
-    assert (m.model_extra or {}).get("has_repeated_words") is False
+    for banned in ("matched_text", "phonemes_asr", "has_repeated_words"):
+        assert banned not in out, f"{banned} leaked into emitted seg"
 
 
 def test_parse_detailed_segment_helper():
@@ -213,8 +221,11 @@ def test_detailed_document_with_alias_meta():
     assert "_meta" in out and "meta" not in out
 
 
-def test_entry_with_legacy_audio_field():
-    """``entry.audio`` is being dropped in Migration #5; tolerance check."""
+def test_entry_with_legacy_audio_field(caplog):
+    """``entry.audio`` was dropped in Migration #5 — the pre-validator
+    strips it on read with an INFO log; readers must not see it."""
+    import logging
+    caplog.set_level(logging.INFO, logger="scripts.lib.schemas._extras")
     raw = {
         "_meta": {},
         "entries": [
@@ -226,10 +237,11 @@ def test_entry_with_legacy_audio_field():
         ],
     }
     doc = DetailedDocument.model_validate(raw)
-    # entry.audio survives via extra="allow"; new code shouldn't depend
-    # on it but legacy on-disk data still has it.
     entry = doc.entries[0]
-    assert (entry.model_extra or {}).get("audio") is not None
+    assert (entry.model_extra or {}) == {}
+    assert not hasattr(entry, "audio")
+    msgs = " ".join(r.getMessage() for r in caplog.records)
+    assert "audio" in msgs  # stripped + logged
 
 
 # -- Real on-disk sample (optional; runs if a fixture is available) ----

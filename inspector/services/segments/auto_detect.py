@@ -37,7 +37,6 @@ import time
 
 from scripts.lib.schemas import Actor, ReciterState, Role
 
-from services.audio.peaks_backfill import backfill_pipeline_peaks
 from services.state import state as state_service
 from services.storage.hf_bucket import get_backend
 
@@ -100,18 +99,6 @@ def hydrate_initial_seen() -> None:
         "transition(s) fired)", len(slugs), fired,
     )
 
-    # Peaks backfill — idempotent. Runs for EVERY wip slug (not only the
-    # ones we just transitioned) so slugs that arrived before this code
-    # shipped also get their pipeline-op peaks. One failure does not block
-    # the others, and never blocks boot.
-    for slug in slugs:
-        try:
-            backfill_pipeline_peaks(slug)
-        except Exception:  # noqa: BLE001
-            logger.exception(
-                "auto_detect: peaks backfill failed for slug=%s", slug,
-            )
-
 
 def reconcile_once() -> int:
     """Single reconcile pass. Returns the number of transitions fired.
@@ -156,15 +143,6 @@ def reconcile_once() -> int:
         logger.info(
             "auto_detect: fired alignment_completed for %d slug(s)", fired,
         )
-    # Peaks backfill for the slugs we just transitioned — idempotent, won't
-    # block the reconcile loop on a per-slug failure.
-    for slug in transitioned:
-        try:
-            backfill_pipeline_peaks(slug)
-        except Exception:  # noqa: BLE001
-            logger.exception(
-                "auto_detect: peaks backfill failed for slug=%s", slug,
-            )
     return fired
 
 

@@ -41,8 +41,6 @@ def test_can_ignore_drives_save_serialization(category):
         "time_start": 0,
         "time_end": 1000,
         "matched_ref": "1:1:1-1:1:1",
-        "matched_text": "x",
-        "phonemes_asr": "",
         "confidence": 1.0,
         "segment_uid": "test-uid",
         "ignored_categories": [category],

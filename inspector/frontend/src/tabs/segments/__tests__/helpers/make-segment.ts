@@ -12,7 +12,6 @@ export interface FixtureSegment {
   time_end: number;
   matched_ref: string;
   matched_text: string;
-  phonemes_asr: string;
   confidence: number;
   ignored_categories?: string[];
   wrap_word_ranges?: number[][];
@@ -33,7 +32,6 @@ export function makeSegment(
     time_end: endMs,
     matched_ref: '1:1:1-1:1:1',
     matched_text: 'x',
-    phonemes_asr: '',
     confidence: 1.0,
     ...overrides,
   };

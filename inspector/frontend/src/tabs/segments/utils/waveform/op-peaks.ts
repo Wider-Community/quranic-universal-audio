@@ -70,18 +70,40 @@ function _coveringRangeForOp(op: OpLike): { url: string; startMs: number; endMs:
 
 /** Slice the chapter-wide peaks array down to a [start, end] sub-range and
  *  emit it as a self-contained covering record (peaks shaped like a segment
- *  peaks blob, indexable directly by the covering-range cache). */
+ *  peaks blob, indexable directly by the covering-range cache).
+ *
+ *  Both shapes are accepted: legacy ``PeakBucket[]`` and the drawer-int8
+ *  ``Int8Array(2N)``. The output is always ``PeakBucket[]`` because the
+ *  on-bucket history JSONL (``edit_history_peaks.jsonl``) is float-list
+ *  shaped — converting the Int8Array slice to nested floats here is the
+ *  boundary. Persistence-format migration is a separate proposal. */
 function _sliceFromChapterPeaks(
-    fullPeaks: PeakBucket[],
+    fullPeaks: PeakBucket[] | Int8Array,
     fullDurationMs: number,
     startMs: number,
     endMs: number,
 ): { peaks: PeakBucket[]; startMs: number; endMs: number; durationMs: number } | null {
-    if (!fullPeaks.length || fullDurationMs <= 0) return null;
-    const pps = fullPeaks.length / fullDurationMs;
+    const fullLen = fullPeaks instanceof Int8Array ? fullPeaks.length >> 1 : fullPeaks.length;
+    if (fullLen === 0 || fullDurationMs <= 0) return null;
+    const pps = fullLen / fullDurationMs;
     const startIdx = Math.max(0, Math.floor(startMs * pps));
-    const endIdx = Math.min(fullPeaks.length, Math.ceil(endMs * pps));
+    const endIdx = Math.min(fullLen, Math.ceil(endMs * pps));
     if (endIdx <= startIdx) return null;
+    // Materialize as PeakBucket[]: the int8 slice gets dequantized once
+    // here so the persisted JSONL stays in the legacy float-list shape.
+    const sliceLen = endIdx - startIdx;
+    const out: PeakBucket[] = new Array(sliceLen);
+    if (fullPeaks instanceof Int8Array) {
+        for (let i = 0; i < sliceLen; i++) {
+            const base = (startIdx + i) * 2;
+            out[i] = [(fullPeaks[base] ?? 0) / 127, (fullPeaks[base + 1] ?? 0) / 127];
+        }
+    } else {
+        for (let i = 0; i < sliceLen; i++) {
+            const bk = fullPeaks[startIdx + i];
+            out[i] = [bk?.[0] ?? 0, bk?.[1] ?? 0];
+        }
+    }
     // Report the slice's ACTUAL time span (not the requested window).
     // Renderers compute peaks-per-ms from these fields; if they reflect
     // the requested window when the slice is actually wider, pps comes
@@ -91,7 +113,7 @@ function _sliceFromChapterPeaks(
     const actualStartMs = startIdx / pps;
     const actualEndMs = endIdx / pps;
     return {
-        peaks: fullPeaks.slice(startIdx, endIdx),
+        peaks: out,
         startMs: actualStartMs,
         endMs: actualEndMs,
         durationMs: actualEndMs - actualStartMs,

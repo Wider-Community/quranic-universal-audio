@@ -109,6 +109,17 @@ def auto_split_path(slug: str, kind: WipOrPublished) -> str:
     return reciter_file(slug, kind, "auto_split_v1.json")
 
 
+def pipeline_meta_path(slug: str, kind: WipOrPublished) -> str:
+    """Per-reciter immutable extraction-time facts.
+
+    Schema: ``scripts/lib/schemas/pipeline_meta.py::PipelineMeta``. Written
+    once by extraction (or the backfill script for legacy reciters); read
+    by ``services/storage/data_loader.load_pipeline_meta``. Immutable
+    post-extraction — never invalidated by save.
+    """
+    return reciter_file(slug, kind, "pipeline_meta.json")
+
+
 def published_timestamps_path(slug: str, chapter: str | int) -> str:
     """Timestamps live only under ``published/<slug>/timestamps/`` — not wip."""
     return f"published/{slug}/timestamps/{chapter}.json"
@@ -182,4 +193,5 @@ PER_RECITER_FILES: tuple[str, ...] = (
     "edit_history_peaks.jsonl",
     "low_confidence_v2.json",
     "auto_split_v1.json",
+    "pipeline_meta.json",
 )

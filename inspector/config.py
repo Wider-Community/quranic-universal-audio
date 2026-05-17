@@ -16,16 +16,11 @@ SURAH_INFO_PATH = DATA_DIR / "surah_info.json"
 # ``data_dir`` (bucket-resolved).
 RECITATION_SEGMENTS_PATH = DATA_DIR / "recitation_segments"
 
-# Optional sibling-project linguistic data (qpc_hafs, digital_khatt, phoneme_sub_costs).
-# Each consumer in services/ gracefully degrades to an empty set/dict if the file is
-# missing, so these paths are advisory rather than required. Override the base dir via
-# INSPECTOR_QUA_DATA_PATH for standalone / Docker deployments.
+# Bundled linguistic data (qpc_hafs, digital_khatt, phoneme_sub_costs) lives in
+# the repo's ``data/`` dir alongside ``surah_info.json``. Override the base dir
+# via INSPECTOR_QUA_DATA_PATH for standalone / Docker deployments.
 _QUA_DATA_OVERRIDE = os.getenv("INSPECTOR_QUA_DATA_PATH")
-_QUA_DATA = (
-    Path(_QUA_DATA_OVERRIDE)
-    if _QUA_DATA_OVERRIDE
-    else _REPO / ".local" / "spaces" / "quranic_universal_aligner" / "data"
-)
+_QUA_DATA = Path(_QUA_DATA_OVERRIDE) if _QUA_DATA_OVERRIDE else DATA_DIR
 QPC_HAFS_PATH = _QUA_DATA / "qpc_hafs.json"
 DK_SCRIPT_PATH = _QUA_DATA / "digital_khatt_v2_script.json"
 PHONEME_SUB_COSTS_PATH = _QUA_DATA / "phoneme_sub_costs.json"
@@ -69,10 +64,6 @@ SEG_SCROLL_ANIM_MODE = "hybrid"
 TRIM_PAD_LEFT = 15000                     # ms padding before segment
 TRIM_PAD_RIGHT = 15000                    # ms padding after segment
 TRIM_DIM_ALPHA = 0.4                      # dimming opacity for padded regions
-
-# Boundary adjustment: phoneme tail mismatch detection
-BOUNDARY_TAIL_K = 3                        # number of trailing phonemes to compare
-SHOW_BOUNDARY_PHONEMES = False             # show GT/ASR tail phonemes on boundary_adj cards
 
 # Accordion context: which validation categories auto-expand context cards
 # Values: "shown" (default open), "hidden" (default closed), "next_only" (open on nav)
@@ -158,9 +149,6 @@ MISSING_WORD_DIFF_MS_WEIGHT = 1000
 WORDS_PER_SEG_HIST_MAX = 15            # upper bound for words-per-segment histogram
 SEGS_PER_VERSE_HIST_MAX = 8            # upper bound for segs-per-verse histogram
 CONF_HIST_BIN_SIZE = 5                 # bin width (percentage points) for confidence histogram
-
-# Boundary display: how many extra phonemes beyond BOUNDARY_TAIL_K to show in detail cards
-BOUNDARY_TAIL_DISPLAY_EXTRA = 2        # display_n = BOUNDARY_TAIL_K + BOUNDARY_TAIL_DISPLAY_EXTRA
 
 # Auto-split (services/auto_split.py): MFA Space + timeout. Cross-verse
 # accordion's "Auto Split" routes here to compute the verse-boundary split

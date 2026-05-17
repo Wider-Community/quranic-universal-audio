@@ -55,9 +55,7 @@ def test_save_round_trips_through_adapters(tmp_reciter_dir, signed_in_client, lo
             "time_start": s["time_start"],
             "time_end": s["time_end"],
             "matched_ref": s["matched_ref"],
-            "matched_text": s["matched_text"],
             "confidence": s["confidence"],
-            "phonemes_asr": s.get("phonemes_asr", ""),
             "segment_uid": s["segment_uid"],
         }
         for s in fixture["entries"][0]["segments"]
@@ -111,8 +109,8 @@ def test_uid_backfilled_for_legacy_fixture(tmp_reciter_dir):
                 "ref": "112",
                 "audio": "https://fixture.local/audio/112.mp3",
                 "segments": [
-                    {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "matched_text": "x", "confidence": 1.0},
-                    {"time_start": 3000, "time_end": 4000, "matched_ref": "112:1:2-112:1:2", "matched_text": "y", "confidence": 1.0},
+                    {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "confidence": 1.0},
+                    {"time_start": 3000, "time_end": 4000, "matched_ref": "112:1:2-112:1:2", "confidence": 1.0},
                 ],
             }
         ],
@@ -148,9 +146,7 @@ def test_uid_stable_across_load_save_load(tmp_reciter_dir, signed_in_client, loa
             "time_start": s["time_start"],
             "time_end": s["time_end"],
             "matched_ref": s["matched_ref"],
-            "matched_text": s["matched_text"],
             "confidence": s["confidence"],
-            "phonemes_asr": s.get("phonemes_asr", ""),
             # NOTE: no segment_uid — Phase 4 backend must backfill from existing
         }
         for s in fixture["entries"][0]["segments"]
@@ -182,7 +178,7 @@ def test_uid_persisted_on_next_save(tmp_reciter_dir, signed_in_client):
                 "ref": "112",
                 "audio": "https://fixture.local/audio/112.mp3",
                 "segments": [
-                    {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "matched_text": "x", "confidence": 1.0},
+                    {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "confidence": 1.0},
                 ],
             }
         ],
@@ -194,7 +190,7 @@ def test_uid_persisted_on_next_save(tmp_reciter_dir, signed_in_client):
     res = client.post(
         f"/api/seg/save/{reciter}/112",
         data=json.dumps({"full_replace": True, "segments": [
-            {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "matched_text": "x", "confidence": 1.0, "phonemes_asr": ""},
+            {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "confidence": 1.0},
         ], "operations": []}),
         headers=_HEADERS,
     )
@@ -217,7 +213,7 @@ def test_uid_deterministic_across_processes(tmp_path):
                 "ref": "112",
                 "audio": "https://fixture.local/audio/112.mp3",
                 "segments": [
-                    {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "matched_text": "x", "confidence": 1.0},
+                    {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "confidence": 1.0},
                 ],
             }
         ],

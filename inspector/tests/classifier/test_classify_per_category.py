@@ -49,8 +49,6 @@ def test_low_confidence_threshold_is_0_80():
     """Segments with confidence ∈ [0.79, 0.81] flip on/off correctly around 0.80."""
     base = {
         "matched_ref": "1:1:1-1:1:1",
-        "matched_text": "x",
-        "phonemes_asr": "",
     }
     below = _classify({**base, "confidence": 0.79}, entry_ref="1", is_by_ayah=False)
     on_threshold = _classify({**base, "confidence": 0.80}, entry_ref="1", is_by_ayah=False)
@@ -65,8 +63,6 @@ def test_low_confidence_detail_threshold_is_1_00():
     """Segments with confidence < 1.00 fall in the detail tier; confidence == 1.00 do not."""
     base = {
         "matched_ref": "1:1:1-1:1:1",
-        "matched_text": "x",
-        "phonemes_asr": "",
     }
     just_below = _classify(
         {**base, "confidence": 0.999}, entry_ref="1", is_by_ayah=False, detail=True
@@ -83,8 +79,6 @@ def test_audio_bleeding_uses_seg_belongs_to_entry():
     """Fixture segment with entry_ref 1:1 + matched_ref 1:2:1 flips audio_bleeding=true."""
     seg = {
         "matched_ref": "1:2:1-1:2:1",
-        "matched_text": "x",
-        "phonemes_asr": "",
         "confidence": 1.0,
     }
     result = _classify(seg, entry_ref="1:1", is_by_ayah=True)
@@ -95,8 +89,6 @@ def test_repetitions_only_wrap_word_ranges():
     """Segment with has_repeated_words=true but no wrap_word_ranges does NOT classify as repetitions (tie-breaker B-1)."""
     seg = {
         "matched_ref": "1:1:1-1:1:1",
-        "matched_text": "x",
-        "phonemes_asr": "",
         "confidence": 1.0,
         "has_repeated_words": True,
     }
@@ -114,8 +106,6 @@ def test_boundary_adj_phoneme_tail_optional():
     """Segment qualifying for boundary_adj: with canonical phonemes provided, tail-mismatch may flip."""
     seg = {
         "matched_ref": "1:6:1-1:6:1",
-        "matched_text": "x",
-        "phonemes_asr": "a b c",
         "confidence": 1.0,
     }
     plain = _classify(seg, entry_ref="1", is_by_ayah=False, canonical=None)
@@ -128,8 +118,6 @@ def test_qalqala_letter_field_populated():
 
     seg = {
         "matched_ref": "112:1:1-112:1:4",
-        "matched_text": "أَحَدٌ",
-        "phonemes_asr": "",
         "confidence": 1.0,
     }
     result = classify_segment_full(seg, entry_ref="112", is_by_ayah=False)
@@ -140,8 +128,6 @@ def test_qalqala_letter_field_populated():
 def test_muqattaat_only_first_word_of_verse():
     """A muqattaat verse with s_word=2 does NOT classify; s_word=1 does."""
     base_seg = {
-        "matched_text": "x",
-        "phonemes_asr": "",
         "confidence": 1.0,
     }
     word1 = dict(base_seg, matched_ref="2:1:1-2:1:1")
@@ -164,8 +150,6 @@ def test_basmala_amin_detail_uses_last_segment_overlapping_1_7():
             {
                 "segment_uid": "one-one",
                 "matched_ref": "1:1:1-1:1:1",
-                "matched_text": "x",
-                "phonemes_asr": "",
                 "confidence": 1.0,
                 "time_start": 0,
                 "time_end": 1000,
@@ -173,8 +157,6 @@ def test_basmala_amin_detail_uses_last_segment_overlapping_1_7():
             {
                 "segment_uid": "one-seven-a",
                 "matched_ref": "1:7:1-1:7:2",
-                "matched_text": "x",
-                "phonemes_asr": "",
                 "confidence": 1.0,
                 "time_start": 1000,
                 "time_end": 2000,
@@ -182,8 +164,6 @@ def test_basmala_amin_detail_uses_last_segment_overlapping_1_7():
             {
                 "segment_uid": "one-seven-b",
                 "matched_ref": "1:7:3-1:7:4",
-                "matched_text": "x",
-                "phonemes_asr": "",
                 "confidence": 1.0,
                 "time_start": 2000,
                 "time_end": 3000,
@@ -215,8 +195,6 @@ def test_basmala_amin_detail_omits_neighboring_fatiha_verses():
             {
                 "segment_uid": f"one-{ayah}",
                 "matched_ref": f"1:{ayah}:1-1:{ayah}:1",
-                "matched_text": "x",
-                "phonemes_asr": "",
                 "confidence": 1.0,
                 "time_start": ayah * 1000,
                 "time_end": (ayah + 1) * 1000,
@@ -257,9 +235,9 @@ def test_missing_words_includes_forward_jump_even_when_words_are_covered_later()
     entries = [{
         "ref": "1",
         "segments": [
-            {"matched_ref": "1:1:1-1:1:10", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:1:5-1:1:7", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:1:11-1:1:15", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:1-1:1:10", "confidence": 1.0},
+            {"matched_ref": "1:1:5-1:1:7", "confidence": 1.0},
+            {"matched_ref": "1:1:11-1:1:15", "confidence": 1.0},
         ],
     }]
 
@@ -281,8 +259,8 @@ def test_missing_words_includes_whole_verse_forward_jump():
     entries = [{
         "ref": "1",
         "segments": [
-            {"matched_ref": "1:1:1-1:1:4", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:3:1-1:3:4", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:1-1:1:4", "confidence": 1.0},
+            {"matched_ref": "1:3:1-1:3:4", "confidence": 1.0},
         ],
     }]
 
@@ -300,9 +278,9 @@ def test_missing_words_allows_backward_repetition_without_forward_skip():
     entries = [{
         "ref": "1",
         "segments": [
-            {"matched_ref": "1:1:1-1:1:5", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:1:1-1:1:5", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:1:6-1:1:10", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:1-1:1:5", "confidence": 1.0},
+            {"matched_ref": "1:1:1-1:1:5", "confidence": 1.0},
+            {"matched_ref": "1:1:6-1:1:10", "confidence": 1.0},
         ],
     }]
 
@@ -314,8 +292,8 @@ def test_missing_words_dedupes_coverage_and_sequence_gap_for_same_range():
     entries = [{
         "ref": "1",
         "segments": [
-            {"matched_ref": "1:1:1-1:1:1", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:1:5-1:1:7", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:1-1:1:1", "confidence": 1.0},
+            {"matched_ref": "1:1:5-1:1:7", "confidence": 1.0},
         ],
     }]
 
@@ -332,11 +310,11 @@ def test_missing_words_splits_cross_verse_partial_forward_jump():
     entries = [{
         "ref": "1",
         "segments": [
-            {"matched_ref": "1:1:1-1:1:2", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:3:3-1:3:4", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:1:3-1:1:4", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:2:1-1:2:3", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:3:1-1:3:2", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:1-1:1:2", "confidence": 1.0},
+            {"matched_ref": "1:3:3-1:3:4", "confidence": 1.0},
+            {"matched_ref": "1:1:3-1:1:4", "confidence": 1.0},
+            {"matched_ref": "1:2:1-1:2:3", "confidence": 1.0},
+            {"matched_ref": "1:3:1-1:3:2", "confidence": 1.0},
         ],
     }]
 
@@ -374,40 +352,14 @@ def test_missing_words_splits_cross_verse_partial_forward_jump():
     ]
 
 
-def test_chapter_validation_counts_uses_sequence_gap_missing_words():
-    """Summary/history counts use the same Missing Words path as the accordion."""
-    from services.validation import chapter_validation_counts  # type: ignore
-    from services.data_loader import get_word_counts  # type: ignore
-
-    entries = [{
-        "ref": "1",
-        "segments": [
-            {"matched_ref": "1:1:1-1:1:10", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:1:5-1:1:7", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:1:11-1:1:15", "matched_text": "x", "confidence": 1.0},
-        ],
-    }]
-    word_counts = get_word_counts()
-    original = word_counts.copy()
-    word_counts.clear()
-    word_counts[(1, 1)] = 15
-    try:
-        counts = chapter_validation_counts(entries, 1, {})
-    finally:
-        word_counts.clear()
-        word_counts.update(original)
-
-    assert counts["missing_words"] == 1
-
-
 def test_missing_words_orders_sequence_gaps_by_quran_position():
     entries = [{
         "ref": "1",
         "segments": [
-            {"matched_ref": "1:1:1-1:1:1", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:3:2-1:3:2", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:2:1-1:2:1", "matched_text": "x", "confidence": 1.0},
-            {"matched_ref": "1:3:1-1:3:1", "matched_text": "x", "confidence": 1.0},
+            {"matched_ref": "1:1:1-1:1:1", "confidence": 1.0},
+            {"matched_ref": "1:3:2-1:3:2", "confidence": 1.0},
+            {"matched_ref": "1:2:1-1:2:1", "confidence": 1.0},
+            {"matched_ref": "1:3:1-1:3:1", "confidence": 1.0},
         ],
     }]
 

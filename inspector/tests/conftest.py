@@ -232,11 +232,29 @@ _SEG_CACHE_NAMES = (
     "_seg",
     "_seg_meta",
     "_seg_verses",
+    "_seg_resolved_by_edit",
+    "_seg_probe_v2",
+    "_seg_auto_split",
+    "_seg_pipeline_meta",
+    "_seg_history_batches",
+    "_seg_split_group_index",
+    "_seg_edit_history",
+    "_seg_history_peaks",
+    "_seg_validate_result",
+    "_seg_stats_result",
 )
 
 
 def _invalidate_seg_caches(reciter: str | None = None):
-    """Invalidate the segment-related caches that may pin pre-redirect data."""
+    """Invalidate every per-reciter segment cache so a previous test's slug
+    can't leak parsed JSONL / derived indices into the next test.
+
+    The new edit-history-derived caches (``_seg_history_batches``,
+    ``_seg_split_group_index``) are NOT touched by the production save/undo
+    invalidation (they're append-on-save by design) — but in tests we want
+    full eviction between cases because tests reuse the ``fixture_reciter``
+    slug across distinct ``tmp_path``s.
+    """
     try:
         from services import cache as _cache
     except Exception:
@@ -357,6 +375,23 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
                     _storage_paths.edit_history_path(reciter, "wip"),
                     f.read(),
                 )
+
+        # pipeline_meta.json is required for validate (the basmala_amin rule
+        # reads ``deleted_basmala_chapters`` from this sidecar — see
+        # services/validation/__init__.py::_read_deleted_basmala_chapters).
+        # Fixtures don't ship a pipeline_meta; seed an empty one so tests
+        # exercise the post-migration code path without hitting hard-fail.
+        from scripts.lib.schemas import PipelineMeta
+        pipeline_meta_doc = PipelineMeta(
+            schema_version=1,
+            generated_at=datetime.now(timezone.utc)
+                .isoformat(timespec="seconds").replace("+00:00", "Z"),
+            deleted_basmala_chapters=[],
+        ).model_dump(mode="json")
+        backend.write_json_atomic(
+            _storage_paths.pipeline_meta_path(reciter, "wip"),
+            pipeline_meta_doc,
+        )
 
         # Build a matching segments.json so consumers that read both files
         # see a consistent on-disk state for the fixture.

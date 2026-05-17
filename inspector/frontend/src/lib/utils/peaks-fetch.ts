@@ -14,14 +14,16 @@ import { fetchJson } from '../api';
 import type { SegSegmentPeaksRequest, SegSegmentPeaksResponse } from '../types/api';
 import type { SegmentPeaks } from '../types/domain';
 
-export interface FetchSegmentPeaksOptions {
-    /** When true, server returns null instead of computing on a cache miss. */
-    cachedOnly?: boolean;
-}
-
 /**
- * Fetch peaks for a single audio slice. Returns the slice peaks, or null if
- * the backend declined (e.g. cached_only miss, ffmpeg failure, empty range).
+ * Fetch peaks for a single audio slice via the ffmpeg + HTTP-Range fallback
+ * endpoint (``/api/seg/segment-peaks/<reciter>``). This is the single fallback
+ * tier when chapter-overview peaks aren't available — chapter peaks load via
+ * ``_fetchPeaks`` (slim int8 envelope) and FE slices them locally; this
+ * helper only fires when there's no chapter peaks to slice.
+ *
+ * Returns the slice peaks (nested float ``PeakBucket[]`` at HD 30 bps), or
+ * null if the backend couldn't produce them (ffmpeg failure, empty range,
+ * unknown URL).
  */
 export async function fetchSegmentPeaks(
     reciter: string,
@@ -29,12 +31,10 @@ export async function fetchSegmentPeaks(
     startMs: number,
     endMs: number,
     chapter?: number,
-    opts: FetchSegmentPeaksOptions = {},
 ): Promise<SegmentPeaks | null> {
     if (!reciter || !url || endMs <= startMs) return null;
     const body: SegSegmentPeaksRequest = {
         segments: [{ url, start_ms: startMs, end_ms: endMs, chapter }],
-        cached_only: opts.cachedOnly ?? false,
     };
     const data = await fetchJson<SegSegmentPeaksResponse>(
         `/api/seg/segment-peaks/${reciter}`,

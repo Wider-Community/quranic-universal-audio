@@ -81,10 +81,10 @@ export function createOp(opType: string, { contextCategory = null, fixKind = 'ma
 }
 
 export function snapshotSeg(seg: Segment): SegSnapshot {
-    // matched_text is derivable from matched_ref + dk_words server-side
-    // (see services/quran_refs.py::dk_text_for_ref). Dropping it from new
-    // snapshots saves ~200-600 B per snapshot; legacy records on disk still
-    // carry it and pass through unchanged via apply_inverse_patch hydration.
+    // Migration #5: matched_text + phonemes_asr are no longer carried on
+    // snapshots — matched_text is derivable from matched_ref via
+    // dk_text_for_ref; phonemes_asr was retired entirely and the schema
+    // pre-validator strips it on read.
     const snap: SegSnapshot = {
         segment_uid: seg.segment_uid || null,
         index_at_save: seg.index,
@@ -98,7 +98,6 @@ export function snapshotSeg(seg: Segment): SegSnapshot {
     // `Boolean(wrap_word_ranges)` — the classifier ignores it (only
     // wrap_word_ranges drives the repetitions category). Dropped.
     if (seg.wrap_word_ranges) snap.wrap_word_ranges = seg.wrap_word_ranges;
-    if (seg.phonemes_asr) snap.phonemes_asr = seg.phonemes_asr;
     if (seg.entry_ref) snap.entry_ref = seg.entry_ref;
     if (seg.chapter != null) snap.chapter = seg.chapter;
     if (seg.ignored_categories?.length) snap.ignored_categories = [...seg.ignored_categories];

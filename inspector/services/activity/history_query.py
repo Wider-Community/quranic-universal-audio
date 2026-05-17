@@ -11,7 +11,6 @@ import threading
 
 from config import RECITATION_SEGMENTS_PATH as _DEFAULT_RECITATION_SEGMENTS_PATH
 from services.storage import cache, data_dir
-from utils.references import chapter_from_ref
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +48,17 @@ def _history_lock(reciter: str) -> threading.Lock:
 def parse_history_for_reciter(reciter: str) -> list[dict]:
     """Read every batch record from a reciter's edit_history.jsonl.
 
-    Shared by undo.py (which needs raw records for batch lookup) and
-    load_edit_history (which applies further filtering for the UI).
+    Cache-aware on the production path: subsequent calls in the same process
+    return the cached parsed list without re-touching disk. Save appends to
+    the cached list (no re-parse); undo also appends a revert batch.
+
+    The legacy test seam (``RECITATION_SEGMENTS_PATH`` monkeypatched away
+    from the default) bypasses the cache entirely so tests can rewrite the
+    underlying JSONL between calls without manual cache invalidation.
+
+    Shared by undo.py (which needs raw records for batch lookup),
+    load_edit_history (which applies further filtering for the UI), and
+    build_split_group_index / build_resolved_by_edit_index (derived indices).
     Returns an empty list when the file is absent.
     """
     if RECITATION_SEGMENTS_PATH != _DEFAULT_RECITATION_SEGMENTS_PATH:
@@ -66,87 +74,20 @@ def parse_history_for_reciter(reciter: str) -> list[dict]:
                 if line:
                     out.append(orjson.loads(line))
         return out
-    return list(data_dir.iter_edit_history(reciter))
+    cached = cache.get_seg_history_batches(reciter)
+    if cached is not None:
+        return cached
+    batches = list(data_dir.iter_edit_history(reciter))
+    cache.set_seg_history_batches(reciter, batches)
+    return batches
 
 
-_CHAPTER_TIME_RESET_TOLERANCE_MS = 500
-
-
-def recover_strip_specials_chapter_per_op(batch: dict) -> dict[str, int]:
-    """Per-op chapter recovery for a legacy ``strip_specials`` batch.
-
-    Use case: snapshots written by the extraction pipeline prior to the
-    chapter-stamping fix have ``chapter: null`` on every op, but the batch
-    still carries ``chapters: [...]`` (the union of every chapter the
-    post-pass touched). We can recover per-op chapter by exploiting two
-    pipeline invariants:
-
-    1. ``strip_special_segments`` iterates entries in detailed.json order
-       (which is surah order for by-surah reciters), then iterates each
-       entry's segs in time order. So within one chapter's contributions
-       the op timestamps are monotonically increasing, and between
-       chapters time resets toward zero (each chapter's audio is a
-       separate per-chapter MP3, time-local).
-    2. ``batch.chapters`` is sorted by the writer.
-
-    Algorithm: walk ops; whenever ``op.time_start`` drops well below the
-    previous op's ``time_end``, that's a chapter boundary. Group ops by
-    those boundaries; pair group N with ``sorted(chapters)[N]``.
-
-    Returns ``{op_id: chapter}`` for every resolvable op. Returns ``{}``
-    when:
-      - batch isn't ``strip_specials`` (waqf_sakt is single-chapter via
-        ``batch.chapter``);
-      - the batch has no ``chapters`` list;
-      - group count ≠ chapter count (heuristic disagrees — refuse to
-        guess; the caller falls back to its own resolution path).
-
-    Validated on legacy Husary data: 117 ops + 112 batch.chapters yields
-    112 groups → exact 1:1 mapping.
-    """
-    if batch.get("batch_type") != "strip_specials":
-        return {}
-    chapters = sorted(
-        c for c in (batch.get("chapters") or []) if isinstance(c, int) and c > 0
-    )
-    if not chapters:
-        return {}
-
-    ops = batch.get("operations") or []
-    groups: list[list[dict]] = []
-    current: list[dict] = []
-    prev_end = -1
-    for op in ops:
-        snap = (op.get("targets_before") or [{}])[0]
-        if not isinstance(snap, dict):
-            continue
-        t0 = snap.get("time_start")
-        t1 = snap.get("time_end")
-        if not isinstance(t0, (int, float)) or not isinstance(t1, (int, float)):
-            continue
-        if current and t0 < prev_end - _CHAPTER_TIME_RESET_TOLERANCE_MS:
-            groups.append(current)
-            current = []
-        current.append(op)
-        prev_end = t1
-    if current:
-        groups.append(current)
-
-    if len(groups) != len(chapters):
-        logger.warning(
-            "recover_strip_specials_chapter_per_op: heuristic group count "
-            "%d ≠ batch.chapters count %d for batch %s; aborting recovery",
-            len(groups), len(chapters), batch.get("batch_id"),
-        )
-        return {}
-
-    out: dict[str, int] = {}
-    for group, ch in zip(groups, chapters):
-        for op in group:
-            op_id = op.get("op_id")
-            if isinstance(op_id, str):
-                out[op_id] = ch
-    return out
+# ``recover_strip_specials_chapter_per_op`` (heuristic chapter recovery for
+# legacy strip_specials batches without snapshot ``chapter`` stamps) was
+# removed when Migration #5 made the stamp mandatory at extraction time.
+# If you're hitting "chapter is null" issues, the data pre-dates Migration #5
+# — fix the source by running ``.local/extraction/scripts/migrate_wip5_in_place.py``
+# on the slug or by re-extracting. Don't reintroduce the heuristic.
 
 
 def _merge_batches_sharing_batch_id(batches: list[dict]) -> list[dict]:
@@ -271,27 +212,14 @@ def _enrich_snapshot_audio_urls(reciter: str, batches: list[dict]) -> None:
         ch = snap.get("chapter")
         if isinstance(ch, int) and ch > 0:
             return ch
-        ref = snap.get("matched_ref", "")
-        if isinstance(ref, str) and ref and ":" in ref:
-            ch = chapter_from_ref(ref)
-            if ch:
-                return ch
-        bch = batch.get("chapter")
-        if isinstance(bch, int) and bch > 0:
-            return bch
-        bchs = batch.get("chapters") or []
-        if len(bchs) == 1 and isinstance(bchs[0], int):
-            return bchs[0]
-        # Last resort: strip_specials per-op chapter recovery via the
-        # time-reset heuristic. Caller passes the recovered map so we
-        # compute it once per batch, not per snapshot.
-        if op_id and op_id in recovered:
-            return recovered[op_id]
+        # Migration #5 contract: every snap carries ``chapter``. The
+        # tier-2/3/4 legacy fallbacks (matched_ref parse, batch.chapter,
+        # single-chapter batch.chapters, time-reset recovery) were
+        # removed. Returning None when the stamp is missing pushes the
+        # data fix back to extraction / migrate_wip5_in_place.
         return None
 
     for batch in batches:
-        # Compute strip-specials per-op chapter recovery once per batch.
-        recovered = recover_strip_specials_chapter_per_op(batch)
         for op in batch.get("operations") or []:
             op_id = op.get("op_id") if isinstance(op.get("op_id"), str) else None
             for key in ("targets_before", "targets_after"):
@@ -300,17 +228,12 @@ def _enrich_snapshot_audio_urls(reciter: str, batches: list[dict]) -> None:
                         continue
                     if snap.get("audio_url"):
                         continue
-                    ch = _snap_chapter(snap, batch, recovered, op_id)
+                    ch = _snap_chapter(snap, batch, None, op_id)
                     if ch is None:
                         continue
                     url = by_chapter.get(ch)
                     if url:
                         snap["audio_url"] = url
-                    # Also stamp the chapter on the snapshot so downstream
-                    # consumers (frontend, peaks backfill) don't need to
-                    # re-derive it.
-                    if not isinstance(snap.get("chapter"), int):
-                        snap["chapter"] = ch
 
 
 def _load_edit_history_from_records(
@@ -413,6 +336,81 @@ def _load_edit_history_from_records(
     if cache_result:
         cache.set_seg_edit_history(reciter, result)
     return result
+
+
+_SPLIT_GROUP_MAX_PASSES = 32  # mirrors frontend/.../utils/constants.ts
+
+
+def build_split_group_index(reciter: str) -> dict[str, list[str]]:
+    """Build ``{root_uid: [descendant_uid, ...]}`` for every committed split.
+
+    Walks every ``split_segment`` op in the cached edit-history batches and
+    runs a fixpoint that transitively closes parent→children chains. For
+    each uid that's been split (directly or via a descendant), the value
+    lists ALL descendants reachable through committed splits.
+
+    Backend supplies this on validation issue items as ``split_group_uids``
+    so the frontend doesn't need to walk ``$historyData`` to render the
+    accordion card with all split descendants. FE-side fixpoint still runs
+    over the uncommitted op log.
+
+    Cache-aware via ``cache.get_seg_split_group_index``. Pure function of
+    ``parse_history_for_reciter(reciter)`` so save can extend it
+    incrementally without re-parsing the JSONL.
+    """
+    cached = cache.get_seg_split_group_index(reciter)
+    if cached is not None:
+        return cached
+
+    batches = parse_history_for_reciter(reciter)
+    # Build parent → children adjacency from every split_segment op.
+    children_of: dict[str, list[str]] = {}
+    for batch in batches:
+        for op in batch.get("operations") or []:
+            if op.get("op_type") != "split_segment" and op.get("kind") != "split_segment":
+                continue
+            parents = op.get("targets_before") or []
+            kids = op.get("targets_after") or []
+            for p in parents:
+                if not isinstance(p, dict):
+                    continue
+                p_uid = p.get("segment_uid")
+                if not p_uid:
+                    continue
+                bucket = children_of.setdefault(p_uid, [])
+                for c in kids:
+                    if not isinstance(c, dict):
+                        continue
+                    c_uid = c.get("segment_uid")
+                    if c_uid and c_uid not in bucket:
+                        bucket.append(c_uid)
+
+    # Transitive closure: for every uid that has children, walk descendants
+    # to the full set with a guarded fixpoint (revert-removable cycles are
+    # impossible in append-only history, but the guard is cheap).
+    out: dict[str, list[str]] = {}
+    for root_uid in children_of:
+        group: list[str] = []
+        seen: set[str] = {root_uid}
+        frontier = [root_uid]
+        for _ in range(_SPLIT_GROUP_MAX_PASSES):
+            grew = False
+            next_frontier: list[str] = []
+            for uid in frontier:
+                for child in children_of.get(uid, ()):
+                    if child not in seen:
+                        seen.add(child)
+                        group.append(child)
+                        next_frontier.append(child)
+                        grew = True
+            if not grew:
+                break
+            frontier = next_frontier
+        if group:
+            out[root_uid] = group
+
+    cache.set_seg_split_group_index(reciter, out)
+    return out
 
 
 def build_resolved_by_edit_index(reciter: str) -> dict[str, set[str]]:

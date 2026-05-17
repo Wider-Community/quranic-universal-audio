@@ -17,8 +17,6 @@ def _seg(matched_ref: str, *, uid: str, t0: int = 0, t1: int = 1000) -> dict:
     return {
         "segment_uid": uid,
         "matched_ref": matched_ref,
-        "matched_text": "x",
-        "phonemes_asr": "",
         "time_start": t0,
         "time_end": t1,
         "confidence": 1.0,

@@ -5,6 +5,7 @@
 
 import type { PeakBucket } from '../types/domain';
 import { WAVEFORM_BG_COLOR, WAVEFORM_FILL_COLOR, WAVEFORM_SILENCE_THRESHOLD, WAVEFORM_STROKE_COLOR } from './constants';
+import { viewPeaks } from './peaks-view';
 
 /**
  * Options for drawWaveformPeaks().
@@ -41,12 +42,13 @@ export interface DrawWaveformOptions {
  * Draw a peak-based waveform onto the given canvas context.
  *
  * @param ctx   - 2D canvas rendering context (canvas must already be sized)
- * @param peaks - Array of [min, max] amplitude buckets (values in [-1, 1])
+ * @param peaks - Array of [min, max] amplitude buckets OR Int8Array(2N)
+ *                (drawer-int8 path under flag). Values map to [-1, 1].
  * @param opts  - Drawing options (see DrawWaveformOptions)
  */
 export function drawWaveformPeaks(
     ctx: CanvasRenderingContext2D,
-    peaks: PeakBucket[],
+    peaks: PeakBucket[] | Int8Array,
     opts: DrawWaveformOptions,
 ): void {
     const { width, height, startMs, endMs, totalDurationMs } = opts;
@@ -55,7 +57,9 @@ export function drawWaveformPeaks(
     ctx.fillStyle = WAVEFORM_BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 
-    if (!peaks || peaks.length === 0) return;
+    if (!peaks) return;
+    const peaksLen = peaks instanceof Int8Array ? peaks.length >> 1 : peaks.length;
+    if (peaksLen === 0) return;
 
     // Apply sub-range slicing when all three range params are present.
     //
@@ -70,13 +74,19 @@ export function drawWaveformPeaks(
     // slice's local index space afterwards. The slice itself is still
     // cheap to compute because it scopes the maxAmp scan; the change is
     // purely in how pixels map to peak indices.
-    let drawPeaks = peaks;
+    //
+    // Under the drawer-int8 path peaks is an Int8Array, sliced via subarray
+    // (zero-copy view) instead of Array.slice. Both shapes flow through
+    // viewPeaks() below so the inner loops are shape-free.
+    let drawPeaks: PeakBucket[] | Int8Array = peaks;
     let pixelToFullIdx: (x: number) => number;
     if (startMs !== undefined && endMs !== undefined && totalDurationMs !== undefined && totalDurationMs > 0) {
-        const peaksPerMs = peaks.length / totalDurationMs;
+        const peaksPerMs = peaksLen / totalDurationMs;
         const i0 = Math.floor(startMs * peaksPerMs);
         const i1 = Math.ceil(endMs * peaksPerMs);
-        drawPeaks = peaks.slice(i0, i1);
+        drawPeaks = peaks instanceof Int8Array
+            ? peaks.subarray(i0 * 2, i1 * 2)   // zero-copy slice in BYTES
+            : (peaks as PeakBucket[]).slice(i0, i1);
         // Map canvas x ∈ [0, width-1] linearly across [startMs, endMs] in
         // absolute time, then into a fractional index inside the slice.
         // No bucket snapping — each canvas pixel reads the peak at its
@@ -89,29 +99,32 @@ export function drawWaveformPeaks(
         // Full-array render: legacy linear mapping over the whole peaks
         // array, identical to the pre-fix behaviour for non-sub-ranged
         // callers (chapter overviews etc.).
-        pixelToFullIdx = (x) => (x / Math.max(1, width - 1)) * (peaks.length - 1);
+        pixelToFullIdx = (x) => (x / Math.max(1, width - 1)) * (peaksLen - 1);
     }
 
-    if (drawPeaks.length === 0) return;
+    const view = viewPeaks(drawPeaks);
+    if (!view || view.length === 0) return;
 
     const buckets = width;
     const halfH = height / 2;
     let maxAmp = 0;
-    for (const bk of drawPeaks) {
-        if (!bk) continue;
-        const a = Math.max(Math.abs(bk[1] ?? 0), Math.abs(bk[0] ?? 0));
+    for (let i = 0; i < view.length; i++) {
+        const a = Math.max(Math.abs(view.max(i)), Math.abs(view.min(i)));
         if (a > maxAmp) maxAmp = a;
     }
     const scale = maxAmp < WAVEFORM_SILENCE_THRESHOLD ? halfH * 0.9 : halfH / maxAmp;
 
-    function sampleAt(arr: PeakBucket[], idx: number, component: 0 | 1): number {
+    function sampleAt(idx: number, component: 0 | 1): number {
+        // view is non-null inside this closure (checked above).
+        const v = view!;
         const fi = pixelToFullIdx(idx);
-        if (fi < 0) return arr[0]?.[component] ?? 0;
-        if (fi >= arr.length - 1) return arr[arr.length - 1]?.[component] ?? 0;
+        const get = (k: number) => (component === 0 ? v.min(k) : v.max(k));
+        if (fi < 0) return get(0);
+        if (fi >= v.length - 1) return get(v.length - 1);
         const lo = Math.floor(fi);
         const hi = lo + 1;
         const t = fi - lo;
-        return (arr[lo]?.[component] ?? 0) * (1 - t) + (arr[hi]?.[component] ?? 0) * t;
+        return get(lo) * (1 - t) + get(hi) * t;
     }
 
     // Build the closed top+bottom envelope once, then fill AND stroke it so
@@ -121,13 +134,13 @@ export function drawWaveformPeaks(
     ctx.beginPath();
     for (let i = 0; i < buckets; i++) {
         const x = (i / buckets) * width;
-        const maxVal = sampleAt(drawPeaks, i, 1);
+        const maxVal = sampleAt(i, 1);
         const y = centerY - maxVal * scale;
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
     for (let i = buckets - 1; i >= 0; i--) {
         const x = (i / buckets) * width;
-        const minVal = sampleAt(drawPeaks, i, 0);
+        const minVal = sampleAt(i, 0);
         const y = centerY - minVal * scale;
         ctx.lineTo(x, y);
     }

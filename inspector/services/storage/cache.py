@@ -10,6 +10,14 @@ from typing import Generic, TypeVar
 
 _T = TypeVar("_T")
 
+# Per-cache LRU ceiling. The Inspector loads one reciter at a time in
+# practice, but admin sweeps + concurrent reviewers can stack up; each
+# parsed cache entry is small individually (~MB) but grows unboundedly
+# across many reciters touched in one process lifetime. 20 covers the
+# realistic concurrency ceiling on a single-worker Space with plenty of
+# headroom while bounding worst-case RSS.
+_KEYED_CACHE_LRU_MAX = 20
+
 
 class _SingletonCache(Generic[_T]):
     """Holds a single nullable value — replaces a bare ``global`` variable."""
@@ -28,16 +36,29 @@ class _SingletonCache(Generic[_T]):
 
 
 class _KeyedCache(Generic[_T]):
-    """Holds a dict keyed by string — replaces a bare ``global`` dict."""
+    """LRU-bounded dict keyed by string — replaces a bare ``global`` dict.
 
-    def __init__(self) -> None:
-        self._data: dict[str, _T] = {}
+    Every ``set`` records the key as most-recently-used; once size exceeds
+    ``_KEYED_CACHE_LRU_MAX``, the oldest entry is evicted. ``get`` does
+    NOT promote a key — the loaders consult the cache once per request,
+    and we want eviction to track write-time (the actual cost we're
+    bounding) rather than read frequency.
+    """
+
+    def __init__(self, max_size: int = _KEYED_CACHE_LRU_MAX) -> None:
+        self._data: "OrderedDict[str, _T]" = OrderedDict()
+        self._max_size = max_size
 
     def get(self, key: str) -> _T | None:
         return self._data.get(key)
 
     def set(self, key: str, value: _T) -> None:
+        if key in self._data:
+            # Mark as most-recently-set so the new value isn't evicted next.
+            self._data.move_to_end(key)
         self._data[key] = value
+        while len(self._data) > self._max_size:
+            self._data.popitem(last=False)
 
     def pop(self, key: str) -> None:
         self._data.pop(key, None)
@@ -46,7 +67,7 @@ class _KeyedCache(Generic[_T]):
         self._data.clear()
 
     def all(self) -> dict[str, _T]:
-        return self._data
+        return dict(self._data)
 
 
 # Timestamps tab — local-mode shard cache lives in `services/timestamps.py`
@@ -65,6 +86,19 @@ _seg_probe_v2: _KeyedCache[tuple[set[str], dict | None]] = _KeyedCache()
 # Auto-Split sidecar — precomputed cursors/refs by uid, plus meta. Empty dict
 # tuple member when sidecar absent so callers don't re-stat on every lookup.
 _seg_auto_split: _KeyedCache[tuple[dict[str, dict], dict | None]] = _KeyedCache()
+# pipeline_meta.json sidecar — extraction-time facts (deleted_basmala_chapters,
+# generated_at, ...). Immutable post-extraction; NEVER invalidated by save.
+_seg_pipeline_meta: _KeyedCache[dict] = _KeyedCache()
+# Parsed edit_history.jsonl batches (list[dict]). Filled lazily on first read;
+# every save APPENDS the new batch (no full re-parse). Undo also appends a
+# revert batch. The cache slot itself is never popped on save/undo — only on
+# process restart or explicit invalidation.
+_seg_history_batches: _KeyedCache[list[dict]] = _KeyedCache()
+# Derived index: uid → list of transitive split-descendant uids. Pure function
+# of _seg_history_batches. Filled lazily; **extended on save** when the saved
+# batch contains split_segment ops, **popped on undo** (revert negates prior
+# ops; incremental append can't model removal — rebuild from cached list).
+_seg_split_group_index: _KeyedCache[dict[str, list[str]]] = _KeyedCache()
 _seg_edit_history: _KeyedCache[dict] = _KeyedCache()
 _seg_history_peaks: _KeyedCache[list[dict]] = _KeyedCache()
 # Validation + stats results — recomputed only on cache miss; cleared by
@@ -121,6 +155,65 @@ def set_seg_auto_split(reciter: str, value: tuple[dict[str, dict], dict | None])
     _seg_auto_split.set(reciter, value)
 
 
+def get_seg_pipeline_meta(reciter: str) -> dict | None:
+    return _seg_pipeline_meta.get(reciter)
+
+
+def set_seg_pipeline_meta(reciter: str, value: dict) -> None:
+    _seg_pipeline_meta.set(reciter, value)
+
+
+def pop_seg_pipeline_meta(reciter: str) -> None:
+    """Explicit eviction (e.g. for the backfill script when it rewrites)."""
+    _seg_pipeline_meta.pop(reciter)
+
+
+# ---------------------------------------------------------------------------
+# Edit-history-derived caches (incremental on save, pop+rebuild on undo)
+# ---------------------------------------------------------------------------
+
+
+def get_seg_history_batches(reciter: str) -> list[dict] | None:
+    return _seg_history_batches.get(reciter)
+
+
+def set_seg_history_batches(reciter: str, batches: list[dict]) -> None:
+    _seg_history_batches.set(reciter, batches)
+
+
+def append_history_batch(reciter: str, batch: dict) -> None:
+    """Append a freshly-saved batch to the cached parsed list.
+
+    No-op if the cache is empty for this reciter (next read will populate
+    it from disk and naturally include the new batch). Save's append-then-
+    notify ordering guarantees the batch is already on disk before this
+    fires, so a cold reader sees a consistent picture either way.
+    """
+    cached = _seg_history_batches.get(reciter)
+    if cached is None:
+        return
+    _seg_history_batches.set(reciter, [*cached, batch])
+
+
+def pop_seg_history_batches(reciter: str) -> None:
+    _seg_history_batches.pop(reciter)
+
+
+def get_seg_split_group_index(reciter: str) -> dict[str, list[str]] | None:
+    return _seg_split_group_index.get(reciter)
+
+
+def set_seg_split_group_index(
+    reciter: str, index: dict[str, list[str]],
+) -> None:
+    _seg_split_group_index.set(reciter, index)
+
+
+def pop_seg_split_group_index(reciter: str) -> None:
+    """Pop on undo — revert ops can't be modelled incrementally."""
+    _seg_split_group_index.pop(reciter)
+
+
 def get_seg_edit_history(reciter: str) -> dict | None:
     return _seg_edit_history.get(reciter)
 
@@ -156,16 +249,22 @@ def set_seg_stats_cache(reciter: str, value: dict) -> None:
 def invalidate_seg_caches(reciter: str) -> None:
     """Remove all segment-related caches for *reciter* and reset reciters list.
 
-    Deliberately does NOT touch the peaks LRU response cache. Saves modify
-    segments.json / edit_history.jsonl only — peaks files are tied to the
-    audio bytes and never change as a side effect of edits, so the cached
-    peaks response stays valid across any number of segment saves.
-    Evicting it here would cost a ~500 ms cold miss on every autosave
-    (every few seconds) for nothing. The LRU still naturally evicts under
-    pressure (50-entry global ceiling) and on process restart; that's the
-    right granularity for a file that genuinely never changes mid-session.
+    Deliberately does NOT touch:
+
+    - The **peaks LRU response cache** — peaks files are tied to the audio
+      bytes and never change as a side effect of edits, so the cached peaks
+      response stays valid across any number of segment saves. Evicting it
+      here would cost a ~500 ms cold miss on every autosave (every few
+      seconds) for nothing. The LRU still naturally evicts under pressure
+      (50-entry global ceiling) and on process restart.
+    - The **pipeline_meta sidecar cache** — extraction-time facts that no
+      user edit can change. Invalidating per save would burn the cache on
+      every autosave for zero benefit.
+
     Add an explicit ``pop_reciter_peaks_response_cache`` call wherever a
-    future code path actually rewrites peaks on the bucket.
+    future code path actually rewrites peaks on the bucket; add an explicit
+    ``pop_seg_pipeline_meta`` call wherever extraction or backfill rewrites
+    the sidecar.
     """
     _seg.pop(reciter)
     _seg_meta.pop(reciter)
@@ -177,14 +276,57 @@ def invalidate_seg_caches(reciter: str) -> None:
     _seg_history_peaks.pop(reciter)
     _seg_validate_result.pop(reciter)
     _seg_stats_result.pop(reciter)
+    # _seg_history_batches and _seg_split_group_index are NOT popped here —
+    # callers that mean it (save / undo) use the surgical helpers below so
+    # the parsed list survives autosave warm paths.
+
+
+def pop_seg_caches_affected_by_segment_edit(reciter: str) -> None:
+    """Surgical eviction of caches a segment edit invalidates.
+
+    Excludes:
+    - ``_seg_pipeline_meta`` — extraction-time, immutable.
+    - ``_seg_history_batches`` — appended in place (no re-parse).
+    - ``_seg_split_group_index`` — extended in place on save; explicitly
+      popped on undo via ``pop_seg_split_group_index``.
+    - ``_seg_auto_split`` — only invalidated when the uid set changes;
+      callers gate the pop on ``batch_changes_segment_set``.
+
+    Callers should follow with ``append_history_batch`` (and, on save,
+    ``set_seg_split_group_index`` to extend the index incrementally).
+    """
+    _seg.pop(reciter)
+    _seg_meta.pop(reciter)
+    _seg_verses.pop(reciter)
+    _seg_resolved_by_edit.pop(reciter)
+    _seg_probe_v2.pop(reciter)
+    _seg_edit_history.pop(reciter)
+    _seg_history_peaks.pop(reciter)
+    _seg_validate_result.pop(reciter)
+    _seg_stats_result.pop(reciter)
+
+
+def batch_changes_segment_set(batch: dict) -> bool:
+    """True when at least one op in ``batch`` mutates the seg uid set.
+
+    Used to decide whether ``_seg_auto_split`` needs eviction — split / merge /
+    auto-fix create new uids, trim / ref-edit do not.
+    """
+    _MUTATING_OPS = {
+        "split_segment",
+        "merge_segments",
+        "auto_fix_missing_word",
+        "delete_segment",
+    }
+    for op in batch.get("operations") or []:
+        if op.get("op_type") in _MUTATING_OPS or op.get("kind") in _MUTATING_OPS:
+            return True
+    return False
 
 
 # Peaks (thread-safe — manually coded)
 _PEAKS_CACHE: dict[str, dict[str, dict]] = {}
 _PEAKS_LOCK = threading.Lock()
-_PEAKS_COMPUTING: set[str] = set()
-
-
 def get_peaks_lock() -> threading.Lock:
     return _PEAKS_LOCK
 
@@ -198,31 +340,6 @@ def set_peaks_for_url(reciter: str, url: str, data: dict) -> None:
         if reciter not in _PEAKS_CACHE:
             _PEAKS_CACHE[reciter] = {}
         _PEAKS_CACHE[reciter][url] = data
-
-
-def update_peaks_cache(reciter: str, new_data: dict[str, dict]) -> dict[str, dict]:
-    """Merge *new_data* into the peaks cache for *reciter*. Returns the full cache."""
-    with _PEAKS_LOCK:
-        if reciter not in _PEAKS_CACHE:
-            _PEAKS_CACHE[reciter] = {}
-        _PEAKS_CACHE[reciter].update(new_data)
-        return dict(_PEAKS_CACHE[reciter])
-
-
-def pop_peaks_cache(reciter: str) -> None:
-    _PEAKS_CACHE.pop(reciter, None)
-
-
-def is_peaks_computing(key: str) -> bool:
-    return key in _PEAKS_COMPUTING
-
-
-def add_peaks_computing(key: str) -> None:
-    _PEAKS_COMPUTING.add(key)
-
-
-def discard_peaks_computing(key: str) -> None:
-    _PEAKS_COMPUTING.discard(key)
 
 
 # Peaks response cache — bounded-LRU for /api/seg/peaks GET responses.

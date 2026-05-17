@@ -83,13 +83,12 @@ def append_peaks_records(
     Migration #5 canonical shape: ``{op_id, url, start_ms, end_ms, bps,
     peaks_b64}``. Callers must provide the int8-b64 encoded peaks; legacy
     ``peaks: list[list[float]]`` inputs are rejected by ``_validate_record``.
-    See ``services.audio.peaks_backfill::_encode_peaks_b64`` for the
-    encoder; pre-existing bucket records were migrated by
-    ``migrate_wip5_in_place.py``.
+    See ``inspector/scripts/backfill_pipeline_peaks.py`` (one-shot CLI)
+    for the encoder + per-op compute path; pre-existing bucket records
+    were migrated by ``.local/extraction/scripts/migrate_wip5_in_place.py``.
 
     Malformed records are skipped silently — partial persistence is fine
-    because consumers fall through to compute-on-play via the runtime
-    backfill.
+    because consumers fall through to lazy compute-on-play.
     """
     if not records:
         return 0

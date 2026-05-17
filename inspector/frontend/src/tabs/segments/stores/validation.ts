@@ -8,12 +8,20 @@
  * `filterStaleIssues` in ValidationPanel.
  */
 
-import { writable } from 'svelte/store';
+import { derived, writable } from 'svelte/store';
 
 import type { SegValidateResponse } from '../../../lib/types/api';
 
 /** Validation data for the currently-loaded reciter, or null if none loaded. */
 export const segValidation = writable<SegValidateResponse | null>(null);
+
+/** Server-supplied split-group closures keyed by root uid. Read by accordion
+ *  cards to expand a split chain without subscribing to historyData. Empty
+ *  map until the first validate response lands. */
+export const splitGroupIndex = derived(
+    segValidation,
+    ($v) => ($v?.split_group_index ?? {}) as Record<string, string[]>,
+);
 
 // ---- UI state persistence (in-memory) ----
 export const valUiOpenCategory = writable<string | null>(null);

@@ -5,7 +5,6 @@ No Flask imports -- all functions accept parameters and return plain dicts.
 
 from __future__ import annotations
 
-import concurrent.futures
 import struct
 import subprocess
 from typing import TYPE_CHECKING
@@ -13,14 +12,10 @@ from typing import TYPE_CHECKING
 from config import (FFMPEG_FULL_TIMEOUT, FFMPEG_TIMEOUT,
                     MIN_FULL_PEAK_BUCKETS, MIN_SEG_PEAK_BUCKETS,
                     PEAKS_BUCKETS_PER_SEC, PEAKS_FFMPEG_SAMPLE_RATE,
-                    PEAKS_PCM_NORMALIZER, PEAKS_SCHEMA_VERSION,
-                    PEAKS_WORKER_COUNT)
-from services.storage import cache
-from services.storage.data_loader import load_detailed
+                    PEAKS_PCM_NORMALIZER, PEAKS_SCHEMA_VERSION)
 
 if TYPE_CHECKING:
     from services.audio_source import AudioSource
-from utils.references import chapter_from_ref
 
 
 def is_current_schema(peaks: dict | None) -> bool:
@@ -80,9 +75,10 @@ def compute_audio_peaks(audio_source: str) -> dict | None:
     """Compute waveform peaks for a local file path or URL.
 
     Returns ``{schema_version, duration_ms, peaks}`` or ``None``. No caching
-    here and no bucket write — peaks are offline-computed and the bucket is
-    treated as read-only at runtime. In-memory dedup lives in
-    ``cache.update_peaks_cache`` for the lifetime of the process.
+    here and no bucket write — chapter peaks are offline-computed on Katana
+    (``.local/extraction/segments/audio_persist.py``) and the inspector
+    treats the bucket as read-only at runtime apart from the recompute
+    fallback in ``audio_fetch.fetch_and_persist_chapter``.
     """
     # Decode to raw mono 16-bit PCM via ffmpeg at the configured peaks sample rate
     try:
@@ -194,64 +190,3 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
     }
 
 
-def _audio_path_for_url(reciter: str, url: str) -> str | None:
-    """Best local file path for an audio URL — bucket-mount only.
-
-    Returns ``None`` when the bucket doesn't have the bytes; the caller skips
-    compute (it would need to download via CDN, which is the chapter
-    audio-proxy's responsibility, not the peaks worker's).
-    """
-    from . import audio_fetch
-    try:
-        bucket_local = audio_fetch.read_prefetched_audio_local_path(reciter, url)
-    except Exception:  # noqa: BLE001
-        bucket_local = None
-    if bucket_local is not None:
-        return str(bucket_local)
-    return None
-
-
-def get_peaks_for_reciter(reciter: str, chapter_filter: set[int] | None = None) -> dict:
-    """Compute and cache peaks for a reciter's audio URLs.  Returns ``{url: peaks_data}``."""
-    entries = load_detailed(reciter)
-    if not entries:
-        return {}
-
-    urls = {}
-    for entry in entries:
-        chapter = chapter_from_ref(entry["ref"])
-        if chapter_filter and chapter not in chapter_filter:
-            continue
-        url = entry.get("audio", "")
-        if url and url not in urls:
-            urls[url] = True
-
-    # Check what's already cached in memory
-    lock = cache.get_peaks_lock()
-    with lock:
-        cached = cache.get_peaks_cache(reciter)
-
-    to_compute = [u for u in urls if u not in cached]
-    if not to_compute:
-        return {u: cached[u] for u in urls if u in cached}
-
-    # Compute missing peaks in parallel
-    results = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=PEAKS_WORKER_COUNT) as pool:
-        future_to_url = {}
-        for u in to_compute:
-            path = _audio_path_for_url(reciter, u)
-            if path is None:
-                continue
-            future_to_url[pool.submit(compute_audio_peaks, path)] = u
-        for future in concurrent.futures.as_completed(future_to_url):
-            url = future_to_url[future]
-            try:
-                data = future.result()
-                if data:
-                    results[url] = data
-            except Exception:
-                pass
-
-    all_cached = cache.update_peaks_cache(reciter, results)
-    return {u: all_cached[u] for u in urls if u in all_cached}

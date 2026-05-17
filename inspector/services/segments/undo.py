@@ -55,9 +55,6 @@ def find_entry_for_insert(entries: list[dict], snap: dict, chapter_set: set[int]
 
 def snap_to_segment(snap: dict) -> dict:
     """Convert a snapshot to a segment dict for insertion."""
-    # Migration #5: matched_text not restored — derivable from matched_ref
-    # via dk_text_for_ref. Pre-Migration snapshots may still carry it but
-    # we deliberately don't propagate it onto the restored seg.
     seg = {
         "segment_uid": snap.get("segment_uid", uuid7()),
         "time_start": snap["time_start"],
@@ -67,8 +64,6 @@ def snap_to_segment(snap: dict) -> dict:
     }
     if snap.get("wrap_word_ranges"):
         seg["wrap_word_ranges"] = snap["wrap_word_ranges"]
-    if snap.get("phonemes_asr"):
-        seg["phonemes_asr"] = snap["phonemes_asr"]
     if snap.get("ignored_categories"):
         seg["ignored_categories"] = list(snap["ignored_categories"])
     return seg
@@ -136,8 +131,6 @@ def _reverse_trim(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
     seg["time_start"] = snap_before["time_start"]
     seg["time_end"] = snap_before["time_end"]
     seg["matched_ref"] = snap_before.get("matched_ref", "")
-    # Migration #5: matched_text not restored (derivable from matched_ref).
-    seg.pop("matched_text", None)
     seg["confidence"] = snap_before.get("confidence", 0)
     _restore_ignored_categories(seg, snap_before)
     entry["segments"].sort(key=lambda s: s["time_start"])
@@ -205,8 +198,6 @@ def _reverse_ref_edit(entries: list[dict], op: dict, chapter_set: set[int]) -> N
     _, _, seg = _find_and_verify(entries, after[0], chapter_set)
     snap_before = before[0]
     seg["matched_ref"] = snap_before.get("matched_ref", "")
-    # Migration #5: matched_text not restored (derivable from matched_ref).
-    seg.pop("matched_text", None)
     seg["confidence"] = snap_before.get("confidence", 0)
     _restore_ignored_categories(seg, snap_before)
 
@@ -304,6 +295,9 @@ def _append_revert_record(reciter: str, target_batch_id: str,
     if chapters:
         revert["chapters"] = chapters
     data_dir.append_edit_history(reciter, revert)
+    # Keep the cached parsed list in step with disk so the next reader
+    # doesn't re-parse the JSONL just to see this revert.
+    cache.append_history_batch(reciter, revert)
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +376,15 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
         actor=actor,
     )
 
-    cache.invalidate_seg_caches(reciter)
+    # Surgical eviction. Derived edit-history indices (split-group, resolved-
+    # by-edit) can't be modelled incrementally on revert — pop them so the
+    # next reader rebuilds from the cached batch list (in-memory walk, no
+    # I/O). Auto-split only needs eviction when the reverted ops moved uids
+    # in/out of the seg set (split / merge / auto-fix / delete).
+    cache.pop_seg_caches_affected_by_segment_edit(reciter)
+    cache.pop_seg_split_group_index(reciter)
+    if cache.batch_changes_segment_set({"operations": operations}):
+        cache.pop_seg_auto_split(reciter)
     return {"ok": True, "operations_reversed": len(operations)}
 
 
@@ -466,5 +468,9 @@ def undo_ops(
         reverts_op_ids=list(requested_op_ids),
     )
 
-    cache.invalidate_seg_caches(reciter)
+    # Surgical eviction (see undo_batch for rationale).
+    cache.pop_seg_caches_affected_by_segment_edit(reciter)
+    cache.pop_seg_split_group_index(reciter)
+    if cache.batch_changes_segment_set({"operations": ops_to_undo}):
+        cache.pop_seg_auto_split(reciter)
     return {"ok": True, "operations_reversed": len(ops_to_undo)}

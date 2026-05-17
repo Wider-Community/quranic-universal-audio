@@ -1,18 +1,18 @@
-"""GET /api/seg/peaks/<reciter> — Option A (slim packed) route shape tests.
+"""GET /api/seg/peaks/<reciter> — slim-int8 chapter peaks route tests.
 
 What this exercises:
 
-- Slim packed peaks files (``wip/<slug>/peaks/<ch>.json.gz``) are read,
-  inflated via ``unpack_slim``, and returned under the legacy response shape
-  ``{peaks: {<url>: {duration_ms, peaks}}, complete}`` so the FE consumer
-  (``_fetchPeaks`` / ``setWaveformPeaks``) sees no change.
-- ``complete`` is always ``True`` post-migration (no background compute path
-  remains).
-- Missing slim files yield an empty ``peaks`` dict + ``Cache-Control:
-  no-store`` so the client doesn't lock in an empty response permanently.
-- LRU response cache returns identical body on repeat request (cache key is
-  ``(reciter, sorted chapter tuple)``).
-- ``invalidate_seg_caches(reciter)`` evicts the response cache.
+- Slim packed peaks files (``<wip|published>/<slug>/peaks/<ch>.json.gz``) are
+  read via ``audio_fetch.read_prefetched_peaks`` and emitted verbatim under
+  ``{peaks: {<url>: {q:'int8', n, peaks_b64, bps, duration_ms}}, complete}``.
+  No server-side dequant — FE inflates b64 → ``Int8Array`` once on receive.
+- ``complete`` is always ``True`` (route has no background-compute path).
+- Missing slim files → empty ``peaks`` dict + ``Cache-Control: no-store``.
+- LRU response cache by ``(reciter, sorted_chapter_tuple)``; survives
+  ``invalidate_seg_caches`` (autosave) — peaks are tied to immutable audio
+  bytes, not segment edits.
+- Per-URL cache + ``ThreadPoolExecutor`` fan-out — regression-tested against
+  the lock-deadlock incident.
 """
 from __future__ import annotations
 
@@ -52,7 +52,9 @@ def _install_slim_peaks(backend, reciter: str, chapter: int, n_peaks: int = 60) 
     audio_meta._SIDECAR_CACHE.clear()
 
 
-def test_peaks_returns_inflated_slim_under_legacy_shape(flask_client, tmp_reciter_dir):
+def test_peaks_returns_slim_int8_envelope(flask_client, tmp_reciter_dir):
+    """Each URL entry carries the slim int8 envelope verbatim, never a
+    nested float list. FE decodes ``peaks_b64`` → ``Int8Array`` once."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
     _install_slim_peaks(tmp_reciter_dir.backend, reciter, chapter=112)
@@ -60,14 +62,15 @@ def test_peaks_returns_inflated_slim_under_legacy_shape(flask_client, tmp_recite
     res = flask_client.get(f"/api/seg/peaks/{reciter}?chapters=112")
     assert res.status_code == 200
     body = res.get_json()
-    assert "peaks" in body
     assert body["complete"] is True
-    # Each entry has the legacy chapter-peaks shape so FE consumers
-    # (setWaveformPeaks) work unchanged.
+    assert body["peaks"], "expected non-empty peaks dict"
     for url, doc in body["peaks"].items():
-        assert isinstance(doc["peaks"], list)
-        assert isinstance(doc["duration_ms"], int)
-        assert doc["duration_ms"] > 0
+        assert doc["q"] == "int8"
+        assert isinstance(doc["peaks_b64"], str) and doc["peaks_b64"]
+        assert isinstance(doc["n"], int) and doc["n"] > 0
+        assert isinstance(doc["duration_ms"], int) and doc["duration_ms"] > 0
+        assert isinstance(doc["bps"], int) and doc["bps"] > 0
+        assert "peaks" not in doc, "envelope must NOT carry a dequantized 'peaks' list"
 
 
 def test_peaks_chapter_filter_excludes_other_chapters(flask_client, tmp_reciter_dir):
@@ -80,9 +83,7 @@ def test_peaks_chapter_filter_excludes_other_chapters(flask_client, tmp_reciter_
     assert res.status_code == 200
     body = res.get_json()
     # Empty result; ikhlas URLs not requested.
-    assert body["peaks"] == {} or all(
-        u for u in body["peaks"].keys()  # any returned URL must be for ch1, but fixture has none
-    )
+    assert body["peaks"] == {}
 
 
 def test_peaks_missing_file_returns_no_store(flask_client, tmp_reciter_dir):

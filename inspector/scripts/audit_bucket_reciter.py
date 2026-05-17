@@ -10,6 +10,7 @@ configured bucket and audits every file we expect to find there:
 * ``edit_history_peaks.jsonl`` -> ``parse_peaks_record`` (per JSONL row)
 * ``low_confidence_v2.json``   -> structural check (``failures`` is list[str])
 * ``auto_split_v1.json``       -> structural check (``by_uid`` dict of slim entries)
+* ``pipeline_meta.json``       -> ``PipelineMeta`` (pydantic v2)
 * ``audio/_done.json``         -> sentinel parse
 * ``audio/<ch>.mp3``           -> existence + non-empty
 * ``peaks/<ch>.json.gz``       -> ``unpack_slim`` round-trip
@@ -35,11 +36,58 @@ import json
 import logging
 import os
 import sys
+from collections import Counter
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
 log = logging.getLogger("audit_bucket_reciter")
+
+
+@contextmanager
+def _capture_extras_warnings():
+    """Capture INFO/WARNING records from the schema extras logger so the
+    audit surfaces every legacy + unknown field stripped during parse.
+
+    Yields a list that fills with ``(level, message)`` tuples — the caller
+    can summarise it into the per-file FileResult detail / warnings counts.
+    """
+    captured: list[tuple[int, str]] = []
+    extras_log = logging.getLogger("scripts.lib.schemas._extras")
+    prev_level = extras_log.level
+    extras_log.setLevel(logging.INFO)
+
+    class _Sink(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append((record.levelno, record.getMessage()))
+
+    sink = _Sink(level=logging.INFO)
+    extras_log.addHandler(sink)
+    try:
+        yield captured
+    finally:
+        extras_log.removeHandler(sink)
+        extras_log.setLevel(prev_level)
+
+
+def _summarise_extras(captured: list[tuple[int, str]]) -> str:
+    """Compress N captured records into a single ``detail`` suffix."""
+    if not captured:
+        return ""
+    n_info = sum(1 for lvl, _ in captured if lvl == logging.INFO)
+    n_warn = sum(1 for lvl, _ in captured if lvl >= logging.WARNING)
+    bits: list[str] = []
+    if n_info:
+        bits.append(f"{n_info} legacy")
+    if n_warn:
+        bits.append(f"{n_warn} unknown")
+    # Sample the first WARNING (most concerning class).
+    sample = next((m for lvl, m in captured if lvl >= logging.WARNING), None)
+    if sample is None and captured:
+        sample = captured[0][1]
+    suffix = " + ".join(bits) + " extras"
+    return f"; {suffix} (e.g. {sample[:160]})" if sample else f"; {suffix}"
 
 _BUCKETS = {
     "dev": "hetchyy/quranic-inspector-bucket-dev",
@@ -55,6 +103,8 @@ class FileResult:
     size: int = 0
     items_ok: int = 0    # for JSONL / collections
     items_total: int = 0
+    n_warn: int = 0      # # of "unknown field" warnings from extras pre-validator
+    n_info: int = 0      # # of "legacy field" infos from extras pre-validator
 
 
 @dataclass
@@ -74,6 +124,14 @@ class AuditResult:
     @property
     def n_missing(self) -> int:
         return sum(1 for f in self.files if f.status == "missing")
+
+    @property
+    def n_warnings(self) -> int:
+        return sum(f.n_warn for f in self.files)
+
+    @property
+    def n_legacy(self) -> int:
+        return sum(f.n_info for f in self.files)
 
 
 # ---------------------------------------------------------------------------
@@ -95,16 +153,21 @@ def _audit_detailed(backend, path: str) -> FileResult:
     except json.JSONDecodeError as e:
         return FileResult(path, "error", f"invalid JSON: {e}", size=size)
 
-    try:
-        validated = DetailedDocument.model_validate(doc)
-    except Exception as e:
-        return FileResult(path, "error", f"schema fail: {e}", size=size)
+    with _capture_extras_warnings() as captured:
+        try:
+            validated = DetailedDocument.model_validate(doc)
+        except Exception as e:
+            return FileResult(path, "error", f"schema fail: {e}", size=size)
 
     n_segs = sum(len(e.segments) for e in validated.entries)
+    n_info = sum(1 for lvl, _ in captured if lvl == logging.INFO)
+    n_warn = sum(1 for lvl, _ in captured if lvl >= logging.WARNING)
     return FileResult(
         path, "ok",
-        f"{len(validated.entries)} entries, {n_segs} segs",
+        f"{len(validated.entries)} entries, {n_segs} segs"
+        + _summarise_extras(captured),
         size=size, items_ok=n_segs, items_total=n_segs,
+        n_info=n_info, n_warn=n_warn,
     )
 
 
@@ -174,26 +237,34 @@ def _audit_edit_history(backend, path: str) -> FileResult:
     n_ok = 0
     n_total = 0
     first_err = None
-    for i, line in enumerate(lines, 1):
-        if not line.strip():
-            continue
-        n_total += 1
-        try:
-            batch = parse_edit_history_line(line)
-            if batch is None:
-                # legacy line silently dropped — counts as warning, not error
+    captured: list[tuple[int, str]] = []
+    with _capture_extras_warnings() as run_captured:
+        for i, line in enumerate(lines, 1):
+            if not line.strip():
                 continue
-            n_ok += 1
-        except Exception as e:
-            if first_err is None:
-                first_err = f"line {i}: {e}"
+            n_total += 1
+            try:
+                batch = parse_edit_history_line(line)
+                if batch is None:
+                    # legacy genesis line silently dropped (not an error)
+                    continue
+                n_ok += 1
+            except Exception as e:
+                if first_err is None:
+                    first_err = f"line {i}: {e}"
+        captured.extend(run_captured)
 
+    n_info = sum(1 for lvl, _ in captured if lvl == logging.INFO)
+    n_warn = sum(1 for lvl, _ in captured if lvl >= logging.WARNING)
     if first_err:
         return FileResult(path, "error",
                           f"{n_ok}/{n_total} valid; first error: {first_err}",
-                          size=size, items_ok=n_ok, items_total=n_total)
-    return FileResult(path, "ok", f"{n_ok}/{n_total} batches",
-                      size=size, items_ok=n_ok, items_total=n_total)
+                          size=size, items_ok=n_ok, items_total=n_total,
+                          n_info=n_info, n_warn=n_warn)
+    return FileResult(path, "ok",
+                      f"{n_ok}/{n_total} batches" + _summarise_extras(captured),
+                      size=size, items_ok=n_ok, items_total=n_total,
+                      n_info=n_info, n_warn=n_warn)
 
 
 def _audit_peaks_history(backend, path: str) -> FileResult:
@@ -209,29 +280,38 @@ def _audit_peaks_history(backend, path: str) -> FileResult:
     n_ok = 0
     n_total = 0
     first_err = None
-    for i, line in enumerate(lines, 1):
-        if not line.strip():
-            continue
-        n_total += 1
-        try:
-            # ``parse_peaks_record`` (per its signature) expects an
-            # already-parsed dict, unlike ``parse_edit_history_line``
-            # which takes the raw JSONL line string. Decode here.
-            obj = json.loads(line)
-            rec = parse_peaks_record(obj)
-            if rec is None:
+    captured: list[tuple[int, str]] = []
+    with _capture_extras_warnings() as run_captured:
+        for i, line in enumerate(lines, 1):
+            if not line.strip():
                 continue
-            n_ok += 1
-        except Exception as e:
-            if first_err is None:
-                first_err = f"line {i}: {e}"
+            n_total += 1
+            try:
+                # ``parse_peaks_record`` expects an already-parsed dict,
+                # unlike ``parse_edit_history_line`` which takes the raw
+                # JSONL line string. Decode here.
+                obj = json.loads(line)
+                rec = parse_peaks_record(obj)
+                if rec is None:
+                    continue
+                n_ok += 1
+            except Exception as e:
+                if first_err is None:
+                    first_err = f"line {i}: {e}"
+        captured.extend(run_captured)
 
+    n_info = sum(1 for lvl, _ in captured if lvl == logging.INFO)
+    n_warn = sum(1 for lvl, _ in captured if lvl >= logging.WARNING)
     if first_err:
         return FileResult(path, "error",
                           f"{n_ok}/{n_total} valid; first error: {first_err}",
-                          size=size, items_ok=n_ok, items_total=n_total)
-    return FileResult(path, "ok", f"{n_ok}/{n_total} peaks records",
-                      size=size, items_ok=n_ok, items_total=n_total)
+                          size=size, items_ok=n_ok, items_total=n_total,
+                          n_info=n_info, n_warn=n_warn)
+    return FileResult(path, "ok",
+                      f"{n_ok}/{n_total} peaks records"
+                      + _summarise_extras(captured),
+                      size=size, items_ok=n_ok, items_total=n_total,
+                      n_info=n_info, n_warn=n_warn)
 
 
 def _audit_low_confidence_v2(backend, path: str) -> FileResult:
@@ -316,6 +396,40 @@ def _audit_auto_split_v1(backend, path: str) -> FileResult:
                       items_ok=len(by_uid), items_total=len(by_uid))
 
 
+def _audit_pipeline_meta(backend, path: str) -> FileResult:
+    """``pipeline_meta.json`` — extraction-time facts (Inspector hard-fails
+    on missing/invalid sidecar). Validated via the canonical Pydantic model."""
+    from scripts.lib.schemas import PipelineMeta
+
+    try:
+        raw = backend.read_bytes(path)
+    except Exception as e:
+        return FileResult(path, "missing", str(e))
+
+    size = len(raw)
+    try:
+        doc = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return FileResult(path, "error", f"invalid JSON: {e}", size=size)
+
+    with _capture_extras_warnings() as captured:
+        try:
+            validated = PipelineMeta.model_validate(doc)
+        except Exception as e:
+            return FileResult(path, "error", f"schema fail: {e}", size=size)
+
+    n_ch = len(validated.deleted_basmala_chapters)
+    n_info = sum(1 for lvl, _ in captured if lvl == logging.INFO)
+    n_warn = sum(1 for lvl, _ in captured if lvl >= logging.WARNING)
+    return FileResult(
+        path, "ok",
+        f"deleted_basmala_chapters={n_ch} @ {validated.generated_at}"
+        + _summarise_extras(captured),
+        size=size, items_ok=n_ch, items_total=n_ch,
+        n_info=n_info, n_warn=n_warn,
+    )
+
+
 def _audit_done_sentinel(backend, path: str) -> FileResult:
     try:
         raw = backend.read_bytes(path)
@@ -383,6 +497,10 @@ _TOP_LEVEL_AUDITORS: list[tuple[str, Callable, bool]] = [
     ("edit_history_peaks.jsonl", _audit_peaks_history, False),
     ("low_confidence_v2.json", _audit_low_confidence_v2, False),
     ("auto_split_v1.json", _audit_auto_split_v1, False),
+    # pipeline_meta.json is required: Inspector hard-fails on missing sidecar
+    # to make backfill a deploy gate. Older reciters need
+    # scripts/backfill_deleted_basmala.py.
+    ("pipeline_meta.json", _audit_pipeline_meta, True),
     ("audio/_done.json", _audit_done_sentinel, False),
 ]
 
@@ -471,7 +589,7 @@ def audit(backend, bucket_id: str, slug: str) -> AuditResult:
 # ---------------------------------------------------------------------------
 
 
-def _setup_paths_and_env(bucket: str) -> None:
+def _setup_paths_and_env(bucket: str | None) -> None:
     """Insert repo root + inspector/ onto sys.path; pin bucket env."""
     here = Path(__file__).resolve()
     repo = here.parents[2]
@@ -480,7 +598,52 @@ def _setup_paths_and_env(bucket: str) -> None:
         raise SystemExit(f"inspector/ not found at {inspector}")
     sys.path.insert(0, str(inspector))
     sys.path.insert(0, str(repo))
-    os.environ["INSPECTOR_BUCKET_REPO"] = _BUCKETS[bucket]
+    if bucket is not None:
+        os.environ["INSPECTOR_BUCKET_REPO"] = _BUCKETS[bucket]
+
+
+class _LocalBackend:
+    """Backend shim over a local reciter directory.
+
+    Pre-upload verification path: lets ``audit_bucket_reciter`` run against
+    a freshly-downloaded slug on disk so the migration can be inspected
+    before any bytes hit the bucket.
+
+    The local dir is expected to mirror the bucket layout:
+    ``<root>/[wip|published]/<slug>/...`` OR just ``<root>/<slug>/...``
+    (in which case audits treat it as ``wip``).
+    """
+
+    def __init__(self, root: Path, kind: str | None = None) -> None:
+        self.root = root.resolve()
+        self.kind = kind  # if set, we'll synthesise wip/<slug>/ prefix lookups
+
+    def read_bytes(self, rel: str) -> bytes:
+        # Strip the optional wip/ or published/ prefix so the underlying
+        # local dir doesn't need that nesting.
+        rel = self._normalise(rel)
+        p = self.root / rel
+        if not p.is_file():
+            raise FileNotFoundError(rel)
+        return p.read_bytes()
+
+    def list_dir(self, prefix: str) -> list[str]:
+        prefix = self._normalise(prefix.rstrip("/"))
+        d = self.root / prefix
+        if not d.is_dir():
+            return []
+        return [f"{prefix}/{name}" for name in sorted(os.listdir(d))]
+
+    def _normalise(self, rel: str) -> str:
+        if self.kind is not None:
+            # When the audit walker probes ``wip/<slug>/x`` and the local
+            # root already represents ``wip/<slug>/``, drop the prefix.
+            for k in ("wip/", "published/"):
+                if rel.startswith(k):
+                    parts = rel.split("/", 2)
+                    if len(parts) >= 3:
+                        return parts[2]
+        return rel
 
 
 def _render(result: AuditResult) -> str:
@@ -499,9 +662,13 @@ def _render(result: AuditResult) -> str:
             lines.append(f"            {f.detail}")
     lines.append("-" * 72)
     n_ok = sum(1 for f in result.files if f.status == "ok")
+    n_warn_total = sum(f.n_warn for f in result.files)
+    n_info_total = sum(f.n_info for f in result.files)
     lines.append(
         f"Summary: {n_ok}/{len(result.files)} ok  |  "
-        f"{result.n_errors} error(s)  |  {result.n_missing} missing"
+        f"{result.n_errors} error(s)  |  {result.n_missing} missing  |  "
+        f"{n_warn_total} unknown-field warning(s)  |  "
+        f"{n_info_total} legacy-field strip(s)"
     )
     return "\n".join(lines)
 
@@ -509,8 +676,12 @@ def _render(result: AuditResult) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--slug", required=True, help="Reciter slug.")
-    ap.add_argument("--bucket", choices=sorted(_BUCKETS), default="prod",
-                    help="Bucket to audit (default: prod).")
+    ap.add_argument("--bucket", choices=sorted(_BUCKETS), default=None,
+                    help="Bucket to audit. Mutually exclusive with --local-path.")
+    ap.add_argument("--local-path", type=Path, default=None,
+                    help="Audit a local copy of a reciter folder (pre-upload "
+                         "verification). Should point at the slug dir itself, "
+                         "e.g. /tmp/husary/. Mutually exclusive with --bucket.")
     ap.add_argument("--json", action="store_true",
                     help="Emit JSON instead of the human-readable table.")
     ap.add_argument("-v", "--verbose", action="store_true",
@@ -522,12 +693,20 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    _setup_paths_and_env(args.bucket)
-    bucket_id = _BUCKETS[args.bucket]
+    if args.bucket is None and args.local_path is None:
+        args.bucket = "prod"  # back-compat default
+    if args.bucket is not None and args.local_path is not None:
+        ap.error("--bucket and --local-path are mutually exclusive")
 
-    # Lazy-import after sys.path + env are set.
-    from services.storage.hf_bucket import get_backend
-    backend = get_backend()
+    _setup_paths_and_env(args.bucket)
+
+    if args.local_path is not None:
+        backend = _LocalBackend(args.local_path, kind="wip")
+        bucket_id = f"local:{args.local_path}"
+    else:
+        from services.storage.hf_bucket import get_backend
+        backend = get_backend()
+        bucket_id = _BUCKETS[args.bucket]
     result = audit(backend, bucket_id, args.slug)
 
     if args.json:

@@ -281,7 +281,7 @@ def build_mfa_ref(seg: dict) -> str | None:
 
     Returns None for segments that should be skipped (empty ref, low
     confidence, or transition segments like Amin/Takbir). The ref is derived
-    only from the segment key, not inferred from matched_text.
+    only from the segment key.
     """
     matched_ref = seg.get("matched_ref", "")
     confidence = seg.get("confidence", 0)

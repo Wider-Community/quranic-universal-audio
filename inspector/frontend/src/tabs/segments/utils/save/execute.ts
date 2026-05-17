@@ -5,11 +5,11 @@
 
 import { get as storeGet } from 'svelte/store';
 
-import { fetchJson, fetchJsonOrNull } from '../../../../lib/api';
+import { fetchJson } from '../../../../lib/api';
 import { SIGN_IN_MESSAGES } from '../../../../lib/sign-in-messages';
 import { openSignInModal } from '../../../../lib/stores/sign-in-modal';
 import { pushToast } from '../../../../lib/stores/toast';
-import type { SegEditHistoryResponse, SegSaveResponse } from '../../../../lib/types/api';
+import type { SegSaveResponse } from '../../../../lib/types/api';
 import type { EditOp, Segment } from '../../../../lib/types/domain';
 import {
     getChapterSegments,
@@ -21,7 +21,6 @@ import {
     getDirtyMap,
 } from '../../stores/dirty';
 import { saveButtonLabel } from '../../stores/save';
-import { renderEditHistoryPanel } from '../history/render';
 import { refreshValidation } from '../validation/refresh';
 import { collectOpPeaks, type OpPeakRecord } from '../waveform/op-peaks';
 export { buildPayloadFromCommandResult } from './payload';
@@ -30,17 +29,15 @@ export { buildPayloadFromCommandResult } from './payload';
 // Payload types
 // ---------------------------------------------------------------------------
 
-// Note: matched_text is intentionally omitted from save payloads. The server
-// derives it from matched_ref via dk_words (services/quran_refs.py::
-// dk_text_for_ref) so detailed.json's matched_text stays consistent with the
-// canonical reference text.
+// Migration #5: matched_text + phonemes_asr are not sent. The server derives
+// matched_text from matched_ref via dk_text_for_ref; phonemes_asr was retired
+// from the disk shape entirely (the schema pre-validator strips it on read).
 interface SaveSegmentPayloadFull {
     segment_uid: string;
     time_start: number;
     time_end: number;
     matched_ref: string;
     confidence: number;
-    phonemes_asr: string;
     audio_url: string;
     wrap_word_ranges?: unknown;
     ignored_categories?: string[];
@@ -173,7 +170,6 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                             time_end: s.time_end,
                             matched_ref: s.matched_ref,
                             confidence: s.confidence,
-                            phonemes_asr: s.phonemes_asr || '',
                             audio_url: s.audio_url || '',
                             ignored_categories: s.ignored_categories ?? [],
                         };
@@ -271,12 +267,12 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                 allOk = false;
                 break;
             }
-            // Defer clearSavedOps until after edit-history has refreshed.
-            // Otherwise there's a transient window where the in-flight split
-            // op is gone from the op log (cleared here) but not yet in
-            // historyData.batches (history fetch still pending), and
-            // getSplitGroupMembers returns only the parent UID — making the
-            // second child blink out of an open accordion card mid-save.
+            // Defer clearSavedOps until after the validation refresh below.
+            // The post-save validate response carries the updated split-group
+            // closure under ``split_group_index``; clearing the op log before
+            // it lands would leave getSplitGroupMembers walking only the
+            // parent uid for a frame and blink a fresh child out of the open
+            // accordion card.
             pendingClears.push({ ch, ops });
             savedChanges += ops.length;
             savedChapters++;
@@ -293,25 +289,20 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                 saveButtonLabel.set('Save');
             }
 
-            // Refresh edit-history FIRST, then atomically apply the
-            // deferred pending-op clears alongside the history render.
-            // Order matters: clearSavedOps bumps dirtyTick which is a
-            // dependency in the validation-card memo for splits — if
-            // batches haven't received the new op yet, getSplitGroupMembers
-            // returns only the parent UID and the second child blinks out.
+            // Refresh validation FIRST (it ships the new split_group_index),
+            // then atomically apply the deferred pending-op clears.
+            // clearSavedOps bumps dirtyTick which the validation-card memo
+            // for splits depends on — landing the new index before clearing
+            // the op log avoids a transient blink of the second child.
+            // History panel intentionally NOT refetched here; it's lazy-
+            // fetched when the user opens the History view, and the
+            // backend's incremental cache append keeps it consistent.
             try {
-                const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
-                    `/api/seg/edit-history/${reciter}`,
-                );
-                if (hist) renderEditHistoryPanel(hist);
-            } catch (_) { /* non-critical */ }
+                await refreshValidation();
+            } catch (e) {
+                console.error('Error refreshing validation:', e);
+            }
             for (const { ch, ops } of pendingClears) clearSavedOps(ch, ops);
-
-            // Validation refresh fires after — it no longer races the history
-            // refresh. Stats are NOT refreshed here: StatsPanel lazy-fetches
-            // on accordion open (compute is ~0.7-1.2 s server-side on prod-sized
-            // reciters and the panel rarely gets opened during editing).
-            void refreshValidation().catch((e) => console.error('Error refreshing validation:', e));
         } else {
             // Nothing saved (either nothing to save or error before first commit)
             saveButtonLabel.set('Save');

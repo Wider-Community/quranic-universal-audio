@@ -4,7 +4,6 @@ The single source of truth for "which validation categories does this segment
 trigger?" — consumed by:
 
 - ``services.validation.detail._build_detail_lists`` (response building).
-- ``services.validation.chapter_validation_counts`` (count rollups).
 - ``services.validation.snapshot_classifier`` (history snapshots).
 
 Public surface
@@ -47,9 +46,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from config import BOUNDARY_TAIL_K, LOW_CONFIDENCE_DETAIL_THRESHOLD, LOW_CONFIDENCE_THRESHOLD
+from config import LOW_CONFIDENCE_DETAIL_THRESHOLD, LOW_CONFIDENCE_THRESHOLD
 from constants import MUQATTAAT_VERSES, QALQALA_LETTERS, STANDALONE_REFS, STANDALONE_WORDS
-from services.segments.phoneme_matching import tail_phoneme_mismatch
 from services.reference.quran_refs import dk_text_for_ref
 from utils.arabic_text import last_arabic_letter, strip_quran_deco
 from utils.references import seg_belongs_to_entry
@@ -112,7 +110,7 @@ def compute_is_boundary_adj(
     s_word: int,
     e_word: int,
     single_word_verses: set,
-    canonical: dict | None,
+    canonical: dict | None = None,
 ) -> bool:
     """Raw boundary-adjustment computation — NO suppression check.
 
@@ -121,26 +119,23 @@ def compute_is_boundary_adj(
     path. Splitting the suppression check out lets us persist a value that
     matches across all writers regardless of runtime ignore state.
 
-    Structural side: one-word segment outside the muqattaʼat / single-word
-    verse / standalone-ref / standalone-word allow-list.
+    Rule: one-word segment outside the muqattaʼat / single-word-verse /
+    standalone-ref / standalone-word allow-list.
 
-    Phoneme side: when ``canonical`` is available and the seg has ASR
-    phonemes, last ``BOUNDARY_TAIL_K`` ASR phonemes diverge from the
-    canonical tail — heuristic for word-boundary drift.
+    ``canonical`` is accepted for back-compat but ignored — the phonemic
+    side was retired in Migration #5 along with ``phonemes_asr``, so
+    structural-only is now the canonical signal. Kept in the signature so
+    callers (save, backfill, extraction outputs.py) don't need touching.
     """
+    _ = canonical  # retired; see docstring
     if (surah, s_ayah) in MUQATTAAT_VERSES:
         return False
     if (surah, s_ayah) in single_word_verses:
         return False
 
     if s_word == e_word and (surah, s_ayah, s_word) not in STANDALONE_REFS:
-        text = seg.get("matched_text") or dk_text_for_ref(seg.get("matched_ref"))
+        text = dk_text_for_ref(seg.get("matched_ref"))
         if strip_quran_deco(text) not in STANDALONE_WORDS:
-            return True
-
-    if canonical and seg.get("phonemes_asr"):
-        matched_ref = seg.get("matched_ref", "")
-        if tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref, canonical, BOUNDARY_TAIL_K):
             return True
 
     return False

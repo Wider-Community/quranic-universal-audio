@@ -6,7 +6,6 @@ from config import (
     SEG_FONT_SIZE, SEG_WORD_SPACING,
     SEG_SCROLL_ANIM_MODE,
     TRIM_PAD_LEFT, TRIM_PAD_RIGHT, TRIM_DIM_ALPHA,
-    SHOW_BOUNDARY_PHONEMES,
     LOW_CONF_DEFAULT_THRESHOLD,
     ACCORDION_CONTEXT,
 )
@@ -21,7 +20,6 @@ from services import cache
 from services.state import catalog as catalog_service
 from services import state as state_service
 from services.data_loader import (
-    load_auto_split,
     load_detailed,
     resolve_pad,
 )
@@ -46,7 +44,6 @@ def seg_config():
             "trim_pad_left": TRIM_PAD_LEFT,
             "trim_pad_right": TRIM_PAD_RIGHT,
             "trim_dim_alpha": TRIM_DIM_ALPHA,
-            "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
             "low_conf_default_threshold": LOW_CONF_DEFAULT_THRESHOLD,
             "validation_categories": list(ALL_CATEGORIES),
             "muqattaat_verses": sorted([list(t) for t in _MUQATTAAT_VERSES]),
@@ -149,13 +146,9 @@ def seg_all(reciter):
             if not seg_uid:
                 seg_uid = uuid7()
                 seg["segment_uid"] = seg_uid
-            # `matched_text` and `audio_url` deliberately omitted:
-            # - `matched_text` is reconstructable client-side via
-            #   ``dkTextForRef($quranRefs, matched_ref)`` and is the single
-            #   biggest wire contributor (~315 KB brotli savings).
-            # - `audio_url` is redundant with the top-level
-            #   ``audio_by_chapter[chapter]`` map; every FE consumer already
-            #   falls back to it.
+            # `audio_url` deliberately omitted — redundant with the
+            # top-level ``audio_by_chapter[chapter]`` map; every FE
+            # consumer already falls back to it.
             seg_dict = {
                 "chapter":      ch,
                 "entry_idx":    entry_idx,
@@ -178,14 +171,6 @@ def seg_all(reciter):
     pad_left_ms, pad_right_ms, min_silence_floor_ms = resolve_pad(
         cache.get_seg_meta(reciter)
     )
-    # Auto-Split sidecar UID set — the FE gates the Auto Split button label on
-    # presence in this set, so seg rows whose offline alignment failed fall
-    # back to the plain Split UX instead of misleading the user. Just UIDs,
-    # not the full payload: the cursors/refs come back from a separate
-    # ``/api/seg/auto-split`` lookup at click-time, so cached in-memory and
-    # cheap (~10 ms).
-    auto_split_by_uid, _ = load_auto_split(reciter)
-    auto_split_uids = sorted(auto_split_by_uid.keys())
     # dk_words + verse_word_counts moved off this payload to the immutable
     # ``/api/static/quran-refs.json`` asset (fetched once per browser).
     # Per-audio-URL duration in ms, sourced from the audio_manifest sidecar.
@@ -215,7 +200,6 @@ def seg_all(reciter):
         "chapter_duration_ms_by_chapter": chapter_duration_ms_by_chapter,
         "duration_ms_by_url": duration_ms_by_url,
         "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
-        "auto_split_uids": auto_split_uids,
         # Legacy symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.
         "pad_ms": (pad_left_ms + pad_right_ms) // 2,
         "pad_left_ms": pad_left_ms,

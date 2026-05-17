@@ -50,9 +50,7 @@ def test_edit_from_card_does_not_write_ignored_categories(
             "time_start": s["time_start"],
             "time_end": s["time_end"],
             "matched_ref": s["matched_ref"],
-            "matched_text": s["matched_text"],
             "confidence": s["confidence"],
-            "phonemes_asr": s.get("phonemes_asr", ""),
             "segment_uid": s["segment_uid"],
         })
 
@@ -68,7 +66,6 @@ def test_edit_from_card_does_not_write_ignored_categories(
                     "type": "editReference",
                     "segmentUid": target_uid,
                     "matched_ref": fixture["entries"][0]["segments"][0]["matched_ref"],
-                    "matched_text": "x",
                     "sourceCategory": category,
                 },
             }
@@ -113,9 +110,7 @@ def test_explicit_ignore_payload_still_persists(
             "time_start": s["time_start"],
             "time_end": s["time_end"],
             "matched_ref": s["matched_ref"],
-            "matched_text": s["matched_text"],
             "confidence": s["confidence"],
-            "phonemes_asr": s.get("phonemes_asr", ""),
             "segment_uid": s["segment_uid"],
         }
         if s["segment_uid"] == target_uid:

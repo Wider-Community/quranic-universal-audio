@@ -287,13 +287,12 @@ def _stamp_persisted_classifier_fields(seg: dict, single_word_verses: set | None
 
     Called by every save path that mutates a segment dict; ensures
     ``qalqala_letter`` and ``is_boundary_adj`` stay in lockstep with
-    ``matched_ref`` / ``matched_text`` after an edit.
+    ``matched_ref`` after an edit.
 
     ``is_boundary_adj`` is computed structural-only here (``canonical=None``):
-    the phonemic side of boundary_adj depends on ``phonemes_asr`` which is
-    only set at extraction time and never touched by user edits, so stamping
-    it without canonical is correct for save-time mutations. The backfill
-    script DOES pass canonical so historical phonemic detections are captured.
+    user edits don't touch the phonemic-side ASR data which only exists at
+    extraction time. Extraction-time stamping passes canonical to capture
+    the phonemic side.
     """
     from services.validation.classifier import compute_is_boundary_adj
     seg["qalqala_letter"] = compute_qalqala_letter(seg)
@@ -388,9 +387,6 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
         if idx is not None and 0 <= idx < len(flat_segments):
             ref = normalize_ref_with_wc(upd.get("matched_ref", ""))
             flat_segments[idx]["matched_ref"] = ref
-            # Migration #5: matched_text no longer persisted on save —
-            # Inspector consumers derive from matched_ref via dk_text_for_ref.
-            flat_segments[idx].pop("matched_text", None)
             if "confidence" in upd:
                 flat_segments[idx]["confidence"] = upd["confidence"]
             if "ignored_categories" in upd:
@@ -446,10 +442,38 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     if isinstance(op_peaks, list) and op_peaks:
         append_peaks_records(reciter, op_peaks, batch_id=batch["batch_id"])
 
-    # Invalidate cache
-    cache.invalidate_seg_caches(reciter)
+    # Surgical cache invalidation. Edit-history-derived caches survive
+    # the autosave warm path by being appended/extended in place; auto-split
+    # only evicts when the uid set changed; pipeline_meta is immutable.
+    cache.pop_seg_caches_affected_by_segment_edit(reciter)
+    cache.append_history_batch(reciter, batch)
+    _refresh_split_group_index_on_save(reciter, batch)
+    if cache.batch_changes_segment_set(batch):
+        cache.pop_seg_auto_split(reciter)
 
     return {"ok": True}
+
+
+def _refresh_split_group_index_on_save(reciter: str, batch: dict) -> None:
+    """Invalidate the cached split-group index when a save contains split ops.
+
+    Pops the cache so the next reader rebuilds from the (already-appended)
+    batch list — pure in-memory walk, no I/O. Pre-computing the new closure
+    inline would require re-running the fixpoint over an existing index plus
+    the new ops, same cost as a full rebuild for typical batch sizes with
+    more code surface. No-op if the cache is empty or the batch has no
+    split ops.
+    """
+    cached = cache.get_seg_split_group_index(reciter)
+    if cached is None:
+        return
+    has_split = any(
+        op.get("op_type") == "split_segment" or op.get("kind") == "split_segment"
+        for op in batch.get("operations") or []
+    )
+    if not has_split:
+        return
+    cache.pop_seg_split_group_index(reciter)
 
 
 def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) -> dict:

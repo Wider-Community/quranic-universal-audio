@@ -74,9 +74,9 @@ def reset_cache() -> None:
 # matched_ref -> dk_words text resolver
 #
 # Mirror of `frontend/src/tabs/segments/utils/data/references.ts::dkTextForRef`.
-# Lets server-side code (validation classifier, undo snapshot enrichment)
-# derive the Arabic text for a canonical ``surah:ayah:word-surah:ayah:word``
-# ref without carrying a `matched_text` field on every snapshot or segment.
+# Server-side derivation of the Arabic text for a canonical
+# ``surah:ayah:word-surah:ayah:word`` ref. Migration #5 removed any
+# per-seg / per-snapshot text field; this is the canonical source.
 # ---------------------------------------------------------------------------
 
 _MAX_AYAH_BOUNDARY = 300  # mirrors references.ts; runaway-ayah guard

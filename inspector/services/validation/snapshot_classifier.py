@@ -3,9 +3,9 @@
 A SegSnapshot is the loose dict shape persisted under
 ``edit_history.jsonl`` operation records (``targets_before``,
 ``targets_after``) and embedded in validation responses. It carries a
-subset of segment fields — typically ``matched_ref``, ``matched_text``,
-``confidence``, ``time_*``, ``segment_uid`` — without an enclosing entry
-or chapter context.
+subset of segment fields — typically ``matched_ref``, ``confidence``,
+``time_*``, ``segment_uid`` — without an enclosing entry or chapter
+context.
 
 This module derives whatever positional inputs the classifier needs from
 the snapshot itself and routes through :func:`classify_segment`. No
