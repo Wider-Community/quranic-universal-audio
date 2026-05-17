@@ -38,7 +38,6 @@ from .activity import (
 from .segments import (
     auto_detect,
     auto_split,
-    phoneme_matching,
     qalqala,
     save,
     segments_query,
@@ -82,7 +81,6 @@ _LEGACY_ALIASES = {
     "stats": stats,
     "auto_detect": auto_detect,
     "auto_split": auto_split,
-    "phoneme_matching": phoneme_matching,
     "qalqala": qalqala,
     "save": save,
     "segments_query": segments_query,

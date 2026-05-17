@@ -3,7 +3,7 @@
     import { get } from 'svelte/store';
 
     import { editGate } from '../../../../lib/actions/editGate';
-    import type { SegValAnyItem, SegValBoundaryAdjItem } from '../../../../lib/types/api';
+    import type { SegValAnyItem } from '../../../../lib/types/api';
     import type { Segment } from '../../../../lib/types/domain';
     import { IssueRegistry } from '../../domain/registry';
     import {
@@ -41,7 +41,6 @@
     let _boundUid: string | null = null;
 
     // ---- Derived ----
-    $: boundaryItem = category === 'boundary_adj' ? (item as SegValBoundaryAdjItem) : null;
     $: issueMsg = (item as { msg?: string }).msg;
 
     // Subscribe to segAllData so resolvedSeg re-derives after split/merge
@@ -93,12 +92,6 @@
     $: ctxMode = $segConfig.accordionContext?.[category] ?? 'hidden';
     $: ctxDefaultOpen = ctxMode !== 'hidden';
     $: ctxNextOnly = ctxMode === 'next_only';
-
-    $: showPhonemes =
-        category === 'boundary_adj' &&
-        $segConfig.showBoundaryPhonemes &&
-        !isDirtySegment &&
-        !!(boundaryItem?.gt_tail || boundaryItem?.asr_tail);
 
     // Split-group expansion: once a resolvedSeg has been split, render every
     // descendant in the main slot so the accordion card grows with the split
@@ -252,14 +245,6 @@
                 validationCategory={category}
                 accordionSiblings={siblings}
             />
-            {#if showPhonemes && boundaryItem && m.segment_uid === _boundUid}
-                <div class="val-phoneme-tail">
-                    <span class="val-tail-label">GT:</span>
-                    <span class="val-tail-phonemes">{boundaryItem.gt_tail || ''}</span>
-                    <span class="val-tail-label">ASR:</span>
-                    <span class="val-tail-phonemes">{boundaryItem.asr_tail || ''}</span>
-                </div>
-            {/if}
         {/each}
         {#if nextSeg}
             <SegmentRow

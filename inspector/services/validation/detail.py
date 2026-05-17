@@ -12,10 +12,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from config import BOUNDARY_TAIL_DISPLAY_EXTRA, BOUNDARY_TAIL_K, LOW_CONFIDENCE_DETAIL_THRESHOLD, SHOW_BOUNDARY_PHONEMES
+from config import LOW_CONFIDENCE_DETAIL_THRESHOLD
 from services.storage.data_loader import load_detailed
 from services.reference.quran_refs import dk_text_for_ref
-from services.segments.phoneme_matching import get_phoneme_tails
 from utils.formatting import format_ms
 from utils.references import chapter_from_ref, seg_belongs_to_entry
 
@@ -258,7 +257,7 @@ def _build_detail_lists(
                         "ref": matched_ref,
                         "display_ref": matched_ref, "confidence": round(confidence, 4),
                         "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                        "text": seg.get("matched_text") or dk_text_for_ref(matched_ref),
+                        "text": dk_text_for_ref(matched_ref),
                         "classified_issues": ["repetitions"],
                     })
                     fallback_issues.append("repetitions")
@@ -338,7 +337,7 @@ def _build_detail_lists(
                     "ref": matched_ref,
                     "display_ref": display_ref, "confidence": round(confidence, 4),
                     "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                    "text": seg.get("matched_text") or dk_text_for_ref(matched_ref),
+                    "text": dk_text_for_ref(matched_ref),
                     "classified_issues": classified,
                 })
 
@@ -372,19 +371,12 @@ def _build_detail_lists(
                 })
 
             if flags["boundary_adj"]:
-                item: dict = {
+                boundary_adj.append({
                     "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
                     "ref": matched_ref,
                     "verse_key": f"{surah}:{s_ayah}",
                     "classified_issues": classified,
-                }
-                if SHOW_BOUNDARY_PHONEMES and canonical and seg.get("phonemes_asr"):
-                    display_n = BOUNDARY_TAIL_K + BOUNDARY_TAIL_DISPLAY_EXTRA
-                    tails = get_phoneme_tails(seg["phonemes_asr"], matched_ref, canonical, display_n)
-                    if tails:
-                        item["gt_tail"] = " ".join(tails[0])
-                        item["asr_tail"] = " ".join(tails[1])
-                boundary_adj.append(item)
+                })
 
             if flags["muqattaat"]:
                 muqattaat.append({

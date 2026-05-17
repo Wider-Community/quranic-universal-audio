@@ -12,9 +12,8 @@ tab, sharing one manifest. This module is the segments-side twin of
 
 Shard schema is documented in `C:\\Users\\ahmed\\.claude\\plans\\wondrous-hopping-mochi.md`
 §1. Slim per-segment payload (`matched_ref`, `time_start`, `time_end`,
-`confidence`) — `phonemes_asr`, `matched_text`, `segment_uid` and
-`ignored_categories` are deliberately not shipped because preload-mode UI does
-not render them.
+`confidence`) — `segment_uid` and `ignored_categories` are deliberately not
+shipped because preload-mode UI does not render them.
 """
 
 from __future__ import annotations

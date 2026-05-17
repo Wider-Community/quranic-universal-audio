@@ -187,7 +187,6 @@ export interface SegConfigResponse {
     trim_pad_left: number;
     trim_pad_right: number;
     trim_dim_alpha: number;
-    show_boundary_phonemes: boolean;
     low_conf_default_threshold: number;
     validation_categories: string[];
     muqattaat_verses: Array<[number, number]>;
@@ -369,8 +368,6 @@ export interface SegValBoundaryAdjItem extends SegValItemBase {
     seg_index: number;
     ref: Ref;
     verse_key: VerseRef;
-    gt_tail?: string;
-    asr_tail?: string;
 }
 
 export interface SegValCrossVerseItem extends SegValItemBase {

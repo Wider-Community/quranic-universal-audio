@@ -6,7 +6,6 @@ from config import (
     SEG_FONT_SIZE, SEG_WORD_SPACING,
     SEG_SCROLL_ANIM_MODE,
     TRIM_PAD_LEFT, TRIM_PAD_RIGHT, TRIM_DIM_ALPHA,
-    SHOW_BOUNDARY_PHONEMES,
     LOW_CONF_DEFAULT_THRESHOLD,
     ACCORDION_CONTEXT,
 )
@@ -46,7 +45,6 @@ def seg_config():
             "trim_pad_left": TRIM_PAD_LEFT,
             "trim_pad_right": TRIM_PAD_RIGHT,
             "trim_dim_alpha": TRIM_DIM_ALPHA,
-            "show_boundary_phonemes": SHOW_BOUNDARY_PHONEMES,
             "low_conf_default_threshold": LOW_CONF_DEFAULT_THRESHOLD,
             "validation_categories": list(ALL_CATEGORIES),
             "muqattaat_verses": sorted([list(t) for t in _MUQATTAAT_VERSES]),
@@ -149,13 +147,9 @@ def seg_all(reciter):
             if not seg_uid:
                 seg_uid = uuid7()
                 seg["segment_uid"] = seg_uid
-            # `matched_text` and `audio_url` deliberately omitted:
-            # - `matched_text` is reconstructable client-side via
-            #   ``dkTextForRef($quranRefs, matched_ref)`` and is the single
-            #   biggest wire contributor (~315 KB brotli savings).
-            # - `audio_url` is redundant with the top-level
-            #   ``audio_by_chapter[chapter]`` map; every FE consumer already
-            #   falls back to it.
+            # `audio_url` deliberately omitted — redundant with the
+            # top-level ``audio_by_chapter[chapter]`` map; every FE
+            # consumer already falls back to it.
             seg_dict = {
                 "chapter":      ch,
                 "entry_idx":    entry_idx,

@@ -55,9 +55,6 @@ def find_entry_for_insert(entries: list[dict], snap: dict, chapter_set: set[int]
 
 def snap_to_segment(snap: dict) -> dict:
     """Convert a snapshot to a segment dict for insertion."""
-    # Migration #5: matched_text not restored — derivable from matched_ref
-    # via dk_text_for_ref. Pre-Migration snapshots may still carry it but
-    # we deliberately don't propagate it onto the restored seg.
     seg = {
         "segment_uid": snap.get("segment_uid", uuid7()),
         "time_start": snap["time_start"],
@@ -67,8 +64,6 @@ def snap_to_segment(snap: dict) -> dict:
     }
     if snap.get("wrap_word_ranges"):
         seg["wrap_word_ranges"] = snap["wrap_word_ranges"]
-    if snap.get("phonemes_asr"):
-        seg["phonemes_asr"] = snap["phonemes_asr"]
     if snap.get("ignored_categories"):
         seg["ignored_categories"] = list(snap["ignored_categories"])
     return seg
@@ -136,8 +131,6 @@ def _reverse_trim(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
     seg["time_start"] = snap_before["time_start"]
     seg["time_end"] = snap_before["time_end"]
     seg["matched_ref"] = snap_before.get("matched_ref", "")
-    # Migration #5: matched_text not restored (derivable from matched_ref).
-    seg.pop("matched_text", None)
     seg["confidence"] = snap_before.get("confidence", 0)
     _restore_ignored_categories(seg, snap_before)
     entry["segments"].sort(key=lambda s: s["time_start"])
@@ -205,8 +198,6 @@ def _reverse_ref_edit(entries: list[dict], op: dict, chapter_set: set[int]) -> N
     _, _, seg = _find_and_verify(entries, after[0], chapter_set)
     snap_before = before[0]
     seg["matched_ref"] = snap_before.get("matched_ref", "")
-    # Migration #5: matched_text not restored (derivable from matched_ref).
-    seg.pop("matched_text", None)
     seg["confidence"] = snap_before.get("confidence", 0)
     _restore_ignored_categories(seg, snap_before)
 

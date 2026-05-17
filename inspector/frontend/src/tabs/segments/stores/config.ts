@@ -9,7 +9,6 @@ export interface SegConfig {
     standaloneRefs: Set<string> | null;
     standaloneWords: Set<string> | null;
     lcDefaultThreshold: number;
-    showBoundaryPhonemes: boolean;
     accordionContext: Record<string, string> | null;
     trimPadLeft: number;
     trimPadRight: number;
@@ -24,7 +23,6 @@ const _defaults: SegConfig = {
     standaloneRefs: null,
     standaloneWords: null,
     lcDefaultThreshold: 80,
-    showBoundaryPhonemes: true,
     accordionContext: null,
     trimPadLeft: 500,
     trimPadRight: 500,

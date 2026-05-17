@@ -25,9 +25,10 @@ def compute_qalqala_letter(seg: dict) -> str | None:
     """Return the persisted ``qalqala_letter`` value for *seg*.
 
     Either a single Arabic letter (one of ``QALQALA_LETTERS``) or ``None``
-    when no qalqala letter exists at the segment's right boundary. Falls
-    back to ``dk_text_for_ref`` when the seg has no ``matched_text``.
+    when no qalqala letter exists at the segment's right boundary. The
+    seg's text is derived from ``matched_ref`` via ``dk_text_for_ref``
+    (Migration #5 dropped per-seg ``matched_text``).
     """
-    text = seg.get("matched_text") or dk_text_for_ref(seg.get("matched_ref"))
+    text = dk_text_for_ref(seg.get("matched_ref"))
     last = last_arabic_letter(text)
     return last if last in QALQALA_LETTERS else None

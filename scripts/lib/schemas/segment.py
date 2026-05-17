@@ -12,20 +12,30 @@ writer/reader drift we discovered in migration #4 + #5 (see
 wraps a per-chapter group; ``DetailedSegment`` is the atomic unit and
 where 99% of the bytes live.
 
-Forward-compat reads: ``extra="allow"`` tolerates unknown legacy fields
-(e.g. snapshots from older extractions that still carry ``matched_text``
-or ``has_repeated_words``). Writers should serialise with
-``model_dump(exclude_none=True)`` so optional fields with no value don't
-land as ``null`` in the JSON.
+Forward-compat reads: ``extra="allow"`` tolerates unknown legacy fields.
+Writers should serialise with ``model_dump(exclude_none=True)`` so
+optional fields with no value don't land as ``null`` in the JSON.
+
+Dead-field rejection: ``matched_text`` and ``phonemes_asr`` were dropped
+in migration #5 and are NEVER valid on a seg or snapshot. The pre-validator
+logs and strips them if encountered (soft rejection on read; hard rejection
+should happen at write paths — extraction and save).
 
 Authoritative spec: ``docs/reference/migrate_wip.md`` §5.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+_log = logging.getLogger(__name__)
+
+# Fields removed in migration #5. The schema actively strips them on read
+# (with a warning) and writers must never emit them.
+_DEAD_FIELDS = ("matched_text", "phonemes_asr")
 
 
 class DetailedSegment(BaseModel):
@@ -47,19 +57,9 @@ class DetailedSegment(BaseModel):
     Optional content fields:
       - ``confidence`` — DP alignment confidence in ``[0.0, 1.0]``. Failed
         alignments get ``0.0``.
-      - ``matched_text`` — derivable from ``matched_ref`` via
-        ``services/reference/quran_refs.py::dk_text_for_ref``. New extraction
-        does NOT emit this; legacy on-disk data still has it (back-compat
-        read). DROPPED in migration #5.
-      - ``phonemes_asr`` — IPA phonemes from the ASR. Default-OFF in
-        extraction output as of migration #5 (consumed internally at
-        extraction time for ``is_boundary_adj`` stamping, then discarded).
-        Re-enable with ``extract_segments.py --with-phonemes-asr`` for the
-        ``SHOW_BOUNDARY_PHONEMES`` debug panel.
       - ``wrap_word_ranges`` — repetition-wrap geometry. Truthy iff the seg
         contains a multi-pass recital pattern. The ``repetitions``
-        validation category triggers ONLY off this field (not the now-
-        retired ``has_repeated_words`` boolean tautology).
+        validation category triggers ONLY off this field.
       - ``segment_uid`` — UUIDv7 stamped by save-flow merge / split / strip
         ops and by the ``/seg/all`` lazy backfill route. Absent on fresh
         extraction output.
@@ -78,10 +78,26 @@ class DetailedSegment(BaseModel):
 
     # === Optional content ===
     confidence: float = Field(0.0, ge=0.0, le=1.0)
-    matched_text: str | None = None
-    phonemes_asr: str | None = None
     wrap_word_ranges: list[list[str]] | None = None
     segment_uid: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _strip_dead_fields(cls, data: Any) -> Any:
+        """Soft-reject migration #5 dead fields on read.
+
+        Snapshots embedded in ``edit_history.jsonl`` may still carry these
+        on legacy buckets that escaped ``migrate_wip5_in_place.py``. We log
+        and strip rather than raise so reads don't burn requests. Hard
+        rejection must happen at write paths (extraction + save), which
+        never construct these fields in the first place after migration #5.
+        """
+        if isinstance(data, dict):
+            for dead in _DEAD_FIELDS:
+                if dead in data:
+                    _log.warning("dropped legacy field %r during seg parse", dead)
+                    data = {k: v for k, v in data.items() if k != dead}
+        return data
 
     @model_validator(mode="after")
     def _validate_time_range(self) -> "DetailedSegment":
@@ -149,8 +165,9 @@ class DetailedDocument(BaseModel):
 def parse_detailed_segment(raw: dict[str, Any]) -> DetailedSegment:
     """Parse one seg dict (e.g. from inside ``entries[i].segments``).
 
-    Tolerates legacy fields (``matched_text``, ``has_repeated_words``,
-    ``phonemes_asr``) via ``extra="allow"``. New writers should serialise
-    via ``seg.model_dump(exclude_none=True)`` to omit fields without value.
+    The pre-validator strips migration #5 dead fields (``matched_text``,
+    ``phonemes_asr``) with a warning. New writers must serialise via
+    ``seg.model_dump(exclude_none=True)`` to omit optional fields with no
+    value (so they don't land as ``null`` in JSON).
     """
     return DetailedSegment.model_validate(raw)

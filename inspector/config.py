@@ -70,10 +70,6 @@ TRIM_PAD_LEFT = 15000                     # ms padding before segment
 TRIM_PAD_RIGHT = 15000                    # ms padding after segment
 TRIM_DIM_ALPHA = 0.4                      # dimming opacity for padded regions
 
-# Boundary adjustment: phoneme tail mismatch detection
-BOUNDARY_TAIL_K = 3                        # number of trailing phonemes to compare
-SHOW_BOUNDARY_PHONEMES = False             # show GT/ASR tail phonemes on boundary_adj cards
-
 # Accordion context: which validation categories auto-expand context cards
 # Values: "shown" (default open), "hidden" (default closed), "next_only" (open on nav)
 ACCORDION_CONTEXT = {
@@ -158,9 +154,6 @@ MISSING_WORD_DIFF_MS_WEIGHT = 1000
 WORDS_PER_SEG_HIST_MAX = 15            # upper bound for words-per-segment histogram
 SEGS_PER_VERSE_HIST_MAX = 8            # upper bound for segs-per-verse histogram
 CONF_HIST_BIN_SIZE = 5                 # bin width (percentage points) for confidence histogram
-
-# Boundary display: how many extra phonemes beyond BOUNDARY_TAIL_K to show in detail cards
-BOUNDARY_TAIL_DISPLAY_EXTRA = 2        # display_n = BOUNDARY_TAIL_K + BOUNDARY_TAIL_DISPLAY_EXTRA
 
 # Auto-split (services/auto_split.py): MFA Space + timeout. Cross-verse
 # accordion's "Auto Split" routes here to compute the verse-boundary split

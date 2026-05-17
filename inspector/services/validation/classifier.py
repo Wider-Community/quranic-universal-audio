@@ -47,9 +47,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from config import BOUNDARY_TAIL_K, LOW_CONFIDENCE_DETAIL_THRESHOLD, LOW_CONFIDENCE_THRESHOLD
+from config import LOW_CONFIDENCE_DETAIL_THRESHOLD, LOW_CONFIDENCE_THRESHOLD
 from constants import MUQATTAAT_VERSES, QALQALA_LETTERS, STANDALONE_REFS, STANDALONE_WORDS
-from services.segments.phoneme_matching import tail_phoneme_mismatch
 from services.reference.quran_refs import dk_text_for_ref
 from utils.arabic_text import last_arabic_letter, strip_quran_deco
 from utils.references import seg_belongs_to_entry
@@ -134,14 +133,13 @@ def compute_is_boundary_adj(
         return False
 
     if s_word == e_word and (surah, s_ayah, s_word) not in STANDALONE_REFS:
-        text = seg.get("matched_text") or dk_text_for_ref(seg.get("matched_ref"))
+        text = dk_text_for_ref(seg.get("matched_ref"))
         if strip_quran_deco(text) not in STANDALONE_WORDS:
             return True
 
-    if canonical and seg.get("phonemes_asr"):
-        matched_ref = seg.get("matched_ref", "")
-        if tail_phoneme_mismatch(seg["phonemes_asr"], matched_ref, canonical, BOUNDARY_TAIL_K):
-            return True
+    # The phonemic side of boundary_adj was retired in Migration #5 — extraction
+    # no longer persists ``phonemes_asr`` on disk and save/undo never touch it,
+    # so structural-only is the canonical signal.
 
     return False
 
