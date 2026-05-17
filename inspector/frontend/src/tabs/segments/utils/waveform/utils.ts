@@ -194,6 +194,31 @@ function _stableHash(input: string): string {
     return (h >>> 0).toString(16).padStart(8, '0').slice(0, 8);
 }
 
+/**
+ * Decode a base64-encoded int8 buffer into a fresh ``Int8Array``.
+ *
+ * Chapter peaks travel the wire in the slim envelope
+ * ``{q:'int8', n, peaks_b64, bps, duration_ms}`` per audio URL; FE decodes
+ * ``peaks_b64`` → ``Int8Array(n * 2)`` once on receive and the drawer reads
+ * the typed array directly via ``peaks-view.ts``. See
+ * ``docs/reference/inspector/peaks.md``.
+ *
+ * Why ``atob`` + ``charCodeAt``: fastest browser-portable path at chapter
+ * scale (≤ 144 KB per chapter). ``Uint8Array.from`` with a callback pays a
+ * function call per byte; ``Response.arrayBuffer`` has higher fixed
+ * overhead than the loop saves below ~1 MB.
+ */
+function _b64ToInt8(b64: string, n: number): Int8Array {
+    const bin = atob(b64);
+    const len = Math.min(bin.length, n * 2);
+    const out = new Int8Array(len);
+    for (let i = 0; i < len; i++) {
+        // charCodeAt returns 0-255; reinterpret as signed int8.
+        out[i] = (bin.charCodeAt(i) << 24) >> 24;
+    }
+    return out;
+}
+
 export function _fetchPeaks(reciter: string, chapters: Array<number | string>): void {
     if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
     if (!chapters || chapters.length === 0) return;
@@ -212,7 +237,24 @@ export function _fetchPeaks(reciter: string, chapters: Array<number | string>): 
     fetchJson<SegPeaksResponse>(url).then(data => {
         if (!get(segAllData) || get(selectedReciter) !== reciter) return;
         for (const [audioUrl, pe] of Object.entries(data.peaks || {})) {
-            if (audioUrl) setWaveformPeaks(audioUrl, pe);
+            if (!audioUrl) continue;
+            // Route emits the slim envelope verbatim. Decode b64 → Int8Array
+            // once and stash the typed view in the per-URL cache; downstream
+            // drawers branch on shape via peaks-view.ts (Int8Array for
+            // chapter peaks here, PeakBucket[] for per-seg ffmpeg fallback
+            // and history-peaks JSONL).
+            const entry = pe as unknown as {
+                q?: string;
+                n?: number;
+                peaks_b64?: string;
+                duration_ms?: number;
+                bps?: number;
+            };
+            if (entry.q !== 'int8' || typeof entry.peaks_b64 !== 'string' || typeof entry.n !== 'number') continue;
+            setWaveformPeaks(audioUrl, {
+                peaks: _b64ToInt8(entry.peaks_b64, entry.n),
+                duration_ms: entry.duration_ms ?? 0,
+            });
         }
         redrawPeaksWaveforms();
         if (!data.complete && Object.keys(data.peaks || {}).length > 0) {

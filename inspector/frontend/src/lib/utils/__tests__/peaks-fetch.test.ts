@@ -31,7 +31,6 @@ describe('fetchSegmentPeaks', () => {
                 end_ms: 200,
                 chapter: 7,
             }],
-            cached_only: false,
         });
     });
 });

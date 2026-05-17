@@ -156,3 +156,48 @@ def unpack_slim(blob: bytes) -> dict | None:
         }
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
         return None
+
+
+def unpack_slim_envelope(blob: bytes) -> dict | None:
+    """Inverse of :func:`pack_slim` that **skips dequant** — returns the slim
+    envelope verbatim as ``{schema_version, duration_ms, q:'int8', bps, n,
+    peaks_b64}``. This is the runtime reader for the FE-facing peaks route:
+    the browser inflates b64 → ``Int8Array`` once on receive and the drawer
+    consumes the typed array directly (see ``peaks-view.ts`` and
+    ``docs/reference/inspector/peaks.md``).
+
+    Validates the same envelope shape as :func:`unpack_slim` (schema_version,
+    quantization tag, payload length) but skips the int8 → float32 →
+    ``.tolist()`` step that the offline extraction's history-JSONL writer
+    still uses. On a husary-ch2-sized chapter that loop alone costs ~5 ms
+    server-side and allocates ~3 MB of float-list objects per request.
+
+    Returns ``None`` on any decode failure (same contract as :func:`unpack_slim`).
+    """
+    try:
+        raw = gzip.decompress(blob)
+        doc = json.loads(raw)
+        if not isinstance(doc, dict) or doc.get("schema_version") != SLIM_SCHEMA_VERSION:
+            return None
+        if doc.get("q") != "int8":
+            return None
+        n = int(doc["n"])
+        # Cheap envelope sanity check: peaks_b64 byte length after decode
+        # MUST equal n * 2 (one int8 each for min, max). Verifies the file
+        # isn't truncated without paying the full decode.
+        b64_len = len(doc["peaks_b64"])
+        # base64 byte count: ceil(decoded / 3) * 4. Reverse: decoded = (b64_len * 3) // 4
+        # (assumes proper padding, which we control on the writer side).
+        decoded_len = (b64_len * 3) // 4
+        if decoded_len < n * 2:
+            return None
+        return {
+            "schema_version": SLIM_SCHEMA_VERSION,
+            "duration_ms": int(doc["duration_ms"]),
+            "bps": int(doc["bps"]),
+            "q": "int8",
+            "n": n,
+            "peaks_b64": doc["peaks_b64"],
+        }
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return None

@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from config import FFMPEG_FULL_TIMEOUT
 from . import audio_meta
 from .peaks import compute_audio_peaks
-from .peaks_slim import pack_slim, unpack_slim
+from .peaks_slim import pack_slim, unpack_slim_envelope
 from services.storage import storage_paths
 from services.storage.hf_bucket import get_backend
 
@@ -348,19 +348,24 @@ def read_prefetched_audio_local_path(slug: str, url: str):
 
 
 def read_prefetched_peaks(slug: str, url: str) -> dict | None:
-    """Return the prefetched peaks for ``url`` as an unpacked dict.
+    """Return the prefetched chapter-overview peaks for ``url`` in the slim
+    int8 envelope shape.
 
-    Reads the v3 slim packed gzip blob from
-    ``wip/<slug>/peaks/<chapter>.json.gz`` and inflates it via
-    ``unpack_slim`` so callers see the familiar
-    ``{schema_version, duration_ms, peaks: list[list[float]], bps}`` shape.
+    Reads ``<wip|published>/<slug>/peaks/<chapter>.json.gz`` and returns the
+    packed envelope verbatim: ``{schema_version:3, duration_ms, q:'int8',
+    bps, n, peaks_b64}``. No dequant, no ``.tolist()`` — the FE-facing route
+    sends this through unchanged and the browser inflates b64 → ``Int8Array``
+    once on receive (see ``docs/reference/inspector/peaks.md``).
 
     Returns ``None`` for:
     - Unknown URL (not in the catalog manifest).
     - Missing file (chapter never prefetched, or backfill not yet run).
-    - Pre-v3 file or corrupt blob (``unpack_slim`` returns None) — caller
-      treats this as a cache miss; the prefetch worker re-bakes via
-      ``fetch_and_persist_chapter``.
+    - Pre-v3 file or corrupt blob — caller treats this as a cache miss; the
+      prefetch worker re-bakes via ``fetch_and_persist_chapter``.
+
+    Companion ``unpack_slim`` (returns dequantized float-list) exists in
+    ``peaks_slim.py`` for the offline extraction history-JSONL writer.
+    Runtime inspector code uses only this envelope reader.
     """
     chapter = audio_meta.chapter_for_url(slug, url)
     if chapter is None:
@@ -371,4 +376,4 @@ def read_prefetched_peaks(slug: str, url: str) -> dict | None:
         blob = backend.read_bytes(path)
     except Exception:  # noqa: BLE001
         return None
-    return unpack_slim(blob)
+    return unpack_slim_envelope(blob)

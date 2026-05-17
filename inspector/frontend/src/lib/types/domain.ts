@@ -131,9 +131,16 @@ export interface HistorySummary {
 export type PeakBucket = [number, number];
 
 /** Pre-computed waveform peaks for an audio URL (full-file).
- *  Server emits `peaks: [[min, max], ...]` — see `services/peaks.py`. B19. */
+ *  Server emits `peaks: [[min, max], ...]` — see `services/peaks.py`. B19.
+ *
+ *  Under the flag-gated drawer-int8 path (``localStorage.peaksInt8Drawer === '1'``)
+ *  ``peaks`` is an ``Int8Array(n * 2)`` instead — interleaved min/max bytes
+ *  in [-127, 127]. The hot-path drawer reads it via ``peaks-view.ts``
+ *  (one branch at view construction, then shape-free per-pixel reads).
+ *  Per-segment peaks (ffmpeg fallback) and history-peaks JSONL stay nested
+ *  list — see ``docs/proposals/peaks-int8-drawer.md``. */
 export interface AudioPeaks {
-    peaks: PeakBucket[];
+    peaks: PeakBucket[] | Int8Array;
     duration_ms: number;
     /** Start offset of this chunk within the audio file (ms). Present on per-segment peaks;
      *  absent/0 for full-file peaks. Drawing must subtract this from seg.time_start/time_end

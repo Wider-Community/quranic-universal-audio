@@ -477,16 +477,23 @@ export interface SegEditHistoryResponse {
 // /api/seg/* — Segments tab (peaks)
 // ===========================================================================
 
-/** GET /api/seg/peaks/:reciter?chapters=1,2,3&cached_only=true */
+/** GET /api/seg/peaks/:reciter?chapters=1,2,3
+ *
+ * Returns slim-int8 chapter-overview peaks per audio URL:
+ * `{ peaks: { [url]: { q:'int8', n, peaks_b64, bps, duration_ms } } }`.
+ * `complete` is always true — the route has no background-compute path.
+ * See `docs/reference/inspector/peaks.md`. */
 export interface SegPeaksResponse {
     peaks: Record<string, AudioPeaks>;
     complete: boolean;
 }
 
-/** POST /api/seg/segment-peaks/:reciter */
+/** POST /api/seg/segment-peaks/:reciter
+ *
+ * Single-tier fallback for when chapter peaks aren't loaded: ffmpeg + HTTP
+ * Range decode per segment, returns HD float ``PeakBucket[]`` at 30 bps. */
 export interface SegSegmentPeaksRequest {
-    segments: Array<{ url: string; start_ms: number; end_ms: number; chapter?: number }>;
-    cached_only?: boolean;
+    segments: Array<{ url: string; start_ms: number; end_ms: number; chapter?: number; pad_ms?: number }>;
 }
 
 export interface SegSegmentPeaksResponse {

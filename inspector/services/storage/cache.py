@@ -307,9 +307,6 @@ def batch_changes_segment_set(batch: dict) -> bool:
 # Peaks (thread-safe — manually coded)
 _PEAKS_CACHE: dict[str, dict[str, dict]] = {}
 _PEAKS_LOCK = threading.Lock()
-_PEAKS_COMPUTING: set[str] = set()
-
-
 def get_peaks_lock() -> threading.Lock:
     return _PEAKS_LOCK
 
@@ -323,31 +320,6 @@ def set_peaks_for_url(reciter: str, url: str, data: dict) -> None:
         if reciter not in _PEAKS_CACHE:
             _PEAKS_CACHE[reciter] = {}
         _PEAKS_CACHE[reciter][url] = data
-
-
-def update_peaks_cache(reciter: str, new_data: dict[str, dict]) -> dict[str, dict]:
-    """Merge *new_data* into the peaks cache for *reciter*. Returns the full cache."""
-    with _PEAKS_LOCK:
-        if reciter not in _PEAKS_CACHE:
-            _PEAKS_CACHE[reciter] = {}
-        _PEAKS_CACHE[reciter].update(new_data)
-        return dict(_PEAKS_CACHE[reciter])
-
-
-def pop_peaks_cache(reciter: str) -> None:
-    _PEAKS_CACHE.pop(reciter, None)
-
-
-def is_peaks_computing(key: str) -> bool:
-    return key in _PEAKS_COMPUTING
-
-
-def add_peaks_computing(key: str) -> None:
-    _PEAKS_COMPUTING.add(key)
-
-
-def discard_peaks_computing(key: str) -> None:
-    _PEAKS_COMPUTING.discard(key)
 
 
 # Peaks response cache — bounded-LRU for /api/seg/peaks GET responses.

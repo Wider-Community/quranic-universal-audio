@@ -14,8 +14,10 @@
     import type { PeakBucket } from '../types/domain';
     import { drawWaveformPeaks } from '../utils/waveform-draw';
 
-    /** Peak data to render. null = show empty (black) canvas. */
-    export let peaks: PeakBucket[] | null = null;
+    /** Peak data to render. null = show empty (black) canvas. Both nested
+     *  `PeakBucket[]` and the drawer-int8 `Int8Array(2N)` are accepted;
+     *  `drawWaveformPeaks` branches on shape internally. */
+    export let peaks: PeakBucket[] | Int8Array | null = null;
     /** Canvas display width in pixels. */
     export let width = 300;
     /** Canvas display height in pixels. */

@@ -73,12 +73,3 @@ def resolve(reciter: str, url: str) -> AudioSource:
         cdn_url=url, data=None, path=None,
         vbr=vbr, bitrate_kbps=bitrate_kbps, chapter_key=chapter_key,
     )
-
-
-def resolve_chapter_peaks(reciter: str, url: str) -> dict | None:
-    """Return the prefetched chapter peaks JSON for ``url`` if present.
-
-    Thin pass-through to ``audio_fetch.read_prefetched_peaks`` — kept here so
-    callers depend on one module for all audio-resolution questions.
-    """
-    return audio_fetch.read_prefetched_peaks(reciter, url)
