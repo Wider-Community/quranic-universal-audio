@@ -107,7 +107,6 @@ def test_uid_backfilled_for_legacy_fixture(tmp_reciter_dir):
         "entries": [
             {
                 "ref": "112",
-                "audio": "https://fixture.local/audio/112.mp3",
                 "segments": [
                     {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "confidence": 1.0},
                     {"time_start": 3000, "time_end": 4000, "matched_ref": "112:1:2-112:1:2", "confidence": 1.0},
@@ -176,7 +175,6 @@ def test_uid_persisted_on_next_save(tmp_reciter_dir, signed_in_client):
         "entries": [
             {
                 "ref": "112",
-                "audio": "https://fixture.local/audio/112.mp3",
                 "segments": [
                     {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "confidence": 1.0},
                 ],
@@ -211,7 +209,6 @@ def test_uid_deterministic_across_processes(tmp_path):
         "entries": [
             {
                 "ref": "112",
-                "audio": "https://fixture.local/audio/112.mp3",
                 "segments": [
                     {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "confidence": 1.0},
                 ],

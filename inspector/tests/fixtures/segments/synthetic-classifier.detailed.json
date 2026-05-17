@@ -47,12 +47,11 @@
         "notes": "Used as the audio_bleeding's secondary entry with audio differing — irrelevant for classifier-only fixture (single entry per ref keeps fixture small)."
       }
     ],
-    "_classifier_inputs_note": "All segments live under entry ref=1 except the muqattaat one (ref=2). entry.audio is irrelevant to classifier rules; only matched_ref vs entry_ref drives audio_bleeding."
+    "_classifier_inputs_note": "All segments live under entry ref=1 except the muqattaat one (ref=2). Only matched_ref vs entry_ref drives audio_bleeding."
   },
   "entries": [
     {
       "ref": "2",
-      "audio": "https://fixture.local/audio/2.mp3",
       "segments": [
         {
           "time_start": 1000,
@@ -67,7 +66,6 @@
     },
     {
       "ref": "1",
-      "audio": "https://fixture.local/audio/1.mp3",
       "segments": [
         {
           "time_start": 1000,

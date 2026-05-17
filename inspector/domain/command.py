@@ -119,15 +119,14 @@ def apply_inverse_patch(entries: list[dict], patch: dict) -> list[dict]:
                 entry["segments"][i] = _hydrate(before_by_uid[uid])
 
     # 3. Re-insert segments that the forward command removed.
-    #    We need to find the right entry to insert into; we match by the
-    #    ``audio_url`` carried in the before-snapshot, with a chapter-based
-    #    fallback when the snapshot pre-dates the audio_url field.
+    #    We match by the snapshot's ``entry_ref`` (set by ``snapshotSeg`` on
+    #    every new save) against ``entry["ref"]``. Legacy snapshots without
+    #    ``entry_ref`` fall back to the affected-chapters set.
     for uid in patch_obj.removedIds:
         snap = before_by_uid.get(uid)
         if not snap:
             continue
-        audio_url = snap.get("audio_url", "")
-        target_entry = _find_entry_for_restore(entries, snap, patch_obj.affectedChapterIds, audio_url)
+        target_entry = _find_entry_for_restore(entries, snap, patch_obj.affectedChapterIds)
         if target_entry is not None:
             target_entry["segments"].append(_hydrate(snap))
 
@@ -144,9 +143,8 @@ def apply_inverse_patch(entries: list[dict], patch: dict) -> list[dict]:
 
     for uid, snap in before_by_uid.items():
         if uid not in present_after_steps_1_3:
-            audio_url = snap.get("audio_url", "")
             target_entry = _find_entry_for_restore(
-                entries, snap, patch_obj.affectedChapterIds, audio_url
+                entries, snap, patch_obj.affectedChapterIds
             )
             if target_entry is not None:
                 target_entry["segments"].append(_hydrate(snap))
@@ -189,20 +187,22 @@ def _find_entry_for_restore(
     entries: list[dict],
     snap: dict,
     chapter_ids: tuple[int, ...],
-    audio_url: str,
 ) -> dict | None:
     """Find the entry to re-insert a restored segment into.
 
-    Prefers audio_url match; falls back to first entry whose chapter is in
-    *chapter_ids*.
+    Match priority:
+      1. Snapshot's ``entry_ref`` against ``entry["ref"]`` (exact match —
+         disambiguates by_ayah deliveries where one chapter has many entries).
+      2. First entry whose chapter is in *chapter_ids* (correct for by_surah
+         and a best-effort fallback for legacy snapshots without entry_ref).
+      3. Any entry at all (last resort).
     """
-    # Pass 1: exact audio_url match.
-    if audio_url:
+    snap_ref = snap.get("entry_ref") or ""
+    if snap_ref:
         for entry in entries:
-            if entry.get("audio", "") == audio_url:
+            if entry.get("ref") == snap_ref:
                 return entry
 
-    # Pass 2: first entry whose chapter is in the affected set.
     for entry in entries:
         ref = entry.get("ref", "")
         try:
@@ -216,5 +216,4 @@ def _find_entry_for_restore(
         if ch in chapter_ids:
             return entry
 
-    # Pass 3: any entry at all (last resort).
     return entries[0] if entries else None

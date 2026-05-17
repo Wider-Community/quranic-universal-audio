@@ -36,7 +36,6 @@
   "entries": [
     {
       "ref": "1",
-      "audio": "https://fixture.local/audio/1.mp3",
       "segments": [
         {
           "time_start": 1000,

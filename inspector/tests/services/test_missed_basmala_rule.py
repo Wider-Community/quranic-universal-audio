@@ -10,7 +10,7 @@ from __future__ import annotations
 
 
 def _entry(ref: str, segs: list[dict]) -> dict:
-    return {"ref": ref, "audio": f"https://example/{ref}.mp3", "segments": segs}
+    return {"ref": ref, "segments": segs}
 
 
 def _seg(matched_ref: str, *, uid: str, t0: int = 0, t1: int = 1000) -> dict:
