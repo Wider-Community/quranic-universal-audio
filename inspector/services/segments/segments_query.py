@@ -33,12 +33,23 @@ def get_chapter_data(reciter: str, chapter: int,
     if not matching:
         return None
 
-    audio_url = matching[0].get("audio", "")
+    # Migration #5: chapter audio URL comes from the bucket audio_manifest
+    # sidecar (`catalog/audio_manifest/<slug>.json::chapters[ch].url`), not
+    # `entry.audio` in detailed.json (extractor drops it). Fall back to the
+    # legacy `entry.audio` field for pre-#5 on-disk data so the transition
+    # is read-tolerant.
+    from services.audio.audio_meta import chapter_urls
+
+    _urls = chapter_urls(reciter)
+    audio_url = (
+        _urls.get(str(chapter))
+        or matching[0].get("audio", "")
+    )
 
     segments = []
     idx = 0
     for entry_idx, entry in enumerate(matching):
-        entry_audio = entry.get("audio", "")
+        entry_audio = audio_url or entry.get("audio", "")
         for seg in entry.get("segments", []):
             t_start = seg.get("time_start", 0)
             t_end = seg.get("time_end", 0)

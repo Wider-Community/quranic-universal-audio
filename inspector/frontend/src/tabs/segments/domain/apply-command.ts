@@ -256,9 +256,9 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
     //
     // Drop repetition metadata from every child: a split *resolves* the
     // multi-pass repetition into independent pieces, so the inherited
-    // `wrap_word_ranges` / `has_repeated_words` no longer describe any one
-    // piece's content. Leaving them attached re-tags clean post-split segs
-    // as repetitions and makes Auto Split feed wrong refs to MFA.
+    // `wrap_word_ranges` no longer describes any one piece's content.
+    // Leaving it attached re-tags clean post-split segs as repetitions
+    // and makes Auto Split feed wrong refs to MFA.
     const pieces: Segment[] = [];
     for (let i = 0; i < nPieces; i++) {
         const start = i === 0 ? target.time_start : cursors[i - 1]!;
@@ -269,7 +269,6 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
             time_end: end,
         };
         delete piece.wrap_word_ranges;
-        delete piece.has_repeated_words;
         if (i === 0) {
             // Keep parent uid + index for piece 0.
         } else {
@@ -365,10 +364,9 @@ function _reduceMerge(state: ApplyCommandState, cmd: MergeCommand, ctx?: ApplyCo
     };
     merged.ignored_categories = mergedIc.size ? [...mergedIc] : undefined;
     // Merging changes the seg's matched_ref + geometry; any wrap that was
-    // scoped to ``first`` may not apply to the merged span. Drop wrap +
-    // has_repeated_words for the same reasons split and edit-ref do.
+    // scoped to ``first`` may not apply to the merged span. Drop wrap for
+    // the same reasons split and edit-ref do.
     delete merged.wrap_word_ranges;
-    delete merged.has_repeated_words;
     const ctxCat = cmd.sourceCategory ?? cmd.contextCategory;
     const resolved = _resolvedFromContext(ctxCat);
 
@@ -443,7 +441,6 @@ function _reduceEditReference(
     // re-tag a real repetition seg whose ref they edited.
     if (target.matched_ref !== cmd.matched_ref) {
         delete next.wrap_word_ranges;
-        delete next.has_repeated_words;
     }
     const resolved = _resolvedFromContext(cmd.sourceCategory ?? cmd.contextCategory);
 

@@ -63,8 +63,6 @@ def snap_to_segment(snap: dict) -> dict:
         "matched_text": snap.get("matched_text", ""),
         "confidence": snap.get("confidence", 0),
     }
-    if snap.get("has_repeated_words"):
-        seg["has_repeated_words"] = True
     if snap.get("wrap_word_ranges"):
         seg["wrap_word_ranges"] = snap["wrap_word_ranges"]
     if snap.get("phonemes_asr"):

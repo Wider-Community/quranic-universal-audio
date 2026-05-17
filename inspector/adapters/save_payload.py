@@ -71,8 +71,9 @@ def make_seg(
     wrap = s.get("wrap_word_ranges")
     if wrap and is_wrap_consistent(matched_ref, wrap, word_counts):
         result["wrap_word_ranges"] = wrap
-        if s.get("has_repeated_words"):
-            result["has_repeated_words"] = True
+        # Migration #5: has_repeated_words is dropped — it was a tautology of
+        # ``bool(wrap_word_ranges)`` and the classifier never read it (only
+        # wrap_word_ranges drives the ``repetitions`` category).
 
     if "ignored_categories" in s:
         ic = filter_persistent_ignores(s.get("ignored_categories") or [])

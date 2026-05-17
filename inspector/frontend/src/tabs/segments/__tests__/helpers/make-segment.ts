@@ -16,7 +16,6 @@ export interface FixtureSegment {
   confidence: number;
   ignored_categories?: string[];
   wrap_word_ranges?: number[][];
-  has_repeated_words?: boolean;
   audio_url?: string;
   ignored?: boolean;
 }

@@ -45,22 +45,39 @@ def normalize_audio_url(url: str) -> str:
 
 
 def _validate_record(rec: dict) -> str | None:
-    """Return an error string if ``rec`` is malformed, else None."""
+    """Return an error string if ``rec`` is malformed, else None.
+
+    Migration #5: ``duration_ms``, ``batch_id``, ``saved_at_utc`` are no
+    longer required (callers derive ``duration = end_ms - start_ms``). The
+    peaks payload may be EITHER ``peaks`` (legacy ``list[list[float]]``)
+    OR ``peaks_b64`` + ``bps`` (new int8-b64 encoding) — at least one form
+    must be present. See ``scripts/lib/schemas/peaks_history.py`` for the
+    full Pydantic-enforced contract.
+    """
     op_id = rec.get("op_id")
     if not isinstance(op_id, str) or not op_id:
         return "missing/invalid op_id"
     url = rec.get("url")
     if not isinstance(url, str) or not url:
         return "missing/invalid url"
-    for k in ("start_ms", "end_ms", "duration_ms"):
+    for k in ("start_ms", "end_ms"):
         v = rec.get(k)
         if not isinstance(v, int) or v < 0:
             return f"missing/invalid {k}"
     if rec["end_ms"] <= rec["start_ms"]:
         return "end_ms must be > start_ms"
     peaks = rec.get("peaks")
-    if not isinstance(peaks, list) or not peaks:
-        return "missing/invalid peaks"
+    peaks_b64 = rec.get("peaks_b64")
+    if peaks_b64 is not None:
+        if not isinstance(peaks_b64, str) or not peaks_b64:
+            return "invalid peaks_b64"
+        if not isinstance(rec.get("bps"), int) or rec["bps"] < 1:
+            return "peaks_b64 requires bps tag"
+    elif peaks is not None:
+        if not isinstance(peaks, list) or not peaks:
+            return "missing/invalid peaks"
+    else:
+        return "record must carry peaks payload (peaks or peaks_b64)"
     return None
 
 
@@ -71,32 +88,37 @@ def append_peaks_records(
 ) -> int:
     """Append per-op peak records for *reciter*. Returns count written.
 
-    Each record must carry ``op_id``, ``url``, ``start_ms``, ``end_ms``,
-    ``peaks``, ``duration_ms``. ``url`` is normalized (proxy stripped) and
-    ``batch_id`` / ``saved_at_utc`` are stamped on each line.
+    Migration #5 slim shape: each record carries ``op_id``, ``url``,
+    ``start_ms``, ``end_ms``, and a peaks payload (``peaks_b64`` + ``bps``
+    preferred; ``peaks`` accepted for back-compat). ``batch_id``,
+    ``duration_ms``, ``saved_at_utc`` are no longer written — consumers
+    derive duration from ``end_ms - start_ms`` and don't filter by
+    batch_id (op_id is the join key).
+
     Malformed records are skipped silently — partial persistence is fine
-    because consumers fall through to compute-on-play.
+    because consumers fall through to compute-on-play via the runtime
+    backfill.
     """
     if not records:
         return 0
-    now = datetime.now(timezone.utc).isoformat(
-        timespec="milliseconds"
-    ).replace("+00:00", "Z")
 
     written = 0
     for rec in records:
         if not isinstance(rec, dict):
             continue
-        line = {
+        line: dict = {
             "op_id": rec.get("op_id"),
-            "batch_id": batch_id if rec.get("batch_id") is None else rec.get("batch_id"),
             "url": normalize_audio_url(rec.get("url", "")),
             "start_ms": rec.get("start_ms"),
             "end_ms": rec.get("end_ms"),
-            "peaks": rec.get("peaks"),
-            "duration_ms": rec.get("duration_ms"),
-            "saved_at_utc": now,
         }
+        # Peaks payload: prefer new (peaks_b64 + bps); fall back to legacy.
+        peaks_b64 = rec.get("peaks_b64")
+        if peaks_b64 is not None:
+            line["bps"] = rec.get("bps")
+            line["peaks_b64"] = peaks_b64
+        elif rec.get("peaks") is not None:
+            line["peaks"] = rec["peaks"]
         err = _validate_record(line)
         if err:
             continue

@@ -14,6 +14,7 @@ from collections import defaultdict
 
 from config import BOUNDARY_TAIL_DISPLAY_EXTRA, BOUNDARY_TAIL_K, LOW_CONFIDENCE_DETAIL_THRESHOLD, SHOW_BOUNDARY_PHONEMES
 from services.storage.data_loader import load_detailed
+from services.reference.quran_refs import dk_text_for_ref
 from services.segments.phoneme_matching import get_phoneme_tails
 from utils.formatting import format_ms
 from utils.references import chapter_from_ref, seg_belongs_to_entry
@@ -257,7 +258,7 @@ def _build_detail_lists(
                         "ref": matched_ref,
                         "display_ref": matched_ref, "confidence": round(confidence, 4),
                         "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                        "text": seg.get("matched_text", ""),
+                        "text": seg.get("matched_text") or dk_text_for_ref(matched_ref),
                         "classified_issues": ["repetitions"],
                     })
                     fallback_issues.append("repetitions")
@@ -337,7 +338,7 @@ def _build_detail_lists(
                     "ref": matched_ref,
                     "display_ref": display_ref, "confidence": round(confidence, 4),
                     "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                    "text": seg.get("matched_text", ""),
+                    "text": seg.get("matched_text") or dk_text_for_ref(matched_ref),
                     "classified_issues": classified,
                 })
 

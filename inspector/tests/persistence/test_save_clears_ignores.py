@@ -284,7 +284,6 @@ def test_save_preserves_wrap_when_fe_sends_it(tmp_reciter_dir, signed_in_client)
             "phonemes_asr": "",
             "audio_url": "https://fixture.local/audio/112.mp3",
             "wrap_word_ranges": [["112:1:2", "112:1:2", "112:1:4"]],
-            "has_repeated_words": True,
         }],
         "operations": [],
     }
@@ -296,7 +295,10 @@ def test_save_preserves_wrap_when_fe_sends_it(tmp_reciter_dir, signed_in_client)
     saved = json.loads(legacy_path.read_text(encoding="utf-8"))
     seg = saved["entries"][0]["segments"][0]
     assert seg.get("wrap_word_ranges") == [["112:1:2", "112:1:2", "112:1:4"]]
-    assert seg.get("has_repeated_words") is True
+    # Migration #5: has_repeated_words is no longer persisted — it was a
+    # boolean tautology of bool(wrap_word_ranges). The classifier only
+    # reads wrap_word_ranges. Assert it's absent.
+    assert "has_repeated_words" not in seg
 
 
 def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, signed_in_client):

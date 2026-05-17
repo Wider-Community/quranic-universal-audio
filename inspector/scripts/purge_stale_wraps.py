@@ -139,6 +139,8 @@ def process_slug(backend, slug: str, kind: str, *, vwc: dict, apply: bool,
             })
             if apply:
                 seg.pop("wrap_word_ranges", None)
+                # Migration #5: has_repeated_words is no longer written by any
+                # path. Keep the pop for in-place purges on legacy on-disk data.
                 seg.pop("has_repeated_words", None)
 
     result = {

@@ -27,5 +27,5 @@ class Segment:
     entry_ref: str
     audio_url: str
     wrap_word_ranges: Optional[object] = None
-    has_repeated_words: bool = False
+    # Migration #5: has_repeated_words dropped — tautology of bool(wrap_word_ranges).
     ignored_categories: tuple[str, ...] = field(default_factory=tuple)

@@ -123,15 +123,24 @@ def seg_all(reciter):
     if not entries:
         return jsonify({"error": "Reciter not found"}), 404
 
+    # Migration #5: chapter audio URLs come from the bucket audio_manifest
+    # sidecar (catalog/audio_manifest/<slug>.json) — `entry.audio` is being
+    # dropped from detailed.json. Pre-seed the map from the sidecar; fall
+    # back to legacy `entry.audio` for pre-#5 on-disk data missing from
+    # the sidecar.
+    from services.audio.audio_meta import chapter_urls
+
+    audio_by_chapter: dict[str, str] = dict(chapter_urls(reciter))
     segments = []
-    audio_by_chapter = {}
     chapter_seg_idx = {}
 
     for entry_idx, entry in enumerate(entries):
         ch = chapter_from_ref(entry["ref"])
-        entry_audio = entry.get("audio", "")
         if str(ch) not in audio_by_chapter:
-            audio_by_chapter[str(ch)] = entry_audio
+            # Legacy back-compat read.
+            entry_audio = entry.get("audio", "")
+            if entry_audio:
+                audio_by_chapter[str(ch)] = entry_audio
         for seg in entry.get("segments", []):
             idx = chapter_seg_idx.get(ch, 0)
             chapter_seg_idx[ch] = idx + 1

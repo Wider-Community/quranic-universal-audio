@@ -94,7 +94,9 @@ export function snapshotSeg(seg: Segment): SegSnapshot {
         matched_ref: seg.matched_ref || '',
         confidence: seg.confidence ?? 0,
     };
-    if (seg.has_repeated_words) snap.has_repeated_words = true;
+    // Migration #5: has_repeated_words is a boolean tautology of
+    // `Boolean(wrap_word_ranges)` — the classifier ignores it (only
+    // wrap_word_ranges drives the repetitions category). Dropped.
     if (seg.wrap_word_ranges) snap.wrap_word_ranges = seg.wrap_word_ranges;
     if (seg.phonemes_asr) snap.phonemes_asr = seg.phonemes_asr;
     if (seg.entry_ref) snap.entry_ref = seg.entry_ref;

@@ -239,26 +239,29 @@ def _enrich_snapshot_audio_urls(reciter: str, batches: list[dict]) -> None:
     if not _needs_enrichment():
         return
 
-    # Local import — load_detailed lives in a sibling package and would
-    # otherwise create a top-of-module cycle in some test fixtures.
-    from services.storage.data_loader import load_detailed
+    # Migration #5: source per-chapter audio URLs from the bucket
+    # audio_manifest sidecar instead of detailed.json's ``entry.audio``
+    # (which the extractor no longer writes). ``chapter_urls(reciter)``
+    # returns ``{str_key: url}`` for both by_surah and by_ayah deliveries;
+    # we int-cast the by_surah keys here since pipeline snapshots
+    # enrich at chapter granularity.
+    from services.audio.audio_meta import chapter_urls
 
+    by_chapter: dict[int, str] = {}
     try:
-        entries = load_detailed(reciter) or []
+        for key, url in chapter_urls(reciter).items():
+            if ":" in str(key):
+                continue  # by_ayah key — chapter enrichment only
+            try:
+                by_chapter[int(key)] = url
+            except (TypeError, ValueError):
+                continue
     except Exception:  # noqa: BLE001
         logger.exception(
-            "history_query: load_detailed failed during audio_url enrichment "
+            "history_query: chapter_urls failed during audio_url enrichment "
             "(reciter=%s)", reciter,
         )
         return
-
-    by_chapter: dict[int, str] = {}
-    for entry in entries:
-        ch = chapter_from_ref(entry.get("ref", ""))
-        if ch and ch not in by_chapter:
-            audio = entry.get("audio")
-            if isinstance(audio, str) and audio:
-                by_chapter[ch] = audio
 
     if not by_chapter:
         return

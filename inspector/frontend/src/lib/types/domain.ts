@@ -34,8 +34,6 @@ export interface Segment {
     /** Back-compat legacy boolean from pre-categories ignore flag. Drift: absent from types/api.ts. */
     ignored?: boolean;
     wrap_word_ranges?: unknown; // opaque — used by repetition detection
-    /** Server-side repetition flag persisted via save/undo. */
-    has_repeated_words?: boolean;
     /** Space-separated ASR phoneme string used by tail-phoneme matching. */
     phonemes_asr?: string;
     /** Chapter number; present on /api/seg/all responses, derived client-side on /data. */

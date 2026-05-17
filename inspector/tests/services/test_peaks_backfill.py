@@ -21,6 +21,11 @@ def patch_backfill(monkeypatch):
 
     state = {
         "history_records": [],
+        # Migration #5: chapter→url comes from chapter_urls() (audio_manifest
+        # sidecar) instead of `entry.audio` in detailed.json. Fixtures
+        # populate the legacy ``detailed_entries`` field which we then
+        # project into the chapter_urls stub below — keeps existing
+        # per-test setup ergonomics unchanged.
         "detailed_entries": [],
         "persisted_peaks": [],
         "compute_calls": [],
@@ -32,6 +37,27 @@ def patch_backfill(monkeypatch):
 
     def fake_load_detailed(reciter):
         return list(state["detailed_entries"])
+
+    def fake_chapter_urls(reciter):
+        # Mirror peaks_backfill._audio_url_by_chapter's interpretation of
+        # the sidecar: by_surah keys are integer strings → URL. Take the
+        # first non-empty `entry.audio` per chapter to match what the
+        # legacy code did.
+        out = {}
+        for entry in state["detailed_entries"]:
+            ref = entry.get("ref", "")
+            if ":" in str(ref):
+                continue
+            try:
+                ch_key = str(int(ref))
+            except (TypeError, ValueError):
+                continue
+            if ch_key in out:
+                continue
+            url = entry.get("audio")
+            if isinstance(url, str) and url:
+                out[ch_key] = url
+        return out
 
     def fake_load_peaks_records(reciter, exclude_op_ids=None):
         return list(state["persisted_peaks"])
@@ -52,6 +78,10 @@ def patch_backfill(monkeypatch):
 
     monkeypatch.setattr(backfill_mod, "parse_history_for_reciter", fake_parse_history)
     monkeypatch.setattr(backfill_mod, "load_detailed", fake_load_detailed)
+    # _audio_url_by_chapter performs a LOCAL import of chapter_urls inside
+    # the helper, so we patch it on the source module (audio_meta).
+    from services.audio import audio_meta
+    monkeypatch.setattr(audio_meta, "chapter_urls", fake_chapter_urls)
     monkeypatch.setattr(backfill_mod, "load_peaks_records", fake_load_peaks_records)
     monkeypatch.setattr(
         backfill_mod, "compute_segment_peaks", fake_compute_segment_peaks,

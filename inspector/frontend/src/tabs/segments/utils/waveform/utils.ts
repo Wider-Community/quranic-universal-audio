@@ -60,7 +60,12 @@ export function indexSegPeaksBulk(peaksMap: Record<string, SegmentPeaks> | null 
 /** Push a list of persisted history-peaks records (from
  *  `/api/seg/history-peaks/<reciter>`) into the covering-range cache so the
  *  History panel renders without re-computing. Tolerant of partial records —
- *  any malformed entry is skipped. */
+ *  any malformed entry is skipped.
+ *
+ *  Migration #5: `duration_ms` is no longer written by either writer (offline
+ *  extraction or runtime backfill) — it's derivable from `end_ms - start_ms`.
+ *  Legacy records on disk still carry it; this reader prefers the derived
+ *  value and falls back to `duration_ms` for older payloads. */
 export function indexHistoryPeaksRecords(
     records: ReadonlyArray<{ url?: string; start_ms?: number; end_ms?: number; peaks?: unknown; duration_ms?: number }> | null | undefined,
 ): void {
@@ -69,10 +74,11 @@ export function indexHistoryPeaksRecords(
         const url = r.url;
         const startMs = r.start_ms;
         const endMs = r.end_ms;
-        const durationMs = r.duration_ms;
         const peaks = r.peaks;
         if (!url || typeof startMs !== 'number' || typeof endMs !== 'number'
-            || typeof durationMs !== 'number' || !Array.isArray(peaks) || peaks.length === 0) continue;
+            || !Array.isArray(peaks) || peaks.length === 0) continue;
+        const durationMs = endMs - startMs;  // derive (was r.duration_ms pre-#5)
+        if (durationMs <= 0) continue;
         pushSegPeaksEntry(url, {
             startMs,
             endMs,
