@@ -21,6 +21,16 @@ backfill time. This script is the sole ``quranic_phonemizer`` consumer
 in the project and rebuilds canonical phonemes in-memory on each
 invocation; no on-disk cache.
 
+``quranic_phonemizer`` is NOT in ``inspector/requirements.txt`` — the
+runtime image doesn't need it. Install locally before running:
+
+    pip install quranic-phonemizer
+
+If the package is missing, the script still runs but produces
+``is_boundary_adj`` from structural rules only (the phonemic side is
+skipped). Use that for spot fixes; for real backfills, install the
+package.
+
 Usage:
     python inspector/scripts/backfill_boundary_adj.py --slug bandar_baleela_mp3quran
     python inspector/scripts/backfill_boundary_adj.py --all-wip

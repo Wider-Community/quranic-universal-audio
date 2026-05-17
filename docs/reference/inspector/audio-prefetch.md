@@ -71,7 +71,7 @@ Audio (`routes/audio/proxy.py::seg_audio_proxy`) lookup order:
 1. `wip/<slug>/audio/<chapter>.mp3` — bucket prefetch.
 2. CDN stream-through for slugs the prefetch hasn't reached yet.
 
-Peaks (`routes/segments/peaks.py::seg_peaks`) checks the in-memory cache, then `wip/<slug>/peaks/<chapter>.json`, then schedules background computation (no disk cache; results land back in the bucket via `_persist_recomputed_chapter_peaks`).
+Peaks (`routes/segments/peaks.py::seg_peaks`) checks the in-memory cache, then reads `wip/<slug>/peaks/<chapter>.json.gz` from the bucket. Missing slim files compute on-demand into the in-memory cache only — runtime never writes peaks back to the bucket. Bucket peaks are produced offline.
 
 ## Admin re-trigger
 

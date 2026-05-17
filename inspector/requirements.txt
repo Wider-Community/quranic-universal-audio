@@ -4,7 +4,6 @@ flask
 # bodies (Timestamps shards in routes/timestamps.py) are outside the allow-list
 # so they're skipped — no double-compression.
 flask-compress>=1.14
-quranic-phonemizer>=2.2
 orjson
 pydantic>=2.10
 # v2 uses the bucket API (batch_bucket_files, list_bucket_tree,

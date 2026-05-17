@@ -79,9 +79,10 @@ def _bucket_pcm_minmax(samples, num_samples: int, num_buckets: int) -> list[list
 def compute_audio_peaks(audio_source: str) -> dict | None:
     """Compute waveform peaks for a local file path or URL.
 
-    Returns ``{schema_version, duration_ms, peaks}`` or ``None``. No caching —
-    callers persist to the bucket via ``_persist_recomputed_chapter_peaks``
-    when appropriate; in-memory dedup lives in ``cache.update_peaks_cache``.
+    Returns ``{schema_version, duration_ms, peaks}`` or ``None``. No caching
+    here and no bucket write — peaks are offline-computed and the bucket is
+    treated as read-only at runtime. In-memory dedup lives in
+    ``cache.update_peaks_cache`` for the lifetime of the process.
     """
     # Decode to raw mono 16-bit PCM via ffmpeg at the configured peaks sample rate
     try:
@@ -249,37 +250,8 @@ def get_peaks_for_reciter(reciter: str, chapter_filter: set[int] | None = None) 
                 data = future.result()
                 if data:
                     results[url] = data
-                    _persist_recomputed_chapter_peaks(reciter, url, data)
             except Exception:
                 pass
 
     all_cached = cache.update_peaks_cache(reciter, results)
     return {u: all_cached[u] for u in urls if u in all_cached}
-
-
-def _persist_recomputed_chapter_peaks(reciter: str, url: str, peaks: dict) -> None:
-    """Write a freshly-computed chapter-peaks dict back to the bucket if the
-    chapter is prefetched. Skips silently when no bucket entry exists (the
-    reciter isn't prefetched yet) or the write fails (next read falls
-    through to compute again).
-
-    Packs to the canonical slim shape (``peaks_slim.pack_slim``) before
-    writing so the bucket file matches the format the reader expects.
-    """
-    from . import audio_fetch, audio_meta
-    from .peaks_slim import pack_slim
-    from services.storage import storage_paths
-    from services.storage.hf_bucket import get_backend
-    try:
-        chapter = audio_meta.chapter_for_url(reciter, url)
-        if chapter is None:
-            return
-        # Only overwrite when the audio is in the bucket -- writing peaks for
-        # a chapter without prefetched audio would mint a partial state that
-        # `audio_prefetch.is_prefetched` (sentinel-only) doesn't model.
-        if audio_fetch.read_prefetched_audio_local_path(reciter, url) is None:
-            return
-        path = storage_paths.prefetched_peaks_path(reciter, chapter)
-        get_backend().write_bytes_atomic(path, pack_slim(peaks))
-    except Exception:  # noqa: BLE001
-        pass
