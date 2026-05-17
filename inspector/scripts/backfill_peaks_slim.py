@@ -42,11 +42,23 @@ from services.storage.hf_bucket import get_backend  # noqa: E402
 logger = logging.getLogger("backfill_peaks_slim")
 
 
-def _iter_wip_slugs(backend) -> Iterable[str]:
-    try:
-        return sorted(backend.list_dir("wip"))
-    except Exception:  # noqa: BLE001
-        return []
+def _iter_all_slugs(backend) -> list[str]:
+    """All reciter slugs under both ``wip/`` and ``published/``.
+
+    Both subtrees can contain peaks files (today only ``wip/`` does, but the
+    state-aware ``storage_paths.prefetched_peaks_path`` reads from whichever
+    matches the reciter's current ``data_dir.kind_for`` result). Walking
+    both keeps the script honest if peaks ever get baked into the publish
+    pipeline.
+    """
+    out: list[str] = []
+    for kind in ("wip", "published"):
+        try:
+            out.extend(backend.list_dir(kind))
+        except Exception:  # noqa: BLE001
+            continue
+    # Dedup in case a slug appears in both (shouldn't happen but defensive).
+    return sorted(set(out))
 
 
 def _iter_chapters(backend, slug: str) -> list[str]:
@@ -142,7 +154,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--slug",
-        help="Limit migration to one reciter slug (default: all under wip/).",
+        help="Limit migration to one reciter slug (default: every slug under wip/ + published/).",
     )
     parser.add_argument(
         "--dry-run",
@@ -158,9 +170,9 @@ def main() -> int:
     if args.slug:
         slugs = [args.slug]
     else:
-        slugs = list(_iter_wip_slugs(backend))
+        slugs = _iter_all_slugs(backend)
     if not slugs:
-        print("no wip/ slugs found", file=sys.stderr)
+        print("no wip/ or published/ slugs found", file=sys.stderr)
         return 1
 
     totals: dict[str, int] = {}

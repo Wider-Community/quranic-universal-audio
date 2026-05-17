@@ -34,11 +34,16 @@ from services.storage.hf_bucket import get_backend  # noqa: E402
 logger = logging.getLogger("rollback_peaks_slim")
 
 
-def _iter_wip_slugs(backend) -> Iterable[str]:
-    try:
-        return sorted(backend.list_dir("wip"))
-    except Exception:  # noqa: BLE001
-        return []
+def _iter_all_slugs(backend) -> list[str]:
+    """All reciter slugs under both ``wip/`` and ``published/`` -- mirrors
+    the backfill script so rollback restores files in either subtree."""
+    out: list[str] = []
+    for kind in ("wip", "published"):
+        try:
+            out.extend(backend.list_dir(kind))
+        except Exception:  # noqa: BLE001
+            continue
+    return sorted(set(out))
 
 
 def _iter_backups(backend, slug: str) -> list[str]:
@@ -120,9 +125,9 @@ def main() -> int:
                         format="%(asctime)s %(levelname)s %(message)s")
 
     backend = get_backend()
-    slugs = [args.slug] if args.slug else list(_iter_wip_slugs(backend))
+    slugs = [args.slug] if args.slug else _iter_all_slugs(backend)
     if not slugs:
-        print("no wip/ slugs found", file=sys.stderr)
+        print("no wip/ or published/ slugs found", file=sys.stderr)
         return 1
 
     totals: dict[str, int] = {}
