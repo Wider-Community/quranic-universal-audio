@@ -237,11 +237,21 @@ function _slicePeaks(
     if (slice.length === 0) return null;
     const maxVals = new Float32Array(buckets);
     const minVals = new Float32Array(buckets);
+    // Map canvas bucket i ∈ [0, buckets) to slice-local fractional index
+    // by going through ABSOLUTE TIME, not by stretching the slice across
+    // the canvas. Fixes the bucket-snap drift the floor/ceil above
+    // introduces: at 10 bps (post slim-peaks migration) each peak covers
+    // 100 ms, so a segment shifted by half a bucket gets drawn ~50 px off
+    // on a 600 px canvas. At 30 bps the same drift was ~17 px and looked
+    // like rendering noise; at 10 bps it's a misaligned silence.
+    const sliceIdxForFrac = (frac: number): number => {
+        const tMs = startMs + frac * (endMs - startMs);
+        return (tMs - rs) * pps - startIdx;
+    };
     if (slice.length >= buckets) {
-        const blockSize = slice.length / buckets;
         for (let i = 0; i < buckets; i++) {
-            const from = Math.floor(i * blockSize);
-            const to = Math.min(Math.ceil((i + 1) * blockSize), slice.length);
+            const from = Math.max(0, Math.floor(sliceIdxForFrac(i / buckets)));
+            const to = Math.min(slice.length, Math.ceil(sliceIdxForFrac((i + 1) / buckets)));
             let mx = -1, mn = 1;
             for (let j = from; j < to; j++) {
                 const bk = slice[j];
@@ -249,12 +259,20 @@ function _slicePeaks(
                 if (bk[1] > mx) mx = bk[1];
                 if (bk[0] < mn) mn = bk[0];
             }
+            // Empty span (e.g. canvas bucket smaller than one peak bucket
+            // at the edges) — fall through to silence so the canvas
+            // doesn't show -1/+1 clipping artifacts.
+            if (mx < mn) { mx = 0; mn = 0; }
             maxVals[i] = mx;
             minVals[i] = mn;
         }
     } else {
         for (let i = 0; i < buckets; i++) {
-            const fi = (i / buckets) * (slice.length - 1);
+            const fi = sliceIdxForFrac((buckets > 1 ? i / (buckets - 1) : 0));
+            if (fi < 0 || fi > slice.length - 1) {
+                minVals[i] = 0; maxVals[i] = 0;
+                continue;
+            }
             const lo = Math.floor(fi);
             const hi = Math.min(lo + 1, slice.length - 1);
             const t = fi - lo;

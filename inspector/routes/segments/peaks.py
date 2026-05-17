@@ -223,11 +223,21 @@ def _slice_chapter_peaks(chapter_peaks: dict | None, start_ms: int, end_ms: int,
     if end_idx == start_idx:
         end_idx = min(n, start_idx + 1)
 
+    # Report the slice's ACTUAL time span (not the requested ``[lo, hi]``
+    # window). Renderers compute pps from these fields; mismatched values
+    # drift canvas mapping by up to one bucket per side -- invisible at
+    # 30 bps, visible at 10 bps post slim-peaks migration. Keeping
+    # ``peaks.length == duration_ms * pps`` exact downstream avoids the
+    # bug entirely. Index → time conversion uses the source duration's
+    # density (``n / duration_ms``) since we sliced against it.
+    pps = n / duration_ms
+    slice_start_ms = start_idx / pps
+    slice_end_ms = end_idx / pps
     return {
         "schema_version": PEAKS_SCHEMA_VERSION,
-        "start_ms": lo,
-        "end_ms": hi,
-        "duration_ms": hi - lo,
+        "start_ms": slice_start_ms,
+        "end_ms": slice_end_ms,
+        "duration_ms": slice_end_ms - slice_start_ms,
         "peaks": peaks[start_idx:end_idx],
     }
 

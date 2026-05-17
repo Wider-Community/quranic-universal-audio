@@ -76,15 +76,25 @@ function _sliceFromChapterPeaks(
     fullDurationMs: number,
     startMs: number,
     endMs: number,
-): { peaks: PeakBucket[]; durationMs: number } | null {
+): { peaks: PeakBucket[]; startMs: number; endMs: number; durationMs: number } | null {
     if (!fullPeaks.length || fullDurationMs <= 0) return null;
     const pps = fullPeaks.length / fullDurationMs;
     const startIdx = Math.max(0, Math.floor(startMs * pps));
     const endIdx = Math.min(fullPeaks.length, Math.ceil(endMs * pps));
     if (endIdx <= startIdx) return null;
+    // Report the slice's ACTUAL time span (not the requested window).
+    // Renderers compute peaks-per-ms from these fields; if they reflect
+    // the requested window when the slice is actually wider, pps comes
+    // out wrong and the canvas mapping drifts by up to one bucket per
+    // side — invisible at 30 bps, visible at 10 bps. Storing the actual
+    // span keeps the invariant `peaks.length == durationMs * pps` exact.
+    const actualStartMs = startIdx / pps;
+    const actualEndMs = endIdx / pps;
     return {
         peaks: fullPeaks.slice(startIdx, endIdx),
-        durationMs: endMs - startMs,
+        startMs: actualStartMs,
+        endMs: actualEndMs,
+        durationMs: actualEndMs - actualStartMs,
     };
 }
 
@@ -107,11 +117,14 @@ export function collectOpPeaks(ops: ReadonlyArray<EditOp>): OpPeakRecord[] {
         if (chapter?.peaks?.length && chapter.duration_ms > 0) {
             const sliced = _sliceFromChapterPeaks(chapter.peaks, chapter.duration_ms, startMs, endMs);
             if (sliced) {
+                // Use the slice's ACTUAL span on the record so
+                // `peaks.length == duration_ms * pps` stays exact —
+                // see _sliceFromChapterPeaks comment for the rationale.
                 out.push({
                     op_id: opId,
                     url,
-                    start_ms: startMs,
-                    end_ms: endMs,
+                    start_ms: sliced.startMs,
+                    end_ms: sliced.endMs,
                     peaks: sliced.peaks,
                     duration_ms: sliced.durationMs,
                 });
