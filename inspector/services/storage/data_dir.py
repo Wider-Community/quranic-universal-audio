@@ -74,6 +74,22 @@ def auto_split_path(slug: str, kind: WipOrPublished | None = None) -> str:
     return storage_paths.auto_split_path(slug, kind or kind_for(slug))
 
 
+def pipeline_meta_path(slug: str, kind: WipOrPublished | None = None) -> str:
+    return storage_paths.pipeline_meta_path(slug, kind or kind_for(slug))
+
+
+def read_pipeline_meta_doc(slug: str) -> dict | None:
+    """Return the parsed ``pipeline_meta.json`` doc, or ``None`` if absent."""
+    try:
+        return get_backend().read_json(pipeline_meta_path(slug))  # type: ignore[return-value]
+    except StorageNotFound:
+        return None
+
+
+def write_pipeline_meta_doc(slug: str, doc: dict) -> None:
+    get_backend().write_json_atomic(pipeline_meta_path(slug), doc)
+
+
 def has_reciter(slug: str, kind: WipOrPublished | None = None) -> bool:
     """True if the reciter directory exists under the given subtree."""
     return get_backend().exists(storage_paths.reciter_dir(slug, kind or kind_for(slug)))

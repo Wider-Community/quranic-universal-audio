@@ -29,6 +29,7 @@ from .catalog import (
 )
 from .edit_history import EditHistoryBatch, EditOperation, parse_edit_history_line
 from .peaks_history import PeaksRecord, parse_peaks_record
+from .pipeline_meta import PipelineMeta
 from .pending_requests import (
     ArchivedRequest,
     ArchivedRequestsFile,
@@ -72,6 +73,7 @@ __all__ = [
     "PeaksRecord",
     "PendingRequest",
     "PendingRequestsFile",
+    "PipelineMeta",
     "ProposedEdits",
     "ReciterCatalog",
     "ReciterEntry",
