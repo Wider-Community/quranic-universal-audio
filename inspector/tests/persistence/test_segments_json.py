@@ -24,9 +24,7 @@ def test_segments_json_rebuild_parity(load_fixture, tmp_reciter_dir, signed_in_c
             "time_start": s["time_start"],
             "time_end": s["time_end"],
             "matched_ref": s["matched_ref"],
-            "matched_text": s["matched_text"],
             "confidence": s["confidence"],
-            "phonemes_asr": s.get("phonemes_asr", ""),
             "segment_uid": s["segment_uid"],
         }
         for s in fixture["entries"][0]["segments"]
@@ -78,9 +76,7 @@ def test_segments_json_meta_preserved(tmp_reciter_dir, signed_in_client, load_fi
                 "time_start": s["time_start"],
                 "time_end": s["time_end"],
                 "matched_ref": s["matched_ref"],
-                "matched_text": s["matched_text"],
                 "confidence": s["confidence"],
-                "phonemes_asr": s.get("phonemes_asr", ""),
                 "segment_uid": s["segment_uid"],
             }
             for s in fixture["entries"][0]["segments"]

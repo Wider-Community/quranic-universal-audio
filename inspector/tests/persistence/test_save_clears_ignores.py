@@ -24,9 +24,7 @@ def _seg_payload_from_fixture(fixture: dict, uid: str, **overrides) -> dict:
         "time_start": src["time_start"],
         "time_end": src["time_end"],
         "matched_ref": src["matched_ref"],
-        "matched_text": src["matched_text"],
         "confidence": src["confidence"],
-        "phonemes_asr": src.get("phonemes_asr", ""),
         "segment_uid": src["segment_uid"],
     }
     base.update(overrides)
@@ -92,7 +90,7 @@ def test_omitted_ignored_categories_preserves_existing(load_fixture, tmp_reciter
         headers=_HEADERS,
     )
 
-    patch_payload = {"segments": [{"index": 0, "matched_ref": fixture["entries"][0]["segments"][0]["matched_ref"], "matched_text": fixture["entries"][0]["segments"][0]["matched_text"]}], "operations": []}
+    patch_payload = {"segments": [{"index": 0, "matched_ref": fixture["entries"][0]["segments"][0]["matched_ref"]}], "operations": []}
     client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(patch_payload),
@@ -149,7 +147,6 @@ def test_save_drops_wrap_when_fe_omits_it(tmp_reciter_dir, signed_in_client):
                     {
                         "time_start": 1000, "time_end": 5000,
                         "matched_ref": "112:1:1-112:1:4",
-                        "matched_text": "x",
                         "confidence": 1.0,
                         "segment_uid": "uid-rep",
                         "wrap_word_ranges": [["112:1:2", "112:1:2", "112:1:4"]],
@@ -170,9 +167,7 @@ def test_save_drops_wrap_when_fe_omits_it(tmp_reciter_dir, signed_in_client):
             "segment_uid": "uid-rep",
             "time_start": 1000, "time_end": 5000,
             "matched_ref": "112:1:1-112:1:4",
-            "matched_text": "x",
             "confidence": 1.0,
-            "phonemes_asr": "",
             "audio_url": "https://fixture.local/audio/112.mp3",
             # wrap_word_ranges + has_repeated_words intentionally omitted
         }],
@@ -209,7 +204,6 @@ def test_save_drops_geometrically_invalid_wrap(tmp_reciter_dir, signed_in_client
             "segments": [{
                 "time_start": 1000, "time_end": 5000,
                 "matched_ref": "112:1:1-112:1:2",
-                "matched_text": "x",
                 "confidence": 1.0,
                 "segment_uid": "uid-rep",
             }],
@@ -226,9 +220,7 @@ def test_save_drops_geometrically_invalid_wrap(tmp_reciter_dir, signed_in_client
             "segment_uid": "uid-rep",
             "time_start": 1000, "time_end": 5000,
             "matched_ref": "112:1:1-112:1:2",
-            "matched_text": "x",
             "confidence": 1.0,
-            "phonemes_asr": "",
             "audio_url": "https://fixture.local/audio/112.mp3",
             "wrap_word_ranges": [["112:1:3", "112:1:3", "112:1:4"]],
             "has_repeated_words": True,
@@ -263,7 +255,6 @@ def test_save_preserves_wrap_when_fe_sends_it(tmp_reciter_dir, signed_in_client)
             "segments": [{
                 "time_start": 1000, "time_end": 5000,
                 "matched_ref": "112:1:1-112:1:4",
-                "matched_text": "x",
                 "confidence": 1.0,
                 "segment_uid": "uid-rep",
             }],
@@ -279,9 +270,7 @@ def test_save_preserves_wrap_when_fe_sends_it(tmp_reciter_dir, signed_in_client)
             "segment_uid": "uid-rep",
             "time_start": 1000, "time_end": 5000,
             "matched_ref": "112:1:1-112:1:4",
-            "matched_text": "x",
             "confidence": 1.0,
-            "phonemes_asr": "",
             "audio_url": "https://fixture.local/audio/112.mp3",
             "wrap_word_ranges": [["112:1:2", "112:1:2", "112:1:4"]],
         }],
@@ -316,7 +305,6 @@ def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, signed_in_clien
                     {
                         "time_start": 1000, "time_end": 2000,
                         "matched_ref": "112:1:1-112:1:1",
-                        "matched_text": "x",
                         "confidence": 1.0,
                         "segment_uid": "uid-1",
                         "ignored": True,
@@ -334,8 +322,8 @@ def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, signed_in_clien
         "segments": [
             {
                 "time_start": 1000, "time_end": 2000,
-                "matched_ref": "112:1:1-112:1:1", "matched_text": "x",
-                "confidence": 1.0, "phonemes_asr": "",
+                "matched_ref": "112:1:1-112:1:1",
+                "confidence": 1.0,
                 "segment_uid": "uid-1",
             }
         ],
@@ -375,7 +363,6 @@ def test_save_drops_matched_text_from_disk(tmp_reciter_dir, signed_in_client):
                 "segment_uid": "uid-mt",
                 "time_start": 1000, "time_end": 5000,
                 "matched_ref": "112:1:1-112:1:4",
-                "matched_text": "legacy-on-disk-value",
                 "confidence": 1.0,
             }],
         }],
@@ -392,7 +379,6 @@ def test_save_drops_matched_text_from_disk(tmp_reciter_dir, signed_in_client):
             "time_start": 1000, "time_end": 5000,
             "matched_ref": "112:1:1-112:1:4",
             "confidence": 1.0,
-            "phonemes_asr": "",
             "audio_url": "https://fixture.local/audio/112.mp3",
         }],
         "operations": [],

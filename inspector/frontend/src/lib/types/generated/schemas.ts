@@ -80,19 +80,9 @@ export interface DetailedEntry {
  * Optional content fields:
  *   - ``confidence`` — DP alignment confidence in ``[0.0, 1.0]``. Failed
  *     alignments get ``0.0``.
- *   - ``matched_text`` — derivable from ``matched_ref`` via
- *     ``services/reference/quran_refs.py::dk_text_for_ref``. New extraction
- *     does NOT emit this; legacy on-disk data still has it (back-compat
- *     read). DROPPED in migration #5.
- *   - ``phonemes_asr`` — IPA phonemes from the ASR. Default-OFF in
- *     extraction output as of migration #5 (consumed internally at
- *     extraction time for ``is_boundary_adj`` stamping, then discarded).
- *     Re-enable with ``extract_segments.py --with-phonemes-asr`` for the
- *     ``SHOW_BOUNDARY_PHONEMES`` debug panel.
  *   - ``wrap_word_ranges`` — repetition-wrap geometry. Truthy iff the seg
  *     contains a multi-pass recital pattern. The ``repetitions``
- *     validation category triggers ONLY off this field (not the now-
- *     retired ``has_repeated_words`` boolean tautology).
+ *     validation category triggers ONLY off this field.
  *   - ``segment_uid`` — UUIDv7 stamped by save-flow merge / split / strip
  *     ops and by the ``/seg/all`` lazy backfill route. Absent on fresh
  *     extraction output.
@@ -104,8 +94,6 @@ export interface DetailedSegment {
   qalqala_letter?: string | null;
   is_boundary_adj?: boolean;
   confidence?: number;
-  matched_text?: string | null;
-  phonemes_asr?: string | null;
   wrap_word_ranges?: string[][] | null;
   segment_uid?: string | null;
   [k: string]: unknown;

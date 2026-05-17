@@ -10,6 +10,14 @@ from typing import Generic, TypeVar
 
 _T = TypeVar("_T")
 
+# Per-cache LRU ceiling. The Inspector loads one reciter at a time in
+# practice, but admin sweeps + concurrent reviewers can stack up; each
+# parsed cache entry is small individually (~MB) but grows unboundedly
+# across many reciters touched in one process lifetime. 20 covers the
+# realistic concurrency ceiling on a single-worker Space with plenty of
+# headroom while bounding worst-case RSS.
+_KEYED_CACHE_LRU_MAX = 20
+
 
 class _SingletonCache(Generic[_T]):
     """Holds a single nullable value — replaces a bare ``global`` variable."""
@@ -28,16 +36,29 @@ class _SingletonCache(Generic[_T]):
 
 
 class _KeyedCache(Generic[_T]):
-    """Holds a dict keyed by string — replaces a bare ``global`` dict."""
+    """LRU-bounded dict keyed by string — replaces a bare ``global`` dict.
 
-    def __init__(self) -> None:
-        self._data: dict[str, _T] = {}
+    Every ``set`` records the key as most-recently-used; once size exceeds
+    ``_KEYED_CACHE_LRU_MAX``, the oldest entry is evicted. ``get`` does
+    NOT promote a key — the loaders consult the cache once per request,
+    and we want eviction to track write-time (the actual cost we're
+    bounding) rather than read frequency.
+    """
+
+    def __init__(self, max_size: int = _KEYED_CACHE_LRU_MAX) -> None:
+        self._data: "OrderedDict[str, _T]" = OrderedDict()
+        self._max_size = max_size
 
     def get(self, key: str) -> _T | None:
         return self._data.get(key)
 
     def set(self, key: str, value: _T) -> None:
+        if key in self._data:
+            # Mark as most-recently-set so the new value isn't evicted next.
+            self._data.move_to_end(key)
         self._data[key] = value
+        while len(self._data) > self._max_size:
+            self._data.popitem(last=False)
 
     def pop(self, key: str) -> None:
         self._data.pop(key, None)
@@ -46,7 +67,7 @@ class _KeyedCache(Generic[_T]):
         self._data.clear()
 
     def all(self) -> dict[str, _T]:
-        return self._data
+        return dict(self._data)
 
 
 # Timestamps tab — local-mode shard cache lives in `services/timestamps.py`

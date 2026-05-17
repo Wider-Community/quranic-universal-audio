@@ -58,9 +58,7 @@ def test_detailed_json_round_trip_preserves_known_fields(load_fixture, tmp_recit
             "time_start": s["time_start"],
             "time_end": s["time_end"],
             "matched_ref": s["matched_ref"],
-            "matched_text": s["matched_text"],
             "confidence": s["confidence"],
-            "phonemes_asr": s.get("phonemes_asr", ""),
             "segment_uid": s["segment_uid"],
         })
     payload = {"full_replace": True, "segments": seg_payload, "operations": []}

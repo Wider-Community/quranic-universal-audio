@@ -17,8 +17,6 @@ def test_ignored_categories_excludes_from_classification(category):
 
     seg = {
         "matched_ref": "112:1:1-112:1:4",
-        "matched_text": "أَحَدٌ",
-        "phonemes_asr": "",
         "confidence": 0.5,
         "wrap_word_ranges": [[1, 1]],
         "ignored_categories": [category],
@@ -48,8 +46,6 @@ def test_all_marker_excludes_all():
 
     seg = {
         "matched_ref": "112:1:1-112:1:4",
-        "matched_text": "أَحَدٌ",
-        "phonemes_asr": "",
         "confidence": 0.5,
         "wrap_word_ranges": [[1, 1]],
         "ignored_categories": ["_all"],
@@ -78,8 +74,6 @@ def test_legacy_ignored_boolean_treated_as_all():
 
     seg = {
         "matched_ref": "112:1:1-112:1:4",
-        "matched_text": "أَحَدٌ",
-        "phonemes_asr": "",
         "confidence": 0.5,
         "wrap_word_ranges": [[1, 1]],
         "ignored": True,

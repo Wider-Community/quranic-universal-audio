@@ -36,11 +36,14 @@ def _slim_seg() -> dict:
 
 
 def _legacy_seg() -> dict:
-    """Pre-#5 bloated shape — what's on disk for existing reciters today.
+    """Pre-#5 bloated shape — what stale on-disk data or snapshots
+    embedded in legacy ``edit_history.jsonl`` may still contain.
 
-    Includes the fields Migration #5 drops: ``matched_text``,
-    ``phonemes_asr``, ``has_repeated_words``. Schema MUST parse this
-    cleanly via ``extra="allow"``.
+    ``matched_text`` + ``phonemes_asr`` were dropped in Migration #5 and
+    the schema now actively strips them on read (with a warning log) so
+    they can't sneak back into the typed surface. ``has_repeated_words``
+    is the tautology field — never modelled, tolerated via ``extra="allow"``
+    so unknown keys don't break parsing.
     """
     return {
         "time_start": 430,
@@ -88,15 +91,22 @@ def test_slim_seg_validates():
     assert m.time_start == 430
     assert m.matched_ref == "1:1:1-1:1:4"
     assert m.confidence == 1.0
-    assert m.matched_text is None
-    assert m.phonemes_asr is None
+    # matched_text and phonemes_asr were dropped in Migration #5 — the
+    # attributes no longer exist on the model.
+    assert not hasattr(m, "matched_text")
+    assert not hasattr(m, "phonemes_asr")
 
 
-def test_legacy_seg_validates_via_extra_allow():
-    """Bloated shape must parse — readers tolerate legacy fields."""
+def test_legacy_seg_strips_dead_fields_on_read():
+    """Legacy seg shape (pre-#5) must parse with matched_text + phonemes_asr
+    silently stripped by the pre-validator. Other unknown fields like
+    ``has_repeated_words`` still round-trip via ``extra="allow"``."""
     m = DetailedSegment.model_validate(_legacy_seg())
-    assert m.matched_text == "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيم"
-    assert m.phonemes_asr is not None
+    # Dead fields are gone — neither typed attributes nor extras.
+    assert not hasattr(m, "matched_text")
+    assert not hasattr(m, "phonemes_asr")
+    assert "matched_text" not in (m.model_extra or {})
+    assert "phonemes_asr" not in (m.model_extra or {})
     # has_repeated_words is the tautology field — tolerated via extra="allow"
     # but not in the model schema. It should round-trip via model_extra.
     assert "has_repeated_words" in (m.model_extra or {})
@@ -163,21 +173,21 @@ def test_slim_seg_emits_slim_shape():
         assert banned not in out, f"{banned} leaked into slim emission"
 
 
-def test_legacy_seg_re_emits_with_legacy_fields_via_extra():
-    """When the writer round-trips a legacy seg, the legacy fields
-    should propagate so we don't accidentally lose data. The Migration #5
-    one-shot migration script strips them deliberately; transparent
-    round-trip preserves them."""
+def test_dead_fields_dont_round_trip():
+    """Round-tripping a legacy seg through the schema strips matched_text
+    and phonemes_asr — they were dropped in Migration #5 and the schema
+    actively prevents them from leaking back into emitted JSON. Other
+    unknown legacy fields tolerated via ``extra="allow"`` still propagate."""
     seg = _legacy_seg()
     m = DetailedSegment.model_validate(seg)
     out = m.model_dump(exclude_none=True)
 
-    # matched_text is a declared optional field — present in input, so
-    # present in output (exclude_none lets non-None values through).
-    assert out["matched_text"] == seg["matched_text"]
+    assert "matched_text" not in out
+    assert "phonemes_asr" not in out
     # has_repeated_words came in via extra="allow" — round-trips through
     # model_extra.
     assert (m.model_extra or {}).get("has_repeated_words") is False
+    assert out.get("has_repeated_words") is False
 
 
 def test_parse_detailed_segment_helper():

@@ -225,9 +225,7 @@ def test_save_accepts_full_replace_payload(signed_in_client, tmp_reciter_dir):
                 "time_start": 4700,
                 "time_end": 7700,
                 "matched_ref": "112:1:1-112:1:4",
-                "matched_text": "قُلْ هُوَ ٱللَّهُ أَحَدٌ",
                 "confidence": 1.0,
-                "phonemes_asr": "",
                 "segment_uid": "019d5c88-f55f-7ee0-81d1-d99f423e8dd5",
             },
         ],
@@ -253,7 +251,7 @@ def test_save_accepts_patch_payload(signed_in_client, tmp_reciter_dir):
 
     payload = {
         "segments": [
-            {"index": 0, "matched_ref": "112:1:1-112:1:4", "matched_text": "x"},
+            {"index": 0, "matched_ref": "112:1:1-112:1:4"},
         ],
         "operations": [],
     }
@@ -346,9 +344,7 @@ def test_save_writes_actor_block_to_history(signed_in_client, tmp_reciter_dir):
                 "time_start": 4700,
                 "time_end": 7700,
                 "matched_ref": "112:1:1-112:1:4",
-                "matched_text": "قُلْ هُوَ ٱللَّهُ أَحَدٌ",
                 "confidence": 1.0,
-                "phonemes_asr": "",
                 "segment_uid": "019d5c88-f55f-7ee0-81d1-d99f423e8dd5",
             },
         ],
