@@ -27,11 +27,11 @@ import orjson
 from flask import Blueprint, Response, jsonify, request
 
 from services import audio_fetch, cache
+from services.audio.audio_meta import chapter_urls
 from services.data_loader import load_detailed
 from services.peaks import compute_segment_peaks
 from services.peaks_history import append_peaks_records, load_peaks_records
 from utils.decorators import require_edit_lock, require_same_origin
-from utils.references import chapter_from_ref
 
 peaks_bp = Blueprint("peaks", __name__, url_prefix="/api/seg")
 
@@ -87,13 +87,22 @@ def seg_peaks(reciter):
             response.headers[k] = v
         return response
 
+    # Migration #5: per-entry ``audio`` field is no longer written by the
+    # extractor (post-migration buckets have ``entry.audio == ""`` for every
+    # entry → empty ``target_urls`` → empty peaks response). The canonical
+    # chapter→URL map lives in ``catalog/audio_manifest/<slug>.json`` and is
+    # cached in ``audio_meta._SIDECAR_CACHE`` after the first read by any
+    # route. Iterate the sidecar directly; ``key`` is ``"1"``..``"114"`` for
+    # by_surah and ``"<surah>:<ayah>"`` for by_ayah deliveries.
     target_urls: list[str] = []
     seen: set[str] = set()
-    for entry in entries:
-        ch = chapter_from_ref(entry["ref"])
+    for key, url in chapter_urls(reciter).items():
+        try:
+            ch = int(key.split(":", 1)[0])
+        except (ValueError, AttributeError):
+            continue
         if chapter_filter is not None and ch not in chapter_filter:
             continue
-        url = entry.get("audio", "")
         if url and url not in seen:
             seen.add(url)
             target_urls.append(url)
