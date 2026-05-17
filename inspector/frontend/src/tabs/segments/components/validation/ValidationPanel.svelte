@@ -32,6 +32,7 @@
     } from '../../../../lib/types/api';
     import { activeTab } from '../../../../lib/utils/active-tab';
     import { TAB_NAMES } from '../../../../lib/utils/constants';
+    import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
     import { IssueRegistry } from '../../domain/registry';
     import { accordionPin, clearAccordionPin, pinAccordion } from '../../stores/accordion-pin';
     import { segAllData, selectedReciter } from '../../stores/chapter';
@@ -48,7 +49,6 @@
     import { resolveCardLeadSeg } from '../../utils/validation/card-lead-seg';
     import { filterStaleIssues } from '../../utils/validation/stale';
     import { _fetchPeaks } from '../../utils/waveform/utils';
-    import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
     import AccordionGuideModal from './AccordionGuideModal.svelte';
     import ErrorCard from './ErrorCard.svelte';
 

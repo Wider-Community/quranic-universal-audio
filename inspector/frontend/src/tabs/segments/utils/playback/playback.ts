@@ -174,12 +174,12 @@ export function playFromSegment(
     const _trace = (typeof localStorage !== 'undefined'
         && localStorage.getItem('insp_warmup_log') === 'true');
     if (_trace) {
-        // eslint-disable-next-line no-console
+         
         console.log(`[play] click seg=${segIndex} ch=${chapterOverride} readyState=${segPort.element?.readyState} reused=${segPort.window != null ? 'window-exists' : 'fresh'}`);
         const el = segPort.element;
         if (el) {
             const onPlaying = (): void => {
-                // eslint-disable-next-line no-console
+                 
                 console.log(`[play] FIRST audible frame ${Math.round(performance.now() - _playClickAt)}ms after click`);
                 el.removeEventListener('playing', onPlaying);
             };

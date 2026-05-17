@@ -365,7 +365,7 @@ export class AudioPort {
         const trace = (typeof localStorage !== 'undefined'
             && localStorage.getItem('insp_warmup_log') === 'true');
         if (trace) {
-            // eslint-disable-next-line no-console
+             
             console.log(`[prewarm] fire ${this._source.audioUrl}`);
         }
         // loadCovering(0, 0) builds the CBR window {start:0, end:Infinity}
@@ -376,7 +376,7 @@ export class AudioPort {
         if (trace) {
             ready
                 .then(() => {
-                    // eslint-disable-next-line no-console
+                     
                     console.log(`[prewarm] canplay in ${Math.round(performance.now() - startedAt)}ms; ready=${this.el?.readyState}`);
                 })
                 .catch(() => {});

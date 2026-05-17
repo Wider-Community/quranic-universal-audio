@@ -70,7 +70,7 @@ function _fire(reciter: string, audioUrl: string, byteStart: number): void {
     const trace = (typeof localStorage !== 'undefined'
         && localStorage.getItem('insp_warmup_log') === 'true');
     if (trace) {
-        // eslint-disable-next-line no-console
+         
         console.log(`[warmup] fire ${audioUrl} bytes=${byteStart}-${byteStart + WARMUP_BYTES - 1}`);
     }
     fetch(proxyUrl, {
@@ -78,7 +78,7 @@ function _fire(reciter: string, audioUrl: string, byteStart: number): void {
     })
         .then((r) => {
             if (trace) {
-                // eslint-disable-next-line no-console
+                 
                 console.log(`[warmup] done ${audioUrl} bytes=${byteStart} → ${r.status} in ${Math.round(performance.now() - startedAt)}ms`);
             }
         })

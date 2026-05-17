@@ -51,12 +51,12 @@ export function shadowPrewarm(audioUrl: string): void {
     if (trace) {
         const startedAt = performance.now();
         const onCanPlay = (): void => {
-            // eslint-disable-next-line no-console
+             
             console.log(`[shadow] canplay in ${Math.round(performance.now() - startedAt)}ms ${audioUrl.slice(-40)}`);
             el.removeEventListener('canplay', onCanPlay);
         };
         el.addEventListener('canplay', onCanPlay, { once: true });
-        // eslint-disable-next-line no-console
+         
         console.log(`[shadow] fire ${audioUrl.slice(-40)}`);
     }
     el.src = audioUrl;
