@@ -589,7 +589,7 @@ def audit(backend, bucket_id: str, slug: str) -> AuditResult:
 # ---------------------------------------------------------------------------
 
 
-def _setup_paths_and_env(bucket: str) -> None:
+def _setup_paths_and_env(bucket: str | None) -> None:
     """Insert repo root + inspector/ onto sys.path; pin bucket env."""
     here = Path(__file__).resolve()
     repo = here.parents[2]
@@ -598,7 +598,52 @@ def _setup_paths_and_env(bucket: str) -> None:
         raise SystemExit(f"inspector/ not found at {inspector}")
     sys.path.insert(0, str(inspector))
     sys.path.insert(0, str(repo))
-    os.environ["INSPECTOR_BUCKET_REPO"] = _BUCKETS[bucket]
+    if bucket is not None:
+        os.environ["INSPECTOR_BUCKET_REPO"] = _BUCKETS[bucket]
+
+
+class _LocalBackend:
+    """Backend shim over a local reciter directory.
+
+    Pre-upload verification path: lets ``audit_bucket_reciter`` run against
+    a freshly-downloaded slug on disk so the migration can be inspected
+    before any bytes hit the bucket.
+
+    The local dir is expected to mirror the bucket layout:
+    ``<root>/[wip|published]/<slug>/...`` OR just ``<root>/<slug>/...``
+    (in which case audits treat it as ``wip``).
+    """
+
+    def __init__(self, root: Path, kind: str | None = None) -> None:
+        self.root = root.resolve()
+        self.kind = kind  # if set, we'll synthesise wip/<slug>/ prefix lookups
+
+    def read_bytes(self, rel: str) -> bytes:
+        # Strip the optional wip/ or published/ prefix so the underlying
+        # local dir doesn't need that nesting.
+        rel = self._normalise(rel)
+        p = self.root / rel
+        if not p.is_file():
+            raise FileNotFoundError(rel)
+        return p.read_bytes()
+
+    def list_dir(self, prefix: str) -> list[str]:
+        prefix = self._normalise(prefix.rstrip("/"))
+        d = self.root / prefix
+        if not d.is_dir():
+            return []
+        return [f"{prefix}/{name}" for name in sorted(os.listdir(d))]
+
+    def _normalise(self, rel: str) -> str:
+        if self.kind is not None:
+            # When the audit walker probes ``wip/<slug>/x`` and the local
+            # root already represents ``wip/<slug>/``, drop the prefix.
+            for k in ("wip/", "published/"):
+                if rel.startswith(k):
+                    parts = rel.split("/", 2)
+                    if len(parts) >= 3:
+                        return parts[2]
+        return rel
 
 
 def _render(result: AuditResult) -> str:
@@ -631,8 +676,12 @@ def _render(result: AuditResult) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--slug", required=True, help="Reciter slug.")
-    ap.add_argument("--bucket", choices=sorted(_BUCKETS), default="prod",
-                    help="Bucket to audit (default: prod).")
+    ap.add_argument("--bucket", choices=sorted(_BUCKETS), default=None,
+                    help="Bucket to audit. Mutually exclusive with --local-path.")
+    ap.add_argument("--local-path", type=Path, default=None,
+                    help="Audit a local copy of a reciter folder (pre-upload "
+                         "verification). Should point at the slug dir itself, "
+                         "e.g. /tmp/husary/. Mutually exclusive with --bucket.")
     ap.add_argument("--json", action="store_true",
                     help="Emit JSON instead of the human-readable table.")
     ap.add_argument("-v", "--verbose", action="store_true",
@@ -644,12 +693,20 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    _setup_paths_and_env(args.bucket)
-    bucket_id = _BUCKETS[args.bucket]
+    if args.bucket is None and args.local_path is None:
+        args.bucket = "prod"  # back-compat default
+    if args.bucket is not None and args.local_path is not None:
+        ap.error("--bucket and --local-path are mutually exclusive")
 
-    # Lazy-import after sys.path + env are set.
-    from services.storage.hf_bucket import get_backend
-    backend = get_backend()
+    _setup_paths_and_env(args.bucket)
+
+    if args.local_path is not None:
+        backend = _LocalBackend(args.local_path, kind="wip")
+        bucket_id = f"local:{args.local_path}"
+    else:
+        from services.storage.hf_bucket import get_backend
+        backend = get_backend()
+        bucket_id = _BUCKETS[args.bucket]
     result = audit(backend, bucket_id, args.slug)
 
     if args.json:
