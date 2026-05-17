@@ -379,10 +379,12 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
     # Surgical eviction. Derived edit-history indices (split-group, resolved-
     # by-edit) can't be modelled incrementally on revert — pop them so the
     # next reader rebuilds from the cached batch list (in-memory walk, no
-    # I/O). Auto-split needs eviction because undo can re-introduce uids.
+    # I/O). Auto-split only needs eviction when the reverted ops moved uids
+    # in/out of the seg set (split / merge / auto-fix / delete).
     cache.pop_seg_caches_affected_by_segment_edit(reciter)
     cache.pop_seg_split_group_index(reciter)
-    cache.pop_seg_auto_split(reciter)
+    if cache.batch_changes_segment_set({"operations": operations}):
+        cache.pop_seg_auto_split(reciter)
     return {"ok": True, "operations_reversed": len(operations)}
 
 
@@ -469,5 +471,6 @@ def undo_ops(
     # Surgical eviction (see undo_batch for rationale).
     cache.pop_seg_caches_affected_by_segment_edit(reciter)
     cache.pop_seg_split_group_index(reciter)
-    cache.pop_seg_auto_split(reciter)
+    if cache.batch_changes_segment_set({"operations": ops_to_undo}):
+        cache.pop_seg_auto_split(reciter)
     return {"ok": True, "operations_reversed": len(ops_to_undo)}

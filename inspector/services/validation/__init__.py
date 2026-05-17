@@ -146,8 +146,10 @@ def validate_reciter_segments(reciter: str) -> dict:
 
     deleted_basmala_chapters = _read_deleted_basmala_chapters(reciter)
     # Precomputed split-group closures (pure function of cached batch list).
-    # Attached onto every per-segment issue item as ``split_group_uids`` so
-    # the FE doesn't need to walk historyData to expand accordion cards.
+    # Shipped at the response top level as ``split_group_index`` (uid → list of
+    # transitive descendants) so the FE can expand accordion cards without
+    # walking historyData. Keyed by ROOT uid only — items look up by their
+    # own uid client-side.
     split_group_index = build_split_group_index(reciter)
 
     detail = _build_detail_lists(

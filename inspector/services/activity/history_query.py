@@ -48,18 +48,19 @@ def _history_lock(reciter: str) -> threading.Lock:
 def parse_history_for_reciter(reciter: str) -> list[dict]:
     """Read every batch record from a reciter's edit_history.jsonl.
 
-    Cache-aware: subsequent calls in the same process return the cached
-    parsed list without re-touching disk. Save appends to the cached list
-    (no re-parse); undo also appends a revert batch.
+    Cache-aware on the production path: subsequent calls in the same process
+    return the cached parsed list without re-touching disk. Save appends to
+    the cached list (no re-parse); undo also appends a revert batch.
+
+    The legacy test seam (``RECITATION_SEGMENTS_PATH`` monkeypatched away
+    from the default) bypasses the cache entirely so tests can rewrite the
+    underlying JSONL between calls without manual cache invalidation.
 
     Shared by undo.py (which needs raw records for batch lookup),
     load_edit_history (which applies further filtering for the UI), and
     build_split_group_index / build_resolved_by_edit_index (derived indices).
     Returns an empty list when the file is absent.
     """
-    cached = cache.get_seg_history_batches(reciter)
-    if cached is not None:
-        return cached
     if RECITATION_SEGMENTS_PATH != _DEFAULT_RECITATION_SEGMENTS_PATH:
         import orjson
 
@@ -72,8 +73,10 @@ def parse_history_for_reciter(reciter: str) -> list[dict]:
                 line = raw.strip()
                 if line:
                     out.append(orjson.loads(line))
-        cache.set_seg_history_batches(reciter, out)
         return out
+    cached = cache.get_seg_history_batches(reciter)
+    if cached is not None:
+        return cached
     batches = list(data_dir.iter_edit_history(reciter))
     cache.set_seg_history_batches(reciter, batches)
     return batches

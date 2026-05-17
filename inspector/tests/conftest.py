@@ -358,6 +358,23 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
                     f.read(),
                 )
 
+        # pipeline_meta.json is required for validate (the basmala_amin rule
+        # reads ``deleted_basmala_chapters`` from this sidecar — see
+        # services/validation/__init__.py::_read_deleted_basmala_chapters).
+        # Fixtures don't ship a pipeline_meta; seed an empty one so tests
+        # exercise the post-migration code path without hitting hard-fail.
+        from scripts.lib.schemas import PipelineMeta
+        pipeline_meta_doc = PipelineMeta(
+            schema_version=1,
+            generated_at=datetime.now(timezone.utc)
+                .isoformat(timespec="seconds").replace("+00:00", "Z"),
+            deleted_basmala_chapters=[],
+        ).model_dump(mode="json")
+        backend.write_json_atomic(
+            _storage_paths.pipeline_meta_path(reciter, "wip"),
+            pipeline_meta_doc,
+        )
+
         # Build a matching segments.json so consumers that read both files
         # see a consistent on-disk state for the fixture.
         try:

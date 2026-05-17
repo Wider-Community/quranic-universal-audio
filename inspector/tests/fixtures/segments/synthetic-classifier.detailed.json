@@ -127,9 +127,7 @@
         {
           "time_start": 13100,
           "time_end": 16000,
-          "matched_ref": "1:7:1-1:7:4",
-          "matched_text": "صِرَٰطَ ٱلَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ ٱلْمَغْضُوبِ عَلَيْهِمْ وَلَا ٱلضَّآلِّينَ هد",
-          "phonemes_asr": "sˤ i rˤ aˤ: tˤ a ll a ð i: n a ʔ a n ʕ a m t a ʕ a l a j h i m h a d",
+          "matched_ref": "90:18:1-90:18:2",
           "confidence": 1.0,
           "segment_uid": "019d5c88-1111-7000-b000-000000000007"
         }

@@ -110,7 +110,7 @@ def compute_is_boundary_adj(
     s_word: int,
     e_word: int,
     single_word_verses: set,
-    canonical: dict | None,
+    canonical: dict | None = None,
 ) -> bool:
     """Raw boundary-adjustment computation — NO suppression check.
 
@@ -119,13 +119,15 @@ def compute_is_boundary_adj(
     path. Splitting the suppression check out lets us persist a value that
     matches across all writers regardless of runtime ignore state.
 
-    Structural side: one-word segment outside the muqattaʼat / single-word
-    verse / standalone-ref / standalone-word allow-list.
+    Rule: one-word segment outside the muqattaʼat / single-word-verse /
+    standalone-ref / standalone-word allow-list.
 
-    Phoneme side: when ``canonical`` is available and the seg has ASR
-    phonemes, last ``BOUNDARY_TAIL_K`` ASR phonemes diverge from the
-    canonical tail — heuristic for word-boundary drift.
+    ``canonical`` is accepted for back-compat but ignored — the phonemic
+    side was retired in Migration #5 along with ``phonemes_asr``, so
+    structural-only is now the canonical signal. Kept in the signature so
+    callers (save, backfill, extraction outputs.py) don't need touching.
     """
+    _ = canonical  # retired; see docstring
     if (surah, s_ayah) in MUQATTAAT_VERSES:
         return False
     if (surah, s_ayah) in single_word_verses:
@@ -135,10 +137,6 @@ def compute_is_boundary_adj(
         text = dk_text_for_ref(seg.get("matched_ref"))
         if strip_quran_deco(text) not in STANDALONE_WORDS:
             return True
-
-    # The phonemic side of boundary_adj was retired in Migration #5 — extraction
-    # no longer persists ``phonemes_asr`` on disk and save/undo never touch it,
-    # so structural-only is the canonical signal.
 
     return False
 

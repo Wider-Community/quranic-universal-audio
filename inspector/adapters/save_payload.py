@@ -36,20 +36,19 @@ def make_seg(
         if uid:
             existing = existing_by_uid.get(uid, {})
 
-    phonemes = s.get("phonemes_asr", "") or existing.get("phonemes_asr", "")
     seg_uid = s.get("segment_uid", "") or existing.get("segment_uid", "")
     matched_ref = normalize_ref(s.get("matched_ref", ""), word_counts)
 
-    # Migration #5: matched_text is no longer persisted in detailed.json —
-    # Inspector consumers derive it from matched_ref via dk_text_for_ref
-    # (services/reference/quran_refs.py). The FE never sends it either.
+    # Migration #5: matched_text + phonemes_asr are no longer persisted in
+    # detailed.json. matched_text is derivable via dk_text_for_ref; phonemes_asr
+    # was retired entirely (DetailedSegment pre-validator strips it on read).
+    # The FE save payload also omits them — see execute.ts SaveSegmentPayloadFull.
     result: dict = {
         "segment_uid": seg_uid,
         "time_start": s.get("time_start", 0),
         "time_end": s.get("time_end", 0),
         "matched_ref": matched_ref,
         "confidence": s.get("confidence", 0.0),
-        "phonemes_asr": phonemes,
     }
 
     # Repetition metadata is FE-authoritative on full_replace: the FE knows

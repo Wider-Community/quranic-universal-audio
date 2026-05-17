@@ -322,7 +322,6 @@ def batch_changes_segment_set(batch: dict) -> bool:
         if op.get("op_type") in _MUTATING_OPS or op.get("kind") in _MUTATING_OPS:
             return True
     return False
-    _seg_stats_result.pop(reciter)
 
 
 # Peaks (thread-safe — manually coded)

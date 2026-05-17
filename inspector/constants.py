@@ -1,10 +1,10 @@
 """Domain constants for the inspector: validation categories, Quranic reference sets."""
 
-# Classifier-emitted categories that the per-chapter counter accumulates.
-# These are the keys produced by ``chapter_validation_counts`` (per-segment
-# flags + ``missing_words``, which is verse-derived but counted alongside).
-# Held here for backward compatibility with un-migrated callers; the canonical
-# category metadata lives in ``services.validation.registry.IssueRegistry``.
+# Classifier-emitted categories carried by ``validate_reciter_segments``'s
+# ``category_counts`` rollup (per-segment flags + ``missing_words``, which is
+# verse-derived but counted alongside). The canonical category metadata lives
+# in ``services.validation.registry.IssueRegistry``; this tuple is kept for the
+# few legacy callers that need the bare category-name set.
 VALIDATION_CATEGORIES = (
     "failed", "low_confidence", "low_confidence_v2", "boundary_adj",
     "cross_verse", "missing_words", "audio_bleeding", "repetitions",
