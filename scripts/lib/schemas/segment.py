@@ -44,8 +44,6 @@ from ._extras import strip_and_warn
 _SEG_DEAD_FIELDS: set[str] = {
     # Migration #5 — derivable / never persisted
     "matched_text", "phonemes_asr", "has_repeated_words",
-    # Migration #5 — moved to _meta.ignored_categories
-    "ignored_categories", "ignored",
     # Snapshot-only fields; do not belong on a persisted seg
     "audio_url", "chapter", "entry_ref", "index_at_save", "display_text",
 }
@@ -84,6 +82,16 @@ class DetailedSegment(BaseModel):
       - ``segment_uid`` — UUIDv7 stamped by save-flow merge / split / strip
         ops and by the ``/seg/all`` lazy backfill route. Absent on fresh
         extraction output.
+      - ``ignored_categories`` — per-seg category-level ignore set written
+        by the "ignore this issue" accordion action; consulted by
+        ``services/validation/classifier.py::is_ignored_for`` to suppress
+        the listed categories from the validation accordion. ``["_all"]``
+        is the legacy wildcard equivalent of the retired ``ignored=True``
+        boolean. See ``docs/proposals/ignored-categories-refactor.md``
+        for the proposed move to a chapter-level sidecar.
+      - ``ignored`` — pre-categories boolean wildcard, kept for back-compat
+        read of legacy on-disk data. Save writes ``ignored_categories``
+        with ``["_all"]`` instead.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -101,6 +109,10 @@ class DetailedSegment(BaseModel):
     confidence: float = Field(0.0, ge=0.0, le=1.0)
     wrap_word_ranges: list[list[str]] | None = None
     segment_uid: str | None = None
+
+    # === Per-seg "ignore this issue" state (see proposal for refactor) ===
+    ignored_categories: list[str] | None = None
+    ignored: bool | None = None  # legacy pre-categories wildcard
 
     @model_validator(mode="before")
     @classmethod

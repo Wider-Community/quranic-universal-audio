@@ -25,7 +25,6 @@ export type Role = "contributor" | "maintainer" | "owner" | "pipeline";
 export interface DetailedDocument {
   _meta?: DetailedMeta;
   entries?: DetailedEntry[];
-  [k: string]: unknown;
 }
 /**
  * The ``_meta`` block at the top of ``detailed.json``.
@@ -45,21 +44,21 @@ export interface DetailedMeta {
   pad_right_ms?: number | null;
   min_silence_floor_ms?: number | null;
   audio_source?: string | null;
-  [k: string]: unknown;
+  pad_ms?: number | null;
+  pad_migrated_at?: string | null;
+  pad_migrated_from_pad_ms?: number | null;
 }
 /**
  * Per-chapter group: ``{ref, segments[]}``.
  *
  * ``audio`` (per-chapter URL) was a duplicated source of truth with
  * ``catalog/audio_manifest/<slug>.json::chapters[ch].url`` and was
- * dropped in migration #5. Legacy on-disk data still has it; readers
- * consume it via ``extra="allow"`` until those readers migrate to
- * ``services.audio.audio_meta.chapter_urls(slug)[ch]``.
+ * dropped in migration #5. Legacy on-disk data still has it; the
+ * pre-validator strips it with an INFO-level warning.
  */
 export interface DetailedEntry {
   ref: string;
   segments?: DetailedSegment[];
-  [k: string]: unknown;
 }
 /**
  * Atomic seg in a chapter's ``segments`` list.
@@ -86,6 +85,16 @@ export interface DetailedEntry {
  *   - ``segment_uid`` — UUIDv7 stamped by save-flow merge / split / strip
  *     ops and by the ``/seg/all`` lazy backfill route. Absent on fresh
  *     extraction output.
+ *   - ``ignored_categories`` — per-seg category-level ignore set written
+ *     by the "ignore this issue" accordion action; consulted by
+ *     ``services/validation/classifier.py::is_ignored_for`` to suppress
+ *     the listed categories from the validation accordion. ``["_all"]``
+ *     is the legacy wildcard equivalent of the retired ``ignored=True``
+ *     boolean. See ``docs/proposals/ignored-categories-refactor.md``
+ *     for the proposed move to a chapter-level sidecar.
+ *   - ``ignored`` — pre-categories boolean wildcard, kept for back-compat
+ *     read of legacy on-disk data. Save writes ``ignored_categories``
+ *     with ``["_all"]`` instead.
  */
 export interface DetailedSegment {
   time_start: number;
@@ -96,32 +105,36 @@ export interface DetailedSegment {
   confidence?: number;
   wrap_word_ranges?: string[][] | null;
   segment_uid?: string | null;
-  [k: string]: unknown;
+  ignored_categories?: string[] | null;
+  ignored?: boolean | null;
 }
 /**
  * One JSONL line in ``edit_history.jsonl`` — a batch of operations.
  *
  * Migration #5 reality-check: both writers (Inspector save +
- * `.local/extraction/segments/post_passes.py`) stamp the timestamp as
- * ``saved_at_utc`` (string), NOT ``ts`` (datetime). Both writers
- * historically wrote ``schema_version: 1``, not ``2``. The schema is
- * permissive on both axes so the actual on-disk shape parses without
- * a schema bump:
+ * ``.local/extraction/segments/post_passes.py``) stamp the timestamp as
+ * ``saved_at_utc`` (string). The legacy ``ts`` field has been retired
+ * from the schema; ``saved_at_utc`` is the canonical declared field.
  *
- * - ``ts`` is optional; ``saved_at_utc`` lands via ``extra="allow"``.
- * - ``schema_version`` defaults to ``1`` matching the literal both
- *   writers emit; readers can bump to ``2`` later in a separate
- *   migration once both writers are updated together.
- * - ``actor`` is optional — Inspector save writes it; the pipeline
- *   now also writes it (constant ``{"hf_user_id": "pipeline", ...}``)
- *   but legacy pre-#5 pipeline batches don't have it.
+ * ``chapter`` (single) is written by Inspector save (one batch per
+ * chapter save). ``chapters`` (list) is written by the pipeline strip-
+ * specials post-pass (one batch can span multiple chapters when audio
+ * contains Basmala/Isti'adha at chapter starts). Exactly one of the
+ * two is present; both are tolerated for forward-compat.
+ *
+ * ``schema_version`` defaults to ``1`` matching the literal both writers
+ * emit; readers can bump to ``2`` later in a separate migration once
+ * both writers are updated together.
  */
 export interface EditHistoryBatch {
   schema_version?: number;
   batch_id: string;
-  ts?: string | null;
+  saved_at_utc?: string | null;
   actor?: Actor | null;
   operations?: EditOperation[];
+  chapter?: number | null;
+  chapters?: number[];
+  batch_type?: string | null;
   reverts_batch_id?: string | null;
   reverts_op_ids?: string[];
   validation_summary_before?: {
@@ -130,7 +143,6 @@ export interface EditHistoryBatch {
   validation_summary_after?: {
     [k: string]: unknown;
   };
-  [k: string]: unknown;
 }
 export interface Actor {
   /**
@@ -153,14 +165,24 @@ export interface Actor {
  * Migration #5: pipeline ops carry ``op_type`` + ``fix_kind`` (no
  * ``kind`` — that's a user-edit-only field set by the FE command store).
  * ``kind`` is therefore optional. At least one of ``kind`` /
- * ``op_type`` must be present for the op to be meaningful, but readers
- * handle either via ``extra="allow"``.
+ * ``op_type`` must be present for the op to be meaningful.
+ *
+ * ``targets_before`` / ``targets_after`` carry seg snapshots — list of
+ * dicts, not validated against ``DetailedSegment`` because snapshots
+ * intentionally carry extra fields (``chapter``, ``audio_url``,
+ * ``index_at_save``) that don't live on persisted segs.
  */
 export interface EditOperation {
   op_id: string;
   kind?: string | null;
   op_type?: string | null;
-  [k: string]: unknown;
+  fix_kind?: string | null;
+  targets_before?: {
+    [k: string]: unknown;
+  }[];
+  targets_after?: {
+    [k: string]: unknown;
+  }[];
 }
 /**
  * One pipeline-op waveform slice. Migration #5 canonical shape.
@@ -189,5 +211,4 @@ export interface PeaksRecord {
   end_ms: number;
   bps: number;
   peaks_b64: string;
-  [k: string]: unknown;
 }
