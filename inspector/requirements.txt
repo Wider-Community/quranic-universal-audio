@@ -5,6 +5,9 @@ flask
 # so they're skipped — no double-compression.
 flask-compress>=1.14
 orjson
+# numpy backs services/audio/peaks_slim.py (slim peaks pack/unpack on hot path).
+# Was transitive via quranic-phonemizer until 8973d648; pinned directly now.
+numpy>=1.26
 pydantic>=2.10
 # v2 uses the bucket API (batch_bucket_files, list_bucket_tree,
 # download_bucket_files, hffs); these landed in huggingface_hub 1.8.0.
