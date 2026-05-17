@@ -26,7 +26,6 @@ import {
 import { activeFilters } from '../../stores/filters';
 import { savedFilterView } from '../../stores/navigation';
 import { setValidation } from '../../stores/validation';
-import { startHistoryLoad } from '../history/loader';
 import { clearPerReciterState } from './clear-per-reciter-state';
 import { dkTextForRef } from './references';
 
@@ -126,9 +125,10 @@ export async function reloadCurrentReciter(): Promise<void> {
     // is ~0.7-1.2 s server-side on prod-sized reciters; paying it eagerly on
     // every reciter switch is wasteful — the panel rarely gets opened.
 
-    // Background only. Opening History awaits the same in-flight promise and
-    // then hydrates persisted waveform peaks.
-    void startHistoryLoad(reciter);
+    // Edit-history is lazy-fetched when the user opens the History panel —
+    // see SegmentsFooter.svelte::showHistoryView. The validate response
+    // already carries the precomputed split_group_index that accordion cards
+    // need, so cold reciter-select no longer pulls the full JSONL.
 
     await allPromise;
 }

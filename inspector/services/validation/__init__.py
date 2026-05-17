@@ -25,7 +25,10 @@ from services.storage.data_loader import (
     load_probe_v2,
     load_seg_verses,
 )
-from services.activity.history_query import build_resolved_by_edit_index
+from services.activity.history_query import (
+    build_resolved_by_edit_index,
+    build_split_group_index,
+)
 from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
 
 # Phonemizer is no longer loaded in the validate runtime path. The phonemic
@@ -212,6 +215,10 @@ def validate_reciter_segments(reciter: str) -> dict:
                     _injected_segs.append(seg)
 
     deleted_basmala_chapters = _read_deleted_basmala_chapters(reciter)
+    # Precomputed split-group closures (pure function of cached batch list).
+    # Attached onto every per-segment issue item as ``split_group_uids`` so
+    # the FE doesn't need to walk historyData to expand accordion cards.
+    split_group_index = build_split_group_index(reciter)
 
     detail = _build_detail_lists(
         entries, is_by_ayah, word_counts, canonical, single_word_verses,
@@ -259,6 +266,10 @@ def validate_reciter_segments(reciter: str) -> dict:
         "basmala_amin": detail["basmala_amin"],
         "category_counts": category_counts,
         "stats": stats,
+        # Precomputed split-group closures keyed by root uid. The FE reads
+        # this map instead of walking historyData to expand accordion cards
+        # with the full descendant chain after a split.
+        "split_group_index": split_group_index,
     }
     if probe_meta is not None:
         result["low_confidence_v2_meta"] = probe_meta

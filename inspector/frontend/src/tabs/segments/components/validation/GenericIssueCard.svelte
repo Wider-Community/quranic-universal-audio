@@ -18,7 +18,7 @@
         getChapterOpsSnapshot,
         isSegmentDirty,
     } from '../../stores/dirty';
-    import { historyData } from '../../stores/history';
+    import { splitGroupIndex } from '../../stores/validation';
     import { ignoreIssueOnSegment } from '../../utils/edit/ignore';
     import { isIgnoredFor } from '../../utils/validation/classified-issues';
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
@@ -100,52 +100,42 @@
     // the seg — we fall back to the single resolvedSeg render.
     //
     // Dependencies: $segAllData (segStoreTick) covers chapter-seg re-derivation;
-    // $historyData picks up newly-saved batches; $dirtyTick ensures the op log
-    // snapshot refreshes after each in-progress split mutation.
+    // the committed-history closure comes pre-attached on the validation item
+    // as `split_group_uids`; $dirtyTick ensures the op log snapshot refreshes
+    // after each in-progress split mutation.
     $: _groupChapter = ((): number => {
         if (resolvedSeg?.chapter != null) return resolvedSeg.chapter;
         const parsed = parseInt(get(selectedChapter));
         return Number.isFinite(parsed) ? parsed : 0;
     })();
-    // Memoize the split-group computation by a split-op-only fingerprint.
-    // `getSplitGroupMembers` runs a multi-pass fixpoint over every split op
-    // in both the edit-history batches and the current op log; firing it on
-    // every `$segAllData` / `$dirtyTick` / `$historyData` tick multiplies
-    // with N accordion cards mounted.
-    //
-    // Earlier the key tracked total `batches.length` + `ops.length`, which
-    // invalidated on every trim/ref-edit op (i.e. nearly every edit) even
-    // though those don't change split-group membership. We now count split
-    // ops only — the only ops that can grow the group — so trim and ref-edit
-    // ops are cache hits.
+    $: _committedSplitGroupUids = _boundUid != null
+        ? $splitGroupIndex[_boundUid]
+        : undefined;
+    // Memoize the split-group computation by an op-log fingerprint. Backend
+    // committed-history closure is invalidated by the post-save validate
+    // refresh (which ships a new `split_group_uids`), so we don't track it
+    // separately here — the new item identity drives re-render.
     let _splitGroupMemoKey = '';
     let _splitGroupMemoResult: Segment[] = [];
     $: {
         void segStoreTick; void $dirtyTick;
         if (_boundUid != null && _groupChapter > 0) {
             const chapterSegs = getChapterSegments(_groupChapter);
-            const batches = $historyData?.batches ?? [];
             const ops = getChapterOpsSnapshot(_groupChapter);
-            // Bump on any structural OR reference-mutating op so memo busts
-            // when auto-fix / edit-reference / merge / etc. change a base seg.
             const MUTATING_OPS = new Set([
                 'split_segment', 'merge_segments', 'edit_reference',
                 'auto_fix_missing_word', 'boundary_adjustment', 'trim_segment',
             ]);
             let mutatingOpsCount = 0;
-            for (const b of batches) {
-                for (const op of b.operations) {
-                    if (MUTATING_OPS.has(op.op_type)) mutatingOpsCount++;
-                }
-            }
             for (const op of ops) {
                 if (MUTATING_OPS.has(op.op_type)) mutatingOpsCount++;
             }
-            const key = `${_groupChapter}|${_boundUid}|${chapterSegs.length}|${mutatingOpsCount}`;
+            const committedLen = _committedSplitGroupUids?.length ?? 0;
+            const key = `${_groupChapter}|${_boundUid}|${chapterSegs.length}|${committedLen}|${mutatingOpsCount}`;
             if (key !== _splitGroupMemoKey) {
                 _splitGroupMemoKey = key;
                 _splitGroupMemoResult = getSplitGroupMembers(
-                    _groupChapter, _boundUid, chapterSegs, batches, ops,
+                    _boundUid, chapterSegs, _committedSplitGroupUids, ops,
                 );
             }
         } else if (_splitGroupMemoKey !== '') {

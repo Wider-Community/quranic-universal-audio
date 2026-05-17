@@ -15,7 +15,7 @@
         dirtyTick,
         getChapterOpsSnapshot,
     } from '../../stores/dirty';
-    import { historyData } from '../../stores/history';
+    import { splitGroupIndex } from '../../stores/validation';
     import { autoFixMissingWord } from '../../utils/edit/auto-fix';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
     import SegmentRow from '../list/SegmentRow.svelte';
@@ -51,7 +51,7 @@
     $: {
         void segStoreTick; void $dirtyTick;
         const chapterSegs = getChapterSegments(item.chapter);
-        const batches = $historyData?.batches ?? [];
+        const splitIdx = $splitGroupIndex;
         const ops = getChapterOpsSnapshot(item.chapter);
         // Base UIDs are looked up per `seg_index`; include them in the key
         // so a fixup that swaps the seg at a given index also invalidates.
@@ -60,24 +60,26 @@
             const base = getSegByChapterIndex(item.chapter, idx);
             baseUids.push(base?.segment_uid ?? `_${idx}`);
         }
-        // Bump on any structural OR reference-mutating op so memo busts when
-        // auto-fix / edit-reference / merge / boundary-adjust change a base
-        // seg under us. Was counting split_segment only, leaving stale
-        // Segment object refs in the cached output for non-split mutations.
+        // Bump on any reference-mutating op so memo busts when auto-fix /
+        // edit-reference / merge / boundary-adjust change a base seg under
+        // us. Committed-history closures arrive via $splitGroupIndex which
+        // refreshes on every validate post-save, so the FE op log is the
+        // only mutable input we need to fingerprint here.
         const MUTATING_OPS = new Set([
             'split_segment', 'merge_segments', 'edit_reference',
             'auto_fix_missing_word', 'boundary_adjustment', 'trim_segment',
         ]);
         let mutatingOpsCount = 0;
-        for (const b of batches) {
-            for (const op of b.operations) {
-                if (MUTATING_OPS.has(op.op_type)) mutatingOpsCount++;
-            }
-        }
         for (const op of ops) {
             if (MUTATING_OPS.has(op.op_type)) mutatingOpsCount++;
         }
-        const key = `${item.chapter}|${(item.seg_indices ?? []).join(',')}|${baseUids.join(',')}|${chapterSegs.length}|${mutatingOpsCount}`;
+        // Count of distinct uids the committed index touches for this
+        // chapter's bases — a fingerprint stand-in for the index identity.
+        let committedTouches = 0;
+        for (const uid of baseUids) {
+            if (splitIdx[uid]) committedTouches++;
+        }
+        const key = `${item.chapter}|${(item.seg_indices ?? []).join(',')}|${baseUids.join(',')}|${chapterSegs.length}|${committedTouches}|${mutatingOpsCount}`;
         if (key !== _segRangeMemoKey) {
             _segRangeMemoKey = key;
             const out: Segment[] = [];
@@ -86,7 +88,8 @@
                 const base = getSegByChapterIndex(item.chapter, idx);
                 if (!base) continue;
                 const baseUid = base.segment_uid ?? null;
-                const group = getSplitGroupMembers(item.chapter, baseUid, chapterSegs, batches, ops);
+                const committed = baseUid != null ? splitIdx[baseUid] : undefined;
+                const group = getSplitGroupMembers(baseUid, chapterSegs, committed, ops);
                 const list = group.length > 0 ? group : [base];
                 for (const s of list) {
                     const segKey = s.segment_uid ?? `${s.chapter}:${s.index}`;

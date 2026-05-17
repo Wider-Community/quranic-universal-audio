@@ -1,8 +1,7 @@
 import { get as storeGet } from 'svelte/store';
 
-import { fetchJson, fetchJsonOrNull } from '../../../../lib/api';
+import { fetchJson } from '../../../../lib/api';
 import type {
-    SegEditHistoryResponse,
     SegUndoBatchResponse,
     SegUndoOpsResponse,
 } from '../../../../lib/types/api';
@@ -27,7 +26,6 @@ import {
 import { setSavePreviewData } from '../../stores/save';
 import { clearUndoing, markUndoing } from '../../stores/undo-pending';
 import { reloadSegAll } from '../data/reciter-actions';
-import { renderEditHistoryPanel } from '../history/render';
 import { refreshValidation } from '../validation/refresh';
 import { buildSavePreviewData, hideSavePreview } from './actions';
 
@@ -38,22 +36,19 @@ import { buildSavePreviewData, hideSavePreview } from './actions';
 export async function _afterUndoSuccess(reciter: string, _opsReversed: number): Promise<void> {
     pendingChainTargets.set([]);
 
-    try {
-        const hist = await fetchJsonOrNull<SegEditHistoryResponse>(
-            `/api/seg/edit-history/${reciter}`,
-        );
-        if (hist) {
-            renderEditHistoryPanel(hist);
-        }
-    } catch (_) { /* non-critical */ }
+    // Mark history stale so the next History-panel open refetches. We
+    // intentionally do NOT eagerly refetch /api/seg/edit-history here —
+    // the panel is lazy-fetched on open, and validation/reloadSegAll below
+    // already cover everything the rest of the UI needs.
     historyDataStale.set(true);
-    // Undo invalidates validation + seg data server-side (invalidate_seg_caches
-    // runs on undo too). Validation counters depend on segAllData.segments
-    // (filterStaleIssues uses liveUids) — without reloading /seg/all the counts
-    // can lag behind the validation response. Stats are NOT refreshed here:
-    // StatsPanel lazy-fetches on accordion open.
+    // Undo invalidates validation + seg data server-side. Validation counters
+    // depend on segAllData.segments (filterStaleIssues uses liveUids) — without
+    // reloading /seg/all the counts can lag behind the validation response.
+    // The validate response also carries the refreshed split_group_index.
+    // Stats are NOT refreshed here: StatsPanel lazy-fetches on accordion open.
     void refreshValidation();
     void reloadSegAll();
+    void reciter; // signature kept for caller compatibility
 }
 
 // ---------------------------------------------------------------------------

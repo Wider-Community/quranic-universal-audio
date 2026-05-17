@@ -445,6 +445,10 @@ export interface SegValidateResponse {
     muqattaat?: SegValMuqattaatItem[];
     qalqala?: SegValQalqalaItem[];
     basmala_amin?: SegValBasmalaAminItem[];
+    /** Precomputed split-group closures keyed by root uid. Lets accordion
+     *  cards expand to show the full split chain without subscribing to
+     *  the (lazily-fetched) edit-history store. */
+    split_group_index?: Record<string, string[]>;
     [k: string]: unknown;
 }
 
