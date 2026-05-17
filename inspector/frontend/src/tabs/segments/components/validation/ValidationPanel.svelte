@@ -47,6 +47,8 @@
     import { warmSeg } from '../../utils/playback/warmup';
     import { resolveCardLeadSeg } from '../../utils/validation/card-lead-seg';
     import { filterStaleIssues } from '../../utils/validation/stale';
+    import { _fetchPeaks } from '../../utils/waveform/utils';
+    import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
     import AccordionGuideModal from './AccordionGuideModal.svelte';
     import ErrorCard from './ErrorCard.svelte';
 
@@ -498,6 +500,43 @@
         shadowPrewarm(wrapped);
     }
 
+    /**
+     * Pre-fetch chapter-overview peaks for every chapter represented in the
+     * currently-open accordion. One batched request via ``_fetchPeaks`` —
+     * populates ``getWaveformPeaks(url)`` cache so per-card canvases
+     * (including not-yet-scrolled-into-view context cards) paint in-memory
+     * via slice instead of paying ~1s ffmpeg per Play click via
+     * ``/segment-peaks`` POST. Reuses the same chapter-extraction approach
+     * as ``_warmAccordionLead`` but covers the full ``displayedItems`` list,
+     * not just the lead card.
+     *
+     * Dedup: chapters already cached (any prior fetch / chapter pick already
+     * populated this entry) are filtered out — sending only the misses. The
+     * route's own LRU response cache absorbs repeat opens of the same
+     * accordion across the session.
+     *
+     * Wire/CPU bound: a typical 5-15-chapter accordion is ~100 KiB-1 MiB on
+     * the wire and ~300-700 ms server-side. Big-N categories like Qalqala
+     * (663 segs across many chapters) may approach the all-114 envelope —
+     * the dedup gate keeps that to the chapters not yet seen this session.
+     */
+    function _prefetchAccordionPeaks(): void {
+        const reciter = $selectedReciter;
+        if (!reciter || !openCategory) return;
+        const audioByChapter = $segAllData?.audio_by_chapter ?? {};
+        const wanted = new Set<number>();
+        for (const item of displayedItems) {
+            const lead = resolveCardLeadSeg(item, openCategory);
+            if (!lead || lead.chapter == null) continue;
+            const url = lead.audio_url ?? audioByChapter[String(lead.chapter)] ?? '';
+            if (!url) continue;
+            if (getWaveformPeaks(url)?.peaks?.length) continue;
+            wanted.add(lead.chapter as number);
+        }
+        if (wanted.size === 0) return;
+        _fetchPeaks(reciter, Array.from(wanted).sort((a, b) => a - b));
+    }
+
     // Card-0 warmup on category open / re-pin. Fires once per (category, item-0).
     let _lastCard0Key: string | null = null;
     $: {
@@ -507,6 +546,7 @@
         if (key && first && kind && key !== _lastCard0Key) {
             _lastCard0Key = key;
             _warmAccordionLead(resolveCardLeadSeg(first, kind));
+            _prefetchAccordionPeaks();
         } else if (!key) {
             _lastCard0Key = null;
         }
