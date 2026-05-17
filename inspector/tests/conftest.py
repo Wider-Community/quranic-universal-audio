@@ -280,8 +280,7 @@ def _invalidate_seg_caches(reciter: str | None = None):
     # entries pin a stale chapter→URL map across tests.
     try:
         from services.audio import audio_meta as _audio_meta
-        if isinstance(getattr(_audio_meta, "_SIDECAR_CACHE", None), dict):
-            _audio_meta._SIDECAR_CACHE.clear()
+        _audio_meta._clear_for_test()
     except Exception:  # noqa: BLE001
         pass
 
