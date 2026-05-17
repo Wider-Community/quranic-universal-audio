@@ -155,6 +155,18 @@ def set_seg_auto_split(reciter: str, value: tuple[dict[str, dict], dict | None])
     _seg_auto_split.set(reciter, value)
 
 
+def pop_seg_auto_split(reciter: str) -> None:
+    """Pop the auto-split cache for *reciter*.
+
+    Save's surgical-invalidate path (``pop_seg_caches_affected_by_segment_edit``)
+    deliberately excludes this cache: split / merge / auto-fix / delete change
+    the uid set so the cached cursors per uid become stale, but ref-edits and
+    pure trims leave it valid. Callers gate the pop on
+    ``batch_changes_segment_set(batch)``.
+    """
+    _seg_auto_split.pop(reciter)
+
+
 def get_seg_pipeline_meta(reciter: str) -> dict | None:
     return _seg_pipeline_meta.get(reciter)
 
