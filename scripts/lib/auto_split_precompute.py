@@ -59,6 +59,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple, Optional
 
+from scripts.lib.mfa_runtime import MfaRuntime
 from scripts.lib.timestamps_pipeline import (
     DEFAULT_ALIGNER_MODEL,
     _init_worker,
@@ -251,6 +252,7 @@ def run_precompute(
     batch_size: int = DEFAULT_BATCH_SIZE,
     workers: int = DEFAULT_WORKERS,
     download_workers: int = DEFAULT_DOWNLOAD_WORKERS,
+    runtime: "MfaRuntime | None" = None,
 ) -> Path | None:
     """Run the offline pre-compute and write the v1 sidecar.
 
@@ -375,10 +377,14 @@ def run_precompute(
     producer = threading.Thread(target=_producer, daemon=True)
     producer.start()
 
-    with ProcessPoolExecutor(
-            max_workers=workers,
-            initializer=_init_worker,
-            initargs=(str(mfa_app_path), 1)) as pool:
+    # Pool ownership: reuse caller-provided runtime if given, else open
+    # a self-contained pool. See scripts/lib/mfa_runtime.py.
+    owned_runtime: MfaRuntime | None = None
+    if runtime is None:
+        owned_runtime = MfaRuntime(mfa_app_path, workers)
+        owned_runtime.__enter__()
+    pool = (runtime or owned_runtime).pool
+    try:
         buf_refs: list[list[str]] = []
         buf_paths: list[str] = []
         buf_uids: list[str] = []
@@ -468,6 +474,9 @@ def run_precompute(
             n_done += 1
             if n_done % 5 == 0 or n_done == n_total:
                 log.info("Aligned: %d/%d batches", n_done, n_total)
+    finally:
+        if owned_runtime is not None:
+            owned_runtime.__exit__(None, None, None)
 
     try:
         tmp_dir.rmdir()
