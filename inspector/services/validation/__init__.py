@@ -18,11 +18,14 @@ from concurrent.futures import ThreadPoolExecutor
 from config import LOW_CONFIDENCE_THRESHOLD
 from constants import VALIDATION_CATEGORIES
 from services.storage import cache
-from services.storage.data_loader import get_word_counts, load_detailed, load_probe_v2, load_seg_verses
-from services.activity.history_query import (
-    build_resolved_by_edit_index,
-    parse_history_for_reciter,
+from services.storage.data_loader import (
+    get_word_counts,
+    load_detailed,
+    load_pipeline_meta,
+    load_probe_v2,
+    load_seg_verses,
 )
+from services.activity.history_query import build_resolved_by_edit_index
 from utils.references import chapter_from_ref, is_by_ayah_source, seg_belongs_to_entry
 
 # Phonemizer is no longer loaded in the validate runtime path. The phonemic
@@ -141,37 +144,21 @@ def _load_resolved_idx_cached(reciter: str) -> dict:
     return resolved
 
 
-def _deleted_basmala_chapters(reciter: str) -> set[int]:
-    """Collect chapters whose Basmala the alignment pipeline already stripped.
+def _read_deleted_basmala_chapters(reciter: str) -> set[int]:
+    """Read the stripped-basmala set from the ``pipeline_meta.json`` sidecar.
 
-    Migration #5 contract: every strip_specials snapshot carries a
-    ``chapter`` stamp. The pre-#5 fallback tiers (heuristic recovery
-    from time-reset groups, union over ``batch.chapters``, matched_ref
-    parse) were removed — if a snapshot lacks ``chapter`` the data
-    pre-dates the contract; run ``migrate_wip5_in_place.py`` on the
-    slug or re-extract.
-
-    The aligner's combined ``Isti'adha+Basmala`` ref is also treated as
-    a Basmala deletion (new extractions rewrite the snapshot ref to
-    ``Basmala`` outright, but tolerating the combined ref is cheap).
+    Hard-fails on missing sidecar (clear deploy signal): silent skip would
+    drop basmala_amin counts to 0 without anyone noticing. Run
+    ``inspector/scripts/backfill_deleted_basmala.py`` for any reciter that
+    pre-dates the extraction-time write.
     """
-    out: set[int] = set()
-    for batch in parse_history_for_reciter(reciter):
-        if batch.get("batch_type") != "strip_specials":
-            continue
-        for op in batch.get("operations") or []:
-            snapshots = op.get("targets_before") or []
-            if not snapshots:
-                continue
-            snap = snapshots[0]
-            if not isinstance(snap, dict):
-                continue
-            if snap.get("matched_ref") not in ("Basmala", "Isti'adha+Basmala"):
-                continue
-            ch = snap.get("chapter")
-            if isinstance(ch, int) and ch > 0:
-                out.add(ch)
-    return out
+    meta = load_pipeline_meta(reciter)
+    if meta is None:
+        raise RuntimeError(
+            f"pipeline_meta.json missing for {reciter!r}; "
+            "run scripts/backfill_deleted_basmala.py"
+        )
+    return set(meta.get("deleted_basmala_chapters") or [])
 
 
 def validate_reciter_segments(reciter: str) -> dict:
@@ -224,7 +211,7 @@ def validate_reciter_segments(reciter: str) -> dict:
                     seg["_resolved_by_edit"] = resolved_idx[uid]
                     _injected_segs.append(seg)
 
-    deleted_basmala_chapters = _deleted_basmala_chapters(reciter)
+    deleted_basmala_chapters = _read_deleted_basmala_chapters(reciter)
 
     detail = _build_detail_lists(
         entries, is_by_ayah, word_counts, canonical, single_word_verses,

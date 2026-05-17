@@ -182,6 +182,30 @@ def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:
     return result
 
 
+def load_pipeline_meta(reciter: str) -> dict | None:
+    """Load ``pipeline_meta.json`` for *reciter* (immutable post-extraction).
+
+    Returns the validated ``PipelineMeta`` dict, or ``None`` if the sidecar
+    is missing. The cache is **never invalidated by save** — the sidecar
+    records extraction-time facts that no user edit can change.
+
+    Callers that depend on a field (e.g. ``deleted_basmala_chapters``) should
+    hard-fail on ``None`` rather than silently substituting an empty set;
+    missing sidecar means the backfill script hasn't run for this reciter.
+    """
+    from scripts.lib.schemas import PipelineMeta
+
+    cached = cache.get_seg_pipeline_meta(reciter)
+    if cached is not None:
+        return cached
+    doc = data_dir.read_pipeline_meta_doc(reciter)
+    if doc is None:
+        return None
+    validated = PipelineMeta.model_validate(doc).model_dump(mode="json")
+    cache.set_seg_pipeline_meta(reciter, validated)
+    return validated
+
+
 def load_auto_split(reciter: str) -> tuple[dict[str, dict], dict | None]:
     """Load ``auto_split_v1.json`` sidecar for *reciter*.
 
