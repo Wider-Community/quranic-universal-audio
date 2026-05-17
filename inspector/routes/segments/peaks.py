@@ -23,7 +23,8 @@ Performance shape (post slim-peaks migration):
 """
 from concurrent.futures import ThreadPoolExecutor
 
-from flask import Blueprint, jsonify, request
+import orjson
+from flask import Blueprint, Response, jsonify, request
 
 from config import PEAKS_SCHEMA_VERSION
 from services import audio_fetch, audio_source, cache
@@ -75,9 +76,13 @@ def seg_peaks(reciter):
     # itself rather than the URL set so cache keys stay compact and stable
     # across detailed.json mutations that don't actually change peaks.
     chapter_key = tuple(sorted(chapter_filter)) if chapter_filter else ()
-    cached_response = cache.get_peaks_response_cache(reciter, chapter_key)
-    if cached_response is not None:
-        response = jsonify(cached_response)
+    cached_bytes = cache.get_peaks_response_cache(reciter, chapter_key)
+    if cached_bytes is not None:
+        # Skip jsonify entirely — bytes are already serialized JSON ready to
+        # send. For the worst chapter (husary ch2, 119k peak tuples) this
+        # avoids ~1.5-2s of jsonify CPU per hit. flask-compress still
+        # negotiates Content-Encoding per request.
+        response = Response(cached_bytes, mimetype="application/json")
         for k, v in _peaks_cache_headers().items():
             response.headers[k] = v
         return response
@@ -120,8 +125,13 @@ def seg_peaks(reciter):
     # failed for it) and the FE falls through to ``/segment-peaks`` POST
     # per-segment as it does for non-prewarmed reciters today.
     body = {"peaks": result, "complete": True}
-    cache.set_peaks_response_cache(reciter, chapter_key, body)
-    response = jsonify(body)
+    # Serialize once via orjson (~3× faster than stdlib json on big payloads)
+    # and cache the bytes so warm requests skip both jsonify and the
+    # orjson encode entirely. flask-compress runs on top per-request.
+    body_bytes = orjson.dumps(body)
+    if result:
+        cache.set_peaks_response_cache(reciter, chapter_key, body_bytes)
+    response = Response(body_bytes, mimetype="application/json")
     if result:
         for k, v in _peaks_cache_headers().items():
             response.headers[k] = v

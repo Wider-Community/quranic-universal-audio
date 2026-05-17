@@ -24,7 +24,12 @@ os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 
 def _install_slim_peaks(backend, reciter: str, chapter: int, n_peaks: int = 60) -> None:
-    """Write a synthetic slim peaks file at the expected bucket path."""
+    """Write a synthetic slim peaks file + audio_manifest sidecar at the
+    expected bucket paths. The manifest is needed because
+    ``read_prefetched_peaks`` resolves URL → chapter through it; without an
+    entry the reader silently returns ``None`` even with a valid slim file
+    sitting next to it on the bucket.
+    """
     from services.storage import storage_paths
     hd = {
         "schema_version": 2,
@@ -35,6 +40,16 @@ def _install_slim_peaks(backend, reciter: str, chapter: int, n_peaks: int = 60) 
         storage_paths.prefetched_peaks_path(reciter, chapter),
         pack_slim(hd),
     )
+    # Minimal sidecar mapping the fixture's audio URL → chapter key.
+    # Wire shape: {"chapters": {"<ch>": {url, ...}}}.
+    backend.write_json_atomic(
+        storage_paths.audio_manifest_path(reciter),
+        {"chapters": {str(chapter): {"url": "https://fixture.local/audio/112.mp3"}}},
+    )
+    # Reset audio_meta's process-level sidecar cache so the new manifest
+    # is picked up by this test run.
+    from services.audio import audio_meta
+    audio_meta._SIDECAR_CACHE.clear()
 
 
 def test_peaks_returns_inflated_slim_under_legacy_shape(flask_client, tmp_reciter_dir):
@@ -110,7 +125,11 @@ def test_peaks_response_cache_evicted_by_invalidate_seg_caches(flask_client, tmp
     # Warm the cache
     res = flask_client.get(f"/api/seg/peaks/{reciter}?chapters=112")
     assert res.status_code == 200
-    assert get_peaks_response_cache(reciter, (112,)) is not None
+    cached = get_peaks_response_cache(reciter, (112,))
+    assert cached is not None
+    # Cache now stores SERIALIZED BYTES (not the parsed dict) so warm
+    # requests skip jsonify entirely on the hot path.
+    assert isinstance(cached, (bytes, bytearray))
 
     invalidate_seg_caches(reciter)
     assert get_peaks_response_cache(reciter, (112,)) is None

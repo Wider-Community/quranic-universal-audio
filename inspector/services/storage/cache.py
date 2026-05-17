@@ -224,21 +224,29 @@ def discard_peaks_computing(key: str) -> None:
 
 # Peaks response cache — bounded-LRU for /api/seg/peaks GET responses.
 #
-# Keyed by (reciter, sorted_chapter_tuple). Value is the already-jsonified
-# response dict ready for Flask to serialize. Eviction is global (not
-# per-reciter) so we cap total RAM regardless of how many reciters a user
-# browses in one session. ~50 entries × avg ~200 KiB = ~10 MiB ceiling.
+# Keyed by (reciter, sorted_chapter_tuple). Value is the SERIALIZED JSON body
+# (bytes) ready to send. Caching bytes (not the parsed dict) skips re-running
+# jsonify on every hit -- for the worst chapter (husary ch2, 119k peak tuples)
+# jsonify costs ~1.5-2s of single-worker CPU, so caching the dict and
+# re-serializing made warm requests indistinguishable from cold ones in
+# practice. Compression (flask-compress) runs on top of this, but the cache
+# stays at the JSON-bytes layer so Vary/Accept-Encoding negotiation still
+# works correctly per request.
+#
+# Eviction is global (not per-reciter) so we cap total RAM regardless of how
+# many reciters a user browses in one session. ~50 entries × avg ~200 KiB
+# uncompressed bytes ≈ ~10 MiB ceiling.
 #
 # Invalidated by reciter via ``pop_reciter_peaks_response_cache``, which is
 # wired into ``invalidate_seg_caches`` -- save / undo flows drop every cached
 # response for the edited reciter so the next request re-reads the bucket.
-_PEAKS_RESPONSE_CACHE: "OrderedDict[tuple[str, tuple], dict]" = OrderedDict()
+_PEAKS_RESPONSE_CACHE: "OrderedDict[tuple[str, tuple], bytes]" = OrderedDict()
 _PEAKS_RESPONSE_MAX = 50
 _PEAKS_RESPONSE_LOCK = threading.Lock()
 
 
-def get_peaks_response_cache(reciter: str, chapters: tuple) -> dict | None:
-    """Return the cached response for ``(reciter, chapters)`` or None."""
+def get_peaks_response_cache(reciter: str, chapters: tuple) -> bytes | None:
+    """Return the cached serialized response bytes for ``(reciter, chapters)``."""
     key = (reciter, chapters)
     with _PEAKS_RESPONSE_LOCK:
         if key in _PEAKS_RESPONSE_CACHE:
@@ -247,8 +255,8 @@ def get_peaks_response_cache(reciter: str, chapters: tuple) -> dict | None:
     return None
 
 
-def set_peaks_response_cache(reciter: str, chapters: tuple, value: dict) -> None:
-    """Store the response under ``(reciter, chapters)``. Evicts oldest when full."""
+def set_peaks_response_cache(reciter: str, chapters: tuple, value: bytes) -> None:
+    """Store serialized response bytes. Evicts oldest entries when full."""
     key = (reciter, chapters)
     with _PEAKS_RESPONSE_LOCK:
         _PEAKS_RESPONSE_CACHE[key] = value
