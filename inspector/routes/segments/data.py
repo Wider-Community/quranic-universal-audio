@@ -20,7 +20,6 @@ from services import cache
 from services.state import catalog as catalog_service
 from services import state as state_service
 from services.data_loader import (
-    load_auto_split,
     load_detailed,
     resolve_pad,
 )
@@ -172,14 +171,6 @@ def seg_all(reciter):
     pad_left_ms, pad_right_ms, min_silence_floor_ms = resolve_pad(
         cache.get_seg_meta(reciter)
     )
-    # Auto-Split sidecar UID set — the FE gates the Auto Split button label on
-    # presence in this set, so seg rows whose offline alignment failed fall
-    # back to the plain Split UX instead of misleading the user. Just UIDs,
-    # not the full payload: the cursors/refs come back from a separate
-    # ``/api/seg/auto-split`` lookup at click-time, so cached in-memory and
-    # cheap (~10 ms).
-    auto_split_by_uid, _ = load_auto_split(reciter)
-    auto_split_uids = sorted(auto_split_by_uid.keys())
     # dk_words + verse_word_counts moved off this payload to the immutable
     # ``/api/static/quran-refs.json`` asset (fetched once per browser).
     # Per-audio-URL duration in ms, sourced from the audio_manifest sidecar.
@@ -209,7 +200,6 @@ def seg_all(reciter):
         "chapter_duration_ms_by_chapter": chapter_duration_ms_by_chapter,
         "duration_ms_by_url": duration_ms_by_url,
         "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
-        "auto_split_uids": auto_split_uids,
         # Legacy symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.
         "pad_ms": (pad_left_ms + pad_right_ms) // 2,
         "pad_left_ms": pad_left_ms,
