@@ -189,7 +189,7 @@ def main() -> None:
     print(f"mode={'MOUNTED ('+args.mount+')' if args.mount else 'NO MOUNT (hffs.cat_file)'}")
     print(f"slug={SLUG}")
 
-    b = BucketBackend(BUCKET, mount=args.mount, force_flush_on_write=True)
+    b = BucketBackend(BUCKET, mount=args.mount)
 
     bench_reads(b, n_warm=args.warm)
     if not args.skip_writes:

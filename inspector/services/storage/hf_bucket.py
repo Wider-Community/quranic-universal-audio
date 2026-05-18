@@ -237,9 +237,9 @@ class BucketBackend:
     Mount + direct-upload hybrid:
 
     - With a mount (deployed Spaces via ``hf-mount``): reads go through the
-      mount, falling back to the bucket API on cache miss. Writes go to the
-      mount + an additional direct upload for durability beyond the mount's
-      2–30 s flush window.
+      mount, falling back to the bucket API on cache miss. Writes go
+      through the mount only — the hf-mount daemon's debounced flush
+      handles durability.
     - Without a mount (local mode): reads go through ``hffs.cat_file()``;
       writes go through ``batch_bucket_files(add=...)``.
 
@@ -252,7 +252,6 @@ class BucketBackend:
         *,
         token: str | None = None,
         mount: str | Path | None = None,
-        force_flush_on_write: bool = True,
     ) -> None:
         self._bucket_id = bucket_id
         self._token = (
@@ -261,7 +260,6 @@ class BucketBackend:
             or os.environ.get("HF_TOKEN")
         )
         self._mount: Path | None = Path(mount).resolve() if mount else None
-        self._force_flush_on_write = force_flush_on_write
         self._write_lock = threading.Lock()
 
         # Bucket writes go through Xet storage, which requires the token to
@@ -392,8 +390,6 @@ class BucketBackend:
                     except OSError:
                         pass
                     raise
-                if self._force_flush_on_write:
-                    self._bucket_upload(path, data)
                 return
 
             self._bucket_upload(path, data)
@@ -402,9 +398,9 @@ class BucketBackend:
         self.write_bytes_atomic(path, _dump_json(obj))
 
     def append_jsonl(self, path: str, record: dict) -> None:
-        """Append-one-line. Buckets don't expose a streaming append; we
-        read-modify-write. With a mount, append happens in-place locally and
-        a refresh-upload follows when ``force_flush_on_write`` is on.
+        """Append-one-line. With a mount, append happens in-place locally
+        and the daemon flushes asynchronously. Without a mount we
+        read-modify-write through the bucket API (no streaming append).
 
         Acceptable at our write rate (≤1 save / 10 s per active reviewer ×
         ≤25 concurrent reviewers per replica).
@@ -419,8 +415,6 @@ class BucketBackend:
                 mp.parent.mkdir(parents=True, exist_ok=True)
                 with mp.open("ab") as fh:
                     fh.write(line)
-                if self._force_flush_on_write:
-                    self._bucket_upload(path, mp.read_bytes())
                 return
 
             try:
@@ -560,7 +554,6 @@ def get_backend() -> StorageBackend:
     - ``INSPECTOR_BUCKET_MOUNT`` — mount path inside deployed Space; unset
       in local mode (BucketBackend uses ``hf_hub_download`` instead)
     - ``INSPECTOR_HF_TOKEN`` / ``HF_TOKEN`` — write/read token
-    - ``INSPECTOR_FORCE_FLUSH_ON_SAVE`` — ``1`` (default) | ``0``
     """
     global _backend_singleton
     if _backend_singleton is not None:
@@ -590,11 +583,9 @@ def get_backend() -> StorageBackend:
             from services.storage.auto_mount import auto_mount
             auto_mount()
             mount = os.environ.get("INSPECTOR_BUCKET_MOUNT") or None
-            force_flush = os.environ.get("INSPECTOR_FORCE_FLUSH_ON_SAVE", "1") == "1"
             backend = BucketBackend(
                 bucket_id=bucket_id,
                 mount=mount,
-                force_flush_on_write=force_flush,
             )
         else:
             raise RuntimeError(f"unknown INSPECTOR_BACKEND={kind!r}")

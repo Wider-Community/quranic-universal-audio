@@ -106,11 +106,6 @@ def auto_mount(*, behind_proxy: bool | None = None,
 
     def _activate() -> Path:
         os.environ["INSPECTOR_BUCKET_MOUNT"] = str(mount_dir)
-        # Mount handles read-after-write; the redundant API upload roughly
-        # doubles small-file write latency. Off by default locally; the
-        # daemon's debounced flush still provides durability.
-        if "INSPECTOR_FORCE_FLUSH_ON_SAVE" not in os.environ:
-            os.environ["INSPECTOR_FORCE_FLUSH_ON_SAVE"] = "0"
         return mount_dir
 
     if os.path.ismount(str(mount_dir)):
