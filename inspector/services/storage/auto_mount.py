@@ -31,7 +31,7 @@ _BUCKET_ROOT = _INSPECTOR_DIR / ".bucket"
 _HF_MOUNT_FALLBACKS = ("~/bin/hf-mount", "/usr/local/bin/hf-mount",
                        "/opt/homebrew/bin/hf-mount")
 
-_DEFAULT_DEV_BUCKET = "hetchyy/quranic-inspector-bucket-dev"
+_DEFAULT_BUCKET = "hetchyy/quranic-inspector-bucket"
 
 
 def _flavor_for(bucket: str) -> str:
@@ -100,7 +100,7 @@ def auto_mount(*, behind_proxy: bool | None = None,
             except OSError:
                 pass
 
-    bucket = os.environ.get("INSPECTOR_BUCKET_REPO", _DEFAULT_DEV_BUCKET)
+    bucket = os.environ.get("INSPECTOR_BUCKET_REPO", _DEFAULT_BUCKET)
     mount_dir = mount_dir_for(bucket)
     mount_dir.mkdir(parents=True, exist_ok=True)
 

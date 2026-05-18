@@ -549,8 +549,8 @@ def get_backend() -> StorageBackend:
     - ``INSPECTOR_BACKEND`` — ``bucket`` (default) | ``filesystem``
     - ``INSPECTOR_FILESYSTEM_ROOT`` — root path for ``FilesystemBackend``
     - ``INSPECTOR_BUCKET_REPO`` — HF repo id (default
-      ``hetchyy/quranic-inspector-bucket-dev`` for local + dev Space;
-      override to the prod repo in the prod Space)
+      ``hetchyy/quranic-inspector-bucket`` for local + prod Space; dev
+      Space overrides to ``hetchyy/quranic-inspector-bucket-dev``)
     - ``INSPECTOR_BUCKET_MOUNT`` — mount path inside deployed Space; unset
       in local mode (BucketBackend uses ``hf_hub_download`` instead)
     - ``INSPECTOR_HF_TOKEN`` / ``HF_TOKEN`` — write/read token
@@ -573,7 +573,7 @@ def get_backend() -> StorageBackend:
             backend: StorageBackend = FilesystemBackend(root)
         elif kind == "bucket":
             bucket_id = os.environ.get(
-                "INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket-dev"
+                "INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket"
             )
             # Opt into the local FUSE mount on first use. No-op if app.py
             # already mounted at boot, under pytest, behind the Space
