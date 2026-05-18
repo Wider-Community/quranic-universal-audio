@@ -59,81 +59,12 @@ if "INSPECTOR_DEV_MODE" not in os.environ:
 
 # Local dev: auto-mount the HF bucket via hf-mount so reads hit a local
 # FUSE cache (~50-500x faster than going through hffs.cat_file every call).
-# Skipped behind the deployed proxy (Space attaches its own mount), in
-# pytest, on filesystem-backend mode, when the user pre-set
-# INSPECTOR_BUCKET_MOUNT, or when INSPECTOR_AUTO_MOUNT=0. Failures degrade
-# silently to the API path — never blocks boot.
-def _auto_mount_dev_bucket() -> None:
-    if os.environ.get("INSPECTOR_BEHIND_PROXY") == "1":
-        return
-    if "pytest" in sys.modules:
-        return
-    if os.environ.get("INSPECTOR_AUTO_MOUNT") == "0":
-        return
-    if os.environ.get("INSPECTOR_BUCKET_MOUNT"):
-        return
-    if os.environ.get("INSPECTOR_BACKEND", "bucket").lower() != "bucket":
-        return
+# Mount path: inspector/.bucket/{dev,prod}/ (gitignored). Failures degrade
+# silently to the API path — never blocks boot. See auto_mount.py for
+# the full skip-conditions list.
+from services.storage.auto_mount import auto_mount as _auto_mount_bucket
 
-    import shutil
-    import subprocess
-    import time
-
-    hf_mount = shutil.which("hf-mount")
-    if not hf_mount:
-        for cand in ("~/bin/hf-mount", "/usr/local/bin/hf-mount",
-                     "/opt/homebrew/bin/hf-mount"):
-            p = Path(cand).expanduser()
-            if p.exists():
-                hf_mount = str(p)
-                break
-    if not hf_mount:
-        return
-
-    bucket = os.environ.get(
-        "INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket-dev"
-    )
-    flavor = "dev" if bucket.endswith("-dev") else "prod"
-    mount_dir = Path(__file__).resolve().parent / ".bucket" / flavor
-    mount_dir.mkdir(parents=True, exist_ok=True)
-
-    def _activate() -> None:
-        os.environ["INSPECTOR_BUCKET_MOUNT"] = str(mount_dir)
-        # The mount handles read-after-write internally; force_flush adds a
-        # redundant API upload after every save (Space behaviour), which
-        # roughly doubles small-file write latency. Off by default locally
-        # — durability still arrives via the daemon's debounced flush.
-        if "INSPECTOR_FORCE_FLUSH_ON_SAVE" not in os.environ:
-            os.environ["INSPECTOR_FORCE_FLUSH_ON_SAVE"] = "0"
-
-    if os.path.ismount(str(mount_dir)):
-        _activate()
-        return
-
-    try:
-        result = subprocess.run(
-            [hf_mount, "start", "--fuse", "--", "--advanced-writes",
-             "bucket", bucket, str(mount_dir)],
-            timeout=30, capture_output=True, text=True,
-        )
-    except Exception:  # noqa: BLE001
-        return
-
-    for _ in range(50):
-        if os.path.ismount(str(mount_dir)):
-            _activate()
-            return
-        time.sleep(0.1)
-
-    # Mount didn't come up — leave env unset; BucketBackend falls back to API.
-    if result.returncode != 0:
-        sys.stderr.write(
-            f"[inspector] hf-mount auto-start failed (exit {result.returncode}): "
-            f"{result.stderr.strip()[:200]}\n"
-        )
-
-
-_auto_mount_dev_bucket()
+_auto_mount_bucket()
 
 
 from flask import Flask, jsonify, send_from_directory
