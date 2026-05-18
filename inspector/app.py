@@ -93,8 +93,8 @@ def _auto_mount_dev_bucket() -> None:
     bucket = os.environ.get(
         "INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket-dev"
     )
-    mount_dir = (Path.home() / ".cache" / "inspector-hf-mount"
-                 / bucket.replace("/", "_"))
+    flavor = "dev" if bucket.endswith("-dev") else "prod"
+    mount_dir = Path(__file__).resolve().parent / ".bucket" / flavor
     mount_dir.mkdir(parents=True, exist_ok=True)
 
     def _activate() -> None:
