@@ -3,10 +3,9 @@
 No Flask imports -- all functions accept parameters and return plain dicts.
 
 Writes go through ``services.data_dir`` which routes to ``BucketBackend`` or
-``FilesystemBackend`` based on ``INSPECTOR_BACKEND``. Per-save
-``huggingface_hub.upload_file()`` is wired into ``BucketBackend`` itself
-(force_flush_on_write), so the save path doesn't need to think about
-durability — it just calls the backend.
+``FilesystemBackend`` based on ``INSPECTOR_BACKEND``. The bucket backend
+writes through the hf-mount FUSE; the daemon's debounced flush handles
+durability to remote storage.
 
 Phase 3 made ``@require_edit_lock`` (signed-in + claim + state checks) the
 sole authoritative writer gate. The earlier ``INSPECTOR_LOCAL_WRITES`` env
