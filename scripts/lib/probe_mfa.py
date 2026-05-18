@@ -104,6 +104,7 @@ def run_probe(
     *,
     mfa_app_path: Path,
     audio_dir: Path | None = None,
+    audio_manifest: Path | None = None,
     beam: int = DEFAULT_PROBE_BEAM,
     method: str = DEFAULT_METHOD,
     padding: str = DEFAULT_PADDING,
@@ -118,15 +119,19 @@ def run_probe(
     UIDs for every probable segment, and runs alignment in parallel via a
     download ThreadPool feeding a process pool of MFA workers.
 
-    When ``audio_dir`` is provided, chapter audio is read from
-    ``<audio_dir>/<chapter>.mp3`` instead of the URL/path in ``detailed.json``
-    — this is the Katana fast-path, since extraction's audio_persist post-pass
-    has already written the per-chapter MP3s right there. Falls back to the
-    ``detailed.json`` source per-chapter when a file is missing.
+    Audio resolution order, per chapter:
+
+    1. ``<audio_dir>/<chapter>.mp3`` if staged locally — Katana fast-path.
+    2. ``entry.audio`` URL/path from ``detailed.json`` (legacy pre-#fdeaae0d).
+    3. ``audio_manifest`` catalog sidecar URL — required for post-#fdeaae0d
+       reciters whose ``detailed.json`` no longer carries ``entry.audio``.
+       Defaults to ``<reciter_dir>/audio_manifest.json``.
 
     Returns the sidecar path on success, or ``None`` when ``detailed.json``
     is missing.
     """
+    from scripts.lib.auto_split_precompute import load_chapter_urls  # local import
+
     reciter_dir = Path(reciter_dir).resolve()
     detailed_path = reciter_dir / "detailed.json"
     if not detailed_path.exists():
@@ -137,6 +142,19 @@ def run_probe(
     if audio_dir is not None and not audio_dir.is_dir():
         log.error("audio_dir does not exist or is not a directory: %s", audio_dir)
         return None
+
+    chapter_urls: dict[int, str] = {}
+    manifest_path = Path(audio_manifest).resolve() if audio_manifest else (
+        reciter_dir / "audio_manifest.json"
+    )
+    if manifest_path.is_file():
+        try:
+            chapter_urls = load_chapter_urls(manifest_path)
+            log.info("Loaded %d chapter URLs from %s", len(chapter_urls), manifest_path)
+        except Exception as e:  # noqa: BLE001
+            log.warning("Failed to load audio_manifest %s: %s", manifest_path, e)
+    elif audio_manifest is not None:
+        log.warning("audio_manifest %s not found; URL fallback disabled", manifest_path)
 
     with open(detailed_path, encoding="utf-8") as f:
         doc = json.load(f)
@@ -155,10 +173,15 @@ def run_probe(
         ref = entry.get("ref", "")
         chapter = _chapter_from_ref(ref)
         audio_src = entry.get("audio", "")
-        if chapter is None or not audio_src:
-            log.warning("Chapter %s: missing chapter/audio; skipping", ref)
+        if chapter is None:
+            log.warning("Chapter %s: missing chapter; skipping", ref)
             return 0
         local_mp3 = audio_dir / f"{chapter}.mp3" if audio_dir else None
+        manifest_url = chapter_urls.get(chapter, "") if chapter_urls else ""
+        if not audio_src and not (local_mp3 is not None and local_mp3.is_file()) \
+                and not manifest_url:
+            log.warning("Chapter %s: missing audio (no entry.audio, no local mp3, no manifest URL); skipping", ref)
+            return 0
         try:
             if local_mp3 is not None and local_mp3.is_file():
                 audio_int16 = load_audio_int16(local_mp3)
@@ -169,8 +192,12 @@ def run_probe(
                 audio_file = download_audio(audio_src)
                 audio_int16 = load_audio_int16(audio_file)
                 audio_file.unlink(missing_ok=True)
-            else:
+            elif audio_src:
                 audio_int16 = load_audio_int16(Path(audio_src))
+            else:
+                audio_file = download_audio(manifest_url)
+                audio_int16 = load_audio_int16(audio_file)
+                audio_file.unlink(missing_ok=True)
         except Exception as e:
             log.warning("Chapter %s: audio load failed (%s); skipping", ref, e)
             return 0
