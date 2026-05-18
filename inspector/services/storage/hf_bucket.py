@@ -582,6 +582,13 @@ def get_backend() -> StorageBackend:
             bucket_id = os.environ.get(
                 "INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket-dev"
             )
+            # Opt into the local FUSE mount on first use. No-op if app.py
+            # already mounted at boot, under pytest, behind the Space
+            # proxy, or if hf-mount isn't installed. Scripts that go
+            # straight to get_backend() get the speedup without explicit
+            # plumbing.
+            from services.storage.auto_mount import auto_mount
+            auto_mount()
             mount = os.environ.get("INSPECTOR_BUCKET_MOUNT") or None
             force_flush = os.environ.get("INSPECTOR_FORCE_FLUSH_ON_SAVE", "1") == "1"
             backend = BucketBackend(
