@@ -85,9 +85,12 @@
         return hl;
     })();
 
-    // Each leaf card gets a splitHL pointing to its own range within wfRange (only for splits)
+    // Each leaf card gets a splitHL pointing to its own range within wfRange (only for splits).
+    // Suppressed on leaves that show a normal-adjust delta — otherwise the "parent's part"
+    // green/dim doubles up over the trim highlight.
     function leafSplitHL(leaf: HistorySnapshot): SplitHighlight | null {
         if (!isSplit || !rootSnap) return null;
+        if (leafTrimHL(leaf)) return null;
         return {
             wfStart: wfRange.wfStart,
             wfEnd: wfRange.wfEnd,
@@ -107,13 +110,35 @@
         return { mergePoint };
     })();
 
-    // Trim highlight for chains that include an adjust operation
-    $: leafTrimHL = (() => {
-        const trimOp = chain.ops.find(co => co.op.op_type === 'boundary_adjustment' || co.op.op_type === 'trim_segment')?.op;
-        if (!trimOp || !trimOp.targets_before || trimOp.targets_before.length === 0) return null;
-        const b = trimOp.targets_before[0] as HistorySnapshot;
-        return { color: 'green', otherStart: b.time_start, otherEnd: b.time_end } as TrimHighlight;
-    })();
+    // Earliest snapshot in the chain carrying this leaf's uid (excluding the leaf itself).
+    // For a split→adjust chain that's the split's targets_after entry (the leaf's
+    // initial post-split state); for a plain adjust chain it's the first
+    // targets_before. chain.ops is already chronological.
+    function leafBaselineSnap(leaf: HistorySnapshot): HistorySnapshot | null {
+        if (!leaf.segment_uid) return null;
+        for (const { op } of chain.ops) {
+            const before = ((op.targets_before || []) as HistorySnapshot[]).find(s => s.segment_uid === leaf.segment_uid);
+            if (before) return before;
+            const after = ((op.targets_after || []) as HistorySnapshot[]).find(s => s.segment_uid === leaf.segment_uid);
+            if (after && after !== leaf) return after;
+        }
+        return null;
+    }
+
+    // Per-leaf trim highlight: only the leaf actually targeted by an adjust gets
+    // the green delta painted, against its baseline (post-split or pre-adjust)
+    // state — not against an arbitrary other-leaf's range.
+    function leafTrimHL(leaf: HistorySnapshot): TrimHighlight | null {
+        const wasAdjusted = chain.ops.some(({ op }) => {
+            if (op.op_type !== 'boundary_adjustment' && op.op_type !== 'trim_segment') return false;
+            return ((op.targets_after || []) as HistorySnapshot[]).some(s => s.segment_uid === leaf.segment_uid);
+        });
+        if (!wasAdjusted) return null;
+        const baseline = leafBaselineSnap(leaf);
+        if (!baseline) return null;
+        if (baseline.time_start === leaf.time_start && baseline.time_end === leaf.time_end) return null;
+        return { color: 'green', otherStart: baseline.time_start, otherEnd: baseline.time_end };
+    }
 
     // Leaf cards need a wider seg range when expanded so the canvas
     // renders against the chain's union. The IntersectionObserver callback
@@ -245,7 +270,7 @@
                                 instanceRole="history"
                                 splitHL={leafSplitHL(leaf)}
                                 mergeHL={leafMergeHL}
-                                trimHL={leafTrimHL}
+                                trimHL={leafTrimHL(leaf)}
                                 opId={chain.ops[0]?.op.op_id ?? null}
                                 {previewCtx}
                             />
