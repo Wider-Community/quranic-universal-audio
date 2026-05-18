@@ -150,6 +150,29 @@ def _load_verse_word_counts(repo_root: Path) -> dict[tuple[int, int], int]:
     return counts
 
 
+def load_chapter_urls(manifest_path: Path) -> dict[int, str]:
+    """Build the ``chapter -> url`` map from a catalog ``audio_manifest`` sidecar.
+
+    Inspector's catalog moved per-chapter URLs out of ``detailed.json`` into
+    ``catalog/audio_manifest/<slug>.json`` (commit fdeaae0d). When neither
+    ``entry.audio`` nor a staged ``audio/<ch>.mp3`` is available, the precompute
+    falls back to URLs from this sidecar so it can still download chapter audio
+    on demand.
+    """
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        doc = json.load(f)
+    chapters = doc.get("chapters") or {}
+    urls: dict[int, str] = {}
+    for ch_str, info in chapters.items():
+        url = (info or {}).get("url") or ""
+        if url:
+            try:
+                urls[int(ch_str)] = url
+            except (TypeError, ValueError):
+                continue
+    return urls
+
+
 # ---------------------------------------------------------------------------
 # Cursor extraction (pure)
 # ---------------------------------------------------------------------------
@@ -245,6 +268,7 @@ def run_precompute(
     *,
     mfa_app_path: Path,
     audio_dir: Path | None = None,
+    audio_manifest: Path | None = None,
     repo_root: Path | None = None,
     beam: int = DEFAULT_BEAM,
     method: str = DEFAULT_METHOD,
@@ -260,11 +284,18 @@ def run_precompute(
     repetition candidate, slices its audio, batched-aligns through a local
     Kalpy MFA process pool, and writes ``<reciter_dir>/auto_split_v1.json``.
 
-    When ``audio_dir`` is provided, chapter audio is read from
-    ``<audio_dir>/<chapter>.mp3`` instead of the URL/path in ``detailed.json``
-    — this is the Katana fast-path, since extraction's audio_persist post-pass
-    has already written the per-chapter MP3s right there. Falls back to the
-    ``detailed.json`` source per-chapter when a file is missing.
+    Audio resolution order, per chapter:
+
+    1. ``<audio_dir>/<chapter>.mp3`` if ``audio_dir`` is provided and the file
+       exists — Katana fast-path, since extraction's audio_persist post-pass
+       writes per-chapter MP3s right there.
+    2. ``entry.audio`` URL/path from ``detailed.json`` (legacy pre-#fdeaae0d
+       reciters).
+    3. ``audio_manifest`` catalog sidecar URL — required for post-#fdeaae0d
+       reciters whose ``detailed.json`` no longer carries ``entry.audio``.
+       Defaults to ``<reciter_dir>/audio_manifest.json`` when not specified;
+       skip silently if neither the explicit path nor the auto-detected one
+       exists.
 
     Returns the sidecar path on success, or ``None`` when ``detailed.json``
     is missing.
@@ -279,6 +310,19 @@ def run_precompute(
     if audio_dir is not None and not audio_dir.is_dir():
         log.error("audio_dir does not exist or is not a directory: %s", audio_dir)
         return None
+
+    chapter_urls: dict[int, str] = {}
+    manifest_path = Path(audio_manifest).resolve() if audio_manifest else (
+        reciter_dir / "audio_manifest.json"
+    )
+    if manifest_path.is_file():
+        try:
+            chapter_urls = load_chapter_urls(manifest_path)
+            log.info("Loaded %d chapter URLs from %s", len(chapter_urls), manifest_path)
+        except Exception as e:  # noqa: BLE001
+            log.warning("Failed to load audio_manifest %s: %s", manifest_path, e)
+    elif audio_manifest is not None:
+        log.warning("audio_manifest %s not found; URL fallback disabled", manifest_path)
 
     repo_root = repo_root or _REPO_ROOT
     verse_word_counts = _load_verse_word_counts(repo_root)
@@ -301,7 +345,7 @@ def run_precompute(
         ref = entry.get("ref", "")
         chapter = chapter_from_ref(ref) if ref else None
         audio_src = entry.get("audio", "")
-        if chapter is None or not audio_src:
+        if chapter is None:
             return 0
 
         # Pre-scan: any candidates? If not skip the audio download entirely.
@@ -315,6 +359,10 @@ def run_precompute(
             return 0
 
         local_mp3 = audio_dir / f"{chapter}.mp3" if audio_dir else None
+        manifest_url = chapter_urls.get(chapter, "") if chapter_urls else ""
+        if not audio_src and not (local_mp3 is not None and local_mp3.is_file()) \
+                and not manifest_url:
+            return 0
         try:
             if local_mp3 is not None and local_mp3.is_file():
                 audio_int16 = load_audio_int16(local_mp3)
@@ -325,8 +373,12 @@ def run_precompute(
                 audio_file = download_audio(audio_src)
                 audio_int16 = load_audio_int16(audio_file)
                 audio_file.unlink(missing_ok=True)
-            else:
+            elif audio_src:
                 audio_int16 = load_audio_int16(Path(audio_src))
+            else:
+                audio_file = download_audio(manifest_url)
+                audio_int16 = load_audio_int16(audio_file)
+                audio_file.unlink(missing_ok=True)
         except Exception as e:  # noqa: BLE001
             log.warning("Chapter %s: audio load failed (%s); skipping %d candidates",
                         ref, e, len(cand_descriptors))

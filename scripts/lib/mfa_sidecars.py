@@ -68,6 +68,7 @@ def run_all_sidecars(
     *,
     mfa_app_path: Path,
     audio_dir: Path | None = None,
+    audio_manifest: Path | None = None,
     repo_root: Path | None = None,
     probe_beam: int = DEFAULT_PROBE_BEAM,
     split_beam: int = SPLIT_BEAM,
@@ -107,6 +108,7 @@ def run_all_sidecars(
                 reciter_dir,
                 mfa_app_path=mfa_app_path,
                 audio_dir=audio_dir,
+                audio_manifest=audio_manifest,
                 beam=probe_beam,
                 batch_size=probe_batch_size,
                 workers=workers,
@@ -119,6 +121,7 @@ def run_all_sidecars(
                 reciter_dir,
                 mfa_app_path=mfa_app_path,
                 audio_dir=audio_dir,
+                audio_manifest=audio_manifest,
                 repo_root=repo_root,
                 beam=split_beam,
                 batch_size=split_batch_size,
@@ -138,6 +141,12 @@ def _main(argv: list[str] | None = None) -> int:
                    help="Directory containing detailed.json (and audio/ for fast-path).")
     p.add_argument("--audio-dir", type=Path, default=None,
                    help="Per-chapter MP3 directory. Defaults to <reciter-dir>/audio.")
+    p.add_argument("--audio-manifest", type=Path, default=None,
+                   help="Catalog audio_manifest sidecar (chapter URLs). "
+                        "Defaults to <reciter-dir>/audio_manifest.json. "
+                        "Used as a per-chapter URL fallback when neither a "
+                        "staged audio dir nor entry.audio in detailed.json "
+                        "carries the source.")
     p.add_argument("--mfa-app-path", type=Path, required=True,
                    help="Path to the local MFA aligner module.")
     p.add_argument("--repo-root", type=Path, default=None,
@@ -171,6 +180,7 @@ def _main(argv: list[str] | None = None) -> int:
         args.reciter_dir,
         mfa_app_path=args.mfa_app_path,
         audio_dir=audio_dir,
+        audio_manifest=args.audio_manifest,
         repo_root=args.repo_root,
         probe_beam=args.probe_beam,
         split_beam=args.split_beam,
