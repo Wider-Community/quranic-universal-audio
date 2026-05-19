@@ -59,8 +59,14 @@
     export let label: string | null = null;
 
     // ---- Open-state (in-memory persistent) ----
+    // Mirror the store both directions: local `openCategory` drives the
+    // <details open={...}> binding; external writes (e.g. `onChapterChange`
+    // collapsing the accordion on manual Sura pick) flow back in so the
+    // mutex stays consistent. Identity guard prevents the reactive ping-
+    // pong loop.
     let openCategory: string | null = $valUiOpenCategory;
-    $: valUiOpenCategory.set(openCategory);
+    $: if (openCategory !== $valUiOpenCategory) valUiOpenCategory.set(openCategory);
+    $: if ($valUiOpenCategory !== openCategory) openCategory = $valUiOpenCategory;
 
     // Reset on chapter change
     let _prevChapter = chapter;

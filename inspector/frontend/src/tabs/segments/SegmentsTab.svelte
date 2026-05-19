@@ -28,9 +28,11 @@
     import SavePreview from './components/save/SavePreview.svelte';
     import ValidationPanel from './components/validation/ValidationPanel.svelte';
     import ShortcutsGuide from './ShortcutsGuide.svelte';
+    import { clearAccordionPin } from './stores/accordion-pin';
     import { autoSaveEnabled } from './stores/autosave';
     import {
         getChapterSegments,
+        pickerDisplayChapter,
         segAllData,
         segAllReciters,
         selectedChapter,
@@ -43,6 +45,7 @@
     import { savedFilterView } from './stores/navigation';
     import { segAudioElement, segListElement, waveformContainer } from './stores/playback';
     import { savePreviewVisible } from './stores/save';
+    import { accordionViewActive, valUiOpenCategory } from './stores/validation';
     import { loadChapterData } from './utils/data/chapter-actions';
     import { loadSegConfig } from './utils/data/config-loader';
     import { reloadCurrentReciter } from './utils/data/reciter-actions';
@@ -212,6 +215,12 @@
     }
     function onChapterChange(ev: CustomEvent<string>): void {
         const v = ev.detail;
+        // Manual Sura pick is the user's explicit gesture to view that
+        // chapter — collapse any open accordion, clear the programmatic
+        // picker-display override, then load.
+        valUiOpenCategory.set(null);
+        clearAccordionPin();
+        pickerDisplayChapter.set(null);
         selectedChapter.set(v);
         void loadChapterData(get(selectedReciter), v);
     }
@@ -318,7 +327,9 @@
 
         <FiltersBar hidden={filterBarHidden} />
 
-        <SegmentsList onRestore={onNavigationRestore} />
+        {#if !$accordionViewActive}
+            <SegmentsList onRestore={onNavigationRestore} />
+        {/if}
 
         <EditOverlay audioElRef={segAudioEl} />
     {/if}

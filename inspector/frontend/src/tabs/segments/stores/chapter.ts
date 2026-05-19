@@ -28,6 +28,17 @@ export const selectedReciter = writable<string>('');
 /** Currently selected chapter id ("" or "1".."114"). */
 export const selectedChapter = writable<string>('');
 
+/** Chapter number to DISPLAY in the footer's Surah picker, independent of
+ *  the authoritative `selectedChapter` (which gates chapter-data load and
+ *  chapter-cards render). Null = fall back to `$selectedChapter`.
+ *
+ *  Written ONLY by `playFromSegment`'s accordion path: when a user plays a
+ *  validation-accordion row whose chapter differs from the currently loaded
+ *  one, the picker should reflect that row's chapter visually without
+ *  triggering a chapter swap. Cleared by `onChapterChange` (manual pick)
+ *  and on reciter/chapter clear paths. */
+export const pickerDisplayChapter = writable<number | null>(null);
+
 /** Currently selected verse filter ("" means "All"). */
 export const selectedVerse = writable<string>('');
 

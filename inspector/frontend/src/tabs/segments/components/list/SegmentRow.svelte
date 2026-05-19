@@ -29,8 +29,10 @@
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import { quranRefs } from '../../../../lib/refs/quran-refs';
     import type { Segment } from '../../../../lib/types/domain';
+    import { clearAccordionPin } from '../../stores/accordion-pin';
     import {
         getAdjacentSegments,
+        pickerDisplayChapter,
         segAllData,
         selectedChapter,
         selectedReciter,
@@ -56,6 +58,7 @@
         segListElement,
         segPort,
     } from '../../stores/playback';
+    import { valUiOpenCategory } from '../../stores/validation';
     import type {
         MergeHighlight,
         SegCanvas,
@@ -553,6 +556,13 @@
                 scrollTop: listEl?.scrollTop ?? 0,
             });
         }
+        // "Go to" is the explicit "render this chapter's cards" gesture —
+        // collapse any open accordion + clear the programmatic picker-
+        // display override so the picker tracks `selectedChapter` once
+        // jumpToSegment swaps it.
+        valUiOpenCategory.set(null);
+        clearAccordionPin();
+        pickerDisplayChapter.set(null);
         jumpToSegment(seg.chapter ?? 0, seg.index);
     }
 

@@ -10,6 +10,7 @@
 import { clearWaveformCache } from '../../../../lib/utils/waveform-cache';
 import { clearAccordionPin } from '../../stores/accordion-pin';
 import {
+    pickerDisplayChapter,
     reciterVbrChapters,
     segAllData,
     segCurrentIdx,
@@ -63,6 +64,7 @@ export function clearPerReciterState(): void {
 
     clearRowRegistry();
     playingSegmentIndex.set(null);
+    pickerDisplayChapter.set(null);
     clearWaveformCache();
 
     disposeSegRange();

@@ -4,14 +4,19 @@
      *
      * Two layouts driven by `splitState.currentSplits.length`:
      *
-     * - N=1 (binary split, today's default) → ``Cancel | L | < | > | R |
-     *   Split``. L/R are SELECTION buttons — pressing one picks which side
-     *   the footer play button loops. If a loop is already running, clicking
+     * - N=1 (binary split, today's default) → ``Cancel | (L | < | > | R) |
+     *   Split``. L and R are SELECTION pills — clicking one picks which
+     *   side the footer ▶ loops. If a loop is already running, clicking
      *   the OTHER side restarts the loop on that side; otherwise it just
-     *   updates the selection. Steppers nudge via `nudgeSplitBoundary`.
-     * - N≥2 (multi-cursor, repetition auto-split) → ``Cancel | [1] [2] …
-     *   [N+1] | Split``. Each ``[i]`` selects region i (0-indexed); same
+     *   updates the selection. < > are CURSOR NUDGERS — they live BETWEEN
+     *   L and R inside the same segmented yellow pill so the gadget reads
+     *   as "the thing that controls the split."
+     * - N≥2 (multi-cursor, repetition auto-split) → ``Cancel | [1][2]…[N+1]
+     *   | Split``. Each ``[i]`` selects region i (0-indexed); same
      *   click-while-playing-switches-region semantics as L/R.
+     *
+     * Active L/R/region uses a 3px yellow top-accent bar plus a 700 weight
+     * bump — no clashing colors, no inset rings; reads as a selected tab.
      *
      * The footer's single play/pause is the universal play surface — this
      * panel never spawns its own play button.
@@ -71,7 +76,7 @@
         return !isBinary && sel.kind === 'region' && sel.index === i;
     }
 
-    // Clamp the selection if the cursor count changed and the previously
+    // Clamp the selection if cursor count changed and the previously-
     // selected region no longer exists (e.g. user deleted a cursor).
     $: if (!isBinary && sel.kind === 'region' && sel.index >= regionCount) {
         setSplitPreviewSelection({ kind: 'region', index: Math.max(0, regionCount - 1) });
@@ -84,10 +89,8 @@
         setSplitPreviewSelection({ kind: 'region', index: sel.kind === 'left' ? 0 : regionCount - 1 });
     }
 
-    /** Set the selection store. If a loop is already running (paused or
-     *  playing), switch the loop to the new range immediately — keeps the
-     *  user in their preview flow without needing to re-press the footer
-     *  play button. */
+    /** Set selection. If a loop is running (paused or playing), also switch
+     *  it to the new range so the user doesn't have to re-press footer ▶. */
     function pickAndMaybeSwitch(nextKind: 'left' | 'right'): void {
         setSplitPreviewSelection({ kind: nextKind });
         if (getPlayRangeRAF() && !segPort.paused) {
@@ -105,40 +108,43 @@
 <div class="seg-edit-inline">
     <div class="seg-edit-buttons">
         <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>Cancel</button>
+
         {#if isBinary}
-            <button
-                class="btn btn-sm seg-split-pick"
-                class:active={selLeftActive}
-                aria-pressed={selLeftActive}
-                title="Preview the LEFT half — press footer play to loop"
-                on:click={() => pickAndMaybeSwitch('left')}
-            >L</button>
-            <button class="btn btn-sm seg-split-step"
-                title="Move split back {EDIT_NUDGE_MS} ms"
-                disabled={splitBackDisabled}
-                on:click={nudgeSplitBack}>&lt;</button>
-            <button class="btn btn-sm seg-split-step"
-                title="Move split forward {EDIT_NUDGE_MS} ms"
-                disabled={splitFwdDisabled}
-                on:click={nudgeSplitFwd}>&gt;</button>
-            <button
-                class="btn btn-sm seg-split-pick"
-                class:active={selRightActive}
-                aria-pressed={selRightActive}
-                title="Preview the RIGHT half — press footer play to loop"
-                on:click={() => pickAndMaybeSwitch('right')}
-            >R</button>
+            <div class="seg-split-group" role="group" aria-label="Split preview & cursor">
+                <button class="seg-pick"
+                    class:active={selLeftActive}
+                    aria-pressed={selLeftActive}
+                    title="Preview the LEFT half — press footer ▶ to loop"
+                    on:click={() => pickAndMaybeSwitch('left')}
+                >L</button>
+                <button class="seg-step"
+                    title="Move split back {EDIT_NUDGE_MS} ms"
+                    disabled={splitBackDisabled}
+                    on:click={nudgeSplitBack}>&lt;</button>
+                <button class="seg-step"
+                    title="Move split forward {EDIT_NUDGE_MS} ms"
+                    disabled={splitFwdDisabled}
+                    on:click={nudgeSplitFwd}>&gt;</button>
+                <button class="seg-pick"
+                    class:active={selRightActive}
+                    aria-pressed={selRightActive}
+                    title="Preview the RIGHT half — press footer ▶ to loop"
+                    on:click={() => pickAndMaybeSwitch('right')}
+                >R</button>
+            </div>
         {:else}
-            {#each regions as i}
-                <button
-                    class="btn btn-sm seg-split-pick seg-split-region"
-                    class:active={selRegion(i)}
-                    aria-pressed={selRegion(i)}
-                    title="Preview region {i + 1} — press footer play to loop"
-                    on:click={() => pickRegionAndMaybeSwitch(i)}
-                >{i + 1}</button>
-            {/each}
+            <div class="seg-split-group" role="group" aria-label="Region preview">
+                {#each regions as i}
+                    <button class="seg-pick seg-pick-region"
+                        class:active={selRegion(i)}
+                        aria-pressed={selRegion(i)}
+                        title="Preview region {i + 1} — press footer ▶ to loop"
+                        on:click={() => pickRegionAndMaybeSwitch(i)}
+                    >{i + 1}</button>
+                {/each}
+            </div>
         {/if}
+
         <button class="btn btn-sm btn-confirm" on:click={onConfirm}>Split</button>
         <span class="seg-edit-status">{$editStatusText}</span>
     </div>

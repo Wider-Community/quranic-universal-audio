@@ -36,7 +36,9 @@
     import { SPEEDS } from '../../../../lib/utils/speed-control';
     import { autoSaveEnabled, toggleAutoSave } from '../../stores/autosave';
     import {
+        getSegByChapterIndex,
         livePlayingVerse,
+        pickerDisplayChapter,
         segData,
         selectedChapter,
         selectedReciter,
@@ -50,6 +52,7 @@
         autoScrollEnabled,
         isMainAudioPlaying,
         playbackSpeed,
+        playingSegmentIndex,
         segAudioElement,
         segPort,
         segPortReady,
@@ -178,6 +181,12 @@
     }
 
     $: hasReciter = !!$selectedReciter;
+
+    // What number to show in the Surah picker. `pickerDisplayChapter` is the
+    // programmatic override written by `playFromSegment` when a cross-chapter
+    // accordion row is played — visual-only, never triggers a chapter swap.
+    // Falls back to `selectedChapter` (the authoritative load gate).
+    $: displaySurahNum = $pickerDisplayChapter ?? ($selectedChapter ? parseInt($selectedChapter) : null);
     $: chipMeta = [titleCaseSlug(contextRiwayah), titleCaseSlug(contextStyle)]
         .filter(Boolean)
         .join(' · ');
@@ -212,11 +221,24 @@
         chapterDurationMs = dur && isFinite(dur) ? dur * 1000 : 0;
     }
 
-    $: progressPct = chapterDurationMs > 0
-        ? Math.max(0, Math.min(100, (currentMs / chapterDurationMs) * 100))
+    // In accordion mode the progress bar represents the played SEGMENT only
+    // (clicking can only seek inside the segment, not across the chapter —
+    // accordion playback is bounded). In chapter mode it represents the
+    // whole chapter timeline.
+    $: accordionActive = $playingSegmentIndex?.origin === 'accordion';
+    $: boundedSeg = accordionActive && $playingSegmentIndex
+        ? getSegByChapterIndex($playingSegmentIndex.chapter, $playingSegmentIndex.index)
+        : null;
+
+    $: progressStartMs = boundedSeg ? boundedSeg.time_start : 0;
+    $: progressEndMs = boundedSeg ? boundedSeg.time_end : chapterDurationMs;
+    $: progressSpanMs = Math.max(0, progressEndMs - progressStartMs);
+
+    $: progressPct = progressSpanMs > 0
+        ? Math.max(0, Math.min(100, ((currentMs - progressStartMs) / progressSpanMs) * 100))
         : 0;
 
-    $: progressVisible = chapterDurationMs > 0;
+    $: progressVisible = progressSpanMs > 0;
 
     // ---- Live verse tracking ----------------------------------------
     // The Surah/Ayah cells light up accent-coloured while playback is
@@ -260,24 +282,29 @@
     }
 
     function onProgressClick(ev: MouseEvent): void {
-        // Seek anywhere in the loaded chapter audio.
-        if (chapterDurationMs <= 0 || !$segPortReady) return;
+        // Seek within the active timeline. In chapter mode that's the full
+        // chapter; in accordion mode it's clamped to the segment range
+        // (accordion playback is bounded — seeking outside the segment is
+        // a no-op-ish: the click maps to the segment range and snaps the
+        // cursor back inside it).
+        if (progressSpanMs <= 0 || !$segPortReady) return;
         const target = ev.currentTarget as HTMLElement;
         const rect = target.getBoundingClientRect();
         const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-        segPort.seek(pct * chapterDurationMs);
+        segPort.seek(progressStartMs + pct * progressSpanMs);
     }
 
     function onProgressKey(ev: KeyboardEvent): void {
-        // Arrow keys nudge the playhead within the chapter in 2% steps.
-        if (chapterDurationMs <= 0 || !$segPortReady) return;
-        const step = chapterDurationMs * 0.02;
+        // Arrow keys nudge in 2% steps within the active timeline (chapter
+        // span in chapter mode, segment span in accordion mode).
+        if (progressSpanMs <= 0 || !$segPortReady) return;
+        const step = progressSpanMs * 0.02;
         if (ev.key === 'ArrowLeft') {
             ev.preventDefault();
-            segPort.seek(Math.max(0, segPort.currentTimeMs() - step));
+            segPort.seek(Math.max(progressStartMs, segPort.currentTimeMs() - step));
         } else if (ev.key === 'ArrowRight') {
             ev.preventDefault();
-            segPort.seek(Math.min(chapterDurationMs - 1, segPort.currentTimeMs() + step));
+            segPort.seek(Math.min(progressEndMs - 1, segPort.currentTimeMs() + step));
         }
     }
 
@@ -362,8 +389,8 @@
         const s = total % 60;
         return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
-    $: elapsedMs = progressVisible ? Math.max(0, currentMs) : 0;
-    $: totalMs = progressVisible ? chapterDurationMs : 0;
+    $: elapsedMs = progressVisible ? Math.max(0, currentMs - progressStartMs) : 0;
+    $: totalMs = progressVisible ? progressSpanMs : 0;
 </script>
 
 <div class="segs-footer" class:is-empty={!hasReciter} bind:this={footerEl}>
@@ -490,15 +517,15 @@
                     <button
                         type="button"
                         class="loc-cell"
-                        class:has-value={!!$selectedChapter}
+                        class:has-value={!!displaySurahNum}
                         class:live={surahLive}
                         on:click={() => { surahOpen = !surahOpen; ayahOpen = false; }}
                         aria-haspopup="dialog"
                         aria-expanded={surahOpen}
                     >
                         <span class="loc-label">Surah</span>
-                        {#if $selectedChapter}
-                            <span class="loc-value">{$selectedChapter}</span>
+                        {#if displaySurahNum}
+                            <span class="loc-value">{displaySurahNum}</span>
                         {:else}
                             <span class="loc-empty">—</span>
                         {/if}
@@ -529,7 +556,7 @@
                     <div class="pop pop-surah">
                         <SurahPopover
                             surahNums={allSurahs}
-                            value={$selectedChapter ? parseInt($selectedChapter) : null}
+                            value={displaySurahNum}
                             on:change={onSurahPick}
                         />
                     </div>
