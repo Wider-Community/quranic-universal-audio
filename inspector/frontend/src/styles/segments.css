@@ -510,10 +510,10 @@
 }
 
 /* Replay button — sits between the START / END nudger pairs in the trim
- * toolbar. Cold-starts a fresh loop from the live `currentStart`. Coloured
- * with the playhead pink (PREVIEW_PLAYHEAD_COLOR = #f72585) so the action
- * visually ties to the live cursor it spawns. Bare icon button; same
- * proportions as the nudgers so they form a single rhythm in the row. */
+ * toolbar. Cold-starts a fresh loop from the live `currentStart`. Uses
+ * the same neutral tinted ink as the cursor nudgers so the toolbar reads
+ * as a single cohesive cluster; the rotate-ccw icon shape carries the
+ * "replay" meaning without a competing accent colour. */
 .seg-edit-inline .seg-edit-buttons .seg-replay {
     flex: 0 0 auto;
     display: inline-flex;
@@ -525,14 +525,14 @@
     border: 1px solid transparent;
     border-radius: 4px;
     background: transparent;
-    color: oklch(0.64 0.27 0);  /* #f72585 — PREVIEW_PLAYHEAD_COLOR */
+    color: oklch(0.82 0.01 250);
     cursor: pointer;
     transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .seg-edit-inline .seg-edit-buttons .seg-replay:hover:not(:disabled) {
-    background: oklch(0.24 0.04 0);
-    border-color: oklch(0.42 0.13 0);
-    color: oklch(0.78 0.18 0);
+    background: oklch(0.24 0.012 250);
+    border-color: oklch(0.32 0.012 250);
+    color: oklch(0.94 0.005 250);
 }
 .seg-edit-inline .seg-edit-buttons .seg-replay:active:not(:disabled) {
     transform: rotate(-30deg);  /* tiny motion cue — mirrors the icon arc */
