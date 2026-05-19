@@ -312,17 +312,13 @@
     {/if}
 
     {#if !$historyVisible && !$savePreviewVisible}
-        <div id="seg-validation-global" class="seg-validation" use:waveformContainer>
-            {#if $selectedChapter}
-                <ValidationPanel chapter={null} label="All Chapters" />
-            {/if}
-        </div>
+        <!-- The validation accordion is a GLOBAL view — always all chapters,
+             never filtered by `selectedChapter`. Chapter-scoped review happens
+             through the chapter-cards `<SegmentsList>` below; the accordion
+             is the place to see every outstanding issue across the reciter
+             regardless of which Sura is currently selected in the picker. -->
         <div id="seg-validation" class="seg-validation" use:waveformContainer>
-            {#if $selectedChapter}
-                <ValidationPanel chapter={parseInt($selectedChapter)} label="Chapter {$selectedChapter}" />
-            {:else}
-                <ValidationPanel chapter={null} />
-            {/if}
+            <ValidationPanel chapter={null} />
         </div>
 
         <FiltersBar hidden={filterBarHidden} />
