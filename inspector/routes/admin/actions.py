@@ -209,22 +209,3 @@ def users_lookup():
     })
 
 
-@admin_actions_bp.route("/prefetch/rerun/<slug>", methods=["POST"])
-@require_same_origin
-def prefetch_rerun(slug: str):
-    """Re-enqueue audio prefetch for ``slug``. Useful when the worker
-    crashed mid-job, the underlying URL set changed, or a maintainer wants
-    to refresh the ffmpeg re-mux after a tooling bump.
-
-    Force-overwrites existing artifacts. The progress dict is reset; the
-    sentinel will only re-appear after a clean completion.
-    """
-    user, err = _require_maintainer_or_above()
-    if err is not None:
-        return err
-    if state_service.get_row(slug) is None:
-        return jsonify({"error": f"unknown slug {slug!r}"}), 404
-    from services import audio_prefetch
-
-    queued = audio_prefetch.enqueue(slug, actor=actor_for(user), force=True)
-    return jsonify({"slug": slug, "queued": queued})

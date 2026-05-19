@@ -62,7 +62,7 @@ When this doc and a planning doc disagree on **behavior**, this doc is the contr
 |---|---|
 | [`runbook.md`](runbook.md) | Operational quick-reference (rotate token, force rebuild, reading audit, etc.) |
 | [`accordion-guides.md`](accordion-guides.md) | Frontend-authored validation accordion guide templates and example records |
-| [`audio-prefetch.md`](audio-prefetch.md) | Event-driven prefetch of in-review chapter audio + peaks to `wip/<slug>/`; sweeper, audit events, VBR Xing-TOC fix |
+| [`wip-audio-sweeper.md`](wip-audio-sweeper.md) | 1-week post-RELEASED GC of `wip/<slug>/{audio,peaks}/`; trigger flow, audit events, sweeper internals |
 
 ## Convention
 

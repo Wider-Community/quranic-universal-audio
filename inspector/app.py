@@ -293,15 +293,14 @@ def _hydrate_bucket_stores() -> None:
     except Exception as e:  # noqa: BLE001
         logger.warning("audit ensure_meta_initialized failed: %s", e)
 
-    # Wire the audio prefetch lifecycle: post-transition hook fires the queue,
-    # the sweeper daemon enforces the 1-week post-RELEASED TTL, and the boot
-    # scan re-enqueues any AWAITING_REVIEW slug whose `_done.json` sentinel
-    # never landed (e.g. Space rebooted mid-job).
+    # Wip-audio sweeper: hourly daemon enforcing the 1-week post-RELEASED
+    # TTL on bucket audio + peaks. Bucket audio itself is written by the
+    # katana extraction pipeline; the inspector only reads and (here) GCs.
     #
-    # Opt-in via ``INSPECTOR_AUDIO_PREFETCH=1`` (Dockerfile sets it). Local
-    # dev runs (``python3 inspector/app.py``) leave it unset so background
-    # workers don't hammer the dev bucket on every restart. Tests skip via
-    # the pytest guard.
+    # Opt-in via ``INSPECTOR_WIP_SWEEPER=1`` (Dockerfile sets it on prod).
+    # Local dev runs (``python3 inspector/app.py``) leave it unset so a
+    # mistyped INSPECTOR_BUCKET_REPO can't accidentally delete prod data.
+    # Tests skip via the pytest guard.
     # Auto-detect reconciler: server-side acceptance of pending requests.
     # ``hydrate_initial_seen`` ALWAYS runs at boot — it's idempotent and only
     # fires alignment_completed for slugs already stuck in AWAITING_ALIGNMENT
@@ -328,25 +327,14 @@ def _hydrate_bucket_stores() -> None:
             except Exception as e:  # noqa: BLE001
                 logger.warning("auto_detect background loop wiring failed: %s", e)
 
-    if "pytest" not in sys.modules and os.environ.get("INSPECTOR_AUDIO_PREFETCH") == "1":
+    if "pytest" not in sys.modules and os.environ.get("INSPECTOR_WIP_SWEEPER") == "1":
         try:
             from services import audio_prefetch
 
-            state_service.register_transition_hook(audio_prefetch.on_state_transition)
             audio_prefetch.start_cleanup_daemon()
-            # Boot-resume is opt-in: a fresh Space with many awaiting_review
-            # rows would otherwise enqueue the entire backlog and peg CPU on
-            # ffmpeg remux for hours. Operators flip this on after confirming
-            # the queue is shaped right for the deploy.
-            if os.environ.get("AUDIO_PREFETCH_RESUME_ON_BOOT") == "1":
-                resumed = audio_prefetch.resume_orphaned()
-                if resumed:
-                    logger.info(
-                        "audio_prefetch: re-enqueued %d orphaned slug(s) at boot",
-                        resumed,
-                    )
+            logger.info("wip-audio sweeper: hourly daemon started")
         except Exception as e:  # noqa: BLE001
-            logger.warning("audio_prefetch wiring failed: %s", e)
+            logger.warning("wip-audio sweeper wiring failed: %s", e)
 
 
 _hydrate_bucket_stores()

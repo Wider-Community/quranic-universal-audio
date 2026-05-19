@@ -467,26 +467,10 @@ def set_audio_manifest_url_index_cache(slug: str, idx: dict[str, str]) -> None:
     _audio_manifest_url_index.set(slug, idx)
 
 
-# Audio download / cache status (thread-safe)
-_AUDIO_DL_LOCK = threading.Lock()
-_AUDIO_DL_PROGRESS: dict[str, dict] = {}
+# Audio cache status (thread-safe). Note: the audio download-progress dict
+# (_AUDIO_DL_PROGRESS + helpers) lived here until the prefetch worker was
+# removed; the sweeper that survives doesn't need progress tracking.
 _AUDIO_CACHE_STATUS: dict[str, dict] = {}
-
-
-def get_audio_dl_lock() -> threading.Lock:
-    return _AUDIO_DL_LOCK
-
-
-def get_audio_dl_progress(reciter: str) -> dict | None:
-    return _AUDIO_DL_PROGRESS.get(reciter)
-
-
-def set_audio_dl_progress(reciter: str, progress: dict) -> None:
-    _AUDIO_DL_PROGRESS[reciter] = progress
-
-
-def pop_audio_dl_progress(reciter: str) -> None:
-    _AUDIO_DL_PROGRESS.pop(reciter, None)
 
 
 def get_audio_cache_status(reciter: str) -> dict | None:
