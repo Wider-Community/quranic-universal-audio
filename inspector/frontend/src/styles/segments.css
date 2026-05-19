@@ -423,117 +423,145 @@
     flex: none;
 }
 
+/* Edit-mode toolbar.
+ *   Cancel  | <stepper group 1> | <stepper group 2> | Apply | status
+ * Outer gap separates clusters; inside a `.seg-stepper` / `.seg-split-group`
+ * the children butt up flush (segmented-control look) so a `< >` pair reads
+ * as ONE stepper, not two chips. Cancel + Apply keep their default
+ * .btn-cancel / .btn-confirm grey/green. */
 .seg-edit-inline .seg-edit-buttons {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    align-items: stretch;
+    gap: 8px;
 }
-
-.seg-edit-inline .seg-edit-buttons .btn-sm {
-    flex: 1;
-}
-
-/* Compact Cancel / Apply — sized to text + a small breather, not stretched. */
 .seg-edit-inline .seg-edit-buttons .btn-cancel,
 .seg-edit-inline .seg-edit-buttons .btn-confirm {
     flex: 0 0 auto;
-    padding: 4px 10px;
+    padding: 4px 12px;
+    font-weight: 600;
 }
 
-/* Trim cursor steppers — green for start side, red for end side. Square-ish
- * icon buttons, no flex stretch. Disabled state dims to ~50%. */
-.seg-edit-inline .seg-edit-buttons .seg-trim-step {
+/* Segmented stepper container — one rounded border around the whole pair,
+ * children share a divider via `border-left` on `* + *`. Theme colors come
+ * from CSS custom properties set by the .seg-stepper-{start,end} or
+ * .seg-split-group modifier on the parent. */
+.seg-stepper,
+.seg-split-group {
     flex: 0 0 auto;
-    padding: 4px 6px;
-    min-width: 22px;
-    font-family: monospace;
-    font-weight: bold;
-    line-height: 1;
+    display: inline-flex;
+    align-items: stretch;
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid var(--seg-edge, #3a3a3a);
+    background: var(--seg-fill, #232323);
 }
-.seg-edit-inline .seg-edit-buttons .seg-trim-step-start {
-    background: #1a3d1f;
-    color: #4caf50;
-    border: 1px solid #2a6c2f;
-}
-.seg-edit-inline .seg-edit-buttons .seg-trim-step-start:hover:not(:disabled) {
-    background: #2a6c2f;
-    color: #b3eab6;
-}
-.seg-edit-inline .seg-edit-buttons .seg-trim-step-end {
-    background: #3d1a1a;
-    color: #f44336;
-    border: 1px solid #6c2a2a;
-}
-.seg-edit-inline .seg-edit-buttons .seg-trim-step-end:hover:not(:disabled) {
-    background: #6c2a2a;
-    color: #f9b3b0;
-}
-.seg-edit-inline .seg-edit-buttons .seg-trim-step:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
+.seg-stepper > * + *,
+.seg-split-group > * + * {
+    border-left: 1px solid var(--seg-edge, #3a3a3a);
 }
 
-/* Split cursor stepper — yellow to match the #ffeb3b split line drawn on
- * the canvas. Single cursor (no start/end pair), so both < and > share the
- * one theme. Same sizing + disabled treatment as .seg-trim-step. */
-.seg-edit-inline .seg-edit-buttons .seg-split-step {
-    flex: 0 0 auto;
-    padding: 4px 6px;
-    min-width: 22px;
-    font-family: monospace;
-    font-weight: bold;
-    line-height: 1;
-    background: #3d3a1a;
-    color: #ffeb3b;
-    border: 1px solid #6c662a;
+/* Trim themes — green for the START stepper, red for the END stepper.
+ * Picked up by the children via CSS vars. */
+.seg-stepper-start {
+    --seg-edge:   #2a6c2f;
+    --seg-fill:   #1a3d1f;
+    --seg-ink:    #4caf50;
+    --seg-ink-hi: #b3eab6;
+    --seg-hi:     #2a6c2f;
 }
-.seg-edit-inline .seg-edit-buttons .seg-split-step:hover:not(:disabled) {
-    background: #6c662a;
-    color: #fff3a0;
-}
-.seg-edit-inline .seg-edit-buttons .seg-split-step:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
+.seg-stepper-end {
+    --seg-edge:   #6c2a2a;
+    --seg-fill:   #3d1a1a;
+    --seg-ink:    #f44336;
+    --seg-ink-hi: #f9b3b0;
+    --seg-hi:     #6c2a2a;
 }
 
-/* Visual divider between the green start-pair and red end-pair of trim
- * steppers (also re-used between split selection clusters when needed).
- * Slim vertical line — same height as the buttons via flex stretch. */
-.seg-edit-inline .seg-edit-buttons .seg-edit-divider {
-    flex: 0 0 auto;
-    width: 1px;
-    align-self: stretch;
-    margin: 4px 6px;
-    background: #3a3a3a;
+/* Split theme — yellow, shared by L / </> / R inside one group. */
+.seg-split-group {
+    --seg-edge:   #6c662a;
+    --seg-fill:   #2a2810;
+    --seg-ink:    #ffeb3b;
+    --seg-ink-hi: #fff3a0;
+    --seg-hi:     #4a4418;
 }
 
-/* Split L / R / region SELECTION buttons — same yellow theme as the
- * .seg-split-step cursor nudgers (they live next to them and conceptually
- * belong to the split cursor). Inactive = outlined; active = filled with a
- * yellow inset ring so the user sees "the footer ▶ plays this range." */
-.seg-edit-inline .seg-edit-buttons .seg-split-pick {
+/* Caret buttons (the actual `<` and `>` cursor nudgers). No individual
+ * border — the parent group provides the outline. Hover lifts to --seg-hi;
+ * disabled fades to 35%. */
+.seg-edit-inline .seg-edit-buttons .seg-step {
     flex: 0 0 auto;
-    padding: 4px 8px;
     min-width: 26px;
-    font-family: monospace;
-    font-weight: bold;
-    line-height: 1;
+    height: 24px;
+    padding: 0 6px;
+    border: none;
     background: transparent;
-    color: #ffeb3b;
-    border: 1px solid #6c662a;
+    color: var(--seg-ink);
+    font: bold 0.85rem/1 ui-monospace, monospace;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
 }
-.seg-edit-inline .seg-edit-buttons .seg-split-pick:hover:not(:disabled) {
-    background: rgba(108, 102, 42, 0.4);
-    color: #fff3a0;
+.seg-edit-inline .seg-edit-buttons .seg-step:hover:not(:disabled) {
+    background: var(--seg-hi);
+    color: var(--seg-ink-hi);
 }
-.seg-edit-inline .seg-edit-buttons .seg-split-pick.active {
-    background: #6c662a;
-    color: #fff3a0;
-    box-shadow: inset 0 0 0 1px #ffeb3b;
+.seg-edit-inline .seg-edit-buttons .seg-step:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
 }
-.seg-edit-inline .seg-edit-buttons .seg-split-pick.seg-split-region {
-    min-width: 1.8em;
-    padding: 0 0.5em;
+
+/* START / END micro-label between the < > carets. Visually anchors the
+ * pair as one stepper and replaces the old free-floating divider line. */
+.seg-stepper-label {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 6px;
+    color: var(--seg-ink);
+    opacity: 0.55;
+    font: 600 0.6rem/1 ui-monospace, monospace;
+    letter-spacing: 0.08em;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Split L / R / region SELECTION pills. Inactive = transparent-on-yellow-ink;
+ * active = filled with a 3px yellow accent bar across the top edge + 700
+ * weight. The top-accent (not an inset ring) reads as "tab selected" — a
+ * structural cue rather than a clashing fill color, and keeps the active /
+ * inactive pair visually coherent inside the shared yellow theme. */
+.seg-edit-inline .seg-edit-buttons .seg-pick {
+    flex: 0 0 auto;
+    min-width: 28px;
+    height: 24px;
+    padding: 0 10px;
+    position: relative;
+    border: none;
+    background: transparent;
+    color: var(--seg-ink);
+    font: 600 0.78rem/1 ui-monospace, monospace;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+.seg-edit-inline .seg-edit-buttons .seg-pick:hover:not(.active) {
+    background: var(--seg-hi);
+    color: var(--seg-ink-hi);
+}
+.seg-edit-inline .seg-edit-buttons .seg-pick.active {
+    background: var(--seg-hi);
+    color: var(--seg-ink-hi);
+    font-weight: 700;
+}
+.seg-edit-inline .seg-edit-buttons .seg-pick.active::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: var(--seg-ink);
+}
+.seg-edit-inline .seg-edit-buttons .seg-pick-region {
+    min-width: 1.9em;
+    padding: 0 0.55em;
 }
 
 .seg-edit-inline .seg-edit-status {

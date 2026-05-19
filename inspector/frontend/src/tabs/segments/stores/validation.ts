@@ -29,6 +29,15 @@ export const valUiLcThreshold = writable<number | null>(null);
 export const valUiScrollTop = writable<number>(0);
 export const valUiMeasuredCardHeight = writable<number | null>(null);
 
+/** True iff a validation accordion is open. Accordion view and chapter-cards
+ *  view are mutually exclusive — `SegmentsTab` gates `<SegmentsList>` on
+ *  `!$accordionViewActive`. Derived (not a writable) so external mutations
+ *  can't desync it from the source of truth. */
+export const accordionViewActive = derived(
+    valUiOpenCategory,
+    ($c) => $c !== null,
+);
+
 /** Set validation data (e.g. after fetching /api/seg/validate). */
 export function setValidation(data: SegValidateResponse): void {
     segValidation.set(data);

@@ -3,22 +3,22 @@
      * TrimPanel — Svelte-rendered inline chrome for trim-mode edit.
      *
      * Mounted by SegmentRow inside `.seg-left` when that row is the active
-     * edit target (see SegmentRow `isEditingThisRow && $editMode === 'trim'`).
-     * Renders Cancel | start-stepper-pair | end-stepper-pair | Apply plus the
-     * status readout. Trim preview is driven by the footer's centralized
-     * play/pause button — no per-panel play affordance here. The duration
-     * lives on the row's TimeRange (`A.MMM - B.MMM | dur`) so it tracks the
-     * typed-edit display in one place.
+     * edit target. Layout: ``Cancel | [< START >] | [< END >] | Apply``.
+     * Each `< >` pair is wrapped in a `.seg-stepper` segmented group with
+     * a green (start) or red (end) theme — the carets share a border so
+     * the pair reads as ONE control rather than two loose chips. A tiny
+     * `START` / `END` micro-label sits between the carets and replaces
+     * the old floating divider line.
      *
-     * Steppers nudge the corresponding cursor by `EDIT_NUDGE_MS` (default
-     * 50 ms) via `nudgeTrimBoundary`, the same code path drag and typed
-     * commits use — so the trim handles, the row time-display, and the
-     * panel state stay in lock-step. Buttons disable when the next nudge
-     * would no-op against the trim window or the opposing handle's
-     * EDIT_MIN_DURATION_MS gap.
+     * Trim PREVIEW play/pause is driven entirely by the footer ▶ (and the
+     * Space shortcut), centralised through `onSegPlayClick`. This panel
+     * never spawns its own play button.
      *
-     * The imperative parts — waveform draw, drag math, pointer cursor — stay
-     * on the canvas (`edit-trim.ts::setupTrimDragHandles`).
+     * Steppers nudge by `EDIT_NUDGE_MS` via `nudgeTrimBoundary`, the same
+     * code path drag + typed commits use — so the trim handles, the row
+     * time-display, and the panel state stay in lock-step. Buttons
+     * disable when the next press would no-op against the trim window or
+     * the opposing handle's EDIT_MIN_DURATION_MS gap.
      */
 
     import type { Segment } from '../../../../lib/types/domain';
@@ -40,11 +40,6 @@
     //      edge (start always strict-clips LEFT, end always RIGHT). Pressing
     //      in the direction further off-screen would step the actual time
     //      with no visible feedback — disable that direction.
-    //
-    // The "into-view" press from a clamped cursor is handled by
-    // `nudgeTrimBoundary`'s snap-to-visual-border path: e.g. left-clamped
-    // start + `>` lands at `viewStart + EDIT_NUDGE_MS` regardless of how
-    // far off-view the actual time was, so the cursor pops back into view.
     $: tw = $trimWindow;
     $: startOffLeft = !!tw && tw.currentStart < tw.viewStart;
     $: endOffRight  = !!tw && tw.currentEnd   > tw.viewEnd;
@@ -62,23 +57,31 @@
 <div class="seg-edit-inline">
     <div class="seg-edit-buttons">
         <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>Cancel</button>
-        <button class="btn btn-sm seg-trim-step seg-trim-step-start"
-            title="Move start back {EDIT_NUDGE_MS} ms"
-            disabled={startBackDisabled}
-            on:click={nudgeStartBack}>&lt;</button>
-        <button class="btn btn-sm seg-trim-step seg-trim-step-start"
-            title="Move start forward {EDIT_NUDGE_MS} ms"
-            disabled={startFwdDisabled}
-            on:click={nudgeStartFwd}>&gt;</button>
-        <span class="seg-edit-divider" aria-hidden="true"></span>
-        <button class="btn btn-sm seg-trim-step seg-trim-step-end"
-            title="Move end back {EDIT_NUDGE_MS} ms"
-            disabled={endBackDisabled}
-            on:click={nudgeEndBack}>&lt;</button>
-        <button class="btn btn-sm seg-trim-step seg-trim-step-end"
-            title="Move end forward {EDIT_NUDGE_MS} ms"
-            disabled={endFwdDisabled}
-            on:click={nudgeEndFwd}>&gt;</button>
+
+        <div class="seg-stepper seg-stepper-start" role="group" aria-label="Trim start">
+            <button class="seg-step"
+                title="Move start back {EDIT_NUDGE_MS} ms"
+                disabled={startBackDisabled}
+                on:click={nudgeStartBack}>&lt;</button>
+            <span class="seg-stepper-label" aria-hidden="true">START</span>
+            <button class="seg-step"
+                title="Move start forward {EDIT_NUDGE_MS} ms"
+                disabled={startFwdDisabled}
+                on:click={nudgeStartFwd}>&gt;</button>
+        </div>
+
+        <div class="seg-stepper seg-stepper-end" role="group" aria-label="Trim end">
+            <button class="seg-step"
+                title="Move end back {EDIT_NUDGE_MS} ms"
+                disabled={endBackDisabled}
+                on:click={nudgeEndBack}>&lt;</button>
+            <span class="seg-stepper-label" aria-hidden="true">END</span>
+            <button class="seg-step"
+                title="Move end forward {EDIT_NUDGE_MS} ms"
+                disabled={endFwdDisabled}
+                on:click={nudgeEndFwd}>&gt;</button>
+        </div>
+
         <button class="btn btn-sm btn-confirm" on:click={() => confirmTrim(seg, canvas)}>Apply</button>
         <span class="seg-edit-status">{$editStatusText}</span>
     </div>

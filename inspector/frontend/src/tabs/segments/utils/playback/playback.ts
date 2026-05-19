@@ -31,6 +31,7 @@ import { type AnimationLoop,createAnimationLoop } from '../../../../lib/utils/an
 import { audioSrcMatches } from '../../../../lib/utils/audio';
 import {
     getSegByChapterIndex,
+    pickerDisplayChapter,
     segAllData,
     segCurrentIdx,
     segData,
@@ -137,6 +138,58 @@ function _onRangeBoundary(ev: { reason: string }): void {
         return;
     }
 }
+
+// Reactively rebuild / tear down the segment-bounded AudioRange when the
+// user toggles autoplay MID-PLAY. Without this, the toggle only takes
+// effect on the next play action — which is what the user reported as
+// "autoplay OFF in main chapter is not pausing between segs": they were
+// playing chapter-continuous, flipped autoplay OFF, and audio sailed past
+// segment boundaries because no AudioRange existed yet.
+//
+// Rules:
+//   - autoplay flipped OFF, chapter-mode play in flight, no _segRange,
+//     `playingSegmentIndex` is a main-list segment → wrap the current
+//     playhead in a stop-policy AudioRange.
+//   - autoplay flipped ON, _segRange exists for a main-list segment →
+//     dispose the range so playback continues chapter-continuously.
+//   - Accordion plays are always bounded regardless of autoplay; this
+//     subscription leaves them alone (gated by `origin === 'main'`).
+autoPlayEnabled.subscribe((enabled) => {
+    if (!segPort.element) return;
+    if (get(editMode)) return; // edit-preview owns the port
+    const active = get(playingSegmentIndex);
+    if (!active || active.origin !== 'main') return;
+    if (segPort.paused) return; // toggle takes effect on next play
+
+    if (enabled && _segRange) {
+        // Switch to chapter-continuous: drop the bounded range so the
+        // chapter audio plays through naturally; start the playhead-draw
+        // rAF the chapter-continuous path needs.
+        _segRange.dispose();
+        _segRange = null;
+        _drawLoop.start();
+        return;
+    }
+
+    if (!enabled && !_segRange) {
+        // Switch to bounded: wrap the currently-playing segment in a
+        // stop-policy range so playback pauses at the upcoming boundary.
+        const seg = getSegByChapterIndex(active.chapter, active.index);
+        if (!seg) return;
+        _drawLoop.stop(); // AudioRange owns the playhead rAF in bounded mode
+        _segRange = new AudioRange({
+            port: segPort,
+            range: { startMs: segPort.currentTimeMs(), endMs: seg.time_end },
+            policy: { kind: 'stop' },
+            onTick: _onRangeTick,
+            onBoundary: _onRangeBoundary,
+            playbackRate: () => get(playbackSpeed),
+        });
+        // `attach` starts the rAF without re-seeking — we want to enforce
+        // the boundary from the live playhead, not snap back to startMs.
+        _segRange.attach();
+    }
+});
 
 // ---------------------------------------------------------------------------
 // Public play API
@@ -259,6 +312,17 @@ export function playFromSegment(
         index: segIndex,
         origin: isAccordionPlay ? 'accordion' : 'main',
     });
+
+    // Cross-chapter accordion play: update the picker's displayed chapter
+    // PROGRAMMATICALLY (visual-only — does NOT touch `selectedChapter` or
+    // trigger `loadChapterData`). Same-chapter accordion plays clear the
+    // override so the picker reads `selectedChapter` normally. Main-list
+    // plays never write here; the picker reflects `selectedChapter`.
+    if (isAccordionPlay) {
+        const cur = get(selectedChapter);
+        const curNum = cur ? parseInt(cur) : NaN;
+        pickerDisplayChapter.set(resolvedChapter !== curNum ? resolvedChapter : null);
+    }
 
     // Accordion plays warm their card's next *sibling* (list position,
     // possibly cross-chapter); main-list plays warm the next displayed
