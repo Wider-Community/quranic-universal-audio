@@ -453,9 +453,19 @@
 /* Symmetrical anchors: pin Cancel to the left edge and Apply/Split to the
  * right edge by absorbing the remaining row width into the auto margins on
  * each side. The middle cluster (nudgers + selection pills) centres in
- * whatever space is left. */
-.seg-edit-inline .seg-edit-buttons .btn-cancel { margin-right: auto; }
-.seg-edit-inline .seg-edit-buttons .btn-confirm { margin-left: auto; }
+ * whatever space is left.
+ *
+ * NB: `.btn` ships with `margin-left: auto` from components.css — that
+ * default would CENTRE Cancel here (both margins auto → centre). Zero
+ * the opposing axis explicitly so the edge anchor wins. Same for Apply. */
+.seg-edit-inline .seg-edit-buttons .btn-cancel {
+    margin-left: 0;
+    margin-right: auto;
+}
+.seg-edit-inline .seg-edit-buttons .btn-confirm {
+    margin-left: auto;
+    margin-right: 0;
+}
 
 /* Caret pair container. Holds two `< >` buttons tight together, sits
  * above a 2px coloured underline whose hue mirrors the canvas marker
