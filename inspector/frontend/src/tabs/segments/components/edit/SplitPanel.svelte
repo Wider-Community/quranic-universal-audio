@@ -88,14 +88,16 @@
     /** Set selection AND cold-start a looping preview of that range —
      *  the legacy "Play Left / Play Right" behavior. Footer ▶ + Space
      *  remain the universal pause/resume; clicking the SAME side again
-     *  while it's playing just restarts that side from the loop start. */
+     *  while it's playing just restarts that side from the loop start.
+     *  `mode: 'cold'` bypasses the entry-time warm-attach so an explicit
+     *  pill click always seeks-and-plays from the region's start. */
     function pickAndMaybeSwitch(nextKind: 'left' | 'right'): void {
         setSplitPreviewSelection({ kind: nextKind });
-        previewSplitAudio(nextKind, canvas);
+        previewSplitAudio(nextKind, canvas, { mode: 'cold' });
     }
     function pickRegionAndMaybeSwitch(i: number): void {
         setSplitPreviewSelection({ kind: 'region', index: i });
-        previewSplitRegion(i, canvas);
+        previewSplitRegion(i, canvas, { mode: 'cold' });
     }
 </script>
 

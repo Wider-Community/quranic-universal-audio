@@ -555,9 +555,12 @@ export function onSegTimeUpdate(fileMs?: number): void {
 
 export function startSegAnimation(): void {
     // UI state only — the rAF drives playhead drawing while audio is active.
-    // The editMode gate keeps the segment-row playhead off the edit canvas
-    // while the preview rAF runs on it.
-    if (get(editMode)) return;
+    // The gate keeps the segment-row playhead off the edit canvas only when
+    // the edit-preview rAF actually owns it: trim / split modes replace the
+    // canvas. Reference edit leaves the row's normal waveform canvas in
+    // place, so the chapter cursor must keep advancing through it.
+    const _m = get(editMode);
+    if (_m === 'trim' || _m === 'split') return;
     playButtonLabel.set('Pause');
     activeAudioSource.set('main');
     isMainAudioPlaying.set(true);
@@ -643,12 +646,15 @@ export function reconcilePlayingAfterMutation(
 }
 
 export function drawActivePlayhead(timeMs?: number): void {
-    // Hoist above the pair-change erase branch (below): during any edit mode
-    // the preview rAF owns the edit canvas, and the erase branch iterates
+    // Hoist above the pair-change erase branch (below): when the edit-preview
+    // rAF owns the row's canvas, the erase branch iterates
     // `getRowEntriesFor(_prevPlaying)` — which includes the edit canvas when
     // adjusting the previously-active segment — and clobbers trim handles
-    // with plain peaks via `drawWaveformFromPeaksForSeg`.
-    if (get(editMode)) return;
+    // with plain peaks via `drawWaveformFromPeaksForSeg`. Only trim / split
+    // replace the canvas; reference edit leaves it intact, so the chapter
+    // cursor must keep drawing through the ref-edit lifetime.
+    const _m = get(editMode);
+    if (_m === 'trim' || _m === 'split') return;
     const allData = get(segAllData);
     const active = get(playingSegmentIndex);
     if (!allData) return;

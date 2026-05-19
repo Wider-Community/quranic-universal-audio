@@ -37,6 +37,7 @@ import type { SegCanvas } from '../../types/segments-waveform';
 import { EDIT_MIN_DURATION_MS, EDIT_SNAP_MS, TRIM_HANDLE_HIT_RADIUS_PX } from '../constants';
 import {
     editPreviewPlaying,
+    setPreviewJustSeeked,
     setPreviewLooping,
 } from '../playback/play-range';
 import { _ensureTrimBaseCache, drawTrimWaveform } from '../waveform/trim-draw';
@@ -454,30 +455,40 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
 // previewTrimAudio — toggle looping preview of trimmed region
 // ---------------------------------------------------------------------------
 
-/** Launch the trim-window preview loop. Branches on the live audio state:
- *  - Warm attach when the chapter playhead is already playing within
- *    `[currentStart, currentEnd]` → audio continues from where it plays,
- *    no seek glitch, the rAF's loop-back at `currentEnd` catches the
- *    wraparound.
- *  - Cold seek otherwise (paused, or playhead outside the window) →
- *    `_playRange` runs `loadCovering` + `seekAndPlay(currentStart)`.
+/** Launch the trim-window preview loop.
+ *
+ *  Default (`mode: 'auto'`) — branches on the live audio state:
+ *  - Playing → warm-attach the playhead rAF without seeking. Audio
+ *    continues from where it plays. If `live >= currentEnd` we prime
+ *    `_previewJustSeeked = true` so the rAF's first frame doesn't fire
+ *    the wrap-back; subsequent forward-crossings of `currentEnd` (after
+ *    audio falls below the boundary) wrap normally.
+ *  - Paused → cold-start via `_playRange` (seek + play + loop).
+ *
+ *  `mode: 'cold'` — always cold-start, regardless of audio state. Used
+ *  by the Replay button's "restart from currentStart" gesture.
  *
  *  Idempotent — calling while a loop is already running cancels the prior
  *  rAF inside `_setupPreviewLoop`. Play/pause toggling is still owned by
- *  `onSegPlayClick` in playback.ts.
- *
- *  Callers: `enterTrimMode` (entry), `TrimPanel`'s replay button when
- *  added. Future selection-change callers (handle drag, view zoom) can
- *  pass a pre-resolved canvas to skip the editCanvas lookup. */
-export function previewTrimAudio(canvas?: SegCanvas | null): void {
+ *  `onSegPlayClick` in playback.ts. */
+export function previewTrimAudio(
+    canvas?: SegCanvas | null,
+    opts?: { mode?: 'auto' | 'cold' },
+): void {
     const c = canvas ?? get(editCanvas);
     const tw = c?._trimWindow;
     if (!tw || !c) return;
     editPreviewPlaying.set(true);
     setPreviewLooping('trim');
 
+    if (opts?.mode === 'cold' || segPort.paused) {
+        _playRange(tw.currentStart, tw.currentEnd);
+        return;
+    }
+
+    // Warm-attach. Skip the first wrap if audio is already past the
+    // window so we don't snap backward to currentStart on entry.
     const live = segPort.currentTimeMs();
-    const inWindow = live >= tw.currentStart && live <= tw.currentEnd;
-    if (!segPort.paused && inWindow) attachPreviewLoop(tw.currentStart, tw.currentEnd);
-    else _playRange(tw.currentStart, tw.currentEnd);
+    setPreviewJustSeeked(live >= tw.currentEnd);
+    attachPreviewLoop(tw.currentStart, tw.currentEnd);
 }

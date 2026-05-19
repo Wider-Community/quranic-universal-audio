@@ -76,7 +76,7 @@
             title="Replay trim window from start"
             aria-label="Replay"
             disabled={replayDisabled}
-            on:click={() => previewTrimAudio(canvas)}
+            on:click={() => previewTrimAudio(canvas, { mode: 'cold' })}
         >
             <Icon name="replay" size={14} />
         </button>
