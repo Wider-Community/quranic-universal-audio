@@ -587,6 +587,9 @@ def get_backend() -> StorageBackend:
                 bucket_id=bucket_id,
                 mount=mount,
             )
+            logging.getLogger("inspector").info(
+                "storage backend: bucket=%s mount=%s", bucket_id, mount or "(api)",
+            )
         else:
             raise RuntimeError(f"unknown INSPECTOR_BACKEND={kind!r}")
 
