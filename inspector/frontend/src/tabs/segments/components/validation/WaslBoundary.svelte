@@ -31,13 +31,13 @@
 
     import { tick } from 'svelte';
 
-    import type { EditOp, Segment } from '../../../../lib/types/domain';
     import { editGate } from '../../../../lib/actions/editGate';
+    import type { EditOp, Segment } from '../../../../lib/types/domain';
     import { refreshSegInStore } from '../../stores/chapter';
     import {
+        amendSegInOp,
         getChapterOps,
         markDirty,
-        amendSegInOp,
     } from '../../stores/dirty';
     import {
         clearWaslPending,
