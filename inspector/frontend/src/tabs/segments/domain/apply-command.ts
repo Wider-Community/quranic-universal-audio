@@ -42,7 +42,7 @@ import type {
 } from './command';
 import { IssueRegistry } from './registry';
 
-const HISTORY_NEUTRAL_CONTEXT_CATEGORIES = new Set(['basmala_amin', 'muqattaat']);
+const HISTORY_NEUTRAL_CONTEXT_CATEGORIES = new Set(['muqattaat']);
 
 function _historyContextCategory(category: string | null | undefined): string | null {
     if (!category || HISTORY_NEUTRAL_CONTEXT_CATEGORIES.has(category)) return null;

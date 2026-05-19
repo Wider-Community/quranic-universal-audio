@@ -37,12 +37,26 @@ describe.skipIf(!applyCommand)('applyCommand', () => {
     expect('validationDelta' in r).toBe(true);
   });
 
-  it('does not record history context for Basmala + Amin edits', () => {
+  it('records op_context_category and resolved delta for Basmala + Amin edits', () => {
+    // basmala_amin behaves like the other resolve-by-edit categories:
+    // edits from inside the accordion stamp op_context_category so the BE
+    // resolved-by-edit index can suppress the flag on next revalidation.
     const r = applyCommand(baseState, {
       type: 'trim',
       segmentUid: 'uid-1',
       delta: { time_start: 100 },
       sourceCategory: 'basmala_amin',
+    } as any);
+    expect(r.operation.op_context_category).toBe('basmala_amin');
+    expect(r.validationDelta?.resolved ?? []).toContain('basmala_amin');
+  });
+
+  it('still strips history context for muqattaat edits', () => {
+    const r = applyCommand(baseState, {
+      type: 'trim',
+      segmentUid: 'uid-1',
+      delta: { time_start: 100 },
+      sourceCategory: 'muqattaat',
     } as any);
     expect(r.operation.op_context_category).toBeNull();
     expect(r.validationDelta?.resolved ?? []).toEqual([]);

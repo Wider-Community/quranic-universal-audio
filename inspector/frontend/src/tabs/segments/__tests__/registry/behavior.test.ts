@@ -40,9 +40,10 @@ describe.skipIf(!registry)('registry behavior — parametrized', () => {
         } as any,
       );
       expect(result.operation).toBeTruthy();
-      // Neutral categories (basmala_amin, muqattaat) are stripped from the
-      // op_context_category since they don't represent issue gains/losses.
-      const isNeutral = cat === 'basmala_amin' || cat === 'muqattaat';
+      // muqattaat is still neutral (info-only). basmala_amin is now a
+      // resolve-by-edit category, so its sourceCategory is persisted as
+      // op_context_category for the BE resolved-by-edit index.
+      const isNeutral = cat === 'muqattaat';
       expect(result.operation.op_context_category).toBe(isNeutral ? null : cat);
       const updated = result.nextState.byId[`uid-${cat}`];
       expect(updated?.ignored_categories ?? []).not.toContain(cat);

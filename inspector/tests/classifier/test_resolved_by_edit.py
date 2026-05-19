@@ -6,10 +6,11 @@ edit_history.jsonl, builds a {uid: {category, ...}} index, injects
 ``_resolved_by_edit`` onto each segment, and the classifier suppresses
 the listed categories without writing to ``ignored_categories``.
 
-Scope: ``boundary_adj``, ``audio_bleeding``, ``repetitions``.
-``cross_verse`` and chapter/verse-level categories are excluded -- they
-stay until the validator clears them. ``qalqala`` is view-only (mirrors
-``muqattaat``) and is also excluded so the flag stays after edits.
+Scope: ``boundary_adj``, ``audio_bleeding``, ``repetitions``,
+``basmala_amin``. ``cross_verse`` and chapter/verse-level categories
+are excluded -- they stay until the validator clears them. ``qalqala``
+is view-only (mirrors ``muqattaat``) and is also excluded so the flag
+stays after edits.
 """
 from __future__ import annotations
 
@@ -54,16 +55,30 @@ def test_is_suppressed_for_combines_ignored_and_resolved():
     assert is_suppressed_for(seg_neither, "boundary_adj") is False
 
 
+def test_basmala_amin_resolved_by_edit_suppresses():
+    seg = {"_resolved_by_edit": {"basmala_amin"}}
+    assert is_resolved_by_edit(seg, "basmala_amin") is True
+    assert is_suppressed_for(seg, "basmala_amin") is True
+    # An ignored basmala still suppresses via the ignore branch.
+    seg_ignored = {"ignored_categories": ["basmala_amin"]}
+    assert is_suppressed_for(seg_ignored, "basmala_amin") is True
+
+
 def test_resolves_by_edit_set_contains_only_soft_categories():
-    """The set must match the user's pick: boundary_adj/audio_bleeding/repetitions.
+    """The set must match the user's pick: boundary_adj / audio_bleeding /
+    repetitions / basmala_amin.
 
     ``qalqala`` is intentionally excluded — it's view-only (like ``muqattaat``)
     so editing a qalqala-flagged seg leaves the flag in place for the next
     validation pass; the edit history still carries the ``qalqala`` pill via
     ``op_context_category``.
+
+    ``basmala_amin`` is included because the user has reviewed the seg from
+    the card and any edit signals "I dealt with it" — revalidation must not
+    re-raise the flag for that uid.
     """
     assert RESOLVES_BY_EDIT_CATEGORIES == frozenset({
-        "boundary_adj", "audio_bleeding", "repetitions",
+        "boundary_adj", "audio_bleeding", "repetitions", "basmala_amin",
     })
 
 
@@ -160,6 +175,28 @@ def test_build_index_accumulates_categories_per_uid(monkeypatch, tmp_path):
     ])
     idx = build_resolved_by_edit_index("r1")
     assert idx == {"uid-A": {"boundary_adj", "audio_bleeding"}}
+
+
+def test_build_index_includes_basmala_amin(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "services.history_query.RECITATION_SEGMENTS_PATH", tmp_path,
+    )
+    _write_history(tmp_path, "r1", [
+        {"record_type": "genesis", "batch_id": "g", "operations": []},
+        {
+            "batch_id": "b1",
+            "operations": [
+                {
+                    "op_id": "o1",
+                    "op_type": "trim_segment",
+                    "op_context_category": "basmala_amin",
+                    "targets_after": [{"segment_uid": "uid-bsm"}],
+                },
+            ],
+        },
+    ])
+    idx = build_resolved_by_edit_index("r1")
+    assert idx == {"uid-bsm": {"basmala_amin"}}
 
 
 def test_build_index_split_marks_both_halves(monkeypatch, tmp_path):
