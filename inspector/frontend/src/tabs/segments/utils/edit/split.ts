@@ -83,13 +83,6 @@ export function enterSplitMode(
     setEdit('split', seg.segment_uid ?? null, mountId);
     setEditingSegIndex(seg.index);
     setEditStatusText('');
-    // Default preview selection: left half for binary, first region for
-    // multi-cursor. The centralized footer play button loops this range.
-    setSplitPreviewSelection(
-        initialSplits && initialSplits.length >= 2
-            ? { kind: 'region', index: 0 }
-            : { kind: 'left' },
-    );
 
     const canvas = row.querySelector<SegCanvas>('canvas');
     if (!canvas) return;
@@ -156,11 +149,26 @@ export function enterSplitMode(
         });
     }
 
+    // Sync the selection store with whatever this entry will auto-play (or
+    // the default starting position for a manual entry). The L/R pills bind
+    // class:active to splitPreviewSelection, so a mismatch here visibly
+    // highlights the wrong side.
+    //   - Auto-seeded binary  → 'right' (auto-plays right half below).
+    //   - Auto-seeded multi   → 'region 0' (auto-plays region 1 below).
+    //   - Manual              → 'left'   (default starting position).
+    const autoSeeded = initialSplits && initialSplits.length > 0;
+    if (autoSeeded && currentSplits.length === 1) {
+        setSplitPreviewSelection({ kind: 'right' });
+    } else if (autoSeeded) {
+        setSplitPreviewSelection({ kind: 'region', index: 0 });
+    } else {
+        setSplitPreviewSelection({ kind: 'left' });
+    }
+
     // Auto-split: when MFA pre-placed cursor(s), kick off a region preview
     // so the user hears the boundary without an extra click.
     //  - 1 cursor (binary): play the right half (matches today's cross-verse).
     //  - N≥2 cursors (repetitions): play region 1 (the forward pass).
-    const autoSeeded = initialSplits && initialSplits.length > 0;
     if (autoSeeded) {
         if (currentSplits.length === 1) {
             previewSplitAudio('right', canvas);
