@@ -34,6 +34,11 @@ export interface Segment {
     /** Back-compat legacy boolean from pre-categories ignore flag. Drift: absent from types/api.ts. */
     ignored?: boolean;
     wrap_word_ranges?: unknown; // opaque — used by repetition detection
+    /** Boundary annotation: this segment is wasl-connected to the next adjacent
+     *  segment (the reciter recited continuously across the boundary). Owned
+     *  by the left side of the connection. Omitted from save payloads when
+     *  false to keep on-disk JSON byte-clean. */
+    is_wasl?: boolean;
     /** Chapter number; present on /api/seg/all responses, derived client-side on /data. */
     chapter?: number;
     /** Stable UID assigned on first server load; present on /api/seg/all. */

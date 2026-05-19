@@ -2,6 +2,7 @@
 """Upload the Inspector to its target Hugging Face Space.
 
 Usage::
+https://huggingface.co/hetchyy
 
     python -m scripts.upload_inspector dev   # → hetchyy/quranic-inspector-dev
     python -m scripts.upload_inspector prod  # → hetchyy/quranic-universal-audio
@@ -58,17 +59,6 @@ pinned: false
 hf_oauth: true
 hf_oauth_expiration_minutes: 480
 ---
-
-# Quranic Universal Audio{suffix}
-
-Read-only public surface (Phase 2). Anonymous browsers can view all reciters
-across the Audio, Segments, and Timestamps tabs. Editing requires Hugging
-Face sign-in (Phase 3, not yet wired) and an active claim.
-
-This Space mirrors the `{branch}` branch of
-[Wider-Community/quranic-universal-audio](https://github.com/Wider-Community/quranic-universal-audio).
-Container builds on every push to that branch via the `inspector-deploy.yml`
-GitHub workflow.
 """
 
 

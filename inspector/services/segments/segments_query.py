@@ -61,6 +61,8 @@ def get_chapter_data(reciter: str, chapter: int,
                 seg_dict["ignored_categories"] = seg["ignored_categories"]
             elif seg.get("ignored"):
                 seg_dict["ignored_categories"] = ["_all"]
+            if seg.get("is_wasl"):
+                seg_dict["is_wasl"] = True
             segments.append(seg_dict)
             idx += 1
 

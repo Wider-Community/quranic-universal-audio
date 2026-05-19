@@ -37,7 +37,7 @@ import {
     selectedChapter,
     selectedReciter,
 } from '../../stores/chapter';
-import { editMode } from '../../stores/edit';
+import { editCanvas, editMode, splitPreviewSelection } from '../../stores/edit';
 import { displayedSegments } from '../../stores/filters';
 import {
     activeAudioSource,
@@ -51,6 +51,12 @@ import {
 } from '../../stores/playback';
 import { drawSegPlayhead, drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 import { _fetchPeaksForClick } from '../waveform/utils';
+import {
+    editPreviewPlaying,
+    getPlayRangeRAF,
+    setPreviewLooping,
+    _playRange,
+} from './play-range';
 import { nextDisplayedSeg, nextSiblingSeg } from './resolvers';
 import { getRowEntriesFor } from './row-registry';
 import { resolveSegSource } from './source';
@@ -269,34 +275,115 @@ export function playFromSegment(
 }
 
 /**
- * Normal-mode play/pause toggle. Edit-mode dispatch (Trim/Split previews)
- * is routed by the footer's `handlePlayClick` so this module stays free of
- * back-references into `utils/edit/*` (avoiding a common <-> playback
- * import cycle). When no segment is yet active, falls back to the first
- * displayed segment.
+ * Universal play/pause entry point — the single source of truth for every
+ * play/pause action in the Segments tab. Both the footer's ▶ button and
+ * the spacebar shortcut route here so their behavior is identical.
+ *
+ * Dispatch:
+ *   - In trim / split edit modes:
+ *       * If a _playRange loop is alive (paused OR playing): toggle
+ *         segPort.pause() / segPort.play() WITHOUT touching previewLooping
+ *         or the canvas — the rAF is pause-resilient, so the cursor stays
+ *         drawn and resume continues from the paused position.
+ *       * Otherwise (no loop yet): cold-start the loop based on the
+ *         active edit mode + split preview selection.
+ *   - In normal mode:
+ *       * If paused with no active segment: start at first displayed.
+ *       * Otherwise: toggle segPort.pause() / segPort.play().
  */
 export function onSegPlayClick(): void {
     if (!segPort.element) return;
+
+    const mode = get(editMode);
+    if (mode === 'trim' || mode === 'split') {
+        if (getPlayRangeRAF()) {
+            // Loop alive — pure pause/resume. The rAF chain in _playRange is
+            // pause-resilient (`if (segPort.paused) requestAnimationFrame(...)
+            // return;`), so neither cursor nor loop state is lost.
+            if (segPort.paused) {
+                editPreviewPlaying.set(true);
+                segPort.uncut();
+                segPort.setPlaybackRate(get(playbackSpeed));
+                segPort.play();
+            } else {
+                editPreviewPlaying.set(false);
+                segPort.pause();
+            }
+            return;
+        }
+        // Cold-start.
+        _coldStartEditPreview(mode);
+        return;
+    }
+
+    // Normal mode.
     const displayed = get(displayedSegments);
     const curIdx = get(segCurrentIdx);
     if (segPort.paused) {
         if (displayed && displayed.length > 0 && curIdx < 0) {
             const first = displayed[0];
             if (first) playFromSegment(first.index, first.chapter);
-        } else if (_segRange) {
-            // Resume a segment-bounded run — the range's rAF loop is alive
-            // and pause-resilient.
-            segPort.setPlaybackRate(get(playbackSpeed));
-            segPort.play();
-        } else if (curIdx >= 0 && displayed) {
-            // Chapter-continuous, paused after first play. Resume from
-            // current playhead position.
+        } else {
+            // Either a segment-bounded AudioRange is alive (resume) or a
+            // chapter-continuous play was paused mid-chapter (also resume).
+            // Both flows call segPort.play() — AudioRange's rAF is pause-
+            // resilient like _playRange's.
             segPort.setPlaybackRate(get(playbackSpeed));
             segPort.play();
         }
     } else {
         segPort.pause();
     }
+}
+
+/** Cold-start an edit-preview loop based on the active edit mode and (for
+ *  split) the user's range selection. Centralized here so onSegPlayClick
+ *  routes through one path; the trim / split panels publish only selection
+ *  state and never invoke `_playRange` directly. */
+function _coldStartEditPreview(mode: 'trim' | 'split'): void {
+    const canvas = get(editCanvas);
+    if (!canvas) return;
+
+    if (mode === 'trim') {
+        const tw = canvas._trimWindow;
+        if (!tw) return;
+        editPreviewPlaying.set(true);
+        setPreviewLooping('trim');
+        _playRange(tw.currentStart, tw.currentEnd);
+        return;
+    }
+
+    // Split: dispatch by current selection.
+    const sd = canvas._splitData;
+    if (!sd) return;
+    const sel = get(splitPreviewSelection);
+    const isBinary = sd.currentSplits.length === 1;
+    editPreviewPlaying.set(true);
+
+    if (isBinary) {
+        const side: 'left' | 'right' = sel.kind === 'left'
+            ? 'left'
+            : sel.kind === 'right'
+                ? 'right'
+                : (sel.index === 0 ? 'left' : 'right');
+        const splitTime = sd.currentSplits[0]!;
+        setPreviewLooping(`split-${side}` as const);
+        _playRange(
+            side === 'left' ? sd.seg.time_start : splitTime,
+            side === 'left' ? splitTime : sd.seg.time_end,
+        );
+        return;
+    }
+
+    // Multi-cursor: region selection.
+    const n = sd.currentSplits.length;
+    const idx = sel.kind === 'region'
+        ? Math.max(0, Math.min(n, sel.index))
+        : (sel.kind === 'left' ? 0 : n);
+    const start = idx === 0 ? sd.seg.time_start : sd.currentSplits[idx - 1]!;
+    const end = idx === n ? sd.seg.time_end : sd.currentSplits[idx]!;
+    setPreviewLooping(`split-region-${idx}` as `split-region-${number}`);
+    _playRange(start, end);
 }
 
 // ---------------------------------------------------------------------------
