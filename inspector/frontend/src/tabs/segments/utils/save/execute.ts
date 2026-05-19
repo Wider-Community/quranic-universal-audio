@@ -41,6 +41,7 @@ interface SaveSegmentPayloadFull {
     audio_url: string;
     wrap_word_ranges?: unknown;
     ignored_categories?: string[];
+    is_wasl?: boolean;
 }
 
 interface SaveSegmentPayloadPatch {
@@ -49,6 +50,7 @@ interface SaveSegmentPayloadPatch {
     matched_ref: string;
     confidence: number;
     ignored_categories?: string[];
+    is_wasl?: boolean;
 }
 
 interface SavePayloadFull {
@@ -174,6 +176,7 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                             ignored_categories: s.ignored_categories ?? [],
                         };
                         if (s.wrap_word_ranges) o.wrap_word_ranges = s.wrap_word_ranges;
+                        if (s.is_wasl) o.is_wasl = true;
                         return o;
                     }),
                     operations: chOps,
@@ -190,6 +193,7 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                             confidence: seg.confidence,
                             ignored_categories: seg.ignored_categories ?? [],
                         };
+                        if (seg.is_wasl) upd.is_wasl = true;
                         updates.push(upd);
                     }
                 }
