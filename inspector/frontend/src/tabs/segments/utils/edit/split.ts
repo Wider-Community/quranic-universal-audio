@@ -35,11 +35,9 @@ import {
     setEditStatusText,
     setSplitPreviewSelection,
     setSplitState,
-    splitPreviewSelection,
     updateSplitState,
 } from '../../stores/edit';
 import { clearFlashForChapter, targetSegmentIndex } from '../../stores/navigation';
-import { segPort } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { EDIT_MIN_DURATION_MS,EDIT_SNAP_MS } from '../constants';
 import {
@@ -48,7 +46,7 @@ import {
     getVerseWordCounts,
     parseSegRef,
 } from '../data/references';
-import { previewLooping, setPreviewLooping } from '../playback/play-range';
+import { editPreviewPlaying, setPreviewLooping } from '../playback/play-range';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { getRowEntryForMount } from '../playback/row-registry';
 import { _ensureSplitBaseCache, drawSplitWaveform } from '../waveform/split-draw';
@@ -489,13 +487,18 @@ export function confirmSplit(
 }
 
 // ---------------------------------------------------------------------------
-// previewSplitAudio — toggle looping preview of left/right half (N=1 only)
+// previewSplitAudio — cold-start the binary-split L/R preview loop
 // ---------------------------------------------------------------------------
 
+/** Cold-start a binary-split (N=1) left/right preview loop. Always starts
+ *  fresh — play/pause toggling is owned by `onSegPlayClick` (playback.ts).
+ *  Callers: enterSplitMode auto-seed; SplitPanel L/R selection click while
+ *  a loop is already running (to switch sides). */
 export function previewSplitAudio(side: 'left' | 'right', canvas?: SegCanvas | null): void {
     const c = canvas ?? get(editCanvas);
     const sd = c?._splitData;
     if (!sd || !c || sd.currentSplits.length !== 1) return;
+    editPreviewPlaying.set(true);
     setPreviewLooping(`split-${side}` as const);
     const splitTime = sd.currentSplits[0]!;
     _playRange(
@@ -505,14 +508,14 @@ export function previewSplitAudio(side: 'left' | 'right', canvas?: SegCanvas | n
 }
 
 // ---------------------------------------------------------------------------
-// previewSplitRegion — loop a single region for the N≥2 multi-cursor flow
+// previewSplitRegion — cold-start a multi-cursor (N≥2) region preview loop
 // ---------------------------------------------------------------------------
 
 /** Loop region ``i`` (0-indexed) of the split. Region ``i`` runs from
  *  ``currentSplits[i-1] ?? seg.time_start`` to ``currentSplits[i] ?? seg.time_end``,
  *  so for N cursors there are N+1 regions. Sets the play-range loop key to
  *  ``'split-region-{i}'`` so the play-range RAF re-seeks correctly across
- *  cursor edits while looping. */
+ *  cursor edits while looping. Always cold-starts. */
 export function previewSplitRegion(idx: number, canvas?: SegCanvas | null): void {
     const c = canvas ?? get(editCanvas);
     const sd = c?._splitData;
@@ -521,50 +524,7 @@ export function previewSplitRegion(idx: number, canvas?: SegCanvas | null): void
     if (idx < 0 || idx > n) return;
     const start = idx === 0 ? sd.seg.time_start : sd.currentSplits[idx - 1]!;
     const end = idx === n ? sd.seg.time_end : sd.currentSplits[idx]!;
+    editPreviewPlaying.set(true);
     setPreviewLooping(`split-region-${idx}` as `split-region-${number}`);
     _playRange(start, end);
-}
-
-// ---------------------------------------------------------------------------
-// previewSplitFromSelection — dispatch from the centralized footer play
-// ---------------------------------------------------------------------------
-
-/** Toggle the split-mode preview loop based on the current
- *  `splitPreviewSelection`. Acts as a play/pause for the selected range —
- *  pressing while the same range is already looping pauses; pressing again
- *  resumes. Called by the footer's `handlePlayClick` when `editMode ===
- *  'split'`, replacing the per-side / per-region play buttons that used to
- *  live in `SplitPanel.svelte`. */
-export function previewSplitFromSelection(canvas?: SegCanvas | null): void {
-    const c = canvas ?? get(editCanvas);
-    const sd = c?._splitData;
-    if (!sd || !c) return;
-    const sel = get(splitPreviewSelection);
-    const isBinary = sd.currentSplits.length === 1;
-
-    // Toggle: if already looping the SAME selection, pause and clear.
-    // Otherwise start (or switch to) the selected range loop.
-    const curLoop = get(previewLooping);
-    const desiredKey: string = sel.kind === 'region'
-        ? `split-region-${sel.index}`
-        : `split-${sel.kind}`;
-    if (curLoop === desiredKey && !segPort.paused) {
-        segPort.pause();
-        return;
-    }
-
-    if (isBinary) {
-        const side: 'left' | 'right' = sel.kind === 'region'
-            ? (sel.index === 0 ? 'left' : 'right')
-            : sel.kind;
-        previewSplitAudio(side, c);
-        return;
-    }
-
-    // Multi-cursor: normalize a left/right selection to region 0 / last.
-    const n = sd.currentSplits.length;
-    const idx = sel.kind === 'region'
-        ? Math.max(0, Math.min(n, sel.index))
-        : (sel.kind === 'left' ? 0 : n);
-    previewSplitRegion(idx, c);
 }

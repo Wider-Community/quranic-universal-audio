@@ -496,6 +496,46 @@
     cursor: not-allowed;
 }
 
+/* Visual divider between the green start-pair and red end-pair of trim
+ * steppers (also re-used between split selection clusters when needed).
+ * Slim vertical line — same height as the buttons via flex stretch. */
+.seg-edit-inline .seg-edit-buttons .seg-edit-divider {
+    flex: 0 0 auto;
+    width: 1px;
+    align-self: stretch;
+    margin: 4px 6px;
+    background: #3a3a3a;
+}
+
+/* Split L / R / region SELECTION buttons — same yellow theme as the
+ * .seg-split-step cursor nudgers (they live next to them and conceptually
+ * belong to the split cursor). Inactive = outlined; active = filled with a
+ * yellow inset ring so the user sees "the footer ▶ plays this range." */
+.seg-edit-inline .seg-edit-buttons .seg-split-pick {
+    flex: 0 0 auto;
+    padding: 4px 8px;
+    min-width: 26px;
+    font-family: monospace;
+    font-weight: bold;
+    line-height: 1;
+    background: transparent;
+    color: #ffeb3b;
+    border: 1px solid #6c662a;
+}
+.seg-edit-inline .seg-edit-buttons .seg-split-pick:hover:not(:disabled) {
+    background: rgba(108, 102, 42, 0.4);
+    color: #fff3a0;
+}
+.seg-edit-inline .seg-edit-buttons .seg-split-pick.active {
+    background: #6c662a;
+    color: #fff3a0;
+    box-shadow: inset 0 0 0 1px #ffeb3b;
+}
+.seg-edit-inline .seg-edit-buttons .seg-split-pick.seg-split-region {
+    min-width: 1.8em;
+    padding: 0 0.5em;
+}
+
 .seg-edit-inline .seg-edit-status {
     color: #ff4444;
     font-size: 0.75rem;
