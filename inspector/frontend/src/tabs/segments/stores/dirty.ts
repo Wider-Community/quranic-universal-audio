@@ -101,6 +101,11 @@ export function snapshotSeg(seg: Segment): SegSnapshot {
     if (seg.entry_ref) snap.entry_ref = seg.entry_ref;
     if (seg.chapter != null) snap.chapter = seg.chapter;
     if (seg.ignored_categories?.length) snap.ignored_categories = [...seg.ignored_categories];
+    // is_wasl is a boundary annotation captured by the in-card WASL/WAQF
+    // picker. Snapshots in op.targets_after carry the committed value so
+    // the EditChainRow split-leaf renderer can render its wasl/waqf tag
+    // straight from history without consulting the live seg.
+    if (seg.is_wasl) snap.is_wasl = true;
     return snap;
 }
 
