@@ -145,9 +145,26 @@ export interface ChainTarget {
     seg: Segment;
     category: string | null;
     originalEndRef: string | null;
+    /**
+     * UID of the previous piece in a CV-split chain. When set on a chain
+     * entry, ``_handoffPendingChain`` pauses BEFORE entering this entry's
+     * ref-edit if ``pendingWaslConfirm.has(prevPieceUid)`` — the user must
+     * pick WASL or WAQF on the boundary between the previous piece and this
+     * one. Only stamped by ``confirmSplit`` for cross-verse splits.
+     */
+    prevPieceUid?: string;
 }
 
 export const pendingChainTargets = writable<ChainTarget[]>([]);
+
+/**
+ * Names the ``segA.segment_uid`` of the ``WaslBoundary`` picker that should
+ * scroll into view + auto-focus its WASL button. Set by
+ * ``_handoffPendingChain`` when the chain pauses on a pending boundary;
+ * cleared by the picker after the user picks. WaslBoundary reactively
+ * subscribes.
+ */
+export const focusWaslBoundary = writable<string | null>(null);
 
 /**
  * Per-session set of left-side segment UIDs whose post-CV-split wasl boundary

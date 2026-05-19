@@ -283,6 +283,17 @@
                                 opId={chain.ops[0]?.op.op_id ?? null}
                                 {previewCtx}
                             />
+                            {#if isSplit
+                                && i < leafSnaps.length - 1
+                                && (leaf as { is_wasl?: boolean }).is_wasl !== undefined}
+                                <!-- Boundary annotation captured by the in-card
+                                     WASL/WAQF picker during the post-split chain.
+                                     Only the LAST leaf has no following boundary,
+                                     so we elide it. -->
+                                <span class="seg-history-wasl-tag" class:on={(leaf as { is_wasl?: boolean }).is_wasl}>
+                                    {(leaf as { is_wasl?: boolean }).is_wasl ? 'wasl' : 'waqf'}
+                                </span>
+                            {/if}
                         </div>
                     {/each}
                 {/if}
