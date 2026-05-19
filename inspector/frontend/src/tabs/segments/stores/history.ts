@@ -77,9 +77,8 @@ export const filterErrCats = writable<Set<string>>(new Set());
 
 /** Single boolean filter — when true, restrict the display to entries whose
  *  ops carry at least one targets_after / snapshots.after snapshot with
- *  ``is_wasl !== undefined`` (either committed wasl or committed waqf). Gives
- *  the user a one-click way to find rows where they made boundary decisions
- *  without having to scan the saved batches list. */
+ *  ``is_wasl === true``. Surfaces only the affirmative WASL assertions
+ *  (waqf is the default state and would dominate the list otherwise). */
 export const filterHasWasl = writable<boolean>(false);
 
 /** Sort order: by edit time (newest first) or by Quran chapter:verse. */
