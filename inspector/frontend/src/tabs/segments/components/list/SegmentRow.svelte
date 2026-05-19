@@ -544,7 +544,7 @@
         }
     }
 
-    function onGotoClick(e: MouseEvent): void {
+    async function onGotoClick(e: MouseEvent): Promise<void> {
         e.stopPropagation();
         const filters = get(activeFilters);
         if (filters.some(f => f.value !== null)) {
@@ -563,7 +563,13 @@
         valUiOpenCategory.set(null);
         clearAccordionPin();
         pickerDisplayChapter.set(null);
-        jumpToSegment(seg.chapter ?? 0, seg.index);
+        const targetChapter = seg.chapter ?? 0;
+        await jumpToSegment(targetChapter, seg.index);
+        // Sync audio to the target seg. `loadChapterData` (inside
+        // `jumpToSegment` when the chapter changed) tore down the prior
+        // playback — start a fresh main-list play so the user lands on the
+        // segment they navigated to, with seek + play, not paused at byte 0.
+        playFromSegment(seg.index, targetChapter);
     }
 
     function onAdjustClick(e: MouseEvent): void {
