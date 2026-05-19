@@ -377,17 +377,22 @@ def _build_detail_lists(
             if (
                 surah == 1
                 and (s_ayah <= 1 <= e_ayah or s_ayah <= 7 <= e_ayah)
-                and not is_suppressed_for(seg, "basmala_amin")
             ):
+                # Suppression is applied at the output gate (below), not at
+                # candidate collection. If a user resolves the canonical
+                # candidate (first 1:1 or last 1:7), the card should
+                # disappear -- NOT promote a neighbouring seg, which would
+                # be whack-a-mole.
                 item = {
                     "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
                     "ref": matched_ref,
                     "classified_issues": classified,
                 }
+                suppressed = is_suppressed_for(seg, "basmala_amin")
                 if s_ayah <= 1 <= e_ayah:
-                    basmala_11.append(item)
+                    basmala_11.append((item, suppressed))
                 if s_ayah <= 7 <= e_ayah:
-                    basmala_amin_17.append(item)
+                    basmala_amin_17.append((item, suppressed))
 
             # Accumulate verse coverage (3-tuple: word_from, word_to, seg_index)
             if s_ayah != e_ayah:
@@ -437,13 +442,22 @@ def _build_detail_lists(
     # (from other chapters). Dedup by (chapter, seg_index, segment_uid) preserves
     # the explicit order while collapsing the overlap when a single seg spans
     # both 1:1 and 1:7 (synthetic short fixtures).
+    #
+    # Suppression is applied here, not at candidate collection: if the canonical
+    # candidate (first 1:1, last 1:7) is ignored or resolved-by-edit, the slot
+    # is left empty instead of being filled by the next-best seg.
     combined_basmala_amin: list[dict] = []
     seen_basmala_amin: set[tuple[int, int, str | None]] = set()
     ordered_items: list[dict] = []
-    if basmala_11:
-        ordered_items.append(basmala_11[0])
-    ordered_items.extend(basmala_amin_17[-1:])
-    ordered_items.extend(basmala_11[1:])
+    if basmala_11 and not basmala_11[0][1]:
+        ordered_items.append(basmala_11[0][0])
+    if basmala_amin_17:
+        last_item, last_suppressed = basmala_amin_17[-1]
+        if not last_suppressed:
+            ordered_items.append(last_item)
+    for item, suppressed in basmala_11[1:]:
+        if not suppressed:
+            ordered_items.append(item)
     ordered_items.extend(missed_basmalas)
     for item in ordered_items:
         key = (item["chapter"], item["seg_index"], item.get("segment_uid"))
