@@ -44,7 +44,6 @@
         verseOptions,
     } from '../../stores/chapter';
     import { isDirtyStore } from '../../stores/dirty';
-    import { editCanvas, editMode } from '../../stores/edit';
     import { historyLoadState, historyVisible } from '../../stores/history';
     import {
         autoPlayEnabled,
@@ -56,10 +55,8 @@
         segPortReady,
     } from '../../stores/playback';
     import { saveButtonLabel, savePreviewVisible } from '../../stores/save';
-    import { previewSplitFromSelection } from '../../utils/edit/split';
-    import { previewTrimAudio } from '../../utils/edit/trim';
     import { hideHistoryView, showHistoryView } from '../../utils/history/actions';
-    import { previewLooping } from '../../utils/playback/play-range';
+    import { editPreviewPlaying } from '../../utils/playback/play-range';
     import {
         onSegAudioEnded,
         onSegPlayClick,
@@ -232,20 +229,11 @@
     $: ayahLive = surahLive && String($livePlayingVerse?.verse ?? '') === $selectedVerse;
 
     // ---- Player handlers --------------------------------------------
-    // Centralized play/pause router. The single source of truth — every
-    // segment-tab play/pause click flows through here. Edit-mode previews
-    // (Trim window loop, Split L/R/region loop) dispatch into their own
-    // helpers; normal-mode delegates to chapter playback.
+    // Pure delegate — every play/pause click (footer ▶ + spacebar shortcut)
+    // routes through `onSegPlayClick`, which is the universal entry point.
+    // It handles normal-mode toggling AND edit-mode preview pause/resume +
+    // cold-start. Both paths share the same state machine.
     function handlePlayClick(): void {
-        const mode = get(editMode);
-        if (mode === 'trim') {
-            previewTrimAudio(get(editCanvas));
-            return;
-        }
-        if (mode === 'split') {
-            previewSplitFromSelection(get(editCanvas));
-            return;
-        }
         onSegPlayClick();
     }
 
@@ -357,8 +345,11 @@
         : 'Saved';
 
     // Play button glyph: pause when normal-mode audio is playing OR an
-    // edit-mode preview loop is active.
-    $: playGlyph = (($isMainAudioPlaying || $previewLooping !== false)
+    // edit-mode preview loop is in its "play" state. `editPreviewPlaying`
+    // flips on cold-start / resume, off on user-initiated pause — distinct
+    // from `previewLooping` (which stays set across pause/resume so the
+    // rAF can resume seamlessly).
+    $: playGlyph = (($isMainAudioPlaying || $editPreviewPlaying)
         ? 'pause'
         : 'play') as IconName;
 
