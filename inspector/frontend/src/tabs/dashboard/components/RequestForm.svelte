@@ -27,7 +27,6 @@
     } from '../../../lib/api/requests';
     import { isOwner } from '../../../lib/stores/current-user';
     import type {
-        AdminBucket,
         PublicDelivery,
         PublicReciter,
     } from '../../../lib/types/public-state';
@@ -288,7 +287,6 @@
         mode === 'create'
             ? `Request ${reciter.name} (${delivery.riwayah} · ${delivery.style})`
             : `Review request for ${reciter.name}`;
-    $: visibleBucket = delivery.bucket as AdminBucket;
 </script>
 
 <section class="request-form" aria-label={title}>
@@ -509,11 +507,6 @@
         {/if}
     </footer>
 
-    <p class="meta">
-        Current state: <span class="bucket bucket-{visibleBucket.replace(/_/g, '-')}">
-            {visibleBucket.replace(/_/g, ' ')}
-        </span>
-    </p>
 </section>
 
 <style>
@@ -710,29 +703,5 @@
     }
     .ghost {
         color: var(--text-muted);
-    }
-    .meta {
-        margin: 0;
-        font-size: var(--fs-meta);
-        color: var(--text-faint);
-    }
-    .bucket {
-        display: inline-block;
-        padding: 1px 8px;
-        border-radius: 999px;
-        font-size: 10.5px;
-        margin-left: 4px;
-    }
-    .bucket-available-for-request {
-        color: var(--state-available-request-fg);
-        background: var(--state-available-request-bg);
-    }
-    .bucket-requested {
-        color: var(--state-requested-fg);
-        background: var(--state-requested-bg);
-    }
-    .bucket-discarded {
-        color: var(--state-discarded-fg);
-        background: var(--state-discarded-bg);
     }
 </style>
