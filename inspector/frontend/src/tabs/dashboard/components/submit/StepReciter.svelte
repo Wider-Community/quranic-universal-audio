@@ -13,14 +13,14 @@
      * The mode toggle cross-fades between the two field groups; the
      * picker's results list animates in via a staggered fade.
      */
-    import { fade, fly } from 'svelte/transition';
     import { writable } from 'svelte/store';
+    import { fade, fly } from 'svelte/transition';
 
-    import { catalogData } from '../../stores/catalog-data';
-    import { submitWizard } from '../../stores/submit-wizard';
-    import { match } from '../../../../lib/utils/fuzzy-match';
     import { COUNTRIES } from '../../../../lib/utils/countries';
     import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
+    import { match } from '../../../../lib/utils/fuzzy-match';
+    import { catalogData } from '../../stores/catalog-data';
+    import { submitWizard } from '../../stores/submit-wizard';
 
     // Local store-backed UI state. We use stores (rather than `let`) because
     // Svelte 5's legacy-mode reactivity has surprising holes for local `let`

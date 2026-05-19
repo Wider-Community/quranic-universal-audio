@@ -13,7 +13,7 @@
      */
     import { fade, fly, slide } from 'svelte/transition';
 
-    import { submitWizard, type LinkRow, type SourceMethod } from '../../stores/submit-wizard';
+    import { type LinkRow, type SourceMethod,submitWizard } from '../../stores/submit-wizard';
 
     $: state = $submitWizard;
     $: method = state.sourceMethod;

@@ -8,8 +8,8 @@
      * fetched lazily; falling back to whatever raw slug the user typed
      * keeps a bad fetch from blocking the wizard.
      */
-    import { fade } from 'svelte/transition';
     import { onMount } from 'svelte';
+    import { fade } from 'svelte/transition';
 
     import { submitWizard } from '../../stores/submit-wizard';
 

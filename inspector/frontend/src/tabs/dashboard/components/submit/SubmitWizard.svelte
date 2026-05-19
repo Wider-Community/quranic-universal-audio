@@ -11,8 +11,8 @@
      * the button just closes the wizard. See PRODUCT.md for the
      * "no theatre" rule.
      */
-    import { fade, fly } from 'svelte/transition';
     import { onDestroy, tick } from 'svelte';
+    import { fade, fly } from 'svelte/transition';
 
     import {
         closeSubmitWizard,
@@ -21,9 +21,9 @@
         type WizardStep,
     } from '../../stores/submit-wizard';
     import ExistingComboBanner from './ExistingComboBanner.svelte';
+    import StepDetails from './StepDetails.svelte';
     import StepReciter from './StepReciter.svelte';
     import StepSource from './StepSource.svelte';
-    import StepDetails from './StepDetails.svelte';
 
     let modalEl: HTMLDivElement | null = null;
     let previouslyFocused: HTMLElement | null = null;
