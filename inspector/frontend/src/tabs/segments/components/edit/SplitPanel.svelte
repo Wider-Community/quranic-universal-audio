@@ -2,24 +2,23 @@
     /**
      * SplitPanel — Svelte-rendered inline chrome for split-mode edit.
      *
-     * Two layouts driven by `splitState.currentSplits.length`:
+     * Layout:
+     *   - Binary (N=1) → ``Cancel    L   <  >   R    Split``.
+     *     L and R are SELECTION pills (bordered, distinct chrome) that
+     *     pick which side the footer ▶ loops. The `< >` carets between
+     *     them nudge the split cursor — bare buttons with a yellow
+     *     underline that mirrors the canvas split-line, so the two roles
+     *     are visually distinct without needing a containing pill.
+     *   - Multi (N≥2) → ``Cancel    [1] [2] … [N+1]    Split``.
+     *     Region pills behave like L/R in binary mode.
      *
-     * - N=1 (binary split, today's default) → ``Cancel | (L | < | > | R) |
-     *   Split``. L and R are SELECTION pills — clicking one picks which
-     *   side the footer ▶ loops. If a loop is already running, clicking
-     *   the OTHER side restarts the loop on that side; otherwise it just
-     *   updates the selection. < > are CURSOR NUDGERS — they live BETWEEN
-     *   L and R inside the same segmented yellow pill so the gadget reads
-     *   as "the thing that controls the split."
-     * - N≥2 (multi-cursor, repetition auto-split) → ``Cancel | [1][2]…[N+1]
-     *   | Split``. Each ``[i]`` selects region i (0-indexed); same
-     *   click-while-playing-switches-region semantics as L/R.
+     * Clicking the OTHER side / region while a loop is running switches
+     * the loop immediately rather than waiting for the user to re-press
+     * the footer ▶.
      *
-     * Active L/R/region uses a 3px yellow top-accent bar plus a 700 weight
-     * bump — no clashing colors, no inset rings; reads as a selected tab.
-     *
-     * The footer's single play/pause is the universal play surface — this
-     * panel never spawns its own play button.
+     * Preview play/pause is owned entirely by the footer ▶ + Space
+     * shortcut, centralised through `onSegPlayClick`. This panel never
+     * spawns its own play button.
      */
 
     import { get } from 'svelte/store';
@@ -68,7 +67,6 @@
     function nudgeSplitBack(): void { nudgeSplitBoundary(-EDIT_NUDGE_MS); }
     function nudgeSplitFwd():  void { nudgeSplitBoundary( EDIT_NUDGE_MS); }
 
-    // Preview selection — drives the footer play button's loop target.
     $: sel = $splitPreviewSelection;
     $: selLeftActive = isBinary && sel.kind === 'left';
     $: selRightActive = isBinary && sel.kind === 'right';
@@ -76,7 +74,7 @@
         return !isBinary && sel.kind === 'region' && sel.index === i;
     }
 
-    // Clamp the selection if cursor count changed and the previously-
+    // Clamp the selection if cursor count changed and the previously
     // selected region no longer exists (e.g. user deleted a cursor).
     $: if (!isBinary && sel.kind === 'region' && sel.index >= regionCount) {
         setSplitPreviewSelection({ kind: 'region', index: Math.max(0, regionCount - 1) });
@@ -89,8 +87,8 @@
         setSplitPreviewSelection({ kind: 'region', index: sel.kind === 'left' ? 0 : regionCount - 1 });
     }
 
-    /** Set selection. If a loop is running (paused or playing), also switch
-     *  it to the new range so the user doesn't have to re-press footer ▶. */
+    /** Update selection. If a loop is running, switch it to the new range
+     *  immediately so the user doesn't have to re-press footer ▶. */
     function pickAndMaybeSwitch(nextKind: 'left' | 'right'): void {
         setSplitPreviewSelection({ kind: nextKind });
         if (getPlayRangeRAF() && !segPort.paused) {
@@ -110,32 +108,34 @@
         <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>Cancel</button>
 
         {#if isBinary}
-            <div class="seg-split-group" role="group" aria-label="Split preview & cursor">
-                <button class="seg-pick"
-                    class:active={selLeftActive}
-                    aria-pressed={selLeftActive}
-                    title="Preview the LEFT half — press footer ▶ to loop"
-                    on:click={() => pickAndMaybeSwitch('left')}
-                >L</button>
-                <button class="seg-step"
+            <button class="seg-side-pick"
+                class:active={selLeftActive}
+                aria-pressed={selLeftActive}
+                title="Preview the LEFT half — press footer ▶ to loop"
+                on:click={() => pickAndMaybeSwitch('left')}
+            >L</button>
+
+            <div class="seg-nudge-pair seg-nudge-split" role="group" aria-label="Split cursor">
+                <button class="seg-nudge"
                     title="Move split back {EDIT_NUDGE_MS} ms"
                     disabled={splitBackDisabled}
-                    on:click={nudgeSplitBack}>&lt;</button>
-                <button class="seg-step"
+                    on:click={nudgeSplitBack}>&lsaquo;</button>
+                <button class="seg-nudge"
                     title="Move split forward {EDIT_NUDGE_MS} ms"
                     disabled={splitFwdDisabled}
-                    on:click={nudgeSplitFwd}>&gt;</button>
-                <button class="seg-pick"
-                    class:active={selRightActive}
-                    aria-pressed={selRightActive}
-                    title="Preview the RIGHT half — press footer ▶ to loop"
-                    on:click={() => pickAndMaybeSwitch('right')}
-                >R</button>
+                    on:click={nudgeSplitFwd}>&rsaquo;</button>
             </div>
+
+            <button class="seg-side-pick"
+                class:active={selRightActive}
+                aria-pressed={selRightActive}
+                title="Preview the RIGHT half — press footer ▶ to loop"
+                on:click={() => pickAndMaybeSwitch('right')}
+            >R</button>
         {:else}
-            <div class="seg-split-group" role="group" aria-label="Region preview">
+            <div class="seg-region-picks" role="group" aria-label="Region preview">
                 {#each regions as i}
-                    <button class="seg-pick seg-pick-region"
+                    <button class="seg-side-pick"
                         class:active={selRegion(i)}
                         aria-pressed={selRegion(i)}
                         title="Preview region {i + 1} — press footer ▶ to loop"

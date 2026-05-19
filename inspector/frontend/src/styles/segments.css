@@ -424,16 +424,25 @@
 }
 
 /* Edit-mode toolbar.
- *   Cancel  | <stepper group 1> | <stepper group 2> | Apply | status
- * Outer gap separates clusters; inside a `.seg-stepper` / `.seg-split-group`
- * the children butt up flush (segmented-control look) so a `< >` pair reads
- * as ONE stepper, not two chips. Cancel + Apply keep their default
- * .btn-cancel / .btn-confirm grey/green. */
+ *   Cancel    < >    < >    Apply       (Trim)
+ *   Cancel    L    < >    R    Split    (Split, binary)
+ *
+ * Layout uses SPACING (12px between clusters, 2px inside a pair) instead
+ * of segmented-group borders to telegraph grouping. Caret pairs hint at
+ * what they nudge via a 2px coloured underline that mirrors the canvas
+ * handle/cursor — green for the trim start, red for the trim end, yellow
+ * for the split cursor. Selection pills (L / R / region 1..N) are bordered
+ * so they read as a distinct role from the borderless nudgers next to
+ * them. Active selection = subtle yellow tint, not a stacked stripe + fill.
+ *
+ * All chrome neutrals are OKLCH with a tiny chroma toward the brand cool
+ * direction — keeps the panel from looking like a flat grey island on the
+ * tinted dark surface. */
 .seg-edit-inline .seg-edit-buttons {
     display: flex;
     flex-wrap: wrap;
-    align-items: stretch;
-    gap: 8px;
+    align-items: center;
+    gap: 12px;
 }
 .seg-edit-inline .seg-edit-buttons .btn-cancel,
 .seg-edit-inline .seg-edit-buttons .btn-confirm {
@@ -442,126 +451,81 @@
     font-weight: 600;
 }
 
-/* Segmented stepper container — one rounded border around the whole pair,
- * children share a divider via `border-left` on `* + *`. Theme colors come
- * from CSS custom properties set by the .seg-stepper-{start,end} or
- * .seg-split-group modifier on the parent. */
-.seg-stepper,
-.seg-split-group {
+/* Caret pair container. Holds two `< >` buttons tight together, sits
+ * above a 2px coloured underline whose hue mirrors the canvas marker
+ * the buttons control — so the eye links the row of carets in the panel
+ * to the cursor on the waveform without any text label. */
+.seg-nudge-pair {
     flex: 0 0 auto;
     display: inline-flex;
     align-items: stretch;
-    border-radius: 5px;
-    overflow: hidden;
-    border: 1px solid var(--seg-edge, #3a3a3a);
-    background: var(--seg-fill, #232323);
+    gap: 2px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid var(--nudge-accent, oklch(0.55 0.01 250));
 }
-.seg-stepper > * + *,
-.seg-split-group > * + * {
-    border-left: 1px solid var(--seg-edge, #3a3a3a);
-}
+.seg-nudge-start { --nudge-accent: #4caf50; }  /* matches trim-draw start handle */
+.seg-nudge-end   { --nudge-accent: #f44336; }  /* matches trim-draw end   handle */
+.seg-nudge-split { --nudge-accent: #ffeb3b; }  /* matches split-draw cursor line */
 
-/* Trim themes — green for the START stepper, red for the END stepper.
- * Picked up by the children via CSS vars. */
-.seg-stepper-start {
-    --seg-edge:   #2a6c2f;
-    --seg-fill:   #1a3d1f;
-    --seg-ink:    #4caf50;
-    --seg-ink-hi: #b3eab6;
-    --seg-hi:     #2a6c2f;
-}
-.seg-stepper-end {
-    --seg-edge:   #6c2a2a;
-    --seg-fill:   #3d1a1a;
-    --seg-ink:    #f44336;
-    --seg-ink-hi: #f9b3b0;
-    --seg-hi:     #6c2a2a;
-}
-
-/* Split theme — yellow, shared by L / </> / R inside one group. */
-.seg-split-group {
-    --seg-edge:   #6c662a;
-    --seg-fill:   #2a2810;
-    --seg-ink:    #ffeb3b;
-    --seg-ink-hi: #fff3a0;
-    --seg-hi:     #4a4418;
-}
-
-/* Caret buttons (the actual `<` and `>` cursor nudgers). No individual
- * border — the parent group provides the outline. Hover lifts to --seg-hi;
- * disabled fades to 35%. */
-.seg-edit-inline .seg-edit-buttons .seg-step {
+.seg-edit-inline .seg-edit-buttons .seg-nudge {
     flex: 0 0 auto;
     min-width: 26px;
     height: 24px;
     padding: 0 6px;
-    border: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
     background: transparent;
-    color: var(--seg-ink);
-    font: bold 0.85rem/1 ui-monospace, monospace;
+    color: oklch(0.82 0.01 250);
+    font: 600 0.95rem/1 ui-monospace, monospace;
     cursor: pointer;
-    transition: background 0.12s, color 0.12s;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.seg-edit-inline .seg-edit-buttons .seg-step:hover:not(:disabled) {
-    background: var(--seg-hi);
-    color: var(--seg-ink-hi);
+.seg-edit-inline .seg-edit-buttons .seg-nudge:hover:not(:disabled) {
+    background: oklch(0.24 0.012 250);
+    border-color: oklch(0.32 0.012 250);
+    color: oklch(0.94 0.005 250);
 }
-.seg-edit-inline .seg-edit-buttons .seg-step:disabled {
-    opacity: 0.35;
+.seg-edit-inline .seg-edit-buttons .seg-nudge:active:not(:disabled) {
+    background: oklch(0.20 0.012 250);
+}
+.seg-edit-inline .seg-edit-buttons .seg-nudge:disabled {
+    opacity: 0.3;
     cursor: not-allowed;
 }
 
-/* START / END micro-label between the < > carets. Visually anchors the
- * pair as one stepper and replaces the old free-floating divider line. */
-.seg-stepper-label {
-    display: inline-flex;
-    align-items: center;
-    padding: 0 6px;
-    color: var(--seg-ink);
-    opacity: 0.55;
-    font: 600 0.6rem/1 ui-monospace, monospace;
-    letter-spacing: 0.08em;
-    pointer-events: none;
-    user-select: none;
-}
-
-/* Split L / R / region SELECTION pills. Inactive = transparent-on-yellow-ink;
- * active = filled with a 3px yellow accent bar across the top edge + 700
- * weight. The top-accent (not an inset ring) reads as "tab selected" — a
- * structural cue rather than a clashing fill color, and keeps the active /
- * inactive pair visually coherent inside the shared yellow theme. */
-.seg-edit-inline .seg-edit-buttons .seg-pick {
+/* Selection pills — L, R, region [N]. Bordered so they read as a
+ * different role from the borderless caret nudgers next to them.
+ * Active state: subtle yellow tint (matches the split cursor on canvas)
+ * plus a single weight bump. No top stripe; the colour shift is enough. */
+.seg-edit-inline .seg-edit-buttons .seg-side-pick {
     flex: 0 0 auto;
     min-width: 28px;
     height: 24px;
-    padding: 0 10px;
-    position: relative;
-    border: none;
+    padding: 0 11px;
+    border: 1px solid oklch(0.32 0.012 250);
+    border-radius: 4px;
     background: transparent;
-    color: var(--seg-ink);
+    color: oklch(0.74 0.012 250);
     font: 600 0.78rem/1 ui-monospace, monospace;
     cursor: pointer;
-    transition: background 0.12s, color 0.12s;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.seg-edit-inline .seg-edit-buttons .seg-pick:hover:not(.active) {
-    background: var(--seg-hi);
-    color: var(--seg-ink-hi);
+.seg-edit-inline .seg-edit-buttons .seg-side-pick:hover:not(.active) {
+    background: oklch(0.22 0.012 250);
+    color: oklch(0.92 0.005 250);
+    border-color: oklch(0.40 0.012 250);
 }
-.seg-edit-inline .seg-edit-buttons .seg-pick.active {
-    background: var(--seg-hi);
-    color: var(--seg-ink-hi);
+.seg-edit-inline .seg-edit-buttons .seg-side-pick.active {
+    background: oklch(0.30 0.08 95 / 0.55);
+    border-color: oklch(0.65 0.16 95);
+    color: oklch(0.94 0.10 95);
     font-weight: 700;
 }
-.seg-edit-inline .seg-edit-buttons .seg-pick.active::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 3px;
-    background: var(--seg-ink);
-}
-.seg-edit-inline .seg-edit-buttons .seg-pick-region {
-    min-width: 1.9em;
-    padding: 0 0.55em;
+
+.seg-region-picks {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .seg-edit-inline .seg-edit-status {
