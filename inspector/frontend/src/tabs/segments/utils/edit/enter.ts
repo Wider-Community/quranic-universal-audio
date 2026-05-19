@@ -12,10 +12,7 @@ import { EDIT_LOAD_PAD_MS } from '../../../../lib/playback/constants';
 import type { Segment } from '../../../../lib/types/domain';
 import { createOp, setPendingOp, snapshotSeg } from '../../stores/dirty';
 import { clearEdit, editMode } from '../../stores/edit';
-import {
-    continuousPlay,
-    segPort,
-} from '../../stores/playback';
+import { segPort } from '../../stores/playback';
 import { disposeSegRange, stopSegAnimation } from '../playback/playback';
 import { resolveSegSource } from '../playback/source';
 import { enterSplitMode } from './split';
@@ -36,10 +33,9 @@ export function enterEditWithBuffer(
     const prePausePlayMs = segPort.paused ? null : segPort.currentTimeMs();
 
     if (!segPort.paused) { segPort.pause(); stopSegAnimation(); }
-    // Dispose the segments-main AudioRange so its rAF + pending advance gap
-    // can't fire onto the audio element while edit-preview owns it.
+    // Tear down the main playhead rAF so it can't fire onto the audio element
+    // while edit-preview owns it.
     disposeSegRange();
-    continuousPlay.set(false);
 
     // Bind the port to THIS seg's source. Cross-chapter Adjust/Split
     // (launched from a validation accordion row whose chapter ≠ active)

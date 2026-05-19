@@ -28,14 +28,12 @@ import {
 } from '../../stores/dirty';
 import {
     clearEdit,
+    flashWaslGap,
     pendingChainTargets,
     setEdit,
     setEditingSegIndex,
 } from '../../stores/edit';
-import {
-    continuousPlay,
-    segPort,
-} from '../../stores/playback';
+import { segPort } from '../../stores/playback';
 import {
     _advanceRefByOneWord,
     _normalizeRef as _normalizeRefLib,
@@ -95,7 +93,6 @@ export function beginRefEdit(
     mountId: symbol | null = null,
 ): void {
     if (!segPort.paused) { segPort.pause(); stopSegAnimation(); }
-    continuousPlay.set(false);
 
     // Seed the initial value with the exact object we just passed to beginRefEdit,
     // bypassing Svelte's reactive prop delay. If _pendingInitialValue is already
@@ -317,6 +314,19 @@ async function _handoffPendingChain(): Promise<void> {
     const queue = get(pendingChainTargets);
     if (!queue.length) return;
     const chain = queue[0]!;
+
+    // CV-split inline nudge: if the head carries a wasl-flash tag, briefly
+    // highlight the WaslGap chip between the previous piece and this one so
+    // the reviewer notices the new boundary. No modal — the chip itself is
+    // the toggle; the chain proceeds straight to ref-edit. Flash auto-clears.
+    if (chain.waslFlashForLeftUid) {
+        const leftUid = chain.waslFlashForLeftUid;
+        flashWaslGap.set(leftUid);
+        setTimeout(() => {
+            flashWaslGap.update((v) => (v === leftUid ? null : v));
+        }, 1800);
+    }
+
     pendingChainTargets.set(queue.slice(1));
 
     // Flush Svelte's pending DOM updates so that newly-inserted rows (e.g. the

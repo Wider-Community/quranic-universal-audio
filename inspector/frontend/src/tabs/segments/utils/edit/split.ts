@@ -33,10 +33,13 @@ import {
     setEditCanvas,
     setEditingSegIndex,
     setEditStatusText,
+    setSplitPreviewSelection,
     setSplitState,
+    splitPreviewSelection,
     updateSplitState,
 } from '../../stores/edit';
 import { clearFlashForChapter, targetSegmentIndex } from '../../stores/navigation';
+import { segPort } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { EDIT_MIN_DURATION_MS,EDIT_SNAP_MS } from '../constants';
 import {
@@ -45,7 +48,7 @@ import {
     getVerseWordCounts,
     parseSegRef,
 } from '../data/references';
-import { setPreviewLooping } from '../playback/play-range';
+import { previewLooping, setPreviewLooping } from '../playback/play-range';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { getRowEntryForMount } from '../playback/row-registry';
 import { _ensureSplitBaseCache, drawSplitWaveform } from '../waveform/split-draw';
@@ -81,6 +84,13 @@ export function enterSplitMode(
     setEdit('split', seg.segment_uid ?? null, mountId);
     setEditingSegIndex(seg.index);
     setEditStatusText('');
+    // Default preview selection: left half for binary, first region for
+    // multi-cursor. The centralized footer play button loops this range.
+    setSplitPreviewSelection(
+        initialSplits && initialSplits.length >= 2
+            ? { kind: 'region', index: 0 }
+            : { kind: 'left' },
+    );
 
     const canvas = row.querySelector<SegCanvas>('canvas');
     if (!canvas) return;
@@ -452,12 +462,27 @@ export function confirmSplit(
     // its own verse — otherwise the chain prefill spans `verse_i_start -
     // last_verse_end` instead of `verse_i_start - verse_i_end`, breaking the
     // per-verse-resolution pattern the binary case already has.
-    const queue = pieces.slice(1).map((p) => {
+    // For cross-verse splits, attach a waslFlashForLeftUid pointer on each
+    // chain entry. _handoffPendingChain reads this to briefly flash the
+    // WaslGap chip between the previous piece and this one — drawing the
+    // reviewer's eye to the new inter-piece boundary as the ref-edit chain
+    // walks through. No modal; the chip is the toggle. Non-CV splits leave
+    // the field unset.
+    const isCrossVerseSplit = chainCat === 'cross_verse';
+    const queue = pieces.slice(1).map((p, i) => {
         const pParsed = parseSegRef(p.matched_ref);
         const originalEndRef = pParsed
             ? `${pParsed.surah}:${pParsed.ayah_to}:${pParsed.word_to}`
             : null;
-        return { seg: p, category: chainCat, originalEndRef };
+        const prevPiece = pieces[i]!;
+        return {
+            seg: p,
+            category: chainCat,
+            originalEndRef,
+            ...(isCrossVerseSplit && prevPiece.segment_uid
+                ? { waslFlashForLeftUid: prevPiece.segment_uid }
+                : {}),
+        };
     });
     pendingChainTargets.set(queue);
     beginRefEdit(pieces[0]!, chainCat, resolvedMountId);
@@ -498,4 +523,48 @@ export function previewSplitRegion(idx: number, canvas?: SegCanvas | null): void
     const end = idx === n ? sd.seg.time_end : sd.currentSplits[idx]!;
     setPreviewLooping(`split-region-${idx}` as `split-region-${number}`);
     _playRange(start, end);
+}
+
+// ---------------------------------------------------------------------------
+// previewSplitFromSelection — dispatch from the centralized footer play
+// ---------------------------------------------------------------------------
+
+/** Toggle the split-mode preview loop based on the current
+ *  `splitPreviewSelection`. Acts as a play/pause for the selected range —
+ *  pressing while the same range is already looping pauses; pressing again
+ *  resumes. Called by the footer's `handlePlayClick` when `editMode ===
+ *  'split'`, replacing the per-side / per-region play buttons that used to
+ *  live in `SplitPanel.svelte`. */
+export function previewSplitFromSelection(canvas?: SegCanvas | null): void {
+    const c = canvas ?? get(editCanvas);
+    const sd = c?._splitData;
+    if (!sd || !c) return;
+    const sel = get(splitPreviewSelection);
+    const isBinary = sd.currentSplits.length === 1;
+
+    // Toggle: if already looping the SAME selection, pause and clear.
+    // Otherwise start (or switch to) the selected range loop.
+    const curLoop = get(previewLooping);
+    const desiredKey: string = sel.kind === 'region'
+        ? `split-region-${sel.index}`
+        : `split-${sel.kind}`;
+    if (curLoop === desiredKey && !segPort.paused) {
+        segPort.pause();
+        return;
+    }
+
+    if (isBinary) {
+        const side: 'left' | 'right' = sel.kind === 'region'
+            ? (sel.index === 0 ? 'left' : 'right')
+            : sel.kind;
+        previewSplitAudio(side, c);
+        return;
+    }
+
+    // Multi-cursor: normalize a left/right selection to region 0 / last.
+    const n = sd.currentSplits.length;
+    const idx = sel.kind === 'region'
+        ? Math.max(0, Math.min(n, sel.index))
+        : (sel.kind === 'left' ? 0 : n);
+    previewSplitRegion(idx, c);
 }

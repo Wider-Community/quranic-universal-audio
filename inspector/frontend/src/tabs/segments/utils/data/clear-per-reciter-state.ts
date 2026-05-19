@@ -24,12 +24,7 @@ import {
 import { clearEdit } from '../../stores/edit';
 import { setHistoryData, setHistoryVisible } from '../../stores/history';
 import { clearMergeRedirects } from '../../stores/merge-redirect';
-import {
-    continuousPlay,
-    playEndMs,
-    playingSegmentIndex,
-    playStartMs,
-} from '../../stores/playback';
+import { playingSegmentIndex } from '../../stores/playback';
 import {
     clearSavePreviewData,
     hidePreview,
@@ -67,9 +62,6 @@ export function clearPerReciterState(): void {
     clearSavePreviewData();
 
     clearRowRegistry();
-    continuousPlay.set(false);
-    playStartMs.set(0);
-    playEndMs.set(0);
     playingSegmentIndex.set(null);
     clearWaveformCache();
 
