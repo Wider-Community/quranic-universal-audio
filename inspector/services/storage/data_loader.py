@@ -246,7 +246,12 @@ def load_auto_split(reciter: str) -> tuple[dict[str, dict], dict | None]:
 # ---------------------------------------------------------------------------
 
 def get_word_counts() -> dict[tuple[int, int], int]:
-    """Load and cache word counts from surah_info.json."""
+    """Load and cache word counts from surah_info.json.
+
+    Also primes ``cache.set_single_word_verses_cache`` with the derived
+    ``{(surah, ayah): wc == 1}`` set so classifier / save callers don't
+    rebuild it per call.
+    """
     cached = cache.get_word_counts_cache()
     if cached is not None:
         return cached
@@ -258,7 +263,22 @@ def get_word_counts() -> dict[tuple[int, int], int]:
             for v in data["verses"]:
                 wc[(int(surah_str), v["verse"])] = v["num_words"]
     cache.set_word_counts_cache(wc)
+    cache.set_single_word_verses_cache({k for k, v in wc.items() if v == 1})
     return wc
+
+
+def get_single_word_verses() -> set[tuple[int, int]]:
+    """Singleton set of ``(surah, ayah)`` keys whose verse has exactly one word.
+
+    Derived from ``get_word_counts()`` once at first read; cached for the
+    process lifetime alongside word_counts (both immutable post-boot).
+    """
+    cached = cache.get_single_word_verses_cache()
+    if cached is not None:
+        return cached
+    # Force compute via get_word_counts (which primes the swv cache).
+    get_word_counts()
+    return cache.get_single_word_verses_cache() or set()
 
 
 def load_surah_info_lite() -> dict:

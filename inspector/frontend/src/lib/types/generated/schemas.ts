@@ -107,6 +107,7 @@ export interface DetailedSegment {
   segment_uid?: string | null;
   ignored_categories?: string[] | null;
   ignored?: boolean | null;
+  is_wasl?: boolean;
 }
 /**
  * One JSONL line in ``edit_history.jsonl`` — a batch of operations.

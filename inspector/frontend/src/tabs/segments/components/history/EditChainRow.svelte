@@ -85,7 +85,11 @@
         return hl;
     })();
 
-    // Each leaf card gets a splitHL pointing to its own range within wfRange (only for splits)
+    // Each leaf card gets a splitHL pointing to its own range within wfRange
+    // (only for splits). Applied to every leaf — adjusted or not — so the
+    // child's portion always renders against the wider parent peak with its
+    // own range highlighted. Trim delta (when present) stacks on top, clipped
+    // to the leaf's bounds so it doesn't bleed onto siblings.
     function leafSplitHL(leaf: HistorySnapshot): SplitHighlight | null {
         if (!isSplit || !rootSnap) return null;
         return {
@@ -107,13 +111,43 @@
         return { mergePoint };
     })();
 
-    // Trim highlight for chains that include an adjust operation
-    $: leafTrimHL = (() => {
-        const trimOp = chain.ops.find(co => co.op.op_type === 'boundary_adjustment' || co.op.op_type === 'trim_segment')?.op;
-        if (!trimOp || !trimOp.targets_before || trimOp.targets_before.length === 0) return null;
-        const b = trimOp.targets_before[0] as HistorySnapshot;
-        return { color: 'green', otherStart: b.time_start, otherEnd: b.time_end } as TrimHighlight;
-    })();
+    // Earliest snapshot in the chain carrying this leaf's uid (excluding the leaf itself).
+    // For a split→adjust chain that's the split's targets_after entry (the leaf's
+    // initial post-split state); for a plain adjust chain it's the first
+    // targets_before. chain.ops is already chronological.
+    function leafBaselineSnap(leaf: HistorySnapshot): HistorySnapshot | null {
+        if (!leaf.segment_uid) return null;
+        for (const { op } of chain.ops) {
+            const before = ((op.targets_before || []) as HistorySnapshot[]).find(s => s.segment_uid === leaf.segment_uid);
+            if (before) return before;
+            const after = ((op.targets_after || []) as HistorySnapshot[]).find(s => s.segment_uid === leaf.segment_uid);
+            if (after && after !== leaf) return after;
+        }
+        return null;
+    }
+
+    // Per-leaf trim highlight: only the leaf actually targeted by an adjust gets
+    // the green delta painted, against its baseline (post-split or pre-adjust)
+    // state — not against an arbitrary other-leaf's range. `clipStart`/`clipEnd`
+    // pin the delta paint to the leaf's own bounds so it doesn't bleed across
+    // the wider split-chain canvas onto sibling leaves' portions.
+    function leafTrimHL(leaf: HistorySnapshot): TrimHighlight | null {
+        const wasAdjusted = chain.ops.some(({ op }) => {
+            if (op.op_type !== 'boundary_adjustment' && op.op_type !== 'trim_segment') return false;
+            return ((op.targets_after || []) as HistorySnapshot[]).some(s => s.segment_uid === leaf.segment_uid);
+        });
+        if (!wasAdjusted) return null;
+        const baseline = leafBaselineSnap(leaf);
+        if (!baseline) return null;
+        if (baseline.time_start === leaf.time_start && baseline.time_end === leaf.time_end) return null;
+        return {
+            color: 'green',
+            otherStart: baseline.time_start,
+            otherEnd: baseline.time_end,
+            clipStart: leaf.time_start,
+            clipEnd: leaf.time_end,
+        };
+    }
 
     // Leaf cards need a wider seg range when expanded so the canvas
     // renders against the chain's union. The IntersectionObserver callback
@@ -245,10 +279,21 @@
                                 instanceRole="history"
                                 splitHL={leafSplitHL(leaf)}
                                 mergeHL={leafMergeHL}
-                                trimHL={leafTrimHL}
+                                trimHL={leafTrimHL(leaf)}
                                 opId={chain.ops[0]?.op.op_id ?? null}
                                 {previewCtx}
                             />
+                            {#if isSplit
+                                && i < leafSnaps.length - 1
+                                && (leaf as { is_wasl?: boolean }).is_wasl !== undefined}
+                                <!-- Boundary annotation captured by the in-card
+                                     WASL/WAQF picker during the post-split chain.
+                                     Only the LAST leaf has no following boundary,
+                                     so we elide it. -->
+                                <span class="seg-history-wasl-tag" class:on={(leaf as { is_wasl?: boolean }).is_wasl}>
+                                    {(leaf as { is_wasl?: boolean }).is_wasl ? 'wasl' : 'waqf'}
+                                </span>
+                            {/if}
                         </div>
                     {/each}
                 {/if}

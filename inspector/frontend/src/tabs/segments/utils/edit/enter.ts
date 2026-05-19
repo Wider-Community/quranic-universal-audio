@@ -12,11 +12,8 @@ import { EDIT_LOAD_PAD_MS } from '../../../../lib/playback/constants';
 import type { Segment } from '../../../../lib/types/domain';
 import { createOp, setPendingOp, snapshotSeg } from '../../stores/dirty';
 import { clearEdit, editMode } from '../../stores/edit';
-import {
-    continuousPlay,
-    segPort,
-} from '../../stores/playback';
-import { disposeSegRange, stopSegAnimation } from '../playback/playback';
+import { segPort } from '../../stores/playback';
+import { disposeSegRange } from '../playback/playback';
 import { resolveSegSource } from '../playback/source';
 import { enterSplitMode } from './split';
 import { enterTrimMode } from './trim';
@@ -35,18 +32,24 @@ export function enterEditWithBuffer(
 
     const prePausePlayMs = segPort.paused ? null : segPort.currentTimeMs();
 
-    if (!segPort.paused) { segPort.pause(); stopSegAnimation(); }
-    // Dispose the segments-main AudioRange so its rAF + pending advance gap
-    // can't fire onto the audio element while edit-preview owns it.
+    // The edit-preview rAF (`_playRange` / `attachPreviewLoop`) takes
+    // over the audio element next. Tear down the chapter-cursor rAF +
+    // any bounded segment range so they can't race the preview loop —
+    // segRange's `stop` policy at seg.time_end would otherwise pause
+    // playback right when the preview loop wants to wrap back to its
+    // loop-start. We do NOT call `segPort.pause()` here: the warm path
+    // (audio playing inside the trim window / split region) keeps the
+    // chapter playhead running; the cold path's `seekAndPlay` inside
+    // `_playRange` resumes playback explicitly. `stopSegAnimation` is
+    // implied by `disposeSegRange` so we can drop the extra call.
     disposeSegRange();
-    continuousPlay.set(false);
 
     // Bind the port to THIS seg's source. Cross-chapter Adjust/Split
     // (launched from a validation accordion row whose chapter ≠ active)
     // would otherwise build the wider clip from the active chapter's URL
-    // — wrong audio. setSource is a no-op for active-chapter Adjust and
-    // invalidates `_window` for cross-chapter so the loadCovering below
-    // swaps to the row's chapter clip.
+    // — wrong audio. `setSource` is `_sameSource`-guarded so same-chapter
+    // is a no-op; cross-chapter invalidates `_window` and the
+    // loadCovering below issues a fresh clip request.
     const segSource = resolveSegSource(seg, chapterOverride);
     if (segSource) segPort.setSource(segSource);
 

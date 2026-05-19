@@ -28,15 +28,18 @@ import {
 import {
     editCanvas,
     editMode,
+    markWaslPending,
     pendingChainTargets,
     setEdit,
     setEditCanvas,
     setEditingSegIndex,
     setEditStatusText,
+    setSplitPreviewSelection,
     setSplitState,
     updateSplitState,
 } from '../../stores/edit';
 import { clearFlashForChapter, targetSegmentIndex } from '../../stores/navigation';
+import { segPort } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { EDIT_MIN_DURATION_MS,EDIT_SNAP_MS } from '../constants';
 import {
@@ -45,12 +48,12 @@ import {
     getVerseWordCounts,
     parseSegRef,
 } from '../data/references';
-import { setPreviewLooping } from '../playback/play-range';
+import { editPreviewPlaying, setPreviewJustSeeked, setPreviewLooping } from '../playback/play-range';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { getRowEntryForMount } from '../playback/row-registry';
 import { _ensureSplitBaseCache, drawSplitWaveform } from '../waveform/split-draw';
 import { _fetchPeaksForClick } from '../waveform/utils';
-import { _playRange, exitEditMode, finalizeEdit } from './common';
+import { _playRange, attachPreviewLoop, exitEditMode, finalizeEdit } from './common';
 import { beginRefEdit, pickProgrammaticMountId } from './reference';
 import { applySplitWheelZoom } from './split-zoom';
 import { getAudioEndMsForSeg } from './trim';
@@ -147,18 +150,58 @@ export function enterSplitMode(
         });
     }
 
-    // Auto-split: when MFA pre-placed cursor(s), kick off a region preview
-    // so the user hears the boundary without an extra click.
-    //  - 1 cursor (binary): play the right half (matches today's cross-verse).
-    //  - N≥2 cursors (repetitions): play region 1 (the forward pass).
-    const autoSeeded = initialSplits && initialSplits.length > 0;
-    if (autoSeeded) {
-        if (currentSplits.length === 1) {
-            previewSplitAudio('right', canvas);
-        } else {
-            previewSplitRegion(0, canvas);
-        }
+    // Pick the region to loop. Same rule for manual AND auto-seeded —
+    // they only differ in where the cursors got seeded (live playhead
+    // for manual, MFA output for auto). The loop target is then:
+    //   - Playing → the region that contains the live playhead. Tie-break
+    //     at the boundary (the manual binary case where cursor ≡ playhead)
+    //     prefers 'right' / forward — no backward seek.
+    //   - Paused  → the "second part" — region index 1 (binary 'right',
+    //     multi 'region 1'). User can L/R-switch from there.
+    //
+    // `previewSplitAudio` / `previewSplitRegion` branch warm vs. cold
+    // internally based on the live playhead position, so warm-attach is
+    // automatic when audio is already running inside the chosen region.
+    const target: SplitTarget = prePausePlayMs !== null
+        ? splitRegionContaining(seg, currentSplits, prePausePlayMs)
+        : (currentSplits.length === 1 ? { kind: 'right' } : { kind: 'region', index: 1 });
+
+    if (target.kind === 'region') {
+        setSplitPreviewSelection({ kind: 'region', index: target.index });
+        previewSplitRegion(target.index, canvas);
+    } else {
+        setSplitPreviewSelection({ kind: target.kind });
+        previewSplitAudio(target.kind, canvas);
     }
+}
+
+// ---------------------------------------------------------------------------
+// splitRegionContaining — map a file-absolute ms onto its split region
+// ---------------------------------------------------------------------------
+
+type SplitTarget =
+    | { kind: 'left' }
+    | { kind: 'right' }
+    | { kind: 'region', index: number };
+
+/** Pure: which region [start, end) contains `ms` given the current split
+ *  cursors. For binary splits (N=1) the answer is `'left'` or `'right'`;
+ *  for multi-cursor (N≥2) it's `{ kind: 'region', index }`. At the L/R
+ *  boundary (manual entry seeds the cursor at the live playhead, so
+ *  `ms === currentSplits[0]`) the tie-break favors `'right'` — forward
+ *  direction, no backward seek when warm-attaching. `ms` outside the seg
+ *  falls back to the first region. */
+function splitRegionContaining(seg: Segment, currentSplits: number[], ms: number): SplitTarget {
+    if (currentSplits.length === 1) {
+        return ms < currentSplits[0]! ? { kind: 'left' } : { kind: 'right' };
+    }
+    const n = currentSplits.length;
+    for (let i = 0; i <= n; i++) {
+        const s = i === 0 ? seg.time_start : currentSplits[i - 1]!;
+        const e = i === n ? seg.time_end : currentSplits[i]!;
+        if (ms >= s && ms < e) return { kind: 'region', index: i };
+    }
+    return { kind: 'region', index: 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -452,43 +495,96 @@ export function confirmSplit(
     // its own verse — otherwise the chain prefill spans `verse_i_start -
     // last_verse_end` instead of `verse_i_start - verse_i_end`, breaking the
     // per-verse-resolution pattern the binary case already has.
-    const queue = pieces.slice(1).map((p) => {
+    const isCrossVerseSplit = chainCat === 'cross_verse';
+    const queue = pieces.slice(1).map((p, i) => {
         const pParsed = parseSegRef(p.matched_ref);
         const originalEndRef = pParsed
             ? `${pParsed.surah}:${pParsed.ayah_to}:${pParsed.word_to}`
             : null;
-        return { seg: p, category: chainCat, originalEndRef };
+        const prevPiece = pieces[i]!;
+        return {
+            seg: p,
+            category: chainCat,
+            originalEndRef,
+            // For CV splits, name the previous piece so _handoffPendingChain
+            // can gate this entry's ref-edit on the user picking WASL/WAQF
+            // first. Non-CV splits leave the field unset and proceed
+            // straight to ref-edit, same as today.
+            ...(isCrossVerseSplit && prevPiece.segment_uid
+                ? { prevPieceUid: prevPiece.segment_uid }
+                : {}),
+        };
     });
     pendingChainTargets.set(queue);
+
+    // For cross-verse splits, mark every new inter-piece boundary as pending
+    // a WASL/WAQF answer. The inline ``WaslBoundary`` picker inside the CV
+    // accordion card reads this set to render both labels muted (forcing a
+    // pick) vs. the committed reading.
+    if (isCrossVerseSplit) {
+        // pieces[0..N-2] are the LEFT side of each new inter-piece boundary.
+        for (let i = 0; i < pieces.length - 1; i++) {
+            const uid = pieces[i]!.segment_uid;
+            if (uid) markWaslPending(uid);
+        }
+    }
+
     beginRefEdit(pieces[0]!, chainCat, resolvedMountId);
 }
 
 // ---------------------------------------------------------------------------
-// previewSplitAudio — toggle looping preview of left/right half (N=1 only)
+// previewSplitAudio — cold-start the binary-split L/R preview loop
 // ---------------------------------------------------------------------------
 
-export function previewSplitAudio(side: 'left' | 'right', canvas?: SegCanvas | null): void {
+/** Launch a binary-split (N=1) left/right preview loop.
+ *
+ *  Default (`mode: 'auto'`):
+ *  - Playing → warm-attach without seeking. Audio continues; if it's
+ *    already past the region's end, prime `_previewJustSeeked` to skip
+ *    the wrap-back on the first frame.
+ *  - Paused → cold-start via `_playRange`.
+ *
+ *  `mode: 'cold'` — always cold-start. Used by SplitPanel's L/R pill
+ *  click ("play THIS side from its start, looping"). */
+export function previewSplitAudio(
+    side: 'left' | 'right',
+    canvas?: SegCanvas | null,
+    opts?: { mode?: 'auto' | 'cold' },
+): void {
     const c = canvas ?? get(editCanvas);
     const sd = c?._splitData;
     if (!sd || !c || sd.currentSplits.length !== 1) return;
+    editPreviewPlaying.set(true);
     setPreviewLooping(`split-${side}` as const);
     const splitTime = sd.currentSplits[0]!;
-    _playRange(
-        side === 'left' ? sd.seg.time_start : splitTime,
-        side === 'left' ? splitTime : sd.seg.time_end,
-    );
+    const startMs = side === 'left' ? sd.seg.time_start : splitTime;
+    const endMs = side === 'left' ? splitTime : sd.seg.time_end;
+
+    if (opts?.mode === 'cold' || segPort.paused) {
+        _playRange(startMs, endMs);
+        return;
+    }
+    const live = segPort.currentTimeMs();
+    setPreviewJustSeeked(live >= endMs);
+    attachPreviewLoop(startMs, endMs);
 }
 
 // ---------------------------------------------------------------------------
-// previewSplitRegion — loop a single region for the N≥2 multi-cursor flow
+// previewSplitRegion — cold-start a multi-cursor (N≥2) region preview loop
 // ---------------------------------------------------------------------------
 
 /** Loop region ``i`` (0-indexed) of the split. Region ``i`` runs from
  *  ``currentSplits[i-1] ?? seg.time_start`` to ``currentSplits[i] ?? seg.time_end``,
  *  so for N cursors there are N+1 regions. Sets the play-range loop key to
  *  ``'split-region-{i}'`` so the play-range RAF re-seeks correctly across
- *  cursor edits while looping. */
-export function previewSplitRegion(idx: number, canvas?: SegCanvas | null): void {
+ *  cursor edits while looping. Same warm/cold branching as
+ *  ``previewSplitAudio`` — `mode: 'cold'` forces cold-start for SplitPanel's
+ *  region-pill click. */
+export function previewSplitRegion(
+    idx: number,
+    canvas?: SegCanvas | null,
+    opts?: { mode?: 'auto' | 'cold' },
+): void {
     const c = canvas ?? get(editCanvas);
     const sd = c?._splitData;
     if (!sd || !c) return;
@@ -496,6 +592,14 @@ export function previewSplitRegion(idx: number, canvas?: SegCanvas | null): void
     if (idx < 0 || idx > n) return;
     const start = idx === 0 ? sd.seg.time_start : sd.currentSplits[idx - 1]!;
     const end = idx === n ? sd.seg.time_end : sd.currentSplits[idx]!;
+    editPreviewPlaying.set(true);
     setPreviewLooping(`split-region-${idx}` as `split-region-${number}`);
-    _playRange(start, end);
+
+    if (opts?.mode === 'cold' || segPort.paused) {
+        _playRange(start, end);
+        return;
+    }
+    const live = segPort.currentTimeMs();
+    setPreviewJustSeeked(live >= end);
+    attachPreviewLoop(start, end);
 }

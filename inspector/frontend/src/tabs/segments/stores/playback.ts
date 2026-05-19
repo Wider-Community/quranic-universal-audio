@@ -8,8 +8,11 @@ import { AudioPort } from '../../../lib/playback/audio-port';
 import { LS_KEYS } from '../../../lib/utils/constants';
 
 /**
- * Whether auto-play (continuous segment advance) is enabled.
- * Persisted to localStorage via LS_KEYS.SEG_AUTOPLAY.
+ * Whether autoplay is enabled — chapter-mode only. When ON, a main-list
+ * play runs chapter-continuously through the rest of the chapter audio.
+ * When OFF, a main-list play stops at the end of the played segment.
+ * Accordion plays always stop at segment end regardless of this flag.
+ * Persisted to localStorage via LS_KEYS.SEG_AUTOPLAY; default ON.
  */
 export const autoPlayEnabled = writable<boolean>(
     localStorage.getItem(LS_KEYS.SEG_AUTOPLAY) !== 'false',
@@ -22,23 +25,6 @@ export const autoPlayEnabled = writable<boolean>(
 export const autoScrollEnabled = writable<boolean>(
     localStorage.getItem(LS_KEYS.SEG_AUTOSCROLL) !== 'false',
 );
-
-/** Whether continuous-play (auto-advance to next segment after one ends) is
- *  currently engaged. Short-lived — toggled per play session, not persisted. */
-export const continuousPlay = writable<boolean>(false);
-
-/** Timestamp (ms, within the current audio source) at which the current
- *  play-range should stop. Written when starting a segment or range; read by
- *  the rAF tick to decide when to pause. */
-export const playEndMs = writable<number>(0);
-
-/** Timestamp (ms, within the current audio source) at which the current
- *  play-range *starts*. Written in tandem with `playEndMs` whenever a
- *  segment is queued for playback (initial play, autoplay-advance, manual
- *  cross-segment seek). The pinned-footer progress bar reads
- *  `(segPort.currentTimeMs() - playStartMs) / (playEndMs - playStartMs)`
- *  to render the per-segment scrubber. Zero when nothing is queued. */
-export const playStartMs = writable<number>(0);
 
 /** Which audio element is currently driving playback: 'main' = the main
  *  segments tab audio element, or `null` when idle. Retained as a typed

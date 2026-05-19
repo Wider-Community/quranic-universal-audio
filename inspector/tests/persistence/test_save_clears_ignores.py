@@ -142,7 +142,6 @@ def test_save_drops_wrap_when_fe_omits_it(tmp_reciter_dir, signed_in_client):
         "entries": [
             {
                 "ref": "112",
-                "audio": "https://fixture.local/audio/112.mp3",
                 "segments": [
                     {
                         "time_start": 1000, "time_end": 5000,
@@ -200,7 +199,6 @@ def test_save_drops_geometrically_invalid_wrap(tmp_reciter_dir, signed_in_client
         "_meta": {"audio_source": "by_surah/fixture"},
         "entries": [{
             "ref": "112",
-            "audio": "https://fixture.local/audio/112.mp3",
             "segments": [{
                 "time_start": 1000, "time_end": 5000,
                 "matched_ref": "112:1:1-112:1:2",
@@ -251,7 +249,6 @@ def test_save_preserves_wrap_when_fe_sends_it(tmp_reciter_dir, signed_in_client)
         "_meta": {"audio_source": "by_surah/fixture"},
         "entries": [{
             "ref": "112",
-            "audio": "https://fixture.local/audio/112.mp3",
             "segments": [{
                 "time_start": 1000, "time_end": 5000,
                 "matched_ref": "112:1:1-112:1:4",
@@ -300,7 +297,6 @@ def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, signed_in_clien
         "entries": [
             {
                 "ref": "112",
-                "audio": "https://fixture.local/audio/112.mp3",
                 "segments": [
                     {
                         "time_start": 1000, "time_end": 2000,

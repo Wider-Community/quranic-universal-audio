@@ -54,7 +54,7 @@ def smoke() -> int:
 
     from .hf_bucket import BucketBackend, StorageNotFound
 
-    backend = BucketBackend(bucket_id=bucket_id, force_flush_on_write=True)
+    backend = BucketBackend(bucket_id=bucket_id)
 
     prefix = "_smoke_phase1"
     test_json = f"{prefix}/probe.json"

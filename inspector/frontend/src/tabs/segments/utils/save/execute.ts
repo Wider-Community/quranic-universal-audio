@@ -21,6 +21,7 @@ import {
     getDirtyMap,
 } from '../../stores/dirty';
 import { saveButtonLabel } from '../../stores/save';
+import { resetHistoryLoader } from '../history/loader';
 import { refreshValidation } from '../validation/refresh';
 import { collectOpPeaks, type OpPeakRecord } from '../waveform/op-peaks';
 export { buildPayloadFromCommandResult } from './payload';
@@ -41,6 +42,7 @@ interface SaveSegmentPayloadFull {
     audio_url: string;
     wrap_word_ranges?: unknown;
     ignored_categories?: string[];
+    is_wasl?: boolean;
 }
 
 interface SaveSegmentPayloadPatch {
@@ -49,6 +51,7 @@ interface SaveSegmentPayloadPatch {
     matched_ref: string;
     confidence: number;
     ignored_categories?: string[];
+    is_wasl?: boolean;
 }
 
 interface SavePayloadFull {
@@ -174,6 +177,7 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                             ignored_categories: s.ignored_categories ?? [],
                         };
                         if (s.wrap_word_ranges) o.wrap_word_ranges = s.wrap_word_ranges;
+                        if (s.is_wasl) o.is_wasl = true;
                         return o;
                     }),
                     operations: chOps,
@@ -190,6 +194,7 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                             confidence: seg.confidence,
                             ignored_categories: seg.ignored_categories ?? [],
                         };
+                        if (seg.is_wasl) upd.is_wasl = true;
                         updates.push(upd);
                     }
                 }
@@ -294,15 +299,18 @@ export async function executeSave(isAutoSave = false): Promise<void> {
             // clearSavedOps bumps dirtyTick which the validation-card memo
             // for splits depends on — landing the new index before clearing
             // the op log avoids a transient blink of the second child.
-            // History panel intentionally NOT refetched here; it's lazy-
-            // fetched when the user opens the History view, and the
-            // backend's incremental cache append keeps it consistent.
+            // History panel: the lazy loader memoizes per-reciter, so reset
+            // it so the next showHistoryView() actually re-fetches the
+            // batches list (including the batch we just appended). Without
+            // this, /api/seg/edit-history is served from the FE's cached
+            // promise and the user sees stale rows.
             try {
                 await refreshValidation();
             } catch (e) {
                 console.error('Error refreshing validation:', e);
             }
             for (const { ch, ops } of pendingClears) clearSavedOps(ch, ops);
+            resetHistoryLoader();
         } else {
             // Nothing saved (either nothing to save or error before first commit)
             saveButtonLabel.set('Save');

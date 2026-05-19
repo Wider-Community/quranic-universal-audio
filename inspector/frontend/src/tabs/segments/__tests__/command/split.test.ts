@@ -127,6 +127,92 @@ describe.skipIf(!applyCommand)('command/split', () => {
     expect(merged.wrap_word_ranges).toBeUndefined();
   });
 
+  it('split propagates wasls[] to children on inter-piece boundaries', () => {
+    // CV wizard: cursors=[1500, 3000] produces 3 pieces with 2 new boundaries.
+    // wasls=[true, false] tags child[0].is_wasl=true, child[1].is_wasl=false.
+    // The last child (no new boundary after it) inherits parent.is_wasl (default false).
+    const state = {
+      byId: {
+        'uid-cv': makeSegment(0, 0, 4500, {
+          segment_uid: 'uid-cv',
+          matched_ref: '37:151:1-37:153:5',
+        }),
+      },
+      idsByChapter: { 1: ['uid-cv'] },
+      selectedChapter: 1 as number | null,
+    };
+    const r = applyCommand(state, {
+      type: 'split',
+      segmentUid: 'uid-cv',
+      splitMs: [1500, 3000],
+      newUids: ['uid-c1', 'uid-c2'],
+      wasls: [true, false],
+    } as any);
+    const ids = (r.nextState.idsByChapter?.[1]) as string[] | undefined;
+    expect(ids).toBeTruthy();
+    const ordered = ids!.map((u) => r.nextState.byId[u]) as any[];
+    expect(ordered.length).toBe(3);
+    expect(ordered[0].is_wasl).toBe(true);
+    expect(ordered[1].is_wasl).toBe(false);
+    expect(ordered[2].is_wasl).toBe(false);
+  });
+
+  it('split with parent is_wasl=true preserves it on the LAST child only', () => {
+    // Parent's is_wasl=true described the parent→next-seg boundary. After
+    // split, that boundary is still owned by the new last child.
+    const state = {
+      byId: {
+        'uid-cv': makeSegment(0, 0, 4000, {
+          segment_uid: 'uid-cv',
+          matched_ref: '2:5:1-2:6:3',
+          is_wasl: true,
+        }),
+      },
+      idsByChapter: { 1: ['uid-cv'] },
+      selectedChapter: 1 as number | null,
+    };
+    const r = applyCommand(state, {
+      type: 'split',
+      segmentUid: 'uid-cv',
+      splitMs: 2000,
+      newUids: ['uid-c2'],
+    } as any);
+    const ids = (r.nextState.idsByChapter?.[1]) as string[];
+    const ordered = ids.map((u) => r.nextState.byId[u]) as any[];
+    expect(ordered.length).toBe(2);
+    expect(ordered[0].is_wasl).toBe(false);
+    expect(ordered[1].is_wasl).toBe(true);
+  });
+
+  it('setIsWasl toggles is_wasl on the target segment', () => {
+    const state = {
+      byId: {
+        'uid-w': makeSegment(0, 0, 4000, {
+          segment_uid: 'uid-w',
+          matched_ref: '2:5:1-2:5:3',
+          is_wasl: false,
+        }),
+      },
+      idsByChapter: { 1: ['uid-w'] },
+      selectedChapter: 1 as number | null,
+    };
+    const onResult = applyCommand(state, {
+      type: 'setIsWasl', segmentUid: 'uid-w', is_wasl: true,
+    } as any);
+    const onSeg = Object.values(onResult.nextState.byId ?? onResult.nextState)[0] as any;
+    expect(onSeg.is_wasl).toBe(true);
+    expect(onResult.operation.op_type).toBe('set_is_wasl');
+    expect(onResult.operation.kind).toBe('single-index');
+
+    // Round-trip back to false.
+    const offResult = applyCommand(
+      { ...state, byId: { 'uid-w': onSeg } },
+      { type: 'setIsWasl', segmentUid: 'uid-w', is_wasl: false } as any,
+    );
+    const offSeg = Object.values(offResult.nextState.byId ?? offResult.nextState)[0] as any;
+    expect(offSeg.is_wasl).toBe(false);
+  });
+
   it('drops wrap_word_ranges from every child', () => {
     // Regression: a parent repetition seg used to leak its wrap onto every
     // split child, re-tagging post-split clean segs as repetitions and

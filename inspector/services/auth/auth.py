@@ -187,6 +187,11 @@ def _dev_current_user() -> User | None:
     role switcher in dev simulates switching between distinct admin users
     in prod — per-user dismissals and claim ownership scope correctly
     instead of collapsing onto a single shared ``dev-local`` user.
+
+    A per-role pair of env vars (``INSPECTOR_DEV_<ROLE>_HF_ID`` /
+    ``INSPECTOR_DEV_<ROLE>_LOGIN``) overrides the synthetic identity —
+    useful when local dev hits the prod bucket and audit entries should
+    be attributed to a real HF user rather than ``dev-owner``.
     """
     raw = request.cookies.get(DEV_ROLE_COOKIE_NAME, "owner") or "owner"
     if raw == "anonymous":
@@ -196,8 +201,11 @@ def _dev_current_user() -> User | None:
     except ValueError:
         # Garbage cookie — don't 500 a dev page, fall back to owner.
         role = Role.OWNER
+    upper = role.value.upper()
+    hf_user_id = os.environ.get(f"INSPECTOR_DEV_{upper}_HF_ID") or f"dev-{role.value}"
+    login = os.environ.get(f"INSPECTOR_DEV_{upper}_LOGIN") or f"dev-{role.value}"
     return User(
-        hf_user_id=f"dev-{role.value}",
-        login=f"dev-{role.value}",
+        hf_user_id=hf_user_id,
+        login=login,
         role=role,
     )

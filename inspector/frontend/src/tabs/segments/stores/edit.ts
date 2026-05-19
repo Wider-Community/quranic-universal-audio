@@ -145,9 +145,78 @@ export interface ChainTarget {
     seg: Segment;
     category: string | null;
     originalEndRef: string | null;
+    /**
+     * UID of the previous piece in a CV-split chain. When set on a chain
+     * entry, ``_handoffPendingChain`` pauses BEFORE entering this entry's
+     * ref-edit if ``pendingWaslConfirm.has(prevPieceUid)`` — the user must
+     * pick WASL or WAQF on the boundary between the previous piece and this
+     * one. Only stamped by ``confirmSplit`` for cross-verse splits.
+     */
+    prevPieceUid?: string;
 }
 
 export const pendingChainTargets = writable<ChainTarget[]>([]);
+
+/**
+ * Names the ``segA.segment_uid`` of the ``WaslBoundary`` picker that should
+ * scroll into view + auto-focus its WASL button. Set by
+ * ``_handoffPendingChain`` when the chain pauses on a pending boundary;
+ * cleared by the picker after the user picks. WaslBoundary reactively
+ * subscribes.
+ */
+export const focusWaslBoundary = writable<string | null>(null);
+
+/**
+ * Per-session set of left-side segment UIDs whose post-CV-split wasl boundary
+ * has not yet been answered yes/no. ``confirmSplit`` adds each non-last child
+ * UID after a cross_verse split; ``WaslBoundary.svelte`` reads the set to
+ * decide whether to render the inline ``waṣl?  no · yes`` prompt vs. the
+ * committed reading. Click on yes/no removes the UID. Forgotten on reload.
+ *
+ * Resolved (committed-true) boundaries render their quiet ``waṣl`` mark from
+ * ``seg.is_wasl`` alone, so reload is fine. Committed-no is the default and
+ * needs no per-UID memory.
+ */
+export const pendingWaslConfirm = writable<Set<string>>(new Set());
+
+export function markWaslPending(leftUid: string): void {
+    pendingWaslConfirm.update((s) => {
+        if (s.has(leftUid)) return s;
+        const next = new Set(s);
+        next.add(leftUid);
+        return next;
+    });
+}
+
+export function clearWaslPending(leftUid: string): void {
+    pendingWaslConfirm.update((s) => {
+        if (!s.has(leftUid)) return s;
+        const next = new Set(s);
+        next.delete(leftUid);
+        return next;
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Split preview selection — which range the centralized footer play button
+// loops while in split mode. Replaces the per-button "Play L / Play R / Play
+// region N" affordances that used to live in SplitPanel.svelte; the panel
+// now exposes a radio for selection and the footer's single play/pause
+// drives the actual loop via `previewSplitFromSelection`.
+// ---------------------------------------------------------------------------
+
+/** What the next footer play press should loop in split mode. `left/right`
+ *  for binary splits (1 cursor); `region` for multi-cursor splits. */
+export type SplitPreviewSelection =
+    | { kind: 'left' }
+    | { kind: 'right' }
+    | { kind: 'region'; index: number };
+
+export const splitPreviewSelection = writable<SplitPreviewSelection>({ kind: 'left' });
+
+export function setSplitPreviewSelection(s: SplitPreviewSelection): void {
+    splitPreviewSelection.set(s);
+}
 
 // ---------------------------------------------------------------------------
 // Setters — all writes route through a single `_editState.update(...)`.

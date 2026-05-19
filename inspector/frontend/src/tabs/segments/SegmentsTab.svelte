@@ -28,9 +28,11 @@
     import SavePreview from './components/save/SavePreview.svelte';
     import ValidationPanel from './components/validation/ValidationPanel.svelte';
     import ShortcutsGuide from './ShortcutsGuide.svelte';
+    import { clearAccordionPin } from './stores/accordion-pin';
     import { autoSaveEnabled } from './stores/autosave';
     import {
         getChapterSegments,
+        pickerDisplayChapter,
         segAllData,
         segAllReciters,
         selectedChapter,
@@ -40,9 +42,10 @@
     import { dirtyTick,isDirtyStore } from './stores/dirty';
     import { activeFilters } from './stores/filters';
     import { historyVisible } from './stores/history';
-    import { savedFilterView } from './stores/navigation';
+    import { savedFilterView, targetSegmentIndex } from './stores/navigation';
     import { segAudioElement, segListElement, waveformContainer } from './stores/playback';
     import { savePreviewVisible } from './stores/save';
+    import { accordionViewActive, valUiOpenCategory } from './stores/validation';
     import { loadChapterData } from './utils/data/chapter-actions';
     import { loadSegConfig } from './utils/data/config-loader';
     import { reloadCurrentReciter } from './utils/data/reciter-actions';
@@ -212,6 +215,12 @@
     }
     function onChapterChange(ev: CustomEvent<string>): void {
         const v = ev.detail;
+        // Manual Sura pick is the user's explicit gesture to view that
+        // chapter — collapse any open accordion, clear the programmatic
+        // picker-display override, then load.
+        valUiOpenCategory.set(null);
+        clearAccordionPin();
+        pickerDisplayChapter.set(null);
         selectedChapter.set(v);
         void loadChapterData(get(selectedReciter), v);
     }
@@ -229,9 +238,15 @@
         const first = segs.find((s) => s.matched_ref?.startsWith(prefix));
         if (first) {
             // Reflect the jump target in the footer's Ayah trigger so the
-            // user can see what they jumped to (vs. the original UI which
-            // snapped back to "All" immediately and forgot the selection).
+            // user can see what they jumped to. `selectedVerse` is purely a
+            // picker-label store now — the segments list is no longer
+            // narrowed to the chosen ayah (see `filters.ts::computeDisplayed`),
+            // so the user keeps every other card in view.
             selectedVerse.set(v);
+            // Scroll the first matching row into view. SegmentRow watches
+            // `targetSegmentIndex` and calls `scrollIntoView` when its row
+            // matches — same path Go-To uses.
+            targetSegmentIndex.set({ chapter: first.chapter ?? chapter, index: first.index });
             playFromSegment(first.index, first.chapter ?? chapter);
         }
     }
@@ -303,22 +318,20 @@
     {/if}
 
     {#if !$historyVisible && !$savePreviewVisible}
-        <div id="seg-validation-global" class="seg-validation" use:waveformContainer>
-            {#if $selectedChapter}
-                <ValidationPanel chapter={null} label="All Chapters" />
-            {/if}
-        </div>
+        <!-- The validation accordion is a GLOBAL view — always all chapters,
+             never filtered by `selectedChapter`. Chapter-scoped review happens
+             through the chapter-cards `<SegmentsList>` below; the accordion
+             is the place to see every outstanding issue across the reciter
+             regardless of which Sura is currently selected in the picker. -->
         <div id="seg-validation" class="seg-validation" use:waveformContainer>
-            {#if $selectedChapter}
-                <ValidationPanel chapter={parseInt($selectedChapter)} label="Chapter {$selectedChapter}" />
-            {:else}
-                <ValidationPanel chapter={null} />
-            {/if}
+            <ValidationPanel chapter={null} />
         </div>
 
         <FiltersBar hidden={filterBarHidden} />
 
-        <SegmentsList onRestore={onNavigationRestore} />
+        {#if !$accordionViewActive}
+            <SegmentsList onRestore={onNavigationRestore} />
+        {/if}
 
         <EditOverlay audioElRef={segAudioEl} />
     {/if}

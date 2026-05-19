@@ -125,6 +125,24 @@ def test_qalqala_letter_field_populated():
     assert result.get("qalqala_letter") == "د"
 
 
+def test_cross_verse_classifies_regardless_of_is_wasl():
+    """The is_wasl boundary annotation is positive metadata, not a suppression.
+    A cross-verse segment with is_wasl=true still classifies as cross_verse —
+    the wasl flag describes that the reciter intentionally recited across the
+    boundary, but the segment is still cross-verse and still surfaces in the
+    accordion.
+    """
+    base = {
+        "matched_ref": "1:5:7-1:6:1",
+        "confidence": 1.0,
+    }
+    plain = _classify(base, entry_ref="1", is_by_ayah=False)
+    waslful = _classify({**base, "is_wasl": True}, entry_ref="1", is_by_ayah=False)
+
+    assert "cross_verse" in plain
+    assert "cross_verse" in waslful
+
+
 def test_muqattaat_only_first_word_of_verse():
     """A muqattaat verse with s_word=2 does NOT classify; s_word=1 does."""
     base_seg = {
@@ -183,6 +201,94 @@ def test_basmala_amin_detail_uses_last_segment_overlapping_1_7():
         "one-one",
         "one-seven-b",
     ]
+
+
+def test_basmala_amin_detail_does_not_promote_when_last_1_7_suppressed():
+    """Resolving the canonical last-1:7 candidate must NOT promote the
+    previous 1:7-overlapping seg as the new amin flag — that's whack-a-mole.
+
+    Reproduces the regression where, after the user edits the last seg of
+    1:7 from the basmala accordion, validation re-raises the flag against
+    the seg immediately before it.
+    """
+    from services.validation.detail import _build_detail_lists  # type: ignore
+
+    entries = [{
+        "ref": "1",
+        "segments": [
+            {
+                "segment_uid": "one-one",
+                "matched_ref": "1:1:1-1:1:1",
+                "confidence": 1.0,
+                "time_start": 0,
+                "time_end": 1000,
+            },
+            {
+                "segment_uid": "one-seven-a",
+                "matched_ref": "1:7:1-1:7:2",
+                "confidence": 1.0,
+                "time_start": 1000,
+                "time_end": 2000,
+            },
+            {
+                # Canonical last-1:7 candidate, marked resolved-by-edit:
+                "segment_uid": "one-seven-b",
+                "matched_ref": "1:7:3-1:7:4",
+                "confidence": 1.0,
+                "time_start": 2000,
+                "time_end": 3000,
+                "_resolved_by_edit": {"basmala_amin"},
+            },
+        ],
+    }]
+
+    detail = _build_detail_lists(
+        entries,
+        is_by_ayah=False,
+        word_counts={(1, ayah): (1 if ayah < 7 else 4) for ayah in range(1, 8)},
+        canonical=None,
+        single_word_verses=set(),
+    )
+
+    # Only 1:1 should remain. The 1:7 slot is empty because the canonical
+    # last-1:7 seg is suppressed; "one-seven-a" must NOT be promoted.
+    assert [item["segment_uid"] for item in detail["basmala_amin"]] == ["one-one"]
+
+
+def test_basmala_amin_detail_drops_first_1_1_when_suppressed():
+    """Suppressing the canonical first-1:1 seg leaves the slot empty too."""
+    from services.validation.detail import _build_detail_lists  # type: ignore
+
+    entries = [{
+        "ref": "1",
+        "segments": [
+            {
+                "segment_uid": "one-one",
+                "matched_ref": "1:1:1-1:1:1",
+                "confidence": 1.0,
+                "time_start": 0,
+                "time_end": 1000,
+                "_resolved_by_edit": {"basmala_amin"},
+            },
+            {
+                "segment_uid": "one-seven",
+                "matched_ref": "1:7:1-1:7:4",
+                "confidence": 1.0,
+                "time_start": 1000,
+                "time_end": 2000,
+            },
+        ],
+    }]
+
+    detail = _build_detail_lists(
+        entries,
+        is_by_ayah=False,
+        word_counts={(1, ayah): (1 if ayah < 7 else 4) for ayah in range(1, 8)},
+        canonical=None,
+        single_word_verses=set(),
+    )
+
+    assert [item["segment_uid"] for item in detail["basmala_amin"]] == ["one-seven"]
 
 
 def test_basmala_amin_detail_omits_neighboring_fatiha_verses():

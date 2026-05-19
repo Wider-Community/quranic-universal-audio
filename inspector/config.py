@@ -90,6 +90,11 @@ PEAKS_BUCKETS_PER_SEC = 30                # target peak density for segment-leve
 
 # Validation thresholds
 LOW_CONFIDENCE_THRESHOLD = 0.80
+# Minimum number of pipeline-stripped basmalas required before we flag the
+# remaining (non-stripped) chapters as "missed Basmala" candidates. Below this
+# count the reciter is treated as one who doesn't recite inter-chapter
+# basmalas, and the augmentation is suppressed to avoid accordion noise.
+MISSED_BASMALA_FLAG_MIN_DELETED = int(os.getenv("MISSED_BASMALA_FLAG_MIN_DELETED", "10"))
 # "Show everything below perfect" tier — used to populate detail lists (not count badges).
 # Distinct from LOW_CONFIDENCE_THRESHOLD (count badge cutoff) and LOW_CONFIDENCE_RED (red highlight).
 LOW_CONFIDENCE_DETAIL_THRESHOLD = 1.0

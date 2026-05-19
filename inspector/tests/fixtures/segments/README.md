@@ -35,7 +35,6 @@ Every `*.detailed.json` follows the canonical detailed.json shape:
   "entries": [
     {
       "ref": "112",
-      "audio": "https://fixture.local/audio/112.mp3",
       "segments": [
         {
           "segment_uid": "...",

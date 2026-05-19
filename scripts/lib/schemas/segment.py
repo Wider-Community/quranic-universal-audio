@@ -114,6 +114,12 @@ class DetailedSegment(BaseModel):
     ignored_categories: list[str] | None = None
     ignored: bool | None = None  # legacy pre-categories wildcard
 
+    # === Boundary annotation: wasl-connection to the next adjacent seg ===
+    # Stored on the LEFT side of the connection; writers omit when False so
+    # the field stays absent on every untouched seg. See ``adapters/save_payload.py``
+    # for the matching omit-when-false serialization rule.
+    is_wasl: bool = False
+
     @model_validator(mode="before")
     @classmethod
     def _surface_extras(cls, data: Any) -> Any:

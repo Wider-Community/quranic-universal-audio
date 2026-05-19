@@ -167,34 +167,21 @@ def load_edit_history(reciter: str) -> dict:
 def _enrich_snapshot_audio_urls(reciter: str, batches: list[dict]) -> None:
     """Fill ``audio_url`` on snapshots that have it empty/null.
 
-    Only walks if any snapshot is missing an audio_url. Resolves per chapter
-    from ``detailed.json`` (mirrors ``segments_query.get_chapter_data``). The
-    chapter for each snapshot is taken from (in order): ``snapshot.chapter``
-    (post-fix extraction), ``snapshot.matched_ref`` parse for real Quran refs,
-    ``batch.chapter``, then the single value in ``batch.chapters`` if any.
-    Snapshots whose chapter still can't be resolved are left untouched.
+    Single pass: snapshots that already carry ``audio_url`` short-circuit
+    on line ``if snap.get("audio_url"): continue`` — the previous
+    "is any enrichment needed?" probe did the same triple-nested walk
+    twice for no benefit. ``chapter_urls(reciter)`` is cache-hit after the
+    first sidecar read, so the up-front load cost the probe defended
+    against is already nil.
+
+    Migration #5: source per-chapter audio URLs from the bucket
+    audio_manifest sidecar instead of detailed.json's ``entry.audio``
+    (which the extractor no longer writes). ``chapter_urls(reciter)``
+    returns ``{str_key: url}`` for both by_surah and by_ayah deliveries;
+    we int-cast the by_surah keys here since pipeline snapshots enrich at
+    chapter granularity. Snapshots whose ``chapter`` stamp is missing are
+    left untouched — the fix lives in extraction / migrate_wip5_in_place.
     """
-    def _needs_enrichment() -> bool:
-        for batch in batches:
-            for op in batch.get("operations") or []:
-                for snap in (op.get("targets_before") or []) + (op.get("targets_after") or []):
-                    if not isinstance(snap, dict):
-                        continue
-                    if not snap.get("audio_url"):
-                        return True
-                    if not isinstance(snap.get("chapter"), int):
-                        return True
-        return False
-
-    if not _needs_enrichment():
-        return
-
-    # Migration #5: source per-chapter audio URLs from the bucket
-    # audio_manifest sidecar instead of detailed.json's ``entry.audio``
-    # (which the extractor no longer writes). ``chapter_urls(reciter)``
-    # returns ``{str_key: url}`` for both by_surah and by_ayah deliveries;
-    # we int-cast the by_surah keys here since pipeline snapshots
-    # enrich at chapter granularity.
     from services.audio.audio_meta import chapter_urls
 
     by_chapter: dict[int, str] = {}
@@ -216,29 +203,16 @@ def _enrich_snapshot_audio_urls(reciter: str, batches: list[dict]) -> None:
     if not by_chapter:
         return
 
-    def _snap_chapter(snap: dict, batch: dict, recovered: dict[str, int],
-                      op_id: str | None) -> int | None:
-        ch = snap.get("chapter")
-        if isinstance(ch, int) and ch > 0:
-            return ch
-        # Migration #5 contract: every snap carries ``chapter``. The
-        # tier-2/3/4 legacy fallbacks (matched_ref parse, batch.chapter,
-        # single-chapter batch.chapters, time-reset recovery) were
-        # removed. Returning None when the stamp is missing pushes the
-        # data fix back to extraction / migrate_wip5_in_place.
-        return None
-
     for batch in batches:
         for op in batch.get("operations") or []:
-            op_id = op.get("op_id") if isinstance(op.get("op_id"), str) else None
             for key in ("targets_before", "targets_after"):
                 for snap in op.get(key) or []:
                     if not isinstance(snap, dict):
                         continue
                     if snap.get("audio_url"):
                         continue
-                    ch = _snap_chapter(snap, batch, None, op_id)
-                    if ch is None:
+                    ch = snap.get("chapter")
+                    if not isinstance(ch, int) or ch <= 0:
                         continue
                     url = by_chapter.get(ch)
                     if url:

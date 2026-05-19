@@ -11,19 +11,20 @@ import pytest
 
 @pytest.fixture
 def stage(monkeypatch):
-    """Yield a helper that stuffs a sidecar dict into ``_SIDECAR_CACHE`` so
-    the bucket read is bypassed entirely. Each test stages its own payload.
+    """Yield a helper that stages a sidecar dict in the audio_manifest
+    cache so the bucket read is bypassed entirely. Each test stages its
+    own payload.
     """
-    from services import audio_meta as audio_meta_mod
+    from services.audio import audio_meta as audio_meta_mod
 
-    audio_meta_mod._SIDECAR_CACHE.clear()
+    audio_meta_mod._clear_for_test()
 
     def _set(slug: str, chapters: dict) -> None:
-        audio_meta_mod._SIDECAR_CACHE[slug] = {"chapters": chapters}
+        audio_meta_mod._stage_for_test(slug, {"chapters": chapters})
 
     yield _set
 
-    audio_meta_mod._SIDECAR_CACHE.clear()
+    audio_meta_mod._clear_for_test()
 
 
 def test_vbr_chapters_for_reciter_returns_sorted_chapter_numbers(stage):

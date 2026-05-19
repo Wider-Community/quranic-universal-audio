@@ -30,7 +30,8 @@ export type Operation =
     | 'editReference'
     | 'delete'
     | 'ignoreIssue'
-    | 'autoFixMissingWord';
+    | 'autoFixMissingWord'
+    | 'setIsWasl';
 
 // ---------------------------------------------------------------------------
 // Command shapes
@@ -71,6 +72,12 @@ export interface SplitCommand extends CommandBase {
      *  ``undefined`` entries inherit the parent's matched_ref/text. */
     refs?: (string | undefined)[];
     texts?: (string | undefined)[];
+    /** Per-new-inter-child-boundary wasl flags. Length = cursors.length
+     *  (one per new boundary). ``wasls[i]`` becomes ``is_wasl`` on child[i]
+     *  (the left side of that boundary). When absent, all children default
+     *  is_wasl=false except the LAST child which inherits the parent's
+     *  is_wasl (which represented the parent-to-next-seg right edge). */
+    wasls?: boolean[];
     // ---- Legacy single-cursor convenience fields (still accepted) --------
     firstRef?: string;
     secondRef?: string;
@@ -123,6 +130,17 @@ export interface AutoFixMissingWordCommand extends CommandBase {
     matched_text?: string;
 }
 
+/** Toggle the boundary wasl annotation. Owned by the LEFT seg of the
+ *  boundary — ``is_wasl=true`` means "wasl-connected to the next adjacent
+ *  segment". Per-segment scope; the reducer does not validate adjacency
+ *  (the caller is expected to be a click on an inter-row affordance that
+ *  only renders when there IS a right neighbour). */
+export interface SetIsWaslCommand extends CommandBase {
+    type: 'setIsWasl';
+    segmentUid: string;
+    is_wasl: boolean;
+}
+
 export type SegmentCommand =
     | TrimCommand
     | SplitCommand
@@ -130,7 +148,8 @@ export type SegmentCommand =
     | EditReferenceCommand
     | DeleteCommand
     | IgnoreIssueCommand
-    | AutoFixMissingWordCommand;
+    | AutoFixMissingWordCommand
+    | SetIsWaslCommand;
 
 // ---------------------------------------------------------------------------
 // Result shapes

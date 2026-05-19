@@ -29,8 +29,10 @@
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import { quranRefs } from '../../../../lib/refs/quran-refs';
     import type { Segment } from '../../../../lib/types/domain';
+    import { clearAccordionPin } from '../../stores/accordion-pin';
     import {
         getAdjacentSegments,
+        pickerDisplayChapter,
         segAllData,
         selectedChapter,
         selectedReciter,
@@ -56,6 +58,7 @@
         segListElement,
         segPort,
     } from '../../stores/playback';
+    import { valUiOpenCategory } from '../../stores/validation';
     import type {
         MergeHighlight,
         SegCanvas,
@@ -541,7 +544,7 @@
         }
     }
 
-    function onGotoClick(e: MouseEvent): void {
+    async function onGotoClick(e: MouseEvent): Promise<void> {
         e.stopPropagation();
         const filters = get(activeFilters);
         if (filters.some(f => f.value !== null)) {
@@ -553,7 +556,20 @@
                 scrollTop: listEl?.scrollTop ?? 0,
             });
         }
-        jumpToSegment(seg.chapter ?? 0, seg.index);
+        // "Go to" is the explicit "render this chapter's cards" gesture —
+        // collapse any open accordion + clear the programmatic picker-
+        // display override so the picker tracks `selectedChapter` once
+        // jumpToSegment swaps it.
+        valUiOpenCategory.set(null);
+        clearAccordionPin();
+        pickerDisplayChapter.set(null);
+        const targetChapter = seg.chapter ?? 0;
+        await jumpToSegment(targetChapter, seg.index);
+        // Sync audio to the target seg. `loadChapterData` (inside
+        // `jumpToSegment` when the chapter changed) tore down the prior
+        // playback — start a fresh main-list play so the user lands on the
+        // segment they navigated to, with seek + play, not paused at byte 0.
+        playFromSegment(seg.index, targetChapter);
     }
 
     function onAdjustClick(e: MouseEvent): void {

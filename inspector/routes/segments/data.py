@@ -120,11 +120,10 @@ def seg_all(reciter):
     if not entries:
         return jsonify({"error": "Reciter not found"}), 404
 
-    # Migration #5: chapter audio URLs come from the bucket audio_manifest
-    # sidecar (catalog/audio_manifest/<slug>.json) — `entry.audio` is being
-    # dropped from detailed.json. Pre-seed the map from the sidecar; fall
-    # back to legacy `entry.audio` for pre-#5 on-disk data missing from
-    # the sidecar.
+    # Chapter audio URLs come from the bucket audio_manifest sidecar
+    # (catalog/audio_manifest/<slug>.json) — the single source of truth
+    # post Migration #5. The legacy per-entry ``audio`` field is no longer
+    # written by the extractor and no longer read here.
     from services.audio.audio_meta import chapter_urls
 
     audio_by_chapter: dict[str, str] = dict(chapter_urls(reciter))
@@ -133,11 +132,6 @@ def seg_all(reciter):
 
     for entry_idx, entry in enumerate(entries):
         ch = chapter_from_ref(entry["ref"])
-        if str(ch) not in audio_by_chapter:
-            # Legacy back-compat read.
-            entry_audio = entry.get("audio", "")
-            if entry_audio:
-                audio_by_chapter[str(ch)] = entry_audio
         for seg in entry.get("segments", []):
             idx = chapter_seg_idx.get(ch, 0)
             chapter_seg_idx[ch] = idx + 1
@@ -166,6 +160,8 @@ def seg_all(reciter):
                 seg_dict["ignored_categories"] = seg["ignored_categories"]
             elif seg.get("ignored"):
                 seg_dict["ignored_categories"] = ["_all"]
+            if seg.get("is_wasl"):
+                seg_dict["is_wasl"] = True
             segments.append(seg_dict)
 
     pad_left_ms, pad_right_ms, min_silence_floor_ms = resolve_pad(

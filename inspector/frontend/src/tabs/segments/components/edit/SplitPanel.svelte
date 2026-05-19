@@ -2,22 +2,35 @@
     /**
      * SplitPanel — Svelte-rendered inline chrome for split-mode edit.
      *
-     * Two layouts driven by `splitState.currentSplits.length`:
+     * Layout:
+     *   - Binary (N=1) → ``Cancel    L   <  >   R    Split``.
+     *     L and R are SELECTION pills (bordered, distinct chrome) that
+     *     pick which side the footer ▶ loops. The `< >` carets between
+     *     them nudge the split cursor — bare buttons with a yellow
+     *     underline that mirrors the canvas split-line, so the two roles
+     *     are visually distinct without needing a containing pill.
+     *   - Multi (N≥2) → ``Cancel    [1] [2] … [N+1]    Split``.
+     *     Region pills behave like L/R in binary mode.
      *
-     * - N=1 (binary split, today's default) → ``Cancel | Play Left | < | >
-     *   | Play Right | Split``. Steppers nudge via `nudgeSplitBoundary`.
-     * - N≥2 (multi-cursor, repetition auto-split) → ``Cancel | [1] [2] …
-     *   [N+1] | Split``. Each ``[i]`` loops region i (0-indexed) via
-     *   `previewSplitRegion`. No steppers — there's no obvious "the
-     *   cursor" to step in multi mode; users drag the cursor lines
-     *   directly. Click-to-seek on the canvas is also disabled in this
-     *   mode (see split.ts `onMouseup`).
+     * Clicking the OTHER side / region while a loop is running switches
+     * the loop immediately rather than waiting for the user to re-press
+     * the footer ▶.
+     *
+     * Preview play/pause is owned entirely by the footer ▶ + Space
+     * shortcut, centralised through `onSegPlayClick`. This panel never
+     * spawns its own play button.
      */
 
     import { get } from 'svelte/store';
 
     import type { Segment } from '../../../../lib/types/domain';
-    import { editingMountId, editStatusText,splitState } from '../../stores/edit';
+    import {
+        editingMountId,
+        editStatusText,
+        setSplitPreviewSelection,
+        splitPreviewSelection,
+        splitState,
+    } from '../../stores/edit';
     import type { SegCanvas } from '../../types/segments-waveform';
     import { EDIT_MIN_DURATION_MS, EDIT_NUDGE_MS } from '../../utils/constants';
     import { exitEditMode } from '../../utils/edit/common';
@@ -51,39 +64,86 @@
 
     function nudgeSplitBack(): void { nudgeSplitBoundary(-EDIT_NUDGE_MS); }
     function nudgeSplitFwd():  void { nudgeSplitBoundary( EDIT_NUDGE_MS); }
+
+    $: sel = $splitPreviewSelection;
+    $: selLeftActive = isBinary && sel.kind === 'left';
+    $: selRightActive = isBinary && sel.kind === 'right';
+    function selRegion(i: number): boolean {
+        return !isBinary && sel.kind === 'region' && sel.index === i;
+    }
+
+    // Clamp the selection if cursor count changed and the previously
+    // selected region no longer exists (e.g. user deleted a cursor).
+    $: if (!isBinary && sel.kind === 'region' && sel.index >= regionCount) {
+        setSplitPreviewSelection({ kind: 'region', index: Math.max(0, regionCount - 1) });
+    }
+    // Mode swap (binary ↔ multi): coerce the selection into a valid shape.
+    $: if (isBinary && sel.kind === 'region') {
+        setSplitPreviewSelection({ kind: sel.index === 0 ? 'left' : 'right' });
+    }
+    $: if (!isBinary && sel.kind !== 'region') {
+        setSplitPreviewSelection({ kind: 'region', index: sel.kind === 'left' ? 0 : regionCount - 1 });
+    }
+
+    /** Set selection AND cold-start a looping preview of that range —
+     *  the legacy "Play Left / Play Right" behavior. Footer ▶ + Space
+     *  remain the universal pause/resume; clicking the SAME side again
+     *  while it's playing just restarts that side from the loop start.
+     *  `mode: 'cold'` bypasses the entry-time warm-attach so an explicit
+     *  pill click always seeks-and-plays from the region's start. */
+    function pickAndMaybeSwitch(nextKind: 'left' | 'right'): void {
+        setSplitPreviewSelection({ kind: nextKind });
+        previewSplitAudio(nextKind, canvas, { mode: 'cold' });
+    }
+    function pickRegionAndMaybeSwitch(i: number): void {
+        setSplitPreviewSelection({ kind: 'region', index: i });
+        previewSplitRegion(i, canvas, { mode: 'cold' });
+    }
 </script>
 
 <div class="seg-edit-inline">
     <div class="seg-edit-buttons">
         <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>Cancel</button>
+
         {#if isBinary}
-            <button class="btn btn-sm btn-preview" on:click={() => previewSplitAudio('left', canvas)}>Play Left</button>
-            <button class="btn btn-sm seg-split-step"
-                title="Move split back {EDIT_NUDGE_MS} ms"
-                disabled={splitBackDisabled}
-                on:click={nudgeSplitBack}>&lt;</button>
-            <button class="btn btn-sm seg-split-step"
-                title="Move split forward {EDIT_NUDGE_MS} ms"
-                disabled={splitFwdDisabled}
-                on:click={nudgeSplitFwd}>&gt;</button>
-            <button class="btn btn-sm btn-preview" on:click={() => previewSplitAudio('right', canvas)}>Play Right</button>
+            <button class="seg-side-pick"
+                class:active={selLeftActive}
+                aria-pressed={selLeftActive}
+                title="Preview the LEFT half — press footer ▶ to loop"
+                on:click={() => pickAndMaybeSwitch('left')}
+            >L</button>
+
+            <div class="seg-nudge-pair seg-nudge-split" role="group" aria-label="Split cursor">
+                <button class="seg-nudge"
+                    title="Move split back {EDIT_NUDGE_MS} ms"
+                    disabled={splitBackDisabled}
+                    on:click={nudgeSplitBack}>&lsaquo;</button>
+                <button class="seg-nudge"
+                    title="Move split forward {EDIT_NUDGE_MS} ms"
+                    disabled={splitFwdDisabled}
+                    on:click={nudgeSplitFwd}>&rsaquo;</button>
+            </div>
+
+            <button class="seg-side-pick"
+                class:active={selRightActive}
+                aria-pressed={selRightActive}
+                title="Preview the RIGHT half — press footer ▶ to loop"
+                on:click={() => pickAndMaybeSwitch('right')}
+            >R</button>
         {:else}
-            {#each regions as i}
-                <button
-                    class="btn btn-sm btn-preview seg-split-region"
-                    title="Play region {i + 1} on loop"
-                    on:click={() => previewSplitRegion(i, canvas)}
-                >{i + 1}</button>
-            {/each}
+            <div class="seg-region-picks" role="group" aria-label="Region preview">
+                {#each regions as i}
+                    <button class="seg-side-pick"
+                        class:active={selRegion(i)}
+                        aria-pressed={selRegion(i)}
+                        title="Preview region {i + 1} — press footer ▶ to loop"
+                        on:click={() => pickRegionAndMaybeSwitch(i)}
+                    >{i + 1}</button>
+                {/each}
+            </div>
         {/if}
+
         <button class="btn btn-sm btn-confirm" on:click={onConfirm}>Split</button>
         <span class="seg-edit-status">{$editStatusText}</span>
     </div>
 </div>
-
-<style>
-    .seg-split-region {
-        min-width: 1.6em;
-        padding: 0 0.4em;
-    }
-</style>

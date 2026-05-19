@@ -26,14 +26,16 @@ import type { SegmentState } from '../../stores/segments';
 import { applyVerseFilterAndRender } from '../data/filters-apply';
 import {
     _playRange as _playRangeImpl,
+    attachPreviewLoop as attachPreviewLoopImpl,
     clearPlayRangeRAF,
     clearPreviewCanplayHandler,
+    editPreviewPlaying,
     getPreviewStopHandler,
     setPreviewJustSeeked,
     setPreviewLooping,
     setPreviewStopHandler,
 } from '../playback/play-range';
-import { startSegAnimation } from '../playback/playback';
+import { ensureBoundedRange, startSegAnimation } from '../playback/playback';
 import { drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 
 // ---------------------------------------------------------------------------
@@ -75,6 +77,7 @@ export function exitEditMode(): void {
     clearEdit();
     setPreviewLooping(false);
     setPreviewJustSeeked(false);
+    editPreviewPlaying.set(false);
     clearPlayRangeRAF();
     clearPreviewCanplayHandler();
     const stopHandler = getPreviewStopHandler();
@@ -88,10 +91,17 @@ export function exitEditMode(): void {
     // while editMode is set — we reach it here only AFTER `clearEdit()`
     // above, so the gate is open and the main-list playhead resumes.
     if (!segPort.paused) startSegAnimation();
+    // Reconcile the bounded-vs-continuous state — `enter.ts` disposed
+    // `_segRange` on edit entry, and without this rebuild a played
+    // accordion / autoplay-off segment would emerge from the edit cycle
+    // unbounded and sail past its boundary. Idempotent for the chapter-
+    // continuous case (no range needed → no-op).
+    ensureBoundedRange();
 }
 
 // Re-export play-range implementation so existing callers still work.
 export const _playRange = _playRangeImpl;
+export const attachPreviewLoop = attachPreviewLoopImpl;
 
 // ---------------------------------------------------------------------------
 // finalizeEdit — post-mutation scaffolding shared by edit-merge/split/delete/trim

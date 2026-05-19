@@ -22,12 +22,10 @@ export function _ensureSplitBaseCache(canvas: SegCanvas): boolean {
     // Slice peaks for the VISIBLE window (not the whole segment) — wheel zoom
     // rebuilds this cache after dropping the prior ImageData via
     // `_splitBaseCache = null`. drawEditPeakBase paints the shared bg + fill
-    // + top/bottom outline so split matches every other surface.
+    // + top/bottom outline so split matches every other surface. On miss
+    // (peaks not yet fetched) return false without overlay text — enterSplitMode
+    // kicks off a fetch and re-draws once peaks land; matches trim's behaviour.
     if (!drawEditPeakBase(canvas, sd.audioUrl || '', sd.viewStart, sd.viewEnd)) {
-        ctx.fillStyle = '#888';
-        ctx.font = '14px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('No waveform data', width / 2, height / 2);
         return false;
     }
 

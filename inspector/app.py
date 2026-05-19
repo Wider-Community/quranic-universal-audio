@@ -6,7 +6,6 @@ SPA shell (inspector/frontend/dist/) and cross-tab routes, and runs the
 startup sequence.
 """
 import argparse
-import json
 import logging
 import os
 import sys
@@ -59,81 +58,12 @@ if "INSPECTOR_DEV_MODE" not in os.environ:
 
 # Local dev: auto-mount the HF bucket via hf-mount so reads hit a local
 # FUSE cache (~50-500x faster than going through hffs.cat_file every call).
-# Skipped behind the deployed proxy (Space attaches its own mount), in
-# pytest, on filesystem-backend mode, when the user pre-set
-# INSPECTOR_BUCKET_MOUNT, or when INSPECTOR_AUTO_MOUNT=0. Failures degrade
-# silently to the API path — never blocks boot.
-def _auto_mount_dev_bucket() -> None:
-    if os.environ.get("INSPECTOR_BEHIND_PROXY") == "1":
-        return
-    if "pytest" in sys.modules:
-        return
-    if os.environ.get("INSPECTOR_AUTO_MOUNT") == "0":
-        return
-    if os.environ.get("INSPECTOR_BUCKET_MOUNT"):
-        return
-    if os.environ.get("INSPECTOR_BACKEND", "bucket").lower() != "bucket":
-        return
+# Mount path: inspector/.bucket/{dev,prod}/ (gitignored). Failures degrade
+# silently to the API path — never blocks boot. See auto_mount.py for
+# the full skip-conditions list.
+from services.storage.auto_mount import auto_mount as _auto_mount_bucket
 
-    import shutil
-    import subprocess
-    import time
-
-    hf_mount = shutil.which("hf-mount")
-    if not hf_mount:
-        for cand in ("~/bin/hf-mount", "/usr/local/bin/hf-mount",
-                     "/opt/homebrew/bin/hf-mount"):
-            p = Path(cand).expanduser()
-            if p.exists():
-                hf_mount = str(p)
-                break
-    if not hf_mount:
-        return
-
-    bucket = os.environ.get(
-        "INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket-dev"
-    )
-    mount_dir = (Path.home() / ".cache" / "inspector-hf-mount"
-                 / bucket.replace("/", "_"))
-    mount_dir.mkdir(parents=True, exist_ok=True)
-
-    def _activate() -> None:
-        os.environ["INSPECTOR_BUCKET_MOUNT"] = str(mount_dir)
-        # The mount handles read-after-write internally; force_flush adds a
-        # redundant API upload after every save (Space behaviour), which
-        # roughly doubles small-file write latency. Off by default locally
-        # — durability still arrives via the daemon's debounced flush.
-        if "INSPECTOR_FORCE_FLUSH_ON_SAVE" not in os.environ:
-            os.environ["INSPECTOR_FORCE_FLUSH_ON_SAVE"] = "0"
-
-    if os.path.ismount(str(mount_dir)):
-        _activate()
-        return
-
-    try:
-        result = subprocess.run(
-            [hf_mount, "start", "--fuse", "--", "--advanced-writes",
-             "bucket", bucket, str(mount_dir)],
-            timeout=30, capture_output=True, text=True,
-        )
-    except Exception:  # noqa: BLE001
-        return
-
-    for _ in range(50):
-        if os.path.ismount(str(mount_dir)):
-            _activate()
-            return
-        time.sleep(0.1)
-
-    # Mount didn't come up — leave env unset; BucketBackend falls back to API.
-    if result.returncode != 0:
-        sys.stderr.write(
-            f"[inspector] hf-mount auto-start failed (exit {result.returncode}): "
-            f"{result.stderr.strip()[:200]}\n"
-        )
-
-
-_auto_mount_dev_bucket()
+_auto_mount_bucket()
 
 
 from flask import Flask, jsonify, send_from_directory
@@ -165,32 +95,58 @@ from utils.json_response import orjson_response
 # Structured logging
 # ---------------------------------------------------------------------------
 
-class JSONFormatter(logging.Formatter):
-    """Emit log records as single-line JSON for downstream aggregation."""
+_LEVEL_SHORT = {"CRITICAL": "CRIT", "WARNING": "WARN", "INFO": "INFO",
+                "ERROR": "ERR ", "DEBUG": "DBG "}
+
+
+class PlainFormatter(logging.Formatter):
+    """Compact human-readable single-line format: ``HH:MM:SS LVL name | msg``.
+
+    JSON aggregation was abandoned — HF Space logs and local stdout are both
+    read by humans, and the JSON wrapper made every line wider than the
+    actual message. Aggregators that need structure can grep on the level
+    token; nothing in our pipeline ingests structured logs today.
+    """
 
     def format(self, record: logging.LogRecord) -> str:
-        payload = {
-            "time": self.formatTime(record, datefmt="%Y-%m-%dT%H:%M:%S"),
-            "level": record.levelname,
-            "name": record.name,
-            "msg": record.getMessage(),
-        }
+        ts = self.formatTime(record, datefmt="%H:%M:%S")
+        lvl = _LEVEL_SHORT.get(record.levelname, record.levelname[:4])
+        name = record.name
+        # Trim noisy package prefixes — "services.activity.activity_state"
+        # → "activity_state" keeps the useful leaf without the breadcrumb.
+        if name.startswith("services."):
+            name = name.rsplit(".", 1)[-1]
+        line = f"{ts} {lvl} {name} | {record.getMessage()}"
         if record.exc_info:
-            payload["exc_info"] = self.formatException(record.exc_info)
-        return json.dumps(payload, ensure_ascii=False)
+            line += "\n" + self.formatException(record.exc_info)
+        return line
 
 
 def _configure_logging() -> None:
-    """Install the JSON formatter on the root logger (idempotent)."""
+    """Install the plain formatter on the root logger (idempotent)."""
     root = logging.getLogger()
     # Avoid duplicate handlers on reload (Flask's reloader re-imports this module).
-    if any(isinstance(h, logging.StreamHandler) and isinstance(h.formatter, JSONFormatter)
+    if any(isinstance(h, logging.StreamHandler) and isinstance(h.formatter, PlainFormatter)
            for h in root.handlers):
         return
+    # Replace any pre-existing stream handlers (e.g. Flask's default) so we
+    # don't double-print every record under the reloader.
+    for h in list(root.handlers):
+        if isinstance(h, logging.StreamHandler):
+            root.removeHandler(h)
     handler = logging.StreamHandler()
-    handler.setFormatter(JSONFormatter())
+    handler.setFormatter(PlainFormatter())
     root.addHandler(handler)
     root.setLevel(logging.INFO)
+    # Silence chatty third-party libraries:
+    # - httpx logs every HTTP request at INFO (one line per bucket read);
+    #   bumping to WARNING keeps real failures, drops the per-request noise.
+    # - huggingface_hub._login prints a benign HF_TOKEN-already-set warning
+    #   on every fresh login() call when the env var is present.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("huggingface_hub._login").setLevel(logging.ERROR)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 _configure_logging()

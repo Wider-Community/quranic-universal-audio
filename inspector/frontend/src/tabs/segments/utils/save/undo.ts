@@ -15,7 +15,7 @@ import {
     recomputeDirtyEntryFromOps,
     setChapterOps,
 } from '../../stores/dirty';
-import { pendingChainTargets } from '../../stores/edit';
+import { pendingChainTargets, pendingWaslConfirm } from '../../stores/edit';
 import {
     buildEditChains,
     type EditChain,
@@ -35,6 +35,7 @@ import { buildSavePreviewData, hideSavePreview } from './actions';
 
 export async function _afterUndoSuccess(reciter: string, _opsReversed: number): Promise<void> {
     pendingChainTargets.set([]);
+    pendingWaslConfirm.set(new Set());
 
     // Mark history stale so the next History-panel open refetches. We
     // intentionally do NOT eagerly refetch /api/seg/edit-history here —
@@ -223,6 +224,7 @@ export function onPendingOpsDiscard(
     if (!confirm(`Discard ${opIds.length} ${noun}${chLabel}?`)) return;
 
     pendingChainTargets.set([]);
+    pendingWaslConfirm.set(new Set());
 
     const opIdSet = new Set(opIds);
     const all = getChapterOps(chapter);

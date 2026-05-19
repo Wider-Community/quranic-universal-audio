@@ -36,14 +36,13 @@ import { segPort } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { EDIT_MIN_DURATION_MS, EDIT_SNAP_MS, TRIM_HANDLE_HIT_RADIUS_PX } from '../constants';
 import {
-    clearPlayRangeRAF,
-    getPreviewLooping,
+    editPreviewPlaying,
     setPreviewJustSeeked,
     setPreviewLooping,
 } from '../playback/play-range';
 import { _ensureTrimBaseCache, drawTrimWaveform } from '../waveform/trim-draw';
 import { _fetchPeaksForClick } from '../waveform/utils';
-import { _playRange, exitEditMode, finalizeEdit } from './common';
+import { _playRange, attachPreviewLoop, exitEditMode, finalizeEdit } from './common';
 import { applyWheelZoom } from './trim-zoom';
 
 // Re-export draw functions so registration sites and other callers still work.
@@ -148,27 +147,23 @@ export function enterTrimMode(seg: Segment, row: HTMLElement, mountId: symbol | 
     canvas._wfCache = null;
     canvas._trimBaseCache = null;
     // Populate the editCanvas store synchronously. SegmentRow.svelte publishes
-    // it too via a reactive block, but that fires on the next microtask — and
-    // `previewTrimAudio` below kicks off `_playRange` immediately, which reads
-    // `editCanvas` via `get(editCanvas)` to thread the canvas into the rAF
-    // loop. Without this explicit set, `_playRange`'s `canvas` is null on the
-    // auto-start path and `animatePlayhead` short-circuits on its first frame
-    // (no playhead, no loop enforcement, no live boundary updates on drag).
+    // it too via a reactive block, but that fires on the next microtask — the
+    // synchronous set lets any user-gesture-driven preview (footer ▶, future
+    // Replay button) read `editCanvas` via `get(editCanvas)` and thread it
+    // into the `_playRange` rAF loop without a one-frame null window.
     setEditCanvas(canvas);
 
     drawTrimWaveform(canvas);
     setupTrimDragHandles(canvas, seg);
 
-    // Fire the preview loop SYNCHRONOUSLY so the audio.play() call stays
-    // inside the user-gesture context of the Adjust click. An async IIFE
-    // with `await _fetchPeaksForClick` breaks that context (browsers drop
-    // the transient activation across microtasks in some cases), and Chrome
-    // silently rejects the play promise — leaving the play/pause button in
-    // the "stop" state with no audio. `animatePlayhead` is resilient to
-    // paused state now, so it's fine for the playhead rAF to run before
-    // peaks arrive. Then kick off the peaks fetch in the background; when
-    // peaks land, `redrawPeaksWaveforms` repaints the edit canvas, or we
-    // redraw here after the fetch completes.
+    // Launch the trim preview loop. `previewTrimAudio` branches warm vs.
+    // cold internally: chapter audio playing within the trim window →
+    // warm-attach the playhead rAF without re-seeking (audio continues
+    // from where it plays, loop-back catches the wrap at currentEnd);
+    // paused or playhead outside the window → cold-start the loop via
+    // `_playRange` (seek to currentStart + play). The call must stay
+    // synchronous inside the click handler chain so Chrome accepts the
+    // play promise on the cold path.
     previewTrimAudio(canvas);
     void _fetchPeaksForClick(seg, chapter).then(() => {
         if (!canvas._trimWindow) return; // user exited trim mode mid-fetch
@@ -460,18 +455,40 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
 // previewTrimAudio — toggle looping preview of trimmed region
 // ---------------------------------------------------------------------------
 
-export function previewTrimAudio(canvas?: SegCanvas | null): void {
+/** Launch the trim-window preview loop.
+ *
+ *  Default (`mode: 'auto'`) — branches on the live audio state:
+ *  - Playing → warm-attach the playhead rAF without seeking. Audio
+ *    continues from where it plays. If `live >= currentEnd` we prime
+ *    `_previewJustSeeked = true` so the rAF's first frame doesn't fire
+ *    the wrap-back; subsequent forward-crossings of `currentEnd` (after
+ *    audio falls below the boundary) wrap normally.
+ *  - Paused → cold-start via `_playRange` (seek + play + loop).
+ *
+ *  `mode: 'cold'` — always cold-start, regardless of audio state. Used
+ *  by the Replay button's "restart from currentStart" gesture.
+ *
+ *  Idempotent — calling while a loop is already running cancels the prior
+ *  rAF inside `_setupPreviewLoop`. Play/pause toggling is still owned by
+ *  `onSegPlayClick` in playback.ts. */
+export function previewTrimAudio(
+    canvas?: SegCanvas | null,
+    opts?: { mode?: 'auto' | 'cold' },
+): void {
     const c = canvas ?? get(editCanvas);
     const tw = c?._trimWindow;
     if (!tw || !c) return;
-    if (getPreviewLooping() && !segPort.paused) {
-        setPreviewLooping(false);
-        setPreviewJustSeeked(false);
-        segPort.pause();
-        clearPlayRangeRAF();
-        if (c._trimWindow) drawTrimWaveform(c);
+    editPreviewPlaying.set(true);
+    setPreviewLooping('trim');
+
+    if (opts?.mode === 'cold' || segPort.paused) {
+        _playRange(tw.currentStart, tw.currentEnd);
         return;
     }
-    setPreviewLooping('trim');
-    _playRange(tw.currentStart, tw.currentEnd);
+
+    // Warm-attach. Skip the first wrap if audio is already past the
+    // window so we don't snap backward to currentStart on entry.
+    const live = segPort.currentTimeMs();
+    setPreviewJustSeeked(live >= tw.currentEnd);
+    attachPreviewLoop(tw.currentStart, tw.currentEnd);
 }

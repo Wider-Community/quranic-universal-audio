@@ -25,7 +25,6 @@
   "entries": [
     {
       "ref": "112",
-      "audio": "https://fixture.local/audio/112.mp3",
       "segments": [
         {
           "time_start": 4700,

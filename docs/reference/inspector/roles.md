@@ -97,9 +97,9 @@ Admin actions that mutate state require a reason ≥ `permissions.MIN_REASON_CHA
 | Mode | Source of identity | `hf_user_id` value |
 |---|---|---|
 | HF Space (`INSPECTOR_DEV_MODE` unset) | Signed `inspector_session` cookie minted on HF OAuth callback; role resolved fresh per request via `access.resolve_role(hf_user_id)` | Real HF OIDC sub |
-| Local dev (`INSPECTOR_DEV_MODE=1`) | Plain `inspector_dev_role` cookie set by the in-app switcher | `dev-<role>` (`dev-owner` / `dev-maintainer` / `dev-contributor`) |
+| Local dev (`INSPECTOR_DEV_MODE=1`) | Plain `inspector_dev_role` cookie set by the in-app switcher | `dev-<role>` (`dev-owner` / `dev-maintainer` / `dev-contributor`) by default; overridable per role via `INSPECTOR_DEV_<ROLE>_HF_ID` / `INSPECTOR_DEV_<ROLE>_LOGIN` env vars |
 
-Role tier resolution is identical in both modes; only the identity source differs. Per-role synthetic `hf_user_id` in dev mode means role-switcher flips simulate distinct admin users — per-user dismissals, claim ownership, and audit actor records all scope correctly.
+Role tier resolution is identical in both modes; only the identity source differs. Per-role synthetic `hf_user_id` in dev mode means role-switcher flips simulate distinct admin users — per-user dismissals, claim ownership, and audit actor records all scope correctly. When local dev points at the prod bucket, set the per-role env vars (e.g. `INSPECTOR_DEV_OWNER_HF_ID` / `INSPECTOR_DEV_OWNER_LOGIN`) to the operator's real HF id + login so audit entries are attributed correctly.
 
 Anonymous in either mode → `current_user()` returns `None`. Dev cookie value `"anonymous"` is the explicit opt-out (otherwise an unset cookie defaults to `"owner"` in dev mode).
 

@@ -27,10 +27,9 @@ state — `/tmp/inspector-cache` survives only as long as the container.
 | Variable                       | Default                              | Purpose                                                                 |
 |--------------------------------|--------------------------------------|-------------------------------------------------------------------------|
 | `INSPECTOR_BACKEND`            | `bucket`                             | `bucket` (HF storage) or `filesystem` (tests / offline maintainer)      |
-| `INSPECTOR_BUCKET_REPO`        | `hetchyy/quranic-inspector-bucket-dev` | HF bucket repo id; flip to prod bucket on prod Space                  |
+| `INSPECTOR_BUCKET_REPO`        | `hetchyy/quranic-inspector-bucket` | HF bucket repo id; dev Space overrides to `…-bucket-dev`                  |
 | `INSPECTOR_BUCKET_MOUNT`       | unset locally; `/data/inspector-bucket` on Space | Mount path inside the container. When unset, the backend falls back to per-call HF API reads. |
 | `INSPECTOR_FILESYSTEM_ROOT`    | unset                                | Required only when `INSPECTOR_BACKEND=filesystem`                       |
-| `INSPECTOR_FORCE_FLUSH_ON_SAVE`| `1`                                  | After each mount-mediated write, also call `huggingface_hub.upload_file` so durability isn't gated on mount-flush windows |
 
 ## Data locations
 

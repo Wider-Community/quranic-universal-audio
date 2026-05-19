@@ -1,15 +1,21 @@
 /**
  * Audio playback, animation, highlight tracking, and play status.
  *
- * Boundary enforcement and rAF-driven playhead drawing live in the unified
- * `AudioRange` primitive (`lib/playback/audio-range.ts`). This module is the
- * caller — it constructs the range from the active segment + autoplay state,
- * wires `onTick` / `onBoundary` to the local stores, and explicitly disposes
- * the range on edit-mode entry and per-reciter resets.
+ * Chapter-continuous model: `segPort` holds the full chapter audio behind it
+ * (loaded by `loadChapterData`). Clicking a segment simply seeks to that
+ * segment's `time_start` and plays forward — the chapter audio plays through
+ * naturally, and `onSegTimeUpdate`'s time→segment lookup keeps the active
+ * highlight in sync as playback crosses segment boundaries.
  *
- * `startSegAnimation` / `stopSegAnimation` are UI-state-only helpers driven
- * by the audio element's `play` / `pause` DOM events; they no longer own a
- * rAF loop and never touch `_segRange`. Explicit teardown is `disposeSegRange()`.
+ * The legacy `AudioRange` per-segment clamp and autoplay advance policy were
+ * removed when the player became chapter-continuous. Edit-mode preview loops
+ * (Trim / Split L/R / Split region) still live in `play-range.ts` — that
+ * module is untouched.
+ *
+ * A small rAF (`_drawLoop`) is started by `startSegAnimation` (DOM 'play'
+ * event re-emission via the AudioPort) and stopped by `stopSegAnimation`
+ * (DOM 'pause' / 'ended'). Each frame draws the playhead on the active row
+ * and reconciles the row highlight against `segCurrentIdx`.
  *
  * Coordinate space: every `timeMs` value flowing through this module is
  * **file-absolute milliseconds**. The `segPort` port translates to / from
@@ -21,33 +27,37 @@ import { get } from 'svelte/store';
 
 import { AudioRange } from '../../../../lib/playback/audio-range';
 import type { Segment } from '../../../../lib/types/domain';
+import { type AnimationLoop,createAnimationLoop } from '../../../../lib/utils/animation';
 import { audioSrcMatches } from '../../../../lib/utils/audio';
 import {
     getSegByChapterIndex,
+    pickerDisplayChapter,
     segAllData,
     segCurrentIdx,
     segData,
     selectedChapter,
     selectedReciter,
 } from '../../stores/chapter';
-import { editMode } from '../../stores/edit';
+import { editCanvas, editMode, splitPreviewSelection } from '../../stores/edit';
 import { displayedSegments } from '../../stores/filters';
 import {
     activeAudioSource,
     autoPlayEnabled,
-    continuousPlay,
     isMainAudioPlaying,
     playbackSpeed,
     playButtonLabel,
-    playEndMs,
     playingSegmentIndex,
-    playStartMs,
     segPort,
     setPlayingSegment,
 } from '../../stores/playback';
 import { drawSegPlayhead, drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 import { _fetchPeaksForClick } from '../waveform/utils';
-import { buildSegPolicy } from './range-spec';
+import {
+    _playRange,
+    editPreviewPlaying,
+    getPlayRangeRAF,
+    setPreviewLooping,
+} from './play-range';
 import { nextDisplayedSeg, nextSiblingSeg } from './resolvers';
 import { getRowEntriesFor } from './row-registry';
 import { resolveSegSource } from './source';
@@ -57,13 +67,30 @@ import { warmSeg } from './warmup';
 // Module-local state
 // ---------------------------------------------------------------------------
 
-let _segRange: AudioRange | null = null;
-
 /** Last drawn (chapter, index) pair so the animation loop can erase the
  *  playhead on the previous row when playback advances. Carries the chapter
  *  so cross-chapter advance (accordion -> another chapter's row) erases from
  *  the right canvas. */
 let _prevPlaying: { chapter: number; index: number } | null = null;
+
+/** Active segment-bounded range. Used for accordion plays (always bounded
+ *  to the played segment) and chapter-mode plays when autoplay is OFF.
+ *  Chapter-mode + autoplay ON plays through the chapter — no range. */
+let _segRange: AudioRange | null = null;
+
+/** Playhead-draw rAF. Replaces the AudioRange-owned tick for the chapter-
+ *  continuous path. Under segment-bounded play, AudioRange owns its own
+ *  rAF that fires `_onRangeTick` — we keep this rAF off in that case.
+ *  Runs only while audio is playing AND not in a CANVAS-REPLACING edit
+ *  mode. Reference edit leaves the row's normal waveform canvas in place,
+ *  so the chapter cursor must keep advancing through it; only 'trim' /
+ *  'split' modes hand the canvas off to `_playRange`'s preview rAF. */
+const _drawLoop: AnimationLoop = createAnimationLoop(() => {
+    const m = get(editMode);
+    if (m === 'trim' || m === 'split') return;
+    drawActivePlayhead(segPort.currentTimeMs());
+    updateSegHighlight();
+});
 
 /** Reset playhead draw-state refs so the draw layer does not point to nodes
  *  destroyed by the next {#each} reconciliation. Called by filters-apply.ts
@@ -74,12 +101,17 @@ export function resetHighlightRefs(): void {
     _prevPlaying = null;
 }
 
-/** Tear down the active AudioRange. Called explicitly on edit-mode entry,
- *  per-reciter clear, and at the start of every fresh `playFromSegment`. */
-export function disposeSegRange(): void {
+/** Tear down active playback rAF and any segment-bounded AudioRange.
+ *  Called explicitly on edit-mode entry, per-reciter clear, and chapter
+ *  swap. */
+export function disposeSegPlayback(): void {
+    _drawLoop.stop();
     _segRange?.dispose();
     _segRange = null;
 }
+
+/** Back-compat alias — older call sites import this name. */
+export const disposeSegRange = disposeSegPlayback;
 
 /** Active-chapter audio URL — independent of which segment's source the
  *  port is currently bound to. Used by `onSegTimeUpdate`'s cross-segment
@@ -94,7 +126,7 @@ function _curChapterUrl(): string {
 }
 
 // ---------------------------------------------------------------------------
-// AudioRange wiring
+// Segment-bounded AudioRange wiring
 // ---------------------------------------------------------------------------
 
 function _onRangeTick(timeMs: number): void {
@@ -103,53 +135,80 @@ function _onRangeTick(timeMs: number): void {
 }
 
 function _onRangeBoundary(ev: { reason: string }): void {
-    // Stop boundary: autoplay finished its run (or single-segment play ended).
-    // Flip the global UI flag so the autoplay toggle visually reflects state;
-    // the audio element's 'pause' event will fire stopSegAnimation in parallel.
     if (ev.reason === 'stop') {
-        playEndMs.set(0);
-        playStartMs.set(0);
-        // If the user toggled autoplay ON after this play started (continuousPlay
-        // flipped true while the old policy had already stopped at a boundary),
-        // advance to the next segment instead of just clearing the flag.
-        const curIdx = get(segCurrentIdx);
-        if (get(continuousPlay) && curIdx >= 0) {
-            const next = nextDisplayedSeg(get(displayedSegments), curIdx);
-            if (next && next.audio_url) {
-                playFromSegment(next.index, next.chapter);
-                return;
-            }
-        }
-        continuousPlay.set(false);
+        // Segment ended in bounded mode — nothing else to do, the port is
+        // paused at seg.time_end. The DOM 'pause' event will fire
+        // `stopSegAnimation` in parallel and reset the play button glyph.
         return;
     }
-    // Advance boundary: the primitive will load the next range after the gap.
-    // Update the active-pair + segCurrentIdx + prefetch+peaks NOW (before the
-    // gap fires) so the UI reflects the upcoming segment immediately.
-    if (ev.reason === 'advance') {
-        const active = get(playingSegmentIndex);
-        const displayed = get(displayedSegments);
-        if (!segPort.element || !active || !displayed) return;
-        const next = nextDisplayedSeg(displayed, active.index);
-        if (!next || next.index !== active.index + 1) return;
-        // Rebind the port to the next seg's source BEFORE the gap timer
-        // fires `_startWithPort(next)` → `port.loadCovering(next.start, next.end)`
-        // — otherwise the port still has the prior seg's chapter source and
-        // the clip URL builds against the wrong audio. setSource is a no-op
-        // when the source is unchanged (same-chapter advance).
-        const nextChapter = next.chapter ?? active.chapter;
-        const nextSource = resolveSegSource(next, nextChapter);
-        if (nextSource) segPort.setSource(nextSource);
-        setPlayingSegment({ chapter: nextChapter, index: next.index });
-        segCurrentIdx.set(next.index);
-        playStartMs.set(next.time_start);
-        playEndMs.set(next.time_end);
-        // Warm next-next so a subsequent auto-advance is also instant.
-        const nextNext = nextDisplayedSeg(displayed, next.index);
-        warmSeg(nextNext, get(selectedReciter), next);
-        if (nextChapter) void _fetchPeaksForClick(next, nextChapter);
+}
+
+/**
+ * Reconcile `_segRange` against the current playback state.
+ *
+ * Centralised so every mode transition that can flip the bounded-vs-
+ * continuous invariant goes through one function:
+ *   - autoPlayEnabled toggled MID-PLAY (subscribe below).
+ *   - `onSegPlayClick` resume from a paused state — covers the case
+ *     where exiting an edit mode left audio paused, then the user hit ▶.
+ *   - `exitEditMode` tail — audio is unpaused via the edit preview
+ *     (Apply / "preview kept playing") AND no main rAF or bounded
+ *     range exists yet.
+ *
+ * Rules:
+ *   - No active segment → drop any range; play (if running) is chapter-
+ *     wide draw-only.
+ *   - Accordion-origin play OR `!autoPlayEnabled` for a main-list play
+ *     → bounded (stop policy at seg.time_end).
+ *   - Main-list + autoplay-on → no range; chapter-continuous.
+ *
+ * Idempotent: same state on entry + exit is a no-op. Safe to over-call.
+ */
+export function ensureBoundedRange(): void {
+    if (!segPort.element) return;
+    if (get(editMode)) return; // edit-preview owns the port
+
+    const active = get(playingSegmentIndex);
+    if (!active) {
+        _segRange?.dispose();
+        _segRange = null;
+        return;
+    }
+
+    const needBounded = active.origin === 'accordion' || !get(autoPlayEnabled);
+
+    if (needBounded && !_segRange) {
+        // Wrap the currently-playing segment in a stop-policy range so
+        // playback pauses at the upcoming boundary. `attach()` starts the
+        // rAF without re-seeking, enforcing from the live playhead.
+        const seg = getSegByChapterIndex(active.chapter, active.index);
+        if (!seg) return;
+        _drawLoop.stop(); // AudioRange owns the playhead rAF in bounded mode
+        _segRange = new AudioRange({
+            port: segPort,
+            range: { startMs: segPort.currentTimeMs(), endMs: seg.time_end },
+            policy: { kind: 'stop' },
+            onTick: _onRangeTick,
+            onBoundary: _onRangeBoundary,
+            playbackRate: () => get(playbackSpeed),
+        });
+        _segRange.attach();
+        return;
+    }
+
+    if (!needBounded && _segRange) {
+        // Switch to chapter-continuous: drop the bounded range so the
+        // chapter audio plays through naturally; start the playhead-draw
+        // rAF the chapter-continuous path needs (only while audio is
+        // actually running).
+        _segRange.dispose();
+        _segRange = null;
+        if (!segPort.paused) _drawLoop.start();
     }
 }
+
+// Mid-play autoplay toggles route through the same reconcile.
+autoPlayEnabled.subscribe(() => ensureBoundedRange());
 
 // ---------------------------------------------------------------------------
 // Public play API
@@ -174,19 +233,18 @@ export function playFromSegment(
     const _trace = (typeof localStorage !== 'undefined'
         && localStorage.getItem('insp_warmup_log') === 'true');
     if (_trace) {
-         
+
         console.log(`[play] click seg=${segIndex} ch=${chapterOverride} readyState=${segPort.element?.readyState} reused=${segPort.window != null ? 'window-exists' : 'fresh'}`);
         const el = segPort.element;
         if (el) {
             const onPlaying = (): void => {
-                 
+
                 console.log(`[play] FIRST audible frame ${Math.round(performance.now() - _playClickAt)}ms after click`);
                 el.removeEventListener('playing', onPlaying);
             };
             el.addEventListener('playing', onPlaying);
         }
     }
-    disposeSegRange();
     const allData = get(segAllData);
     if (!allData) return;
     if (!segPort.element) return;
@@ -213,41 +271,54 @@ export function playFromSegment(
     const segSource = resolveSegSource(seg, resolvedChapter);
     if (segSource) segPort.setSource(segSource);
 
-    // Autoplay is intentionally main-list only: accordion plays always stop
-    // at time_end regardless of the global autoplay toggle.
-    continuousPlay.set(get(autoPlayEnabled) && !isAccordionPlay);
-    playStartMs.set(seg.time_start);
-    playEndMs.set(seg.time_end);
+    const seekMs = seekToMs ?? seg.time_start;
 
-    // File-absolute spec — port owns CBR-vs-VBR transport and offset
-    // bookkeeping. The seek target defaults to the segment start.
-    const range = {
-        startMs: seekToMs ?? seg.time_start,
-        endMs: seg.time_end,
-    };
-    const policy = buildSegPolicy({
-        getAutoPlayEnabled: () => get(autoPlayEnabled),
-        isAccordionPlay,
-        // Lazy: AudioRange reuses the same policy across N consecutive
-        // boundary fires during an autoplay run. Read the live active-pair
-        // index each time so the resolver sees the segment we just advanced
-        // INTO, not the one we originally started on. Falls back to segIndex
-        // for the very first boundary (before _onRangeBoundary has updated
-        // playingSegmentIndex) and for cross-chapter accordion plays where
-        // the active pair is set elsewhere.
-        getCurrentIndex: () => get(playingSegmentIndex)?.index ?? segIndex,
-        getDisplayed: () => get(displayedSegments),
-    });
+    // Tear down any prior segment-bounded range. Three playback regimes:
+    //   - chapter mode + autoplay ON  → no AudioRange. Seek + play, chapter
+    //                                    audio plays through naturally.
+    //   - chapter mode + autoplay OFF → AudioRange with `stop` policy.
+    //                                    Pauses at seg.time_end.
+    //   - accordion play              → AudioRange with `stop` policy.
+    //                                    Always bounded regardless of toggle.
+    _segRange?.dispose();
+    _segRange = null;
 
-    _segRange = new AudioRange({
-        port: segPort,
-        range,
-        policy,
-        onTick: _onRangeTick,
-        onBoundary: _onRangeBoundary,
-        playbackRate: () => get(playbackSpeed),
-    });
-    _segRange.start();
+    const bounded = isAccordionPlay || !get(autoPlayEnabled);
+
+    if (bounded) {
+        _segRange = new AudioRange({
+            port: segPort,
+            range: { startMs: seekMs, endMs: seg.time_end },
+            policy: { kind: 'stop' },
+            onTick: _onRangeTick,
+            onBoundary: _onRangeBoundary,
+            playbackRate: () => get(playbackSpeed),
+        });
+        _segRange.start();
+    } else {
+        // Chapter-continuous: load (or fast-path-reuse), then seek + play.
+        // For CBR same-chapter the `loadCovering` short-circuits via fast-path 1
+        // and `seekAndPlay` runs synchronously. For VBR or cross-chapter
+        // accordion it awaits canplay before seeking.
+        const { ready, swapped } = segPort.loadCovering(seg.time_start, seg.time_end);
+        const startPlayback = (): void => {
+            segPort.setPlaybackRate(get(playbackSpeed));
+            segPort.seekAndPlay(seekMs);
+        };
+        if (!swapped) {
+            startPlayback();
+        } else {
+            ready.then(() => {
+                // Another play/source-swap may have superseded us — bail if the
+                // active pair has changed targets in the meantime.
+                const cur = get(playingSegmentIndex);
+                if (!cur || cur.chapter !== resolvedChapter || cur.index !== segIndex) return;
+                startPlayback();
+            }).catch((e: unknown) => {
+                if (e && (e as { name?: string }).name !== 'AbortError') console.error(e);
+            });
+        }
+    }
 
     segCurrentIdx.set(segIndex);
     // Authoritative (chapter, index) for the active play — every downstream
@@ -260,6 +331,17 @@ export function playFromSegment(
         index: segIndex,
         origin: isAccordionPlay ? 'accordion' : 'main',
     });
+
+    // Cross-chapter accordion play: update the picker's displayed chapter
+    // PROGRAMMATICALLY (visual-only — does NOT touch `selectedChapter` or
+    // trigger `loadChapterData`). Same-chapter accordion plays clear the
+    // override so the picker reads `selectedChapter` normally. Main-list
+    // plays never write here; the picker reflects `selectedChapter`.
+    if (isAccordionPlay) {
+        const cur = get(selectedChapter);
+        const curNum = cur ? parseInt(cur) : NaN;
+        pickerDisplayChapter.set(resolvedChapter !== curNum ? resolvedChapter : null);
+    }
 
     // Accordion plays warm their card's next *sibling* (list position,
     // possibly cross-chapter); main-list plays warm the next displayed
@@ -275,29 +357,118 @@ export function playFromSegment(
     void _fetchPeaksForClick(seg, resolvedChapter);
 }
 
+/**
+ * Universal play/pause entry point — the single source of truth for every
+ * play/pause action in the Segments tab. Both the footer's ▶ button and
+ * the spacebar shortcut route here so their behavior is identical.
+ *
+ * Dispatch:
+ *   - In trim / split edit modes:
+ *       * If a _playRange loop is alive (paused OR playing): toggle
+ *         segPort.pause() / segPort.play() WITHOUT touching previewLooping
+ *         or the canvas — the rAF is pause-resilient, so the cursor stays
+ *         drawn and resume continues from the paused position.
+ *       * Otherwise (no loop yet): cold-start the loop based on the
+ *         active edit mode + split preview selection.
+ *   - In normal mode:
+ *       * If paused with no active segment: start at first displayed.
+ *       * Otherwise: toggle segPort.pause() / segPort.play().
+ */
 export function onSegPlayClick(): void {
     if (!segPort.element) return;
+
+    const mode = get(editMode);
+    if (mode === 'trim' || mode === 'split') {
+        if (getPlayRangeRAF()) {
+            // Loop alive — pure pause/resume. The rAF chain in _playRange is
+            // pause-resilient (`if (segPort.paused) requestAnimationFrame(...)
+            // return;`), so neither cursor nor loop state is lost.
+            if (segPort.paused) {
+                editPreviewPlaying.set(true);
+                segPort.uncut();
+                segPort.setPlaybackRate(get(playbackSpeed));
+                segPort.play();
+            } else {
+                editPreviewPlaying.set(false);
+                segPort.pause();
+            }
+            return;
+        }
+        // Cold-start.
+        _coldStartEditPreview(mode);
+        return;
+    }
+
+    // Normal mode.
     const displayed = get(displayedSegments);
     const curIdx = get(segCurrentIdx);
     if (segPort.paused) {
         if (displayed && displayed.length > 0 && curIdx < 0) {
             const first = displayed[0];
             if (first) playFromSegment(first.index, first.chapter);
-        } else if (_segRange) {
-            // Resume an existing run — the range's pause-resilient frame loop
-            // ticks idly while audio was paused, no rebuild needed.
+        } else {
+            // Resuming from pause. Reconcile `_segRange` against current
+            // state BEFORE play — covers the case where exiting an edit
+            // mode (Adjust / Split) tore down the prior bound and we now
+            // need to rebuild it so accordion / autoplay-off plays don't
+            // sail past their segment boundary on resume.
+            ensureBoundedRange();
             segPort.setPlaybackRate(get(playbackSpeed));
             segPort.play();
-        } else if (curIdx >= 0 && displayed) {
-            // No range alive (e.g. user manually paused before any play) —
-            // rebuild from the segCurrentIdx pointer.
-            const curSeg = displayed.find(s => s.index === curIdx);
-            if (curSeg) playFromSegment(curSeg.index, curSeg.chapter);
         }
     } else {
-        continuousPlay.set(false);
         segPort.pause();
     }
+}
+
+/** Cold-start an edit-preview loop based on the active edit mode and (for
+ *  split) the user's range selection. Centralized here so onSegPlayClick
+ *  routes through one path; the trim / split panels publish only selection
+ *  state and never invoke `_playRange` directly. */
+function _coldStartEditPreview(mode: 'trim' | 'split'): void {
+    const canvas = get(editCanvas);
+    if (!canvas) return;
+
+    if (mode === 'trim') {
+        const tw = canvas._trimWindow;
+        if (!tw) return;
+        editPreviewPlaying.set(true);
+        setPreviewLooping('trim');
+        _playRange(tw.currentStart, tw.currentEnd);
+        return;
+    }
+
+    // Split: dispatch by current selection.
+    const sd = canvas._splitData;
+    if (!sd) return;
+    const sel = get(splitPreviewSelection);
+    const isBinary = sd.currentSplits.length === 1;
+    editPreviewPlaying.set(true);
+
+    if (isBinary) {
+        const side: 'left' | 'right' = sel.kind === 'left'
+            ? 'left'
+            : sel.kind === 'right'
+                ? 'right'
+                : (sel.index === 0 ? 'left' : 'right');
+        const splitTime = sd.currentSplits[0]!;
+        setPreviewLooping(`split-${side}` as const);
+        _playRange(
+            side === 'left' ? sd.seg.time_start : splitTime,
+            side === 'left' ? splitTime : sd.seg.time_end,
+        );
+        return;
+    }
+
+    // Multi-cursor: region selection.
+    const n = sd.currentSplits.length;
+    const idx = sel.kind === 'region'
+        ? Math.max(0, Math.min(n, sel.index))
+        : (sel.kind === 'left' ? 0 : n);
+    const start = idx === 0 ? sd.seg.time_start : sd.currentSplits[idx - 1]!;
+    const end = idx === n ? sd.seg.time_end : sd.currentSplits[idx]!;
+    setPreviewLooping(`split-region-${idx}` as `split-region-${number}`);
+    _playRange(start, end);
 }
 
 // ---------------------------------------------------------------------------
@@ -311,8 +482,7 @@ export function onSegTimeUpdate(fileMs?: number): void {
     // the clip URL, not the chapter audio URL. Cross-segment-within-shared-
     // audio detection (the body of this function) keys off matching the
     // chapter URL — useless in clip mode. Segment switches in VBR mode come
-    // through `_onRangeBoundary('advance')` and explicit `playFromSegment`
-    // calls instead.
+    // through explicit `playFromSegment` calls instead.
     if (segPort.window?.isClip) return;
     if (!segPort.element) return;
     // Cross-chapter accordion plays keep the port bound to the row's chapter
@@ -337,11 +507,10 @@ export function onSegTimeUpdate(fileMs?: number): void {
     const displayed = get(displayedSegments);
     const active = get(playingSegmentIndex);
 
-    // Cross-segment-within-same-audio detection. AudioRange owns per-segment
-    // boundary fires, but a manual seek (user dragging the audio scrubber
-    // across multiple segment windows) bypasses the rAF — this branch keeps
-    // segCurrentIdx and the active pair in sync with the audio's actual
-    // position. Also runs as a safety net if rAF is throttled.
+    // Time → segment lookup. Under chapter-continuous playback the chapter
+    // audio plays through; this scan migrates the active pair to whatever
+    // segment currently contains the playhead. Also catches manual seek-bar
+    // drags across multiple segment windows.
     const prevIdx = get(segCurrentIdx);
     let nextCurrentIdx = -1;
     let nextCurrentChapter = active?.chapter ?? null;
@@ -369,9 +538,8 @@ export function onSegTimeUpdate(fileMs?: number): void {
     segCurrentIdx.set(nextCurrentIdx);
 
     if (nextCurrentIdx !== prevIdx && nextCurrentIdx >= 0 && nextCurrentChapter != null) {
-        // Auto-advanced into a new segment via shared-audio playback (no
-        // boundary fire — the segments share an audio file). Update the
-        // active pair so the playhead and class:playing follow.
+        // Crossed into a new segment via chapter-continuous playback. Update
+        // the active pair so the playhead and class:playing follow.
         setPlayingSegment({ chapter: nextCurrentChapter, index: nextCurrentIdx });
         if (displayed) {
             const curSeg = displayed.find(s => s.index === nextCurrentIdx);
@@ -380,28 +548,29 @@ export function onSegTimeUpdate(fileMs?: number): void {
             if (curSeg) {
                 const chapterForPeaks = curSeg.chapter ?? (get(selectedChapter) ? parseInt(get(selectedChapter)) : 0);
                 if (chapterForPeaks) void _fetchPeaksForClick(curSeg, chapterForPeaks);
-                playStartMs.set(curSeg.time_start);
-                playEndMs.set(curSeg.time_end);
             }
         }
     }
 }
 
 export function startSegAnimation(): void {
-    // UI state only — AudioRange owns the rAF. The editMode gate keeps the
-    // segment-row playhead off the edit canvas while the preview rAF runs.
-    if (get(editMode)) return;
+    // UI state only — the rAF drives playhead drawing while audio is active.
+    // The gate keeps the segment-row playhead off the edit canvas only when
+    // the edit-preview rAF actually owns it: trim / split modes replace the
+    // canvas. Reference edit leaves the row's normal waveform canvas in
+    // place, so the chapter cursor must keep advancing through it.
+    const _m = get(editMode);
+    if (_m === 'trim' || _m === 'split') return;
     playButtonLabel.set('Pause');
     activeAudioSource.set('main');
     isMainAudioPlaying.set(true);
+    // Skip the local rAF when a segment-bounded AudioRange is running — its
+    // own onTick already calls drawActivePlayhead / updateSegHighlight, and
+    // running both would double-draw the playhead and waste a frame budget.
+    if (!_segRange) _drawLoop.start();
 }
 
 export function stopSegAnimation(): void {
-    // UI state only — does NOT dispose the AudioRange. The 'pause' DOM event
-    // fires this both for user pauses (range stays alive, ready to resume)
-    // and the autoplay-gap pause (range scheduled the resume internally).
-    // Explicit teardown is `disposeSegRange()`.
-    //
     // Mirror the `editMode` gate from `startSegAnimation`. During edit-mode
     // preview, `_playRange`'s loop seek-back issues a transient
     // `pauseAndFlush()` to drain the OS audio sink — that fires a 'pause'
@@ -413,26 +582,16 @@ export function stopSegAnimation(): void {
     playButtonLabel.set('Play');
     if (get(activeAudioSource) === 'main') activeAudioSource.set(null);
     isMainAudioPlaying.set(false);
+    _drawLoop.stop();
 }
 
 export function onSegAudioEnded(): void {
-    // Audio element fired 'ended' — the underlying file finished. AudioRange's
-    // boundary fires before this in the normal autoplay flow; we only get
-    // here when the file ended without a boundary advance taking over.
-    const curIdx = get(segCurrentIdx);
-    if (get(continuousPlay) && curIdx >= 0) {
-        const next = nextDisplayedSeg(get(displayedSegments), curIdx);
-        if (next && next.audio_url) {
-            playFromSegment(next.index, next.chapter);
-            return;
-        }
-    }
-    continuousPlay.set(false);
-    disposeSegRange();
-    // Audio actually finished — clear the active-pair highlight. This is the
-    // genuine "nothing is playing" signal (distinct from cross-chapter accordion
-    // plays, which must NOT clear the pair on a displayed-slice miss).
+    // Chapter audio file ended (user let it play through). Clear the active
+    // pair, tear down any segment-bounded range, and stop the rAF.
     setPlayingSegment(null);
+    _segRange?.dispose();
+    _segRange = null;
+    _drawLoop.stop();
 }
 
 // ---------------------------------------------------------------------------
@@ -442,9 +601,9 @@ export function onSegAudioEnded(): void {
 export function updateSegHighlight(): void {
     // setPlayingSegment() is identity-guarded — a same-value rAF tick is a
     // no-op for subscribers. The active pair (chapter, index) is set by
-    // playFromSegment and maintained by onSegTimeUpdate for auto-advance; this
-    // function bridges segCurrentIdx changes back to the pair when they
-    // originate outside the time-update path (e.g. manual seek handler).
+    // playFromSegment and maintained by onSegTimeUpdate for in-chapter
+    // advance; this function bridges segCurrentIdx changes back to the pair
+    // when they originate outside the time-update path (e.g. manual seek).
     const curIdx = get(segCurrentIdx);
     const active = get(playingSegmentIndex);
     if (curIdx < 0) return;
@@ -464,7 +623,7 @@ export function updateSegHighlight(): void {
  * Because split/merge preserve UIDs on the firstHalf / kept side, the playing
  * segment usually still exists under the same UID with a new index — we look
  * it up and update the active pair. If the playing seg was removed (delete,
- * or merge consumed it), we clear the pair and dispose the range so the UI
+ * or merge consumed it), we clear the pair and stop the rAF so the UI
  * doesn't keep drawing a playhead on a stale (chapter, index) pointer.
  */
 export function reconcilePlayingAfterMutation(
@@ -482,25 +641,28 @@ export function reconcilePlayingAfterMutation(
         setPlayingSegment({ chapter, index: found.index });
     } else {
         setPlayingSegment(null);
-        disposeSegRange();
+        _drawLoop.stop();
     }
 }
 
 export function drawActivePlayhead(timeMs?: number): void {
-    // Hoist above the pair-change erase branch (below): during any edit mode
-    // the preview rAF owns the edit canvas, and the erase branch iterates
+    // Hoist above the pair-change erase branch (below): when the edit-preview
+    // rAF owns the row's canvas, the erase branch iterates
     // `getRowEntriesFor(_prevPlaying)` — which includes the edit canvas when
     // adjusting the previously-active segment — and clobbers trim handles
-    // with plain peaks via `drawWaveformFromPeaksForSeg`.
-    if (get(editMode)) return;
+    // with plain peaks via `drawWaveformFromPeaksForSeg`. Only trim / split
+    // replace the canvas; reference edit leaves it intact, so the chapter
+    // cursor must keep drawing through the ref-edit lifetime.
+    const _m = get(editMode);
+    if (_m === 'trim' || _m === 'split') return;
     const allData = get(segAllData);
     const active = get(playingSegmentIndex);
     if (!allData) return;
     if (!segPort.element) return;
-    // `timeMs` is the file-absolute time supplied by AudioRange's rAF tick.
-    // For direct callers (manual seek handler) fall back to the live port
-    // reading — the port owns offset translation so file-absolute is
-    // identical regardless of CBR vs VBR transport.
+    // `timeMs` is the file-absolute time supplied by the rAF tick. For direct
+    // callers (manual seek handler) fall back to the live port reading — the
+    // port owns offset translation so file-absolute is identical regardless
+    // of CBR vs VBR transport.
     const time = timeMs ?? segPort.currentTimeMs();
 
     const prev = _prevPlaying;

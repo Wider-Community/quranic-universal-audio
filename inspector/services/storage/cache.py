@@ -435,6 +435,38 @@ def set_audio_url_cache(key: str, urls: dict) -> None:
     _audio_url.set(key, urls)
 
 
+# Audio manifest sidecar (catalog/audio_manifest/<slug>.json) + derived
+# URL → chapter-key inverse index. Both populated together by
+# ``services/audio/audio_meta._load_sidecar`` on first read. The inverse
+# index turns ``chapter_for_url`` / ``chapter_meta_for_url`` from O(N)
+# linear scans into O(1) dict lookups on the peaks fan-out hot path.
+# Lifecycle matches every other per-reciter cache: LRU-bounded, popped by
+# ``pop_audio_manifest_cache`` when a future probe-refresh path lands.
+_audio_manifest: _KeyedCache[dict] = _KeyedCache()
+_audio_manifest_url_index: _KeyedCache[dict[str, str]] = _KeyedCache()
+
+
+def get_audio_manifest_cache(slug: str) -> dict | None:
+    return _audio_manifest.get(slug)
+
+
+def set_audio_manifest_cache(slug: str, doc: dict) -> None:
+    _audio_manifest.set(slug, doc)
+
+
+def pop_audio_manifest_cache(slug: str) -> None:
+    _audio_manifest.pop(slug)
+    _audio_manifest_url_index.pop(slug)
+
+
+def get_audio_manifest_url_index_cache(slug: str) -> dict[str, str] | None:
+    return _audio_manifest_url_index.get(slug)
+
+
+def set_audio_manifest_url_index_cache(slug: str, idx: dict[str, str]) -> None:
+    _audio_manifest_url_index.set(slug, idx)
+
+
 # Audio download / cache status (thread-safe)
 _AUDIO_DL_LOCK = threading.Lock()
 _AUDIO_DL_PROGRESS: dict[str, dict] = {}
@@ -479,6 +511,22 @@ def get_word_counts_cache():
 
 def set_word_counts_cache(wc: dict[tuple[int, int], int]) -> None:
     _word_counts.set(wc)
+
+
+# Single-word verses — derived from word_counts, computed once and cached
+# alongside it. Used by the classifier's muqattaat / basmala_amin rules and
+# the save-time persisted-classifier-fields stamp. Three callsites used to
+# rebuild this O(6236) comprehension fresh each call; the singleton matches
+# the lifetime of ``_word_counts`` (immutable post-boot).
+_single_word_verses: _SingletonCache[set[tuple[int, int]]] = _SingletonCache()
+
+
+def get_single_word_verses_cache():
+    return _single_word_verses.get()
+
+
+def set_single_word_verses_cache(swv: set[tuple[int, int]]) -> None:
+    _single_word_verses.set(swv)
 
 
 # Audio sources (Audio tab)

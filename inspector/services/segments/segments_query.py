@@ -33,23 +33,17 @@ def get_chapter_data(reciter: str, chapter: int,
     if not matching:
         return None
 
-    # Migration #5: chapter audio URL comes from the bucket audio_manifest
-    # sidecar (`catalog/audio_manifest/<slug>.json::chapters[ch].url`), not
-    # `entry.audio` in detailed.json (extractor drops it). Fall back to the
-    # legacy `entry.audio` field for pre-#5 on-disk data so the transition
-    # is read-tolerant.
+    # Chapter audio URL sourced from the audio_manifest sidecar
+    # (``catalog/audio_manifest/<slug>.json::chapters[ch].url``) — the
+    # single source of truth post Migration #5. Returns "" when the sidecar
+    # has no entry for the chapter; the FE handles the missing-URL case.
     from services.audio.audio_meta import chapter_urls
 
-    _urls = chapter_urls(reciter)
-    audio_url = (
-        _urls.get(str(chapter))
-        or matching[0].get("audio", "")
-    )
+    audio_url = chapter_urls(reciter).get(str(chapter), "")
 
     segments = []
     idx = 0
     for entry_idx, entry in enumerate(matching):
-        entry_audio = audio_url or entry.get("audio", "")
         for seg in entry.get("segments", []):
             t_start = seg.get("time_start", 0)
             t_end = seg.get("time_end", 0)
@@ -61,12 +55,14 @@ def get_chapter_data(reciter: str, chapter: int,
                 "time_end": t_end,
                 "matched_ref": mref,
                 "confidence": round(seg.get("confidence", 0.0), 4),
-                "audio_url": entry_audio,
+                "audio_url": audio_url,
             }
             if seg.get("ignored_categories"):
                 seg_dict["ignored_categories"] = seg["ignored_categories"]
             elif seg.get("ignored"):
                 seg_dict["ignored_categories"] = ["_all"]
+            if seg.get("is_wasl"):
+                seg_dict["is_wasl"] = True
             segments.append(seg_dict)
             idx += 1
 

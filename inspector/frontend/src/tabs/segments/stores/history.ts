@@ -33,6 +33,7 @@ export {
 // Re-export item helpers so existing consumers keep one import site.
 export {
     buildDisplayItems,
+    chainHasWaslAnnotation,
     computeFilteredSummary,
     countVersesFromBatches,
     countVersesFromItems,
@@ -41,6 +42,7 @@ export {
     groupRelatedOps,
     histItemChapter,
     histItemTimeStart,
+    itemHasWaslAnnotation,
     itemMatchesCatFilter,
     itemMatchesOpFilter,
     SHORT_LABELS,
@@ -72,6 +74,12 @@ export const filterOpTypes = writable<Set<string>>(new Set());
 
 /** Active error-category filter pills (e.g. {"low_confidence"}). */
 export const filterErrCats = writable<Set<string>>(new Set());
+
+/** Single boolean filter — when true, restrict the display to entries whose
+ *  ops carry at least one targets_after / snapshots.after snapshot with
+ *  ``is_wasl === true``. Surfaces only the affirmative WASL assertions
+ *  (waqf is the default state and would dominate the list otherwise). */
+export const filterHasWasl = writable<boolean>(false);
 
 /** Sort order: by edit time (newest first) or by Quran chapter:verse. */
 export const sortMode = writable<'time' | 'quran'>('time');
@@ -139,10 +147,18 @@ export function toggleFilter(kind: 'op' | 'cat', value: string): void {
     });
 }
 
-/** Clear both filter sets in a single tick. */
+/** Toggle the boolean wasl-annotation filter. Mirrors ``toggleFilter`` but
+ *  for a single binary axis: on means "only entries with a wasl boundary
+ *  decision", off means "all entries". */
+export function toggleWaslFilter(): void {
+    filterHasWasl.update((v) => !v);
+}
+
+/** Clear all filter axes in a single tick. */
 export function clearFilters(): void {
     filterOpTypes.set(new Set());
     filterErrCats.set(new Set());
+    filterHasWasl.set(false);
 }
 
 /** Set the sort mode (time | quran). */

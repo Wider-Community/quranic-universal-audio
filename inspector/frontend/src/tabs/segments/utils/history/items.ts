@@ -189,6 +189,35 @@ export function chainMatchesCatFilter(chain: EditChain, cats: Set<string>): bool
     return false;
 }
 
+/** True iff any snapshot inside ``op.targets_after`` or
+ *  ``op.snapshots?.after`` carries ``is_wasl === true``. Waqf is the default
+ *  state for any cross-verse boundary; the filter exists to surface the
+ *  affirmative WASL assertions, not the trivially-true waqf majority. */
+function _opHasWaslAnnotation(op: EditOp): boolean {
+    const seen = (arr: unknown): boolean => {
+        if (!Array.isArray(arr)) return false;
+        for (const snap of arr) {
+            if (snap && typeof snap === 'object'
+                && (snap as { is_wasl?: unknown }).is_wasl === true) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (seen(op.targets_after)) return true;
+    const snaps = (op as EditOp & { snapshots?: { after?: unknown } }).snapshots;
+    if (snaps && seen(snaps.after)) return true;
+    return false;
+}
+
+export function itemHasWaslAnnotation(item: OpFlatItem): boolean {
+    return item.group.some(_opHasWaslAnnotation);
+}
+
+export function chainHasWaslAnnotation(chain: EditChain): boolean {
+    return chain.ops.some(({ op }) => _opHasWaslAnnotation(op));
+}
+
 export function computeFilteredSummary(entries: DisplayEntry[]): FilteredItemSummary {
     const opCounts: Record<string, number> = {};
     const fixKindCounts: Record<string, number> = {};
@@ -239,6 +268,7 @@ export function buildDisplayItems(
     chains: Map<string, EditChain> | null,
     fOpTypes: Set<string>,
     fErrCats: Set<string>,
+    fHasWasl: boolean = false,
 ): DisplayEntry[] {
     const out: DisplayEntry[] = [];
     if (chains) {
@@ -247,12 +277,14 @@ export function buildDisplayItems(
             if (!chain.ops.some(({ op }) => batchOpIds.has(op.op_id))) continue;
             if (fOpTypes.size > 0 && !chainMatchesOpFilter(chain, fOpTypes)) continue;
             if (fErrCats.size > 0 && !chainMatchesCatFilter(chain, fErrCats)) continue;
+            if (fHasWasl && !chainHasWaslAnnotation(chain)) continue;
             out.push({ type: 'chain', chain, date: chain.latestDate || '' });
         }
     }
     for (const item of items) {
         if (fOpTypes.size > 0 && !itemMatchesOpFilter(item, fOpTypes)) continue;
         if (fErrCats.size > 0 && !itemMatchesCatFilter(item, fErrCats)) continue;
+        if (fHasWasl && !itemHasWaslAnnotation(item)) continue;
         out.push({ type: 'op-item', item, date: item.date });
     }
 

@@ -40,7 +40,7 @@ export const CAN_IGNORE_CATEGORIES: CategoryName[] = [
   'repetitions',
   'audio_bleeding',
   'boundary_adj',
-  'cross_verse',
+  'basmala_amin',
 ];
 
 export const PERSISTS_IGNORE_CATEGORIES: CategoryName[] = [...CAN_IGNORE_CATEGORIES];
@@ -54,5 +54,5 @@ export const AUTO_SUPPRESS_CATEGORIES: CategoryName[] = [
   'repetitions',
   'audio_bleeding',
   'boundary_adj',
-  'cross_verse',
+  'basmala_amin',
 ];

@@ -3,10 +3,9 @@
 No Flask imports -- all functions accept parameters and return plain dicts.
 
 Writes go through ``services.data_dir`` which routes to ``BucketBackend`` or
-``FilesystemBackend`` based on ``INSPECTOR_BACKEND``. Per-save
-``huggingface_hub.upload_file()`` is wired into ``BucketBackend`` itself
-(force_flush_on_write), so the save path doesn't need to think about
-durability — it just calls the backend.
+``FilesystemBackend`` based on ``INSPECTOR_BACKEND``. The bucket backend
+writes through the hf-mount FUSE; the daemon's debounced flush handles
+durability to remote storage.
 
 Phase 3 made ``@require_edit_lock`` (signed-in + claim + state checks) the
 sole authoritative writer gate. The earlier ``INSPECTOR_LOCAL_WRITES`` env
@@ -24,7 +23,12 @@ from constants import HISTORY_SCHEMA_VERSION
 from domain.command import validate_patch_dict
 from scripts.lib.schemas import Actor
 from services.storage import cache, data_dir
-from services.storage.data_loader import get_word_counts, load_detailed, load_probe_v2
+from services.storage.data_loader import (
+    get_single_word_verses,
+    get_word_counts,
+    load_detailed,
+    load_probe_v2,
+)
 from services.audio.peaks_history import append_peaks_records
 from services.segments.qalqala import compute_qalqala_letter
 from services.validation.registry import filter_persistent_ignores
@@ -63,6 +67,8 @@ _ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset({
     "ignoreIssue",
     "auto_fix_missing_word",
     "autoFixMissingWord",
+    "set_is_wasl",
+    "setIsWasl",
     # ``confirm_reference`` is a reducer-edge variant of editReference recorded
     # on ``op_type`` only; the ``command.type`` itself remains ``editReference``.
 })
@@ -298,8 +304,7 @@ def _stamp_persisted_classifier_fields(seg: dict, single_word_verses: set | None
     seg["qalqala_letter"] = compute_qalqala_letter(seg)
 
     if single_word_verses is None:
-        wc = get_word_counts()
-        single_word_verses = {k for k, v in wc.items() if v == 1}
+        single_word_verses = get_single_word_verses()
 
     matched_ref = seg.get("matched_ref") or ""
     parts = matched_ref.split("-")
@@ -329,7 +334,7 @@ def _apply_full_replace(matching: list[dict], updates: dict,
     input validation failure (propagated by the caller as the route response).
     """
     word_counts = get_word_counts()
-    single_word_verses = {k for k, v in word_counts.items() if v == 1}
+    single_word_verses = get_single_word_verses()
     if len(matching) == 1:
         new_segs = [
             _make_seg(s, existing_by_time, existing_by_uid, word_counts)
@@ -380,8 +385,7 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
         for seg in e.get("segments", []):
             flat_segments.append(seg)
 
-    word_counts = get_word_counts()
-    single_word_verses = {k for k, v in word_counts.items() if v == 1}
+    single_word_verses = get_single_word_verses()
     for upd in updates["segments"]:
         idx = upd.get("index")
         if idx is not None and 0 <= idx < len(flat_segments):

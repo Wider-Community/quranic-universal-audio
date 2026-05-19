@@ -2,51 +2,43 @@
     /**
      * TrimPanel — Svelte-rendered inline chrome for trim-mode edit.
      *
-     * Mounted by SegmentRow inside `.seg-left` when that row is the active
-     * edit target (see SegmentRow `isEditingThisRow && $editMode === 'trim'`).
-     * Renders Cancel | start-stepper-pair | Preview | end-stepper-pair | Apply
-     * plus the status readout. The duration moved out of this panel — it now
-     * lives on the row's TimeRange (`A.MMM - B.MMM | dur`) so it tracks the
-     * typed-edit display in one place.
+     * Layout: ``Cancel    <  >    [↻]    <  >    Apply``.
+     * The two `< >` pairs are bare caret buttons separated by spacing,
+     * each pair sitting above a 2px coloured underline that mirrors the
+     * canvas trim-handle (green for start, red for end). Spatial position
+     * carries the meaning — start nudgers on the left, end on the right —
+     * so the panel doesn't need text labels or bordered groups for what's
+     * a seven-element toolbar.
      *
-     * Steppers nudge the corresponding cursor by `EDIT_NUDGE_MS` (default
-     * 50 ms) via `nudgeTrimBoundary`, the same code path drag and typed
-     * commits use — so the trim handles, the row time-display, and the
-     * panel state stay in lock-step. Buttons disable when the next nudge
-     * would no-op against the trim window or the opposing handle's
-     * EDIT_MIN_DURATION_MS gap.
+     * Between the two stepper pairs sits a playhead-pink replay button.
+     * Clicking it cold-starts a fresh loop from the live `currentStart`
+     * → `currentEnd`, regardless of the current pause / play state. The
+     * footer ▶ remains the pause/resume; this button is the only path
+     * to restart-from-start.
      *
-     * The imperative parts — waveform draw, drag math, pointer cursor — stay
-     * on the canvas (`edit-trim.ts::setupTrimDragHandles`).
+     * Preview play/pause is owned entirely by the footer ▶ and the Space
+     * shortcut (centralised through `onSegPlayClick`). This panel never
+     * spawns its own pause/resume button.
      */
 
+    import Icon from '../../../../lib/icons/Icon.svelte';
     import type { Segment } from '../../../../lib/types/domain';
     import { editStatusText, trimWindow } from '../../stores/edit';
     import type { SegCanvas } from '../../types/segments-waveform';
     import { EDIT_MIN_DURATION_MS, EDIT_NUDGE_MS } from '../../utils/constants';
     import { exitEditMode } from '../../utils/edit/common';
     import { confirmTrim, nudgeTrimBoundary, previewTrimAudio } from '../../utils/edit/trim';
-    import { previewLooping } from '../../utils/playback/play-range';
 
     export let seg: Segment;
     export let canvas: SegCanvas;
 
-    $: previewGlyph = $previewLooping === 'trim' ? '\u25A0' : '\u25B6';
-
-    // Stepper-disable gates. A stepper disables when the next press would be
-    // a no-op. Two cases:
-    //   1. Standard: cursor is on-view, but `actual ± step` would be clamped
-    //      back to actual (already at windowStart/End or pinned against
-    //      opposing handle + EDIT_MIN_DURATION_MS).
-    //   2. Off-view "away" press: cursor is visually clamped at one canvas
-    //      edge (start always strict-clips LEFT, end always RIGHT). Pressing
-    //      in the direction further off-screen would step the actual time
-    //      with no visible feedback — disable that direction.
-    //
-    // The "into-view" press from a clamped cursor is handled by
-    // `nudgeTrimBoundary`'s snap-to-visual-border path: e.g. left-clamped
-    // start + `>` lands at `viewStart + EDIT_NUDGE_MS` regardless of how
-    // far off-view the actual time was, so the cursor pops back into view.
+    // Stepper-disable gates. Two failure modes:
+    //   1. Standard: cursor is on-view but `actual ± step` would clamp
+    //      against windowStart/End or the opposing handle's EDIT_MIN_DURATION_MS.
+    //   2. Off-view "away" press: cursor visually clipped at one canvas
+    //      edge (start always strict-clips LEFT, end RIGHT). Pressing
+    //      further off-screen would step `actual` with no visible feedback
+    //      so we disable that direction.
     $: tw = $trimWindow;
     $: startOffLeft = !!tw && tw.currentStart < tw.viewStart;
     $: endOffRight  = !!tw && tw.currentEnd   > tw.viewEnd;
@@ -54,6 +46,10 @@
     $: startFwdDisabled  = !tw || tw.currentStart >= tw.currentEnd - EDIT_MIN_DURATION_MS;
     $: endBackDisabled   = !tw || tw.currentEnd <= tw.currentStart + EDIT_MIN_DURATION_MS;
     $: endFwdDisabled    = !tw || endOffRight || tw.currentEnd >= tw.windowEnd;
+    // Replay cold-starts a loop from the LIVE currentStart/currentEnd via
+    // `previewTrimAudio`. Disabled when the window collapses below the
+    // same min-duration the nudgers already use.
+    $: replayDisabled = !tw || (tw.currentEnd - tw.currentStart) < EDIT_MIN_DURATION_MS;
 
     function nudgeStartBack(): void { nudgeTrimBoundary('start', -EDIT_NUDGE_MS); }
     function nudgeStartFwd():  void { nudgeTrimBoundary('start',  EDIT_NUDGE_MS); }
@@ -64,24 +60,38 @@
 <div class="seg-edit-inline">
     <div class="seg-edit-buttons">
         <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>Cancel</button>
-        <button class="btn btn-sm seg-trim-step seg-trim-step-start"
-            title="Move start back {EDIT_NUDGE_MS} ms"
-            disabled={startBackDisabled}
-            on:click={nudgeStartBack}>&lt;</button>
-        <button class="btn btn-sm seg-trim-step seg-trim-step-start"
-            title="Move start forward {EDIT_NUDGE_MS} ms"
-            disabled={startFwdDisabled}
-            on:click={nudgeStartFwd}>&gt;</button>
-        <button class="btn btn-sm seg-card-play-btn" title="Play / pause trim preview"
-            on:click={() => previewTrimAudio(canvas)}>{previewGlyph}</button>
-        <button class="btn btn-sm seg-trim-step seg-trim-step-end"
-            title="Move end back {EDIT_NUDGE_MS} ms"
-            disabled={endBackDisabled}
-            on:click={nudgeEndBack}>&lt;</button>
-        <button class="btn btn-sm seg-trim-step seg-trim-step-end"
-            title="Move end forward {EDIT_NUDGE_MS} ms"
-            disabled={endFwdDisabled}
-            on:click={nudgeEndFwd}>&gt;</button>
+
+        <div class="seg-nudge-pair seg-nudge-start" role="group" aria-label="Trim start">
+            <button class="seg-nudge"
+                title="Move start back {EDIT_NUDGE_MS} ms"
+                disabled={startBackDisabled}
+                on:click={nudgeStartBack}>&lsaquo;</button>
+            <button class="seg-nudge"
+                title="Move start forward {EDIT_NUDGE_MS} ms"
+                disabled={startFwdDisabled}
+                on:click={nudgeStartFwd}>&rsaquo;</button>
+        </div>
+
+        <button class="seg-replay"
+            title="Replay trim window from start"
+            aria-label="Replay"
+            disabled={replayDisabled}
+            on:click={() => previewTrimAudio(canvas, { mode: 'cold' })}
+        >
+            <Icon name="replay" size={14} />
+        </button>
+
+        <div class="seg-nudge-pair seg-nudge-end" role="group" aria-label="Trim end">
+            <button class="seg-nudge"
+                title="Move end back {EDIT_NUDGE_MS} ms"
+                disabled={endBackDisabled}
+                on:click={nudgeEndBack}>&lsaquo;</button>
+            <button class="seg-nudge"
+                title="Move end forward {EDIT_NUDGE_MS} ms"
+                disabled={endFwdDisabled}
+                on:click={nudgeEndFwd}>&rsaquo;</button>
+        </div>
+
         <button class="btn btn-sm btn-confirm" on:click={() => confirmTrim(seg, canvas)}>Apply</button>
         <span class="seg-edit-status">{$editStatusText}</span>
     </div>

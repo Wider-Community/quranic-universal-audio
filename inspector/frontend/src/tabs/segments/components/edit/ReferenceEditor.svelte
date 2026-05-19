@@ -22,6 +22,7 @@
     import {
         clearEdit,
         pendingChainTargets,
+        pendingWaslConfirm,
     } from '../../stores/edit';
     import {
         _normalizeRef,
@@ -98,7 +99,11 @@
         // Cancelling one ref edit aborts the full split-chain — user can
         // Edit Ref manually on the remaining pieces. Clearing the whole
         // queue prevents a stale handoff fire when the next clearEdit lands.
+        // Also drop any wasl-pending UIDs the chain would have prompted for,
+        // otherwise their pickers stay stuck in the muted "awaiting" state
+        // even though no chain will revisit them.
         pendingChainTargets.set([]);
+        pendingWaslConfirm.set(new Set());
         clearEdit();
         dispatch('preview', null);
     }
@@ -119,11 +124,12 @@
     }
 
     function onBlur(): void {
-        // After an invalid attempt, the input loses focus when we re-focus
-        // immediately (browser quirks during async commit). Suppress the blur
-        // auto-commit while invalid so the editor stays open for re-entry.
+        // Click-away = cancel (parity with Escape). Only Enter commits, so a
+        // stray click outside the input never bumps confidence to 1.0 via the
+        // unchanged-ref audit path. Skip while invalid so the editor stays
+        // open after a rejected attempt (browser re-focus quirk).
         if (invalid) return;
-        void commit();
+        cancel();
     }
 
     function onClick(e: MouseEvent): void {

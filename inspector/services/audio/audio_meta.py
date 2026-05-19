@@ -17,16 +17,22 @@ from __future__ import annotations
 
 import logging
 
-from services.storage import storage_paths
+from services.storage import cache, storage_paths
 from services.storage.hf_bucket import StorageNotFound, get_backend
 
 logger = logging.getLogger(__name__)
 
-_SIDECAR_CACHE: dict[str, dict] = {}
-
 
 def _load_sidecar(slug: str) -> dict | None:
-    cached = _SIDECAR_CACHE.get(slug)
+    """Read + cache the audio manifest sidecar for ``slug``.
+
+    Populates two LRU-bounded cache slots on first read:
+    - ``_audio_manifest`` — the full sidecar doc.
+    - ``_audio_manifest_url_index`` — derived ``{url: chapter_key}`` map for
+      O(1) ``chapter_for_url`` / ``chapter_meta_for_url`` reverse lookups
+      (the peaks fan-out previously did a linear scan per URL).
+    """
+    cached = cache.get_audio_manifest_cache(slug)
     if cached is not None:
         return cached
     try:
@@ -38,7 +44,20 @@ def _load_sidecar(slug: str) -> dict | None:
         return None
     if not isinstance(doc, dict):
         return None
-    _SIDECAR_CACHE[slug] = doc
+    cache.set_audio_manifest_cache(slug, doc)
+    # Build the URL → chapter-key inverse index alongside the sidecar so
+    # both lookups stay in lockstep. One O(N_chapters) walk at load time
+    # replaces O(N_chapters) per URL reverse lookup on every peaks request.
+    chapters = doc.get("chapters") or {}
+    inverse: dict[str, str] = {}
+    if isinstance(chapters, dict):
+        for k, entry in chapters.items():
+            if not isinstance(entry, dict):
+                continue
+            u = entry.get("url")
+            if isinstance(u, str) and u:
+                inverse[u] = k
+    cache.set_audio_manifest_url_index_cache(slug, inverse)
     return doc
 
 
@@ -58,10 +77,11 @@ def chapter_meta(reciter: str, chapter: int | str) -> dict | None:
 
 def chapter_meta_for_url(reciter: str, url: str) -> dict | None:
     """Reverse lookup: chapter entry by URL. None when unknown."""
-    for entry in _chapters(reciter).values():
-        if isinstance(entry, dict) and entry.get("url") == url:
-            return entry
-    return None
+    key = chapter_for_url(reciter, url)
+    if key is None:
+        return None
+    entry = _chapters(reciter).get(key)
+    return entry if isinstance(entry, dict) else None
 
 
 def _is_vbr_entry(entry: dict | None) -> bool:
@@ -139,11 +159,15 @@ def chapter_for_url(reciter: str, url: str) -> str | None:
     """Reverse-lookup the chapter key for a URL — used by the audio-proxy
     short-circuit. Returns the raw sidecar key (``"1"``..``"114"`` or
     ``"<surah>:<ayah>"``) or None when the URL is unknown.
+
+    O(1) via the inverse index populated alongside the sidecar (see
+    ``_load_sidecar``).
     """
-    for k, entry in _chapters(reciter).items():
-        if isinstance(entry, dict) and entry.get("url") == url:
-            return k
-    return None
+    _load_sidecar(reciter)  # ensure both caches are populated
+    idx = cache.get_audio_manifest_url_index_cache(reciter)
+    if not idx:
+        return None
+    return idx.get(url)
 
 
 def chapter_urls(reciter: str) -> dict[str, str]:
@@ -155,6 +179,39 @@ def chapter_urls(reciter: str) -> dict[str, str]:
         if isinstance(entry, dict) and isinstance(entry.get("url"), str):
             out[k] = entry["url"]
     return out
+
+
+def _stage_for_test(slug: str, doc: dict) -> None:
+    """Test helper — install a sidecar doc + derived URL index in one call.
+
+    Replaces the pre-refactor ``audio_meta._SIDECAR_CACHE[slug] = doc``
+    pattern that tests used directly. Builds the URL → chapter-key inverse
+    index from ``doc`` so reverse lookups work without round-tripping
+    through ``_load_sidecar``.
+    """
+    cache.set_audio_manifest_cache(slug, doc)
+    inverse: dict[str, str] = {}
+    chapters = doc.get("chapters") or {}
+    if isinstance(chapters, dict):
+        for k, entry in chapters.items():
+            if isinstance(entry, dict):
+                u = entry.get("url")
+                if isinstance(u, str) and u:
+                    inverse[u] = k
+    cache.set_audio_manifest_url_index_cache(slug, inverse)
+
+
+def _clear_for_test() -> None:
+    """Test helper — drop every cached sidecar + URL index. Mirrors the
+    pre-refactor ``audio_meta._SIDECAR_CACHE.clear()`` pattern."""
+    # Access the underlying _KeyedCache slots through cache.py setters by
+    # popping every staged slug. Tests stage a small set; iterate the dict.
+    am = getattr(cache, "_audio_manifest", None)
+    idx = getattr(cache, "_audio_manifest_url_index", None)
+    if am is not None and hasattr(am, "clear"):
+        am.clear()
+    if idx is not None and hasattr(idx, "clear"):
+        idx.clear()
 
 
 def chapter_numbers(reciter: str) -> list[int]:

@@ -412,3 +412,21 @@
     color: #f0a500;
     font-size: 0.82rem;
 }
+
+/* Wasl/waqf annotation tag rendered below a split-leaf SegmentRow in the
+   history panel. Captured by the in-card WASL/WAQF picker during the
+   post-split chain; only present on leaves followed by another leaf
+   (i.e. there's a real boundary on this seg's right edge). */
+.seg-history-wasl-tag {
+    display: inline-block;
+    margin: 2px 0 0 8px;
+    padding: 1px 6px;
+    font-size: var(--fs-meta);
+    line-height: 1.2;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+.seg-history-wasl-tag.on {
+    color: var(--accent);
+}

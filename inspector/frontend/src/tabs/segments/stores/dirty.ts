@@ -101,6 +101,11 @@ export function snapshotSeg(seg: Segment): SegSnapshot {
     if (seg.entry_ref) snap.entry_ref = seg.entry_ref;
     if (seg.chapter != null) snap.chapter = seg.chapter;
     if (seg.ignored_categories?.length) snap.ignored_categories = [...seg.ignored_categories];
+    // is_wasl is a boundary annotation captured by the in-card WASL/WAQF
+    // picker. Snapshots in op.targets_after carry the committed value so
+    // the EditChainRow split-leaf renderer can render its wasl/waqf tag
+    // straight from history without consulting the live seg.
+    if (seg.is_wasl) snap.is_wasl = true;
     return snap;
 }
 
@@ -197,6 +202,45 @@ export function getOpLog(): Map<number, EditOp[]> {
 /** Get ops for a specific chapter. */
 export function getChapterOps(chapter: number): EditOp[] {
     return _opLog.get(chapter) || [];
+}
+
+/**
+ * Mutate every seg snapshot for ``segmentUid`` inside ``op`` to carry the
+ * given ``fields`` overlay (e.g. ``{ is_wasl: true }``). Walks
+ * ``targets_after``, ``snapshots.after``, and ``patch.after`` (when
+ * present) so the save payload, history-row snapshot, and inverse-patch
+ * undo all stay in sync.
+ *
+ * Used by the post-CV-split wasl flow: the user's WASL/WAQF pick amends
+ * the parent split op's snapshots in place instead of emitting a fresh
+ * ``set_is_wasl`` op (which would pollute the edit-history view with one
+ * row per pick). ``_bump()`` nudges ``dirtyTick`` so reactive subscribers
+ * (history panel, dirty banner) re-derive.
+ *
+ * No-op if no snapshot in ``op`` matches the UID. Safe to call on any op
+ * shape — only matching snapshots are touched.
+ */
+export function amendSegInOp(
+    op: EditOp,
+    segmentUid: string,
+    fields: Record<string, unknown>,
+): void {
+    const apply = (arr: Array<Record<string, unknown>> | undefined): void => {
+        if (!Array.isArray(arr)) return;
+        for (const snap of arr) {
+            if (snap && (snap as { segment_uid?: string }).segment_uid === segmentUid) {
+                Object.assign(snap, fields);
+            }
+        }
+    };
+    apply(op.targets_after);
+    const snaps = (op as EditOp & { snapshots?: { after?: Array<Record<string, unknown>> } })
+        .snapshots;
+    if (snaps && Array.isArray(snaps.after)) apply(snaps.after);
+    if (op.patch && Array.isArray(op.patch.after)) {
+        apply(op.patch.after as Array<Record<string, unknown>>);
+    }
+    _bump();
 }
 
 /** Delete dirty entry for a chapter. */

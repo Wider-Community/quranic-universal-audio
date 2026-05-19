@@ -175,10 +175,11 @@ export function computeDisplayed(
     if (chapter) {
         segs = segs.filter((s) => s.chapter === chapter);
     }
-    if (verseStr && chapter) {
-        const prefix = `${chapter}:${verseStr}:`;
-        segs = segs.filter((s) => s.matched_ref && s.matched_ref.startsWith(prefix));
-    }
+    // `verseStr` (selectedVerse) is intentionally NOT applied as a filter
+    // anymore — picking an ayah from the footer scrolls to the first matching
+    // segment but keeps every other row in view. The store is still a derived
+    // dep so the picker's "All" label / chosen-verse label stays reactive.
+    void verseStr;
 
     // Clear stale neighbour tags (mutates segAllData — full re-index rebuild
     // at save/undo time drops these anyway).

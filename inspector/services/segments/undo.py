@@ -34,18 +34,17 @@ def find_segment_by_uid(entries: list[dict], uid: str, chapter_set: set[int]):
 def find_entry_for_insert(entries: list[dict], snap: dict, chapter_set: set[int]):
     """Find the correct entry to insert a restored segment into.
 
-    For by_surah: single entry per chapter.
-    For by_ayah: match by audio_url from the snapshot.
+    For by_surah: a single entry per chapter, so the first chapter match is
+    correct. For by_ayah: multiple entries per chapter (one per ayah) —
+    match by the snapshot's ``entry_ref`` (set by ``snapshotSeg`` on every
+    new save) against ``entry["ref"]``. Legacy snapshots that predate
+    ``entry_ref`` fall back to the chapter-membership match.
     """
-    audio_url = snap.get("audio_url", "")
-    for entry in entries:
-        ch = chapter_from_ref(entry["ref"])
-        if ch not in chapter_set:
-            continue
-        if audio_url and entry.get("audio", "") == audio_url:
-            return entry
-        if not audio_url:
-            return entry
+    snap_ref = snap.get("entry_ref") or ""
+    if snap_ref:
+        for entry in entries:
+            if entry.get("ref") == snap_ref:
+                return entry
     for entry in entries:
         ch = chapter_from_ref(entry["ref"])
         if ch in chapter_set:
