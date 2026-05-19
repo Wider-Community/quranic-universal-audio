@@ -145,28 +145,23 @@ export function enterTrimMode(seg: Segment, row: HTMLElement, mountId: symbol | 
     canvas._wfCache = null;
     canvas._trimBaseCache = null;
     // Populate the editCanvas store synchronously. SegmentRow.svelte publishes
-    // it too via a reactive block, but that fires on the next microtask — and
-    // `previewTrimAudio` below kicks off `_playRange` immediately, which reads
-    // `editCanvas` via `get(editCanvas)` to thread the canvas into the rAF
-    // loop. Without this explicit set, `_playRange`'s `canvas` is null on the
-    // auto-start path and `animatePlayhead` short-circuits on its first frame
-    // (no playhead, no loop enforcement, no live boundary updates on drag).
+    // it too via a reactive block, but that fires on the next microtask — the
+    // synchronous set lets any user-gesture-driven preview (footer ▶, future
+    // Replay button) read `editCanvas` via `get(editCanvas)` and thread it
+    // into the `_playRange` rAF loop without a one-frame null window.
     setEditCanvas(canvas);
 
     drawTrimWaveform(canvas);
     setupTrimDragHandles(canvas, seg);
 
-    // Fire the preview loop SYNCHRONOUSLY so the audio.play() call stays
-    // inside the user-gesture context of the Adjust click. An async IIFE
-    // with `await _fetchPeaksForClick` breaks that context (browsers drop
-    // the transient activation across microtasks in some cases), and Chrome
-    // silently rejects the play promise — leaving the play/pause button in
-    // the "stop" state with no audio. `animatePlayhead` is resilient to
-    // paused state now, so it's fine for the playhead rAF to run before
-    // peaks arrive. Then kick off the peaks fetch in the background; when
-    // peaks land, `redrawPeaksWaveforms` repaints the edit canvas, or we
-    // redraw here after the fetch completes.
-    previewTrimAudio(canvas);
+    // Entry no longer auto-starts a trim preview loop. Adjust must not
+    // disrupt chapter playback — if the user clicked Adjust while audio
+    // was running, the chapter playhead continues through the segment;
+    // if it was paused, it stays paused. Explicit preview entry points
+    // (footer ▶ when audio is paused, the future Replay button) own the
+    // cold-start. Auto-split's `previewSplitAudio` / `previewSplitRegion`
+    // are unaffected — they live in `enterSplitMode` for CV/reps seeded
+    // splits and still cold-start as the user expects.
     void _fetchPeaksForClick(seg, chapter).then(() => {
         if (!canvas._trimWindow) return; // user exited trim mode mid-fetch
 

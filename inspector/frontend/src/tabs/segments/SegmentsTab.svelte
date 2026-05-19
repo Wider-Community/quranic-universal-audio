@@ -42,7 +42,7 @@
     import { dirtyTick,isDirtyStore } from './stores/dirty';
     import { activeFilters } from './stores/filters';
     import { historyVisible } from './stores/history';
-    import { savedFilterView } from './stores/navigation';
+    import { savedFilterView, targetSegmentIndex } from './stores/navigation';
     import { segAudioElement, segListElement, waveformContainer } from './stores/playback';
     import { savePreviewVisible } from './stores/save';
     import { accordionViewActive, valUiOpenCategory } from './stores/validation';
@@ -238,9 +238,15 @@
         const first = segs.find((s) => s.matched_ref?.startsWith(prefix));
         if (first) {
             // Reflect the jump target in the footer's Ayah trigger so the
-            // user can see what they jumped to (vs. the original UI which
-            // snapped back to "All" immediately and forgot the selection).
+            // user can see what they jumped to. `selectedVerse` is purely a
+            // picker-label store now — the segments list is no longer
+            // narrowed to the chosen ayah (see `filters.ts::computeDisplayed`),
+            // so the user keeps every other card in view.
             selectedVerse.set(v);
+            // Scroll the first matching row into view. SegmentRow watches
+            // `targetSegmentIndex` and calls `scrollIntoView` when its row
+            // matches — same path Go-To uses.
+            targetSegmentIndex.set({ chapter: first.chapter ?? chapter, index: first.index });
             playFromSegment(first.index, first.chapter ?? chapter);
         }
     }

@@ -34,7 +34,6 @@ import {
     setEdit,
     setEditingSegIndex,
 } from '../../stores/edit';
-import { segPort } from '../../stores/playback';
 import {
     _advanceRefByOneWord,
     _normalizeRef as _normalizeRefLib,
@@ -43,7 +42,6 @@ import {
     getVerseWordCounts,
     parseSegRef,
 } from '../data/references';
-import { stopSegAnimation } from '../playback/playback';
 import type { RowEntry, RowInstanceRole } from '../playback/row-registry';
 import { getRowEntriesFor } from '../playback/row-registry';
 import { finalizeEdit } from './common';
@@ -93,7 +91,9 @@ export function beginRefEdit(
     contextCategory: string | null = null,
     mountId: symbol | null = null,
 ): void {
-    if (!segPort.paused) { segPort.pause(); stopSegAnimation(); }
+    // Reference edits are silent — opening the inline `<input>` must not
+    // interrupt chapter / accordion playback. The previous unconditional
+    // `segPort.pause()` here was visible UX noise on every Edit-Ref click.
 
     // Seed the initial value with the exact object we just passed to beginRefEdit,
     // bypassing Svelte's reactive prop delay. If _pendingInitialValue is already
