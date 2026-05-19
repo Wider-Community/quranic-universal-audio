@@ -28,6 +28,7 @@ import {
     _playRange as _playRangeImpl,
     clearPlayRangeRAF,
     clearPreviewCanplayHandler,
+    editPreviewPlaying,
     getPreviewStopHandler,
     setPreviewJustSeeked,
     setPreviewLooping,
@@ -75,6 +76,7 @@ export function exitEditMode(): void {
     clearEdit();
     setPreviewLooping(false);
     setPreviewJustSeeked(false);
+    editPreviewPlaying.set(false);
     clearPlayRangeRAF();
     clearPreviewCanplayHandler();
     const stopHandler = getPreviewStopHandler();
