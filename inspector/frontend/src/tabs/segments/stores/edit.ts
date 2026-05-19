@@ -145,25 +145,40 @@ export interface ChainTarget {
     seg: Segment;
     category: string | null;
     originalEndRef: string | null;
-    /**
-     * When set on a chain entry produced by a CV split, ``_handoffPendingChain``
-     * triggers a brief visual flash on the ``WaslGap`` chip between the segment
-     * named by this UID (the previous piece) and ``seg`` (the current piece),
-     * then continues with the normal ref-edit step. No modal — the chip itself
-     * is the toggle; the flash just draws the eye there.
-     */
-    waslFlashForLeftUid?: string;
 }
 
 export const pendingChainTargets = writable<ChainTarget[]>([]);
 
 /**
- * Holds the ``segA.segment_uid`` of the WaslGap chip that should momentarily
- * flash and scroll into view. Written by ``_handoffPendingChain`` between
- * post-split ref-edits; read by ``WaslGap.svelte`` to apply a brief CSS
- * animation. Auto-clears after the animation duration.
+ * Per-session set of left-side segment UIDs whose post-CV-split wasl boundary
+ * has not yet been answered yes/no. ``confirmSplit`` adds each non-last child
+ * UID after a cross_verse split; ``WaslBoundary.svelte`` reads the set to
+ * decide whether to render the inline ``waṣl?  no · yes`` prompt vs. the
+ * committed reading. Click on yes/no removes the UID. Forgotten on reload.
+ *
+ * Resolved (committed-true) boundaries render their quiet ``waṣl`` mark from
+ * ``seg.is_wasl`` alone, so reload is fine. Committed-no is the default and
+ * needs no per-UID memory.
  */
-export const flashWaslGap = writable<string | null>(null);
+export const pendingWaslConfirm = writable<Set<string>>(new Set());
+
+export function markWaslPending(leftUid: string): void {
+    pendingWaslConfirm.update((s) => {
+        if (s.has(leftUid)) return s;
+        const next = new Set(s);
+        next.add(leftUid);
+        return next;
+    });
+}
+
+export function clearWaslPending(leftUid: string): void {
+    pendingWaslConfirm.update((s) => {
+        if (!s.has(leftUid)) return s;
+        const next = new Set(s);
+        next.delete(leftUid);
+        return next;
+    });
+}
 
 // ---------------------------------------------------------------------------
 // Split preview selection — which range the centralized footer play button

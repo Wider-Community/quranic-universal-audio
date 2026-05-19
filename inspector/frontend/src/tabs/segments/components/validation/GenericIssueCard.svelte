@@ -24,6 +24,7 @@
     import { resolveIssueSeg } from '../../utils/validation/resolve-issue';
     import { getSplitGroupMembers } from '../../utils/validation/split-group';
     import SegmentRow from '../list/SegmentRow.svelte';
+    import WaslBoundary from './WaslBoundary.svelte';
 
     const dispatch = createEventDispatcher<{ contextchange: boolean }>();
 
@@ -226,7 +227,7 @@
                 accordionSiblings={siblings}
             />
         {/if}
-        {#each mainMembers as m (m.segment_uid ?? `${m.chapter}:${m.index}`)}
+        {#each mainMembers as m, i (m.segment_uid ?? `${m.chapter}:${m.index}`)}
             <SegmentRow
                 seg={m}
                 showGotoBtn={true}
@@ -235,6 +236,12 @@
                 validationCategory={category}
                 accordionSiblings={siblings}
             />
+            {#if category === 'cross_verse' && i < mainMembers.length - 1}
+                {@const next = mainMembers[i + 1]}
+                {#if next}
+                    <WaslBoundary leftSeg={m} rightSeg={next} />
+                {/if}
+            {/if}
         {/each}
         {#if nextSeg}
             <SegmentRow
