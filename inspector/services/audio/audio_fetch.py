@@ -1,14 +1,11 @@
-"""Per-chapter audio fetch + Xing-TOC remux + bucket persistence.
+"""Per-chapter audio fetch + bucket persistence.
 
 The prefetch worker (``services.audio_prefetch``) drives this module across a
 thread pool. Each call:
 
 1. HTTP-fetches the upstream chapter URL to a temp file.
-2. For VBR chapters, runs ``ffmpeg -bsf:a mp3_to_xing`` so the browser's
-   ``<audio>.currentTime`` seek lands on the correct frame — the inspector
-   then serves the remuxed file directly with no clip-route involvement.
-3. Uploads the (possibly remuxed) MP3 to ``wip/<slug>/audio/<chapter>.mp3``.
-4. Computes waveform peaks from the local temp file, packs to the slim shape
+2. Uploads the MP3 to ``wip/<slug>/audio/<chapter>.mp3``.
+3. Computes waveform peaks from the local temp file, packs to the slim shape
    (int8-quantized, decimated, gzipped via ``peaks_slim.pack_slim``), and
    uploads to ``wip/<slug>/peaks/<chapter>.json.gz``.
 
@@ -21,14 +18,11 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
 import tempfile
-import threading
 import time
 import urllib.request
 from dataclasses import dataclass
 
-from config import FFMPEG_FULL_TIMEOUT
 from . import audio_meta
 from .peaks import compute_audio_peaks
 from .peaks_slim import pack_slim, unpack_slim_envelope
@@ -36,12 +30,6 @@ from services.storage import storage_paths
 from services.storage.hf_bucket import get_backend
 
 logger = logging.getLogger(__name__)
-
-# Global ffmpeg gate. mp3_to_xing is CPU-bound; letting the prefetch fan-out
-# spawn one ffmpeg per chapter pegs small Space CPU and starves the request
-# path. Cap to a single concurrent remux process; downloads + uploads still
-# parallelize via the prefetch thread pool.
-_FFMPEG_SEM = threading.Semaphore(1)
 
 
 @dataclass(frozen=True)
@@ -53,7 +41,6 @@ class ChapterArtifact:
     peaks_path: str | None
     bytes_written: int
     duration_ms: int | None
-    ffmpeg_remuxed: bool
 
 
 class ChapterFetchError(Exception):
@@ -78,51 +65,6 @@ def _download_to_temp(url: str, tmp_dir: str) -> str:
             pass
         raise ChapterFetchError("download", f"{type(e).__name__}: {e}") from e
     return tmp
-
-
-def _remux_mp3_to_xing(src: str, tmp_dir: str) -> str | None:
-    """Re-wrap ``src`` adding a Xing TOC header. Returns the new path on
-    success or ``None`` when ffmpeg is missing / errors — caller falls back
-    to the un-remuxed file (still serves correctly, just keeps the legacy
-    VBR mis-seek issue for that chapter).
-    """
-    fd, tmp = tempfile.mkstemp(suffix=".mp3", dir=tmp_dir)
-    os.close(fd)
-    try:
-        with _FFMPEG_SEM:
-            result = subprocess.run(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    src,
-                    "-c:a",
-                    "copy",
-                    "-bsf:a",
-                    "mp3_to_xing",
-                    "-v",
-                    "error",
-                    tmp,
-                ],
-                capture_output=True,
-                timeout=FFMPEG_FULL_TIMEOUT,
-            )
-        if result.returncode != 0 or os.path.getsize(tmp) == 0:
-            logger.warning(
-                "mp3_to_xing remux failed (rc=%s): %s",
-                result.returncode,
-                result.stderr.decode("utf-8", errors="replace")[:200],
-            )
-            os.unlink(tmp)
-            return None
-        return tmp
-    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        logger.warning("mp3_to_xing skipped: %s", e)
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        return None
 
 
 def _recompute_peaks_for_existing_audio(
@@ -176,7 +118,6 @@ def _recompute_peaks_for_existing_audio(
             peaks_path=peaks_path,
             bytes_written=size,
             duration_ms=peaks.get("duration_ms"),
-            ffmpeg_remuxed=False,
         )
     finally:
         if tmp_dir:
@@ -216,7 +157,6 @@ def fetch_and_persist_chapter(
                 peaks_path=peaks_path,
                 bytes_written=size,
                 duration_ms=existing_peaks.get("duration_ms"),
-                ffmpeg_remuxed=False,
             )
         artifact = _recompute_peaks_for_existing_audio(slug, chapter, audio_path, peaks_path)
         if artifact is not None:
@@ -225,23 +165,17 @@ def fetch_and_persist_chapter(
 
     tmp_dir = tempfile.mkdtemp(prefix=f"prefetch_{slug}_")
     raw_path: str | None = None
-    remux_path: str | None = None
     try:
         raw_path = _download_to_temp(url, tmp_dir)
 
-        is_vbr = audio_meta.is_vbr_for_url(slug, url)
-        if is_vbr:
-            remux_path = _remux_mp3_to_xing(raw_path, tmp_dir)
-        upload_src = remux_path or raw_path
-
-        with open(upload_src, "rb") as fh:
+        with open(raw_path, "rb") as fh:
             data = fh.read()
         try:
             backend.write_bytes_atomic(audio_path, data)
         except Exception as e:  # noqa: BLE001
             raise ChapterFetchError("upload_audio", f"{type(e).__name__}: {e}") from e
 
-        peaks = compute_audio_peaks(upload_src)
+        peaks = compute_audio_peaks(raw_path)
         duration_ms = peaks.get("duration_ms") if peaks else None
         if peaks:
             try:
@@ -257,15 +191,13 @@ def fetch_and_persist_chapter(
             peaks_path=peaks_path if peaks else None,
             bytes_written=len(data),
             duration_ms=duration_ms,
-            ffmpeg_remuxed=remux_path is not None,
         )
     finally:
-        for p in (raw_path, remux_path):
-            if p:
-                try:
-                    os.unlink(p)
-                except OSError:
-                    pass
+        if raw_path:
+            try:
+                os.unlink(raw_path)
+            except OSError:
+                pass
         try:
             os.rmdir(tmp_dir)
         except OSError:

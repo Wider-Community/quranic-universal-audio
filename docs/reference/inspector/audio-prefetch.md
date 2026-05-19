@@ -31,9 +31,8 @@ The post-transition observer lives in `inspector/services/state/state.py::regist
 Per-chapter pipeline (`inspector/services/audio_fetch.py::fetch_and_persist_chapter`):
 
 1. HTTP-stream the upstream URL → temp file.
-2. If `audio_meta.is_vbr_for_url` ⇒ run `ffmpeg -c:a copy -bsf:a mp3_to_xing`. Failure falls back to the un-remuxed bytes (logged).
-3. `write_bytes_atomic` the MP3 to `wip/<slug>/audio/<chapter>.mp3`.
-4. `compute_audio_peaks` on the local temp → `pack_slim` → `write_bytes_atomic` to `wip/<slug>/peaks/<chapter>.json.gz`.
+2. `write_bytes_atomic` the MP3 to `wip/<slug>/audio/<chapter>.mp3`.
+3. `compute_audio_peaks` on the local temp → `pack_slim` → `write_bytes_atomic` to `wip/<slug>/peaks/<chapter>.json.gz`.
 
 `_done.json` is only written when every chapter succeeded. Partial failures leave the sentinel absent so the next trigger fills the gaps.
 
@@ -45,7 +44,7 @@ Every step lands in `audit/<YYYY>-<MM>.jsonl` so the timeline for a reciter is q
 |---|---|
 | `audio_prefetch.queued` | Enqueue call (skip-flag in payload when the sentinel already exists). |
 | `audio_prefetch.started` | Worker picked up the slug. `payload.total = chapter count`. |
-| `audio_prefetch.chapter_done` | Chapter MP3 + peaks written. `payload = {chapter, bytes, duration_ms, ffmpeg_remuxed}`. |
+| `audio_prefetch.chapter_done` | Chapter MP3 + peaks written. `payload = {chapter, bytes, duration_ms}`. |
 | `audio_prefetch.chapter_failed` | One chapter failed; job continues. `payload.stage` is one of `download` / `upload_audio` / `unknown`. |
 | `audio_prefetch.completed` | All chapters succeeded; sentinel written. |
 | `audio_prefetch.failed` | At least one chapter failed; sentinel absent. |

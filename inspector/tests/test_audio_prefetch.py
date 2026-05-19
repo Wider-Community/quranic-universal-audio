@@ -82,7 +82,6 @@ def stub_fetch(monkeypatch):
             peaks_path=peaks_path,
             bytes_written=len(data),
             duration_ms=1000,
-            ffmpeg_remuxed=False,
         )
 
     monkeypatch.setattr(audio_fetch, "fetch_and_persist_chapter", fake_fetch)
@@ -270,7 +269,6 @@ def test_run_one_skips_done_marker_on_failure(
             peaks_path=None,
             bytes_written=2,
             duration_ms=None,
-            ffmpeg_remuxed=False,
         )
 
     monkeypatch.setattr(audio_fetch, "fetch_and_persist_chapter", flaky)
