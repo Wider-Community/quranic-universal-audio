@@ -34,6 +34,7 @@ RESOLVES_BY_EDIT_CATEGORIES: frozenset[str] = frozenset({
     "audio_bleeding",
     "repetitions",
     "low_confidence_v2",
+    "basmala_amin",
 })
 
 # Legacy test seam: older unit tests monkeypatch this path directly. Production

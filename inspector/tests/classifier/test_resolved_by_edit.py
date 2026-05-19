@@ -131,6 +131,7 @@ def test_resolves_by_edit_set_contains_only_soft_categories():
     """
     assert RESOLVES_BY_EDIT_CATEGORIES == frozenset({
         "boundary_adj", "audio_bleeding", "repetitions", "low_confidence_v2",
+        "basmala_amin",
     })
 
 
