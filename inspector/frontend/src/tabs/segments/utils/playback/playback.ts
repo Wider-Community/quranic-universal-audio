@@ -52,10 +52,10 @@ import {
 import { drawSegPlayhead, drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 import { _fetchPeaksForClick } from '../waveform/utils';
 import {
+    _playRange,
     editPreviewPlaying,
     getPlayRangeRAF,
     setPreviewLooping,
-    _playRange,
 } from './play-range';
 import { nextDisplayedSeg, nextSiblingSeg } from './resolvers';
 import { getRowEntriesFor } from './row-registry';

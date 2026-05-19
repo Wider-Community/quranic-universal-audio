@@ -32,13 +32,10 @@ import {
     setTrimWindow,
     updateTrimWindow,
 } from '../../stores/edit';
-import { segPort } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { EDIT_MIN_DURATION_MS, EDIT_SNAP_MS, TRIM_HANDLE_HIT_RADIUS_PX } from '../constants';
 import {
-    clearPlayRangeRAF,
-    getPreviewLooping,
-    setPreviewJustSeeked,
+    editPreviewPlaying,
     setPreviewLooping,
 } from '../playback/play-range';
 import { _ensureTrimBaseCache, drawTrimWaveform } from '../waveform/trim-draw';
@@ -460,18 +457,21 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
 // previewTrimAudio — toggle looping preview of trimmed region
 // ---------------------------------------------------------------------------
 
+/** Cold-start the trim-window preview loop. Idempotent — calling while a
+ *  loop is already running cancels the existing rAF (in `_playRange`'s
+ *  setup) and starts fresh. Play/pause toggling is owned by `onSegPlayClick`
+ *  (playback.ts), not by this function — the footer ▶ and the spacebar
+ *  both route there so they never reset the cursor.
+ *
+ *  Callers today:
+ *    - `enterTrimMode` (auto-seed on edit entry).
+ *  Future selection-change callers (handle drag, view zoom) can pass a
+ *  pre-resolved canvas to skip the editCanvas lookup. */
 export function previewTrimAudio(canvas?: SegCanvas | null): void {
     const c = canvas ?? get(editCanvas);
     const tw = c?._trimWindow;
     if (!tw || !c) return;
-    if (getPreviewLooping() && !segPort.paused) {
-        setPreviewLooping(false);
-        setPreviewJustSeeked(false);
-        segPort.pause();
-        clearPlayRangeRAF();
-        if (c._trimWindow) drawTrimWaveform(c);
-        return;
-    }
+    editPreviewPlaying.set(true);
     setPreviewLooping('trim');
     _playRange(tw.currentStart, tw.currentEnd);
 }

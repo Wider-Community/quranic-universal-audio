@@ -70,6 +70,7 @@
             title="Move start forward {EDIT_NUDGE_MS} ms"
             disabled={startFwdDisabled}
             on:click={nudgeStartFwd}>&gt;</button>
+        <span class="seg-edit-divider" aria-hidden="true"></span>
         <button class="btn btn-sm seg-trim-step seg-trim-step-end"
             title="Move end back {EDIT_NUDGE_MS} ms"
             disabled={endBackDisabled}

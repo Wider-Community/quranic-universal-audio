@@ -4,19 +4,17 @@
      *
      * Two layouts driven by `splitState.currentSplits.length`:
      *
-     * - N=1 (binary split, today's default) → ``Cancel | (L) | < | > | (R)
-     *   | Split``. The L/R toggle is a SELECTION radio — pressing it picks
-     *   which side the footer play button loops. Steppers nudge via
-     *   `nudgeSplitBoundary`.
+     * - N=1 (binary split, today's default) → ``Cancel | L | < | > | R |
+     *   Split``. L/R are SELECTION buttons — pressing one picks which side
+     *   the footer play button loops. If a loop is already running, clicking
+     *   the OTHER side restarts the loop on that side; otherwise it just
+     *   updates the selection. Steppers nudge via `nudgeSplitBoundary`.
      * - N≥2 (multi-cursor, repetition auto-split) → ``Cancel | [1] [2] …
-     *   [N+1] | Split``. Each ``[i]`` selects region i (0-indexed); footer
-     *   play loops that region. No steppers — there's no obvious "the
-     *   cursor" to step in multi mode; users drag the cursor lines
-     *   directly. Click-to-seek on the canvas is also disabled in this
-     *   mode (see split.ts `onMouseup`).
+     *   [N+1] | Split``. Each ``[i]`` selects region i (0-indexed); same
+     *   click-while-playing-switches-region semantics as L/R.
      *
-     * The footer's single play/pause is the universal preview play surface;
-     * this panel never spawns its own play button.
+     * The footer's single play/pause is the universal play surface — this
+     * panel never spawns its own play button.
      */
 
     import { get } from 'svelte/store';
@@ -29,13 +27,17 @@
         splitPreviewSelection,
         splitState,
     } from '../../stores/edit';
+    import { segPort } from '../../stores/playback';
     import type { SegCanvas } from '../../types/segments-waveform';
     import { EDIT_MIN_DURATION_MS, EDIT_NUDGE_MS } from '../../utils/constants';
     import { exitEditMode } from '../../utils/edit/common';
     import {
         confirmSplit,
         nudgeSplitBoundary,
+        previewSplitAudio,
+        previewSplitRegion,
     } from '../../utils/edit/split';
+    import { getPlayRangeRAF } from '../../utils/playback/play-range';
 
     export let seg: Segment;
     export let canvas: SegCanvas;
@@ -82,9 +84,22 @@
         setSplitPreviewSelection({ kind: 'region', index: sel.kind === 'left' ? 0 : regionCount - 1 });
     }
 
-    function pickLeft(): void { setSplitPreviewSelection({ kind: 'left' }); }
-    function pickRight(): void { setSplitPreviewSelection({ kind: 'right' }); }
-    function pickRegion(i: number): void { setSplitPreviewSelection({ kind: 'region', index: i }); }
+    /** Set the selection store. If a loop is already running (paused or
+     *  playing), switch the loop to the new range immediately — keeps the
+     *  user in their preview flow without needing to re-press the footer
+     *  play button. */
+    function pickAndMaybeSwitch(nextKind: 'left' | 'right'): void {
+        setSplitPreviewSelection({ kind: nextKind });
+        if (getPlayRangeRAF() && !segPort.paused) {
+            previewSplitAudio(nextKind, canvas);
+        }
+    }
+    function pickRegionAndMaybeSwitch(i: number): void {
+        setSplitPreviewSelection({ kind: 'region', index: i });
+        if (getPlayRangeRAF() && !segPort.paused) {
+            previewSplitRegion(i, canvas);
+        }
+    }
 </script>
 
 <div class="seg-edit-inline">
@@ -95,8 +110,8 @@
                 class="btn btn-sm seg-split-pick"
                 class:active={selLeftActive}
                 aria-pressed={selLeftActive}
-                title="Preview the LEFT half — press the footer play to loop"
-                on:click={pickLeft}
+                title="Preview the LEFT half — press footer play to loop"
+                on:click={() => pickAndMaybeSwitch('left')}
             >L</button>
             <button class="btn btn-sm seg-split-step"
                 title="Move split back {EDIT_NUDGE_MS} ms"
@@ -110,8 +125,8 @@
                 class="btn btn-sm seg-split-pick"
                 class:active={selRightActive}
                 aria-pressed={selRightActive}
-                title="Preview the RIGHT half — press the footer play to loop"
-                on:click={pickRight}
+                title="Preview the RIGHT half — press footer play to loop"
+                on:click={() => pickAndMaybeSwitch('right')}
             >R</button>
         {:else}
             {#each regions as i}
@@ -119,8 +134,8 @@
                     class="btn btn-sm seg-split-pick seg-split-region"
                     class:active={selRegion(i)}
                     aria-pressed={selRegion(i)}
-                    title="Preview region {i + 1} — press the footer play to loop"
-                    on:click={() => pickRegion(i)}
+                    title="Preview region {i + 1} — press footer play to loop"
+                    on:click={() => pickRegionAndMaybeSwitch(i)}
                 >{i + 1}</button>
             {/each}
         {/if}
@@ -128,14 +143,3 @@
         <span class="seg-edit-status">{$editStatusText}</span>
     </div>
 </div>
-
-<style>
-    .seg-split-region {
-        min-width: 1.6em;
-        padding: 0 0.4em;
-    }
-    .seg-split-pick.active {
-        background-color: var(--accent, #4a90e2);
-        color: white;
-    }
-</style>
