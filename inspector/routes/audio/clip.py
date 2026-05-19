@@ -17,7 +17,7 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from config import AUDIO_CACHE_MAX_AGE, FFMPEG_FULL_TIMEOUT
 from services import audio_source
-from services.data_loader import load_detailed
+from services.audio import audio_meta
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +36,9 @@ def _is_known_chapter_url(reciter: str, url: str) -> bool:
     serve to this reciter. Anything else gets a 403, even if it's the same
     host as a known URL.
     """
-    if not url:
-        return False
-    entries = load_detailed(reciter)
-    if not entries:
-        return False
-    return any(e.get("audio") == url for e in entries)
+    # audio_manifest sidecar is the single source of truth post-migration #5;
+    # the legacy per-entry `audio` field is stripped on read by the schema.
+    return bool(url) and audio_meta.chapter_for_url(reciter, url) is not None
 
 
 @segment_clip_bp.route("/segment-clip/<reciter>")
