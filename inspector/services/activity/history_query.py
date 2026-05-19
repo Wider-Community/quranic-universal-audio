@@ -21,10 +21,14 @@ logger = logging.getLogger(__name__)
 # ``cross_verse`` is excluded -- it's a hard structural rule. Self-resolving
 # categories (``low_confidence``, ``failed``) are excluded because the
 # classifier already drops them when ``confidence`` flips to 1.0.
+# ``basmala_amin`` is included: the user has reviewed the seg from the card
+# and any edit (trim/split/merge/editReference) signals "I dealt with it" --
+# revalidation must not re-raise the flag for that uid.
 RESOLVES_BY_EDIT_CATEGORIES: frozenset[str] = frozenset({
     "boundary_adj",
     "audio_bleeding",
     "repetitions",
+    "basmala_amin",
 })
 
 # Legacy test seam: older unit tests monkeypatch this path directly. Production
