@@ -296,7 +296,13 @@ function _slicePeaks(
     return { maxVals, minVals };
 }
 
-/** Draw red/green overlay on history card waveforms to show trim changes. */
+/** Draw red/green overlay on history card waveforms to show trim changes.
+ *
+ * Paints the canvas region OUTSIDE [otherStart, otherEnd], optionally
+ * intersected with [clipStart, clipEnd]. The clip is used by split-leaf
+ * cards whose canvas spans the chain's wider union range — without it the
+ * delta paint bleeds onto sibling leaves' portions of the canvas.
+ */
 export function _drawTrimHighlight(canvas: SegCanvas, seg: Segment): void {
     const hl = canvas._trimHL;
     if (!hl) return;
@@ -306,16 +312,32 @@ export function _drawTrimHighlight(canvas: SegCanvas, seg: Segment): void {
     const dur = seg.time_end - seg.time_start;
     if (dur <= 0) return;
 
+    const clipStart = hl.clipStart ?? seg.time_start;
+    const clipEnd = hl.clipEnd ?? seg.time_end;
+    const toX = (ms: number): number => ((ms - seg.time_start) / dur) * w;
+
     const rgba = hl.color === 'red' ? 'rgba(244, 67, 54, 0.3)' : 'rgba(76, 175, 80, 0.3)';
     ctx.fillStyle = rgba;
 
-    if (seg.time_start < hl.otherStart) {
-        const x2 = ((hl.otherStart - seg.time_start) / dur) * w;
-        ctx.fillRect(0, 0, x2, h);
+    // Left region: canvas ∩ clip ∩ [-∞, otherStart]
+    {
+        const lo = Math.max(seg.time_start, clipStart);
+        const hi = Math.min(hl.otherStart, clipEnd, seg.time_end);
+        if (hi > lo) {
+            const x1 = Math.max(0, toX(lo));
+            const x2 = Math.min(w, toX(hi));
+            if (x2 > x1) ctx.fillRect(x1, 0, x2 - x1, h);
+        }
     }
-    if (seg.time_end > hl.otherEnd) {
-        const x1 = ((hl.otherEnd - seg.time_start) / dur) * w;
-        ctx.fillRect(x1, 0, w - x1, h);
+    // Right region: canvas ∩ clip ∩ [otherEnd, +∞]
+    {
+        const lo = Math.max(hl.otherEnd, clipStart, seg.time_start);
+        const hi = Math.min(seg.time_end, clipEnd);
+        if (hi > lo) {
+            const x1 = Math.max(0, toX(lo));
+            const x2 = Math.min(w, toX(hi));
+            if (x2 > x1) ctx.fillRect(x1, 0, x2 - x1, h);
+        }
     }
 }
 

@@ -67,6 +67,8 @@ _ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset({
     "ignoreIssue",
     "auto_fix_missing_word",
     "autoFixMissingWord",
+    "set_is_wasl",
+    "setIsWasl",
     # ``confirm_reference`` is a reducer-edge variant of editReference recorded
     # on ``op_type`` only; the ``command.type`` itself remains ``editReference``.
 })

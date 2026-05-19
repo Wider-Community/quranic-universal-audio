@@ -36,6 +36,7 @@ import type {
     Operation,
     SegmentCommand,
     SegmentPatch,
+    SetIsWaslCommand,
     SplitCommand,
     TrimCommand,
 } from './command';
@@ -65,6 +66,7 @@ const OP_TYPE_BY_COMMAND: Readonly<Record<Operation, string>> = Object.freeze({
     delete: 'delete_segment',
     ignoreIssue: 'ignore_issue',
     autoFixMissingWord: 'auto_fix_missing_word',
+    setIsWasl: 'set_is_wasl',
 });
 
 const STRUCTURAL_COMMANDS: ReadonlySet<Operation> = new Set([
@@ -259,6 +261,16 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
     // `wrap_word_ranges` no longer describes any one piece's content.
     // Leaving it attached re-tags clean post-split segs as repetitions
     // and makes Auto Split feed wrong refs to MFA.
+    // wasl propagation rule: ``cmd.wasls[i]`` (when supplied) sets
+    // ``is_wasl`` on child[i] (the LEFT side of the new inter-child boundary
+    // ``cursors[i]``). The last child (no new boundary after it) inherits
+    // the parent's is_wasl — that flag described the parent-to-next-seg
+    // right edge, which post-split is now child[N-1]'s right edge.
+    const parentWasl = target.is_wasl === true;
+    const waslOverrides = cmd.wasls && cmd.wasls.length === cursors.length
+        ? cmd.wasls
+        : null;
+
     const pieces: Segment[] = [];
     for (let i = 0; i < nPieces; i++) {
         const start = i === 0 ? target.time_start : cursors[i - 1]!;
@@ -279,6 +291,11 @@ function _reduceSplit(state: ApplyCommandState, cmd: SplitCommand, ctx?: ApplyCo
         }
         if (refs[i] !== undefined) piece.matched_ref = refs[i]!;
         if (texts[i] !== undefined) piece.matched_text = texts[i]!;
+        if (i < nPieces - 1) {
+            piece.is_wasl = waslOverrides ? waslOverrides[i] === true : false;
+        } else {
+            piece.is_wasl = parentWasl;
+        }
         pieces.push(piece);
     }
 
@@ -557,6 +574,45 @@ function _reduceIgnoreIssue(
     };
 }
 
+function _reduceSetIsWasl(
+    state: ApplyCommandState,
+    cmd: SetIsWaslCommand,
+    ctx?: ApplyCommandContext,
+): CommandResult {
+    const target = _findSeg(state, cmd.segmentUid);
+    if (!target) throw new Error(`applyCommand[setIsWasl]: segment '${cmd.segmentUid}' not found`);
+    const chapter = _chapterFor(target, state);
+
+    const next = _cloneSeg(target);
+    next.is_wasl = !!cmd.is_wasl;
+
+    const op = _baseOperation(cmd, target, chapter, target.index, ctx);
+    op.fix_kind = cmd.fixKind ?? 'manual';
+    op.snapshots.before = [_snapshot(target)];
+    op.snapshots.after = [_snapshot(next)];
+    op.targets_before = op.snapshots.before;
+    op.targets_after = op.snapshots.after;
+    op.affected_chapters = [chapter];
+
+    const nextState: CommandNextState = {
+        byId: { [next.segment_uid ?? cmd.segmentUid]: next },
+        affectedChapter: chapter,
+    };
+    return {
+        nextState,
+        operation: op,
+        affectedChapters: [chapter],
+        validationDelta: { resolved: [], introduced: [] },
+        patch: _buildPatch(
+            [_snapshot(target)],
+            [_snapshot(next)],
+            [],
+            [],
+            [chapter],
+        ),
+    };
+}
+
 function _reduceAutoFixMissingWord(
     state: ApplyCommandState,
     cmd: AutoFixMissingWordCommand,
@@ -623,6 +679,8 @@ export function applyCommand(
             return _reduceIgnoreIssue(state as ApplyCommandState, command, ctx);
         case 'autoFixMissingWord':
             return _reduceAutoFixMissingWord(state as ApplyCommandState, command, ctx);
+        case 'setIsWasl':
+            return _reduceSetIsWasl(state as ApplyCommandState, command, ctx);
         default: {
             const _exhaustive: never = command;
             throw new Error(`applyCommand: unsupported command type ${(_exhaustive as { type: string }).type}`);

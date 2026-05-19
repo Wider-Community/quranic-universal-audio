@@ -125,6 +125,24 @@ def test_qalqala_letter_field_populated():
     assert result.get("qalqala_letter") == "د"
 
 
+def test_cross_verse_classifies_regardless_of_is_wasl():
+    """The is_wasl boundary annotation is positive metadata, not a suppression.
+    A cross-verse segment with is_wasl=true still classifies as cross_verse —
+    the wasl flag describes that the reciter intentionally recited across the
+    boundary, but the segment is still cross-verse and still surfaces in the
+    accordion.
+    """
+    base = {
+        "matched_ref": "1:5:7-1:6:1",
+        "confidence": 1.0,
+    }
+    plain = _classify(base, entry_ref="1", is_by_ayah=False)
+    waslful = _classify({**base, "is_wasl": True}, entry_ref="1", is_by_ayah=False)
+
+    assert "cross_verse" in plain
+    assert "cross_verse" in waslful
+
+
 def test_muqattaat_only_first_word_of_verse():
     """A muqattaat verse with s_word=2 does NOT classify; s_word=1 does."""
     base_seg = {

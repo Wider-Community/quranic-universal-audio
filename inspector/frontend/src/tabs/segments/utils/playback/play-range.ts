@@ -31,6 +31,15 @@ import { drawTrimWaveform } from '../waveform/trim-draw';
 // ---------------------------------------------------------------------------
 
 export const previewLooping = writable<PreviewLoopMode>(false);
+
+/** True while the user wants an edit-mode preview to be playing. Set by
+ *  the centralized play/pause handler in playback.ts on cold-start and
+ *  resume; cleared on user-initiated pause and on exitEditMode. Distinct
+ *  from `previewLooping` (which tracks WHICH range is the loop target —
+ *  stays set across pause/resume so the rAF can resume seamlessly).
+ *  Drives the footer play-button glyph in edit mode. */
+export const editPreviewPlaying = writable<boolean>(false);
+
 let _previewJustSeeked = false;
 let _playRangeRAF: RafHandle | null = null;
 let _previewStopHandler: ((ev: Event) => void) | null = null;

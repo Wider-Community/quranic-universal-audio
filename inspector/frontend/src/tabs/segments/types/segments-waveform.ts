@@ -16,6 +16,12 @@ export interface TrimHighlight {
     color: 'red' | 'green';
     otherStart: number;
     otherEnd: number;
+    /** Optional time-range clip applied on top of the canvas's visual range
+     *  when painting the delta. Used by split-leaf cards whose canvas spans
+     *  the chain's union range — the clip restricts the trim coloring to the
+     *  leaf's own bounds so it doesn't bleed onto sibling leaves. */
+    clipStart?: number;
+    clipEnd?: number;
 }
 
 /**

@@ -17,6 +17,7 @@ export interface FixtureSegment {
   wrap_word_ranges?: number[][];
   audio_url?: string;
   ignored?: boolean;
+  is_wasl?: boolean;
 }
 
 export function makeSegment(

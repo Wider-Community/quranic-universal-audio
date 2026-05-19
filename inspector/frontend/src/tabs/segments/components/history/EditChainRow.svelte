@@ -85,12 +85,13 @@
         return hl;
     })();
 
-    // Each leaf card gets a splitHL pointing to its own range within wfRange (only for splits).
-    // Suppressed on leaves that show a normal-adjust delta — otherwise the "parent's part"
-    // green/dim doubles up over the trim highlight.
+    // Each leaf card gets a splitHL pointing to its own range within wfRange
+    // (only for splits). Applied to every leaf — adjusted or not — so the
+    // child's portion always renders against the wider parent peak with its
+    // own range highlighted. Trim delta (when present) stacks on top, clipped
+    // to the leaf's bounds so it doesn't bleed onto siblings.
     function leafSplitHL(leaf: HistorySnapshot): SplitHighlight | null {
         if (!isSplit || !rootSnap) return null;
-        if (leafTrimHL(leaf)) return null;
         return {
             wfStart: wfRange.wfStart,
             wfEnd: wfRange.wfEnd,
@@ -127,7 +128,9 @@
 
     // Per-leaf trim highlight: only the leaf actually targeted by an adjust gets
     // the green delta painted, against its baseline (post-split or pre-adjust)
-    // state — not against an arbitrary other-leaf's range.
+    // state — not against an arbitrary other-leaf's range. `clipStart`/`clipEnd`
+    // pin the delta paint to the leaf's own bounds so it doesn't bleed across
+    // the wider split-chain canvas onto sibling leaves' portions.
     function leafTrimHL(leaf: HistorySnapshot): TrimHighlight | null {
         const wasAdjusted = chain.ops.some(({ op }) => {
             if (op.op_type !== 'boundary_adjustment' && op.op_type !== 'trim_segment') return false;
@@ -137,7 +140,13 @@
         const baseline = leafBaselineSnap(leaf);
         if (!baseline) return null;
         if (baseline.time_start === leaf.time_start && baseline.time_end === leaf.time_end) return null;
-        return { color: 'green', otherStart: baseline.time_start, otherEnd: baseline.time_end };
+        return {
+            color: 'green',
+            otherStart: baseline.time_start,
+            otherEnd: baseline.time_end,
+            clipStart: leaf.time_start,
+            clipEnd: leaf.time_end,
+        };
     }
 
     // Leaf cards need a wider seg range when expanded so the canvas
