@@ -20,7 +20,6 @@
         submitWizard,
         type WizardStep,
     } from '../../stores/submit-wizard';
-    import ExistingComboBanner from './ExistingComboBanner.svelte';
     import StepDetails from './StepDetails.svelte';
     import StepReciter from './StepReciter.svelte';
     import StepSource from './StepSource.svelte';
@@ -108,17 +107,20 @@
         }
     }
 
-    $: canAdvanceStep1 = state.reciterMode === 'existing'
-        ? !!state.existingReciterSlug
-        : state.newReciter.name_en.trim().length > 0;
+    $: canAdvanceStep1 = (() => {
+        if (state.reciterMode === 'existing_combo') {
+            return !!state.existingReciterSlug && !!state.existingComboSlug;
+        }
+        if (state.reciterMode === 'existing_reciter') {
+            return !!state.existingReciterSlug;
+        }
+        return state.newReciter.name_en.trim().length > 0;
+    })();
     $: canAdvanceStep2 = state.sourceMethod !== null;
     $: canSubmit = !!state.combination.riwayah && !!state.combination.style;
-
-    // Conflict check: existing reciter already covers this exact (riwayah, style).
-    $: pickedReciter = state.existingReciterSlug
-        ? null // resolved inside StepReciter; surface via store later if needed
-        : null;
-    $: bannerHighlighted = false;
+    // existing_combo skips source + details — the canonical edit path lives in
+    // RequestForm. We don't need step 2/3 for that mode.
+    $: skipSourceAndDetails = state.reciterMode === 'existing_combo';
 
     function next(): void {
         if (step === 1 && canAdvanceStep1) setStep(2);
@@ -164,27 +166,25 @@
                         on:click={closeSubmitWizard}
                     >×</button>
                 </div>
-                <ol class="stepper" aria-label="Progress">
-                    {#each [1, 2, 3] as n (n)}
-                        <li
-                            class="dot"
-                            class:done={n < step}
-                            class:active={n === step}
-                            aria-current={n === step ? 'step' : undefined}
-                        >
-                            <span class="dot-num">{n}</span>
-                            <span class="dot-label">
-                                {n === 1 ? 'Reciter' : n === 2 ? 'Source' : 'Details'}
-                            </span>
-                        </li>
-                    {/each}
-                    <span class="stepper-track" data-step={step} aria-hidden="true"></span>
-                </ol>
+                {#if !skipSourceAndDetails}
+                    <ol class="stepper" aria-label="Progress">
+                        {#each [1, 2, 3] as n (n)}
+                            <li
+                                class="dot"
+                                class:done={n < step}
+                                class:active={n === step}
+                                aria-current={n === step ? 'step' : undefined}
+                            >
+                                <span class="dot-num">{n}</span>
+                                <span class="dot-label">
+                                    {n === 1 ? 'Reciter' : n === 2 ? 'Source' : 'Details'}
+                                </span>
+                            </li>
+                        {/each}
+                        <span class="stepper-track" data-step={step} aria-hidden="true"></span>
+                    </ol>
+                {/if}
             </header>
-
-            <div class="banner-wrap">
-                <ExistingComboBanner highlighted={bannerHighlighted} />
-            </div>
 
             <div class="body">
                 {#key step}
@@ -212,7 +212,19 @@
                 </div>
                 <div class="right">
                     <button type="button" class="ghost" on:click={closeSubmitWizard}>Cancel</button>
-                    {#if step < 3}
+                    {#if skipSourceAndDetails}
+                        <!-- existing_combo mode: StepReciter renders its own
+                             routing button; the footer primary stays disabled
+                             until a combination is picked, then closes. -->
+                        <button
+                            type="button"
+                            class="primary"
+                            on:click={submitNoop}
+                            disabled={!canAdvanceStep1}
+                        >
+                            Done
+                        </button>
+                    {:else if step < 3}
                         <button
                             type="button"
                             class="primary"
@@ -356,10 +368,6 @@
         font-size: var(--fs-meta);
         text-transform: uppercase;
         letter-spacing: 0.06em;
-    }
-
-    .banner-wrap {
-        padding: var(--s-3) var(--s-6) 0;
     }
 
     .body {

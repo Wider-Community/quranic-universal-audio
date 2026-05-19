@@ -11,10 +11,31 @@
     import { onMount } from 'svelte';
     import { fade } from 'svelte/transition';
 
+    import { catalogData } from '../../stores/catalog-data';
     import { submitWizard } from '../../stores/submit-wizard';
 
     const MIN_YEAR = 1885;
     const MAX_YEAR = new Date().getFullYear();
+
+    $: pickedReciter = $submitWizard.existingReciterSlug
+        ? $catalogData.reciters.find((r) => r.reciter_id === $submitWizard.existingReciterSlug) ?? null
+        : null;
+
+    // Non-blocking conflict: existing reciter already covers (riwayah, style).
+    // Mirrors RequestForm.svelte's predicate so the contributor surface stays
+    // consistent. Doesn't block submission — admin makes the call.
+    $: conflict = !!pickedReciter
+        && !!$submitWizard.combination.riwayah
+        && !!$submitWizard.combination.style
+        && pickedReciter.deliveries.some(
+            (d) =>
+                d.riwayah === $submitWizard.combination.riwayah
+                && d.style === $submitWizard.combination.style,
+        );
+
+    $: yearOutOfBounds = $submitWizard.combination.recording_year !== ''
+        && (($submitWizard.combination.recording_year as number) < MIN_YEAR
+            || ($submitWizard.combination.recording_year as number) > MAX_YEAR);
 
     interface VocabRow { slug: string; name: string; }
 
@@ -100,8 +121,21 @@
                 value={state.combination.recording_year === '' ? '' : String(state.combination.recording_year)}
                 on:input={onYear}
             />
+            {#if yearOutOfBounds}
+                <span class="field-hint warn">
+                    Year must be between {MIN_YEAR} and {MAX_YEAR}.
+                </span>
+            {/if}
         </label>
     </div>
+
+    {#if conflict}
+        <p class="warning" transition:fade={{ duration: 160 }}>
+            Heads up: {pickedReciter?.name} already has
+            ({state.combination.riwayah} · {state.combination.style}). Submission is still
+            allowed — the admin will review and decide.
+        </p>
+    {/if}
 
     <label class="comments">
         <span>Comments <span class="hint">optional</span></span>
@@ -204,5 +238,19 @@
         color: var(--text-muted);
         font-size: 10.5px;
         line-height: 1.4;
+    }
+    .field-hint {
+        margin-top: 2px;
+        font-size: 10.5px;
+        color: var(--text-faint);
+    }
+    .field-hint.warn { color: var(--state-error-fg); }
+    .warning {
+        margin: 0;
+        padding: var(--s-3);
+        background: var(--state-requested-bg);
+        color: var(--state-requested-fg);
+        border-radius: var(--r-2);
+        font-size: var(--fs-meta);
     }
 </style>
