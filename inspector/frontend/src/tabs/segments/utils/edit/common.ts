@@ -26,6 +26,7 @@ import type { SegmentState } from '../../stores/segments';
 import { applyVerseFilterAndRender } from '../data/filters-apply';
 import {
     _playRange as _playRangeImpl,
+    attachPreviewLoop as attachPreviewLoopImpl,
     clearPlayRangeRAF,
     clearPreviewCanplayHandler,
     editPreviewPlaying,
@@ -100,6 +101,7 @@ export function exitEditMode(): void {
 
 // Re-export play-range implementation so existing callers still work.
 export const _playRange = _playRangeImpl;
+export const attachPreviewLoop = attachPreviewLoopImpl;
 
 // ---------------------------------------------------------------------------
 // finalizeEdit — post-mutation scaffolding shared by edit-merge/split/delete/trim
