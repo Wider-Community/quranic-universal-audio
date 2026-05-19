@@ -211,11 +211,11 @@
                     class="seg-history-filter-pill"
                     class:active={$filterHasWasl}
                     data-filter-type="wasl"
-                    data-filter-value="any"
-                    title="Show only edits that carry a WASL or WAQF boundary decision"
+                    data-filter-value="wasl"
+                    title="Show only edits that mark a boundary as WASL"
                     on:click={() => toggleWaslFilter()}
                 >
-                    Wasl annotation <span class="pill-count">{waslCount}</span>
+                    Wasl <span class="pill-count">{waslCount}</span>
                 </button>
             </div>
         </div>

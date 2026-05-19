@@ -190,14 +190,15 @@ export function chainMatchesCatFilter(chain: EditChain, cats: Set<string>): bool
 }
 
 /** True iff any snapshot inside ``op.targets_after`` or
- *  ``op.snapshots?.after`` carries an ``is_wasl`` field (either ``true`` or
- *  ``false``). Both represent reviewer-touched boundaries — the filter
- *  surfaces all "I made a decision here" rows, not just the affirmative ones. */
+ *  ``op.snapshots?.after`` carries ``is_wasl === true``. Waqf is the default
+ *  state for any cross-verse boundary; the filter exists to surface the
+ *  affirmative WASL assertions, not the trivially-true waqf majority. */
 function _opHasWaslAnnotation(op: EditOp): boolean {
     const seen = (arr: unknown): boolean => {
         if (!Array.isArray(arr)) return false;
         for (const snap of arr) {
-            if (snap && typeof snap === 'object' && 'is_wasl' in (snap as Record<string, unknown>)) {
+            if (snap && typeof snap === 'object'
+                && (snap as { is_wasl?: unknown }).is_wasl === true) {
                 return true;
             }
         }
