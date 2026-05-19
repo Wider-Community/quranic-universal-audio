@@ -48,7 +48,7 @@ import {
     getVerseWordCounts,
     parseSegRef,
 } from '../data/references';
-import { editPreviewPlaying, setPreviewLooping } from '../playback/play-range';
+import { editPreviewPlaying, setPreviewJustSeeked, setPreviewLooping } from '../playback/play-range';
 import { reconcilePlayingAfterMutation } from '../playback/playback';
 import { getRowEntryForMount } from '../playback/row-registry';
 import { _ensureSplitBaseCache, drawSplitWaveform } from '../waveform/split-draw';
@@ -536,11 +536,21 @@ export function confirmSplit(
 // previewSplitAudio — cold-start the binary-split L/R preview loop
 // ---------------------------------------------------------------------------
 
-/** Launch a binary-split (N=1) left/right preview loop. Branches warm vs.
- *  cold internally — warm-attach when audio is already playing within the
- *  chosen side, cold-seek otherwise. Callers: `enterSplitMode` entry,
- *  SplitPanel L/R selection click. */
-export function previewSplitAudio(side: 'left' | 'right', canvas?: SegCanvas | null): void {
+/** Launch a binary-split (N=1) left/right preview loop.
+ *
+ *  Default (`mode: 'auto'`):
+ *  - Playing → warm-attach without seeking. Audio continues; if it's
+ *    already past the region's end, prime `_previewJustSeeked` to skip
+ *    the wrap-back on the first frame.
+ *  - Paused → cold-start via `_playRange`.
+ *
+ *  `mode: 'cold'` — always cold-start. Used by SplitPanel's L/R pill
+ *  click ("play THIS side from its start, looping"). */
+export function previewSplitAudio(
+    side: 'left' | 'right',
+    canvas?: SegCanvas | null,
+    opts?: { mode?: 'auto' | 'cold' },
+): void {
     const c = canvas ?? get(editCanvas);
     const sd = c?._splitData;
     if (!sd || !c || sd.currentSplits.length !== 1) return;
@@ -550,10 +560,13 @@ export function previewSplitAudio(side: 'left' | 'right', canvas?: SegCanvas | n
     const startMs = side === 'left' ? sd.seg.time_start : splitTime;
     const endMs = side === 'left' ? splitTime : sd.seg.time_end;
 
+    if (opts?.mode === 'cold' || segPort.paused) {
+        _playRange(startMs, endMs);
+        return;
+    }
     const live = segPort.currentTimeMs();
-    const inRegion = live >= startMs && live <= endMs;
-    if (!segPort.paused && inRegion) attachPreviewLoop(startMs, endMs);
-    else _playRange(startMs, endMs);
+    setPreviewJustSeeked(live >= endMs);
+    attachPreviewLoop(startMs, endMs);
 }
 
 // ---------------------------------------------------------------------------
@@ -564,9 +577,14 @@ export function previewSplitAudio(side: 'left' | 'right', canvas?: SegCanvas | n
  *  ``currentSplits[i-1] ?? seg.time_start`` to ``currentSplits[i] ?? seg.time_end``,
  *  so for N cursors there are N+1 regions. Sets the play-range loop key to
  *  ``'split-region-{i}'`` so the play-range RAF re-seeks correctly across
- *  cursor edits while looping. Branches warm vs. cold internally — same
- *  rule as `previewSplitAudio`. */
-export function previewSplitRegion(idx: number, canvas?: SegCanvas | null): void {
+ *  cursor edits while looping. Same warm/cold branching as
+ *  ``previewSplitAudio`` — `mode: 'cold'` forces cold-start for SplitPanel's
+ *  region-pill click. */
+export function previewSplitRegion(
+    idx: number,
+    canvas?: SegCanvas | null,
+    opts?: { mode?: 'auto' | 'cold' },
+): void {
     const c = canvas ?? get(editCanvas);
     const sd = c?._splitData;
     if (!sd || !c) return;
@@ -577,8 +595,11 @@ export function previewSplitRegion(idx: number, canvas?: SegCanvas | null): void
     editPreviewPlaying.set(true);
     setPreviewLooping(`split-region-${idx}` as `split-region-${number}`);
 
+    if (opts?.mode === 'cold' || segPort.paused) {
+        _playRange(start, end);
+        return;
+    }
     const live = segPort.currentTimeMs();
-    const inRegion = live >= start && live <= end;
-    if (!segPort.paused && inRegion) attachPreviewLoop(start, end);
-    else _playRange(start, end);
+    setPreviewJustSeeked(live >= end);
+    attachPreviewLoop(start, end);
 }
