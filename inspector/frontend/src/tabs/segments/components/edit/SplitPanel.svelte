@@ -31,7 +31,6 @@
         splitPreviewSelection,
         splitState,
     } from '../../stores/edit';
-    import { segPort } from '../../stores/playback';
     import type { SegCanvas } from '../../types/segments-waveform';
     import { EDIT_MIN_DURATION_MS, EDIT_NUDGE_MS } from '../../utils/constants';
     import { exitEditMode } from '../../utils/edit/common';
@@ -41,7 +40,6 @@
         previewSplitAudio,
         previewSplitRegion,
     } from '../../utils/edit/split';
-    import { getPlayRangeRAF } from '../../utils/playback/play-range';
 
     export let seg: Segment;
     export let canvas: SegCanvas;
@@ -87,19 +85,17 @@
         setSplitPreviewSelection({ kind: 'region', index: sel.kind === 'left' ? 0 : regionCount - 1 });
     }
 
-    /** Update selection. If a loop is running, switch it to the new range
-     *  immediately so the user doesn't have to re-press footer ▶. */
+    /** Set selection AND cold-start a looping preview of that range —
+     *  the legacy "Play Left / Play Right" behavior. Footer ▶ + Space
+     *  remain the universal pause/resume; clicking the SAME side again
+     *  while it's playing just restarts that side from the loop start. */
     function pickAndMaybeSwitch(nextKind: 'left' | 'right'): void {
         setSplitPreviewSelection({ kind: nextKind });
-        if (getPlayRangeRAF() && !segPort.paused) {
-            previewSplitAudio(nextKind, canvas);
-        }
+        previewSplitAudio(nextKind, canvas);
     }
     function pickRegionAndMaybeSwitch(i: number): void {
         setSplitPreviewSelection({ kind: 'region', index: i });
-        if (getPlayRangeRAF() && !segPort.paused) {
-            previewSplitRegion(i, canvas);
-        }
+        previewSplitRegion(i, canvas);
     }
 </script>
 

@@ -36,7 +36,6 @@
     import { SPEEDS } from '../../../../lib/utils/speed-control';
     import { autoSaveEnabled, toggleAutoSave } from '../../stores/autosave';
     import {
-        getSegByChapterIndex,
         livePlayingVerse,
         pickerDisplayChapter,
         segData,
@@ -221,24 +220,17 @@
         chapterDurationMs = dur && isFinite(dur) ? dur * 1000 : 0;
     }
 
-    // In accordion mode the progress bar represents the played SEGMENT only
-    // (clicking can only seek inside the segment, not across the chapter —
-    // accordion playback is bounded). In chapter mode it represents the
-    // whole chapter timeline.
+    // Progress bar DISPLAY is always chapter-wide — `currentMs` /
+    // chapterDurationMs — regardless of accordion vs chapter playback.
+    // The accordion bound only affects the click-seek ACTION (see
+    // `onProgressClick` / `onProgressKey` below), not the visual.
     $: accordionActive = $playingSegmentIndex?.origin === 'accordion';
-    $: boundedSeg = accordionActive && $playingSegmentIndex
-        ? getSegByChapterIndex($playingSegmentIndex.chapter, $playingSegmentIndex.index)
-        : null;
 
-    $: progressStartMs = boundedSeg ? boundedSeg.time_start : 0;
-    $: progressEndMs = boundedSeg ? boundedSeg.time_end : chapterDurationMs;
-    $: progressSpanMs = Math.max(0, progressEndMs - progressStartMs);
-
-    $: progressPct = progressSpanMs > 0
-        ? Math.max(0, Math.min(100, ((currentMs - progressStartMs) / progressSpanMs) * 100))
+    $: progressPct = chapterDurationMs > 0
+        ? Math.max(0, Math.min(100, (currentMs / chapterDurationMs) * 100))
         : 0;
 
-    $: progressVisible = progressSpanMs > 0;
+    $: progressVisible = chapterDurationMs > 0;
 
     // ---- Live verse tracking ----------------------------------------
     // The Surah/Ayah cells light up accent-coloured while playback is
@@ -282,29 +274,28 @@
     }
 
     function onProgressClick(ev: MouseEvent): void {
-        // Seek within the active timeline. In chapter mode that's the full
-        // chapter; in accordion mode it's clamped to the segment range
-        // (accordion playback is bounded — seeking outside the segment is
-        // a no-op-ish: the click maps to the segment range and snaps the
-        // cursor back inside it).
-        if (progressSpanMs <= 0 || !$segPortReady) return;
+        // Seek anywhere in the chapter — but only in chapter-mode playback.
+        // Accordion plays are bounded to a single segment; the click is a
+        // no-op there so the playhead can't escape the bounded range.
+        if (chapterDurationMs <= 0 || !$segPortReady) return;
+        if (accordionActive) return;
         const target = ev.currentTarget as HTMLElement;
         const rect = target.getBoundingClientRect();
         const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-        segPort.seek(progressStartMs + pct * progressSpanMs);
+        segPort.seek(pct * chapterDurationMs);
     }
 
     function onProgressKey(ev: KeyboardEvent): void {
-        // Arrow keys nudge in 2% steps within the active timeline (chapter
-        // span in chapter mode, segment span in accordion mode).
-        if (progressSpanMs <= 0 || !$segPortReady) return;
-        const step = progressSpanMs * 0.02;
+        // Arrow keys nudge in 2% steps. Same accordion guard as click-seek.
+        if (chapterDurationMs <= 0 || !$segPortReady) return;
+        if (accordionActive) return;
+        const step = chapterDurationMs * 0.02;
         if (ev.key === 'ArrowLeft') {
             ev.preventDefault();
-            segPort.seek(Math.max(progressStartMs, segPort.currentTimeMs() - step));
+            segPort.seek(Math.max(0, segPort.currentTimeMs() - step));
         } else if (ev.key === 'ArrowRight') {
             ev.preventDefault();
-            segPort.seek(Math.min(progressEndMs - 1, segPort.currentTimeMs() + step));
+            segPort.seek(Math.min(chapterDurationMs - 1, segPort.currentTimeMs() + step));
         }
     }
 
@@ -389,8 +380,8 @@
         const s = total % 60;
         return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
-    $: elapsedMs = progressVisible ? Math.max(0, currentMs - progressStartMs) : 0;
-    $: totalMs = progressVisible ? progressSpanMs : 0;
+    $: elapsedMs = progressVisible ? Math.max(0, currentMs) : 0;
+    $: totalMs = progressVisible ? chapterDurationMs : 0;
 </script>
 
 <div class="segs-footer" class:is-empty={!hasReciter} bind:this={footerEl}>
@@ -507,7 +498,7 @@
                     <button
                         type="button"
                         class="play-cell"
-                        disabled={!$segPortReady || !$segData?.audio_url}
+                        disabled={!$segPortReady || (!$segData?.audio_url && !$playingSegmentIndex)}
                         on:click={handlePlayClick}
                         aria-label={playGlyph === 'pause' ? 'Pause' : 'Play'}
                     >
