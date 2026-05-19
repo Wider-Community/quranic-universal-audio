@@ -6,10 +6,14 @@ edit_history.jsonl, builds a {uid: {category, ...}} index, injects
 ``_resolved_by_edit`` onto each segment, and the classifier suppresses
 the listed categories without writing to ``ignored_categories``.
 
-Scope: ``boundary_adj``, ``audio_bleeding``, ``repetitions``.
-``cross_verse`` and chapter/verse-level categories are excluded -- they
-stay until the validator clears them. ``qalqala`` is view-only (mirrors
-``muqattaat``) and is also excluded so the flag stays after edits.
+Scope: ``boundary_adj``, ``audio_bleeding``, ``repetitions``,
+``low_confidence_v2``. ``cross_verse`` and chapter/verse-level categories
+are excluded -- they stay until the validator clears them. ``qalqala`` is
+view-only (mirrors ``muqattaat``) and is also excluded so the flag stays
+after edits. ``low_confidence`` (v1) is excluded because it self-resolves
+via the edit-time ``confidence = 1.0`` bump; v2 is included because it's
+keyed against a frozen extraction-time sidecar that ``confidence`` doesn't
+affect.
 """
 from __future__ import annotations
 
@@ -114,15 +118,19 @@ def test_basmala_amin_resolved_by_edit_suppresses():
 
 
 def test_resolves_by_edit_set_contains_only_soft_categories():
-    """The set must match the user's pick: boundary_adj/audio_bleeding/repetitions.
+    """The set must match the user's pick: boundary_adj/audio_bleeding/repetitions
+    plus low_confidence_v2.
 
     ``qalqala`` is intentionally excluded — it's view-only (like ``muqattaat``)
     so editing a qalqala-flagged seg leaves the flag in place for the next
     validation pass; the edit history still carries the ``qalqala`` pill via
-    ``op_context_category``.
+    ``op_context_category``. ``low_confidence`` (v1) is excluded because it
+    self-resolves via the confidence=1.0 bump; ``low_confidence_v2`` is included
+    because it's keyed against a frozen probe sidecar that confidence doesn't
+    affect.
     """
     assert RESOLVES_BY_EDIT_CATEGORIES == frozenset({
-        "boundary_adj", "audio_bleeding", "repetitions",
+        "boundary_adj", "audio_bleeding", "repetitions", "low_confidence_v2",
     })
 
 
