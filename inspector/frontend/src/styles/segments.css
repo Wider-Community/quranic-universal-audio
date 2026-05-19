@@ -509,6 +509,39 @@
     cursor: not-allowed;
 }
 
+/* Replay button — sits between the START / END nudger pairs in the trim
+ * toolbar. Cold-starts a fresh loop from the live `currentStart`. Coloured
+ * with the playhead pink (PREVIEW_PLAYHEAD_COLOR = #f72585) so the action
+ * visually ties to the live cursor it spawns. Bare icon button; same
+ * proportions as the nudgers so they form a single rhythm in the row. */
+.seg-edit-inline .seg-edit-buttons .seg-replay {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: oklch(0.64 0.27 0);  /* #f72585 — PREVIEW_PLAYHEAD_COLOR */
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.seg-edit-inline .seg-edit-buttons .seg-replay:hover:not(:disabled) {
+    background: oklch(0.24 0.04 0);
+    border-color: oklch(0.42 0.13 0);
+    color: oklch(0.78 0.18 0);
+}
+.seg-edit-inline .seg-edit-buttons .seg-replay:active:not(:disabled) {
+    transform: rotate(-30deg);  /* tiny motion cue — mirrors the icon arc */
+}
+.seg-edit-inline .seg-edit-buttons .seg-replay:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
 /* Selection pills — L, R, region [N]. Bordered so they read as a
  * different role from the borderless caret nudgers next to them.
  * Active state: subtle yellow tint (matches the split cursor on canvas)

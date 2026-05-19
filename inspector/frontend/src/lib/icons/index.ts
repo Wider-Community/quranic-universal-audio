@@ -20,6 +20,7 @@ import check from './check.svg?raw';
 import history from './history.svg?raw';
 import pause from './pause.svg?raw';
 import play from './play.svg?raw';
+import replay from './replay.svg?raw';
 import spin from './spin.svg?raw';
 
 export const ICONS = {
@@ -32,6 +33,7 @@ export const ICONS = {
     history,
     pause,
     play,
+    replay,
     spin,
 } as const;
 
