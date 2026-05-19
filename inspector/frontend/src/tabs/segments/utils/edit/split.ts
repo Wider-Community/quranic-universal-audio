@@ -469,20 +469,33 @@ export function confirmSplit(
     // its own verse — otherwise the chain prefill spans `verse_i_start -
     // last_verse_end` instead of `verse_i_start - verse_i_end`, breaking the
     // per-verse-resolution pattern the binary case already has.
-    const queue = pieces.slice(1).map((p) => {
+    const isCrossVerseSplit = chainCat === 'cross_verse';
+    const queue = pieces.slice(1).map((p, i) => {
         const pParsed = parseSegRef(p.matched_ref);
         const originalEndRef = pParsed
             ? `${pParsed.surah}:${pParsed.ayah_to}:${pParsed.word_to}`
             : null;
-        return { seg: p, category: chainCat, originalEndRef };
+        const prevPiece = pieces[i]!;
+        return {
+            seg: p,
+            category: chainCat,
+            originalEndRef,
+            // For CV splits, name the previous piece so _handoffPendingChain
+            // can gate this entry's ref-edit on the user picking WASL/WAQF
+            // first. Non-CV splits leave the field unset and proceed
+            // straight to ref-edit, same as today.
+            ...(isCrossVerseSplit && prevPiece.segment_uid
+                ? { prevPieceUid: prevPiece.segment_uid }
+                : {}),
+        };
     });
     pendingChainTargets.set(queue);
 
     // For cross-verse splits, mark every new inter-piece boundary as pending
-    // a wasl yes/no answer. The inline ``WaslBoundary`` inside the CV
-    // accordion card reads this set to know whether to render the
-    // ``waṣl?  no · yes`` prompt vs. the quiet committed reading.
-    if (chainCat === 'cross_verse') {
+    // a WASL/WAQF answer. The inline ``WaslBoundary`` picker inside the CV
+    // accordion card reads this set to render both labels muted (forcing a
+    // pick) vs. the committed reading.
+    if (isCrossVerseSplit) {
         // pieces[0..N-2] are the LEFT side of each new inter-piece boundary.
         for (let i = 0; i < pieces.length - 1; i++) {
             const uid = pieces[i]!.segment_uid;

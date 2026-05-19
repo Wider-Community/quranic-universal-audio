@@ -199,6 +199,45 @@ export function getChapterOps(chapter: number): EditOp[] {
     return _opLog.get(chapter) || [];
 }
 
+/**
+ * Mutate every seg snapshot for ``segmentUid`` inside ``op`` to carry the
+ * given ``fields`` overlay (e.g. ``{ is_wasl: true }``). Walks
+ * ``targets_after``, ``snapshots.after``, and ``patch.after`` (when
+ * present) so the save payload, history-row snapshot, and inverse-patch
+ * undo all stay in sync.
+ *
+ * Used by the post-CV-split wasl flow: the user's WASL/WAQF pick amends
+ * the parent split op's snapshots in place instead of emitting a fresh
+ * ``set_is_wasl`` op (which would pollute the edit-history view with one
+ * row per pick). ``_bump()`` nudges ``dirtyTick`` so reactive subscribers
+ * (history panel, dirty banner) re-derive.
+ *
+ * No-op if no snapshot in ``op`` matches the UID. Safe to call on any op
+ * shape — only matching snapshots are touched.
+ */
+export function amendSegInOp(
+    op: EditOp,
+    segmentUid: string,
+    fields: Record<string, unknown>,
+): void {
+    const apply = (arr: Array<Record<string, unknown>> | undefined): void => {
+        if (!Array.isArray(arr)) return;
+        for (const snap of arr) {
+            if (snap && (snap as { segment_uid?: string }).segment_uid === segmentUid) {
+                Object.assign(snap, fields);
+            }
+        }
+    };
+    apply(op.targets_after);
+    const snaps = (op as EditOp & { snapshots?: { after?: Array<Record<string, unknown>> } })
+        .snapshots;
+    if (snaps && Array.isArray(snaps.after)) apply(snaps.after);
+    if (op.patch && Array.isArray(op.patch.after)) {
+        apply(op.patch.after as Array<Record<string, unknown>>);
+    }
+    _bump();
+}
+
 /** Delete dirty entry for a chapter. */
 export function deleteDirtyEntry(chapter: number): void {
     _dirtyMap.delete(chapter);

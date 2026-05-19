@@ -28,7 +28,9 @@ import {
 } from '../../stores/dirty';
 import {
     clearEdit,
+    focusWaslBoundary,
     pendingChainTargets,
+    pendingWaslConfirm,
     setEdit,
     setEditingSegIndex,
 } from '../../stores/edit';
@@ -313,6 +315,19 @@ async function _handoffPendingChain(): Promise<void> {
     const queue = get(pendingChainTargets);
     if (!queue.length) return;
     const chain = queue[0]!;
+
+    // CV-split gate: if this entry's previous piece still has an
+    // unanswered wasl boundary, pause the chain HERE — don't pop the
+    // queue, don't advance to ref-edit. Signal the matching WaslBoundary
+    // picker to scroll into view + auto-focus its WASL button. The
+    // picker's commit handler removes the UID from pendingWaslConfirm
+    // and calls ``resumePendingChain()`` which re-enters this function
+    // — the gate is now clear, the chain pops and proceeds normally.
+    if (chain.prevPieceUid && get(pendingWaslConfirm).has(chain.prevPieceUid)) {
+        focusWaslBoundary.set(chain.prevPieceUid);
+        return;
+    }
+
     pendingChainTargets.set(queue.slice(1));
 
     // Flush Svelte's pending DOM updates so that newly-inserted rows (e.g. the
@@ -384,4 +399,15 @@ async function _handoffPendingChain(): Promise<void> {
     }
 
     beginRefEdit(chain.seg, chain.category, mountId);
+}
+
+/**
+ * Public re-entry point for the post-split chain. Called by
+ * ``WaslBoundary.svelte`` after the user picks WASL/WAQF on a boundary
+ * that paused the chain: the picker clears the UID from
+ * ``pendingWaslConfirm`` and then calls this so the chain re-checks the
+ * gate, finds it clear, and advances to the next ref-edit.
+ */
+export function resumePendingChain(): void {
+    void _handoffPendingChain();
 }
