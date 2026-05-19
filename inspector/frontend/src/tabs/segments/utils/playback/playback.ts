@@ -81,9 +81,13 @@ let _segRange: AudioRange | null = null;
 /** Playhead-draw rAF. Replaces the AudioRange-owned tick for the chapter-
  *  continuous path. Under segment-bounded play, AudioRange owns its own
  *  rAF that fires `_onRangeTick` — we keep this rAF off in that case.
- *  Runs only while audio is playing AND not in edit mode. */
+ *  Runs only while audio is playing AND not in a CANVAS-REPLACING edit
+ *  mode. Reference edit leaves the row's normal waveform canvas in place,
+ *  so the chapter cursor must keep advancing through it; only 'trim' /
+ *  'split' modes hand the canvas off to `_playRange`'s preview rAF. */
 const _drawLoop: AnimationLoop = createAnimationLoop(() => {
-    if (get(editMode)) return; // edit-preview owns the canvas while editing
+    const m = get(editMode);
+    if (m === 'trim' || m === 'split') return;
     drawActivePlayhead(segPort.currentTimeMs());
     updateSegHighlight();
 });

@@ -32,6 +32,7 @@ import {
     setTrimWindow,
     updateTrimWindow,
 } from '../../stores/edit';
+import { segPort } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
 import { EDIT_MIN_DURATION_MS, EDIT_SNAP_MS, TRIM_HANDLE_HIT_RADIUS_PX } from '../constants';
 import {
@@ -40,7 +41,7 @@ import {
 } from '../playback/play-range';
 import { _ensureTrimBaseCache, drawTrimWaveform } from '../waveform/trim-draw';
 import { _fetchPeaksForClick } from '../waveform/utils';
-import { _playRange, exitEditMode, finalizeEdit } from './common';
+import { _playRange, attachPreviewLoop, exitEditMode, finalizeEdit } from './common';
 import { applyWheelZoom } from './trim-zoom';
 
 // Re-export draw functions so registration sites and other callers still work.
@@ -154,14 +155,15 @@ export function enterTrimMode(seg: Segment, row: HTMLElement, mountId: symbol | 
     drawTrimWaveform(canvas);
     setupTrimDragHandles(canvas, seg);
 
-    // Entry no longer auto-starts a trim preview loop. Adjust must not
-    // disrupt chapter playback — if the user clicked Adjust while audio
-    // was running, the chapter playhead continues through the segment;
-    // if it was paused, it stays paused. Explicit preview entry points
-    // (footer ▶ when audio is paused, the future Replay button) own the
-    // cold-start. Auto-split's `previewSplitAudio` / `previewSplitRegion`
-    // are unaffected — they live in `enterSplitMode` for CV/reps seeded
-    // splits and still cold-start as the user expects.
+    // Launch the trim preview loop. `previewTrimAudio` branches warm vs.
+    // cold internally: chapter audio playing within the trim window →
+    // warm-attach the playhead rAF without re-seeking (audio continues
+    // from where it plays, loop-back catches the wrap at currentEnd);
+    // paused or playhead outside the window → cold-start the loop via
+    // `_playRange` (seek to currentStart + play). The call must stay
+    // synchronous inside the click handler chain so Chrome accepts the
+    // play promise on the cold path.
+    previewTrimAudio(canvas);
     void _fetchPeaksForClick(seg, chapter).then(() => {
         if (!canvas._trimWindow) return; // user exited trim mode mid-fetch
 
@@ -452,21 +454,30 @@ export function confirmTrim(seg: Segment, canvas?: SegCanvas | null): void {
 // previewTrimAudio — toggle looping preview of trimmed region
 // ---------------------------------------------------------------------------
 
-/** Cold-start the trim-window preview loop. Idempotent — calling while a
- *  loop is already running cancels the existing rAF (in `_playRange`'s
- *  setup) and starts fresh. Play/pause toggling is owned by `onSegPlayClick`
- *  (playback.ts), not by this function — the footer ▶ and the spacebar
- *  both route there so they never reset the cursor.
+/** Launch the trim-window preview loop. Branches on the live audio state:
+ *  - Warm attach when the chapter playhead is already playing within
+ *    `[currentStart, currentEnd]` → audio continues from where it plays,
+ *    no seek glitch, the rAF's loop-back at `currentEnd` catches the
+ *    wraparound.
+ *  - Cold seek otherwise (paused, or playhead outside the window) →
+ *    `_playRange` runs `loadCovering` + `seekAndPlay(currentStart)`.
  *
- *  Callers today:
- *    - `enterTrimMode` (auto-seed on edit entry).
- *  Future selection-change callers (handle drag, view zoom) can pass a
- *  pre-resolved canvas to skip the editCanvas lookup. */
+ *  Idempotent — calling while a loop is already running cancels the prior
+ *  rAF inside `_setupPreviewLoop`. Play/pause toggling is still owned by
+ *  `onSegPlayClick` in playback.ts.
+ *
+ *  Callers: `enterTrimMode` (entry), `TrimPanel`'s replay button when
+ *  added. Future selection-change callers (handle drag, view zoom) can
+ *  pass a pre-resolved canvas to skip the editCanvas lookup. */
 export function previewTrimAudio(canvas?: SegCanvas | null): void {
     const c = canvas ?? get(editCanvas);
     const tw = c?._trimWindow;
     if (!tw || !c) return;
     editPreviewPlaying.set(true);
     setPreviewLooping('trim');
-    _playRange(tw.currentStart, tw.currentEnd);
+
+    const live = segPort.currentTimeMs();
+    const inWindow = live >= tw.currentStart && live <= tw.currentEnd;
+    if (!segPort.paused && inWindow) attachPreviewLoop(tw.currentStart, tw.currentEnd);
+    else _playRange(tw.currentStart, tw.currentEnd);
 }

@@ -67,10 +67,26 @@ export function getPreviewStopHandler(): ((ev: Event) => void) | null { return _
 export function setPreviewStopHandler(h: ((ev: Event) => void) | null): void { _previewStopHandler = h; }
 
 // ---------------------------------------------------------------------------
-// _playRange
+// _playRange / attachPreviewLoop — preview-loop rAF (cold seek vs warm attach)
 // ---------------------------------------------------------------------------
 
+/** Cold-start a preview loop — `loadCovering` + `seekAndPlay(startMs)` then
+ *  attach the playhead rAF. Use when the audio is paused, or playing a
+ *  different region than the one we want to loop. */
 export function _playRange(startMs: number, endMs: number): void {
+    _setupPreviewLoop(startMs, endMs, /* coldSeek = */ true);
+}
+
+/** Warm-attach a preview loop — schedule the playhead rAF over [startMs,
+ *  endMs] but DON'T seek or reload. Use when audio is already playing
+ *  within the target range; the rAF's existing loop-back logic catches
+ *  the wraparound at `effectiveEnd` and keeps the loop alive without
+ *  the cold-start glitch (no extra `seekAndPlay`, no clip rebuild). */
+export function attachPreviewLoop(startMs: number, endMs: number): void {
+    _setupPreviewLoop(startMs, endMs, /* coldSeek = */ false);
+}
+
+function _setupPreviewLoop(startMs: number, endMs: number, coldSeek: boolean): void {
     if (!segPort.element) return;
     if (_previewStopHandler) {
         // Legacy timeupdate-based stop handler — port subscribes via
@@ -209,6 +225,15 @@ export function _playRange(startMs: number, endMs: number): void {
             ctx.beginPath(); ctx.moveTo(x - 4, 0); ctx.lineTo(x + 4, 0); ctx.lineTo(x, 6); ctx.closePath(); ctx.fill();
         }
         _playRangeRAF = requestAnimationFrame(animatePlayhead);
+    }
+
+    if (!coldSeek) {
+        // Warm attach — audio is already playing within (or near) the loop
+        // window. Skip loadCovering / seekAndPlay and just schedule the
+        // playhead rAF; animatePlayhead's loop-back at effectiveEnd handles
+        // wraparound from here without a fresh seek glitch.
+        _playRangeRAF = requestAnimationFrame(animatePlayhead);
+        return;
     }
 
     // Ensure the port is covering the requested file-absolute window. In
