@@ -28,6 +28,7 @@ import {
 import {
     editCanvas,
     editMode,
+    markWaslPending,
     pendingChainTargets,
     setEdit,
     setEditCanvas,
@@ -460,29 +461,27 @@ export function confirmSplit(
     // its own verse — otherwise the chain prefill spans `verse_i_start -
     // last_verse_end` instead of `verse_i_start - verse_i_end`, breaking the
     // per-verse-resolution pattern the binary case already has.
-    // For cross-verse splits, attach a waslFlashForLeftUid pointer on each
-    // chain entry. _handoffPendingChain reads this to briefly flash the
-    // WaslGap chip between the previous piece and this one — drawing the
-    // reviewer's eye to the new inter-piece boundary as the ref-edit chain
-    // walks through. No modal; the chip is the toggle. Non-CV splits leave
-    // the field unset.
-    const isCrossVerseSplit = chainCat === 'cross_verse';
-    const queue = pieces.slice(1).map((p, i) => {
+    const queue = pieces.slice(1).map((p) => {
         const pParsed = parseSegRef(p.matched_ref);
         const originalEndRef = pParsed
             ? `${pParsed.surah}:${pParsed.ayah_to}:${pParsed.word_to}`
             : null;
-        const prevPiece = pieces[i]!;
-        return {
-            seg: p,
-            category: chainCat,
-            originalEndRef,
-            ...(isCrossVerseSplit && prevPiece.segment_uid
-                ? { waslFlashForLeftUid: prevPiece.segment_uid }
-                : {}),
-        };
+        return { seg: p, category: chainCat, originalEndRef };
     });
     pendingChainTargets.set(queue);
+
+    // For cross-verse splits, mark every new inter-piece boundary as pending
+    // a wasl yes/no answer. The inline ``WaslBoundary`` inside the CV
+    // accordion card reads this set to know whether to render the
+    // ``waṣl?  no · yes`` prompt vs. the quiet committed reading.
+    if (chainCat === 'cross_verse') {
+        // pieces[0..N-2] are the LEFT side of each new inter-piece boundary.
+        for (let i = 0; i < pieces.length - 1; i++) {
+            const uid = pieces[i]!.segment_uid;
+            if (uid) markWaslPending(uid);
+        }
+    }
+
     beginRefEdit(pieces[0]!, chainCat, resolvedMountId);
 }
 

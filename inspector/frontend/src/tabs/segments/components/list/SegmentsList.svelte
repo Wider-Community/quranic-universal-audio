@@ -50,7 +50,6 @@
         topOfRow,
         topSpacerValue,
     } from './virtualization';
-    import WaslGap from './WaslGap.svelte';
 
     export let onRestore: (() => void) | null = null;
 
@@ -414,16 +413,6 @@
                             (raw: {Math.round(t?.silence_after_raw_ms ?? 0)}ms)
                         </div>
                     </div>
-                {/if}
-                {#if !virtualize || (startIdx + localIdx) < endIdx}
-                    <!-- Inter-row wasl boundary. The pinned editing row is
-                         appended outside the window slice; its "next" seg
-                         doesn't correspond to a positional neighbour, so
-                         skip the gap for that row. -->
-                    <WaslGap
-                        segA={seg}
-                        segB={$displayedSegments[startIdx + localIdx + 1] ?? null}
-                    />
                 {/if}
             </div>
         {/each}
