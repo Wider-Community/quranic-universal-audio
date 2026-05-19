@@ -17,15 +17,19 @@
 
     import {
         buildDisplayItems,
+        chainHasWaslAnnotation,
         clearFilters,
         editChains,
         filterErrCats,
+        filterHasWasl,
         filterOpTypes,
         flatItems,
         historyData,
+        itemHasWaslAnnotation,
         setSortMode,
         sortMode,
         toggleFilter,
+        toggleWaslFilter,
     } from '../../stores/history';
     import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../utils/constants';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
@@ -135,10 +139,27 @@
     $: opEntries = Object.entries(opCounts).sort((a, b) => (baseOpCounts[b[0]] || 0) - (baseOpCounts[a[0]] || 0));
     $: catEntries = Object.entries(catCounts).sort((a, b) => (baseCatCounts[b[0]] || 0) - (baseCatCounts[a[0]] || 0));
 
-    $: hasFilters = $filterOpTypes.size > 0 || $filterErrCats.size > 0;
+    // Wasl-annotation pill count: any entry in the unfiltered list whose ops
+    // carry an is_wasl annotation in any targets_after snapshot. Counted off
+    // the same `unfilteredEntries` base so the count is stable regardless of
+    // other active filters.
+    $: waslCount = (() => {
+        let n = 0;
+        for (const entry of unfilteredEntries) {
+            if (entry.type === 'chain') {
+                if (chainHasWaslAnnotation(entry.chain)) n++;
+            } else if (itemHasWaslAnnotation(entry.item)) {
+                n++;
+            }
+        }
+        return n;
+    })();
+
+    $: hasFilters = $filterOpTypes.size > 0 || $filterErrCats.size > 0 || $filterHasWasl;
     $: showOps = Object.keys(baseOpCounts).length >= 2;
     $: showCats = Object.keys(baseCatCounts).length >= 2;
-    $: hasAny = showOps || showCats;
+    $: showWasl = waslCount > 0;
+    $: hasAny = showOps || showCats || showWasl;
 </script>
 
 <div id="seg-history-filters" class="seg-history-filters" class:hidden-none={!hasAny}>
@@ -178,6 +199,24 @@
                         {ERROR_CAT_LABELS[cat]} <span class="pill-count">{count}</span>
                     </button>
                 {/each}
+            </div>
+        </div>
+    {/if}
+
+    {#if showWasl}
+        <div class="seg-history-filter-section">
+            <span class="seg-history-filter-label">Annotation:</span>
+            <div id="seg-history-filter-wasl" class="seg-history-filter-pills">
+                <button
+                    class="seg-history-filter-pill"
+                    class:active={$filterHasWasl}
+                    data-filter-type="wasl"
+                    data-filter-value="any"
+                    title="Show only edits that carry a WASL or WAQF boundary decision"
+                    on:click={() => toggleWaslFilter()}
+                >
+                    Wasl annotation <span class="pill-count">{waslCount}</span>
+                </button>
             </div>
         </div>
     {/if}

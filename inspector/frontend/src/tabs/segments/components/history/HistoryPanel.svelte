@@ -38,6 +38,7 @@
         editChains,
         type FilteredItemSummary,
         filterErrCats,
+        filterHasWasl,
         filterOpTypes,
         flatItems,
         historyData,
@@ -59,7 +60,7 @@
     import HistoryFilters from './HistoryFilters.svelte';
 
     // Filtered flat items -----------------------------------------------------
-    $: hasFilters = $filterOpTypes.size > 0 || $filterErrCats.size > 0;
+    $: hasFilters = $filterOpTypes.size > 0 || $filterErrCats.size > 0 || $filterHasWasl;
 
     // Batches display ---------------------------------------------------------
     $: displayEntries = (!$historyData || !$historyData.batches) ? [] : buildDisplayItems(
@@ -69,6 +70,7 @@
         $editChains,
         $filterOpTypes,
         $filterErrCats,
+        $filterHasWasl,
     );
 
     // Summary derivation ------------------------------------------------------
