@@ -2,11 +2,12 @@
     /**
      * Wizard step 2 — pick the source method.
      *
-     * Two radio-cards (links / playlist). Browser uploads are deliberately
-     * excluded: 1–3 GB of audio through a single-worker gunicorn Space
-     * blocks every concurrent user mid-transfer, and Drive / YouTube /
-     * Archive.org are already adequate hosts. Contributors host the audio
-     * themselves and hand us URLs.
+     * Top horizontal toggle (links / playlist), body is the picked panel.
+     * Same shape as step 1's reciter mode toggle so the two steps rhyme
+     * visually. Browser uploads are deliberately excluded: 1–3 GB of audio
+     * through a single-worker gunicorn Space blocks every concurrent user
+     * mid-transfer, and Drive / YouTube / Archive.org are already adequate
+     * hosts. Contributors host the audio themselves and hand us URLs.
      *
      * The "links" panel accepts three interchangeable input forms — bulk
      * paste, CSV / JSON drop, and per-chapter inline rows — all writing
@@ -15,18 +16,15 @@
      * Submit is a no-op until backend lands, so every interaction is local
      * state only. Playlist URL is captured but never parsed.
      */
-    import { fade, fly, slide } from 'svelte/transition';
+    import { fade, fly } from 'svelte/transition';
 
-    import { type LinkRow, type SourceMethod, submitWizard } from '../../stores/submit-wizard';
+    import { type LinkRow, submitWizard } from '../../stores/submit-wizard';
 
     $: state = $submitWizard;
-    $: method = state.sourceMethod;
+    $: method = state.sourceMethod ?? 'links';
 
-    function pick(m: SourceMethod): void {
-        submitWizard.update((s) => ({
-            ...s,
-            sourceMethod: s.sourceMethod === m ? null : m,
-        }));
+    function pick(m: 'links' | 'playlist'): void {
+        submitWizard.update((s) => ({ ...s, sourceMethod: m }));
     }
 
     function updateLink(chapter: number, url: string): void {
@@ -99,145 +97,113 @@
 </script>
 
 <div class="step" in:fade={{ duration: 180 }}>
-    <p class="lede">How are the recordings reaching us?</p>
+    <div class="mode-toggle" role="tablist" aria-label="Source method">
+        <button
+            type="button"
+            class="mode-btn"
+            class:active={method === 'links'}
+            role="tab"
+            aria-selected={method === 'links'}
+            on:click={() => pick('links')}
+        >
+            <span class="mode-label">Direct links</span>
+            <span class="mode-hint">114 URLs · paste, drop, or per chapter</span>
+        </button>
+        <button
+            type="button"
+            class="mode-btn"
+            class:active={method === 'playlist'}
+            role="tab"
+            aria-selected={method === 'playlist'}
+            on:click={() => pick('playlist')}
+        >
+            <span class="mode-label">Playlist</span>
+            <span class="mode-hint">YouTube · SoundCloud · Archive · Drive folder</span>
+        </button>
+        <span class="mode-track" data-mode={method} aria-hidden="true"></span>
+    </div>
 
-    <ul class="cards" role="radiogroup" aria-label="Source method">
-        <!-- Direct links -->
-        <li>
-            <button
-                type="button"
-                class="card"
-                class:active={method === 'links'}
-                role="radio"
-                aria-checked={method === 'links'}
-                on:click={() => pick('links')}
-            >
-                <span class="card-head">
-                    <span class="card-num">01</span>
-                    <span class="card-title">Direct links</span>
-                    <span class="card-sub">114 URLs — fill per chapter, or drop a CSV / JSON</span>
-                </span>
-                <span class="card-glyph" aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-                        <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 1 0-5.66-5.66L11.5 6.5" />
-                        <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 1 0 5.66 5.66L12.5 17.5" />
-                    </svg>
-                </span>
-            </button>
-
+    {#key method}
+        <div class="body-pane" in:fly={{ y: 4, duration: 180 }}>
             {#if method === 'links'}
-                <div class="panel" transition:slide={{ duration: 200 }}>
-                    <div class="links-grid">
-                        <div class="examples">
-                            <div
-                                class="csv-drop"
-                                on:drop={onFileDrop}
-                                on:dragover={prevent}
-                                role="presentation"
-                            >
-                                <span class="csv-icon" aria-hidden="true">⟱</span>
-                                <span class="csv-copy">
-                                    Drop <span class="m">.csv</span> or <span class="m">.json</span>, or
-                                </span>
-                                <label class="csv-pick">
-                                    browse
-                                    <input type="file" accept=".csv,.json,text/csv,application/json" on:change={onFilePick} hidden />
-                                </label>
-                            </div>
+                <div class="links-grid">
+                    <div class="examples">
+                        <div
+                            class="csv-drop"
+                            on:drop={onFileDrop}
+                            on:dragover={prevent}
+                            role="presentation"
+                        >
+                            <span class="csv-icon" aria-hidden="true">⟱</span>
+                            <span class="csv-copy">
+                                Drop <span class="m">.csv</span> or <span class="m">.json</span>, or
+                            </span>
+                            <label class="csv-pick">
+                                browse
+                                <input type="file" accept=".csv,.json,text/csv,application/json" on:change={onFilePick} hidden />
+                            </label>
+                        </div>
 
-                            <div class="example">
-                                <span class="example-label">CSV — header optional</span>
-                                <pre class="example-code">chapter,url
+                        <div class="example">
+                            <span class="example-label">CSV — header optional</span>
+                            <pre class="example-code">chapter,url
 1,https://example.com/001.mp3
 2,https://example.com/002.mp3
 …</pre>
-                            </div>
-                            <div class="example">
-                                <span class="example-label">JSON</span>
-                                <pre class="example-code">{`[
+                        </div>
+                        <div class="example">
+                            <span class="example-label">JSON</span>
+                            <pre class="example-code">{`[
   { "chapter": 1, "url": "https://example.com/001.mp3" },
   { "chapter": 2, "url": "https://example.com/002.mp3" },
   …
 ]`}</pre>
-                            </div>
                         </div>
+                    </div>
 
-                        <div class="per-chapter">
-                            <div class="pc-head">
-                                <span>Per chapter</span>
-                                <span class="pc-count" class:complete={linkComplete} class:warn={linkAnyMalformed}>
-                                    {linkCount} / 114
-                                </span>
-                            </div>
-                            <div class="pc-rows">
-                                {#each state.links as row (row.chapter)}
-                                    <label class="pc-row">
-                                        <span class="pc-num">{String(row.chapter).padStart(3, '0')}</span>
-                                        <input
-                                            type="url"
-                                            placeholder="https://…"
-                                            value={row.url}
-                                            class:has-url={row.url.trim().length > 0}
-                                            on:input={(e) => updateLink(row.chapter, (e.currentTarget as HTMLInputElement).value)}
-                                        />
-                                    </label>
-                                {/each}
-                            </div>
+                    <div class="per-chapter">
+                        <div class="pc-head">
+                            <span>Per chapter</span>
+                            <span class="pc-count" class:complete={linkComplete} class:warn={linkAnyMalformed}>
+                                {linkCount} / 114
+                            </span>
+                        </div>
+                        <div class="pc-rows">
+                            {#each state.links as row (row.chapter)}
+                                <label class="pc-row">
+                                    <span class="pc-num">{String(row.chapter).padStart(3, '0')}</span>
+                                    <input
+                                        type="url"
+                                        placeholder="https://…"
+                                        value={row.url}
+                                        class:has-url={row.url.trim().length > 0}
+                                        on:input={(e) => updateLink(row.chapter, (e.currentTarget as HTMLInputElement).value)}
+                                    />
+                                </label>
+                            {/each}
                         </div>
                     </div>
                 </div>
+            {:else}
+                <label class="playlist">
+                    <span>Playlist URL</span>
+                    <input
+                        type="url"
+                        placeholder="https://youtube.com/playlist?list=…"
+                        value={state.playlistUrl}
+                        on:input={(e) => submitWizard.update((s) => ({ ...s, playlistUrl: (e.currentTarget as HTMLInputElement).value }))}
+                    />
+                    <span class="playlist-hint">
+                        For a Google Drive folder, share it as
+                        <em>anyone with the link can view</em> and name the
+                        files so chapter order is unambiguous
+                        (<span class="m">001.mp3</span> … <span class="m">114.mp3</span>).
+                        We fetch via yt-dlp once the ingest pipeline lands.
+                    </span>
+                </label>
             {/if}
-        </li>
-
-        <!-- Playlist -->
-        <li>
-            <button
-                type="button"
-                class="card"
-                class:active={method === 'playlist'}
-                role="radio"
-                aria-checked={method === 'playlist'}
-                on:click={() => pick('playlist')}
-            >
-                <span class="card-head">
-                    <span class="card-num">02</span>
-                    <span class="card-title">Playlist</span>
-                    <span class="card-sub">One URL — YouTube, SoundCloud, Archive.org, Google Drive folder</span>
-                </span>
-                <span class="card-glyph" aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-                        <path d="M8 6h13" />
-                        <path d="M8 12h13" />
-                        <path d="M8 18h9" />
-                        <circle cx="4" cy="6" r="1" />
-                        <circle cx="4" cy="12" r="1" />
-                        <circle cx="4" cy="18" r="1" />
-                    </svg>
-                </span>
-            </button>
-
-            {#if method === 'playlist'}
-                <div class="panel" transition:slide={{ duration: 200 }}>
-                    <label class="playlist">
-                        <span>Playlist URL</span>
-                        <input
-                            type="url"
-                            placeholder="https://youtube.com/playlist?list=…"
-                            value={state.playlistUrl}
-                            on:input={(e) => submitWizard.update((s) => ({ ...s, playlistUrl: (e.currentTarget as HTMLInputElement).value }))}
-                        />
-                        <span class="playlist-hint">
-                            For a Google Drive folder, share it as
-                            <em>anyone with the link can view</em> and name the
-                            files so chapter order is unambiguous
-                            (<span class="m">001.mp3</span> … <span class="m">114.mp3</span>).
-                            We fetch via yt-dlp once the ingest pipeline lands.
-                        </span>
-                    </label>
-                </div>
-            {/if}
-        </li>
-    </ul>
+        </div>
+    {/key}
 </div>
 
 <style>
@@ -246,91 +212,59 @@
         flex-direction: column;
         gap: var(--s-4);
     }
-    .lede {
-        margin: 0;
-        font-size: var(--fs-meta);
-        color: var(--text-muted);
-        max-width: 60ch;
-    }
 
-    .cards {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--s-2);
-    }
-    .card {
-        width: 100%;
-        display: flex;
-        align-items: stretch;
-        justify-content: space-between;
-        gap: var(--s-3);
-        padding: var(--s-3) var(--s-4);
-        background: var(--panel);
-        border: 1px solid var(--border-quiet);
-        border-radius: var(--r-2);
-        text-align: left;
-        transition: border-color var(--t-base) var(--ease-out-quart),
-                    background var(--t-base) var(--ease-out-quart),
-                    transform var(--t-base) var(--ease-out-quart);
-    }
-    .card:hover {
-        border-color: var(--border-default);
-        background: var(--panel-2);
-    }
-    .card.active {
-        border-color: var(--accent);
-        background: var(--accent-tint-soft);
-    }
-    .card-head {
+    .mode-toggle {
+        position: relative;
         display: grid;
-        grid-template-columns: auto 1fr;
-        grid-template-rows: auto auto;
-        column-gap: var(--s-3);
-        row-gap: 2px;
-        align-items: baseline;
-    }
-    .card-num {
-        grid-row: 1 / span 2;
-        grid-column: 1;
-        align-self: center;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        color: var(--text-faint);
-        padding-top: 2px;
-    }
-    .card.active .card-num { color: var(--accent); }
-    .card-title {
-        grid-column: 2;
-        font-size: var(--fs-body);
-        font-weight: 500;
-        color: var(--text-primary);
-    }
-    .card-sub {
-        grid-column: 2;
-        font-size: 11.5px;
-        color: var(--text-muted);
-    }
-    .card-glyph {
-        color: var(--text-faint);
-        display: flex;
-        align-items: center;
-        transition: color var(--t-base) var(--ease-out-quart),
-                    transform var(--t-base) var(--ease-out-quart);
-    }
-    .card.active .card-glyph {
-        color: var(--accent);
-        transform: translateX(-2px);
-    }
-
-    .panel {
-        margin: var(--s-1) 0 var(--s-2);
-        padding: var(--s-3);
+        grid-template-columns: 1fr 1fr;
         background: var(--canvas-inset);
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
+        padding: 3px;
+    }
+    .mode-btn {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        padding: var(--s-2) var(--s-3);
+        border-radius: 4px;
+        color: var(--text-muted);
+        text-align: left;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        transition: color var(--t-base) var(--ease-out-quart);
+    }
+    .mode-btn.active { color: var(--text-primary); }
+    .mode-label {
+        font-size: var(--fs-body);
+        font-weight: 500;
+    }
+    .mode-hint {
+        font-size: 10.5px;
+        color: var(--text-faint);
+    }
+    .mode-track {
+        position: absolute;
+        top: 3px;
+        bottom: 3px;
+        width: calc(50% - 3px);
+        left: 3px;
+        background: var(--panel);
+        border: 1px solid var(--border-quiet);
+        border-radius: 4px;
+        transition: transform var(--t-base) var(--ease-out-expo);
+        pointer-events: none;
+    }
+    .mode-track[data-mode='playlist'] { transform: translateX(100%); }
+
+    .body-pane {
+        display: flex;
+        flex-direction: column;
+        will-change: transform, opacity;
     }
 
     .m { font-family: var(--font-mono); color: var(--text-secondary); }

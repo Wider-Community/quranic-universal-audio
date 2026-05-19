@@ -79,7 +79,7 @@ const initial: SubmitWizardState = {
     existingReciterSlug: null,
     existingComboSlug: null,
     newReciter: { name_en: '', name_ar: '', countryName: '' },
-    sourceMethod: null,
+    sourceMethod: 'links',
     links: emptyLinks(),
     playlistUrl: '',
     combination: {
