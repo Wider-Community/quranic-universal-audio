@@ -38,6 +38,7 @@
     import {
         livePlayingVerse,
         pickerDisplayChapter,
+        segAllData,
         segData,
         selectedChapter,
         selectedReciter,
@@ -190,9 +191,21 @@
         .filter(Boolean)
         .join(' · ');
 
-    // Full 1..114 range — surah availability per reciter would tighten this
-    // later if we surface per-reciter chapter manifests in the catalog.
-    const allSurahs: number[] = Array.from({ length: 114 }, (_, i) => i + 1);
+    // Filtered to surahs the reciter actually has in their audio manifest.
+    // Manifest keys are either "<surah>" or "<surah>:<ayah>" — take the
+    // numeric prefix, dedupe, sort. Fall back to 1..114 while segAllData
+    // is still loading so the picker isn't briefly empty.
+    $: allSurahs = (() => {
+        const byCh = $segAllData?.audio_by_chapter;
+        if (!byCh) return Array.from({ length: 114 }, (_, i) => i + 1);
+        const nums = new Set<number>();
+        for (const key of Object.keys(byCh)) {
+            const n = parseInt(key.split(':')[0] ?? '', 10);
+            if (Number.isFinite(n) && n >= 1 && n <= 114) nums.add(n);
+        }
+        if (nums.size === 0) return Array.from({ length: 114 }, (_, i) => i + 1);
+        return Array.from(nums).sort((a, b) => a - b);
+    })();
 
     $: filteredAyahs = ayahQuery.trim()
         ? $verseOptions.filter((v) => String(v).startsWith(ayahQuery.trim()))
