@@ -59,20 +59,20 @@
     export let label: string | null = null;
 
     // ---- Open-state (in-memory persistent) ----
-    // Mirror the store both directions: local `openCategory` drives the
-    // <details open={...}> binding; external writes (e.g. `onChapterChange`
-    // collapsing the accordion on manual Sura pick) flow back in so the
-    // mutex stays consistent. Identity guard prevents the reactive ping-
-    // pong loop.
+    // `valUiOpenCategory` is the single source of truth — `openCategory` is
+    // a read-only mirror used by template bindings. All WRITES to the open
+    // state go through `valUiOpenCategory.set(...)` (in `handleAccordionToggle`
+    // and the chapter-change reset below). External collapses
+    // (`onChapterChange` on manual Sura pick, `onGotoClick` on Go-to) write
+    // to the store directly and flow back in via this $: subscription.
     let openCategory: string | null = $valUiOpenCategory;
-    $: if (openCategory !== $valUiOpenCategory) valUiOpenCategory.set(openCategory);
-    $: if ($valUiOpenCategory !== openCategory) openCategory = $valUiOpenCategory;
+    $: openCategory = $valUiOpenCategory;
 
     // Reset on chapter change
     let _prevChapter = chapter;
     $: if (chapter !== _prevChapter) {
         _prevChapter = chapter;
-        openCategory = null;
+        valUiOpenCategory.set(null);
         cardsScrollTop = 0;
         clearAccordionPin();
     }
@@ -673,7 +673,8 @@
     function handleAccordionToggle(e: Event, type: string): void {
         const detailsEl = e.currentTarget as HTMLDetailsElement;
         const isOpen = detailsEl.open;
-        openCategory = isOpen ? type : (openCategory === type ? null : openCategory);
+        const cur = openCategory;
+        valUiOpenCategory.set(isOpen ? type : (cur === type ? null : cur));
     }
 
     // Capture the open-time snapshot of visible items so autosave-driven
