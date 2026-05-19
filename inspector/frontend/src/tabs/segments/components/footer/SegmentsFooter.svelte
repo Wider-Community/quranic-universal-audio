@@ -9,8 +9,8 @@
      * `SegmentsAudioControls.svelte` is removed.
      *
      * A 4px progress fill across the top of the footer tracks the
-     * currently-playing segment via (segPort.currentTimeMs - playStartMs) /
-     * (playEndMs - playStartMs).
+     * currently-loaded chapter audio via segPort.currentTimeMs /
+     * (audio element duration).
      *
      * Reads tab-scoped stores directly; mutating coordination (reciter task
      * refresh, chapter load, verse jump, picker change) is bubbled to the
@@ -44,21 +44,22 @@
         verseOptions,
     } from '../../stores/chapter';
     import { isDirtyStore } from '../../stores/dirty';
+    import { editCanvas, editMode } from '../../stores/edit';
     import { historyLoadState, historyVisible } from '../../stores/history';
     import {
         autoPlayEnabled,
         autoScrollEnabled,
-        continuousPlay,
         isMainAudioPlaying,
         playbackSpeed,
-        playEndMs,
-        playStartMs,
         segAudioElement,
         segPort,
         segPortReady,
     } from '../../stores/playback';
     import { saveButtonLabel, savePreviewVisible } from '../../stores/save';
+    import { previewSplitFromSelection } from '../../utils/edit/split';
+    import { previewTrimAudio } from '../../utils/edit/trim';
     import { hideHistoryView, showHistoryView } from '../../utils/history/actions';
+    import { previewLooping } from '../../utils/playback/play-range';
     import {
         onSegAudioEnded,
         onSegPlayClick,
@@ -199,18 +200,26 @@
             : 'History';
 
     // ---- Progress bar -----------------------------------------------
-    // % through the currently-playing segment. Falls back to 0 when no
-    // range is queued (`playStartMs` and `playEndMs` are both 0 between
-    // plays). Reactive on `currentMs` so the rAF-driven onTimeUpdate
-    // subscriber drives the fill.
-    $: progressPct = (() => {
-        const range = $playEndMs - $playStartMs;
-        if (range <= 0) return 0;
-        const pct = ((currentMs - $playStartMs) / range) * 100;
-        return Math.max(0, Math.min(100, pct));
-    })();
+    // % through the currently-loaded CHAPTER audio. Under chapter-continuous
+    // playback the user sees a single timeline spanning the full chapter;
+    // clicking seeks anywhere within it. `chapterDurationMs` is read from
+    // the `<audio>` element's `duration` once canplay has fired (a small
+    // reactive bump on $isMainAudioPlaying keeps it fresh after chapter
+    // swaps).
+    let chapterDurationMs = 0;
+    $: {
+        // Re-read whenever playback state or chapter changes; the audio element
+        // updates duration on metadata load.
+        void $isMainAudioPlaying; void $segData?.audio_url;
+        const dur = segPort.element?.duration;
+        chapterDurationMs = dur && isFinite(dur) ? dur * 1000 : 0;
+    }
 
-    $: progressVisible = $playEndMs > 0 && $playStartMs >= 0;
+    $: progressPct = chapterDurationMs > 0
+        ? Math.max(0, Math.min(100, (currentMs / chapterDurationMs) * 100))
+        : 0;
+
+    $: progressVisible = chapterDurationMs > 0;
 
     // ---- Live verse tracking ----------------------------------------
     // The Surah/Ayah cells light up accent-coloured while playback is
@@ -223,14 +232,26 @@
     $: ayahLive = surahLive && String($livePlayingVerse?.verse ?? '') === $selectedVerse;
 
     // ---- Player handlers --------------------------------------------
+    // Centralized play/pause router. The single source of truth — every
+    // segment-tab play/pause click flows through here. Edit-mode previews
+    // (Trim window loop, Split L/R/region loop) dispatch into their own
+    // helpers; normal-mode delegates to chapter playback.
     function handlePlayClick(): void {
+        const mode = get(editMode);
+        if (mode === 'trim') {
+            previewTrimAudio(get(editCanvas));
+            return;
+        }
+        if (mode === 'split') {
+            previewSplitFromSelection(get(editCanvas));
+            return;
+        }
         onSegPlayClick();
     }
 
     function handleAutoPlayToggle(): void {
         const next = !get(autoPlayEnabled);
         autoPlayEnabled.set(next);
-        continuousPlay.set(next);
         localStorage.setItem(LS_KEYS.SEG_AUTOPLAY, String(next));
     }
 
@@ -251,29 +272,24 @@
     }
 
     function onProgressClick(ev: MouseEvent): void {
-        // Seek within the current segment by clicking the progress bar.
-        // Does NOT cross segment boundaries — AudioRange owns that — so
-        // a click outside the playing range is clamped to the end.
-        if ($playEndMs <= $playStartMs || !$segPortReady) return;
+        // Seek anywhere in the loaded chapter audio.
+        if (chapterDurationMs <= 0 || !$segPortReady) return;
         const target = ev.currentTarget as HTMLElement;
         const rect = target.getBoundingClientRect();
         const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-        const seekMs = $playStartMs + pct * ($playEndMs - $playStartMs);
-        segPort.seek(seekMs);
+        segPort.seek(pct * chapterDurationMs);
     }
 
     function onProgressKey(ev: KeyboardEvent): void {
-        // Arrow keys nudge the playhead within the segment in 2% steps —
-        // the slider exists for finegrained inspection, not full transport.
-        if ($playEndMs <= $playStartMs || !$segPortReady) return;
-        const range = $playEndMs - $playStartMs;
-        const step = range * 0.02;
+        // Arrow keys nudge the playhead within the chapter in 2% steps.
+        if (chapterDurationMs <= 0 || !$segPortReady) return;
+        const step = chapterDurationMs * 0.02;
         if (ev.key === 'ArrowLeft') {
             ev.preventDefault();
-            segPort.seek(Math.max($playStartMs, segPort.currentTimeMs() - step));
+            segPort.seek(Math.max(0, segPort.currentTimeMs() - step));
         } else if (ev.key === 'ArrowRight') {
             ev.preventDefault();
-            segPort.seek(Math.min($playEndMs - 1, segPort.currentTimeMs() + step));
+            segPort.seek(Math.min(chapterDurationMs - 1, segPort.currentTimeMs() + step));
         }
     }
 
@@ -340,8 +356,11 @@
         ? ($autoSaveEnabled && get(saveButtonLabel) === 'Save' ? 'Saving…' : $saveButtonLabel)
         : 'Saved';
 
-    // Play button glyph: pause when actively playing, play otherwise.
-    $: playGlyph = ($isMainAudioPlaying ? 'pause' : 'play') as IconName;
+    // Play button glyph: pause when normal-mode audio is playing OR an
+    // edit-mode preview loop is active.
+    $: playGlyph = (($isMainAudioPlaying || $previewLooping !== false)
+        ? 'pause'
+        : 'play') as IconName;
 
     // Time display for the progress row.
     function fmt(ms: number): string {
@@ -352,8 +371,8 @@
         const s = total % 60;
         return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
-    $: elapsedMs = progressVisible ? Math.max(0, currentMs - $playStartMs) : 0;
-    $: totalMs = progressVisible ? Math.max(0, $playEndMs - $playStartMs) : 0;
+    $: elapsedMs = progressVisible ? Math.max(0, currentMs) : 0;
+    $: totalMs = progressVisible ? chapterDurationMs : 0;
 </script>
 
 <div class="segs-footer" class:is-empty={!hasReciter} bind:this={footerEl}>
@@ -450,7 +469,7 @@
                         class="pref-cell"
                         class:on={$autoPlayEnabled}
                         aria-pressed={$autoPlayEnabled}
-                        title="Auto-play next segment when current ends"
+                        title="Autoplay — when ON, play continues through the whole chapter; when OFF, stops at the end of each segment (chapter mode only; accordions always stop)"
                         on:click={handleAutoPlayToggle}
                     >
                         <Icon name="autoplay" size={16} />
@@ -472,7 +491,7 @@
                         class="play-cell"
                         disabled={!$segPortReady || !$segData?.audio_url}
                         on:click={handlePlayClick}
-                        aria-label={$isMainAudioPlaying ? 'Pause' : 'Play'}
+                        aria-label={playGlyph === 'pause' ? 'Pause' : 'Play'}
                     >
                         <Icon name={playGlyph} size={14} />
                     </button>

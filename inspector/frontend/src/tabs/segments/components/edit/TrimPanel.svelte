@@ -4,8 +4,9 @@
      *
      * Mounted by SegmentRow inside `.seg-left` when that row is the active
      * edit target (see SegmentRow `isEditingThisRow && $editMode === 'trim'`).
-     * Renders Cancel | start-stepper-pair | Preview | end-stepper-pair | Apply
-     * plus the status readout. The duration moved out of this panel — it now
+     * Renders Cancel | start-stepper-pair | end-stepper-pair | Apply plus the
+     * status readout. Trim preview is driven by the footer's centralized
+     * play/pause button — no per-panel play affordance here. The duration
      * lives on the row's TimeRange (`A.MMM - B.MMM | dur`) so it tracks the
      * typed-edit display in one place.
      *
@@ -25,13 +26,10 @@
     import type { SegCanvas } from '../../types/segments-waveform';
     import { EDIT_MIN_DURATION_MS, EDIT_NUDGE_MS } from '../../utils/constants';
     import { exitEditMode } from '../../utils/edit/common';
-    import { confirmTrim, nudgeTrimBoundary, previewTrimAudio } from '../../utils/edit/trim';
-    import { previewLooping } from '../../utils/playback/play-range';
+    import { confirmTrim, nudgeTrimBoundary } from '../../utils/edit/trim';
 
     export let seg: Segment;
     export let canvas: SegCanvas;
-
-    $: previewGlyph = $previewLooping === 'trim' ? '\u25A0' : '\u25B6';
 
     // Stepper-disable gates. A stepper disables when the next press would be
     // a no-op. Two cases:
@@ -72,8 +70,6 @@
             title="Move start forward {EDIT_NUDGE_MS} ms"
             disabled={startFwdDisabled}
             on:click={nudgeStartFwd}>&gt;</button>
-        <button class="btn btn-sm seg-card-play-btn" title="Play / pause trim preview"
-            on:click={() => previewTrimAudio(canvas)}>{previewGlyph}</button>
         <button class="btn btn-sm seg-trim-step seg-trim-step-end"
             title="Move end back {EDIT_NUDGE_MS} ms"
             disabled={endBackDisabled}

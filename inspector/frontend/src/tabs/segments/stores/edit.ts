@@ -145,9 +145,46 @@ export interface ChainTarget {
     seg: Segment;
     category: string | null;
     originalEndRef: string | null;
+    /**
+     * When set on a chain entry produced by a CV split, ``_handoffPendingChain``
+     * triggers a brief visual flash on the ``WaslGap`` chip between the segment
+     * named by this UID (the previous piece) and ``seg`` (the current piece),
+     * then continues with the normal ref-edit step. No modal — the chip itself
+     * is the toggle; the flash just draws the eye there.
+     */
+    waslFlashForLeftUid?: string;
 }
 
 export const pendingChainTargets = writable<ChainTarget[]>([]);
+
+/**
+ * Holds the ``segA.segment_uid`` of the WaslGap chip that should momentarily
+ * flash and scroll into view. Written by ``_handoffPendingChain`` between
+ * post-split ref-edits; read by ``WaslGap.svelte`` to apply a brief CSS
+ * animation. Auto-clears after the animation duration.
+ */
+export const flashWaslGap = writable<string | null>(null);
+
+// ---------------------------------------------------------------------------
+// Split preview selection — which range the centralized footer play button
+// loops while in split mode. Replaces the per-button "Play L / Play R / Play
+// region N" affordances that used to live in SplitPanel.svelte; the panel
+// now exposes a radio for selection and the footer's single play/pause
+// drives the actual loop via `previewSplitFromSelection`.
+// ---------------------------------------------------------------------------
+
+/** What the next footer play press should loop in split mode. `left/right`
+ *  for binary splits (1 cursor); `region` for multi-cursor splits. */
+export type SplitPreviewSelection =
+    | { kind: 'left' }
+    | { kind: 'right' }
+    | { kind: 'region'; index: number };
+
+export const splitPreviewSelection = writable<SplitPreviewSelection>({ kind: 'left' });
+
+export function setSplitPreviewSelection(s: SplitPreviewSelection): void {
+    splitPreviewSelection.set(s);
+}
 
 // ---------------------------------------------------------------------------
 // Setters — all writes route through a single `_editState.update(...)`.
