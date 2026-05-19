@@ -2,25 +2,32 @@
     /**
      * TrimPanel — Svelte-rendered inline chrome for trim-mode edit.
      *
-     * Layout: ``Cancel    <  >    <  >    Apply``.
+     * Layout: ``Cancel    <  >    [↻]    <  >    Apply``.
      * The two `< >` pairs are bare caret buttons separated by spacing,
      * each pair sitting above a 2px coloured underline that mirrors the
      * canvas trim-handle (green for start, red for end). Spatial position
      * carries the meaning — start nudgers on the left, end on the right —
      * so the panel doesn't need text labels or bordered groups for what's
-     * a six-element toolbar.
+     * a seven-element toolbar.
+     *
+     * Between the two stepper pairs sits a playhead-pink replay button.
+     * Clicking it cold-starts a fresh loop from the live `currentStart`
+     * → `currentEnd`, regardless of the current pause / play state. The
+     * footer ▶ remains the pause/resume; this button is the only path
+     * to restart-from-start.
      *
      * Preview play/pause is owned entirely by the footer ▶ and the Space
      * shortcut (centralised through `onSegPlayClick`). This panel never
-     * spawns its own play button.
+     * spawns its own pause/resume button.
      */
 
+    import Icon from '../../../../lib/icons/Icon.svelte';
     import type { Segment } from '../../../../lib/types/domain';
     import { editStatusText, trimWindow } from '../../stores/edit';
     import type { SegCanvas } from '../../types/segments-waveform';
     import { EDIT_MIN_DURATION_MS, EDIT_NUDGE_MS } from '../../utils/constants';
     import { exitEditMode } from '../../utils/edit/common';
-    import { confirmTrim, nudgeTrimBoundary } from '../../utils/edit/trim';
+    import { confirmTrim, nudgeTrimBoundary, previewTrimAudio } from '../../utils/edit/trim';
 
     export let seg: Segment;
     export let canvas: SegCanvas;
@@ -39,6 +46,10 @@
     $: startFwdDisabled  = !tw || tw.currentStart >= tw.currentEnd - EDIT_MIN_DURATION_MS;
     $: endBackDisabled   = !tw || tw.currentEnd <= tw.currentStart + EDIT_MIN_DURATION_MS;
     $: endFwdDisabled    = !tw || endOffRight || tw.currentEnd >= tw.windowEnd;
+    // Replay cold-starts a loop from the LIVE currentStart/currentEnd via
+    // `previewTrimAudio`. Disabled when the window collapses below the
+    // same min-duration the nudgers already use.
+    $: replayDisabled = !tw || (tw.currentEnd - tw.currentStart) < EDIT_MIN_DURATION_MS;
 
     function nudgeStartBack(): void { nudgeTrimBoundary('start', -EDIT_NUDGE_MS); }
     function nudgeStartFwd():  void { nudgeTrimBoundary('start',  EDIT_NUDGE_MS); }
@@ -60,6 +71,15 @@
                 disabled={startFwdDisabled}
                 on:click={nudgeStartFwd}>&rsaquo;</button>
         </div>
+
+        <button class="seg-replay"
+            title="Replay trim window from start"
+            aria-label="Replay"
+            disabled={replayDisabled}
+            on:click={() => previewTrimAudio(canvas)}
+        >
+            <Icon name="replay" size={14} />
+        </button>
 
         <div class="seg-nudge-pair seg-nudge-end" role="group" aria-label="Trim end">
             <button class="seg-nudge"
