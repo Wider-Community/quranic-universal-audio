@@ -41,6 +41,8 @@ export const bookmarks = writable<Bookmark[]>([]);
 export const bookmarksVisible = writable<boolean>(false);
 export const qfConnected = writable<boolean>(false);
 export const qfLogin = writable<string | null>(null);
+/** True when the active session is the local dev stub (not a real QF login). */
+export const qfDev = writable<boolean>(false);
 
 export function bookmarkKey(surah: number, ayah: number): string {
     return `${surah}:${ayah}`;
@@ -85,6 +87,7 @@ export async function initBookmarks(): Promise<void> {
         const status = await getQfStatus();
         qfConnected.set(status.connected);
         qfLogin.set(status.login ?? null);
+        qfDev.set(Boolean(status.dev));
         if (status.connected) await syncFromQf();
     } catch {
         qfConnected.set(false);
@@ -142,6 +145,7 @@ export async function disconnectQf(): Promise<void> {
     }
     qfConnected.set(false);
     qfLogin.set(null);
+    qfDev.set(false);
     bookmarks.set(loadLocal());
 }
 

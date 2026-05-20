@@ -21,6 +21,7 @@
         disconnectQf,
         initBookmarks,
         qfConnected,
+        qfDev,
         qfLogin,
         removeBookmark,
         syncFromQf,
@@ -53,6 +54,7 @@
             void devConnectQf()
                 .then(() => {
                     qfConnected.set(true);
+                    qfDev.set(true);
                     return syncFromQf();
                 })
                 .catch(() => {});
@@ -77,9 +79,15 @@
     <div class="bm-conn">
         {#if $qfConnected}
             <div class="bm-conn-row">
-                <span class="bm-conn-on" title="Synced with Quran.Foundation">
-                    ● Synced{$qfLogin ? ` · ${$qfLogin}` : ''}
-                </span>
+                {#if $qfDev}
+                    <span class="bm-conn-dev" title="Local dev stub — NOT a real Quran.Foundation login. No account or token involved.">
+                        ⚙ Dev stub (local only)
+                    </span>
+                {:else}
+                    <span class="bm-conn-on" title="Synced with Quran.Foundation">
+                        ● Synced{$qfLogin ? ` · ${$qfLogin}` : ''}
+                    </span>
+                {/if}
                 <button class="bm-disconnect" type="button" onclick={() => disconnectQf()}>
                     Disconnect
                 </button>
@@ -155,6 +163,7 @@
     .bm-conn { margin-bottom: 14px; }
     .bm-conn-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .bm-conn-on { color: #5fd38a; font-size: 0.85rem; font-weight: 600; }
+    .bm-conn-dev { color: #d8a13a; font-size: 0.85rem; font-weight: 600; }
     .bm-disconnect {
         background: none;
         border: 1px solid #3a3a5a;
