@@ -109,6 +109,137 @@ def flask_client():
     return app.test_client()
 
 
+# ---------------------------------------------------------------------------
+# SQLite substrate test harness (post-cutover: the DB is the source of truth).
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _substrate_db(tmp_path):
+    """Every test runs against a fresh, migrated SQLite DB.
+
+    Bucket uploads are disabled (``set_sync_enabled(False)``) so the bulk of the
+    suite doesn't pay snapshot/CAS cost; durability tests flip it back on. The
+    DB file lives under the same ``tmp_path`` the content fixtures use, so the
+    SQLite substrate and the per-reciter ``wip/<slug>/`` FilesystemBackend
+    content compose in one temp dir.
+    """
+    from services import db
+    from services.db import sync as _sync
+
+    db.set_db_path_for_test(tmp_path / "inspector-test.db")
+    db.init_db()
+    _sync.set_sync_enabled(False)
+    _sync._reset_for_test()
+    yield
+    db.reset()
+    _sync.set_sync_enabled(True)
+
+
+def _seed_delivery_chain(conn, slug: str, reciter_id: str = "r") -> None:
+    """Insert the FK chain a ``delivery_states`` row needs: vocab + reciter +
+    delivery (all idempotent)."""
+    conn.execute(
+        "INSERT OR IGNORE INTO reciters(reciter_id,name_en) VALUES (?,?)",
+        (reciter_id, reciter_id.upper()),
+    )
+    conn.execute("INSERT OR IGNORE INTO riwayahs(slug,short,name) VALUES ('hafs','h','Hafs')")
+    conn.execute("INSERT OR IGNORE INTO styles(slug,short,name) VALUES ('mur','m','Mur')")
+    conn.execute("INSERT OR IGNORE INTO sources(slug,name) VALUES ('src','Src')")
+    conn.execute("INSERT OR IGNORE INTO channels(slug,short,name) VALUES ('ch','c','Ch')")
+    conn.execute(
+        "INSERT OR IGNORE INTO deliveries(slug,reciter_id,riwayah,style,source,channel,"
+        "audio_category,chapter_count,added_at,added_by_hf_id) VALUES "
+        "(?,?,'hafs','mur','src','ch','by_surah',114,'2026-01-01T00:00:00Z','sys')",
+        (slug, reciter_id),
+    )
+
+
+def _seed_state(
+    slug: str,
+    *,
+    state: str = "awaiting_review",
+    state_since=None,
+    visibility: str = "public",
+    visibility_reason: str | None = None,
+    assignee_hf_id: str | None = None,
+    assignee_login: str = "test_user",
+    marked_ready: bool = False,
+    last_save_at=None,
+    reciter_id: str = "rid",
+    timestamps_job_ids=None,
+    prefetch_purge_at=None,
+    revision_in_progress=None,
+) -> None:
+    """Seed a ``delivery_states`` row (+ FK chain), synthesizing an open
+    ``claims`` row when ``assignee_hf_id`` is given. Backs the legacy per-file
+    ``_row(...)`` / ``_replace_state(...)`` seeding. ``assignee_*``/``marked_ready``
+    only surface on UNDER_REVIEW rows (the ReciterRow invariant), so pass
+    ``state="under_review"`` with an assignee."""
+    from datetime import datetime, timezone
+
+    from services import db
+    from services.db import repo_access, repo_claims, repo_state
+    from scripts.lib.schemas import ReciterState, Visibility
+
+    now = datetime.now(timezone.utc)
+    st = state if isinstance(state, ReciterState) else ReciterState(state)
+    vis = visibility if isinstance(visibility, Visibility) else Visibility(visibility)
+    # Schema CHECK: discarded ⇒ visibility_reason NOT NULL.
+    if vis == Visibility.DISCARDED and not visibility_reason:
+        visibility_reason = "seeded discarded"
+    with db.transaction() as conn:
+        _seed_delivery_chain(conn, slug, reciter_id)
+        repo_state.upsert_state(
+            slug,
+            state=st,
+            state_since=state_since or now,
+            visibility=vis,
+            visibility_reason=visibility_reason,
+            last_save_at=last_save_at,
+            timestamps_job_ids=list(timestamps_job_ids or []),
+            prefetch_purge_at=prefetch_purge_at,
+            revision_in_progress=revision_in_progress,
+        )
+        if assignee_hf_id is not None:
+            repo_access.ensure_user(assignee_hf_id, login=assignee_login)
+            repo_claims.open_claim(
+                slug=slug,
+                assignee_id=assignee_hf_id,
+                assignee_login=assignee_login,
+                claimed_at=now,
+            )
+            if marked_ready:
+                repo_claims.set_marked_ready(slug, ready=True)
+
+
+def _seed_role(hf_user_id: str, *, login: str = "test_user", role: str = "contributor") -> None:
+    """Seed a member's role (CONTRIBUTOR is implicit → just ensure the user row
+    for FK targets)."""
+    from services import db
+    from services.db import repo_access
+    from scripts.lib.schemas import Role
+
+    with db.transaction():
+        repo_access.ensure_user(hf_user_id, login=login)
+        if role != "contributor":
+            repo_access.grant_role(
+                hf_user_id=hf_user_id, login=login, role=Role(role), granted_by="test-seed",
+            )
+
+
+@pytest.fixture
+def seed_state():
+    """Callable: ``seed_state(slug, state=, assignee_hf_id=, marked_ready=, ...)``."""
+    return _seed_state
+
+
+@pytest.fixture
+def seed_role():
+    """Callable: ``seed_role(hf_user_id, login=, role=)``."""
+    return _seed_role
+
+
 @pytest.fixture
 def signed_in_client(monkeypatch):
     """Factory returning a Flask test client that carries a signed identity cookie.
@@ -132,12 +263,7 @@ def signed_in_client(monkeypatch):
     if not os.environ.get("INSPECTOR_SESSION_SECRET"):
         monkeypatch.setenv("INSPECTOR_SESSION_SECRET", secrets.token_hex(32))
 
-    from datetime import datetime, timezone
-
-    from scripts.lib.schemas import Member, Role, RolesFile
-
     from app import app
-    from services import access as access_service
     from services import auth as auth_service
 
     app.config["TESTING"] = True
@@ -148,27 +274,10 @@ def signed_in_client(monkeypatch):
         login: str = "test_user",
         role: str = "contributor",
     ):
-        # Seed the access store. CONTRIBUTOR is the implicit default — no
-        # member row needed; resolve_role returns CONTRIBUTOR for unknown ids.
-        if role != "contributor":
-            now = datetime.now(timezone.utc)
-            roles_file = RolesFile(
-                members=[
-                    Member(
-                        hf_user_id=hf_user_id,
-                        login=login,
-                        role=Role(role),
-                        added_at=now,
-                        added_by_hf_id="test-seed",
-                    )
-                ]
-            )
-            # Replace the in-memory store directly (bypasses the bucket).
-            with access_service._store_lock:  # type: ignore[attr-defined]
-                access_service._store = roles_file  # type: ignore[attr-defined]
-        else:
-            with access_service._store_lock:  # type: ignore[attr-defined]
-                access_service._store = RolesFile()  # type: ignore[attr-defined]
+        # Seed the role into the SQLite substrate (CONTRIBUTOR is implicit;
+        # resolve_role returns CONTRIBUTOR for unknown ids). The autouse
+        # _substrate_db fixture handles teardown.
+        _seed_role(hf_user_id, login=login, role=role)
 
         client = app.test_client()
         cookie = auth_service.encode_session(login=login, hf_user_id=hf_user_id)
@@ -181,35 +290,18 @@ def signed_in_client(monkeypatch):
 
     yield _make
 
-    # Teardown: clear the access store so subsequent tests start clean.
-    with access_service._store_lock:  # type: ignore[attr-defined]
-        access_service._store = RolesFile()  # type: ignore[attr-defined]
-
 
 @pytest.fixture
 def state_persistence(tmp_path, monkeypatch):
-    """Per-test FilesystemBackend so state mutations persist across requests.
+    """Per-test FilesystemBackend for per-reciter content + the SQLite substrate
+    (via the autouse ``_substrate_db`` fixture) for state.
 
-    Replaces the legacy `_stub_persist` pattern (which mocked
-    `state._persist_row` to a no-op): instead of forcing tests to manually
-    `_replace_state(...)` between requests to simulate persistence, this
-    fixture wires a real bucket backend rooted at a tmp dir. State
-    transitions go through `_persist_row` for real — the in-memory
-    `_state_file` global is updated AND the JSON is written to tmp_path.
-    Subsequent GETs read the persisted state for free.
-
-    Also re-hydrates the catalog + access stores against the empty backend
-    so prior test bleed-through can't pin stale rows. Stubs `audit.append`
-    so we don't write to the audit log per claim/release.
-
-    Yields the FilesystemBackend so individual tests can inspect what
-    landed on disk if needed.
+    Post-cutover, state persists across requests for free (it lives in SQLite).
+    This fixture just wires the FilesystemBackend for any ``wip/<slug>/`` content
+    a test reads, and yields it for inspection. Seed state via the ``seed_state``
+    fixture / ``_seed_state`` helper, or by driving ``transition()``.
     """
-    from services import access as access_service
-    from services import audit as audit_service
-    from services import catalog as catalog_service
     from services import hf_bucket as _hf_bucket
-    from services import state as state_service
 
     monkeypatch.setenv("INSPECTOR_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("INSPECTOR_BACKEND", "filesystem")
@@ -217,11 +309,6 @@ def state_persistence(tmp_path, monkeypatch):
 
     backend = _hf_bucket.FilesystemBackend(tmp_path)
     _hf_bucket.set_backend(backend)
-    state_service.hydrate()
-    catalog_service.hydrate()
-    access_service.hydrate()
-
-    monkeypatch.setattr(audit_service, "append", lambda **kw: None)
 
     yield backend
 
@@ -298,12 +385,7 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
     """
     from datetime import datetime, timezone
 
-    from scripts.lib.schemas import ReciterRow, ReciterState, ReciterStateFile
-
     from services import hf_bucket as _hf_bucket
-    from services import state as _state_service
-    from services import access as _access_service
-    from services import catalog as _catalog_service
     from services import storage_paths as _storage_paths
 
     monkeypatch.setenv("INSPECTOR_DATA_DIR", str(tmp_path))
@@ -312,12 +394,6 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
 
     backend = _hf_bucket.FilesystemBackend(tmp_path)
     _hf_bucket.set_backend(backend)
-
-    # Rehydrate the in-memory services against the fresh empty backend so
-    # the previous test's state doesn't leak across.
-    _state_service.hydrate()
-    _catalog_service.hydrate()
-    _access_service.hydrate()
 
     _invalidate_seg_caches()
 
@@ -335,30 +411,17 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         ``AWAITING_REVIEW`` keeps existing tests unchanged.
         """
         # Seed a state row so data_dir.kind_for(reciter) returns "wip".
-        rows = list(_state_service.snapshot().reciters)
-        if not any(r.slug == reciter for r in rows):
-            now = datetime.now(timezone.utc)
+        from services.db import repo_state as _repo_state
+        if not _repo_state.exists(reciter):
             if under_review_for is None:
-                row = ReciterRow(
-                    slug=reciter,
-                    state=ReciterState.AWAITING_REVIEW,
-                    state_since=now,
-                )
+                _seed_state(reciter, state="awaiting_review")
             else:
-                row = ReciterRow(
-                    slug=reciter,
-                    state=ReciterState.UNDER_REVIEW,
-                    state_since=now,
+                _seed_state(
+                    reciter,
+                    state="under_review",
                     assignee_hf_id=under_review_for,
                     assignee_login="test_user",
-                    assignee_since=now,
                 )
-            rows.append(row)
-            backend.write_json_atomic(
-                _storage_paths.state_path(),
-                ReciterStateFile(reciters=rows).model_dump(mode="json"),
-            )
-            _state_service.hydrate()
 
         # Install fixture file at wip/<reciter>/detailed.json
         src = FIXTURES_DIR / f"{fixture_name}.detailed.json"
@@ -420,26 +483,15 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         as the assignee, without copying a fixture. Used by tests that
         hand-author their own ``detailed.json`` and just need the lock
         decorator to pass."""
-        now = datetime.now(timezone.utc)
-        rows = [
-            r for r in _state_service.snapshot().reciters
-            if r.slug != reciter
-        ]
-        rows.append(
-            ReciterRow(
-                slug=reciter,
-                state=ReciterState.UNDER_REVIEW,
-                state_since=now,
-                assignee_hf_id=hf_user_id,
-                assignee_login="test_user",
-                assignee_since=now,
-            )
+        from services.db import repo_state as _repo_state
+        if _repo_state.exists(reciter):
+            return
+        _seed_state(
+            reciter,
+            state="under_review",
+            assignee_hf_id=hf_user_id,
+            assignee_login="test_user",
         )
-        backend.write_json_atomic(
-            _storage_paths.state_path(),
-            ReciterStateFile(reciters=rows).model_dump(mode="json"),
-        )
-        _state_service.hydrate()
 
     yield type("TmpReciter", (), {
         "root": tmp_path / "wip",

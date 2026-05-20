@@ -19,29 +19,26 @@ os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 
 def _replace_state(rows: list):
-    from scripts.lib.schemas import ReciterStateFile
-    from services import state as state_service
+    """Seed each spec from ``_row`` into the SQLite substrate (post-cutover the
+    DB is the source of truth — the old in-memory ``_state_file`` is gone)."""
+    from tests.conftest import _seed_state
 
-    new_file = ReciterStateFile(reciters=rows)
-    with state_service._state_lock:  # type: ignore[attr-defined]
-        state_service._state_file = new_file  # type: ignore[attr-defined]
+    for spec in rows:
+        _seed_state(**spec)
 
 
 def _row(slug: str, *, state: str = "awaiting_review",
          assignee_hf_id: str | None = None,
          marked_ready: bool = False,
          visibility: str = "public"):
-    from scripts.lib.schemas import ReciterRow, ReciterState, Visibility
-
-    return ReciterRow(
+    """Return a seed spec consumed by ``_replace_state`` → ``_seed_state``."""
+    return dict(
         slug=slug,
-        state=ReciterState(state),
-        state_since=datetime.now(timezone.utc),
+        state=state,
         assignee_hf_id=assignee_hf_id,
-        assignee_login="prev_owner" if assignee_hf_id else None,
-        assignee_since=datetime.now(timezone.utc) if assignee_hf_id else None,
+        assignee_login="prev_owner" if assignee_hf_id else "test_user",
         marked_ready=marked_ready,
-        visibility=Visibility(visibility),
+        visibility=visibility,
     )
 
 
