@@ -336,6 +336,22 @@ def _hydrate_bucket_stores() -> None:
         except Exception as e:  # noqa: BLE001
             logger.warning("wip-audio sweeper wiring failed: %s", e)
 
+    # SQLite substrate (transition flag, default off): pull the DB from the
+    # bucket and run migrations so it's ready. Additive during the transition —
+    # the legacy stores above still serve reads until the per-service cutover.
+    if "pytest" not in sys.modules:
+        try:
+            from services import db as _db
+
+            if _db.substrate_enabled():
+                from services.db import sync as _sync
+
+                _sync.pull()
+                ver = _db.init_db()
+                logger.info("db substrate: ready at schema v%s", ver)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("db substrate init failed: %s", e)
+
 
 _hydrate_bucket_stores()
 

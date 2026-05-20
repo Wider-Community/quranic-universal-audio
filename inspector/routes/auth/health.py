@@ -60,6 +60,25 @@ def healthz():
         # via a state-vs-wip mismatch hours/days later.
         "auto_detect_loop": auto_detect_service.is_background_loop_running(),
     }
+
+    # SQLite substrate status (only when the flag is on). Surfaces db open
+    # state + bucket-upload lag so a stuck sync is visible from /healthz.
+    from services import db as _db
+
+    if _db.substrate_enabled():
+        from services.db import sync as _sync
+
+        db_health = _db.healthcheck()
+        sync_status = _sync.status()
+        payload["db"] = {
+            "open": db_health.get("open"),
+            "schema_version": db_health.get("schema_version"),
+            "last_bucket_upload_ts": sync_status["last_bucket_upload_ts"],
+            "bucket_lag_seconds": sync_status["bucket_lag_seconds"],
+            "last_error": sync_status["last_error"],
+        }
+        healthy = healthy and bool(db_health.get("open"))
+
     # Return 503 in deployed mode (mount configured) so probes fail loud.
     # Local mode has no mount and would always 503 — keep it 200 there.
     if not healthy and os.environ.get("INSPECTOR_BUCKET_MOUNT"):
