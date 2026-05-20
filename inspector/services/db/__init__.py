@@ -9,8 +9,6 @@ read/write).
 
 from __future__ import annotations
 
-import os
-
 from .connection import (
     _chmod_600,
     current_db_seq,
@@ -31,15 +29,6 @@ def init_db() -> int:
     # WAL/SHM sidecars only exist after the first write; tighten perms now.
     _chmod_600(db_path())
     return version
-
-
-def substrate_enabled() -> bool:
-    """True when the SQLite substrate is the source of truth.
-
-    Transition flag (plan's ``INSPECTOR_STORE_BACKEND`` escape hatch): defaults
-    to ``json`` (legacy stores) until the cutover flips it to ``sqlite``.
-    """
-    return os.environ.get("INSPECTOR_STORE_BACKEND", "json").lower() == "sqlite"
 
 
 def healthcheck() -> dict:
