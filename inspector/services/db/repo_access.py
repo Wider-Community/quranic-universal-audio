@@ -122,8 +122,16 @@ def grant_role(
         (hf_user_id, role.value, _serde.to_iso(ts), granted_by),
     )
     member = find_member(hf_user_id)
-    assert member is not None
+    if member is None:  # the row was just inserted; this should never happen
+        raise RuntimeError(f"grant_role: member {hf_user_id!r} missing after insert")
     return member
+
+
+def has_any_active() -> bool:
+    """True iff any active role assignment exists (bootstrap guard)."""
+    return get_conn().execute(
+        "SELECT 1 FROM role_assignments WHERE revoked_at IS NULL LIMIT 1"
+    ).fetchone() is not None
 
 
 def revoke_role(

@@ -26,6 +26,10 @@ from scripts.lib.schemas.catalog import Alias, Derived
 
 from . import _serde
 from .connection import get_conn
+from .errors import Duplicate
+
+# reciter columns a caller may edit.
+_RECITER_WRITABLE = ("name_en", "name_ar", "country", "notes")
 
 # delivery columns a caller may edit, mapped to a serializer.
 _DELIVERY_WRITABLE: dict[str, Any] = {
@@ -176,8 +180,7 @@ def find_delivery(slug: str) -> Delivery | None:
 
 
 def edit_reciter(reciter_id: str, **fields) -> ReciterEntry | None:
-    allowed = {"name_en", "name_ar", "country", "notes"}
-    cols = {k: v for k, v in fields.items() if k in allowed and v is not None}
+    cols = {k: v for k, v in fields.items() if k in _RECITER_WRITABLE and v is not None}
     if cols:
         sets = ", ".join(f"{k} = ?" for k in cols)
         get_conn().execute(
@@ -251,6 +254,47 @@ def load_vocab(vocab: Vocab) -> None:
     for rc in vocab.recording_contexts:
         conn.execute("INSERT OR IGNORE INTO recording_contexts(slug,name) VALUES (?,?)",
                      (rc.slug, rc.name))
+
+
+def add_reciter(entry: ReciterEntry) -> ReciterEntry:
+    """Add a reciter, raising ``Duplicate`` on an existing id (vs the raw
+    IntegrityError from ``insert_reciter``) to preserve the service's contract."""
+    if find_reciter(entry.reciter_id) is not None:
+        raise Duplicate(f"reciter_id {entry.reciter_id!r} already exists")
+    insert_reciter(entry)
+    return entry
+
+
+def add_delivery(d: Delivery) -> Delivery:
+    """Add a delivery, raising ``Duplicate`` on an existing slug, and refresh
+    the persisted ``derived.source_channels`` rollup."""
+    if find_delivery(d.slug) is not None:
+        raise Duplicate(f"delivery slug {d.slug!r} already exists")
+    insert_delivery(d)
+    refresh_derived()
+    return d
+
+
+def refresh_derived() -> None:
+    """Recompute + persist ``derived.source_channels`` from the deliveries.
+
+    Called whenever the delivery set changes. The migration persists the
+    source catalog's derived verbatim (parity); this keeps it correct after
+    inspector-side adds. Deterministic order (source, channel)."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT source, channel, COUNT(*) AS c FROM deliveries "
+        "GROUP BY source, channel ORDER BY source, channel"
+    ).fetchall()
+    derived = {
+        "source_channels": [
+            {"source": r["source"], "channel": r["channel"], "delivery_count": r["c"]}
+            for r in rows
+        ]
+    }
+    conn.execute(
+        "UPDATE catalog_meta SET derived = ? WHERE id = 1", (_serde.json_dumps(derived),)
+    )
 
 
 def insert_alias(alias: Alias) -> None:
