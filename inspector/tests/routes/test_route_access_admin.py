@@ -23,47 +23,33 @@ _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
 
 def _replace_state(rows: list):
-    from scripts.lib.schemas import ReciterStateFile
-    from services import state as state_service
+    """Seed each ``_row`` spec into the SQLite substrate."""
+    from tests.conftest import _seed_state
 
-    with state_service._state_lock:  # type: ignore[attr-defined]
-        state_service._state_file = ReciterStateFile(reciters=rows)  # type: ignore[attr-defined]
+    for spec in rows:
+        _seed_state(**spec)
 
 
 def _row(slug, *, state="awaiting_review", assignee_hf_id=None):
-    from scripts.lib.schemas import ReciterRow, ReciterState, Visibility
-
-    return ReciterRow(
+    """Return a seed spec consumed by ``_replace_state`` → ``_seed_state``."""
+    return dict(
         slug=slug,
-        state=ReciterState(state),
-        state_since=datetime.now(timezone.utc),
+        state=state,
         assignee_hf_id=assignee_hf_id,
-        assignee_login="prev" if assignee_hf_id else None,
-        assignee_since=datetime.now(timezone.utc) if assignee_hf_id else None,
-        visibility=Visibility.PUBLIC,
+        assignee_login="prev" if assignee_hf_id else "test_user",
+        visibility="public",
     )
 
 
 def _stub_access_persist(monkeypatch):
-    """Stop access.grant/revoke/update from hitting the bucket."""
-    from services import access as access_service
-
-    monkeypatch.setattr(access_service, "_persist", lambda new_store: None)
-    # Audit append from access is also a bucket write — silence it.
-    from services import audit as audit_service
-
-    monkeypatch.setattr(audit_service, "append", lambda **kw: None)
+    """No-op post-cutover: grant/revoke/update commit to SQLite (sync upload is
+    disabled by the autouse fixture) and audit rows are real transitions."""
+    return None
 
 
 def _stub_state_persist(monkeypatch):
-    """Stop state.transition's _persist_row from hitting the bucket."""
-    from services import state as state_service
-
-    monkeypatch.setattr(
-        state_service,
-        "_persist_row",
-        lambda row, *, replace_existing: None,
-    )
+    """No-op post-cutover (state persists in SQLite for free)."""
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -196,17 +182,8 @@ def test_revoke_force_releases_active_claim(signed_in_client, monkeypatch):
     # with one containing only the owner. Then add the revocation target as
     # a maintainer so it can be revoked.
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner", role="owner")
-    now = datetime.now(timezone.utc)
-    with access_service._store_lock:  # type: ignore[attr-defined]
-        snapshot = access_service._store.model_copy(deep=True)  # type: ignore[attr-defined]
-        snapshot.members.append(Member(
-            hf_user_id="u-target",
-            login="target",
-            role=Role.MAINTAINER,
-            added_at=now,
-            added_by_hf_id="u-owner",
-        ))
-        access_service._store = snapshot  # type: ignore[attr-defined]
+    from tests.conftest import _seed_role
+    _seed_role("u-target", login="target", role="maintainer")
 
     res = client.post(
         "/api/admin/access/revoke",
@@ -228,18 +205,9 @@ def test_revoke_maintainer_cannot_revoke_owner(signed_in_client, monkeypatch):
     _stub_access_persist(monkeypatch)
     # Sign in first so the fixture seeds the maintainer revoker.
     client, _ = signed_in_client(hf_user_id="u-mod", login="mod", role="maintainer")
-    # Then add the OWNER target to the same store.
-    now = datetime.now(timezone.utc)
-    with access_service._store_lock:  # type: ignore[attr-defined]
-        snapshot = access_service._store.model_copy(deep=True)  # type: ignore[attr-defined]
-        snapshot.members.append(Member(
-            hf_user_id="u-owner-target",
-            login="founder",
-            role=Role.OWNER,
-            added_at=now,
-            added_by_hf_id="bootstrap",
-        ))
-        access_service._store = snapshot  # type: ignore[attr-defined]
+    # Then add the OWNER target.
+    from tests.conftest import _seed_role
+    _seed_role("u-owner-target", login="founder", role="owner")
 
     res = client.post(
         "/api/admin/access/revoke",
@@ -263,17 +231,8 @@ def test_update_login_cache_refresh(signed_in_client, monkeypatch):
 
     _stub_access_persist(monkeypatch)
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner", role="owner")
-    now = datetime.now(timezone.utc)
-    with access_service._store_lock:  # type: ignore[attr-defined]
-        snapshot = access_service._store.model_copy(deep=True)  # type: ignore[attr-defined]
-        snapshot.members.append(Member(
-            hf_user_id="u-target",
-            login="old_login",
-            role=Role.MAINTAINER,
-            added_at=now,
-            added_by_hf_id="u-owner",
-        ))
-        access_service._store = snapshot  # type: ignore[attr-defined]
+    from tests.conftest import _seed_role
+    _seed_role("u-target", login="old_login", role="maintainer")
 
     res = client.post(
         "/api/admin/access/update",

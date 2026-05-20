@@ -189,7 +189,13 @@ def _seed_state(
     if vis == Visibility.DISCARDED and not visibility_reason:
         visibility_reason = "seeded discarded"
     with db.transaction() as conn:
-        _seed_delivery_chain(conn, slug, reciter_id)
+        # Only seed the default FK chain (vocab+reciter+delivery) when the
+        # delivery doesn't already exist — tests that pre-insert a custom
+        # catalog must not get the default vocab merged in.
+        if conn.execute(
+            "SELECT 1 FROM deliveries WHERE slug = ?", (slug,)
+        ).fetchone() is None:
+            _seed_delivery_chain(conn, slug, reciter_id)
         repo_state.upsert_state(
             slug,
             state=st,

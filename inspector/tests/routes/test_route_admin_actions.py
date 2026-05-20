@@ -22,11 +22,12 @@ _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
 
 def _replace_state(rows: list):
-    from scripts.lib.schemas import ReciterStateFile
-    from services import state as state_service
+    """Seed each ``_row`` spec into the SQLite substrate (post-cutover source
+    of truth; the in-memory ``_state_file`` is gone)."""
+    from tests.conftest import _seed_state
 
-    with state_service._state_lock:  # type: ignore[attr-defined]
-        state_service._state_file = ReciterStateFile(reciters=rows)  # type: ignore[attr-defined]
+    for spec in rows:
+        _seed_state(**spec)
 
 
 def _row(
@@ -37,31 +38,21 @@ def _row(
     assignee_login="target_user",
     marked_ready=False,
 ):
-    from scripts.lib.schemas import ReciterRow, ReciterState, Visibility
-
-    now = datetime.now(timezone.utc)
-    return ReciterRow(
+    """Return a seed spec consumed by ``_replace_state`` → ``_seed_state``."""
+    return dict(
         slug=slug,
-        state=ReciterState(state),
-        state_since=now,
+        state=state,
         assignee_hf_id=assignee_hf_id,
-        assignee_login=assignee_login if assignee_hf_id else None,
-        assignee_since=now if assignee_hf_id else None,
+        assignee_login=assignee_login,
         marked_ready=marked_ready,
-        visibility=Visibility.PUBLIC,
+        visibility="public",
     )
 
 
 def _stub_state_persist(monkeypatch):
-    from services import audit as audit_service
-    from services import state as state_service
-
-    monkeypatch.setattr(
-        state_service,
-        "_persist_row",
-        lambda row, *, replace_existing: None,
-    )
-    monkeypatch.setattr(audit_service, "append", lambda **kw: None)
+    """No-op post-cutover: state persists in SQLite for free and audit rows are
+    real transition rows. Kept so call sites don't churn."""
+    return None
 
 
 def _stub_hf_users(monkeypatch, *, returns):
