@@ -19,12 +19,12 @@
     import { writable } from 'svelte/store';
     import { fade, fly } from 'svelte/transition';
 
-    import { openDetail } from '../../stores/dashboard-state';
-    import { catalogData } from '../../stores/catalog-data';
-    import { closeSubmitWizard, submitWizard } from '../../stores/submit-wizard';
     import { COUNTRIES, countryByName } from '../../../../lib/utils/countries';
     import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
     import { match } from '../../../../lib/utils/fuzzy-match';
+    import { catalogData } from '../../stores/catalog-data';
+    import { openDetail } from '../../stores/dashboard-state';
+    import { closeSubmitWizard, submitWizard } from '../../stores/submit-wizard';
 
     const queryStore = writable('');
 
