@@ -248,15 +248,20 @@ export interface WbwLanguage {
 
 let _wbwLangs: Promise<WbwLanguage[]> | null = null;
 
-/** Available WBW translation languages (load once). */
+/** Available WBW translation languages (load once).
+ *  `cache: 'no-cache'` revalidates with the server instead of trusting a
+ *  possibly-stale cached copy — the response shape gained a `complete` field,
+ *  and a long-lived cached body from before that change would otherwise drop
+ *  it (making every language look "partial"). Revalidation is a cheap 304 once
+ *  the body is current. */
 export async function loadWbwLanguages(): Promise<WbwLanguage[]> {
     if (!_wbwLangs) {
-        _wbwLangs = fetchJson<WbwLanguage[]>('/api/qf/content/wbw/languages').catch(
-            (e) => {
-                _wbwLangs = null; // allow retry
-                throw e;
-            },
-        );
+        _wbwLangs = fetchJson<WbwLanguage[]>('/api/qf/content/wbw/languages', {
+            cache: 'no-cache',
+        }).catch((e) => {
+            _wbwLangs = null; // allow retry
+            throw e;
+        });
     }
     return _wbwLangs;
 }
