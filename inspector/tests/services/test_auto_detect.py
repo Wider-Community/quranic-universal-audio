@@ -40,7 +40,8 @@ def auto_detect_env(tmp_path, monkeypatch):
     backend = _hf_bucket.FilesystemBackend(tmp_path)
     _hf_bucket.set_backend(backend)
 
-    catalog = ReciterCatalog(
+    from tests.conftest import _seed_catalog
+    _seed_catalog(
         vocab=Vocab(
             riwayat=[Riwayah(slug="hafs", short="H", name="Hafs")],
             styles=[Style(slug="murattal", short="M", name="Murattal")],
@@ -63,18 +64,7 @@ def auto_detect_env(tmp_path, monkeypatch):
             ),
         ],
     )
-    backend.write_json_atomic(
-        storage_paths.catalog_path(), catalog.model_dump(mode="json"),
-    )
-    catalog_service.hydrate()
-    pending_requests_service.hydrate()
     auto_detect_service._reset_seen_for_tests()
-
-    monkeypatch.setattr(
-        __import__("services.audit", fromlist=["audit"]),
-        "append",
-        lambda *a, **kw: None,
-    )
 
     yield auto_detect_service, state_service, backend
 
@@ -83,22 +73,8 @@ def auto_detect_env(tmp_path, monkeypatch):
 
 
 def _seed_state(backend, *, slug: str, state: ReciterState):
-    from services import state as state_service
-    from services import storage_paths
-
-    rows = ReciterStateFile(
-        reciters=[
-            ReciterRow(
-                slug=slug,
-                state=state,
-                state_since=datetime.now(timezone.utc),
-            ),
-        ]
-    )
-    backend.write_json_atomic(
-        storage_paths.state_path(), rows.model_dump(mode="json"),
-    )
-    state_service.hydrate()
+    from tests.conftest import _seed_state as _seed
+    _seed(slug, state=state.value, reciter_id="rec_a")
 
 
 # ---------------------------------------------------------------------------

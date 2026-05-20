@@ -319,6 +319,11 @@ def _apply_event(
 
     before = repo_state.get_row(slug)
 
+    # Actor must exist for the transitions.actor_id FK BEFORE the handler runs —
+    # some handlers (alignment_completed → apply_and_archive_completed) append
+    # their own transition rows (catalog.edited) mid-handler.
+    repo_access.ensure_user(actor.hf_user_id, login=actor.login_at_time)
+
     # Capture auto-claim intent BEFORE the handler resolves (clears) the pending
     # request via apply_and_archive_completed.
     auto_claim_requester: Actor | None = None
@@ -330,8 +335,6 @@ def _apply_event(
 
     new_row = handler(slug, before, actor, payload, reason)
 
-    # Actor must exist for the transitions.actor_id FK.
-    repo_access.ensure_user(actor.hf_user_id, login=actor.login_at_time)
     # Transition row FIRST (delivery_states/claims reference its id).
     tid = repo_transitions.append(
         event=event,
