@@ -2,13 +2,15 @@
     import { onMount } from 'svelte';
 
     import { signIn, signOut } from './lib/api/auth-client';
+    import BookmarksPanel from './lib/components/BookmarksPanel.svelte';
     import DevRoleSwitcher from './lib/components/DevRoleSwitcher.svelte';
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import SignInModal from './lib/components/SignInModal.svelte';
     import ToastHost from './lib/components/ToastHost.svelte';
     import { dashPort } from './lib/playback/dash-port';
+    import { toggleBookmarksPanel } from './lib/stores/bookmarks';
     import { currentUser, isSignedIn, loadCurrentUser } from './lib/stores/current-user';
-    import { getActiveTab, setActiveTab } from './lib/utils/active-tab';
+    import { activeTab as activeTabStore, getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS, TAB_NAMES } from './lib/utils/constants';
     import DashboardTab from './tabs/dashboard/DashboardTab.svelte';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
@@ -16,7 +18,10 @@
     import { tsPort } from './tabs/timestamps/stores/playback';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
 
+    // `activeTab` follows the shared store so external navigation (e.g. the
+    // Bookmarks sidebar calling setActiveTab) switches tabs here too.
     let activeTab = getActiveTab();
+    $: activeTab = $activeTabStore;
     // Lazy-mount tabs: defer Timestamps/Segments mount until the user actually
     // visits them. Once visited, the tab stays in the DOM (hidden) so its
     // state (loaded reciter, scroll position, edits) survives tab switches.
@@ -26,6 +31,18 @@
     $: if (activeTab && !mountedTabs.has(activeTab)) {
         mountedTabs = new Set([...mountedTabs, activeTab]);
     }
+    // Tab side-effects run on every change — whether triggered by a tab-bar
+    // button or external setActiveTab. Persist the choice and pause the ports
+    // of the tabs being left (pause is a no-op when nothing's playing).
+    $: applyTabSideEffects(activeTab);
+
+    function applyTabSideEffects(tab: string): void {
+        if (!tab) return;
+        localStorage.setItem(LS_KEYS.ACTIVE_TAB, tab);
+        if (tab !== TAB_NAMES.TIMESTAMPS) tsPort.pause();
+        if (tab !== TAB_NAMES.SEGMENTS) segPort.pause();
+        if (tab !== TAB_NAMES.DASHBOARD) dashPort.pause();
+    }
 
     function _onSignIn() {
         signIn();
@@ -33,17 +50,6 @@
 
     function _onSignOut() {
         void signOut();
-    }
-
-    function switchTab(tab: string): void {
-        setActiveTab(tab);
-        activeTab = tab;
-        localStorage.setItem(LS_KEYS.ACTIVE_TAB, tab);
-        // Pause whichever tabs the user is leaving. Each tab's port owns
-        // its element + transport; pause is no-op when nothing's playing.
-        if (tab !== TAB_NAMES.TIMESTAMPS) tsPort.pause();
-        if (tab !== TAB_NAMES.SEGMENTS) segPort.pause();
-        if (tab !== TAB_NAMES.DASHBOARD) dashPort.pause();
     }
 
     function cleanupLegacyAudioKeys(): void {
@@ -67,11 +73,11 @@
             TAB_NAMES.SEGMENTS,
         ];
         if (savedTab && validTabs.includes(savedTab)) {
-            switchTab(savedTab);
+            setActiveTab(savedTab);
         } else {
             // First-time visitors and legacy `insp_active_tab='audio'`
             // users land on Dashboard.
-            switchTab(TAB_NAMES.DASHBOARD);
+            setActiveTab(TAB_NAMES.DASHBOARD);
         }
         void loadCurrentUser();
     });
@@ -80,11 +86,14 @@
 <div class="container">
     <header>
         <div class="tab-bar">
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => switchTab(TAB_NAMES.DASHBOARD)}>Dashboard</button>
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => switchTab(TAB_NAMES.TIMESTAMPS)}>Timestamps</button>
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => switchTab(TAB_NAMES.SEGMENTS)}>Segments</button>
+            <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => setActiveTab(TAB_NAMES.DASHBOARD)}>Dashboard</button>
+            <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => setActiveTab(TAB_NAMES.TIMESTAMPS)}>Timestamps</button>
+            <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => setActiveTab(TAB_NAMES.SEGMENTS)}>Segments</button>
         </div>
         <div class="auth-controls">
+            <button type="button" class="auth-btn" title="Bookmarks" on:click={toggleBookmarksPanel}>
+                ☆ Bookmarks
+            </button>
             {#if $currentUser.dev_mode}
                 <!-- Local dev only — never rendered on the deployed Space. -->
                 <DevRoleSwitcher />
@@ -135,6 +144,9 @@
 <!-- Root-mounted sign-in modal + toast host (Phase 3). -->
 <SignInModal />
 <ToastHost />
+
+<!-- Quran.Foundation bookmarks sidebar. -->
+<BookmarksPanel />
 
 <style>
     header {

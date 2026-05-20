@@ -25,21 +25,24 @@ if str(_REPO_ROOT) not in sys.path:
 # (HF Space) gets its secrets from Space settings and the file is absent.
 # Keys already in the process env win (shell `export` beats the file).
 def _load_dotenv_for_local_dev() -> None:
-    env_path = _REPO_ROOT / ".env"
-    if not env_path.exists():
-        return
-    try:
-        for raw in env_path.read_text(encoding="utf-8").splitlines():
-            line = raw.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            k = k.strip()
-            v = v.strip().strip('"').strip("'")
-            if k and k not in os.environ:
-                os.environ[k] = v
-    except OSError:
-        pass
+    # Load repo-root `.env` first, then `inspector/.env` (e.g. Quran.Foundation
+    # API creds live there). Keys already in the process env win; earlier files
+    # win over later ones.
+    for env_path in (_REPO_ROOT / ".env", Path(__file__).resolve().parent / ".env"):
+        if not env_path.exists():
+            continue
+        try:
+            for raw in env_path.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+        except OSError:
+            pass
 
 
 _load_dotenv_for_local_dev()
