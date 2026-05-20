@@ -48,6 +48,18 @@ def dismissed_for_user(hf_user_id: str) -> set[str]:
     return {r[0] for r in rows}
 
 
+def all_dismissals() -> dict[str, list[str]]:
+    """Every per-user dismissal as ``{hf_user_id: [content_hash, ...]}`` — backs
+    the legacy ``activity_state.snapshot().dismissals`` reassembly."""
+    rows = get_conn().execute(
+        "SELECT hf_user_id, audit_content_hash FROM activity_dismissals ORDER BY ts"
+    ).fetchall()
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        out.setdefault(r["hf_user_id"], []).append(r["audit_content_hash"])
+    return out
+
+
 # ---- global tombstones ----
 
 

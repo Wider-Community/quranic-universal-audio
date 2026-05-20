@@ -21,7 +21,7 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
-from scripts.lib.schemas import Actor, ReciterState, Role
+from scripts.lib.schemas import Role
 
 from services import permissions
 
@@ -34,40 +34,12 @@ from routes._admin_helpers import (
 )
 
 from services import access as access_service
-from services import state as state_service
 
 from utils.decorators import require_same_origin
 
 logger = logging.getLogger(__name__)
 
 access_admin_bp = Blueprint("access_admin", __name__, url_prefix="/api/admin/access")
-
-
-def _force_release_active_claims(hf_user_id: str, *, revoking_actor: Actor, reason: str) -> list[str]:
-    """Release every UNDER_REVIEW claim held by ``hf_user_id``.
-
-    Returns the list of slugs released. Audited as one ``reciter.released``
-    event per slug. Skips errors on individual rows (logged) to avoid
-    blocking the revoke when one transition fails.
-    """
-    released_slugs: list[str] = []
-    for row in state_service.all_rows():
-        if (row.state == ReciterState.UNDER_REVIEW
-                and row.assignee_hf_id == hf_user_id):
-            try:
-                state_service.transition(
-                    row.slug,
-                    "reciter.released",
-                    actor=revoking_actor,
-                    reason=f"Auto-release: role revoked. {reason}",
-                )
-                released_slugs.append(row.slug)
-            except Exception as e:  # noqa: BLE001
-                logger.warning(
-                    "auto-release on revoke failed for slug=%s: %s",
-                    row.slug, e,
-                )
-    return released_slugs
 
 
 @access_admin_bp.route("/grant", methods=["POST"])
@@ -138,20 +110,15 @@ def access_revoke():
 
     actor = _actor_for(user)
     try:
-        member = access_service.revoke(
+        # Atomic: role-revoke + cascade-release every open claim this user
+        # holds, in one transaction (no "role revoked but claim left open").
+        member, released_slugs = access_service.revoke(
             hf_user_id=hf_user_id, actor=actor, reason=reason,
         )
     except access_service.NotAuthorized as e:
         return jsonify({"error": str(e)}), 403
     except access_service.MemberNotFound:
         return jsonify({"error": f"member {hf_user_id} not found"}), 404
-
-    # Side effect: force-release any active claims this user holds. Audit
-    # log captures access.role_revoked already (above) + one
-    # reciter.released per slug below.
-    released_slugs = _force_release_active_claims(
-        hf_user_id, revoking_actor=actor, reason=reason,
-    )
 
     return jsonify({
         "ok": True,
