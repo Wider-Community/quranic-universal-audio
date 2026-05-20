@@ -55,41 +55,52 @@ def _reciter(reciter_id: str, name_en: str):
 
 
 def _install(monkeypatch, reciters, deliveries, rows):
-    """Replace the catalog + state snapshots with the supplied fixtures."""
+    """Seed the supplied catalog + state fixtures into the SQLite substrate."""
     from scripts.lib.schemas import (
         Channel,
-        ReciterCatalog,
-        ReciterStateFile,
         Riwayah,
         Source,
         Style,
         Vocab,
     )
-    from services import catalog as catalog_service
-    from services import state as state_service
+    from services import db
+    from services.db import repo_catalog
 
-    catalog = ReciterCatalog(
-        vocab=Vocab(
-            riwayat=[Riwayah(slug="hafs_an_asim", short="hafs", name="Hafs")],
-            styles=[Style(slug="murattal", short="murattal", name="Murattal")],
-            sources=[
-                Source(slug="mp3quran", name="mp3quran",
-                       url="https://mp3quran.net",
-                       audio_categories=["by_surah"]),
-            ],
-            channels=[
-                Channel(slug="mp3quran", short="mp3q", name="mp3quran",
-                        host_patterns=["mp3quran.net"]),
-            ],
-            recording_contexts=[],
-        ),
-        reciters=reciters,
-        deliveries=deliveries,
+    vocab = Vocab(
+        riwayat=[Riwayah(slug="hafs_an_asim", short="hafs", name="Hafs")],
+        styles=[Style(slug="murattal", short="murattal", name="Murattal")],
+        sources=[
+            Source(slug="mp3quran", name="mp3quran",
+                   url="https://mp3quran.net",
+                   audio_categories=["by_surah"]),
+        ],
+        channels=[
+            Channel(slug="mp3quran", short="mp3q", name="mp3quran",
+                    host_patterns=["mp3quran.net"]),
+        ],
+        recording_contexts=[],
     )
-    with catalog_service._store_lock:  # type: ignore[attr-defined]
-        catalog_service._store = catalog  # type: ignore[attr-defined]
-    with state_service._state_lock:  # type: ignore[attr-defined]
-        state_service._state_file = ReciterStateFile(reciters=rows)  # type: ignore[attr-defined]
+    with db.transaction():
+        repo_catalog.load_vocab(vocab)
+        for r in reciters:
+            repo_catalog.insert_reciter(r)
+        for d in deliveries:
+            repo_catalog.insert_delivery(d)
+
+    # State rows: seed delivery_states (+ synthesized claim) per ReciterRow.
+    from tests.conftest import _seed_state
+
+    for row in rows:
+        _seed_state(
+            row.slug,
+            state=row.state.value,
+            state_since=row.state_since,
+            visibility=row.visibility.value,
+            visibility_reason=row.visibility_reason,
+            assignee_hf_id=row.assignee_hf_id,
+            assignee_login=row.assignee_login or "test_user",
+            marked_ready=row.marked_ready,
+        )
 
 
 # ---------------------------------------------------------------------------
