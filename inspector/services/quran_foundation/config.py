@@ -21,8 +21,10 @@ PREPROD_AUTHORIZE_URL: Final[str] = f"{PREPROD_ISSUER}/oauth2/auth"
 PREPROD_TOKEN_URL: Final[str] = f"{PREPROD_ISSUER}/oauth2/token"
 PREPROD_USER_API_BASE: Final[str] = "https://apis-prelive.quran.foundation/auth/v1"
 
-# Scope required for user APIs (bookmarks live under the `user` scope).
-USER_API_SCOPE: Final[str] = "openid offline_access user collection"
+# Scopes granted on the pre-prod client (per QF onboarding: bookmark,
+# collection). Request exactly what's approved — Ory rejects unapproved scopes
+# at consent/token time.
+USER_API_SCOPE: Final[str] = "openid offline_access bookmark collection"
 
 # Token TTL safety margin (seconds) — refresh slightly early.
 TOKEN_REFRESH_SKEW: Final[int] = 60

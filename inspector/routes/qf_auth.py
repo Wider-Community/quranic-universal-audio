@@ -26,6 +26,16 @@ def _secure_cookie() -> bool:
     return request.scheme == "https"
 
 
+def _callback_url() -> str:
+    """Derive the OAuth callback from the current request host so the same
+    value is used on localhost and the deployed Space (the pre-prod client
+    accepts any redirect URI). Falls back to the configured default."""
+    root = request.host_url.rstrip("/")
+    if root:
+        return f"{root}/api/qf/callback"
+    return qf_config.redirect_uri()
+
+
 def _set_cookie(resp, name: str, value: str, max_age: int) -> None:
     resp.set_cookie(
         name,
@@ -46,11 +56,14 @@ def qf_login():
     pkce = oauth.new_pkce()
     state = oauth.new_state()
     nonce = oauth.new_state()
+    redirect_uri = _callback_url()
     url = oauth.build_authorize_url(
-        state=state, nonce=nonce, code_challenge=pkce.challenge
+        state=state, nonce=nonce, code_challenge=pkce.challenge, redirect_uri=redirect_uri
     )
     resp = make_response(redirect(url))
-    tmp = session.encode_oauth_tmp({"state": state, "verifier": pkce.verifier})
+    tmp = session.encode_oauth_tmp(
+        {"state": state, "verifier": pkce.verifier, "redirect_uri": redirect_uri}
+    )
     _set_cookie(resp, session.QF_OAUTH_TMP_COOKIE_NAME, tmp, session.QF_OAUTH_TMP_MAX_AGE)
     return resp
 
@@ -68,7 +81,11 @@ def qf_callback():
     if not code or not tmp or tmp.get("state") != state:
         return redirect("/?qf_error=state")
     try:
-        token = oauth.exchange_code(code=code, code_verifier=tmp.get("verifier", ""))
+        token = oauth.exchange_code(
+            code=code,
+            code_verifier=tmp.get("verifier", ""),
+            redirect_uri=tmp.get("redirect_uri", _callback_url()),
+        )
     except oauth.QfOAuthError as e:
         logger.warning("QF token exchange failed: %s", e)
         return redirect("/?qf_error=token")

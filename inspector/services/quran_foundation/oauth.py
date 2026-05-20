@@ -45,11 +45,11 @@ def new_state() -> str:
     return secrets.token_urlsafe(24)
 
 
-def build_authorize_url(*, state: str, nonce: str, code_challenge: str) -> str:
+def build_authorize_url(*, state: str, nonce: str, code_challenge: str, redirect_uri: str) -> str:
     params = {
         "client_id": config.preprod_client_id(),
         "response_type": "code",
-        "redirect_uri": config.redirect_uri(),
+        "redirect_uri": redirect_uri,
         "scope": config.USER_API_SCOPE,
         "state": state,
         "nonce": nonce,
@@ -59,14 +59,15 @@ def build_authorize_url(*, state: str, nonce: str, code_challenge: str) -> str:
     return f"{config.PREPROD_AUTHORIZE_URL}?{urlencode(params)}"
 
 
-def exchange_code(*, code: str, code_verifier: str) -> dict:
-    """Exchange an authorization code for tokens. Returns the token dict
+def exchange_code(*, code: str, code_verifier: str, redirect_uri: str) -> dict:
+    """Exchange an authorization code for tokens. ``redirect_uri`` must match
+    the one used in the authorize request. Returns the token dict
     (``access_token``, ``refresh_token``, ``expires_in``, ...)."""
     return _token_request(
         {
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": config.redirect_uri(),
+            "redirect_uri": redirect_uri,
             "code_verifier": code_verifier,
         }
     )
