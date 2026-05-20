@@ -16,21 +16,15 @@
      * (datalist + focus-stash dance + ISO-2 resolution) so the UX matches.
      * TODO: extract to a shared CountryField component.
      */
-    import { fade, fly } from 'svelte/transition';
     import { writable } from 'svelte/store';
+    import { fade, fly } from 'svelte/transition';
 
-    import { catalogData } from '../../stores/catalog-data';
-    import { submitWizard } from '../../stores/submit-wizard';
     import { openDetail } from '../../stores/dashboard-state';
-    import { closeSubmitWizard } from '../../stores/submit-wizard';
-    import { match } from '../../../../lib/utils/fuzzy-match';
-    import {
-        COUNTRIES,
-        countryByCode,
-        countryByName,
-        normalizeCountry as resolveCountry,
-    } from '../../../../lib/utils/countries';
+    import { catalogData } from '../../stores/catalog-data';
+    import { closeSubmitWizard, submitWizard } from '../../stores/submit-wizard';
+    import { COUNTRIES, countryByName } from '../../../../lib/utils/countries';
     import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
+    import { match } from '../../../../lib/utils/fuzzy-match';
 
     const queryStore = writable('');
 
@@ -38,11 +32,12 @@
     $: mode = state.reciterMode;
     $: reciters = $catalogData.reciters;
     $: pickedReciter = state.existingReciterSlug
-        ? reciters.find((r) => r.reciter_id === state.existingReciterSlug) ?? null
+        ? (reciters.find((r) => r.reciter_id === state.existingReciterSlug) ?? null)
         : null;
-    $: pickedCombo = pickedReciter && state.existingComboSlug
-        ? pickedReciter.deliveries.find((d) => d.slug === state.existingComboSlug) ?? null
-        : null;
+    $: pickedCombo =
+        pickedReciter && state.existingComboSlug
+            ? (pickedReciter.deliveries.find((d) => d.slug === state.existingComboSlug) ?? null)
+            : null;
 
     function computeFiltered(rs: typeof reciters, q: string): typeof reciters {
         if (!q) return rs.slice(0, 80);
@@ -104,7 +99,6 @@
     let countryFocusStash: string | null = null;
     $: countryName = state.newReciter.countryName;
     $: countryCode = countryByName(countryName)?.code ?? '';
-    $: invalidCountry = !!countryName && !countryCode;
     function onCountryFocus(): void {
         countryFocusStash = countryName;
         updateNew('countryName', '');
@@ -152,11 +146,7 @@
             <span class="mode-label">New reciter</span>
             <span class="mode-hint">not in the catalog yet</span>
         </button>
-        <span
-            class="mode-track"
-            data-mode={mode}
-            aria-hidden="true"
-        ></span>
+        <span class="mode-track" data-mode={mode} aria-hidden="true"></span>
     </div>
 
     {#if mode === 'existing_combo' || mode === 'existing_reciter'}
@@ -170,11 +160,9 @@
                                 <span class="picked-ar" dir="rtl">{pickedReciter.name_ar}</span>
                             {/if}
                         </div>
-                        <button
-                            type="button"
-                            class="picked-change"
-                            on:click={clearReciter}
-                        >Change</button>
+                        <button type="button" class="picked-change" on:click={clearReciter}
+                            >Change</button
+                        >
                     </div>
                 </div>
 
@@ -197,7 +185,9 @@
                                             <span class="ct">{titleCaseSlug(d.style)}</span>
                                             {#if d.recording_context}
                                                 <span class="ct dim">·</span>
-                                                <span class="ct dim">{titleCaseSlug(d.recording_context)}</span>
+                                                <span class="ct dim"
+                                                    >{titleCaseSlug(d.recording_context)}</span
+                                                >
                                             {/if}
                                         </span>
                                         <span class="combo-meta">
@@ -208,7 +198,8 @@
                             {/each}
                             {#if pickedReciter.deliveries.length === 0}
                                 <li class="combo-empty">
-                                    No combinations yet for this reciter — switch to "Existing reciter" to add the first.
+                                    No combinations yet for this reciter — switch to "Existing
+                                    reciter" to add the first.
                                 </li>
                             {/if}
                         </ul>
@@ -220,14 +211,16 @@
                                 <button
                                     type="button"
                                     class="route-btn"
-                                    on:click={routeToRequestForm}
-                                >Open now ›</button>
+                                    on:click={routeToRequestForm}>Open now ›</button
+                                >
                             </div>
                         {/if}
                     </div>
                 {:else if pickedReciter.deliveries.length > 0}
                     <div class="combos-block muted" in:fade={{ duration: 200 }}>
-                        <span class="combos-label">Already covered (heads-up — pick a fresh combination on step 3)</span>
+                        <span class="combos-label"
+                            >Already covered (heads-up — pick a fresh combination on step 3)</span
+                        >
                         <div class="combo-pills">
                             {#each pickedReciter.deliveries as d (d.slug)}
                                 <span class="combo-pill">
@@ -259,7 +252,6 @@
                                 <button
                                     type="button"
                                     class="result"
-                                    role="option"
                                     on:click={() => pickReciter(r.reciter_id)}
                                     style:--row={i}
                                 >
@@ -286,7 +278,8 @@
                     type="text"
                     placeholder="Abdul-Basit Abdus-Samad"
                     value={state.newReciter.name_en}
-                    on:input={(e) => updateNew('name_en', (e.currentTarget as HTMLInputElement).value)}
+                    on:input={(e) =>
+                        updateNew('name_en', (e.currentTarget as HTMLInputElement).value)}
                 />
             </label>
             <label class="rtl">
@@ -296,7 +289,8 @@
                     dir="rtl"
                     placeholder="عبد الباسط عبد الصمد"
                     value={state.newReciter.name_ar}
-                    on:input={(e) => updateNew('name_ar', (e.currentTarget as HTMLInputElement).value)}
+                    on:input={(e) =>
+                        updateNew('name_ar', (e.currentTarget as HTMLInputElement).value)}
                 />
             </label>
             <label class="country-field">
@@ -313,7 +307,8 @@
                     list="submit-wizard-countries"
                     placeholder="Start typing a country name…"
                     value={state.newReciter.countryName}
-                    on:input={(e) => updateNew('countryName', (e.currentTarget as HTMLInputElement).value)}
+                    on:input={(e) =>
+                        updateNew('countryName', (e.currentTarget as HTMLInputElement).value)}
                     on:focus={onCountryFocus}
                     on:blur={onCountryBlur}
                 />
@@ -357,7 +352,9 @@
         text-align: left;
         transition: color var(--t-base) var(--ease-out-quart);
     }
-    .mode-btn.active { color: var(--text-primary); }
+    .mode-btn.active {
+        color: var(--text-primary);
+    }
     .mode-label {
         font-size: var(--fs-meta);
         font-weight: 500;
@@ -378,8 +375,12 @@
         transition: transform var(--t-base) var(--ease-out-expo);
         pointer-events: none;
     }
-    .mode-track[data-mode='existing_reciter'] { transform: translateX(100%); }
-    .mode-track[data-mode='new']               { transform: translateX(200%); }
+    .mode-track[data-mode='existing_reciter'] {
+        transform: translateX(100%);
+    }
+    .mode-track[data-mode='new'] {
+        transform: translateX(200%);
+    }
 
     .pane {
         display: flex;
@@ -391,7 +392,9 @@
         grid-template-columns: 1fr 1fr;
         gap: var(--s-3);
     }
-    .pane.new .country-field { grid-column: 1 / -1; }
+    .pane.new .country-field {
+        grid-column: 1 / -1;
+    }
 
     label {
         display: flex;
@@ -400,7 +403,9 @@
         font-size: var(--fs-meta);
         color: var(--text-muted);
     }
-    label.rtl input { text-align: right; }
+    label.rtl input {
+        text-align: right;
+    }
     input {
         background: var(--panel);
         border: 1px solid var(--border-default);
@@ -408,9 +413,13 @@
         border-radius: var(--r-2);
         padding: 8px 10px;
         font: inherit;
-        transition: border-color var(--t-fast), background var(--t-fast);
+        transition:
+            border-color var(--t-fast),
+            background var(--t-fast);
     }
-    input::placeholder { color: var(--text-faint); }
+    input::placeholder {
+        color: var(--text-faint);
+    }
     input:focus {
         outline: none;
         border-color: var(--accent);
@@ -422,7 +431,9 @@
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
     }
-    .label-meta.warn { color: var(--state-error-fg); }
+    .label-meta.warn {
+        color: var(--state-error-fg);
+    }
 
     /* picker + inline results list */
     .picker {
@@ -464,27 +475,44 @@
         border-radius: var(--r-1);
         color: var(--text-secondary);
         text-align: left;
-        transition: background var(--t-fast), color var(--t-fast);
+        transition:
+            background var(--t-fast),
+            color var(--t-fast);
         animation: row-in 220ms var(--ease-out-quart) both;
         animation-delay: calc(var(--row) * 12ms);
     }
     @keyframes row-in {
-        from { opacity: 0; transform: translateY(-2px); }
-        to   { opacity: 1; transform: none; }
+        from {
+            opacity: 0;
+            transform: translateY(-2px);
+        }
+        to {
+            opacity: 1;
+            transform: none;
+        }
     }
     .result:hover {
         background: var(--accent-tint-soft);
         color: var(--text-primary);
     }
-    .r-name { font-size: var(--fs-body); color: var(--text-primary); }
-    .r-name-ar { font-size: var(--fs-body); color: var(--text-secondary); }
+    .r-name {
+        font-size: var(--fs-body);
+        color: var(--text-primary);
+    }
+    .r-name-ar {
+        font-size: var(--fs-body);
+        color: var(--text-secondary);
+    }
     .r-count {
         font-family: var(--font-mono);
         font-size: 10.5px;
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
     }
-    .r-count-unit { color: var(--text-faint); margin-left: 3px; }
+    .r-count-unit {
+        color: var(--text-faint);
+        margin-left: 3px;
+    }
 
     /* picked reciter chip */
     .picked {
@@ -522,7 +550,9 @@
         padding: 4px 10px;
         border: 1px solid var(--border-default);
         border-radius: var(--r-2);
-        transition: color var(--t-fast), border-color var(--t-fast);
+        transition:
+            color var(--t-fast),
+            border-color var(--t-fast);
     }
     .picked-change:hover {
         color: var(--text-primary);
@@ -571,7 +601,9 @@
         border-radius: var(--r-1);
         color: var(--text-secondary);
         text-align: left;
-        transition: background var(--t-fast), border-color var(--t-fast);
+        transition:
+            background var(--t-fast),
+            border-color var(--t-fast);
         animation: row-in 200ms var(--ease-out-quart) both;
         animation-delay: calc(var(--row) * 18ms);
     }
@@ -591,7 +623,9 @@
         font-family: var(--font-mono);
         font-size: 12px;
     }
-    .combo-tags .ct.dim { color: var(--text-faint); }
+    .combo-tags .ct.dim {
+        color: var(--text-faint);
+    }
     .combo-meta {
         font-family: var(--font-mono);
         font-size: 10.5px;
@@ -650,7 +684,9 @@
         padding: 4px 10px;
         border: 1px solid var(--accent);
         border-radius: var(--r-2);
-        transition: background var(--t-fast), color var(--t-fast);
+        transition:
+            background var(--t-fast),
+            color var(--t-fast);
     }
     .route-btn:hover {
         background: var(--accent);
