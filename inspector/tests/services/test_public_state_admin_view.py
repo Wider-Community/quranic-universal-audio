@@ -34,71 +34,37 @@ from scripts.lib.schemas import (
 
 def _seed_two_combos_one_discarded(backend):
     """Seed: reciter ``rec_a`` with two deliveries — one public, one discarded."""
-    from services import storage_paths
+    from tests.conftest import _seed_catalog, _seed_state
 
-    catalog = ReciterCatalog(
+    _seed_catalog(
         vocab=Vocab(
             riwayat=[
                 Riwayah(slug="hafs", short="H", name="Hafs"),
                 Riwayah(slug="warsh", short="W", name="Warsh"),
             ],
-            styles=[
-                Style(slug="murattal", short="M", name="Murattal"),
-            ],
+            styles=[Style(slug="murattal", short="M", name="Murattal")],
             sources=[Source(slug="src1", name="Source One")],
             channels=[Channel(slug="ch1", short="c1", name="Channel One")],
         ),
         reciters=[ReciterEntry(reciter_id="rec_a", name_en="Reciter A")],
         deliveries=[
             Delivery(
-                slug="rec_a_hafs",
-                reciter_id="rec_a",
-                riwayah="hafs",
-                style="murattal",
-                source="src1",
-                channel="ch1",
-                audio_category=AudioCategory.BY_SURAH,
-                chapter_count=114,
-                added_at=datetime.now(timezone.utc),
-                added_by_hf_id="seed",
+                slug="rec_a_hafs", reciter_id="rec_a", riwayah="hafs",
+                style="murattal", source="src1", channel="ch1",
+                audio_category=AudioCategory.BY_SURAH, chapter_count=114,
+                added_at=datetime.now(timezone.utc), added_by_hf_id="seed",
             ),
             Delivery(
-                slug="rec_a_warsh",
-                reciter_id="rec_a",
-                riwayah="warsh",
-                style="murattal",
-                source="src1",
-                channel="ch1",
-                audio_category=AudioCategory.BY_SURAH,
-                chapter_count=114,
-                added_at=datetime.now(timezone.utc),
-                added_by_hf_id="seed",
+                slug="rec_a_warsh", reciter_id="rec_a", riwayah="warsh",
+                style="murattal", source="src1", channel="ch1",
+                audio_category=AudioCategory.BY_SURAH, chapter_count=114,
+                added_at=datetime.now(timezone.utc), added_by_hf_id="seed",
             ),
         ],
     )
-    backend.write_json_atomic(
-        storage_paths.catalog_path(), catalog.model_dump(mode="json"),
-    )
-
-    state = ReciterStateFile(
-        reciters=[
-            ReciterRow(
-                slug="rec_a_hafs",
-                state=ReciterState.CATALOGUED,
-                state_since=datetime.now(timezone.utc),
-            ),
-            ReciterRow(
-                slug="rec_a_warsh",
-                state=ReciterState.CATALOGUED,
-                state_since=datetime.now(timezone.utc),
-                visibility=Visibility.DISCARDED,
-                visibility_reason="duplicate of warsh-other",
-            ),
-        ]
-    )
-    backend.write_json_atomic(
-        storage_paths.state_path(), state.model_dump(mode="json"),
-    )
+    _seed_state("rec_a_hafs", state="catalogued")
+    _seed_state("rec_a_warsh", state="catalogued", visibility="discarded",
+                visibility_reason="duplicate of warsh-other")
 
 
 @pytest.fixture
@@ -178,7 +144,8 @@ def test_is_reciter_fully_discarded_when_all_discarded(tmp_path, monkeypatch):
     _hf_bucket.set_backend(backend)
 
     # Single delivery, discarded.
-    catalog = ReciterCatalog(
+    from tests.conftest import _seed_catalog, _seed_state
+    _seed_catalog(
         vocab=Vocab(
             riwayat=[Riwayah(slug="hafs", short="H", name="Hafs")],
             styles=[Style(slug="murattal", short="M", name="Murattal")],
@@ -188,38 +155,15 @@ def test_is_reciter_fully_discarded_when_all_discarded(tmp_path, monkeypatch):
         reciters=[ReciterEntry(reciter_id="rec_b", name_en="Reciter B")],
         deliveries=[
             Delivery(
-                slug="rec_b",
-                reciter_id="rec_b",
-                riwayah="hafs",
-                style="murattal",
-                source="src1",
-                channel="ch1",
-                audio_category=AudioCategory.BY_SURAH,
-                chapter_count=114,
-                added_at=_dt.now(_tz.utc),
-                added_by_hf_id="seed",
+                slug="rec_b", reciter_id="rec_b", riwayah="hafs",
+                style="murattal", source="src1", channel="ch1",
+                audio_category=AudioCategory.BY_SURAH, chapter_count=114,
+                added_at=_dt.now(_tz.utc), added_by_hf_id="seed",
             ),
         ],
     )
-    backend.write_json_atomic(
-        storage_paths.catalog_path(), catalog.model_dump(mode="json"),
-    )
-    state = ReciterStateFile(
-        reciters=[
-            ReciterRow(
-                slug="rec_b",
-                state=ReciterState.CATALOGUED,
-                state_since=_dt.now(_tz.utc),
-                visibility=Visibility.DISCARDED,
-                visibility_reason="testing",
-            ),
-        ]
-    )
-    backend.write_json_atomic(
-        storage_paths.state_path(), state.model_dump(mode="json"),
-    )
-    catalog_service.hydrate()
-    state_service.hydrate()
+    _seed_state("rec_b", state="catalogued", visibility="discarded",
+                visibility_reason="testing")
 
     assert public_state_service.is_reciter_fully_discarded("rec_b") is True
     payload = public_state_service.admin_view_reciter("rec_b")
