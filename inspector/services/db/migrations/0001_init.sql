@@ -81,15 +81,18 @@ CREATE TABLE recording_contexts (
     name TEXT NOT NULL
 );
 
--- catalog-level metadata (generated_at, schema_version) — single row id=1.
--- derived.source_channels is NOT stored; it is reconstructed deterministically
--- at read time via GROUP BY over deliveries.
+-- catalog-level metadata — single row id=1.
+-- ``derived`` (e.g. source_channels) is PERSISTED verbatim (JSON) rather than
+-- reconstructed, so the full ReciterCatalog.model_dump() round-trips byte-for-byte
+-- through the migration parity gate; it's refreshed when deliveries change.
 CREATE TABLE catalog_meta (
     id             INTEGER PRIMARY KEY CHECK (id = 1),
     schema_version INTEGER NOT NULL DEFAULT 2,
-    generated_at   TEXT
+    generated_at   TEXT,
+    derived        TEXT NOT NULL DEFAULT '{"source_channels": []}'
 );
-INSERT INTO catalog_meta(id, schema_version, generated_at) VALUES (1, 2, NULL);
+INSERT INTO catalog_meta(id, schema_version, generated_at, derived)
+    VALUES (1, 2, NULL, '{"source_channels": []}');
 
 CREATE TABLE catalog_aliases (
     id   INTEGER PRIMARY KEY AUTOINCREMENT,
