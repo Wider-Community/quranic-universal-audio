@@ -98,25 +98,11 @@ def test_save_marked_ready_returns_403(signed_in_client, tmp_reciter_dir):
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
 
-    # Flip marked_ready=True in the in-memory + on-disk state.
-    snapshot = state_service.snapshot()
-    new_rows = []
-    for r in snapshot.reciters:
-        if r.slug == reciter:
-            new_rows.append(ReciterRow(
-                slug=r.slug,
-                state=ReciterState.UNDER_REVIEW,
-                state_since=r.state_since,
-                assignee_hf_id=r.assignee_hf_id,
-                assignee_login=r.assignee_login,
-                assignee_since=r.assignee_since,
-                marked_ready=True,
-                visibility=Visibility.PUBLIC,
-            ))
-        else:
-            new_rows.append(r)
-    with state_service._state_lock:  # type: ignore[attr-defined]
-        state_service._state_file = ReciterStateFile(reciters=new_rows)  # type: ignore[attr-defined]
+    # Mark the existing open claim ready.
+    from services import db as _db
+    from services.db import repo_claims
+    with _db.transaction():
+        repo_claims.set_marked_ready(reciter, ready=True)
 
     client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
     res = client.post(
@@ -140,19 +126,12 @@ def test_save_owner_bypasses_state_check(signed_in_client, tmp_reciter_dir):
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="other-user")
 
-    # Flip state to catalogued so a non-owner would get 403.
-    snapshot = state_service.snapshot()
-    new_rows = [
-        ReciterRow(
-            slug=r.slug,
-            state=ReciterState.CATALOGUED,
-            state_since=datetime.now(timezone.utc),
-            visibility=Visibility.PUBLIC,
-        ) if r.slug == reciter else r
-        for r in snapshot.reciters
-    ]
-    with state_service._state_lock:  # type: ignore[attr-defined]
-        state_service._state_file = ReciterStateFile(reciters=new_rows)  # type: ignore[attr-defined]
+    # Flip state to catalogued (close the claim) so a non-owner would get 403.
+    from services import db as _db
+    from services.db import repo_claims, repo_state
+    with _db.transaction():
+        repo_claims.close_claim(slug=reciter, close_reason="test")
+        repo_state.update_state(reciter, state=ReciterState.CATALOGUED)
 
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
     res = client.post(
@@ -178,22 +157,10 @@ def test_save_owner_marked_ready_still_blocked(signed_in_client, tmp_reciter_dir
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="u-owner")
 
-    snapshot = state_service.snapshot()
-    new_rows = [
-        ReciterRow(
-            slug=r.slug,
-            state=ReciterState.UNDER_REVIEW,
-            state_since=r.state_since,
-            assignee_hf_id=r.assignee_hf_id,
-            assignee_login=r.assignee_login,
-            assignee_since=r.assignee_since,
-            marked_ready=True,
-            visibility=Visibility.PUBLIC,
-        ) if r.slug == reciter else r
-        for r in snapshot.reciters
-    ]
-    with state_service._state_lock:  # type: ignore[attr-defined]
-        state_service._state_file = ReciterStateFile(reciters=new_rows)  # type: ignore[attr-defined]
+    from services import db as _db
+    from services.db import repo_claims
+    with _db.transaction():
+        repo_claims.set_marked_ready(reciter, ready=True)
 
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
     res = client.post(
