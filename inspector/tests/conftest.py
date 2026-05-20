@@ -219,6 +219,32 @@ def _seed_state(
                 repo_claims.set_marked_ready(slug, ready=True)
 
 
+def _seed_catalog(*, reciters=(), deliveries=(), vocab=None) -> None:
+    """Seed catalog rows (vocab + reciters + deliveries) into the substrate.
+
+    Default vocab covers the ``_seed_state`` delivery defaults
+    (hafs/mur/src/ch). Pass a custom ``Vocab`` when deliveries reference other
+    slugs."""
+    from services import db
+    from services.db import repo_catalog
+    from scripts.lib.schemas import Channel, Riwayah, Source, Style, Vocab
+
+    if vocab is None:
+        vocab = Vocab(
+            riwayat=[Riwayah(slug="hafs", short="h", name="Hafs")],
+            styles=[Style(slug="mur", short="m", name="Mur")],
+            sources=[Source(slug="src", name="Src")],
+            channels=[Channel(slug="ch", short="c", name="Ch")],
+            recording_contexts=[],
+        )
+    with db.transaction():
+        repo_catalog.load_vocab(vocab)
+        for r in reciters:
+            repo_catalog.insert_reciter(r)
+        for d in deliveries:
+            repo_catalog.insert_delivery(d)
+
+
 def _seed_role(hf_user_id: str, *, login: str = "test_user", role: str = "contributor") -> None:
     """Seed a member's role (CONTRIBUTOR is implicit → just ensure the user row
     for FK targets)."""
