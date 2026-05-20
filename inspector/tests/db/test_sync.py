@@ -93,6 +93,21 @@ def test_daily_snapshot_and_retention(synced):
     assert "inspector-2026-05-20.db" not in removed
 
 
+def test_upload_failure_sets_last_error_and_raises(synced, monkeypatch):
+    _commit_user()
+
+    def boom(path, data):
+        raise IOError("network down")
+
+    monkeypatch.setattr(sync, "_write_direct", boom)
+    with pytest.raises(IOError):
+        sync.upload()
+    st = sync.status()
+    assert st["last_error"] is not None and "OSError" in st["last_error"]
+    # no token/url leakage: only type + truncated message
+    assert "network down" in st["last_error"]
+
+
 def test_status_and_lag(synced):
     assert sync.bucket_lag_seconds() is None
     _commit_user()

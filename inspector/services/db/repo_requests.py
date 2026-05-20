@@ -192,7 +192,8 @@ def get_for_slug(archive_kind: str, slug: str) -> list[ArchivedRequest]:
     request_archive.get_for_slug(kind) list-per-slug order)."""
     status = _STATUS_FOR_ARCHIVE[archive_kind]
     rows = get_conn().execute(
-        "SELECT * FROM requests WHERE slug = ? AND status = ? ORDER BY resolved_at, id",
+        "SELECT * FROM requests WHERE slug = ? AND status = ? "
+        "ORDER BY resolved_at, submitted_at, id",
         (slug, status),
     ).fetchall()
     return [_to_archived(r) for r in rows]
