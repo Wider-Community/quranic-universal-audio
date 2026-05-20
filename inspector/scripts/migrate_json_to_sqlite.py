@@ -132,6 +132,13 @@ def build(src: dict, *, allow_orphans: bool = False) -> dict:
         "requests", "transitions", "dismissals", "tombstones", "orphans_skipped",
     )}
 
+    # idempotency guard: build() only runs against a freshly-migrated empty DB.
+    _conn0 = db.get_conn()
+    for _t in ("role_assignments", "reciters", "deliveries", "delivery_states",
+               "claims", "requests", "transitions"):
+        if _conn0.execute(f"SELECT 1 FROM {_t} LIMIT 1").fetchone():  # fixed table list
+            raise SystemExit(f"ABORT: target table {_t} is not empty — run against a fresh DB")
+
     with db.transaction() as conn:
         # --- access: users + role_assignments ---
         for m in src["roles"].members:
@@ -294,7 +301,8 @@ def _norm_catalog(dump: dict) -> dict:
 
 
 def parity_check(src: dict, *, allow_orphans: bool) -> list[str]:
-    from services.db import repo_access, repo_catalog, repo_requests, repo_state
+    from services import db
+    from services.db import repo_access, repo_activity, repo_catalog, repo_requests, repo_state
 
     delivery_slugs = {d.slug for d in src["catalog"].deliveries}
     issues: list[str] = []
@@ -321,8 +329,41 @@ def parity_check(src: dict, *, allow_orphans: bool) -> list[str]:
     if got_pending != want_pending:
         issues.append(f"pending mismatch: {got_pending} != {want_pending}")
 
-    from services import db
-    n_tx = db.get_conn().execute("SELECT COUNT(*) FROM transitions").fetchone()[0]
+    conn = db.get_conn()
+
+    # archives: per-status row counts (slugs out of catalog are skipped on build)
+    for kind, af in src["archives"].items():
+        status = _STATUS_FOR_ARCHIVE[kind]
+        want = sum(len(lst) for s, lst in af.by_slug.items() if s in delivery_slugs)
+        got = conn.execute("SELECT COUNT(*) FROM requests WHERE status=?", (status,)).fetchone()[0]
+        if got != want:
+            issues.append(f"archive {kind} count {got} != {want}")
+
+    # open claims ↔ under_review state rows with an assignee
+    want_claims = {
+        (r.slug, r.assignee_hf_id) for r in src["state"].reciters
+        if r.slug in delivery_slugs and r.assignee_hf_id
+    }
+    got_claims = {
+        (row["slug"], row["assignee_id"])
+        for row in conn.execute("SELECT slug, assignee_id FROM claims WHERE released_at IS NULL")
+    }
+    if got_claims != want_claims:
+        issues.append(f"open claims mismatch: {got_claims} != {want_claims}")
+
+    # role_assignments: full count (active + revoked) + active set already checked
+    n_roles = conn.execute("SELECT COUNT(*) FROM role_assignments").fetchone()[0]
+    if n_roles != len(src["roles"].members):
+        issues.append(f"role_assignments count {n_roles} != {len(src['roles'].members)}")
+
+    # activity sidecars (keyed on content_hash)
+    if repo_activity.deleted_set() != set(src["activity"].deleted):
+        issues.append("tombstones mismatch")
+    for hf, hashes in src["activity"].dismissals.items():
+        if repo_activity.dismissed_for_user(hf) != set(hashes):
+            issues.append(f"dismissals mismatch for {hf}")
+
+    n_tx = conn.execute("SELECT COUNT(*) FROM transitions").fetchone()[0]
     if n_tx != len(src["audit"]):
         issues.append(f"transitions count {n_tx} != audit {len(src['audit'])}")
 

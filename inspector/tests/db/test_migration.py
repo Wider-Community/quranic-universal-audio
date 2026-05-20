@@ -150,6 +150,78 @@ def test_activity_links_to_transition_by_content_hash(seeded_bucket):
     assert repo_activity.is_dismissed(aid, "owner1") is True
 
 
+def test_rerun_aborts_on_nonempty_db(seeded_bucket):
+    M.run(allow_orphans=False)
+    with pytest.raises(SystemExit):
+        M.run(allow_orphans=False)  # second run sees a populated DB → abort
+
+
+def test_empty_stores_migrate_cleanly(tmp_path):
+    backend = FilesystemBackend(str(tmp_path / "bucket"))
+    hf_bucket.set_backend(backend)
+    db.set_db_path_for_test(tmp_path / "local.db")
+    db.init_db()
+    try:
+        stats = M.run(allow_orphans=False)  # nothing seeded → all zeros, no crash
+        assert stats["transitions"] == 0 and stats["states"] == 0
+        assert stats["requests"] == 0 and stats["deliveries"] == 0
+    finally:
+        db.reset()
+        hf_bucket.reset_backend()
+
+
+def test_audit_record_without_request_id_or_actor(tmp_path):
+    backend = FilesystemBackend(str(tmp_path / "bucket"))
+    hf_bucket.set_backend(backend)
+    db.set_db_path_for_test(tmp_path / "local.db")
+    db.init_db()
+    try:
+        backend.write_json_atomic(sp.catalog_path(), _catalog().model_dump(mode="json"))
+        # one record with no request_id and no actor (older audit shape)
+        backend.append_jsonl(sp.audit_partition_path(TS), {
+            "ts": "2026-05-10T00:00:00+00:00", "event": "catalog.edited",
+            "slug": None, "payload": {"k": "v"}, "result": "ok",
+        })
+        stats = M.run(allow_orphans=False)
+        assert stats["transitions"] == 1
+        tx = list(repo_transitions.feed(limit=5))[0]
+        assert tx["event"] == "catalog.edited" and tx["actor"]["hf_user_id"] is None
+    finally:
+        db.reset()
+        hf_bucket.reset_backend()
+
+
+def test_pending_and_archive_for_same_slug(tmp_path):
+    backend = FilesystemBackend(str(tmp_path / "bucket"))
+    hf_bucket.set_backend(backend)
+    db.set_db_path_for_test(tmp_path / "local.db")
+    db.init_db()
+    try:
+        backend.write_json_atomic(sp.catalog_path(), _catalog().model_dump(mode="json"))
+        # same slug: a returned archive (past) + a fresh pending (resubmitted)
+        backend.write_json_atomic(sp.pending_requests_path(), PendingRequestsFile(by_slug={
+            "rid_hafs_mur": PendingRequest(
+                slug="rid_hafs_mur", submitted_at=TS,
+                requester=Actor(hf_user_id="c", login_at_time="c", role=Role.CONTRIBUTOR),
+                proposed_edits=ProposedEdits()),
+        }).model_dump(mode="json"))
+        backend.write_json_atomic(sp.returned_requests_path(), ArchivedRequestsFile(by_slug={
+            "rid_hafs_mur": [ArchivedRequest(
+                slug="rid_hafs_mur", submitted_at=TS,
+                requester=Actor(hf_user_id="c", login_at_time="c", role=Role.CONTRIBUTOR),
+                proposed_edits=ProposedEdits(), archived_at=TS,
+                transitioned_by=Actor(hf_user_id="adm", login_at_time="adm", role=Role.OWNER),
+                reason="needs work")],
+        }).model_dump(mode="json"))
+        # the pending-unique index only constrains status='pending', so this is fine
+        M.run(allow_orphans=False)
+        assert repo_requests.has_pending("rid_hafs_mur") is True
+        assert len(repo_requests.get_for_slug("returned", "rid_hafs_mur")) == 1
+    finally:
+        db.reset()
+        hf_bucket.reset_backend()
+
+
 def test_orphan_state_slug_aborts(tmp_path):
     backend = FilesystemBackend(str(tmp_path / "bucket"))
     hf_bucket.set_backend(backend)

@@ -6,21 +6,27 @@ uploads it synchronously with a compare-and-swap guard before the mutating
 request is acked. Uses the bucket primitives directly, bypassing the mount's
 debounced flush (a container restart in that window would lose an acked write).
 
-CAS: a tiny ``db/inspector.seq`` sidecar holds ``{seq, nonce, ts}``. Upload
+CAS: a tiny ``db/inspector.seq`` sidecar holds ``{seq, nonce, ts}``. The seq is
+read FROM the snapshot itself, so it always matches the uploaded content. Upload
 refuses if the remote ``seq`` is ahead of ours AND was written by a different
-container nonce (deploy-overlap guard) — last-writer does NOT silently win.
+container nonce (deploy-overlap guard).
 
-Counters (``status()``) back ``/healthz``: ``last_bucket_upload_ts``,
-``bucket_lag_seconds``, ``last_error``, ``queue`` (always 0 — uploads are
-synchronous in this build).
+CAVEAT: bucket I/O has no atomic compare-and-swap, so this guard catches a
+*stale* racer, not two writers committing in the exact same instant. It is safe
+under the project's single-active-writer invariant (one Space, single worker);
+a rolling-deploy overlap is the window it covers. Documented, not eliminated.
+
+Counters (``status()``) back ``/healthz``.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 import sqlite3
 import tempfile
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -35,17 +41,24 @@ logger = logging.getLogger(__name__)
 DB_BUCKET_PATH = "db/inspector.db"
 SEQ_BUCKET_PATH = "db/inspector.seq"
 _SNAPSHOT_RETENTION_DAYS = 30
+_SNAPSHOT_RE = re.compile(r"^inspector-(\d{4}-\d{2}-\d{2})\.db$")
 
-# A per-process identity so the CAS guard can tell "our own prior upload" from
+# Per-process identity so the CAS guard can tell "our own prior upload" from
 # "another container raced us during a rolling deploy".
 _NONCE = uuid.uuid4().hex[:12]
 
+_state_lock = threading.Lock()
 _last_upload_ts: float | None = None
 _last_error: str | None = None
 
 
 class UploadConflict(RuntimeError):
     """The bucket DB was advanced by a different container; upload refused."""
+
+
+def _safe_err(e: Exception) -> str:
+    """Exception text without leaking secrets (HF errors can embed token=... URLs)."""
+    return f"{type(e).__name__}: {str(e)[:200]}"
 
 
 # ---- mount-bypassing I/O (direct on BucketBackend; plain on FilesystemBackend) ----
@@ -66,13 +79,15 @@ def _write_direct(path: str, data: bytes) -> None:
 # ---- snapshot ----
 
 
-def snapshot_bytes() -> bytes:
-    """A consistent, standalone single-file copy of the current DB.
+def snapshot() -> tuple[bytes, int]:
+    """Return (standalone-db-bytes, db_seq) for the current DB.
 
-    Uses SQLite's online backup API, so it is safe to call with the writer
-    connection open and produces a self-contained file (no WAL sidecar to
-    upload). MUST be called outside an active write transaction.
+    Uses SQLite's online backup API → a self-contained file (no WAL sidecar).
+    The seq is read from the snapshot itself so the uploaded bytes and the
+    labelled seq can never disagree. MUST run outside an active write txn.
     """
+    if connection._active.get() is not None:  # type: ignore[attr-defined]
+        raise RuntimeError("snapshot() called inside an active write transaction")
     src = connection.get_writer()
     fd, tmp = tempfile.mkstemp(suffix=".db")
     os.close(fd)
@@ -80,9 +95,11 @@ def snapshot_bytes() -> bytes:
         dest = sqlite3.connect(tmp)
         try:
             src.backup(dest)
+            row = dest.execute("SELECT value FROM db_meta WHERE key='db_seq'").fetchone()
+            seq = int(row[0]) if row else 0
         finally:
             dest.close()
-        return Path(tmp).read_bytes()
+        return Path(tmp).read_bytes(), seq
     finally:
         for p in (tmp, f"{tmp}-wal", f"{tmp}-shm"):
             try:
@@ -91,11 +108,11 @@ def snapshot_bytes() -> bytes:
                 pass
 
 
+def snapshot_bytes() -> bytes:
+    return snapshot()[0]
+
+
 # ---- seq sidecar / CAS ----
-
-
-def _local_seq() -> int:
-    return connection.current_db_seq(connection.get_writer())
 
 
 def _read_remote_seq() -> dict | None:
@@ -103,12 +120,13 @@ def _read_remote_seq() -> dict | None:
         raw = _read_direct(SEQ_BUCKET_PATH)
     except StorageNotFound:
         return None
-    except Exception as e:  # treat unreadable sidecar as absent, log loudly
-        logger.warning("db sync: could not read remote seq sidecar: %s", e)
+    except Exception as e:
+        logger.warning("db sync: could not read remote seq sidecar: %s", _safe_err(e))
         return None
     try:
         return _serde.json_loads(raw)
-    except Exception:
+    except Exception as e:
+        logger.warning("db sync: malformed remote seq sidecar: %s", _safe_err(e))
         return None
 
 
@@ -130,30 +148,33 @@ def upload() -> int:
     propagates — never report a write durable that isn't in the bucket.
     """
     global _last_upload_ts, _last_error
-    local = _local_seq()
+    data, snap_seq = snapshot()  # seq read from the snapshot → matches the bytes
     remote = _read_remote_seq()
     if (
         remote is not None
-        and int(remote.get("seq", -1)) >= local
+        and int(remote.get("seq", -1)) >= snap_seq
         and remote.get("nonce") != _NONCE
     ):
-        _last_error = (
+        msg = (
             f"CAS conflict: bucket seq={remote.get('seq')} (nonce "
-            f"{remote.get('nonce')}) >= local {local}; refusing to clobber"
+            f"{remote.get('nonce')}) >= local {snap_seq}; refusing to clobber"
         )
-        logger.error("db sync: %s", _last_error)
-        raise UploadConflict(_last_error)
+        with _state_lock:
+            _last_error = msg
+        logger.error("db sync: %s", msg)
+        raise UploadConflict(msg)
     try:
-        data = snapshot_bytes()
         _write_direct(DB_BUCKET_PATH, data)
-        _write_direct(SEQ_BUCKET_PATH, _seq_payload(local))
+        _write_direct(SEQ_BUCKET_PATH, _seq_payload(snap_seq))
     except Exception as e:
-        _last_error = f"upload failed: {e}"
+        with _state_lock:
+            _last_error = _safe_err(e)
         logger.exception("db sync: upload failed")
         raise
-    _last_upload_ts = time.time()
-    _last_error = None
-    return local
+    with _state_lock:
+        _last_upload_ts = time.time()
+        _last_error = None
+    return snap_seq
 
 
 # ---- boot pull ----
@@ -161,8 +182,8 @@ def upload() -> int:
 
 def pull(dest_path: str | None = None) -> bool:
     """Download the bucket DB to the local path (default: the configured DB
-    path). Returns True if pulled, False if the bucket has no DB yet (fresh
-    init). Always trust the bucket; clears any stale local WAL/-shm."""
+    path). Returns True if pulled, False if the bucket has no DB yet. Always
+    trust the bucket; clears stale local WAL/-shm; perms tightened to 0600."""
     dest = dest_path or connection.db_path()
     try:
         data = _read_direct(DB_BUCKET_PATH)
@@ -177,6 +198,10 @@ def pull(dest_path: str | None = None) -> bool:
             pass
     tmp = f"{dest}.pull.tmp"
     Path(tmp).write_bytes(data)
+    try:
+        os.chmod(tmp, 0o600)  # DB holds private requests/audit
+    except OSError:
+        pass
     os.replace(tmp, dest)
     logger.info("db sync: pulled %d bytes from bucket", len(data))
     return True
@@ -186,8 +211,6 @@ def pull(dest_path: str | None = None) -> bool:
 
 
 def daily_snapshot(*, today: datetime | None = None) -> str:
-    """Upload a dated snapshot and prune snapshots older than the retention
-    window. Returns the snapshot bucket path."""
     day = (today or datetime.now(timezone.utc)).date().isoformat()
     path = f"db/inspector-{day}.db"
     _write_direct(path, snapshot_bytes())
@@ -196,18 +219,16 @@ def daily_snapshot(*, today: datetime | None = None) -> str:
 
 
 def _prune_snapshots(*, today: datetime | None = None) -> list[str]:
-    import re
-
     cutoff = (today or datetime.now(timezone.utc)).date()
     backend = get_backend()
     try:
         names = backend.list_dir("db")
-    except Exception:
+    except Exception as e:
+        logger.warning("db sync: snapshot prune skipped (list_dir failed): %s", _safe_err(e))
         return []
-    pat = re.compile(r"^inspector-(\d{4}-\d{2}-\d{2})\.db$")
     removed: list[str] = []
     for name in names:
-        m = pat.match(name)
+        m = _SNAPSHOT_RE.match(name)
         if not m:
             continue
         try:
@@ -219,7 +240,7 @@ def _prune_snapshots(*, today: datetime | None = None) -> list[str]:
                 backend.delete(f"db/{name}")
                 removed.append(name)
             except Exception as e:
-                logger.warning("db sync: failed to prune %s: %s", name, e)
+                logger.warning("db sync: failed to prune %s: %s", name, _safe_err(e))
     return removed
 
 
@@ -233,16 +254,18 @@ def bucket_lag_seconds() -> float | None:
 
 
 def status() -> dict:
-    return {
-        "nonce": _NONCE,
-        "last_bucket_upload_ts": _last_upload_ts,
-        "bucket_lag_seconds": bucket_lag_seconds(),
-        "last_error": _last_error,
-        "queue": 0,  # synchronous uploads in this build
-    }
+    with _state_lock:
+        return {
+            "nonce": _NONCE,
+            "last_bucket_upload_ts": _last_upload_ts,
+            "bucket_lag_seconds": bucket_lag_seconds(),
+            "last_error": _last_error,
+            "queue": 0,  # synchronous uploads in this build
+        }
 
 
 def _reset_for_test() -> None:
     global _last_upload_ts, _last_error
-    _last_upload_ts = None
-    _last_error = None
+    with _state_lock:
+        _last_upload_ts = None
+        _last_error = None
