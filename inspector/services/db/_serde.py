@@ -23,11 +23,22 @@ def now() -> datetime:
 
 
 def to_iso(dt: datetime | None) -> str | None:
+    """ISO-8601 UTC string in the EXACT form pydantic ``model_dump(mode="json")``
+    emits — a ``Z`` suffix, not ``+00:00`` (pydantic v2). Stored timestamps and
+    pydantic-serialized wire timestamps must be byte-identical so activity cards
+    (which emit the raw stored ``ts`` string) match what the rest of the app
+    produced before the cutover. See ``activity`` feed parity tests."""
     if dt is None:
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return dt.isoformat()
+    else:
+        dt = dt.astimezone(timezone.utc)
+    s = dt.isoformat()
+    # isoformat() renders UTC as "+00:00"; pydantic renders it as "Z".
+    if s.endswith("+00:00"):
+        s = s[:-6] + "Z"
+    return s
 
 
 def from_iso(s: str | None) -> datetime | None:
