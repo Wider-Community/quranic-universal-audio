@@ -52,10 +52,8 @@ def _install_catalog(monkeypatch, name_by_slug):
 
 
 def _reset_activity_state():
-    from scripts.lib.schemas import ActivityState
-    from services import activity_state as activity_state_service
-    with activity_state_service._store_lock:  # type: ignore[attr-defined]
-        activity_state_service._store = ActivityState()  # type: ignore[attr-defined]
+    """No-op post-cutover (the autouse _substrate_db fixture isolates state)."""
+    return None
 
 
 def _record(event, *, slug="husary_qdc", ts="2026-05-13T12:00:00+00:00",
