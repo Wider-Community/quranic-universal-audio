@@ -31,12 +31,8 @@ def dev_mode_client(monkeypatch):
     monkeypatch.setenv("INSPECTOR_DEV_MODE", "1")
 
     from app import app
-    from scripts.lib.schemas import ReciterStateFile
-    from services import state as state_service
 
-    with state_service._state_lock:  # type: ignore[attr-defined]
-        state_service._state_file = ReciterStateFile()  # type: ignore[attr-defined]
-
+    # State starts empty via the autouse _substrate_db fixture.
     app.config["TESTING"] = True
     return app.test_client()
 
