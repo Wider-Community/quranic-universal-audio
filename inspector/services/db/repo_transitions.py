@@ -49,7 +49,12 @@ def append(
     with transaction() as conn:
         # Guarantee the actor_id FK target exists (every transition references
         # it) — inside the txn so it uses the writer, not a read-only reader.
-        repo_access.ensure_user(actor.hf_user_id, login=actor.login_at_time)
+        # Do NOT pass login here: actor.login_at_time is a cookie snapshot that
+        # may be stale, and refreshing users.login_cache on every transition
+        # would clobber a fresher cache (login refresh belongs to the auth
+        # callback / access.update). The transition's own actor_login_snapshot
+        # column already records the snapshot login for the audit trail.
+        repo_access.ensure_user(actor.hf_user_id)
         conn.execute(
             "INSERT INTO transitions(id, ts, slug, event, from_state, to_state, "
             "actor_id, actor_login_snapshot, actor_role_snapshot, reason, result, "
