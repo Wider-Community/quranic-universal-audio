@@ -37,14 +37,21 @@ def _state_row(slug: str, *, state: str = "awaiting_review",
 
 
 def _seed_state(rows: list):
-    """Inject rows into the in-memory state file. The state_persistence
-    fixture handles disk persistence on subsequent mutations."""
-    from scripts.lib.schemas import ReciterStateFile
-    from services import state as state_service
+    """Seed each ReciterRow into the SQLite substrate (call ``_seed_catalog``
+    first so the delivery FK target exists)."""
+    from tests.conftest import _seed_state as _seed
 
-    new_file = ReciterStateFile(reciters=rows)
-    with state_service._state_lock:  # type: ignore[attr-defined]
-        state_service._state_file = new_file  # type: ignore[attr-defined]
+    for r in rows:
+        _seed(
+            r.slug,
+            state=r.state.value,
+            state_since=r.state_since,
+            visibility=r.visibility.value,
+            visibility_reason=r.visibility_reason,
+            assignee_hf_id=r.assignee_hf_id,
+            assignee_login=r.assignee_login or "test_user",
+            marked_ready=r.marked_ready,
+        )
 
 
 def _seed_catalog(slug: str, *, reciter_id: str = "test_reciter",
@@ -92,13 +99,8 @@ def _seed_catalog(slug: str, *, reciter_id: str = "test_reciter",
         added_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         added_by_hf_id="system_seed",
     )
-    cat = ReciterCatalog(
-        vocab=vocab,
-        reciters=[reciter],
-        deliveries=[delivery],
-    )
-    with catalog_service._store_lock:  # type: ignore[attr-defined]
-        catalog_service._store = cat  # type: ignore[attr-defined]
+    from tests.conftest import _seed_catalog as _seedcat
+    _seedcat(vocab=vocab, reciters=[reciter], deliveries=[delivery])
 
 
 # ---------------------------------------------------------------------------
