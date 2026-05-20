@@ -29,8 +29,11 @@ import tempfile
 import threading
 import time
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
 
 from services.storage.hf_bucket import StorageNotFound, get_backend
 
@@ -50,6 +53,15 @@ _NONCE = uuid.uuid4().hex[:12]
 _state_lock = threading.Lock()
 _last_upload_ts: float | None = None
 _last_error: str | None = None
+
+# Durability seam (the "no 200 without a durable bucket copy" invariant).
+# ``_SYNC_ENABLED`` is True in production; tests disable it via
+# ``set_sync_enabled(False)`` so the bulk of the suite doesn't pay snapshot
+# cost (dedicated durability tests flip it back on). ``_defer_depth`` lets a
+# boot-scan / sweeper batch wrap N transitions in ``deferred_sync()`` so the
+# loop uploads ONCE instead of once-per-commit (the boot/bucket-storm fix).
+_SYNC_ENABLED = True
+_defer_depth: ContextVar[int] = ContextVar("db_sync_defer_depth", default=0)
 
 
 class UploadConflict(RuntimeError):
@@ -269,3 +281,66 @@ def _reset_for_test() -> None:
     with _state_lock:
         _last_upload_ts = None
         _last_error = None
+
+
+# ---- durability seam (used by every mutating service boundary) ----
+
+
+def set_sync_enabled(enabled: bool) -> None:
+    """Arm/disarm the per-commit bucket upload. Production keeps it armed;
+    tests disarm it unless they specifically assert durability."""
+    global _SYNC_ENABLED
+    _SYNC_ENABLED = enabled
+
+
+def is_sync_enabled() -> bool:
+    return _SYNC_ENABLED
+
+
+def mark_durable() -> None:
+    """Make the just-committed transaction durable on the bucket.
+
+    No-op when sync is disarmed (tests) or when inside a ``deferred_sync()``
+    batch (the batch uploads once on exit). Raises (→ caller maps to 5xx) on
+    ``UploadConflict`` / upload failure so a write absent from the bucket is
+    never acked 200.
+    """
+    if not _SYNC_ENABLED or _defer_depth.get() > 0:
+        return
+    upload()
+
+
+@contextmanager
+def deferred_sync() -> Iterator[None]:
+    """Coalesce uploads across a batch of commits into ONE upload on exit.
+
+    Boot-scan (``hydrate_initial_seen``) and the wip sweeper apply N transitions
+    in a loop; without this each would CAS-upload, storming the bucket at boot.
+    The outermost block uploads once (only if the body didn't raise and at least
+    one durable boundary ran). Re-entrant via a depth counter.
+    """
+    token = _defer_depth.set(_defer_depth.get() + 1)
+    raised = False
+    try:
+        yield
+    except BaseException:
+        raised = True
+        raise
+    finally:
+        depth = _defer_depth.get()
+        _defer_depth.reset(token)
+        if depth == 1 and not raised and _SYNC_ENABLED:
+            upload()
+
+
+@contextmanager
+def durable_transaction() -> Iterator[sqlite3.Connection]:
+    """A top-level write transaction whose commit is uploaded to the bucket
+    before control returns to the caller. Use at EVERY mutating service
+    boundary (``state.transition``, ``access`` grant/revoke/update, activity
+    mutations). The upload fires after the txn commits and the active-conn
+    ContextVar clears (``snapshot()`` requires no active txn). On upload failure
+    the exception propagates — the route layer turns it into 5xx."""
+    with connection.transaction() as conn:
+        yield conn
+    mark_durable()
