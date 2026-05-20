@@ -98,21 +98,49 @@
     border-color: rgba(67, 97, 238, 0.35);
 }
 
-/* Word-by-word translation caption — sits first in the .mega-block column,
-   above .mega-word. Static (never updated per playback frame), LTR, and
-   width-bounded so a long gloss wraps under its word instead of widening the
-   token column. */
-.mega-translation {
-    max-width: 14ch;
-    margin: 0 auto;
-    padding: 0 4px 2px;
+/* Word-by-word translation tier — sits first in the .mega-block column, above
+   .mega-word. Shares the tile vocabulary of the letter/phoneme tiers but reads
+   quieter and warmer (it carries meaning, not phonetics). `dir="auto"` on the
+   element keeps RTL glosses (Urdu, Persian, Arabic) correct while English
+   stays LTR.
+
+   `width: 0; min-width: 100%` is deliberate: it makes the tier take exactly the
+   width the word + letter/phoneme tiers already establish for the block,
+   without its own (often long) text widening the block. So a short gloss sits
+   on one line and a long one wraps to that available width — new lines only
+   when genuinely needed. Static render, never touched by the 60fps highlight
+   path. */
+.word-translation {
+    align-self: stretch;
+    width: 0;
+    min-width: 100%;
+    box-sizing: border-box;
+    padding: 3px 6px;
+    border-radius: 3px;
+    /* Part of the tile family, kept a touch quieter than the word so the
+       Arabic stays the hero (see PRODUCT.md: the reciter's word outranks any
+       companion info). Distinction comes from the warm text, not a louder box. */
+    background: oklch(0.205 0.014 274);
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-    font-size: 0.72rem;
-    line-height: 1.2;
-    color: #9aa3b2;
+    /* Scale with the analysis zoom (like the word/letter tiers) but stay
+       proportionally secondary, so the gloss tracks the user's chosen size. */
+    font-size: calc(var(--analysis-letter-font-size, 1.05rem) * 0.72);
+    line-height: 1.25;
+    letter-spacing: 0.005em;
+    /* Warm-neutral so the meaning tier reads as human language, distinct from
+       the cool #aaa of the phonetic letter/phoneme tiers, without using gold
+       (reserved for the active word and banned as religious-site ornament). */
+    color: oklch(0.79 0.022 80);
     text-align: center;
+    text-wrap: balance;
     overflow-wrap: anywhere;
     min-height: 1.2em;
+}
+
+/* Missing gloss (word-count mismatch vs API): keep the row's height so words
+   stay vertically aligned, but drop the chrome so it doesn't read as a tile. */
+.word-translation.is-empty {
+    background: transparent;
 }
 
 .mega-word {

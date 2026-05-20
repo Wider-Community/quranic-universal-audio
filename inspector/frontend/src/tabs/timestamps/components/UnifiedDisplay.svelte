@@ -18,6 +18,7 @@
 
     import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
     import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../../lib/utils/arabic-text';
+    import WordTranslation from './WordTranslation.svelte';
     import {
         showLetters,
         showPhonemes,
@@ -669,7 +670,7 @@
             tabindex="-1"
         >
             {#if $showTranslations}
-                <div class="mega-translation" dir="auto">{$verseTranslations[block.word.location] ?? ''}</div>
+                <WordTranslation text={$verseTranslations[block.word.location] ?? ''} />
             {/if}
             <div
                 class="mega-word"
