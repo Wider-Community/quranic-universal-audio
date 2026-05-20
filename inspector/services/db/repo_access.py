@@ -51,11 +51,18 @@ def get_login(hf_user_id: str) -> str | None:
 
 
 def resolve_role(hf_user_id: str) -> Role:
+    """Effective role; non-members → CONTRIBUTOR.
+
+    Parity: the legacy ``RolesFile.resolve_role`` returned ``member.role`` —
+    a ``use_enum_values`` plain string ("maintainer") for members — so the
+    ``User.role`` callers store (and ``str()``) stays a bare string. Return the
+    raw DB string for members to preserve that wire/str behavior; the
+    non-member default keeps the ``Role.CONTRIBUTOR`` member like the legacy."""
     row = get_conn().execute(
         "SELECT role FROM role_assignments WHERE hf_user_id = ? AND revoked_at IS NULL",
         (hf_user_id,),
     ).fetchone()
-    return Role(row[0]) if row else Role.CONTRIBUTOR
+    return row[0] if row else Role.CONTRIBUTOR
 
 
 def _member_from_rows(ra, login: str | None) -> Member:

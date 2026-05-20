@@ -224,6 +224,11 @@ def test_uid_deterministic_across_processes(tmp_path):
         sys.path.insert(0, os.environ['REPO_ROOT'])
         os.environ['INSPECTOR_BACKEND'] = 'filesystem'
         os.environ['INSPECTOR_FILESYSTEM_ROOT'] = os.environ['DATA_DIR']
+        # Cold process: initialise the SQLite substrate like app boot does
+        # (load_detailed → kind_for → repo_state needs the schema present).
+        os.environ['INSPECTOR_DB_PATH'] = os.path.join(os.environ['DATA_DIR'], 'inspector.db')
+        from services import db
+        db.init_db()
         from services.data_loader import load_detailed
         entries = load_detailed('legacy_reciter')
         print(json.dumps([s['segment_uid'] for e in entries for s in e['segments']]))
