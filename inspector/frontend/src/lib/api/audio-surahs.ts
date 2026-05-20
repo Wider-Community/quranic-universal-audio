@@ -12,6 +12,12 @@ import type { AudioSurahsResponse } from '../types/api';
 export interface SurahEntry {
     url: string;
     durationMs: number | null;
+    /** Routing tag from the backend: ``qf_api`` when the URL came from the
+     * Quran.Foundation Content API, ``qf_fallback`` when an attempt fell back
+     * to our own link. Absent for un-routed deliveries. */
+    via?: 'qf_api' | 'qf_fallback';
+    /** Our original CDN link, present only when ``via === 'qf_api'``. */
+    originUrl?: string;
 }
 
 const _cache: Map<string, Record<string, SurahEntry>> = new Map();
@@ -32,7 +38,7 @@ export async function fetchSurahsForDelivery(
     const raw = data.surahs ?? {};
     const out: Record<string, SurahEntry> = {};
     for (const [k, v] of Object.entries(raw)) {
-        out[k] = { url: v.url, durationMs: v.duration_ms };
+        out[k] = { url: v.url, durationMs: v.duration_ms, via: v.via, originUrl: v.origin_url };
     }
     _cache.set(key, out);
     return out;

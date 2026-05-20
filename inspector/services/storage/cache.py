@@ -435,6 +435,30 @@ def set_audio_url_cache(key: str, urls: dict) -> None:
     _audio_url.set(key, urls)
 
 
+# Quran.Foundation Content API. Token is a single client_credentials grant
+# shared process-wide ({access_token, expires_at}); chapter-URL maps are keyed
+# by the QF chapter-reciter id (stringified). Content is immutable, so the
+# only invalidation is the token's own TTL — no mutation hook needed.
+_qf_content_token: _SingletonCache[dict] = _SingletonCache()
+_qf_chapter_urls: _KeyedCache[dict] = _KeyedCache()
+
+
+def get_qf_content_token() -> dict | None:
+    return _qf_content_token.get()
+
+
+def set_qf_content_token(token: dict) -> None:
+    _qf_content_token.set(token)
+
+
+def get_qf_chapter_urls(qf_reciter_id: str) -> dict | None:
+    return _qf_chapter_urls.get(qf_reciter_id)
+
+
+def set_qf_chapter_urls(qf_reciter_id: str, urls: dict) -> None:
+    _qf_chapter_urls.set(qf_reciter_id, urls)
+
+
 # Audio manifest sidecar (catalog/audio_manifest/<slug>.json) + derived
 # URL → chapter-key inverse index. Both populated together by
 # ``services/audio/audio_meta._load_sidecar`` on first read. The inverse

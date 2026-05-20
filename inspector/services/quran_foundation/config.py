@@ -27,6 +27,22 @@ USER_API_SCOPE: Final[str] = "openid offline_access user collection"
 # Token TTL safety margin (seconds) — refresh slightly early.
 TOKEN_REFRESH_SKEW: Final[int] = 60
 
+# --- Production (Content APIs / client_credentials) ---
+# The content client is a separate, server-to-server credential (no user
+# login). Endpoints are PRODUCTION, not pre-prod.
+CONTENT_ISSUER: Final[str] = "https://oauth2.quran.foundation"
+CONTENT_TOKEN_URL: Final[str] = f"{CONTENT_ISSUER}/oauth2/token"
+CONTENT_API_BASE: Final[str] = "https://apis.quran.foundation/content/api/v4"
+CONTENT_SCOPE: Final[str] = "content"
+
+# The content OAuth host sits behind Cloudflare, which 403s (error 1010) the
+# default urllib/requests User-Agent. A browser-like UA is REQUIRED on both
+# token and API requests (verified live this session).
+USER_AGENT: Final[str] = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+)
+
 
 def preprod_client_id() -> str:
     return os.environ.get("QF_PREPROD_CLIENT_ID", "").strip()
@@ -47,3 +63,16 @@ def redirect_uri() -> str:
 def is_configured() -> bool:
     """True when pre-prod client credentials are present."""
     return bool(preprod_client_id() and preprod_client_secret())
+
+
+def content_client_id() -> str:
+    return os.environ.get("QF_CONTENT_CLIENT_ID", "").strip()
+
+
+def content_client_secret() -> str:
+    return os.environ.get("QF_CONTENT_CLIENT_SECRET", "").strip()
+
+
+def content_is_configured() -> bool:
+    """True when the Content-API (client_credentials) credentials are present."""
+    return bool(content_client_id() and content_client_secret())
