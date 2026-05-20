@@ -136,6 +136,21 @@ def for_slug(slug: str) -> list[dict]:
     return [_row_to_record(r) for r in rows]
 
 
+def since(cutoff_iso: str, *, limit: int | None = None) -> Iterator[dict]:
+    """Yield transition records with ``ts >= cutoff_iso``, newest-first.
+
+    Backs the activity feeds (which read a rolling time window and classify in
+    Python). ``ts`` is an ISO-8601 string in the canonical stored form, so a
+    lexical ``>=`` is also chronological."""
+    sql = f"SELECT {_COLS} FROM transitions WHERE ts >= ? ORDER BY seq DESC"
+    params: list[Any] = [cutoff_iso]
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(limit)
+    for row in get_conn().execute(sql, params).fetchall():
+        yield _row_to_record(row)
+
+
 def feed(
     *,
     events: Iterable[str] | None = None,

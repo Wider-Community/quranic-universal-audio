@@ -1,30 +1,24 @@
-"""Audit log service: per-month JSONL partitions on the bucket.
+"""Audit log: thin facade over the SQLite ``transitions`` table.
 
-Append-only. Inspector backend is sole writer. State + catalog + access +
-admin events all go through ``append()``. Direct upload per record (bypasses
-the mount's 2-30 s flush window) — audit durability matters more than
-latency for state-changing events.
-
-Spec: docs/planning/inspector-deploy/v2/inspector-state-management.md §2.
+Post-cutover the canonical event log IS ``transitions`` (``repo_transitions``).
+This module keeps the legacy ``audit.append(event, …)`` signature so the ~16
+call sites (state, catalog, access, activity, audio_prefetch) don't churn, and
+delegates to ``repo_transitions.append`` which enrolls in the caller's active
+``transaction()`` (a SAVEPOINT when nested) — so the audit row commits
+atomically with the state/claim/catalog write that motivated it, and its
+durability rides the boundary's ``durable_transaction`` upload.
 """
 
 from __future__ import annotations
 
 import logging
-import os
-import threading
-import uuid
-from datetime import datetime, timezone
 from typing import Any, Literal
 
 from scripts.lib.schemas import Actor, AuditRecord
 
-from services.storage import storage_paths
-from services.storage.hf_bucket import get_backend
+from services.db import repo_transitions
 
 logger = logging.getLogger(__name__)
-
-_append_lock = threading.Lock()
 
 
 def append(
@@ -38,59 +32,23 @@ def append(
     request_id: str | None = None,
     reason: str | None = None,
     result: Literal["ok", "error"] = "ok",
-    ts: datetime | None = None,
 ) -> AuditRecord:
-    """Validate + persist one audit record. Returns the persisted record.
+    """Append one transition row and return the equivalent ``AuditRecord``.
 
-    Serialized by a module-level lock so per-partition appends never
-    interleave across threads. Per-slug serialization happens upstream in
-    ``services/state.transition()``; this lock is the partition-level
-    backstop.
+    Must run inside an active ``transaction()`` for state/catalog/access events
+    (so it's atomic with the motivating write); ``repo_transitions.append``
+    self-commits only for genuinely standalone audits.
     """
-    if ts is None:
-        ts = datetime.now(timezone.utc)
-
-    record = AuditRecord(
-        ts=ts,
+    rec = repo_transitions.append(
         event=event,
+        actor=actor,
         slug=slug,
         from_state=from_state,
         to_state=to_state,
-        actor=actor,
-        payload=payload or {},
-        request_id=request_id or _new_request_id(),
+        payload=payload,
+        request_id=request_id,
         reason=reason,
         result=result,
     )
-
-    partition = storage_paths.audit_partition_path(ts)
-    payload_dict = record.model_dump(mode="json")
-    backend = get_backend()
-    with _append_lock:
-        backend.append_jsonl(partition, payload_dict)
-    logger.info("audit %s slug=%s event=%s", record.request_id, slug or "-", event)
-    return record
-
-
-def _new_request_id() -> str:
-    return f"req_{uuid.uuid4().hex[:12]}"
-
-
-def ensure_meta_initialized() -> None:
-    """Write ``audit/_meta.json`` once with ``schema_version`` — idempotent.
-
-    Called at app startup. Carries the schema version once per env instead
-    of per record.
-    """
-    backend = get_backend()
-    path = storage_paths.audit_meta_path()
-    if backend.exists(path):
-        return
-    backend.write_json_atomic(
-        path,
-        {
-            "schema_version": 1,
-            "writer_version": "inspector-v2",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        },
-    )
+    logger.info("audit %s slug=%s event=%s", rec.request_id, slug or "-", event)
+    return rec

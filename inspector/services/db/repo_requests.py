@@ -150,6 +150,15 @@ def resolve(
     return True
 
 
+def delete_pending(slug: str) -> bool:
+    """Hard-delete the open pending request for ``slug`` (no archive). Returns
+    True if one was removed. Backs the legacy ``pending_requests.clear``."""
+    cur = get_conn().execute(
+        "DELETE FROM requests WHERE slug = ? AND status = 'pending'", (slug,)
+    )
+    return cur.rowcount > 0
+
+
 # ---- reads ----
 
 
@@ -185,6 +194,18 @@ def count_pending(*, include_slugless: bool = True) -> int:
     if not include_slugless:
         sql += " AND slug IS NOT NULL"
     return int(get_conn().execute(sql).fetchone()[0])
+
+
+def all_archived(archive_kind: str) -> list[ArchivedRequest]:
+    """All archived requests for a terminal status (oldest→newest). Backs the
+    legacy ``request_archive.snapshot(kind)`` reassembly."""
+    status = _STATUS_FOR_ARCHIVE[archive_kind]
+    rows = get_conn().execute(
+        "SELECT * FROM requests WHERE status = ? AND slug IS NOT NULL "
+        "ORDER BY resolved_at, submitted_at, id",
+        (status,),
+    ).fetchall()
+    return [_to_archived(r) for r in rows]
 
 
 def get_for_slug(archive_kind: str, slug: str) -> list[ArchivedRequest]:

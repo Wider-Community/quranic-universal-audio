@@ -275,6 +275,34 @@ def add_delivery(d: Delivery) -> Delivery:
     return d
 
 
+def find_source(slug: str) -> Source | None:
+    r = get_conn().execute(
+        "SELECT slug, name, url, audio_categories FROM sources WHERE slug = ?", (slug,)
+    ).fetchone()
+    if r is None:
+        return None
+    return Source(
+        slug=r["slug"], name=r["name"], url=r["url"],
+        audio_categories=_serde.json_loads(r["audio_categories"]) or [],
+    )
+
+
+def add_source(source: Source) -> Source:
+    """Append a vocab source, raising ``Duplicate`` on an existing slug."""
+    if find_source(source.slug) is not None:
+        raise Duplicate(f"source {source.slug!r} already exists")
+    get_conn().execute(
+        "INSERT INTO sources(slug, name, url, audio_categories) VALUES (?,?,?,?)",
+        (
+            source.slug, source.name, source.url,
+            _serde.json_dumps(
+                [c.value if hasattr(c, "value") else c for c in source.audio_categories]
+            ),
+        ),
+    )
+    return source
+
+
 def refresh_derived() -> None:
     """Recompute + persist ``derived.source_channels`` from the deliveries.
 

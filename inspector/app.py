@@ -273,64 +273,65 @@ register_blueprints(app)
 # get a clear "no reciters yet" page rather than a hard 500.
 # ---------------------------------------------------------------------------
 
-def _hydrate_bucket_stores() -> None:
-    for label, fn in (
-        ("access", access_service.hydrate),
-        ("state", state_service.hydrate),
-        ("catalog", catalog_service.hydrate),
-        ("activity_state", activity_state_service.hydrate),
-        ("pending_requests", pending_requests_service.hydrate),
-        ("request_archive", request_archive_service.hydrate),
-    ):
-        try:
-            fn()
-        except Exception as e:  # noqa: BLE001 — log and continue
-            logger.warning(
-                "%s store hydrate failed (%s); continuing with empty in-memory model",
-                label,
-                e,
-            )
+def _boot_substrate() -> None:
+    """Boot the SQLite substrate (the source of truth), then the idempotent
+    boot-scan + opt-in daemons.
 
+    Hard cut: the 6 legacy bucket JSON stores are no longer hydrated into
+    memory — the DB pulled from the bucket IS the source of truth. Per-reciter
+    content under ``wip/<slug>/`` stays JSON-on-bucket and is read on demand.
+
+    Boot order (matters): pull → migrate FIRST (a repo read before migration
+    would hit an empty/old schema), THEN the boot-scan (which reads/writes the
+    DB-backed state), THEN daemons (which call ``state.transition``). A failure
+    in deployed mode (``INSPECTOR_BUCKET_MOUNT`` set) leaves the app importable
+    with ``db_open:false`` so ``/healthz`` returns 503 — never a hard import
+    crash; locally a real init error surfaces loudly.
+
+    Tests skip this entirely and manage their own DB via the ``sqlite_db``
+    fixture.
+    """
+    if "pytest" in sys.modules:
+        return
+
+    from services import db as _db
+    from services.db import sync as _sync
+
+    deployed = bool(os.environ.get("INSPECTOR_BUCKET_MOUNT"))
     try:
-        audit_service.ensure_meta_initialized()
-    except Exception as e:  # noqa: BLE001
-        logger.warning("audit ensure_meta_initialized failed: %s", e)
+        _sync.pull()  # bucket DB → local path (fresh init if the bucket has none)
+        ver = _db.init_db()  # open writer + run migrations (fail-fast)
+        logger.info("db substrate: ready at schema v%s", ver)
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "db substrate init failed; /healthz will report db_open:false"
+        )
+        if not deployed:
+            raise
+        return
 
-    # Wip-audio sweeper: hourly daemon enforcing the 1-week post-RELEASED
-    # TTL on bucket audio + peaks. Bucket audio itself is written by the
-    # katana extraction pipeline; the inspector only reads and (here) GCs.
-    #
-    # Opt-in via ``INSPECTOR_WIP_SWEEPER=1`` (Dockerfile sets it on prod).
-    # Local dev runs (``python3 inspector/app.py``) leave it unset so a
-    # mistyped INSPECTOR_BUCKET_REPO can't accidentally delete prod data.
-    # Tests skip via the pytest guard.
-    # Auto-detect reconciler: server-side acceptance of pending requests.
-    # ``hydrate_initial_seen`` ALWAYS runs at boot — it's idempotent and only
-    # fires alignment_completed for slugs already stuck in AWAITING_ALIGNMENT
-    # despite having ``wip/<slug>/`` files. Without this, a reciter uploaded
-    # while the server was down (or before deploy of the auto-detect feature)
-    # stays in AWAITING_ALIGNMENT forever, causing the dashboard row, detail
-    # modal, and segments combobox to all disagree about its bucket.
-    #
-    # The 60s background polling loop stays opt-in via ``INSPECTOR_AUTO_DETECT=1``
-    # because dev environments don't want a CPU loop hammering the bucket.
-    # Tests skip both via the pytest guard.
-    if "pytest" not in sys.modules:
-        try:
+    # Boot-scan: idempotent ``alignment_completed`` catch-up for ``wip/<slug>/``
+    # dirs stuck in AWAITING_ALIGNMENT. Wrapped in ``deferred_sync`` so its loop
+    # of N transitions produces ONE coalesced bucket upload, not N (avoids a
+    # boot-time upload storm / cross-container CAS thrash).
+    try:
+        with _sync.deferred_sync():
             auto_detect_service.hydrate_initial_seen()
-        except Exception as e:  # noqa: BLE001
-            logger.warning("auto_detect hydrate_initial_seen failed: %s", e)
-        if os.environ.get("INSPECTOR_AUTO_DETECT") == "1":
-            try:
-                interval = int(os.environ.get("INSPECTOR_AUTO_DETECT_INTERVAL_S", "60"))
-                auto_detect_service.start_background_loop(interval_seconds=interval)
-                logger.info(
-                    "auto_detect: background loop scheduled (interval=%ss)", interval,
-                )
-            except Exception as e:  # noqa: BLE001
-                logger.warning("auto_detect background loop wiring failed: %s", e)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("auto_detect hydrate_initial_seen failed: %s", e)
 
-    if "pytest" not in sys.modules and os.environ.get("INSPECTOR_WIP_SWEEPER") == "1":
+    # 60s polling reconciler — opt-in (dev environments don't want a loop).
+    if os.environ.get("INSPECTOR_AUTO_DETECT") == "1":
+        try:
+            interval = int(os.environ.get("INSPECTOR_AUTO_DETECT_INTERVAL_S", "60"))
+            auto_detect_service.start_background_loop(interval_seconds=interval)
+            logger.info("auto_detect: background loop scheduled (interval=%ss)", interval)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("auto_detect background loop wiring failed: %s", e)
+
+    # Wip-audio sweeper: hourly TTL GC of bucket audio/peaks. Opt-in via
+    # ``INSPECTOR_WIP_SWEEPER=1`` (prod Dockerfile sets it).
+    if os.environ.get("INSPECTOR_WIP_SWEEPER") == "1":
         try:
             from services import audio_prefetch
 
@@ -339,24 +340,8 @@ def _hydrate_bucket_stores() -> None:
         except Exception as e:  # noqa: BLE001
             logger.warning("wip-audio sweeper wiring failed: %s", e)
 
-    # SQLite substrate (transition flag, default off): pull the DB from the
-    # bucket and run migrations so it's ready. Additive during the transition —
-    # the legacy stores above still serve reads until the per-service cutover.
-    if "pytest" not in sys.modules:
-        try:
-            from services import db as _db
 
-            if _db.substrate_enabled():
-                from services.db import sync as _sync
-
-                _sync.pull()
-                ver = _db.init_db()
-                logger.info("db substrate: ready at schema v%s", ver)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("db substrate init failed: %s", e)
-
-
-_hydrate_bucket_stores()
+_boot_substrate()
 
 
 # ---------------------------------------------------------------------------

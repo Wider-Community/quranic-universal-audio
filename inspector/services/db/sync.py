@@ -335,12 +335,19 @@ def deferred_sync() -> Iterator[None]:
 
 @contextmanager
 def durable_transaction() -> Iterator[sqlite3.Connection]:
-    """A top-level write transaction whose commit is uploaded to the bucket
-    before control returns to the caller. Use at EVERY mutating service
-    boundary (``state.transition``, ``access`` grant/revoke/update, activity
-    mutations). The upload fires after the txn commits and the active-conn
-    ContextVar clears (``snapshot()`` requires no active txn). On upload failure
-    the exception propagates — the route layer turns it into 5xx."""
+    """A write transaction whose commit is uploaded to the bucket before
+    control returns to the caller. Use at EVERY mutating service boundary
+    (``state.transition``, ``catalog``/``pending_requests`` mutations,
+    ``access`` grant/revoke/update, activity mutations).
+
+    Nesting-safe: when called inside an already-active transaction (e.g.
+    ``catalog.edit_delivery`` invoked from ``state.transition``'s txn) it is a
+    SAVEPOINT and does NOT upload — only the OUTERMOST boundary uploads, once,
+    after the txn commits and the active-conn ContextVar clears (``snapshot()``
+    requires no active txn). On upload failure the exception propagates — the
+    route layer turns it into 5xx."""
+    top_level = connection._active.get() is None  # type: ignore[attr-defined]
     with connection.transaction() as conn:
         yield conn
-    mark_durable()
+    if top_level:
+        mark_durable()
