@@ -21,8 +21,10 @@
     import {
         showLetters,
         showPhonemes,
+        showTranslations,
         tsHoveredElement,
         tsWaveformHoverTime,
+        verseTranslations,
     } from '../stores/display';
     import type { TsLoopTarget } from '../stores/playback';
     import { autoMode, loopTarget, tsPort } from '../stores/playback';
@@ -666,6 +668,9 @@
             role="button"
             tabindex="-1"
         >
+            {#if $showTranslations}
+                <div class="mega-translation" dir="auto">{$verseTranslations[block.word.location] ?? ''}</div>
+            {/if}
             <div
                 class="mega-word"
                 role="group"

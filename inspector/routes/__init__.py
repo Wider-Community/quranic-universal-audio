@@ -35,6 +35,7 @@ def register_blueprints(app):
     from routes.audio.metadata import audio_meta_bp
     from routes.audio.clip import segment_clip_bp
     from routes.qf_auth import qf_auth_bp
+    from routes.qf_content import qf_content_bp
     from routes.bookmarks import bookmarks_bp
 
     app.register_blueprint(health_bp)
@@ -56,6 +57,7 @@ def register_blueprints(app):
     app.register_blueprint(audio_meta_bp)
     app.register_blueprint(segment_clip_bp)
     app.register_blueprint(qf_auth_bp)
+    app.register_blueprint(qf_content_bp)
     app.register_blueprint(bookmarks_bp)
     app.register_blueprint(static_bp)
 

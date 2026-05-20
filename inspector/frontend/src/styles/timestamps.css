@@ -98,6 +98,23 @@
     border-color: rgba(67, 97, 238, 0.35);
 }
 
+/* Word-by-word translation caption — sits first in the .mega-block column,
+   above .mega-word. Static (never updated per playback frame), LTR, and
+   width-bounded so a long gloss wraps under its word instead of widening the
+   token column. */
+.mega-translation {
+    max-width: 14ch;
+    margin: 0 auto;
+    padding: 0 4px 2px;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    color: #9aa3b2;
+    text-align: center;
+    overflow-wrap: anywhere;
+    min-height: 1.2em;
+}
+
 .mega-word {
     padding: 6px 8px;
     background: #0f0f23;
@@ -313,6 +330,26 @@
     text-align: center;
 }
 .ts-view-btn.active, .ts-mode-btn.active { background: var(--anim-highlight-color); color: #1a1a2e; font-weight: bold; }
+/* Translations toggle + language picker span the full group width (its own
+   row under the Analysis/Animation + Letters/Phonemes rows). */
+.ts-translations-toggle {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.ts-translations-toggle .ts-mode-btn { flex: 1 1 auto; }
+.ts-translation-lang {
+    flex: 0 0 auto;
+    max-width: 9rem;
+    background: #1a1a2e;
+    color: #d7d7df;
+    border: 1px solid #2a2a44;
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
 .ts-auto-toggles {
     display: grid;
     grid-template-columns: 1fr 1fr;

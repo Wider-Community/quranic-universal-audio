@@ -13,6 +13,7 @@ are cached by QF reciter id. See ``services/storage/cache.py``.
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Final
 
@@ -25,6 +26,31 @@ from . import config
 _TIMEOUT_SECONDS: Final[float] = 10.0
 # Fallback token lifetime when the issuer omits ``expires_in`` (seconds).
 _DEFAULT_TOKEN_TTL: Final[int] = 3600
+
+# Word-by-word translation languages exposed by the Content API, as
+# ``(iso_code, English label)``. ``en`` is first / the default. All 15 entries
+# verified live against ``/verses/by_key/...?language=<code>`` this session —
+# each returns native-script glosses (the top-level ``language`` param is the
+# switch; ``word_translation_language`` silently falls back to English).
+CONTENT_WBW_LANGUAGES: Final[list[tuple[str, str]]] = [
+    ("en", "English"),
+    ("ur", "Urdu"),
+    ("id", "Indonesian"),
+    ("bn", "Bengali"),
+    ("fa", "Persian"),
+    ("hi", "Hindi"),
+    ("ta", "Tamil"),
+    ("tr", "Turkish"),
+    ("fr", "French"),
+    ("zh", "Chinese"),
+    ("ml", "Malayalam"),
+    ("sq", "Albanian"),
+    ("sd", "Sindhi"),
+    ("dv", "Divehi"),
+    ("inh", "Ingush"),
+]
+_WBW_LANG_CODES: Final[frozenset[str]] = frozenset(c for c, _ in CONTENT_WBW_LANGUAGES)
+_VERSE_KEY_RE: Final[re.Pattern[str]] = re.compile(r"^\d+:\d+$")
 
 
 class QfContentError(RuntimeError):
@@ -112,4 +138,61 @@ def chapter_audio_urls(qf_reciter_id: int) -> dict[str, str]:
         if chap is not None and isinstance(audio_url, str) and audio_url:
             out[str(chap)] = audio_url
     cache.set_qf_chapter_urls(key, out)
+    return out
+
+
+def word_by_word(verse_key: str, language: str = "en") -> dict[str, str]:
+    """Return ``{location: gloss}`` for one ayah's word-by-word translation.
+
+    ``verse_key`` is ``"surah:ayah"`` (e.g. ``"2:255"``); ``location`` keys are
+    ``"surah:ayah:word"`` — the same join key the Timestamps tab carries on
+    each ``TsWord``. Unknown ``language`` codes fall back to English. The
+    ayah-number glyph (``char_type_name == "end"``) is filtered out. Result is
+    cached per ``(verse_key, language)`` — content is immutable.
+    """
+    if not _VERSE_KEY_RE.match(verse_key):
+        raise QfContentError(f"invalid verse_key: {verse_key!r}")
+    lang = language if language in _WBW_LANG_CODES else "en"
+
+    cache_key = f"{verse_key}|{lang}"
+    cached = cache.get_qf_wbw(cache_key)
+    if cached is not None:
+        return cached
+
+    token = get_content_token()
+    url = f"{config.CONTENT_API_BASE}/verses/by_key/{verse_key}"
+    try:
+        resp = requests.get(
+            url,
+            params={
+                "words": "true",
+                "language": lang,
+                "word_fields": "location,translation",
+            },
+            headers=_ua_headers(
+                {"x-auth-token": token, "x-client-id": config.content_client_id()}
+            ),
+            timeout=_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as e:
+        raise QfContentError(f"QF verses/by_key failed: {e}") from e
+    if not resp.ok:
+        raise QfContentError(f"QF verses/by_key {resp.status_code}: {resp.text[:200]}")
+    body = resp.json()
+    verse = body.get("verse") if isinstance(body, dict) else None
+    words = verse.get("words") if isinstance(verse, dict) else None
+    if not isinstance(words, list):
+        raise QfContentError("QF verses/by_key response missing verse.words")
+
+    out: dict[str, str] = {}
+    for w in words:
+        if not isinstance(w, dict) or w.get("char_type_name") == "end":
+            continue
+        loc = w.get("location")
+        if not isinstance(loc, str) or not loc:
+            continue
+        tr = w.get("translation")
+        text = tr.get("text") if isinstance(tr, dict) else None
+        out[loc] = text or ""
+    cache.set_qf_wbw(cache_key, out)
     return out

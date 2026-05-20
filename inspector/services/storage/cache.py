@@ -441,6 +441,9 @@ def set_audio_url_cache(key: str, urls: dict) -> None:
 # only invalidation is the token's own TTL — no mutation hook needed.
 _qf_content_token: _SingletonCache[dict] = _SingletonCache()
 _qf_chapter_urls: _KeyedCache[dict] = _KeyedCache()
+# Word-by-word translations, keyed by "<verse_key>|<language>" (e.g.
+# "2:255|ur"). Content is immutable — no mutation hook, just LRU eviction.
+_qf_wbw: _KeyedCache[dict] = _KeyedCache()
 
 
 def get_qf_content_token() -> dict | None:
@@ -457,6 +460,14 @@ def get_qf_chapter_urls(qf_reciter_id: str) -> dict | None:
 
 def set_qf_chapter_urls(qf_reciter_id: str, urls: dict) -> None:
     _qf_chapter_urls.set(qf_reciter_id, urls)
+
+
+def get_qf_wbw(key: str) -> dict | None:
+    return _qf_wbw.get(key)
+
+
+def set_qf_wbw(key: str, words: dict) -> None:
+    _qf_wbw.set(key, words)
 
 
 # Audio manifest sidecar (catalog/audio_manifest/<slug>.json) + derived

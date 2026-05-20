@@ -49,14 +49,18 @@
         loadManifest,
         loadQpc,
         loadVbrChapters,
+        loadVerseTranslations,
     } from './services/ts_client';
     import {
         granularity,
         showLetters,
         showPhonemes,
+        showTranslations,
+        translationLanguage,
         TS_GRANULARITIES,
         TS_VIEW_MODES,
         tsConfig,
+        verseTranslations,
         viewMode,
     } from './stores/display';
     import {
@@ -120,6 +124,13 @@
                 }
             }
         }
+
+        // Translation prefs are independent of view mode (the toggle only
+        // surfaces in Analysis, but the saved choice hydrates regardless).
+        const sT = localStorage.getItem(LS_KEYS.TS_SHOW_TRANSLATIONS);
+        if (sT !== null) showTranslations.set(sT === 'true');
+        const sLang = localStorage.getItem(LS_KEYS.TS_TRANSLATION_LANG);
+        if (sLang) translationLanguage.set(sLang);
 
         await surahInfoReady;
         await loadReciters();
@@ -559,6 +570,32 @@
         return surah && ayah ? `${surah}:${ayah}` : '';
     })();
     $: bookmarkedCurrent = currentVerseKey ? isBookmarked($bookmarks, currentVerseKey) : false;
+
+    // Word-by-word translation overlay (Analysis only). Lazily fetch glosses
+    // for the loaded verse whenever the toggle/language/verse changes. Async +
+    // independent of the audio element — never seeks or pauses, so playback is
+    // untouched (mirrors the passive letter/phoneme display). A monotonic token
+    // guards against out-of-order responses when the user flips quickly.
+    let _trReq = 0;
+    $: refreshTranslations($loadedVerse, $showTranslations, $translationLanguage);
+    function refreshTranslations(
+        lv: typeof $loadedVerse,
+        on: boolean,
+        lang: string,
+    ): void {
+        if (!on || !lv || lv.data.words.length === 0) {
+            verseTranslations.set({});
+            return;
+        }
+        const token = ++_trReq;
+        loadVerseTranslations(lv.data.words, lang)
+            .then((map) => {
+                if (token === _trReq) verseTranslations.set(map);
+            })
+            .catch(() => {
+                if (token === _trReq) verseTranslations.set({});
+            });
+    }
 
     function toggleVerseBookmark(): void {
         if (!currentVerseKey) return;
