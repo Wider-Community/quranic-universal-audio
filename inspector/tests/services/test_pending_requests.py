@@ -37,12 +37,50 @@ def fresh_pending(tmp_path, monkeypatch):
 
     backend = _hf_bucket.FilesystemBackend(tmp_path)
     _hf_bucket.set_backend(backend)
-    pending_requests_service.hydrate()
-    request_archive_service.hydrate()
+    # requests.slug FK → deliveries: seed the catalog (vocab + reciter +
+    # delivery) the submit + apply_and_archive tests use.
+    _seed_test_catalog_db()
 
     yield pending_requests_service, backend
 
     _hf_bucket.reset_backend()
+
+
+def _seed_test_catalog_db():
+    """Seed the test catalog (rich vocab + ``test_reciter`` delivery) into the
+    SQLite substrate so submit (FK) + apply_and_archive (edits) both work."""
+    from datetime import datetime as _dt, timezone as _tz
+
+    from scripts.lib.schemas import (
+        AudioCategory, Channel, Delivery, ReciterEntry, RecordingContext,
+        Riwayah, Source, Style, Vocab,
+    )
+    from services import db
+    from services.db import repo_catalog
+
+    vocab = Vocab(
+        riwayat=[Riwayah(slug="hafs", short="H", name="Hafs"),
+                 Riwayah(slug="warsh", short="W", name="Warsh")],
+        styles=[Style(slug="murattal", short="M", name="Murattal"),
+                Style(slug="mujawwad", short="J", name="Mujawwad")],
+        sources=[Source(slug="src1", name="Source One")],
+        channels=[Channel(slug="ch1", short="c1", name="Channel One")],
+        recording_contexts=[RecordingContext(slug="studio", name="Studio"),
+                            RecordingContext(slug="broadcast", name="Broadcast")],
+    )
+    with db.transaction():
+        repo_catalog.load_vocab(vocab)
+        repo_catalog.insert_reciter(ReciterEntry(
+            reciter_id="test_reciter", name_en="Original Name",
+            name_ar=None, country=None,
+        ))
+        repo_catalog.insert_delivery(Delivery(
+            slug="test_reciter", reciter_id="test_reciter",
+            riwayah="hafs", style="murattal", recording_context="studio",
+            recording_year=2010, source="src1", channel="ch1",
+            audio_category=AudioCategory.BY_SURAH, chapter_count=114,
+            added_at=_dt.now(_tz.utc), added_by_hf_id="seed",
+        ))
 
 
 def _actor(hf_user_id: str = "u-1", login: str = "alice", role: str = "contributor") -> Actor:
@@ -64,36 +102,8 @@ def test_hydrate_empty_when_no_file(fresh_pending):
     assert snap.by_slug == {}
 
 
-def test_hydrate_loads_existing_file(tmp_path, monkeypatch):
-    from services import hf_bucket as _hf_bucket
-    from services import pending_requests as svc
-    from services import storage_paths
-
-    monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))
-    backend = _hf_bucket.FilesystemBackend(tmp_path)
-    _hf_bucket.set_backend(backend)
-
-    seed = {
-        "by_slug": {
-            "test_reciter": {
-                "slug": "test_reciter",
-                "submitted_at": "2026-01-01T00:00:00+00:00",
-                "requester": {
-                    "hf_user_id": "u-1",
-                    "login_at_time": "alice",
-                    "role": "contributor",
-                },
-                "proposed_edits": {"name_en": "Updated"},
-                "comments": None,
-            }
-        }
-    }
-    backend.write_json_atomic(storage_paths.pending_requests_path(), seed)
-    svc.hydrate()
-    snap = svc.snapshot()
-    assert "test_reciter" in snap.by_slug
-    assert snap.by_slug["test_reciter"].requester.hf_user_id == "u-1"
-    _hf_bucket.reset_backend()
+# (Removed test_hydrate_loads_existing_file: pending.json bucket hydrate no
+# longer exists — the substrate DB is the source of truth.)
 
 
 # ---------------------------------------------------------------------------
@@ -118,9 +128,6 @@ def test_submit_creates_entry(fresh_pending):
     assert entry.proposed_edits.name_en == "Updated"
     assert entry.proposed_edits.recording_year == 2020
     assert entry.comments == "some comments"
-
-    raw = backend.read_json(storage_paths.pending_requests_path())
-    assert "test_reciter" in raw["by_slug"]
 
 
 def test_submit_rejects_when_pending_exists(fresh_pending):
@@ -162,72 +169,8 @@ def test_clear_is_idempotent(fresh_pending):
 
 @pytest.fixture
 def seeded_catalog(fresh_pending, monkeypatch):
-    """Install a small catalog so apply_and_archive_completed has something to patch."""
-    from datetime import datetime as _dt, timezone as _tz
-
-    from scripts.lib.schemas import (
-        AudioCategory,
-        Channel,
-        Delivery,
-        ReciterCatalog,
-        ReciterEntry,
-        RecordingContext,
-        Riwayah,
-        Source,
-        Style,
-        Vocab,
-    )
-    from services import catalog as catalog_service
-    from services import hf_bucket as _hf_bucket
-    from services import storage_paths
-
-    catalog = ReciterCatalog(
-        vocab=Vocab(
-            riwayat=[
-                Riwayah(slug="hafs", short="H", name="Hafs"),
-                Riwayah(slug="warsh", short="W", name="Warsh"),
-            ],
-            styles=[
-                Style(slug="murattal", short="M", name="Murattal"),
-                Style(slug="mujawwad", short="J", name="Mujawwad"),
-            ],
-            sources=[Source(slug="src1", name="Source One")],
-            channels=[Channel(slug="ch1", short="c1", name="Channel One")],
-            recording_contexts=[
-                RecordingContext(slug="studio", name="Studio"),
-                RecordingContext(slug="broadcast", name="Broadcast"),
-            ],
-        ),
-        reciters=[
-            ReciterEntry(
-                reciter_id="test_reciter",
-                name_en="Original Name",
-                name_ar=None,
-                country=None,
-            ),
-        ],
-        deliveries=[
-            Delivery(
-                slug="test_reciter",
-                reciter_id="test_reciter",
-                riwayah="hafs",
-                style="murattal",
-                recording_context="studio",
-                recording_year=2010,
-                source="src1",
-                channel="ch1",
-                audio_category=AudioCategory.BY_SURAH,
-                chapter_count=114,
-                added_at=_dt.now(_tz.utc),
-                added_by_hf_id="seed",
-            ),
-        ],
-    )
-    backend = _hf_bucket.get_backend()
-    backend.write_json_atomic(
-        storage_paths.catalog_path(), catalog.model_dump(mode="json"),
-    )
-    catalog_service.hydrate()
+    """The catalog is already seeded by ``fresh_pending`` (``_seed_test_catalog_db``);
+    apply_and_archive_completed has the ``test_reciter`` delivery + vocab to patch."""
     return fresh_pending
 
 
