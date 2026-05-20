@@ -17,7 +17,7 @@ from typing import Any, Iterable, Iterator
 
 from scripts.lib.schemas import Actor, AuditRecord
 
-from . import _serde
+from . import _serde, repo_access
 from .connection import get_conn, transaction
 
 
@@ -47,6 +47,9 @@ def append(
         ts=ts_iso, event=event, slug=slug, actor_hf=actor.hf_user_id, result=result
     )
     with transaction() as conn:
+        # Guarantee the actor_id FK target exists (every transition references
+        # it) — inside the txn so it uses the writer, not a read-only reader.
+        repo_access.ensure_user(actor.hf_user_id, login=actor.login_at_time)
         conn.execute(
             "INSERT INTO transitions(id, ts, slug, event, from_state, to_state, "
             "actor_id, actor_login_snapshot, actor_role_snapshot, reason, result, "
