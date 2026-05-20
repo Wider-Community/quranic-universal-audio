@@ -10,6 +10,7 @@ read/write).
 from __future__ import annotations
 
 from .connection import (
+    _chmod_600,
     current_db_seq,
     db_path,
     get_conn,
@@ -24,7 +25,10 @@ from .migrate import current_version, run_migrations
 def init_db() -> int:
     """Open the writer + apply pending migrations. Returns schema version."""
     conn = get_writer()
-    return run_migrations(conn)
+    version = run_migrations(conn)
+    # WAL/SHM sidecars only exist after the first write; tighten perms now.
+    _chmod_600(db_path())
+    return version
 
 
 __all__ = [

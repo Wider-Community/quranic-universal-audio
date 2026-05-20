@@ -183,23 +183,32 @@ def transaction() -> Iterator[sqlite3.Connection]:
             _depth.reset(token)
         return
 
-    # top-level
+    # top-level. _WRITE_LOCK and the context vars are set up so that ANY
+    # failure (incl. BEGIN/COMMIT/db_seq bump) still releases the lock and
+    # never leaves the shared writer connection mid-transaction.
     _WRITE_LOCK.acquire()
-    conn = get_writer()
-    tok_active = _active.set(conn)
-    tok_depth = _depth.set(0)
-    conn.execute("BEGIN IMMEDIATE")
     try:
-        yield conn
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
-    else:
-        _bump_db_seq(conn)
-        conn.execute("COMMIT")
+        conn = get_writer()
+        tok_active = _active.set(conn)
+        tok_depth = _depth.set(0)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield conn
+                _bump_db_seq(conn)
+                conn.execute("COMMIT")
+            except Exception:
+                # roll back the (possibly still-open) txn; swallow rollback
+                # errors so the original exception propagates intact.
+                try:
+                    conn.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
+        finally:
+            _active.reset(tok_active)
+            _depth.reset(tok_depth)
     finally:
-        _active.reset(tok_active)
-        _depth.reset(tok_depth)
         _WRITE_LOCK.release()
 
 

@@ -91,6 +91,9 @@ def submit(
         "proposed_edits": (proposed_edits or ProposedEdits()).model_dump(mode="json"),
     }
     if extra_payload:
+        clash = {"requester", "proposed_edits"} & set(extra_payload)
+        if clash:
+            raise ValueError(f"extra_payload may not override reserved keys: {sorted(clash)}")
         payload.update(extra_payload)
     rid = _new_request_id()
     get_conn().execute(

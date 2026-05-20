@@ -33,7 +33,12 @@ def to_iso(dt: datetime | None) -> str | None:
 def from_iso(s: str | None) -> datetime | None:
     if s is None:
         return None
-    return datetime.fromisoformat(s)
+    dt = datetime.fromisoformat(s)
+    # Stored values are always UTC; force tz-awareness for inputs that lack a
+    # suffix (e.g. legacy strings) so round-trips stay deterministic.
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def json_dumps(obj: Any) -> str:
