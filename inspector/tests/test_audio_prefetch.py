@@ -71,12 +71,8 @@ def test_timestamps_completed_stamps_purge_at_seven_days_ahead(tmp_reciter_dir):
     actor = _system_actor()
     now = datetime.now(timezone.utc)
 
-    row = ReciterRow(
-        slug="slug_x",
-        state=ReciterState.AWAITING_TIMESTAMPS,
-        state_since=now,
-    )
-    state._persist_row(row, replace_existing=False)
+    from tests.conftest import _seed_state
+    _seed_state("slug_x", state="awaiting_timestamps")
 
     new = state.transition("slug_x", "reciter.timestamps_completed", actor=actor)
     assert new.state == ReciterState.RELEASED
@@ -91,13 +87,9 @@ def test_alignment_completed_clears_purge_at(tmp_reciter_dir):
 
     actor = _system_actor()
     now = datetime.now(timezone.utc)
-    row = ReciterRow(
-        slug="slug_x",
-        state=ReciterState.AWAITING_ALIGNMENT,
-        state_since=now,
-        prefetch_purge_at=now + timedelta(days=2),
-    )
-    state._persist_row(row, replace_existing=False)
+    from tests.conftest import _seed_state
+    _seed_state("slug_x", state="awaiting_alignment",
+                prefetch_purge_at=now + timedelta(days=2))
 
     new = state.transition("slug_x", "reciter.alignment_completed", actor=actor)
     assert new.state == ReciterState.AWAITING_REVIEW
@@ -114,13 +106,10 @@ def test_sweep_due_purges_overdue_rows_and_clears_stamp(tmp_reciter_dir):
     from services.hf_bucket import get_backend
 
     now = datetime.now(timezone.utc)
-    row = ReciterRow(
-        slug="slug_x",
-        state=ReciterState.RELEASED,
-        state_since=now - timedelta(days=10),
-        prefetch_purge_at=now - timedelta(hours=1),
-    )
-    state._persist_row(row, replace_existing=False)
+    from tests.conftest import _seed_state
+    _seed_state("slug_x", state="released",
+                state_since=now - timedelta(days=10),
+                prefetch_purge_at=now - timedelta(hours=1))
 
     backend = get_backend()
     backend.write_bytes_atomic(storage_paths.prefetched_audio_path("slug_x", "1"), b"a")
@@ -146,13 +135,9 @@ def test_sweep_due_skips_future_purge_at(tmp_reciter_dir):
     from services.hf_bucket import get_backend
 
     now = datetime.now(timezone.utc)
-    row = ReciterRow(
-        slug="slug_x",
-        state=ReciterState.RELEASED,
-        state_since=now,
-        prefetch_purge_at=now + timedelta(days=6),
-    )
-    state._persist_row(row, replace_existing=False)
+    from tests.conftest import _seed_state
+    _seed_state("slug_x", state="released",
+                prefetch_purge_at=now + timedelta(days=6))
 
     backend = get_backend()
     backend.write_bytes_atomic(storage_paths.prefetched_audio_path("slug_x", "1"), b"a")
