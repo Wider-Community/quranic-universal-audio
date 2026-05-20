@@ -56,91 +56,37 @@ def _isolated_backend(tmp_path, monkeypatch):
     backend = _hf_bucket.FilesystemBackend(tmp_path)
     _hf_bucket.set_backend(backend)
 
-    # Seed a catalog with one delivery in CATALOGUED, and one in
-    # AWAITING_ALIGNMENT (so reject + GET pending tests have something).
-    catalog = ReciterCatalog(
-        vocab=Vocab(
-            riwayat=[
-                Riwayah(slug="hafs", short="H", name="Hafs"),
-                Riwayah(slug="warsh", short="W", name="Warsh"),
-            ],
-            styles=[Style(slug="murattal", short="M", name="Murattal")],
-            sources=[Source(slug="src1", name="Source One")],
-            channels=[Channel(slug="ch1", short="c1", name="Channel One")],
-        ),
-        reciters=[
-            ReciterEntry(reciter_id="rec_clean", name_en="Clean Reciter"),
-            ReciterEntry(reciter_id="rec_pending", name_en="Pending Reciter"),
-            ReciterEntry(reciter_id="rec_discarded", name_en="Discarded Reciter"),
-        ],
-        deliveries=[
-            Delivery(
-                slug="rec_clean",
-                reciter_id="rec_clean",
-                riwayah="hafs",
-                style="murattal",
-                source="src1",
-                channel="ch1",
-                audio_category=AudioCategory.BY_SURAH,
-                chapter_count=114,
-                added_at=datetime.now(timezone.utc),
-                added_by_hf_id="seed",
-            ),
-            Delivery(
-                slug="rec_pending",
-                reciter_id="rec_pending",
-                riwayah="hafs",
-                style="murattal",
-                source="src1",
-                channel="ch1",
-                audio_category=AudioCategory.BY_SURAH,
-                chapter_count=114,
-                added_at=datetime.now(timezone.utc),
-                added_by_hf_id="seed",
-            ),
-            Delivery(
-                slug="rec_discarded",
-                reciter_id="rec_discarded",
-                riwayah="hafs",
-                style="murattal",
-                source="src1",
-                channel="ch1",
-                audio_category=AudioCategory.BY_SURAH,
-                chapter_count=114,
-                added_at=datetime.now(timezone.utc),
-                added_by_hf_id="seed",
-            ),
-        ],
-    )
-    backend.write_json_atomic(
-        storage_paths.catalog_path(), catalog.model_dump(mode="json"),
-    )
+    # Seed the catalog (3 deliveries) + state rows into the SQLite substrate.
+    from services import db
+    from services.db import repo_catalog
+    from tests.conftest import _seed_state
 
     now = datetime.now(timezone.utc)
-    state = ReciterStateFile(
-        reciters=[
-            ReciterRow(slug="rec_clean", state=ReciterState.CATALOGUED, state_since=now),
-            ReciterRow(
-                slug="rec_pending",
-                state=ReciterState.AWAITING_ALIGNMENT,
-                state_since=now,
-            ),
-            ReciterRow(
-                slug="rec_discarded",
-                state=ReciterState.CATALOGUED,
-                state_since=now,
-                visibility=Visibility.DISCARDED,
-                visibility_reason="testing setup",
-            ),
-        ]
+    vocab = Vocab(
+        riwayat=[Riwayah(slug="hafs", short="H", name="Hafs"),
+                 Riwayah(slug="warsh", short="W", name="Warsh")],
+        styles=[Style(slug="murattal", short="M", name="Murattal")],
+        sources=[Source(slug="src1", name="Source One")],
+        channels=[Channel(slug="ch1", short="c1", name="Channel One")],
     )
-    backend.write_json_atomic(
-        storage_paths.state_path(), state.model_dump(mode="json"),
-    )
+    with db.transaction():
+        repo_catalog.load_vocab(vocab)
+        for rid, name in (
+            ("rec_clean", "Clean Reciter"),
+            ("rec_pending", "Pending Reciter"),
+            ("rec_discarded", "Discarded Reciter"),
+        ):
+            repo_catalog.insert_reciter(ReciterEntry(reciter_id=rid, name_en=name))
+            repo_catalog.insert_delivery(Delivery(
+                slug=rid, reciter_id=rid, riwayah="hafs", style="murattal",
+                source="src1", channel="ch1", audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114, added_at=now, added_by_hf_id="seed",
+            ))
 
-    catalog_service.hydrate()
-    state_service.hydrate()
-    pending_requests_service.hydrate()
+    _seed_state("rec_clean", state="catalogued", reciter_id="rec_clean")
+    _seed_state("rec_pending", state="awaiting_alignment", reciter_id="rec_pending")
+    _seed_state("rec_discarded", state="catalogued", visibility="discarded",
+                visibility_reason="testing setup", reciter_id="rec_discarded")
 
     # Seed an in-flight pending entry for rec_pending so admin GET + reject
     # tests have something to inspect.
