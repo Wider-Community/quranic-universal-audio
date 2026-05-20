@@ -14,6 +14,7 @@ are cached by QF reciter id. See ``services/storage/cache.py``.
 from __future__ import annotations
 
 import re
+import threading
 import time
 from typing import Final
 
@@ -26,6 +27,12 @@ from . import config
 _TIMEOUT_SECONDS: Final[float] = 10.0
 # Fallback token lifetime when the issuer omits ``expires_in`` (seconds).
 _DEFAULT_TOKEN_TTL: Final[int] = 3600
+# After a token-mint failure, fast-fail subsequent mints for this long so an
+# upstream outage doesn't make every concurrent request hang on the timeout.
+_TOKEN_FAIL_COOLDOWN_SECS: Final[float] = 20.0
+# Serialises token minting: concurrent cold-cache requests share one mint
+# attempt instead of each hammering the (sometimes slow) token endpoint.
+_token_lock = threading.Lock()
 
 # Word-by-word translation languages exposed by the Content API, as
 # ``(iso_code, English label)``. ``en`` is first / the default. All 15 entries
@@ -64,38 +71,71 @@ def _ua_headers(extra: dict | None = None) -> dict:
     return headers
 
 
-def get_content_token() -> str:
-    """Return a valid content access token, minting + caching as needed."""
+def _token_valid(now: float) -> str | None:
     cached = cache.get_qf_content_token()
-    now = time.time()
     if cached and cached.get("expires_at", 0) - config.TOKEN_REFRESH_SKEW > now:
         return cached["access_token"]
+    return None
 
-    cid, secret = config.content_client_id(), config.content_client_secret()
-    if not cid or not secret:
-        raise QfContentError("QF content client credentials are not configured")
-    try:
-        resp = requests.post(
-            config.CONTENT_TOKEN_URL,
-            data={"grant_type": "client_credentials", "scope": config.CONTENT_SCOPE},
-            auth=(cid, secret),  # client_secret_basic
-            headers=_ua_headers(),
-            timeout=_TIMEOUT_SECONDS,
-        )
-    except requests.RequestException as e:
-        raise QfContentError(f"QF content token request failed: {e}") from e
-    if not resp.ok:
-        raise QfContentError(
-            f"QF content token {resp.status_code}: {resp.text[:200]}"
-        )
-    body = resp.json()
-    access = body.get("access_token")
-    if not access:
-        raise QfContentError("QF content token response missing access_token")
-    expires_in = body.get("expires_in")
-    ttl = expires_in if isinstance(expires_in, (int, float)) else _DEFAULT_TOKEN_TTL
-    cache.set_qf_content_token({"access_token": access, "expires_at": now + ttl})
-    return access
+
+def get_content_token() -> str:
+    """Return a valid content access token, minting + caching as needed.
+
+    Minting is single-flighted (``_token_lock``) so concurrent cold-cache
+    requests share one attempt, and a short cooldown after a failure makes
+    subsequent requests fast-fail instead of each hanging on the timeout while
+    the upstream token endpoint is degraded.
+    """
+    now = time.time()
+    token = _token_valid(now)
+    if token:
+        return token
+
+    cooldown = cache.get_qf_token_cooldown()
+    if cooldown and cooldown > now:
+        raise QfContentError("QF content token temporarily unavailable (cooldown)")
+
+    with _token_lock:
+        # Re-check under the lock: another thread may have minted (or tripped
+        # the cooldown) while we were waiting.
+        now = time.time()
+        token = _token_valid(now)
+        if token:
+            return token
+        cooldown = cache.get_qf_token_cooldown()
+        if cooldown and cooldown > now:
+            raise QfContentError("QF content token temporarily unavailable (cooldown)")
+
+        cid, secret = config.content_client_id(), config.content_client_secret()
+        if not cid or not secret:
+            raise QfContentError("QF content client credentials are not configured")
+        try:
+            resp = requests.post(
+                config.CONTENT_TOKEN_URL,
+                data={
+                    "grant_type": "client_credentials",
+                    "scope": config.CONTENT_SCOPE,
+                },
+                auth=(cid, secret),  # client_secret_basic
+                headers=_ua_headers(),
+                timeout=_TIMEOUT_SECONDS,
+            )
+        except requests.RequestException as e:
+            cache.set_qf_token_cooldown(time.time() + _TOKEN_FAIL_COOLDOWN_SECS)
+            raise QfContentError(f"QF content token request failed: {e}") from e
+        if not resp.ok:
+            cache.set_qf_token_cooldown(time.time() + _TOKEN_FAIL_COOLDOWN_SECS)
+            raise QfContentError(
+                f"QF content token {resp.status_code}: {resp.text[:200]}"
+            )
+        body = resp.json()
+        access = body.get("access_token")
+        if not access:
+            raise QfContentError("QF content token response missing access_token")
+        expires_in = body.get("expires_in")
+        ttl = expires_in if isinstance(expires_in, (int, float)) else _DEFAULT_TOKEN_TTL
+        cache.set_qf_content_token({"access_token": access, "expires_at": now + ttl})
+        return access
 
 
 def chapter_audio_urls(qf_reciter_id: int) -> dict[str, str]:

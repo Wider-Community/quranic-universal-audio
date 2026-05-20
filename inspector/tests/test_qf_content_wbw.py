@@ -48,9 +48,11 @@ def _clear_qf_cache():
 
     cache._qf_content_token.clear()
     cache._qf_wbw.clear()
+    cache._qf_token_cooldown.clear()
     yield
     cache._qf_content_token.clear()
     cache._qf_wbw.clear()
+    cache._qf_token_cooldown.clear()
 
 
 def test_word_by_word_parses_filters_and_caches(monkeypatch, _clear_qf_cache):
@@ -121,6 +123,32 @@ def test_word_by_word_raises_on_http_error(monkeypatch, _clear_qf_cache):
     )
     with pytest.raises(content.QfContentError):
         content.word_by_word("2:255", "en")
+
+
+def test_token_failure_trips_cooldown_and_fast_fails(monkeypatch, _clear_qf_cache):
+    """After a token-mint failure, the next call fast-fails from the cooldown
+    without hitting the network again — so an outage can't make every
+    concurrent request hang on the timeout."""
+    from services.quran_foundation import content
+
+    monkeypatch.setattr(content.config, "content_client_id", lambda: "cid")
+    monkeypatch.setattr(content.config, "content_client_secret", lambda: "sec")
+    calls = {"n": 0}
+
+    def boom(*a, **k):
+        calls["n"] += 1
+        raise content.requests.RequestException("token endpoint down")
+
+    monkeypatch.setattr(content.requests, "post", boom)
+
+    with pytest.raises(content.QfContentError):
+        content.get_content_token()
+    assert calls["n"] == 1
+
+    # Second call within the cooldown window must not touch the network.
+    with pytest.raises(content.QfContentError):
+        content.get_content_token()
+    assert calls["n"] == 1
 
 
 # ---- routes ----
