@@ -141,20 +141,22 @@ def edit_reciter(
 ) -> ReciterEntry:
     """Mutate a reciter row in place. ``reciter_id`` is immutable."""
     _require_maintainer(actor)
+    # Compute the patch BEFORE opening a txn so a no-change call does no bucket
+    # I/O / db_seq bump (matches the legacy "no _persist on empty patch").
+    existing = repo_catalog.find_reciter(reciter_id)
+    if existing is None:
+        raise InvalidCatalogChange(f"reciter_id {reciter_id!r} not found")
+    proposed = {
+        "name_en": name_en, "name_ar": name_ar,
+        "country": country, "notes": notes,
+    }
+    patch: dict = {}
+    for field, new in proposed.items():
+        if new is not None and new != getattr(existing, field):
+            patch[field] = {"from": getattr(existing, field), "to": new}
+    if not patch:
+        return existing
     with _sync.durable_transaction():
-        existing = repo_catalog.find_reciter(reciter_id)
-        if existing is None:
-            raise InvalidCatalogChange(f"reciter_id {reciter_id!r} not found")
-        proposed = {
-            "name_en": name_en, "name_ar": name_ar,
-            "country": country, "notes": notes,
-        }
-        patch: dict = {}
-        for field, new in proposed.items():
-            if new is not None and new != getattr(existing, field):
-                patch[field] = {"from": getattr(existing, field), "to": new}
-        if not patch:
-            return existing
         updated = repo_catalog.edit_reciter(
             reciter_id, **{k: v["to"] for k, v in patch.items()}
         )
@@ -208,20 +210,20 @@ def edit_delivery(
     the legacy editable surface (riwayah/style/recording_context/recording_year)
     is exposed. Invalid vocab FK → ``InvalidCatalogChange`` (SQLite FK)."""
     _require_maintainer(actor)
+    existing = repo_catalog.find_delivery(slug)
+    if existing is None:
+        raise InvalidCatalogChange(f"delivery slug {slug!r} not found")
+    proposed = {
+        "riwayah": riwayah, "style": style,
+        "recording_context": recording_context, "recording_year": recording_year,
+    }
+    patch: dict = {}
+    for field, new in proposed.items():
+        if new is not None and new != getattr(existing, field):
+            patch[field] = {"from": getattr(existing, field), "to": new}
+    if not patch:
+        return existing
     with _sync.durable_transaction():
-        existing = repo_catalog.find_delivery(slug)
-        if existing is None:
-            raise InvalidCatalogChange(f"delivery slug {slug!r} not found")
-        proposed = {
-            "riwayah": riwayah, "style": style,
-            "recording_context": recording_context, "recording_year": recording_year,
-        }
-        patch: dict = {}
-        for field, new in proposed.items():
-            if new is not None and new != getattr(existing, field):
-                patch[field] = {"from": getattr(existing, field), "to": new}
-        if not patch:
-            return existing
         try:
             updated = repo_catalog.edit_delivery(
                 slug, **{k: v["to"] for k, v in patch.items()}

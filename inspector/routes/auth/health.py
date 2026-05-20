@@ -25,12 +25,14 @@ health_bp = Blueprint("health", __name__)
 
 
 def _bucket_mounted() -> bool:
-    """True if INSPECTOR_BUCKET_MOUNT exists and contains the v2 state file.
+    """True if INSPECTOR_BUCKET_MOUNT exists and contains the substrate DB.
 
-    Checks the directory + the load-bearing ``state/reciter_state.json`` because
-    a bucket attachment can succeed at the Space layer but produce an empty
-    mount if the bucket itself is empty or the wrong repo. Catching that here
-    surfaces the misconfiguration in the smoke tests rather than at first read.
+    Checks the directory + the load-bearing ``db/inspector.db`` because a bucket
+    attachment can succeed at the Space layer but produce an empty mount if the
+    bucket itself is empty or the wrong repo. Catching that here surfaces the
+    misconfiguration in the smoke tests rather than at first read. (Post-cutover
+    the canonical bucket artefact is ``db/inspector.db``, not the legacy
+    ``state/reciter_state.json``.)
     """
     mount = os.environ.get("INSPECTOR_BUCKET_MOUNT")
     if not mount:
@@ -38,7 +40,7 @@ def _bucket_mounted() -> bool:
     root = Path(mount)
     if not root.is_dir():
         return False
-    return (root / "state" / "reciter_state.json").is_file()
+    return (root / "db" / "inspector.db").is_file()
 
 
 @health_bp.route("/healthz")

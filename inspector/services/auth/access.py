@@ -100,8 +100,8 @@ def grant(
         _require_role(actor, Role.MAINTAINER, Role.OWNER)
 
     with _sync.durable_transaction():
-        if repo_access.find_member(hf_user_id) is not None:
-            existing = repo_access.find_member(hf_user_id)
+        existing = repo_access.find_member(hf_user_id)
+        if existing is not None:
             raise MemberAlreadyActive(
                 f"member {hf_user_id} already active with role {existing.role}"
             )
