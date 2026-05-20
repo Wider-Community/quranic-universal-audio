@@ -18,7 +18,6 @@
 
     import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
     import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../../lib/utils/arabic-text';
-    import WordTranslation from './WordTranslation.svelte';
     import {
         showLetters,
         showPhonemes,
@@ -31,6 +30,7 @@
     import { autoMode, loopTarget, tsPort } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
+    import WordTranslation from './WordTranslation.svelte';
 
     // ---- Local structural state (derived declaratively from loadedVerse) ----
 

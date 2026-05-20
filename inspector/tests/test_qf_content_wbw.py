@@ -158,9 +158,14 @@ def test_route_wbw_languages(flask_client):
     resp = flask_client.get("/api/qf/content/wbw/languages")
     assert resp.status_code == 200
     langs = resp.get_json()
-    assert {"code": "en", "label": "English"} in langs
-    assert any(x["code"] == "ur" for x in langs)
     assert len(langs) == 15
+    by_code = {x["code"]: x for x in langs}
+    assert by_code["en"]["label"] == "English"
+    # Completeness flags (full-Quran measured): English/Urdu complete, Tamil/Hindi not.
+    assert by_code["en"]["complete"] is True
+    assert by_code["ur"]["complete"] is True
+    assert by_code["ta"]["complete"] is False
+    assert by_code["hi"]["complete"] is False
 
 
 def test_route_wbw_returns_words(flask_client, monkeypatch, _clear_qf_cache):

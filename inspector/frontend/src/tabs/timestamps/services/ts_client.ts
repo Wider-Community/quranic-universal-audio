@@ -241,6 +241,9 @@ export async function loadDk(): Promise<Record<string, { text?: string }>> {
 export interface WbwLanguage {
     code: string;
     label: string;
+    /** False when the language has meaningful English-fallback gaps (full-Quran
+     *  measured); the picker flags these as "partial". */
+    complete: boolean;
 }
 
 let _wbwLangs: Promise<WbwLanguage[]> | null = null;

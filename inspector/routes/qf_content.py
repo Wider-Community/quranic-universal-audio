@@ -20,9 +20,16 @@ qf_content_bp = Blueprint("qf_content", __name__, url_prefix="/api/qf/content")
 
 @qf_content_bp.route("/wbw/languages")
 def wbw_languages():
-    """Return the available word-by-word translation languages."""
-    langs = [{"code": c, "label": label} for c, label in qf_content.CONTENT_WBW_LANGUAGES]
-    return jsonify(langs), 200, {"Cache-Control": "public, max-age=86400"}
+    """Return the available word-by-word translation languages.
+
+    ``complete`` is False for languages with meaningful English-fallback gaps
+    (measured full-Quran); the picker flags those as "partial".
+    """
+    langs = [
+        {"code": c, "label": label, "complete": c in qf_content.COMPLETE_WBW_CODES}
+        for c, label in qf_content.CONTENT_WBW_LANGUAGES
+    ]
+    return jsonify(langs), 200, {"Cache-Control": "public, max-age=3600"}
 
 
 @qf_content_bp.route("/wbw/<int:surah>/<int:ayah>")

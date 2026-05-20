@@ -367,17 +367,6 @@
     gap: 4px;
 }
 .ts-translations-toggle .ts-mode-btn { flex: 1 1 auto; }
-.ts-translation-lang {
-    flex: 0 0 auto;
-    max-width: 9rem;
-    background: #1a1a2e;
-    color: #d7d7df;
-    border: 1px solid #2a2a44;
-    border-radius: 4px;
-    padding: 3px 6px;
-    font-size: 0.8rem;
-    cursor: pointer;
-}
 .ts-auto-toggles {
     display: grid;
     grid-template-columns: 1fr 1fr;

@@ -57,6 +57,16 @@ CONTENT_WBW_LANGUAGES: Final[list[tuple[str, str]]] = [
     ("inh", "Ingush"),
 ]
 _WBW_LANG_CODES: Final[frozenset[str]] = frozenset(c for c, _ in CONTENT_WBW_LANGUAGES)
+
+# Languages whose word-by-word set is effectively complete (≤4% of verses leak
+# an English fallback word), measured with a full-Quran pass against this API
+# (77,429 words / 6,236 verses, English as the reference gloss). The rest carry
+# real gaps — Indonesian 19% of verses, Hindi/Turkish ~60%, Tamil 83%, Divehi
+# 99% — and are flagged "partial" in the picker so users aren't surprised by
+# English mixed into a non-English gloss. See the picker in the Timestamps tab.
+COMPLETE_WBW_CODES: Final[frozenset[str]] = frozenset(
+    {"en", "ur", "bn", "fa", "fr", "zh", "sq"}
+)
 _VERSE_KEY_RE: Final[re.Pattern[str]] = re.compile(r"^\d+:\d+$")
 
 

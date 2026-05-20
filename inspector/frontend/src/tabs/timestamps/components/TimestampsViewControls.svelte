@@ -27,6 +27,7 @@
     import { autoMode, loopTarget, tsPort } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { findWordAt } from '../utils/loop-target';
+    import TranslationLangSelect from './TranslationLangSelect.svelte';
 
     const dispatch = createEventDispatcher<{
         randomAny: void;
@@ -34,11 +35,10 @@
     }>();
 
     // ---- Word-by-word translations (Analysis only) ----
-    let wbwLanguages: WbwLanguage[] = [];
+    let wbwLanguages: WbwLanguage[] = [{ code: 'en', label: 'English', complete: true }];
 
     onMount(() => {
-        // Fetch the language list lazily; failure just leaves the dropdown with
-        // its English fallback option.
+        // Fetch the language list lazily; failure just leaves the English fallback.
         loadWbwLanguages()
             .then((langs) => {
                 if (langs.length) wbwLanguages = langs;
@@ -54,8 +54,7 @@
         localStorage.setItem(LS_KEYS.TS_SHOW_TRANSLATIONS, String(nv));
     }
 
-    function onTranslationLanguage(e: Event): void {
-        const code = (e.currentTarget as HTMLSelectElement).value;
+    function setTranslationLanguage(code: string): void {
         translationLanguage.set(code);
         localStorage.setItem(LS_KEYS.TS_TRANSLATION_LANG, code);
     }
@@ -164,12 +163,11 @@
                     title="Show word-by-word translation above each word"
                     on:click={toggleTranslations}>Translations</button>
                 {#if $showTranslations}
-                    <select class="ts-translation-lang" aria-label="Translation language"
-                        value={$translationLanguage} on:change={onTranslationLanguage}>
-                        {#each (wbwLanguages.length ? wbwLanguages : [{ code: 'en', label: 'English' }]) as lang}
-                            <option value={lang.code}>{lang.label}</option>
-                        {/each}
-                    </select>
+                    <TranslationLangSelect
+                        languages={wbwLanguages}
+                        value={$translationLanguage}
+                        onChange={setTranslationLanguage}
+                    />
                 {/if}
             </div>
         {/if}
