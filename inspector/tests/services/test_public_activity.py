@@ -13,16 +13,9 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _isolate_activity_state():
-    """Reset the in-memory activity-state store between tests so a tombstone
-    or dismissal written by one test doesn't leak into the next."""
-    from scripts.lib.schemas import ActivityState
-    from services import activity_state as activity_state_service
-
-    with activity_state_service._store_lock:  # type: ignore[attr-defined]
-        activity_state_service._store = ActivityState()  # type: ignore[attr-defined]
+    """No-op post-cutover: the autouse ``_substrate_db`` fixture gives each test
+    a fresh DB, so dismissals/tombstones can't leak across tests."""
     yield
-    with activity_state_service._store_lock:  # type: ignore[attr-defined]
-        activity_state_service._store = ActivityState()  # type: ignore[attr-defined]
 
 
 def _install_audit(monkeypatch, records):
@@ -197,25 +190,20 @@ def test_tombstoned_audit_id_excluded(monkeypatch, tmp_path):
     """Records whose audit_id is in the global tombstone list disappear."""
     from services import activity_classification as ac
     from services import activity_state as activity_state_service
-    from services import hf_bucket as _hf_bucket
     from services.public_activity import all_public_cards
     from scripts.lib.schemas import Actor, Role
-
-    backend = _hf_bucket.FilesystemBackend(tmp_path)
-    _hf_bucket.set_backend(backend)
-    activity_state_service.hydrate()
 
     rec = _record("reciter.claimed")
     _install_audit(monkeypatch, [rec])
     _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
-    monkeypatch.setattr("services.audit.append", lambda **kw: None)
 
     actor = Actor(hf_user_id="u-O", login_at_time="owen", role=Role.OWNER)
+    # Tombstone the synthetic record's audit_id (no content_hash on it → the
+    # card falls back to ac.audit_id, matching this key).
     activity_state_service.delete(ac.audit_id(rec), actor=actor,
                                   reason="ten chars or more here")
 
     assert all_public_cards() == []
-    _hf_bucket.reset_backend()
 
 
 class _StubDelivery:
