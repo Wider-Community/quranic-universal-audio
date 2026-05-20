@@ -18,6 +18,7 @@ import {
     addRemoteBookmark,
     getQfStatus,
     getRemoteBookmarks,
+    qfLogout,
     removeRemoteBookmark,
 } from '../api/bookmarks-client';
 
@@ -129,6 +130,19 @@ export function removeBookmark(key: string): void {
     } else {
         persistLocal(next);
     }
+}
+
+/** Disconnect from Quran.Foundation: clear the session and return to the
+ *  local (localStorage-backed) bookmarks. */
+export async function disconnectQf(): Promise<void> {
+    try {
+        await qfLogout();
+    } catch {
+        /* clearing is best-effort; fall through to local mode regardless */
+    }
+    qfConnected.set(false);
+    qfLogin.set(null);
+    bookmarks.set(loadLocal());
 }
 
 export function toggleBookmarksPanel(): void {

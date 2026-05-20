@@ -50,3 +50,8 @@ export async function removeRemoteBookmark(key: string): Promise<void> {
 export async function devConnectQf(): Promise<void> {
     await fetchJson('/api/qf/dev-login', { method: 'POST' });
 }
+
+/** Clear the qf_session cookie (disconnect from Quran.Foundation). */
+export async function qfLogout(): Promise<void> {
+    await fetchJson('/api/qf/logout', { method: 'POST' });
+}

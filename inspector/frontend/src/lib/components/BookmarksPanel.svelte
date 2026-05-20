@@ -18,6 +18,7 @@
     import {
         bookmarks,
         bookmarksVisible,
+        disconnectQf,
         initBookmarks,
         qfConnected,
         qfLogin,
@@ -75,9 +76,14 @@
 
     <div class="bm-conn">
         {#if $qfConnected}
-            <span class="bm-conn-on" title="Synced with Quran.Foundation">
-                ● Synced{$qfLogin ? ` · ${$qfLogin}` : ''}
-            </span>
+            <div class="bm-conn-row">
+                <span class="bm-conn-on" title="Synced with Quran.Foundation">
+                    ● Synced{$qfLogin ? ` · ${$qfLogin}` : ''}
+                </span>
+                <button class="bm-disconnect" type="button" onclick={() => disconnectQf()}>
+                    Disconnect
+                </button>
+            </div>
         {:else}
             <button class="bm-connect" type="button" onclick={connect}>
                 Connect Quran.Foundation
@@ -147,7 +153,18 @@
     }
     .bm-close:hover { color: #fff; }
     .bm-conn { margin-bottom: 14px; }
+    .bm-conn-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .bm-conn-on { color: #5fd38a; font-size: 0.85rem; font-weight: 600; }
+    .bm-disconnect {
+        background: none;
+        border: 1px solid #3a3a5a;
+        color: #9aa6c8;
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 0.78rem;
+        cursor: pointer;
+    }
+    .bm-disconnect:hover { border-color: #ff6b6b; color: #ff6b6b; }
     .bm-connect {
         width: 100%;
         background: #f0a500;
