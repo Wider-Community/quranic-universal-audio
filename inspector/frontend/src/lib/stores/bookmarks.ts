@@ -94,6 +94,30 @@ export async function initBookmarks(): Promise<void> {
     }
 }
 
+/**
+ * Called once at the moment of connecting: merge the browser's local bookmarks
+ * up into the QF account (push any the account doesn't already have), then show
+ * the synced account list. Runs only on connect — not on every load — so it
+ * never resurrects bookmarks the user later deletes from their account.
+ */
+export async function onQfConnected(): Promise<void> {
+    qfConnected.set(true);
+    const local = get(bookmarks);
+    try {
+        const remote = await getRemoteBookmarks();
+        if (remote.connected) {
+            const remoteKeys = new Set(remote.bookmarks.map((b) => b.key));
+            const toPush = local.filter((b) => !remoteKeys.has(b.key));
+            await Promise.all(
+                toPush.map((b) => addRemoteBookmark(b.surah, b.ayah).catch(() => {})),
+            );
+        }
+    } catch {
+        /* merge is best-effort; fall through to a plain sync */
+    }
+    await syncFromQf();
+}
+
 /** Replace the list with the QF-synced bookmarks (connected mode only). */
 export async function syncFromQf(): Promise<void> {
     const resp = await getRemoteBookmarks();

@@ -20,11 +20,11 @@
         bookmarksVisible,
         disconnectQf,
         initBookmarks,
+        onQfConnected,
         qfConnected,
         qfDev,
         qfLogin,
         removeBookmark,
-        syncFromQf,
     } from '../stores/bookmarks';
     import { currentUser } from '../stores/current-user';
     import { pendingTsNavigation } from '../stores/navigation';
@@ -53,9 +53,8 @@
         if ($currentUser.dev_mode) {
             void devConnectQf()
                 .then(() => {
-                    qfConnected.set(true);
                     qfDev.set(true);
-                    return syncFromQf();
+                    return onQfConnected();
                 })
                 .catch(() => {});
             return;
@@ -86,8 +85,7 @@
             if (!data || data.type !== 'qf-auth') return;
             cleanup();
             if (data.status === 'connected') {
-                qfConnected.set(true);
-                void syncFromQf();
+                void onQfConnected();
             }
         };
         const poll = setInterval(() => {
