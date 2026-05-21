@@ -2,27 +2,27 @@
 
 Single GET route. Lookup order:
 
-1. **Bucket prefetch** — ``wip/<slug>/audio/<chapter>.mp3`` written by
-   ``services.audio_prefetch`` when the row enters AWAITING_REVIEW. VBR
-   chapters have a Xing TOC injected at prefetch time, so direct
-   ``<audio>.currentTime`` seek works without the clip-route.
-2. **CDN stream-through** — for slugs the prefetch hasn't reached yet
-   (anonymous browsing, in-flight prefetch, by_ayah deliveries we don't
-   prefetch today). We stream the upstream response through Flask
-   instead of 302-redirecting so the audio bytes always arrive same-
-   origin from the browser's perspective with explicit CORS headers.
-   The naive 302 fails for ``<audio crossorigin="anonymous">``: the
-   redirect response itself carries no ``Access-Control-Allow-Origin``
-   header, so even though every published-reciter CDN sends ACAO on the
-   final response, the redirect chain is treated as opaque by Chrome's
-   Fetch impl and ``MediaElementAudioSourceNode`` produces silence.
+1. **Bucket-resident audio** — ``wip/<slug>/audio/<chapter>.mp3`` written
+   by the katana extraction pipeline (`.local/extraction/upload_to_bucket.py`).
+   Served via ``send_file`` (uses OS sendfile, honours Range + 304). The
+   ``-c:a copy -f mp3`` step in ``audio_persist.py`` injects an Xing/Info
+   header so the browser computes ``<audio>.duration`` correctly.
+2. **CDN stream-through** — for slugs the extraction pipeline hasn't
+   reached yet (anonymous browsing, pre-extraction onboarding, by_ayah
+   deliveries). We stream the upstream response through Flask instead of
+   302-redirecting so the bytes always arrive same-origin from the
+   browser's perspective with explicit CORS headers. The naive 302 fails
+   for ``<audio crossorigin="anonymous">``: the redirect response itself
+   carries no ``Access-Control-Allow-Origin`` header, so even though
+   every published-reciter CDN sends ACAO on the final response, the
+   redirect chain is treated as opaque by Chrome's Fetch impl and
+   ``MediaElementAudioSourceNode`` produces silence.
 
 The download-all + delete-cache + cache-status endpoints have been removed
-— the prefetch is event-driven now, not user-driven. Admin re-trigger lives
-under ``/api/admin/prefetch-rerun/<slug>``.
-
-The CDN stream-through path is also the place to delete once every reciter
-has bucket-cached audio + peaks (see ``docs/reference/inspector/audio-prefetch.md``).
+— bucket audio is populated by the offline pipeline, not by a Space-side
+warm path. The 1-week post-RELEASED GC lives in
+``services.audio_prefetch.sweep_due`` (see
+``docs/reference/inspector/wip-audio-sweeper.md``).
 """
 
 import logging

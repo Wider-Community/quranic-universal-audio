@@ -1,321 +1,41 @@
-"""Per-chapter audio fetch + Xing-TOC remux + bucket persistence.
+"""Bucket-resident audio read primitives + cleanup.
 
-The prefetch worker (``services.audio_prefetch``) drives this module across a
-thread pool. Each call:
+Used by:
+- ``audio_source.resolve`` — picks bucket vs CDN path for the audio proxy.
+- ``routes/segments/peaks.py`` — slim-envelope peaks reader.
+- ``audio_prefetch.sweep_due`` — post-release cleanup.
 
-1. HTTP-fetches the upstream chapter URL to a temp file.
-2. For VBR chapters, runs ``ffmpeg -bsf:a mp3_to_xing`` so the browser's
-   ``<audio>.currentTime`` seek lands on the correct frame — the inspector
-   then serves the remuxed file directly with no clip-route involvement.
-3. Uploads the (possibly remuxed) MP3 to ``wip/<slug>/audio/<chapter>.mp3``.
-4. Computes waveform peaks from the local temp file, packs to the slim shape
-   (int8-quantized, decimated, gzipped via ``peaks_slim.pack_slim``), and
-   uploads to ``wip/<slug>/peaks/<chapter>.json.gz``.
+No background worker. No CDN downloads. Bucket audio is written by the
+katana extraction pipeline (``.local/extraction/upload_to_bucket.py`` +
+``.local/extraction/segments/audio_persist.py``); the inspector only reads
+and (via the sweeper) deletes.
 
-No Flask imports. The module is callable from any thread that holds neither
-a per-slug nor the global write-lock; the bucket backend serializes its own
-writes internally.
+No Flask imports — callable from any thread.
 """
 
 from __future__ import annotations
 
 import logging
-import os
-import subprocess
-import tempfile
-import threading
-import time
-import urllib.request
-from dataclasses import dataclass
 
-from config import FFMPEG_FULL_TIMEOUT
 from . import audio_meta
-from .peaks import compute_audio_peaks
-from .peaks_slim import pack_slim, unpack_slim_envelope
+from .peaks_slim import unpack_slim_envelope
 from services.storage import storage_paths
 from services.storage.hf_bucket import get_backend
 
 logger = logging.getLogger(__name__)
 
-# Global ffmpeg gate. mp3_to_xing is CPU-bound; letting the prefetch fan-out
-# spawn one ffmpeg per chapter pegs small Space CPU and starves the request
-# path. Cap to a single concurrent remux process; downloads + uploads still
-# parallelize via the prefetch thread pool.
-_FFMPEG_SEM = threading.Semaphore(1)
-
-
-@dataclass(frozen=True)
-class ChapterArtifact:
-    """Result of one chapter prefetch — feeds the audit payload."""
-
-    chapter: str
-    audio_path: str
-    peaks_path: str | None
-    bytes_written: int
-    duration_ms: int | None
-    ffmpeg_remuxed: bool
-
-
-class ChapterFetchError(Exception):
-    """Raised when a chapter cannot be prefetched. Carries a short tag so the
-    audit event can record *why* (network / decode / upload)."""
-
-    def __init__(self, stage: str, detail: str) -> None:
-        super().__init__(f"{stage}: {detail}")
-        self.stage = stage
-        self.detail = detail
-
-
-def _download_to_temp(url: str, tmp_dir: str) -> str:
-    fd, tmp = tempfile.mkstemp(suffix=".mp3", dir=tmp_dir)
-    os.close(fd)
-    try:
-        urllib.request.urlretrieve(url, tmp)
-    except Exception as e:  # noqa: BLE001
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise ChapterFetchError("download", f"{type(e).__name__}: {e}") from e
-    return tmp
-
-
-def _remux_mp3_to_xing(src: str, tmp_dir: str) -> str | None:
-    """Re-wrap ``src`` adding a Xing TOC header. Returns the new path on
-    success or ``None`` when ffmpeg is missing / errors — caller falls back
-    to the un-remuxed file (still serves correctly, just keeps the legacy
-    VBR mis-seek issue for that chapter).
-    """
-    fd, tmp = tempfile.mkstemp(suffix=".mp3", dir=tmp_dir)
-    os.close(fd)
-    try:
-        with _FFMPEG_SEM:
-            result = subprocess.run(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    src,
-                    "-c:a",
-                    "copy",
-                    "-bsf:a",
-                    "mp3_to_xing",
-                    "-v",
-                    "error",
-                    tmp,
-                ],
-                capture_output=True,
-                timeout=FFMPEG_FULL_TIMEOUT,
-            )
-        if result.returncode != 0 or os.path.getsize(tmp) == 0:
-            logger.warning(
-                "mp3_to_xing remux failed (rc=%s): %s",
-                result.returncode,
-                result.stderr.decode("utf-8", errors="replace")[:200],
-            )
-            os.unlink(tmp)
-            return None
-        return tmp
-    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        logger.warning("mp3_to_xing skipped: %s", e)
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        return None
-
-
-def _recompute_peaks_for_existing_audio(
-    slug: str, chapter: str, audio_path: str, peaks_path: str
-) -> ChapterArtifact | None:
-    """Rebuild peaks JSON in-place against the audio already in the bucket.
-
-    Used when the chapter MP3 is current but the sidecar peaks predate the
-    schema bump (v1 had a fencepost in its bucket loop that left chapters
-    with peaks shorter than they advertised). Returns ``None`` on any
-    failure so the caller can fall back to the full re-fetch path.
-    """
-    backend = get_backend()
-    local = None
-    try:
-        local = backend.local_path(audio_path)
-    except Exception:  # noqa: BLE001
-        local = None
-
-    tmp_dir: str | None = None
-    src_path: str | None = None
-    try:
-        if local is not None:
-            src_path = str(local)
-        else:
-            tmp_dir = tempfile.mkdtemp(prefix=f"peaks_recompute_{slug}_")
-            fd, src_path = tempfile.mkstemp(suffix=".mp3", dir=tmp_dir)
-            os.close(fd)
-            try:
-                with open(src_path, "wb") as fh:
-                    fh.write(backend.read_bytes(audio_path))
-            except Exception as e:  # noqa: BLE001
-                logger.warning("peaks recompute: audio read failed for %s/%s: %s",
-                               slug, chapter, e)
-                return None
-
-        peaks = compute_audio_peaks(src_path)
-        if not peaks:
-            return None
-        try:
-            backend.write_bytes_atomic(peaks_path, pack_slim(peaks))
-        except (OSError, ValueError) as e:
-            logger.warning("peaks recompute: upload failed for %s/%s: %s",
-                           slug, chapter, e)
-            return None
-
-        size = len(backend.read_bytes(audio_path))
-        return ChapterArtifact(
-            chapter=chapter,
-            audio_path=audio_path,
-            peaks_path=peaks_path,
-            bytes_written=size,
-            duration_ms=peaks.get("duration_ms"),
-            ffmpeg_remuxed=False,
-        )
-    finally:
-        if tmp_dir:
-            if src_path:
-                try:
-                    os.unlink(src_path)
-                except OSError:
-                    pass
-            try:
-                os.rmdir(tmp_dir)
-            except OSError:
-                pass
-
-
-def fetch_and_persist_chapter(
-    slug: str, chapter: str, url: str, *, force: bool = False
-) -> ChapterArtifact:
-    """Prefetch one chapter end-to-end. Idempotent against existing artifacts
-    unless ``force`` is true — saves work on resumed jobs and on the lazy
-    fallback path after a Space restart.
-    """
-    backend = get_backend()
-    audio_path = storage_paths.prefetched_audio_path(slug, chapter)
-    peaks_path = storage_paths.prefetched_peaks_path(slug, chapter)
-
-    if not force and backend.exists(audio_path) and backend.exists(peaks_path):
-        # Audio bytes never go stale. Peaks can — v3 is the current shape
-        # (``services/audio/peaks_slim.py``); pre-v3 entries return None from
-        # ``read_prefetched_peaks`` so we drop into the recompute-against-
-        # existing-audio path instead of re-downloading the chapter.
-        existing_peaks = read_prefetched_peaks(slug, url)
-        if existing_peaks is not None:
-            size = len(backend.read_bytes(audio_path))
-            return ChapterArtifact(
-                chapter=chapter,
-                audio_path=audio_path,
-                peaks_path=peaks_path,
-                bytes_written=size,
-                duration_ms=existing_peaks.get("duration_ms"),
-                ffmpeg_remuxed=False,
-            )
-        artifact = _recompute_peaks_for_existing_audio(slug, chapter, audio_path, peaks_path)
-        if artifact is not None:
-            return artifact
-        # Fall through to full re-fetch if the peaks-only recompute failed.
-
-    tmp_dir = tempfile.mkdtemp(prefix=f"prefetch_{slug}_")
-    raw_path: str | None = None
-    remux_path: str | None = None
-    try:
-        raw_path = _download_to_temp(url, tmp_dir)
-
-        is_vbr = audio_meta.is_vbr_for_url(slug, url)
-        if is_vbr:
-            remux_path = _remux_mp3_to_xing(raw_path, tmp_dir)
-        upload_src = remux_path or raw_path
-
-        with open(upload_src, "rb") as fh:
-            data = fh.read()
-        try:
-            backend.write_bytes_atomic(audio_path, data)
-        except Exception as e:  # noqa: BLE001
-            raise ChapterFetchError("upload_audio", f"{type(e).__name__}: {e}") from e
-
-        peaks = compute_audio_peaks(upload_src)
-        duration_ms = peaks.get("duration_ms") if peaks else None
-        if peaks:
-            try:
-                backend.write_bytes_atomic(peaks_path, pack_slim(peaks))
-            except (OSError, ValueError) as e:
-                # Audio is up; peaks failure is recoverable on first /peaks request.
-                logger.warning("peaks upload failed for %s/%s: %s", slug, chapter, e)
-                peaks_path = None  # signal "not persisted"
-
-        return ChapterArtifact(
-            chapter=chapter,
-            audio_path=audio_path,
-            peaks_path=peaks_path if peaks else None,
-            bytes_written=len(data),
-            duration_ms=duration_ms,
-            ffmpeg_remuxed=remux_path is not None,
-        )
-    finally:
-        for p in (raw_path, remux_path):
-            if p:
-                try:
-                    os.unlink(p)
-                except OSError:
-                    pass
-        try:
-            os.rmdir(tmp_dir)
-        except OSError:
-            pass
-
-
-def write_done_marker(slug: str, *, total_chapters: int, completed_at_ms: int) -> None:
-    """Atomic last-write that signals "fully prefetched". Presence of this
-    file is the *only* signal ``audio_prefetch.is_prefetched`` consults — the
-    audio files alone are not enough because a Space restart mid-job can leave
-    a partial set on the bucket.
-    """
-    get_backend().write_json_atomic(
-        storage_paths.prefetch_done_marker_path(slug),
-        {
-            "schema_version": 1,
-            "total_chapters": total_chapters,
-            "completed_at_ms": completed_at_ms,
-        },
-    )
-
-
-def clear_prefetch(slug: str) -> None:
-    """Delete every artifact under ``wip/<slug>/audio/`` and ``wip/<slug>/peaks/``.
-    Called by the post-RELEASED sweeper and by the admin re-trigger route.
-    """
-    backend = get_backend()
-    for d in (storage_paths.prefetched_audio_dir(slug), storage_paths.prefetched_peaks_dir(slug)):
-        try:
-            backend.delete(d)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("clear_prefetch: failed deleting %s: %s", d, e)
-
-
-def now_ms() -> int:
-    return int(time.time() * 1000)
-
 
 # ----------------------------------------------------------------------
-# Read paths (used by the audio-proxy + peaks routes for short-circuits)
+# Read paths (used by the audio-proxy + peaks routes)
 # ----------------------------------------------------------------------
 
 
 def read_prefetched_audio_bytes(slug: str, url: str) -> bytes | None:
-    """Return the prefetched MP3 bytes for ``url`` if present in the bucket.
+    """Return the chapter MP3 bytes for ``url`` if present in the bucket.
 
     Resolves URL → chapter key through the catalog sidecar. Returns ``None``
-    when either the URL isn't in this delivery's sidecar or the prefetch
-    artifact hasn't been written yet — the caller then falls back to its
-    existing path (local disk cache or CDN redirect).
+    when either the URL isn't in this delivery's sidecar or the chapter file
+    isn't on the bucket — the caller then falls back to a CDN redirect.
     """
     chapter = audio_meta.chapter_for_url(slug, url)
     if chapter is None:
@@ -329,13 +49,13 @@ def read_prefetched_audio_bytes(slug: str, url: str) -> bytes | None:
 
 
 def read_prefetched_audio_local_path(slug: str, url: str):
-    """Return a real local ``Path`` to the prefetched chapter when the
-    backend can expose one (deployed bucket mount or local-disk backend).
+    """Return a real local ``Path`` to the chapter file when the backend can
+    expose one (deployed bucket mount or local-disk backend).
 
     Lets the audio-proxy hand ``send_file`` a path instead of a BytesIO —
-    Werkzeug then handles Range/304 via OS sendfile and we avoid pulling
-    the whole 4–5 MB MP3 into Flask memory on every surah switch.
-    Returns ``None`` for local-dev no-mount (callers fall back to bytes).
+    Werkzeug then handles Range/304 via OS sendfile and we avoid pulling the
+    whole 4–5 MB MP3 into Flask memory on every surah switch. Returns
+    ``None`` for local-dev no-mount (callers fall back to bytes or CDN).
     """
     chapter = audio_meta.chapter_for_url(slug, url)
     if chapter is None:
@@ -348,8 +68,7 @@ def read_prefetched_audio_local_path(slug: str, url: str):
 
 
 def read_prefetched_peaks(slug: str, url: str) -> dict | None:
-    """Return the prefetched chapter-overview peaks for ``url`` in the slim
-    int8 envelope shape.
+    """Return the chapter-overview peaks for ``url`` in the slim int8 envelope.
 
     Reads ``<wip|published>/<slug>/peaks/<chapter>.json.gz`` and returns the
     packed envelope verbatim: ``{schema_version:3, duration_ms, q:'int8',
@@ -359,9 +78,10 @@ def read_prefetched_peaks(slug: str, url: str) -> dict | None:
 
     Returns ``None`` for:
     - Unknown URL (not in the catalog manifest).
-    - Missing file (chapter never prefetched, or backfill not yet run).
-    - Pre-v3 file or corrupt blob — caller treats this as a cache miss; the
-      prefetch worker re-bakes via ``fetch_and_persist_chapter``.
+    - Missing file (extraction didn't bake peaks for that chapter, or backfill
+      not yet run).
+    - Pre-v3 file or corrupt blob — caller treats this as a cache miss and
+      falls back to ``/segment-peaks`` per-card.
 
     Companion ``unpack_slim`` (returns dequantized float-list) exists in
     ``peaks_slim.py`` for the offline extraction history-JSONL writer.
@@ -377,3 +97,18 @@ def read_prefetched_peaks(slug: str, url: str) -> dict | None:
     except Exception:  # noqa: BLE001
         return None
     return unpack_slim_envelope(blob)
+
+
+def clear_prefetch(slug: str) -> None:
+    """Delete every artifact under ``wip/<slug>/audio/`` and ``wip/<slug>/peaks/``.
+
+    Called by the post-RELEASED sweeper. The ``_done.json`` sentinel is
+    deleted separately by the sweeper itself so it can survive a partial
+    failure here.
+    """
+    backend = get_backend()
+    for d in (storage_paths.prefetched_audio_dir(slug), storage_paths.prefetched_peaks_dir(slug)):
+        try:
+            backend.delete(d)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("clear_prefetch: failed deleting %s: %s", d, e)

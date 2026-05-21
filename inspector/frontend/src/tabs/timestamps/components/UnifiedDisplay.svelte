@@ -21,13 +21,16 @@
     import {
         showLetters,
         showPhonemes,
+        showTranslations,
         tsHoveredElement,
         tsWaveformHoverTime,
+        verseTranslations,
     } from '../stores/display';
     import type { TsLoopTarget } from '../stores/playback';
     import { autoMode, loopTarget, tsPort } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
+    import WordTranslation from './WordTranslation.svelte';
 
     // ---- Local structural state (derived declaratively from loadedVerse) ----
 
@@ -666,6 +669,9 @@
             role="button"
             tabindex="-1"
         >
+            {#if $showTranslations}
+                <WordTranslation text={$verseTranslations[block.word.location] ?? ''} />
+            {/if}
             <div
                 class="mega-word"
                 role="group"

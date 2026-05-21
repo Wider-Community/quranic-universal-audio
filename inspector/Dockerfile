@@ -61,7 +61,6 @@ WORKDIR /tmp/ffmpeg-${FFMPEG_VERSION}
 #                    (segment-clip route re-encodes the requested window to
 #                    mono 96k mp3 — without libmp3lame the route returns
 #                    200 OK / 0 bytes silently and browser playback hangs)
-#   bsf:             mp3_to_xing (injects VBR seek TOC, used by audio_fetch)
 #   filter:          aresample (for `-ar` sample-rate conversion), aformat, anull
 #   protocol:        file + pipe (local I/O) + http,https,tcp,tls (CDN reads —
 #                    lets `_ffmpeg_decode_segment` decode remote-only chapters
@@ -83,7 +82,6 @@ RUN ./configure \
       --enable-demuxer=mp3,wav,s16le \
       --enable-encoder=libmp3lame,pcm_s16le \
       --enable-muxer=mp3,s16le,wav,pcm_s16le \
-      --enable-bsf=mp3_to_xing \
       --enable-filter=aresample,aformat,anull \
       --enable-protocol=file,pipe,http,https,tcp,tls \
       --enable-parser=mpegaudio \
@@ -105,7 +103,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     INSPECTOR_BUCKET_REPO=hetchyy/quranic-inspector-bucket-dev \
     INSPECTOR_PARSED_CACHE_BYTES=134217728 \
     INSPECTOR_BEHIND_PROXY=1 \
-    INSPECTOR_AUDIO_PREFETCH=1 \
+    INSPECTOR_WIP_SWEEPER=1 \
     INSPECTOR_AUTO_DETECT=1 \
     GUNICORN_WORKERS=1 \
     PIP_NO_CACHE_DIR=1 \

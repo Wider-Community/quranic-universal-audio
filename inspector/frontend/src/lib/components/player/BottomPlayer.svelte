@@ -144,6 +144,16 @@
             const entry = urls[String(surahNum)];
             if (entry) {
                 const url = entry.url;
+                if (entry.via === 'qf_api') {
+                    console.log(
+                        '[qf-audio] ▶ routed via Quran.Foundation API:',
+                        url,
+                        '— overrides our link:',
+                        entry.originUrl,
+                    );
+                } else if (entry.via === 'qf_fallback') {
+                    console.warn('[qf-audio] API unavailable — using our CDN link:', url);
+                }
                 const cbrSrc = url.startsWith('/api/')
                     ? url
                     : `/api/seg/audio-proxy/${delivery.slug}?url=${encodeURIComponent(url)}`;

@@ -134,8 +134,8 @@ def validate_reciter_segments(reciter: str) -> dict:
     # and stripped from every seg before returning so it never reaches disk
     # via the cached entries list. Categories are limited to the soft set in
     # ``RESOLVES_BY_EDIT_CATEGORIES`` (boundary_adj / audio_bleeding /
-    # repetitions) -- this is what makes those cards disappear from the
-    # accordion once the user has edited from them.
+    # repetitions / low_confidence_v2) -- this is what makes those cards
+    # disappear from the accordion once the user has edited from them.
     _injected_segs: list[dict] = []
     if resolved_idx:
         for entry in entries:

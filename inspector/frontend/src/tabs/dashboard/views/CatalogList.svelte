@@ -21,6 +21,7 @@
     import ActivityRail from '../components/ActivityRail.svelte';
     import type { RowEntry } from '../components/CatalogTable.svelte';
     import CatalogTable from '../components/CatalogTable.svelte';
+    import SubmitWizard from '../components/submit/SubmitWizard.svelte';
     import { catalogData, loadCatalog } from '../stores/catalog-data';
     import {
         clearAllFilters,
@@ -31,6 +32,7 @@
         setSort,
         toggleFacet,
     } from '../stores/dashboard-state';
+    import { openSubmitWizard } from '../stores/submit-wizard';
 
     onMount(() => {
         void loadCatalog();
@@ -153,14 +155,24 @@
 
     <section class="body">
         <div class="toolbar">
-            <div class="search">
-                <SearchInput
-                    value={$dashboardState.search}
-                    placeholder="Search reciters"
-                    count={sorted.length}
-                    total={totalReciters}
-                    on:input={(e) => setSearch(e.detail)}
-                />
+            <div class="search-group">
+                <div class="search">
+                    <SearchInput
+                        value={$dashboardState.search}
+                        placeholder="Search reciters"
+                        count={sorted.length}
+                        total={totalReciters}
+                        on:input={(e) => setSearch(e.detail)}
+                    />
+                </div>
+                <button
+                    type="button"
+                    class="submit-recitation"
+                    on:click={openSubmitWizard}
+                >
+                    <span class="sr-glyph" aria-hidden="true">+</span>
+                    <span class="sr-label">Submit recitation</span>
+                </button>
             </div>
             <div class="sort">
                 <label>
@@ -215,19 +227,29 @@
     <ActivityRail />
 </div>
 
+<SubmitWizard />
+
 <style>
     .toolbar {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         gap: var(--s-4);
         padding: 0 0 var(--s-2);
         flex-wrap: wrap;
     }
+    .search-group {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        min-width: 0;
+    }
     .search {
-        flex: 1;
+        width: 420px;
         min-width: 240px;
         max-width: 420px;
+    }
+    .sort {
+        margin-left: auto;
     }
     .sort label { display: inline-flex; align-items: center; gap: var(--s-2); }
     .sort-label {
@@ -246,6 +268,48 @@
         cursor: pointer;
     }
     .sort select:focus { border-color: var(--accent); outline: none; }
+
+    .submit-recitation {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 var(--s-3);
+        background: var(--accent);
+        color: var(--accent-fg);
+        border: 1px solid var(--accent);
+        border-radius: var(--r-2);
+        font: inherit;
+        font-size: var(--fs-meta);
+        font-weight: 500;
+        cursor: pointer;
+        transition: background var(--t-fast),
+                    border-color var(--t-fast),
+                    transform var(--t-fast),
+                    box-shadow var(--t-base) var(--ease-out-quart);
+        box-shadow: 0 1px 2px oklch(0 0 0 / 0.18);
+    }
+    .submit-recitation:hover {
+        background: var(--accent-strong);
+        border-color: var(--accent-strong);
+        box-shadow: 0 6px 18px oklch(0.785 0.13 220 / 0.18);
+    }
+    .submit-recitation:active { transform: translateY(1px); }
+    .submit-recitation:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }
+    .sr-glyph {
+        font-size: 14px;
+        line-height: 1;
+        font-weight: 400;
+        opacity: 0.9;
+        transition: transform var(--t-base) var(--ease-out-quart);
+    }
+    .submit-recitation:hover .sr-glyph {
+        transform: rotate(90deg);
+    }
+    .sr-label { letter-spacing: 0.01em; }
 
     .grid {
         display: grid;

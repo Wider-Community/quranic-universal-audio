@@ -7,10 +7,13 @@ edit_history.jsonl, builds a {uid: {category, ...}} index, injects
 the listed categories without writing to ``ignored_categories``.
 
 Scope: ``boundary_adj``, ``audio_bleeding``, ``repetitions``,
-``basmala_amin``. ``cross_verse`` and chapter/verse-level categories
-are excluded -- they stay until the validator clears them. ``qalqala``
-is view-only (mirrors ``muqattaat``) and is also excluded so the flag
-stays after edits.
+``basmala_amin``, ``low_confidence_v2``. ``cross_verse`` and
+chapter/verse-level categories are excluded -- they stay until the validator
+clears them. ``qalqala`` is view-only (mirrors ``muqattaat``) and is also
+excluded so the flag stays after edits. ``low_confidence`` (v1) is excluded
+because it self-resolves via the edit-time ``confidence = 1.0`` bump; v2 is
+included because it's keyed against a frozen extraction-time sidecar that
+``confidence`` doesn't affect.
 """
 from __future__ import annotations
 
@@ -19,6 +22,7 @@ import json
 import pytest
 
 from services.validation.classifier import (
+    classify_flags,
     is_resolved_by_edit,
     is_suppressed_for,
 )
@@ -44,6 +48,55 @@ def test_is_resolved_by_edit_no_field():
     assert is_resolved_by_edit({"_resolved_by_edit": set()}, "boundary_adj") is False
 
 
+def test_classify_drops_low_confidence_v2_when_resolved_by_edit():
+    """Even when ``segment_uid`` is in ``probe_failed_uids``, an edit
+    dispatched from the v2 card (yielding ``_resolved_by_edit`` membership)
+    suppresses the flag."""
+    seg = {
+        "matched_ref": "112:1:1-112:1:4",
+        "confidence": 1.0,
+        "segment_uid": "uid-V",
+        "_resolved_by_edit": {"low_confidence_v2"},
+    }
+    flags = classify_flags(
+        seg,
+        entry_ref="112",
+        is_by_ayah=False,
+        surah=112,
+        s_ayah=1,
+        e_ayah=1,
+        s_word=1,
+        e_word=4,
+        single_word_verses=set(),
+        canonical=None,
+        probe_failed_uids={"uid-V"},
+    )
+    assert flags["low_confidence_v2"] is False
+
+
+def test_classify_keeps_low_confidence_v2_without_resolved_by_edit():
+    """Negative control: same probe-failed uid, no resolved-by-edit → flag stays."""
+    seg = {
+        "matched_ref": "112:1:1-112:1:4",
+        "confidence": 1.0,
+        "segment_uid": "uid-V",
+    }
+    flags = classify_flags(
+        seg,
+        entry_ref="112",
+        is_by_ayah=False,
+        surah=112,
+        s_ayah=1,
+        e_ayah=1,
+        s_word=1,
+        e_word=4,
+        single_word_verses=set(),
+        canonical=None,
+        probe_failed_uids={"uid-V"},
+    )
+    assert flags["low_confidence_v2"] is True
+
+
 def test_is_suppressed_for_combines_ignored_and_resolved():
     seg_ignored = {"ignored_categories": ["boundary_adj"]}
     assert is_suppressed_for(seg_ignored, "boundary_adj") is True
@@ -66,19 +119,20 @@ def test_basmala_amin_resolved_by_edit_suppresses():
 
 def test_resolves_by_edit_set_contains_only_soft_categories():
     """The set must match the user's pick: boundary_adj / audio_bleeding /
-    repetitions / basmala_amin.
+    repetitions / basmala_amin / low_confidence_v2.
 
     ``qalqala`` is intentionally excluded — it's view-only (like ``muqattaat``)
     so editing a qalqala-flagged seg leaves the flag in place for the next
     validation pass; the edit history still carries the ``qalqala`` pill via
-    ``op_context_category``.
-
-    ``basmala_amin`` is included because the user has reviewed the seg from
-    the card and any edit signals "I dealt with it" — revalidation must not
-    re-raise the flag for that uid.
+    ``op_context_category``. ``low_confidence`` (v1) is excluded because it
+    self-resolves via the confidence=1.0 bump; ``low_confidence_v2`` is included
+    because it's keyed against a frozen probe sidecar that confidence doesn't
+    affect. ``basmala_amin`` is included because any edit from the card signals
+    "I dealt with it" — revalidation must not re-raise the flag for that uid.
     """
     assert RESOLVES_BY_EDIT_CATEGORIES == frozenset({
-        "boundary_adj", "audio_bleeding", "repetitions", "basmala_amin",
+        "boundary_adj", "audio_bleeding", "repetitions", "low_confidence_v2",
+        "basmala_amin",
     })
 
 
@@ -225,6 +279,32 @@ def test_build_index_split_marks_both_halves(monkeypatch, tmp_path):
         "uid-first": {"repetitions"},
         "uid-second": {"repetitions"},
     }
+
+
+def test_build_index_picks_up_low_confidence_v2(monkeypatch, tmp_path):
+    """v2 differs from v1: confidence=1.0 doesn't clear it (the v2 signal is
+    sidecar-keyed on segment_uid, not on confidence), so the index MUST carry
+    ``low_confidence_v2`` ops so the validator can suppress the flag.
+    """
+    monkeypatch.setattr(
+        "services.history_query.RECITATION_SEGMENTS_PATH", tmp_path,
+    )
+    _write_history(tmp_path, "r1", [
+        {"record_type": "genesis", "batch_id": "g", "operations": []},
+        {
+            "batch_id": "b1",
+            "operations": [
+                {
+                    "op_id": "o1",
+                    "op_type": "trim_segment",
+                    "op_context_category": "low_confidence_v2",
+                    "targets_after": [{"segment_uid": "uid-V"}],
+                },
+            ],
+        },
+    ])
+    idx = build_resolved_by_edit_index("r1")
+    assert idx == {"uid-V": {"low_confidence_v2"}}
 
 
 def test_build_index_skips_reverted_batches(monkeypatch, tmp_path):

@@ -1,12 +1,55 @@
 """Audio tab metadata routes (/api/audio/*)."""
 
+import logging
+
 from flask import Blueprint, jsonify
 
 from services import cache, storage_paths
 from services.data_loader import load_audio_sources
 from services.hf_bucket import StorageNotFound, get_backend
+from services.quran_foundation import config as qf_config
+from services.quran_foundation import content as qf_content
+from services.quran_foundation.reciter_map import qf_id_for
+from services.state import catalog
+
+logger = logging.getLogger(__name__)
 
 audio_meta_bp = Blueprint("audio_meta", __name__, url_prefix="/api/audio")
+
+
+def _apply_qf_routing(source: str, slug: str, surahs: dict[str, dict]) -> None:
+    """Swap our QuranicAudio CDN links for Content-API URLs in place.
+
+    Only acts on ``source == "quranicaudio"`` deliveries whose (reciter_id,
+    style) is mapped. Each routed chapter is tagged ``via="qf_api"`` with the
+    original link kept as ``origin_url`` (so the FE can log the override). On
+    any Content-API failure the chapters keep our link, tagged ``qf_fallback``.
+    """
+    if source != "quranicaudio" or not qf_config.content_is_configured():
+        return
+    delivery = catalog.find_delivery(slug)
+    if delivery is None:
+        return
+    qf_id = qf_id_for(delivery.reciter_id, delivery.style)
+    if qf_id is None:
+        return
+    try:
+        api_urls = qf_content.chapter_audio_urls(qf_id)
+    except qf_content.QfContentError as e:
+        logger.warning("qf-audio: routing failed for %s (qf id %s): %s", slug, qf_id, e)
+        for entry in surahs.values():
+            entry["via"] = "qf_fallback"
+        return
+    for k, entry in surahs.items():
+        api_url = api_urls.get(k)
+        if not api_url:
+            continue
+        entry["origin_url"] = entry["url"]
+        entry["url"] = api_url
+        entry["via"] = "qf_api"
+        # The QF /qdc/ files are re-encodes of differing length; drop our
+        # manifest duration so the player reads the real header on play.
+        entry["duration_ms"] = None
 
 
 @audio_meta_bp.route("/sources")
@@ -52,5 +95,6 @@ def audio_surahs(category, source, slug):
             surahs[k] = {"url": url, "duration_ms": duration_ms}
         elif isinstance(v, str):
             surahs[k] = {"url": v, "duration_ms": None}
+    _apply_qf_routing(source, slug, surahs)
     cache.set_audio_url_cache(key, surahs)
     return jsonify({"surahs": surahs})

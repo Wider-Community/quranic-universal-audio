@@ -24,10 +24,19 @@ logger = logging.getLogger(__name__)
 # ``basmala_amin`` is included: the user has reviewed the seg from the card
 # and any edit (trim/split/merge/editReference) signals "I dealt with it" --
 # revalidation must not re-raise the flag for that uid.
+#
+# ``low_confidence_v2`` IS included even though v1 is excluded: v2 is
+# sourced from a frozen extraction-time MFA tight-beam probe sidecar keyed
+# by ``segment_uid`` (see classifier.classify_flags lines around the
+# ``probe_failed_uids`` check), NOT from ``seg.confidence``. The edit-time
+# confidence bump to 1.0 clears v1 but has no effect on v2 — without
+# resolved-by-edit handling the v2 card would re-appear on every revalidate
+# after the user edited it.
 RESOLVES_BY_EDIT_CATEGORIES: frozenset[str] = frozenset({
     "boundary_adj",
     "audio_bleeding",
     "repetitions",
+    "low_confidence_v2",
     "basmala_amin",
 })
 

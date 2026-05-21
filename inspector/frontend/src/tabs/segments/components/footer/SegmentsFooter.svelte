@@ -38,6 +38,7 @@
     import {
         livePlayingVerse,
         pickerDisplayChapter,
+        segAllData,
         segData,
         selectedChapter,
         selectedReciter,
@@ -66,7 +67,11 @@
         startSegAnimation,
         stopSegAnimation,
     } from '../../utils/playback/playback';
-    import { confirmSaveFromPreview, hideSavePreview, onSegSaveClick } from '../../utils/save/actions';
+    import {
+        confirmSaveFromPreview,
+        hideSavePreview,
+        onSegSaveClick,
+    } from '../../utils/save/actions';
 
     export let reciterTask: ReciterTask | null = null;
     export let chipActionBusy: '' | 'unclaim' | 'mark' = '';
@@ -185,14 +190,27 @@
     // programmatic override written by `playFromSegment` when a cross-chapter
     // accordion row is played — visual-only, never triggers a chapter swap.
     // Falls back to `selectedChapter` (the authoritative load gate).
-    $: displaySurahNum = $pickerDisplayChapter ?? ($selectedChapter ? parseInt($selectedChapter) : null);
+    $: displaySurahNum =
+        $pickerDisplayChapter ?? ($selectedChapter ? parseInt($selectedChapter) : null);
     $: chipMeta = [titleCaseSlug(contextRiwayah), titleCaseSlug(contextStyle)]
         .filter(Boolean)
         .join(' · ');
 
-    // Full 1..114 range — surah availability per reciter would tighten this
-    // later if we surface per-reciter chapter manifests in the catalog.
-    const allSurahs: number[] = Array.from({ length: 114 }, (_, i) => i + 1);
+    // Filtered to surahs the reciter actually has in their audio manifest.
+    // Manifest keys are either "<surah>" or "<surah>:<ayah>" — take the
+    // numeric prefix, dedupe, sort. Fall back to 1..114 while segAllData
+    // is still loading so the picker isn't briefly empty.
+    $: allSurahs = (() => {
+        const byCh = $segAllData?.audio_by_chapter;
+        if (!byCh) return Array.from({ length: 114 }, (_, i) => i + 1);
+        const nums = new Set<number>();
+        for (const key of Object.keys(byCh)) {
+            const n = parseInt(key.split(':')[0] ?? '', 10);
+            if (Number.isFinite(n) && n >= 1 && n <= 114) nums.add(n);
+        }
+        if (nums.size === 0) return Array.from({ length: 114 }, (_, i) => i + 1);
+        return Array.from(nums).sort((a, b) => a - b);
+    })();
 
     $: filteredAyahs = ayahQuery.trim()
         ? $verseOptions.filter((v) => String(v).startsWith(ayahQuery.trim()))
@@ -201,8 +219,8 @@
     $: historyButtonLabel = $historyVisible
         ? 'Back'
         : $historyLoadState === 'loading'
-            ? 'History…'
-            : 'History';
+          ? 'History…'
+          : 'History';
 
     // ---- Progress bar -----------------------------------------------
     // % through the currently-loaded CHAPTER audio. Under chapter-continuous
@@ -215,7 +233,8 @@
     $: {
         // Re-read whenever playback state or chapter changes; the audio element
         // updates duration on metadata load.
-        void $isMainAudioPlaying; void $segData?.audio_url;
+        void $isMainAudioPlaying;
+        void $segData?.audio_url;
         const dur = segPort.element?.duration;
         chapterDurationMs = dur && isFinite(dur) ? dur * 1000 : 0;
     }
@@ -226,9 +245,10 @@
     // `onProgressClick` / `onProgressKey` below), not the visual.
     $: accordionActive = $playingSegmentIndex?.origin === 'accordion';
 
-    $: progressPct = chapterDurationMs > 0
-        ? Math.max(0, Math.min(100, (currentMs / chapterDurationMs) * 100))
-        : 0;
+    $: progressPct =
+        chapterDurationMs > 0
+            ? Math.max(0, Math.min(100, (currentMs / chapterDurationMs) * 100))
+            : 0;
 
     $: progressVisible = chapterDurationMs > 0;
 
@@ -359,7 +379,9 @@
     $: showSavePreview = $savePreviewVisible;
     $: saveDisabled = $autoSaveEnabled || !$isDirtyStore;
     $: saveLabel = $isDirtyStore
-        ? ($autoSaveEnabled && get(saveButtonLabel) === 'Save' ? 'Saving…' : $saveButtonLabel)
+        ? $autoSaveEnabled && get(saveButtonLabel) === 'Save'
+            ? 'Saving…'
+            : $saveButtonLabel
         : 'Saved';
 
     // Play button glyph: pause when normal-mode audio is playing OR an
@@ -367,9 +389,7 @@
     // flips on cold-start / resume, off on user-initiated pause — distinct
     // from `previewLooping` (which stays set across pause/resume so the
     // rAF can resume seamlessly).
-    $: playGlyph = (($isMainAudioPlaying || $editPreviewPlaying)
-        ? 'pause'
-        : 'play') as IconName;
+    $: playGlyph = ($isMainAudioPlaying || $editPreviewPlaying ? 'pause' : 'play') as IconName;
 
     // Time display for the progress row.
     function fmt(ms: number): string {
@@ -432,27 +452,23 @@
 
             {#if hasReciter && !showSavePreview}
                 <div class="reciter-actions">
-                    <ClaimButton
-                        slug={$selectedReciter || ''}
-                        task={reciterTask}
-                        onClaimed={onClaimed}
-                    />
+                    <ClaimButton slug={$selectedReciter || ''} task={reciterTask} {onClaimed} />
                     {#if reciterTask?.predicates.can_mark_ready}
                         <button
                             type="button"
                             class="action ghost-accent"
                             disabled={chipActionBusy !== ''}
                             title="Mark this reciter ready for a maintainer to publish"
-                            on:click={onMarkReady}
-                        >Mark ready</button>
+                            on:click={onMarkReady}>Mark ready</button
+                        >
                     {/if}
                     {#if reciterTask?.predicates.can_release}
                         <button
                             type="button"
                             class="action ghost"
                             disabled={chipActionBusy !== ''}
-                            on:click={onUnclaim}
-                        >Unclaim</button>
+                            on:click={onUnclaim}>Unclaim</button
+                        >
                     {/if}
                 </div>
             {/if}
@@ -461,7 +477,10 @@
         {#if hasReciter}
             <div
                 class="zone zone-location"
-                use:clickOutside={() => { surahOpen = false; ayahOpen = false; }}
+                use:clickOutside={() => {
+                    surahOpen = false;
+                    ayahOpen = false;
+                }}
             >
                 <div class="player-row">
                     <button
@@ -470,8 +489,8 @@
                         class:boosted={$playbackSpeed !== 1}
                         on:click={cyclePlaybackSpeed}
                         title="Playback speed (click to cycle)"
-                        aria-label="Playback speed {$playbackSpeed}×"
-                    >{$playbackSpeed}×</button>
+                        aria-label="Playback speed {$playbackSpeed}×">{$playbackSpeed}×</button
+                    >
 
                     <button
                         type="button"
@@ -510,7 +529,10 @@
                         class="loc-cell"
                         class:has-value={!!displaySurahNum}
                         class:live={surahLive}
-                        on:click={() => { surahOpen = !surahOpen; ayahOpen = false; }}
+                        on:click={() => {
+                            surahOpen = !surahOpen;
+                            ayahOpen = false;
+                        }}
                         aria-haspopup="dialog"
                         aria-expanded={surahOpen}
                     >
@@ -573,8 +595,8 @@
                                     class:active={String(v) === $selectedVerse}
                                     role="option"
                                     aria-selected={String(v) === $selectedVerse}
-                                    on:click={() => onAyahPick(v)}
-                                >{v}</button>
+                                    on:click={() => onAyahPick(v)}>{v}</button
+                                >
                             {:else}
                                 <div class="empty">No matches</div>
                             {/each}
@@ -590,7 +612,9 @@
             {#if hasReciter}
                 {#if showSavePreview}
                     <button class="action ghost" on:click={() => hideSavePreview()}>Cancel</button>
-                    <button class="action primary" on:click={confirmSaveFromPreview}>Confirm save</button>
+                    <button class="action primary" on:click={confirmSaveFromPreview}
+                        >Confirm save</button
+                    >
                 {:else}
                     <button
                         type="button"
@@ -616,7 +640,9 @@
                                 class="autosave-toggle"
                                 class:on={$autoSaveEnabled}
                                 aria-pressed={$autoSaveEnabled}
-                                title={$autoSaveEnabled ? 'Auto-save on — click to disable' : 'Auto-save off — click to enable'}
+                                title={$autoSaveEnabled
+                                    ? 'Auto-save on — click to disable'
+                                    : 'Auto-save off — click to enable'}
                                 on:click={() => toggleAutoSave(!$autoSaveEnabled)}
                             >
                                 <Icon name="bolt" size={12} />
@@ -679,7 +705,9 @@
     /* The <audio> element is the source of all playback DOM events. It
        has no visual representation; hidden via display:none keeps the
        intrinsic 0×0 size from contributing to the footer height. */
-    audio { display: none; }
+    audio {
+        display: none;
+    }
 
     /* Progress row: times flanking the scrub bar, matching the dashboard
        PlayerProgress format. Visible only when a segment range is queued
@@ -691,7 +719,10 @@
         padding: var(--s-2) var(--s-4) 0;
         flex-shrink: 0;
     }
-    .progress:not(.active) { opacity: 0; pointer-events: none; }
+    .progress:not(.active) {
+        opacity: 0;
+        pointer-events: none;
+    }
     .time {
         font-family: var(--font-mono);
         font-size: 10.5px;
@@ -718,7 +749,9 @@
         transition: height var(--t-fast) ease;
     }
     .bar:hover .track,
-    .bar:focus-visible .track { height: 5px; }
+    .bar:focus-visible .track {
+        height: 5px;
+    }
     .progress .fill {
         height: 100%;
         background: var(--accent);
@@ -763,7 +796,9 @@
         gap: var(--s-2);
         flex-wrap: wrap;
     }
-    .empty-spacer { display: none; }
+    .empty-spacer {
+        display: none;
+    }
 
     .reciter-actions {
         display: inline-flex;
@@ -796,18 +831,28 @@
         color: inherit;
         cursor: pointer;
         font: inherit;
-        transition: border-color var(--t-fast), background var(--t-fast);
+        transition:
+            border-color var(--t-fast),
+            background var(--t-fast);
     }
-    .identity:hover { border-color: var(--border-strong); background: var(--panel); }
-    .identity:focus-visible { outline: none; border-color: var(--accent); }
+    .identity:hover {
+        border-color: var(--border-strong);
+        background: var(--panel);
+    }
+    .identity:focus-visible {
+        outline: none;
+        border-color: var(--accent);
+    }
     .identity.placeholder {
         background: var(--accent-tint-soft);
-        border-color: oklch(0.785 0.130 220 / 0.35);
+        border-color: oklch(0.785 0.13 220 / 0.35);
         color: var(--accent);
         padding: 8px var(--s-3);
         gap: var(--s-2);
     }
-    .identity.placeholder:hover { background: var(--accent-tint); }
+    .identity.placeholder:hover {
+        background: var(--accent-tint);
+    }
 
     .identity-placeholder-label {
         font-size: var(--fs-row);
@@ -821,8 +866,12 @@
         font-size: var(--fs-meta);
         transition: color var(--t-fast);
     }
-    .identity:hover .identity-switch { color: var(--text-secondary); }
-    .identity.placeholder .identity-switch { color: var(--accent); }
+    .identity:hover .identity-switch {
+        color: var(--text-secondary);
+    }
+    .identity.placeholder .identity-switch {
+        color: var(--accent);
+    }
 
     /* ---------- Player row (single-row, container-less) ----------
        Reading order, left-to-right:
@@ -848,13 +897,18 @@
         align-items: center;
         justify-content: center;
         padding: 0;
-        transition: background var(--t-fast), color var(--t-fast);
+        transition:
+            background var(--t-fast),
+            color var(--t-fast);
         min-width: 0;
     }
     .player-row > button:hover:not(:disabled) {
         color: var(--text-primary);
     }
-    .player-row > button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .player-row > button:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+    }
 
     /* Play — the only accent-filled element. Round, slightly larger
        than the icon prefs so it reads as the primary action. */
@@ -943,8 +997,12 @@
         background: var(--panel-2);
         color: var(--text-primary);
     }
-    .player-row .loc-cell.has-value { color: var(--text-primary); }
-    .player-row .loc-cell.live { color: var(--accent); }
+    .player-row .loc-cell.has-value {
+        color: var(--text-primary);
+    }
+    .player-row .loc-cell.live {
+        color: var(--accent);
+    }
 
     .pop {
         position: absolute;
@@ -983,7 +1041,9 @@
         outline: none;
         margin-bottom: var(--s-2);
     }
-    .ayah-search:focus { border-color: var(--accent); }
+    .ayah-search:focus {
+        border-color: var(--accent);
+    }
     .ayah-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
@@ -1000,7 +1060,10 @@
         font-variant-numeric: tabular-nums;
         font-size: var(--fs-meta);
         cursor: pointer;
-        transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+        transition:
+            border-color var(--t-fast),
+            color var(--t-fast),
+            background var(--t-fast);
     }
     .ayah-cell:hover {
         border-color: var(--border-strong);
@@ -1033,7 +1096,10 @@
         font: inherit;
         font-size: var(--fs-meta);
         cursor: pointer;
-        transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+        transition:
+            background var(--t-fast),
+            border-color var(--t-fast),
+            color var(--t-fast);
     }
     .action:hover:not(:disabled) {
         background: var(--panel);
@@ -1054,7 +1120,7 @@
     .action.ghost-accent {
         background: transparent;
         color: var(--accent);
-        border-color: oklch(0.785 0.130 220 / 0.35);
+        border-color: oklch(0.785 0.13 220 / 0.35);
     }
     .action.ghost-accent:hover:not(:disabled) {
         background: var(--accent-tint);
@@ -1071,16 +1137,23 @@
         border-color: var(--accent-strong);
     }
 
-    .action.save { min-width: 104px; justify-content: center; padding-inline: var(--s-3); }
+    .action.save {
+        min-width: 104px;
+        justify-content: center;
+        padding-inline: var(--s-3);
+    }
     .action.save.saved {
         background: transparent;
         border-color: var(--border-quiet);
         color: var(--text-muted);
     }
-    .save-glyph { color: oklch(0.78 0.13 155); font-weight: 600; }
+    .save-glyph {
+        color: oklch(0.78 0.13 155);
+        font-weight: 600;
+    }
     .action.save.auto-busy {
         background: transparent;
-        border-color: oklch(0.785 0.130 220 / 0.35);
+        border-color: oklch(0.785 0.13 220 / 0.35);
         color: var(--accent);
     }
     .save-pulse {
@@ -1091,8 +1164,13 @@
         animation: pulse 1.4s ease-out-quart infinite;
     }
     @keyframes pulse {
-        0%, 100% { opacity: 0.35; }
-        50% { opacity: 1; }
+        0%,
+        100% {
+            opacity: 0.35;
+        }
+        50% {
+            opacity: 1;
+        }
     }
 
     .autosave-toggle {
@@ -1107,7 +1185,10 @@
         cursor: pointer;
         font: inherit;
         font-size: var(--fs-meta);
-        transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+        transition:
+            color var(--t-fast),
+            border-color var(--t-fast),
+            background var(--t-fast);
     }
     .autosave-toggle:hover {
         color: var(--text-primary);
@@ -1115,7 +1196,7 @@
     }
     .autosave-toggle.on {
         border-style: solid;
-        border-color: oklch(0.785 0.130 220 / 0.45);
+        border-color: oklch(0.785 0.13 220 / 0.45);
         background: var(--accent-tint);
         color: var(--accent);
     }
@@ -1132,7 +1213,10 @@
         cursor: pointer;
         font: inherit;
         font-size: var(--fs-meta);
-        transition: color var(--t-fast), background var(--t-fast), border-color var(--t-fast);
+        transition:
+            color var(--t-fast),
+            background var(--t-fast),
+            border-color var(--t-fast);
     }
     .utility:hover {
         color: var(--text-primary);
@@ -1142,7 +1226,7 @@
     .utility.on {
         color: var(--accent);
         background: var(--accent-tint);
-        border-color: oklch(0.785 0.130 220 / 0.35);
+        border-color: oklch(0.785 0.13 220 / 0.35);
     }
 
     /* ---------- Responsive ---------- */
@@ -1160,8 +1244,11 @@
             transform: none;
             justify-content: flex-start;
         }
-        .zone-save { justify-content: flex-start; }
-        .pop-surah, .pop-ayah {
+        .zone-save {
+            justify-content: flex-start;
+        }
+        .pop-surah,
+        .pop-ayah {
             left: 0;
             right: 0;
             transform: none;
@@ -1169,7 +1256,11 @@
         }
     }
     @media (max-width: 540px) {
-        .util-label { display: none; }
-        .action.save { min-width: 92px; }
+        .util-label {
+            display: none;
+        }
+        .action.save {
+            min-width: 92px;
+        }
     }
 </style>

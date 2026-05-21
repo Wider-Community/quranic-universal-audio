@@ -234,6 +234,95 @@ export async function loadDk(): Promise<Record<string, { text?: string }>> {
     return _dk;
 }
 
+// ---------------------------------------------------------------------------
+// Word-by-word translations (Quran.Foundation Content API, via Flask proxy)
+// ---------------------------------------------------------------------------
+
+export interface WbwLanguage {
+    code: string;
+    label: string;
+    /** False when the language has meaningful English-fallback gaps (full-Quran
+     *  measured); the picker flags these as "partial". */
+    complete: boolean;
+}
+
+let _wbwLangs: Promise<WbwLanguage[]> | null = null;
+
+/** Available WBW translation languages (load once).
+ *  `cache: 'no-cache'` revalidates with the server instead of trusting a
+ *  possibly-stale cached copy — the response shape gained a `complete` field,
+ *  and a long-lived cached body from before that change would otherwise drop
+ *  it (making every language look "partial"). Revalidation is a cheap 304 once
+ *  the body is current. */
+export async function loadWbwLanguages(): Promise<WbwLanguage[]> {
+    if (!_wbwLangs) {
+        _wbwLangs = fetchJson<WbwLanguage[]>('/api/qf/content/wbw/languages', {
+            cache: 'no-cache',
+        }).catch((e) => {
+            _wbwLangs = null; // allow retry
+            throw e;
+        });
+    }
+    return _wbwLangs;
+}
+
+interface WbwResponse {
+    verse_key: string;
+    language: string;
+    words: Record<string, string>;
+}
+
+/** Per-(ayahKey|language) cache so re-toggling / re-visiting a verse is free. */
+const _wbwByAyah = new Map<string, Promise<Record<string, string>>>();
+
+async function _fetchAyahTranslation(
+    ayahKey: string,
+    language: string,
+): Promise<Record<string, string>> {
+    const cacheKey = `${ayahKey}|${language}`;
+    const hit = _wbwByAyah.get(cacheKey);
+    if (hit) return hit;
+    const [surah, ayah] = ayahKey.split(':');
+    const url = `/api/qf/content/wbw/${surah}/${ayah}?language=${encodeURIComponent(language)}`;
+    const promise = fetchJson<WbwResponse>(url)
+        .then((r) => r.words ?? {})
+        .catch((e) => {
+            _wbwByAyah.delete(cacheKey); // allow retry on transient failure
+            throw e;
+        });
+    _wbwByAyah.set(cacheKey, promise);
+    return promise;
+}
+
+/**
+ * Resolve word-by-word glosses for a loaded verse's words, keyed by
+ * `location` ("surah:ayah:word"). Distinct ayahs are derived from the words'
+ * locations (handles cross-verse compound segments — usually 1 ayah, sometimes
+ * 2). Per-ayah results are merged and cached. A failed ayah fetch is skipped
+ * (its words simply render no gloss) rather than failing the whole verse.
+ */
+export async function loadVerseTranslations(
+    words: TsWord[],
+    language: string,
+): Promise<Record<string, string>> {
+    const ayahs = new Set<string>();
+    for (const w of words) {
+        const parts = w.location.split(':');
+        if (parts.length >= 2) ayahs.add(`${parts[0]}:${parts[1]}`);
+    }
+    const merged: Record<string, string> = {};
+    await Promise.all(
+        [...ayahs].map((ayahKey) =>
+            _fetchAyahTranslation(ayahKey, language)
+                .then((map) => Object.assign(merged, map))
+                .catch(() => {
+                    /* skip this ayah on failure */
+                }),
+        ),
+    );
+    return merged;
+}
+
 function _resourceUrl(manifest: TsManifestResponse, key: string): string {
     const filename = manifest.resources?.[key];
     if (!filename) {

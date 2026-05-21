@@ -133,9 +133,6 @@ PEAKS_WORKER_COUNT = 8                   # ThreadPoolExecutor workers for parall
 # (``_slice_chapter_peaks``) work unchanged.
 PEAKS_SCHEMA_VERSION = 3
 
-# Audio-cache background download (routes/audio_proxy.py)
-AUDIO_DL_WORKER_COUNT = 8                # concurrent audio-file download workers for by_surah cache warmup
-
 # Server defaults (app.py)
 DEFAULT_PORT = 5000                      # Flask --port default
 FLASK_ENV_VAR = "FLASK_ENV"              # environment variable name for Flask env

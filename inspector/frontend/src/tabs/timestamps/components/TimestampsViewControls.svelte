@@ -9,14 +9,17 @@
      * from its keyboard handler.
      */
 
-    import { createEventDispatcher } from 'svelte';
+    import { createEventDispatcher, onMount } from 'svelte';
     import { get } from 'svelte/store';
 
     import { LS_KEYS } from '../../../lib/utils/constants';
+    import { loadWbwLanguages, type WbwLanguage } from '../services/ts_client';
     import {
         granularity,
         showLetters,
         showPhonemes,
+        showTranslations,
+        translationLanguage,
         TS_GRANULARITIES,
         TS_VIEW_MODES,
         viewMode,
@@ -24,11 +27,37 @@
     import { autoMode, loopTarget, tsPort } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { findWordAt } from '../utils/loop-target';
+    import TranslationLangSelect from './TranslationLangSelect.svelte';
 
     const dispatch = createEventDispatcher<{
         randomAny: void;
         randomCurrent: void;
     }>();
+
+    // ---- Word-by-word translations (Analysis only) ----
+    let wbwLanguages: WbwLanguage[] = [{ code: 'en', label: 'English', complete: true }];
+
+    onMount(() => {
+        // Fetch the language list lazily; failure just leaves the English fallback.
+        loadWbwLanguages()
+            .then((langs) => {
+                if (langs.length) wbwLanguages = langs;
+            })
+            .catch(() => {
+                /* keep fallback */
+            });
+    });
+
+    function toggleTranslations(): void {
+        const nv = !$showTranslations;
+        showTranslations.set(nv);
+        localStorage.setItem(LS_KEYS.TS_SHOW_TRANSLATIONS, String(nv));
+    }
+
+    function setTranslationLanguage(code: string): void {
+        translationLanguage.set(code);
+        localStorage.setItem(LS_KEYS.TS_TRANSLATION_LANG, code);
+    }
 
     // ---- View / mode / auto toggles ----
     export function setView(mode: 'analysis' | 'animation'): void {
@@ -128,6 +157,20 @@
                 {$viewMode === TS_VIEW_MODES.ANALYSIS ? 'Phonemes' : 'Letters'}
             </button>
         </div>
+        {#if $viewMode === TS_VIEW_MODES.ANALYSIS}
+            <div class="ts-translations-toggle">
+                <button class="ts-mode-btn" class:active={$showTranslations}
+                    title="Show word-by-word translation above each word"
+                    on:click={toggleTranslations}>Translations</button>
+                {#if $showTranslations}
+                    <TranslationLangSelect
+                        languages={wbwLanguages}
+                        value={$translationLanguage}
+                        onChange={setTranslationLanguage}
+                    />
+                {/if}
+            </div>
+        {/if}
     </div>
     <div class="ts-auto-toggles">
         <div class="ts-auto-row">

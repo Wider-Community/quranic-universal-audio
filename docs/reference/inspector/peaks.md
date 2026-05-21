@@ -67,17 +67,16 @@ peaks via `compute_audio_peaks`, packs via `pack_slim`, writes to
 (`upload_to_bucket.py --include-audio`) lands audio + peaks + sentinel
 atomically; Inspector reads the same paths described below.
 
-### Fallback: in-Flask prefetch
+### No in-Flask fallback
 
-`inspector/services/audio/audio_fetch.py::fetch_and_persist_chapter`. Fires
-on the state transitions listed in `audio-prefetch.md` for reciters that
-predate the Katana migration. Same pack call, same path. Idempotent: a
-chapter whose `.json.gz` already exists is re-validated by
-`read_prefetched_peaks` (envelope check) and skipped if current schema.
-
-The runtime fallback also recomputes peaks from existing audio when a
-pre-v3 file is detected — `_recompute_peaks_for_existing_audio` packs fresh
-peaks without re-downloading the MP3.
+The inspector used to run an in-Space background worker
+(`audio_fetch.fetch_and_persist_chapter`) that would download from upstream
+and write fresh peaks alongside the audio. That worker was removed once
+Katana extraction became the only writer of bucket audio + peaks. Peaks
+missing on the bucket today fall through to the per-segment ffmpeg
+fallback in `routes/segments/peaks.py::seg_segment_peaks` — there's no
+runtime re-bake path. See [wip-audio-sweeper.md](wip-audio-sweeper.md)
+for the removal rationale.
 
 ## Storage paths (state-aware)
 

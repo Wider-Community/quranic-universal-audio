@@ -130,7 +130,7 @@ def prefetched_audio_dir(slug: str) -> str:
 
 
 def prefetched_audio_path(slug: str, chapter: str | int) -> str:
-    """MP3 written by the audio_prefetch worker for in-review reciters."""
+    """MP3 written by the katana extraction pipeline for in-review reciters."""
     return f"wip/{slug}/audio/{chapter}.mp3"
 
 
