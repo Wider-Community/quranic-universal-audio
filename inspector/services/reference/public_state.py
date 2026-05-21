@@ -275,7 +275,21 @@ def all_public_reciters() -> list[PublicReciter]:
 
     A reciter with zero deliveries (theoretically possible at catalog-edit
     boundaries) is skipped — the dashboard has nothing to render for it.
+
+    Result is cached keyed on ``db_seq`` (the only high-frequency public path):
+    a hit skips the full catalog-model + state-JOIN rebuild. Any committed
+    write bumps ``db_seq`` and transparently invalidates the entry. A shallow
+    copy is returned so callers may sort/filter in place without mutating the
+    cached canonical list.
     """
+    from services import db as _db
+    from services.storage import cache as _cache
+
+    seq = _db.current_db_seq()
+    cached = _cache.get_public_reciters_cache(seq)
+    if cached is not None:
+        return list(cached)
+
     catalog = catalog_service.snapshot()
     state_index = _build_state_index()
     channel_names = {ch.slug: ch.name for ch in catalog.vocab.channels}
@@ -296,7 +310,9 @@ def all_public_reciters() -> list[PublicReciter]:
         if not public["deliveries"]:
             continue
         out.append(public)
-    return out
+
+    _cache.set_public_reciters_cache(seq, out)
+    return list(out)
 
 
 def detail(reciter_id: str) -> PublicReciter | None:
