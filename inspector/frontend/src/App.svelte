@@ -5,6 +5,7 @@
     import BookmarksPanel from './lib/components/BookmarksPanel.svelte';
     import DevRoleSwitcher from './lib/components/DevRoleSwitcher.svelte';
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
+    import ExternalLinks from './lib/components/ExternalLinks.svelte';
     import SignInModal from './lib/components/SignInModal.svelte';
     import ToastHost from './lib/components/ToastHost.svelte';
     import { dashPort } from './lib/playback/dash-port';
@@ -85,6 +86,7 @@
 
 <div class="container">
     <header>
+        <ExternalLinks />
         <div class="tab-bar">
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => setActiveTab(TAB_NAMES.DASHBOARD)}>Dashboard</button>
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => setActiveTab(TAB_NAMES.TIMESTAMPS)}>Timestamps</button>
