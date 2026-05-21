@@ -63,7 +63,21 @@ def hydrate() -> None:
 
 
 def snapshot() -> ReciterCatalog:
-    return repo_catalog.snapshot()
+    """Full catalog read model. Cached on ``db_seq`` (the rebuild is ~38 ms
+    today, ~300–700 ms at scale, and runs on hot read paths). The returned
+    instance is shared — treat as READ-ONLY (no consumer mutates it). Cached
+    in the service, not the repo, so the migration's direct
+    ``repo_catalog.snapshot()`` calls bypass it."""
+    from services import db as _db
+    from services.storage import cache as _cache
+
+    seq = _db.current_db_seq()
+    cached = _cache.get_catalog_snapshot_cache(seq)
+    if cached is not None:
+        return cached
+    cat = repo_catalog.snapshot()
+    _cache.set_catalog_snapshot_cache(seq, cat)
+    return cat
 
 
 def find_delivery(slug: str) -> Delivery | None:
