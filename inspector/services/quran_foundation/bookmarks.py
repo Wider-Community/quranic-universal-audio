@@ -112,32 +112,49 @@ def _rows(body) -> list:
     return body if isinstance(body, list) else []
 
 
-# QF caps the bookmarks page size at 20.
+# QF caps the bookmarks page size at 20; paginate via cursor to see them all.
 _MAX_FIRST: Final[int] = 20
+_MAX_PAGES: Final[int] = 25
 
 
-def _fetch_rows(token: str, first: int = _MAX_FIRST) -> list:
+def _fetch_page(token: str, after: str | None = None) -> tuple[list, str | None, bool]:
     url = f"{config.PREPROD_USER_API_BASE}/bookmarks"
+    # NB: the LIST endpoint wants `mushafId` (create body uses `mushaf`);
+    # `first` must be <= 20. Cursor pagination uses `after`.
+    params: dict = {"mushafId": _MUSHAF_ID, "first": _MAX_FIRST}
+    if after:
+        params["after"] = after
     try:
         resp = requests.get(
-            url,
-            headers=_headers(token),
-            # NB: the LIST endpoint wants `mushafId` (create body uses `mushaf`);
-            # `first` must be <= 20.
-            params={"mushafId": _MUSHAF_ID, "first": min(first, _MAX_FIRST)},
-            timeout=_TIMEOUT_SECONDS,
+            url, headers=_headers(token), params=params, timeout=_TIMEOUT_SECONDS
         )
     except requests.RequestException as e:
         raise QfBookmarkError(f"QF bookmarks list failed: {e}") from e
-    logger.info("QF list_bookmarks %s body=%s", resp.status_code, resp.text[:500])
     if not resp.ok:
+        logger.info("QF list_bookmarks %s body=%s", resp.status_code, resp.text[:300])
         raise QfBookmarkError(f"QF bookmarks list {resp.status_code}: {resp.text[:200]}")
-    return _rows(resp.json())
+    body = resp.json()
+    rows = _rows(body)
+    pg = body.get("pagination") if isinstance(body, dict) else None
+    pg = pg or {}
+    return rows, pg.get("endCursor"), bool(pg.get("hasNextPage"))
 
 
-def list_bookmarks(token: str, *, first: int = _MAX_FIRST) -> list[dict]:
+def _all_rows(token: str) -> list:
+    out: list = []
+    after = None
+    for _ in range(_MAX_PAGES):
+        rows, cursor, has_next = _fetch_page(token, after)
+        out.extend(rows)
+        if not has_next or not cursor:
+            break
+        after = cursor
+    return out
+
+
+def list_bookmarks(token: str) -> list[dict]:
     out: list[dict] = []
-    for raw in _fetch_rows(token, first):
+    for raw in _all_rows(token):
         if not isinstance(raw, dict):
             continue
         key = _extract_key(raw)
@@ -177,7 +194,7 @@ def remove_bookmark(token: str, key: str) -> None:
         return
     surah, ayah = parts
     bid = None
-    for raw in _fetch_rows(token):
+    for raw in _all_rows(token):
         if not isinstance(raw, dict) or raw.get("type") != "ayah":
             continue
         k = raw.get("key")
@@ -185,6 +202,7 @@ def remove_bookmark(token: str, key: str) -> None:
         if k is not None and vn is not None and int(k) == surah and int(vn) == ayah:
             bid = raw.get("id")
             break
+    logger.info("QF remove_bookmark key=%s -> id=%s", key, bid)
     if not bid:
         return  # already absent
     url = f"{config.PREPROD_USER_API_BASE}/bookmarks/{bid}"
@@ -192,5 +210,6 @@ def remove_bookmark(token: str, key: str) -> None:
         resp = requests.delete(url, headers=_headers(token), timeout=_TIMEOUT_SECONDS)
     except requests.RequestException as e:
         raise QfBookmarkError(f"QF bookmark remove failed: {e}") from e
+    logger.info("QF remove_bookmark DELETE %s -> %s body=%s", bid, resp.status_code, resp.text[:200])
     if not resp.ok and resp.status_code != 404:
         raise QfBookmarkError(f"QF bookmark remove {resp.status_code}: {resp.text[:200]}")

@@ -59,11 +59,18 @@
                 .catch(() => {});
             return;
         }
-        // Google-style popup: a top-level window on the *.hf.space origin keeps
-        // OAuth first-party even when the app is embedded in the huggingface.co
-        // iframe. The popup signals back via postMessage and closes; we then
-        // re-read connection status.
-        const loginUrl = `${window.location.origin}/api/qf/login?popup=1`;
+        const origin = window.location.origin;
+        // Embedded in the huggingface.co iframe: popups get coerced and the
+        // OAuth state/CSRF cookies don't survive the iframe↔popup boundary
+        // (state_match=False / Ory CSRF errors). Break the whole tab out to the
+        // first-party app for a normal full-page login instead.
+        if (window.self !== window.top) {
+            window.open(`${origin}/api/qf/login`, '_top');
+            return;
+        }
+        // Top-level (direct URL): Google-style popup that signals back via
+        // postMessage and closes; we then re-read connection status.
+        const loginUrl = `${origin}/api/qf/login?popup=1`;
         const w = 500;
         const h = 680;
         const left = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
@@ -74,8 +81,10 @@
             `popup,width=${w},height=${h},left=${left},top=${top}`,
         );
         if (!popup) {
-            // Popup blocked — fall back to a full-page redirect.
-            window.location.href = loginUrl;
+            // Popup blocked — fall back to a full-page redirect (no popup flag,
+            // so the callback redirects back into the app rather than showing
+            // the self-closing page).
+            window.location.href = `${origin}/api/qf/login`;
             return;
         }
 
