@@ -16,7 +16,13 @@
     import { onMount } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { fetchJson } from '../../lib/api';
+    import {
+        addBookmark,
+        bookmarks,
+        isBookmarked,
+        removeBookmark,
+    } from '../../lib/stores/bookmarks';
+    import { pendingTsNavigation } from '../../lib/stores/navigation';
     import type { TsConfigResponse, TsDataResponse } from '../../lib/types/api';
     import type { TsReciter } from '../../lib/types/domain';
     import { getActiveTab } from '../../lib/utils/active-tab';
@@ -43,14 +49,18 @@
         loadManifest,
         loadQpc,
         loadVbrChapters,
+        loadVerseTranslations,
     } from './services/ts_client';
     import {
         granularity,
         showLetters,
         showPhonemes,
+        showTranslations,
+        translationLanguage,
         TS_GRANULARITIES,
         TS_VIEW_MODES,
         tsConfig,
+        verseTranslations,
         viewMode,
     } from './stores/display';
     import {
@@ -115,8 +125,20 @@
             }
         }
 
+        // Translation prefs are independent of view mode (the toggle only
+        // surfaces in Analysis, but the saved choice hydrates regardless).
+        const sT = localStorage.getItem(LS_KEYS.TS_SHOW_TRANSLATIONS);
+        if (sT !== null) showTranslations.set(sT === 'true');
+        const sLang = localStorage.getItem(LS_KEYS.TS_TRANSLATION_LANG);
+        if (sLang) translationLanguage.set(sLang);
+
         await surahInfoReady;
         await loadReciters();
+
+        // A bookmark click (pendingTsNavigation) owns the first verse load —
+        // skip the random auto-pick so we don't load a verse then immediately
+        // replace it. The reactive consumer below handles the actual load.
+        if (navHandled || get(pendingTsNavigation)) return;
 
         // Autoplay on first load only when this tab is the active one — a
         // browser deep-link or refresh while the Segments tab is up should
@@ -333,6 +355,74 @@
         }
     }
 
+    // ---------------------------------------------------------------------
+    // Bookmark deep-link: load a SPECIFIC verse with a RANDOM published
+    // reciter and autoplay. Mirrors loadRandomTimestamp's reciter/chapter
+    // store-setting but pins the verseRef to the bookmarked verse.
+    // ---------------------------------------------------------------------
+
+    let navHandled = false;
+
+    function shuffle<T>(arr: T[]): T[] {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j]!, arr[i]!];
+        }
+        return arr;
+    }
+
+    export async function loadVerseRandomReciter(
+        surah: number,
+        ayah: number,
+        autoplay: boolean = true,
+    ): Promise<void> {
+        document.body.classList.add('loading');
+        const verseRef = `${surah}:${ayah}`;
+        try {
+            const m = await loadManifest();
+            const candidates = shuffle(
+                Object.keys(m.reciters).filter((slug) =>
+                    m.reciters[slug]?.ts_chapters?.includes(surah),
+                ),
+            );
+            const [qpc, dk] = await Promise.all([loadQpc(), loadDk()]);
+            for (const reciter of candidates.slice(0, 6)) {
+                try {
+                    const shard = await loadChapterShard(reciter, surah);
+                    if (!chapterVerseRefs(shard).includes(verseRef)) continue;
+                    tsVbrChapters.set(new Set(await loadVbrChapters(reciter)));
+                    const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk);
+                    if (!data) continue;
+                    selectedReciter.set(data.reciter);
+                    localStorage.setItem(LS_KEYS.TS_RECITER, data.reciter);
+                    chapters.set(m.reciters[data.reciter]?.ts_chapters ?? []);
+                    selectedChapter.set(String(data.chapter));
+                    await populateVersesFor(data.reciter, data.chapter);
+                    ingestVerseData(data, autoplay);
+                    return;
+                } catch {
+                    // Shard 404 / assemble miss — try the next reciter.
+                    continue;
+                }
+            }
+            // No published reciter has this exact verse — fall back to random
+            // so the tab still shows something rather than an empty state.
+            console.warn(`No reciter found for ${verseRef}; falling back to random`);
+            await loadRandomTimestamp(null, autoplay);
+        } catch (e) {
+            console.error('Error loading bookmarked verse:', e);
+        } finally {
+            document.body.classList.remove('loading');
+            primePrerolls();
+        }
+    }
+
+    function consumePendingNav(nav: { surah: number; ayah: number; autoplay: boolean }): void {
+        navHandled = true;
+        pendingTsNavigation.set(null);
+        void loadVerseRandomReciter(nav.surah, nav.ayah, nav.autoplay);
+    }
+
     /** Consume the matching pre-roll if it exists, otherwise return null. */
     function consumePreroll(
         kind: 'same' | 'any',
@@ -465,6 +555,58 @@
     $: prevDisabled = segmentSelectedIdx <= 0;
     $: nextDisabled = segmentSelectedIdx < 0 || segmentSelectedIdx >= $verses.length - 1;
 
+    // Bookmark deep-link consumer: fires on mount (if a click set it before the
+    // tab mounted) and on every later bookmark click while the tab stays mounted.
+    $: if ($pendingTsNavigation) consumePendingNav($pendingTsNavigation);
+
+    // Current verse → bookmarkable surah:ayah (strip any compound-ref suffix).
+    $: currentVerseKey = (() => {
+        const ref = $selectedVerse;
+        if (!ref) return '';
+        const head = ref.split('-')[0] ?? ref;
+        const [s, a] = head.split(':');
+        const surah = parseInt(s ?? '', 10);
+        const ayah = parseInt(a ?? '', 10);
+        return surah && ayah ? `${surah}:${ayah}` : '';
+    })();
+    $: bookmarkedCurrent = currentVerseKey ? isBookmarked($bookmarks, currentVerseKey) : false;
+
+    // Word-by-word translation overlay (Analysis only). Lazily fetch glosses
+    // for the loaded verse whenever the toggle/language/verse changes. Async +
+    // independent of the audio element — never seeks or pauses, so playback is
+    // untouched (mirrors the passive letter/phoneme display). A monotonic token
+    // guards against out-of-order responses when the user flips quickly.
+    let _trReq = 0;
+    $: refreshTranslations($loadedVerse, $showTranslations, $translationLanguage);
+    function refreshTranslations(
+        lv: typeof $loadedVerse,
+        on: boolean,
+        lang: string,
+    ): void {
+        if (!on || !lv || lv.data.words.length === 0) {
+            verseTranslations.set({});
+            return;
+        }
+        const token = ++_trReq;
+        loadVerseTranslations(lv.data.words, lang)
+            .then((map) => {
+                if (token === _trReq) verseTranslations.set(map);
+            })
+            .catch(() => {
+                if (token === _trReq) verseTranslations.set({});
+            });
+    }
+
+    function toggleVerseBookmark(): void {
+        if (!currentVerseKey) return;
+        if (bookmarkedCurrent) {
+            removeBookmark(currentVerseKey);
+        } else {
+            const [s, a] = currentVerseKey.split(':');
+            addBookmark(parseInt(s ?? '', 10), parseInt(a ?? '', 10));
+        }
+    }
+
     // ---------------------------------------------------------------------
     // Mount
     // ---------------------------------------------------------------------
@@ -515,6 +657,20 @@
         on:verseChange={(e) => onVerseChange(e.detail)}
     />
 
+    {#if currentVerseKey}
+        <div class="ts-bookmark-row">
+            <button
+                type="button"
+                class="ts-bookmark-btn"
+                class:active={bookmarkedCurrent}
+                title={bookmarkedCurrent ? 'Remove bookmark' : 'Bookmark this verse'}
+                on:click={toggleVerseBookmark}
+            >
+                {bookmarkedCurrent ? '★ Bookmarked' : '☆ Bookmark verse'}
+            </button>
+        </div>
+    {/if}
+
     <main>
         <TimestampsAudio
             bind:this={audioComp}
@@ -545,3 +701,23 @@
         </div>
     </main>
 </div>
+
+<style>
+    .ts-bookmark-row {
+        display: flex;
+        justify-content: center;
+        margin: 6px 0 2px;
+    }
+    .ts-bookmark-btn {
+        background: #16213e;
+        color: #d8def0;
+        border: 1px solid #2a3a6a;
+        border-radius: 6px;
+        padding: 5px 12px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+    .ts-bookmark-btn:hover { background: #1c294b; border-color: #4cc9f0; }
+    .ts-bookmark-btn.active { color: #f0a500; border-color: #f0a500; }
+</style>

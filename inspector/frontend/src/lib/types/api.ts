@@ -516,6 +516,12 @@ export interface AudioSourcesResponse {
 export interface AudioSurahEntry {
     url: string;
     duration_ms: number | null;
+    /** Set when the URL was routed through the Quran.Foundation Content API
+     * (``qf_api``) or an attempt fell back to our own CDN link
+     * (``qf_fallback``). Absent for normal, un-routed deliveries. */
+    via?: 'qf_api' | 'qf_fallback';
+    /** Our original CDN link, present only when ``via === 'qf_api'``. */
+    origin_url?: string;
 }
 export interface AudioSurahsResponse {
     surahs: Record<string, AudioSurahEntry>;
