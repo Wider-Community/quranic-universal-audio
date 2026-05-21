@@ -118,7 +118,8 @@ def _fetch_rows(token: str, first: int = 100) -> list:
         resp = requests.get(
             url,
             headers=_headers(token),
-            params={"mushaf": _MUSHAF_ID, "first": first},
+            # NB: the LIST endpoint wants `mushafId` (create body uses `mushaf`).
+            params={"mushafId": _MUSHAF_ID, "first": first},
             timeout=_TIMEOUT_SECONDS,
         )
     except requests.RequestException as e:
