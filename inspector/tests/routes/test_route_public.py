@@ -139,9 +139,11 @@ def test_stats_returns_six_bucket_counts(flask_client, monkeypatch):
 
 
 def test_stats_sets_cache_control(flask_client, monkeypatch):
+    # no-store: stats reflect live lifecycle state (bucket counts shift on
+    # every claim/transition); a client max-age served stale counts.
     _install(monkeypatch, reciters=[], deliveries=[], rows=[])
     resp = flask_client.get("/api/public/stats")
-    assert "max-age=30" in resp.headers["Cache-Control"]
+    assert "no-store" in resp.headers["Cache-Control"]
 
 
 # ---------------------------------------------------------------------------

@@ -4,9 +4,12 @@ All responses are public — no authentication required, no per-user
 predicates included. Assignee identity is redacted in
 ``services/public_state`` before the data ever reaches this layer.
 
-Endpoints emit ``Cache-Control: public, max-age=30`` so a CDN front or a
-returning visitor can absorb repeat requests; per-call work is cheap (every
-reciter lives in memory after the bucket hydrate at boot).
+The list/stats reads are ``Cache-Control: no-store``: they reflect reciter
+lifecycle state (claims, transitions) that an editor changes live, and a
+client cache made the dashboard status + reciter list show stale state for up
+to its max-age after a transition. Server-side cost is already absorbed by the
+``db_seq``-keyed read cache (``services/storage/cache.py``), so client caching
+only bought staleness.
 
 Slice B of phase 6.
 """
@@ -25,7 +28,10 @@ from services import search_normalize as search_normalize_service
 public_bp = Blueprint("public", __name__, url_prefix="/api/public")
 
 
-_LIST_CACHE = "public, max-age=30"
+# no-store: these lists carry live lifecycle state (claims/transitions). A
+# client max-age made the dashboard status pill + reciter list stale for up to
+# 30s after an action; the server-side db_seq read cache absorbs the recompute.
+_LIST_CACHE = "no-store"
 
 _VALID_BUCKETS = {
     "available_for_request",

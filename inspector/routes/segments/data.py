@@ -85,7 +85,10 @@ def seg_reciters():
         }
         for row in sorted(state_service.all_rows(), key=lambda r: r.slug)
     ]
-    return orjson_response(result, headers={"Cache-Control": "private, max-age=30"})
+    # no-store: this list carries live lifecycle state (state/visibility per
+    # row) that changes on claim/release/transition; a client max-age made the
+    # Segments reciter list + picker stale for up to 30s after an action.
+    return orjson_response(result, headers={"Cache-Control": "no-store"})
 
 
 @seg_data_bp.route("/chapters/<reciter>")
