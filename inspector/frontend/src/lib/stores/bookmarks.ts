@@ -139,19 +139,35 @@ export async function onQfConnected(): Promise<void> {
     await syncFromQf();
 }
 
-/** Replace the list with the QF-synced bookmarks (connected mode only). */
+/** Re-check connection on returning to this tab (after the new-tab login). */
+export async function recheckConnection(): Promise<void> {
+    try {
+        const status = await getQfStatus();
+        if (status.connected && !get(qfConnected)) {
+            qfLogin.set(status.login ?? null);
+            qfDev.set(Boolean(status.dev));
+            await onQfConnected();
+        }
+    } catch {
+        /* ignore — stays in current mode */
+    }
+}
+
+/** Replace the list with the QF-synced bookmarks (connected mode only).
+ *  Mirrors the synced list into localStorage so the local copy never goes
+ *  stale — this is what stops a later merge from resurrecting deletes. */
 export async function syncFromQf(): Promise<void> {
     const resp = await getRemoteBookmarks();
     qfConnected.set(resp.connected);
     if (resp.connected) {
-        bookmarks.set(
-            resp.bookmarks.map((b) => ({
-                surah: b.surah,
-                ayah: b.ayah,
-                key: b.key,
-                addedAt: Date.now(),
-            })),
-        );
+        const list = resp.bookmarks.map((b) => ({
+            surah: b.surah,
+            ayah: b.ayah,
+            key: b.key,
+            addedAt: Date.now(),
+        }));
+        bookmarks.set(list);
+        persistLocal(list);
     }
 }
 
@@ -161,22 +177,20 @@ export function addBookmark(surah: number, ayah: number): void {
     if (isBookmarked(list, key)) return;
     const next = [makeBookmark(surah, ayah), ...list];
     bookmarks.set(next);
+    persistLocal(next); // always mirror locally so it stays in sync with the account
     if (get(qfConnected)) {
         void addRemoteBookmark(surah, ayah).catch(() => {
             /* best-effort; local copy already updated */
         });
-    } else {
-        persistLocal(next);
     }
 }
 
 export function removeBookmark(key: string): void {
     const next = get(bookmarks).filter((b) => b.key !== key);
     bookmarks.set(next);
+    persistLocal(next); // mirror the deletion locally so a reconnect can't re-push it
     if (get(qfConnected)) {
         void removeRemoteBookmark(key).catch(() => {});
-    } else {
-        persistLocal(next);
     }
 }
 

@@ -24,6 +24,7 @@
         qfConnected,
         qfDev,
         qfLogin,
+        recheckConnection,
         removeBookmark,
     } from '../stores/bookmarks';
     import { currentUser } from '../stores/current-user';
@@ -35,8 +36,13 @@
     // surahInfo loads async; flip `ready` when it lands so labels re-render
     // from bare numbers to full surah names.
     let ready = $state(false);
+    // Absolute login URL on this app's own origin (always *.hf.space inside the
+    // HF iframe). Used as a real anchor href so the browser reliably opens a
+    // first-party top-level tab — HF's recommended OAuth-from-Space pattern.
+    let loginHref = $state('/api/qf/login');
 
     onMount(() => {
+        loginHref = `${window.location.origin}/api/qf/login`;
         void initBookmarks();
         void surahInfoReady.then(() => {
             ready = true;
@@ -49,67 +55,26 @@
         bookmarksVisible.set(false);
     }
 
-    function connect(): void {
-        if ($currentUser.dev_mode) {
-            void devConnectQf()
-                .then(() => {
-                    qfDev.set(true);
-                    return onQfConnected();
-                })
-                .catch(() => {});
-            return;
-        }
-        const origin = window.location.origin;
-        // Embedded in the huggingface.co iframe: top-navigation is sandbox-blocked
-        // and popups get coerced, breaking OAuth state/cookies. Open the login in
-        // a NEW TAB — a top-level first-party hf.space context where OAuth works.
-        // The user completes sign-in and continues in that tab (connected).
-        if (window.self !== window.top) {
-            window.open(`${origin}/api/qf/login`, '_blank', 'noopener');
-            return;
-        }
-        // Top-level (direct URL): Google-style popup that signals back via
-        // postMessage and closes; we then re-read connection status.
-        const loginUrl = `${origin}/api/qf/login?popup=1`;
-        const w = 500;
-        const h = 680;
-        const left = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
-        const top = window.screenY + Math.max(0, (window.outerHeight - h) / 2);
-        const popup = window.open(
-            loginUrl,
-            'qf_oauth',
-            `popup,width=${w},height=${h},left=${left},top=${top}`,
-        );
-        if (!popup) {
-            // Popup blocked — fall back to a full-page redirect (no popup flag,
-            // so the callback redirects back into the app rather than showing
-            // the self-closing page).
-            window.location.href = `${origin}/api/qf/login`;
-            return;
-        }
+    /** Dev-mode stub connect (no real OAuth). */
+    function devConnect(): void {
+        void devConnectQf()
+            .then(() => {
+                qfDev.set(true);
+                return onQfConnected();
+            })
+            .catch(() => {});
+    }
 
-        const onMessage = (e: MessageEvent): void => {
-            if (e.origin !== window.location.origin) return;
-            const data = e.data as { type?: string; status?: string } | null;
-            if (!data || data.type !== 'qf-auth') return;
-            cleanup();
-            if (data.status === 'connected') {
-                void onQfConnected();
-            }
+    /** Login opens in a new top-level tab (the `<a target="_blank">`). When the
+     *  user returns to this tab, re-check status — on the direct (first-party)
+     *  URL that flips us to connected + merges. In the HF iframe the embed can't
+     *  read the session (third-party cookies), so the new tab is the home. */
+    function armConnect(): void {
+        const onFocus = (): void => {
+            window.removeEventListener('focus', onFocus);
+            void recheckConnection();
         };
-        const poll = setInterval(() => {
-            if (popup.closed) {
-                cleanup();
-                // Message may have been missed (e.g. popup closed manually) —
-                // re-check status to catch a completed login.
-                void initBookmarks();
-            }
-        }, 700);
-        function cleanup(): void {
-            clearInterval(poll);
-            window.removeEventListener('message', onMessage);
-        }
-        window.addEventListener('message', onMessage);
+        window.addEventListener('focus', onFocus);
     }
 
     function label(surah: number): string {
@@ -139,11 +104,16 @@
                     Disconnect
                 </button>
             </div>
-        {:else}
-            <button class="bm-connect" type="button" onclick={connect}>
-                Connect Quran.Foundation
+        {:else if $currentUser.dev_mode}
+            <button class="bm-connect" type="button" onclick={devConnect}>
+                Connect (dev stub)
             </button>
             <p class="bm-conn-hint">Saved locally. Connect to sync across Quran.com apps.</p>
+        {:else}
+            <a class="bm-connect" href={loginHref} target="_blank" rel="noopener" onclick={armConnect}>
+                Connect Quran.Foundation
+            </a>
+            <p class="bm-conn-hint">Opens a new tab to sign in. Bookmarks are saved locally until then.</p>
         {/if}
     </div>
 
@@ -222,7 +192,11 @@
     }
     .bm-disconnect:hover { border-color: #ff6b6b; color: #ff6b6b; }
     .bm-connect {
+        display: block;
         width: 100%;
+        box-sizing: border-box;
+        text-align: center;
+        text-decoration: none;
         background: #f0a500;
         color: #1a1a1a;
         border: 0;
