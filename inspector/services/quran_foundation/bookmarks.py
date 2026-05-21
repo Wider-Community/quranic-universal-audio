@@ -112,14 +112,19 @@ def _rows(body) -> list:
     return body if isinstance(body, list) else []
 
 
-def _fetch_rows(token: str, first: int = 100) -> list:
+# QF caps the bookmarks page size at 20.
+_MAX_FIRST: Final[int] = 20
+
+
+def _fetch_rows(token: str, first: int = _MAX_FIRST) -> list:
     url = f"{config.PREPROD_USER_API_BASE}/bookmarks"
     try:
         resp = requests.get(
             url,
             headers=_headers(token),
-            # NB: the LIST endpoint wants `mushafId` (create body uses `mushaf`).
-            params={"mushafId": _MUSHAF_ID, "first": first},
+            # NB: the LIST endpoint wants `mushafId` (create body uses `mushaf`);
+            # `first` must be <= 20.
+            params={"mushafId": _MUSHAF_ID, "first": min(first, _MAX_FIRST)},
             timeout=_TIMEOUT_SECONDS,
         )
     except requests.RequestException as e:
@@ -130,7 +135,7 @@ def _fetch_rows(token: str, first: int = 100) -> list:
     return _rows(resp.json())
 
 
-def list_bookmarks(token: str, *, first: int = 100) -> list[dict]:
+def list_bookmarks(token: str, *, first: int = _MAX_FIRST) -> list[dict]:
     out: list[dict] = []
     for raw in _fetch_rows(token, first):
         if not isinstance(raw, dict):
