@@ -650,3 +650,37 @@ def invalidate_public_reciters_cache() -> None:
     global _public_reciters
     with _public_reciters_lock:
         _public_reciters = None
+
+
+# ---------------------------------------------------------------------------
+# Catalog snapshot — the full ReciterCatalog rebuild from SQL through pydantic.
+# Recomputed per request on /api/static/catalog.json, public detail / admin-view
+# pages, and activity-feed descriptor lookups; ~38 ms today but ~300 ms at 10x
+# deliveries and ~700 ms at 100x (single-threaded → compounds across concurrent
+# visitors on the single worker). Cache the built model keyed on db_seq so the
+# rebuild is paid once per write generation. Returned INSTANCE is shared — all
+# catalog_service.snapshot() consumers are read-only (verified); never mutate it.
+# ---------------------------------------------------------------------------
+
+_catalog_snapshot_lock = _threading.Lock()
+_catalog_snapshot: "tuple[int, object] | None" = None
+
+
+def get_catalog_snapshot_cache(db_seq: int):
+    """Return the cached ReciterCatalog iff built at ``db_seq``, else None."""
+    with _catalog_snapshot_lock:
+        if _catalog_snapshot is not None and _catalog_snapshot[0] == db_seq:
+            return _catalog_snapshot[1]
+    return None
+
+
+def set_catalog_snapshot_cache(db_seq: int, value: object) -> None:
+    global _catalog_snapshot
+    with _catalog_snapshot_lock:
+        _catalog_snapshot = (db_seq, value)
+
+
+def invalidate_catalog_snapshot_cache() -> None:
+    global _catalog_snapshot
+    with _catalog_snapshot_lock:
+        _catalog_snapshot = None

@@ -132,13 +132,16 @@ def _substrate_db(tmp_path):
     db.init_db()
     _sync.set_sync_enabled(False)
     _sync._reset_for_test()
-    # The public-reciters cache is keyed on db_seq; db.reset() restarts that
-    # counter, so clear the cache between tests to avoid cross-test bleed.
+    # The public-reciters + catalog-snapshot caches are keyed on db_seq;
+    # db.reset() restarts that counter, so clear them between tests to avoid
+    # cross-test bleed.
     _cache.invalidate_public_reciters_cache()
+    _cache.invalidate_catalog_snapshot_cache()
     yield
     db.reset()
     _sync.set_sync_enabled(True)
     _cache.invalidate_public_reciters_cache()
+    _cache.invalidate_catalog_snapshot_cache()
 
 
 def _seed_delivery_chain(conn, slug: str, reciter_id: str = "r") -> None:
