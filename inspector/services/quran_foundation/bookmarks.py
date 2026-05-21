@@ -13,11 +13,14 @@ the FE↔backend wiring is demonstrable today.
 from __future__ import annotations
 
 import re
+import logging
 from typing import Final
 
 import requests
 
 from . import config
+
+logger = logging.getLogger(__name__)
 
 _TIMEOUT_SECONDS: Final[float] = 10.0
 _KEY_RE: Final[re.Pattern] = re.compile(r"^(\d{1,3}):(\d{1,3})$")
@@ -102,6 +105,7 @@ def list_bookmarks(token: str, *, first: int = 50) -> list[dict]:
         raise QfBookmarkError(f"QF bookmarks list failed: {e}") from e
     if not resp.ok:
         raise QfBookmarkError(f"QF bookmarks list {resp.status_code}: {resp.text[:200]}")
+    logger.info("QF list_bookmarks %s body=%s", resp.status_code, resp.text[:500])
     body = resp.json()
     # Tolerate {data: [...]}, {bookmarks: [...]}, or a bare list.
     rows = body.get("data") if isinstance(body, dict) else body
@@ -121,12 +125,16 @@ def list_bookmarks(token: str, *, first: int = 50) -> list[dict]:
 def add_bookmark(token: str, surah: int, ayah: int) -> dict:
     url = f"{config.PREPROD_USER_API_BASE}/bookmarks"
     key = normalize_key(surah, ayah)
+    payload = {"key": key, "type": "ayah", "mushaf": 1, "verse_key": key}
     try:
         resp = requests.post(
-            url, headers=_headers(token), json={"key": key}, timeout=_TIMEOUT_SECONDS
+            url, headers=_headers(token), json=payload, timeout=_TIMEOUT_SECONDS
         )
     except requests.RequestException as e:
         raise QfBookmarkError(f"QF bookmark add failed: {e}") from e
+    logger.info(
+        "QF add_bookmark sent=%s -> %s body=%s", payload, resp.status_code, resp.text[:500]
+    )
     if not resp.ok:
         raise QfBookmarkError(f"QF bookmark add {resp.status_code}: {resp.text[:200]}")
     return {"surah": int(surah), "ayah": int(ayah), "key": key}
