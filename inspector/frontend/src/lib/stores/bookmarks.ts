@@ -88,10 +88,31 @@ export async function initBookmarks(): Promise<void> {
         qfConnected.set(status.connected);
         qfLogin.set(status.login ?? null);
         qfDev.set(Boolean(status.dev));
-        if (status.connected) await syncFromQf();
+        if (status.connected) {
+            // A `?qf_connected=1` landing means we just returned from a
+            // full-page OAuth (popup coerced to same-tab, e.g. in the HF
+            // iframe). Treat it as a fresh connect → merge local up, then
+            // strip the flag so reloads don't re-merge.
+            if (consumeFreshConnectFlag()) {
+                await onQfConnected();
+            } else {
+                await syncFromQf();
+            }
+        }
     } catch {
         qfConnected.set(false);
     }
+}
+
+function consumeFreshConnectFlag(): boolean {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('qf_connected') !== '1') return false;
+    params.delete('qf_connected');
+    const qs = params.toString();
+    const url = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash;
+    window.history.replaceState({}, '', url);
+    return true;
 }
 
 /**

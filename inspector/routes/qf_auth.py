@@ -77,14 +77,24 @@ def qf_login():
 
 
 def _popup_close_html(status: str) -> str:
-    """Minimal page that signals the opener and closes the popup."""
+    """Page returned to the popup after auth.
+
+    If it's a real popup, signal the opener and close. If the browser turned
+    the popup into a same-tab navigation (e.g. inside the huggingface.co
+    iframe), there's no opener to close — so redirect back into the app instead
+    of dead-ending on a "you can close this window" page."""
+    target = "/?qf_connected=1" if status == "connected" else "/?qf_error=1"
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
-        "<title>Quran.Foundation</title></head><body>"
-        "<p style='font-family:sans-serif;color:#444'>You can close this window.</p>"
-        "<script>(function(){try{if(window.opener)window.opener.postMessage("
-        f"{{type:'qf-auth',status:'{status}'}},window.location.origin);}}catch(e){{}}"
-        "window.close();})();</script></body></html>"
+        "<title>Quran.Foundation</title></head>"
+        "<body><p style='font-family:sans-serif;color:#444'>Connecting…</p>"
+        "<script>(function(){"
+        "var status=" + repr(status) + ";var target=" + repr(target) + ";"
+        "function go(){try{window.location.replace(target);}catch(e){}}"
+        "try{if(window.opener&&window.opener!==window){"
+        "window.opener.postMessage({type:'qf-auth',status:status},window.location.origin);"
+        "window.close();setTimeout(go,600);}else{go();}}catch(e){go();}"
+        "})();</script></body></html>"
     )
 
 
