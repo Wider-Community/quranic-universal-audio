@@ -60,12 +60,12 @@
             return;
         }
         const origin = window.location.origin;
-        // Embedded in the huggingface.co iframe: popups get coerced and the
-        // OAuth state/CSRF cookies don't survive the iframe↔popup boundary
-        // (state_match=False / Ory CSRF errors). Break the whole tab out to the
-        // first-party app for a normal full-page login instead.
+        // Embedded in the huggingface.co iframe: top-navigation is sandbox-blocked
+        // and popups get coerced, breaking OAuth state/cookies. Open the login in
+        // a NEW TAB — a top-level first-party hf.space context where OAuth works.
+        // The user completes sign-in and continues in that tab (connected).
         if (window.self !== window.top) {
-            window.open(`${origin}/api/qf/login`, '_top');
+            window.open(`${origin}/api/qf/login`, '_blank', 'noopener');
             return;
         }
         // Top-level (direct URL): Google-style popup that signals back via
