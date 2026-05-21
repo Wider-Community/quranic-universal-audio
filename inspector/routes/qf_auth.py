@@ -66,29 +66,53 @@ def qf_login():
         state=state, nonce=nonce, code_challenge=pkce.challenge, redirect_uri=redirect_uri
     )
     resp = make_response(redirect(url))
-    tmp = session.encode_oauth_tmp(
-        {"state": state, "verifier": pkce.verifier, "redirect_uri": redirect_uri}
-    )
+    tmp = session.encode_oauth_tmp({
+        "state": state,
+        "verifier": pkce.verifier,
+        "redirect_uri": redirect_uri,
+        "popup": request.args.get("popup") == "1",
+    })
     _set_cookie(resp, session.QF_OAUTH_TMP_COOKIE_NAME, tmp, session.QF_OAUTH_TMP_MAX_AGE)
     return resp
+
+
+def _popup_close_html(status: str) -> str:
+    """Minimal page that signals the opener and closes the popup."""
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<title>Quran.Foundation</title></head><body>"
+        "<p style='font-family:sans-serif;color:#444'>You can close this window.</p>"
+        "<script>(function(){try{if(window.opener)window.opener.postMessage("
+        f"{{type:'qf-auth',status:'{status}'}},window.location.origin);}}catch(e){{}}"
+        "window.close();})();</script></body></html>"
+    )
+
+
+def _finish(popup: bool, status: str, redirect_to: str):
+    """Build the callback response: a self-closing page for popup mode, else a
+    redirect back into the SPA."""
+    if popup:
+        return make_response(_popup_close_html(status))
+    return make_response(redirect(redirect_to))
 
 
 @qf_auth_bp.route("/callback", methods=["GET"])
 def qf_callback():
     """Finish the OAuth2 flow: validate state, exchange code, mint session."""
+    tmp = session.decode_oauth_tmp(request.cookies.get(session.QF_OAUTH_TMP_COOKIE_NAME, ""))
+    popup = bool(tmp and tmp.get("popup"))
     err = request.args.get("error")
     if err:
         logger.warning("QF callback error: %s", request.args.get("error_description", err))
-        return redirect("/?qf_error=1")
+        return _finish(popup, "error", "/?qf_error=1")
     code = request.args.get("code", "")
     state = request.args.get("state", "")
-    tmp = session.decode_oauth_tmp(request.cookies.get(session.QF_OAUTH_TMP_COOKIE_NAME, ""))
     logger.info(
-        "QF callback: has_code=%s has_tmp=%s state_match=%s",
-        bool(code), bool(tmp), bool(tmp) and tmp.get("state") == state,
+        "QF callback: popup=%s has_code=%s has_tmp=%s state_match=%s",
+        popup, bool(code), bool(tmp), bool(tmp) and tmp.get("state") == state,
     )
     if not code or not tmp or tmp.get("state") != state:
-        return redirect("/?qf_error=state")
+        return _finish(popup, "error", "/?qf_error=state")
     try:
         token = oauth.exchange_code(
             code=code,
@@ -97,8 +121,8 @@ def qf_callback():
         )
     except oauth.QfOAuthError as e:
         logger.warning("QF token exchange failed: %s", e)
-        return redirect("/?qf_error=token")
-    resp = make_response(redirect("/?qf_connected=1"))
+        return _finish(popup, "error", "/?qf_error=token")
+    resp = _finish(popup, "connected", "/?qf_connected=1")
     _set_cookie(
         resp,
         session.QF_SESSION_COOKIE_NAME,

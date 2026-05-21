@@ -60,9 +60,49 @@
                 .catch(() => {});
             return;
         }
-        // Real OAuth flow. Completes once a redirect URI is registered on the
-        // pre-prod client; until then QF returns a redirect_uri error.
-        window.location.href = '/api/qf/login';
+        // Google-style popup: a top-level window on the *.hf.space origin keeps
+        // OAuth first-party even when the app is embedded in the huggingface.co
+        // iframe. The popup signals back via postMessage and closes; we then
+        // re-read connection status.
+        const loginUrl = `${window.location.origin}/api/qf/login?popup=1`;
+        const w = 500;
+        const h = 680;
+        const left = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
+        const top = window.screenY + Math.max(0, (window.outerHeight - h) / 2);
+        const popup = window.open(
+            loginUrl,
+            'qf_oauth',
+            `popup,width=${w},height=${h},left=${left},top=${top}`,
+        );
+        if (!popup) {
+            // Popup blocked — fall back to a full-page redirect.
+            window.location.href = loginUrl;
+            return;
+        }
+
+        const onMessage = (e: MessageEvent): void => {
+            if (e.origin !== window.location.origin) return;
+            const data = e.data as { type?: string; status?: string } | null;
+            if (!data || data.type !== 'qf-auth') return;
+            cleanup();
+            if (data.status === 'connected') {
+                qfConnected.set(true);
+                void syncFromQf();
+            }
+        };
+        const poll = setInterval(() => {
+            if (popup.closed) {
+                cleanup();
+                // Message may have been missed (e.g. popup closed manually) —
+                // re-check status to catch a completed login.
+                void initBookmarks();
+            }
+        }, 700);
+        function cleanup(): void {
+            clearInterval(poll);
+            window.removeEventListener('message', onMessage);
+        }
+        window.addEventListener('message', onMessage);
     }
 
     function label(surah: number): string {
