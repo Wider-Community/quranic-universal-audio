@@ -81,38 +81,57 @@ def _headers(token: str) -> dict:
     }
 
 
+# Mushaf id used for bookmark create/list (QDC default Hafs mushaf).
+_MUSHAF_ID: Final[int] = 1
+
+
 def _extract_key(raw: dict) -> str | None:
-    """Pull a verse key out of a QF bookmark record, tolerating field-name
-    variation (key / verse_key / verseKey, or surah+ayah fields)."""
-    for field in ("key", "verse_key", "verseKey"):
+    """Map a QF bookmark record to a ``surah:ayah`` key.
+
+    QF ayah bookmarks look like ``{"type":"ayah","key":<surah>,"verseNumber":<ayah>}``
+    where ``key`` is the chapter number. Only ayah bookmarks map to a verse
+    key; surah/juz/page bookmarks are skipped (our viewer is verse-level)."""
+    t = raw.get("type")
+    k = raw.get("key")
+    vn = raw.get("verseNumber", raw.get("verse_number"))
+    if t == "ayah" and isinstance(k, (int, float)) and vn is not None:
+        return f"{int(k)}:{int(vn)}"
+    # Tolerant fallbacks for string verse keys.
+    for field in ("verse_key", "verseKey"):
         val = raw.get(field)
         if isinstance(val, str) and _KEY_RE.match(val):
             return val
-    surah = raw.get("surah") or raw.get("chapter") or raw.get("chapter_id")
-    ayah = raw.get("ayah") or raw.get("verse") or raw.get("verse_number")
-    if surah is not None and ayah is not None:
-        return f"{int(surah)}:{int(ayah)}"
+    if isinstance(k, str) and _KEY_RE.match(k):
+        return k
     return None
 
 
-def list_bookmarks(token: str, *, first: int = 50) -> list[dict]:
+def _rows(body) -> list:
+    if isinstance(body, dict):
+        return body.get("data") or body.get("bookmarks") or []
+    return body if isinstance(body, list) else []
+
+
+def _fetch_rows(token: str, first: int = 100) -> list:
     url = f"{config.PREPROD_USER_API_BASE}/bookmarks"
     try:
         resp = requests.get(
-            url, headers=_headers(token), params={"first": first}, timeout=_TIMEOUT_SECONDS
+            url,
+            headers=_headers(token),
+            params={"mushaf": _MUSHAF_ID, "first": first},
+            timeout=_TIMEOUT_SECONDS,
         )
     except requests.RequestException as e:
         raise QfBookmarkError(f"QF bookmarks list failed: {e}") from e
+    logger.info("QF list_bookmarks %s body=%s", resp.status_code, resp.text[:500])
     if not resp.ok:
         raise QfBookmarkError(f"QF bookmarks list {resp.status_code}: {resp.text[:200]}")
-    logger.info("QF list_bookmarks %s body=%s", resp.status_code, resp.text[:500])
-    body = resp.json()
-    # Tolerate {data: [...]}, {bookmarks: [...]}, or a bare list.
-    rows = body.get("data") if isinstance(body, dict) else body
-    if rows is None and isinstance(body, dict):
-        rows = body.get("bookmarks", [])
+    return _rows(resp.json())
+
+
+def list_bookmarks(token: str, *, first: int = 100) -> list[dict]:
     out: list[dict] = []
-    for raw in rows or []:
+    for raw in _fetch_rows(token, first):
         if not isinstance(raw, dict):
             continue
         key = _extract_key(raw)
@@ -124,8 +143,13 @@ def list_bookmarks(token: str, *, first: int = 50) -> list[dict]:
 
 def add_bookmark(token: str, surah: int, ayah: int) -> dict:
     url = f"{config.PREPROD_USER_API_BASE}/bookmarks"
-    key = normalize_key(surah, ayah)
-    payload = {"key": key, "type": "ayah", "mushaf": 1, "verse_key": key}
+    # QF ayah bookmark: key = chapter number, verseNumber = ayah (both numeric).
+    payload = {
+        "mushaf": _MUSHAF_ID,
+        "type": "ayah",
+        "key": int(surah),
+        "verseNumber": int(ayah),
+    }
     try:
         resp = requests.post(
             url, headers=_headers(token), json=payload, timeout=_TIMEOUT_SECONDS
@@ -133,15 +157,31 @@ def add_bookmark(token: str, surah: int, ayah: int) -> dict:
     except requests.RequestException as e:
         raise QfBookmarkError(f"QF bookmark add failed: {e}") from e
     logger.info(
-        "QF add_bookmark sent=%s -> %s body=%s", payload, resp.status_code, resp.text[:500]
+        "QF add_bookmark sent=%s -> %s body=%s", payload, resp.status_code, resp.text[:300]
     )
     if not resp.ok:
         raise QfBookmarkError(f"QF bookmark add {resp.status_code}: {resp.text[:200]}")
-    return {"surah": int(surah), "ayah": int(ayah), "key": key}
+    return {"surah": int(surah), "ayah": int(ayah), "key": normalize_key(surah, ayah)}
 
 
 def remove_bookmark(token: str, key: str) -> None:
-    url = f"{config.PREPROD_USER_API_BASE}/bookmarks/{key}"
+    # QF deletes by bookmark id (a cuid), not the verse key — look it up first.
+    parts = _split_key(key)
+    if not parts:
+        return
+    surah, ayah = parts
+    bid = None
+    for raw in _fetch_rows(token):
+        if not isinstance(raw, dict) or raw.get("type") != "ayah":
+            continue
+        k = raw.get("key")
+        vn = raw.get("verseNumber", raw.get("verse_number"))
+        if k is not None and vn is not None and int(k) == surah and int(vn) == ayah:
+            bid = raw.get("id")
+            break
+    if not bid:
+        return  # already absent
+    url = f"{config.PREPROD_USER_API_BASE}/bookmarks/{bid}"
     try:
         resp = requests.delete(url, headers=_headers(token), timeout=_TIMEOUT_SECONDS)
     except requests.RequestException as e:
