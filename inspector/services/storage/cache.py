@@ -615,3 +615,38 @@ def get_surah_info_lite_cache():
 
 def set_surah_info_lite_cache(data: dict) -> None:
     _surah_info_lite.set(data)
+
+
+# ---------------------------------------------------------------------------
+# Public reciters list — the only high-frequency, anonymous, concurrent path.
+# ``all_public_reciters()`` rebuilds the WHOLE catalog model + the state JOIN
+# per call; cache the materialized list keyed on the monotonic ``db_seq`` so
+# ANY committed write (state / catalog / access / activity all bump db_seq)
+# transparently invalidates it — no explicit per-mutation hooks to keep in
+# sync. Single-worker gthread: a benign race just recomputes for one seq.
+# ---------------------------------------------------------------------------
+
+import threading as _threading
+
+_public_reciters_lock = _threading.Lock()
+_public_reciters: "tuple[int, list] | None" = None
+
+
+def get_public_reciters_cache(db_seq: int):
+    """Return the cached list iff it was computed at ``db_seq``, else None."""
+    with _public_reciters_lock:
+        if _public_reciters is not None and _public_reciters[0] == db_seq:
+            return _public_reciters[1]
+    return None
+
+
+def set_public_reciters_cache(db_seq: int, value: list) -> None:
+    global _public_reciters
+    with _public_reciters_lock:
+        _public_reciters = (db_seq, value)
+
+
+def invalidate_public_reciters_cache() -> None:
+    global _public_reciters
+    with _public_reciters_lock:
+        _public_reciters = None
