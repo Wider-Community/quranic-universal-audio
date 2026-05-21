@@ -37,13 +37,18 @@ def _callback_url() -> str:
 
 
 def _set_cookie(resp, name: str, value: str, max_age: int) -> None:
+    # The OAuth round-trip returns from a different site (prelive.auth.quran.com)
+    # and the deployed app may run inside the huggingface.co iframe — both are
+    # cross-site contexts where only SameSite=None;Secure cookies are sent.
+    # Mirror the app's HF-OAuth state cookie policy (app.py SESSION_COOKIE_SAMESITE).
+    https = _secure_cookie()
     resp.set_cookie(
         name,
         value,
         max_age=max_age,
         httponly=True,
-        samesite="Lax",
-        secure=_secure_cookie(),
+        samesite="None" if https else "Lax",
+        secure=https,
         path="/",
     )
 
@@ -78,6 +83,10 @@ def qf_callback():
     code = request.args.get("code", "")
     state = request.args.get("state", "")
     tmp = session.decode_oauth_tmp(request.cookies.get(session.QF_OAUTH_TMP_COOKIE_NAME, ""))
+    logger.info(
+        "QF callback: has_code=%s has_tmp=%s state_match=%s",
+        bool(code), bool(tmp), bool(tmp) and tmp.get("state") == state,
+    )
     if not code or not tmp or tmp.get("state") != state:
         return redirect("/?qf_error=state")
     try:
