@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import logging
 import os
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
-from flask import Blueprint, jsonify, make_response, redirect, request, session
+from flask import Blueprint, jsonify, make_response, redirect, request
 
 from scripts.lib.schemas import ReciterState
 
@@ -68,19 +68,39 @@ def _callback_url() -> str:
     return urljoin(request.url_root, "api/auth/callback")
 
 
+def _state_from_redirect(resp) -> str | None:
+    """Pull the OAuth ``state`` Authlib embedded in the authorize redirect.
+
+    We key the post-login return path on it server-side; see
+    ``auth_service.remember_return_path``.
+    """
+    location = resp.headers.get("Location", "")
+    if not location:
+        return None
+    vals = parse_qs(urlparse(location).query).get("state")
+    return vals[0] if vals else None
+
+
 @auth_bp.route("/auth/login")
 def auth_login():
     if not auth_service.is_oauth_configured():
         return jsonify({"error": "OAuth not configured on this deploy"}), 503
     return_to = _safe_return_path(request.args.get("return"))
-    session["post_login_return"] = return_to
     oauth = auth_service.get_oauth()
     redirect_uri = _callback_url()
+    resp = oauth.huggingface.authorize_redirect(redirect_uri)
+    # Stash the return path server-side, keyed by the freshly-minted OAuth
+    # state. The Flask session cookie can't carry it: inside the cross-site HF
+    # iframe it's third-party and Safari drops it (same reason the OAuth state
+    # itself is now server-side — see services/auth).
+    state = _state_from_redirect(resp)
+    if state:
+        auth_service.remember_return_path(state, return_to)
     logger.info(
         "auth.login url_root=%s host=%s scheme=%s redirect_uri=%s return=%s",
         request.url_root, request.host, request.scheme, redirect_uri, return_to,
     )
-    return oauth.huggingface.authorize_redirect(redirect_uri)
+    return resp
 
 
 @auth_bp.route("/auth/callback")
@@ -102,7 +122,7 @@ def auth_callback():
             "hf_error_description": hf_error_desc,
         }), 400
 
-    return_to = _safe_return_path(session.pop("post_login_return", "/"))
+    return_to = _safe_return_path(auth_service.pop_return_path(request.args.get("state")))
     oauth = auth_service.get_oauth()
     try:
         token = oauth.huggingface.authorize_access_token()
