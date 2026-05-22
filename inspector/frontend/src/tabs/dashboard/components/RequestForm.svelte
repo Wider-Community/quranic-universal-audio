@@ -485,7 +485,7 @@
             >
                 {busy ? 'Submitting…' : 'Submit request'}
             </button>
-        {:else if pending}
+        {:else if pending && $isOwner}
             <div class="admin-actions">
                 <button
                     type="button"

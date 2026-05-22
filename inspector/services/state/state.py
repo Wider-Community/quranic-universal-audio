@@ -230,6 +230,13 @@ def _require_maintainer(actor: Actor) -> None:
         )
 
 
+def _require_owner(actor: Actor) -> None:
+    if not permissions.is_owner(actor):
+        raise NotAuthorizedForTransition(
+            f"actor role {actor.role!r} requires OWNER"
+        )
+
+
 def _require_contributor_or_higher(actor: Actor) -> None:
     if not permissions.is_contributor_or_higher(actor):
         raise NotAuthorizedForTransition(
@@ -629,7 +636,7 @@ def _h_request_rejected_soft(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"request_rejected_soft requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
-    _require_maintainer(actor)
+    _require_owner(actor)
     norm_reason = _require_reason(reason, "request_rejected_soft")
 
     from . import pending_requests as _pending_requests
@@ -655,7 +662,7 @@ def _h_request_rejected_hard(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"request_rejected_hard requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
-    _require_maintainer(actor)
+    _require_owner(actor)
     norm_reason = _require_reason(reason, "request_rejected_hard")
 
     from . import pending_requests as _pending_requests

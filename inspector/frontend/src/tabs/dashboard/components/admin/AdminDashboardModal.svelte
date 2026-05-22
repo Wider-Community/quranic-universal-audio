@@ -3,11 +3,12 @@
      * compartment ships now; the rest are disabled placeholders for the shape. */
     import Modal from '../../../../lib/components/Modal.svelte';
     import { adminDashboard, type AdminTab } from '../../stores/admin-dashboard.svelte';
+    import RequestsCompartment from './RequestsCompartment.svelte';
     import UsersCompartment from './UsersCompartment.svelte';
 
     const TABS: { id: AdminTab; label: string; enabled: boolean }[] = [
         { id: 'users', label: 'Users', enabled: true },
-        { id: 'requests', label: 'Requests', enabled: false },
+        { id: 'requests', label: 'Requests', enabled: true },
         { id: 'to_publish', label: 'To publish', enabled: false },
         { id: 'permissions', label: 'Permissions', enabled: false },
     ];
@@ -31,6 +32,9 @@
                     onclick={() => adminDashboard.setTab(t.id)}
                 >
                     {t.label}
+                    {#if t.id === 'requests' && adminDashboard.unviewedRequests > 0}
+                        <span class="am-tab-count">{adminDashboard.unviewedRequests}</span>
+                    {/if}
                 </button>
             {/each}
         </nav>
@@ -38,6 +42,8 @@
 
     {#if adminDashboard.activeTab === 'users'}
         <UsersCompartment />
+    {:else if adminDashboard.activeTab === 'requests'}
+        <RequestsCompartment />
     {/if}
 </Modal>
 
@@ -61,4 +67,17 @@
         height: 2px; background: var(--accent); border-radius: 2px 2px 0 0;
     }
     .am-tab.disabled { color: var(--text-faint); cursor: not-allowed; }
+    .am-tab-count {
+        margin-left: var(--s-1);
+        min-width: 17px;
+        padding: 0 5px;
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        line-height: 17px;
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+        color: var(--accent);
+        background: var(--accent-tint);
+        border-radius: 999px;
+    }
 </style>

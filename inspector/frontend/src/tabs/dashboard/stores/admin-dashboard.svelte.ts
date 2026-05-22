@@ -18,6 +18,10 @@ export type UsersSortKey =
 class AdminDashboardStore {
     open = $state(false);
     activeTab = $state<AdminTab>('users');
+    /** Caller's unviewed-open request count. Drives the Requests tab pill +
+     * the dot on the entry button. Polled by the button; refreshed by the
+     * Requests compartment on load/view/resolve so both surfaces agree. */
+    unviewedRequests = $state(0);
 
     openModal(tab: AdminTab = 'users'): void {
         this.activeTab = tab;
@@ -30,6 +34,10 @@ class AdminDashboardStore {
 
     setTab(tab: AdminTab): void {
         this.activeTab = tab;
+    }
+
+    setUnviewedRequests(n: number): void {
+        this.unviewedRequests = Math.max(0, n);
     }
 }
 

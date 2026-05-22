@@ -308,7 +308,7 @@ def test_reject_soft_happy_path(state_env, monkeypatch):
     state_service.transition(
         "test_reciter",
         "reciter.request_rejected_soft",
-        actor=_actor(role="maintainer"),
+        actor=_actor(role="owner"),
         reason="not a priority right now",
     )
     row = state_service.get_row("test_reciter")
@@ -325,18 +325,20 @@ def test_reject_soft_happy_path(state_env, monkeypatch):
     assert len(archived) == 1
     assert archived[0].reason == "not a priority right now"
     assert archived[0].proposed_edits.name_en == "New Name"
-    assert archived[0].transitioned_by.role == "maintainer"
+    assert archived[0].transitioned_by.role == "owner"
 
 
-def test_reject_soft_rejects_non_admin(state_env, monkeypatch):
+def test_reject_soft_rejects_non_owner(state_env, monkeypatch):
+    """Send-back is owner-only — both contributors and maintainers are denied."""
     state_service, _ = _seed_awaiting_alignment_with_pending(state_env, monkeypatch)
-    with pytest.raises(state_service.NotAuthorizedForTransition):
-        state_service.transition(
-            "test_reciter",
-            "reciter.request_rejected_soft",
-            actor=_actor(role="contributor"),
-            reason="ten chars+",
-        )
+    for role in ("contributor", "maintainer"):
+        with pytest.raises(state_service.NotAuthorizedForTransition):
+            state_service.transition(
+                "test_reciter",
+                "reciter.request_rejected_soft",
+                actor=_actor(role=role),
+                reason="ten chars+ reason",
+            )
 
 
 def test_reject_soft_requires_reason(state_env, monkeypatch):
@@ -345,7 +347,7 @@ def test_reject_soft_requires_reason(state_env, monkeypatch):
         state_service.transition(
             "test_reciter",
             "reciter.request_rejected_soft",
-            actor=_actor(role="maintainer"),
+            actor=_actor(role="owner"),
             reason="too short",
         )
 
@@ -359,7 +361,7 @@ def test_reject_soft_requires_awaiting_alignment(state_env, monkeypatch):
         state_service.transition(
             "test_reciter",
             "reciter.request_rejected_soft",
-            actor=_actor(role="maintainer"),
+            actor=_actor(role="owner"),
             reason="this is a perfectly valid reason",
         )
 
@@ -377,7 +379,7 @@ def test_reject_hard_happy_path(state_env, monkeypatch):
     state_service.transition(
         "test_reciter",
         "reciter.request_rejected_hard",
-        actor=_actor(role="maintainer"),
+        actor=_actor(role="owner"),
         reason="duplicate of an already-published reciter",
     )
     row = state_service.get_row("test_reciter")
@@ -393,18 +395,20 @@ def test_reject_hard_happy_path(state_env, monkeypatch):
     )
     assert len(archived) == 1
     assert archived[0].reason == "duplicate of an already-published reciter"
-    assert archived[0].transitioned_by.role == "maintainer"
+    assert archived[0].transitioned_by.role == "owner"
 
 
-def test_reject_hard_rejects_non_admin(state_env, monkeypatch):
+def test_reject_hard_rejects_non_owner(state_env, monkeypatch):
+    """Discard is owner-only — both contributors and maintainers are denied."""
     state_service, _ = _seed_awaiting_alignment_with_pending(state_env, monkeypatch)
-    with pytest.raises(state_service.NotAuthorizedForTransition):
-        state_service.transition(
-            "test_reciter",
-            "reciter.request_rejected_hard",
-            actor=_actor(role="contributor"),
-            reason="ten chars+ reason",
-        )
+    for role in ("contributor", "maintainer"):
+        with pytest.raises(state_service.NotAuthorizedForTransition):
+            state_service.transition(
+                "test_reciter",
+                "reciter.request_rejected_hard",
+                actor=_actor(role=role),
+                reason="ten chars+ reason",
+            )
 
 
 def test_reject_hard_requires_reason(state_env, monkeypatch):
@@ -413,7 +417,7 @@ def test_reject_hard_requires_reason(state_env, monkeypatch):
         state_service.transition(
             "test_reciter",
             "reciter.request_rejected_hard",
-            actor=_actor(role="maintainer"),
+            actor=_actor(role="owner"),
             reason="short",
         )
 

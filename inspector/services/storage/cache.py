@@ -739,3 +739,35 @@ def invalidate_admin_users_cache() -> None:
     global _admin_users
     with _admin_users_lock:
         _admin_users = None
+
+
+# ---------------------------------------------------------------------------
+# Admin Requests tab — catalog-joined base rows per (db_seq, status). The join
+# (delivery → reciter name + riwayah/style + conflict scan) is the expensive
+# part; cache it keyed on db_seq so it's paid once per write generation. The
+# per-caller overlay (viewed flag + requester redaction + unviewed count) is
+# cheap and applied live on top, so the cache stays caller-agnostic. Keyed by
+# status because the four facets are read independently; entries from older
+# db_seqs are pruned on write so the dict stays bounded by the live generation.
+# ---------------------------------------------------------------------------
+
+_admin_requests_lock = _threading.Lock()
+_admin_requests: "dict[tuple[int, str], object]" = {}
+
+
+def get_admin_requests_cache(db_seq: int, status: str):
+    """Return cached base rows for ``(db_seq, status)``, else None."""
+    with _admin_requests_lock:
+        return _admin_requests.get((db_seq, status))
+
+
+def set_admin_requests_cache(db_seq: int, status: str, value: object) -> None:
+    with _admin_requests_lock:
+        for k in [k for k in _admin_requests if k[0] != db_seq]:
+            _admin_requests.pop(k, None)
+        _admin_requests[(db_seq, status)] = value
+
+
+def invalidate_admin_requests_cache() -> None:
+    with _admin_requests_lock:
+        _admin_requests.clear()

@@ -4,8 +4,8 @@ Covers all four routes under ``inspector/routes/requests.py``:
 
 - ``POST /api/reciter/<slug>/request`` — contributor+
 - ``GET  /api/admin/request/<slug>`` — maintainer+ (with tier-aware actor redaction)
-- ``POST /api/admin/request/<slug>/reject-soft`` — maintainer+
-- ``POST /api/admin/request/<slug>/reject-hard`` — maintainer+
+- ``POST /api/admin/request/<slug>/reject-soft`` — owner-only
+- ``POST /api/admin/request/<slug>/reject-hard`` — owner-only
 - ``POST /api/admin/reciter/<slug>/undiscard`` — owner-only
 """
 
@@ -257,8 +257,19 @@ def test_reject_soft_contributor_returns_403(signed_in_client):
     assert res.status_code == 403
 
 
-def test_reject_soft_maintainer_happy_path(signed_in_client):
+def test_reject_soft_maintainer_returns_403(signed_in_client):
+    """Send-back is owner-only now — maintainers are denied."""
     client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
+    res = client.post(
+        "/api/admin/request/rec_pending/reject-soft",
+        headers=_HEADERS,
+        data=json.dumps({"reason": "not a priority right now"}),
+    )
+    assert res.status_code == 403
+
+
+def test_reject_soft_owner_happy_path(signed_in_client):
+    client, _ = signed_in_client(role="owner", hf_user_id="u-O")
     res = client.post(
         "/api/admin/request/rec_pending/reject-soft",
         headers=_HEADERS,
@@ -277,7 +288,7 @@ def test_reject_soft_maintainer_happy_path(signed_in_client):
 
 
 def test_reject_soft_requires_reason(signed_in_client):
-    client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
+    client, _ = signed_in_client(role="owner", hf_user_id="u-O")
     res = client.post(
         "/api/admin/request/rec_pending/reject-soft",
         headers=_HEADERS,
@@ -301,8 +312,19 @@ def test_reject_hard_contributor_returns_403(signed_in_client):
     assert res.status_code == 403
 
 
-def test_reject_hard_maintainer_sets_discarded(signed_in_client):
+def test_reject_hard_maintainer_returns_403(signed_in_client):
+    """Discard is owner-only now — maintainers are denied."""
     client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
+    res = client.post(
+        "/api/admin/request/rec_pending/reject-hard",
+        headers=_HEADERS,
+        data=json.dumps({"reason": "duplicate of an already-published reciter"}),
+    )
+    assert res.status_code == 403
+
+
+def test_reject_hard_owner_sets_discarded(signed_in_client):
+    client, _ = signed_in_client(role="owner", hf_user_id="u-O")
     res = client.post(
         "/api/admin/request/rec_pending/reject-hard",
         headers=_HEADERS,
@@ -320,7 +342,7 @@ def test_reject_hard_maintainer_sets_discarded(signed_in_client):
 
 
 def test_reject_hard_requires_reason(signed_in_client):
-    client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
+    client, _ = signed_in_client(role="owner", hf_user_id="u-O")
     res = client.post(
         "/api/admin/request/rec_pending/reject-hard",
         headers=_HEADERS,
@@ -408,3 +430,84 @@ def test_reconcile_maintainer_returns_count(signed_in_client, monkeypatch):
     body = json.loads(res.data)
     assert body["ok"] is True
     assert body["fired_count"] == 7
+
+
+# ---------------------------------------------------------------------------
+# GET /api/admin/requests  (Requests-tab list) + view-mark + unviewed-count
+# ---------------------------------------------------------------------------
+
+
+def test_list_requests_contributor_returns_403(signed_in_client):
+    client, _ = signed_in_client(role="contributor")
+    res = client.get("/api/admin/requests?status=open")
+    assert res.status_code == 403
+
+
+def test_list_requests_invalid_status_returns_400(signed_in_client):
+    client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
+    res = client.get("/api/admin/requests?status=bogus")
+    assert res.status_code == 400
+
+
+def test_list_requests_maintainer_open_redacts_and_diffs(signed_in_client):
+    client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
+    res = client.get("/api/admin/requests?status=open")
+    assert res.status_code == 200
+    body = json.loads(res.data)
+
+    assert body["counts"]["open"] == 1
+    assert body["unviewed_count"] == 1
+    assert len(body["rows"]) == 1
+    row = body["rows"][0]
+    assert row["slug"] == "rec_pending"
+    assert row["viewed"] is False
+    # maintainer: requester identity redacted, role retained
+    assert "requester_login" not in row
+    assert row["requester_role"] == "contributor"
+    # proposed-changes diff over the seeded ProposedEdits (name_en + year)
+    changed = {c["field"]: c for c in row["changes"]}
+    assert changed["name_en"]["from"] == "Pending Reciter"
+    assert changed["name_en"]["to"] == "Renamed"
+    assert changed["recording_year"]["to"] == 2024
+
+
+def test_list_requests_owner_includes_requester_login(signed_in_client):
+    client, _ = signed_in_client(role="owner", hf_user_id="u-O")
+    res = client.get("/api/admin/requests?status=open")
+    body = json.loads(res.data)
+    row = body["rows"][0]
+    assert row["requester_login"] == "requester"
+    assert row["requester_hf_user_id"] == "u-requester"
+
+
+def test_view_marks_request_and_decrements_unviewed(signed_in_client):
+    client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
+    rid = json.loads(client.get("/api/admin/requests?status=open").data)["rows"][0]["id"]
+
+    res = client.post(f"/api/admin/requests/{rid}/view", headers=_HEADERS)
+    assert res.status_code == 200
+
+    after = json.loads(client.get("/api/admin/requests?status=open").data)
+    assert after["unviewed_count"] == 0
+    assert after["rows"][0]["viewed"] is True
+
+    # count endpoint agrees
+    cnt = json.loads(client.get("/api/admin/requests/unviewed-count").data)
+    assert cnt["count"] == 0
+
+
+def test_view_unknown_request_returns_404(signed_in_client):
+    client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
+    res = client.post("/api/admin/requests/rq_nope/view", headers=_HEADERS)
+    assert res.status_code == 404
+
+
+def test_unviewed_count_is_per_admin(signed_in_client):
+    """One admin viewing doesn't clear another admin's unviewed count."""
+    m_client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
+    rid = json.loads(m_client.get("/api/admin/requests?status=open").data)["rows"][0]["id"]
+    m_client.post(f"/api/admin/requests/{rid}/view", headers=_HEADERS)
+
+    o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
+    cnt = json.loads(o_client.get("/api/admin/requests/unviewed-count").data)
+    assert cnt["count"] == 1

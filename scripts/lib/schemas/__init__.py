@@ -11,6 +11,12 @@ from __future__ import annotations
 
 from .access import Member, Role, RolesFile
 from .activity_state import ActivityState
+from .admin_requests import (
+    AdminRequestCounts,
+    AdminRequestRow,
+    AdminRequestsResponse,
+    RequestChange,
+)
 from .admin_users import (
     AdminActiveClaim,
     AdminActivityEvent,
@@ -72,7 +78,10 @@ __all__ = [
     "AdminActiveClaim",
     "AdminActivityEvent",
     "AdminClaimEvent",
+    "AdminRequestCounts",
     "AdminRequestEvent",
+    "AdminRequestRow",
+    "AdminRequestsResponse",
     "AdminRoleEvent",
     "AdminUserDetail",
     "AdminUserRow",
@@ -81,6 +90,7 @@ __all__ = [
     "AdminUsersSummary",
     "AdminVisitorStats",
     "ArchivedRequest",
+    "RequestChange",
     "ArchivedRequestsFile",
     "AudioCategory",
     "AudioManifestSidecar",

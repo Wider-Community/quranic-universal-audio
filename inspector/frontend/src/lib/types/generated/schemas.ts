@@ -37,6 +37,13 @@ export interface AdminClaimEvent {
   outcome?: string;
   [k: string]: unknown;
 }
+export interface AdminRequestCounts {
+  open?: number;
+  accepted?: number;
+  returned?: number;
+  discarded?: number;
+  [k: string]: unknown;
+}
 export interface AdminRequestEvent {
   id: string;
   kind: string;
@@ -45,6 +52,52 @@ export interface AdminRequestEvent {
   status: string;
   resolved_at?: string | null;
   resolution_reason?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminRequestRow {
+  id: string;
+  slug?: string | null;
+  kind: string;
+  status: string;
+  submitted_at: string;
+  resolved_at?: string | null;
+  resolution_reason?: string | null;
+  auto_claim?: boolean;
+  comments?: string | null;
+  name_en?: string | null;
+  name_ar?: string | null;
+  riwayah?: string | null;
+  style?: string | null;
+  proposed_edits?: {
+    [k: string]: unknown;
+  };
+  changes?: RequestChange[];
+  conflict?: boolean;
+  viewed?: boolean;
+  requester_role?: string | null;
+  requester_login?: string | null;
+  requester_hf_user_id?: string | null;
+  resolved_by_role?: string | null;
+  resolved_by_login?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * One proposed-edit field, with the current catalog value as ``from``.
+ *
+ * Mirrors a single ``ProposedEdits`` field. ``from``/``to`` carry strings or
+ * numbers (recording_year) or null.
+ */
+export interface RequestChange {
+  field: string;
+  label: string;
+  from?: string | number | null;
+  to?: string | number | null;
+  [k: string]: unknown;
+}
+export interface AdminRequestsResponse {
+  rows?: AdminRequestRow[];
+  counts?: AdminRequestCounts;
+  unviewed_count?: number;
   [k: string]: unknown;
 }
 export interface AdminRoleEvent {

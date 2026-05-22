@@ -117,28 +117,30 @@ def test_unknown_event_defaults_to_hidden():
     assert ac.classify(_record("totally.new.event")) == "hidden"
 
 
-def test_reciter_requested_is_dual_bucket_public_priority():
-    """`reciter.requested` is in BOTH public and admin maps. classify()
-    returns public (so the anti-drift test treats it as classified); the
-    admin rail consumes admin_kind_for() directly."""
+def test_reciter_requested_is_public_only():
+    """Request *review* moved to the Admin dashboard → Requests tab, so
+    `reciter.requested` is public-only now: public prose on the rail, no
+    admin-rail card."""
     from services import activity_classification as ac
 
     record = _record("reciter.requested")
     assert ac.classify(record) == "public"
     assert ac.public_kind_for(record) == "requested"
-    assert ac.admin_kind_for(record) == "request_submitted"
+    assert ac.admin_kind_for(record) is None
 
 
-@pytest.mark.parametrize("event,expected_kind", [
-    ("reciter.request_rejected_soft", "request_rejected_soft"),
-    ("reciter.request_rejected_hard", "request_rejected_hard"),
+@pytest.mark.parametrize("event", [
+    "reciter.request_rejected_soft",
+    "reciter.request_rejected_hard",
 ])
-def test_request_reject_events_admin_only(event, expected_kind):
+def test_request_reject_events_hidden(event):
+    """Reject outcomes are off both rails (still audited) — they live in the
+    Requests tab now, not the notifications feed."""
     from services import activity_classification as ac
 
     record = _record(event)
-    assert ac.classify(record) == "admin_only"
-    assert ac.admin_kind_for(record) == expected_kind
+    assert ac.classify(record) == "hidden"
+    assert ac.admin_kind_for(record) is None
     assert ac.public_kind_for(record) is None
 
 
