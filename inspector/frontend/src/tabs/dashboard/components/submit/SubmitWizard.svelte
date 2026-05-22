@@ -24,6 +24,7 @@
         submitWizard,
         type WizardStep,
     } from '../../stores/submit-wizard';
+    import StepConfirm from './StepConfirm.svelte';
     import StepDetails from './StepDetails.svelte';
     import StepReciter from './StepReciter.svelte';
     import StepSource from './StepSource.svelte';
@@ -120,19 +121,44 @@
         }
         return state.newReciter.name_en.trim().length > 0;
     })();
-    $: canAdvanceStep2 = state.sourceMethod !== null;
-    $: canSubmit = !!state.combination.riwayah && !!state.combination.style;
+    // Step 2 gates on valid URLs (the hard errors the backend would reject) but
+    // NOT on full 114-chapter coverage — missing chapters are an allowed warning.
+    $: linksFilled = state.links.filter((r) => r.url.trim().length > 0);
+    $: anyMalformed = linksFilled.some((r) => !/^https?:\/\//i.test(r.url.trim()));
+    $: canAdvanceStep2 =
+        state.sourceMethod === 'playlist'
+            ? /^https?:\/\//i.test(state.playlistUrl.trim())
+            : state.sourceMethod === 'links' && linksFilled.length > 0 && !anyMalformed;
+    $: canAdvanceStep3 = !!state.combination.riwayah && !!state.combination.style;
+    $: canSubmit =
+        state.attestations.distribution_rights &&
+        state.attestations.links_verified &&
+        state.attestations.storage_rights;
     // existing_combo skips source + details — the canonical edit path lives in
-    // RequestForm. We don't need step 2/3 for that mode.
+    // RequestForm. We don't need step 2/3/4 for that mode.
     $: skipSourceAndDetails = state.reciterMode === 'existing_combo';
+
+    /** Whether step n is reachable given the gates for the steps before it. */
+    function canReach(n: number): boolean {
+        if (n <= 1) return true;
+        if (n === 2) return canAdvanceStep1;
+        if (n === 3) return canAdvanceStep1 && canAdvanceStep2;
+        return canAdvanceStep1 && canAdvanceStep2 && canAdvanceStep3;
+    }
+    function goToStep(n: number): void {
+        if (n === step) return;
+        if (n < step || canReach(n)) setStep(n as WizardStep);
+    }
 
     function next(): void {
         if (step === 1 && canAdvanceStep1) setStep(2);
         else if (step === 2 && canAdvanceStep2) setStep(3);
+        else if (step === 3 && canAdvanceStep3) setStep(4);
     }
     function back(): void {
         if (step === 2) setStep(1);
         else if (step === 3) setStep(2);
+        else if (step === 4) setStep(3);
     }
     function doneExistingCombo(): void {
         // existing_combo routes to RequestForm via StepReciter; nothing to submit.
@@ -174,6 +200,7 @@
             },
             comments: state.comments.trim() || null,
             auto_claim: state.autoClaim,
+            attestations: { ...state.attestations },
         };
     }
 
@@ -235,17 +262,25 @@
                 </div>
                 {#if !skipSourceAndDetails}
                     <ol class="stepper" aria-label="Progress">
-                        {#each [1, 2, 3] as n (n)}
+                        {#each [1, 2, 3, 4] as n (n)}
                             <li
                                 class="dot"
                                 class:done={n < step}
                                 class:active={n === step}
+                                class:reachable={canReach(n)}
                                 aria-current={n === step ? 'step' : undefined}
                             >
-                                <span class="dot-num">{n}</span>
-                                <span class="dot-label">
-                                    {n === 1 ? 'Reciter' : n === 2 ? 'Source' : 'Details'}
-                                </span>
+                                <button
+                                    type="button"
+                                    class="dot-btn"
+                                    disabled={!canReach(n) && n > step}
+                                    on:click={() => goToStep(n)}
+                                >
+                                    <span class="dot-num">{n}</span>
+                                    <span class="dot-label">
+                                        {n === 1 ? 'Reciter' : n === 2 ? 'Source' : n === 3 ? 'Details' : 'Confirm'}
+                                    </span>
+                                </button>
                             </li>
                         {/each}
                         <span class="stepper-track" data-step={step} aria-hidden="true"></span>
@@ -264,8 +299,10 @@
                             <StepReciter />
                         {:else if step === 2}
                             <StepSource />
-                        {:else}
+                        {:else if step === 3}
                             <StepDetails />
+                        {:else}
+                            <StepConfirm />
                         {/if}
                     </div>
                 {/key}
@@ -299,12 +336,16 @@
                         >
                             Done
                         </button>
-                    {:else if step < 3}
+                    {:else if step < 4}
                         <button
                             type="button"
                             class="primary"
                             on:click={next}
-                            disabled={step === 1 ? !canAdvanceStep1 : !canAdvanceStep2}
+                            disabled={step === 1
+                                ? !canAdvanceStep1
+                                : step === 2
+                                  ? !canAdvanceStep2
+                                  : !canAdvanceStep3}
                         >
                             Continue
                             <span class="primary-glyph" aria-hidden="true">›</span>
@@ -389,14 +430,14 @@
         margin: var(--s-3) 0 var(--s-1);
         padding: 0;
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         gap: var(--s-2);
     }
     .stepper-track {
         position: absolute;
         bottom: -3px;
         left: 0;
-        width: calc(100% / 3);
+        width: calc(100% / 4);
         height: 2px;
         background: var(--accent);
         border-radius: 2px;
@@ -404,6 +445,7 @@
     }
     .stepper-track[data-step='2'] { transform: translateX(100%); }
     .stepper-track[data-step='3'] { transform: translateX(200%); }
+    .stepper-track[data-step='4'] { transform: translateX(300%); }
     .dot {
         display: flex;
         align-items: center;
@@ -412,6 +454,19 @@
         color: var(--text-faint);
         transition: color var(--t-base) var(--ease-out-quart);
     }
+    .dot-btn {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        background: transparent;
+        border: 0;
+        padding: 0;
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+    }
+    .dot-btn:disabled { cursor: default; }
+    .dot.reachable .dot-btn:not(:disabled):hover { color: var(--text-primary); }
     .dot.active { color: var(--text-primary); }
     .dot.done { color: var(--text-secondary); }
     .dot-num {

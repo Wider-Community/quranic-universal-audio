@@ -33,6 +33,9 @@
                 && d.style === $submitWizard.combination.style,
         );
 
+    $: nonHafsRiwayah =
+        !!$submitWizard.combination.riwayah && $submitWizard.combination.riwayah !== 'hafs';
+
     $: yearOutOfBounds = $submitWizard.combination.recording_year !== ''
         && (($submitWizard.combination.recording_year as number) < MIN_YEAR
             || ($submitWizard.combination.recording_year as number) > MAX_YEAR);
@@ -128,6 +131,13 @@
             {/if}
         </label>
     </div>
+
+    {#if nonHafsRiwayah}
+        <p class="callout" transition:fade={{ duration: 160 }}>
+            Non-hafs riwayahs are not supported at the moment, we aim to have this ready
+            soon inshallah. You can still make the request.
+        </p>
+    {/if}
 
     {#if conflict}
         <p class="warning" transition:fade={{ duration: 160 }}>
@@ -252,5 +262,15 @@
         color: var(--state-requested-fg);
         border-radius: var(--r-2);
         font-size: var(--fs-meta);
+    }
+    .callout {
+        margin: 0;
+        padding: var(--s-3);
+        background: oklch(0.86 0.13 75 / 0.12);
+        color: var(--state-error-fg);
+        border: 1px solid oklch(0.86 0.13 75 / 0.35);
+        border-radius: var(--r-2);
+        font-size: var(--fs-meta);
+        line-height: var(--lh-normal);
     }
 </style>

@@ -221,6 +221,9 @@
                 && d.style === style,
         );
 
+    // Non-hafs riwayahs aren't aligned yet — non-blocking heads-up.
+    $: nonHafsRiwayah = !!riwayah && riwayah !== 'hafs';
+
     async function onSubmit(): Promise<void> {
         if (busy) return;
         if (invalidCountry) {
@@ -459,6 +462,13 @@
         </span>
     </label>
 
+    {#if mode === 'create' && nonHafsRiwayah}
+        <p class="callout">
+            Non-hafs riwayahs are not supported at the moment, we aim to have this
+            ready soon inshallah. You can still make the request.
+        </p>
+    {/if}
+
     {#if conflict}
         <p class="warning">
             Heads up: another delivery of {reciter.name} already uses
@@ -658,6 +668,16 @@
         color: var(--state-error-fg);
         border-radius: var(--r-2);
         font-size: var(--fs-meta);
+    }
+    .callout {
+        margin: 0;
+        padding: var(--s-3);
+        background: oklch(0.86 0.13 75 / 0.12);
+        color: var(--state-error-fg);
+        border: 1px solid oklch(0.86 0.13 75 / 0.35);
+        border-radius: var(--r-2);
+        font-size: var(--fs-meta);
+        line-height: var(--lh-normal);
     }
     footer {
         display: flex;
