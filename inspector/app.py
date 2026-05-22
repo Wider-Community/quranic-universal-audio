@@ -237,27 +237,18 @@ Compress(app)
 if os.environ.get("INSPECTOR_BEHIND_PROXY") == "1":
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-# Flask's signed-cookie session is used by Authlib for the short-lived
-# OAuth state between /authorize and /callback. Our identity cookie is
-# separate (see services/auth.py). Both signed with the same secret.
+# Flask's secret key still signs anything that touches the session, but the
+# OAuth state no longer lives there — it's held server-side in a per-process
+# cache (see services/auth.py) because on HF Spaces the app runs in a
+# cross-site huggingface.co iframe where the third-party session cookie is
+# dropped by Safari, which surfaced as MismatchingStateError on the callback.
+# Our identity cookie is separate and signed with the same secret.
 try:
     app.secret_key = get_session_secret()
 except MissingSecret as e:
     # Local dev / test paths may not have the secret seeded. Anyone hitting
     # an OAuth route gets a 503 from auth_service.is_oauth_configured().
     logger.warning("INSPECTOR_SESSION_SECRET unavailable: %s", e)
-
-# HF Spaces renders the app inside an iframe under huggingface.co. The
-# OAuth round-trip (authorize → callback) is iframe-scoped, so the Flask
-# session cookie carrying the OAuth state must use SameSite=None;Secure
-# to survive the cross-site iframe navigation. Without these, Authlib
-# raises MismatchingStateError on the callback because the cookie never
-# came back. Locally the app runs over plain HTTP where SameSite=None
-# requires Secure (browsers reject otherwise), so fall back to Lax there.
-_behind_proxy = os.environ.get("INSPECTOR_BEHIND_PROXY") == "1"
-app.config["SESSION_COOKIE_SAMESITE"] = "None" if _behind_proxy else "Lax"
-app.config["SESSION_COOKIE_SECURE"] = _behind_proxy
-app.config["SESSION_COOKIE_HTTPONLY"] = True
 
 # Register the HF OAuth provider with Authlib so the auth routes can
 # resolve oauth.huggingface at request time.

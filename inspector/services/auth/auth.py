@@ -1,9 +1,14 @@
 """HF OAuth + signed-cookie session.
 
-Two cookie surfaces:
-- Flask's default ``session`` cookie (signed via ``app.secret_key``) is the
-  short-lived OAuth-state store between ``/authorize`` and ``/callback``
-  (~30 s lifetime). Authlib uses this internally.
+OAuth-state store + one cookie surface:
+- The short-lived OAuth state/nonce between ``/authorize`` and ``/callback``
+  lives in a server-side in-process cache (``_state_cache``), NOT in Flask's
+  session cookie. On HF Spaces the app runs inside a cross-site
+  ``huggingface.co`` iframe where that cookie is third-party and Safari's ITP
+  drops it, so Authlib raised ``MismatchingStateError`` on the callback. A
+  server-side store keeps the embedded login working with no cookie
+  round-trip. Safe because the app is pinned to a single worker (see
+  ``app.py`` ``_assert_single_worker``).
 - ``inspector_session`` cookie signed via ``itsdangerous`` is the long-lived
   (1 week) identity cookie, set after a successful callback. Holds
   ``{login, hf_user_id, iat}``.
@@ -28,10 +33,11 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass
 
-from authlib.integrations.flask_client import OAuth
+from authlib.integrations.flask_client import OAuth, FlaskIntegration
 from flask import request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -62,13 +68,120 @@ DEV_ROLE_VALUES = ("owner", "maintainer", "contributor", "anonymous")
 
 _oauth: OAuth | None = None
 
+# TTL for the post-login return path we stash alongside Authlib's own state
+# entry (Authlib's state uses the integration's own expires_in). 10 min
+# comfortably covers a human completing the HF consent screen.
+_RETURN_PATH_TTL = 600
+
+
+class _TTLCache:
+    """Tiny in-process TTL cache for the OAuth state + return path.
+
+    Read/written through ``get(key)`` / ``set(key, value, expires)`` /
+    ``delete(key)`` by ``_CacheStateIntegration`` and the return-path helpers.
+    See the module docstring for why a server-side store is needed on HF
+    Spaces. The single-worker invariant (``app.py``) makes a per-process dict
+    safe.
+    """
+
+    def __init__(self) -> None:
+        self._store: dict[str, tuple[float, object]] = {}
+        self._lock = threading.Lock()
+
+    def get(self, key: str):
+        now = time.time()
+        with self._lock:
+            item = self._store.get(key)
+            if item is None:
+                return None
+            expires_at, value = item
+            if expires_at and expires_at < now:
+                self._store.pop(key, None)
+                return None
+            return value
+
+    def set(self, key: str, value, expires: float | None = None) -> None:
+        expires_at = time.time() + expires if expires else 0.0
+        with self._lock:
+            # Opportunistically drop expired entries so abandoned logins don't
+            # accumulate unbounded.
+            if len(self._store) > 256:
+                now = time.time()
+                self._store = {
+                    k: v for k, v in self._store.items()
+                    if not v[0] or v[0] >= now
+                }
+            self._store[key] = (expires_at, value)
+
+    def delete(self, key: str) -> None:
+        with self._lock:
+            self._store.pop(key, None)
+
+
+_state_cache = _TTLCache()
+
+
+class _CacheStateIntegration(FlaskIntegration):
+    """Keep the OAuth state entirely in ``_state_cache`` — never the session.
+
+    Authlib's stock integration writes an ``exp`` marker to the Flask session
+    even when a ``cache`` is configured, and ``get_state_data`` bails out if
+    that session entry is missing. Inside the cross-site HF iframe the session
+    cookie doesn't round-trip (Safari drops it), so the stock path still raises
+    ``MismatchingStateError``. Overriding the three state hooks to use only the
+    cache makes the callback succeed with no cookie at all.
+    """
+
+    def _state_key(self, state: str) -> str:
+        return f"_state_{self.name}_{state}"
+
+    def get_state_data(self, session, state):  # noqa: ARG002 — session unused by design
+        if not state:
+            return None
+        return self.cache.get(self._state_key(state))
+
+    def set_state_data(self, session, state, data):  # noqa: ARG002
+        self.cache.set(self._state_key(state), data, self.expires_in)
+
+    def clear_state_data(self, session, state):  # noqa: ARG002
+        if state:
+            self.cache.delete(self._state_key(state))
+
+
+class _CacheStateOAuth(OAuth):
+    """Flask ``OAuth`` registry that stores OAuth state server-side."""
+
+    framework_integration_cls = _CacheStateIntegration
+
+
+def remember_return_path(state: str, path: str) -> None:
+    """Stash the post-login return path keyed by the OAuth ``state``.
+
+    Lives alongside Authlib's own state entry in the server-side cache so the
+    callback can recover the redirect target without a session cookie.
+    """
+    _state_cache.set(f"return_{state}", path, _RETURN_PATH_TTL)
+
+
+def pop_return_path(state: str | None) -> str | None:
+    """Return (and clear) the stashed post-login return path, or ``None``."""
+    if not state:
+        return None
+    key = f"return_{state}"
+    val = _state_cache.get(key)
+    _state_cache.delete(key)
+    return val if isinstance(val, str) else None
+
 
 def init_oauth(app) -> OAuth:
     """Register the HF OAuth provider on the Flask app. Idempotent."""
     global _oauth
     if _oauth is not None:
         return _oauth
-    oauth = OAuth(app)
+    # _CacheStateOAuth keeps the OAuth state in _state_cache instead of the
+    # Flask session cookie (third-party and dropped by Safari inside the HF
+    # iframe). The cache is wired in via the registry's `cache` slot.
+    oauth = _CacheStateOAuth(app, cache=_state_cache)
     oauth.register(
         name="huggingface",
         client_id=os.environ.get("OAUTH_CLIENT_ID"),
