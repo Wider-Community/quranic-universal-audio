@@ -276,7 +276,9 @@ def test_reciter_detail_returns_payload(flask_client, monkeypatch):
     body = json.loads(resp.data)
     assert body["name"] == "Husary"
     assert body["primary_bucket"] == "published"
-    assert "max-age=60" in resp.headers["Cache-Control"]
+    # no-store: detail folds in per-delivery lifecycle state that changes on
+    # claim/transition; a client max-age made the modal stale.
+    assert "no-store" in resp.headers["Cache-Control"]
 
 
 def test_reciter_detail_404_on_unknown(flask_client, monkeypatch):

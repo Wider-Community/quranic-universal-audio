@@ -37,6 +37,7 @@
     import { compareDeliveries } from '../../../lib/utils/delivery-sort';
     import RequestForm from '../components/RequestForm.svelte';
     import StateTimeline from '../components/StateTimeline.svelte';
+    import { loadCatalog } from '../stores/catalog-data';
     import { closeDetail, dashboardState } from '../stores/dashboard-state';
 
     let reciter: (PublicReciter & Partial<AdminViewReciter>) | null = null;
@@ -97,6 +98,10 @@
             lastFetched = null;
             await maybeReload(detailId);
         }
+        // Also refresh the dashboard list/counts/picker behind the modal —
+        // a request submit/reject/undiscard changes catalog+state, and the
+        // catalog store is otherwise length-gated to its boot snapshot.
+        void loadCatalog(true);
     }
 
     async function onUndiscard(d: AdminDiscardedDelivery): Promise<void> {

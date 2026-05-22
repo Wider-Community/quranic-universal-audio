@@ -121,7 +121,10 @@ def reciter_detail(reciter_id: str):
     public = public_state_service.detail(reciter_id)
     if public is None:
         return jsonify({"error": "reciter not found"}), 404
-    return _with_cache(public, "public, max-age=60")
+    # no-store: the detail payload folds in per-delivery lifecycle state
+    # (status, which combos are discarded) that changes on claim/transition;
+    # a client max-age made the detail modal stale for up to a minute.
+    return _with_cache(public, "no-store")
 
 
 @public_bp.route("/reciters")
