@@ -29,6 +29,7 @@ from services.storage.data_loader import (
     load_detailed,
     load_probe_v2,
 )
+from services.audio import op_peaks as op_peaks_svc
 from services.audio.peaks_history import append_peaks_records
 from services.segments.qalqala import compute_qalqala_letter
 from services.validation.registry import filter_persistent_ignores
@@ -439,12 +440,25 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     }
     data_dir.append_edit_history(reciter, batch)
 
-    # Persist any op-level peaks the client gathered from its in-memory cache
-    # so cross-session History viewing works without re-computing. Best-effort:
-    # malformed entries are silently skipped (lazy compute-on-play fills gaps).
-    op_peaks = updates.get("op_peaks")
-    if isinstance(op_peaks, list) and op_peaks:
-        append_peaks_records(reciter, op_peaks, batch_id=batch["batch_id"])
+    # Generate per-op waveform peaks by slicing the baked 10 bps chapter peaks
+    # for each op's covering range, so the History panel renders cross-session
+    # (incl. anonymous) without re-computing. Cheap (int8 slice + b64, no
+    # ffmpeg) and complete for every saved op whose chapter peaks are baked.
+    # Best-effort: a peaks failure must never fail the save (lazy compute-on-
+    # play fills any gaps). Dedup-by-op_id lives in append_peaks_records.
+    try:
+        by_chapter = op_peaks_svc.audio_url_by_chapter(reciter)
+        recs = op_peaks_svc.build_op_records(
+            reciter, operations, by_chapter, default_chapter=chapter,
+        )
+        if recs:
+            append_peaks_records(reciter, recs, batch_id=batch["batch_id"])
+    except Exception:  # noqa: BLE001 — peaks are best-effort, never block a save
+        import logging
+        logging.getLogger(__name__).exception(
+            "[%s] history-peaks generation failed during save (ch %s)",
+            reciter, chapter,
+        )
 
     # Surgical cache invalidation. Edit-history-derived caches survive
     # the autosave warm path by being appended/extended in place; auto-split
