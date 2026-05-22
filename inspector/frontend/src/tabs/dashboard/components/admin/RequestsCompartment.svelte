@@ -424,7 +424,7 @@
                                                         class="btn accept"
                                                         disabled={busyId === row.id}
                                                         onclick={() => (acceptRow = row)}
-                                                    >Accept &amp; create catalog entry</button>
+                                                    >Accept &amp; queue for ingest</button>
                                                 {/if}
                                                 <textarea
                                                     bind:value={reason}

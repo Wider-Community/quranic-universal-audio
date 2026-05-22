@@ -13,12 +13,10 @@ export type RequestStatus = 'open' | 'accepted' | 'returned' | 'discarded';
 
 const _JSON = { 'Content-Type': 'application/json' };
 
-/** Owner-confirmed catalog fields for accepting an intake request. */
+/** Owner input for accepting an intake request — only the canonical reciter_id,
+ * and only for a new reciter. Source/channel/slug are determined at ingest. */
 export interface AcceptIntakeFields {
-    slug: string;
-    reciter_id: string;
-    source: string;
-    channel: string;
+    reciter_id?: string;
 }
 
 export async function fetchRequests(
@@ -62,10 +60,9 @@ async function _post(url: string, body?: unknown): Promise<Record<string, unknow
     return json;
 }
 
-/** Mint the catalog entry + queue an intake request for alignment. */
-export async function acceptRequest(id: string, fields: AcceptIntakeFields): Promise<string> {
-    const json = await _post(`/api/admin/requests/${id}/accept`, fields);
-    return json.slug as string;
+/** Approve an intake request + queue it for offline ingest. */
+export async function acceptRequest(id: string, fields: AcceptIntakeFields = {}): Promise<void> {
+    await _post(`/api/admin/requests/${id}/accept`, fields);
 }
 
 /** Reachability-probe an intake request's audio source (owner-only). */

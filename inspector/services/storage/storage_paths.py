@@ -196,15 +196,6 @@ def prefetch_done_marker_path(slug: str) -> str:
     return f"wip/{slug}/audio/_done.json"
 
 
-def intake_source_path(slug: str) -> str:
-    """Normalised audio source stashed when an intake request is accepted.
-
-    Written once by ``services.admin.intake.accept`` (the contributor's
-    direct-links / playlist source for the freshly-minted delivery); consumed
-    by the offline ingest pipeline. Schema: ``IntakeSource``."""
-    return f"wip/{slug}/intake.json"
-
-
 PER_RECITER_FILES: tuple[str, ...] = (
     "segments.json",
     "detailed.json",

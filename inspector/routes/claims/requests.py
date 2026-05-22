@@ -43,7 +43,6 @@ from services import permissions
 from services import state as state_service
 from services.admin import intake as intake_service
 from services.admin import requests as admin_requests_service
-from services.state import catalog as catalog_service
 
 from utils.decorators import require_role, require_same_origin
 
@@ -275,25 +274,18 @@ def mark_request_viewed(user, rid: str):
 @require_same_origin
 @require_role(Role.OWNER)
 def accept_intake(user, rid: str):
-    """Mint the catalog entry for an intake request + queue it for alignment.
-    Body: owner-confirmed ``slug``, ``reciter_id``, ``source``, ``channel``."""
+    """Approve an intake request + queue it for offline ingest. Body (new-reciter
+    only): owner-confirmed canonical ``reciter_id``. No catalog write here —
+    source/channel/slug are determined by ingest from the actual audio."""
     body = request.get_json(silent=True) or {}
-    slug = (body.get("slug") or "").strip()
-    reciter_id = (body.get("reciter_id") or "").strip()
-    source = (body.get("source") or "").strip()
-    channel = (body.get("channel") or "").strip()
-    if not (slug and reciter_id and source and channel):
-        return jsonify({"error": "slug, reciter_id, source and channel are required"}), 400
+    reciter_id = body.get("reciter_id")
     try:
-        minted = intake_service.accept(
-            rid, actor=actor_for(user), slug=slug,
-            reciter_id=reciter_id, source=source, channel=channel,
-        )
+        intake_service.accept(rid, actor=actor_for(user), reciter_id=reciter_id)
     except intake_service.NotIntakeRequest:
         return jsonify({"error": "unknown intake request"}), 404
-    except (catalog_service.CatalogError, ValueError) as e:
+    except intake_service.IntakeError as e:
         return jsonify({"error": str(e)}), 400
-    return jsonify({"ok": True, "slug": minted})
+    return jsonify({"ok": True})
 
 
 @requests_bp.route("/admin/requests/<rid>/probe", methods=["POST"])

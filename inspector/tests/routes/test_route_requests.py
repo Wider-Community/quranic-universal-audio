@@ -600,51 +600,69 @@ def test_intake_submit_missing_chapters_warns(signed_in_client):
     assert any("Missing" in w for w in json.loads(res.data)["warnings"])
 
 
-def test_intake_accept_new_combo_creates_delivery(signed_in_client):
+def test_intake_accept_new_combo_queues_without_catalog_write(signed_in_client):
     c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1", login="alice")
     rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
                                    data=json.dumps(_new_combo_body())).data)["id"]
 
     o_client, _ = signed_in_client(role="owner", hf_user_id="u-O", login="owner")
     res = o_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
-                        data=json.dumps({"slug": "rec_clean_warsh", "reciter_id": "rec_clean",
-                                         "source": "src1", "channel": "ch1"}))
+                        data=json.dumps({}))
     assert res.status_code == 200, res.data
-    assert json.loads(res.data)["slug"] == "rec_clean_warsh"
 
-    # Catalog delivery minted + state row in AWAITING_ALIGNMENT.
+    # No catalog delivery and no state row are created at accept — those are
+    # the offline ingest's job (it needs the real source/channel/bitrate).
     from services import catalog as catalog_service
     from services import state as state_service
-    d = catalog_service.find_delivery("rec_clean_warsh")
-    assert d is not None and d.riwayah == "warsh" and d.reciter_id == "rec_clean"
-    row = state_service.get_row("rec_clean_warsh")
-    assert row is not None and row.state.value == "awaiting_alignment"
-
-    # Source stashed onto wip/<slug>/intake.json.
-    from services import hf_bucket as _hf_bucket
-    from services import storage_paths
-    src = _hf_bucket.get_backend().read_json(storage_paths.intake_source_path("rec_clean_warsh"))
-    assert src["method"] == "links" and len(src["links"]) == 114
-
-    # Intake row resolved accepted + slug-linked.
     from services.db import repo_requests
     accepted = repo_requests.get_by_id(rid)
-    assert accepted["status"] == "accepted" and accepted["slug"] == "rec_clean_warsh"
+    assert accepted["status"] == "accepted" and accepted["slug"] is None
+    # The reciter already existed; no new delivery was minted for the combo.
+    assert not any(
+        d.reciter_id == "rec_clean" and d.riwayah == "warsh"
+        for d in catalog_service.snapshot().deliveries
+    )
 
 
-def test_intake_accept_new_reciter_creates_reciter_and_delivery(signed_in_client):
+def test_intake_accept_new_reciter_stamps_reciter_id_no_catalog_write(signed_in_client):
     c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
     rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
                                    data=json.dumps(_new_reciter_body())).data)["id"]
 
     o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
     res = o_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
-                        data=json.dumps({"slug": "test_reciter_hafs", "reciter_id": "test_reciter",
-                                         "source": "src1", "channel": "ch1"}))
+                        data=json.dumps({"reciter_id": "test_reciter"}))
     assert res.status_code == 200, res.data
+
     from services import catalog as catalog_service
-    assert catalog_service.find_reciter("test_reciter") is not None
-    assert catalog_service.find_delivery("test_reciter_hafs") is not None
+    from services.db import _serde, repo_requests
+    # Reciter is NOT created at accept — deferred to ingest.
+    assert catalog_service.find_reciter("test_reciter") is None
+    row = repo_requests.get_by_id(rid)
+    assert row["status"] == "accepted" and row["slug"] is None
+    # Owner's canonical reciter_id is stamped onto the payload for ingest.
+    assert (_serde.json_loads(row["payload"]) or {})["reciter_id"] == "test_reciter"
+
+
+def test_intake_accept_new_reciter_requires_reciter_id(signed_in_client):
+    c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_reciter_body())).data)["id"]
+    o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
+    res = o_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
+                        data=json.dumps({}))
+    assert res.status_code == 400
+    assert "reciter_id" in json.loads(res.data)["error"]
+
+
+def test_intake_accept_rejects_bad_reciter_id(signed_in_client):
+    c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_reciter_body())).data)["id"]
+    o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
+    res = o_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
+                        data=json.dumps({"reciter_id": "Bad ID!"}))
+    assert res.status_code == 400
 
 
 def test_intake_accept_requires_owner(signed_in_client):
@@ -653,16 +671,14 @@ def test_intake_accept_requires_owner(signed_in_client):
                                    data=json.dumps(_new_combo_body())).data)["id"]
     m_client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
     res = m_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
-                        data=json.dumps({"slug": "x_y", "reciter_id": "rec_clean",
-                                         "source": "src1", "channel": "ch1"}))
+                        data=json.dumps({}))
     assert res.status_code == 403
 
 
 def test_intake_accept_unknown_404(signed_in_client):
     o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
     res = o_client.post("/api/admin/requests/rq_nope/accept", headers=_HEADERS,
-                        data=json.dumps({"slug": "a_b", "reciter_id": "rec_clean",
-                                         "source": "src1", "channel": "ch1"}))
+                        data=json.dumps({"reciter_id": "x"}))
     assert res.status_code == 404
 
 

@@ -5,40 +5,37 @@ have no catalogued delivery yet. Distinct from ``services.pending_requests``
 (the slug-based edit-request flow) — but resolution funnels through the same
 ``repo_requests`` core (``resolve`` / ``resolve_by_id``).
 
-Accept is the load-bearing piece. It mints the catalog entry, stashes the audio
-source onto the new ``wip/<slug>/`` tree, and **advances the slug to
-AWAITING_ALIGNMENT via ``reciter.requested``** (on the requester's behalf,
-carrying ``auto_claim``). This is deliberate, not just "create + park at
-CATALOGUED": the offline ingest pipeline requires AWAITING_ALIGNMENT to fire
-``reciter.alignment_completed``, and routing through ``reciter.requested`` reuses
-the entire existing align → implicit-accept → auto-claim machinery (a freshly
-CATALOGUED slug can't be claimed — ``_h_claimed`` requires AWAITING_REVIEW). The
-intake row itself resolves to ``accepted`` and back-fills ``requests.slug`` with
-the minted delivery. Local alignment stays offline.
+**Accept does NOT create the catalog delivery.** A delivery requires valid
+``source`` / ``channel`` vocab FKs, plus codec/bitrate/duration — all of which
+are *probed from the actual audio* and only become known (and valid) once the
+offline ingest pipeline fetches it. An arbitrary contributor link may not map to
+any existing vocab at all, so a human can't classify it at accept time. The
+slug's mandatory ``channel_short`` suffix has the same problem.
+
+So acceptance is a lightweight approval: it records the owner's canonical
+``reciter_id`` (new reciters only — the one genuinely human decision) and flips
+the request to ``accepted``. The request row already carries the audio source +
+proposed metadata; the offline pipeline reads accepted slugless requests, fetches
++ probes the audio, then creates the reciter + delivery (with correct
+source/channel/slug) and back-fills ``requests.slug``. Local alignment + ingest
+stay offline.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 
 from scripts.lib.schemas import (
     Actor,
-    AudioCategory,
-    Delivery,
     IntakeSubmission,
     IntakeValidation,
     ProbeResponse,
-    ProposedEdits,
 )
 from scripts.lib.schemas.intake_requests import IntakeSource
+from scripts.lib.schemas.state import SLUG_RE
 
 from services.db import _serde, repo_requests
 from services.db import sync as _sync
-from services.state import catalog as catalog_service
-from services.state import state as state_service
-from services.storage import storage_paths
-from services.storage.hf_bucket import get_backend
 
 from . import intake_validation
 from .intake_probe import probe_source
@@ -134,92 +131,43 @@ def _append_dedup_warning(sub: IntakeSubmission, validation: IntakeValidation) -
 # ---- Accept (owner) ---------------------------------------------------------
 
 
-def accept(
-    request_id: str,
-    *,
-    actor: Actor,
-    slug: str,
-    reciter_id: str,
-    source: str,
-    channel: str,
-) -> str:
-    """Mint the catalog entry for a pending intake request, stash its source,
-    queue it for alignment, and resolve the request to ``accepted``.
+def accept(request_id: str, *, actor: Actor, reciter_id: str | None = None) -> str:
+    """Approve a pending intake request and queue it for offline ingest.
 
-    ``slug`` / ``reciter_id`` / ``source`` / ``channel`` are owner-confirmed in
-    the Accept dialog (the URL can't supply the source/channel vocab FKs, and
-    the slug is sticky once created). Returns the minted delivery slug. Raises
-    :class:`NotIntakeRequest` for a bad id; ``catalog.CatalogError`` /
-    ``ValueError`` (bad slug / FK / collision) propagate for the route to 400.
+    Does **not** touch the catalog. For ``new_reciter`` the owner-confirmed
+    ``reciter_id`` (the one human decision — a canonical curated slug) is stamped
+    into the payload so ingest creates the reciter under it; for
+    ``existing_reciter_new_combo`` the ``reciter_id`` is already on the payload.
+    The request flips to ``accepted`` (slug stays ``NULL`` until ingest mints the
+    delivery). Source/channel/bitrate/slug are deferred to the offline pipeline,
+    which is the only place they can be validly determined.
+
+    Raises :class:`NotIntakeRequest` for a bad id and :class:`IntakeError` for a
+    missing/invalid ``reciter_id`` on a new-reciter request.
     """
     row = _require_pending_intake(request_id)
-    payload = _serde.json_loads(row["payload"]) or {}
-    edits = ProposedEdits(**(payload.get("proposed_edits") or {}))
-    src = IntakeSource(**(payload.get("source") or {"method": "links"}))
-    requester = Actor(**payload["requester"])
     kind = row["kind"]
+    payload = _serde.json_loads(row["payload"]) or {}
 
-    # Build the delivery up front so a validation error aborts before any write.
-    # Audio metrics (codec/bitrate/duration) are unknown until offline ingest
-    # probes the files — left at their schema defaults; chapter_count reflects
-    # the supplied direct links (0 for a playlist, enumerated offline).
-    delivery = Delivery(
-        slug=slug,
-        reciter_id=reciter_id,
-        riwayah=edits.riwayah,
-        style=edits.style,
-        recording_context=edits.recording_context,
-        recording_year=edits.recording_year,
-        source=source,
-        channel=channel,
-        audio_category=AudioCategory.BY_SURAH,
-        chapter_count=len(src.links) if src.method == "links" else 0,
-        added_at=datetime.now(timezone.utc),
-        added_by_hf_id=actor.hf_user_id,
-    )
+    if kind == "new_reciter":
+        rid = (reciter_id or "").strip()
+        if not rid:
+            raise IntakeError("reciter_id is required to accept a new-reciter request.")
+        if not SLUG_RE.match(rid):
+            raise IntakeError(
+                f"invalid reciter_id {rid!r} — lowercase letters, digits, and "
+                "single underscores only."
+            )
+        payload["reciter_id"] = rid
 
     with _sync.durable_transaction():
         if kind == "new_reciter":
-            catalog_service.add_reciter(
-                actor=actor,
-                reciter_id=reciter_id,
-                name_en=edits.name_en or reciter_id,
-                name_ar=edits.name_ar,
-                country=edits.country,
-                reason="accepted intake request",
-            )
-        catalog_service.add_delivery(
-            actor=actor, delivery=delivery, reason="accepted intake request",
-        )
-        # Queue for alignment as the requester so auto_claim targets them. The
-        # delivery already carries the proposed combination, so no proposed_edits
-        # need re-applying on completion — pass an empty set.
-        state_service.transition(
-            slug,
-            "reciter.requested",
-            actor=requester,
-            payload={
-                "proposed_edits": {},
-                "comments": row["comments"],
-                "auto_claim": bool(row["auto_claim"]),
-            },
-        )
+            repo_requests.set_payload(request_id, payload)
         repo_requests.resolve_by_id(
-            request_id=request_id,
-            status="accepted",
-            transitioned_by=actor,
-            slug=slug,
+            request_id=request_id, status="accepted", transitioned_by=actor,
         )
-    # Stash the contributor's source for the offline ingest pipeline AFTER the
-    # txn commits — a rollback must not leave an orphan sidecar for a slug that
-    # was never created. A committed delivery briefly missing its sidecar is
-    # recoverable (ingest can re-request the source); an orphan file is silent
-    # litter.
-    get_backend().write_json_atomic(
-        storage_paths.intake_source_path(slug), src.model_dump(mode="json"),
-    )
     _invalidate()
-    return slug
+    return request_id
 
 
 # ---- Resolve: send back / discard (owner) -----------------------------------
