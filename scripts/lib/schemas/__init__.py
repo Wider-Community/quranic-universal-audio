@@ -2,7 +2,7 @@
 
 Lives at ``scripts/lib/schemas/`` so Inspector backend, GH Actions scripts,
 the training pipeline, and the dataset builder all read the same canonical
-definitions. See docs/reference/reciter-catalog.md and
+definitions. See docs/reference/catalog.md and
 docs/planning/inspector-deploy/v2/inspector-state-management.md for the
 authoritative spec.
 """
@@ -11,6 +11,20 @@ from __future__ import annotations
 
 from .access import Member, Role, RolesFile
 from .activity_state import ActivityState
+from .admin_users import (
+    AdminActiveClaim,
+    AdminActivityEvent,
+    AdminClaimEvent,
+    AdminRequestEvent,
+    AdminRoleEvent,
+    AdminUserDetail,
+    AdminUserRow,
+    AdminUserStats,
+    AdminUsersResponse,
+    AdminUsersSummary,
+    AdminVisitorStats,
+    VisitorDayStat,
+)
 from .audit import Actor, AuditRecord
 from .catalog import (
     AudioCategory,
@@ -55,6 +69,17 @@ from .state import (
 __all__ = [
     "ActivityState",
     "Actor",
+    "AdminActiveClaim",
+    "AdminActivityEvent",
+    "AdminClaimEvent",
+    "AdminRequestEvent",
+    "AdminRoleEvent",
+    "AdminUserDetail",
+    "AdminUserRow",
+    "AdminUserStats",
+    "AdminUsersResponse",
+    "AdminUsersSummary",
+    "AdminVisitorStats",
     "ArchivedRequest",
     "ArchivedRequestsFile",
     "AudioCategory",
@@ -89,6 +114,7 @@ __all__ = [
     "Source",
     "Style",
     "Visibility",
+    "VisitorDayStat",
     "Vocab",
     "parse_detailed_segment",
     "parse_edit_history_line",
