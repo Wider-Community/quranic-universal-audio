@@ -66,8 +66,12 @@
         const parts = [reciterId];
         const r = row.riwayah ?? '';
         const st = row.style ?? '';
-        if (r && r !== 'hafs') parts.push(shortOf(riwayat, r));
-        if (st && st !== 'murattal') parts.push(shortOf(styles, st));
+        // Omit the default riwayah/style by SHORT (catalog.md §3): hafs_an_asim
+        // → short 'hafs' (omitted), murattal → 'murattal' (omitted).
+        const rShort = r ? shortOf(riwayat, r) : '';
+        const stShort = st ? shortOf(styles, st) : '';
+        if (rShort && rShort !== 'hafs') parts.push(rShort);
+        if (stShort && stShort !== 'murattal') parts.push(stShort);
         const year = edits.recording_year;
         if (year) parts.push(String(year));
         if (channel) parts.push(shortOf(channels, channel));
@@ -238,12 +242,28 @@
         border: 1px solid var(--border-default);
         border-radius: var(--r-3);
         padding: var(--s-5);
+        /* Cap to the viewport (backdrop adds --s-6 padding each side) and
+           scroll internally so content never clips off screen on short or
+           zoomed viewports. Mirrors SubmitWizard / RequestForm sizing. */
+        max-height: min(88vh, 880px);
         display: flex;
         flex-direction: column;
         gap: var(--s-4);
+        overflow-y: auto;
         box-shadow: 0 32px 80px oklch(0 0 0 / 0.45);
     }
-    header { display: flex; align-items: center; justify-content: space-between; }
+    header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        /* Keep the close button reachable while the body scrolls. */
+        position: sticky;
+        top: 0;
+        margin: calc(-1 * var(--s-5)) calc(-1 * var(--s-5)) 0;
+        padding: var(--s-5) var(--s-5) 0;
+        background: var(--canvas);
+        z-index: 1;
+    }
     h3 { margin: 0; font-size: var(--fs-h3); font-weight: 500; color: var(--text-primary); }
     .close {
         width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;

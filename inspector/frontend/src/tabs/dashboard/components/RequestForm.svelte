@@ -84,7 +84,7 @@
     let autoClaim = false;
 
     // Vocab options fetched lazily from /api/static/catalog.json.
-    let riwayatOptions: { slug: string; name: string }[] = [];
+    let riwayatOptions: { slug: string; short?: string; name: string }[] = [];
     let styleOptions: { slug: string; name: string }[] = [];
     let contextOptions: { slug: string; name: string }[] = [];
 
@@ -94,7 +94,7 @@
             if (resp.ok) {
                 const cat = await resp.json();
                 riwayatOptions = (cat?.vocab?.riwayat ?? []).map(
-                    (r: { slug: string; name: string }) => ({ slug: r.slug, name: r.name }),
+                    (r: { slug: string; short?: string; name: string }) => ({ slug: r.slug, short: r.short, name: r.name }),
                 );
                 styleOptions = (cat?.vocab?.styles ?? []).map(
                     (s: { slug: string; name: string }) => ({ slug: s.slug, name: s.name }),
@@ -221,8 +221,10 @@
                 && d.style === style,
         );
 
-    // Non-hafs riwayahs aren't aligned yet — non-blocking heads-up.
-    $: nonHafsRiwayah = !!riwayah && riwayah !== 'hafs';
+    // Non-hafs riwayahs aren't aligned yet — non-blocking heads-up. Hafs is
+    // matched by vocab SHORT ('hafs'), not the slug ('hafs_an_asim').
+    $: selectedRiwayahShort = riwayatOptions.find((r) => r.slug === riwayah)?.short;
+    $: nonHafsRiwayah = !!selectedRiwayahShort && selectedRiwayahShort !== 'hafs';
 
     async function onSubmit(): Promise<void> {
         if (busy) return;
@@ -526,14 +528,28 @@
         border-radius: var(--r-3);
         padding: var(--s-5);
         width: min(640px, 92vw);
+        /* Cap to the viewport (backdrop adds --s-6 padding each side) and
+           scroll internally so tall create-mode content never clips off
+           screen. Mirrors SubmitWizard's modal sizing. */
+        max-height: min(88vh, 880px);
         display: flex;
         flex-direction: column;
         gap: var(--s-3);
+        overflow-y: auto;
     }
     header {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        /* Keep the close button reachable while the body scrolls. Negative
+           margins bleed the header over the form's padding so scrolled
+           content doesn't peek through; its own padding restores the inset. */
+        position: sticky;
+        top: 0;
+        margin: calc(-1 * var(--s-5)) calc(-1 * var(--s-5)) 0;
+        padding: var(--s-5) var(--s-5) var(--s-2);
+        background: var(--canvas);
+        z-index: 1;
     }
     header h3 {
         margin: 0;
