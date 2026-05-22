@@ -36,6 +36,7 @@ class AdminRequestRow(BaseModel):
 
     id: str
     slug: str | None = None
+    # existing_combo_edit (slug-based) | existing_reciter_new_combo | new_reciter
     kind: str
     status: str                              # pending | accepted | returned | discarded
     submitted_at: str
@@ -44,7 +45,9 @@ class AdminRequestRow(BaseModel):
     auto_claim: bool = False
     comments: str | None = None
 
-    # catalog-joined display fields
+    # catalog-joined display fields. For slugless intake rows these come from
+    # the payload (new_reciter identity) or a reciter_id join (new_combo).
+    reciter_id: str | None = None
     name_en: str | None = None
     name_ar: str | None = None
     riwayah: str | None = None
@@ -53,6 +56,11 @@ class AdminRequestRow(BaseModel):
     proposed_edits: dict = Field(default_factory=dict)
     changes: list[RequestChange] = Field(default_factory=list)
     conflict: bool = False
+
+    # intake-only payload (audio source + last reachability probe). Absent
+    # (None) for slug-based edit requests.
+    source: dict | None = None
+    probe: dict | None = None
 
     # per-caller overlay
     viewed: bool = False

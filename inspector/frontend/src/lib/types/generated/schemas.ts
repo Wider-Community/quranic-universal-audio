@@ -64,6 +64,7 @@ export interface AdminRequestRow {
   resolution_reason?: string | null;
   auto_claim?: boolean;
   comments?: string | null;
+  reciter_id?: string | null;
   name_en?: string | null;
   name_ar?: string | null;
   riwayah?: string | null;
@@ -73,6 +74,12 @@ export interface AdminRequestRow {
   };
   changes?: RequestChange[];
   conflict?: boolean;
+  source?: {
+    [k: string]: unknown;
+  } | null;
+  probe?: {
+    [k: string]: unknown;
+  } | null;
   viewed?: boolean;
   requester_role?: string | null;
   requester_login?: string | null;
@@ -339,6 +346,73 @@ export interface EditOperation {
   }[];
 }
 /**
+ * Normalised audio source. Typed links and dropped CSV/JSON files both feed
+ * ``links``; ``playlist`` carries a single URL we enumerate offline (yt-dlp).
+ */
+export interface IntakeSource {
+  method: "links" | "playlist";
+  links?: SourceLink[];
+  playlist_url?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * One per-chapter direct audio URL.
+ */
+export interface SourceLink {
+  chapter: number;
+  url: string;
+  [k: string]: unknown;
+}
+/**
+ * Body of ``POST /api/requests/intake``.
+ *
+ * ``proposed_edits`` reuses :class:`ProposedEdits` — its fields already are the
+ * combination (riwayah/style/recording_context/recording_year) plus, for
+ * ``new_reciter``, identity (name_en/name_ar/country).
+ */
+export interface IntakeSubmission {
+  kind: "existing_reciter_new_combo" | "new_reciter";
+  reciter_id?: string | null;
+  proposed_edits?: ProposedEdits;
+  source: IntakeSource;
+  comments?: string | null;
+  auto_claim?: boolean;
+  [k: string]: unknown;
+}
+/**
+ * User-submitted catalog edits, all optional.
+ *
+ * Only the fields the requester actually changed get populated. The
+ * server uses these to patch the catalog on auto-acceptance — fields
+ * left ``None`` mean "leave the existing catalog value alone."
+ *
+ * Riwayah and style are descriptive fields on the ``Delivery`` row, not
+ * parts of the slug — changing them does NOT re-key the row. Collisions
+ * with another delivery of the same reciter are non-blocking warnings.
+ */
+export interface ProposedEdits {
+  riwayah?: string | null;
+  style?: string | null;
+  name_en?: string | null;
+  name_ar?: string | null;
+  /**
+   * ISO-2 country code; validation deferred to catalog write
+   */
+  country?: string | null;
+  recording_context?: string | null;
+  recording_year?: number | null;
+}
+/**
+ * Structural validation outcome (submit-time). ``errors`` block submission;
+ * ``warnings`` (missing chapters, duplicates, unrecognised playlist host,
+ * likely-duplicate request) are advisory — the admin adjudicates.
+ */
+export interface IntakeValidation {
+  errors?: string[];
+  warnings?: string[];
+  [k: string]: unknown;
+}
+/**
  * One pipeline-op waveform slice. Migration #5 canonical shape.
  *
  * All fields required:
@@ -365,4 +439,24 @@ export interface PeaksRecord {
   end_ms: number;
   bps: number;
   peaks_b64: string;
+}
+/**
+ * Body of ``POST /api/admin/requests/<id>/probe``. Also cached onto the
+ * request row's ``payload.probe`` so the panel shows the last result.
+ */
+export interface ProbeResponse {
+  at: string;
+  results?: ProbeResult[];
+  [k: string]: unknown;
+}
+/**
+ * Reachability of one URL. ``status`` is the HTTP status (``None`` when the
+ * connection itself failed); ``reachable`` is the rolled-up verdict.
+ */
+export interface ProbeResult {
+  chapter?: number | null;
+  url: string;
+  status?: number | null;
+  reachable?: boolean;
+  [k: string]: unknown;
 }

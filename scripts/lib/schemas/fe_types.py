@@ -40,6 +40,14 @@ from .admin_users import (
     VisitorDayStat,
 )
 from .edit_history import EditHistoryBatch, EditOperation
+from .intake_requests import (
+    IntakeSource,
+    IntakeSubmission,
+    IntakeValidation,
+    ProbeResponse,
+    ProbeResult,
+    SourceLink,
+)
 from .peaks_history import PeaksRecord
 from .segment import (
     DetailedDocument,
@@ -69,7 +77,13 @@ __all__ = [
     "DetailedSegment",
     "EditHistoryBatch",
     "EditOperation",
+    "IntakeSource",
+    "IntakeSubmission",
+    "IntakeValidation",
     "PeaksRecord",
+    "ProbeResponse",
+    "ProbeResult",
     "RequestChange",
+    "SourceLink",
     "VisitorDayStat",
 ]

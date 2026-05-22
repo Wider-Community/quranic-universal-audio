@@ -511,3 +511,178 @@ def test_unviewed_count_is_per_admin(signed_in_client):
     o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
     cnt = json.loads(o_client.get("/api/admin/requests/unviewed-count").data)
     assert cnt["count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Intake: submit (new combination / new reciter) + accept / probe / resolve
+# ---------------------------------------------------------------------------
+
+
+def _links(n=114):
+    return [{"chapter": c, "url": f"https://cdn.example/{c:03d}.mp3"} for c in range(1, n + 1)]
+
+
+def _new_reciter_body(**over):
+    body = {
+        "kind": "new_reciter",
+        "proposed_edits": {"name_en": "Test Reciter", "name_ar": "قارئ",
+                           "riwayah": "hafs", "style": "murattal"},
+        "source": {"method": "links", "links": _links()},
+        "comments": "From a clean studio master.",
+    }
+    body.update(over)
+    return body
+
+
+def _new_combo_body(**over):
+    body = {
+        "kind": "existing_reciter_new_combo",
+        "reciter_id": "rec_clean",
+        "proposed_edits": {"riwayah": "warsh", "style": "murattal"},
+        "source": {"method": "links", "links": _links()},
+    }
+    body.update(over)
+    return body
+
+
+def test_intake_submit_anonymous_401(flask_client):
+    res = flask_client.post("/api/requests/intake", headers=_HEADERS,
+                            data=json.dumps(_new_reciter_body()))
+    assert res.status_code == 401
+
+
+def test_intake_submit_new_reciter_happy(signed_in_client):
+    client, _ = signed_in_client(role="contributor", hf_user_id="u-1", login="alice")
+    res = client.post("/api/requests/intake", headers=_HEADERS,
+                      data=json.dumps(_new_reciter_body()))
+    assert res.status_code == 200, res.data
+    body = json.loads(res.data)
+    assert body["ok"] and body["id"].startswith("rq_")
+    assert body["warnings"] == []
+
+    # Appears in the admin open queue with intake shape (slugless, source).
+    o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
+    rows = json.loads(o_client.get("/api/admin/requests?status=open").data)["rows"]
+    intake = next(r for r in rows if r["kind"] == "new_reciter")
+    assert intake["slug"] is None
+    assert intake["name_en"] == "Test Reciter"
+    assert intake["source"]["method"] == "links"
+    assert len(intake["source"]["links"]) == 114
+
+
+def test_intake_submit_missing_name_is_error(signed_in_client):
+    client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
+    body = _new_reciter_body(proposed_edits={"riwayah": "hafs", "style": "murattal"})
+    res = client.post("/api/requests/intake", headers=_HEADERS, data=json.dumps(body))
+    assert res.status_code == 400
+    assert any("English name" in e for e in json.loads(res.data)["errors"])
+
+
+def test_intake_submit_missing_chapters_warns(signed_in_client):
+    client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
+    body = _new_reciter_body(source={"method": "links", "links": _links(50)})
+    res = client.post("/api/requests/intake", headers=_HEADERS, data=json.dumps(body))
+    assert res.status_code == 200
+    assert any("Missing" in w for w in json.loads(res.data)["warnings"])
+
+
+def test_intake_accept_new_combo_creates_delivery(signed_in_client):
+    c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1", login="alice")
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_combo_body())).data)["id"]
+
+    o_client, _ = signed_in_client(role="owner", hf_user_id="u-O", login="owner")
+    res = o_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
+                        data=json.dumps({"slug": "rec_clean_warsh", "reciter_id": "rec_clean",
+                                         "source": "src1", "channel": "ch1"}))
+    assert res.status_code == 200, res.data
+    assert json.loads(res.data)["slug"] == "rec_clean_warsh"
+
+    # Catalog delivery minted + state row in AWAITING_ALIGNMENT.
+    from services import catalog as catalog_service
+    from services import state as state_service
+    d = catalog_service.find_delivery("rec_clean_warsh")
+    assert d is not None and d.riwayah == "warsh" and d.reciter_id == "rec_clean"
+    row = state_service.get_row("rec_clean_warsh")
+    assert row is not None and row.state.value == "awaiting_alignment"
+
+    # Source stashed onto wip/<slug>/intake.json.
+    from services import hf_bucket as _hf_bucket
+    from services import storage_paths
+    src = _hf_bucket.get_backend().read_json(storage_paths.intake_source_path("rec_clean_warsh"))
+    assert src["method"] == "links" and len(src["links"]) == 114
+
+    # Intake row resolved accepted + slug-linked.
+    from services.db import repo_requests
+    accepted = repo_requests.get_by_id(rid)
+    assert accepted["status"] == "accepted" and accepted["slug"] == "rec_clean_warsh"
+
+
+def test_intake_accept_new_reciter_creates_reciter_and_delivery(signed_in_client):
+    c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_reciter_body())).data)["id"]
+
+    o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
+    res = o_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
+                        data=json.dumps({"slug": "test_reciter_hafs", "reciter_id": "test_reciter",
+                                         "source": "src1", "channel": "ch1"}))
+    assert res.status_code == 200, res.data
+    from services import catalog as catalog_service
+    assert catalog_service.find_reciter("test_reciter") is not None
+    assert catalog_service.find_delivery("test_reciter_hafs") is not None
+
+
+def test_intake_accept_requires_owner(signed_in_client):
+    c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_combo_body())).data)["id"]
+    m_client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
+    res = m_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
+                        data=json.dumps({"slug": "x_y", "reciter_id": "rec_clean",
+                                         "source": "src1", "channel": "ch1"}))
+    assert res.status_code == 403
+
+
+def test_intake_accept_unknown_404(signed_in_client):
+    o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
+    res = o_client.post("/api/admin/requests/rq_nope/accept", headers=_HEADERS,
+                        data=json.dumps({"slug": "a_b", "reciter_id": "rec_clean",
+                                         "source": "src1", "channel": "ch1"}))
+    assert res.status_code == 404
+
+
+def test_intake_discard_resolves_request(signed_in_client):
+    c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_combo_body())).data)["id"]
+    o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
+    res = o_client.post(f"/api/admin/requests/{rid}/discard", headers=_HEADERS,
+                        data=json.dumps({"reason": "Duplicate of an existing combo."}))
+    assert res.status_code == 200
+    from services.db import repo_requests
+    assert repo_requests.get_by_id(rid)["status"] == "discarded"
+
+
+def test_intake_probe_caches_result(signed_in_client, monkeypatch):
+    from scripts.lib.schemas import ProbeResponse, ProbeResult
+    from services.admin import intake as intake_service
+
+    def _fake_probe(source):
+        return ProbeResponse(at="2026-01-01T00:00:00+00:00",
+                             results=[ProbeResult(chapter=1, url="https://x/1.mp3",
+                                                  status=200, reachable=True)])
+    monkeypatch.setattr(intake_service, "probe_source", _fake_probe)
+
+    c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_combo_body())).data)["id"]
+    o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
+    res = o_client.post(f"/api/admin/requests/{rid}/probe", headers=_HEADERS)
+    assert res.status_code == 200
+    assert json.loads(res.data)["results"][0]["reachable"] is True
+
+    from services.db import repo_requests
+    from services.db import _serde
+    payload = _serde.json_loads(repo_requests.get_by_id(rid)["payload"])
+    assert payload["probe"]["results"][0]["status"] == 200

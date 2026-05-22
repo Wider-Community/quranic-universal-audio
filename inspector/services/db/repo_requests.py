@@ -116,6 +116,43 @@ def submit(
     return rid
 
 
+def _resolve_row(
+    row,
+    *,
+    status: str,
+    transitioned_by: Actor,
+    reason: str | None,
+    slug: str | None,
+    closed_by_transition_id: str | None,
+    at: datetime | None,
+) -> bool:
+    """Shared resolution core. Stamps the terminal status + archival metadata on
+    one already-fetched pending row. ``slug`` back-fills ``requests.slug`` when
+    given (intake accept mints a delivery and links it); ``None`` keeps the
+    existing slug. Both the slug-keyed and id-keyed entry points funnel here so
+    the status-mutation logic lives in exactly one place."""
+    repo_access.ensure_user(transitioned_by.hf_user_id, login=transitioned_by.login_at_time)
+    payload = _serde.json_loads(row["payload"]) or {}
+    payload["transitioned_by"] = _actor_dict(transitioned_by)
+    new_slug = slug if slug is not None else row["slug"]
+    get_conn().execute(
+        "UPDATE requests SET status = ?, resolved_at = ?, resolved_by_id = ?, "
+        "resolution_reason = ?, payload = ?, closed_by_transition_id = ?, slug = ? "
+        "WHERE id = ?",
+        (
+            status,
+            _serde.to_iso(at or _serde.now()),
+            transitioned_by.hf_user_id,
+            reason,
+            _serde.json_dumps(payload),
+            closed_by_transition_id,
+            new_slug,
+            row["id"],
+        ),
+    )
+    return True
+
+
 def resolve(
     *,
     slug: str,
@@ -126,28 +163,48 @@ def resolve(
     at: datetime | None = None,
 ) -> bool:
     """Move the open (pending) request for ``slug`` to a terminal status,
-    stamping archival metadata into the payload. Returns True if one moved."""
+    stamping archival metadata into the payload. Returns True if one moved.
+    Slug-keyed path used by the edit-request (state-machine) flow."""
     row = get_pending_row(slug)
     if row is None:
         return False
-    repo_access.ensure_user(transitioned_by.hf_user_id, login=transitioned_by.login_at_time)
-    payload = _serde.json_loads(row["payload"]) or {}
-    payload["transitioned_by"] = _actor_dict(transitioned_by)
-    get_conn().execute(
-        "UPDATE requests SET status = ?, resolved_at = ?, resolved_by_id = ?, "
-        "resolution_reason = ?, payload = ?, closed_by_transition_id = ? "
-        "WHERE id = ?",
-        (
-            status,
-            _serde.to_iso(at or _serde.now()),
-            transitioned_by.hf_user_id,
-            reason,
-            _serde.json_dumps(payload),
-            closed_by_transition_id,
-            row["id"],
-        ),
+    return _resolve_row(
+        row, status=status, transitioned_by=transitioned_by, reason=reason,
+        slug=None, closed_by_transition_id=closed_by_transition_id, at=at,
     )
-    return True
+
+
+def resolve_by_id(
+    *,
+    request_id: str,
+    status: str,                       # accepted | returned | discarded
+    transitioned_by: Actor,
+    reason: str | None = None,
+    slug: str | None = None,
+    closed_by_transition_id: str | None = None,
+    at: datetime | None = None,
+) -> bool:
+    """Resolve a pending request by id (slugless intake flow — no state machine).
+    ``slug`` optionally links a freshly-minted delivery on accept. Returns False
+    if the id is unknown or already terminal."""
+    row = get_by_id(request_id)
+    if row is None or row["status"] != "pending":
+        return False
+    return _resolve_row(
+        row, status=status, transitioned_by=transitioned_by, reason=reason,
+        slug=slug, closed_by_transition_id=closed_by_transition_id, at=at,
+    )
+
+
+def set_payload(request_id: str, payload: dict) -> bool:
+    """Overwrite a request's ``payload`` JSON (caller merges first — e.g. probe
+    cache write reads, sets ``payload['probe']``, then writes back). Returns
+    True if a row matched."""
+    cur = get_conn().execute(
+        "UPDATE requests SET payload = ? WHERE id = ?",
+        (_serde.json_dumps(payload), request_id),
+    )
+    return cur.rowcount > 0
 
 
 def delete_pending(slug: str) -> bool:
@@ -227,24 +284,26 @@ def get_by_id(request_id: str):
 
 
 def admin_list_rows(*, status: str) -> list:
-    """Raw rows for the admin Requests tab (slug-bearing only). ``status`` is a
-    DB status (``pending``/``accepted``/``returned``/``discarded``). Pending is
-    ordered oldest-first (longest-waiting on top); terminal statuses
+    """Raw rows for the admin Requests tab. ``status`` is a DB status
+    (``pending``/``accepted``/``returned``/``discarded``). Includes slugless
+    intake rows (new-combo / new-reciter) alongside slug-based edit requests.
+    Pending is ordered oldest-first (longest-waiting on top); terminal statuses
     newest-resolved first. Returns sqlite Rows; the service maps + redacts."""
     if status == "pending":
         order = "submitted_at ASC"
     else:
         order = "resolved_at DESC, submitted_at DESC, id DESC"
     return get_conn().execute(
-        f"SELECT * FROM requests WHERE status = ? AND slug IS NOT NULL ORDER BY {order}",
+        f"SELECT * FROM requests WHERE status = ? ORDER BY {order}",
         (status,),
     ).fetchall()
 
 
 def counts_by_status() -> dict[str, int]:
-    """``{status: count}`` over slug-bearing requests (drives the facet chips)."""
+    """``{status: count}`` over all requests — edit + intake (drives the facet
+    chips)."""
     rows = get_conn().execute(
-        "SELECT status, COUNT(*) FROM requests WHERE slug IS NOT NULL GROUP BY status"
+        "SELECT status, COUNT(*) FROM requests GROUP BY status"
     ).fetchall()
     return {r[0]: int(r[1]) for r in rows}
 
@@ -277,9 +336,9 @@ def viewed_ids_for_user(hf_user_id: str) -> set[str]:
 
 
 def count_unviewed_open_for_user(hf_user_id: str) -> int:
-    """Open (pending) requests this admin has not yet viewed."""
+    """Open (pending) requests this admin has not yet viewed — edit + intake."""
     return int(get_conn().execute(
-        "SELECT COUNT(*) FROM requests r WHERE r.status = 'pending' AND r.slug IS NOT NULL "
+        "SELECT COUNT(*) FROM requests r WHERE r.status = 'pending' "
         "AND NOT EXISTS (SELECT 1 FROM request_views v "
         "WHERE v.request_id = r.id AND v.hf_user_id = ?)",
         (hf_user_id,),

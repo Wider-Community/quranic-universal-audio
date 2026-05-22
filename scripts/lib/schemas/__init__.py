@@ -48,6 +48,14 @@ from .catalog import (
     Vocab,
 )
 from .edit_history import EditHistoryBatch, EditOperation, parse_edit_history_line
+from .intake_requests import (
+    IntakeSource,
+    IntakeSubmission,
+    IntakeValidation,
+    ProbeResponse,
+    ProbeResult,
+    SourceLink,
+)
 from .peaks_history import PeaksRecord, parse_peaks_record
 from .pipeline_meta import PipelineMeta
 from .pending_requests import (
@@ -104,11 +112,16 @@ __all__ = [
     "DetailedSegment",
     "EditHistoryBatch",
     "EditOperation",
+    "IntakeSource",
+    "IntakeSubmission",
+    "IntakeValidation",
     "Member",
     "PeaksRecord",
     "PendingRequest",
     "PendingRequestsFile",
     "PipelineMeta",
+    "ProbeResponse",
+    "ProbeResult",
     "ProposedEdits",
     "ReciterCatalog",
     "ReciterEntry",
@@ -122,6 +135,7 @@ __all__ = [
     "RolesFile",
     "SidecarMeta",
     "Source",
+    "SourceLink",
     "Style",
     "Visibility",
     "VisitorDayStat",

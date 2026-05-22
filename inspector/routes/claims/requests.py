@@ -32,15 +32,18 @@ of ``@require_role`` for the tier check.
 from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
+from pydantic import ValidationError
 
-from scripts.lib.schemas import Role
+from scripts.lib.schemas import IntakeSubmission, Role
 
 from routes._admin_helpers import actor_for, validate_reason
 
 from services import pending_requests as pending_requests_service
 from services import permissions
 from services import state as state_service
+from services.admin import intake as intake_service
 from services.admin import requests as admin_requests_service
+from services.state import catalog as catalog_service
 
 from utils.decorators import require_role, require_same_origin
 
@@ -106,6 +109,34 @@ def submit_request(user, slug: str):
         return jsonify({"error": str(e)}), 400
 
     return jsonify({"ok": True, "slug": slug, "state": new_row.state.value})
+
+
+# ---------------------------------------------------------------------------
+# User: submit intake (new combination / new reciter — slugless)
+# ---------------------------------------------------------------------------
+
+
+@requests_bp.route("/requests/intake", methods=["POST"])
+@require_same_origin
+@require_role(Role.CONTRIBUTOR, Role.MAINTAINER, Role.OWNER)
+def submit_intake(user):
+    """New-combo / new-reciter contribution with an audio source (direct links
+    or a playlist). Structural-validate, then record a slugless pending request.
+    400 carries ``{errors, warnings}`` on blocking validation failure."""
+    body = request.get_json(silent=True) or {}
+    try:
+        sub = IntakeSubmission.model_validate(body)
+    except ValidationError as e:
+        return jsonify({"error": "invalid submission", "detail": e.errors()}), 400
+    try:
+        rid, validation = intake_service.submit(sub, requester=actor_for(user))
+    except intake_service.IntakeValidationError as e:
+        return jsonify({
+            "error": "validation failed",
+            "errors": e.validation.errors,
+            "warnings": e.validation.warnings,
+        }), 400
+    return jsonify({"ok": True, "id": rid, "warnings": validation.warnings})
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +263,74 @@ def mark_request_viewed(user, rid: str):
     ok = admin_requests_service.mark_viewed(rid, actor=actor_for(user))
     if not ok:
         return jsonify({"error": "unknown request"}), 404
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Owner: intake accept / probe / resolve (slugless new-combo / new-reciter)
+# ---------------------------------------------------------------------------
+
+
+@requests_bp.route("/admin/requests/<rid>/accept", methods=["POST"])
+@require_same_origin
+@require_role(Role.OWNER)
+def accept_intake(user, rid: str):
+    """Mint the catalog entry for an intake request + queue it for alignment.
+    Body: owner-confirmed ``slug``, ``reciter_id``, ``source``, ``channel``."""
+    body = request.get_json(silent=True) or {}
+    slug = (body.get("slug") or "").strip()
+    reciter_id = (body.get("reciter_id") or "").strip()
+    source = (body.get("source") or "").strip()
+    channel = (body.get("channel") or "").strip()
+    if not (slug and reciter_id and source and channel):
+        return jsonify({"error": "slug, reciter_id, source and channel are required"}), 400
+    try:
+        minted = intake_service.accept(
+            rid, actor=actor_for(user), slug=slug,
+            reciter_id=reciter_id, source=source, channel=channel,
+        )
+    except intake_service.NotIntakeRequest:
+        return jsonify({"error": "unknown intake request"}), 404
+    except (catalog_service.CatalogError, ValueError) as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "slug": minted})
+
+
+@requests_bp.route("/admin/requests/<rid>/probe", methods=["POST"])
+@require_same_origin
+@require_role(Role.OWNER)
+def probe_intake(user, rid: str):
+    """Owner-triggered reachability probe of an intake request's audio source."""
+    try:
+        result = intake_service.probe(rid)
+    except intake_service.NotIntakeRequest:
+        return jsonify({"error": "unknown intake request"}), 404
+    return jsonify(result.model_dump(mode="json"))
+
+
+@requests_bp.route("/admin/requests/<rid>/return", methods=["POST"])
+@require_same_origin
+@require_role(Role.OWNER)
+def return_intake(user, rid: str):
+    return _resolve_intake(user, rid, "returned")
+
+
+@requests_bp.route("/admin/requests/<rid>/discard", methods=["POST"])
+@require_same_origin
+@require_role(Role.OWNER)
+def discard_intake(user, rid: str):
+    return _resolve_intake(user, rid, "discarded")
+
+
+def _resolve_intake(user, rid: str, status: str):
+    body = request.get_json(silent=True) or {}
+    reason, err = validate_reason(body)
+    if err is not None:
+        return err
+    try:
+        intake_service.resolve(rid, status=status, reason=reason, actor=actor_for(user))
+    except intake_service.NotIntakeRequest:
+        return jsonify({"error": "unknown intake request"}), 404
     return jsonify({"ok": True})
 
 

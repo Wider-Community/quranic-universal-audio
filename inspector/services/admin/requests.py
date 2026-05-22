@@ -110,49 +110,90 @@ def mark_viewed(request_id: str, *, actor) -> bool:
 # ---------------------------------------------------------------------------
 
 
+_INTAKE_KINDS = ("existing_reciter_new_combo", "new_reciter")
+
+
 def _build_base_rows(db_status: str) -> list[dict]:
     out: list[dict] = []
     for row in repo_requests.admin_list_rows(status=db_status):
         payload = _serde.json_loads(row["payload"]) or {}
         slug = row["slug"]
+        kind = row["kind"]
+        proposed = payload.get("proposed_edits") or {}
+        is_intake = kind in _INTAKE_KINDS
 
         delivery = catalog_service.find_delivery(slug) if slug else None
-        reciter = (
-            catalog_service.find_reciter(delivery.reciter_id)
-            if delivery is not None
-            else None
-        )
-        name_en = reciter.name_en if reciter is not None else None
-        if name_en is None:
-            name_en = catalog_service.display_name(slug) or slug
-        name_ar = reciter.name_ar if reciter is not None else None
-        riwayah = delivery.riwayah if delivery is not None else None
-        style = delivery.style if delivery is not None else None
+        # Resolve the reciter: from the delivery (slug-based / accepted intake),
+        # else from the payload's reciter_id (new-combo against an existing
+        # reciter). new_reciter has neither — identity lives in proposed_edits.
+        reciter_id = delivery.reciter_id if delivery is not None else payload.get("reciter_id")
+        reciter = catalog_service.find_reciter(reciter_id) if reciter_id else None
 
-        proposed = payload.get("proposed_edits") or {}
+        if delivery is not None:
+            name_en = reciter.name_en if reciter is not None else (
+                catalog_service.display_name(slug) or slug
+            )
+            name_ar = reciter.name_ar if reciter is not None else None
+            riwayah = delivery.riwayah
+            style = delivery.style
+        elif kind == "new_reciter":
+            name_en = proposed.get("name_en")
+            name_ar = proposed.get("name_ar")
+            riwayah = proposed.get("riwayah")
+            style = proposed.get("style")
+        else:  # existing_reciter_new_combo (no delivery yet)
+            name_en = reciter.name_en if reciter is not None else None
+            name_ar = reciter.name_ar if reciter is not None else None
+            riwayah = proposed.get("riwayah")
+            style = proposed.get("style")
+
         current = _current_values(delivery, reciter)
+        if kind == "existing_reciter_new_combo":
+            conflict = _intake_combo_conflict(reciter_id, proposed)
+        else:
+            conflict = _conflict(slug, delivery, proposed)
 
         out.append({
             "id": row["id"],
             "slug": slug,
-            "kind": row["kind"],
+            "kind": kind,
             "status": row["status"],
             "submitted_at": row["submitted_at"],
             "resolved_at": row["resolved_at"],
             "resolution_reason": row["resolution_reason"],
             "auto_claim": bool(row["auto_claim"]),
             "comments": row["comments"],
+            "reciter_id": reciter_id,
             "name_en": name_en,
             "name_ar": name_ar,
             "riwayah": riwayah,
             "style": style,
             "proposed_edits": proposed,
             "changes": _changes_list(proposed, current),
-            "conflict": _conflict(slug, delivery, proposed),
+            "conflict": conflict,
+            "source": payload.get("source") if is_intake else None,
+            "probe": payload.get("probe") if is_intake else None,
             "_requester": payload.get("requester") or {},
             "_transitioned_by": payload.get("transitioned_by") or {},
         })
     return out
+
+
+def _intake_combo_conflict(reciter_id, proposed: dict) -> bool:
+    """True iff a new-combo intake's proposed (riwayah, style) already exists as
+    a delivery of the same reciter. Advisory; mirrors ``_conflict`` for the
+    slugless case."""
+    if not reciter_id:
+        return False
+    riwayah = proposed.get("riwayah")
+    style = proposed.get("style")
+    if not riwayah or not style:
+        return False
+    catalog = catalog_service.snapshot()
+    return any(
+        d.reciter_id == reciter_id and d.riwayah == riwayah and d.style == style
+        for d in catalog.deliveries
+    )
 
 
 def _current_values(delivery, reciter) -> dict:
