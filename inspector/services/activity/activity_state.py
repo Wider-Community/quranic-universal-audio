@@ -1,9 +1,10 @@
-"""Activity state service: facade over the activity sidecar tables.
+"""Activity state service: facade over SQLite sidecar tables.
 
 Per-user dismissals (admin rail) + global tombstones (public rail) live in
-``activity_dismissals`` / ``activity_tombstones`` (``repo_activity``), keyed on
-the transition ``content_hash`` (the same id the FE already holds). The audit
-trail for each mutation is a transition row appended in the same durable txn.
+``activity_dismissals`` / ``activity_tombstones`` (``repo_activity``), keyed
+on the transition ``content_hash`` (the same id the FE already holds). The
+audit trail for each mutation is a transition row appended in the same durable
+transaction.
 """
 
 from __future__ import annotations

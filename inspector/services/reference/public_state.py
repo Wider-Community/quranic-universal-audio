@@ -266,7 +266,7 @@ def to_public_reciter(
 
 
 def _build_state_index() -> dict[str, ReciterRow]:
-    """Snapshot the in-memory state store into a slug-keyed index."""
+    """Snapshot the state table (DB via ``state_service``) into a slug-keyed index."""
     return {row.slug: row for row in state_service.all_rows()}
 
 
@@ -277,10 +277,10 @@ def all_public_reciters() -> list[PublicReciter]:
     boundaries) is skipped — the dashboard has nothing to render for it.
 
     Result is cached keyed on ``db_seq`` (the only high-frequency public path):
-    a hit skips the full catalog-model + state-JOIN rebuild. Any committed
-    write bumps ``db_seq`` and transparently invalidates the entry. A shallow
-    copy is returned so callers may sort/filter in place without mutating the
-    cached canonical list.
+    a hit skips the full catalog-model (DB→pydantic) + state-JOIN rebuild. Any
+    committed write bumps ``db_seq`` and transparently invalidates the entry.
+    A shallow copy is returned so callers may sort/filter in place without
+    mutating the cached canonical list.
     """
     from services import db as _db
     from services.storage import cache as _cache

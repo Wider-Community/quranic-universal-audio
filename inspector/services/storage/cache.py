@@ -619,11 +619,12 @@ def set_surah_info_lite_cache(data: dict) -> None:
 
 # ---------------------------------------------------------------------------
 # Public reciters list — the only high-frequency, anonymous, concurrent path.
-# ``all_public_reciters()`` rebuilds the WHOLE catalog model + the state JOIN
-# per call; cache the materialized list keyed on the monotonic ``db_seq`` so
-# ANY committed write (state / catalog / access / activity all bump db_seq)
-# transparently invalidates it — no explicit per-mutation hooks to keep in
-# sync. Single-worker gthread: a benign race just recomputes for one seq.
+# ``all_public_reciters()`` rebuilds the WHOLE catalog model (from DB via
+# ``catalog_service.snapshot()``) + the state JOIN per call; cache the
+# materialized list keyed on the monotonic ``db_seq`` so ANY committed write
+# (any DB mutation bumps db_seq) transparently invalidates it — no explicit
+# per-mutation hooks to keep in sync. Single-worker gthread: a benign race
+# just recomputes for one seq.
 # ---------------------------------------------------------------------------
 
 import threading as _threading
@@ -653,12 +654,13 @@ def invalidate_public_reciters_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Catalog snapshot — the full ReciterCatalog rebuild from SQL through pydantic.
-# Recomputed per request on /api/static/catalog.json, public detail / admin-view
-# pages, and activity-feed descriptor lookups; ~38 ms today but ~300 ms at 10x
-# deliveries and ~700 ms at 100x (single-threaded → compounds across concurrent
-# visitors on the single worker). Cache the built model keyed on db_seq so the
-# rebuild is paid once per write generation. Returned INSTANCE is shared — all
+# Catalog snapshot — the full ReciterCatalog rebuild from the SQLite DB
+# through pydantic. Recomputed per request on /api/static/catalog.json,
+# public detail / admin-view pages, and activity-feed descriptor lookups;
+# ~38 ms today but ~300 ms at 10x deliveries and ~700 ms at 100x
+# (single-threaded → compounds across concurrent visitors on the single
+# worker). Cache the built model keyed on db_seq so the rebuild is paid
+# once per write generation. Returned INSTANCE is shared — all
 # catalog_service.snapshot() consumers are read-only (verified); never mutate it.
 # ---------------------------------------------------------------------------
 

@@ -8,7 +8,7 @@ byte-identical. Mutations keep the legacy public signatures, compute the
 only — it does NOT build the patch), and append the transition inside the
 caller's transaction so the audit row is atomic with the edit.
 
-Authority for schema: docs/reference/reciter-catalog.md (the pydantic models
+Authority for schema: docs/reference/catalog.md (the pydantic models
 in ``scripts/lib/schemas/catalog.py`` are the runtime authority).
 """
 
@@ -66,8 +66,8 @@ def snapshot() -> ReciterCatalog:
     """Full catalog read model. Cached on ``db_seq`` (the rebuild is ~38 ms
     today, ~300–700 ms at scale, and runs on hot read paths). The returned
     instance is shared — treat as READ-ONLY (no consumer mutates it). Cached
-    in the service, not the repo, so the migration's direct
-    ``repo_catalog.snapshot()`` calls bypass it."""
+    in the service via ``db_seq`` keying; per-request cache misses are rebuilt
+    from the SQLite tables."""
     from services import db as _db
     from services.storage import cache as _cache
 

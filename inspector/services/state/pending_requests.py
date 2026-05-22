@@ -1,12 +1,10 @@
-"""Pending request service: facade over the unified ``requests`` table.
+"""Pending request service: facade over the SQLite ``requests`` table.
 
-Post-cutover the pending store + the three archive files collapse into one
-``requests`` table (``repo_requests``); a row's ``status`` (``pending`` →
-``accepted``/``returned``/``discarded``) replaces the move-between-files dance,
-so "archive then clear" is a single ``resolve()`` and partial-commit is
-impossible. Public signatures are unchanged; ``apply_and_archive_completed``
-keeps the reciter-vs-delivery edit split + the non-blocking
-``catalog.conflict_warning``.
+Requests are stored in one unified ``requests`` table (``repo_requests``);
+a row's ``status`` field (``pending`` → ``accepted``/``returned``/``discarded``)
+tracks resolution state. Public signatures are unchanged;
+``apply_and_archive_completed`` keeps the reciter-vs-delivery edit split +
+the non-blocking ``catalog.conflict_warning``.
 """
 
 from __future__ import annotations

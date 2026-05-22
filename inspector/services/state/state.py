@@ -1,8 +1,8 @@
-"""Reciter state service: ``<bucket>/state/reciter_state.json``.
+"""Reciter state service: reads/writes from SQLite ``delivery_states`` + ``claims`` tables.
 
 Single source of truth for reciter lifecycle + assignee. Inspector backend
-is sole writer. Per-slug ``threading.Lock`` serializes concurrent writes
-against the same slug; different slugs run independently.
+is sole writer. The SQLite DB (via ``repo_state``, ``repo_claims``) is the
+canonical store; writes commit atomically via ``durable_transaction``.
 
 The full state machine ships in Phase 1 even though most endpoint callers
 land in later phases — the dispatcher is the single source of truth and
@@ -61,8 +61,8 @@ class UnknownEvent(StateError):
 class InvalidTransition(StateError):
     """Raised when the matrix rejects a transition.
 
-    The in-memory store and on-bucket file are unchanged; no audit entry is
-    written. Callers should surface HTTP 400 with the message.
+    The database is unchanged; no transition row is written. Callers should
+    surface HTTP 400 with the message.
     """
 
 

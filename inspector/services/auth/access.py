@@ -1,4 +1,4 @@
-"""Roles service: facade over ``users`` + ``role_assignments`` (``repo_access``).
+"""Roles service: facade over SQLite ``users`` + ``role_assignments`` tables.
 
 Inspector backend is sole writer. ``resolve_role`` / ``find_member`` /
 ``snapshot`` read the assembled ``Member``/``RolesFile`` shapes; grant / revoke
@@ -7,8 +7,7 @@ transition row.
 
 Revoke is atomic with its cascade: revoking a user who holds open claims closes
 those claims AND emits their ``reciter.released`` transitions in the SAME
-transaction (via the non-locking ``state._apply_event``), replacing the old
-swallow-errors per-row loop in ``routes/admin/access.py`` — no more "role
+transaction (via the non-locking ``state._apply_event``) — no more "role
 revoked but a claim left open".
 
 Spec: docs/planning/inspector-deploy/v2/inspector-state-management.md §9.

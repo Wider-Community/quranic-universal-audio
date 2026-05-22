@@ -3,6 +3,16 @@
 No I/O. No backend coupling. Single source for the on-bucket layout
 documented in docs/planning/inspector-deploy/v2/inspector-data-storage.md §3.
 
+IMPORTANT: The 7 legacy JSON stores (state, catalog, access, pending_requests,
+request_archive shards, activity_state) and append-only audit JSONL are now
+READ-ONLY backups. The SQLite database (``inspector.db``, uploaded whole-file
+to the bucket after each committed write) is the sole source of truth.
+Migration is one-shot; these helpers remain to support test fixtures and the
+migration script itself.
+
+Per-reciter CONTENT path helpers (detailed, segments, edit_history, peaks, audio,
+etc.) are still actively used and unchanged.
+
 Paths are returned as POSIX strings (forward slashes) regardless of host OS —
 that's the wire format used by ``huggingface_hub.upload_file`` and the
 ``hf-mount`` driver. ``FilesystemBackend`` translates to native paths.

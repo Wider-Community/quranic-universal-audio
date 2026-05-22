@@ -1,10 +1,10 @@
-"""Request archives: thin read facade over the unified ``requests`` table.
+"""Request archives: thin read facade over the SQLite ``requests`` table.
 
-Post-cutover the three archive files (``completed``/``returned``/``discarded``)
-are just terminal ``status`` values on ``requests`` rows — written by
-``repo_requests.resolve`` (called from ``pending_requests``), never by a
-separate append here. This module keeps ``ArchiveKind`` + the per-slug/whole
-read helpers so legacy/forensic read callers don't churn.
+The three archive states (``completed``/``returned``/``discarded``) are
+terminal ``status`` values on ``requests`` rows — written by
+``repo_requests.resolve`` (called from ``pending_requests``). This module
+keeps ``ArchiveKind`` + the per-slug/whole read helpers so legacy/forensic
+read callers don't churn.
 """
 
 from __future__ import annotations

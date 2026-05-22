@@ -267,10 +267,10 @@ register_blueprints(app)
 
 
 # ---------------------------------------------------------------------------
-# Bucket-resident stores: hydrate on import so both `python3 inspector/app.py`
-# and `gunicorn inspector.app:app` follow the same path. Errors degrade to
-# empty in-memory stores + a warning — the app still boots so contributors
-# get a clear "no reciters yet" page rather than a hard 500.
+# SQLite substrate: boot on import so both `python3 inspector/app.py`
+# and `gunicorn inspector.app:app` follow the same path. Errors degrade
+# gracefully (503 on /healthz, but app still importable) — contributors get
+# clear feedback rather than a hard crash.
 # ---------------------------------------------------------------------------
 
 def _boot_substrate() -> None:

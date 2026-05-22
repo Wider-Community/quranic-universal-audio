@@ -2,9 +2,9 @@
 
 Two routes share one blueprint:
 
-- ``GET /healthz`` — readiness signal. Reports bucket mount + state hydration
-  status. Returns 200 in local mode (where there's no mount to check) and
-  503 in deployed mode when bucket/state are degraded so probes fail loud.
+- ``GET /healthz`` — readiness signal. Reports SQLite DB + bucket mount status.
+  Returns 200 in local mode (where there's no mount to check) and 503 in
+  deployed mode when DB/bucket are degraded so probes fail loud.
 
 - ``GET /livez``  — liveness signal. Always 200 with a tiny body; use it when
   a probe should not touch the bucket.
@@ -25,14 +25,13 @@ health_bp = Blueprint("health", __name__)
 
 
 def _bucket_mounted() -> bool:
-    """True if INSPECTOR_BUCKET_MOUNT exists and contains the substrate DB.
+    """True if INSPECTOR_BUCKET_MOUNT exists and contains the SQLite substrate.
 
     Checks the directory + the load-bearing ``db/inspector.db`` because a bucket
     attachment can succeed at the Space layer but produce an empty mount if the
     bucket itself is empty or the wrong repo. Catching that here surfaces the
-    misconfiguration in the smoke tests rather than at first read. (Post-cutover
-    the canonical bucket artefact is ``db/inspector.db``, not the legacy
-    ``state/reciter_state.json``.)
+    misconfiguration in the smoke tests rather than at first read. The canonical
+    substrate artefact is ``db/inspector.db``.
     """
     mount = os.environ.get("INSPECTOR_BUCKET_MOUNT")
     if not mount:
