@@ -7,8 +7,11 @@
      * read-only; only owners see Send back / Discard.
      */
     import {
+        discardRequest,
         fetchRequests,
         markRequestViewed,
+        probeRequest,
+        returnRequest,
         type RequestStatus,
     } from '../../../../lib/api/admin-requests';
     import { rejectRequestHard, rejectRequestSoft } from '../../../../lib/api/requests';
@@ -16,11 +19,23 @@
     import type {
         AdminRequestRow,
         AdminRequestsResponse,
+        ProbeResult,
     } from '../../../../lib/types/generated/schemas';
     import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
     import { relativeTime } from '../../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../../lib/utils/visible-poll';
     import { adminDashboard } from '../../stores/admin-dashboard.svelte';
+    import AcceptIntakeDialog from './AcceptIntakeDialog.svelte';
+
+    const INTAKE_KINDS = ['existing_reciter_new_combo', 'new_reciter'];
+    function isIntake(row: AdminRequestRow): boolean {
+        return INTAKE_KINDS.includes(row.kind);
+    }
+    function kindLabel(row: AdminRequestRow): string {
+        if (row.kind === 'new_reciter') return 'New reciter';
+        if (row.kind === 'existing_reciter_new_combo') return 'New combination';
+        return '';
+    }
 
     const STALE_DAYS = 7;
 
@@ -34,6 +49,11 @@
     let reason = $state('');
     let busyId = $state<string | null>(null);
     let actionError = $state<string | null>(null);
+
+    // Intake-only: reachability probe + accept dialog.
+    let probeBusyId = $state<string | null>(null);
+    let probeResults = $state<Record<string, ProbeResult[]>>({});
+    let acceptRow = $state<AdminRequestRow | null>(null);
 
     function applyResult(r: AdminRequestsResponse): void {
         resp = r;
@@ -83,12 +103,22 @@
     }
 
     async function resolve(row: AdminRequestRow, kind: 'soft' | 'hard'): Promise<void> {
-        if (!row.slug || reason.trim().length < 10 || busyId) return;
+        if (reason.trim().length < 10 || busyId) return;
+        // Edit-requests resolve by slug through the state machine; slugless
+        // intake rows resolve by id (pure status mutation).
+        if (!isIntake(row) && !row.slug) return;
         busyId = row.id;
         actionError = null;
         try {
-            if (kind === 'soft') await rejectRequestSoft(row.slug, reason.trim());
-            else await rejectRequestHard(row.slug, reason.trim());
+            const r = reason.trim();
+            if (isIntake(row)) {
+                if (kind === 'soft') await returnRequest(row.id, r);
+                else await discardRequest(row.id, r);
+            } else if (kind === 'soft') {
+                await rejectRequestSoft(row.slug!, r);
+            } else {
+                await rejectRequestHard(row.slug!, r);
+            }
             expandedId = null;
             reason = '';
             applyResult(await fetchRequests(status));
@@ -107,10 +137,62 @@
         }
     }
 
+    async function probe(row: AdminRequestRow): Promise<void> {
+        if (probeBusyId) return;
+        probeBusyId = row.id;
+        actionError = null;
+        try {
+            const res = await probeRequest(row.id);
+            probeResults[row.id] = res.results ?? [];
+        } catch (e) {
+            actionError = (e as Error).message ?? 'Probe failed.';
+        } finally {
+            probeBusyId = null;
+        }
+    }
+
+    function onAccepted(): void {
+        acceptRow = null;
+        expandedId = null;
+        fetchRequests(status).then(applyResult).catch(() => {});
+    }
+
+    function probeFor(row: AdminRequestRow): ProbeResult[] {
+        // Live probe result this session, else the cached one from payload.
+        const live = probeResults[row.id];
+        if (live) return live;
+        const cached = row.probe as { results?: ProbeResult[] } | null | undefined;
+        return cached?.results ?? [];
+    }
+
+    function sourceSummary(row: AdminRequestRow): string {
+        const src = row.source as
+            | { method?: string; links?: unknown[]; playlist_url?: string }
+            | null
+            | undefined;
+        if (!src) return '';
+        if (src.method === 'playlist') {
+            let host = '';
+            try {
+                host = new URL(src.playlist_url ?? '').hostname.replace(/^www\./, '');
+            } catch {
+                host = '';
+            }
+            return host ? `Playlist · ${host}` : 'Playlist';
+        }
+        return `${src.links?.length ?? 0}/114 links`;
+    }
+
+    function displayName(row: AdminRequestRow): string {
+        const en = (row.name_en ?? '').trim();
+        if (en) return en;
+        return row.slug ? titleCaseSlug(row.slug) : '—';
+    }
+
     function comboLabel(row: AdminRequestRow): string {
         const r = row.riwayah ? titleCaseSlug(row.riwayah) : '';
         const s = row.style ? titleCaseSlug(row.style) : '';
-        return [r, s].filter(Boolean).join('  ·  ');
+        return [r, s].filter(Boolean).join(' · ');
     }
 
     function changeSummary(row: AdminRequestRow): string {
@@ -187,19 +269,35 @@
                         aria-expanded={expandedId === row.id}
                         onclick={() => toggle(row)}
                     >
-                        <span class="who">
-                            {#if status === 'open' && !row.viewed}
-                                <span class="unread" aria-label="Unviewed"></span>
-                            {/if}
-                            {#if row.name_ar}
-                                <span class="name-ar" dir="rtl">{row.name_ar}</span>
-                            {/if}
-                            <span class="name-en">{row.name_en ?? row.slug}</span>
+                        <span class="identity">
+                            <span class="id-name">
+                                {#if status === 'open' && !row.viewed}
+                                    <span class="unread" aria-label="Unviewed"></span>
+                                {/if}
+                                {#if row.name_ar}
+                                    <span class="name-ar" dir="rtl">{row.name_ar}</span>
+                                {/if}
+                                <span class="name-en">{displayName(row)}</span>
+                                {#if isIntake(row)}
+                                    <span class="kind-badge" class:nr={row.kind === 'new_reciter'}>
+                                        {kindLabel(row)}
+                                    </span>
+                                {/if}
+                            </span>
+                            <span class="id-meta">
+                                <span class="combo">{comboLabel(row)}</span>
+                                {#if isIntake(row)}
+                                    <span class="sep">·</span>
+                                    <span class="src-sum">{sourceSummary(row)}</span>
+                                {:else}
+                                    <span class="sep">·</span>
+                                    <span class="changes" class:none={(row.changes?.length ?? 0) === 0}>
+                                        {changeSummary(row)}
+                                    </span>
+                                {/if}
+                            </span>
                         </span>
-                        <span class="combo">{comboLabel(row)}</span>
-                        <span class="changes" class:none={(row.changes?.length ?? 0) === 0}>
-                            {changeSummary(row)}
-                        </span>
+
                         <span class="req-meta">
                             {#if row.auto_claim}
                                 <span class="req-tag self" title="Requester will be auto-assigned as reviewer when alignment completes">self-review</span>
@@ -241,6 +339,52 @@
                                             {/each}
                                         </dl>
                                     {/if}
+
+                                    {#if isIntake(row)}
+                                        {@const src = (row.source ?? {}) as { method?: string; links?: { chapter: number; url: string }[]; playlist_url?: string }}
+                                        {@const probed = probeFor(row)}
+                                        {@const probedByUrl = new Map(probed.map((p) => [p.url, p]))}
+                                        <div class="source">
+                                            <div class="source-head">
+                                                <h4>Audio source</h4>
+                                                {#if $isOwner && status === 'open'}
+                                                    <button
+                                                        class="btn tiny"
+                                                        disabled={probeBusyId === row.id}
+                                                        onclick={() => probe(row)}
+                                                    >{probeBusyId === row.id ? 'Probing…' : 'Probe reachability'}</button>
+                                                {/if}
+                                            </div>
+                                            {#if src.method === 'playlist'}
+                                                <a class="playlist-link" href={src.playlist_url} target="_blank" rel="noopener noreferrer">
+                                                    {src.playlist_url}
+                                                </a>
+                                                {#if probed[0]}
+                                                    {@const p = probed[0]}
+                                                    <span class="reach {p.reachable ? 'ok' : 'bad'}">
+                                                        {p.reachable ? `reachable (${p.status})` : `unreachable${p.status ? ` (${p.status})` : ''}`}
+                                                    </span>
+                                                {/if}
+                                            {:else}
+                                                <ul class="links">
+                                                    {#each src.links ?? [] as ln (ln.chapter)}
+                                                        {@const p = probedByUrl.get(ln.url)}
+                                                        <li>
+                                                            <span class="ln-num">{String(ln.chapter).padStart(3, '0')}</span>
+                                                            <a class="ln-url" href={ln.url} target="_blank" rel="noopener noreferrer">{ln.url}</a>
+                                                            {#if p}
+                                                                <span class="ln-reach {p.reachable ? 'ok' : 'bad'}" title={p.status ? `HTTP ${p.status}` : 'unreachable'}>
+                                                                    {p.reachable ? '✓' : '✗'}
+                                                                </span>
+                                                            {:else}
+                                                                <span class="ln-reach none">–</span>
+                                                            {/if}
+                                                        </li>
+                                                    {/each}
+                                                </ul>
+                                            {/if}
+                                        </div>
+                                    {/if}
                                 </div>
 
                                 <div class="review-side">
@@ -262,14 +406,26 @@
 
                                     {#if row.conflict}
                                         <p class="notice">
-                                            Another delivery of {row.name_en ?? 'this reciter'} already uses
-                                            this riwayah · style. The edit still applies on acceptance.
+                                            {#if isIntake(row)}
+                                                {row.name_en ?? 'This reciter'} already has a delivery with
+                                                this riwayah · style. Accepting creates another.
+                                            {:else}
+                                                Another delivery of {row.name_en ?? 'this reciter'} already uses
+                                                this riwayah · style. The edit still applies on acceptance.
+                                            {/if}
                                         </p>
                                     {/if}
 
                                     {#if status === 'open'}
                                         {#if $isOwner}
                                             <div class="resolve">
+                                                {#if isIntake(row)}
+                                                    <button
+                                                        class="btn accept"
+                                                        disabled={busyId === row.id}
+                                                        onclick={() => (acceptRow = row)}
+                                                    >Accept &amp; create catalog entry</button>
+                                                {/if}
                                                 <textarea
                                                     bind:value={reason}
                                                     rows="2"
@@ -280,7 +436,7 @@
                                                     <p class="action-error">{actionError}</p>
                                                 {/if}
                                                 <div class="resolve-foot">
-                                                    <span class="resolve-hint">Required for both actions.</span>
+                                                    <span class="resolve-hint">Required for send back / discard.</span>
                                                     <div class="resolve-actions">
                                                         <button
                                                             class="btn"
@@ -327,6 +483,10 @@
     {/if}
 </div>
 
+{#if acceptRow}
+    <AcceptIntakeDialog row={acceptRow} onClose={() => (acceptRow = null)} onAccepted={onAccepted} />
+{/if}
+
 <style>
     .reqs { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 
@@ -365,12 +525,11 @@
     .req:last-child { border-bottom: none; }
 
     .req-head {
-        display: grid;
-        grid-template-columns: minmax(0, 1.6fr) 0.9fr 1fr auto;
+        display: flex;
         align-items: center;
-        gap: var(--s-4);
+        gap: var(--s-5);
         width: 100%;
-        padding: var(--s-4) var(--s-5);
+        padding: var(--s-3) var(--s-5);
         text-align: left;
         background: transparent; border: 0; cursor: pointer;
         transition: background var(--t-fast);
@@ -378,15 +537,34 @@
     .req-head:hover { background: var(--panel); }
     .req.open > .req-head { background: var(--panel); }
 
-    .who { display: flex; align-items: baseline; gap: var(--s-3); min-width: 0; }
+    /* identity grows; meta cluster keeps its intrinsic width on the right.
+       Two zones, so left edges and right edges align row-to-row without a
+       rigid column grid stranding content in the middle. */
+    .identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .id-name { display: flex; align-items: baseline; gap: var(--s-2); min-width: 0; }
     .unread { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; align-self: center; }
-    .name-ar { font-size: var(--fs-h3); color: var(--text-primary); line-height: 1.25; white-space: nowrap; }
-    .name-en { font-size: var(--fs-meta); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .combo { font-size: var(--fs-meta); color: var(--text-secondary); white-space: nowrap; }
-    .changes { font-size: var(--fs-meta); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .changes.none { color: var(--text-faint); font-style: italic; }
+    .name-ar { font-size: var(--fs-h3); color: var(--text-primary); line-height: 1.2; white-space: nowrap; }
+    .name-en { font-size: var(--fs-row); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* when an Arabic name leads, the Latin transliteration recedes */
+    .name-ar + .name-en { font-size: var(--fs-meta); color: var(--text-muted); }
 
-    .req-meta { display: inline-flex; align-items: center; gap: var(--s-3); justify-content: flex-end; white-space: nowrap; }
+    .id-meta { display: flex; align-items: baseline; gap: var(--s-2); font-size: var(--fs-meta); min-width: 0; }
+    .id-meta .combo { color: var(--text-secondary); white-space: nowrap; }
+    .id-meta .sep { color: var(--text-faint); }
+    .id-meta .changes { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .id-meta .changes.none { color: var(--text-faint); font-style: italic; }
+    .id-meta .src-sum { color: var(--text-muted); white-space: nowrap; font-family: var(--font-mono); font-size: 11px; }
+
+    .kind-badge {
+        flex-shrink: 0;
+        padding: 1px 7px; border-radius: 999px;
+        font-size: 10px; font-weight: 500; letter-spacing: 0.02em;
+        color: var(--accent); background: var(--accent-tint);
+        white-space: nowrap;
+    }
+    .kind-badge.nr { color: var(--state-published-fg); background: var(--state-published-bg); }
+
+    .req-meta { flex-shrink: 0; display: inline-flex; align-items: center; gap: var(--s-3); justify-content: flex-end; white-space: nowrap; }
     .req-tag { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: oklch(0.62 0.02 268 / 0.16); }
     .req-tag.self { color: var(--accent); background: var(--accent-tint); }
     .req-tag.self::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
@@ -427,6 +605,33 @@
     .diff-row .to { color: var(--text-primary); }
     .diff-row.rtl .to { direction: rtl; unicode-bidi: isolate; }
     .no-changes { font-size: var(--fs-meta); color: var(--text-faint); font-style: italic; padding: var(--s-2) 0; }
+
+    /* intake audio source */
+    .source { margin-top: var(--s-4); }
+    .source-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-2); }
+    .source-head h4 { margin: 0; }
+    .playlist-link { font-family: var(--font-mono); font-size: 11.5px; color: var(--accent); word-break: break-all; }
+    .reach { display: inline-block; margin-top: 4px; font-size: 10.5px; }
+    .reach.ok { color: var(--state-published-fg); }
+    .reach.bad { color: var(--state-error-fg); }
+    .links {
+        list-style: none; margin: 0; padding: 4px;
+        max-height: 220px; overflow-y: auto;
+        background: var(--canvas-inset); border: 1px solid var(--border-quiet); border-radius: var(--r-2);
+        display: flex; flex-direction: column; gap: 1px;
+    }
+    .links li { display: grid; grid-template-columns: 30px 1fr 16px; align-items: center; gap: var(--s-2); padding: 2px 4px; }
+    .ln-num { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); text-align: right; }
+    .ln-url { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ln-url:hover { color: var(--accent); }
+    .ln-reach { font-size: 11px; text-align: center; font-weight: 600; }
+    .ln-reach.ok { color: var(--state-published-fg); }
+    .ln-reach.bad { color: var(--state-error-fg); }
+    .ln-reach.none { color: var(--text-faint); font-weight: 400; }
+
+    .btn.tiny { padding: 3px 9px; font-size: 10.5px; }
+    .btn.accept { align-self: stretch; color: var(--accent); border-color: var(--accent); background: var(--accent-tint); }
+    .btn.accept:hover:not(:disabled) { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
     .review-side { display: flex; flex-direction: column; gap: var(--s-4); }
     .submitted-by { margin: 0; font-size: var(--fs-meta); color: var(--text-muted); }

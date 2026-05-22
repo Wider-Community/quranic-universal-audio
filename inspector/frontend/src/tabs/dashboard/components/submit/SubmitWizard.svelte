@@ -14,6 +14,10 @@
     import { onDestroy, tick } from 'svelte';
     import { fade, fly } from 'svelte/transition';
 
+    import { submitIntake } from '../../../../lib/api/submit-recitation';
+    import { pushToast } from '../../../../lib/stores/toast';
+    import type { IntakeSubmission } from '../../../../lib/types/generated/schemas';
+    import { countryByName } from '../../../../lib/utils/countries';
     import {
         closeSubmitWizard,
         setStep,
@@ -130,9 +134,72 @@
         if (step === 2) setStep(1);
         else if (step === 3) setStep(2);
     }
-    function submitNoop(): void {
-        // Backend lands later; close cleanly.
+    function doneExistingCombo(): void {
+        // existing_combo routes to RequestForm via StepReciter; nothing to submit.
         closeSubmitWizard();
+    }
+
+    // ---- submit ----
+
+    let submitting = false;
+    let submitErrors: string[] = [];
+
+    function buildPayload(): IntakeSubmission {
+        const kind =
+            state.reciterMode === 'new' ? 'new_reciter' : 'existing_reciter_new_combo';
+        const c = state.combination;
+        const proposed_edits: IntakeSubmission['proposed_edits'] = {
+            riwayah: c.riwayah || null,
+            style: c.style || null,
+            recording_context: c.recording_context || null,
+            recording_year: c.recording_year === '' ? null : Number(c.recording_year),
+        };
+        if (kind === 'new_reciter') {
+            proposed_edits.name_en = state.newReciter.name_en.trim() || null;
+            proposed_edits.name_ar = state.newReciter.name_ar.trim() || null;
+            proposed_edits.country =
+                countryByName(state.newReciter.countryName)?.code ?? null;
+        }
+        const links = state.links
+            .filter((r) => r.url.trim().length > 0)
+            .map((r) => ({ chapter: r.chapter, url: r.url.trim() }));
+        return {
+            kind,
+            reciter_id: kind === 'existing_reciter_new_combo' ? state.existingReciterSlug : null,
+            proposed_edits,
+            source: {
+                method: state.sourceMethod ?? 'links',
+                links,
+                playlist_url: state.playlistUrl.trim() || null,
+            },
+            comments: state.comments.trim() || null,
+            auto_claim: state.autoClaim,
+        };
+    }
+
+    async function submit(): Promise<void> {
+        if (submitting) return;
+        submitting = true;
+        submitErrors = [];
+        try {
+            const result = await submitIntake(buildPayload());
+            if (!result.ok) {
+                submitErrors = result.errors ?? ['Submission failed.'];
+                return;
+            }
+            for (const w of result.warnings) {
+                pushToast({ kind: 'warn', text: w, ttl: 7000 });
+            }
+            pushToast({
+                kind: 'success',
+                text: 'Thanks — your submission is queued for review.',
+            });
+            closeSubmitWizard();
+        } catch (e) {
+            submitErrors = [e instanceof Error ? e.message : 'Submission failed.'];
+        } finally {
+            submitting = false;
+        }
     }
 
     onDestroy(() => unlockScroll());
@@ -204,10 +271,18 @@
                 {/key}
             </div>
 
+            {#if submitErrors.length > 0}
+                <div class="submit-errors" role="alert" transition:fade={{ duration: 140 }}>
+                    {#each submitErrors as err (err)}
+                        <span>{err}</span>
+                    {/each}
+                </div>
+            {/if}
+
             <footer>
                 <div class="left">
                     {#if step > 1}
-                        <button type="button" class="ghost" on:click={back}>← Back</button>
+                        <button type="button" class="ghost" on:click={back} disabled={submitting}>← Back</button>
                     {/if}
                 </div>
                 <div class="right">
@@ -219,7 +294,7 @@
                         <button
                             type="button"
                             class="primary"
-                            on:click={submitNoop}
+                            on:click={doneExistingCombo}
                             disabled={!canAdvanceStep1}
                         >
                             Done
@@ -238,10 +313,10 @@
                         <button
                             type="button"
                             class="primary"
-                            on:click={submitNoop}
-                            disabled={!canSubmit}
+                            on:click={submit}
+                            disabled={!canSubmit || submitting}
                         >
-                            Submit
+                            {submitting ? 'Submitting…' : 'Submit'}
                         </button>
                     {/if}
                 </div>
@@ -378,6 +453,19 @@
         position: relative;
     }
     .step-wrap { will-change: transform, opacity; }
+
+    .submit-errors {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin: 0 var(--s-6);
+        padding: var(--s-2) var(--s-3);
+        background: var(--state-error-bg, oklch(0.3 0.08 25 / 0.18));
+        border: 1px solid var(--state-error-fg);
+        border-radius: var(--r-2);
+        color: var(--state-error-fg);
+        font-size: var(--fs-meta);
+    }
 
     footer {
         padding: var(--s-3) var(--s-6);
