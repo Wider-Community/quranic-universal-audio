@@ -2,6 +2,7 @@
 docs/reciters-research/
 docs/planning/
 docs/proposals/
+docs/reference/
 
 # Cache
 __pycache__/

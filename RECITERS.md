@@ -2,7 +2,7 @@
 
 **422** reciters · **864** mushaf deliveries · **0** aligned. Generated from `.github/scripts/list_reciters.py` against `<bucket>/catalog/reciter_catalog.json`.
 
-> A reciter is a human; a *mushaf delivery* is one specific audio file set for one (riwayah, style, year, channel) tuple. Same reciter can appear with multiple mushaf deliveries (different riwayat, different channels, etc.). All audio metadata describes the **source** file — the public dataset re-encodes to a uniform format (see [`docs/reference/reciter-catalog.md`](../docs/reference/reciter-catalog.md) §5).
+> A reciter is a human; a *mushaf delivery* is one specific audio file set for one (riwayah, style, year, channel) tuple. Same reciter can appear with multiple mushaf deliveries (different riwayat, different channels, etc.). All audio metadata describes the **source** file — the public dataset re-encodes to a uniform format (see [`docs/reference/catalog.md`](../docs/reference/catalog.md) §5).
 
 ## Summary
 

@@ -55,7 +55,7 @@ jobs:
     # lockstep with scripts/lib/schemas/. If a backend pydantic schema
     # changes and the dev forgot to regen the FE types, this job fails
     # with `git diff --exit-code` on the generated file. See
-    # docs/reference/migrate_wip.md §5 and inspector/scripts/regen_fe_types.py.
+    # docs/reference/data-migrations.md §5 and inspector/scripts/regen_fe_types.py.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
