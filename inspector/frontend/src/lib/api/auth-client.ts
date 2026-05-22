@@ -13,13 +13,21 @@
 import { resetCurrentUser } from '../stores/current-user';
 
 export function signIn(returnPath?: string | null): void {
-    const target = returnPath ?? (typeof window !== 'undefined'
-        ? window.location.pathname + window.location.search
-        : '/');
+    if (typeof window === 'undefined') return;
+    const target = returnPath ?? window.location.pathname + window.location.search;
     const url = `/api/auth/login?return=${encodeURIComponent(target)}`;
-    if (typeof window !== 'undefined') {
-        window.location.assign(url);
+    // Embedded in the huggingface.co iframe the OAuth round-trip is
+    // third-party, so the Flask session cookie carrying the OAuth state is
+    // blocked (Safari ITP rejects it outright despite SameSite=None;Secure),
+    // and Authlib raises MismatchingStateError on the callback. Break the
+    // whole tab out to the first-party *.hf.space origin so authorize→callback
+    // runs top-level and the state cookie survives. Mirrors the QF login
+    // break-out in BookmarksPanel.svelte.
+    if (window.self !== window.top) {
+        window.open(`${window.location.origin}${url}`, '_top');
+        return;
     }
+    window.location.assign(url);
 }
 
 export async function signOut(): Promise<void> {
