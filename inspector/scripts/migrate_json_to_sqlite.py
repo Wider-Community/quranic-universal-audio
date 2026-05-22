@@ -28,8 +28,17 @@ import logging
 import os
 import re
 import sys
+from pathlib import Path
 
 logger = logging.getLogger("migrate_json_to_sqlite")
+
+# Backfill SQL is owned by the schema migration so there's one source of truth;
+# build() applies it after its inserts (schema migrations run before build()
+# populates, so a fresh build needs first_seen recomputed post-insert).
+_FIRST_SEEN_BACKFILL_SQL = (
+    Path(__file__).resolve().parent.parent
+    / "services" / "db" / "migrations" / "0003_backfill_first_seen.sql"
+)
 
 _STATUS_FOR_ARCHIVE = {"completed": "accepted", "returned": "returned", "discarded": "discarded"}
 _BUCKET_REPOS = {
@@ -278,6 +287,12 @@ def build(src: dict, *, allow_orphans: bool = False) -> dict:
                     (ch, hf, now_iso),
                 )
                 stats["dismissals"] += 1
+
+        # Correct first_seen to the earliest historical evidence now that all
+        # users + their role/claim/request/transition rows are inserted (within
+        # this same txn, so the recompute sees them). Same statement that ships
+        # as migration 0003 for already-populated DBs.
+        conn.execute(_FIRST_SEEN_BACKFILL_SQL.read_text(encoding="utf-8"))
 
         stats["users"] = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
 

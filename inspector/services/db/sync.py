@@ -192,6 +192,22 @@ def upload() -> int:
 # ---- boot pull ----
 
 
+def _replace_with_retry(src: str, dst: str, *, attempts: int = 5, delay: float = 0.1) -> None:
+    """``os.replace`` with short backoff. On Windows the atomic swap raises
+    ``PermissionError`` (WinError 5) when a transient handle holds ``src`` or
+    ``dst`` for a few ms — Defender real-time scanning the freshly-written
+    ``src``, or a not-yet-released prior handle. Retrying rides out that window.
+    POSIX always succeeds on the first attempt, so this is a no-op cost there."""
+    for i in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if i == attempts - 1:
+                raise
+            time.sleep(delay)
+
+
 def pull(dest_path: str | None = None) -> bool:
     """Download the bucket DB to the local path (default: the configured DB
     path). Returns True if pulled, False if the bucket has no DB yet. Always
@@ -209,12 +225,18 @@ def pull(dest_path: str | None = None) -> bool:
         except OSError:
             pass
     tmp = f"{dest}.pull.tmp"
+    # Clean any stale tmp from a prior failed pull so a leftover can't wedge
+    # the next boot (and so chmod/replace below act on our fresh bytes).
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
     Path(tmp).write_bytes(data)
     try:
         os.chmod(tmp, 0o600)  # DB holds private requests/audit
     except OSError:
         pass
-    os.replace(tmp, dest)
+    _replace_with_retry(tmp, dest)
     logger.info("db sync: pulled %d bytes from bucket", len(data))
     return True
 

@@ -145,6 +145,23 @@ def _merge_batches_sharing_batch_id(batches: list[dict]) -> list[dict]:
     return out
 
 
+def edit_history_op_ids(reciter: str) -> set[str]:
+    """Set of every ``op_id`` in a reciter's edit history.
+
+    Reads the cache-aware raw batch list (``parse_history_for_reciter``), so
+    after the first read this is a cheap in-memory walk. Used to validate
+    History on-play write-back POSTs — only peaks for ops that actually exist
+    may be persisted (any same-origin viewer, incl. anonymous, can POST).
+    """
+    out: set[str] = set()
+    for batch in parse_history_for_reciter(reciter):
+        for op in batch.get("operations") or []:
+            op_id = op.get("op_id")
+            if isinstance(op_id, str) and op_id:
+                out.add(op_id)
+    return out
+
+
 def load_edit_history(reciter: str) -> dict:
     """Return ``{batches, summary}`` for a reciter's edit_history.jsonl.
 

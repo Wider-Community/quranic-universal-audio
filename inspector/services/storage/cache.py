@@ -101,6 +101,11 @@ _seg_history_batches: _KeyedCache[list[dict]] = _KeyedCache()
 _seg_split_group_index: _KeyedCache[dict[str, list[str]]] = _KeyedCache()
 _seg_edit_history: _KeyedCache[dict] = _KeyedCache()
 _seg_history_peaks: _KeyedCache[list[dict]] = _KeyedCache()
+# Serialized GET /api/seg/history-peaks response bytes, keyed by reciter. The
+# History panel is browsed heavily (incl. anonymous), so cache the orjson bytes
+# to skip re-serializing the (canonical b64) record list on every tab open.
+# Popped wherever the JSONL is appended (save invalidation + anon write-back).
+_seg_history_peaks_response: _KeyedCache[bytes] = _KeyedCache()
 # Validation + stats results — recomputed only on cache miss; cleared by
 # ``invalidate_seg_caches`` on every save / undo so writers can't read stale data.
 _seg_validate_result: _KeyedCache[dict] = _KeyedCache()
@@ -242,6 +247,18 @@ def set_seg_history_peaks(reciter: str, value: list[dict]) -> None:
     _seg_history_peaks.set(reciter, value)
 
 
+def get_seg_history_peaks_response(reciter: str) -> bytes | None:
+    return _seg_history_peaks_response.get(reciter)
+
+
+def set_seg_history_peaks_response(reciter: str, value: bytes) -> None:
+    _seg_history_peaks_response.set(reciter, value)
+
+
+def pop_seg_history_peaks_response(reciter: str) -> None:
+    _seg_history_peaks_response.pop(reciter)
+
+
 def get_seg_validate_cache(reciter: str) -> dict | None:
     return _seg_validate_result.get(reciter)
 
@@ -286,6 +303,7 @@ def invalidate_seg_caches(reciter: str) -> None:
     _seg_auto_split.pop(reciter)
     _seg_edit_history.pop(reciter)
     _seg_history_peaks.pop(reciter)
+    _seg_history_peaks_response.pop(reciter)
     _seg_validate_result.pop(reciter)
     _seg_stats_result.pop(reciter)
     # _seg_history_batches and _seg_split_group_index are NOT popped here —
@@ -314,6 +332,7 @@ def pop_seg_caches_affected_by_segment_edit(reciter: str) -> None:
     _seg_probe_v2.pop(reciter)
     _seg_edit_history.pop(reciter)
     _seg_history_peaks.pop(reciter)
+    _seg_history_peaks_response.pop(reciter)
     _seg_validate_result.pop(reciter)
     _seg_stats_result.pop(reciter)
 
@@ -686,3 +705,37 @@ def invalidate_catalog_snapshot_cache() -> None:
     global _catalog_snapshot
     with _catalog_snapshot_lock:
         _catalog_snapshot = None
+
+
+# ---------------------------------------------------------------------------
+# Admin Users list — assembled read model (5 GROUP-BY aggregations merged in
+# Python). Maintainer/owner-only and low-frequency, but the assembly touches
+# transitions/requests/claims, so cache the built payload keyed on db_seq
+# exactly like public_reciters: ANY committed write (role grants, claims,
+# transitions, the hourly visitor flush) bumps db_seq → transparent
+# invalidation, no per-mutation hook. The detail endpoint is lazy/bounded and
+# NOT cached.
+# ---------------------------------------------------------------------------
+
+_admin_users_lock = _threading.Lock()
+_admin_users: "tuple[int, object] | None" = None
+
+
+def get_admin_users_cache(db_seq: int):
+    """Return the cached admin-users payload iff built at ``db_seq``, else None."""
+    with _admin_users_lock:
+        if _admin_users is not None and _admin_users[0] == db_seq:
+            return _admin_users[1]
+    return None
+
+
+def set_admin_users_cache(db_seq: int, value: object) -> None:
+    global _admin_users
+    with _admin_users_lock:
+        _admin_users = (db_seq, value)
+
+
+def invalidate_admin_users_cache() -> None:
+    global _admin_users
+    with _admin_users_lock:
+        _admin_users = None

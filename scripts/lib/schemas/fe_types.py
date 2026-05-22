@@ -19,6 +19,20 @@ committed to git so CI can ``git diff --exit-code`` it.
 """
 from __future__ import annotations
 
+from .admin_users import (
+    AdminActiveClaim,
+    AdminActivityEvent,
+    AdminClaimEvent,
+    AdminRequestEvent,
+    AdminRoleEvent,
+    AdminUserDetail,
+    AdminUserRow,
+    AdminUserStats,
+    AdminUsersResponse,
+    AdminUsersSummary,
+    AdminVisitorStats,
+    VisitorDayStat,
+)
 from .edit_history import EditHistoryBatch, EditOperation
 from .peaks_history import PeaksRecord
 from .segment import (
@@ -29,6 +43,17 @@ from .segment import (
 )
 
 __all__ = [
+    "AdminActiveClaim",
+    "AdminActivityEvent",
+    "AdminClaimEvent",
+    "AdminRequestEvent",
+    "AdminRoleEvent",
+    "AdminUserDetail",
+    "AdminUserRow",
+    "AdminUserStats",
+    "AdminUsersResponse",
+    "AdminUsersSummary",
+    "AdminVisitorStats",
     "DetailedDocument",
     "DetailedEntry",
     "DetailedMeta",
@@ -36,4 +61,5 @@ __all__ = [
     "EditHistoryBatch",
     "EditOperation",
     "PeaksRecord",
+    "VisitorDayStat",
 ]

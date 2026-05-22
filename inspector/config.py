@@ -162,6 +162,20 @@ MFA_SPACE_URL = os.environ.get(
 )
 AUTO_SPLIT_MFA_TIMEOUT = 15
 
+# Admin dashboard — identity recency + visitor analytics
+# How stale last_entry_at must be before /api/me writes again (debounce so a
+# browsing session is at most one write per user per window, not per page load).
+ENTRY_DEBOUNCE_SECONDS = int(os.getenv("INSPECTOR_ENTRY_DEBOUNCE_SECONDS", "900"))
+# Visitor-counter flush cadence (in-memory → visitor_daily). One DB txn per
+# flush = one bucket upload per flush; never per request.
+VISITOR_FLUSH_INTERVAL_SECONDS = int(
+    os.getenv("INSPECTOR_VISITOR_FLUSH_INTERVAL_SECONDS", "3600")
+)
+# Opaque first-party cookie for approximate unique-anonymous counting (random
+# uuid4; NO fingerprinting, NO PII). Set only for anonymous callers.
+ANON_COOKIE_NAME = "inspector_anon"
+ANON_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
+
 # Audio MIME types (shared between app.py and audio_proxy)
 AUDIO_MIME_TYPES = {
     ".flac": "audio/flac",

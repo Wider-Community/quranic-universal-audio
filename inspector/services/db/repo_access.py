@@ -47,6 +47,32 @@ def get_login(hf_user_id: str) -> str | None:
     return row[0] if row else None
 
 
+def touch_last_login(hf_user_id: str, *, now: datetime | None = None) -> None:
+    """Stamp ``last_login_at`` (called from the OAuth callback). No-op if the
+    row is absent — the callback pairs this with ``ensure_user`` so it exists."""
+    ts = _serde.to_iso(now or _serde.now())
+    get_conn().execute(
+        "UPDATE users SET last_login_at = ? WHERE hf_user_id = ?", (ts, hf_user_id)
+    )
+
+
+def touch_last_entry(hf_user_id: str, *, now: datetime | None = None) -> None:
+    """Stamp ``last_entry_at`` (debounced page-entry recency). UPDATE-only:
+    a missing row (pre-feature session) is a no-op until the next login."""
+    ts = _serde.to_iso(now or _serde.now())
+    get_conn().execute(
+        "UPDATE users SET last_entry_at = ? WHERE hf_user_id = ?", (ts, hf_user_id)
+    )
+
+
+def get_last_entry(hf_user_id: str) -> str | None:
+    """Stored ``last_entry_at`` ISO string (or None) — the debounce read."""
+    row = get_conn().execute(
+        "SELECT last_entry_at FROM users WHERE hf_user_id = ?", (hf_user_id,)
+    ).fetchone()
+    return row[0] if row else None
+
+
 # ---- role queries ----
 
 
@@ -139,6 +165,16 @@ def has_any_active() -> bool:
     return get_conn().execute(
         "SELECT 1 FROM role_assignments WHERE revoked_at IS NULL LIMIT 1"
     ).fetchone() is not None
+
+
+def active_owner_count() -> int:
+    """Number of active OWNER assignments — the last-owner guard for the
+    admin role picker (refuse to demote/revoke the final owner)."""
+    return get_conn().execute(
+        "SELECT COUNT(*) FROM role_assignments "
+        "WHERE role = ? AND revoked_at IS NULL",
+        (Role.OWNER.value,),
+    ).fetchone()[0]
 
 
 def revoke_role(

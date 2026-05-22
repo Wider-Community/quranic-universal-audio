@@ -69,12 +69,14 @@ from services.storage.auto_mount import auto_mount as _auto_mount_bucket
 _auto_mount_bucket()
 
 
-from flask import Flask, jsonify, send_from_directory
+import uuid
+
+from flask import Flask, g, jsonify, request, send_from_directory
 from flask_compress import Compress
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from config import (DEFAULT_PORT,
+from config import (ANON_COOKIE_MAX_AGE, ANON_COOKIE_NAME, DEFAULT_PORT,
                     FLASK_DEV_VALUE, FLASK_ENV_VAR, SERVER_HOST)
 from routes import register_blueprints
 from services import access as access_service
@@ -86,6 +88,7 @@ from services import audit as audit_service
 from services import auth as auth_service
 from services import catalog as catalog_service
 from services import state as state_service
+from services.admin import visitors as visitor_analytics
 from services.data_loader import load_surah_info_lite
 # Phonemizer was eagerly initialized here. It's now imported lazily inside
 # inspector/scripts/backfill_boundary_adj.py (the only remaining consumer).
@@ -267,6 +270,55 @@ register_blueprints(app)
 
 
 # ---------------------------------------------------------------------------
+# Visitor analytics (Tier 2/3) — anon vs signed-in traffic counters.
+# Gated by INSPECTOR_VISITOR_ANALYTICS=1 (prod Dockerfile sets it) so dev /
+# tests have zero behavior change. Classification is HMAC-only (no DB) and
+# counting is in-memory; the hourly flush daemon (wired in _boot_substrate)
+# is the only thing that touches the bucket.
+# ---------------------------------------------------------------------------
+
+_ANON_SKIP_PREFIXES = ("/assets/", "/fonts/")
+_ANON_SKIP_PATHS = {"/healthz", "/favicon.ico"}
+
+
+def _visitor_analytics_on() -> bool:
+    return os.environ.get("INSPECTOR_VISITOR_ANALYTICS") == "1"
+
+
+@app.before_request
+def _count_visitor():
+    if not _visitor_analytics_on():
+        return
+    p = request.path
+    if p in _ANON_SKIP_PATHS or p.startswith(_ANON_SKIP_PREFIXES):
+        return
+    cookie = request.cookies.get(auth_service.SESSION_COOKIE_NAME, "")
+    payload = auth_service.decode_session(cookie) if cookie else None
+    if payload is not None:
+        visitor_analytics.record_hit(payload)
+        return
+    anon_id = request.cookies.get(ANON_COOKIE_NAME)
+    visitor_analytics.record_hit(None, anon_id=anon_id)
+    if not anon_id:
+        g.set_anon_cookie = True  # mint one in _set_anon_cookie
+
+
+@app.after_request
+def _set_anon_cookie(resp):
+    if getattr(g, "set_anon_cookie", False):
+        resp.set_cookie(
+            ANON_COOKIE_NAME,
+            uuid.uuid4().hex,
+            max_age=ANON_COOKIE_MAX_AGE,
+            httponly=True,
+            secure=_behind_proxy,
+            samesite="None" if _behind_proxy else "Lax",
+            path="/",
+        )
+    return resp
+
+
+# ---------------------------------------------------------------------------
 # SQLite substrate: boot on import so both `python3 inspector/app.py`
 # and `gunicorn inspector.app:app` follow the same path. Errors degrade
 # gracefully (503 on /healthz, but app still importable) — contributors get
@@ -339,6 +391,16 @@ def _boot_substrate() -> None:
             logger.info("wip-audio sweeper: hourly daemon started")
         except Exception as e:  # noqa: BLE001
             logger.warning("wip-audio sweeper wiring failed: %s", e)
+
+    # Visitor-analytics flush: hourly drain of in-memory traffic counters into
+    # visitor_daily (one bucket upload/hour). Opt-in via
+    # ``INSPECTOR_VISITOR_ANALYTICS=1`` (prod Dockerfile sets it).
+    if os.environ.get("INSPECTOR_VISITOR_ANALYTICS") == "1":
+        try:
+            visitor_analytics.start_flush_daemon()
+            logger.info("visitor analytics: hourly flush daemon started")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("visitor analytics wiring failed: %s", e)
 
 
 _boot_substrate()
@@ -435,9 +497,13 @@ if __name__ == "__main__":
     # 300 reciters at startup, which is unviable at deployed scale.
 
     # Vite owns frontend file-watching (HMR in dev; rebuild on npm run build).
-    # Flask reloader only needs to watch Python modules, which it does natively.
-    # Debug + reloader default off for production; opt in with `FLASK_ENV=development`
-    # (matches plan §4: `debug=False` unless `FLASK_ENV=development`).
+    # The Werkzeug reloader is DELIBERATELY OFF (even in debug): it runs two
+    # processes (supervisor + worker), each of which imports this module and
+    # runs `_boot_substrate()` → both open the single SQLite writer connection.
+    # That violates the single-worker invariant; on Windows the second boot's
+    # `sync.pull()` `os.replace` is denied (the other process holds the DB),
+    # crashing startup with WinError 5 (on Linux it silently races). Python
+    # changes therefore need a manual restart; debug still gives rich error pages.
     debug = os.environ.get(FLASK_ENV_VAR) == FLASK_DEV_VALUE
-    logger.info("Starting server at http://localhost:%d (debug=%s)", args.port, debug)
-    app.run(host=SERVER_HOST, port=args.port, debug=debug, use_reloader=debug)
+    logger.info("Starting server at http://localhost:%d (debug=%s, reloader=off)", args.port, debug)
+    app.run(host=SERVER_HOST, port=args.port, debug=debug, use_reloader=False)

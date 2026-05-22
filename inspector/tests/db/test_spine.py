@@ -9,6 +9,11 @@ import sqlite3
 import pytest
 
 from services import db
+from services.db import migrate as _migrate
+
+# Highest migration number on disk — the version a fresh DB lands at. Derived
+# (not hard-coded) so adding a migration doesn't break these smoke tests.
+_LATEST_VERSION = max(n for n, _ in _migrate._discover())
 
 
 @pytest.fixture
@@ -20,7 +25,7 @@ def fresh_db(tmp_path):
 
 
 def test_migration_creates_all_tables(fresh_db):
-    assert db.current_version(db.get_writer()) == 1
+    assert db.current_version(db.get_writer()) == _LATEST_VERSION
     conn = db.get_conn()
     names = {
         r[0]
@@ -32,14 +37,14 @@ def test_migration_creates_all_tables(fresh_db):
         "db_meta", "users", "role_assignments", "riwayahs", "styles", "sources",
         "channels", "recording_contexts", "catalog_meta", "catalog_aliases",
         "reciters", "deliveries", "transitions", "delivery_states", "claims",
-        "requests", "activity_dismissals", "activity_tombstones",
+        "requests", "activity_dismissals", "activity_tombstones", "visitor_daily",
     }
     assert expected <= names
 
 
 def test_rerun_migrations_is_noop(fresh_db):
     # second run should not error (no CREATE TABLE re-execution)
-    assert db.run_migrations(db.get_writer()) == 1
+    assert db.run_migrations(db.get_writer()) == _LATEST_VERSION
 
 
 def test_commit_bumps_db_seq(fresh_db):

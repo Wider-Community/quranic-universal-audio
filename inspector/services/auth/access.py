@@ -125,14 +125,22 @@ def revoke(
     hf_user_id: str,
     actor: Actor,
     reason: str | None = None,
+    cascade_release: bool = True,
 ) -> tuple[Member, list[str]]:
-    """Soft-revoke a member AND release every open claim they hold, atomically.
+    """Soft-revoke a member AND (by default) release every open claim they hold,
+    atomically.
 
-    Returns ``(revoked_member, released_slugs)``. The cascade emits one
-    ``reciter.released`` transition per slug (via ``state._apply_event`` — no
+    Returns ``(revoked_member, released_slugs)``. With ``cascade_release=True``
+    (offboarding — the ``/api/admin/access/revoke`` endpoint) the cascade emits
+    one ``reciter.released`` transition per slug (via ``state._apply_event`` — no
     slug lock, so no deadlock against the write lock) and closes the claim +
     flips the delivery back to AWAITING_REVIEW, all in the same transaction as
-    the role revoke. Either everything commits or nothing does."""
+    the role revoke. Either everything commits or nothing does.
+
+    With ``cascade_release=False`` (a role-picker *demote* to contributor) the
+    claims are left untouched: a contributor is a valid claim holder, so a
+    demoted reviewer keeps their work-in-progress. Only the role assignment is
+    dropped + audited."""
     _require_role(actor, Role.MAINTAINER, Role.OWNER)
     # Lazy import: avoids a state↔access import cycle at package init.
     from services.state import state as _state_service
@@ -145,16 +153,17 @@ def revoke(
             raise NotAuthorized("only OWNER can revoke an OWNER member")
 
         released_slugs: list[str] = []
-        for slug in repo_claims.open_claims_for_user(hf_user_id):
-            _state_service._apply_event(
-                conn,
-                slug,
-                "reciter.released",
-                actor=actor,
-                payload={},
-                reason=f"Auto-release: role revoked. {reason}" if reason else "Auto-release: role revoked.",
-            )
-            released_slugs.append(slug)
+        if cascade_release:
+            for slug in repo_claims.open_claims_for_user(hf_user_id):
+                _state_service._apply_event(
+                    conn,
+                    slug,
+                    "reciter.released",
+                    actor=actor,
+                    payload={},
+                    reason=f"Auto-release: role revoked. {reason}" if reason else "Auto-release: role revoked.",
+                )
+                released_slugs.append(slug)
 
         member = repo_access.revoke_role(
             hf_user_id=hf_user_id, revoked_by=actor.hf_user_id, reason=reason,

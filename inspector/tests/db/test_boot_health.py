@@ -20,7 +20,9 @@ def test_healthz_reports_db_section(client):
     body = client.get("/healthz").get_json()
     assert "db" in body
     assert body["db"]["open"] is True
-    assert body["db"]["schema_version"] == 1
+    # Latest migration on disk (derived so a new migration doesn't break this).
+    from services.db import migrate as _migrate
+    assert body["db"]["schema_version"] == max(n for n, _ in _migrate._discover())
     # no upload yet → lag is None, no error
     assert body["db"]["bucket_lag_seconds"] is None
     assert body["db"]["last_error"] is None

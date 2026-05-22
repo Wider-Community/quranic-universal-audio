@@ -23,6 +23,7 @@
     import { relativeTime } from '../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../lib/utils/visible-poll';
     import AdminActivityRail from './AdminActivityRail.svelte';
+    import AdminDashboardButton from './admin/AdminDashboardButton.svelte';
 
     let cards: PublicActivityCard[] = [];
     let loading = true;
@@ -93,6 +94,7 @@
 </script>
 
 <div class="rail-wrap">
+    <AdminDashboardButton />
     <AdminActivityRail />
 
     <aside class="activity" aria-label="Recent activity">
