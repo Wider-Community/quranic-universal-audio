@@ -530,11 +530,14 @@
         border-radius: var(--r-3);
         padding: var(--s-5);
         width: min(640px, 92vw);
-        /* Backdrop reserves the bottom-player height + its own --s-6 padding,
-           so the modal never overlaps the player or clips off screen. The
-           shell itself doesn't scroll — header/footer are pinned by flex and
-           only `.body` scrolls. Mirrors SubmitWizard's modal sizing. */
-        max-height: 100%;
+        /* Cap to the viewport minus the backdrop padding (--s-6 each side)
+           and the fixed bottom-player height, so the modal never overlaps the
+           player or clips off screen. Computed in viewport units rather than
+           `100%` — a percentage max-height resolves unreliably against the
+           fixed-position backdrop and can be dropped entirely (modal then
+           overflows with no scroll). The shell itself doesn't scroll:
+           header/footer are pinned by flex and only `.body` scrolls. */
+        max-height: min(880px, calc(100vh - 2 * var(--s-6) - var(--player-h, 72px)));
         display: flex;
         flex-direction: column;
         gap: var(--s-3);
