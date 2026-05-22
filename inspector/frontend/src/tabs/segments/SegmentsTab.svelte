@@ -92,16 +92,11 @@
         setEditingMode(syncEditingMode($currentUser, fresh));
         // /api/me's active_claim derives from state — pull a fresh copy too.
         void loadCurrentUser();
-        // Re-resolve the chip's bucket so its StatePill reflects the new
-        // state immediately (claim flips awaiting_review → under_review,
-        // unclaim flips it back). Without this, the pill stays stale until
-        // a manual reload.
-        void resolveContextFromSlug(slug);
-        // The dashboard row + segments combobox both subscribe to
-        // `catalogData` (loaded once at app boot). A claim/unclaim doesn't
-        // invalidate that cache automatically, so cross-surface state would
-        // diverge until the next manual reload. Force a refetch here so
-        // every surface lands the new bucket without a page refresh.
+        // Force a catalog refetch so every surface lands the new bucket
+        // without a page refresh. The footer chip's StatePill + the picker
+        // modal both derive their bucket from `$catalogData` reactively, so
+        // when this lands the claim flip (awaiting_review → under_review, or
+        // back on unclaim) re-flows everywhere with no manual re-resolve.
         void loadCatalog(true);
     }
 
@@ -154,38 +149,36 @@
                 selectedReciter.set(validSaved);
                 _bindTask(validSaved);
                 await onReciterChange(validSaved);
-                void resolveContextFromSlug(validSaved);
+                // Kick the shared catalog fetch; the footer chip's identity +
+                // bucket derive reactively from `$catalogData` once it lands.
+                void loadCatalog();
             }
         } catch (e) { console.error('Error loading seg reciters:', e); }
     }
 
-    async function resolveContextFromSlug(slug: string): Promise<void> {
-        try {
-            await loadCatalog(); // idempotent — first caller in any tab pays the cost
-            const snap = get(catalogData);
-            for (const r of snap.reciters) {
-                const d = r.deliveries.find((x) => x.slug === slug);
-                if (d) {
-                    contextName = r.name;
-                    contextNameAr = r.name_ar ?? null;
-                    contextCountry = r.country ?? null;
-                    contextBucket = d.bucket;
-                    contextRiwayah = d.riwayah;
-                    contextStyle = d.style;
-                    return;
-                }
-            }
-        } catch {
-            // Silent fail; chip falls back to slug-less placeholder.
+    // Footer chip identity + bucket derive REACTIVELY from the shared catalog
+    // snapshot keyed on the selected reciter. Deriving (not imperatively
+    // assigning) is what keeps the chip's StatePill live: a claim/unclaim
+    // calls `loadCatalog(true)`, and when the fresh snapshot lands this block
+    // re-flows the new bucket automatically. The previous imperative resolver
+    // read `get(catalogData)` synchronously — before the forced refetch landed
+    // — so the footer pill stayed stale until a manual reload even though the
+    // picker modal (which subscribes to `$catalogData`) updated correctly.
+    $: ctxDelivery = (() => {
+        const slug = $selectedReciter;
+        if (!slug) return null;
+        for (const r of $catalogData.reciters) {
+            const d = r.deliveries.find((x) => x.slug === slug);
+            if (d) return { reciter: r, delivery: d };
         }
-    }
-
-    let contextName: string | null = null;
-    let contextNameAr: string | null = null;
-    let contextCountry: string | null = null;
-    let contextBucket: import('../../lib/types/public-state').PublicBucket | null = null;
-    let contextRiwayah: string | null = null;
-    let contextStyle: string | null = null;
+        return null;
+    })();
+    $: contextName = ctxDelivery?.reciter.name ?? null;
+    $: contextNameAr = ctxDelivery?.reciter.name_ar ?? null;
+    $: contextCountry = ctxDelivery?.reciter.country ?? null;
+    $: contextBucket = ctxDelivery?.delivery.bucket ?? null;
+    $: contextRiwayah = ctxDelivery?.delivery.riwayah ?? null;
+    $: contextStyle = ctxDelivery?.delivery.style ?? null;
 
     function onPickerChange(
         ev: CustomEvent<{
@@ -198,13 +191,10 @@
             style: string;
         }>,
     ): void {
-        const { slug, name, nameAr, country, bucket, riwayah, style } = ev.detail;
-        contextName = name;
-        contextNameAr = nameAr;
-        contextCountry = country;
-        contextBucket = bucket;
-        contextRiwayah = riwayah;
-        contextStyle = style;
+        // Identity + bucket flow through the reactive `ctxDelivery` derivation
+        // keyed on `selectedReciter` (the picker reads the same catalog
+        // snapshot), so we only set the slug and rebind here.
+        const { slug } = ev.detail;
         selectedReciter.set(slug);
         _bindTask(slug || null);
         onReciterChange(slug);
