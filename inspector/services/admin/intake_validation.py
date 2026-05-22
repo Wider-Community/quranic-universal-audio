@@ -10,17 +10,33 @@ chapters, duplicates, unrecognised playlist host) — the admin adjudicates.
 
 from __future__ import annotations
 
-import re
 from urllib.parse import urlparse
 
+from pydantic import HttpUrl, TypeAdapter, ValidationError
+
 from scripts.lib.schemas import IntakeSubmission, IntakeValidation
-from scripts.lib.schemas.intake_requests import SourceLink
+from scripts.lib.schemas.intake_requests import SourceLink, normalize_url
 
 from services.state import catalog as catalog_service
 
 TOTAL_CHAPTERS = 114
 
-_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+# Parsing is delegated to Pydantic's HttpUrl (Rust `url` engine). We only
+# pre-normalise so a user-typed scheme-less URL (`cdn.example/1.mp3`) is allowed.
+_HTTP_URL = TypeAdapter(HttpUrl)
+
+
+def _is_plausible_url(raw: str | None) -> bool:
+    """True if ``raw`` parses as an http(s) URL (scheme optional → normalised to
+    https). Not a reachability check — just well-formedness."""
+    u = (raw or "").strip()
+    if not u:
+        return False
+    try:
+        _HTTP_URL.validate_python(normalize_url(u))
+        return True
+    except ValidationError:
+        return False
 
 # Hosts whose playlists/folders the offline ingest can enumerate (yt-dlp / API).
 _PLAYLIST_HOSTS = (
@@ -68,8 +84,8 @@ def validate_submission(sub: IntakeSubmission) -> IntakeValidation:
         url = (src.playlist_url or "").strip()
         if not url:
             errors.append("A playlist URL is required.")
-        elif not _URL_RE.match(url):
-            errors.append("Playlist URL must start with http:// or https://.")
+        elif not _is_plausible_url(url):
+            errors.append("Enter a valid playlist URL.")
         else:
             host = (urlparse(url).hostname or "").lower()
             host = host.removeprefix("www.")
@@ -89,7 +105,7 @@ def _validate_links(links: list[SourceLink]) -> tuple[list[str], list[str]]:
     counts: dict[int, int] = {}
     malformed_chapters: list[int] = []
     for ln in links:
-        if not _URL_RE.match((ln.url or "").strip()):
+        if not _is_plausible_url(ln.url):
             malformed_chapters.append(ln.chapter)
             continue
         counts[ln.chapter] = counts.get(ln.chapter, 0) + 1
@@ -97,7 +113,7 @@ def _validate_links(links: list[SourceLink]) -> tuple[list[str], list[str]]:
     if malformed_chapters:
         errors.append(
             f"Malformed URL for chapter(s): {_compact(malformed_chapters)} "
-            "— must start with http:// or https://."
+            "— enter a valid web address."
         )
 
     dups = sorted(c for c, n in counts.items() if n > 1)

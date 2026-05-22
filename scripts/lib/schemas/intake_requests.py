@@ -19,23 +19,48 @@ per the schema convention; FE-facing subset re-exported from ``fe_types.py``.
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .pending_requests import ProposedEdits
 
 IntakeKind = Literal["existing_reciter_new_combo", "new_reciter"]
 SourceMethod = Literal["links", "playlist"]
 
+_SCHEME_RE = re.compile(r"^[a-z][a-z0-9+.\-]*://", re.IGNORECASE)
+
+
+def normalize_url(raw: str | None) -> str:
+    """Make a user-typed URL absolute. A scheme is NOT required from the user —
+    bare ``cdn.example/001.mp3`` is fine and defaults to ``https://``; a
+    protocol-relative ``//host/…`` keeps its implied scheme as https. Already-
+    schemed URLs (including non-http like ``ftp://``) pass through unchanged so
+    the validator can still flag them. Downstream (probe / ingest) needs an
+    absolute URL, so we canonicalise here at the wire boundary."""
+    u = (raw or "").strip()
+    if not u:
+        return u
+    if _SCHEME_RE.match(u):
+        return u
+    if u.startswith("//"):
+        return f"https:{u}"
+    return f"https://{u}"
+
 
 class SourceLink(BaseModel):
-    """One per-chapter direct audio URL."""
+    """One per-chapter direct audio URL (scheme optional — normalised to https)."""
 
     model_config = ConfigDict(extra="allow")
 
     chapter: int = Field(ge=1, le=114)
     url: str
+
+    @field_validator("url")
+    @classmethod
+    def _normalize(cls, v: str) -> str:
+        return normalize_url(v)
 
 
 class IntakeSource(BaseModel):
@@ -47,6 +72,11 @@ class IntakeSource(BaseModel):
     method: SourceMethod
     links: list[SourceLink] = Field(default_factory=list)
     playlist_url: str | None = None
+
+    @field_validator("playlist_url")
+    @classmethod
+    def _normalize_playlist(cls, v: str | None) -> str | None:
+        return normalize_url(v) if v else v
 
 
 class IntakeAttestations(BaseModel):

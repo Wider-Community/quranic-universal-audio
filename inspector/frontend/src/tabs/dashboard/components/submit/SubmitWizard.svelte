@@ -18,6 +18,7 @@
     import { pushToast } from '../../../../lib/stores/toast';
     import type { IntakeSubmission } from '../../../../lib/types/generated/schemas';
     import { countryByName } from '../../../../lib/utils/countries';
+    import { isPlausibleUrl } from '../../../../lib/utils/url';
     import {
         closeSubmitWizard,
         setStep,
@@ -124,10 +125,10 @@
     // Step 2 gates on valid URLs (the hard errors the backend would reject) but
     // NOT on full 114-chapter coverage — missing chapters are an allowed warning.
     $: linksFilled = state.links.filter((r) => r.url.trim().length > 0);
-    $: anyMalformed = linksFilled.some((r) => !/^https?:\/\//i.test(r.url.trim()));
+    $: anyMalformed = linksFilled.some((r) => !isPlausibleUrl(r.url));
     $: canAdvanceStep2 =
         state.sourceMethod === 'playlist'
-            ? /^https?:\/\//i.test(state.playlistUrl.trim())
+            ? isPlausibleUrl(state.playlistUrl)
             : state.sourceMethod === 'links' && linksFilled.length > 0 && !anyMalformed;
     $: canAdvanceStep3 = !!state.combination.riwayah && !!state.combination.style;
     $: canSubmit =

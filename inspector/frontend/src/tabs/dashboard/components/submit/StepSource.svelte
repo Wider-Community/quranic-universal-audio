@@ -18,6 +18,7 @@
      */
     import { fade, fly } from 'svelte/transition';
 
+    import { isPlausibleUrl } from '../../../../lib/utils/url';
     import { type LinkRow, submitWizard } from '../../stores/submit-wizard';
 
     $: state = $submitWizard;
@@ -90,7 +91,7 @@
     $: linkCount = state.links.filter((r) => r.url.trim().length > 0).length;
     $: linkComplete = linkCount === 114;
     $: malformedChapters = state.links
-        .filter((r) => r.url.trim().length > 0 && !/^https?:\/\//i.test(r.url.trim()))
+        .filter((r) => r.url.trim().length > 0 && !isPlausibleUrl(r.url))
         .map((r) => r.chapter);
     $: linkAnyMalformed = malformedChapters.length > 0;
     $: presentChapters = new Set(
@@ -200,7 +201,7 @@
                                         placeholder="https://…"
                                         value={row.url}
                                         class:has-url={row.url.trim().length > 0}
-                                        class:malformed={row.url.trim().length > 0 && !/^https?:\/\//i.test(row.url.trim())}
+                                        class:malformed={row.url.trim().length > 0 && !isPlausibleUrl(row.url)}
                                         on:input={(e) => updateLink(row.chapter, (e.currentTarget as HTMLInputElement).value)}
                                     />
                                 </label>
@@ -230,7 +231,7 @@
                     <span>Playlist URL</span>
                     <input
                         type="url"
-                        placeholder="https://youtube.com/playlist?list=…"
+                        placeholder="YouTube, SoundCloud, Internet Archive, Google Drive folder, etc."
                         value={state.playlistUrl}
                         on:input={(e) => submitWizard.update((s) => ({ ...s, playlistUrl: (e.currentTarget as HTMLInputElement).value }))}
                     />

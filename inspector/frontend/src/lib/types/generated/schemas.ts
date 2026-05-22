@@ -369,7 +369,7 @@ export interface IntakeSource {
   [k: string]: unknown;
 }
 /**
- * One per-chapter direct audio URL.
+ * One per-chapter direct audio URL (scheme optional — normalised to https).
  */
 export interface SourceLink {
   chapter: number;

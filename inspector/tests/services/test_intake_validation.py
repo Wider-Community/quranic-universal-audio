@@ -49,10 +49,19 @@ def test_partial_links_warns_missing():
 
 
 def test_malformed_url_reports_indices():
-    bad = [{"chapter": 3, "url": "ftp://nope/3.mp3"}, {"chapter": 7, "url": "nope"},
-           {"chapter": 2, "url": "https://ok/2.mp3"}]
+    # ftp scheme (non-http) and a whitespace-bearing junk value are both rejected;
+    # a bare host without a scheme is accepted (normalised to https).
+    bad = [{"chapter": 3, "url": "ftp://example.com/3.mp3"},
+           {"chapter": 7, "url": "not a url"},
+           {"chapter": 2, "url": "cdn.example.com/2.mp3"}]
     v = iv.validate_submission(_new_reciter(source={"method": "links", "links": bad}))
     assert any("Malformed URL for chapter(s): 3, 7" in e for e in v.errors)
+
+
+def test_scheme_less_url_accepted():
+    links = [{"chapter": c, "url": f"cdn.example.com/{c:03d}.mp3"} for c in range(1, 115)]
+    v = iv.validate_submission(_new_reciter(source={"method": "links", "links": links}))
+    assert not any("Malformed" in e for e in v.errors)
 
 
 def test_missing_attestation_errors():
