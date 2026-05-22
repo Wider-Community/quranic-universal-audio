@@ -300,6 +300,7 @@
         <button class="close" type="button" on:click={() => dispatch('close')}>×</button>
     </header>
 
+    <div class="body">
     {#if mode === 'create'}
         <div class="intro">
             <p class="intro-heading">Request Guidelines</p>
@@ -482,6 +483,7 @@
     {#if formError}
         <p class="error">{formError}</p>
     {/if}
+    </div>
 
     <footer>
         <button type="button" class="ghost" on:click={() => dispatch('close')}>
@@ -528,28 +530,29 @@
         border-radius: var(--r-3);
         padding: var(--s-5);
         width: min(640px, 92vw);
-        /* Cap to the viewport (backdrop adds --s-6 padding each side) and
-           scroll internally so tall create-mode content never clips off
-           screen. Mirrors SubmitWizard's modal sizing. */
-        max-height: min(88vh, 880px);
+        /* Backdrop reserves the bottom-player height + its own --s-6 padding,
+           so the modal never overlaps the player or clips off screen. The
+           shell itself doesn't scroll — header/footer are pinned by flex and
+           only `.body` scrolls. Mirrors SubmitWizard's modal sizing. */
+        max-height: 100%;
         display: flex;
         flex-direction: column;
         gap: var(--s-3);
-        overflow-y: auto;
+        overflow: hidden;
     }
     header {
+        flex: none;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        /* Keep the close button reachable while the body scrolls. Negative
-           margins bleed the header over the form's padding so scrolled
-           content doesn't peek through; its own padding restores the inset. */
-        position: sticky;
-        top: 0;
-        margin: calc(-1 * var(--s-5)) calc(-1 * var(--s-5)) 0;
-        padding: var(--s-5) var(--s-5) var(--s-2);
-        background: var(--canvas);
-        z-index: 1;
+    }
+    .body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-3);
     }
     header h3 {
         margin: 0;
@@ -696,11 +699,11 @@
         line-height: var(--lh-normal);
     }
     footer {
+        flex: none;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: var(--s-3);
-        margin-top: var(--s-3);
     }
     .admin-actions {
         display: flex;

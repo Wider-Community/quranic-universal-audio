@@ -745,5 +745,9 @@
         align-items: center;
         justify-content: center;
         padding: var(--s-6);
+        /* The bottom player is fixed at z-index 110 (same as this backdrop),
+           so it paints over anything that reaches the viewport bottom. Reserve
+           its height so the centered modal — and its footer — clear it. */
+        padding-bottom: calc(var(--s-6) + var(--player-h, 72px));
     }
 </style>
