@@ -85,6 +85,14 @@ export interface PublicDelivery {
     bitrate_mode: string; // cbr | vbr | abr | mixed | unknown
     total_duration_sec: number | null;
     bucket: PublicBucket;
+    /**
+     * Per-bucket entry timestamps: ``{ bucket: [iso, ...] }`` chronological,
+     * one entry per distinct visit to that bucket. Present only on the modal
+     * (detail / admin-view) payloads — absent on the cached list. Drives the
+     * dated lifecycle timeline; the first entry is the milestone's first-reached
+     * date, the full list is the per-node tooltip history.
+     */
+    bucket_dates?: Record<string, string[]>;
 }
 
 export interface PublicReciter {

@@ -8,14 +8,16 @@
      * Off-axis buckets:
      *   - available_for_request → no nodes reached, no current
      *
-     * Dates: the wire-level ``PublicDelivery`` carries ``state_since`` only
-     * for the current bucket, so only the current node shows a date — the
-     * others render an em dash. (Full bucket_dates history would require
-     * an audit-log replay on the backend; out of scope here.)
+     * Dates: ``PublicDelivery.bucket_dates`` (modal-only) carries the full
+     * chronological entry timestamps per bucket. Each node shows its
+     * first-reached date; nodes visited more than once expose every entry in a
+     * hover tooltip. Nodes ABOVE the current bucket render an em dash even if
+     * previously reached (a regressed delivery — e.g. un-published back to
+     * under-review — only shows dates for its current position and below).
      */
     import { PUBLIC_BUCKET_LABELS, type PublicBucket, type PublicDelivery } from '../../../lib/types/public-state';
 
-    export let delivery: PublicDelivery | null = null;
+    let { delivery = null }: { delivery?: PublicDelivery | null } = $props();
 
     const AXIS: readonly PublicBucket[] = [
         'requested',
@@ -24,11 +26,18 @@
         'published',
     ] as const;
 
-    function fmtDate(iso: string | null): string {
-        if (!iso) return '';
+    function fmtDate(iso: string): string {
         const d = new Date(iso);
         if (Number.isNaN(d.getTime())) return '';
         return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function fmtDateTime(iso: string): string {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return iso;
+        return d.toLocaleString(undefined, {
+            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+        });
     }
 
     // Map any bucket to where it lands on the 4-node axis.
@@ -44,17 +53,38 @@
         }
     }
 
-    $: bucket = delivery?.bucket ?? null;
-    $: currentIdx = reachedIndex(bucket);
-    $: dateLabel = delivery?.state_since ? fmtDate(delivery.state_since) : '';
+    const bucket = $derived(delivery?.bucket ?? null);
+    const currentIdx = $derived(reachedIndex(bucket));
+    const bucketDates = $derived(delivery?.bucket_dates ?? {});
 
-    $: items = AXIS.map((b, i) => ({
-        bucket: b,
-        label: PUBLIC_BUCKET_LABELS[b],
-        reached: i <= currentIdx,
-        current: i === currentIdx,
-        date: i === currentIdx ? dateLabel : '',
-    }));
+    const items = $derived(
+        AXIS.map((b, i) => {
+            const reached = i <= currentIdx;
+            const entries = bucketDates[b] ?? [];
+            // First-reached as the node date; fall back to state_since for the
+            // current node when transition history is unavailable (legacy rows).
+            let date = '';
+            const firstEntry = entries[0];
+            if (reached && firstEntry) {
+                date = fmtDate(firstEntry);
+            } else if (i === currentIdx && delivery?.state_since) {
+                date = fmtDate(delivery.state_since);
+            }
+            const visits = reached ? entries.length : 0;
+            const tooltip = visits > 1
+                ? `${PUBLIC_BUCKET_LABELS[b]} — entered ${visits}×:\n${entries.map(fmtDateTime).join('\n')}`
+                : '';
+            return {
+                bucket: b,
+                label: PUBLIC_BUCKET_LABELS[b],
+                reached,
+                current: i === currentIdx,
+                date,
+                visits,
+                tooltip,
+            };
+        })
+    );
 </script>
 
 <div class="timeline" role="list" aria-label="Combination lifecycle">
@@ -66,12 +96,15 @@
                 class:reached={item.reached}
                 class:current={item.current}
                 role="listitem"
+                title={item.tooltip || undefined}
             >
                 <span class="dot" aria-hidden="true"></span>
                 <div class="meta">
                     <div class="label">{item.label}</div>
                     {#if item.date}
-                        <div class="date">{item.date}</div>
+                        <div class="date">
+                            {item.date}{#if item.visits > 1}<span class="repeat" aria-label="entered {item.visits} times">×{item.visits}</span>{/if}
+                        </div>
                     {:else}
                         <div class="date faint">—</div>
                     {/if}
@@ -153,4 +186,15 @@
         margin-top: 2px;
     }
     .date.faint { opacity: 0.55; }
+    .repeat {
+        margin-left: 3px;
+        padding: 0 3px;
+        border-radius: 4px;
+        background: var(--accent-tint-soft);
+        color: var(--accent);
+        font-size: 9px;
+        font-weight: 600;
+        vertical-align: top;
+    }
+    .node[title] { cursor: help; }
 </style>
