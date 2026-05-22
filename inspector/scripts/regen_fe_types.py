@@ -14,7 +14,7 @@ fails the build via ``git diff --exit-code`` if the committed file
 diverges from regeneration — this is the structural fix that stops
 backend Pydantic models from drifting against FE TypeScript types.
 
-Migration #5 (``docs/reference/migrate_wip.md`` §5) introduces the
+Migration #5 (``docs/reference/data-migrations.md`` §5) introduces the
 codegen pipeline.
 
 Requirements:
@@ -95,7 +95,7 @@ def main() -> int:
         "// Regenerate after touching scripts/lib/schemas/:\n"
         "//   python inspector/scripts/regen_fe_types.py\n"
         "// CI fails via `git diff --exit-code` on this path if out of sync.\n"
-        "// See docs/reference/migrate_wip.md §5.\n\n"
+        "// See docs/reference/data-migrations.md §5.\n\n"
     )
     if not text.startswith("/* eslint-disable */"):
         OUTPUT.write_text(header + text, encoding="utf-8")

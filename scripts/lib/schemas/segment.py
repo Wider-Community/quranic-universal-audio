@@ -6,7 +6,7 @@ Both the offline extraction pipeline (`.local/extraction/segments/outputs.py`)
 and the Inspector save flow (`inspector/services/segments/save.py`) MUST
 round-trip through this model — that is the structural fix for the
 writer/reader drift we discovered in migration #4 + #5 (see
-``docs/reference/migrate_wip.md`` §5).
+``docs/reference/data-migrations.md`` §5).
 
 ``DetailedDocument`` wraps ``_meta`` + ``entries[]``; ``DetailedEntry``
 wraps a per-chapter group; ``DetailedSegment`` is the atomic unit and
@@ -26,7 +26,7 @@ DO NOT live on a persisted seg and are explicitly in ``DEAD_FIELDS``
 for the DetailedSegment model — they're modelled separately on
 ``SegSnapshot`` for op payloads.
 
-Authoritative spec: ``docs/reference/migrate_wip.md`` §5.
+Authoritative spec: ``docs/reference/data-migrations.md`` §5.
 """
 
 from __future__ import annotations

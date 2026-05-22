@@ -1,7 +1,7 @@
 """Waveform peaks routes (``/api/seg/peaks`` + ``/api/seg/segment-peaks`` +
 ``/api/seg/history-peaks``).
 
-Two-tier shape (see ``docs/reference/inspector/peaks.md``):
+Two-tier shape (see ``the inspector-audio skill``):
 
 1. **Chapter-overview peaks** — ``GET /api/seg/peaks/<reciter>?chapters=...``.
    Reads the slim packed files from ``<wip|published>/<slug>/peaks/<ch>.json.gz``
@@ -29,9 +29,10 @@ from flask import Blueprint, Response, jsonify, request
 from services import audio_fetch, cache
 from services.audio.audio_meta import chapter_urls
 from services.data_loader import load_detailed
+from services.history_query import edit_history_op_ids
 from services.peaks import compute_segment_peaks
 from services.peaks_history import append_peaks_records, load_peaks_records
-from utils.decorators import require_edit_lock, require_same_origin
+from utils.decorators import require_same_origin
 
 peaks_bp = Blueprint("peaks", __name__, url_prefix="/api/seg")
 
@@ -163,6 +164,7 @@ def seg_segment_peaks(reciter):
         end_ms = seg.get("end_ms", 0)
         chapter = seg.get("chapter")
         pad_ms = int(seg.get("pad_ms", 0) or 0)
+        bps = seg.get("bps")  # History passes 10; default (None) → HD 30 bps
         if not url or end_ms <= start_ms:
             continue
         key = f"{url}:{start_ms}:{end_ms}:{pad_ms}" if pad_ms else f"{url}:{start_ms}:{end_ms}"
@@ -172,45 +174,76 @@ def seg_segment_peaks(reciter):
             end_ms + pad_ms,
             reciter,
             chapter=chapter,
+            bps=int(bps) if isinstance(bps, int) else None,
         )
         if data:
             results[key] = data
     return jsonify({"peaks": results})
 
 
+# Caps for the on-play write-back POST (any same-origin viewer can call it).
+_HISTORY_POST_MAX_RECORDS = 64
+_HISTORY_POST_MAX_B64 = 64 * 1024  # one record's peaks_b64; 10 bps × long op ≪ this
+
+
 @peaks_bp.route("/history-peaks/<reciter>", methods=["GET"])
 def seg_history_peaks_get(reciter):
     """Return persisted per-op peaks for the History panel.
 
-    Returns ``{"records": [...]}`` — empty list if the reciter has no
-    edit_history_peaks.jsonl yet. The frontend pushes each record into the
-    covering-range cache so history rows render without re-computing.
+    Emits the canonical slim records verbatim — ``{"records": [{op_id, url,
+    start_ms, end_ms, bps, peaks_b64}, ...]}`` — no float inflation. The FE
+    decodes ``peaks_b64`` → ``Int8Array`` once and indexes by covering range.
+    Empty list when the reciter has no ``edit_history_peaks.jsonl`` yet.
 
-    Mutates on every save; ``no-store`` to keep the History panel honest.
+    Serialized bytes are cached per reciter (``orjson``) and reused on repeat
+    opens — History is browsed heavily, incl. anonymous. Invalidated whenever
+    the JSONL is appended (save invalidation + write-back). ``no-store`` on the
+    wire so a stale browser copy never masks a freshly-persisted op.
     """
-    response = jsonify({"records": load_peaks_records(reciter)})
+    cached = cache.get_seg_history_peaks_response(reciter)
+    if cached is None:
+        cached = orjson.dumps({"records": load_peaks_records(reciter)})
+        cache.set_seg_history_peaks_response(reciter, cached)
+    response = Response(cached, mimetype="application/json")
     response.headers["Cache-Control"] = "no-store"
     return response
 
 
 @peaks_bp.route("/history-peaks/<reciter>", methods=["POST"])
 @require_same_origin
-@require_edit_lock(reciter_param="reciter", admin_bypass=True)
 def seg_history_peaks_post(reciter):
-    """Append peak records computed lazily during History playback.
+    """Persist a peak record computed lazily during History playback.
 
-    Payload: ``{"records": [{op_id, url, start_ms, end_ms, peaks, duration_ms,
-    batch_id?}, ...]}``. Used when a History canvas computes peaks on play —
-    persisting them here makes future sessions render the same row without a
-    Range fetch.
+    Payload: ``{"records": [{op_id, url, start_ms, end_ms, bps, peaks_b64}]}``.
+    When a History row has no persisted peaks, it ffmpeg-computes on play (at
+    10 bps) and posts the result here so future viewers — including anonymous
+    ones — render it instantly.
 
-    Gated by ``require_edit_lock`` because this writes
-    ``edit_history_peaks.jsonl`` in the bucket — same writer-policy as
-    save/undo.
+    **Not** lock-gated: this writes only derived, idempotent peaks for ops that
+    already exist, not user edits. Guards instead:
+      - ``require_same_origin`` (CSRF),
+      - every ``op_id`` must exist in the reciter's edit history,
+      - ``append_peaks_records`` dedups by op_id (one record per op),
+      - record count + ``peaks_b64`` size are bounded.
     """
     body = request.get_json(silent=True) or {}
     records = body.get("records", [])
     if not isinstance(records, list):
         return jsonify({"error": "records must be a list"}), 400
-    written = append_peaks_records(reciter, records)
-    return jsonify({"ok": True, "written": written})
+    if len(records) > _HISTORY_POST_MAX_RECORDS:
+        return jsonify({"error": "too many records"}), 413
+
+    valid_op_ids = edit_history_op_ids(reciter)
+    accepted: list[dict] = []
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("op_id") not in valid_op_ids:
+            continue  # unknown op — refuse to persist arbitrary data
+        b64 = rec.get("peaks_b64")
+        if not isinstance(b64, str) or len(b64) > _HISTORY_POST_MAX_B64:
+            continue
+        accepted.append(rec)
+
+    written = append_peaks_records(reciter, accepted)
+    return jsonify({"ok": True, "written": written, "skipped": len(records) - written})

@@ -21,9 +21,13 @@ import type { SegmentPeaks } from '../types/domain';
  * ``_fetchPeaks`` (slim int8 envelope) and FE slices them locally; this
  * helper only fires when there's no chapter peaks to slice.
  *
- * Returns the slice peaks (nested float ``PeakBucket[]`` at HD 30 bps), or
- * null if the backend couldn't produce them (ffmpeg failure, empty range,
- * unknown URL).
+ * Returns the slice peaks (nested float ``PeakBucket[]``), or null if the
+ * backend couldn't produce them (ffmpeg failure, empty range, unknown URL).
+ *
+ * ``bps`` (buckets per second) defaults to the backend's HD 30. The History
+ * tab passes 10 to match the chapter overview + the persisted
+ * ``edit_history_peaks.jsonl`` (cheaper compute, and the write-back record is
+ * already 10 bps).
  */
 export async function fetchSegmentPeaks(
     reciter: string,
@@ -31,10 +35,11 @@ export async function fetchSegmentPeaks(
     startMs: number,
     endMs: number,
     chapter?: number,
+    bps?: number,
 ): Promise<SegmentPeaks | null> {
     if (!reciter || !url || endMs <= startMs) return null;
     const body: SegSegmentPeaksRequest = {
-        segments: [{ url, start_ms: startMs, end_ms: endMs, chapter }],
+        segments: [{ url, start_ms: startMs, end_ms: endMs, chapter, bps }],
     };
     const data = await fetchJson<SegSegmentPeaksResponse>(
         `/api/seg/segment-peaks/${reciter}`,

@@ -3,7 +3,7 @@
 // Regenerate after touching scripts/lib/schemas/:
 //   python inspector/scripts/regen_fe_types.py
 // CI fails via `git diff --exit-code` on this path if out of sync.
-// See docs/reference/migrate_wip.md §5.
+// See docs/reference/data-migrations.md §5.
 
 /* tslint:disable */
 /* eslint-disable */
@@ -14,6 +14,106 @@
 
 export type Role = "contributor" | "maintainer" | "owner" | "pipeline";
 
+export interface AdminActiveClaim {
+  slug: string;
+  state?: string | null;
+  marked_ready?: boolean;
+  [k: string]: unknown;
+}
+export interface AdminActivityEvent {
+  ts?: string | null;
+  slug?: string | null;
+  event: string;
+  to_state?: string | null;
+  reason?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminClaimEvent {
+  slug: string;
+  claimed_at?: string | null;
+  released_at?: string | null;
+  marked_ready_at?: string | null;
+  close_reason?: string | null;
+  outcome?: string;
+  [k: string]: unknown;
+}
+export interface AdminRequestEvent {
+  id: string;
+  kind: string;
+  slug?: string | null;
+  submitted_at?: string | null;
+  status: string;
+  resolved_at?: string | null;
+  resolution_reason?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminRoleEvent {
+  role: string;
+  granted_at?: string | null;
+  granted_by?: string | null;
+  revoked_at?: string | null;
+  revoked_by?: string | null;
+  reason?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminUserDetail {
+  hf_user_id: string;
+  login?: string | null;
+  role?: string;
+  joined?: string | null;
+  last_login_at?: string | null;
+  last_entry_at?: string | null;
+  last_activity?: string | null;
+  stats?: AdminUserStats;
+  role_history?: AdminRoleEvent[];
+  claims_history?: AdminClaimEvent[];
+  requests_history?: AdminRequestEvent[];
+  recent_activity?: AdminActivityEvent[];
+  [k: string]: unknown;
+}
+export interface AdminUserStats {
+  reviews?: number;
+  lifetime_claims?: number;
+  avg_turnaround_seconds?: number | null;
+  requests_by_status?: {
+    [k: string]: number;
+  };
+  [k: string]: unknown;
+}
+export interface AdminUserRow {
+  hf_user_id: string;
+  login?: string | null;
+  role?: string;
+  joined?: string | null;
+  last_activity?: string | null;
+  requests?: number;
+  reviews?: number;
+  active_claim?: AdminActiveClaim | null;
+  [k: string]: unknown;
+}
+export interface AdminUsersResponse {
+  users?: AdminUserRow[];
+  summary?: AdminUsersSummary;
+  [k: string]: unknown;
+}
+export interface AdminUsersSummary {
+  registered?: number;
+  active_this_week?: number;
+  [k: string]: unknown;
+}
+export interface AdminVisitorStats {
+  today: VisitorDayStat;
+  recent?: VisitorDayStat[];
+  [k: string]: unknown;
+}
+export interface VisitorDayStat {
+  date: string;
+  signed_in_hits?: number;
+  anon_hits?: number;
+  unique_signed_in?: number;
+  unique_anon?: number;
+  [k: string]: unknown;
+}
 /**
  * Whole ``detailed.json`` document.
  *

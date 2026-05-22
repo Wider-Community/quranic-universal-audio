@@ -2,26 +2,35 @@
 
 Per-op JSONL at ``<bucket>/<kind>/<reciter>/edit_history_peaks.jsonl``,
 append-only. Lets the History panel render waveforms across sessions
-without re-computing — and survives full-audio download/delete switching
-since this file lives in the data tree, not the audio cache.
+without re-computing — and survives the wip-audio sweeper (which GCs
+``wip/<slug>/{audio,peaks}/`` but not this root-level file), so anonymous
+viewers of a released reciter still get instant waveforms.
 
-Schema (one record per line)::
+Migration #5 canonical shape (one record per line)::
 
     {
       "op_id": "<uuid>",
-      "batch_id": "<uuid>" | null,
       "url": "<canonical url, proxy-stripped>",
       "start_ms": int,
       "end_ms": int,
-      "peaks": [[min, max], ...],
-      "duration_ms": int,
-      "saved_at_utc": "<iso>"
+      "bps": int,            # buckets-per-second density (10 today)
+      "peaks_b64": "<base64 of n*2 int8s>"
     }
 
-Same op_id may appear on multiple lines when peaks are persisted lazily for
-different ranges (e.g. on play after a save where peaks weren't ready).
-Consumers index by ``url`` and use covering-range matching, so duplicates are
-benign.
+The pre-#5 verbose shape (``peaks: list[list[float]]`` + ``batch_id`` /
+``duration_ms`` / ``saved_at_utc``) is rejected by ``_validate_record``;
+existing bucket files were re-encoded by ``migrate_wip5_in_place.py``. See
+``scripts/lib/schemas/peaks_history.py`` for the authoritative contract.
+
+Writers: ``services/segments/save.py`` (runtime, slices baked chapter peaks
+via ``op_peaks.build_op_records``), the History on-play write-back POST, the
+offline pipeline (``write_edit_history_peaks``), and the
+``backfill_pipeline_peaks.py`` CLI. ``append_peaks_records`` dedups by
+``op_id`` so concurrent / repeat writers append at most one record per op.
+
+Readers index by ``url`` + covering-range, so a record covering a row's span
+renders it regardless of which op produced it (waveform for a URL+range is
+identical) — making dedup-by-op_id safe.
 """
 
 import re
@@ -83,15 +92,26 @@ def append_peaks_records(
     Migration #5 canonical shape: ``{op_id, url, start_ms, end_ms, bps,
     peaks_b64}``. Callers must provide the int8-b64 encoded peaks; legacy
     ``peaks: list[list[float]]`` inputs are rejected by ``_validate_record``.
-    See ``inspector/scripts/backfill_pipeline_peaks.py`` (one-shot CLI)
-    for the encoder + per-op compute path; pre-existing bucket records
-    were migrated by ``.local/extraction/scripts/migrate_wip5_in_place.py``.
+
+    **Dedup-by-op_id:** an op already persisted is skipped (no bucket write) —
+    bounds the file to one record per op and means concurrent / repeat writers
+    (autosave re-saves, multiple anonymous viewers playing the same op) append
+    at most once. ``batch_id`` is accepted for caller compatibility but not
+    part of the canonical record.
 
     Malformed records are skipped silently — partial persistence is fine
     because consumers fall through to lazy compute-on-play.
     """
     if not records:
         return 0
+
+    # Build the seen-op_id set once (warms the in-memory list cache). Dedup
+    # against both already-persisted ops and earlier records in this same call.
+    seen: set[str] = {
+        rec.get("op_id")
+        for rec in load_peaks_records(reciter)
+        if isinstance(rec.get("op_id"), str)
+    }
 
     written = 0
     for rec in records:
@@ -108,11 +128,18 @@ def append_peaks_records(
         err = _validate_record(line)
         if err:
             continue
+        if line["op_id"] in seen:
+            continue  # already persisted — no bucket write
         data_dir.append_peaks_history(reciter, line)
         cached = cache.get_seg_history_peaks(reciter)
         if cached is not None:
             cached.append(line)
+        seen.add(line["op_id"])
         written += 1
+
+    if written:
+        # The serialized GET response is now stale.
+        cache.pop_seg_history_peaks_response(reciter)
     return written
 
 
@@ -149,29 +176,30 @@ def _inflate_peaks_b64(rec: dict) -> dict:
 def load_peaks_records(
     reciter: str,
     exclude_op_ids: set[str] | None = None,
+    inflate: bool = False,
 ) -> list[dict]:
     """Read the peaks JSONL for *reciter*. Returns ``[]`` if missing.
 
     Silently skips malformed records, mirroring
     ``services.history_query.parse_history_file``.
 
-    Migration #5: records written by the offline pipeline now carry
-    ``peaks_b64`` + ``bps`` instead of ``peaks: list[list[float]]``.
-    Inflate at read time so the FE wire shape (and the in-memory
-    ``peaks`` list) is stable across the transition.
+    The in-memory cache holds the **canonical** ``peaks_b64`` records (matching
+    what ``append_peaks_records`` appends, so the two never drift). The
+    FE-facing GET serves these verbatim and decodes b64 client-side. Pass
+    ``inflate=True`` to get the legacy ``peaks: list[list[float]]`` shape (for
+    any float consumer / tests) — applied after the cache read so the cache
+    stays canonical.
     """
     excluded = exclude_op_ids or set()
-    out: list[dict] = []
     cached = cache.get_seg_history_peaks(reciter)
-    if cached is not None and not excluded:
-        return cached
+    if cached is None:
+        cached = [
+            rec for rec in data_dir.iter_peaks_history(reciter)
+            if isinstance(rec, dict)
+        ]
+        cache.set_seg_history_peaks(reciter, cached)
 
-    for rec in data_dir.iter_peaks_history(reciter):
-        if not isinstance(rec, dict):
-            continue
-        if rec.get("op_id") in excluded:
-            continue
-        out.append(_inflate_peaks_b64(rec))
-    if not excluded:
-        cache.set_seg_history_peaks(reciter, out)
+    out = [rec for rec in cached if rec.get("op_id") not in excluded]
+    if inflate:
+        out = [_inflate_peaks_b64(rec) for rec in out]
     return out

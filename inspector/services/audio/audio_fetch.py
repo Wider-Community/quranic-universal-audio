@@ -74,7 +74,7 @@ def read_prefetched_peaks(slug: str, url: str) -> dict | None:
     packed envelope verbatim: ``{schema_version:3, duration_ms, q:'int8',
     bps, n, peaks_b64}``. No dequant, no ``.tolist()`` — the FE-facing route
     sends this through unchanged and the browser inflates b64 → ``Int8Array``
-    once on receive (see ``docs/reference/inspector/peaks.md``).
+    once on receive (see ``the inspector-audio skill``).
 
     Returns ``None`` for:
     - Unknown URL (not in the catalog manifest).

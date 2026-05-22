@@ -164,7 +164,7 @@ def unpack_slim_envelope(blob: bytes) -> dict | None:
     peaks_b64}``. This is the runtime reader for the FE-facing peaks route:
     the browser inflates b64 → ``Int8Array`` once on receive and the drawer
     consumes the typed array directly (see ``peaks-view.ts`` and
-    ``docs/reference/inspector/peaks.md``).
+    ``the inspector-audio skill``).
 
     Validates the same envelope shape as :func:`unpack_slim` (schema_version,
     quantization tag, payload length) but skips the int8 → float32 →

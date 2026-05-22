@@ -105,11 +105,16 @@ export interface SegSavedPreviewState {
 // Peaks (covering-range + observer queue)
 // ---------------------------------------------------------------------------
 
-/** Segment-level peaks entry keyed by URL (covering-range cache). */
+/** Segment-level peaks entry keyed by URL (covering-range cache).
+ *
+ * ``peaks`` is ``PeakBucket[]`` for ffmpeg fallback slices (30 bps floats) and
+ * ``Int8Array`` for history-peaks records decoded from the b64 wire shape
+ * (10 bps). Both are handled transparently by ``peaks-view.ts`` /
+ * ``draw-seg.ts``. */
 export interface SegPeaksRangeEntry {
     startMs: number;
     endMs: number;
-    peaks: PeakBucket[];
+    peaks: PeakBucket[] | Int8Array;
     durationMs: number;
 }
 

@@ -7,10 +7,9 @@
  *    emits this when the client doesn't request the int8 shape, and the
  *    per-segment ffmpeg fallback (``/segment-peaks``) always emits it because
  *    those peaks are HD floats (30 bps) not quantizable to int8 without losing
- *    transient fidelity. History-peaks JSONL on the bucket also stores
- *    nested-list — backfilling that file is a separate proposal.
+ *    transient fidelity.
  *
- * 2. **Drawer-int8** (new, flag-gated): ``Int8Array`` of length ``n * 2``, with
+ * 2. **Drawer-int8**: ``Int8Array`` of length ``n * 2``, with
  *    pairs interleaved ``[mn₀, mx₀, mn₁, mx₁, ...]``. Quantized to [-127, 127];
  *    dequant at read is ``v / 127``. The route now passes the slim-packed
  *    bytes verbatim under ``?shape=i8``, FE decodes once into ``Int8Array``,
@@ -20,7 +19,8 @@
  * branch on shape at every pixel — caller hits ``view.min(i)`` / ``view.max(i)``
  * and the right path is taken once at view construction. JIT inlines the
  * accessor when each call site is monomorphic (which they are in practice:
- * chapter overviews always use one shape, history rows always use the other).
+ * chapter overviews + history rows use the int8 shape; the per-segment ffmpeg
+ * fallback uses the nested float shape).
  */
 import type { PeakBucket } from '../types/domain';
 
@@ -82,4 +82,36 @@ export function viewPeaks(peaks: PeakBucket[] | Int8Array | null | undefined): P
 /** Cheap "is this shape int8" check without constructing a view. */
 export function isInt8Peaks(peaks: PeakBucket[] | Int8Array | null | undefined): peaks is Int8Array {
     return peaks instanceof Int8Array;
+}
+
+function _q(v: number): number {
+    const x = Math.round(v * 127);
+    return x < -127 ? -127 : x > 127 ? 127 : x;
+}
+
+/**
+ * Pack a peaks payload into base64 of ``n*2`` int8s — the canonical
+ * ``edit_history_peaks.jsonl`` ``peaks_b64`` wire shape (inverse of
+ * ``utils.ts::_b64ToInt8``). An ``Int8Array`` is encoded as-is; float buckets
+ * are quantized ``round(v*127)`` clamped to [-127, 127]. Used by the History
+ * on-play write-back to persist a freshly-computed slice. History slices are
+ * small (≤ a few hundred buckets), so the per-byte ``String.fromCharCode``
+ * loop is the fastest portable path (same rationale as ``_b64ToInt8``).
+ */
+export function packPeaksB64(peaks: PeakBucket[] | Int8Array): string {
+    let bytes: Int8Array;
+    if (peaks instanceof Int8Array) {
+        bytes = peaks;
+    } else {
+        bytes = new Int8Array(peaks.length * 2);
+        for (let i = 0; i < peaks.length; i++) {
+            const bk = peaks[i] ?? _NESTED_DEFAULT;
+            bytes[i * 2] = _q(bk[0] ?? 0);
+            bytes[i * 2 + 1] = _q(bk[1] ?? 0);
+        }
+    }
+    const u8 = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let bin = '';
+    for (let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]!);
+    return btoa(bin);
 }
