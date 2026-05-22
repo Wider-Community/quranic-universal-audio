@@ -23,13 +23,16 @@
 
     interface VocabRow {
         slug: string;
+        short?: string;
         name: string;
     }
     let sources = $state<VocabRow[]>([]);
     let channels = $state<VocabRow[]>([]);
+    let riwayat = $state<VocabRow[]>([]);
+    let styles = $state<VocabRow[]>([]);
 
-    const isNewReciter = row.kind === 'new_reciter';
-    const edits = (row.proposed_edits ?? {}) as Record<string, unknown>;
+    const isNewReciter = $derived(row.kind === 'new_reciter');
+    const edits = $derived((row.proposed_edits ?? {}) as Record<string, unknown>);
 
     function toSlug(s: string): string {
         return (s || '')
@@ -39,37 +42,57 @@
             .replace(/^_+|_+$/g, '')
             .replace(/_+/g, '_');
     }
+    function shortOf(list: VocabRow[], slug: string): string {
+        return list.find((v) => v.slug === slug)?.short || slug;
+    }
 
-    const suggestedReciterId = isNewReciter
-        ? toSlug((edits.name_en as string) ?? '')
-        : (row.reciter_id ?? '');
+    const suggestedReciterId = $derived(
+        isNewReciter ? toSlug((edits.name_en as string) ?? '') : (row.reciter_id ?? ''),
+    );
 
-    let reciterId = $state(suggestedReciterId);
+    let reciterId = $state('');
     let slug = $state('');
     let source = $state('');
     let channel = $state('');
     let busy = $state(false);
     let error = $state<string | null>(null);
+    let reciterTouched = false;
+    let slugTouched = false;
 
-    // Suggest the delivery slug from the (now-known) reciter_id + combo. Owner
-    // can override; it becomes the permanent, sticky slug.
-    $effect(() => {
-        const parts = [reciterId, row.riwayah ?? '', row.style ?? ''];
+    // Build the slug per the catalog convention (catalog.md §3):
+    //   <reciter_id>[_riwayah_short≠hafs][_style_short≠murattal][_year]_<channel_short>
+    // Owner can override; it becomes the permanent, sticky slug.
+    const suggestedSlug = $derived.by(() => {
+        const parts = [reciterId];
+        const r = row.riwayah ?? '';
+        const st = row.style ?? '';
+        if (r && r !== 'hafs') parts.push(shortOf(riwayat, r));
+        if (st && st !== 'murattal') parts.push(shortOf(styles, st));
         const year = edits.recording_year;
         if (year) parts.push(String(year));
-        const suggestion = parts.filter(Boolean).map(toSlug).join('_');
-        if (!slug || slug === _lastSuggestion) slug = suggestion;
-        _lastSuggestion = suggestion;
+        if (channel) parts.push(shortOf(channels, channel));
+        return parts.filter(Boolean).map(toSlug).join('_');
     });
-    let _lastSuggestion = '';
+
+    // Seed the editable fields from the suggestions until the owner edits them.
+    $effect(() => {
+        if (!reciterTouched) reciterId = suggestedReciterId;
+    });
+    $effect(() => {
+        if (!slugTouched) slug = suggestedSlug;
+    });
 
     onMount(async () => {
         try {
             const res = await fetch('/api/static/catalog.json');
             if (!res.ok) return;
             const cat = await res.json();
-            sources = (cat?.vocab?.sources ?? []).map((s: VocabRow) => ({ slug: s.slug, name: s.name }));
-            channels = (cat?.vocab?.channels ?? []).map((c: VocabRow) => ({ slug: c.slug, name: c.name }));
+            const pick = (xs: VocabRow[]) =>
+                (xs ?? []).map((v) => ({ slug: v.slug, short: v.short, name: v.name }));
+            sources = pick(cat?.vocab?.sources);
+            channels = pick(cat?.vocab?.channels);
+            riwayat = pick(cat?.vocab?.riwayat);
+            styles = pick(cat?.vocab?.styles);
         } catch {
             // Best-effort — owner can still type valid slugs if the fetch fails.
         }
@@ -102,10 +125,12 @@
         if (e.key === 'Escape') onClose();
     }
 
-    const comboLabel = [row.riwayah, row.style]
-        .filter(Boolean)
-        .map((s) => titleCaseSlug(s as string))
-        .join(' · ');
+    const comboLabel = $derived(
+        [row.riwayah, row.style]
+            .filter(Boolean)
+            .map((s) => titleCaseSlug(s as string))
+            .join(' · '),
+    );
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -136,30 +161,49 @@
             {#if isNewReciter}
                 <label>
                     <span>Reciter ID</span>
-                    <input type="text" bind:value={reciterId} spellcheck="false" placeholder="reciter_id_slug" />
+                    <input
+                        type="text"
+                        bind:value={reciterId}
+                        spellcheck="false"
+                        placeholder="reciter_id_slug"
+                        oninput={() => (reciterTouched = true)}
+                    />
                 </label>
             {/if}
+            <div class="two">
+                <label>
+                    <span>Source</span>
+                    <select bind:value={source}>
+                        <option value="" disabled>Pick one…</option>
+                        {#each sources as s (s.slug)}
+                            <option value={s.slug}>{s.name}</option>
+                        {/each}
+                    </select>
+                </label>
+                <label>
+                    <span>Channel</span>
+                    <select bind:value={channel}>
+                        <option value="" disabled>Pick one…</option>
+                        {#each channels as c (c.slug)}
+                            <option value={c.slug}>{c.name}</option>
+                        {/each}
+                    </select>
+                </label>
+            </div>
             <label>
                 <span>Delivery slug</span>
-                <input type="text" bind:value={slug} spellcheck="false" placeholder="delivery_slug" />
-            </label>
-            <label>
-                <span>Source</span>
-                <select bind:value={source}>
-                    <option value="" disabled>Pick one…</option>
-                    {#each sources as s (s.slug)}
-                        <option value={s.slug}>{s.name}</option>
-                    {/each}
-                </select>
-            </label>
-            <label>
-                <span>Channel</span>
-                <select bind:value={channel}>
-                    <option value="" disabled>Pick one…</option>
-                    {#each channels as c (c.slug)}
-                        <option value={c.slug}>{c.name}</option>
-                    {/each}
-                </select>
+                <input
+                    type="text"
+                    bind:value={slug}
+                    spellcheck="false"
+                    placeholder="pick a channel to complete the slug"
+                    oninput={() => (slugTouched = true)}
+                />
+                <span class="slug-hint">
+                    Built per the catalog convention
+                    <code>reciter[_riwayah][_style][_year]_channel</code> (hafs / murattal
+                    omitted). Edit if needed — it’s permanent.
+                </span>
             </label>
         </div>
 
@@ -219,7 +263,10 @@
     .ctx-combo { font-size: var(--fs-meta); color: var(--text-muted); font-family: var(--font-mono); }
 
     .fields { display: flex; flex-direction: column; gap: var(--s-3); }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
     label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-meta); color: var(--text-muted); }
+    .slug-hint { font-size: 10.5px; color: var(--text-faint); line-height: 1.5; }
+    .slug-hint code { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
     input, select {
         background: var(--panel); border: 1px solid var(--border-default); color: var(--text-primary);
         border-radius: var(--r-2); padding: 8px 10px; font: inherit;

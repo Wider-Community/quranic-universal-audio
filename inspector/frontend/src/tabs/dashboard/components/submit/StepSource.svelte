@@ -211,9 +211,7 @@
                             <div class="coverage">
                                 {#if linkAnyMalformed}
                                     <p class="cov-line err">
-                                        <span class="cov-label">Invalid URL</span>
-                                        chapter{malformedChapters.length === 1 ? '' : 's'}
-                                        {compactRanges(malformedChapters)} — must start with http(s)://
+                                        Some URLs are invalid (highlighted) — each must start with http(s)://
                                     </p>
                                 {/if}
                                 {#if linkCount > 0 && !linkComplete}
@@ -436,7 +434,6 @@
         border-radius: var(--r-1); font-size: 10px; font-weight: 500;
     }
     .cov-line.err { color: var(--state-error-fg); }
-    .cov-line.err .cov-label { background: oklch(0.6 0.12 25 / 0.18); }
     .cov-line.warn .cov-label { background: oklch(0.86 0.13 75 / 0.16); color: var(--state-error-fg); }
 
     /* playlist */

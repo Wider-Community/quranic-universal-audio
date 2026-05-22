@@ -95,6 +95,21 @@
         }));
     }
 
+    // Live duplicate check for new reciters: fuzzy-match the typed name(s)
+    // against the catalogue so near-spellings surface before submission.
+    $: newNameEn = state.newReciter.name_en.trim();
+    $: newNameAr = state.newReciter.name_ar.trim();
+    $: dupCandidates =
+        mode === 'new' && (newNameEn.length >= 2 || newNameAr.length >= 2)
+            ? reciters
+                  .filter(
+                      (r) =>
+                          (newNameEn.length >= 2 && match(r.name, newNameEn)) ||
+                          (newNameAr.length >= 2 && !!r.name_ar && match(r.name_ar, newNameAr)),
+                  )
+                  .slice(0, 4)
+            : [];
+
     // Country picker dance — copied from RequestForm.
     let countryFocusStash: string | null = null;
     $: countryName = state.newReciter.countryName;
@@ -272,6 +287,10 @@
         </div>
     {:else}
         <div class="pane new" in:fly={{ y: 4, duration: 180 }}>
+            <p class="dup-hint">
+                Please double-check this reciter isn’t already in the catalog — even under a
+                slightly different spelling. Search “Existing reciter” first if unsure.
+            </p>
             <label>
                 <span>English name</span>
                 <input
@@ -318,6 +337,23 @@
                     <option value={c.name} label={c.code}></option>
                 {/each}
             </datalist>
+
+            {#if dupCandidates.length > 0}
+                <div class="dup-matches" transition:fade={{ duration: 160 }}>
+                    <span class="dup-matches-label">Possibly already in the catalog</span>
+                    <ul>
+                        {#each dupCandidates as r (r.reciter_id)}
+                            <li>
+                                <button type="button" class="dup-row" on:click={() => { setMode('existing_reciter'); pickReciter(r.reciter_id); }}>
+                                    <span class="dup-name">{r.name}</span>
+                                    {#if r.name_ar}<span class="dup-ar" dir="rtl">{r.name_ar}</span>{/if}
+                                    <span class="dup-use">Use this →</span>
+                                </button>
+                            </li>
+                        {/each}
+                    </ul>
+                </div>
+            {/if}
         </div>
     {/if}
 </div>
@@ -395,6 +431,45 @@
     .pane.new .country-field {
         grid-column: 1 / -1;
     }
+    .dup-hint {
+        grid-column: 1 / -1;
+        margin: 0;
+        font-size: 11px;
+        color: var(--text-faint);
+        line-height: 1.5;
+    }
+    .dup-matches {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-2);
+        padding: var(--s-3);
+        background: oklch(0.86 0.13 75 / 0.1);
+        border: 1px solid oklch(0.86 0.13 75 / 0.35);
+        border-radius: var(--r-2);
+    }
+    .dup-matches-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--state-error-fg);
+    }
+    .dup-matches ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+    .dup-row {
+        width: 100%;
+        display: flex;
+        align-items: baseline;
+        gap: var(--s-2);
+        padding: 5px 8px;
+        border-radius: var(--r-1);
+        text-align: left;
+        color: var(--text-secondary);
+        transition: background var(--t-fast);
+    }
+    .dup-row:hover { background: var(--panel); }
+    .dup-name { font-size: var(--fs-body); color: var(--text-primary); }
+    .dup-ar { font-size: var(--fs-meta); color: var(--text-secondary); }
+    .dup-use { margin-left: auto; font-size: 10.5px; color: var(--accent); }
 
     label {
         display: flex;
