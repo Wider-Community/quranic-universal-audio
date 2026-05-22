@@ -294,6 +294,16 @@ def transition(
         raise UnknownEvent(f"unknown slug-bound event {event!r}")
     with _sync.durable_transaction() as conn:
         new_row = _apply_event(conn, slug, event, actor=actor, payload=payload, reason=reason)
+    # The TS manifest (services/reference/timestamps.py) is a process-cached
+    # projection of which slugs are released/completed, with no other
+    # invalidation hook — without this it stays frozen at boot-state until the
+    # next restart. Drop it AFTER commit (a pre-commit drop could let a
+    # concurrent manifest read re-cache the old state). Unconditional rather
+    # than enumerating publish-affecting events: the rebuild is cheap + lazy
+    # (next manifest request, warm sidecar caches) and transitions are
+    # admin/edit-frequency, not request-frequency.
+    from services.reference import timestamps as _ts_manifest
+    _ts_manifest.invalidate()
     return new_row
 
 
