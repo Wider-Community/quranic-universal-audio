@@ -54,6 +54,10 @@ def validate_submission(sub: IntakeSubmission) -> IntakeValidation:
         errors.append("Style is required.")
     # recording_year bounds (1885–current) are enforced by ProposedEdits at parse.
 
+    # Consent gates — all three required (also enforced client-side at step 4).
+    if not sub.attestations.all_true():
+        errors.append("You must confirm all three statements to submit.")
+
     # --- source ---
     src = sub.source
     if src.method == "links":
@@ -83,16 +87,17 @@ def _validate_links(links: list[SourceLink]) -> tuple[list[str], list[str]]:
     warnings: list[str] = []
 
     counts: dict[int, int] = {}
-    malformed = 0
+    malformed_chapters: list[int] = []
     for ln in links:
         if not _URL_RE.match((ln.url or "").strip()):
-            malformed += 1
+            malformed_chapters.append(ln.chapter)
             continue
         counts[ln.chapter] = counts.get(ln.chapter, 0) + 1
 
-    if malformed:
+    if malformed_chapters:
         errors.append(
-            f"{malformed} link(s) are malformed — URLs must start with http:// or https://."
+            f"Malformed URL for chapter(s): {_compact(malformed_chapters)} "
+            "— must start with http:// or https://."
         )
 
     dups = sorted(c for c, n in counts.items() if n > 1)

@@ -522,6 +522,9 @@ def _links(n=114):
     return [{"chapter": c, "url": f"https://cdn.example/{c:03d}.mp3"} for c in range(1, n + 1)]
 
 
+_ATTEST = {"distribution_rights": True, "links_verified": True, "storage_rights": True}
+
+
 def _new_reciter_body(**over):
     body = {
         "kind": "new_reciter",
@@ -529,6 +532,7 @@ def _new_reciter_body(**over):
                            "riwayah": "hafs", "style": "murattal"},
         "source": {"method": "links", "links": _links()},
         "comments": "From a clean studio master.",
+        "attestations": dict(_ATTEST),
     }
     body.update(over)
     return body
@@ -540,6 +544,7 @@ def _new_combo_body(**over):
         "reciter_id": "rec_clean",
         "proposed_edits": {"riwayah": "warsh", "style": "murattal"},
         "source": {"method": "links", "links": _links()},
+        "attestations": dict(_ATTEST),
     }
     body.update(over)
     return body
@@ -576,6 +581,15 @@ def test_intake_submit_missing_name_is_error(signed_in_client):
     res = client.post("/api/requests/intake", headers=_HEADERS, data=json.dumps(body))
     assert res.status_code == 400
     assert any("English name" in e for e in json.loads(res.data)["errors"])
+
+
+def test_intake_submit_missing_attestation_is_error(signed_in_client):
+    client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
+    body = _new_reciter_body(attestations={"distribution_rights": True,
+                                           "links_verified": False, "storage_rights": True})
+    res = client.post("/api/requests/intake", headers=_HEADERS, data=json.dumps(body))
+    assert res.status_code == 400
+    assert any("confirm all three" in e for e in json.loads(res.data)["errors"])
 
 
 def test_intake_submit_missing_chapters_warns(signed_in_client):

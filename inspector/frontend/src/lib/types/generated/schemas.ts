@@ -346,6 +346,19 @@ export interface EditOperation {
   }[];
 }
 /**
+ * Contributor confirmations recorded with the submission (audit trail).
+ *
+ * All three must be true to submit — gated client-side and re-checked server-
+ * side. Rights to *share* (distribution / reciter permission) and rights to
+ * *store* (QUA download + permanent retention) are deliberately separate.
+ */
+export interface IntakeAttestations {
+  distribution_rights?: boolean;
+  links_verified?: boolean;
+  storage_rights?: boolean;
+  [k: string]: unknown;
+}
+/**
  * Normalised audio source. Typed links and dropped CSV/JSON files both feed
  * ``links``; ``playlist`` carries a single URL we enumerate offline (yt-dlp).
  */
@@ -377,6 +390,7 @@ export interface IntakeSubmission {
   source: IntakeSource;
   comments?: string | null;
   auto_claim?: boolean;
+  attestations?: IntakeAttestations;
   [k: string]: unknown;
 }
 /**

@@ -49,6 +49,7 @@ from .catalog import (
 )
 from .edit_history import EditHistoryBatch, EditOperation, parse_edit_history_line
 from .intake_requests import (
+    IntakeAttestations,
     IntakeSource,
     IntakeSubmission,
     IntakeValidation,
@@ -112,6 +113,7 @@ __all__ = [
     "DetailedSegment",
     "EditHistoryBatch",
     "EditOperation",
+    "IntakeAttestations",
     "IntakeSource",
     "IntakeSubmission",
     "IntakeValidation",

@@ -41,6 +41,7 @@ from .admin_users import (
 )
 from .edit_history import EditHistoryBatch, EditOperation
 from .intake_requests import (
+    IntakeAttestations,
     IntakeSource,
     IntakeSubmission,
     IntakeValidation,
@@ -77,6 +78,7 @@ __all__ = [
     "DetailedSegment",
     "EditHistoryBatch",
     "EditOperation",
+    "IntakeAttestations",
     "IntakeSource",
     "IntakeSubmission",
     "IntakeValidation",

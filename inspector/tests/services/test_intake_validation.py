@@ -16,6 +16,8 @@ def _new_reciter(**over):
         "kind": "new_reciter",
         "proposed_edits": {"name_en": "X", "riwayah": "hafs", "style": "murattal"},
         "source": {"method": "links", "links": _links()},
+        "attestations": {"distribution_rights": True, "links_verified": True,
+                         "storage_rights": True},
     }
     body.update(over)
     return IntakeSubmission.model_validate(body)
@@ -46,10 +48,18 @@ def test_partial_links_warns_missing():
     assert any("Missing 64" in w for w in v.warnings)
 
 
-def test_malformed_url_errors():
-    bad = [{"chapter": 1, "url": "ftp://nope/1.mp3"}, {"chapter": 2, "url": "https://ok/2.mp3"}]
+def test_malformed_url_reports_indices():
+    bad = [{"chapter": 3, "url": "ftp://nope/3.mp3"}, {"chapter": 7, "url": "nope"},
+           {"chapter": 2, "url": "https://ok/2.mp3"}]
     v = iv.validate_submission(_new_reciter(source={"method": "links", "links": bad}))
-    assert any("malformed" in e for e in v.errors)
+    assert any("Malformed URL for chapter(s): 3, 7" in e for e in v.errors)
+
+
+def test_missing_attestation_errors():
+    v = iv.validate_submission(_new_reciter(
+        attestations={"distribution_rights": True, "links_verified": True,
+                      "storage_rights": False}))
+    assert any("all three" in e for e in v.errors)
 
 
 def test_duplicate_chapter_warns():

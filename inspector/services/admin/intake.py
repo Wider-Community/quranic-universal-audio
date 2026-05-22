@@ -80,6 +80,7 @@ def submit(sub: IntakeSubmission, *, requester: Actor) -> tuple[str, IntakeValid
     extra_payload = {
         "reciter_id": sub.reciter_id,
         "source": sub.source.model_dump(mode="json"),
+        "attestations": sub.attestations.model_dump(mode="json"),
     }
     with _sync.durable_transaction():
         rid = repo_requests.submit(
@@ -190,10 +191,6 @@ def accept(
         catalog_service.add_delivery(
             actor=actor, delivery=delivery, reason="accepted intake request",
         )
-        # Stash the contributor's source for the offline ingest pipeline.
-        get_backend().write_json_atomic(
-            storage_paths.intake_source_path(slug), src.model_dump(mode="json"),
-        )
         # Queue for alignment as the requester so auto_claim targets them. The
         # delivery already carries the proposed combination, so no proposed_edits
         # need re-applying on completion — pass an empty set.
@@ -213,6 +210,14 @@ def accept(
             transitioned_by=actor,
             slug=slug,
         )
+    # Stash the contributor's source for the offline ingest pipeline AFTER the
+    # txn commits — a rollback must not leave an orphan sidecar for a slug that
+    # was never created. A committed delivery briefly missing its sidecar is
+    # recoverable (ingest can re-request the source); an orphan file is silent
+    # litter.
+    get_backend().write_json_atomic(
+        storage_paths.intake_source_path(slug), src.model_dump(mode="json"),
+    )
     _invalidate()
     return slug
 

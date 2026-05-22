@@ -49,6 +49,23 @@ class IntakeSource(BaseModel):
     playlist_url: str | None = None
 
 
+class IntakeAttestations(BaseModel):
+    """Contributor confirmations recorded with the submission (audit trail).
+
+    All three must be true to submit — gated client-side and re-checked server-
+    side. Rights to *share* (distribution / reciter permission) and rights to
+    *store* (QUA download + permanent retention) are deliberately separate."""
+
+    model_config = ConfigDict(extra="allow")
+
+    distribution_rights: bool = False
+    links_verified: bool = False
+    storage_rights: bool = False
+
+    def all_true(self) -> bool:
+        return self.distribution_rights and self.links_verified and self.storage_rights
+
+
 class IntakeSubmission(BaseModel):
     """Body of ``POST /api/requests/intake``.
 
@@ -64,6 +81,7 @@ class IntakeSubmission(BaseModel):
     source: IntakeSource
     comments: str | None = Field(default=None, max_length=1000)
     auto_claim: bool = False
+    attestations: IntakeAttestations = Field(default_factory=IntakeAttestations)
 
 
 class IntakeValidation(BaseModel):
