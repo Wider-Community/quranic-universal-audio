@@ -59,6 +59,25 @@
     const ageISO = $derived(row.open_claim?.claimed_at ?? row.state_since ?? null);
     const age = $derived(relativeAge(ageISO));
 
+    // Stale-reviewer signal: any row with an active claim (under_review,
+    // including marked-ready) whose claim opened more than 7 days ago. The
+    // age cell on Available / Published rows tracks ``state_since`` which is
+    // a different concept — we only want this nudge when someone is actively
+    // sitting on a slug. Computed from the same ISO the relative label uses
+    // so they can't disagree.
+    const STALE_THRESHOLD_SECS = 7 * 24 * 60 * 60;
+    function secondsAgo(iso: string | null | undefined): number {
+        if (!iso) return 0;
+        const then = Date.parse(iso);
+        if (Number.isNaN(then)) return 0;
+        return Math.max(0, Math.floor((Date.now() - then) / 1000));
+    }
+    const isStale = $derived(
+        row.state === 'under_review'
+            && !!row.open_claim?.claimed_at
+            && secondsAgo(row.open_claim.claimed_at) > STALE_THRESHOLD_SECS,
+    );
+
     const reviewerLogin = $derived(row.open_claim?.login ?? null);
     const hasReviewer = $derived(reviewerLogin !== null);
 
@@ -134,7 +153,16 @@
         <span class="avatar">{hasReviewer ? initials(reviewerLogin) : ''}</span>
         <span class="who">{hasReviewer ? reviewerLogin : '—'}</span>
     </td>
-    <td class="cell age">{age}</td>
+    <td class="cell age" class:stale={isStale}>
+        {#if isStale}
+            <span
+                class="stale-warn"
+                aria-label="Claim open more than 7 days"
+                title="Claim open more than 7 days — consider reassigning or releasing"
+            >⚠</span>
+        {/if}
+        {age}
+    </td>
     <td class="cell actions">
         <button class="btn" type="button" onclick={onSegments}>Segments</button>
         <button
@@ -268,6 +296,20 @@
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
         text-align: right;
+        white-space: nowrap;
+    }
+    /* Stale-reviewer nudge: any under_review row whose claim opened > 7d ago
+     * surfaces a warning glyph beside the age. The age text itself shifts to
+     * the warning tone so the row scans as "this needs attention" at a
+     * glance, without the visual weight of a dedicated cell. */
+    .cell.age.stale { color: var(--state-error-fg); }
+    .stale-warn {
+        display: inline-block;
+        margin-right: 4px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--state-error-fg);
+        cursor: help;
     }
 
     .cell.actions { white-space: nowrap; }
