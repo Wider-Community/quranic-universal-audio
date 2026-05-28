@@ -1,31 +1,38 @@
 <script lang="ts">
     /**
-     * Admin Reviews compartment (M1: tab shell + list renders).
+     * Admin Reviews compartment.
      *
      * Fetches the per-recitation list once via /api/admin/reviews/list, splits
      * it across four state buckets, and renders a collapsible section per
      * bucket. Section order is fixed by priority: marked-ready first, available
-     * last (and collapsed by default — it's typically the longest tail).
+     * last (collapsed by default — it's typically the longest tail).
      *
      * The state-vs-bucket mapping is computed FE-side from the canonical wire
      * shape; backend deliberately stays state-neutral. See
      * scripts/lib/schemas/admin_reviews.py for the bucket→predicate contract.
      *
-     * Drawer interactions (row body click, action buttons) land in M2/M3 —
-     * for now buttons are visual stubs.
+     * Row body click opens the General drawer (M2). Action button drawers
+     * (Ops) land in M3.
      */
+    import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
     import { fetchAdminReviews } from '../../../../../lib/api/admin-reviews';
     import type {
         AdminReviewRow,
         AdminReviewsResponse,
     } from '../../../../../lib/types/generated/schemas';
+    import ReviewsGeneralDrawer from './ReviewsGeneralDrawer.svelte';
     import ReviewsRow from './ReviewsRow.svelte';
 
     let resp = $state<AdminReviewsResponse | null>(null);
     let loading = $state(true);
     let error = $state<string | null>(null);
 
+    /** Bumping this triggers the fetch effect (used after an admin action
+     * mutates state — the drawer calls back to invalidate). */
+    let refetchSeq = $state(0);
+
     $effect(() => {
+        refetchSeq;  // tracked dep
         const ac = new AbortController();
         loading = true;
         error = null;
@@ -42,6 +49,10 @@
             });
         return () => ac.abort();
     });
+
+    function refetch(): void {
+        refetchSeq += 1;
+    }
 
     // Bucket predicates — see schemas/admin_reviews.py for the contract.
     function isMarkedReady(r: AdminReviewRow): boolean {
@@ -94,7 +105,16 @@
             case 'available': return available;
         }
     }
+
+    // Esc closes the drawer (mirror UsersCompartment's scrim+key dismissal).
+    function onKey(e: KeyboardEvent): void {
+        if (e.key === 'Escape' && reviewsStore.openDrawer !== null) {
+            reviewsStore.close();
+        }
+    }
 </script>
+
+<svelte:window on:keydown={onKey} />
 
 <div class="reviews">
     {#if loading}
@@ -137,6 +157,19 @@
             </section>
         {/each}
     {/if}
+
+    {#if reviewsStore.selectedSlug && reviewsStore.openDrawer === 'general'}
+        <div
+            class="drawer-scrim"
+            role="presentation"
+            onclick={() => reviewsStore.close()}
+        ></div>
+        <ReviewsGeneralDrawer
+            slug={reviewsStore.selectedSlug}
+            onclose={() => reviewsStore.close()}
+            onaction={refetch}
+        />
+    {/if}
 </div>
 
 <style>
@@ -146,6 +179,7 @@
         flex-direction: column;
         padding: var(--s-3) var(--s-5) var(--s-5);
         gap: var(--s-3);
+        height: 100%;
     }
 
     .state {
@@ -216,5 +250,12 @@
         list-style: none;
         padding: 0;
         margin: 0;
+    }
+
+    .drawer-scrim {
+        position: absolute;
+        inset: 0;
+        background: oklch(0.06 0.005 268 / 0.45);
+        z-index: 4;
     }
 </style>

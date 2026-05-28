@@ -26,8 +26,12 @@ from .admin_requests import (
     RequestChange,
 )
 from .admin_reviews import (
+    AdminReviewClaimHistoryEntry,
+    AdminReviewDetail,
     AdminReviewOpenClaim,
     AdminReviewRow,
+    AdminReviewTransition,
+    AdminReviewValidation,
     AdminReviewsResponse,
 )
 from .admin_users import (
@@ -70,8 +74,12 @@ __all__ = [
     "AdminRequestEvent",
     "AdminRequestRow",
     "AdminRequestsResponse",
+    "AdminReviewClaimHistoryEntry",
+    "AdminReviewDetail",
     "AdminReviewOpenClaim",
     "AdminReviewRow",
+    "AdminReviewTransition",
+    "AdminReviewValidation",
     "AdminReviewsResponse",
     "AdminRoleEvent",
     "AdminUserDetail",

@@ -107,11 +107,60 @@ export interface AdminRequestsResponse {
   unviewed_count?: number;
   [k: string]: unknown;
 }
+/**
+ * One claim row (open or closed) for the reviewer-history table.
+ */
+export interface AdminReviewClaimHistoryEntry {
+  assignee_id: string;
+  login?: string | null;
+  claimed_at?: string | null;
+  released_at?: string | null;
+  marked_ready_at?: string | null;
+  close_reason?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * Full per-recitation payload for the General drawer.
+ *
+ * Carries everything except the live validation counts (lazy-loaded via
+ * ``/api/admin/reviews/<slug>/validation`` only when the accordion expands —
+ * ``validate_reciter_segments`` walks the bucket and is too expensive to
+ * eager-fetch on every drawer open).
+ */
+export interface AdminReviewDetail {
+  slug: string;
+  state: string;
+  state_since?: string | null;
+  reciter_id: string;
+  name_ar?: string | null;
+  name_en?: string | null;
+  riwayah: string;
+  style: string;
+  channel: string;
+  current_claim?: AdminReviewOpenClaim | null;
+  claim_history?: AdminReviewClaimHistoryEntry[];
+  transitions?: AdminReviewTransition[];
+  timestamps_job_ids?: string[];
+  [k: string]: unknown;
+}
 export interface AdminReviewOpenClaim {
   assignee_id: string;
   login?: string | null;
   claimed_at?: string | null;
   marked_ready_at?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * One row from the ``transitions`` table, slim-shaped for the timeline.
+ */
+export interface AdminReviewTransition {
+  ts: string;
+  event: string;
+  from_state?: string | null;
+  to_state?: string | null;
+  actor_login?: string | null;
+  actor_role?: string | null;
+  reason?: string | null;
   [k: string]: unknown;
 }
 export interface AdminReviewRow {
@@ -125,6 +174,21 @@ export interface AdminReviewRow {
   style: string;
   channel: string;
   open_claim?: AdminReviewOpenClaim | null;
+  [k: string]: unknown;
+}
+/**
+ * Validation category counts for one slug.
+ *
+ * ``has_data`` is False when ``validate_reciter_segments`` returns None
+ * (no ``detailed.json`` on the bucket yet — typical for fresh
+ * ``awaiting_review`` rows that haven't been touched).
+ */
+export interface AdminReviewValidation {
+  slug: string;
+  category_counts?: {
+    [k: string]: number;
+  };
+  has_data?: boolean;
   [k: string]: unknown;
 }
 export interface AdminReviewsResponse {

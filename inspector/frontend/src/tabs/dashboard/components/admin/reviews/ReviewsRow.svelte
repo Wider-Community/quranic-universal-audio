@@ -5,12 +5,21 @@
      * Single-line dense layout: Arabic name dominant + Latin trailing inline,
      * taxonomy chips (Riwayah · Style · Channel), reviewer (or em-dash on
      * Published rows whose claim closed), age in mono, two action buttons
-     * [Segments] [Ops]. Row body click + button click handlers are stubs
-     * in M1 — wired in M2 (general drawer) and M3 (ops drawer).
+     * [Segments] [Ops].
+     *
+     * - Row body click → General drawer (M2, wired below)
+     * - Segments button → close modal + open the Segments tab with this slug
+     *   pre-selected (uses the existing dashboardState.openDetail helper)
+     * - Ops button → Ops drawer (M3, still a stub)
      */
+    import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
+    import { adminDashboard } from '../../../stores/admin-dashboard.svelte';
+    import { openDetail as openSegmentsDetail } from '../../../stores/dashboard-state';
     import type { AdminReviewRow } from '../../../../../lib/types/generated/schemas';
 
     let { row }: { row: AdminReviewRow } = $props();
+
+    const isActive = $derived(reviewsStore.selectedSlug === row.slug);
 
     function initials(login: string | null | undefined): string {
         if (!login) return '?';
@@ -52,22 +61,26 @@
     const hasReviewer = $derived(reviewerLogin !== null);
 
     function onRowClick(): void {
-        // M2: open General drawer keyed on row.slug
+        reviewsStore.open(row.slug, 'general');
     }
 
     function onOps(e: MouseEvent): void {
         e.stopPropagation();
-        // M3: open Ops drawer keyed on row.slug
+        // M3: reviewsStore.open(row.slug, 'ops')
     }
 
     function onSegments(e: MouseEvent): void {
         e.stopPropagation();
-        // M2: dashboardState.openDetail(row.reciter_id, row.slug) + adminDashboard.close()
+        // Take the user to the Segments tab with this recitation pre-selected,
+        // then dismiss the admin modal so the deep-link lands cleanly.
+        openSegmentsDetail(row.reciter_id, row.slug);
+        adminDashboard.close();
     }
 </script>
 
 <div
     class="row"
+    class:active={isActive}
     role="button"
     tabindex="0"
     onclick={onRowClick}
@@ -115,6 +128,11 @@
     .row:hover { background: var(--panel); }
     .row:focus-visible {
         outline: 0;
+        background: var(--panel);
+        box-shadow: inset 0 0 0 1px var(--accent-tint);
+        border-radius: var(--r-1);
+    }
+    .row.active {
         background: var(--panel);
         box-shadow: inset 0 0 0 1px var(--accent-tint);
         border-radius: var(--r-1);
