@@ -12,7 +12,7 @@
      */
     import { onDestroy, onMount } from 'svelte';
 
-    import { deletePublicActivity } from '../../../lib/api/admin-activity';
+    import { deletePublicActivity } from '../../../lib/api/public-activity-admin';
     import {
         fetchPublicActivity,
         type PublicActivityCard,
@@ -23,7 +23,6 @@
     import { relativeTime } from '../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../lib/utils/visible-poll';
     import AdminDashboardButton from './admin/AdminDashboardButton.svelte';
-    import AdminActivityRail from './AdminActivityRail.svelte';
 
     let cards: PublicActivityCard[] = [];
     let loading = true;
@@ -95,7 +94,6 @@
 
 <div class="rail-wrap">
     <AdminDashboardButton />
-    <AdminActivityRail />
 
     <aside class="activity" aria-label="Recent activity">
         <header>

@@ -94,17 +94,11 @@ def test_resolve_to_archive_and_get_for_slug(fresh_db):
     assert returned[0].reason == "needs better source"
 
 
-def test_activity_dismiss_and_tombstone(fresh_db):
+def test_activity_tombstone(fresh_db):
+    """Per-user dismissals were dropped with the admin notifications rail
+    (migration 0006). Only the global tombstone path remains."""
     seed_user("u1", "alice")
     ch = "abc123def4567890"
-    with db.transaction():
-        repo_activity.dismiss(ch, "u1")
-    assert repo_activity.is_dismissed(ch, "u1") is True
-    assert repo_activity.dismissed_for_user("u1") == {ch}
-    assert repo_activity.is_dismissed(ch, "other") is False
-    with db.transaction():
-        repo_activity.undismiss(ch, "u1")
-    assert repo_activity.is_dismissed(ch, "u1") is False
 
     with db.transaction():
         repo_activity.delete(ch, deleted_by="u1", reason="spam")

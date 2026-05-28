@@ -98,14 +98,17 @@ def test_extra_payload_cannot_override_reserved(fresh_db):
             )
 
 
-# ---- repo_activity: undismiss no-op + get_by_content_hash ----
+# ---- repo_activity: undelete no-op + get_by_content_hash ----
 
 
-def test_undismiss_missing_is_noop(fresh_db):
+def test_undelete_missing_is_noop(fresh_db):
+    """Per-user dismiss/undismiss were removed with the admin notifications
+    rail (migration 0006). Only the global tombstone path remains — verify
+    its undelete is still a safe no-op on an unknown hash."""
     seed_user("u1")
     with db.transaction():
-        repo_activity.undismiss("nonexistent", "u1")  # must not raise
-    assert repo_activity.is_dismissed("nonexistent", "u1") is False
+        repo_activity.undelete("nonexistent")  # must not raise
+    assert repo_activity.is_deleted("nonexistent") is False
 
 
 def test_get_by_content_hash(fresh_db):

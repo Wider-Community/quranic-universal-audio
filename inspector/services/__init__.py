@@ -29,7 +29,6 @@ from .audio import (
 from .activity import (
     activity_classification,
     activity_state,
-    admin_activity,
     history_query,
     public_activity,
     search_normalize,
@@ -74,7 +73,6 @@ _LEGACY_ALIASES = {
     "peaks_history": peaks_history,
     "activity_classification": activity_classification,
     "activity_state": activity_state,
-    "admin_activity": admin_activity,
     "history_query": history_query,
     "public_activity": public_activity,
     "search_normalize": search_normalize,

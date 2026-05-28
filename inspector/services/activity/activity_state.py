@@ -1,10 +1,14 @@
-"""Activity state service: facade over SQLite sidecar tables.
+"""Activity state service: facade over the global-tombstone sidecar.
 
-Per-user dismissals (admin rail) + global tombstones (public rail) live in
-``activity_dismissals`` / ``activity_tombstones`` (``repo_activity``), keyed
-on the transition ``content_hash`` (the same id the FE already holds). The
-audit trail for each mutation is a transition row appended in the same durable
+Owner-only ``delete`` writes a row into ``activity_tombstones`` (keyed on
+the transition ``content_hash`` the FE already holds) so the public-feed
+reader filters the matching audit record out for everyone. The audit trail
+for the mutation is a transition row appended in the same durable
 transaction.
+
+Per-user dismissals were retired alongside the admin notifications rail
+(the Admin dashboard tabs are now the source of admin awareness); only the
+public-feed tombstone path remains.
 """
 
 from __future__ import annotations
@@ -29,48 +33,15 @@ def hydrate() -> None:
 
 
 def snapshot() -> ActivityState:
-    """Reassemble the legacy view (``deleted`` list + ``dismissals`` map)."""
-    return ActivityState(
-        deleted=sorted(repo_activity.deleted_set()),
-        dismissals=repo_activity.all_dismissals(),
-    )
+    """Reassemble the legacy view (``deleted`` list of tombstoned audit_ids)."""
+    return ActivityState(deleted=sorted(repo_activity.deleted_set()))
 
 
 def is_deleted(audit_id: str) -> bool:
     return repo_activity.is_deleted(audit_id)
 
 
-def is_dismissed(audit_id: str, hf_user_id: str) -> bool:
-    return repo_activity.is_dismissed(audit_id, hf_user_id)
-
-
 # ---- Mutations (durable; audit row in the same txn) ----
-
-
-def dismiss(audit_id: str, *, actor: Actor) -> None:
-    """Record a per-user dismissal for ``actor.hf_user_id`` (idempotent)."""
-    with _sync.durable_transaction():
-        if repo_activity.is_dismissed(audit_id, actor.hf_user_id):
-            return
-        repo_activity.dismiss(audit_id, actor.hf_user_id)
-        audit.append(
-            event="activity.dismissed",
-            actor=actor,
-            payload={"audit_id": audit_id},
-        )
-
-
-def undismiss(audit_id: str, *, actor: Actor) -> None:
-    """Remove ``audit_id`` from the caller's dismissals (no-op if absent)."""
-    with _sync.durable_transaction():
-        if not repo_activity.is_dismissed(audit_id, actor.hf_user_id):
-            return
-        repo_activity.undismiss(audit_id, actor.hf_user_id)
-        audit.append(
-            event="activity.undismissed",
-            actor=actor,
-            payload={"audit_id": audit_id},
-        )
 
 
 def delete(audit_id: str, *, actor: Actor, reason: str) -> None:

@@ -1,12 +1,13 @@
 """Tests for ``services/activity_classification``.
 
-Centralised classifier that maps every state-machine event to one of three
-buckets: ``public`` (anyone can see), ``admin_only`` (maintainers + owners),
-or ``hidden`` (off both rails). Public and admin feeds both read from this
-module so the two views can never drift out of sync.
+Centralised classifier that maps every state-machine event to one of two
+buckets: ``public`` (anyone can see) or ``hidden`` (off the rail). The
+admin notifications rail was retired; admin-only events now live in
+``HIDDEN_EVENTS`` (still audited via ``transitions``, just not surfaced
+on a passive feed — the Admin dashboard tabs are the discovery surface).
 
 Also covers ``audit_id`` — a stable content-derived identifier used by
-dismissals and tombstones to point at audit records without mutating the
+the global-tombstone store to point at audit records without mutating the
 append-only audit log.
 """
 
@@ -69,33 +70,25 @@ def test_timestamps_completed_is_hidden_not_public():
     assert ac.classify(_record("reciter.timestamps_completed")) == "hidden"
 
 
-@pytest.mark.parametrize("event,expected_kind", [
-    ("reciter.released", "released"),
-    ("reciter.marked_ready", "marked_ready"),
-    ("reciter.unmarked_ready", "unmarked_ready"),
-    ("reciter.merge_rejected", "merge_rejected"),
-    ("reciter.unpublished", "unpublished"),
-    ("reciter.discarded", "discarded"),
-    ("reciter.undiscarded", "undiscarded"),
-    ("claim.force_released", "force_released"),
-    ("claim.reassigned", "reassigned"),
-    ("admin.unlocked_for_revision", "unlocked_for_revision"),
-])
-def test_admin_only_events_classified(event, expected_kind):
-    from services import activity_classification as ac
-
-    record = _record(event)
-    assert ac.classify(record) == "admin_only"
-    assert ac.ADMIN_ONLY_EVENTS[event] == expected_kind
-
-
 @pytest.mark.parametrize("event", [
+    # Former ADMIN_ONLY_EVENTS — admin notifications rail retired; these
+    # are now hidden (the Admin dashboard tabs cover them).
+    "reciter.released",
+    "reciter.marked_ready",
+    "reciter.unmarked_ready",
+    "reciter.merge_rejected",
+    "reciter.unpublished",
+    "reciter.discarded",
+    "reciter.undiscarded",
+    "claim.force_released",
+    "claim.reassigned",
+    "admin.unlocked_for_revision",
+    # Always hidden.
     "catalog.edited",
     "admin.clear_prefetch_purge_at",
     "access.role_granted",
     "access.role_revoked",
     "access.role_updated",
-    "activity.dismissed",
     "admin.activity_deleted",
 ])
 def test_hidden_events_classified(event):
@@ -105,7 +98,7 @@ def test_hidden_events_classified(event):
 
 
 def test_unknown_event_defaults_to_hidden():
-    """Safe-default: new events not in either allowlist stay off both rails."""
+    """Safe-default: new events not in either allowlist stay off the rail."""
     from services import activity_classification as ac
 
     assert ac.classify(_record("totally.new.event")) == "hidden"
@@ -114,13 +107,12 @@ def test_unknown_event_defaults_to_hidden():
 def test_reciter_requested_is_public_only():
     """Request *review* moved to the Admin dashboard → Requests tab, so
     `reciter.requested` is public-only now: public prose on the rail, no
-    admin-rail card."""
+    admin surface."""
     from services import activity_classification as ac
 
     record = _record("reciter.requested")
     assert ac.classify(record) == "public"
     assert ac.public_kind_for(record) == "requested"
-    assert ac.admin_kind_for(record) is None
 
 
 @pytest.mark.parametrize("event", [
@@ -128,19 +120,18 @@ def test_reciter_requested_is_public_only():
     "reciter.request_rejected_hard",
 ])
 def test_request_reject_events_hidden(event):
-    """Reject outcomes are off both rails (still audited) — they live in the
-    Requests tab now, not the notifications feed."""
+    """Reject outcomes are off the rail (still audited) — they live in the
+    Requests tab now."""
     from services import activity_classification as ac
 
     record = _record(event)
     assert ac.classify(record) == "hidden"
-    assert ac.admin_kind_for(record) is None
     assert ac.public_kind_for(record) is None
 
 
 def test_catalog_conflict_warning_is_hidden():
     """The non-blocking conflict signal emitted by apply_and_archive_completed must not
-    surface on either rail."""
+    surface on the rail."""
     from services import activity_classification as ac
 
     assert ac.classify(_record("catalog.conflict_warning")) == "hidden"
@@ -158,8 +149,7 @@ def test_anti_drift_every_state_handler_is_classified():
     for event in handlers:
         assert ac.is_classified(event), (
             f"state.py registers {event!r} but it isn't classified in "
-            "activity_classification. Add it to PUBLIC_EVENTS, "
-            "ADMIN_ONLY_EVENTS, or HIDDEN_EVENTS."
+            "activity_classification. Add it to PUBLIC_EVENTS or HIDDEN_EVENTS."
         )
 
 

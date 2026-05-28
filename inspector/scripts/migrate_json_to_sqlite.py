@@ -12,7 +12,9 @@ Decomposition:
   pending + 3 archives → requests (status pending|accepted|returned|discarded)
   audit JSONL → transitions (ts/id/content_hash preserved verbatim; slug NULLed
                 if the delivery no longer exists, to satisfy the FK)
-  activity → activity_dismissals / activity_tombstones (keyed on content_hash)
+  activity → activity_tombstones (keyed on content_hash; the legacy per-user
+             dismissals list is dropped — the admin notifications rail it
+             backed has been retired)
 
 Parity is SEMANTIC (list order normalized — repos read slug-sorted), not byte.
 
@@ -138,7 +140,7 @@ def build(src: dict, *, allow_orphans: bool = False) -> dict:
     delivery_slugs = {d.slug for d in catalog.deliveries}
     stats = {k: 0 for k in (
         "users", "roles", "reciters", "deliveries", "states", "claims",
-        "requests", "transitions", "dismissals", "tombstones", "orphans_skipped",
+        "requests", "transitions", "tombstones", "orphans_skipped",
     )}
 
     # idempotency guard: build() only runs against a freshly-migrated empty DB.
@@ -271,6 +273,8 @@ def build(src: dict, *, allow_orphans: bool = False) -> dict:
             stats["transitions"] += 1
 
         # --- activity sidecars ---
+        # Per-user dismissals were dropped with the admin notifications rail;
+        # only the global tombstone list is migrated.
         now_iso = _serde.to_iso(_serde.now())
         for ch in src["activity"].deleted:
             conn.execute(
@@ -278,15 +282,6 @@ def build(src: dict, *, allow_orphans: bool = False) -> dict:
                 (ch, now_iso),
             )
             stats["tombstones"] += 1
-        for hf, hashes in src["activity"].dismissals.items():
-            repo_access.ensure_user(hf)
-            for ch in hashes:
-                conn.execute(
-                    "INSERT OR IGNORE INTO activity_dismissals(audit_content_hash, hf_user_id, ts) "
-                    "VALUES (?,?,?)",
-                    (ch, hf, now_iso),
-                )
-                stats["dismissals"] += 1
 
         # Correct first_seen to the earliest historical evidence now that all
         # users + their role/claim/request/transition rows are inserted (within
@@ -374,9 +369,6 @@ def parity_check(src: dict, *, allow_orphans: bool) -> list[str]:
     # activity sidecars (keyed on content_hash)
     if repo_activity.deleted_set() != set(src["activity"].deleted):
         issues.append("tombstones mismatch")
-    for hf, hashes in src["activity"].dismissals.items():
-        if repo_activity.dismissed_for_user(hf) != set(hashes):
-            issues.append(f"dismissals mismatch for {hf}")
 
     n_tx = conn.execute("SELECT COUNT(*) FROM transitions").fetchone()[0]
     if n_tx != len(src["audit"]):

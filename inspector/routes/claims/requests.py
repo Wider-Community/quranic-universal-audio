@@ -8,7 +8,7 @@ User-facing:
 Admin (maintainer + owner):
 - ``GET  /api/admin/request/<slug>`` — fetch one pending request payload.
   Requester actor identity is included for owners, redacted for maintainers
-  (mirrors the admin-activity-rail redaction pattern).
+  (same tier-based redaction pattern as the Requests tab list endpoint).
 - ``GET  /api/admin/requests?status=open|accepted|returned|discarded`` —
   Requests-tab review queue (catalog-joined, tier-redacted) + facet counts +
   the caller's unviewed-open count.
@@ -147,7 +147,7 @@ def _pending_to_payload(pending, *, owner: bool) -> dict:
     """Serialize a ``PendingRequest`` for the admin review form.
 
     Owners see the full requester actor identity; maintainers see only the
-    role. Mirrors ``services.admin_activity._to_card`` tier-aware shape.
+    role — same tier-based redaction the Requests-tab list endpoint applies.
     """
     payload = {
         "slug": pending.slug,

@@ -19,8 +19,8 @@
 
     // Two independent pollers — failure of one (e.g. transient 5xx) doesn't
     // blank the other's dot. Same 30s cadence; Page-Visibility-aware via
-    // visiblePoll so background tabs don't churn. Idempotent guards mirror
-    // AdminActivityRail's reactive-start pattern.
+    // visiblePoll so background tabs don't churn. Idempotent guards keep
+    // the pollers stable across dev role-switcher flips.
     $effect(() => {
         if (!$isAdmin) return;
         if (teardownRequests === null) {

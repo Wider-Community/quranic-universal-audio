@@ -1,11 +1,10 @@
 -- Inspector SQLite substrate — migration 0004.
 --
--- Per-admin "viewed" marks for requests. Mirrors activity_dismissals
--- (migration 0001): a (request, admin) pair, written the first time an admin
--- inline-expands a request in the Admin dashboard → Requests tab. A pending
--- request is "unviewed" for an admin until such a row exists; that drives the
--- per-admin unviewed-count badge on the Requests tab + the dot on the
--- Admin-dashboard entry button.
+-- Per-admin "viewed" marks for requests. A (request, admin) pair, written
+-- the first time an admin inline-expands a request in the Admin dashboard →
+-- Requests tab. A pending request is "unviewed" for an admin until such a
+-- row exists; that drives the per-admin unviewed-count badge on the
+-- Requests tab + the dot on the Admin-dashboard entry button.
 --
 -- Conventions match 0001: TEXT ISO-8601 timestamps, no transaction control
 -- (the migration runner wraps the script in BEGIN/COMMIT + the user_version

@@ -1,5 +1,5 @@
 """One-shot JSON→SQLite migration: decomposition, parity, and the
-activity↔transition content_hash linkage that dismissals/tombstones depend on."""
+activity↔transition content_hash linkage that the global tombstone store depends on."""
 
 from __future__ import annotations
 
@@ -107,8 +107,10 @@ def seeded_bucket(tmp_path):
     rec = _audit_record()
     aid = activity_classification.audit_id(rec)
     backend.append_jsonl(sp.audit_partition_path(TS), rec)
+    # Legacy ``dismissals`` field was dropped with the admin notifications rail;
+    # only the global tombstone list survives the migration.
     backend.write_json_atomic(sp.activity_state_path(), ActivityState(
-        deleted=[aid], dismissals={"owner1": [aid]}).model_dump(mode="json"))
+        deleted=[aid]).model_dump(mode="json"))
 
     yield {"backend": backend, "audit_id": aid}
     db.reset()
@@ -145,9 +147,9 @@ def test_activity_links_to_transition_by_content_hash(seeded_bucket):
     tx = repo_transitions.get_by_content_hash(aid)
     assert tx is not None and tx["event"] == "reciter.released"
     assert tx["content_hash"] == aid
-    # tombstone + dismissal survived and point at that hash
+    # tombstone survived and points at that hash (per-user dismissals were
+    # dropped with the admin notifications rail in migration 0006)
     assert repo_activity.is_deleted(aid) is True
-    assert repo_activity.is_dismissed(aid, "owner1") is True
 
 
 def test_rerun_aborts_on_nonempty_db(seeded_bucket):

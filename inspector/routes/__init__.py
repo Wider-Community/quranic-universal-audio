@@ -18,7 +18,7 @@ def register_blueprints(app):
     """Register all route blueprints on the Flask app."""
     from routes.admin.access import access_admin_bp
     from routes.admin.actions import admin_actions_bp
-    from routes.admin.activity import admin_activity_bp, public_activity_admin_bp
+    from routes.admin.activity import public_activity_admin_bp
     from routes.admin.reviews import admin_reviews_bp
     from routes.admin.users import admin_users_bp
     from routes.auth.auth import auth_bp
@@ -45,7 +45,6 @@ def register_blueprints(app):
     app.register_blueprint(public_bp)
     app.register_blueprint(access_admin_bp)
     app.register_blueprint(admin_actions_bp)
-    app.register_blueprint(admin_activity_bp)
     app.register_blueprint(public_activity_admin_bp)
     app.register_blueprint(admin_reviews_bp)
     app.register_blueprint(admin_users_bp)
