@@ -1,10 +1,11 @@
 /**
  * Admin dashboard modal state (Svelte 5 rune store — the repo's first).
- * Owns open/closed + the active compartment tab. Future compartments
- * (requests / to_publish / permissions) slot into the `AdminTab` union.
+ * Owns open/closed + the active compartment tab. Future compartments slot
+ * into the `AdminTab` union (currently: users · requests · reviews ·
+ * permissions; reviews replaced the disabled `to_publish` placeholder).
  */
 
-export type AdminTab = 'users' | 'requests' | 'to_publish' | 'permissions';
+export type AdminTab = 'users' | 'requests' | 'reviews' | 'permissions';
 
 /** Sortable columns in the Users table (clicking a header sorts by these). */
 export type UsersSortKey =

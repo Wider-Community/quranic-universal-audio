@@ -17,6 +17,11 @@ from .admin_requests import (
     AdminRequestsResponse,
     RequestChange,
 )
+from .admin_reviews import (
+    AdminReviewOpenClaim,
+    AdminReviewRow,
+    AdminReviewsResponse,
+)
 from .admin_users import (
     AdminActiveClaim,
     AdminActivityEvent,
@@ -91,6 +96,9 @@ __all__ = [
     "AdminRequestEvent",
     "AdminRequestRow",
     "AdminRequestsResponse",
+    "AdminReviewOpenClaim",
+    "AdminReviewRow",
+    "AdminReviewsResponse",
     "AdminRoleEvent",
     "AdminUserDetail",
     "AdminUserRow",

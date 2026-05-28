@@ -4,12 +4,13 @@
     import Modal from '../../../../lib/components/Modal.svelte';
     import { adminDashboard, type AdminTab } from '../../stores/admin-dashboard.svelte';
     import RequestsCompartment from './RequestsCompartment.svelte';
+    import ReviewsCompartment from './reviews/ReviewsCompartment.svelte';
     import UsersCompartment from './UsersCompartment.svelte';
 
     const TABS: { id: AdminTab; label: string; enabled: boolean }[] = [
         { id: 'users', label: 'Users', enabled: true },
         { id: 'requests', label: 'Requests', enabled: true },
-        { id: 'to_publish', label: 'To publish', enabled: false },
+        { id: 'reviews', label: 'Reviews', enabled: true },
         { id: 'permissions', label: 'Permissions', enabled: false },
     ];
 </script>
@@ -44,6 +45,8 @@
         <UsersCompartment />
     {:else if adminDashboard.activeTab === 'requests'}
         <RequestsCompartment />
+    {:else if adminDashboard.activeTab === 'reviews'}
+        <ReviewsCompartment />
     {/if}
 </Modal>
 

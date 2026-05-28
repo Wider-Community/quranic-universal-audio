@@ -107,6 +107,30 @@ export interface AdminRequestsResponse {
   unviewed_count?: number;
   [k: string]: unknown;
 }
+export interface AdminReviewOpenClaim {
+  assignee_id: string;
+  login?: string | null;
+  claimed_at?: string | null;
+  marked_ready_at?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminReviewRow {
+  slug: string;
+  state: string;
+  state_since?: string | null;
+  reciter_id: string;
+  name_ar?: string | null;
+  name_en?: string | null;
+  riwayah: string;
+  style: string;
+  channel: string;
+  open_claim?: AdminReviewOpenClaim | null;
+  [k: string]: unknown;
+}
+export interface AdminReviewsResponse {
+  rows?: AdminReviewRow[];
+  [k: string]: unknown;
+}
 export interface AdminRoleEvent {
   role: string;
   granted_at?: string | null;
