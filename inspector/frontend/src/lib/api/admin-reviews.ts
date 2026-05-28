@@ -97,3 +97,77 @@ export async function forceReleaseClaim(slug: string, reason: string): Promise<v
 export async function sendBackToUnderReview(slug: string, reason: string): Promise<void> {
     return postWithReason(`/api/admin/send-back/${encodeURIComponent(slug)}`, reason);
 }
+
+// ---- Reviewer popover: lookup + reassign ----
+//
+// Both surfaces drive the owner-only "click the current reviewer → change or
+// remove" popover in the General drawer. ``UserCard`` mirrors the response
+// shape of ``/api/admin/users/lookup`` (and the ``to_user`` field of the
+// reassign route). Not yet formalised in ``scripts/lib/schemas/`` — promote
+// when a second surface starts consuming it.
+
+export interface UserCard {
+    hf_user_id: string;
+    login: string;
+    fullname: string | null;
+    avatar_url: string | null;
+}
+
+/**
+ * Resolve a free-text HF login → ``UserCard``. Returns ``null`` on 404
+ * (unknown login — typo); throws with the server ``error`` string on 502
+ * (transport failure) or any other non-200.
+ */
+export async function lookupUser(
+    login: string,
+    signal?: AbortSignal,
+): Promise<UserCard | null> {
+    const resp = await fetch('/api/admin/users/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login }),
+        signal,
+    });
+    if (resp.status === 404) return null;
+    if (!resp.ok) {
+        let msg = `HTTP ${resp.status}`;
+        try {
+            const body = (await resp.json()) as { error?: string };
+            if (body?.error) msg = body.error;
+        } catch {
+            /* non-JSON body — keep status fallback */
+        }
+        throw new Error(msg);
+    }
+    return (await resp.json()) as UserCard;
+}
+
+/**
+ * Reassign the open claim on ``slug`` to a different reviewer (owner-only).
+ * Mirrors ``forceReleaseClaim`` shape — throws the server ``error`` string
+ * verbatim on failure so the caller can surface it inline.
+ */
+export async function reassignClaim(
+    slug: string,
+    to_login: string,
+    reason: string,
+): Promise<void> {
+    const resp = await fetch(
+        `/api/admin/claim/reassign/${encodeURIComponent(slug)}`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to_login, reason }),
+        },
+    );
+    if (!resp.ok) {
+        let msg = `HTTP ${resp.status}`;
+        try {
+            const body = (await resp.json()) as { error?: string };
+            if (body?.error) msg = body.error;
+        } catch {
+            /* non-JSON body — keep status fallback */
+        }
+        throw new Error(msg);
+    }
+}

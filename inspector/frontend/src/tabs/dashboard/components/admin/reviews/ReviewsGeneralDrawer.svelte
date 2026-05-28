@@ -15,13 +15,14 @@
     import {
         fetchAdminReviewDetail,
         fetchAdminReviewValidation,
-        forceReleaseClaim,
     } from '../../../../../lib/api/admin-reviews';
+    import { isOwner } from '../../../../../lib/stores/current-user';
     import type {
         AdminReviewDetail,
         AdminReviewValidation,
     } from '../../../../../lib/types/generated/schemas';
     import ExpandedTimeline from './ExpandedTimeline.svelte';
+    import ReviewerActionsPopover from './ReviewerActionsPopover.svelte';
 
     let {
         slug,
@@ -38,10 +39,10 @@
     let loading = $state(true);
     let error = $state<string | null>(null);
 
-    let removing = $state(false);
-    let removeReason = $state('');
-    let removeError = $state<string | null>(null);
-    let confirmingRemove = $state(false);
+    /** Owner-only reviewer-actions popover (Change / Remove). The trigger is
+     * the current-reviewer chip; the popover handles its own dismissal +
+     * fires ``onaction`` on success so the drawer + parent list refetch. */
+    let popoverOpen = $state(false);
 
     let valExpanded = $state(false);
     let validation = $state<AdminReviewValidation | null>(null);
@@ -56,9 +57,7 @@
         loading = true;
         error = null;
         detail = null;
-        removeError = null;
-        confirmingRemove = false;
-        removeReason = '';
+        popoverOpen = false;
         valExpanded = false;
         validation = null;
         valError = null;
@@ -170,29 +169,18 @@
         if (valExpanded) void loadValidation();
     }
 
-    async function confirmRemove(): Promise<void> {
-        if (!detail?.current_claim) return;
-        const reason = removeReason.trim();
-        if (reason.length < 4) {
-            removeError = 'reason must be at least 4 characters';
-            return;
-        }
-        removing = true;
-        removeError = null;
+    /** Fired by the popover after a successful Reassign / Force-release.
+     * Refetch the drawer detail in place so the current-claim block reflects
+     * the new state, then bubble up to the parent so the list refetches. */
+    async function onReviewerActionDone(): Promise<void> {
         try {
-            await forceReleaseClaim(slug, reason);
-            // Refetch detail in place so the drawer reflects the new state; the
-            // caller will also refetch its list.
-            confirmingRemove = false;
-            removeReason = '';
             const fresh = await fetchAdminReviewDetail(slug);
             if (fresh !== null) detail = fresh;
-            onaction?.();
-        } catch (e) {
-            removeError = (e as Error).message ?? 'Failed to remove reviewer';
-        } finally {
-            removing = false;
+        } catch {
+            /* drawer's bottom-level error already surfaces stale data; the
+             * parent list refetch is the durable reconciliation path */
         }
+        onaction?.();
     }
 </script>
 
@@ -227,62 +215,54 @@
             <section class="dsection">
                 <h3 class="dsection-head">Current reviewer</h3>
                 {#if detail.current_claim}
-                    <div class="current-claim">
-                        <span class="avatar">{initials(detail.current_claim.login)}</span>
-                        <div class="meta">
-                            <div class="who">{detail.current_claim.login ?? detail.current_claim.assignee_id}</div>
-                            <div class="since">
-                                claimed {fmtDate(detail.current_claim.claimed_at)} · {fmtRelative(detail.current_claim.claimed_at)}
-                                {#if detail.current_claim.marked_ready_at}
-                                    · marked ready {fmtRelative(detail.current_claim.marked_ready_at)}
-                                {/if}
-                            </div>
-                        </div>
-                        {#if !confirmingRemove}
+                    <div class="claim-wrap">
+                        {#if $isOwner}
                             <button
-                                class="release-btn"
+                                class="current-claim clickable"
+                                class:open={popoverOpen}
                                 type="button"
-                                onclick={() => (confirmingRemove = true)}
-                            >Remove</button>
+                                onclick={() => (popoverOpen = !popoverOpen)}
+                                aria-haspopup="dialog"
+                                aria-expanded={popoverOpen}
+                                title="Click to change or remove the reviewer"
+                            >
+                                <span class="avatar">{initials(detail.current_claim.login)}</span>
+                                <div class="meta">
+                                    <div class="who">{detail.current_claim.login ?? detail.current_claim.assignee_id}</div>
+                                    <div class="since">
+                                        claimed {fmtDate(detail.current_claim.claimed_at)} · {fmtRelative(detail.current_claim.claimed_at)}
+                                        {#if detail.current_claim.marked_ready_at}
+                                            · marked ready {fmtRelative(detail.current_claim.marked_ready_at)}
+                                        {/if}
+                                    </div>
+                                </div>
+                                <span class="caret" aria-hidden="true">▾</span>
+                            </button>
+                            {#if popoverOpen}
+                                <ReviewerActionsPopover
+                                    {slug}
+                                    currentLogin={detail.current_claim.login ?? null}
+                                    onclose={() => (popoverOpen = false)}
+                                    onaction={onReviewerActionDone}
+                                />
+                            {/if}
+                        {:else}
+                            <!-- Maintainers see the reviewer display as static
+                                 text; claim mutations are owner-only. -->
+                            <div class="current-claim">
+                                <span class="avatar">{initials(detail.current_claim.login)}</span>
+                                <div class="meta">
+                                    <div class="who">{detail.current_claim.login ?? detail.current_claim.assignee_id}</div>
+                                    <div class="since">
+                                        claimed {fmtDate(detail.current_claim.claimed_at)} · {fmtRelative(detail.current_claim.claimed_at)}
+                                        {#if detail.current_claim.marked_ready_at}
+                                            · marked ready {fmtRelative(detail.current_claim.marked_ready_at)}
+                                        {/if}
+                                    </div>
+                                </div>
+                            </div>
                         {/if}
                     </div>
-                    {#if confirmingRemove}
-                        <div class="confirm-slot">
-                            <div class="confirm-q">
-                                Force-release this claim? The reviewer is removed; the recitation returns to <em>Available for review</em>.
-                            </div>
-                            <label class="reason">
-                                <span>Reason</span>
-                                <input
-                                    type="text"
-                                    bind:value={removeReason}
-                                    placeholder="Why are you removing the claim?"
-                                    disabled={removing}
-                                />
-                            </label>
-                            {#if removeError}
-                                <div class="confirm-error" role="alert">{removeError}</div>
-                            {/if}
-                            <div class="confirm-actions">
-                                <button
-                                    class="btn-confirm"
-                                    type="button"
-                                    onclick={confirmRemove}
-                                    disabled={removing}
-                                >{removing ? 'Removing…' : 'Force-release'}</button>
-                                <button
-                                    class="btn-cancel"
-                                    type="button"
-                                    onclick={() => {
-                                        confirmingRemove = false;
-                                        removeReason = '';
-                                        removeError = null;
-                                    }}
-                                    disabled={removing}
-                                >Cancel</button>
-                            </div>
-                        </div>
-                    {/if}
                 {:else}
                     <div class="empty-block">No open claim on this recitation.</div>
                 {/if}
@@ -493,14 +473,37 @@
         text-transform: none;
     }
 
-    /* current claim */
+    /* current claim — owner-clickable trigger or maintainer-static display.
+     * .claim-wrap holds the relative-positioning anchor for the absolute
+     * popover; mirrors RolePicker's .rp-wrap pattern. */
+    .claim-wrap {
+        position: relative;
+        display: block;
+    }
     .current-claim {
         display: flex;
         align-items: center;
         gap: var(--s-3);
+        width: 100%;
         padding: var(--s-3);
         background: var(--panel-2);
+        border: 1px solid transparent;
         border-radius: var(--r-2);
+        text-align: left;
+        font: inherit;
+        color: inherit;
+    }
+    /* Only owners get the clickable affordance — subtle hover ring matches
+     * RolePicker's .rp-trigger:hover treatment so the click target reads
+     * the same as the role pill on other surfaces. */
+    .current-claim.clickable {
+        cursor: pointer;
+        transition: border-color var(--t-fast), background var(--t-fast);
+    }
+    .current-claim.clickable:hover,
+    .current-claim.clickable.open {
+        border-color: var(--accent-tint);
+        background: var(--panel);
     }
     .current-claim .meta { flex: 1; min-width: 0; }
     .current-claim .who {
@@ -512,6 +515,14 @@
         color: var(--text-muted);
         margin-top: 2px;
     }
+    .current-claim .caret {
+        font-size: 10px;
+        color: var(--text-faint);
+        line-height: 1;
+        flex-shrink: 0;
+    }
+    .current-claim.clickable:hover .caret { color: var(--text-muted); }
+
     .avatar {
         width: 28px; height: 28px;
         border-radius: 50%;
@@ -525,94 +536,6 @@
         flex: 0 0 auto;
     }
     .avatar.small { width: 22px; height: 22px; font-size: 10px; background: var(--panel-2); color: var(--text-muted); }
-    .release-btn {
-        background: transparent;
-        border: 1px solid var(--border-default);
-        color: var(--text-secondary);
-        font: inherit;
-        font-size: var(--fs-meta);
-        padding: 4px 12px;
-        border-radius: var(--r-1);
-        cursor: pointer;
-        transition: color var(--t-fast), border-color var(--t-fast);
-    }
-    .release-btn:hover {
-        color: var(--state-error-fg);
-        border-color: var(--state-error-fg);
-    }
-
-    /* confirm slot */
-    .confirm-slot {
-        background: var(--accent-tint-soft);
-        border: 1px solid var(--accent-tint);
-        border-radius: var(--r-2);
-        padding: var(--s-3);
-        margin-top: var(--s-2);
-    }
-    .confirm-slot .confirm-q {
-        font-size: var(--fs-body);
-        color: var(--text-primary);
-        margin-bottom: var(--s-2);
-        line-height: 1.45;
-    }
-    .confirm-slot em { font-style: normal; color: var(--accent-strong); }
-    .confirm-slot .reason {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        margin-bottom: var(--s-2);
-    }
-    .confirm-slot .reason span {
-        font-size: 10.5px;
-        color: var(--text-faint);
-        font-family: var(--font-mono);
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-    }
-    .confirm-slot input {
-        background: var(--canvas);
-        border: 1px solid var(--border-quiet);
-        border-radius: var(--r-1);
-        padding: 6px 10px;
-        color: var(--text-primary);
-        font: inherit;
-        font-size: var(--fs-body);
-    }
-    .confirm-slot input:focus {
-        outline: 0;
-        border-color: var(--accent-tint);
-        box-shadow: 0 0 0 2px var(--accent-tint-soft);
-    }
-    .confirm-error {
-        color: var(--state-error-fg);
-        font-size: var(--fs-meta);
-        margin-bottom: var(--s-2);
-    }
-    .confirm-actions { display: flex; gap: var(--s-2); }
-    .btn-confirm {
-        background: var(--accent);
-        color: var(--accent-fg);
-        border: 0;
-        padding: 5px 14px;
-        border-radius: var(--r-1);
-        cursor: pointer;
-        font: inherit;
-        font-size: var(--fs-meta);
-        font-weight: 500;
-    }
-    .btn-confirm:hover:not(:disabled) { background: var(--accent-strong); }
-    .btn-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
-    .btn-cancel {
-        background: transparent;
-        color: var(--text-secondary);
-        border: 1px solid var(--border-default);
-        padding: 4px 14px;
-        border-radius: var(--r-1);
-        cursor: pointer;
-        font: inherit;
-        font-size: var(--fs-meta);
-    }
-    .btn-cancel:disabled { opacity: 0.6; cursor: not-allowed; }
 
     /* reviewer history */
     .history-list { list-style: none; padding: 0; margin: 0; }

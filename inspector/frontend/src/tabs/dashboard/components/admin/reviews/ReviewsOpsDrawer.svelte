@@ -17,6 +17,7 @@
         forceReleaseClaim,
         sendBackToUnderReview,
     } from '../../../../../lib/api/admin-reviews';
+    import { isOwner } from '../../../../../lib/stores/current-user';
     import type { AdminReviewDetail } from '../../../../../lib/types/generated/schemas';
 
     let {
@@ -165,27 +166,36 @@
                 </div>
             {/if}
 
-            <!-- UNDER REVIEW (not marked-ready): force-release only. -->
+            <!-- UNDER REVIEW (not marked-ready): force-release only.
+                 Owner-only — maintainers see an explainer in lieu of an
+                 actionable button. The General drawer's reviewer popover
+                 is the canonical entry point for both Change and Remove. -->
             {#if currentState === 'under_review' && !markedReady}
                 <section class="dsection">
                     <h3 class="dsection-head">State</h3>
-                    <div class="ops-actions">
-                        <button
-                            class="ops-action danger"
-                            type="button"
-                            onclick={() => arm('force_release')}
-                            disabled={busy}
-                        >
-                            <div>
-                                <span class="name">Force-release claim</span>
-                                <span class="hint">Closes the open claim; recitation returns to <em>Available for review</em>.</span>
-                            </div>
-                            <span class="arrow">→</span>
-                        </button>
-                        {#if armed === 'force_release'}
-                            {@render confirmSlot('Force-release', 'Force-release this claim?')}
-                        {/if}
-                    </div>
+                    {#if $isOwner}
+                        <div class="ops-actions">
+                            <button
+                                class="ops-action danger"
+                                type="button"
+                                onclick={() => arm('force_release')}
+                                disabled={busy}
+                            >
+                                <div>
+                                    <span class="name">Force-release claim</span>
+                                    <span class="hint">Closes the open claim; recitation returns to <em>Available for review</em>. Tip: the General drawer also lets you click the reviewer to Change or Remove inline.</span>
+                                </div>
+                                <span class="arrow">→</span>
+                            </button>
+                            {#if armed === 'force_release'}
+                                {@render confirmSlot('Force-release', 'Force-release this claim?')}
+                            {/if}
+                        </div>
+                    {:else}
+                        <div class="empty-block">
+                            No admin actions available — claim management is <em>owner-only</em>. Escalate to an owner to force-release or reassign.
+                        </div>
+                    {/if}
                 </section>
             {/if}
 
@@ -221,20 +231,24 @@
                         {#if armed === 'send_back_ur'}
                             {@render confirmSlot('Send back to UR', 'Clear marked-ready on this claim?')}
                         {/if}
-                        <button
-                            class="ops-action"
-                            type="button"
-                            onclick={() => arm('send_back_available')}
-                            disabled={busy}
-                        >
-                            <div>
-                                <span class="name">Send back to available</span>
-                                <span class="hint">Release the claim and unmark ready; recitation returns to <em>Available for review</em>.</span>
-                            </div>
-                            <span class="arrow">→</span>
-                        </button>
-                        {#if armed === 'send_back_available'}
-                            {@render confirmSlot('Send back to available', 'Force-release this claim and unmark ready?')}
+                        <!-- Send-back-to-available calls force-release under
+                             the hood — owner-only for the same reason. -->
+                        {#if $isOwner}
+                            <button
+                                class="ops-action"
+                                type="button"
+                                onclick={() => arm('send_back_available')}
+                                disabled={busy}
+                            >
+                                <div>
+                                    <span class="name">Send back to available</span>
+                                    <span class="hint">Release the claim and unmark ready; recitation returns to <em>Available for review</em>. <span class="owner-tag">owner-only</span></span>
+                                </div>
+                                <span class="arrow">→</span>
+                            </button>
+                            {#if armed === 'send_back_available'}
+                                {@render confirmSlot('Send back to available', 'Force-release this claim and unmark ready?')}
+                            {/if}
                         {/if}
                     </div>
                 </section>
@@ -439,6 +453,19 @@
         line-height: 1.45;
     }
     .ops-action .hint em { color: var(--accent-strong); font-style: normal; }
+    .ops-action .hint .owner-tag {
+        display: inline-block;
+        margin-left: 6px;
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--accent-strong);
+        background: var(--accent-tint-soft);
+        border-radius: 999px;
+        padding: 1px 6px;
+        vertical-align: 1px;
+    }
     .ops-action .arrow {
         margin-left: auto;
         color: var(--text-faint);
