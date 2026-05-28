@@ -62,13 +62,31 @@
     const reviewerLogin = $derived(row.open_claim?.login ?? null);
     const hasReviewer = $derived(reviewerLogin !== null);
 
+    // Marked-ready unread dot — server-authoritative ``row.unread``, AND
+    // suppressed locally the moment any drawer for this slug opens (the
+    // session-set drop hides the dot before the optimistic POST returns).
+    const showUnread = $derived(
+        !!row.unread && !reviewsStore.isViewedThisSession(row.slug),
+    );
+
+    /** Open a drawer and, on the first open for this slug, optimistically
+     * decrement the dashboard counter so the entry-button dot / tab pill
+     * also drop in sync. The compartment's next fetch reconciles. */
+    function openDrawer(kind: 'general' | 'ops'): void {
+        const wasUnread = showUnread;
+        reviewsStore.open(row.slug, kind);
+        if (wasUnread) {
+            adminDashboard.setUnviewedReviews(adminDashboard.unviewedReviews - 1);
+        }
+    }
+
     function onRowClick(): void {
-        reviewsStore.open(row.slug, 'general');
+        openDrawer('general');
     }
 
     function onOps(e: MouseEvent): void {
         e.stopPropagation();
-        reviewsStore.open(row.slug, 'ops');
+        openDrawer('ops');
     }
 
     function onSegments(e: MouseEvent): void {
@@ -98,6 +116,9 @@
 >
     <td class="cell reciter">
         <div class="reciter-inner">
+            {#if showUnread}
+                <span class="unread" aria-label="new marked-ready" title="New marked ready"></span>
+            {/if}
             {#if row.name_en}
                 <span class="reciter-lt">{row.name_en}</span>
             {/if}
@@ -159,6 +180,17 @@
         gap: var(--s-3);
         min-width: 0;
         overflow: hidden;
+    }
+    /* Unread mark — mirrors the Requests-tab .unread dot for visual parity.
+     * Centered against the row baseline (baseline alignment on the flex
+     * parent would push it under the text), so override to center. */
+    .reciter-inner .unread {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        flex-shrink: 0;
+        align-self: center;
     }
     .reciter-lt {
         font-size: 14px;

@@ -23,6 +23,11 @@ class AdminDashboardStore {
      * the dot on the entry button. Polled by the button; refreshed by the
      * Requests compartment on load/view/resolve so both surfaces agree. */
     unviewedRequests = $state(0);
+    /** Caller's unviewed marked-ready review count. Drives the Reviews tab
+     * pill + (combined with ``unviewedRequests``) the entry-button dot.
+     * Polled by the button; refreshed by ReviewsCompartment on fetch + by
+     * the reviews store on optimistic drawer-open. */
+    unviewedReviews = $state(0);
 
     openModal(tab: AdminTab = 'users'): void {
         this.activeTab = tab;
@@ -39,6 +44,10 @@ class AdminDashboardStore {
 
     setUnviewedRequests(n: number): void {
         this.unviewedRequests = Math.max(0, n);
+    }
+
+    setUnviewedReviews(n: number): void {
+        this.unviewedReviews = Math.max(0, n);
     }
 }
 

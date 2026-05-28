@@ -1,33 +1,65 @@
 <script lang="ts">
     /** Trigger above the Admin notifications rail. Visible to maintainers +
-     * owners ($isAdmin); opens the admin dashboard modal. Carries a quiet dot
-     * (no number) when the caller has unviewed open requests — polled from
-     * /api/admin/requests/unviewed-count and shared via the dashboard store. */
+     * owners ($isAdmin); opens the admin dashboard modal. Carries a single
+     * quiet dot (no number) when the caller has any unviewed admin work —
+     * polled in parallel from /api/admin/requests/unviewed-count and
+     * /api/admin/reviews/unviewed-count and OR'd via the dashboard store.
+     * One dot keeps the trigger calm; the per-tab pills inside the modal
+     * differentiate which surface needs attention. */
     import { onDestroy } from 'svelte';
 
     import { fetchUnviewedRequestCount } from '../../../../lib/api/admin-requests';
+    import { fetchUnviewedReviewCount } from '../../../../lib/api/admin-reviews';
     import { isAdmin } from '../../../../lib/stores/current-user';
     import { visiblePoll } from '../../../../lib/utils/visible-poll';
     import { adminDashboard } from '../../stores/admin-dashboard.svelte';
 
-    let teardown: (() => void) | null = null;
+    let teardownRequests: (() => void) | null = null;
+    let teardownReviews: (() => void) | null = null;
 
-    // Start polling once the caller is admin. Guard keeps it idempotent so the
-    // dev role-switcher flipping admin → contributor → admin doesn't stack
-    // pollers (mirrors AdminActivityRail's reactive-start pattern).
+    // Two independent pollers — failure of one (e.g. transient 5xx) doesn't
+    // blank the other's dot. Same 30s cadence; Page-Visibility-aware via
+    // visiblePoll so background tabs don't churn. Idempotent guards mirror
+    // AdminActivityRail's reactive-start pattern.
     $effect(() => {
-        if (!$isAdmin || teardown !== null) return;
-        teardown = visiblePoll<number>({
-            intervalMs: 30_000,
-            fetcher: (signal) => fetchUnviewedRequestCount(signal),
-            onResult: (n) => adminDashboard.setUnviewedRequests(n),
-            onError: () => {},
-        });
+        if (!$isAdmin) return;
+        if (teardownRequests === null) {
+            teardownRequests = visiblePoll<number>({
+                intervalMs: 30_000,
+                fetcher: (signal) => fetchUnviewedRequestCount(signal),
+                onResult: (n) => adminDashboard.setUnviewedRequests(n),
+                onError: () => {},
+            });
+        }
+        if (teardownReviews === null) {
+            teardownReviews = visiblePoll<number>({
+                intervalMs: 30_000,
+                fetcher: (signal) => fetchUnviewedReviewCount(signal),
+                onResult: (n) => adminDashboard.setUnviewedReviews(n),
+                onError: () => {},
+            });
+        }
     });
 
-    onDestroy(() => teardown?.());
+    onDestroy(() => {
+        teardownRequests?.();
+        teardownReviews?.();
+    });
 
-    const hasUnviewed = $derived(adminDashboard.unviewedRequests > 0);
+    const unviewedRequests = $derived(adminDashboard.unviewedRequests);
+    const unviewedReviews = $derived(adminDashboard.unviewedReviews);
+    const hasUnviewed = $derived(unviewedRequests > 0 || unviewedReviews > 0);
+
+    const dotLabel = $derived.by(() => {
+        const parts: string[] = [];
+        if (unviewedRequests > 0) {
+            parts.push(`${unviewedRequests} unviewed request${unviewedRequests === 1 ? '' : 's'}`);
+        }
+        if (unviewedReviews > 0) {
+            parts.push(`${unviewedReviews} marked-ready review${unviewedReviews === 1 ? '' : 's'}`);
+        }
+        return parts.join(' · ');
+    });
 </script>
 
 {#if $isAdmin}
@@ -42,8 +74,8 @@
         {#if hasUnviewed}
             <span
                 class="notif-dot"
-                aria-label={`${adminDashboard.unviewedRequests} unviewed request${adminDashboard.unviewedRequests === 1 ? '' : 's'}`}
-                title="Unviewed requests"
+                aria-label={dotLabel}
+                title={dotLabel}
             ></span>
         {/if}
     </button>

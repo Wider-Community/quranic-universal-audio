@@ -20,6 +20,7 @@
         AdminReviewRow,
         AdminReviewsResponse,
     } from '../../../../../lib/types/generated/schemas';
+    import { adminDashboard } from '../../../stores/admin-dashboard.svelte';
     import ReviewsGeneralDrawer from './ReviewsGeneralDrawer.svelte';
     import ReviewsOpsDrawer from './ReviewsOpsDrawer.svelte';
     import ReviewsRow from './ReviewsRow.svelte';
@@ -42,6 +43,11 @@
                 if (ac.signal.aborted) return;
                 resp = r;
                 loading = false;
+                // Sync the dashboard-wide marked-ready counter so the entry-
+                // button dot and the Reviews-tab pill agree with the freshly
+                // fetched list — also reconciles any drift from optimistic
+                // decrements on drawer open.
+                adminDashboard.setUnviewedReviews(r.unviewed_marked_ready ?? 0);
             })
             .catch((e: unknown) => {
                 if (ac.signal.aborted) return;
