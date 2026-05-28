@@ -81,7 +81,6 @@ def test_timestamps_completed_is_hidden_not_public():
     ("reciter.undiscarded", "undiscarded"),
     ("claim.force_released", "force_released"),
     ("claim.reassigned", "reassigned"),
-    ("admin.force_set_state", "force_set_state"),
     ("admin.unlocked_for_revision", "unlocked_for_revision"),
 ])
 def test_admin_only_events_classified(event, expected_kind):

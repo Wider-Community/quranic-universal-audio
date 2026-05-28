@@ -127,42 +127,6 @@ class SeededPayload(TypedDict, total=False):
 
 
 # ----------------------------------------------------------------------
-# Allowed pairs for admin.force_set_state
-# ----------------------------------------------------------------------
-
-
-# Per state-mgmt outcomes log (Phase 1 reconciliation): the canonical
-# allowed-pair set.
-_FORCE_SET_STATE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
-    {
-        # bidirectional
-        (ReciterState.CATALOGUED.value, ReciterState.AWAITING_ALIGNMENT.value),
-        (ReciterState.AWAITING_ALIGNMENT.value, ReciterState.CATALOGUED.value),
-        (
-            ReciterState.AWAITING_ALIGNMENT.value,
-            ReciterState.AWAITING_REVIEW.value,
-        ),
-        (
-            ReciterState.AWAITING_REVIEW.value,
-            ReciterState.AWAITING_ALIGNMENT.value,
-        ),
-        (
-            ReciterState.AWAITING_TIMESTAMPS.value,
-            ReciterState.RELEASED.value,
-        ),
-        (
-            ReciterState.RELEASED.value,
-            ReciterState.AWAITING_TIMESTAMPS.value,
-        ),
-        (ReciterState.RELEASED.value, ReciterState.COMPLETED.value),
-        (ReciterState.COMPLETED.value, ReciterState.RELEASED.value),
-        # one-directional
-        (ReciterState.UNDER_REVIEW.value, ReciterState.AWAITING_REVIEW.value),
-    }
-)
-
-
-# ----------------------------------------------------------------------
 # Reads (assembled from the SQLite substrate via repo_state)
 # ----------------------------------------------------------------------
 
@@ -960,38 +924,6 @@ def _h_reassigned(slug, before, actor, payload, reason):
     )
 
 
-def _h_force_set_state(slug, before, actor, payload, reason):
-    if before is None:
-        raise UnknownReciter(slug)
-    _require_maintainer(actor)
-    target = payload.get("to_state")
-    if not target:
-        raise InvalidTransition("force_set_state requires payload.to_state")
-    pair = (before.state.value, target)
-    if pair not in _FORCE_SET_STATE_ALLOWED:
-        raise InvalidTransition(
-            f"force_set_state pair {pair} not in allowed set"
-        )
-    _require_reason(reason, "force_set_state")
-    return _replace(
-        before,
-        state=ReciterState(target),
-        state_since=_now(),
-        # Clear assignee fields when leaving under_review to avoid invariant
-        # violations on the resulting row.
-        **(
-            {
-                "assignee_hf_id": None,
-                "assignee_login": None,
-                "assignee_since": None,
-                "marked_ready": False,
-            }
-            if before.state == ReciterState.UNDER_REVIEW
-            else {}
-        ),
-    )
-
-
 def _h_batch_timestamps_refresh(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
@@ -1043,7 +975,6 @@ _HANDLERS: dict[str, Any] = {
     "published.edited": _h_published_edited,
     "claim.force_released": _h_force_released,
     "claim.reassigned": _h_reassigned,
-    "admin.force_set_state": _h_force_set_state,
     "admin.unlocked_for_revision": _h_unlocked_for_revision,
     "admin.batch_timestamps_refresh": _h_batch_timestamps_refresh,
     "admin.clear_prefetch_purge_at": _h_clear_prefetch_purge_at,

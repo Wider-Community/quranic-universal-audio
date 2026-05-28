@@ -49,7 +49,6 @@ _TEMPLATES: dict[str, str] = {
     "undiscarded": "{name} restored",
     "force_released": "{name} claim force-released",
     "reassigned": "{name} claim reassigned",
-    "force_set_state": "{name} state force-set",
     "unlocked_for_revision": "{name} unlocked for revision",
 }
 

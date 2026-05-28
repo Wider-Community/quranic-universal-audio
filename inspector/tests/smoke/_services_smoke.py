@@ -177,14 +177,12 @@ def smoke() -> int:
             assert row.state == ReciterState.CATALOGUED
             print("ok  state catalog.added → CATALOGUED")
 
-            # admin.force_set_state to push into awaiting_alignment then back
-            # awaiting_review (covers the bidirectional pairs).
+            # reciter.requested → AWAITING_ALIGNMENT (the canonical flow now
+            # that admin.force_set_state has been removed).
             row = state.transition(
                 "saad_al_ghamdi",
-                "admin.force_set_state",
-                actor=owner_actor,
-                payload={"to_state": "awaiting_alignment"},
-                reason="seed-from-test smoke harness",
+                "reciter.requested",
+                actor=contributor_actor,
             )
             assert row.state == ReciterState.AWAITING_ALIGNMENT
             row = state.transition(
@@ -351,10 +349,8 @@ def smoke() -> int:
             )
             state.transition(
                 "test_other",
-                "admin.force_set_state",
-                actor=owner_actor,
-                payload={"to_state": "awaiting_alignment"},
-                reason="harness pushes through alignment",
+                "reciter.requested",
+                actor=contributor_actor,
             )
             state.transition(
                 "test_other",

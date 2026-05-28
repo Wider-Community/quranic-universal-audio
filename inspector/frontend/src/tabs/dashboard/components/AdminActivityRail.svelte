@@ -123,7 +123,6 @@
         undiscarded: 'restored',
         force_released: 'force-released',
         reassigned: 'reassigned',
-        force_set_state: 'force-set state on',
         unlocked_for_revision: 'unlocked for revision',
     };
 
@@ -276,7 +275,6 @@
     .marker-undiscarded         { background: var(--text-muted); }
     .marker-force-released,
     .marker-reassigned,
-    .marker-force-set-state,
     .marker-unlocked-for-revision { background: var(--accent-strong); }
     .marker-released,
     .marker-unmarked-ready       { background: var(--state-available-fg); }

@@ -66,13 +66,13 @@ def test_feed_includes_admin_only_events(monkeypatch):
     _install_audit(monkeypatch, [
         _record("reciter.marked_ready"),
         _record("claim.force_released"),
-        _record("admin.force_set_state"),
+        _record("admin.unlocked_for_revision"),
     ])
     _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
 
     page = feed(caller_role=Role.MAINTAINER, caller_hf_id="u-X")
     kinds = sorted({c["kind"] for c in page["cards"]})
-    assert kinds == ["force_released", "force_set_state", "marked_ready"]
+    assert kinds == ["force_released", "marked_ready", "unlocked_for_revision"]
 
 
 def test_feed_excludes_public_events(monkeypatch):

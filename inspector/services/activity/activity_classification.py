@@ -55,7 +55,6 @@ ADMIN_ONLY_EVENTS: dict[str, str] = {
     "reciter.undiscarded": "undiscarded",
     "claim.force_released": "force_released",
     "claim.reassigned": "reassigned",
-    "admin.force_set_state": "force_set_state",
     "admin.unlocked_for_revision": "unlocked_for_revision",
 }
 

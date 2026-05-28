@@ -2,7 +2,7 @@
 
 Phase 4 backend surface. Each route is a thin wrapper around a single
 ``state.transition`` call gated by maintainer+ role. State-machine
-handlers (`_h_force_released`, `_h_reassigned`, `_h_force_set_state`,
+handlers (`_h_force_released`, `_h_reassigned`,
 `_h_merge_rejected`) own all precondition + invariant checks; routes
 just authenticate, validate body shape, and dispatch.
 
@@ -129,35 +129,6 @@ def reassign(slug: str):
             "avatar_url": target.avatar_url,
         },
     })
-
-
-@admin_actions_bp.route("/state/force-set/<slug>", methods=["POST"])
-@require_same_origin
-def force_set_state(slug: str):
-    user, err = _require_maintainer_or_above()
-    if err is not None:
-        return err
-
-    body = request.get_json(silent=True) or {}
-    to_state_raw = (body.get("to_state") or "").strip()
-    if not to_state_raw:
-        return jsonify({"error": "to_state is required"}), 400
-    try:
-        ReciterState(to_state_raw)
-    except ValueError:
-        return jsonify({"error": f"unknown to_state {to_state_raw!r}"}), 400
-    reason, err = validate_reason(body)
-    if err is not None:
-        return err
-
-    new_row = state_service.transition(
-        slug,
-        "admin.force_set_state",
-        actor=actor_for(user),
-        payload={"to_state": to_state_raw},
-        reason=reason,
-    )
-    return jsonify({"row": row_to_dict(new_row)})
 
 
 @admin_actions_bp.route("/send-back/<slug>", methods=["POST"])

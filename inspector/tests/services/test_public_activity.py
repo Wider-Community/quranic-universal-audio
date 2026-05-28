@@ -103,7 +103,7 @@ def test_redacts_non_allowlisted_events(monkeypatch):
     _install_audit(monkeypatch, [
         _record("claim.force_released"),
         _record("claim.reassigned"),
-        _record("admin.force_set_state"),
+        _record("admin.unlocked_for_revision"),
         _record("reciter.discarded"),
         _record("reciter.unmarked_ready"),
         _record("access.role_granted"),

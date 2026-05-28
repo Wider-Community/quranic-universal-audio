@@ -18,7 +18,6 @@ export type AdminEventKind =
     | 'undiscarded'
     | 'force_released'
     | 'reassigned'
-    | 'force_set_state'
     | 'unlocked_for_revision';
 
 export interface AdminActivityCard {
