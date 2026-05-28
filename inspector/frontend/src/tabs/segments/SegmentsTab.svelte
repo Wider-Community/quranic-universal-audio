@@ -104,6 +104,19 @@
     // after sign-in or after access revoke).
     $: setEditingMode(syncEditingMode($currentUser, reciterTask));
 
+    // Out-of-band reciter changes: the admin Reviews tab's Segments deep-link
+    // sets ``$selectedReciter`` directly (no picker event), so a reactive
+    // subscription is what triggers the same _bindTask + onReciterChange
+    // flow the picker fires. ``onPickerChange`` and ``loadReciters`` set
+    // ``_lastBoundReciter`` BEFORE updating the store so this block skips
+    // the work they've already done — no double-load.
+    let _lastBoundReciter: string | null = null;
+    $: if (typeof $selectedReciter === 'string' && $selectedReciter && $selectedReciter !== _lastBoundReciter) {
+        _lastBoundReciter = $selectedReciter;
+        _bindTask($selectedReciter);
+        void onReciterChange($selectedReciter);
+    }
+
     $: filterBarHidden = $segAllData === null;
 
     // Inline header actions — Unclaim and Mark-ready operate on the
@@ -146,6 +159,10 @@
                 localStorage.removeItem(LS_KEYS.SEG_RECITER);
             }
             if (validSaved) {
+                // Mark this slug as handled before updating the store so the
+                // out-of-band reactive subscription below skips it (we run
+                // _bindTask + onReciterChange imperatively right here).
+                _lastBoundReciter = validSaved;
                 selectedReciter.set(validSaved);
                 _bindTask(validSaved);
                 await onReciterChange(validSaved);
@@ -193,8 +210,11 @@
     ): void {
         // Identity + bucket flow through the reactive `ctxDelivery` derivation
         // keyed on `selectedReciter` (the picker reads the same catalog
-        // snapshot), so we only set the slug and rebind here.
+        // snapshot), so we only set the slug and rebind here. ``_lastBoundReciter``
+        // is set first so the out-of-band reactive subscription skips the
+        // work we run imperatively below — no double-load.
         const { slug } = ev.detail;
+        _lastBoundReciter = slug || null;
         selectedReciter.set(slug);
         _bindTask(slug || null);
         onReciterChange(slug);
