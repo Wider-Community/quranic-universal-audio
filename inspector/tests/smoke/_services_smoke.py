@@ -346,7 +346,7 @@ def smoke() -> int:
             row = state.transition(
                 "test_other",
                 "claim.reassigned",
-                actor=maintainer_actor,
+                actor=owner_actor,
                 payload={"new_assignee_hf_id": "200", "new_assignee_login": "maint_bob"},
                 reason="original claim holder went on leave for two weeks",
             )

@@ -51,10 +51,24 @@ def _require_maintainer_or_above():
     return user, None
 
 
+def _require_owner():
+    """Auth + owner-only gate. Returns ``(user, None)`` or
+    ``(None, (resp, status))``. Used by the claim-mutation surfaces
+    (force-release + reassign) — owners manage who reviews, maintainers
+    gate quality. See Reviews-tab plan §"Reassign popover"."""
+    user, err = require_signed_in_or_401()
+    if err is not None:
+        return None, err
+    err_resp = require_role_or_403(user, Role.OWNER)
+    if err_resp is not None:
+        return None, err_resp
+    return user, None
+
+
 @admin_actions_bp.route("/claim/force-release/<slug>", methods=["POST"])
 @require_same_origin
 def force_release(slug: str):
-    user, err = _require_maintainer_or_above()
+    user, err = _require_owner()
     if err is not None:
         return err
 
@@ -81,7 +95,7 @@ def force_release(slug: str):
 @admin_actions_bp.route("/claim/reassign/<slug>", methods=["POST"])
 @require_same_origin
 def reassign(slug: str):
-    user, err = _require_maintainer_or_above()
+    user, err = _require_owner()
     if err is not None:
         return err
 

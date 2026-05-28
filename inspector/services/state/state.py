@@ -833,7 +833,10 @@ def _h_force_released(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"claim.force_released requires UNDER_REVIEW, got {before.state.value}"
         )
-    _require_maintainer(actor)
+    # Owner-only: claim-mutation surfaces (force-release + reassign) are
+    # an owner privilege; maintainers gate quality (send-back-to-UR) but
+    # don't manage who reviews. See Reviews-tab plan §"Reassign popover".
+    _require_owner(actor)
     _require_reason(reason, "claim.force_released")
     return _replace(
         before,
@@ -853,7 +856,8 @@ def _h_reassigned(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"claim.reassigned requires UNDER_REVIEW, got {before.state.value}"
         )
-    _require_maintainer(actor)
+    # Owner-only — pairs with _h_force_released (see comment there).
+    _require_owner(actor)
     new_hf = payload.get("new_assignee_hf_id")
     new_login = payload.get("new_assignee_login")
     if not new_hf or not new_login:
