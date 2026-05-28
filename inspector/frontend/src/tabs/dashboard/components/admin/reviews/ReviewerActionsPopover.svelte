@@ -24,6 +24,9 @@
         reassignClaim,
         type UserCard,
     } from '../../../../../lib/api/admin-reviews';
+    import { refreshReciterTask } from '../../../../../lib/api/reciter-task';
+    import { loadCurrentUser } from '../../../../../lib/stores/current-user';
+    import { loadCatalog } from '../../../stores/catalog-data';
 
     let {
         slug,
@@ -105,12 +108,32 @@
         && !reassigning,
     );
 
+    /**
+     * Push the new state to every surface that might be displaying this slug
+     * without waiting for its natural refresh cadence. Mirrors the
+     * SegmentsTab's ``_refreshTask`` trio so the Segments-tab footer + claim
+     * affordance flip in lockstep with the admin drawer — otherwise the task
+     * store stays stale until its 30 s poll tick fires (the bug this guards
+     * against).
+     */
+    async function _propagateStateChange(): Promise<void> {
+        // Fire all three in parallel — they're independent endpoints and
+        // the popover closes immediately after, so we shouldn't make the
+        // user wait on a serial chain.
+        await Promise.allSettled([
+            refreshReciterTask(slug),
+            loadCurrentUser(),
+            loadCatalog(true),
+        ]);
+    }
+
     async function confirmReassign(): Promise<void> {
         if (!canReassign || !resolved) return;
         reassigning = true;
         changeErr = null;
         try {
             await reassignClaim(slug, resolved.login, changeReason.trim());
+            await _propagateStateChange();
             onaction?.();
             onclose();
         } catch (e) {
@@ -133,6 +156,7 @@
         removeErr = null;
         try {
             await forceReleaseClaim(slug, removeReason.trim());
+            await _propagateStateChange();
             onaction?.();
             onclose();
         } catch (e) {

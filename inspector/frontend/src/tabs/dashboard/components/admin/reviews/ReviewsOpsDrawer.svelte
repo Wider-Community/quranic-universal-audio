@@ -17,8 +17,10 @@
         forceReleaseClaim,
         sendBackToUnderReview,
     } from '../../../../../lib/api/admin-reviews';
-    import { isOwner } from '../../../../../lib/stores/current-user';
+    import { refreshReciterTask } from '../../../../../lib/api/reciter-task';
+    import { isOwner,loadCurrentUser } from '../../../../../lib/stores/current-user';
     import type { AdminReviewDetail } from '../../../../../lib/types/generated/schemas';
+    import { loadCatalog } from '../../../stores/catalog-data';
 
     let {
         slug,
@@ -110,6 +112,17 @@
                     await sendBackToUnderReview(slug, r);
                     break;
             }
+            // Propagate the state change to every surface that might be
+            // displaying this slug right now — the Segments tab's reciter-
+            // task store keeps a 30 s poll cadence, so without this push the
+            // footer + claim affordance stay stale until its next tick. The
+            // catalog refetch flips the bucket-derived footer chip; the
+            // /api/me refetch flips ``active_claim``.
+            await Promise.allSettled([
+                refreshReciterTask(slug),
+                loadCurrentUser(),
+                loadCatalog(true),
+            ]);
             // Refetch the local detail so the drawer reflects the new state;
             // the caller also refetches its list.
             armed = null;

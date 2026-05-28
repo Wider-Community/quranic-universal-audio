@@ -63,14 +63,27 @@ export interface ReciterTask {
 
 export const POLL_INTERVAL_MS = 30_000;
 
-const _stores = new Map<string, Readable<ReciterTask | null>>();
+// Per-slug entry: the public Readable + a private push hook the
+// ``refreshReciterTask`` helper uses to broadcast fresh data to live
+// subscribers. The push hook is null while no one is subscribed (the
+// readable's start callback hasn't run yet) — refreshReciterTask falls
+// back to fire-and-forget in that case.
+interface CacheEntry {
+    store: Readable<ReciterTask | null>;
+    push: ((v: ReciterTask | null) => void) | null;
+}
+
+const _stores = new Map<string, CacheEntry>();
 
 export function getReciterTaskStore(slug: string): Readable<ReciterTask | null> {
-    let existing = _stores.get(slug);
-    if (existing) return existing;
+    const existing = _stores.get(slug);
+    if (existing) return existing.store;
 
-    const store = readable<ReciterTask | null>(null, (set) => {
+    const entry: CacheEntry = { store: null as never, push: null };
+
+    entry.store = readable<ReciterTask | null>(null, (set) => {
         let cancelled = false;
+        entry.push = set;
 
         async function tick() {
             const data = await fetchJsonOrNull<ReciterTask>(
@@ -85,20 +98,31 @@ export function getReciterTaskStore(slug: string): Readable<ReciterTask | null> 
         return () => {
             cancelled = true;
             clearInterval(handle);
+            entry.push = null;
             // Drop the cached store when no one's listening so a future
             // subscribe on the same slug runs a fresh initial fetch.
             _stores.delete(slug);
         };
     });
 
-    _stores.set(slug, store);
-    existing = store;
-    return existing;
+    _stores.set(slug, entry);
+    return entry.store;
 }
 
-/** Force a one-shot refresh; useful right after a state-mutating action. */
+/**
+ * Force a one-shot refresh, AND push the fresh value to any live
+ * subscribers on the same slug. Use after a state-mutating action from
+ * anywhere in the app — including cross-tab surfaces like the Admin
+ * Reviews popover, where the segments-tab's task store would otherwise
+ * stay stale until its next 30 s poll tick fires.
+ */
 export async function refreshReciterTask(slug: string): Promise<ReciterTask | null> {
-    return fetchJsonOrNull<ReciterTask>(
+    const data = await fetchJsonOrNull<ReciterTask>(
         `/api/reciter-task/${encodeURIComponent(slug)}`,
     );
+    // Broadcast to live subscribers (if any) — otherwise this is a no-op
+    // and the caller just consumes the returned value.
+    const entry = _stores.get(slug);
+    if (entry?.push) entry.push(data);
+    return data;
 }
