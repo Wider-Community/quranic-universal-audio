@@ -1,16 +1,20 @@
 <script lang="ts">
     /**
-     * One recitation row in the Reviews tab landing list.
+     * One recitation row in the Reviews tab landing list (table-format).
      *
-     * Single-line dense layout: Arabic name dominant + Latin trailing inline,
-     * taxonomy chips (Riwayah · Style · Channel), reviewer (or em-dash on
-     * Published rows whose claim closed), age in mono, two action buttons
-     * [Segments] [Ops].
+     * Emits a ``<tr>`` so all rows across all state sections share the same
+     * column widths (defined in ReviewsCompartment.svelte with
+     * ``table-layout: fixed`` + ``<colgroup>``). Cells, in order:
+     *   1. Reciter — Latin name dominant (primary, 15px) + Arabic trailing
+     *      inline (muted, 13px). Per user feedback: English not smaller, first.
+     *   2. Riwayah · 3. Style · 4. Channel — taxonomy chips
+     *   5. Reviewer — initials avatar + login (or em dash when unclaimed)
+     *   6. Age — relative time in mono
+     *   7. Actions — Segments + Ops buttons
      *
-     * - Row body click → General drawer (M2, wired below)
-     * - Segments button → close modal + open the Segments tab with this slug
-     *   pre-selected (uses the existing dashboardState.openDetail helper)
-     * - Ops button → Ops drawer (M3, still a stub)
+     * Row body click → General drawer. Segments button switches to the
+     * top-level Segments tab with this slug pre-selected. Ops opens the
+     * Ops drawer.
      */
     import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
     import { adminDashboard } from '../../../stores/admin-dashboard.svelte';
@@ -28,13 +32,10 @@
         if (!login) return '?';
         const trimmed = login.trim();
         if (!trimmed) return '?';
-        // first two alphanumerics, uppercased
         const chars = trimmed.replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase();
         return chars || trimmed.slice(0, 2).toUpperCase();
     }
 
-    // Relative age from an ISO timestamp. Coarse-grained — minute precision
-    // would be noise at this density.
     function relativeAge(iso: string | null | undefined): string {
         if (!iso) return '';
         const then = Date.parse(iso);
@@ -55,8 +56,6 @@
         return `${years}y`;
     }
 
-    // Time-in-state from open_claim.claimed_at if there's an open claim,
-    // else from state_since (Published rows whose claim closed land here).
     const ageISO = $derived(row.open_claim?.claimed_at ?? row.state_since ?? null);
     const age = $derived(relativeAge(ageISO));
 
@@ -74,11 +73,6 @@
 
     function onSegments(e: MouseEvent): void {
         e.stopPropagation();
-        // Switch to the Segments TOP-LEVEL tab with this delivery's slug
-        // pre-selected. Three steps so both first-mount (loadReciters reads
-        // localStorage) and already-mounted (selectedReciter store) paths
-        // pick up the new slug; then close the admin modal so the tab
-        // switch lands cleanly.
         try {
             localStorage.setItem(LS_KEYS.SEG_RECITER, row.slug);
         } catch {
@@ -90,37 +84,35 @@
     }
 </script>
 
-<div
+<tr
     class="row"
     class:active={isActive}
-    role="button"
     tabindex="0"
     onclick={onRowClick}
-    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(); } }}
+    onkeydown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onRowClick();
+        }
+    }}
 >
-    <div class="reciter">
+    <td class="cell reciter">
         {#if row.name_en}
             <span class="reciter-lt">{row.name_en}</span>
         {/if}
         {#if row.name_ar}
             <span class="reciter-ar" dir="rtl">{row.name_ar}</span>
         {/if}
-    </div>
-
-    <ul class="taxonomy">
-        <li class="chip">{row.riwayah}</li>
-        <li class="chip">{row.style}</li>
-        <li class="chip channel">{row.channel}</li>
-    </ul>
-
-    <div class="reviewer" class:unassigned={!hasReviewer}>
+    </td>
+    <td class="cell taxonomy"><span class="chip">{row.riwayah}</span></td>
+    <td class="cell taxonomy"><span class="chip">{row.style}</span></td>
+    <td class="cell taxonomy"><span class="chip channel">{row.channel}</span></td>
+    <td class="cell reviewer" class:unassigned={!hasReviewer}>
         <span class="avatar">{hasReviewer ? initials(reviewerLogin) : ''}</span>
         <span class="who">{hasReviewer ? reviewerLogin : '—'}</span>
-    </div>
-
-    <div class="age">{age}</div>
-
-    <div class="row-actions">
+    </td>
+    <td class="cell age">{age}</td>
+    <td class="cell actions">
         <button class="btn" type="button" onclick={onSegments}>Segments</button>
         <button
             class="btn"
@@ -128,17 +120,11 @@
             type="button"
             onclick={onOps}
         >Ops</button>
-    </div>
-</div>
+    </td>
+</tr>
 
 <style>
     .row {
-        display: grid;
-        grid-template-columns: minmax(240px, 1fr) auto auto auto auto;
-        gap: var(--s-4);
-        align-items: center;
-        padding: var(--s-2) var(--s-1);
-        border-bottom: 1px solid var(--border-quiet);
         cursor: pointer;
         transition: background-color var(--t-fast);
     }
@@ -147,26 +133,31 @@
         outline: 0;
         background: var(--panel);
         box-shadow: inset 0 0 0 1px var(--accent-tint);
-        border-radius: var(--r-1);
     }
     .row.active {
         background: var(--panel);
         box-shadow: inset 0 0 0 1px var(--accent-tint);
-        border-radius: var(--r-1);
     }
 
-    .reciter {
-        min-width: 0;
+    .cell {
+        padding: var(--s-2) var(--s-3);
+        border-bottom: 1px solid var(--border-quiet);
+        vertical-align: middle;
+    }
+    .row:last-child .cell { border-bottom: 0; }
+
+    /* reciter — Latin primary first, Arabic trailing muted */
+    .cell.reciter {
         display: flex;
         align-items: baseline;
-        gap: var(--s-2);
-        flex-wrap: nowrap;
+        gap: var(--s-3);
+        min-width: 0;
         overflow: hidden;
     }
     .reciter-lt {
-        font-size: 15px;
+        font-size: 14px;
         color: var(--text-primary);
-        line-height: 1.25;
+        line-height: 1.3;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -182,14 +173,7 @@
         flex: 0 1 auto;
     }
 
-    .taxonomy {
-        list-style: none;
-        display: flex;
-        gap: var(--s-1);
-        flex-wrap: nowrap;
-        padding: 0;
-        margin: 0;
-    }
+    .cell.taxonomy { color: var(--text-secondary); }
     .chip {
         display: inline-flex;
         align-items: center;
@@ -203,6 +187,9 @@
         font-variant-numeric: tabular-nums;
         border: 1px solid transparent;
         white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
     }
     .chip.channel {
         background: transparent;
@@ -210,15 +197,17 @@
         color: var(--text-muted);
     }
 
-    .reviewer {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        min-width: 130px;
+    .cell.reviewer {
         font-size: var(--fs-body);
         color: var(--text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
-    .reviewer .avatar {
+    .cell.reviewer .avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         width: 20px;
         height: 20px;
         border-radius: 50%;
@@ -226,32 +215,25 @@
         color: var(--accent-strong);
         font-size: 9.5px;
         font-weight: 600;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        letter-spacing: 0;
-        flex: 0 0 auto;
+        vertical-align: -5px;
+        margin-right: 6px;
     }
-    .reviewer.unassigned { color: var(--text-faint); }
-    .reviewer.unassigned .avatar {
+    .cell.reviewer.unassigned { color: var(--text-faint); }
+    .cell.reviewer.unassigned .avatar {
         background: transparent;
         border: 1px dashed var(--border-default);
     }
 
-    .age {
+    .cell.age {
         font-family: var(--font-mono);
         font-size: 11px;
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
-        min-width: 52px;
         text-align: right;
     }
 
-    .row-actions {
-        display: flex;
-        gap: var(--s-1);
-    }
-    .row-actions .btn {
+    .cell.actions { white-space: nowrap; }
+    .cell.actions .btn {
         background: transparent;
         border: 1px solid var(--border-quiet);
         color: var(--text-secondary);
@@ -262,11 +244,12 @@
         cursor: pointer;
         transition: border-color var(--t-fast), color var(--t-fast), background-color var(--t-fast);
     }
-    .row-actions .btn:hover {
+    .cell.actions .btn + .btn { margin-left: var(--s-1); }
+    .cell.actions .btn:hover {
         border-color: var(--border-default);
         color: var(--text-primary);
     }
-    .row-actions .btn.armed {
+    .cell.actions .btn.armed {
         border-color: var(--accent);
         color: var(--accent-strong);
         background: var(--accent-tint-soft);
