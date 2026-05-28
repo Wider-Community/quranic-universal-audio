@@ -19,7 +19,36 @@ committed to git so CI can ``git diff --exit-code`` it.
 """
 from __future__ import annotations
 
+from .admin_requests import (
+    AdminRequestCounts,
+    AdminRequestRow,
+    AdminRequestsResponse,
+    RequestChange,
+)
+from .admin_users import (
+    AdminActiveClaim,
+    AdminActivityEvent,
+    AdminClaimEvent,
+    AdminRequestEvent,
+    AdminRoleEvent,
+    AdminUserDetail,
+    AdminUserRow,
+    AdminUserStats,
+    AdminUsersResponse,
+    AdminUsersSummary,
+    AdminVisitorStats,
+    VisitorDayStat,
+)
 from .edit_history import EditHistoryBatch, EditOperation
+from .intake_requests import (
+    IntakeAttestations,
+    IntakeSource,
+    IntakeSubmission,
+    IntakeValidation,
+    ProbeResponse,
+    ProbeResult,
+    SourceLink,
+)
 from .peaks_history import PeaksRecord
 from .segment import (
     DetailedDocument,
@@ -29,11 +58,34 @@ from .segment import (
 )
 
 __all__ = [
+    "AdminActiveClaim",
+    "AdminActivityEvent",
+    "AdminClaimEvent",
+    "AdminRequestCounts",
+    "AdminRequestEvent",
+    "AdminRequestRow",
+    "AdminRequestsResponse",
+    "AdminRoleEvent",
+    "AdminUserDetail",
+    "AdminUserRow",
+    "AdminUserStats",
+    "AdminUsersResponse",
+    "AdminUsersSummary",
+    "AdminVisitorStats",
     "DetailedDocument",
     "DetailedEntry",
     "DetailedMeta",
     "DetailedSegment",
     "EditHistoryBatch",
     "EditOperation",
+    "IntakeAttestations",
+    "IntakeSource",
+    "IntakeSubmission",
+    "IntakeValidation",
     "PeaksRecord",
+    "ProbeResponse",
+    "ProbeResult",
+    "RequestChange",
+    "SourceLink",
+    "VisitorDayStat",
 ]

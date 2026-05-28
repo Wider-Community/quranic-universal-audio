@@ -84,7 +84,7 @@
     let autoClaim = false;
 
     // Vocab options fetched lazily from /api/static/catalog.json.
-    let riwayatOptions: { slug: string; name: string }[] = [];
+    let riwayatOptions: { slug: string; short?: string; name: string }[] = [];
     let styleOptions: { slug: string; name: string }[] = [];
     let contextOptions: { slug: string; name: string }[] = [];
 
@@ -94,7 +94,7 @@
             if (resp.ok) {
                 const cat = await resp.json();
                 riwayatOptions = (cat?.vocab?.riwayat ?? []).map(
-                    (r: { slug: string; name: string }) => ({ slug: r.slug, name: r.name }),
+                    (r: { slug: string; short?: string; name: string }) => ({ slug: r.slug, short: r.short, name: r.name }),
                 );
                 styleOptions = (cat?.vocab?.styles ?? []).map(
                     (s: { slug: string; name: string }) => ({ slug: s.slug, name: s.name }),
@@ -221,6 +221,11 @@
                 && d.style === style,
         );
 
+    // Non-hafs riwayahs aren't aligned yet — non-blocking heads-up. Hafs is
+    // matched by vocab SHORT ('hafs'), not the slug ('hafs_an_asim').
+    $: selectedRiwayahShort = riwayatOptions.find((r) => r.slug === riwayah)?.short;
+    $: nonHafsRiwayah = !!selectedRiwayahShort && selectedRiwayahShort !== 'hafs';
+
     async function onSubmit(): Promise<void> {
         if (busy) return;
         if (invalidCountry) {
@@ -295,6 +300,7 @@
         <button class="close" type="button" on:click={() => dispatch('close')}>×</button>
     </header>
 
+    <div class="body">
     {#if mode === 'create'}
         <div class="intro">
             <p class="intro-heading">Request Guidelines</p>
@@ -459,6 +465,13 @@
         </span>
     </label>
 
+    {#if mode === 'create' && nonHafsRiwayah}
+        <p class="callout">
+            Non-hafs riwayahs are not supported at the moment, we aim to have this
+            ready soon inshallah. You can still make the request.
+        </p>
+    {/if}
+
     {#if conflict}
         <p class="warning">
             Heads up: another delivery of {reciter.name} already uses
@@ -470,6 +483,7 @@
     {#if formError}
         <p class="error">{formError}</p>
     {/if}
+    </div>
 
     <footer>
         <button type="button" class="ghost" on:click={() => dispatch('close')}>
@@ -485,7 +499,7 @@
             >
                 {busy ? 'Submitting…' : 'Submit request'}
             </button>
-        {:else if pending}
+        {:else if pending && $isOwner}
             <div class="admin-actions">
                 <button
                     type="button"
@@ -516,14 +530,32 @@
         border-radius: var(--r-3);
         padding: var(--s-5);
         width: min(640px, 92vw);
+        /* Cap to the viewport minus the backdrop padding (--s-6 each side)
+           and the fixed bottom-player height, so the modal never overlaps the
+           player or clips off screen. Computed in viewport units rather than
+           `100%` — a percentage max-height resolves unreliably against the
+           fixed-position backdrop and can be dropped entirely (modal then
+           overflows with no scroll). The shell itself doesn't scroll:
+           header/footer are pinned by flex and only `.body` scrolls. */
+        max-height: min(880px, calc(100vh - 2 * var(--s-6) - var(--player-h, 72px)));
         display: flex;
         flex-direction: column;
         gap: var(--s-3);
+        overflow: hidden;
     }
     header {
+        flex: none;
         display: flex;
         align-items: center;
         justify-content: space-between;
+    }
+    .body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-3);
     }
     header h3 {
         margin: 0;
@@ -659,12 +691,22 @@
         border-radius: var(--r-2);
         font-size: var(--fs-meta);
     }
+    .callout {
+        margin: 0;
+        padding: var(--s-3);
+        background: oklch(0.86 0.13 75 / 0.12);
+        color: var(--state-error-fg);
+        border: 1px solid oklch(0.86 0.13 75 / 0.35);
+        border-radius: var(--r-2);
+        font-size: var(--fs-meta);
+        line-height: var(--lh-normal);
+    }
     footer {
+        flex: none;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: var(--s-3);
-        margin-top: var(--s-3);
     }
     .admin-actions {
         display: flex;

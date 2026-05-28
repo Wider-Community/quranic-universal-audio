@@ -10,7 +10,7 @@
  */
 import { writable } from 'svelte/store';
 
-export type WizardStep = 1 | 2 | 3;
+export type WizardStep = 1 | 2 | 3 | 4;
 
 /**
  * Reciter mode tri-state.
@@ -46,6 +46,13 @@ export interface CombinationFields {
     recording_year: number | '';
 }
 
+/** Step-4 consent gates — all must be true to submit. */
+export interface Attestations {
+    distribution_rights: boolean;
+    links_verified: boolean;
+    storage_rights: boolean;
+}
+
 export interface SubmitWizardState {
     open: boolean;
     step: WizardStep;
@@ -63,6 +70,7 @@ export interface SubmitWizardState {
     combination: CombinationFields;
     comments: string;
     autoClaim: boolean;
+    attestations: Attestations;
 }
 
 function emptyLinks(): LinkRow[] {
@@ -90,6 +98,11 @@ const initial: SubmitWizardState = {
     },
     comments: '',
     autoClaim: false,
+    attestations: {
+        distribution_rights: false,
+        links_verified: false,
+        storage_rights: false,
+    },
 };
 
 export const submitWizard = writable<SubmitWizardState>(initial);

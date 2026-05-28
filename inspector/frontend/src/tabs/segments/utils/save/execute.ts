@@ -5,7 +5,6 @@
 
 import { get as storeGet } from 'svelte/store';
 
-import { fetchJson } from '../../../../lib/api';
 import { SIGN_IN_MESSAGES } from '../../../../lib/sign-in-messages';
 import { openSignInModal } from '../../../../lib/stores/sign-in-modal';
 import { pushToast } from '../../../../lib/stores/toast';
@@ -23,7 +22,6 @@ import {
 import { saveButtonLabel } from '../../stores/save';
 import { resetHistoryLoader } from '../history/loader';
 import { refreshValidation } from '../validation/refresh';
-import { collectOpPeaks, type OpPeakRecord } from '../waveform/op-peaks';
 export { buildPayloadFromCommandResult } from './payload';
 
 // ---------------------------------------------------------------------------
@@ -58,13 +56,11 @@ interface SavePayloadFull {
     full_replace: true;
     segments: SaveSegmentPayloadFull[];
     operations: EditOp[];
-    op_peaks?: OpPeakRecord[];
 }
 
 interface SavePayloadPatch {
     segments: SaveSegmentPayloadPatch[];
     operations: EditOp[];
-    op_peaks?: OpPeakRecord[];
 }
 
 // ---------------------------------------------------------------------------
@@ -205,10 +201,9 @@ export async function executeSave(isAutoSave = false): Promise<void> {
 
             if (!payload) continue;
 
-            // Pull peaks from in-memory caches for every op that has them.
-            const opPeaks = collectOpPeaks(chOps);
-            if (opPeaks.length > 0) payload.op_peaks = opPeaks;
-
+            // History-row peaks are generated server-side at save time by
+            // slicing the baked chapter peaks (services/audio/op_peaks.py) — no
+            // client payload needed.
             pendingSaves.push({ chapter: ch, payload, ops: chOps });
         }
 

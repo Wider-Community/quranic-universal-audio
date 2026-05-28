@@ -22,6 +22,7 @@
     import { titleCaseSlug } from '../../../lib/utils/delivery-label';
     import { relativeTime } from '../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../lib/utils/visible-poll';
+    import AdminDashboardButton from './admin/AdminDashboardButton.svelte';
     import AdminActivityRail from './AdminActivityRail.svelte';
 
     let cards: PublicActivityCard[] = [];
@@ -93,6 +94,7 @@
 </script>
 
 <div class="rail-wrap">
+    <AdminDashboardButton />
     <AdminActivityRail />
 
     <aside class="activity" aria-label="Recent activity">

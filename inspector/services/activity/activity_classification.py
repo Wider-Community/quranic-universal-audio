@@ -28,12 +28,10 @@ Bucket = Literal["public", "admin_only", "hidden"]
 # Public bucket: event -> public-card "kind" (drives the marker dot + template).
 PUBLIC_EVENTS: dict[str, str] = {
     "catalog.added": "added",
-    # `reciter.requested` lands in BOTH PUBLIC_EVENTS and ADMIN_ONLY_EVENTS:
-    # the public rail shows "X was requested" as plain prose, the admin rail
-    # shows a clickable card linking to the proposed-edits form. `classify()`
-    # returns the public bucket (priority order below) so the anti-drift test
-    # treats it as a single classified event; the two `*_kind_for()` lookups
-    # are what the two feeds actually consume.
+    # `reciter.requested` shows on the public rail as plain "X was requested"
+    # prose. Request *review* is no longer a notification — it lives in the
+    # Admin dashboard → Requests tab — so this event is public-only (it is NOT
+    # in ADMIN_ONLY_EVENTS; `admin_kind_for()` returns None for it).
     "reciter.requested": "requested",
     "reciter.alignment_completed": "available_review",
     "reciter.claimed": "under_review",
@@ -46,12 +44,6 @@ PUBLIC_EVENTS: dict[str, str] = {
 
 # Admin-only bucket: event -> admin-card "kind".
 ADMIN_ONLY_EVENTS: dict[str, str] = {
-    # See PUBLIC_EVENTS note above — `reciter.requested` is dual-bucket so the
-    # admin rail can render a clickable review card alongside the public
-    # rail's plain-prose entry.
-    "reciter.requested": "request_submitted",
-    "reciter.request_rejected_soft": "request_rejected_soft",
-    "reciter.request_rejected_hard": "request_rejected_hard",
     "reciter.released": "released",
     "reciter.marked_ready": "marked_ready",
     "reciter.unmarked_ready": "unmarked_ready",
@@ -73,6 +65,11 @@ ADMIN_ONLY_EVENTS: dict[str, str] = {
 # (vs. "developer added a new event and forgot to classify it").
 HIDDEN_EVENTS: frozenset[str] = frozenset({
     "catalog.edited",
+    # Request review moved off the notifications rail into the Admin dashboard
+    # → Requests tab. The submit event stays public prose (PUBLIC_EVENTS);
+    # the admin-side reject outcomes are hidden from both rails (still audited).
+    "reciter.request_rejected_soft",
+    "reciter.request_rejected_hard",
     # Non-blocking warning emitted by ``services.pending_requests.apply_and_archive_completed``
     # when a requester's proposed (riwayah, style) matches another delivery of
     # the same reciter. Visible in the audit log for debugging only.

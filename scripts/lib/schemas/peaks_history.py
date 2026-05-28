@@ -24,7 +24,7 @@ Extras handling: ``extra="forbid"`` + ``strip_and_warn`` pre-validator
 rejected (they need re-encoding via the migration script) because the
 pre-validator only strips bloat, not malformed records.
 
-Authoritative spec: ``docs/reference/migrate_wip.md`` §5.
+Authoritative spec: ``docs/reference/data-migrations.md`` §5.
 """
 
 from __future__ import annotations

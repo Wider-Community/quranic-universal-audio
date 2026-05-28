@@ -23,8 +23,8 @@ interface HistoryPeaksResponse {
         url?: string;
         start_ms?: number;
         end_ms?: number;
-        peaks?: unknown;
-        duration_ms?: number;
+        bps?: number;
+        peaks_b64?: string;
     }>;
 }
 

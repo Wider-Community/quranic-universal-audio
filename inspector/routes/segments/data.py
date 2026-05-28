@@ -60,15 +60,14 @@ def seg_config():
 
 @seg_data_bp.route("/reciters")
 def seg_reciters():
-    """List reciters tracked in the state file.
+    """List reciters tracked in the SQLite state store.
 
-    Joins ``state_service.all_rows()`` (lifecycle + visibility) with the
+    Joins ``state_service.all_rows()`` (lifecycle + visibility from DB) with the
     in-memory catalog snapshot. ``audio_source`` is the channel
     (``delivery.source`` — ``mp3quran``, ``qul``, etc.); ``audio_category``
     is the by_surah / by_ayah split the FE needs to gate per-row playback
-    routing (proxy wrap, clip vs chapter URL). Both layers are hydrated at
-    boot and live in process memory, so this endpoint does zero bucket I/O
-    per request.
+    routing (proxy wrap, clip vs chapter URL). The catalog is cached at boot,
+    so this endpoint does zero bucket I/O per request.
     """
     by_slug = {
         d.slug: (d.source, d.audio_category.value)
@@ -85,7 +84,10 @@ def seg_reciters():
         }
         for row in sorted(state_service.all_rows(), key=lambda r: r.slug)
     ]
-    return orjson_response(result, headers={"Cache-Control": "private, max-age=30"})
+    # no-store: this list carries live lifecycle state (state/visibility per
+    # row) that changes on claim/release/transition; a client max-age made the
+    # Segments reciter list + picker stale for up to 30s after an action.
+    return orjson_response(result, headers={"Cache-Control": "no-store"})
 
 
 @seg_data_bp.route("/chapters/<reciter>")

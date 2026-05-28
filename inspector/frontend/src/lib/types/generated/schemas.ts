@@ -3,7 +3,7 @@
 // Regenerate after touching scripts/lib/schemas/:
 //   python inspector/scripts/regen_fe_types.py
 // CI fails via `git diff --exit-code` on this path if out of sync.
-// See docs/reference/migrate_wip.md §5.
+// See docs/reference/data-migrations.md §5.
 
 /* tslint:disable */
 /* eslint-disable */
@@ -14,6 +14,166 @@
 
 export type Role = "contributor" | "maintainer" | "owner" | "pipeline";
 
+export interface AdminActiveClaim {
+  slug: string;
+  state?: string | null;
+  marked_ready?: boolean;
+  [k: string]: unknown;
+}
+export interface AdminActivityEvent {
+  ts?: string | null;
+  slug?: string | null;
+  event: string;
+  to_state?: string | null;
+  reason?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminClaimEvent {
+  slug: string;
+  claimed_at?: string | null;
+  released_at?: string | null;
+  marked_ready_at?: string | null;
+  close_reason?: string | null;
+  outcome?: string;
+  [k: string]: unknown;
+}
+export interface AdminRequestCounts {
+  open?: number;
+  accepted?: number;
+  returned?: number;
+  discarded?: number;
+  [k: string]: unknown;
+}
+export interface AdminRequestEvent {
+  id: string;
+  kind: string;
+  slug?: string | null;
+  submitted_at?: string | null;
+  status: string;
+  resolved_at?: string | null;
+  resolution_reason?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminRequestRow {
+  id: string;
+  slug?: string | null;
+  kind: string;
+  status: string;
+  submitted_at: string;
+  resolved_at?: string | null;
+  resolution_reason?: string | null;
+  auto_claim?: boolean;
+  comments?: string | null;
+  reciter_id?: string | null;
+  name_en?: string | null;
+  name_ar?: string | null;
+  riwayah?: string | null;
+  style?: string | null;
+  proposed_edits?: {
+    [k: string]: unknown;
+  };
+  changes?: RequestChange[];
+  conflict?: boolean;
+  source?: {
+    [k: string]: unknown;
+  } | null;
+  probe?: {
+    [k: string]: unknown;
+  } | null;
+  viewed?: boolean;
+  requester_role?: string | null;
+  requester_login?: string | null;
+  requester_hf_user_id?: string | null;
+  resolved_by_role?: string | null;
+  resolved_by_login?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * One proposed-edit field, with the current catalog value as ``from``.
+ *
+ * Mirrors a single ``ProposedEdits`` field. ``from``/``to`` carry strings or
+ * numbers (recording_year) or null.
+ */
+export interface RequestChange {
+  field: string;
+  label: string;
+  from?: string | number | null;
+  to?: string | number | null;
+  [k: string]: unknown;
+}
+export interface AdminRequestsResponse {
+  rows?: AdminRequestRow[];
+  counts?: AdminRequestCounts;
+  unviewed_count?: number;
+  [k: string]: unknown;
+}
+export interface AdminRoleEvent {
+  role: string;
+  granted_at?: string | null;
+  granted_by?: string | null;
+  revoked_at?: string | null;
+  revoked_by?: string | null;
+  reason?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminUserDetail {
+  hf_user_id: string;
+  login?: string | null;
+  role?: string;
+  joined?: string | null;
+  last_login_at?: string | null;
+  last_entry_at?: string | null;
+  last_activity?: string | null;
+  stats?: AdminUserStats;
+  role_history?: AdminRoleEvent[];
+  claims_history?: AdminClaimEvent[];
+  requests_history?: AdminRequestEvent[];
+  recent_activity?: AdminActivityEvent[];
+  [k: string]: unknown;
+}
+export interface AdminUserStats {
+  reviews?: number;
+  lifetime_claims?: number;
+  avg_turnaround_seconds?: number | null;
+  requests_by_status?: {
+    [k: string]: number;
+  };
+  [k: string]: unknown;
+}
+export interface AdminUserRow {
+  hf_user_id: string;
+  login?: string | null;
+  role?: string;
+  joined?: string | null;
+  last_activity?: string | null;
+  requests?: number;
+  reviews?: number;
+  active_claim?: AdminActiveClaim | null;
+  [k: string]: unknown;
+}
+export interface AdminUsersResponse {
+  users?: AdminUserRow[];
+  summary?: AdminUsersSummary;
+  [k: string]: unknown;
+}
+export interface AdminUsersSummary {
+  registered?: number;
+  active_this_week?: number;
+  [k: string]: unknown;
+}
+export interface AdminVisitorStats {
+  today: VisitorDayStat;
+  recent?: VisitorDayStat[];
+  [k: string]: unknown;
+}
+export interface VisitorDayStat {
+  date: string;
+  signed_in_hits?: number;
+  anon_hits?: number;
+  unique_signed_in?: number;
+  unique_anon?: number;
+  [k: string]: unknown;
+}
 /**
  * Whole ``detailed.json`` document.
  *
@@ -186,6 +346,87 @@ export interface EditOperation {
   }[];
 }
 /**
+ * Contributor confirmations recorded with the submission (audit trail).
+ *
+ * All three must be true to submit — gated client-side and re-checked server-
+ * side. Rights to *share* (distribution / reciter permission) and rights to
+ * *store* (QUA download + permanent retention) are deliberately separate.
+ */
+export interface IntakeAttestations {
+  distribution_rights?: boolean;
+  links_verified?: boolean;
+  storage_rights?: boolean;
+  [k: string]: unknown;
+}
+/**
+ * Normalised audio source. Typed links and dropped CSV/JSON files both feed
+ * ``links``; ``playlist`` carries a single URL we enumerate offline (yt-dlp).
+ */
+export interface IntakeSource {
+  method: "links" | "playlist";
+  links?: SourceLink[];
+  playlist_url?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * One per-chapter direct audio URL (scheme optional — normalised to https).
+ */
+export interface SourceLink {
+  chapter: number;
+  url: string;
+  [k: string]: unknown;
+}
+/**
+ * Body of ``POST /api/requests/intake``.
+ *
+ * ``proposed_edits`` reuses :class:`ProposedEdits` — its fields already are the
+ * combination (riwayah/style/recording_context/recording_year) plus, for
+ * ``new_reciter``, identity (name_en/name_ar/country).
+ */
+export interface IntakeSubmission {
+  kind: "existing_reciter_new_combo" | "new_reciter";
+  reciter_id?: string | null;
+  proposed_edits?: ProposedEdits;
+  source: IntakeSource;
+  comments?: string | null;
+  auto_claim?: boolean;
+  attestations?: IntakeAttestations;
+  [k: string]: unknown;
+}
+/**
+ * User-submitted catalog edits, all optional.
+ *
+ * Only the fields the requester actually changed get populated. The
+ * server uses these to patch the catalog on auto-acceptance — fields
+ * left ``None`` mean "leave the existing catalog value alone."
+ *
+ * Riwayah and style are descriptive fields on the ``Delivery`` row, not
+ * parts of the slug — changing them does NOT re-key the row. Collisions
+ * with another delivery of the same reciter are non-blocking warnings.
+ */
+export interface ProposedEdits {
+  riwayah?: string | null;
+  style?: string | null;
+  name_en?: string | null;
+  name_ar?: string | null;
+  /**
+   * ISO-2 country code; validation deferred to catalog write
+   */
+  country?: string | null;
+  recording_context?: string | null;
+  recording_year?: number | null;
+}
+/**
+ * Structural validation outcome (submit-time). ``errors`` block submission;
+ * ``warnings`` (missing chapters, duplicates, unrecognised playlist host,
+ * likely-duplicate request) are advisory — the admin adjudicates.
+ */
+export interface IntakeValidation {
+  errors?: string[];
+  warnings?: string[];
+  [k: string]: unknown;
+}
+/**
  * One pipeline-op waveform slice. Migration #5 canonical shape.
  *
  * All fields required:
@@ -212,4 +453,24 @@ export interface PeaksRecord {
   end_ms: number;
   bps: number;
   peaks_b64: string;
+}
+/**
+ * Body of ``POST /api/admin/requests/<id>/probe``. Also cached onto the
+ * request row's ``payload.probe`` so the panel shows the last result.
+ */
+export interface ProbeResponse {
+  at: string;
+  results?: ProbeResult[];
+  [k: string]: unknown;
+}
+/**
+ * Reachability of one URL. ``status`` is the HTTP status (``None`` when the
+ * connection itself failed); ``reachable`` is the rolled-up verdict.
+ */
+export interface ProbeResult {
+  chapter?: number | null;
+  url: string;
+  status?: number | null;
+  reachable?: boolean;
+  [k: string]: unknown;
 }

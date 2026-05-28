@@ -18,6 +18,7 @@
      */
     import { fade, fly } from 'svelte/transition';
 
+    import { isPlausibleUrl } from '../../../../lib/utils/url';
     import { type LinkRow, submitWizard } from '../../stores/submit-wizard';
 
     $: state = $submitWizard;
@@ -89,9 +90,32 @@
 
     $: linkCount = state.links.filter((r) => r.url.trim().length > 0).length;
     $: linkComplete = linkCount === 114;
-    $: linkAnyMalformed = state.links.some(
-        (r) => r.url.trim().length > 0 && !/^https?:\/\//i.test(r.url.trim()),
+    $: malformedChapters = state.links
+        .filter((r) => r.url.trim().length > 0 && !isPlausibleUrl(r.url))
+        .map((r) => r.chapter);
+    $: linkAnyMalformed = malformedChapters.length > 0;
+    $: presentChapters = new Set(
+        state.links.filter((r) => r.url.trim().length > 0).map((r) => r.chapter),
     );
+    $: missingChapters = Array.from({ length: 114 }, (_, i) => i + 1).filter(
+        (c) => !presentChapters.has(c),
+    );
+
+    /** Render a sorted int list as compact ranges: [1,2,3,7] → "1–3, 7". */
+    function compactRanges(nums: number[]): string {
+        const xs = [...new Set(nums)].sort((a, b) => a - b);
+        if (xs.length === 0) return '';
+        const parts: string[] = [];
+        let start = xs[0]!;
+        let prev = xs[0]!;
+        for (const n of xs.slice(1)) {
+            if (n === prev + 1) { prev = n; continue; }
+            parts.push(start === prev ? `${start}` : `${start}–${prev}`);
+            start = prev = n;
+        }
+        parts.push(start === prev ? `${start}` : `${start}–${prev}`);
+        return parts.join(', ');
+    }
 
     function prevent(e: DragEvent): void { e.preventDefault(); }
 </script>
@@ -177,11 +201,29 @@
                                         placeholder="https://…"
                                         value={row.url}
                                         class:has-url={row.url.trim().length > 0}
+                                        class:malformed={row.url.trim().length > 0 && !isPlausibleUrl(row.url)}
                                         on:input={(e) => updateLink(row.chapter, (e.currentTarget as HTMLInputElement).value)}
                                     />
                                 </label>
                             {/each}
                         </div>
+
+                        {#if linkAnyMalformed || (linkCount > 0 && !linkComplete)}
+                            <div class="coverage">
+                                {#if linkAnyMalformed}
+                                    <p class="cov-line err">
+                                        Some URLs are invalid (highlighted) — each must start with http(s)://
+                                    </p>
+                                {/if}
+                                {#if linkCount > 0 && !linkComplete}
+                                    <p class="cov-line warn">
+                                        <span class="cov-label">Missing</span>
+                                        {missingChapters.length} of 114 — chapter{missingChapters.length === 1 ? '' : 's'}
+                                        {compactRanges(missingChapters)}
+                                    </p>
+                                {/if}
+                            </div>
+                        {/if}
                     </div>
                 </div>
             {:else}
@@ -189,16 +231,12 @@
                     <span>Playlist URL</span>
                     <input
                         type="url"
-                        placeholder="https://youtube.com/playlist?list=…"
+                        placeholder="YouTube, SoundCloud, Internet Archive, Google Drive folder, etc."
                         value={state.playlistUrl}
                         on:input={(e) => submitWizard.update((s) => ({ ...s, playlistUrl: (e.currentTarget as HTMLInputElement).value }))}
                     />
                     <span class="playlist-hint">
-                        For a Google Drive folder, share it as
-                        <em>anyone with the link can view</em> and name the
-                        files so chapter order is unambiguous
-                        (<span class="m">001.mp3</span> … <span class="m">114.mp3</span>).
-                        We fetch via yt-dlp once the ingest pipeline lands.
+                        For a Drive folder, make sure it is public and name the files so chapter order is unambiguous (001.mp3 ... 114.mp3).
                     </span>
                 </label>
             {/if}
@@ -388,6 +426,16 @@
         background: var(--canvas-inset);
     }
     .pc-row input.has-url { color: var(--text-primary); }
+    .pc-row input.malformed { border-color: var(--state-error-fg); color: var(--state-error-fg); }
+
+    .coverage { display: flex; flex-direction: column; gap: 3px; margin-top: var(--s-2); }
+    .cov-line { margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
+    .cov-line .cov-label {
+        display: inline-block; margin-right: 6px; padding: 0 6px;
+        border-radius: var(--r-1); font-size: 10px; font-weight: 500;
+    }
+    .cov-line.err { color: var(--state-error-fg); }
+    .cov-line.warn .cov-label { background: oklch(0.86 0.13 75 / 0.16); color: var(--state-error-fg); }
 
     /* playlist */
     .playlist {

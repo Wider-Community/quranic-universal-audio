@@ -101,6 +101,11 @@ _seg_history_batches: _KeyedCache[list[dict]] = _KeyedCache()
 _seg_split_group_index: _KeyedCache[dict[str, list[str]]] = _KeyedCache()
 _seg_edit_history: _KeyedCache[dict] = _KeyedCache()
 _seg_history_peaks: _KeyedCache[list[dict]] = _KeyedCache()
+# Serialized GET /api/seg/history-peaks response bytes, keyed by reciter. The
+# History panel is browsed heavily (incl. anonymous), so cache the orjson bytes
+# to skip re-serializing the (canonical b64) record list on every tab open.
+# Popped wherever the JSONL is appended (save invalidation + anon write-back).
+_seg_history_peaks_response: _KeyedCache[bytes] = _KeyedCache()
 # Validation + stats results — recomputed only on cache miss; cleared by
 # ``invalidate_seg_caches`` on every save / undo so writers can't read stale data.
 _seg_validate_result: _KeyedCache[dict] = _KeyedCache()
@@ -242,6 +247,18 @@ def set_seg_history_peaks(reciter: str, value: list[dict]) -> None:
     _seg_history_peaks.set(reciter, value)
 
 
+def get_seg_history_peaks_response(reciter: str) -> bytes | None:
+    return _seg_history_peaks_response.get(reciter)
+
+
+def set_seg_history_peaks_response(reciter: str, value: bytes) -> None:
+    _seg_history_peaks_response.set(reciter, value)
+
+
+def pop_seg_history_peaks_response(reciter: str) -> None:
+    _seg_history_peaks_response.pop(reciter)
+
+
 def get_seg_validate_cache(reciter: str) -> dict | None:
     return _seg_validate_result.get(reciter)
 
@@ -286,6 +303,7 @@ def invalidate_seg_caches(reciter: str) -> None:
     _seg_auto_split.pop(reciter)
     _seg_edit_history.pop(reciter)
     _seg_history_peaks.pop(reciter)
+    _seg_history_peaks_response.pop(reciter)
     _seg_validate_result.pop(reciter)
     _seg_stats_result.pop(reciter)
     # _seg_history_batches and _seg_split_group_index are NOT popped here —
@@ -314,6 +332,7 @@ def pop_seg_caches_affected_by_segment_edit(reciter: str) -> None:
     _seg_probe_v2.pop(reciter)
     _seg_edit_history.pop(reciter)
     _seg_history_peaks.pop(reciter)
+    _seg_history_peaks_response.pop(reciter)
     _seg_validate_result.pop(reciter)
     _seg_stats_result.pop(reciter)
 
@@ -481,6 +500,7 @@ def set_qf_token_cooldown(until: float) -> None:
     _qf_token_cooldown.set(until)
 
 
+
 # Audio manifest sidecar (catalog/audio_manifest/<slug>.json) + derived
 # URL → chapter-key inverse index. Both populated together by
 # ``services/audio/audio_meta._load_sidecar`` on first read. The inverse
@@ -614,3 +634,140 @@ def get_surah_info_lite_cache():
 
 def set_surah_info_lite_cache(data: dict) -> None:
     _surah_info_lite.set(data)
+
+
+# ---------------------------------------------------------------------------
+# Public reciters list — the only high-frequency, anonymous, concurrent path.
+# ``all_public_reciters()`` rebuilds the WHOLE catalog model (from DB via
+# ``catalog_service.snapshot()``) + the state JOIN per call; cache the
+# materialized list keyed on the monotonic ``db_seq`` so ANY committed write
+# (any DB mutation bumps db_seq) transparently invalidates it — no explicit
+# per-mutation hooks to keep in sync. Single-worker gthread: a benign race
+# just recomputes for one seq.
+# ---------------------------------------------------------------------------
+
+import threading as _threading
+
+_public_reciters_lock = _threading.Lock()
+_public_reciters: "tuple[int, list] | None" = None
+
+
+def get_public_reciters_cache(db_seq: int):
+    """Return the cached list iff it was computed at ``db_seq``, else None."""
+    with _public_reciters_lock:
+        if _public_reciters is not None and _public_reciters[0] == db_seq:
+            return _public_reciters[1]
+    return None
+
+
+def set_public_reciters_cache(db_seq: int, value: list) -> None:
+    global _public_reciters
+    with _public_reciters_lock:
+        _public_reciters = (db_seq, value)
+
+
+def invalidate_public_reciters_cache() -> None:
+    global _public_reciters
+    with _public_reciters_lock:
+        _public_reciters = None
+
+
+# ---------------------------------------------------------------------------
+# Catalog snapshot — the full ReciterCatalog rebuild from the SQLite DB
+# through pydantic. Recomputed per request on /api/static/catalog.json,
+# public detail / admin-view pages, and activity-feed descriptor lookups;
+# ~38 ms today but ~300 ms at 10x deliveries and ~700 ms at 100x
+# (single-threaded → compounds across concurrent visitors on the single
+# worker). Cache the built model keyed on db_seq so the rebuild is paid
+# once per write generation. Returned INSTANCE is shared — all
+# catalog_service.snapshot() consumers are read-only (verified); never mutate it.
+# ---------------------------------------------------------------------------
+
+_catalog_snapshot_lock = _threading.Lock()
+_catalog_snapshot: "tuple[int, object] | None" = None
+
+
+def get_catalog_snapshot_cache(db_seq: int):
+    """Return the cached ReciterCatalog iff built at ``db_seq``, else None."""
+    with _catalog_snapshot_lock:
+        if _catalog_snapshot is not None and _catalog_snapshot[0] == db_seq:
+            return _catalog_snapshot[1]
+    return None
+
+
+def set_catalog_snapshot_cache(db_seq: int, value: object) -> None:
+    global _catalog_snapshot
+    with _catalog_snapshot_lock:
+        _catalog_snapshot = (db_seq, value)
+
+
+def invalidate_catalog_snapshot_cache() -> None:
+    global _catalog_snapshot
+    with _catalog_snapshot_lock:
+        _catalog_snapshot = None
+
+
+# ---------------------------------------------------------------------------
+# Admin Users list — assembled read model (5 GROUP-BY aggregations merged in
+# Python). Maintainer/owner-only and low-frequency, but the assembly touches
+# transitions/requests/claims, so cache the built payload keyed on db_seq
+# exactly like public_reciters: ANY committed write (role grants, claims,
+# transitions, the hourly visitor flush) bumps db_seq → transparent
+# invalidation, no per-mutation hook. The detail endpoint is lazy/bounded and
+# NOT cached.
+# ---------------------------------------------------------------------------
+
+_admin_users_lock = _threading.Lock()
+_admin_users: "tuple[int, object] | None" = None
+
+
+def get_admin_users_cache(db_seq: int):
+    """Return the cached admin-users payload iff built at ``db_seq``, else None."""
+    with _admin_users_lock:
+        if _admin_users is not None and _admin_users[0] == db_seq:
+            return _admin_users[1]
+    return None
+
+
+def set_admin_users_cache(db_seq: int, value: object) -> None:
+    global _admin_users
+    with _admin_users_lock:
+        _admin_users = (db_seq, value)
+
+
+def invalidate_admin_users_cache() -> None:
+    global _admin_users
+    with _admin_users_lock:
+        _admin_users = None
+
+
+# ---------------------------------------------------------------------------
+# Admin Requests tab — catalog-joined base rows per (db_seq, status). The join
+# (delivery → reciter name + riwayah/style + conflict scan) is the expensive
+# part; cache it keyed on db_seq so it's paid once per write generation. The
+# per-caller overlay (viewed flag + requester redaction + unviewed count) is
+# cheap and applied live on top, so the cache stays caller-agnostic. Keyed by
+# status because the four facets are read independently; entries from older
+# db_seqs are pruned on write so the dict stays bounded by the live generation.
+# ---------------------------------------------------------------------------
+
+_admin_requests_lock = _threading.Lock()
+_admin_requests: "dict[tuple[int, str], object]" = {}
+
+
+def get_admin_requests_cache(db_seq: int, status: str):
+    """Return cached base rows for ``(db_seq, status)``, else None."""
+    with _admin_requests_lock:
+        return _admin_requests.get((db_seq, status))
+
+
+def set_admin_requests_cache(db_seq: int, status: str, value: object) -> None:
+    with _admin_requests_lock:
+        for k in [k for k in _admin_requests if k[0] != db_seq]:
+            _admin_requests.pop(k, None)
+        _admin_requests[(db_seq, status)] = value
+
+
+def invalidate_admin_requests_cache() -> None:
+    with _admin_requests_lock:
+        _admin_requests.clear()

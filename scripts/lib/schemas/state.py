@@ -16,7 +16,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Slug regex: lowercase letter prefix, ASCII alnum + underscore, 2-80 chars.
-# Matches docs/reference/reciter-catalog.md §3 (extended ceiling to 80 to
+# Matches docs/reference/catalog.md §3 (extended ceiling to 80 to
 # accommodate disambiguators like _byayah, _128k_v2).
 SLUG_RE = re.compile(r"^[a-z][a-z0-9_]{1,79}$")
 

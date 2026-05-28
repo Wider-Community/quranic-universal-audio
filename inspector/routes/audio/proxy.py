@@ -22,7 +22,7 @@ The download-all + delete-cache + cache-status endpoints have been removed
 — bucket audio is populated by the offline pipeline, not by a Space-side
 warm path. The 1-week post-RELEASED GC lives in
 ``services.audio_prefetch.sweep_due`` (see
-``docs/reference/inspector/wip-audio-sweeper.md``).
+``the inspector-audio skill``).
 """
 
 import logging

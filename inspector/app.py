@@ -69,12 +69,14 @@ from services.storage.auto_mount import auto_mount as _auto_mount_bucket
 _auto_mount_bucket()
 
 
-from flask import Flask, jsonify, send_from_directory
+import uuid
+
+from flask import Flask, g, jsonify, request, send_from_directory
 from flask_compress import Compress
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from config import (DEFAULT_PORT,
+from config import (ANON_COOKIE_MAX_AGE, ANON_COOKIE_NAME, DEFAULT_PORT,
                     FLASK_DEV_VALUE, FLASK_ENV_VAR, SERVER_HOST)
 from routes import register_blueprints
 from services import access as access_service
@@ -86,6 +88,7 @@ from services import audit as audit_service
 from services import auth as auth_service
 from services import catalog as catalog_service
 from services import state as state_service
+from services.admin import visitors as visitor_analytics
 from services.data_loader import load_surah_info_lite
 # Phonemizer was eagerly initialized here. It's now imported lazily inside
 # inspector/scripts/backfill_boundary_adj.py (the only remaining consumer).
@@ -234,7 +237,8 @@ Compress(app)
 # request.url_root reflects the public https URL (load-bearing for the
 # OAuth redirect_uri). Gated by env so local dev / docker-compose runs
 # without proxy headers are unaffected.
-if os.environ.get("INSPECTOR_BEHIND_PROXY") == "1":
+_behind_proxy = os.environ.get("INSPECTOR_BEHIND_PROXY") == "1"
+if _behind_proxy:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Flask's secret key still signs anything that touches the session, but the
@@ -258,70 +262,120 @@ register_blueprints(app)
 
 
 # ---------------------------------------------------------------------------
-# Bucket-resident stores: hydrate on import so both `python3 inspector/app.py`
-# and `gunicorn inspector.app:app` follow the same path. Errors degrade to
-# empty in-memory stores + a warning — the app still boots so contributors
-# get a clear "no reciters yet" page rather than a hard 500.
+# Visitor analytics (Tier 2/3) — anon vs signed-in traffic counters.
+# Gated by INSPECTOR_VISITOR_ANALYTICS=1 (prod Dockerfile sets it) so dev /
+# tests have zero behavior change. Classification is HMAC-only (no DB) and
+# counting is in-memory; the hourly flush daemon (wired in _boot_substrate)
+# is the only thing that touches the bucket.
 # ---------------------------------------------------------------------------
 
-def _hydrate_bucket_stores() -> None:
-    for label, fn in (
-        ("access", access_service.hydrate),
-        ("state", state_service.hydrate),
-        ("catalog", catalog_service.hydrate),
-        ("activity_state", activity_state_service.hydrate),
-        ("pending_requests", pending_requests_service.hydrate),
-        ("request_archive", request_archive_service.hydrate),
-    ):
-        try:
-            fn()
-        except Exception as e:  # noqa: BLE001 — log and continue
-            logger.warning(
-                "%s store hydrate failed (%s); continuing with empty in-memory model",
-                label,
-                e,
-            )
+_ANON_SKIP_PREFIXES = ("/assets/", "/fonts/")
+_ANON_SKIP_PATHS = {"/healthz", "/favicon.ico"}
 
+
+def _visitor_analytics_on() -> bool:
+    return os.environ.get("INSPECTOR_VISITOR_ANALYTICS") == "1"
+
+
+@app.before_request
+def _count_visitor():
+    if not _visitor_analytics_on():
+        return
+    p = request.path
+    if p in _ANON_SKIP_PATHS or p.startswith(_ANON_SKIP_PREFIXES):
+        return
+    cookie = request.cookies.get(auth_service.SESSION_COOKIE_NAME, "")
+    payload = auth_service.decode_session(cookie) if cookie else None
+    if payload is not None:
+        visitor_analytics.record_hit(payload)
+        return
+    anon_id = request.cookies.get(ANON_COOKIE_NAME)
+    visitor_analytics.record_hit(None, anon_id=anon_id)
+    if not anon_id:
+        g.set_anon_cookie = True  # mint one in _set_anon_cookie
+
+
+@app.after_request
+def _set_anon_cookie(resp):
+    if getattr(g, "set_anon_cookie", False):
+        resp.set_cookie(
+            ANON_COOKIE_NAME,
+            uuid.uuid4().hex,
+            max_age=ANON_COOKIE_MAX_AGE,
+            httponly=True,
+            secure=_behind_proxy,
+            samesite="None" if _behind_proxy else "Lax",
+            path="/",
+        )
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# SQLite substrate: boot on import so both `python3 inspector/app.py`
+# and `gunicorn inspector.app:app` follow the same path. Errors degrade
+# gracefully (503 on /healthz, but app still importable) — contributors get
+# clear feedback rather than a hard crash.
+# ---------------------------------------------------------------------------
+
+def _boot_substrate() -> None:
+    """Boot the SQLite substrate (the source of truth), then the idempotent
+    boot-scan + opt-in daemons.
+
+    Hard cut: the 6 legacy bucket JSON stores are no longer hydrated into
+    memory — the DB pulled from the bucket IS the source of truth. Per-reciter
+    content under ``wip/<slug>/`` stays JSON-on-bucket and is read on demand.
+
+    Boot order (matters): pull → migrate FIRST (a repo read before migration
+    would hit an empty/old schema), THEN the boot-scan (which reads/writes the
+    DB-backed state), THEN daemons (which call ``state.transition``). A failure
+    in deployed mode (``INSPECTOR_BUCKET_MOUNT`` set) leaves the app importable
+    with ``db_open:false`` so ``/healthz`` returns 503 — never a hard import
+    crash; locally a real init error surfaces loudly.
+
+    Tests skip this entirely and manage their own DB via the ``sqlite_db``
+    fixture.
+    """
+    if "pytest" in sys.modules:
+        return
+
+    from services import db as _db
+    from services.db import sync as _sync
+
+    deployed = bool(os.environ.get("INSPECTOR_BUCKET_MOUNT"))
     try:
-        audit_service.ensure_meta_initialized()
-    except Exception as e:  # noqa: BLE001
-        logger.warning("audit ensure_meta_initialized failed: %s", e)
+        _sync.pull()  # bucket DB → local path (fresh init if the bucket has none)
+        ver = _db.init_db()  # open writer + run migrations (fail-fast)
+        logger.info("db substrate: ready at schema v%s", ver)
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "db substrate init failed; /healthz will report db_open:false"
+        )
+        if not deployed:
+            raise
+        return
 
-    # Wip-audio sweeper: hourly daemon enforcing the 1-week post-RELEASED
-    # TTL on bucket audio + peaks. Bucket audio itself is written by the
-    # katana extraction pipeline; the inspector only reads and (here) GCs.
-    #
-    # Opt-in via ``INSPECTOR_WIP_SWEEPER=1`` (Dockerfile sets it on prod).
-    # Local dev runs (``python3 inspector/app.py``) leave it unset so a
-    # mistyped INSPECTOR_BUCKET_REPO can't accidentally delete prod data.
-    # Tests skip via the pytest guard.
-    # Auto-detect reconciler: server-side acceptance of pending requests.
-    # ``hydrate_initial_seen`` ALWAYS runs at boot — it's idempotent and only
-    # fires alignment_completed for slugs already stuck in AWAITING_ALIGNMENT
-    # despite having ``wip/<slug>/`` files. Without this, a reciter uploaded
-    # while the server was down (or before deploy of the auto-detect feature)
-    # stays in AWAITING_ALIGNMENT forever, causing the dashboard row, detail
-    # modal, and segments combobox to all disagree about its bucket.
-    #
-    # The 60s background polling loop stays opt-in via ``INSPECTOR_AUTO_DETECT=1``
-    # because dev environments don't want a CPU loop hammering the bucket.
-    # Tests skip both via the pytest guard.
-    if "pytest" not in sys.modules:
-        try:
+    # Boot-scan: idempotent ``alignment_completed`` catch-up for ``wip/<slug>/``
+    # dirs stuck in AWAITING_ALIGNMENT. Wrapped in ``deferred_sync`` so its loop
+    # of N transitions produces ONE coalesced bucket upload, not N (avoids a
+    # boot-time upload storm / cross-container CAS thrash).
+    try:
+        with _sync.deferred_sync():
             auto_detect_service.hydrate_initial_seen()
-        except Exception as e:  # noqa: BLE001
-            logger.warning("auto_detect hydrate_initial_seen failed: %s", e)
-        if os.environ.get("INSPECTOR_AUTO_DETECT") == "1":
-            try:
-                interval = int(os.environ.get("INSPECTOR_AUTO_DETECT_INTERVAL_S", "60"))
-                auto_detect_service.start_background_loop(interval_seconds=interval)
-                logger.info(
-                    "auto_detect: background loop scheduled (interval=%ss)", interval,
-                )
-            except Exception as e:  # noqa: BLE001
-                logger.warning("auto_detect background loop wiring failed: %s", e)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("auto_detect hydrate_initial_seen failed: %s", e)
 
-    if "pytest" not in sys.modules and os.environ.get("INSPECTOR_WIP_SWEEPER") == "1":
+    # 60s polling reconciler — opt-in (dev environments don't want a loop).
+    if os.environ.get("INSPECTOR_AUTO_DETECT") == "1":
+        try:
+            interval = int(os.environ.get("INSPECTOR_AUTO_DETECT_INTERVAL_S", "60"))
+            auto_detect_service.start_background_loop(interval_seconds=interval)
+            logger.info("auto_detect: background loop scheduled (interval=%ss)", interval)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("auto_detect background loop wiring failed: %s", e)
+
+    # Wip-audio sweeper: hourly TTL GC of bucket audio/peaks. Opt-in via
+    # ``INSPECTOR_WIP_SWEEPER=1`` (prod Dockerfile sets it).
+    if os.environ.get("INSPECTOR_WIP_SWEEPER") == "1":
         try:
             from services import audio_prefetch
 
@@ -330,8 +384,18 @@ def _hydrate_bucket_stores() -> None:
         except Exception as e:  # noqa: BLE001
             logger.warning("wip-audio sweeper wiring failed: %s", e)
 
+    # Visitor-analytics flush: hourly drain of in-memory traffic counters into
+    # visitor_daily (one bucket upload/hour). Opt-in via
+    # ``INSPECTOR_VISITOR_ANALYTICS=1`` (prod Dockerfile sets it).
+    if os.environ.get("INSPECTOR_VISITOR_ANALYTICS") == "1":
+        try:
+            visitor_analytics.start_flush_daemon()
+            logger.info("visitor analytics: hourly flush daemon started")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("visitor analytics wiring failed: %s", e)
 
-_hydrate_bucket_stores()
+
+_boot_substrate()
 
 
 # ---------------------------------------------------------------------------
@@ -425,9 +489,13 @@ if __name__ == "__main__":
     # 300 reciters at startup, which is unviable at deployed scale.
 
     # Vite owns frontend file-watching (HMR in dev; rebuild on npm run build).
-    # Flask reloader only needs to watch Python modules, which it does natively.
-    # Debug + reloader default off for production; opt in with `FLASK_ENV=development`
-    # (matches plan §4: `debug=False` unless `FLASK_ENV=development`).
+    # The Werkzeug reloader is DELIBERATELY OFF (even in debug): it runs two
+    # processes (supervisor + worker), each of which imports this module and
+    # runs `_boot_substrate()` → both open the single SQLite writer connection.
+    # That violates the single-worker invariant; on Windows the second boot's
+    # `sync.pull()` `os.replace` is denied (the other process holds the DB),
+    # crashing startup with WinError 5 (on Linux it silently races). Python
+    # changes therefore need a manual restart; debug still gives rich error pages.
     debug = os.environ.get(FLASK_ENV_VAR) == FLASK_DEV_VALUE
-    logger.info("Starting server at http://localhost:%d (debug=%s)", args.port, debug)
-    app.run(host=SERVER_HOST, port=args.port, debug=debug, use_reloader=debug)
+    logger.info("Starting server at http://localhost:%d (debug=%s, reloader=off)", args.port, debug)
+    app.run(host=SERVER_HOST, port=args.port, debug=debug, use_reloader=False)

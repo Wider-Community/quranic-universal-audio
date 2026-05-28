@@ -47,26 +47,8 @@ def test_hydrate_empty_when_no_file(fresh_state):
     assert snap.dismissals == {}
 
 
-def test_hydrate_loads_existing_file(tmp_path, monkeypatch):
-    from services import activity_state as activity_state_service
-    from services import hf_bucket as _hf_bucket
-    from services import storage_paths
-
-    monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))
-    backend = _hf_bucket.FilesystemBackend(tmp_path)
-    _hf_bucket.set_backend(backend)
-    backend.write_json_atomic(
-        storage_paths.activity_state_path(),
-        {
-            "deleted": ["aaaa1111", "bbbb2222"],
-            "dismissals": {"u-1": ["cccc3333"], "u-2": ["dddd4444"]},
-        },
-    )
-    activity_state_service.hydrate()
-    snap = activity_state_service.snapshot()
-    assert snap.deleted == ["aaaa1111", "bbbb2222"]
-    assert snap.dismissals == {"u-1": ["cccc3333"], "u-2": ["dddd4444"]}
-    _hf_bucket.reset_backend()
+# (Removed test_hydrate_loads_existing_file: bucket activity_state.json hydrate
+# no longer exists — the substrate DB is the source of truth.)
 
 
 # ---------------------------------------------------------------------------
@@ -197,15 +179,15 @@ def test_delete_idempotent(fresh_state, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_writes_persist_to_bucket(fresh_state, monkeypatch):
-    svc, backend = fresh_state
+def test_writes_persist_to_substrate(fresh_state, monkeypatch):
+    """Dismiss/delete persist into the SQLite substrate (read back via snapshot)."""
+    svc, _ = fresh_state
     from services import audit as audit_service
-    from services import storage_paths
     monkeypatch.setattr(audit_service, "append", lambda **kw: None)
 
     svc.dismiss("abc123", actor=_actor("u-A", role="maintainer"))
     svc.delete("xyz789", actor=_actor("u-O", role="owner"), reason="ten chars+")
 
-    raw = backend.read_json(storage_paths.activity_state_path())
-    assert raw["deleted"] == ["xyz789"]
-    assert raw["dismissals"] == {"u-A": ["abc123"]}
+    snap = svc.snapshot()
+    assert snap.deleted == ["xyz789"]
+    assert snap.dismissals == {"u-A": ["abc123"]}

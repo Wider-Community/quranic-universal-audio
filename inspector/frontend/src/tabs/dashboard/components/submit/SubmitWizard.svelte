@@ -14,12 +14,18 @@
     import { onDestroy, tick } from 'svelte';
     import { fade, fly } from 'svelte/transition';
 
+    import { submitIntake } from '../../../../lib/api/submit-recitation';
+    import { pushToast } from '../../../../lib/stores/toast';
+    import type { IntakeSubmission } from '../../../../lib/types/generated/schemas';
+    import { countryByName } from '../../../../lib/utils/countries';
+    import { isPlausibleUrl } from '../../../../lib/utils/url';
     import {
         closeSubmitWizard,
         setStep,
         submitWizard,
         type WizardStep,
     } from '../../stores/submit-wizard';
+    import StepConfirm from './StepConfirm.svelte';
     import StepDetails from './StepDetails.svelte';
     import StepReciter from './StepReciter.svelte';
     import StepSource from './StepSource.svelte';
@@ -116,23 +122,112 @@
         }
         return state.newReciter.name_en.trim().length > 0;
     })();
-    $: canAdvanceStep2 = state.sourceMethod !== null;
-    $: canSubmit = !!state.combination.riwayah && !!state.combination.style;
+    // Step 2 gates on valid URLs (the hard errors the backend would reject) but
+    // NOT on full 114-chapter coverage — missing chapters are an allowed warning.
+    $: linksFilled = state.links.filter((r) => r.url.trim().length > 0);
+    $: anyMalformed = linksFilled.some((r) => !isPlausibleUrl(r.url));
+    $: canAdvanceStep2 =
+        state.sourceMethod === 'playlist'
+            ? isPlausibleUrl(state.playlistUrl)
+            : state.sourceMethod === 'links' && linksFilled.length > 0 && !anyMalformed;
+    $: canAdvanceStep3 = !!state.combination.riwayah && !!state.combination.style;
+    $: canSubmit =
+        state.attestations.distribution_rights &&
+        state.attestations.links_verified &&
+        state.attestations.storage_rights;
     // existing_combo skips source + details — the canonical edit path lives in
-    // RequestForm. We don't need step 2/3 for that mode.
+    // RequestForm. We don't need step 2/3/4 for that mode.
     $: skipSourceAndDetails = state.reciterMode === 'existing_combo';
+
+    /** Whether step n is reachable given the gates for the steps before it. */
+    function canReach(n: number): boolean {
+        if (n <= 1) return true;
+        if (n === 2) return canAdvanceStep1;
+        if (n === 3) return canAdvanceStep1 && canAdvanceStep2;
+        return canAdvanceStep1 && canAdvanceStep2 && canAdvanceStep3;
+    }
+    function goToStep(n: number): void {
+        if (n === step) return;
+        if (n < step || canReach(n)) setStep(n as WizardStep);
+    }
 
     function next(): void {
         if (step === 1 && canAdvanceStep1) setStep(2);
         else if (step === 2 && canAdvanceStep2) setStep(3);
+        else if (step === 3 && canAdvanceStep3) setStep(4);
     }
     function back(): void {
         if (step === 2) setStep(1);
         else if (step === 3) setStep(2);
+        else if (step === 4) setStep(3);
     }
-    function submitNoop(): void {
-        // Backend lands later; close cleanly.
+    function doneExistingCombo(): void {
+        // existing_combo routes to RequestForm via StepReciter; nothing to submit.
         closeSubmitWizard();
+    }
+
+    // ---- submit ----
+
+    let submitting = false;
+    let submitErrors: string[] = [];
+
+    function buildPayload(): IntakeSubmission {
+        const kind =
+            state.reciterMode === 'new' ? 'new_reciter' : 'existing_reciter_new_combo';
+        const c = state.combination;
+        const proposed_edits: IntakeSubmission['proposed_edits'] = {
+            riwayah: c.riwayah || null,
+            style: c.style || null,
+            recording_context: c.recording_context || null,
+            recording_year: c.recording_year === '' ? null : Number(c.recording_year),
+        };
+        if (kind === 'new_reciter') {
+            proposed_edits.name_en = state.newReciter.name_en.trim() || null;
+            proposed_edits.name_ar = state.newReciter.name_ar.trim() || null;
+            proposed_edits.country =
+                countryByName(state.newReciter.countryName)?.code ?? null;
+        }
+        const links = state.links
+            .filter((r) => r.url.trim().length > 0)
+            .map((r) => ({ chapter: r.chapter, url: r.url.trim() }));
+        return {
+            kind,
+            reciter_id: kind === 'existing_reciter_new_combo' ? state.existingReciterSlug : null,
+            proposed_edits,
+            source: {
+                method: state.sourceMethod ?? 'links',
+                links,
+                playlist_url: state.playlistUrl.trim() || null,
+            },
+            comments: state.comments.trim() || null,
+            auto_claim: state.autoClaim,
+            attestations: { ...state.attestations },
+        };
+    }
+
+    async function submit(): Promise<void> {
+        if (submitting) return;
+        submitting = true;
+        submitErrors = [];
+        try {
+            const result = await submitIntake(buildPayload());
+            if (!result.ok) {
+                submitErrors = result.errors ?? ['Submission failed.'];
+                return;
+            }
+            for (const w of result.warnings) {
+                pushToast({ kind: 'warn', text: w, ttl: 7000 });
+            }
+            pushToast({
+                kind: 'success',
+                text: 'Thanks — your submission is queued for review.',
+            });
+            closeSubmitWizard();
+        } catch (e) {
+            submitErrors = [e instanceof Error ? e.message : 'Submission failed.'];
+        } finally {
+            submitting = false;
+        }
     }
 
     onDestroy(() => unlockScroll());
@@ -168,17 +263,25 @@
                 </div>
                 {#if !skipSourceAndDetails}
                     <ol class="stepper" aria-label="Progress">
-                        {#each [1, 2, 3] as n (n)}
+                        {#each [1, 2, 3, 4] as n (n)}
                             <li
                                 class="dot"
                                 class:done={n < step}
                                 class:active={n === step}
+                                class:reachable={canReach(n)}
                                 aria-current={n === step ? 'step' : undefined}
                             >
-                                <span class="dot-num">{n}</span>
-                                <span class="dot-label">
-                                    {n === 1 ? 'Reciter' : n === 2 ? 'Source' : 'Details'}
-                                </span>
+                                <button
+                                    type="button"
+                                    class="dot-btn"
+                                    disabled={!canReach(n) && n > step}
+                                    on:click={() => goToStep(n)}
+                                >
+                                    <span class="dot-num">{n}</span>
+                                    <span class="dot-label">
+                                        {n === 1 ? 'Reciter' : n === 2 ? 'Source' : n === 3 ? 'Details' : 'Confirm'}
+                                    </span>
+                                </button>
                             </li>
                         {/each}
                         <span class="stepper-track" data-step={step} aria-hidden="true"></span>
@@ -197,17 +300,27 @@
                             <StepReciter />
                         {:else if step === 2}
                             <StepSource />
-                        {:else}
+                        {:else if step === 3}
                             <StepDetails />
+                        {:else}
+                            <StepConfirm />
                         {/if}
                     </div>
                 {/key}
             </div>
 
+            {#if submitErrors.length > 0}
+                <div class="submit-errors" role="alert" transition:fade={{ duration: 140 }}>
+                    {#each submitErrors as err (err)}
+                        <span>{err}</span>
+                    {/each}
+                </div>
+            {/if}
+
             <footer>
                 <div class="left">
                     {#if step > 1}
-                        <button type="button" class="ghost" on:click={back}>← Back</button>
+                        <button type="button" class="ghost" on:click={back} disabled={submitting}>← Back</button>
                     {/if}
                 </div>
                 <div class="right">
@@ -219,17 +332,21 @@
                         <button
                             type="button"
                             class="primary"
-                            on:click={submitNoop}
+                            on:click={doneExistingCombo}
                             disabled={!canAdvanceStep1}
                         >
                             Done
                         </button>
-                    {:else if step < 3}
+                    {:else if step < 4}
                         <button
                             type="button"
                             class="primary"
                             on:click={next}
-                            disabled={step === 1 ? !canAdvanceStep1 : !canAdvanceStep2}
+                            disabled={step === 1
+                                ? !canAdvanceStep1
+                                : step === 2
+                                  ? !canAdvanceStep2
+                                  : !canAdvanceStep3}
                         >
                             Continue
                             <span class="primary-glyph" aria-hidden="true">›</span>
@@ -238,10 +355,10 @@
                         <button
                             type="button"
                             class="primary"
-                            on:click={submitNoop}
-                            disabled={!canSubmit}
+                            on:click={submit}
+                            disabled={!canSubmit || submitting}
                         >
-                            Submit
+                            {submitting ? 'Submitting…' : 'Submit'}
                         </button>
                     {/if}
                 </div>
@@ -314,14 +431,14 @@
         margin: var(--s-3) 0 var(--s-1);
         padding: 0;
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         gap: var(--s-2);
     }
     .stepper-track {
         position: absolute;
         bottom: -3px;
         left: 0;
-        width: calc(100% / 3);
+        width: calc(100% / 4);
         height: 2px;
         background: var(--accent);
         border-radius: 2px;
@@ -329,6 +446,7 @@
     }
     .stepper-track[data-step='2'] { transform: translateX(100%); }
     .stepper-track[data-step='3'] { transform: translateX(200%); }
+    .stepper-track[data-step='4'] { transform: translateX(300%); }
     .dot {
         display: flex;
         align-items: center;
@@ -337,6 +455,19 @@
         color: var(--text-faint);
         transition: color var(--t-base) var(--ease-out-quart);
     }
+    .dot-btn {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        background: transparent;
+        border: 0;
+        padding: 0;
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+    }
+    .dot-btn:disabled { cursor: default; }
+    .dot.reachable .dot-btn:not(:disabled):hover { color: var(--text-primary); }
     .dot.active { color: var(--text-primary); }
     .dot.done { color: var(--text-secondary); }
     .dot-num {
@@ -378,6 +509,19 @@
         position: relative;
     }
     .step-wrap { will-change: transform, opacity; }
+
+    .submit-errors {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin: 0 var(--s-6);
+        padding: var(--s-2) var(--s-3);
+        background: var(--state-error-bg, oklch(0.3 0.08 25 / 0.18));
+        border: 1px solid var(--state-error-fg);
+        border-radius: var(--r-2);
+        color: var(--state-error-fg);
+        font-size: var(--fs-meta);
+    }
 
     footer {
         padding: var(--s-3) var(--s-6);

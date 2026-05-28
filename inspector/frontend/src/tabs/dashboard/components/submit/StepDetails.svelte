@@ -33,11 +33,19 @@
                 && d.style === $submitWizard.combination.style,
         );
 
+    // Hafs is identified by its vocab SHORT ('hafs'), not the slug
+    // ('hafs_an_asim'). Show the callout only once we know the short and it
+    // isn't hafs — avoids a false positive before vocab loads.
+    $: selectedRiwayahShort = riwayatOptions.find(
+        (r) => r.slug === $submitWizard.combination.riwayah,
+    )?.short;
+    $: nonHafsRiwayah = !!selectedRiwayahShort && selectedRiwayahShort !== 'hafs';
+
     $: yearOutOfBounds = $submitWizard.combination.recording_year !== ''
         && (($submitWizard.combination.recording_year as number) < MIN_YEAR
             || ($submitWizard.combination.recording_year as number) > MAX_YEAR);
 
-    interface VocabRow { slug: string; name: string; }
+    interface VocabRow { slug: string; short?: string; name: string; }
 
     let riwayatOptions: VocabRow[] = [];
     let styleOptions: VocabRow[] = [];
@@ -50,7 +58,7 @@
             const resp = await fetch('/api/static/catalog.json');
             if (!resp.ok) return;
             const cat = await resp.json();
-            riwayatOptions = (cat?.vocab?.riwayat ?? []).map((r: VocabRow) => ({ slug: r.slug, name: r.name }));
+            riwayatOptions = (cat?.vocab?.riwayat ?? []).map((r: VocabRow) => ({ slug: r.slug, short: r.short, name: r.name }));
             styleOptions = (cat?.vocab?.styles ?? []).map((s: VocabRow) => ({ slug: s.slug, name: s.name }));
             contextOptions = (cat?.vocab?.recording_contexts ?? []).map((c: VocabRow) => ({ slug: c.slug, name: c.name }));
         } catch {
@@ -128,6 +136,13 @@
             {/if}
         </label>
     </div>
+
+    {#if nonHafsRiwayah}
+        <p class="callout" transition:fade={{ duration: 160 }}>
+            Non-hafs riwayahs are not supported at the moment, we aim to have this ready
+            soon inshallah. You can still make the request.
+        </p>
+    {/if}
 
     {#if conflict}
         <p class="warning" transition:fade={{ duration: 160 }}>
@@ -252,5 +267,15 @@
         color: var(--state-requested-fg);
         border-radius: var(--r-2);
         font-size: var(--fs-meta);
+    }
+    .callout {
+        margin: 0;
+        padding: var(--s-3);
+        background: oklch(0.86 0.13 75 / 0.12);
+        color: var(--state-error-fg);
+        border: 1px solid oklch(0.86 0.13 75 / 0.35);
+        border-radius: var(--r-2);
+        font-size: var(--fs-meta);
+        line-height: var(--lh-normal);
     }
 </style>

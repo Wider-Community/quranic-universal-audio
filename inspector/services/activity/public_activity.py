@@ -1,18 +1,21 @@
-"""Public activity feed — redacted projection of the audit log.
+"""Public activity feed — redacted projection of the ``transitions`` log.
 
-Reads ``audit/<YYYY>-<MM>.jsonl`` partitions and surfaces only the public
-events classified by ``services/activity_classification``. Every other
-event class — admin overrides, force-releases, reassignments, discards,
-merge-rejected, intermediate state revisions, role changes — is redacted
-from the public feed.
+Reads a rolling window of the SQLite ``transitions`` table (``repo_transitions``)
+and surfaces only the public events classified by
+``services/activity_classification``. Every other event class — admin
+overrides, force-releases, reassignments, discards, merge-rejected,
+intermediate state revisions, role changes — is redacted from the public feed.
 
 Assignee identity is omitted by default. When the caller is an owner, the
 ``actor_login`` + ``actor_hf_user_id`` fields are populated so owners can
 see "@login requested X · 2h ago". Maintainers, contributors, and anonymous
 visitors get the redacted shape.
 
-Records tombstoned in ``services/activity_state.deleted`` are filtered out
-for everyone (owner-only delete affordance writes the tombstone).
+Records tombstoned in ``activity_tombstones`` are filtered out for everyone
+(owner-only delete affordance writes the tombstone). The dismissal/tombstone
+key is the STORED ``content_hash`` column — never recomputed from the row,
+because a migration-NULLed slug would recompute a different hash and silently
+stop matching.
 """
 
 from __future__ import annotations
@@ -22,11 +25,10 @@ from typing import Iterable, TypedDict
 
 from scripts.lib.schemas import Role
 
-from . import activity_classification, activity_state
+from . import activity_classification
 from services.state import catalog as catalog_service
 from services.auth import permissions
-from services.storage import storage_paths
-from services.storage.hf_bucket import get_backend
+from services.db import _serde, repo_activity, repo_transitions
 
 
 PublicEventKind = str  # matches keys in activity_classification.PUBLIC_EVENTS
@@ -55,28 +57,20 @@ _TEMPLATES: dict[str, str] = {
 }
 
 
-def _iter_partitions(months: int) -> Iterable[dict]:
-    """Yield raw audit records from the current month + previous N-1 months.
-
-    Records are yielded newest-first per partition; partitions are
-    iterated newest-first too, so concatenation gives a roughly
-    chronological-descending stream that the caller re-sorts before
-    paginating.
-    """
+def _window_cutoff_iso(months: int) -> str:
+    """ISO timestamp for the start of the earliest month in an N-month window
+    (current month + previous N-1), matching the legacy partition span."""
     now = datetime.now(timezone.utc)
-    backend = get_backend()
-    for offset in range(months):
-        year = now.year
-        month = now.month - offset
-        while month <= 0:
-            month += 12
-            year -= 1
-        path = storage_paths.audit_partition_path(
-            datetime(year, month, 1, tzinfo=timezone.utc),
-        )
-        if not backend.exists(path):
-            continue
-        yield from reversed(list(backend.iter_jsonl(path)))
+    year, month = now.year, now.month - (months - 1)
+    while month <= 0:
+        month += 12
+        year -= 1
+    return _serde.to_iso(datetime(year, month, 1, tzinfo=timezone.utc))
+
+
+def _iter_partitions(months: int) -> Iterable[dict]:
+    """Yield transition records from the rolling N-month window, newest-first."""
+    yield from repo_transitions.since(_window_cutoff_iso(months))
 
 
 def _delivery_descriptor(slug: str) -> tuple[str, str, str] | None:
@@ -120,7 +114,9 @@ def _to_card(
         riwayah=riwayah,
         style=style,
         text=_TEMPLATES.get(kind, "{name}").format(name=name),
-        audit_id=activity_classification.audit_id(record),
+        # STORED content_hash (the id the FE/dismissals already hold) — never
+        # recompute from the row (a NULLed slug would mismatch).
+        audit_id=record.get("content_hash") or activity_classification.audit_id(record),
     )
     if include_actor:
         actor = record.get("actor") or {}
@@ -148,8 +144,7 @@ def all_public_cards(
     include_actor = caller_role is not None and permissions.is_owner(
         type("_R", (), {"role": caller_role})()
     )
-    state_snap = activity_state.snapshot()
-    deleted_ids = set(state_snap.deleted)
+    deleted_ids = repo_activity.deleted_set()
 
     cards: list[PublicActivityCard] = []
     for record in _iter_partitions(months):

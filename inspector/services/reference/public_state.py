@@ -53,6 +53,21 @@ _BUCKET_PROGRESS: dict[PublicBucket, int] = {
     "published": 4,
 }
 
+# Internal lifecycle state → public bucket. Several internal states collapse
+# onto one bucket (UNDER_REVIEW + AWAITING_TIMESTAMPS → "under_review",
+# RELEASED + COMPLETED → "published"); CATALOGUED reads as still-requestable.
+# Single source of truth for both ``bucket_for`` (current state) and the
+# transitions replay in ``_bucket_dates_for_slug`` (historical states).
+_STATE_TO_BUCKET: dict[ReciterState, PublicBucket] = {
+    ReciterState.CATALOGUED: "available_for_request",
+    ReciterState.AWAITING_ALIGNMENT: "requested",
+    ReciterState.AWAITING_REVIEW: "available_for_review",
+    ReciterState.UNDER_REVIEW: "under_review",
+    ReciterState.AWAITING_TIMESTAMPS: "under_review",
+    ReciterState.RELEASED: "published",
+    ReciterState.COMPLETED: "published",
+}
+
 # Full-mushaf chapter counts per audio category. Anything less is "partial".
 _FULL_CHAPTERS: dict[AudioCategory, int] = {
     AudioCategory.BY_SURAH: 114,
@@ -67,6 +82,10 @@ class PublicDelivery(TypedDict, total=False):
     slug: str                    # ID only — never rendered to users.
     bucket: PublicBucket
     state_since: str | None      # ISO datetime; None when no state row exists.
+    # Per-bucket entry timestamps: {bucket: [iso, ...]} chronological, one entry
+    # per *distinct* visit to that bucket. Modal-only — attached by the detail /
+    # admin-view paths (NOT the cached list), so it's absent on list payloads.
+    bucket_dates: dict[str, list[str]]
     riwayah: str
     style: str
     recording_context: str | None
@@ -119,27 +138,14 @@ def bucket_for(row: ReciterRow | None) -> PublicBucket:
     """
     if row is None:
         return "available_for_request"
-
-    state = row.state
-    if state == ReciterState.CATALOGUED:
-        return "available_for_request"
-    if state == ReciterState.AWAITING_ALIGNMENT:
-        return "requested"
-    if state == ReciterState.AWAITING_REVIEW:
-        return "available_for_review"
-    if state == ReciterState.UNDER_REVIEW:
-        # marked_ready stays internal-only; row remains publicly "under review"
-        # until it actually transitions to RELEASED.
-        return "under_review"
-    if state == ReciterState.AWAITING_TIMESTAMPS:
-        # Post-mark-ready, pre-released window. Still surfaced as under_review.
-        return "under_review"
-    if state in (ReciterState.RELEASED, ReciterState.COMPLETED):
-        return "published"
-
-    # Defensive — should be unreachable; new ReciterState members must add
-    # an explicit branch above (callers depend on the closed set).
-    raise ValueError(f"unmapped reciter state: {state!r}")
+    try:
+        # marked_ready stays internal-only; AWAITING_TIMESTAMPS still reads as
+        # "under_review" publicly until it actually transitions to RELEASED.
+        return _STATE_TO_BUCKET[row.state]
+    except KeyError:
+        # Defensive — new ReciterState members must be added to _STATE_TO_BUCKET
+        # (callers depend on the closed set).
+        raise ValueError(f"unmapped reciter state: {row.state!r}")
 
 
 def _delivery_coverage(d: Delivery) -> Literal["full", "partial"]:
@@ -172,6 +178,44 @@ def _to_public_delivery(
         bitrate_mode=d.bitrate_mode.value if hasattr(d.bitrate_mode, "value") else str(d.bitrate_mode),
         total_duration_sec=d.total_duration_sec,
     )
+
+
+def _bucket_dates_for_slug(slug: str) -> dict[str, list[str]]:
+    """Replay a delivery's transitions into per-bucket entry timestamps.
+
+    Returns ``{bucket: [iso, ...]}`` in chronological order — one timestamp per
+    *distinct* entry into that bucket. Consecutive transitions that stay in the
+    same bucket (e.g. UNDER_REVIEW → AWAITING_TIMESTAMPS, both "under_review")
+    collapse to a single entry; a bucket re-entered after regressing away
+    (e.g. under_review → available_for_review → under_review) records a fresh
+    timestamp. Buckets never entered are absent.
+
+    Modal-only: called from the per-open ``detail`` / ``admin_view`` paths, one
+    indexed ``transitions`` query per delivery — never the cached list path.
+    """
+    from services.db import repo_transitions
+
+    out: dict[str, list[str]] = {}
+    prev_bucket: PublicBucket | None = None
+    for rec in repo_transitions.for_slug(slug):
+        raw = rec.get("to_state")
+        if not raw:
+            continue
+        try:
+            bucket = _STATE_TO_BUCKET[ReciterState(raw)]
+        except (ValueError, KeyError):
+            continue  # unknown/legacy state value — skip defensively
+        if bucket == prev_bucket:
+            continue  # same bucket, internal-only move — not a new visit
+        out.setdefault(bucket, []).append(rec["ts"])
+        prev_bucket = bucket
+    return out
+
+
+def _attach_bucket_dates(deliveries: list[PublicDelivery]) -> None:
+    """Populate ``bucket_dates`` on each delivery in place (modal paths only)."""
+    for d in deliveries:
+        d["bucket_dates"] = _bucket_dates_for_slug(d["slug"])
 
 
 def _primary_bucket(buckets: list[PublicBucket]) -> PublicBucket:
@@ -266,7 +310,7 @@ def to_public_reciter(
 
 
 def _build_state_index() -> dict[str, ReciterRow]:
-    """Snapshot the in-memory state store into a slug-keyed index."""
+    """Snapshot the state table (DB via ``state_service``) into a slug-keyed index."""
     return {row.slug: row for row in state_service.all_rows()}
 
 
@@ -275,7 +319,21 @@ def all_public_reciters() -> list[PublicReciter]:
 
     A reciter with zero deliveries (theoretically possible at catalog-edit
     boundaries) is skipped — the dashboard has nothing to render for it.
+
+    Result is cached keyed on ``db_seq`` (the only high-frequency public path):
+    a hit skips the full catalog-model (DB→pydantic) + state-JOIN rebuild. Any
+    committed write bumps ``db_seq`` and transparently invalidates the entry.
+    A shallow copy is returned so callers may sort/filter in place without
+    mutating the cached canonical list.
     """
+    from services import db as _db
+    from services.storage import cache as _cache
+
+    seq = _db.current_db_seq()
+    cached = _cache.get_public_reciters_cache(seq)
+    if cached is not None:
+        return list(cached)
+
     catalog = catalog_service.snapshot()
     state_index = _build_state_index()
     channel_names = {ch.slug: ch.name for ch in catalog.vocab.channels}
@@ -296,7 +354,9 @@ def all_public_reciters() -> list[PublicReciter]:
         if not public["deliveries"]:
             continue
         out.append(public)
-    return out
+
+    _cache.set_public_reciters_cache(seq, out)
+    return list(out)
 
 
 def detail(reciter_id: str) -> PublicReciter | None:
@@ -319,6 +379,9 @@ def detail(reciter_id: str) -> PublicReciter | None:
     public = to_public_reciter(reciter, deliveries, state_index, channel_names)
     if not public["deliveries"]:
         return None
+    # Modal renders a per-delivery lifecycle timeline; the cached list path
+    # (to_public_reciter) deliberately omits this heavier per-slug replay.
+    _attach_bucket_dates(public["deliveries"])
     return public
 
 
@@ -408,6 +471,10 @@ def admin_view_reciter(reciter_id: str) -> AdminViewReciter | None:
         len(public_dels) == 0
         and len(discarded_dels) > 0
     )
+
+    # Modal renders a per-delivery lifecycle timeline (incl. discarded combos).
+    _attach_bucket_dates(public_dels)
+    _attach_bucket_dates(discarded_dels)
 
     buckets = _unique_ordered([d["bucket"] for d in public_dels])
     last_activity_values = [

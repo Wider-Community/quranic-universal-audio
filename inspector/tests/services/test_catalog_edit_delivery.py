@@ -36,7 +36,8 @@ def fresh_catalog(tmp_path, monkeypatch):
     backend = _hf_bucket.FilesystemBackend(tmp_path)
     _hf_bucket.set_backend(backend)
 
-    catalog = ReciterCatalog(
+    from tests.conftest import _seed_catalog
+    _seed_catalog(
         vocab=Vocab(
             riwayat=[
                 Riwayah(slug="hafs", short="H", name="Hafs"),
@@ -53,9 +54,7 @@ def fresh_catalog(tmp_path, monkeypatch):
                 RecordingContext(slug="broadcast", name="Broadcast"),
             ],
         ),
-        reciters=[
-            ReciterEntry(reciter_id="rec_a", name_en="Reciter A"),
-        ],
+        reciters=[ReciterEntry(reciter_id="rec_a", name_en="Reciter A")],
         deliveries=[
             Delivery(
                 slug="rec_a",
@@ -73,10 +72,6 @@ def fresh_catalog(tmp_path, monkeypatch):
             ),
         ],
     )
-    backend.write_json_atomic(
-        storage_paths.catalog_path(), catalog.model_dump(mode="json"),
-    )
-    catalog_service.hydrate()
 
     yield catalog_service, backend
 
@@ -173,13 +168,10 @@ def test_edit_delivery_audit_record_shape(fresh_catalog, monkeypatch):
     assert rec["reason"] == "proposed update"
 
 
-def test_edit_delivery_persists_to_bucket(fresh_catalog, monkeypatch):
-    catalog_service, backend = fresh_catalog
-    from services import audit as audit_service
-    from services import storage_paths
-    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+def test_edit_delivery_persists_to_substrate(fresh_catalog, monkeypatch):
+    catalog_service, _ = fresh_catalog
 
     catalog_service.edit_delivery(actor=_actor(), slug="rec_a", riwayah="warsh")
-    raw = backend.read_json(storage_paths.catalog_path())
-    d = next(d for d in raw["deliveries"] if d["slug"] == "rec_a")
-    assert d["riwayah"] == "warsh"
+    # Read back through the catalog snapshot (the substrate is the source of truth).
+    d = catalog_service.find_delivery("rec_a")
+    assert d.riwayah == "warsh"

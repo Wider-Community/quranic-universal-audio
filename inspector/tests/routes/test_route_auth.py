@@ -26,31 +26,22 @@ os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 def _seed_state_row(slug: str, *, assignee_hf_id: str | None = None,
                     state: str = "awaiting_review"):
-    """Replace the in-memory state store with a single row for ``slug``."""
-    from scripts.lib.schemas import ReciterRow, ReciterState, ReciterStateFile, Visibility
+    """Seed a single state row for ``slug`` into the SQLite substrate."""
+    from tests.conftest import _seed_state
 
-    from services import state as state_service
-
-    row = ReciterRow(
-        slug=slug,
-        state=ReciterState(state),
-        state_since=datetime.now(timezone.utc),
+    _seed_state(
+        slug,
+        state=state,
         assignee_hf_id=assignee_hf_id,
-        assignee_login="someone" if assignee_hf_id else None,
-        assignee_since=datetime.now(timezone.utc) if assignee_hf_id else None,
-        visibility=Visibility.PUBLIC,
+        assignee_login="someone" if assignee_hf_id else "test_user",
+        visibility="public",
     )
-    new_file = ReciterStateFile(reciters=[row])
-    with state_service._state_lock:  # type: ignore[attr-defined]
-        state_service._state_file = new_file  # type: ignore[attr-defined]
 
 
 def _clear_state():
-    from scripts.lib.schemas import ReciterStateFile
-    from services import state as state_service
-
-    with state_service._state_lock:  # type: ignore[attr-defined]
-        state_service._state_file = ReciterStateFile()  # type: ignore[attr-defined]
+    """No-op post-cutover: the autouse _substrate_db fixture gives each test a
+    fresh empty DB."""
+    return None
 
 
 def test_me_anonymous_returns_null_shape(flask_client):
@@ -97,9 +88,8 @@ def test_me_role_reflects_live_access_revoke(signed_in_client):
     """Revoke a maintainer's role mid-session → next /api/me returns
     role=contributor without re-login. Validates that role is resolved
     fresh per request and not pinned in the cookie."""
-    from scripts.lib.schemas import RolesFile
-
-    from services import access as access_service
+    from services import db
+    from services.db import repo_access
 
     _clear_state()
     # Sign in as maintainer.
@@ -109,9 +99,9 @@ def test_me_role_reflects_live_access_revoke(signed_in_client):
     resp1 = client.get("/api/me")
     assert json.loads(resp1.data)["role"] == "maintainer"
 
-    # Revoke (drop the member from the in-memory store).
-    with access_service._store_lock:  # type: ignore[attr-defined]
-        access_service._store = RolesFile()  # type: ignore[attr-defined]
+    # Revoke the active role assignment (live role resolution, same cookie).
+    with db.transaction():
+        repo_access.revoke_role(hf_user_id="u-3", revoked_by="u-3")
 
     # Same cookie, same client — but role resolution is live.
     resp2 = client.get("/api/me")

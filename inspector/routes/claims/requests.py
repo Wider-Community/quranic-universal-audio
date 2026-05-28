@@ -6,19 +6,24 @@ User-facing:
   the row CATALOGUED → AWAITING_ALIGNMENT and persists the pending entry.
 
 Admin (maintainer + owner):
-- ``GET  /api/admin/request/<slug>`` — fetch the pending request payload.
+- ``GET  /api/admin/request/<slug>`` — fetch one pending request payload.
   Requester actor identity is included for owners, redacted for maintainers
   (mirrors the admin-activity-rail redaction pattern).
+- ``GET  /api/admin/requests?status=open|accepted|returned|discarded`` —
+  Requests-tab review queue (catalog-joined, tier-redacted) + facet counts +
+  the caller's unviewed-open count.
+- ``GET  /api/admin/requests/unviewed-count`` — the caller's unviewed-open
+  count alone (entry-button dot + tab pill when the modal is closed).
+- ``POST /api/admin/requests/<id>/view`` — mark a request viewed for the
+  calling admin (fired on inline expand). Per-admin, idempotent.
+
+Owner-only:
 - ``POST /api/admin/request/<slug>/reject-soft`` — send back; row returns
   to CATALOGUED. Reason ≥10 chars required.
 - ``POST /api/admin/request/<slug>/reject-hard`` — discard; row goes back
   to CATALOGUED + visibility=DISCARDED. Reason ≥10 chars required.
-
-Owner-only:
 - ``POST /api/admin/reciter/<slug>/undiscard`` — restore a discarded
-  row to visibility=PUBLIC. Reason ≥10 chars required. Wraps the
-  existing ``reciter.undiscarded`` state event (which today requires
-  maintainer); the route adds the owner-only gate.
+  row to visibility=PUBLIC. Reason ≥10 chars required.
 
 All POST routes stack ``@require_same_origin`` for CSRF defense on top
 of ``@require_role`` for the tier check.
@@ -27,14 +32,17 @@ of ``@require_role`` for the tier check.
 from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
+from pydantic import ValidationError
 
-from scripts.lib.schemas import Role
+from scripts.lib.schemas import IntakeSubmission, Role
 
 from routes._admin_helpers import actor_for, validate_reason
 
 from services import pending_requests as pending_requests_service
 from services import permissions
 from services import state as state_service
+from services.admin import intake as intake_service
+from services.admin import requests as admin_requests_service
 
 from utils.decorators import require_role, require_same_origin
 
@@ -103,6 +111,34 @@ def submit_request(user, slug: str):
 
 
 # ---------------------------------------------------------------------------
+# User: submit intake (new combination / new reciter — slugless)
+# ---------------------------------------------------------------------------
+
+
+@requests_bp.route("/requests/intake", methods=["POST"])
+@require_same_origin
+@require_role(Role.CONTRIBUTOR, Role.MAINTAINER, Role.OWNER)
+def submit_intake(user):
+    """New-combo / new-reciter contribution with an audio source (direct links
+    or a playlist). Structural-validate, then record a slugless pending request.
+    400 carries ``{errors, warnings}`` on blocking validation failure."""
+    body = request.get_json(silent=True) or {}
+    try:
+        sub = IntakeSubmission.model_validate(body)
+    except ValidationError as e:
+        return jsonify({"error": "invalid submission", "detail": e.errors()}), 400
+    try:
+        rid, validation = intake_service.submit(sub, requester=actor_for(user))
+    except intake_service.IntakeValidationError as e:
+        return jsonify({
+            "error": "validation failed",
+            "errors": e.validation.errors,
+            "warnings": e.validation.warnings,
+        }), 400
+    return jsonify({"ok": True, "id": rid, "warnings": validation.warnings})
+
+
+# ---------------------------------------------------------------------------
 # Admin: fetch pending
 # ---------------------------------------------------------------------------
 
@@ -168,16 +204,126 @@ def _reject(user, slug: str, event: str):
 
 @requests_bp.route("/admin/request/<slug>/reject-soft", methods=["POST"])
 @require_same_origin
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_role(Role.OWNER)
 def reject_soft(user, slug: str):
     return _reject(user, slug, "reciter.request_rejected_soft")
 
 
 @requests_bp.route("/admin/request/<slug>/reject-hard", methods=["POST"])
 @require_same_origin
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_role(Role.OWNER)
 def reject_hard(user, slug: str):
     return _reject(user, slug, "reciter.request_rejected_hard")
+
+
+# ---------------------------------------------------------------------------
+# Admin: Requests-tab list + per-admin unviewed badge
+# ---------------------------------------------------------------------------
+
+
+_VALID_STATUSES = ("open", "accepted", "returned", "discarded")
+
+
+@requests_bp.route("/admin/requests", methods=["GET"])
+@require_role(Role.MAINTAINER, Role.OWNER)
+def list_requests(user):
+    """Review-queue payload for one status facet. Tier-redacted: maintainers
+    see requester role only, owners see the full identity."""
+    status = request.args.get("status", "open")
+    if status not in _VALID_STATUSES:
+        return jsonify({"error": "invalid status"}), 400
+    payload = admin_requests_service.list_requests(
+        status=status,
+        caller_is_owner=permissions.is_owner(user),
+        caller_hf_id=user.hf_user_id,
+    )
+    resp = jsonify(payload)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@requests_bp.route("/admin/requests/unviewed-count", methods=["GET"])
+@require_role(Role.MAINTAINER, Role.OWNER)
+def requests_unviewed_count(user):
+    """Open requests the caller hasn't viewed — drives the tab pill + the
+    entry-button dot. Polled, so never cached."""
+    resp = jsonify(
+        {"count": admin_requests_service.unviewed_count(caller_hf_id=user.hf_user_id)}
+    )
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@requests_bp.route("/admin/requests/<rid>/view", methods=["POST"])
+@require_same_origin
+@require_role(Role.MAINTAINER, Role.OWNER)
+def mark_request_viewed(user, rid: str):
+    """Mark a request viewed for the calling admin (fired on inline expand)."""
+    ok = admin_requests_service.mark_viewed(rid, actor=actor_for(user))
+    if not ok:
+        return jsonify({"error": "unknown request"}), 404
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Owner: intake accept / probe / resolve (slugless new-combo / new-reciter)
+# ---------------------------------------------------------------------------
+
+
+@requests_bp.route("/admin/requests/<rid>/accept", methods=["POST"])
+@require_same_origin
+@require_role(Role.OWNER)
+def accept_intake(user, rid: str):
+    """Approve an intake request + queue it for offline ingest. Body (new-reciter
+    only): owner-confirmed canonical ``reciter_id``. No catalog write here —
+    source/channel/slug are determined by ingest from the actual audio."""
+    body = request.get_json(silent=True) or {}
+    reciter_id = body.get("reciter_id")
+    try:
+        intake_service.accept(rid, actor=actor_for(user), reciter_id=reciter_id)
+    except intake_service.NotIntakeRequest:
+        return jsonify({"error": "unknown intake request"}), 404
+    except intake_service.IntakeError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
+@requests_bp.route("/admin/requests/<rid>/probe", methods=["POST"])
+@require_same_origin
+@require_role(Role.OWNER)
+def probe_intake(user, rid: str):
+    """Owner-triggered reachability probe of an intake request's audio source."""
+    try:
+        result = intake_service.probe(rid)
+    except intake_service.NotIntakeRequest:
+        return jsonify({"error": "unknown intake request"}), 404
+    return jsonify(result.model_dump(mode="json"))
+
+
+@requests_bp.route("/admin/requests/<rid>/return", methods=["POST"])
+@require_same_origin
+@require_role(Role.OWNER)
+def return_intake(user, rid: str):
+    return _resolve_intake(user, rid, "returned")
+
+
+@requests_bp.route("/admin/requests/<rid>/discard", methods=["POST"])
+@require_same_origin
+@require_role(Role.OWNER)
+def discard_intake(user, rid: str):
+    return _resolve_intake(user, rid, "discarded")
+
+
+def _resolve_intake(user, rid: str, status: str):
+    body = request.get_json(silent=True) or {}
+    reason, err = validate_reason(body)
+    if err is not None:
+        return err
+    try:
+        intake_service.resolve(rid, status=status, reason=reason, actor=actor_for(user))
+    except intake_service.NotIntakeRequest:
+        return jsonify({"error": "unknown intake request"}), 404
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------

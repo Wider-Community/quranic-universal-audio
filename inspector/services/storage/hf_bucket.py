@@ -394,6 +394,29 @@ class BucketBackend:
 
             self._bucket_upload(path, data)
 
+    # ---- mount-bypassing direct I/O (used only by the SQLite db sync) ----
+    #
+    # The DB sync must NOT trust the mount's 2-30s debounced flush window: a
+    # container restart in that window would lose an acknowledged write. These
+    # go straight to the bucket API regardless of mount, matching the
+    # substrate-redesign decision to bypass the mount for the DB file.
+
+    def read_bytes_direct(self, path: str) -> bytes:
+        _ensure_posix(path)
+        from huggingface_hub import hffs  # type: ignore[import-not-found]
+
+        try:
+            return hffs.cat_file(self._bucket_uri(path))
+        except Exception as e:
+            if self._is_not_found(e):
+                raise StorageNotFound(path) from e
+            raise
+
+    def write_bytes_direct(self, path: str, data: bytes) -> None:
+        _ensure_posix(path)
+        with self._write_lock:
+            self._bucket_upload(path, data)
+
     def write_json_atomic(self, path: str, obj: dict | list) -> None:
         self.write_bytes_atomic(path, _dump_json(obj))
 

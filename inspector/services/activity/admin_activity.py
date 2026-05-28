@@ -18,9 +18,10 @@ from typing import TypedDict
 
 from scripts.lib.schemas import Role
 
-from . import activity_classification, activity_state, public_activity
+from . import activity_classification, public_activity
 from services.state import catalog as catalog_service
 from services.auth import permissions
+from services.db import repo_activity
 
 
 class AdminActivityCard(TypedDict, total=False):
@@ -80,7 +81,9 @@ def _to_card(record: dict, *, include_actor: bool) -> AdminActivityCard | None:
         return None
 
     card: AdminActivityCard = AdminActivityCard(
-        audit_id=activity_classification.audit_id(record),
+        # STORED content_hash — never recompute (a NULLed slug would mismatch
+        # the migrated dismissal/tombstone the FE already holds).
+        audit_id=record.get("content_hash") or activity_classification.audit_id(record),
         ts=ts,
         kind=kind,
         name=name,
@@ -113,8 +116,7 @@ def all_admin_cards(
     (still sorted newest-first) and ``archived_count`` is the live count.
     """
     include_actor = permissions.is_owner(type("X", (), {"role": caller_role})())
-    state_snap = activity_state.snapshot()
-    dismissed = set(state_snap.dismissals.get(caller_hf_id, []))
+    dismissed = repo_activity.dismissed_for_user(caller_hf_id)
 
     live: list[AdminActivityCard] = []
     archived: list[AdminActivityCard] = []

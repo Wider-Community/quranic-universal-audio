@@ -62,27 +62,33 @@ export function indexSegPeaksBulk(peaksMap: Record<string, SegmentPeaks> | null 
  *  History panel renders without re-computing. Tolerant of partial records —
  *  any malformed entry is skipped.
  *
- *  Migration #5: `duration_ms` is no longer written by either writer (offline
- *  extraction or runtime backfill) — it's derivable from `end_ms - start_ms`.
- *  Legacy records on disk still carry it; this reader prefers the derived
- *  value and falls back to `duration_ms` for older payloads. */
+ *  Migration #5 wire shape: each record carries `peaks_b64` (base64 of n*2
+ *  int8s) + `bps`, NOT a float `peaks` array. We decode b64 → `Int8Array`
+ *  once on receive and stash the typed view — symmetric with chapter peaks
+ *  (`_fetchPeaks`) and ~25× lighter on the heap than the old float-list. The
+ *  drawer reads either shape via `peaks-view.ts`. `duration_ms` is derived
+ *  from `end_ms - start_ms`. */
 export function indexHistoryPeaksRecords(
-    records: ReadonlyArray<{ url?: string; start_ms?: number; end_ms?: number; peaks?: unknown; duration_ms?: number }> | null | undefined,
+    records: ReadonlyArray<{ url?: string; start_ms?: number; end_ms?: number; peaks_b64?: unknown }> | null | undefined,
 ): void {
     if (!records?.length) return;
     for (const r of records) {
         const url = r.url;
         const startMs = r.start_ms;
         const endMs = r.end_ms;
-        const peaks = r.peaks;
+        const b64 = r.peaks_b64;
         if (!url || typeof startMs !== 'number' || typeof endMs !== 'number'
-            || !Array.isArray(peaks) || peaks.length === 0) continue;
-        const durationMs = endMs - startMs;  // derive (was r.duration_ms pre-#5)
+            || typeof b64 !== 'string' || b64.length === 0) continue;
+        const durationMs = endMs - startMs;
         if (durationMs <= 0) continue;
+        // Pass b64.length as a generous cap so `_b64ToInt8` decodes the full
+        // payload (it min()s against the decoded byte length).
+        const peaks = _b64ToInt8(b64, b64.length);
+        if (peaks.length === 0) continue;
         pushSegPeaksEntry(url, {
             startMs,
             endMs,
-            peaks: peaks as SegmentPeaks['peaks'],
+            peaks,
             durationMs,
         });
     }
@@ -201,7 +207,7 @@ function _stableHash(input: string): string {
  * ``{q:'int8', n, peaks_b64, bps, duration_ms}`` per audio URL; FE decodes
  * ``peaks_b64`` → ``Int8Array(n * 2)`` once on receive and the drawer reads
  * the typed array directly via ``peaks-view.ts``. See
- * ``docs/reference/inspector/peaks.md``.
+ * ``the inspector-audio skill``.
  *
  * Why ``atob`` + ``charCodeAt``: fastest browser-portable path at chapter
  * scale (≤ 144 KB per chapter). ``Uint8Array.from`` with a callback pays a

@@ -1,28 +1,21 @@
-"""Catalog service: ``<bucket>/catalog/reciter_catalog.json``.
+"""Catalog service: facade over the SQLite catalog tables (``repo_catalog``).
 
-Inspector backend is sole writer. In-memory ``ReciterCatalog`` model
-hydrated at startup, replaced atomically on every mutating call.
+Inspector backend is sole writer. ``snapshot()`` reassembles the full
+``ReciterCatalog`` (vocab + reciters + deliveries + aliases + persisted
+``derived`` + ``generated_at``) so ``/api/static/catalog.json`` stays
+byte-identical. Mutations keep the legacy public signatures, compute the
+``catalog.edited`` audit ``patch={field:{from,to}}`` shape (the repo persists
+only — it does NOT build the patch), and append the transition inside the
+caller's transaction so the audit row is atomic with the edit.
 
-Phase 1 surface:
-- ``hydrate()`` / ``snapshot()`` for boot-time + read access
-- ``add_reciter()`` / ``edit_reciter()`` / ``add_delivery()`` / ``add_audio_source()``
-  for maintainer admin actions
-
-Endpoints exposing these mutations land in Phase 4/5; this module provides
-the service layer those endpoints will call. The Phase 1 stub catalog has
-vocab-only content; mutation calls aren't expected to fire in Phase 1 itself.
-
-Authority for schema: docs/reference/reciter-catalog.md (the pydantic models
+Authority for schema: docs/reference/catalog.md (the pydantic models
 in ``scripts/lib/schemas/catalog.py`` are the runtime authority).
 """
 
 from __future__ import annotations
 
 import logging
-import threading
-from datetime import datetime, timezone
-
-from pydantic import ValidationError
+import sqlite3
 
 from scripts.lib.schemas import (
     Actor,
@@ -35,8 +28,8 @@ from scripts.lib.schemas import (
 
 from . import audit
 from services.auth import permissions
-from services.storage import storage_paths
-from services.storage.hf_bucket import StorageNotFound, get_backend
+from services.db import errors as db_errors, repo_catalog
+from services.db import sync as _sync
 
 logger = logging.getLogger(__name__)
 
@@ -56,64 +49,54 @@ class NotAuthorizedForCatalog(CatalogError):
     pass
 
 
-# ---- In-memory store ----
-
-
-_store: ReciterCatalog = ReciterCatalog()
-_store_lock = threading.Lock()
+# ---- Boot ----
 
 
 def hydrate() -> None:
-    """Load or initialize the catalog from the bucket. Idempotent."""
-    global _store
-    backend = get_backend()
-    try:
-        raw = backend.read_json(storage_paths.catalog_path())
-        loaded = ReciterCatalog.model_validate(raw)
-    except StorageNotFound:
-        logger.warning(
-            "catalog: catalog file missing on bucket; initializing empty "
-            "in-memory store. Seed the stub via "
-            "`.local/inspector-deploy/v2/seed_catalog_stub.py`."
-        )
-        loaded = ReciterCatalog()
-    except ValidationError as e:
-        logger.exception("catalog: invalid bucket catalog — refusing to hydrate")
-        raise InvalidCatalogChange(str(e)) from e
-    with _store_lock:
-        _store = loaded
+    """No-op under the SQLite substrate (the DB is the source of truth, loaded
+    at boot by ``db.sync.pull`` + ``init_db``). Kept so legacy boot/test call
+    sites don't churn."""
+    return None
+
+
+# ---- Reads ----
 
 
 def snapshot() -> ReciterCatalog:
-    """Return a defensive copy of the in-memory catalog."""
-    with _store_lock:
-        return _store.model_copy(deep=True)
+    """Full catalog read model. Cached on ``db_seq`` (the rebuild is ~38 ms
+    today, ~300–700 ms at scale, and runs on hot read paths). The returned
+    instance is shared — treat as READ-ONLY (no consumer mutates it). Cached
+    in the service via ``db_seq`` keying; per-request cache misses are rebuilt
+    from the SQLite tables."""
+    from services import db as _db
+    from services.storage import cache as _cache
+
+    seq = _db.current_db_seq()
+    cached = _cache.get_catalog_snapshot_cache(seq)
+    if cached is not None:
+        return cached
+    cat = repo_catalog.snapshot()
+    _cache.set_catalog_snapshot_cache(seq, cat)
+    return cat
 
 
 def find_delivery(slug: str) -> Delivery | None:
-    with _store_lock:
-        return _store.find_delivery(slug)
+    return repo_catalog.find_delivery(slug)
 
 
 def find_reciter(reciter_id: str) -> ReciterEntry | None:
-    with _store_lock:
-        return _store.find_reciter(reciter_id)
+    return repo_catalog.find_reciter(reciter_id)
 
 
 def display_name(slug: str) -> str | None:
-    """Resolve a delivery slug to its reciter's ``name_en``.
-
-    Returns ``None`` when the slug is unknown to the catalog (e.g. before
-    catalog promotion, or after a delivery was removed). Callers must
-    tolerate the fallback gracefully — surfacing a raw slug to the user is
-    never acceptable in user-facing copy.
-    """
-    with _store_lock:
-        delivery = _store.find_delivery(slug)
-        if delivery is None:
-            return None
-        reciter = _store.find_reciter(delivery.reciter_id)
-        return reciter.name_en if reciter is not None else None
+    """Resolve a delivery slug to its reciter's ``name_en`` (``None`` if the
+    slug is unknown). Callers must tolerate the fallback — never surface a raw
+    slug in user-facing copy."""
+    delivery = repo_catalog.find_delivery(slug)
+    if delivery is None:
+        return None
+    reciter = repo_catalog.find_reciter(delivery.reciter_id)
+    return reciter.name_en if reciter is not None else None
 
 
 # ---- Authorization ----
@@ -127,15 +110,8 @@ def _require_maintainer(actor: Actor) -> None:
         )
 
 
-# ---- Mutations ----
-
-
-def _persist(new_store: ReciterCatalog) -> None:
-    backend = get_backend()
-    backend.write_json_atomic(
-        storage_paths.catalog_path(),
-        new_store.model_dump(mode="json"),
-    )
+# ---- Mutations (each wraps its own durable txn; nesting-safe when called
+#      from inside another boundary's transaction, e.g. the accept flow). ----
 
 
 def add_reciter(
@@ -148,37 +124,23 @@ def add_reciter(
     notes: str | None = None,
     reason: str | None = None,
 ) -> ReciterEntry:
-    """Append a new reciter to ``reciters[]``. ``reciter_id`` must be unique."""
-    global _store
     _require_maintainer(actor)
-
-    with _store_lock:
-        if _store.find_reciter(reciter_id) is not None:
-            raise InvalidCatalogChange(f"reciter_id {reciter_id!r} already exists")
-
-        new_store = _store.model_copy(deep=True)
-        new_entry = ReciterEntry(
-            reciter_id=reciter_id,
-            name_en=name_en,
-            name_ar=name_ar,
-            country=country,
-            notes=notes,
-        )
-        new_store.reciters.append(new_entry)
-        try:
-            new_store = ReciterCatalog.model_validate(new_store.model_dump(mode="json"))
-        except ValidationError as e:
-            raise InvalidCatalogChange(str(e)) from e
-        _persist(new_store)
-        _store = new_store
-
-    audit.append(
-        event="catalog.added",
-        actor=actor,
-        payload={"kind": "reciter", "reciter_id": reciter_id, "name_en": name_en},
-        reason=reason,
+    entry = ReciterEntry(
+        reciter_id=reciter_id, name_en=name_en, name_ar=name_ar,
+        country=country, notes=notes,
     )
-    return new_entry
+    with _sync.durable_transaction():
+        try:
+            repo_catalog.add_reciter(entry)
+        except db_errors.Duplicate as e:
+            raise InvalidCatalogChange(str(e)) from e
+        audit.append(
+            event="catalog.added",
+            actor=actor,
+            payload={"kind": "reciter", "reciter_id": reciter_id, "name_en": name_en},
+            reason=reason,
+        )
+    return entry
 
 
 def edit_reciter(
@@ -192,50 +154,33 @@ def edit_reciter(
     reason: str | None = None,
 ) -> ReciterEntry:
     """Mutate a reciter row in place. ``reciter_id`` is immutable."""
-    global _store
     _require_maintainer(actor)
-
-    with _store_lock:
-        existing = _store.find_reciter(reciter_id)
-        if existing is None:
-            raise InvalidCatalogChange(f"reciter_id {reciter_id!r} not found")
-
-        new_store = _store.model_copy(deep=True)
-        patch: dict = {}
-        for r in new_store.reciters:
-            if r.reciter_id == reciter_id:
-                if name_en is not None and name_en != r.name_en:
-                    patch["name_en"] = {"from": r.name_en, "to": name_en}
-                    r.name_en = name_en
-                if name_ar is not None and name_ar != r.name_ar:
-                    patch["name_ar"] = {"from": r.name_ar, "to": name_ar}
-                    r.name_ar = name_ar
-                if country is not None and country != r.country:
-                    patch["country"] = {"from": r.country, "to": country}
-                    r.country = country
-                if notes is not None and notes != r.notes:
-                    patch["notes"] = {"from": r.notes, "to": notes}
-                    r.notes = notes
-                existing = r
-                break
-
-        if not patch:
-            return existing
-
-        try:
-            new_store = ReciterCatalog.model_validate(new_store.model_dump(mode="json"))
-        except ValidationError as e:
-            raise InvalidCatalogChange(str(e)) from e
-        _persist(new_store)
-        _store = new_store
-
-    audit.append(
-        event="catalog.edited",
-        actor=actor,
-        payload={"kind": "reciter", "reciter_id": reciter_id, "patch": patch},
-        reason=reason,
-    )
-    return existing
+    # Compute the patch BEFORE opening a txn so a no-change call does no bucket
+    # I/O / db_seq bump (matches the legacy "no _persist on empty patch").
+    existing = repo_catalog.find_reciter(reciter_id)
+    if existing is None:
+        raise InvalidCatalogChange(f"reciter_id {reciter_id!r} not found")
+    proposed = {
+        "name_en": name_en, "name_ar": name_ar,
+        "country": country, "notes": notes,
+    }
+    patch: dict = {}
+    for field, new in proposed.items():
+        if new is not None and new != getattr(existing, field):
+            patch[field] = {"from": getattr(existing, field), "to": new}
+    if not patch:
+        return existing
+    with _sync.durable_transaction():
+        updated = repo_catalog.edit_reciter(
+            reciter_id, **{k: v["to"] for k, v in patch.items()}
+        )
+        audit.append(
+            event="catalog.edited",
+            actor=actor,
+            payload={"kind": "reciter", "reciter_id": reciter_id, "patch": patch},
+            reason=reason,
+        )
+    return updated or existing
 
 
 def add_delivery(
@@ -244,34 +189,24 @@ def add_delivery(
     delivery: Delivery,
     reason: str | None = None,
 ) -> Delivery:
-    """Append a new delivery. Slug + FKs validated by ``ReciterCatalog``."""
-    global _store
     _require_maintainer(actor)
-
-    with _store_lock:
-        if _store.find_delivery(delivery.slug) is not None:
-            raise InvalidCatalogChange(
-                f"delivery slug {delivery.slug!r} already exists"
-            )
-        new_store = _store.model_copy(deep=True)
-        new_store.deliveries.append(delivery)
+    with _sync.durable_transaction():
         try:
-            new_store = ReciterCatalog.model_validate(new_store.model_dump(mode="json"))
-        except ValidationError as e:
+            repo_catalog.add_delivery(delivery)
+        except db_errors.Duplicate as e:
             raise InvalidCatalogChange(str(e)) from e
-        _persist(new_store)
-        _store = new_store
-
-    audit.append(
-        event="catalog.added",
-        actor=actor,
-        payload={
-            "kind": "delivery",
-            "slug": delivery.slug,
-            "reciter_id": delivery.reciter_id,
-        },
-        reason=reason,
-    )
+        except sqlite3.IntegrityError as e:  # FK to vocab/reciter
+            raise InvalidCatalogChange(str(e)) from e
+        audit.append(
+            event="catalog.added",
+            actor=actor,
+            payload={
+                "kind": "delivery",
+                "slug": delivery.slug,
+                "reciter_id": delivery.reciter_id,
+            },
+            reason=reason,
+        )
     return delivery
 
 
@@ -285,72 +220,38 @@ def edit_delivery(
     recording_year: int | None = None,
     reason: str | None = None,
 ) -> Delivery:
-    """Mutate a delivery row in place. ``slug`` and ``reciter_id`` are immutable.
-
-    Used by ``services.pending_requests.apply_and_archive_completed`` to apply the
-    requester's proposed edits at auto-acceptance time, and by future
-    admin catalog-edit routes. Fields left ``None`` are not touched. The
-    catalog model_validator enforces FK invariants (riwayah, style,
-    recording_context must be in vocab) — invalid edits raise
-    ``InvalidCatalogChange``.
-    """
-    global _store
+    """Mutate a delivery row in place. ``slug``/``reciter_id`` immutable. Only
+    the legacy editable surface (riwayah/style/recording_context/recording_year)
+    is exposed. Invalid vocab FK → ``InvalidCatalogChange`` (SQLite FK)."""
     _require_maintainer(actor)
-
-    with _store_lock:
-        existing = _store.find_delivery(slug)
-        if existing is None:
-            raise InvalidCatalogChange(f"delivery slug {slug!r} not found")
-
-        new_store = _store.model_copy(deep=True)
-        patch: dict = {}
-        for d in new_store.deliveries:
-            if d.slug == slug:
-                if riwayah is not None and riwayah != d.riwayah:
-                    patch["riwayah"] = {"from": d.riwayah, "to": riwayah}
-                    d.riwayah = riwayah
-                if style is not None and style != d.style:
-                    patch["style"] = {"from": d.style, "to": style}
-                    d.style = style
-                if (
-                    recording_context is not None
-                    and recording_context != d.recording_context
-                ):
-                    patch["recording_context"] = {
-                        "from": d.recording_context,
-                        "to": recording_context,
-                    }
-                    d.recording_context = recording_context
-                if (
-                    recording_year is not None
-                    and recording_year != d.recording_year
-                ):
-                    patch["recording_year"] = {
-                        "from": d.recording_year,
-                        "to": recording_year,
-                    }
-                    d.recording_year = recording_year
-                existing = d
-                break
-
-        if not patch:
-            return existing
-
+    existing = repo_catalog.find_delivery(slug)
+    if existing is None:
+        raise InvalidCatalogChange(f"delivery slug {slug!r} not found")
+    proposed = {
+        "riwayah": riwayah, "style": style,
+        "recording_context": recording_context, "recording_year": recording_year,
+    }
+    patch: dict = {}
+    for field, new in proposed.items():
+        if new is not None and new != getattr(existing, field):
+            patch[field] = {"from": getattr(existing, field), "to": new}
+    if not patch:
+        return existing
+    with _sync.durable_transaction():
         try:
-            new_store = ReciterCatalog.model_validate(new_store.model_dump(mode="json"))
-        except ValidationError as e:
+            updated = repo_catalog.edit_delivery(
+                slug, **{k: v["to"] for k, v in patch.items()}
+            )
+        except sqlite3.IntegrityError as e:
             raise InvalidCatalogChange(str(e)) from e
-        _persist(new_store)
-        _store = new_store
-
-    audit.append(
-        event="catalog.edited",
-        actor=actor,
-        slug=slug,
-        payload={"kind": "delivery", "slug": slug, "patch": patch},
-        reason=reason,
-    )
-    return existing
+        audit.append(
+            event="catalog.edited",
+            actor=actor,
+            slug=slug,
+            payload={"kind": "delivery", "slug": slug, "patch": patch},
+            reason=reason,
+        )
+    return updated or existing
 
 
 def add_audio_source(
@@ -359,29 +260,18 @@ def add_audio_source(
     source: Source,
     reason: str | None = None,
 ) -> Source:
-    """Append a new entry to ``vocab.sources[]``."""
-    global _store
     _require_maintainer(actor)
-
-    with _store_lock:
-        existing_slugs = {s.slug for s in _store.vocab.sources}
-        if source.slug in existing_slugs:
-            raise InvalidCatalogChange(f"source {source.slug!r} already exists")
-        new_store = _store.model_copy(deep=True)
-        new_store.vocab.sources.append(source)
+    with _sync.durable_transaction():
         try:
-            new_store = ReciterCatalog.model_validate(new_store.model_dump(mode="json"))
-        except ValidationError as e:
+            repo_catalog.add_source(source)
+        except db_errors.Duplicate as e:
             raise InvalidCatalogChange(str(e)) from e
-        _persist(new_store)
-        _store = new_store
-
-    audit.append(
-        event="catalog.audio_source_added",
-        actor=actor,
-        payload={"slug": source.slug, "name": source.name},
-        reason=reason,
-    )
+        audit.append(
+            event="catalog.audio_source_added",
+            actor=actor,
+            payload={"slug": source.slug, "name": source.name},
+            reason=reason,
+        )
     return source
 
 
@@ -401,6 +291,7 @@ __all__ = [
     "edit_reciter",
     "find_delivery",
     "find_reciter",
+    "display_name",
     "hydrate",
     "snapshot",
 ]

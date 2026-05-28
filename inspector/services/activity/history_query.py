@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 # ``cross_verse`` is excluded -- it's a hard structural rule. Self-resolving
 # categories (``low_confidence``, ``failed``) are excluded because the
 # classifier already drops them when ``confidence`` flips to 1.0.
+# ``basmala_amin`` is included: the user has reviewed the seg from the card
+# and any edit (trim/split/merge/editReference) signals "I dealt with it" --
+# revalidation must not re-raise the flag for that uid.
 #
 # ``low_confidence_v2`` IS included even though v1 is excluded: v2 is
 # sourced from a frozen extraction-time MFA tight-beam probe sidecar keyed
@@ -139,6 +142,23 @@ def _merge_batches_sharing_batch_id(batches: list[dict]) -> list[dict]:
             acc["chapter"] = None if len(chs) > 1 else next(iter(chs))
         acc["saved_at_utc"] = batch.get("saved_at_utc") or acc.get("saved_at_utc")
 
+    return out
+
+
+def edit_history_op_ids(reciter: str) -> set[str]:
+    """Set of every ``op_id`` in a reciter's edit history.
+
+    Reads the cache-aware raw batch list (``parse_history_for_reciter``), so
+    after the first read this is a cheap in-memory walk. Used to validate
+    History on-play write-back POSTs — only peaks for ops that actually exist
+    may be persisted (any same-origin viewer, incl. anonymous, can POST).
+    """
+    out: set[str] = set()
+    for batch in parse_history_for_reciter(reciter):
+        for op in batch.get("operations") or []:
+            op_id = op.get("op_id")
+            if isinstance(op_id, str) and op_id:
+                out.add(op_id)
     return out
 
 

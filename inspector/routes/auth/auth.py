@@ -21,6 +21,9 @@ from scripts.lib.schemas import ReciterState
 
 from services import auth as auth_service
 from services import state as state_service
+from services.admin import visitors as visitor_service
+from services.db import repo_access
+from services.db import sync as _sync
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +151,18 @@ def auth_callback():
         logger.warning("auth.callback userinfo missing sub/login: keys=%s", list(userinfo or {}))
         return jsonify({"error": "OAuth userinfo missing identity fields"}), 400
 
+    # Persist the user on login so "everyone who logged in" has a row even with
+    # zero edits, and stamp login recency. ensure_user upserts login_cache +
+    # last_seen (+ first_seen once); touch_last_login sets last_login_at.
+    # Non-fatal: a failed persist must not block sign-in (the row is recreated
+    # on the next action / re-login).
+    try:
+        with _sync.durable_transaction():
+            repo_access.ensure_user(sub, login=login)
+            repo_access.touch_last_login(sub)
+    except Exception:  # noqa: BLE001
+        logger.exception("auth.callback: failed to persist user on login (continuing)")
+
     cookie = auth_service.encode_session(login=login, hf_user_id=sub)
     resp = make_response(redirect(return_to, code=302))
     resp.set_cookie(
@@ -204,6 +219,14 @@ def auth_me():
             "active_claims": [],
             "dev_mode": dev_mode,
         })
+    # Page-entry recency: /api/me runs on every SPA load / focus, so this is
+    # debounced (at most one write per user per window) and best-effort — a
+    # failure here must never break identity resolution.
+    try:
+        visitor_service.maybe_touch_entry(user.hf_user_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("auth.me: maybe_touch_entry failed (continuing)")
+
     active_claims = [
         r.slug for r in state_service.all_rows()
         if r.state == ReciterState.UNDER_REVIEW

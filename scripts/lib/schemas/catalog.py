@@ -4,7 +4,7 @@ Single file consolidates vocab (riwayat, styles, sources, channels,
 recording_contexts), reciters[], deliveries[], aliases[], plus a ``derived``
 section of computed indices. Inspector backend is the sole writer.
 
-Authoritative spec: docs/reference/reciter-catalog.md.
+Authoritative spec: docs/reference/catalog.md.
 
 Phase-1 scope: enough to deserialize the vocab-only stub catalog produced
 by ``.local/inspector-deploy/v2/seed_catalog_stub.py``. Full Delivery /

@@ -52,9 +52,15 @@ def ts_config():
 # Bodies are pre-gzipped (`mtime=0`, deterministic). Sent without a
 # `Content-Encoding: gzip` header — the frontend decompresses with
 # `DecompressionStream('gzip')` so the same code path handles bucket + local.
-# Manifest/shard mutate when reciters are published; 1-day cache keeps perf
-# good while bounding staleness to a publish-cycle window.
+# Shards are immutable per published reciter, so they keep the long cache.
 _GZIP_HEADERS = {"Cache-Control": "public, max-age=86400"}
+
+# The manifest changes whenever a reciter is published/unpublished. The server
+# rebuilds it on the next request after any lifecycle transition (state.py
+# invalidates the process cache), so a short client TTL is what bounds how long
+# a stale published-set lingers in the browser. 10 min trades a tiny re-fetch
+# (a few hundred gzipped bytes) for prompt propagation of publish changes.
+_MANIFEST_HEADERS = {"Cache-Control": "public, max-age=600"}
 
 
 @ts_bp.route("/manifest")
@@ -63,7 +69,7 @@ def ts_manifest():
     return Response(
         ts_serve.manifest_bytes(),
         mimetype="application/octet-stream",
-        headers=_GZIP_HEADERS,
+        headers=_MANIFEST_HEADERS,
     )
 
 

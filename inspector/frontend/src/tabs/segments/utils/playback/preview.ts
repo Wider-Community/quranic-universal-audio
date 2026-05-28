@@ -28,6 +28,7 @@ import { get, type Readable, type Writable,writable } from 'svelte/store';
 import { AudioPort } from '../../../../lib/playback/audio-port';
 import { AudioRange } from '../../../../lib/playback/audio-range';
 import { fetchSegmentPeaks } from '../../../../lib/utils/peaks-fetch';
+import { packPeaksB64 } from '../../../../lib/utils/peaks-view';
 import { reciterVbrChapters, selectedReciter } from '../../stores/chapter';
 import { playbackSpeed } from '../../stores/playback';
 import type { SegCanvas } from '../../types/segments-waveform';
@@ -197,16 +198,19 @@ export function createPreviewPlaybackContext(opts: { persistPeaks?: boolean } = 
         const pad = 200;
         const fetchStart = Math.max(0, startMs - pad);
         const fetchEnd = endMs + pad;
-        const peaks = await fetchSegmentPeaks(reciter, audioUrl, fetchStart, fetchEnd);
+        // History rows (opId) compute at 10 bps — matches the chapter overview
+        // and the persisted record (cheaper ffmpeg, no decimation on persist).
+        const reqBps = (persistPeaks && opId) ? 10 : undefined;
+        const peaks = await fetchSegmentPeaks(reciter, audioUrl, fetchStart, fetchEnd, undefined, reqBps);
         if (!peaks?.peaks?.length) return;
         // Reuse the bulk indexer so the entry lands in the same covering
         // cache the IntersectionObserver pipeline reads from.
         indexSegPeaksBulk({ [`${audioUrl}:${fetchStart}:${fetchEnd}`]: peaks });
         redrawPeaksWaveforms();
 
-        // History rows (opId set) — persist so future sessions hydrate
-        // these peaks at panel open. Fire-and-forget; failures are silent
-        // (next play computes again).
+        // History rows (opId set) — persist the canonical b64 record so future
+        // viewers (incl. anonymous) hydrate at panel open. Backend dedups by
+        // op_id, so a repeat play is a cheap no-op write. Fire-and-forget.
         if (persistPeaks && opId) {
             void fetch(`/api/seg/history-peaks/${reciter}`, {
                 method: 'POST',
@@ -217,8 +221,8 @@ export function createPreviewPlaybackContext(opts: { persistPeaks?: boolean } = 
                         url: audioUrl,
                         start_ms: peaks.start_ms ?? fetchStart,
                         end_ms: peaks.end_ms ?? fetchEnd,
-                        peaks: peaks.peaks,
-                        duration_ms: peaks.duration_ms,
+                        bps: 10,
+                        peaks_b64: packPeaksB64(peaks.peaks),
                     }],
                 }),
             }).catch(() => {});

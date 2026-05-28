@@ -152,13 +152,19 @@ def _ffmpeg_decode_segment(src: AudioSource | None, url: str,
 
 def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
                           reciter: str | None = None,
-                          chapter: int | str | None = None) -> dict | None:
+                          chapter: int | str | None = None,
+                          bps: int | None = None) -> dict | None:
     """Compute peaks for a specific segment time range via ffmpeg.
 
     Returns ``{schema_version, start_ms, end_ms, duration_ms, peaks}`` or
     ``None``. No caching — the caller is expected to be a one-shot live
     request when bucket chapter peaks are missing; bucket peaks themselves
     are produced offline and treated as the canonical store.
+
+    ``bps`` (buckets per second) defaults to the HD ``PEAKS_BUCKETS_PER_SEC``
+    (30) used by Segments-tab zoom + Timestamps. The History tab passes 10 to
+    match the chapter overview + the persisted ``edit_history_peaks.jsonl``,
+    making the fallback ~3× cheaper and the write-back record already-10 bps.
     """
     # Decode via resolver — local bytes / path when prefetched, otherwise
     # ffmpeg fetches the chapter via HTTP Range directly (frame-aware,
@@ -178,7 +184,8 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
     samples = struct.unpack(f"<{num_samples}h", raw)
 
     actual_duration_ms = int(num_samples / PEAKS_FFMPEG_SAMPLE_RATE * 1000)
-    num_buckets = max(MIN_SEG_PEAK_BUCKETS, int(duration_sec * PEAKS_BUCKETS_PER_SEC))
+    eff_bps = bps if (isinstance(bps, int) and bps >= 1) else PEAKS_BUCKETS_PER_SEC
+    num_buckets = max(MIN_SEG_PEAK_BUCKETS, int(duration_sec * eff_bps))
     peaks = _bucket_pcm_minmax(samples, num_samples, num_buckets)
 
     return {

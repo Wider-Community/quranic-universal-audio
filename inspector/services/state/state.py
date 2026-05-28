@@ -1,8 +1,8 @@
-"""Reciter state service: ``<bucket>/state/reciter_state.json``.
+"""Reciter state service: reads/writes from SQLite ``delivery_states`` + ``claims`` tables.
 
 Single source of truth for reciter lifecycle + assignee. Inspector backend
-is sole writer. Per-slug ``threading.Lock`` serializes concurrent writes
-against the same slug; different slugs run independently.
+is sole writer. The SQLite DB (via ``repo_state``, ``repo_claims``) is the
+canonical store; writes commit atomically via ``durable_transaction``.
 
 The full state machine ships in Phase 1 even though most endpoint callers
 land in later phases — the dispatcher is the single source of truth and
@@ -19,11 +19,9 @@ Spec:
 from __future__ import annotations
 
 import logging
-import threading
+import sqlite3
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, TypedDict
-
-from pydantic import ValidationError
+from typing import Any, TypedDict
 
 from scripts.lib.schemas import (
     Actor,
@@ -36,8 +34,9 @@ from scripts.lib.schemas import (
 
 from . import audit
 from services.auth import permissions
-from services.storage import storage_paths
-from services.storage.hf_bucket import StorageNotFound, get_backend
+from services import db as _db
+from services.db import repo_access, repo_claims, repo_state, repo_transitions
+from services.db import sync as _sync
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +61,8 @@ class UnknownEvent(StateError):
 class InvalidTransition(StateError):
     """Raised when the matrix rejects a transition.
 
-    The in-memory store and on-bucket file are unchanged; no audit entry is
-    written. Callers should surface HTTP 400 with the message.
+    The database is unchanged; no transition row is written. Callers should
+    surface HTTP 400 with the message.
     """
 
 
@@ -164,61 +163,30 @@ _FORCE_SET_STATE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
 
 
 # ----------------------------------------------------------------------
-# In-memory store
+# Reads (assembled from the SQLite substrate via repo_state)
 # ----------------------------------------------------------------------
 
 
-_state_file: ReciterStateFile = ReciterStateFile()
-_state_lock = threading.Lock()  # guards _state_file replacement
-_slug_locks: dict[str, threading.Lock] = {}
-_slug_locks_lock = threading.Lock()  # guards _slug_locks dict mutation
-_hydrated = False  # flips True on first successful hydrate(); /healthz reads this
-
-
-def _get_slug_lock(slug: str) -> threading.Lock:
-    with _slug_locks_lock:
-        lock = _slug_locks.get(slug)
-        if lock is None:
-            lock = threading.Lock()
-            _slug_locks[slug] = lock
-        return lock
-
-
 def hydrate() -> None:
-    """Load or initialize the state file from the bucket. Idempotent."""
-    global _state_file, _hydrated
-    backend = get_backend()
-    try:
-        raw = backend.read_json(storage_paths.state_path())
-        loaded = ReciterStateFile.model_validate(raw)
-    except StorageNotFound:
-        logger.warning(
-            "state: state file missing on bucket; initializing empty in-memory "
-            "store. Seed via `.local/inspector-deploy/v2/seed_state.py`."
-        )
-        loaded = ReciterStateFile()
-    except ValidationError as e:
-        logger.exception("state: invalid bucket state file — refusing to hydrate")
-        raise InvalidTransition(str(e)) from e
-    with _state_lock:
-        _state_file = loaded
-        _hydrated = True
+    """No-op under the SQLite substrate (the DB is the source of truth, loaded
+    at boot by ``db.sync.pull`` + ``init_db``). Kept so legacy boot/test call
+    sites don't churn."""
+    return None
 
 
 def is_hydrated() -> bool:
-    """Return True if the state file was loaded from (or initialized against) the bucket."""
-    with _state_lock:
-        return _hydrated
+    """True if the DB is open + migrated (``/healthz`` reads this)."""
+    return bool(_db.healthcheck().get("open"))
 
 
 def snapshot() -> ReciterStateFile:
-    with _state_lock:
-        return _state_file.model_copy(deep=True)
+    """Reassemble the legacy whole-store view (parity for the few readers that
+    expect a ``ReciterStateFile``)."""
+    return ReciterStateFile(reciters=repo_state.all_rows())
 
 
 def get_row(slug: str) -> ReciterRow | None:
-    with _state_lock:
-        return _state_file.find(slug)
+    return repo_state.get_row(slug)
 
 
 def kind_for(slug: str) -> str | None:
@@ -239,8 +207,7 @@ def kind_for(slug: str) -> str | None:
 
 
 def all_rows() -> list[ReciterRow]:
-    with _state_lock:
-        return list(_state_file.reciters)
+    return repo_state.all_rows()
 
 
 # ----------------------------------------------------------------------
@@ -260,6 +227,13 @@ def _require_maintainer(actor: Actor) -> None:
     if not permissions.is_maintainer(actor):
         raise NotAuthorizedForTransition(
             f"actor role {actor.role!r} requires MAINTAINER or OWNER"
+        )
+
+
+def _require_owner(actor: Actor) -> None:
+    if not permissions.is_owner(actor):
+        raise NotAuthorizedForTransition(
+            f"actor role {actor.role!r} requires OWNER"
         )
 
 
@@ -299,120 +273,8 @@ def _require_reason(reason: str | None, event: str) -> str:
 
 
 # ----------------------------------------------------------------------
-# Dispatch
+# Dispatch — one durable transaction per event
 # ----------------------------------------------------------------------
-
-
-# Post-transition observer registry. Hooks fire AFTER the row is persisted
-# and the audit record is appended; they receive ``(before, after, event,
-# actor)``. Used by ``services.audio_prefetch`` to enqueue prefetch jobs and
-# similar lifecycle reactions. Failures in hooks are logged but never raised
-# back to the caller — the transition itself already committed.
-TransitionHook = Callable[[ReciterRow | None, ReciterRow, str, Actor], None]
-_TRANSITION_HOOKS: list[TransitionHook] = []
-
-
-def register_transition_hook(fn: TransitionHook) -> None:
-    """Register a post-transition observer. Idempotent on identity."""
-    if fn not in _TRANSITION_HOOKS:
-        _TRANSITION_HOOKS.append(fn)
-
-
-def clear_transition_hooks() -> None:
-    """Drop all registered hooks. For tests."""
-    _TRANSITION_HOOKS.clear()
-
-
-# ----------------------------------------------------------------------
-# Auto-claim queue — stashed in `_h_alignment_completed` and consumed by
-# the post-transition hook so the second `reciter.claimed` transition can
-# acquire the slug lock fresh (the handler ran inside it).
-# ----------------------------------------------------------------------
-
-
-_AUTO_CLAIM_QUEUE: dict[str, Actor] = {}
-_auto_claim_lock = threading.Lock()
-
-
-def _auto_claim_hook(
-    before: ReciterRow | None,
-    new_row: ReciterRow,
-    event: str,
-    actor: Actor,  # noqa: ARG001 — unused; system actor fired alignment_completed
-) -> None:
-    """When ``reciter.alignment_completed`` fires for a slug whose pending
-    request was submitted with ``auto_claim=True``, fire a follow-up
-    ``reciter.claimed`` on the requester's behalf.
-
-    Owner exemption: owners may hold multiple simultaneous claims (matches
-    the policy gate in ``services.auth.predicates.can_claim`` and the
-    manual ``/api/claim/<slug>`` route), so the one-claim check below is
-    skipped for them.
-
-    For non-owners holding another active claim, an audit record
-    (``reciter.auto_claim_skipped``) is appended so the skip is
-    inspectable later instead of being a silent INFO log only.
-    """
-    if event != "reciter.alignment_completed":
-        return
-    with _auto_claim_lock:
-        requester = _AUTO_CLAIM_QUEUE.pop(new_row.slug, None)
-    if requester is None:
-        return
-
-    existing_claim_slug: str | None = None
-    if not permissions.is_owner(requester):
-        existing_claim_slug = next(
-            (
-                r.slug for r in all_rows()
-                if r.state == ReciterState.UNDER_REVIEW
-                and r.assignee_hf_id == requester.hf_user_id
-                and r.slug != new_row.slug
-            ),
-            None,
-        )
-    if existing_claim_slug is not None:
-        logger.info(
-            "auto_claim: %s already holds claim on %s; skipping auto-claim of %s",
-            requester.hf_user_id,
-            existing_claim_slug,
-            new_row.slug,
-        )
-        try:
-            audit.append(
-                event="reciter.auto_claim_skipped",
-                actor=requester,
-                slug=new_row.slug,
-                payload={
-                    "reason": "other_active_claim",
-                    "existing_claim_slug": existing_claim_slug,
-                },
-            )
-        except Exception:  # noqa: BLE001
-            logger.exception(
-                "auto_claim: failed to write skip audit for slug=%s",
-                new_row.slug,
-            )
-        return
-    try:
-        transition(
-            new_row.slug,
-            "reciter.claimed",
-            actor=requester,
-            payload={
-                "assignee_hf_id": requester.hf_user_id,
-                "assignee_login": requester.login_at_time,
-            },
-        )
-    except StateError:
-        logger.exception(
-            "auto_claim: claim transition failed for slug=%s requester=%s",
-            new_row.slug,
-            requester.hf_user_id,
-        )
-
-
-_TRANSITION_HOOKS.append(_auto_claim_hook)
 
 
 def transition(
@@ -423,24 +285,75 @@ def transition(
     payload: dict[str, Any] | None = None,
     reason: str | None = None,
 ) -> ReciterRow:
-    """Apply a slug-bound transition. Returns the new row.
+    """Apply a slug-bound transition in ONE durable transaction. Returns the
+    new row.
 
-    For non-slug-bound events (access.*, catalog.audio_source_added) callers
-    should use the relevant service module instead — those don't touch the
-    state file.
+    The handler + the ``transitions`` row + the ``delivery_states``/``claims``
+    writes (and any folded auto-claim) commit atomically; the commit is then
+    uploaded to the bucket before this returns (``durable_transaction``) so a
+    write is never acked without a durable bucket copy. No per-slug lock: the
+    single serialized writer + ``BEGIN IMMEDIATE`` already serializes same-slug
+    writes (and a per-slug lock taken before the write lock would deadlock the
+    revoke cascade, which holds the write lock then closes per-slug claims).
     """
     payload = payload or {}
+    if event not in _HANDLERS:
+        raise UnknownEvent(f"unknown slug-bound event {event!r}")
+    with _sync.durable_transaction() as conn:
+        new_row = _apply_event(conn, slug, event, actor=actor, payload=payload, reason=reason)
+    # The TS manifest (services/reference/timestamps.py) is a process-cached
+    # projection of which slugs are released/completed, with no other
+    # invalidation hook — without this it stays frozen at boot-state until the
+    # next restart. Drop it AFTER commit (a pre-commit drop could let a
+    # concurrent manifest read re-cache the old state). Unconditional rather
+    # than enumerating publish-affecting events: the rebuild is cheap + lazy
+    # (next manifest request, warm sidecar caches) and transitions are
+    # admin/edit-frequency, not request-frequency.
+    from services.reference import timestamps as _ts_manifest
+    _ts_manifest.invalidate()
+    return new_row
+
+
+def _apply_event(
+    conn: sqlite3.Connection,
+    slug: str,
+    event: str,
+    *,
+    actor: Actor,
+    payload: dict[str, Any],
+    reason: str | None,
+) -> ReciterRow:
+    """Apply one event on the active transaction connection (NON-locking).
+
+    Used by ``transition()`` and — for the cascading ``reciter.released`` on
+    role revoke — by ``services.auth.access.revoke``. FK ordering: the
+    ``transitions`` row is written FIRST (``delivery_states``/``claims``
+    reference it), then the state + claim diffs, then any folded auto-claim.
+    """
     handler = _HANDLERS.get(event)
     if handler is None:
         raise UnknownEvent(f"unknown slug-bound event {event!r}")
 
-    slug_lock = _get_slug_lock(slug)
-    with slug_lock:
-        before = get_row(slug)
-        new_row = handler(slug, before, actor, payload, reason)
-        _persist_row(new_row, replace_existing=before is not None)
+    before = repo_state.get_row(slug)
 
-    audit.append(
+    # Actor must exist for the transitions.actor_id FK BEFORE the handler runs —
+    # some handlers (alignment_completed → apply_and_archive_completed) append
+    # their own transition rows (catalog.edited) mid-handler.
+    repo_access.ensure_user(actor.hf_user_id, login=actor.login_at_time)
+
+    # Capture auto-claim intent BEFORE the handler resolves (clears) the pending
+    # request via apply_and_archive_completed.
+    auto_claim_requester: Actor | None = None
+    if event == "reciter.alignment_completed":
+        from . import pending_requests as _pending_requests
+        pending = _pending_requests.get(slug)
+        if pending is not None and pending.auto_claim:
+            auto_claim_requester = pending.requester
+
+    new_row = handler(slug, before, actor, payload, reason)
+
+    # Transition row FIRST (delivery_states/claims reference its id).
+    tid = repo_transitions.append(
         event=event,
         actor=actor,
         slug=slug,
@@ -448,46 +361,113 @@ def transition(
         to_state=new_row.state.value,
         payload=payload,
         reason=reason,
-    )
+    ).request_id
+    _persist_state(before, new_row, tid=tid)
+    _persist_claim_diff(before, new_row, tid=tid, event=event)
 
-    for hook in _TRANSITION_HOOKS:
-        try:
-            hook(before, new_row, event, actor)
-        except Exception:  # noqa: BLE001
-            logger.exception(
-                "post-transition hook %r failed for slug=%s event=%s",
-                getattr(hook, "__name__", hook),
-                slug,
-                event,
-            )
+    if auto_claim_requester is not None:
+        _maybe_auto_claim(conn, slug, auto_claim_requester)
 
     return new_row
 
 
-def _persist_row(row: ReciterRow, *, replace_existing: bool) -> None:
-    """Replace (or insert) a row, persist + replace in-memory model atomically."""
-    global _state_file
-    with _state_lock:
-        new_file = _state_file.model_copy(deep=True)
-        if replace_existing:
-            for i, existing in enumerate(new_file.reciters):
-                if existing.slug == row.slug:
-                    new_file.reciters[i] = row
-                    break
-        else:
-            new_file.reciters.append(row)
-
-        try:
-            new_file = ReciterStateFile.model_validate(new_file.model_dump(mode="json"))
-        except ValidationError as e:
-            raise InvalidTransition(str(e)) from e
-
-        backend = get_backend()
-        backend.write_json_atomic(
-            storage_paths.state_path(),
-            new_file.model_dump(mode="json"),
+def _persist_state(before: ReciterRow | None, new_row: ReciterRow, *, tid: str) -> None:
+    """Insert (new row) or update the changed ``delivery_states`` columns."""
+    if before is None:
+        repo_state.upsert_state(
+            new_row.slug,
+            state=new_row.state,
+            state_since=new_row.state_since,
+            visibility=new_row.visibility,
+            visibility_reason=new_row.visibility_reason,
+            last_save_at=new_row.last_save_at,
+            created_by_transition_id=tid,
+            timestamps_job_ids=list(new_row.timestamps_job_ids),
+            prefetch_purge_at=new_row.prefetch_purge_at,
+            revision_in_progress=new_row.revision_in_progress,
         )
-        _state_file = new_file
+        return
+    updates: dict[str, Any] = {}
+    for col in (
+        "state", "state_since", "visibility", "visibility_reason",
+        "last_save_at", "timestamps_job_ids", "prefetch_purge_at",
+        "revision_in_progress",
+    ):
+        if getattr(new_row, col) != getattr(before, col):
+            updates[col] = getattr(new_row, col)
+    if updates:
+        repo_state.update_state(new_row.slug, **updates)
+
+
+def _persist_claim_diff(
+    before: ReciterRow | None, new_row: ReciterRow, *, tid: str, event: str
+) -> None:
+    """Derive claim operations from the assignee/marked_ready delta. The open
+    claim is the source of truth for ``assignee_*`` + ``marked_ready`` on the
+    assembled ``ReciterRow`` (only populated on UNDER_REVIEW rows)."""
+    before_assignee = before.assignee_hf_id if before is not None else None
+    new_assignee = new_row.assignee_hf_id
+    before_ready = before.marked_ready if before is not None else False
+
+    if new_assignee and not before_assignee:
+        repo_access.ensure_user(new_assignee, login=new_row.assignee_login)
+        repo_claims.open_claim(
+            slug=new_row.slug,
+            assignee_id=new_assignee,
+            assignee_login=new_row.assignee_login,
+            claimed_at=new_row.assignee_since,
+            opened_by_transition_id=tid,
+        )
+    elif before_assignee and new_assignee and new_assignee != before_assignee:
+        repo_access.ensure_user(new_assignee, login=new_row.assignee_login)
+        repo_claims.reassign(
+            slug=new_row.slug,
+            new_assignee_id=new_assignee,
+            new_assignee_login=new_row.assignee_login,
+            at=new_row.assignee_since,
+            closed_by_transition_id=tid,
+            opened_by_transition_id=tid,
+        )
+    elif before_assignee and not new_assignee:
+        repo_claims.close_claim(
+            slug=new_row.slug, close_reason=event, closed_by_transition_id=tid
+        )
+
+    # marked_ready toggle on a still-held claim (same assignee).
+    if new_assignee and before_assignee == new_assignee and new_row.marked_ready != before_ready:
+        repo_claims.set_marked_ready(new_row.slug, ready=new_row.marked_ready)
+
+
+def _maybe_auto_claim(conn: sqlite3.Connection, slug: str, requester: Actor) -> None:
+    """Fold ``reciter.claimed`` into the alignment txn for an ``auto_claim``
+    request. Owners are exempt from the one-claim check; a non-owner already
+    holding another claim gets an in-txn ``reciter.auto_claim_skipped`` audit."""
+    repo_access.ensure_user(requester.hf_user_id, login=requester.login_at_time)
+    if not permissions.is_owner(requester):
+        held = repo_claims.open_claim_for_user(requester.hf_user_id)
+        if held is not None and held != slug:
+            logger.info(
+                "auto_claim: %s already holds claim on %s; skipping %s",
+                requester.hf_user_id, held, slug,
+            )
+            repo_transitions.append(
+                event="reciter.auto_claim_skipped",
+                actor=requester,
+                slug=slug,
+                payload={"reason": "other_active_claim", "existing_claim_slug": held},
+            )
+            return
+    _apply_event(
+        conn,
+        slug,
+        "reciter.claimed",
+        actor=requester,
+        payload={
+            "assignee_hf_id": requester.hf_user_id,
+            "assignee_login": requester.login_at_time,
+        },
+        reason=None,
+    )
 
 
 # ----------------------------------------------------------------------
@@ -537,11 +517,9 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
     The pending entry is cleared regardless of whether edits applied
     cleanly — catalog failures are logged but don't block the transition.
 
-    If the pending request carried ``auto_claim=True``, the requester is
-    stashed in ``_AUTO_CLAIM_QUEUE`` keyed by slug — the post-transition
-    hook ``_auto_claim_hook`` then fires ``reciter.claimed`` on the
-    requester's behalf once this transition has fully persisted. Skipping
-    silently if they already hold another active claim.
+    If the pending request carried ``auto_claim=True``, ``_apply_event`` folds
+    a follow-up ``reciter.claimed`` into THIS transaction on the requester's
+    behalf (skipping, with an audit, if a non-owner already holds a claim).
     """
     if before is None:
         raise UnknownReciter(slug)
@@ -550,16 +528,12 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
             f"alignment_completed requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
 
-    # Capture the auto_claim requester (if any) BEFORE apply_and_archive_completed
-    # archives + clears the pending entry.
-    # Imported here (not at module top) to avoid a circular import:
-    # pending_requests → catalog → audit; audit doesn't touch state.
+    # The auto_claim requester is captured by ``_apply_event`` BEFORE this
+    # handler resolves the pending request; the follow-up ``reciter.claimed``
+    # is folded into the same transaction post-persist (no recursion through
+    # ``transition()``, no post-commit queue).
+    # Imported here (not at module top) to avoid a circular import.
     from . import pending_requests as _pending_requests
-    pending = _pending_requests.get(slug)
-    if pending is not None and pending.auto_claim:
-        with _auto_claim_lock:
-            _AUTO_CLAIM_QUEUE[slug] = pending.requester
-
     _pending_requests.apply_and_archive_completed(slug, actor=actor)
 
     return _replace(
@@ -623,10 +597,9 @@ def _h_requested(slug, before, actor, payload, reason):
 
     auto_claim = bool(payload.get("auto_claim", False))
 
-    # Persist the pending entry *inside* the slug lock so a second concurrent
-    # request fails the get() check above. If _persist_row fails downstream,
-    # the entry will be cleaned up the next time the slug is rejected — or
-    # rebuildable from the audit log.
+    # Persist the pending entry inside the same transaction as the state row;
+    # the partial-unique index + the get() check above reject a duplicate, and
+    # a downstream failure rolls the whole event back atomically.
     _pending_requests.submit(
         slug,
         requester=actor,
@@ -663,7 +636,7 @@ def _h_request_rejected_soft(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"request_rejected_soft requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
-    _require_maintainer(actor)
+    _require_owner(actor)
     norm_reason = _require_reason(reason, "request_rejected_soft")
 
     from . import pending_requests as _pending_requests
@@ -689,7 +662,7 @@ def _h_request_rejected_hard(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"request_rejected_hard requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
-    _require_maintainer(actor)
+    _require_owner(actor)
     norm_reason = _require_reason(reason, "request_rejected_hard")
 
     from . import pending_requests as _pending_requests
@@ -1090,14 +1063,9 @@ def _replace(row: ReciterRow, **changes: Any) -> ReciterRow:
 
 
 def has_other_active_claim(hf_user_id: str, *, except_slug: str | None = None) -> bool:
-    """True if ``hf_user_id`` is assignee on any UNDER_REVIEW row (other than
-    ``except_slug``). Used to enforce one-claim-per-user.
-    """
-    for row in all_rows():
-        if row.state != ReciterState.UNDER_REVIEW:
-            continue
-        if row.slug == except_slug:
-            continue
-        if row.assignee_hf_id == hf_user_id:
-            return True
-    return False
+    """True if ``hf_user_id`` holds an open claim (other than ``except_slug``).
+    Used to enforce one-claim-per-user — an O(1) index lookup on ``claims``."""
+    held = repo_claims.open_claim_for_user(hf_user_id)
+    if held is None:
+        return False
+    return held != except_slug

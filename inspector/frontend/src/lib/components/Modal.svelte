@@ -15,6 +15,9 @@
     export let title: string | null = null;
     /** Accessible label for the close button. */
     export let closeLabel = 'Close';
+    /** ``'wide'`` gives a near-fullscreen shell (admin dashboard). Default
+     * leaves every existing caller unchanged. */
+    export let size: 'default' | 'wide' = 'default';
 
     const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -106,6 +109,7 @@
     >
         <div
             class="modal"
+            class:wide={size === 'wide'}
             bind:this={modalEl}
             role="dialog"
             aria-modal="true"
@@ -171,6 +175,10 @@
         box-shadow: 0 32px 80px oklch(0 0 0 / 0.45),
                     0 2px 8px oklch(0 0 0 / 0.3);
         animation: modal-in var(--t-slow) var(--ease-out-expo);
+    }
+    .modal.wide {
+        width: min(1480px, 95vw);
+        height: min(900px, 92vh);
     }
     @keyframes modal-in {
         from { opacity: 0; transform: translateY(12px) scale(0.985); }
