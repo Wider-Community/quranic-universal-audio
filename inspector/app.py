@@ -237,7 +237,8 @@ Compress(app)
 # request.url_root reflects the public https URL (load-bearing for the
 # OAuth redirect_uri). Gated by env so local dev / docker-compose runs
 # without proxy headers are unaffected.
-if os.environ.get("INSPECTOR_BEHIND_PROXY") == "1":
+_behind_proxy = os.environ.get("INSPECTOR_BEHIND_PROXY") == "1"
+if _behind_proxy:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Flask's secret key still signs anything that touches the session, but the
