@@ -73,7 +73,10 @@ def force_release(slug: str):
         return err
 
     body = request.get_json(silent=True) or {}
-    reason, err = validate_reason(body)
+    # Reason is optional on owner claim mutations — the action is auditable
+    # via the actor + slug + transition row regardless. Sub-threshold strings
+    # are normalized to empty by validate_reason(required=False).
+    reason, err = validate_reason(body, required=False)
     if err is not None:
         return err
 
@@ -103,7 +106,8 @@ def reassign(slug: str):
     to_login = (body.get("to_login") or "").strip()
     if not to_login:
         return jsonify({"error": "to_login is required"}), 400
-    reason, err = validate_reason(body)
+    # Optional reason — same rationale as force-release.
+    reason, err = validate_reason(body, required=False)
     if err is not None:
         return err
 

@@ -133,7 +133,10 @@ def test_force_release_by_maintainer_returns_403(signed_in_client, monkeypatch):
     assert res.status_code == 403
 
 
-def test_force_release_short_reason_returns_400(signed_in_client, monkeypatch):
+def test_force_release_short_reason_succeeds(signed_in_client, monkeypatch):
+    """Reason is OPTIONAL on owner claim mutations — a short or empty string
+    is normalized to '' and the action proceeds. Action is still auditable
+    via actor + slug + transition row."""
     _stub_state_persist(monkeypatch)
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="owner")
@@ -142,7 +145,20 @@ def test_force_release_short_reason_returns_400(signed_in_client, monkeypatch):
         data=json.dumps({"reason": "too short"}),
         headers=_HEADERS,
     )
-    assert res.status_code == 400
+    assert res.status_code == 200, res.get_json()
+
+
+def test_force_release_no_reason_succeeds(signed_in_client, monkeypatch):
+    """Reason field can be omitted entirely."""
+    _stub_state_persist(monkeypatch)
+    _replace_state([_row("test_slug")])
+    client, _ = signed_in_client(role="owner")
+    res = client.post(
+        "/api/admin/claim/force-release/test_slug",
+        data=json.dumps({}),
+        headers=_HEADERS,
+    )
+    assert res.status_code == 200, res.get_json()
 
 
 def test_force_release_wrong_state_returns_400(signed_in_client, monkeypatch):
@@ -274,7 +290,10 @@ def test_reassign_missing_to_login_returns_400(signed_in_client, monkeypatch):
     assert res.status_code == 400
 
 
-def test_reassign_short_reason_returns_400(signed_in_client, monkeypatch):
+def test_reassign_short_reason_succeeds(signed_in_client, monkeypatch):
+    """Reason is OPTIONAL on owner claim mutations (mirror of
+    force-release test). Short / empty reasons normalize to '' and the
+    action proceeds; audit row carries the actor + slug + event."""
     _stub_state_persist(monkeypatch)
     _stub_hf_users(monkeypatch, returns=_hf_user())
     _replace_state([_row("test_slug")])
@@ -285,7 +304,22 @@ def test_reassign_short_reason_returns_400(signed_in_client, monkeypatch):
         data=json.dumps({"to_login": "alice", "reason": "short"}),
         headers=_HEADERS,
     )
-    assert res.status_code == 400
+    assert res.status_code == 200, res.get_json()
+
+
+def test_reassign_no_reason_succeeds(signed_in_client, monkeypatch):
+    """Reason field can be omitted entirely."""
+    _stub_state_persist(monkeypatch)
+    _stub_hf_users(monkeypatch, returns=_hf_user())
+    _replace_state([_row("test_slug")])
+    client, _ = signed_in_client(role="owner")
+
+    res = client.post(
+        "/api/admin/claim/reassign/test_slug",
+        data=json.dumps({"to_login": "alice"}),
+        headers=_HEADERS,
+    )
+    assert res.status_code == 200, res.get_json()
 
 
 def test_reassign_by_contributor_returns_403(signed_in_client):

@@ -198,13 +198,13 @@
 
 <svelte:window on:keydown={onKey} />
 
-<div class="reviews">
+<div class="reviews" class:drawer-open={reviewsStore.openDrawer !== null}>
     {#if loading}
         <div class="state">Loading…</div>
     {:else if error}
         <div class="state error" role="alert">{error}</div>
     {:else}
-        <!-- Filter bar -->
+        <!-- Filter bar (sticky, always visible while the list scrolls) -->
         <div class="filter-bar">
             <span class="search">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
@@ -275,58 +275,65 @@
             </div>
         </div>
 
-        {#if narrowedToZero}
-            <div class="narrowed">
-                <span>No recitations match the active filter.</span>
-                <button class="clear-link" type="button" onclick={() => reviewsStore.clearFilters()}>
-                    Clear filters
-                </button>
-            </div>
-        {/if}
+        <!-- Scrollable list area — owns the only scrollbar in the compartment
+             so the drawer (absolute against .reviews) stays sticky to the
+             viewport regardless of how far the list is scrolled. Disabled
+             via overflow:hidden when the drawer opens so wheel events don't
+             bleed past the scrim. -->
+        <div class="list-area">
+            {#if narrowedToZero}
+                <div class="narrowed">
+                    <span>No recitations match the active filter.</span>
+                    <button class="clear-link" type="button" onclick={() => reviewsStore.clearFilters()}>
+                        Clear filters
+                    </button>
+                </div>
+            {/if}
 
-        {#each SECTIONS as section (section.key)}
-            {@const sectionRows = rowsFor(section.key)}
-            <section
-                class="state-section"
-                class:collapsed={collapsed[section.key]}
-            >
-                <button
-                    class="state-head"
-                    type="button"
-                    aria-expanded={!collapsed[section.key]}
-                    onclick={() => toggle(section.key)}
+            {#each SECTIONS as section (section.key)}
+                {@const sectionRows = rowsFor(section.key)}
+                <section
+                    class="state-section"
+                    class:collapsed={collapsed[section.key]}
                 >
-                    <span class="state-mark {section.mark}"></span>
-                    <span class="state-name">{section.label}</span>
-                    <span class="state-count">{sectionRows.length}</span>
-                    <span class="state-toggle" aria-hidden="true">▾</span>
-                </button>
-                {#if !collapsed[section.key]}
-                    <div class="state-body">
-                        {#if sectionRows.length === 0}
-                            <div class="empty-line">No items.</div>
-                        {:else}
-                            <table class="reviews-table">
-                                <colgroup>
-                                    <col class="col-reciter" />
-                                    <col class="col-riwayah" />
-                                    <col class="col-style" />
-                                    <col class="col-channel" />
-                                    <col class="col-reviewer" />
-                                    <col class="col-age" />
-                                    <col class="col-actions" />
-                                </colgroup>
-                                <tbody>
-                                    {#each sectionRows as row (row.slug)}
-                                        <ReviewsRow {row} />
-                                    {/each}
-                                </tbody>
-                            </table>
-                        {/if}
-                    </div>
-                {/if}
-            </section>
-        {/each}
+                    <button
+                        class="state-head"
+                        type="button"
+                        aria-expanded={!collapsed[section.key]}
+                        onclick={() => toggle(section.key)}
+                    >
+                        <span class="state-mark {section.mark}"></span>
+                        <span class="state-name">{section.label}</span>
+                        <span class="state-count">{sectionRows.length}</span>
+                        <span class="state-toggle" aria-hidden="true">▾</span>
+                    </button>
+                    {#if !collapsed[section.key]}
+                        <div class="state-body">
+                            {#if sectionRows.length === 0}
+                                <div class="empty-line">No items.</div>
+                            {:else}
+                                <table class="reviews-table">
+                                    <colgroup>
+                                        <col class="col-reciter" />
+                                        <col class="col-riwayah" />
+                                        <col class="col-style" />
+                                        <col class="col-channel" />
+                                        <col class="col-reviewer" />
+                                        <col class="col-age" />
+                                        <col class="col-actions" />
+                                    </colgroup>
+                                    <tbody>
+                                        {#each sectionRows as row (row.slug)}
+                                            <ReviewsRow {row} />
+                                        {/each}
+                                    </tbody>
+                                </table>
+                            {/if}
+                        </div>
+                    {/if}
+                </section>
+            {/each}
+        </div>
     {/if}
 
     {#if reviewsStore.selectedSlug && reviewsStore.openDrawer !== null}
@@ -352,14 +359,33 @@
 </div>
 
 <style>
+    /* Own the scroll inside the compartment so the absolute-positioned
+     * drawer stays sticky to the modal-body viewport. Without this, the
+     * drawer was anchored to .reviews which scrolled with its content
+     * inside the modal-body's overflow:auto, causing the drawer to drift
+     * off-screen at non-zero scroll positions. */
     .reviews {
         position: relative;
         display: flex;
         flex-direction: column;
-        padding: var(--s-3) var(--s-5) var(--s-5);
+        padding: var(--s-3) var(--s-5) 0;
         gap: var(--s-3);
         height: 100%;
+        overflow: hidden;
     }
+    .list-area {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding-bottom: var(--s-5);
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-3);
+    }
+    /* When a drawer is open, freeze list scrolling — the scrim catches
+     * clicks but wheel/touchpad events would otherwise bleed through to
+     * the underlying scroll container. */
+    .reviews.drawer-open .list-area { overflow: hidden; }
 
     .state {
         padding: var(--s-12) 0;

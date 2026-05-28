@@ -35,7 +35,7 @@ from scripts.lib.schemas import (
 from . import audit
 from services.auth import permissions
 from services import db as _db
-from services.db import repo_access, repo_claims, repo_state, repo_transitions
+from services.db import _serde, repo_access, repo_claims, repo_state, repo_transitions
 from services.db import sync as _sync
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,15 @@ class InvalidTransition(StateError):
 
     The database is unchanged; no transition row is written. Callers should
     surface HTTP 400 with the message.
+
+    Optional ``details`` carry structured context the FE can render (e.g.
+    the offending category counts for a mark-ready submission). The app-
+    level error handler at ``app.py`` includes them in the JSON envelope.
     """
+
+    def __init__(self, message: str, *, details: dict | None = None):
+        super().__init__(message)
+        self.details = details or None
 
 
 class NotAuthorizedForTransition(StateError):
@@ -324,7 +332,7 @@ def _apply_event(
         reason=reason,
     ).request_id
     _persist_state(before, new_row, tid=tid)
-    _persist_claim_diff(before, new_row, tid=tid, event=event)
+    _persist_claim_diff(before, new_row, tid=tid, event=event, payload=payload)
 
     if auto_claim_requester is not None:
         _maybe_auto_claim(conn, slug, auto_claim_requester)
@@ -361,11 +369,20 @@ def _persist_state(before: ReciterRow | None, new_row: ReciterRow, *, tid: str) 
 
 
 def _persist_claim_diff(
-    before: ReciterRow | None, new_row: ReciterRow, *, tid: str, event: str
+    before: ReciterRow | None,
+    new_row: ReciterRow,
+    *,
+    tid: str,
+    event: str,
+    payload: dict[str, Any],
 ) -> None:
     """Derive claim operations from the assignee/marked_ready delta. The open
     claim is the source of truth for ``assignee_*`` + ``marked_ready`` on the
-    assembled ``ReciterRow`` (only populated on UNDER_REVIEW rows)."""
+    assembled ``ReciterRow`` (only populated on UNDER_REVIEW rows).
+
+    For ``reciter.marked_ready`` events, ``payload`` is the validated
+    ``MarkReadyRequest`` shape — the checklist + two comment boxes are
+    persisted onto the open claim alongside ``marked_ready_at``."""
     before_assignee = before.assignee_hf_id if before is not None else None
     new_assignee = new_row.assignee_hf_id
     before_ready = before.marked_ready if before is not None else False
@@ -396,7 +413,25 @@ def _persist_claim_diff(
 
     # marked_ready toggle on a still-held claim (same assignee).
     if new_assignee and before_assignee == new_assignee and new_row.marked_ready != before_ready:
-        repo_claims.set_marked_ready(new_row.slug, ready=new_row.marked_ready)
+        if new_row.marked_ready:
+            # mark-ready: payload is a validated MarkReadyRequest shape
+            # (the handler raises before reaching this point if not). Pull
+            # checklist + comments onto the open-claim row.
+            checklist = payload.get("checklist") or {}
+            checklist_json = _serde.json_dumps(checklist)
+            repo_claims.set_marked_ready(
+                new_row.slug,
+                ready=True,
+                checklist_json=checklist_json,
+                comment_checks=str(payload.get("comment_checks") or ""),
+                comment_issues=str(payload.get("comment_issues") or ""),
+            )
+        else:
+            # unmark-ready: clears marked_ready_at + the three submission
+            # columns on the open claim. A subsequent re-mark writes fresh
+            # values; the prior cycle's submission lives on the closed
+            # history row (set_marked_ready only touches the OPEN claim).
+            repo_claims.set_marked_ready(new_row.slug, ready=False)
 
 
 def _maybe_auto_claim(conn: sqlite3.Connection, slug: str, requester: Actor) -> None:
@@ -672,6 +707,17 @@ def _h_released(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"released requires UNDER_REVIEW, got {before.state.value}"
         )
+    # A reviewer who has already marked ready must unmark first (or an
+    # admin must force-release / send-back). Self-release on a marked
+    # row would silently drop the submission and leave a half-finished
+    # cycle behind. Maintainers are routed through ``claim.force_released``
+    # for that case (different audit reason). The route still uses this
+    # handler for the maintainer-self-release-of-own-claim edge case, so
+    # the gate fires only when the claim holder owns the marked row.
+    if before.marked_ready and permissions.is_claim_holder(actor, before):
+        raise InvalidTransition(
+            "release blocked: unmark ready first, or ask an admin to send back"
+        )
     _require_claim_holder_or_maintainer(actor, before)
     return _replace(
         before,
@@ -686,6 +732,16 @@ def _h_released(slug, before, actor, payload, reason):
 
 
 def _h_marked_ready(slug, before, actor, payload, reason):
+    """Reviewer mark-ready handler.
+
+    Validates the submission payload (well-formed ``MarkReadyRequest`` with
+    all five checklist values True) and re-computes the five gated
+    validation category counts against the on-disk segs. Either gate
+    raises ``InvalidTransition`` so the reviewer sees a structured 400.
+
+    The submission lives on the open claim row (persisted by
+    ``_persist_claim_diff`` via the payload it threads through).
+    """
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.UNDER_REVIEW:
@@ -695,6 +751,53 @@ def _h_marked_ready(slug, before, actor, payload, reason):
     _require_claim_holder(actor, before)
     if before.marked_ready:
         raise InvalidTransition("already marked_ready")
+
+    # Lazy import: scripts.lib.schemas is a sibling import (already used
+    # elsewhere in this module), but the validation module pulls heavy
+    # bucket loaders — keep it off the top-level state.py import graph.
+    from scripts.lib.schemas import BLOCKING_COUNT_KEYS, MarkReadyRequest
+    from pydantic import ValidationError
+
+    try:
+        submission = MarkReadyRequest.model_validate(payload)
+    except ValidationError as e:
+        raise InvalidTransition(
+            "marked_ready payload invalid",
+            details={"validation_errors": e.errors()},
+        ) from e
+
+    unchecked = [
+        k for k, v in submission.checklist.model_dump().items() if not v
+    ]
+    if unchecked:
+        raise InvalidTransition(
+            "checklist incomplete: all attestations must be checked",
+            details={"unchecked": unchecked},
+        )
+
+    # Authoritative: re-compute live category counts against on-disk segs.
+    # The FE applies the same gate as a UX layer, but the server is the
+    # source of truth — a race against unsaved edits or a stale snapshot
+    # in the browser can mean the FE's view diverges.
+    from services.validation import validate_reciter_segments
+
+    result = validate_reciter_segments(slug)
+    if result is None:
+        raise InvalidTransition(
+            "marked_ready blocked: no segments found on bucket"
+        )
+    counts = result.get("category_counts") or {}
+    nonzero = {
+        k: int(counts.get(k, 0))
+        for k in BLOCKING_COUNT_KEYS
+        if int(counts.get(k, 0)) > 0
+    }
+    if nonzero:
+        raise InvalidTransition(
+            "blocking validation counts must be zero before mark-ready",
+            details={"blocking_counts": nonzero},
+        )
+
     return _replace(before, marked_ready=True)
 
 
@@ -837,7 +940,9 @@ def _h_force_released(slug, before, actor, payload, reason):
     # an owner privilege; maintainers gate quality (send-back-to-UR) but
     # don't manage who reviews. See Reviews-tab plan §"Reassign popover".
     _require_owner(actor)
-    _require_reason(reason, "claim.force_released")
+    # Reason is optional — the actor + slug + transition row already make
+    # the action auditable. The route layer normalizes empty/short strings
+    # to "" via validate_reason(required=False).
     return _replace(
         before,
         state=ReciterState.AWAITING_REVIEW,
@@ -865,7 +970,7 @@ def _h_reassigned(slug, before, actor, payload, reason):
             "claim.reassigned requires payload "
             "{new_assignee_hf_id, new_assignee_login}"
         )
-    _require_reason(reason, "claim.reassigned")
+    # Reason is optional — pairs with _h_force_released (see comment there).
     return _replace(
         before,
         assignee_hf_id=new_hf,
