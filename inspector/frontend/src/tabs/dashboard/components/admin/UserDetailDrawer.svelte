@@ -1,10 +1,10 @@
 <script lang="ts">
     /** Per-user detail, lazy-fetched on open. Slides over the table; the
      * caller renders the scrim + handles close. */
+    import { fetchAdminUser } from '../../../../lib/api/admin-users';
     import Avatar from '../../../../lib/components/Avatar.svelte';
     import RolePicker from '../../../../lib/components/RolePicker.svelte';
     import Timeline from '../../../../lib/components/Timeline.svelte';
-    import { fetchAdminUser } from '../../../../lib/api/admin-users';
     import type { AdminUserDetail } from '../../../../lib/types/generated/schemas';
     import { compactAgo, fmtDate, fmtDuration } from '../../../../lib/utils/admin-format';
 

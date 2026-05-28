@@ -11,8 +11,8 @@
         fetchRequests,
         markRequestViewed,
         probeRequest,
-        returnRequest,
         type RequestStatus,
+        returnRequest,
     } from '../../../../lib/api/admin-requests';
     import { rejectRequestHard, rejectRequestSoft } from '../../../../lib/api/requests';
     import { isOwner } from '../../../../lib/stores/current-user';

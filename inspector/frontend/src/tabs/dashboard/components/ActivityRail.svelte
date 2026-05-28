@@ -22,8 +22,8 @@
     import { titleCaseSlug } from '../../../lib/utils/delivery-label';
     import { relativeTime } from '../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../lib/utils/visible-poll';
-    import AdminActivityRail from './AdminActivityRail.svelte';
     import AdminDashboardButton from './admin/AdminDashboardButton.svelte';
+    import AdminActivityRail from './AdminActivityRail.svelte';
 
     let cards: PublicActivityCard[] = [];
     let loading = true;
