@@ -62,15 +62,14 @@ export function setEditingMode(mode: EditingMode): void {
  *   1. user == null  → view / unauthenticated
  *   2. task == null  → view / unauthenticated (route still loading)
  *   3. row.visibility == discarded → view / discarded
- *   4. user.role == owner && marked_ready → view / marked_ready
- *   5. user.role == owner → owner  (any state, no claim required)
- *   6. row.state == completed → view / completed
- *   7. row.state == released → view / released
- *   8. row.state == under_review && marked_ready && user is assignee → view / marked_ready
- *   9. row.state == under_review && user is assignee → editor
- *   10. maintainer && row.state == under_review && !marked_ready → maintainer
- *   11. row.state in {catalogued, awaiting_alignment, awaiting_timestamps} → view / not-claimable
- *   12. else → view / wrong-assignee
+ *   4. user.role == owner → owner  (any state, marked_ready or not, no claim required)
+ *   5. row.state == completed → view / completed
+ *   6. row.state == released → view / released
+ *   7. row.state == under_review && marked_ready && user is assignee → view / marked_ready
+ *   8. row.state == under_review && user is assignee → editor
+ *   9. maintainer && row.state == under_review && !marked_ready → maintainer
+ *   10. row.state in {catalogued, awaiting_alignment, awaiting_timestamps} → view / not-claimable
+ *   11. else → view / wrong-assignee
  */
 export function syncEditingMode(
     user: CurrentUser | null,
@@ -88,9 +87,9 @@ export function syncEditingMode(
     if (row.visibility === 'discarded') {
         return { kind: 'view', viewReason: 'discarded' };
     }
-    // Owner fast-path: can edit any public, non-frozen reciter regardless of state.
+    // Owner fast-path: can edit any public reciter regardless of state or
+    // marked_ready freeze (owner override is total — bypasses both).
     if (user.role === 'owner') {
-        if (row.marked_ready) return { kind: 'view', viewReason: 'marked_ready' };
         return { kind: 'owner' };
     }
     if (row.state === 'completed') {

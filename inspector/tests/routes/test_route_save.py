@@ -145,15 +145,8 @@ def test_save_owner_bypasses_state_check(signed_in_client, tmp_reciter_dir):
     )
 
 
-def test_save_owner_marked_ready_still_blocked(signed_in_client, tmp_reciter_dir):
-    """Owner is still blocked by marked_ready — that flag freezes for everyone."""
-    from datetime import datetime, timezone
-
-    from scripts.lib.schemas import (
-        ReciterRow, ReciterState, ReciterStateFile, Visibility,
-    )
-    from services import state as state_service
-
+def test_save_owner_marked_ready_bypasses_freeze(signed_in_client, tmp_reciter_dir):
+    """Owner override is total — marked_ready does not block owner saves."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="u-owner")
 
@@ -165,11 +158,14 @@ def test_save_owner_marked_ready_still_blocked(signed_in_client, tmp_reciter_dir
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
     res = client.post(
         f"/api/seg/save/{reciter}/112",
-        data=json.dumps({"segments": [], "operations": []}),
+        data=json.dumps({"full_replace": True, "segments": [], "operations": []}),
         headers=_HEADERS,
     )
-    assert res.status_code == 403
-    assert "marked ready" in res.get_json()["error"].lower()
+    # Gate passed — 200 (save succeeded) or 400 (payload-shape complaint) both
+    # confirm the lock did not 403 on marked_ready.
+    assert res.status_code in (200, 400), (
+        f"unexpected status {res.status_code}; body={res.get_json()}"
+    )
 
 
 # ---------------------------------------------------------------------------

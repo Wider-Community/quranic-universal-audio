@@ -2,8 +2,8 @@
 
 Mirror of the spec in inspector-state-management.md §8 plus
 ``can_edit_as_admin`` (maintainer/owner override on UNDER_REVIEW rows) and
-``can_edit_as_owner`` (owner editing any public non-frozen row regardless of
-state).
+``can_edit_as_owner`` (owner editing any public row regardless of state or
+marked_ready freeze — owner override is total).
 
 Pure functions: each takes the row + optional ``User`` and returns ``bool``.
 Anonymous (``user is None``) always yields ``False`` for any contribution
@@ -68,10 +68,10 @@ def can_edit_as_admin(row, user) -> bool:
 
 
 def can_edit_as_owner(row, user) -> bool:
-    """Owner editing any non-frozen public reciter, regardless of state."""
+    """Owner editing any public reciter, regardless of state or marked_ready."""
     if user is None or row is None or not permissions.is_owner(user):
         return False
-    return not row.marked_ready and row.visibility == Visibility.PUBLIC
+    return row.visibility == Visibility.PUBLIC
 
 
 def can_mark_ready(row, user) -> bool:

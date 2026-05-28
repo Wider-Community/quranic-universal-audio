@@ -350,7 +350,7 @@ def test_owner_can_claim_multiple_reciters(signed_in_client, state_persistence):
 
 
 def test_reciter_task_predicates_owner_can_edit_as_owner(signed_in_client):
-    """Owner gets can_edit_as_owner=True on any public non-frozen row."""
+    """Owner gets can_edit_as_owner=True on any public row (any state)."""
     # Test with a catalogued row (state that normally blocks all edits)
     _replace_state([_row("test_slug", state="catalogued")])
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
@@ -373,15 +373,15 @@ def test_reciter_task_predicates_owner_can_claim_with_other_active(signed_in_cli
     assert preds["can_claim"] is True
 
 
-def test_reciter_task_predicates_owner_marked_ready_blocked(signed_in_client):
-    """Owner cannot edit a marked_ready row (can_edit_as_owner is False)."""
+def test_reciter_task_predicates_owner_marked_ready_overrides(signed_in_client):
+    """Owner can still edit a marked_ready row — owner override is total."""
     _replace_state([_row(
         "test_slug", state="under_review", assignee_hf_id="other", marked_ready=True,
     )])
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
     resp = client.get("/api/reciter-task/test_slug")
     preds = json.loads(resp.data)["predicates"]
-    assert preds["can_edit_as_owner"] is False
+    assert preds["can_edit_as_owner"] is True
 
 
 def test_reciter_task_predicates_non_owner_lacks_can_edit_as_owner(signed_in_client):

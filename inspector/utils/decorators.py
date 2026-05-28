@@ -107,12 +107,12 @@ def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = Fa
     **Admin bypass** (``admin_bypass=True``): maintainer/owner can edit any
     ``under_review`` row regardless of assignee.
 
-    **Owner bypass**: owners can edit any public, non-marked-ready row
-    regardless of ``ReciterState`` or assignee — no ``admin_bypass`` flag
-    required.
+    **Owner bypass**: owners can edit any public row regardless of
+    ``ReciterState``, assignee, or marked_ready freeze — no ``admin_bypass``
+    flag required. Owner override is total.
 
-    Marked-ready rows are NEVER editable by anyone via this gate; the
-    reviewer's "Continue editing" flips ``marked_ready=False`` first.
+    Marked-ready rows are otherwise frozen for everyone else; the reviewer's
+    "Continue editing" flips ``marked_ready=False`` first.
 
     On success: ``g.current_user`` and ``g.current_row`` are set so the
     route can build an ``Actor`` from them without re-resolving.
@@ -131,10 +131,7 @@ def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = Fa
             if row is None:
                 abort(404, description="unknown reciter")
             if permissions.is_owner(user):
-                # Owners bypass the state check; marked_ready and visibility
-                # still apply.
-                if row.marked_ready:
-                    abort(403, description="reciter is marked ready for publish and frozen")
+                # Owners bypass state and marked_ready; only visibility applies.
                 if row.visibility != Visibility.PUBLIC:
                     abort(403, description="reciter visibility blocks edits")
             else:

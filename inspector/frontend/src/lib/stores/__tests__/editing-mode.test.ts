@@ -197,15 +197,14 @@ describe('syncEditingMode', () => {
         expect(syncEditingMode(_user({ role: 'owner' }), task)).toEqual({ kind: 'owner' });
     });
 
-    it('returns view/marked_ready for owner on a marked_ready row', () => {
+    it('returns owner for owner on a marked_ready row (override bypasses freeze)', () => {
         const task = _task({
             state: 'under_review',
             marked_ready: true,
             assignee_hf_id: 'other',
         });
         expect(syncEditingMode(_user({ role: 'owner' }), task)).toEqual({
-            kind: 'view',
-            viewReason: 'marked_ready',
+            kind: 'owner',
         });
     });
 
