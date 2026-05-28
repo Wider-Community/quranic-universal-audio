@@ -14,7 +14,9 @@
      */
     import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
     import { adminDashboard } from '../../../stores/admin-dashboard.svelte';
-    import { openDetail as openSegmentsDetail } from '../../../stores/dashboard-state';
+    import { LS_KEYS, TAB_NAMES } from '../../../../../lib/utils/constants';
+    import { setActiveTab } from '../../../../../lib/utils/active-tab';
+    import { selectedReciter } from '../../../../segments/stores/chapter';
     import type { AdminReviewRow } from '../../../../../lib/types/generated/schemas';
 
     let { row }: { row: AdminReviewRow } = $props();
@@ -72,9 +74,18 @@
 
     function onSegments(e: MouseEvent): void {
         e.stopPropagation();
-        // Take the user to the Segments tab with this recitation pre-selected,
-        // then dismiss the admin modal so the deep-link lands cleanly.
-        openSegmentsDetail(row.reciter_id, row.slug);
+        // Switch to the Segments TOP-LEVEL tab with this delivery's slug
+        // pre-selected. Three steps so both first-mount (loadReciters reads
+        // localStorage) and already-mounted (selectedReciter store) paths
+        // pick up the new slug; then close the admin modal so the tab
+        // switch lands cleanly.
+        try {
+            localStorage.setItem(LS_KEYS.SEG_RECITER, row.slug);
+        } catch {
+            /* localStorage unavailable — store-set still works for this session */
+        }
+        selectedReciter.set(row.slug);
+        setActiveTab(TAB_NAMES.SEGMENTS);
         adminDashboard.close();
     }
 </script>
@@ -88,11 +99,11 @@
     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(); } }}
 >
     <div class="reciter">
-        {#if row.name_ar}
-            <span class="reciter-ar" dir="rtl">{row.name_ar}</span>
-        {/if}
         {#if row.name_en}
             <span class="reciter-lt">{row.name_en}</span>
+        {/if}
+        {#if row.name_ar}
+            <span class="reciter-ar" dir="rtl">{row.name_ar}</span>
         {/if}
     </div>
 
@@ -152,19 +163,19 @@
         flex-wrap: nowrap;
         overflow: hidden;
     }
-    .reciter-ar {
-        font-size: 17px;
+    .reciter-lt {
+        font-size: 15px;
         color: var(--text-primary);
         line-height: 1.25;
-        unicode-bidi: isolate;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         flex: 0 1 auto;
     }
-    .reciter-lt {
-        font-size: 11px;
-        color: var(--text-faint);
+    .reciter-ar {
+        font-size: 13px;
+        color: var(--text-muted);
+        unicode-bidi: isolate;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

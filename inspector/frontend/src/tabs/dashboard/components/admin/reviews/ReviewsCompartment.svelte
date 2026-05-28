@@ -127,17 +127,42 @@
 
     type SectionKey = 'marked_ready' | 'under_review' | 'published' | 'available';
 
+    const COLLAPSE_LS_KEY = 'insp_reviews_collapsed';
+
     // Collapsed-by-default: only Available. The other three are where the
-    // urgency lives.
-    let collapsed = $state<Record<SectionKey, boolean>>({
-        marked_ready: false,
-        under_review: false,
-        published: false,
-        available: true,
-    });
+    // urgency lives. Cached to localStorage so the maintainer's section
+    // preferences persist across reloads.
+    function loadCollapsed(): Record<SectionKey, boolean> {
+        const fallback: Record<SectionKey, boolean> = {
+            marked_ready: false,
+            under_review: false,
+            published: false,
+            available: true,
+        };
+        try {
+            const raw = localStorage.getItem(COLLAPSE_LS_KEY);
+            if (!raw) return fallback;
+            const parsed = JSON.parse(raw) as Partial<Record<SectionKey, boolean>>;
+            return {
+                marked_ready: parsed.marked_ready ?? fallback.marked_ready,
+                under_review: parsed.under_review ?? fallback.under_review,
+                published: parsed.published ?? fallback.published,
+                available: parsed.available ?? fallback.available,
+            };
+        } catch {
+            return fallback;
+        }
+    }
+
+    let collapsed = $state<Record<SectionKey, boolean>>(loadCollapsed());
 
     function toggle(key: SectionKey): void {
         collapsed[key] = !collapsed[key];
+        try {
+            localStorage.setItem(COLLAPSE_LS_KEY, JSON.stringify(collapsed));
+        } catch {
+            /* localStorage unavailable — toggle still works for this session */
+        }
     }
 
     // Section order is FIXED — see plan §State-machine mapping.
