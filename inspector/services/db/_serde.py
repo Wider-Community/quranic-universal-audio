@@ -3,9 +3,9 @@
 - datetimes ↔ ISO-8601 UTC strings (the on-disk column format)
 - JSON columns via orjson
 - content_hash: the stable, content-derived id the activity layer uses for
-  dismissals/tombstones. MUST stay byte-identical to
+  global tombstones. MUST stay byte-identical to
   ``services.activity.activity_classification.audit_id`` so migrated
-  dismissals/tombstones keep matching their transitions.
+  tombstones keep matching their transitions.
 """
 
 from __future__ import annotations
@@ -92,7 +92,7 @@ def content_hash_for_record(record: dict) -> str:
 
     Used by the JSON→SQLite migration on historical audit JSONL records so the
     result matches what ``activity_classification.audit_id`` produced for the
-    same record (the key the dismissal/tombstone stores point at)."""
+    same record (the key the tombstone store points at)."""
     actor = record.get("actor") or {}
     actor_hf = actor.get("hf_user_id") if isinstance(actor, dict) else None
     return content_hash(

@@ -6,8 +6,11 @@
 -- table is dead weight. Its sibling ``activity_tombstones`` stays — owner-only
 -- public-feed deletes still write there.
 --
+-- 0001_init.sql created the table with only its composite PRIMARY KEY (no
+-- named secondary index), so DROP TABLE alone is enough — SQLite drops the
+-- auto-index alongside the table.
+--
 -- Conventions match prior migrations: the runner wraps in BEGIN/COMMIT and
 -- bumps user_version.
 
-DROP INDEX IF EXISTS ix_activity_dismissals_user;
 DROP TABLE IF EXISTS activity_dismissals;

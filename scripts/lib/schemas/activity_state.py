@@ -16,7 +16,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ActivityState(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # ``extra="ignore"`` so a legacy ``activity/state.json`` carrying the
+    # retired per-user ``dismissals`` map still validates cleanly when the
+    # one-shot JSON-to-SQLite migrator reads it — the field is dropped at
+    # load time, modern code only sees ``deleted``. New code should never
+    # produce unknown keys.
+    model_config = ConfigDict(extra="ignore")
 
     schema_version: int = 1
     deleted: list[str] = Field(

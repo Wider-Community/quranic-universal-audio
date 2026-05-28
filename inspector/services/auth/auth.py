@@ -57,10 +57,11 @@ SESSION_SALT = "inspector-session-v1"
 #
 # Each dev role resolves to a *distinct* synthetic identity (e.g. owner →
 # ``dev-owner`` / ``@dev-owner``) so the role switcher behaves like switching
-# between real HF users in prod: per-user dismissals, claims, and audit
-# actor records are scoped per role rather than collapsing onto one shared
-# ``dev-local`` user. ``DEV_USER_HF_ID`` is kept as the legacy default for
-# any caller that still references it (no in-tree callers do).
+# between real HF users in prod: claims, audit actor records, and per-admin
+# view marks (request_views / review_views) are scoped per role rather than
+# collapsing onto one shared ``dev-local`` user. ``DEV_USER_HF_ID`` is kept
+# as the legacy default for any caller that still references it (no in-tree
+# callers do).
 DEV_ROLE_COOKIE_NAME = "inspector_dev_role"
 DEV_USER_HF_ID = "dev-local"
 DEV_USER_LOGIN = "dev"
@@ -298,7 +299,7 @@ def _dev_current_user() -> User | None:
 
     Each role gets its own ``hf_user_id`` (``dev-<role>``) so flipping the
     role switcher in dev simulates switching between distinct admin users
-    in prod — per-user dismissals and claim ownership scope correctly
+    in prod — per-admin view marks and claim ownership scope correctly
     instead of collapsing onto a single shared ``dev-local`` user.
 
     A per-role pair of env vars (``INSPECTOR_DEV_<ROLE>_HF_ID`` /

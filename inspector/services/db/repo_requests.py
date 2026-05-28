@@ -308,7 +308,7 @@ def counts_by_status() -> dict[str, int]:
     return {r[0]: int(r[1]) for r in rows}
 
 
-# ---- per-admin view marks (mirror repo_activity dismissals) ----
+# ---- per-admin view marks (drive the Requests-tab unviewed badge) ----
 
 
 def mark_viewed(request_id: str, hf_user_id: str, *, at: datetime | None = None) -> None:

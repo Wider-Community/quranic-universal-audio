@@ -56,7 +56,9 @@ def audit_meta_path() -> str:
 
 
 def activity_state_path() -> str:
-    """Per-user dismissals + global tombstones for the activity rails."""
+    """Legacy bucket sidecar — global tombstones for the public activity rail
+    (consumed by the one-shot JSON→SQLite migrator only; live writes go to
+    the ``activity_tombstones`` table)."""
     return "activity/state.json"
 
 
