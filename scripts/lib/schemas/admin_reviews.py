@@ -46,12 +46,22 @@ class AdminReviewRow(BaseModel):
     style: str
     channel: str
     open_claim: AdminReviewOpenClaim | None = None
+    # True only for ``state == under_review`` AND open_claim has a
+    # ``marked_ready_at`` later than this caller's recorded ``review_views``
+    # row (or no row exists). Drives the per-row ``.unread`` dot in the FE.
+    # Defaults to False so non-marked-ready rows stay clean even if a stale
+    # view row would otherwise satisfy the predicate vacuously.
+    unread: bool = False
 
 
 class AdminReviewsResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     rows: list[AdminReviewRow] = Field(default_factory=list)
+    # Per-caller count of marked-ready entries this admin hasn't viewed yet.
+    # Mirrors ``AdminRequestsResponse.unviewed_count`` so the compartment can
+    # sync the dashboard store on every fetch without a second roundtrip.
+    unviewed_marked_ready: int = 0
 
 
 # ---- detail drawer ----

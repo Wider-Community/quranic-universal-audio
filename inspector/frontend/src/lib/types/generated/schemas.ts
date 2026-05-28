@@ -174,6 +174,7 @@ export interface AdminReviewRow {
   style: string;
   channel: string;
   open_claim?: AdminReviewOpenClaim | null;
+  unread?: boolean;
   [k: string]: unknown;
 }
 /**
@@ -193,6 +194,7 @@ export interface AdminReviewValidation {
 }
 export interface AdminReviewsResponse {
   rows?: AdminReviewRow[];
+  unviewed_marked_ready?: number;
   [k: string]: unknown;
 }
 export interface AdminRoleEvent {
