@@ -97,12 +97,14 @@
     }}
 >
     <td class="cell reciter">
-        {#if row.name_en}
-            <span class="reciter-lt">{row.name_en}</span>
-        {/if}
-        {#if row.name_ar}
-            <span class="reciter-ar" dir="rtl">{row.name_ar}</span>
-        {/if}
+        <div class="reciter-inner">
+            {#if row.name_en}
+                <span class="reciter-lt">{row.name_en}</span>
+            {/if}
+            {#if row.name_ar}
+                <span class="reciter-ar" dir="rtl">{row.name_ar}</span>
+            {/if}
+        </div>
     </td>
     <td class="cell taxonomy"><span class="chip">{row.riwayah}</span></td>
     <td class="cell taxonomy"><span class="chip">{row.style}</span></td>
@@ -146,8 +148,12 @@
     }
     .row:last-child .cell { border-bottom: 0; }
 
-    /* reciter — Latin primary first, Arabic trailing muted */
-    .cell.reciter {
+    /* reciter — Latin primary first, Arabic trailing muted. The cell itself
+     * stays a `table-cell` so the colgroup width applies; flex lives on the
+     * inner wrapper. (Setting `display: flex` on a <td> opts it out of the
+     * table layout entirely and collapses the fixed column widths.) */
+    .cell.reciter { overflow: hidden; }
+    .reciter-inner {
         display: flex;
         align-items: baseline;
         gap: var(--s-3);
