@@ -76,14 +76,6 @@ describe('syncEditingMode', () => {
         });
     });
 
-    it('returns view/completed for completed reciter', () => {
-        const task = _task({ state: 'completed' });
-        expect(syncEditingMode(_user(), task)).toEqual({
-            kind: 'view',
-            viewReason: 'completed',
-        });
-    });
-
     it('returns view/released for post-publish reciter', () => {
         const task = _task({ state: 'released' });
         expect(syncEditingMode(_user(), task)).toEqual({
@@ -187,11 +179,6 @@ describe('syncEditingMode', () => {
         expect(syncEditingMode(_user({ role: 'owner' }), task)).toEqual({ kind: 'owner' });
     });
 
-    it('returns owner for owner on a completed reciter', () => {
-        const task = _task({ state: 'completed' });
-        expect(syncEditingMode(_user({ role: 'owner' }), task)).toEqual({ kind: 'owner' });
-    });
-
     it('returns owner for owner on an awaiting_review row (no claim needed)', () => {
         const task = _task({ state: 'awaiting_review' });
         expect(syncEditingMode(_user({ role: 'owner' }), task)).toEqual({ kind: 'owner' });
@@ -216,11 +203,4 @@ describe('syncEditingMode', () => {
         });
     });
 
-    it('maintainer still gets view/completed on completed reciter (no owner bypass)', () => {
-        const task = _task({ state: 'completed' });
-        expect(syncEditingMode(_user({ role: 'maintainer' }), task)).toEqual({
-            kind: 'view',
-            viewReason: 'completed',
-        });
-    });
 });

@@ -4,9 +4,9 @@ Uses a ``FilesystemBackend`` against a tempdir — no HF deps. Run with
 ``python -m inspector.services._services_smoke``.
 
 Exercises the slug-bound state machine end-to-end (claim → mark-ready →
-unmark → release → claim → publish → timestamps → dataset_published →
-removed_from_dataset → unpublished), plus the role bootstrap + grant +
-revoke + update flows, plus catalog vocab-only stub round-trip.
+unmark → release → claim → publish → timestamps → unlocked_for_revision
+→ unpublished), plus the role bootstrap + grant + revoke + update flows,
+plus catalog vocab-only stub round-trip.
 """
 
 from __future__ import annotations
@@ -294,16 +294,7 @@ def smoke() -> int:
             assert row.timestamps_job_ids == ["job_abc"]
             print("ok  state reciter.timestamps_completed → RELEASED")
 
-            # dataset_published
-            row = state.transition(
-                "saad_al_ghamdi",
-                "reciter.dataset_published",
-                actor=maintainer_actor,
-            )
-            assert row.state == ReciterState.COMPLETED
-            print("ok  state reciter.dataset_published → COMPLETED")
-
-            # unlocked_for_revision — sets RevisionContext (exits COMPLETED)
+            # unlocked_for_revision — sets RevisionContext (exits RELEASED)
             row = state.transition(
                 "saad_al_ghamdi",
                 "admin.unlocked_for_revision",
@@ -311,7 +302,7 @@ def smoke() -> int:
             )
             assert row.state == ReciterState.AWAITING_REVIEW
             assert row.revision_in_progress is not None
-            assert row.revision_in_progress.unlocked_from_state == "completed"
+            assert row.revision_in_progress.unlocked_from_state == "released"
             print("ok  state admin.unlocked_for_revision sets RevisionContext")
 
             # discard / undiscard

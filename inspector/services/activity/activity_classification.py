@@ -49,7 +49,6 @@ ADMIN_ONLY_EVENTS: dict[str, str] = {
     "reciter.unmarked_ready": "unmarked_ready",
     "reciter.merge_rejected": "merge_rejected",
     "reciter.unpublished": "unpublished",
-    "reciter.dataset_published": "dataset_published",
     "reciter.discarded": "discarded",
     "reciter.undiscarded": "undiscarded",
     "claim.force_released": "force_released",

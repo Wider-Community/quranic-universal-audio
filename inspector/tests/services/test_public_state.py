@@ -124,11 +124,10 @@ def test_bucket_for_awaiting_timestamps_is_under_review():
     )
 
 
-def test_bucket_for_released_and_completed_collapse_to_published():
+def test_bucket_for_released_maps_to_published():
     from services.public_state import bucket_for
 
     assert bucket_for(_state_row("test_a", state="released")) == "published"
-    assert bucket_for(_state_row("test_b", state="completed")) == "published"
 
 
 # ---------------------------------------------------------------------------

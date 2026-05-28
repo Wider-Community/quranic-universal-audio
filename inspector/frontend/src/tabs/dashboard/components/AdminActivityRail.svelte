@@ -117,7 +117,6 @@
         unmarked_ready: 'unmarked ready',
         merge_rejected: 'sent back',
         unpublished: 'unpublished',
-        dataset_published: 'published to dataset',
         discarded: 'discarded',
         undiscarded: 'restored',
         force_released: 'force-released',

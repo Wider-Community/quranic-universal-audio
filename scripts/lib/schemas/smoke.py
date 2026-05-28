@@ -94,14 +94,8 @@ def smoke() -> int:
             assignee_since=_now(),
             marked_ready=True,
         )
-        completed = ReciterRow(
-            slug="yasser_al_dosari",
-            state=ReciterState.COMPLETED,
-            state_since=_now(),
-            visibility=Visibility.PUBLIC,
-        )
         state_file = ReciterStateFile(
-            reciters=[catalogued, awaiting, under, ready, completed]
+            reciters=[catalogued, awaiting, under, ready]
         )
         assert state_file.find("mishary_alafasi") is under
         _round_trip("ReciterStateFile", state_file)

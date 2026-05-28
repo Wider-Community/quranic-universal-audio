@@ -1,6 +1,6 @@
 """Timestamp manifest + per-chapter shard server.
 
-Bucket-only: manifest is composed from state (released/completed reciters)
+Bucket-only: manifest is composed from state (released reciters)
 + catalog (display + delivery metadata) + audio_manifest sidecars (URL
 template). Per-chapter shards read from
 ``<bucket>/published/<slug>/timestamps/<chapter>.json`` on demand and gzip
@@ -71,11 +71,8 @@ def _build_resource_bytes() -> dict[str, bytes]:
     return out
 
 
-_PUBLISHED_STATES = frozenset({"released", "completed"})
-
-
 def _published_reciter_slugs() -> list[str]:
-    """Return slugs of reciters in a ``released``/``completed`` lifecycle state.
+    """Return slugs of reciters in the ``released`` lifecycle state.
 
     State alone — no bucket I/O. The lifecycle gate
     ``awaiting_timestamps → released`` is what guarantees these slugs have
@@ -84,7 +81,7 @@ def _published_reciter_slugs() -> list[str]:
     return [
         row.slug
         for row in state_service.all_rows()
-        if row.state.value in _PUBLISHED_STATES
+        if row.state.value == "released"
     ]
 
 

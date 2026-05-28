@@ -167,7 +167,7 @@ CREATE INDEX ix_transitions_hash    ON transitions(content_hash);
 CREATE TABLE delivery_states (
     slug                     TEXT PRIMARY KEY REFERENCES deliveries(slug),
     state                    TEXT NOT NULL,    -- catalogued|awaiting_alignment|awaiting_review|
-                                               --   under_review|awaiting_timestamps|released|completed
+                                               --   under_review|awaiting_timestamps|released
     state_since              TEXT NOT NULL,
     visibility               TEXT NOT NULL DEFAULT 'public',   -- public | discarded
     visibility_reason        TEXT,

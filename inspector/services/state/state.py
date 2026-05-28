@@ -162,10 +162,7 @@ def kind_for(slug: str) -> str | None:
     row = get_row(slug)
     if row is None:
         return None
-    if row.state in (
-        ReciterState.RELEASED,
-        ReciterState.COMPLETED,
-    ):
+    if row.state == ReciterState.RELEASED:
         return "published"
     return "wip"
 
@@ -266,7 +263,7 @@ def transition(
     with _sync.durable_transaction() as conn:
         new_row = _apply_event(conn, slug, event, actor=actor, payload=payload, reason=reason)
     # The TS manifest (services/reference/timestamps.py) is a process-cached
-    # projection of which slugs are released/completed, with no other
+    # projection of which slugs are released, with no other
     # invalidation hook — without this it stays frozen at boot-state until the
     # next restart. Drop it AFTER commit (a pre-commit drop could let a
     # concurrent manifest read re-cache the old state). Unconditional rather
@@ -769,23 +766,12 @@ def _h_timestamps_completed(slug, before, actor, payload, reason):
     )
 
 
-def _h_dataset_published(slug, before, actor, payload, reason):
+def _h_unpublished(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.RELEASED:
         raise InvalidTransition(
-            f"dataset_published requires RELEASED, got {before.state.value}"
-        )
-    _require_maintainer(actor)
-    return _replace(before, state=ReciterState.COMPLETED, state_since=_now())
-
-
-def _h_unpublished(slug, before, actor, payload, reason):
-    if before is None:
-        raise UnknownReciter(slug)
-    if before.state not in (ReciterState.RELEASED, ReciterState.COMPLETED):
-        raise InvalidTransition(
-            f"unpublished requires RELEASED or COMPLETED, got {before.state.value}"
+            f"unpublished requires RELEASED, got {before.state.value}"
         )
     _require_maintainer(actor)
     _require_reason(reason, "unpublished")
@@ -801,16 +787,13 @@ def _h_unpublished(slug, before, actor, payload, reason):
 def _h_unlocked_for_revision(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
-    if before.state not in (ReciterState.RELEASED, ReciterState.COMPLETED):
+    if before.state != ReciterState.RELEASED:
         raise InvalidTransition(
-            f"unlocked_for_revision requires RELEASED or COMPLETED, got "
-            f"{before.state.value}"
+            f"unlocked_for_revision requires RELEASED, got {before.state.value}"
         )
     _require_maintainer(actor)
     context = RevisionContext(
-        unlocked_from_state="completed"
-        if before.state == ReciterState.COMPLETED
-        else "released",
+        unlocked_from_state="released",
         unlocked_at=_now(),
         unlocked_by_hf_id=actor.hf_user_id,
         original_assignee_hf_id=None,
@@ -913,7 +896,6 @@ _HANDLERS: dict[str, Any] = {
     "reciter.merge_rejected": _h_merge_rejected,
     "reciter.published": _h_published,
     "reciter.timestamps_completed": _h_timestamps_completed,
-    "reciter.dataset_published": _h_dataset_published,
     "reciter.unpublished": _h_unpublished,
     "reciter.discarded": _h_discarded,
     "reciter.undiscarded": _h_undiscarded,

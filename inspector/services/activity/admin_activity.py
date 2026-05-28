@@ -43,7 +43,6 @@ _TEMPLATES: dict[str, str] = {
     "unmarked_ready": "{name} unmarked ready",
     "merge_rejected": "{name} marked-ready submission rejected",
     "unpublished": "{name} unpublished",
-    "dataset_published": "{name} published to dataset",
     "discarded": "{name} discarded",
     "undiscarded": "{name} restored",
     "force_released": "{name} claim force-released",

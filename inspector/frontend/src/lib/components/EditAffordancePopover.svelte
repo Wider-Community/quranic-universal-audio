@@ -28,8 +28,6 @@
                 return 'Awaiting publish';
             case 'released':
                 return 'Awaiting timestamps';
-            case 'completed':
-                return 'Reciter completed';
             case 'not-claimable':
                 return 'Not available for editing';
             case 'discarded':
@@ -47,8 +45,6 @@
                 return "You marked this reciter ready for publish. Click 'Continue editing' in the banner to make changes.";
             case 'released':
                 return 'This reciter is awaiting timestamp generation; edits are locked.';
-            case 'completed':
-                return 'This reciter is completed and view-only.';
             case 'not-claimable':
                 return 'This reciter is in a pipeline state and cannot be claimed yet.';
             case 'discarded':

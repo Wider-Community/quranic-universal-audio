@@ -12,7 +12,6 @@ export type AdminEventKind =
     | 'unmarked_ready'
     | 'merge_rejected'
     | 'unpublished'
-    | 'dataset_published'
     | 'discarded'
     | 'undiscarded'
     | 'force_released'
