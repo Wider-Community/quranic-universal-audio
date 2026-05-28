@@ -21,6 +21,7 @@
         AdminReviewsResponse,
     } from '../../../../../lib/types/generated/schemas';
     import ReviewsGeneralDrawer from './ReviewsGeneralDrawer.svelte';
+    import ReviewsOpsDrawer from './ReviewsOpsDrawer.svelte';
     import ReviewsRow from './ReviewsRow.svelte';
 
     let resp = $state<AdminReviewsResponse | null>(null);
@@ -158,17 +159,25 @@
         {/each}
     {/if}
 
-    {#if reviewsStore.selectedSlug && reviewsStore.openDrawer === 'general'}
+    {#if reviewsStore.selectedSlug && reviewsStore.openDrawer !== null}
         <div
             class="drawer-scrim"
             role="presentation"
             onclick={() => reviewsStore.close()}
         ></div>
-        <ReviewsGeneralDrawer
-            slug={reviewsStore.selectedSlug}
-            onclose={() => reviewsStore.close()}
-            onaction={refetch}
-        />
+        {#if reviewsStore.openDrawer === 'general'}
+            <ReviewsGeneralDrawer
+                slug={reviewsStore.selectedSlug}
+                onclose={() => reviewsStore.close()}
+                onaction={refetch}
+            />
+        {:else if reviewsStore.openDrawer === 'ops'}
+            <ReviewsOpsDrawer
+                slug={reviewsStore.selectedSlug}
+                onclose={() => reviewsStore.close()}
+                onaction={refetch}
+            />
+        {/if}
     {/if}
 </div>
 

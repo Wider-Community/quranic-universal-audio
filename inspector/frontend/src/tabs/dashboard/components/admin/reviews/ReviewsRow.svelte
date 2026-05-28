@@ -20,6 +20,7 @@
     let { row }: { row: AdminReviewRow } = $props();
 
     const isActive = $derived(reviewsStore.selectedSlug === row.slug);
+    const isOpsActive = $derived(isActive && reviewsStore.openDrawer === 'ops');
 
     function initials(login: string | null | undefined): string {
         if (!login) return '?';
@@ -66,7 +67,7 @@
 
     function onOps(e: MouseEvent): void {
         e.stopPropagation();
-        // M3: reviewsStore.open(row.slug, 'ops')
+        reviewsStore.open(row.slug, 'ops');
     }
 
     function onSegments(e: MouseEvent): void {
@@ -110,7 +111,12 @@
 
     <div class="row-actions">
         <button class="btn" type="button" onclick={onSegments}>Segments</button>
-        <button class="btn" type="button" onclick={onOps}>Ops</button>
+        <button
+            class="btn"
+            class:armed={isOpsActive}
+            type="button"
+            onclick={onOps}
+        >Ops</button>
     </div>
 </div>
 
@@ -248,5 +254,10 @@
     .row-actions .btn:hover {
         border-color: var(--border-default);
         color: var(--text-primary);
+    }
+    .row-actions .btn.armed {
+        border-color: var(--accent);
+        color: var(--accent-strong);
+        background: var(--accent-tint-soft);
     }
 </style>

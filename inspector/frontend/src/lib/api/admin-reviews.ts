@@ -43,12 +43,8 @@ export async function fetchAdminReviewValidation(
     return (await resp.json()) as AdminReviewValidation;
 }
 
-/**
- * Force-release the current open claim on ``slug``. Throws the server's
- * ``error`` string on failure so the caller can surface it verbatim.
- */
-export async function forceReleaseClaim(slug: string, reason: string): Promise<void> {
-    const resp = await fetch(`/api/admin/claim/force-release/${encodeURIComponent(slug)}`, {
+async function postWithReason(path: string, reason: string): Promise<void> {
+    const resp = await fetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
@@ -63,4 +59,21 @@ export async function forceReleaseClaim(slug: string, reason: string): Promise<v
         }
         throw new Error(msg);
     }
+}
+
+/**
+ * Force-release the current open claim on ``slug``. Closes the claim and
+ * transitions UNDER_REVIEW → AWAITING_REVIEW. Throws the server's ``error``
+ * string verbatim on failure so the caller can surface it.
+ */
+export async function forceReleaseClaim(slug: string, reason: string): Promise<void> {
+    return postWithReason(`/api/admin/claim/force-release/${encodeURIComponent(slug)}`, reason);
+}
+
+/**
+ * Send a marked-ready recitation back to Under review. Fires
+ * ``reciter.merge_rejected`` — keeps the claim open, clears ``marked_ready_at``.
+ */
+export async function sendBackToUnderReview(slug: string, reason: string): Promise<void> {
+    return postWithReason(`/api/admin/send-back/${encodeURIComponent(slug)}`, reason);
 }
