@@ -306,39 +306,3 @@ def word_has_stop(surah: int, ayah: int, word_num: int) -> bool:
     if not entry:
         return False
     return bool(STOP_SIGNS & set(entry.get("text", "")))
-
-
-# ---------------------------------------------------------------------------
-# Audio sources (Audio tab)
-# ---------------------------------------------------------------------------
-
-def load_audio_sources() -> dict:
-    """Build the Audio-tab hierarchy ``{category: {source: [{slug, name}, ...]}}``.
-
-    Phase 1: reads the catalog's deliveries (``vocab.sources`` × per-delivery
-    ``audio_category``). With the vocab-only stub catalog, ``deliveries[]`` is
-    empty and this returns ``{}`` — the Audio tab renders empty and a banner
-    surfaces "catalog not yet promoted". Phase 6 catalog promotion populates
-    this from the real delivery list.
-    """
-    from services.state import catalog as catalog_service
-    from utils.formatting import slug_to_name
-
-    cached = cache.get_audio_sources_cache()
-    if cached is not None:
-        return cached
-
-    result: dict[str, dict[str, list[dict]]] = {}
-    snapshot = catalog_service.snapshot()
-    for delivery in snapshot.deliveries:
-        category = delivery.audio_category.value
-        source = delivery.source
-        result.setdefault(category, {}).setdefault(source, []).append(
-            {"slug": delivery.slug, "name": slug_to_name(delivery.slug)}
-        )
-    # Stable order for both layers.
-    for cat in result.values():
-        for entries in cat.values():
-            entries.sort(key=lambda e: e["slug"])
-    cache.set_audio_sources_cache(result)
-    return result

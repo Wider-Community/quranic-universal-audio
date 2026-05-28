@@ -10,13 +10,9 @@ This is the replacement for a manual "Accept" button: by the time files
 exist in the bucket, the request has effectively been accepted — the
 human work is now reviewing the alignment, not approving the metadata.
 
-Two trigger points:
-
-1. Periodic background loop (``start_background_loop``) — polls every
-   ``AUTO_DETECT_INTERVAL_SECONDS`` (default 60) in the single-worker
-   deployed profile.
-2. On-demand admin trigger — ``POST /api/admin/reconcile`` calls
-   ``reconcile_once`` synchronously. Useful in dev and as a backstop.
+Trigger: periodic background loop (``start_background_loop``) — polls every
+``AUTO_DETECT_INTERVAL_SECONDS`` (default 60) in the single-worker deployed
+profile.
 
 The "seen" set is process-local, seeded at boot from the current state of
 the bucket. After a restart a re-fire would no-op because the row is no

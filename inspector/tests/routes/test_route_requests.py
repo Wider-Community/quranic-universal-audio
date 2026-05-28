@@ -403,36 +403,6 @@ def test_undiscard_requires_reason(signed_in_client):
 
 
 # ---------------------------------------------------------------------------
-# POST /api/admin/reconcile (admin_reconcile_bp)
-# ---------------------------------------------------------------------------
-
-
-def test_reconcile_anonymous_returns_401(flask_client):
-    res = flask_client.post("/api/admin/reconcile", headers=_HEADERS)
-    assert res.status_code == 401
-
-
-def test_reconcile_contributor_returns_403(signed_in_client):
-    client, _ = signed_in_client(role="contributor")
-    res = client.post("/api/admin/reconcile", headers=_HEADERS)
-    assert res.status_code == 403
-
-
-def test_reconcile_maintainer_returns_count(signed_in_client, monkeypatch):
-    """Stubbed: this exercises the route gate + that it calls into the reconciler,
-    not the reconciler's behavior (covered in test_auto_detect)."""
-    from services import auto_detect as auto_detect_service
-    monkeypatch.setattr(auto_detect_service, "reconcile_once", lambda: 7)
-
-    client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
-    res = client.post("/api/admin/reconcile", headers=_HEADERS)
-    assert res.status_code == 200
-    body = json.loads(res.data)
-    assert body["ok"] is True
-    assert body["fired_count"] == 7
-
-
-# ---------------------------------------------------------------------------
 # GET /api/admin/requests  (Requests-tab list) + view-mark + unviewed-count
 # ---------------------------------------------------------------------------
 

@@ -780,18 +780,6 @@ def _h_dataset_published(slug, before, actor, payload, reason):
     return _replace(before, state=ReciterState.COMPLETED, state_since=_now())
 
 
-def _h_removed_from_dataset(slug, before, actor, payload, reason):
-    if before is None:
-        raise UnknownReciter(slug)
-    if before.state != ReciterState.COMPLETED:
-        raise InvalidTransition(
-            f"removed_from_dataset requires COMPLETED, got {before.state.value}"
-        )
-    _require_maintainer(actor)
-    _require_reason(reason, "removed_from_dataset")
-    return _replace(before, state=ReciterState.RELEASED, state_since=_now())
-
-
 def _h_unpublished(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
@@ -834,30 +822,6 @@ def _h_unlocked_for_revision(slug, before, actor, payload, reason):
         revision_in_progress=context,
         prefetch_purge_at=None,
     )
-
-
-def _h_seeded(slug, before, actor, payload, reason):
-    """One-shot cutover seed event. Allows any state; emitted by the seed
-    script with ``actor.role = OWNER``. Does not change state.
-    """
-    if before is None:
-        raise UnknownReciter(slug)
-    _require_maintainer(actor)
-    return before
-
-
-def _h_published_edited(slug, before, actor, payload, reason):
-    """Maintainer direct-edit save on a released/completed reciter. State-
-    preserving — audit-only. Inspector save flow fires this event per batch.
-    """
-    if before is None:
-        raise UnknownReciter(slug)
-    if before.state not in (ReciterState.RELEASED, ReciterState.COMPLETED):
-        raise InvalidTransition(
-            "published.edited requires RELEASED or COMPLETED"
-        )
-    _require_maintainer(actor)
-    return _replace(before, last_save_at=_now())
 
 
 def _h_discarded(slug, before, actor, payload, reason):
@@ -924,23 +888,6 @@ def _h_reassigned(slug, before, actor, payload, reason):
     )
 
 
-def _h_batch_timestamps_refresh(slug, before, actor, payload, reason):
-    if before is None:
-        raise UnknownReciter(slug)
-    if before.state not in (ReciterState.RELEASED, ReciterState.COMPLETED):
-        raise InvalidTransition(
-            "batch_timestamps_refresh requires RELEASED or COMPLETED"
-        )
-    _require_maintainer(actor)
-    job_id = payload.get("job_id")
-    if not job_id:
-        raise InvalidTransition("batch_timestamps_refresh requires payload.job_id")
-    job_ids = list(before.timestamps_job_ids)
-    if job_id not in job_ids:
-        job_ids.append(job_id)
-    return _replace(before, timestamps_job_ids=job_ids)
-
-
 def _h_clear_prefetch_purge_at(slug, before, actor, payload, reason):
     """Sweeper-only event. Clears ``prefetch_purge_at`` after the audio +
     peaks directories are deleted, so the same row doesn't re-trigger on the
@@ -967,16 +914,12 @@ _HANDLERS: dict[str, Any] = {
     "reciter.published": _h_published,
     "reciter.timestamps_completed": _h_timestamps_completed,
     "reciter.dataset_published": _h_dataset_published,
-    "reciter.removed_from_dataset": _h_removed_from_dataset,
     "reciter.unpublished": _h_unpublished,
-    "reciter.seeded": _h_seeded,
     "reciter.discarded": _h_discarded,
     "reciter.undiscarded": _h_undiscarded,
-    "published.edited": _h_published_edited,
     "claim.force_released": _h_force_released,
     "claim.reassigned": _h_reassigned,
     "admin.unlocked_for_revision": _h_unlocked_for_revision,
-    "admin.batch_timestamps_refresh": _h_batch_timestamps_refresh,
     "admin.clear_prefetch_purge_at": _h_clear_prefetch_purge_at,
 }
 

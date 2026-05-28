@@ -505,13 +505,6 @@ export interface SegSegmentPeaksResponse {
 // /api/audio/* — Audio tab
 // ===========================================================================
 
-/** GET /api/audio/sources — hierarchical {by_surah, by_ayah}. Loose shape. */
-export interface AudioSourcesResponse {
-    by_surah?: Record<string, unknown>;
-    by_ayah?: Record<string, unknown>;
-    [k: string]: unknown;
-}
-
 /** GET /api/audio/surahs/:category/:source/:slug */
 export interface AudioSurahEntry {
     url: string;

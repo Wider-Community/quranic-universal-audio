@@ -44,7 +44,6 @@ _TEMPLATES: dict[str, str] = {
     "merge_rejected": "{name} marked-ready submission rejected",
     "unpublished": "{name} unpublished",
     "dataset_published": "{name} published to dataset",
-    "removed_from_dataset": "{name} removed from dataset",
     "discarded": "{name} discarded",
     "undiscarded": "{name} restored",
     "force_released": "{name} claim force-released",

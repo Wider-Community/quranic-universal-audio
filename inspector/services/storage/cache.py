@@ -579,18 +579,6 @@ def set_single_word_verses_cache(swv: set[tuple[int, int]]) -> None:
     _single_word_verses.set(swv)
 
 
-# Audio sources (Audio tab)
-_audio_sources: _SingletonCache[dict] = _SingletonCache()
-
-
-def get_audio_sources_cache():
-    return _audio_sources.get()
-
-
-def set_audio_sources_cache(sources: dict) -> None:
-    _audio_sources.set(sources)
-
-
 # QPC / DK data
 _qpc: _SingletonCache[dict[str, dict]] = _SingletonCache()
 _dk: _SingletonCache[dict[str, dict]] = _SingletonCache()

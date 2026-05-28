@@ -5,7 +5,6 @@ import logging
 from flask import Blueprint, jsonify
 
 from services import cache, storage_paths
-from services.data_loader import load_audio_sources
 from services.hf_bucket import StorageNotFound, get_backend
 from services.quran_foundation import config as qf_config
 from services.quran_foundation import content as qf_content
@@ -50,12 +49,6 @@ def _apply_qf_routing(source: str, slug: str, surahs: dict[str, dict]) -> None:
         # The QF /qdc/ files are re-encodes of differing length; drop our
         # manifest duration so the player reads the real header on play.
         entry["duration_ms"] = None
-
-
-@audio_meta_bp.route("/sources")
-def audio_sources():
-    """Return hierarchical audio source structure (built from the catalog)."""
-    return jsonify(load_audio_sources())
 
 
 @audio_meta_bp.route("/surahs/<category>/<source>/<slug>")

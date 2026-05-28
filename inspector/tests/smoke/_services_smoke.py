@@ -303,17 +303,7 @@ def smoke() -> int:
             assert row.state == ReciterState.COMPLETED
             print("ok  state reciter.dataset_published → COMPLETED")
 
-            # removed_from_dataset
-            row = state.transition(
-                "saad_al_ghamdi",
-                "reciter.removed_from_dataset",
-                actor=maintainer_actor,
-                reason="dataset rebuild post-correction-of-verse-152",
-            )
-            assert row.state == ReciterState.RELEASED
-            print("ok  state reciter.removed_from_dataset → RELEASED")
-
-            # unlocked_for_revision — sets RevisionContext
+            # unlocked_for_revision — sets RevisionContext (exits COMPLETED)
             row = state.transition(
                 "saad_al_ghamdi",
                 "admin.unlocked_for_revision",
@@ -321,7 +311,7 @@ def smoke() -> int:
             )
             assert row.state == ReciterState.AWAITING_REVIEW
             assert row.revision_in_progress is not None
-            assert row.revision_in_progress.unlocked_from_state == "released"
+            assert row.revision_in_progress.unlocked_from_state == "completed"
             print("ok  state admin.unlocked_for_revision sets RevisionContext")
 
             # discard / undiscard

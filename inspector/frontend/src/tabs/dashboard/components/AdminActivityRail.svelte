@@ -118,7 +118,6 @@
         merge_rejected: 'sent back',
         unpublished: 'unpublished',
         dataset_published: 'published to dataset',
-        removed_from_dataset: 'removed from dataset',
         discarded: 'discarded',
         undiscarded: 'restored',
         force_released: 'force-released',

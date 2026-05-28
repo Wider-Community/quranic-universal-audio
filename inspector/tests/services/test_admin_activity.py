@@ -95,9 +95,7 @@ def test_feed_excludes_hidden_events(monkeypatch):
     from services.admin_activity import feed
 
     _install_audit(monkeypatch, [
-        _record("admin.batch_timestamps_refresh"),
         _record("reciter.timestamps_completed"),
-        _record("published.edited"),
         _record("access.role_granted"),
     ])
     _install_catalog(monkeypatch, {"husary_qdc": "Husary"})

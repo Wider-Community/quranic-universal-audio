@@ -50,7 +50,6 @@ ADMIN_ONLY_EVENTS: dict[str, str] = {
     "reciter.merge_rejected": "merge_rejected",
     "reciter.unpublished": "unpublished",
     "reciter.dataset_published": "dataset_published",
-    "reciter.removed_from_dataset": "removed_from_dataset",
     "reciter.discarded": "discarded",
     "reciter.undiscarded": "undiscarded",
     "claim.force_released": "force_released",
@@ -79,10 +78,7 @@ HIDDEN_EVENTS: frozenset[str] = frozenset({
     # the audit log carries the forensic trail; promote to admin_only or
     # public if/when a UI surface is added.
     "reciter.auto_claim_skipped",
-    "reciter.seeded",
     "reciter.timestamps_completed",
-    "published.edited",
-    "admin.batch_timestamps_refresh",
     "admin.clear_prefetch_purge_at",
     "access.role_granted",
     "access.role_revoked",
