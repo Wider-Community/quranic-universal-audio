@@ -31,7 +31,7 @@
         },
         {
             key: 'storage_rights',
-            text: 'I grant Quranic Universal Audio the right to download, store, and process this audio permanently.',
+            text: 'I grant Quranic Universal Audio the right to download, process, distribute, and store this audio permanently.',
         },
     ];
 </script>

@@ -151,8 +151,15 @@
                 // Pre-select the slug requested by the caller (e.g. from the
                 // bottom player's state pill), if it exists on this reciter.
                 const req = detailView?.initialSlug;
-                if (req && result.deliveries.some((d) => d.slug === req)) {
-                    selectedSlug = req;
+                if (req) {
+                    const match = result.deliveries.find((d) => d.slug === req);
+                    if (match) {
+                        selectedSlug = req;
+                        // Auto-open the RequestForm when the caller asked to
+                        // land directly on the request modal (submit-recitation
+                        // wizard → existing-combo path).
+                        if (detailView?.openRequest) openRequest(match);
+                    }
                 }
             }
         } catch (e) {

@@ -20,7 +20,7 @@
     import { fade, fly } from 'svelte/transition';
 
     import { COUNTRIES, countryByName } from '../../../../lib/utils/countries';
-    import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
+    import { channelDisplay, titleCaseSlug } from '../../../../lib/utils/delivery-label';
     import { match } from '../../../../lib/utils/fuzzy-match';
     import { catalogData } from '../../stores/catalog-data';
     import { openDetail } from '../../stores/dashboard-state';
@@ -34,10 +34,6 @@
     $: pickedReciter = state.existingReciterSlug
         ? (reciters.find((r) => r.reciter_id === state.existingReciterSlug) ?? null)
         : null;
-    $: pickedCombo =
-        pickedReciter && state.existingComboSlug
-            ? (pickedReciter.deliveries.find((d) => d.slug === state.existingComboSlug) ?? null)
-            : null;
 
     function computeFiltered(rs: typeof reciters, q: string): typeof reciters {
         if (!q) return rs.slice(0, 80);
@@ -77,14 +73,10 @@
         submitWizard.update((s) => ({ ...s, existingComboSlug: slug }));
     }
 
-    function routeToRequestForm(): void {
+    function openPickedReciterDetail(): void {
         if (!pickedReciter) return;
-        // Closes the wizard and opens the reciter-detail modal where the
-        // RequestForm lives. The user clicks the chosen combination row
-        // there → "Request alignment" surface them want.
-        const reciter_id = pickedReciter.reciter_id;
         closeSubmitWizard();
-        openDetail(reciter_id);
+        openDetail(pickedReciter.reciter_id);
     }
 
     // ---- new-reciter fields ----
@@ -175,9 +167,19 @@
                                 <span class="picked-ar" dir="rtl">{pickedReciter.name_ar}</span>
                             {/if}
                         </div>
-                        <button type="button" class="picked-change" on:click={clearReciter}
-                            >Change</button
-                        >
+                        <div class="picked-actions">
+                            <button
+                                type="button"
+                                class="picked-action"
+                                title="Open this reciter's detail page"
+                                on:click={openPickedReciterDetail}
+                            >View detail <span class="picked-action-glyph" aria-hidden="true">↗</span></button>
+                            <button
+                                type="button"
+                                class="picked-action"
+                                on:click={clearReciter}
+                            >Change</button>
+                        </div>
                     </div>
                 </div>
 
@@ -204,6 +206,10 @@
                                                     >{titleCaseSlug(d.recording_context)}</span
                                                 >
                                             {/if}
+                                            {#if d.channel}
+                                                <span class="ct dim">·</span>
+                                                <span class="ct dim">{channelDisplay(d)}</span>
+                                            {/if}
                                         </span>
                                         <span class="combo-meta">
                                             {d.chapter_count}/114
@@ -218,18 +224,6 @@
                                 </li>
                             {/if}
                         </ul>
-
-                        {#if pickedCombo}
-                            <div class="route-note" in:fade={{ duration: 160 }}>
-                                Continue opens the reciter detail where the
-                                <em>Request alignment</em> button lives for this combination.
-                                <button
-                                    type="button"
-                                    class="route-btn"
-                                    on:click={routeToRequestForm}>Open now ›</button
-                                >
-                            </div>
-                        {/if}
                     </div>
                 {:else if pickedReciter.deliveries.length > 0}
                     <div class="combos-block muted" in:fade={{ duration: 200 }}>
@@ -239,7 +233,14 @@
                         <div class="combo-pills">
                             {#each pickedReciter.deliveries as d (d.slug)}
                                 <span class="combo-pill">
-                                    {titleCaseSlug(d.riwayah)} · {titleCaseSlug(d.style)}
+                                    {[
+                                        titleCaseSlug(d.riwayah),
+                                        titleCaseSlug(d.style),
+                                        d.recording_context ? titleCaseSlug(d.recording_context) : null,
+                                        d.channel ? channelDisplay(d) : null,
+                                    ]
+                                        .filter(Boolean)
+                                        .join(' · ')}
                                 </span>
                             {/each}
                         </div>
@@ -618,20 +619,41 @@
         font-size: var(--fs-body);
         color: var(--text-secondary);
     }
-    .picked-change {
+    .picked-actions {
         flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s-1);
+    }
+    .picked-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
         font-size: 10.5px;
         color: var(--text-muted);
         padding: 4px 10px;
+        background: transparent;
         border: 1px solid var(--border-default);
         border-radius: var(--r-2);
+        cursor: pointer;
         transition:
             color var(--t-fast),
             border-color var(--t-fast);
     }
-    .picked-change:hover {
+    .picked-action:hover {
         color: var(--text-primary);
         border-color: var(--accent);
+    }
+    .picked-action-glyph {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        line-height: 1;
+        color: var(--text-faint);
+        transition: color var(--t-fast), transform var(--t-fast);
+    }
+    .picked-action:hover .picked-action-glyph {
+        color: var(--accent);
+        transform: translate(1px, -1px);
     }
 
     /* combos block */
@@ -730,41 +752,4 @@
         font-family: var(--font-mono);
     }
 
-    .route-note {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--s-3);
-        padding: var(--s-3);
-        background: var(--panel);
-        border: 1px solid var(--accent-tint);
-        border-radius: var(--r-2);
-        font-size: var(--fs-meta);
-        color: var(--text-secondary);
-    }
-    .route-note em {
-        font-style: normal;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        padding: 1px 5px;
-        border-radius: var(--r-1);
-        background: var(--canvas-inset);
-        border: 1px solid var(--border-quiet);
-        color: var(--text-primary);
-    }
-    .route-btn {
-        flex-shrink: 0;
-        font-size: var(--fs-meta);
-        color: var(--accent);
-        padding: 4px 10px;
-        border: 1px solid var(--accent);
-        border-radius: var(--r-2);
-        transition:
-            background var(--t-fast),
-            color var(--t-fast);
-    }
-    .route-btn:hover {
-        background: var(--accent);
-        color: var(--accent-fg);
-    }
 </style>

@@ -12,7 +12,16 @@ import { derived, writable } from 'svelte/store';
 
 export type DashboardView =
     | { kind: 'list' }
-    | { kind: 'detail'; reciterId: string; initialSlug?: string };
+    | {
+          kind: 'detail';
+          reciterId: string;
+          initialSlug?: string;
+          /** Open the RequestForm for `initialSlug` immediately after the
+           *  detail loads. Used by the submit-recitation wizard to land the
+           *  user straight on the request modal without an intermediate
+           *  "click the combination row" step. */
+          openRequest?: boolean;
+      };
 
 export type DashboardSort = 'status' | 'recent' | 'alphabetical' | 'combinations';
 
@@ -59,8 +68,15 @@ export function clearAllFilters(): void {
     }));
 }
 
-export function openDetail(reciterId: string, initialSlug?: string): void {
-    dashboardState.update((s) => ({ ...s, view: { kind: 'detail', reciterId, initialSlug } }));
+export function openDetail(
+    reciterId: string,
+    initialSlug?: string,
+    opts: { openRequest?: boolean } = {},
+): void {
+    dashboardState.update((s) => ({
+        ...s,
+        view: { kind: 'detail', reciterId, initialSlug, openRequest: opts.openRequest },
+    }));
 }
 
 export function closeDetail(): void {

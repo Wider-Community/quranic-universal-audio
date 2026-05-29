@@ -244,9 +244,9 @@
         min-width: 0;
     }
     .search {
-        width: 420px;
-        min-width: 240px;
-        max-width: 420px;
+        width: 210px;
+        min-width: 120px;
+        max-width: 210px;
     }
     .sort {
         margin-left: auto;
