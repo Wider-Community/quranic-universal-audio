@@ -139,6 +139,7 @@ def _substrate_db(tmp_path):
     _cache.invalidate_catalog_snapshot_cache()
     _cache.invalidate_admin_users_cache()
     _cache.invalidate_admin_requests_cache()
+    _cache.invalidate_capability_matrix_cache()
     yield
     db.reset()
     _sync.set_sync_enabled(True)
@@ -146,6 +147,7 @@ def _substrate_db(tmp_path):
     _cache.invalidate_catalog_snapshot_cache()
     _cache.invalidate_admin_users_cache()
     _cache.invalidate_admin_requests_cache()
+    _cache.invalidate_capability_matrix_cache()
 
 
 def _seed_delivery_chain(conn, slug: str, reciter_id: str = "r") -> None:

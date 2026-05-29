@@ -19,6 +19,7 @@ function _user(overrides: Partial<CurrentUser> = {}): CurrentUser {
         active_claim: null,
         active_claims: [],
         dev_mode: false,
+        capabilities: [],
         ...overrides,
     };
 }
@@ -158,6 +159,7 @@ describe('syncEditingMode', () => {
             active_claim: null,
             active_claims: [],
             dev_mode: false,
+            capabilities: [],
         };
         expect(syncEditingMode(anon, _task())).toEqual({
             kind: 'view',

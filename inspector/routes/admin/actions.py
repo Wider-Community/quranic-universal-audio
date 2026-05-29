@@ -18,11 +18,9 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
-from scripts.lib.schemas import ReciterState, Role
-
 from routes._admin_helpers import (
     actor_for,
-    require_role_or_403,
+    require_capability_or_403,
     require_signed_in_or_401,
     row_to_dict,
     validate_reason,
@@ -38,28 +36,18 @@ logger = logging.getLogger(__name__)
 admin_actions_bp = Blueprint("admin_actions", __name__, url_prefix="/api/admin")
 
 
-def _require_maintainer_or_above():
-    """Auth + maintainer-or-owner gate. Returns ``(user, None)`` or
+def _require_cap(capability: str):
+    """Auth + capability gate. Returns ``(user, None)`` or
     ``(None, (resp, status))``.
-    """
+
+    The data-driven replacement for the old fixed-tier inline gates: each
+    route names its capability and the owner-configurable matrix decides which
+    tiers pass. (Force-release / reassign default owner-only; send-back +
+    user-lookup default maintainer+.)"""
     user, err = require_signed_in_or_401()
     if err is not None:
         return None, err
-    err_resp = require_role_or_403(user, Role.MAINTAINER, Role.OWNER)
-    if err_resp is not None:
-        return None, err_resp
-    return user, None
-
-
-def _require_owner():
-    """Auth + owner-only gate. Returns ``(user, None)`` or
-    ``(None, (resp, status))``. Used by the claim-mutation surfaces
-    (force-release + reassign) — owners manage who reviews, maintainers
-    gate quality. See Reviews-tab plan §"Reassign popover"."""
-    user, err = require_signed_in_or_401()
-    if err is not None:
-        return None, err
-    err_resp = require_role_or_403(user, Role.OWNER)
+    err_resp = require_capability_or_403(user, capability)
     if err_resp is not None:
         return None, err_resp
     return user, None
@@ -68,7 +56,7 @@ def _require_owner():
 @admin_actions_bp.route("/claim/force-release/<slug>", methods=["POST"])
 @require_same_origin
 def force_release(slug: str):
-    user, err = _require_owner()
+    user, err = _require_cap("claim.force_release")
     if err is not None:
         return err
 
@@ -98,7 +86,7 @@ def force_release(slug: str):
 @admin_actions_bp.route("/claim/reassign/<slug>", methods=["POST"])
 @require_same_origin
 def reassign(slug: str):
-    user, err = _require_owner()
+    user, err = _require_cap("claim.reassign")
     if err is not None:
         return err
 
@@ -152,7 +140,7 @@ def reassign(slug: str):
 @admin_actions_bp.route("/send-back/<slug>", methods=["POST"])
 @require_same_origin
 def send_back(slug: str):
-    user, err = _require_maintainer_or_above()
+    user, err = _require_cap("review.send_back")
     if err is not None:
         return err
 
@@ -173,7 +161,7 @@ def send_back(slug: str):
 @admin_actions_bp.route("/users/lookup", methods=["POST"])
 @require_same_origin
 def users_lookup():
-    _user, err = _require_maintainer_or_above()
+    _user, err = _require_cap("user.lookup")
     if err is not None:
         return err
 

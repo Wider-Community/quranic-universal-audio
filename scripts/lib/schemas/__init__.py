@@ -11,6 +11,12 @@ from __future__ import annotations
 
 from .access import Member, Role, RolesFile
 from .activity_state import ActivityState
+from .admin_permissions import (
+    AdminCapabilityRow,
+    AdminCapabilityTierState,
+    AdminPermissionGroup,
+    AdminPermissionsResponse,
+)
 from .admin_requests import (
     AdminRequestCounts,
     AdminRequestRow,
@@ -41,6 +47,14 @@ from .admin_users import (
     VisitorDayStat,
 )
 from .audit import Actor, AuditRecord
+from .capabilities import (
+    CAPABILITIES,
+    CAPABILITIES_BY_ID,
+    GROUP_ORDER,
+    MANAGE_PERMISSIONS,
+    TIERS,
+    Capability,
+)
 from .catalog import (
     AudioCategory,
     AudioManifestSidecar,
@@ -100,6 +114,10 @@ from .state import (
 __all__ = [
     "ActivityState",
     "Actor",
+    "AdminCapabilityRow",
+    "AdminCapabilityTierState",
+    "AdminPermissionGroup",
+    "AdminPermissionsResponse",
     "AdminActiveClaim",
     "AdminActivityEvent",
     "AdminClaimEvent",
@@ -127,6 +145,12 @@ __all__ = [
     "AudioCategory",
     "AudioManifestSidecar",
     "AuditRecord",
+    "CAPABILITIES",
+    "CAPABILITIES_BY_ID",
+    "Capability",
+    "GROUP_ORDER",
+    "MANAGE_PERMISSIONS",
+    "TIERS",
     "Channel",
     "ChapterEntry",
     "Delivery",

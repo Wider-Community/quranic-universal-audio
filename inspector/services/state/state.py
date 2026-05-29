@@ -184,33 +184,51 @@ def all_rows() -> list[ReciterRow]:
 # ----------------------------------------------------------------------
 
 
-def _is_maintainer(actor: Actor) -> bool:
-    return permissions.is_maintainer(actor)
+def _require_capability(actor: Actor, capability: str) -> None:
+    """Tier-capability gate — the data-driven replacement for the legacy
+    ``_require_maintainer`` / ``_require_owner`` / ``_require_contributor_or_higher``
+    tier checks. Raises ``NotAuthorizedForTransition`` (→ 403) when the actor's
+    tier lacks ``capability`` in the resolved permission matrix. Owner always
+    passes; ``manage_permissions`` stays owner-only.
 
+    Called at the SAME point in each handler where its legacy tier check sat,
+    so the 400-before-403 (state-then-auth) precedence is unchanged. Ownership
+    (claim-holder) checks stay separate — they ask "is this *your* row", which
+    is not a tier capability. Lazy import keeps the auth package off state.py's
+    import-time graph (matches the other in-handler lazy imports)."""
+    from services.auth import capabilities as _capabilities
 
-def _is_owner(actor: Actor) -> bool:
-    return permissions.is_owner(actor)
-
-
-def _require_maintainer(actor: Actor) -> None:
-    if not permissions.is_maintainer(actor):
+    if not _capabilities.can(actor, capability):
         raise NotAuthorizedForTransition(
-            f"actor role {actor.role!r} requires MAINTAINER or OWNER"
+            f"actor role {actor.role!r} lacks capability {capability!r}"
         )
 
 
-def _require_owner(actor: Actor) -> None:
-    if not permissions.is_owner(actor):
-        raise NotAuthorizedForTransition(
-            f"actor role {actor.role!r} requires OWNER"
-        )
-
-
-def _require_contributor_or_higher(actor: Actor) -> None:
-    if not permissions.is_contributor_or_higher(actor):
-        raise NotAuthorizedForTransition(
-            f"actor role {actor.role!r} is not a recognized role"
-        )
+# Event → tier capability. Authoritative map of which capability each gated
+# transition enforces (the handler hardcodes the same id inline). Events absent
+# here have NO tier gate by design: server-/sweeper-driven
+# (``reciter.alignment_completed``, ``reciter.timestamps_completed``,
+# ``admin.clear_prefetch_purge_at``) or pure ownership (``reciter.released`` =
+# claim-holder-or-maintainer). The parity test asserts every mapped event
+# rejects an under-privileged actor.
+_EVENT_CAPABILITY: dict[str, str] = {
+    "catalog.added": "catalog.add",
+    "catalog.edited": "catalog.edit",
+    "reciter.requested": "request.submit",
+    "reciter.request_rejected_soft": "request.reject_soft",
+    "reciter.request_rejected_hard": "request.reject_hard",
+    "reciter.claimed": "claim.acquire",
+    "reciter.marked_ready": "claim.mark_ready",
+    "reciter.unmarked_ready": "claim.unmark_ready",
+    "reciter.merge_rejected": "review.send_back",
+    "reciter.published": "reciter.publish",
+    "reciter.unpublished": "reciter.unpublish",
+    "reciter.discarded": "reciter.discard",
+    "reciter.undiscarded": "reciter.undiscard",
+    "claim.force_released": "claim.force_release",
+    "claim.reassigned": "claim.reassign",
+    "admin.unlocked_for_revision": "reciter.unlock_for_revision",
+}
 
 
 def _require_claim_holder_or_maintainer(actor: Actor, row: ReciterRow) -> None:
@@ -485,7 +503,7 @@ def _h_catalog_added(slug, before, actor, payload, reason):
     """Catalog admin added a reciter; insert a state row in CATALOGUED."""
     if before is not None:
         raise InvalidTransition(f"slug {slug!r} already has a state row")
-    _require_maintainer(actor)
+    _require_capability(actor, "catalog.add")
     return ReciterRow(
         slug=slug,
         state=ReciterState.CATALOGUED,
@@ -497,7 +515,7 @@ def _h_catalog_edited(slug, before, actor, payload, reason):
     """No-op on the state row; audit-only. The dispatcher still records it."""
     if before is None:
         raise UnknownReciter(slug)
-    _require_maintainer(actor)
+    _require_capability(actor, "catalog.edit")
     return before  # unchanged
 
 
@@ -560,7 +578,7 @@ def _h_requested(slug, before, actor, payload, reason):
     server-side (see ``_h_alignment_completed``); admins can reject
     pre-acceptance via ``reciter.request_rejected_*``.
     """
-    _require_contributor_or_higher(actor)
+    _require_capability(actor, "request.submit")
 
     if before is not None:
         if before.state != ReciterState.CATALOGUED:
@@ -632,7 +650,7 @@ def _h_request_rejected_soft(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"request_rejected_soft requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
-    _require_owner(actor)
+    _require_capability(actor, "request.reject_soft")
     norm_reason = _require_reason(reason, "request_rejected_soft")
 
     from . import pending_requests as _pending_requests
@@ -658,7 +676,7 @@ def _h_request_rejected_hard(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"request_rejected_hard requires AWAITING_ALIGNMENT, got {before.state.value}"
         )
-    _require_owner(actor)
+    _require_capability(actor, "request.reject_hard")
     norm_reason = _require_reason(reason, "request_rejected_hard")
 
     from . import pending_requests as _pending_requests
@@ -676,7 +694,7 @@ def _h_request_rejected_hard(slug, before, actor, payload, reason):
 def _h_claimed(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
-    _require_contributor_or_higher(actor)
+    _require_capability(actor, "claim.acquire")
     if before.state != ReciterState.AWAITING_REVIEW:
         raise InvalidTransition(
             f"claimed requires AWAITING_REVIEW, got {before.state.value}"
@@ -748,6 +766,7 @@ def _h_marked_ready(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"marked_ready requires UNDER_REVIEW, got {before.state.value}"
         )
+    _require_capability(actor, "claim.mark_ready")
     _require_claim_holder(actor, before)
     if before.marked_ready:
         raise InvalidTransition("already marked_ready")
@@ -808,6 +827,7 @@ def _h_unmarked_ready(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"unmarked_ready requires UNDER_REVIEW, got {before.state.value}"
         )
+    _require_capability(actor, "claim.unmark_ready")
     _require_claim_holder(actor, before)
     if not before.marked_ready:
         raise InvalidTransition("not currently marked_ready")
@@ -821,7 +841,7 @@ def _h_merge_rejected(slug, before, actor, payload, reason):
         raise InvalidTransition(
             "merge_rejected requires UNDER_REVIEW + marked_ready=true"
         )
-    _require_maintainer(actor)
+    _require_capability(actor, "review.send_back")
     _require_reason(reason, "merge_rejected")
     return _replace(before, marked_ready=False)
 
@@ -833,7 +853,7 @@ def _h_published(slug, before, actor, payload, reason):
         raise InvalidTransition(
             "published requires UNDER_REVIEW + marked_ready=true"
         )
-    _require_maintainer(actor)
+    _require_capability(actor, "reciter.publish")
     # Side effects (bucket move, dispatch, TS job enqueue) are Phase 5+; here
     # we just write the state transition. revision_in_progress is cleared on
     # publish (if it was set by admin.unlocked_for_revision).
@@ -876,7 +896,7 @@ def _h_unpublished(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"unpublished requires RELEASED, got {before.state.value}"
         )
-    _require_maintainer(actor)
+    _require_capability(actor, "reciter.unpublish")
     _require_reason(reason, "unpublished")
     return _replace(
         before,
@@ -894,7 +914,7 @@ def _h_unlocked_for_revision(slug, before, actor, payload, reason):
         raise InvalidTransition(
             f"unlocked_for_revision requires RELEASED, got {before.state.value}"
         )
-    _require_maintainer(actor)
+    _require_capability(actor, "reciter.unlock_for_revision")
     context = RevisionContext(
         unlocked_from_state="released",
         unlocked_at=_now(),
@@ -913,7 +933,7 @@ def _h_unlocked_for_revision(slug, before, actor, payload, reason):
 def _h_discarded(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
-    _require_maintainer(actor)
+    _require_capability(actor, "reciter.discard")
     if before.visibility == Visibility.DISCARDED:
         raise InvalidTransition("already discarded")
     reason = _require_reason(reason, "discarded")
@@ -923,7 +943,7 @@ def _h_discarded(slug, before, actor, payload, reason):
 def _h_undiscarded(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
-    _require_maintainer(actor)
+    _require_capability(actor, "reciter.undiscard")
     if before.visibility != Visibility.DISCARDED:
         raise InvalidTransition("not currently discarded")
     return _replace(before, visibility=Visibility.PUBLIC, visibility_reason=None)
@@ -939,7 +959,7 @@ def _h_force_released(slug, before, actor, payload, reason):
     # Owner-only: claim-mutation surfaces (force-release + reassign) are
     # an owner privilege; maintainers gate quality (send-back-to-UR) but
     # don't manage who reviews. See Reviews-tab plan §"Reassign popover".
-    _require_owner(actor)
+    _require_capability(actor, "claim.force_release")
     # Reason is optional — the actor + slug + transition row already make
     # the action auditable. The route layer normalizes empty/short strings
     # to "" via validate_reason(required=False).
@@ -962,7 +982,7 @@ def _h_reassigned(slug, before, actor, payload, reason):
             f"claim.reassigned requires UNDER_REVIEW, got {before.state.value}"
         )
     # Owner-only — pairs with _h_force_released (see comment there).
-    _require_owner(actor)
+    _require_capability(actor, "claim.reassign")
     new_hf = payload.get("new_assignee_hf_id")
     new_login = payload.get("new_assignee_login")
     if not new_hf or not new_login:

@@ -23,7 +23,7 @@ from services.admin import users as users_service
 from services.admin import visitors as visitor_service
 from services.auth import access as access_service
 
-from utils.decorators import require_role, require_same_origin
+from utils.decorators import require_capability, require_same_origin
 
 admin_users_bp = Blueprint("admin_users", __name__, url_prefix="/api/admin")
 
@@ -32,13 +32,13 @@ _ASSIGNABLE_ROLES = {Role.CONTRIBUTOR, Role.MAINTAINER, Role.OWNER}
 
 
 @admin_users_bp.route("/users")
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_capability("users.view")
 def list_users(user):
     return jsonify(users_service.list_users())
 
 
 @admin_users_bp.route("/users/<hf_user_id>")
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_capability("users.view")
 def user_detail(user, hf_user_id):
     detail = users_service.get_user_detail(hf_user_id)
     if detail is None:
@@ -47,16 +47,24 @@ def user_detail(user, hf_user_id):
 
 
 @admin_users_bp.route("/visitor-stats")
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_capability("users.view")
 def visitor_stats(user):
     return jsonify(visitor_service.get_visitor_stats())
 
 
 @admin_users_bp.route("/users/<hf_user_id>/role", methods=["POST"])
 @require_same_origin
-@require_role(Role.OWNER)
+@require_capability("roles.assign_maintainer")
 def set_user_role(user, hf_user_id):
-    """Owner-only: change a user's role (contributor / maintainer / owner)."""
+    """Change a user's role via the picker.
+
+    Coarse gate is ``roles.assign_maintainer`` (you must be able to manage
+    roles at all); the per-target-tier capability is enforced in the service
+    (``users_service.set_role`` → ``access.*``), which requires
+    ``roles.assign_owner`` whenever the change touches the owner tier. This
+    unifies the picker with the legacy ``/api/admin/access/*`` endpoints on the
+    same capabilities. Structural guards (last-owner, owner-on-owner) still
+    fire in the service after the capability check."""
     body = request.get_json(silent=True) or {}
     role_raw = (body.get("role") or "").strip()
     try:

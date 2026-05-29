@@ -34,17 +34,17 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
-from scripts.lib.schemas import IntakeSubmission, Role
+from scripts.lib.schemas import IntakeSubmission
 
 from routes._admin_helpers import actor_for, validate_reason
 
 from services import pending_requests as pending_requests_service
-from services import permissions
 from services import state as state_service
 from services.admin import intake as intake_service
 from services.admin import requests as admin_requests_service
+from services.auth import capabilities as cap_service
 
-from utils.decorators import require_role, require_same_origin
+from utils.decorators import require_capability, require_same_origin
 
 
 requests_bp = Blueprint("requests", __name__, url_prefix="/api")
@@ -57,7 +57,7 @@ requests_bp = Blueprint("requests", __name__, url_prefix="/api")
 
 @requests_bp.route("/reciter/<slug>/request", methods=["POST"])
 @require_same_origin
-@require_role(Role.CONTRIBUTOR, Role.MAINTAINER, Role.OWNER)
+@require_capability("request.submit")
 def submit_request(user, slug: str):
     body = request.get_json(silent=True) or {}
 
@@ -117,7 +117,7 @@ def submit_request(user, slug: str):
 
 @requests_bp.route("/requests/intake", methods=["POST"])
 @require_same_origin
-@require_role(Role.CONTRIBUTOR, Role.MAINTAINER, Role.OWNER)
+@require_capability("request.submit")
 def submit_intake(user):
     """New-combo / new-reciter contribution with an audio source (direct links
     or a playlist). Structural-validate, then record a slugless pending request.
@@ -168,12 +168,13 @@ def _pending_to_payload(pending, *, owner: bool) -> dict:
 
 
 @requests_bp.route("/admin/request/<slug>", methods=["GET"])
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_capability("request.review")
 def get_pending(user, slug: str):
     pending = pending_requests_service.get(slug)
     if pending is None:
         return jsonify({"error": "no pending request for this reciter"}), 404
-    owner = permissions.is_owner(user)
+    # Identity disclosure is now a toggleable capability (default owner-only).
+    owner = cap_service.can(user, "identity.see_actor")
     resp = jsonify(_pending_to_payload(pending, owner=owner))
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -204,14 +205,14 @@ def _reject(user, slug: str, event: str):
 
 @requests_bp.route("/admin/request/<slug>/reject-soft", methods=["POST"])
 @require_same_origin
-@require_role(Role.OWNER)
+@require_capability("request.reject_soft")
 def reject_soft(user, slug: str):
     return _reject(user, slug, "reciter.request_rejected_soft")
 
 
 @requests_bp.route("/admin/request/<slug>/reject-hard", methods=["POST"])
 @require_same_origin
-@require_role(Role.OWNER)
+@require_capability("request.reject_hard")
 def reject_hard(user, slug: str):
     return _reject(user, slug, "reciter.request_rejected_hard")
 
@@ -225,7 +226,7 @@ _VALID_STATUSES = ("open", "accepted", "returned", "discarded")
 
 
 @requests_bp.route("/admin/requests", methods=["GET"])
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_capability("request.review")
 def list_requests(user):
     """Review-queue payload for one status facet. Tier-redacted: maintainers
     see requester role only, owners see the full identity."""
@@ -234,7 +235,7 @@ def list_requests(user):
         return jsonify({"error": "invalid status"}), 400
     payload = admin_requests_service.list_requests(
         status=status,
-        caller_is_owner=permissions.is_owner(user),
+        caller_is_owner=cap_service.can(user, "identity.see_actor"),
         caller_hf_id=user.hf_user_id,
     )
     resp = jsonify(payload)
@@ -243,7 +244,7 @@ def list_requests(user):
 
 
 @requests_bp.route("/admin/requests/unviewed-count", methods=["GET"])
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_capability("request.review")
 def requests_unviewed_count(user):
     """Open requests the caller hasn't viewed — drives the tab pill + the
     entry-button dot. Polled, so never cached."""
@@ -256,7 +257,7 @@ def requests_unviewed_count(user):
 
 @requests_bp.route("/admin/requests/<rid>/view", methods=["POST"])
 @require_same_origin
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_capability("request.review")
 def mark_request_viewed(user, rid: str):
     """Mark a request viewed for the calling admin (fired on inline expand)."""
     ok = admin_requests_service.mark_viewed(rid, actor=actor_for(user))
@@ -272,7 +273,7 @@ def mark_request_viewed(user, rid: str):
 
 @requests_bp.route("/admin/requests/<rid>/accept", methods=["POST"])
 @require_same_origin
-@require_role(Role.OWNER)
+@require_capability("intake.accept")
 def accept_intake(user, rid: str):
     """Approve an intake request + queue it for offline ingest. Body (new-reciter
     only): owner-confirmed canonical ``reciter_id``. No catalog write here —
@@ -290,7 +291,7 @@ def accept_intake(user, rid: str):
 
 @requests_bp.route("/admin/requests/<rid>/probe", methods=["POST"])
 @require_same_origin
-@require_role(Role.OWNER)
+@require_capability("intake.probe")
 def probe_intake(user, rid: str):
     """Owner-triggered reachability probe of an intake request's audio source."""
     try:
@@ -302,14 +303,14 @@ def probe_intake(user, rid: str):
 
 @requests_bp.route("/admin/requests/<rid>/return", methods=["POST"])
 @require_same_origin
-@require_role(Role.OWNER)
+@require_capability("intake.resolve")
 def return_intake(user, rid: str):
     return _resolve_intake(user, rid, "returned")
 
 
 @requests_bp.route("/admin/requests/<rid>/discard", methods=["POST"])
 @require_same_origin
-@require_role(Role.OWNER)
+@require_capability("intake.resolve")
 def discard_intake(user, rid: str):
     return _resolve_intake(user, rid, "discarded")
 
@@ -333,7 +334,7 @@ def _resolve_intake(user, rid: str, status: str):
 
 @requests_bp.route("/admin/reciter/<slug>/undiscard", methods=["POST"])
 @require_same_origin
-@require_role(Role.OWNER)
+@require_capability("reciter.undiscard")
 def undiscard(user, slug: str):
     body = request.get_json(silent=True) or {}
     reason, err = validate_reason(body)

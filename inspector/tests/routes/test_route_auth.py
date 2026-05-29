@@ -58,6 +58,8 @@ def test_me_anonymous_returns_null_shape(flask_client):
         "active_claim": None,
         "active_claims": [],
         "dev_mode": False,
+        # Anonymous holds the anon-eligible view capabilities by default.
+        "capabilities": ["view.catalog", "view.public_activity"],
     }
 
 
