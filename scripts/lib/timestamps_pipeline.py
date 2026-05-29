@@ -73,6 +73,7 @@ class MfaBackend(Protocol):
         beam: int,
         shared_cmvn: bool,
         padding: str,
+        word_boundary_allocation: dict | None = None,
     ) -> list[dict] | None:
         """Return MFA results aligned one-to-one with refs/audio_paths."""
 
@@ -102,6 +103,7 @@ class SpaceMfaBackend:
         beam: int,
         shared_cmvn: bool,
         padding: str,
+        word_boundary_allocation: dict | None = None,
     ) -> list[dict] | None:
         return _submit_with_retry(
             list(refs),
@@ -111,6 +113,7 @@ class SpaceMfaBackend:
             beam=beam,
             shared_cmvn=shared_cmvn,
             padding=padding,
+            word_boundary_allocation=word_boundary_allocation,
             timeout=self.timeout,
             max_retries=self.max_retries,
         )
@@ -155,14 +158,17 @@ class LocalMfaBackend:
         beam: int,
         shared_cmvn: bool,
         padding: str,
+        word_boundary_allocation: dict | None = None,
     ) -> list[dict] | None:
         class _FileObj:
             def __init__(self, name): self.name = name
         files = [_FileObj(str(p)) for p in audio_paths]
+        wb_json = (json.dumps(word_boundary_allocation)
+                   if word_boundary_allocation else "")
         result = self.module._api_align_batch_impl(
             "local_batch", list(refs), files, method,
             str(beam), str(beam),  # retry_beam=beam (no implicit retry)
-            str(shared_cmvn).lower(), padding)
+            str(shared_cmvn).lower(), padding, wb_json)
         if result.get("status") != "ok":
             raise RuntimeError(f"Local MFA batch failed: {result}")
         return result["results"]
@@ -207,7 +213,8 @@ def _init_worker(mfa_app_path: str, mfa_threads: int = 1):
     _WORKER["module"] = module
 
 
-def _worker_align(refs, audio_paths, method, beam, shared_cmvn, padding):
+def _worker_align(refs, audio_paths, method, beam, shared_cmvn, padding,
+                  word_boundary_allocation=None):
     """ProcessPoolExecutor task: align one batch slice for one beam."""
     module = _WORKER["module"]
     if module is None:
@@ -216,10 +223,12 @@ def _worker_align(refs, audio_paths, method, beam, shared_cmvn, padding):
     class _FileObj:
         def __init__(self, name): self.name = name
     files = [_FileObj(p) for p in audio_paths]
+    wb_json = (json.dumps(word_boundary_allocation)
+               if word_boundary_allocation else "")
     result = module._api_align_batch_impl(
         f"w{os.getpid()}", list(refs), files, method,
         str(beam), str(beam),
-        str(shared_cmvn).lower(), padding)
+        str(shared_cmvn).lower(), padding, wb_json)
     if result.get("status") != "ok":
         raise RuntimeError(f"Worker MFA batch failed: {result}")
     return result["results"]
@@ -581,6 +590,7 @@ def _convert_result(result: dict, seg_offset_ms: int) -> list:
 def mfa_upload_and_submit(refs, audio_paths, base_url, *,
                           method=DEFAULT_METHOD, beam=DEFAULT_BEAMS[0],
                           shared_cmvn=False, padding=DEFAULT_PADDING,
+                          word_boundary_allocation=None,
                           timeout=DEFAULT_TIMEOUT):
     """Upload audio files and submit alignment batch to the MFA Space.
 
@@ -616,11 +626,13 @@ def mfa_upload_and_submit(refs, audio_paths, base_url, *,
     ]
 
     # Submit batch alignment
+    wb_json = (json.dumps(word_boundary_allocation)
+               if word_boundary_allocation else "")
     submit_resp = requests.post(
         f"{base_url}/gradio_api/call/align_batch",
         headers={**headers, "Content-Type": "application/json"},
         json={"data": [refs, file_data_list, method, str(beam), str(beam),
-                        str(shared_cmvn).lower(), padding]},
+                        str(shared_cmvn).lower(), padding, wb_json]},
         timeout=timeout,
     )
     submit_resp.raise_for_status()
@@ -689,7 +701,8 @@ def process(input_dir: Path,
             refresh_verses: set[str] | None = None,
             download_workers: int = DEFAULT_DOWNLOAD_WORKERS,
             workers: int = DEFAULT_WORKERS,
-            mfa_app_path: str | Path | None = None) -> Path | None:
+            mfa_app_path: str | Path | None = None,
+            word_boundary_allocation: dict | None = None) -> Path | None:
     """Process all chapters from detailed.json through MFA alignment.
 
     Each value in ``beams`` runs as an independent alignment pass over
@@ -972,7 +985,8 @@ def process(input_dir: Path,
             for b in beams:
                 fut = pool.submit(_worker_align,
                                   list(refs), list(paths),
-                                  method, b, shared_cmvn, padding)
+                                  method, b, shared_cmvn, padding,
+                                  word_boundary_allocation)
                 future_meta[fut] = (bid, b)
 
         producer = threading.Thread(target=_producer_loop, daemon=True)
@@ -1047,7 +1061,8 @@ def process(input_dir: Path,
                     results = backend.align_batch(
                         refs, paths,
                         method=method, beam=b,
-                        shared_cmvn=shared_cmvn, padding=padding)
+                        shared_cmvn=shared_cmvn, padding=padding,
+                        word_boundary_allocation=word_boundary_allocation)
                 except Exception as e:
                     log.error("Batch %d beam=%d raised %s", bid, b, e)
                     _store_results(b, mp, [], error_msg=str(e))
@@ -1303,6 +1318,7 @@ def process(input_dir: Path,
 
 def _submit_with_retry(refs, audio_paths, space_url, *, method, beam,
                        shared_cmvn, padding=DEFAULT_PADDING,
+                       word_boundary_allocation=None,
                        timeout=DEFAULT_TIMEOUT, max_retries=1):
     """Submit batch to MFA Space with one retry on failure."""
     for attempt in range(max_retries + 1):
@@ -1311,6 +1327,7 @@ def _submit_with_retry(refs, audio_paths, space_url, *, method, beam,
                 refs, audio_paths, space_url,
                 method=method, beam=beam,
                 shared_cmvn=shared_cmvn, padding=padding,
+                word_boundary_allocation=word_boundary_allocation,
                 timeout=timeout)
             log.info("Submitted batch (event_id=%s), waiting for results...", event_id)
             return mfa_wait_result(event_id, headers, base, timeout=timeout)
