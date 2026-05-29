@@ -328,36 +328,47 @@ export function setupSplitDragHandle(canvas: SegCanvas, seg: Segment): void {
 }
 
 // ---------------------------------------------------------------------------
-// nudgeSplitBoundary — step the single-cursor by ±deltaMs (SplitPanel only)
+// nudgeSplitCursor — step an arbitrary cursor by ±deltaMs (SplitPanel only)
 // ---------------------------------------------------------------------------
 
 /**
- * Move the single split cursor by `deltaMs`, clamped to
- * `[seg.time_start + EDIT_MIN_DURATION_MS, seg.time_end - EDIT_MIN_DURATION_MS]`.
+ * Move split cursor `idx` by `deltaMs`, clamped against its neighbours
+ * (the previous/next cursor, or the seg start/end at the array ends) with
+ * `EDIT_MIN_DURATION_MS` headroom on each side — same clamp the drag handle
+ * uses in `setupSplitDragHandle`. Returns the resolved time, or `null` when
+ * there's no active split or `idx` is out of range.
  *
- * Only meaningful in N=1 (binary) mode — N≥2 mode hides the stepper
- * controls because there's no obvious "the cursor" to step. Callers that
- * invoke this in multi-mode get a no-op return of `null`.
+ * Used by SplitPanel for both modes: binary steps cursor 0; multi steps the
+ * left- or right-edge cursor of the currently selected region.
  */
-export function nudgeSplitBoundary(deltaMs: number): number | null {
+export function nudgeSplitCursor(idx: number, deltaMs: number): number | null {
     const canvas = get(editCanvas);
     const sd = canvas?._splitData;
-    if (!canvas || !sd || sd.currentSplits.length !== 1) return null;
+    if (!canvas || !sd) return null;
+    const cursors = sd.currentSplits;
+    if (idx < 0 || idx >= cursors.length) return null;
     const { seg } = sd;
     const minDur = EDIT_MIN_DURATION_MS;
-    const cur = sd.currentSplits[0]!;
+    const cur = cursors[idx]!;
+    // Off-view cursor (zoomed past it) → anchor at the view centre so the step
+    // lands somewhere visible rather than nudging an invisible point.
     const onView = cur >= sd.viewStart && cur <= sd.viewEnd;
     const anchor: number = onView ? cur : (sd.viewStart + sd.viewEnd) / 2;
-    const next = Math.max(
-        seg.time_start + minDur,
-        Math.min(anchor + deltaMs, seg.time_end - minDur),
-    );
+    const lo = (idx > 0 ? cursors[idx - 1]! : seg.time_start) + minDur;
+    const hi = (idx < cursors.length - 1 ? cursors[idx + 1]! : seg.time_end) - minDur;
+    const next = Math.max(lo, Math.min(anchor + deltaMs, hi));
     if (next === cur) return next;
-    sd.currentSplits[0] = next;
-    const cursors = sd.currentSplits.slice();
-    updateSplitState((s) => s ? { ...s, currentSplits: cursors } : s);
+    cursors[idx] = next;
+    // Force a new array reference so derivedEq subscribers re-fire.
+    const updated = cursors.slice();
+    updateSplitState((s) => s ? { ...s, currentSplits: updated } : s);
     drawSplitWaveform(canvas);
     return next;
+}
+
+/** Binary-mode convenience: step the single cursor (index 0). */
+export function nudgeSplitBoundary(deltaMs: number): number | null {
+    return nudgeSplitCursor(0, deltaMs);
 }
 
 // ---------------------------------------------------------------------------

@@ -9,8 +9,14 @@
      *     them nudge the split cursor — bare buttons with a yellow
      *     underline that mirrors the canvas split-line, so the two roles
      *     are visually distinct without needing a containing pill.
-     *   - Multi (N≥2) → ``Cancel    [1] [2] … [N+1]    Split``.
-     *     Region pills behave like L/R in binary mode.
+     *   - Multi (N≥2) → ``Cancel  [1] ‹› [2] ‹› … [N+1]  Split``.
+     *     Region pills behave like L/R in binary mode. A `‹ ›` nudge pair
+     *     sits between every adjacent pill, stepping the cursor at that
+     *     boundary. All pairs are always rendered (stable layout), but only
+     *     the two flanking the SELECTED region are interactable — the rest
+     *     are dimmed + disabled. Each pair carries the same yellow
+     *     split-line underline as binary mode. Covers both auto-split kinds
+     *     (cross-verse across 3+ verses, and repetitions).
      *
      * Clicking the OTHER side / region while a loop is running switches
      * the loop immediately rather than waiting for the user to re-press
@@ -37,6 +43,7 @@
     import {
         confirmSplit,
         nudgeSplitBoundary,
+        nudgeSplitCursor,
         previewSplitAudio,
         previewSplitRegion,
     } from '../../utils/edit/split';
@@ -71,6 +78,27 @@
     function selRegion(i: number): boolean {
         return !isBinary && sel.kind === 'region' && sel.index === i;
     }
+
+    // Multi-cursor nudge helpers. Boundary `c` is the cursor between region
+    // `c` and region `c+1` (there are cursorCount of them). A boundary is
+    // interactable only while it flanks the selected region — i.e. it's that
+    // region's right edge (sel.index === c) or left edge (sel.index === c+1).
+    function boundaryActive(c: number): boolean {
+        return sel.kind === 'region' && (sel.index === c || sel.index === c + 1);
+    }
+    function cursorBackDisabled(c: number): boolean {
+        const cs = ss?.currentSplits;
+        if (!ss || !cs || cs[c] === undefined) return true;
+        const lo = (c > 0 ? cs[c - 1]! : ss.seg.time_start) + EDIT_MIN_DURATION_MS;
+        return cs[c]! <= lo;
+    }
+    function cursorFwdDisabled(c: number): boolean {
+        const cs = ss?.currentSplits;
+        if (!ss || !cs || cs[c] === undefined) return true;
+        const hi = (c < cs.length - 1 ? cs[c + 1]! : ss.seg.time_end) - EDIT_MIN_DURATION_MS;
+        return cs[c]! >= hi;
+    }
+    function nudgeCursor(c: number, deltaMs: number): void { nudgeSplitCursor(c, deltaMs); }
 
     // Clamp the selection if cursor count changed and the previously
     // selected region no longer exists (e.g. user deleted a cursor).
@@ -139,6 +167,21 @@
                         title="Preview region {i + 1} — press footer ▶ to loop"
                         on:click={() => pickRegionAndMaybeSwitch(i)}
                     >{i + 1}</button>
+                    {#if i < cursorCount}
+                        <div class="seg-nudge-pair seg-nudge-split"
+                            class:inactive={!boundaryActive(i)}
+                            role="group"
+                            aria-label="Adjust split between region {i + 1} and {i + 2}">
+                            <button class="seg-nudge"
+                                title="Move this split back {EDIT_NUDGE_MS} ms"
+                                disabled={!boundaryActive(i) || cursorBackDisabled(i)}
+                                on:click={() => nudgeCursor(i, -EDIT_NUDGE_MS)}>&lsaquo;</button>
+                            <button class="seg-nudge"
+                                title="Move this split forward {EDIT_NUDGE_MS} ms"
+                                disabled={!boundaryActive(i) || cursorFwdDisabled(i)}
+                                on:click={() => nudgeCursor(i, EDIT_NUDGE_MS)}>&rsaquo;</button>
+                        </div>
+                    {/if}
                 {/each}
             </div>
         {/if}
