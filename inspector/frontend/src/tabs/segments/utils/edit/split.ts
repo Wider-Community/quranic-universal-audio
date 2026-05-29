@@ -55,7 +55,12 @@ import { _ensureSplitBaseCache, drawSplitWaveform } from '../waveform/split-draw
 import { _fetchPeaksForClick } from '../waveform/utils';
 import { _playRange, attachPreviewLoop, exitEditMode, finalizeEdit } from './common';
 import { beginRefEdit, pickProgrammaticMountId } from './reference';
-import { applySplitWheelZoom } from './split-zoom';
+import {
+    animateSplitZoomTo,
+    applySplitWheelZoom,
+    computeRegionView,
+    computeSweepDurationMs,
+} from './split-zoom';
 import { getAudioEndMsForSeg } from './trim';
 
 function _suggestSplitRefs(ref: Parameters<typeof _suggestSplitRefsLib>[0]): ReturnType<typeof _suggestSplitRefsLib> {
@@ -590,11 +595,18 @@ export function previewSplitAudio(
  *  ``'split-region-{i}'`` so the play-range RAF re-seeks correctly across
  *  cursor edits while looping. Same warm/cold branching as
  *  ``previewSplitAudio`` — `mode: 'cold'` forces cold-start for SplitPanel's
- *  region-pill click. */
+ *  region-pill click.
+ *
+ *  `zoom: true` (SplitPanel's pill click) animates the view window to frame
+ *  this region with padding — a pan/zoom sweep from the current view. Omitted
+ *  on the entry-time preview (`enterSplitMode`) so the initial auto-split
+ *  selection stays fully zoomed out; only user clicks (switch OR replay-same)
+ *  zoom. Only reachable in the multi-cursor regime (binary L/R uses
+ *  ``previewSplitAudio``), so the "regions > 2" scope holds implicitly. */
 export function previewSplitRegion(
     idx: number,
     canvas?: SegCanvas | null,
-    opts?: { mode?: 'auto' | 'cold' },
+    opts?: { mode?: 'auto' | 'cold'; zoom?: boolean },
 ): void {
     const c = canvas ?? get(editCanvas);
     const sd = c?._splitData;
@@ -603,6 +615,13 @@ export function previewSplitRegion(
     if (idx < 0 || idx > n) return;
     const start = idx === 0 ? sd.seg.time_start : sd.currentSplits[idx - 1]!;
     const end = idx === n ? sd.seg.time_end : sd.currentSplits[idx]!;
+
+    if (opts?.zoom) {
+        const target = computeRegionView(start, end, sd.seg.time_start, sd.seg.time_end);
+        const from = { viewStart: sd.viewStart, viewEnd: sd.viewEnd };
+        animateSplitZoomTo(c, target, computeSweepDurationMs(from, target));
+    }
+
     editPreviewPlaying.set(true);
     setPreviewLooping(`split-region-${idx}` as `split-region-${number}`);
 

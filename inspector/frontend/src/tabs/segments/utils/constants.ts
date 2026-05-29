@@ -36,6 +36,22 @@ export const TRIM_MIN_VIEW_MS = 500;
  *  responsive without overshooting on a single mouse-wheel notch. */
 export const TRIM_WHEEL_ZOOM_FACTOR = 0.85;
 
+/** Split-mode region auto-zoom: padding on each side of the selected region,
+ *  as a fraction of the region's duration. 0.25 → the framed window is the
+ *  region plus 25% slack left and right (total width 1.5× the region). Each
+ *  side is clamped independently to the segment bounds (edge regions keep the
+ *  unclamped side's full padding). Mirrors the timestamps-tab loop zoom. */
+export const SPLIT_ZOOM_PAD_FRACTION = 0.25;
+
+/** Split-mode region zoom animation: floor / cap / speed for the pan+zoom
+ *  sweep between view windows when switching (or replaying) a region pill.
+ *  Duration = clamp(MIN + distanceSec × MS_PER_SEC, MIN, MAX) where distance
+ *  is the center-to-center travel. Short hops stay snappy; long jumps reel
+ *  visibly through the waveform. Values mirror the timestamps tab's feel. */
+export const SPLIT_ZOOM_ANIMATE_MIN_MS = 180;
+export const SPLIT_ZOOM_ANIMATE_MAX_MS = 900;
+export const SPLIT_ZOOM_ANIMATE_MS_PER_SEC = 35;
+
 /** Canvas dimensions for segment row waveforms. */
 export const SEG_ROW_CANVAS_WIDTH = 380;
 export const SEG_ROW_CANVAS_HEIGHT = 60;

@@ -143,7 +143,7 @@
     }
     function pickRegionAndMaybeSwitch(i: number): void {
         setSplitPreviewSelection({ kind: 'region', index: i });
-        previewSplitRegion(i, canvas, { mode: 'cold' });
+        previewSplitRegion(i, canvas, { mode: 'cold', zoom: true });
     }
 </script>
 

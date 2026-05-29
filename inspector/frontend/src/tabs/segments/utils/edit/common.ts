@@ -37,6 +37,7 @@ import {
 } from '../playback/play-range';
 import { ensureBoundedRange, startSegAnimation } from '../playback/playback';
 import { drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
+import { cancelSplitZoom } from './split-zoom';
 
 // ---------------------------------------------------------------------------
 // exitEditMode — shared cleanup for trim/split
@@ -78,6 +79,7 @@ export function exitEditMode(): void {
     setPreviewLooping(false);
     setPreviewJustSeeked(false);
     editPreviewPlaying.set(false);
+    cancelSplitZoom();
     clearPlayRangeRAF();
     clearPreviewCanplayHandler();
     const stopHandler = getPreviewStopHandler();
