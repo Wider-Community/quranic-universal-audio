@@ -1,9 +1,9 @@
 /**
  * Reviews tab selection + drawer state + filters (Svelte 5 rune store).
  *
- * Lifecycle: row body click opens the General drawer; the Ops button on
- * each row opens the Ops drawer. ``close()`` clears selection too so the
- * scrim, the X button, and Esc all funnel through one path.
+ * Lifecycle: row body click opens the General drawer. ``close()`` clears
+ * selection too so the scrim, the X button, and Esc all funnel through one
+ * path.
  *
  * Filters and sort persist across modal open/close (the store is a
  * module-level singleton). They reset on page reload — see
@@ -23,7 +23,7 @@
 
 import { markReviewViewed } from '../api/admin-reviews';
 
-export type ReviewsDrawerKind = 'general' | 'ops';
+export type ReviewsDrawerKind = 'general';
 
 export type ReviewsSort = 'stalled' | 'name';
 
@@ -75,11 +75,6 @@ class ReviewsStore {
      * session — drives the row's local dot-suppression guard. */
     isViewedThisSession(slug: string): boolean {
         return this.viewedThisSession.has(slug);
-    }
-
-    /** Swap drawer kind without changing the selected row. */
-    setDrawer(kind: ReviewsDrawerKind): void {
-        this.openDrawer = kind;
     }
 
     /** Close all — clears selection too so the active-row ring drops. */

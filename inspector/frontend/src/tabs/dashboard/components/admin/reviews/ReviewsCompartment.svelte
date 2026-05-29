@@ -22,7 +22,6 @@
     } from '../../../../../lib/types/generated/schemas';
     import { adminDashboard } from '../../../stores/admin-dashboard.svelte';
     import ReviewsGeneralDrawer from './ReviewsGeneralDrawer.svelte';
-    import ReviewsOpsDrawer from './ReviewsOpsDrawer.svelte';
     import ReviewsRow from './ReviewsRow.svelte';
 
     let resp = $state<AdminReviewsResponse | null>(null);
@@ -344,12 +343,6 @@
         ></div>
         {#if reviewsStore.openDrawer === 'general'}
             <ReviewsGeneralDrawer
-                slug={reviewsStore.selectedSlug}
-                onclose={() => reviewsStore.close()}
-                onaction={refetch}
-            />
-        {:else if reviewsStore.openDrawer === 'ops'}
-            <ReviewsOpsDrawer
                 slug={reviewsStore.selectedSlug}
                 onclose={() => reviewsStore.close()}
                 onaction={refetch}

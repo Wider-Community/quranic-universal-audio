@@ -27,7 +27,6 @@
     let { row }: { row: AdminReviewRow } = $props();
 
     const isActive = $derived(reviewsStore.selectedSlug === row.slug);
-    const isOpsActive = $derived(isActive && reviewsStore.openDrawer === 'ops');
 
     function relativeAge(iso: string | null | undefined): string {
         if (!iso) return '';
@@ -84,7 +83,7 @@
     /** Open a drawer and, on the first open for this slug, optimistically
      * decrement the dashboard counter so the entry-button dot / tab pill
      * also drop in sync. The compartment's next fetch reconciles. */
-    function openDrawer(kind: 'general' | 'ops'): void {
+    function openDrawer(kind: 'general'): void {
         const wasUnread = showUnread;
         reviewsStore.open(row.slug, kind);
         if (wasUnread) {
@@ -94,11 +93,6 @@
 
     function onRowClick(): void {
         openDrawer('general');
-    }
-
-    function onOps(e: MouseEvent): void {
-        e.stopPropagation();
-        openDrawer('ops');
     }
 
     function onSegments(e: MouseEvent): void {
@@ -158,12 +152,6 @@
     </td>
     <td class="cell actions">
         <button class="btn" type="button" onclick={onSegments}>Segments</button>
-        <button
-            class="btn"
-            class:armed={isOpsActive}
-            type="button"
-            onclick={onOps}
-        >Ops</button>
     </td>
 </tr>
 
@@ -317,14 +305,8 @@
         cursor: pointer;
         transition: border-color var(--t-fast), color var(--t-fast), background-color var(--t-fast);
     }
-    .cell.actions .btn + .btn { margin-left: var(--s-1); }
     .cell.actions .btn:hover {
         border-color: var(--border-default);
         color: var(--text-primary);
-    }
-    .cell.actions .btn.armed {
-        border-color: var(--accent);
-        color: var(--accent-strong);
-        background: var(--accent-tint-soft);
     }
 </style>
