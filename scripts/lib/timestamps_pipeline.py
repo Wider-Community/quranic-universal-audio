@@ -689,6 +689,200 @@ def mfa_wait_result(event_id, headers, base_url, timeout=DEFAULT_TIMEOUT):
 # Main processing
 # ---------------------------------------------------------------------------
 
+def _normalize_from_results(chapters, results_by_ch, audio_category):
+    """Convert raw MFA results to per-chapter ordered occurrences + failures.
+
+    The conversion + per-verse word routing half of the former
+    ``_build_outputs`` closure, factored out so the deduped projection
+    (``_dedup_core``) is shared between the live pipeline and the
+    read-path ``canonical_occurrence`` (single implementation, no drift).
+
+    Returns ``(norm, failures)`` where ``norm[ch_idx]`` is a list of
+    occurrences in result order::
+
+        {"ch_ref", "seg_index", "matched_ref", "time_start", "time_end",
+         "words_by_verse": {verse_key: [converted_word, ...]}, "segment_uid"}
+
+    No repeat-pass skip and no word merge — every accepted segment is one
+    occurrence. Failed segments go to ``failures`` (carrying ``seg`` + ref
+    so run contiguity can be reconstructed downstream).
+    """
+    by_surah = audio_category == "by_surah_audio"
+    norm: dict[int, list] = {}
+    failures: list[dict] = []
+    for ch_idx, chapter in enumerate(chapters):
+        ch_ref = str(chapter.get("ref", ""))
+        segs = chapter.get("segments", [])
+        verse_prefix = (f"{ch_ref}:" if (not by_surah and ":" in ch_ref) else None)
+        ch_occ = []
+        for seg_idx, result in results_by_ch.get(ch_idx, []):
+            if seg_idx >= len(segs):
+                continue
+            seg = segs[seg_idx]
+            matched_ref = seg.get("matched_ref", "")
+            if result.get("status") != "ok":
+                failures.append({
+                    "verse": ch_ref, "seg": seg_idx,
+                    "ref": matched_ref,
+                    "error": result.get("error", "unknown"),
+                })
+                continue
+            seg_offset_ms = seg.get("time_start", 0)
+            seg_end_ms = seg.get("time_end", seg_offset_ms)
+            raw_words = result.get("words", [])
+            if verse_prefix is not None:
+                raw_words = [w for w in raw_words
+                             if w.get("location", "").startswith(verse_prefix)]
+            words_by_verse: dict[str, list] = {}
+            for w in raw_words:
+                verse_key = w["location"].rsplit(":", 1)[0]
+                words_by_verse.setdefault(verse_key, []).append(
+                    _convert_word(w, seg_offset_ms))
+            ch_occ.append({
+                "ch_ref": ch_ref,
+                "seg_index": seg_idx,
+                "matched_ref": matched_ref,
+                "time_start": seg_offset_ms,
+                "time_end": seg_end_ms,
+                "words_by_verse": words_by_verse,
+                "segment_uid": seg.get("segment_uid"),
+            })
+        if ch_occ:
+            norm[ch_idx] = ch_occ
+    return norm, failures
+
+
+def _dedup_core(chapters_norm, seed_existing, *, completed_surahs,
+                completed_refs, refresh_surahs, audio_category):
+    """Repeat-pass skip + word merge + verse bounds over normalized occurrences.
+
+    The deduped half of the former ``_build_outputs`` closure. Operates on
+    the normalized form (already-converted, verse-routed words) so the live
+    pipeline (fresh results) and the read-path (stored v2) produce identical
+    output. ``chapters_norm`` entries are
+    ``{"ch_ref", "matched_refs": [positional matched_ref], "occurrences": [...]}``.
+
+    Returns ``(full_data, words_data)``.
+    """
+    full_data: dict = dict(seed_existing) if seed_existing else {}
+    words_data: dict = {}
+    seg_bounds: dict[str, list[int]] = {}
+    if seed_existing:
+        for ref, val in seed_existing.items():
+            words_data[ref] = [[w[0], w[1], w[2]] for w in val["words"]]
+            vs = val.get("verse_start_ms")
+            ve = val.get("verse_end_ms")
+            if vs is not None and ve is not None:
+                seg_bounds[ref] = [vs, ve]
+
+    by_surah = audio_category == "by_surah_audio"
+    for ch in chapters_norm:
+        ch_ref = ch["ch_ref"]
+        if seed_existing is not None:
+            if by_surah:
+                if ch_ref in completed_surahs and ch_ref not in (refresh_surahs or set()):
+                    continue
+            else:
+                if ch_ref in completed_refs:
+                    continue
+        occurrences = ch["occurrences"]
+        if not occurrences:
+            continue
+
+        if by_surah:
+            repeat_skip = _repeat_pass_skip_indices(
+                [{"matched_ref": m} for m in ch["matched_refs"]])
+            if repeat_skip:
+                log.info("Surah %s: dropping %d re-pass home seg(s): %s",
+                         ch_ref, len(repeat_skip), sorted(repeat_skip))
+            for occ in occurrences:
+                if occ["seg_index"] in repeat_skip:
+                    continue
+                matched_ref = occ["matched_ref"]
+                seg_offset_ms = occ["time_start"]
+                seg_end_ms = occ["time_end"]
+                seg_home_key = _matched_ref_to_output_key(matched_ref)
+                seg_is_single_home = (seg_home_key is not None
+                                      and ":" in seg_home_key
+                                      and "-" not in seg_home_key)
+                if seg_is_single_home:
+                    cur = seg_bounds.get(seg_home_key)
+                    if cur is None:
+                        seg_bounds[seg_home_key] = [seg_offset_ms, seg_end_ms]
+                    else:
+                        cur[0] = min(cur[0], seg_offset_ms)
+                        cur[1] = max(cur[1], seg_end_ms)
+                if not occ["words_by_verse"]:
+                    continue
+                for verse_key, verse_words in occ["words_by_verse"].items():
+                    entry = full_data.setdefault(
+                        verse_key, {"words": [], "_provenance": []})
+                    if "_provenance" not in entry:
+                        entry["_provenance"] = [True] * len(entry["words"])
+                    _merge_seg_words(entry, matched_ref, verse_key, verse_words)
+        else:
+            all_words = []
+            for occ in occurrences:
+                for verse_words in occ["words_by_verse"].values():
+                    all_words.extend(verse_words)
+            if all_words:
+                full_data[ch_ref] = {"words": all_words}
+
+    for ref in list(full_data.keys()):
+        if ref.startswith("0:"):
+            del full_data[ref]
+
+    for ref, val in full_data.items():
+        val.pop("_home_indices", None)
+        val.pop("_provenance", None)
+        words = val["words"]
+        words.sort(key=lambda w: w[1])
+        bound = seg_bounds.get(ref)
+        word_start = words[0][1] if words else None
+        word_end = max((w[2] for w in words), default=None)
+        if bound is not None and words:
+            val["verse_start_ms"] = min(bound[0], word_start)
+            val["verse_end_ms"] = max(bound[1], word_end)
+        elif bound is not None:
+            val["verse_start_ms"] = bound[0]
+            val["verse_end_ms"] = bound[1]
+        elif words:
+            val["verse_start_ms"] = word_start
+            val["verse_end_ms"] = word_end
+
+    for ref, val in full_data.items():
+        if ref not in words_data:
+            words_data[ref] = [[w[0], w[1], w[2]] for w in val["words"]]
+
+    return full_data, words_data
+
+
+def build_outputs(results_by_ch, seed_existing, *, chapters,
+                  completed_surahs, completed_refs, refresh_surahs,
+                  audio_category):
+    """Module-level form of the former ``_build_outputs`` closure.
+
+    ``_normalize_from_results`` (convert + verse-route) → ``_dedup_core``
+    (skip + merge + bounds). ``canonical_occurrence`` reuses the SAME
+    ``_dedup_core`` over stored v2, so the deduped projection cannot drift
+    from what the pipeline wrote. Returns ``(full_data, words_data, mfa_failures)``.
+    """
+    norm, failures = _normalize_from_results(chapters, results_by_ch, audio_category)
+    chapters_norm = []
+    for ch_idx, chapter in enumerate(chapters):
+        chapters_norm.append({
+            "ch_ref": str(chapter.get("ref", "")),
+            "matched_refs": [s.get("matched_ref", "")
+                             for s in chapter.get("segments", [])],
+            "occurrences": norm.get(ch_idx, []),
+        })
+    full_data, words_data = _dedup_core(
+        chapters_norm, seed_existing,
+        completed_surahs=completed_surahs, completed_refs=completed_refs,
+        refresh_surahs=refresh_surahs, audio_category=audio_category)
+    return full_data, words_data, failures
+
+
 def process(input_dir: Path,
             backend: MfaBackend | None,
             method: str,

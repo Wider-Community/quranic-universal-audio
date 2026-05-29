@@ -6,32 +6,41 @@ cross-verse bleed collapsed at write time). v2 stops discarding that
 information at the raw level:
 
 - ``build_raw_v2`` records EVERY accepted segment as its own *occurrence*
-  under its output key (compound key for cross-verse), with the segment's
-  full nested words verbatim — no repeat-pass skip, no word merge.
-- ``canonical_occurrence`` (added in the next increment) projects a v2
-  document back to the historical deduped verse map, so consumers that
-  want the canonical single take (the Timestamps tab, the dataset) get
-  byte-identical output to today.
+  under its output key (compound key for cross-verse; ``"_transitions"``
+  for non-verse tokens), with the segment's words verbatim — no
+  repeat-pass skip, no word merge.
+- ``canonical_occurrence`` projects a v2 document back to the historical
+  deduped verse map, so consumers that want the canonical single take
+  (the Timestamps tab, the dataset) get byte-identical output to today.
 
-This module is the single home for the dedup rule. ``build_raw_v2`` here
-and the to-be-lifted ``build_outputs`` in ``timestamps_pipeline`` feed a
-shared core so the deduped projection can never drift from what the
-pipeline wrote. See ``docs/planning/inspector-deploy/v2/phases/13-timestamps-job.md``.
+Both faces reuse the pipeline's shared core: ``build_raw_v2`` and
+``build_outputs`` feed ``_normalize_from_results``; ``canonical_occurrence``
+and ``build_outputs`` feed ``_dedup_core``. There is exactly one
+implementation of conversion and of dedup, so the projection can never
+drift from what the pipeline wrote. See
+``docs/planning/inspector-deploy/v2/phases/13-timestamps-job.md``.
 """
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any
 
-# Converters live in the pipeline today; they will move here when the
-# closure lift lands. Importing them keeps a single implementation in the
-# meantime (one-directional: pipeline does not import this module yet).
+# Conversion + dedup live in the pipeline today (alongside the helpers);
+# this module imports them so there is a single implementation. One-
+# directional: the pipeline does not import this module.
 from scripts.lib.timestamps_pipeline import (
-    _convert_result,
+    _normalize_from_results,
+    _dedup_core,
     _matched_ref_to_output_key,
 )
 
 V2_SCHEMA_VERSION = 2
+
+# Bucket for accepted non-verse (transition) segments — kept so the
+# canonical projection can reproduce the pipeline exactly, but excluded
+# from per-chapter shards (split_to_shards skips ``_``-prefixed keys).
+_TRANSITION_KEY = "_transitions"
 
 
 def build_raw_v2(
@@ -41,76 +50,80 @@ def build_raw_v2(
 ) -> dict[str, Any]:
     """Build the unfiltered v2 timestamps document from MFA results.
 
-    Args:
-        chapters: ``detailed.json`` ``entries`` — each ``{"ref", "segments"[]}``.
-        results_by_ch: ``{chapter_index: [(seg_index, mfa_result), ...]}`` —
-            exactly the structure the pipeline assembles per beam.
-        audio_category: ``"by_surah_audio"`` or ``"by_ayah_audio"``.
+    Returns ``{"_meta": {"mfa_failures": [...], "schema_version": 2},
+    "<output_key>": [occurrence, ...]}`` where ``output_key`` is the
+    single-verse key (``"1:1"``), the compound cross-verse key
+    (``"1:1:3-1:2:2"``), or ``"_transitions"``. Each occurrence is the
+    normalized shape from ``_normalize_from_results``::
 
-    Returns:
-        ``{"_meta": {"mfa_failures": [...]}, "<output_key>": [occurrence, ...]}``
-        where ``output_key`` is the single-verse key (``"1:1"``) or the
-        compound cross-verse key (``"37:151:3-37:152:2"``), and each
-        occurrence is::
+        {"ch_ref", "seg_index", "matched_ref", "time_start", "time_end",
+         "words_by_verse": {verse_key: [[widx, s, e, letters, phones]...]},
+         "segment_uid"}
 
-            {
-              "seg_index": int,        # chapter-local order (run reconstruction)
-              "matched_ref": str,
-              "time_start": int, "time_end": int,   # ms in chapter audio
-              "words": [[widx, s_ms, e_ms, [[char,s,e]...], [[phone,s,e]...]]...],
-              "segment_uid": str | None,             # nullable passthrough
-            }
-
-        NO repeat-pass skip and NO word merge are applied — every accepted
-        segment is preserved as a distinct occurrence. Failed segments are
-        recorded in ``_meta.mfa_failures`` (carrying ``seg_index`` + ref so
-        ``canonical_occurrence`` can reconstruct run contiguity), never as
-        occurrences. Transition segments (non-verse ``matched_ref``) are
-        dropped, matching the pipeline.
+    NO repeat-pass skip and NO word merge — every accepted segment is a
+    distinct occurrence. Failed segments are recorded only in
+    ``_meta.mfa_failures`` (with ``seg`` + ref for run reconstruction).
     """
+    norm, failures = _normalize_from_results(chapters, results_by_ch, audio_category)
     raw: dict[str, Any] = {}
-    failures: list[dict] = []
-
-    for ch_idx, chapter in enumerate(chapters):
-        ch_ref = str(chapter.get("ref", ""))
-        segments = chapter.get("segments", [])
-        for seg_idx, result in results_by_ch.get(ch_idx, []):
-            if seg_idx >= len(segments):
-                continue
-            seg = segments[seg_idx]
-            matched_ref = seg.get("matched_ref", "")
-
-            if result.get("status") != "ok":
-                failures.append({
-                    "verse": ch_ref,
-                    "seg": seg_idx,
-                    "ref": matched_ref,
-                    "error": result.get("error", "unknown"),
-                })
-                continue
-
-            output_key = _matched_ref_to_output_key(matched_ref)
-            if output_key is None:
-                # Transition segment (Basmala / Isti'adha / etc.) — no verse
-                # home; the pipeline strips these from the verse map too.
-                continue
-
-            time_start = int(seg.get("time_start", 0))
-            time_end = int(seg.get("time_end", time_start))
-            words = _convert_result(result, time_start)
-
-            raw.setdefault(output_key, []).append({
-                "seg_index": seg_idx,
-                "matched_ref": matched_ref,
-                "time_start": time_start,
-                "time_end": time_end,
-                "words": words,
-                "segment_uid": seg.get("segment_uid"),
-            })
-
-    # Deterministic occurrence order within each key = chapter seg order.
+    for occs in norm.values():
+        for occ in occs:
+            key = _matched_ref_to_output_key(occ["matched_ref"]) or _TRANSITION_KEY
+            raw.setdefault(key, []).append(occ)
     for key in raw:
-        raw[key].sort(key=lambda o: o["seg_index"])
-
+        raw[key].sort(key=lambda o: (o["ch_ref"], o["seg_index"]))
     raw["_meta"] = {"mfa_failures": failures, "schema_version": V2_SCHEMA_VERSION}
     return raw
+
+
+def canonical_occurrence(
+    v2_doc: dict[str, Any],
+    audio_category: str,
+    seed_existing: dict | None = None,
+) -> dict[str, Any]:
+    """Project a v2 raw document to the historical deduped verse map.
+
+    Regroups occurrences (+ failures) by chapter via the occurrence's
+    ``ch_ref``, reconstructs the positional ``matched_refs`` list each
+    chapter needs for repeat-pass run detection, and runs the SAME
+    ``_dedup_core`` the live pipeline uses. Returns ``full_data`` — the
+    verse-keyed deduped map (byte-identical to the historical
+    ``timestamps_full.json`` body).
+    """
+    occ_by_ch: dict[str, list] = defaultdict(list)
+    refs_by_ch: dict[str, dict[int, str]] = defaultdict(dict)
+
+    for key, occs in v2_doc.items():
+        if key == "_meta":
+            continue
+        for occ in occs:
+            ch = occ["ch_ref"]
+            occ_by_ch[ch].append(occ)
+            refs_by_ch[ch][occ["seg_index"]] = occ["matched_ref"]
+
+    meta = v2_doc.get("_meta", {}) or {}
+    for fail in (meta.get("mfa_failures") or []):
+        ch = str(fail.get("verse", ""))
+        seg = fail.get("seg")
+        if seg is not None and ch in occ_by_ch:
+            # Only fill run-reconstruction refs for chapters that produced
+            # at least one occurrence (others contribute nothing to full_data).
+            refs_by_ch[ch].setdefault(seg, fail.get("ref", ""))
+
+    chapters_norm = []
+    for ch, occs in occ_by_ch.items():
+        seg_map = refs_by_ch[ch]
+        max_idx = max(seg_map) if seg_map else -1
+        matched_refs = [seg_map.get(i, "") for i in range(max_idx + 1)]
+        chapters_norm.append({
+            "ch_ref": ch,
+            "matched_refs": matched_refs,
+            "occurrences": sorted(occs, key=lambda o: o["seg_index"]),
+        })
+
+    full_data, _words = _dedup_core(
+        chapters_norm, seed_existing,
+        completed_surahs=set(), completed_refs=set(),
+        refresh_surahs=None, audio_category=audio_category,
+    )
+    return full_data
