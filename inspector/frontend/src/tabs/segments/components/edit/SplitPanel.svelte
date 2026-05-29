@@ -60,7 +60,6 @@
     $: cursorCount = ss?.currentSplits.length ?? 0;
     $: isBinary = cursorCount === 1;
     $: regionCount = cursorCount + 1;
-    $: regions = Array.from({ length: regionCount }, (_, i) => i);
 
     // Stepper-disable gates apply in binary mode only.
     $: firstSplit = ss?.currentSplits[0];
@@ -75,29 +74,48 @@
     $: sel = $splitPreviewSelection;
     $: selLeftActive = isBinary && sel.kind === 'left';
     $: selRightActive = isBinary && sel.kind === 'right';
-    function selRegion(i: number): boolean {
-        return !isBinary && sel.kind === 'region' && sel.index === i;
+
+    // Per-region UI descriptors for multi-cursor (auto-split) mode. Rebuilt
+    // whenever the split cursors (`ss`) OR the preview selection (`sel`)
+    // change — both are passed as args so Svelte tracks them as real reactive
+    // deps. The template iterates THIS array rather than calling helper
+    // functions inline; a `foo(i)` call in markup hides its ss/sel reads from
+    // Svelte's dependency analysis, so the disabled/highlight state wouldn't
+    // re-evaluate on a pure selection switch (only after a cursor move).
+    //
+    // Boundary `i` is the cursor between region `i` and region `i+1` (there
+    // are `cursorCount` of them; the last region has none). A boundary is
+    // interactable only while it flanks the selected region — its right edge
+    // (sel.index === i) or its left edge (sel.index === i+1).
+    type RegionCtl = {
+        i: number;
+        selected: boolean;
+        boundary: null | { active: boolean; backDisabled: boolean; fwdDisabled: boolean };
+    };
+    $: regionCtls = buildRegionCtls(ss, sel);
+
+    function buildRegionCtls(s: typeof ss, selection: typeof sel): RegionCtl[] {
+        const cs = s?.currentSplits;
+        if (!s || !cs) return [];
+        const selIdx = selection.kind === 'region' ? selection.index : -1;
+        const minDur = EDIT_MIN_DURATION_MS;
+        return Array.from({ length: cs.length + 1 }, (_, i): RegionCtl => {
+            if (i >= cs.length) return { i, selected: selIdx === i, boundary: null };
+            const cur = cs[i]!;
+            const lo = (i > 0 ? cs[i - 1]! : s.seg.time_start) + minDur;
+            const hi = (i < cs.length - 1 ? cs[i + 1]! : s.seg.time_end) - minDur;
+            return {
+                i,
+                selected: selIdx === i,
+                boundary: {
+                    active: selIdx === i || selIdx === i + 1,
+                    backDisabled: cur <= lo,
+                    fwdDisabled: cur >= hi,
+                },
+            };
+        });
     }
 
-    // Multi-cursor nudge helpers. Boundary `c` is the cursor between region
-    // `c` and region `c+1` (there are cursorCount of them). A boundary is
-    // interactable only while it flanks the selected region — i.e. it's that
-    // region's right edge (sel.index === c) or left edge (sel.index === c+1).
-    function boundaryActive(c: number): boolean {
-        return sel.kind === 'region' && (sel.index === c || sel.index === c + 1);
-    }
-    function cursorBackDisabled(c: number): boolean {
-        const cs = ss?.currentSplits;
-        if (!ss || !cs || cs[c] === undefined) return true;
-        const lo = (c > 0 ? cs[c - 1]! : ss.seg.time_start) + EDIT_MIN_DURATION_MS;
-        return cs[c]! <= lo;
-    }
-    function cursorFwdDisabled(c: number): boolean {
-        const cs = ss?.currentSplits;
-        if (!ss || !cs || cs[c] === undefined) return true;
-        const hi = (c < cs.length - 1 ? cs[c + 1]! : ss.seg.time_end) - EDIT_MIN_DURATION_MS;
-        return cs[c]! >= hi;
-    }
     function nudgeCursor(c: number, deltaMs: number): void { nudgeSplitCursor(c, deltaMs); }
 
     // Clamp the selection if cursor count changed and the previously
@@ -160,26 +178,26 @@
             >R</button>
         {:else}
             <div class="seg-region-picks" role="group" aria-label="Region preview">
-                {#each regions as i}
+                {#each regionCtls as r (r.i)}
                     <button class="seg-side-pick"
-                        class:active={selRegion(i)}
-                        aria-pressed={selRegion(i)}
-                        title="Preview region {i + 1} — press footer ▶ to loop"
-                        on:click={() => pickRegionAndMaybeSwitch(i)}
-                    >{i + 1}</button>
-                    {#if i < cursorCount}
+                        class:active={r.selected}
+                        aria-pressed={r.selected}
+                        title="Preview region {r.i + 1} — press footer ▶ to loop"
+                        on:click={() => pickRegionAndMaybeSwitch(r.i)}
+                    >{r.i + 1}</button>
+                    {#if r.boundary}
                         <div class="seg-nudge-pair seg-nudge-split"
-                            class:inactive={!boundaryActive(i)}
+                            class:inactive={!r.boundary.active}
                             role="group"
-                            aria-label="Adjust split between region {i + 1} and {i + 2}">
+                            aria-label="Adjust split between region {r.i + 1} and {r.i + 2}">
                             <button class="seg-nudge"
                                 title="Move this split back {EDIT_NUDGE_MS} ms"
-                                disabled={!boundaryActive(i) || cursorBackDisabled(i)}
-                                on:click={() => nudgeCursor(i, -EDIT_NUDGE_MS)}>&lsaquo;</button>
+                                disabled={!r.boundary.active || r.boundary.backDisabled}
+                                on:click={() => nudgeCursor(r.i, -EDIT_NUDGE_MS)}>&lsaquo;</button>
                             <button class="seg-nudge"
                                 title="Move this split forward {EDIT_NUDGE_MS} ms"
-                                disabled={!boundaryActive(i) || cursorFwdDisabled(i)}
-                                on:click={() => nudgeCursor(i, EDIT_NUDGE_MS)}>&rsaquo;</button>
+                                disabled={!r.boundary.active || r.boundary.fwdDisabled}
+                                on:click={() => nudgeCursor(r.i, EDIT_NUDGE_MS)}>&rsaquo;</button>
                         </div>
                     {/if}
                 {/each}
