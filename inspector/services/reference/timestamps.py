@@ -249,14 +249,21 @@ def manifest_bytes() -> bytes:
     return _manifest_bytes
 
 
-def shard_bytes(reciter: str, chapter: int, full: bool = False) -> bytes | None:
+def shard_bytes(
+    reciter: str,
+    chapter: int,
+    full: bool = False,
+    allow_unreleased: bool = False,
+) -> bytes | None:
     _ensure_built()
     # Only serve shards for reciters the manifest advertises (released + has
     # chapters). Folder-level isolation is gone post-unification, so enforce the
     # released gate here too — don't leak a non-released reciter's timestamps.
-    # (Owner preview of under-review reciters lands with the
-    # ``timestamps.view_unreleased`` capability — separate increment.)
-    if reciter not in _served_slugs:
+    # ``allow_unreleased`` is the owner-preview bypass: the route sets it when
+    # the caller holds ``timestamps.view_unreleased`` (capability check lives in
+    # the route — this service stays Flask-free), letting an owner read a
+    # generated-but-unreleased reciter's shards.
+    if reciter not in _served_slugs and not allow_unreleased:
         return None
     return _load_bucket_shard(reciter, chapter, full)
 

@@ -15,7 +15,9 @@ from config import (
     ANALYSIS_WORD_FONT_SIZE, ANALYSIS_LETTER_FONT_SIZE,
 )
 from services.audio_meta import vbr_chapters_for_reciter
+from services import auth as auth_service
 from services import timestamps as ts_serve
+from services.auth import capabilities as _capabilities
 from utils.json_response import orjson_response
 
 ts_bp = Blueprint("ts", __name__, url_prefix="/api/ts")
@@ -82,7 +84,14 @@ def ts_shard(reciter, chapter):
     shards ignore the flag (no occurrences to expand).
     """
     full = request.args.get("full") in ("1", "true", "yes")
-    body = ts_serve.shard_bytes(reciter, chapter, full=full)
+    # Owner preview: holders of ``timestamps.view_unreleased`` may read shards
+    # for generated-but-unreleased reciters; everyone else stays released-only.
+    allow_unreleased = _capabilities.can(
+        auth_service.current_user(), "timestamps.view_unreleased"
+    )
+    body = ts_serve.shard_bytes(
+        reciter, chapter, full=full, allow_unreleased=allow_unreleased
+    )
     if body is None:
         return jsonify({"error": "Shard not found"}), 404
     return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)
