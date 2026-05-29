@@ -334,13 +334,24 @@ def test_mark_ready_rejects_nonzero_blocking_counts(
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     def _has_lc(_reciter):
-        return {"category_counts": {
-            "low_confidence": 3,
-            "low_confidence_v2": 0,
-            "boundary_adj": 0,
-            "cross_verse": 0,
-            "basmala_amin": 0,
-        }}
+        # LC count must come from the items list (strict-threshold recompute),
+        # not from ``category_counts.low_confidence`` directly — see
+        # ``_h_marked_ready`` for the rationale. Three sub-0.80 items here.
+        return {
+            "low_confidence": [
+                {"segment_uid": "u1", "confidence": 0.5, "chapter": 1, "seg_index": 0},
+                {"segment_uid": "u2", "confidence": 0.6, "chapter": 1, "seg_index": 1},
+                {"segment_uid": "u3", "confidence": 0.7, "chapter": 1, "seg_index": 2},
+            ],
+            "category_counts": {
+                "low_confidence": 3,
+                "low_confidence_v2": 0,
+                "boundary_adj": 0,
+                "cross_verse": 0,
+                "basmala_amin": 0,
+                "repetitions": 0,
+            },
+        }
 
     from services import validation as _validation
     monkeypatch.setattr(_validation, "validate_reciter_segments", _has_lc)
@@ -356,6 +367,76 @@ def test_mark_ready_rejects_nonzero_blocking_counts(
     payload = json.loads(resp.data)
     assert "blocking validation counts" in payload["error"]
     assert payload["details"]["blocking_counts"] == {"low_confidence": 3}
+
+
+def test_mark_ready_lc_count_uses_strict_threshold_not_detail(
+    signed_in_client, state_persistence, monkeypatch,
+):
+    """Server gate must count low_confidence items at the strict 0.80
+    cutoff (matching the FE accordion badge), NOT the detail-list size
+    (which uses LOW_CONFIDENCE_DETAIL_THRESHOLD = 1.0 and includes every
+    imperfect segment). Regression: server was rejecting reciters whose
+    accordion + form both showed zero blocking items because
+    ``category_counts.low_confidence`` reported the 0–100% detail count.
+    """
+    _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
+
+    # Validator response shaped exactly like real output: detail list
+    # carries every imperfect segment (here three items at 0.85, 0.91, 0.99,
+    # all ABOVE the 0.80 strict cutoff), category_counts mirrors len(detail).
+    def _lots_of_detail(_reciter):
+        return {
+            "low_confidence": [
+                {"segment_uid": "u1", "confidence": 0.85, "chapter": 1, "seg_index": 0},
+                {"segment_uid": "u2", "confidence": 0.91, "chapter": 1, "seg_index": 1},
+                {"segment_uid": "u3", "confidence": 0.99, "chapter": 1, "seg_index": 2},
+            ],
+            "category_counts": {
+                "low_confidence": 3,
+                "low_confidence_v2": 0, "boundary_adj": 0, "cross_verse": 0,
+                "basmala_amin": 0, "repetitions": 0,
+            },
+        }
+
+    from services import validation as _validation
+    monkeypatch.setattr(_validation, "validate_reciter_segments", _lots_of_detail)
+    monkeypatch.setitem(_validation.__dict__, "validate_reciter_segments", _lots_of_detail)
+
+    client, _ = signed_in_client(hf_user_id="u-1", login="alice")
+    resp = client.post(
+        "/api/mark-ready/test_slug",
+        headers={"Origin": "http://localhost"},
+        json=_FULL_CHECKLIST_BODY,
+    )
+    # All three items are above 0.80 → strict count is 0 → gate passes.
+    assert resp.status_code == 200, resp.data
+
+    # Sanity: an item BELOW 0.80 still blocks.
+    def _one_strict_lc(_reciter):
+        return {
+            "low_confidence": [
+                {"segment_uid": "u1", "confidence": 0.79, "chapter": 1, "seg_index": 0},
+                {"segment_uid": "u2", "confidence": 0.99, "chapter": 1, "seg_index": 1},
+            ],
+            "category_counts": {
+                "low_confidence": 2,
+                "low_confidence_v2": 0, "boundary_adj": 0, "cross_verse": 0,
+                "basmala_amin": 0, "repetitions": 0,
+            },
+        }
+    monkeypatch.setattr(_validation, "validate_reciter_segments", _one_strict_lc)
+    monkeypatch.setitem(_validation.__dict__, "validate_reciter_segments", _one_strict_lc)
+
+    # Re-seed: previous request marked it ready, so flip back to under-review.
+    _replace_state([_row("other_slug", state="under_review", assignee_hf_id="u-1")])
+    resp = client.post(
+        "/api/mark-ready/other_slug",
+        headers={"Origin": "http://localhost"},
+        json=_FULL_CHECKLIST_BODY,
+    )
+    assert resp.status_code == 400
+    body = json.loads(resp.data)
+    assert body["details"]["blocking_counts"] == {"low_confidence": 1}
 
 
 def test_mark_ready_rejects_malformed_body(
@@ -394,6 +475,91 @@ def test_release_blocked_after_marked_ready(
 
 
 # ---------------------------------------------------------------------------
+# owner mark-ready bypass (claim.mark_ready_skip_gates)
+# ---------------------------------------------------------------------------
+
+
+def test_mark_ready_owner_bypass_accepts_empty_body(signed_in_client, state_persistence):
+    """Owners hold ``claim.mark_ready_skip_gates`` by default — POST with no
+    body must succeed even when the validation segs would normally block.
+    The handler skips the count gate AND the Pydantic validation when the
+    bypass capability is held."""
+    _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-owner")])
+
+    client, _ = signed_in_client(hf_user_id="u-owner", login="owner_u", role="owner")
+    # NOTE: deliberately don't mock validate_reciter_segments — the bypass
+    # path should never call it. If the handler dropped the bypass branch
+    # this test would fail with "no segments found on bucket".
+    resp = client.post(
+        "/api/mark-ready/test_slug",
+        headers={"Origin": "http://localhost"},
+        json={},
+    )
+    assert resp.status_code == 200, resp.data
+    assert json.loads(resp.data)["marked_ready"] is True
+
+
+def test_mark_ready_owner_bypass_persists_bypass_used(signed_in_client, state_persistence):
+    """The handler must stamp ``bypass_used=1`` on the open claim so the
+    admin Reviews drawer can render the bypass pill."""
+    from services.db import repo_claims
+
+    _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-owner")])
+    client, _ = signed_in_client(hf_user_id="u-owner", login="owner_u", role="owner")
+    resp = client.post(
+        "/api/mark-ready/test_slug",
+        headers={"Origin": "http://localhost"},
+        json={},
+    )
+    assert resp.status_code == 200, resp.data
+
+    open_claim = repo_claims.get_open_claim("test_slug")
+    assert open_claim is not None
+    assert open_claim["mark_ready_bypass_used"] == 1
+    # No checklist persisted on a bypass submission.
+    assert open_claim["mark_ready_checklist"] is None
+
+
+def test_mark_ready_non_owner_still_requires_form_body(
+    signed_in_client, state_persistence, _clean_validation,
+):
+    """A contributor without the override capability still hits the
+    Pydantic gate — empty body → 400. Sanity check that the bypass path
+    isn't accidentally exposed."""
+    _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
+
+    client, _ = signed_in_client(hf_user_id="u-1", login="alice")
+    resp = client.post(
+        "/api/mark-ready/test_slug",
+        headers={"Origin": "http://localhost"},
+        json={},
+    )
+    assert resp.status_code == 400
+    payload = json.loads(resp.data)
+    assert payload["error"] == "marked_ready payload invalid"
+
+
+def test_mark_ready_owner_bypass_predicate_surfaces(signed_in_client, state_persistence):
+    """``can_skip_mark_ready_gates`` must be true for owners holding a claim,
+    false for the contributor assignee, and false for any non-claim-holder."""
+    _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-owner")])
+    client, _ = signed_in_client(hf_user_id="u-owner", login="owner_u", role="owner")
+    resp = client.get("/api/reciter-task/test_slug")
+    preds = json.loads(resp.data)["predicates"]
+    assert preds["can_mark_ready"] is True
+    assert preds["can_skip_mark_ready_gates"] is True
+
+    # Re-seed with a contributor claim-holder. Same role test should
+    # surface bypass=False.
+    _replace_state([_row("contrib_slug", state="under_review", assignee_hf_id="u-2")])
+    client2, _ = signed_in_client(hf_user_id="u-2", login="bob")
+    resp = client2.get("/api/reciter-task/contrib_slug")
+    preds = json.loads(resp.data)["predicates"]
+    assert preds["can_mark_ready"] is True
+    assert preds["can_skip_mark_ready_gates"] is False
+
+
+# ---------------------------------------------------------------------------
 # reciter-task
 # ---------------------------------------------------------------------------
 
@@ -417,6 +583,7 @@ def test_reciter_task_predicates_anonymous(flask_client):
         "can_edit_as_admin": False,
         "can_edit_as_owner": False,
         "can_mark_ready": False,
+        "can_skip_mark_ready_gates": False,
         "can_unmark_ready": False,
         "can_release": False,
     }

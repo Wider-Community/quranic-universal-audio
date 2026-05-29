@@ -281,27 +281,46 @@
             </section>
 
             <!-- Mark-ready submission (visible only when the reviewer has
-                 submitted the form on the open claim). Labels come from the
-                 same copy module the reviewer saw — single source of truth. -->
+                 submitted the form on the open claim, OR when an owner used
+                 the bypass to skip the form). Labels come from the same copy
+                 module the reviewer saw — single source of truth.
+
+                 Bypass submissions (`sub.bypass_used`) carry `checklist=null`;
+                 we render an "owner bypass" pill and a single explanatory
+                 line in place of the checklist tick list. The two comment
+                 boxes still render when populated, regardless of mode. -->
             {#if detail.current_claim?.mark_ready_submission}
                 {@const sub = detail.current_claim.mark_ready_submission}
-                <section class="dsection mr-submission">
+                {@const checklist = sub.checklist}
+                <section class="dsection mr-submission" class:mr-bypass={sub.bypass_used}>
                     <h3 class="dsection-head">
                         Mark-ready submission
+                        {#if sub.bypass_used}
+                            <span class="mr-bypass-pill" title="Submitted with the owner-bypass capability">
+                                owner bypass
+                            </span>
+                        {/if}
                         {#if detail.current_claim.marked_ready_at}
                             <span class="aside">submitted {fmtRelative(detail.current_claim.marked_ready_at)}</span>
                         {/if}
                     </h3>
-                    <ul class="mr-checklist">
-                        {#each CHECKLIST_ORDER as key (key)}
-                            <li class="mr-check-row" class:done={sub.checklist[key]}>
-                                <span class="mr-check-glyph" aria-hidden="true">
-                                    {sub.checklist[key] ? '✓' : '·'}
-                                </span>
-                                <span class="mr-check-label">{checklistLabelFor(key)}</span>
-                            </li>
-                        {/each}
-                    </ul>
+                    {#if sub.bypass_used || !checklist}
+                        <p class="mr-bypass-line">
+                            Submitted via owner bypass — the form checklist and the
+                            zero-count validation gates were skipped.
+                        </p>
+                    {:else}
+                        <ul class="mr-checklist">
+                            {#each CHECKLIST_ORDER as key (key)}
+                                <li class="mr-check-row" class:done={checklist[key]}>
+                                    <span class="mr-check-glyph" aria-hidden="true">
+                                        {checklist[key] ? '✓' : '·'}
+                                    </span>
+                                    <span class="mr-check-label">{checklistLabelFor(key)}</span>
+                                </li>
+                            {/each}
+                        </ul>
+                    {/if}
                     {#if (sub.comment_checks ?? '').trim()}
                         <div class="mr-comment">
                             <div class="mr-comment-label">{markReadyCopy.comments.checks.label}</div>
@@ -695,6 +714,31 @@
         background: var(--canvas-inset);
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
+    }
+    .mr-submission.mr-bypass {
+        border-color: oklch(from var(--state-warn-fg) l c h / 0.4);
+        background: oklch(from var(--state-warn-fg) l c h / 0.05);
+    }
+    .mr-bypass-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        margin-left: var(--s-2);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--state-warn-fg);
+        background: oklch(from var(--state-warn-fg) l c h / 0.12);
+        border: 1px solid oklch(from var(--state-warn-fg) l c h / 0.4);
+        border-radius: var(--r-pill);
+    }
+    .mr-bypass-line {
+        margin: 0 0 var(--s-3);
+        font-size: var(--fs-meta);
+        font-style: italic;
+        color: var(--text-secondary);
+        line-height: var(--lh-normal);
     }
     .mr-checklist {
         list-style: none;

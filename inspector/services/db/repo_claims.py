@@ -91,15 +91,20 @@ def set_marked_ready(
     checklist_json: str | None = None,
     comment_checks: str = "",
     comment_issues: str = "",
+    bypass_used: bool = False,
 ) -> None:
     """Stamp / clear ``marked_ready_at`` AND the submission columns on the
     open claim.
 
     When ``ready`` is True: stamps ``marked_ready_at`` and writes the
     submission columns. Callers building the submission write should
-    JSON-encode the checklist via ``_serde.json_dumps``.
+    JSON-encode the checklist via ``_serde.json_dumps``. Pass
+    ``bypass_used=True`` when the submission came from a holder of the
+    ``claim.mark_ready_skip_gates`` capability — ``checklist_json`` will
+    typically be ``None`` in that case (the bypass path doesn't carry
+    one).
 
-    When ``ready`` is False (unmark): clears all four columns. The closed
+    When ``ready`` is False (unmark): clears all five columns. The closed
     history row (if any) keeps its prior submission — only the OPEN
     claim is reset, mirroring how ``marked_ready_at`` already worked.
     """
@@ -107,14 +112,17 @@ def set_marked_ready(
         val = _serde.to_iso(at or _serde.now())
         get_conn().execute(
             "UPDATE claims SET marked_ready_at = ?, mark_ready_checklist = ?, "
-            "mark_ready_comment_checks = ?, mark_ready_comment_issues = ? "
+            "mark_ready_comment_checks = ?, mark_ready_comment_issues = ?, "
+            "mark_ready_bypass_used = ? "
             "WHERE slug = ? AND released_at IS NULL",
-            (val, checklist_json, comment_checks, comment_issues, slug),
+            (val, checklist_json, comment_checks, comment_issues,
+             1 if bypass_used else 0, slug),
         )
     else:
         get_conn().execute(
             "UPDATE claims SET marked_ready_at = NULL, mark_ready_checklist = NULL, "
-            "mark_ready_comment_checks = NULL, mark_ready_comment_issues = NULL "
+            "mark_ready_comment_checks = NULL, mark_ready_comment_issues = NULL, "
+            "mark_ready_bypass_used = NULL "
             "WHERE slug = ? AND released_at IS NULL",
             (slug,),
         )

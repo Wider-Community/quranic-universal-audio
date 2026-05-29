@@ -33,6 +33,7 @@ from services import catalog as catalog_service
 from services import permissions as permissions_service
 from services import predicates as predicates_service
 from services import state as state_service
+from services.auth import capabilities as capabilities_service
 
 from utils.decorators import require_same_origin
 
@@ -97,32 +98,48 @@ def release(slug: str):
 def mark_ready(slug: str):
     """Submit the mark-ready form for ``slug``.
 
-    Body MUST be a ``MarkReadyRequest``: a five-key checklist (all True) +
+    Body MUST be a ``MarkReadyRequest``: a six-key checklist (all True) +
     two optional comment strings. The state handler validates the payload,
     re-computes live validation category counts, and rejects with a
     structured 400 if either gate fails. The submission is persisted on
     the open claim row alongside ``marked_ready_at``.
+
+    Holders of ``claim.mark_ready_skip_gates`` (owners by default) may
+    POST an empty body — the handler skips the checklist + counts gates
+    and stamps ``bypass_used=True`` on the persisted submission. The
+    route's capability check is a UX shortcut; the handler always
+    re-checks via the resolver, so a tier losing the cap mid-flight
+    falls back to the normal gated path.
     """
     user, err = _require_user_or_401()
     if err is not None:
         return err
 
-    # Pydantic owns the wire-shape contract; route translates a malformed
-    # body into a 400 with the same envelope as the count-gated path.
     raw = request.get_json(silent=True) or {}
-    try:
-        submission = MarkReadyRequest.model_validate(raw)
-    except ValidationError as e:
-        return jsonify({
-            "error": "marked_ready payload invalid",
-            "details": {"validation_errors": e.errors()},
-        }), 400
+    bypass = capabilities_service.can(user, "claim.mark_ready_skip_gates")
+
+    if bypass:
+        # Pass whatever the body carried (typically empty) through to the
+        # handler; it skips Pydantic validation when bypass is in effect.
+        payload: dict = dict(raw) if isinstance(raw, dict) else {}
+    else:
+        # Pydantic owns the wire-shape contract; route translates a
+        # malformed body into a 400 with the same envelope as the
+        # count-gated path.
+        try:
+            submission = MarkReadyRequest.model_validate(raw)
+        except ValidationError as e:
+            return jsonify({
+                "error": "marked_ready payload invalid",
+                "details": {"validation_errors": e.errors()},
+            }), 400
+        payload = submission.model_dump()
 
     new_row = state_service.transition(
         slug,
         "reciter.marked_ready",
         actor=_actor_for(user),
-        payload=submission.model_dump(),
+        payload=payload,
     )
     return jsonify(_row_to_dict(new_row))
 

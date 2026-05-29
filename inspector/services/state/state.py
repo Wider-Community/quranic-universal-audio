@@ -402,20 +402,28 @@ def _persist_claim_diff(
     # marked_ready toggle on a still-held claim (same assignee).
     if new_assignee and before_assignee == new_assignee and new_row.marked_ready != before_ready:
         if new_row.marked_ready:
-            # mark-ready: payload is a validated MarkReadyRequest shape
-            # (the handler raises before reaching this point if not). Pull
-            # checklist + comments onto the open-claim row.
+            # mark-ready: payload was validated by the handler unless the
+            # owner-bypass branch ran (no checklist in that case). Pull
+            # whichever fields the payload carries.
+            bypass = bool(payload.get("bypass_used"))
             checklist = payload.get("checklist") or {}
-            checklist_json = _serde.json_dumps(checklist)
+            # Bypass submissions don't carry a checklist; persist NULL so
+            # the admin Reviews drawer can distinguish "submitted via
+            # bypass" from "form submission with empty checklist".
+            checklist_json = (
+                None if bypass or not checklist
+                else _serde.json_dumps(checklist)
+            )
             repo_claims.set_marked_ready(
                 new_row.slug,
                 ready=True,
                 checklist_json=checklist_json,
                 comment_checks=str(payload.get("comment_checks") or ""),
                 comment_issues=str(payload.get("comment_issues") or ""),
+                bypass_used=bypass,
             )
         else:
-            # unmark-ready: clears marked_ready_at + the three submission
+            # unmark-ready: clears marked_ready_at + the four submission
             # columns on the open claim. A subsequent re-mark writes fresh
             # values; the prior cycle's submission lives on the closed
             # history row (set_marked_ready only touches the OPEN claim).
@@ -723,9 +731,15 @@ def _h_marked_ready(slug, before, actor, payload, reason):
     """Reviewer mark-ready handler.
 
     Validates the submission payload (well-formed ``MarkReadyRequest`` with
-    all five checklist values True) and re-computes the five gated
-    validation category counts against the on-disk segs. Either gate
-    raises ``InvalidTransition`` so the reviewer sees a structured 400.
+    all six checklist values True) and re-computes the six gated validation
+    category counts against the on-disk segs. Either gate raises
+    ``InvalidTransition`` so the reviewer sees a structured 400.
+
+    Holders of ``claim.mark_ready_skip_gates`` (owners by default) skip
+    BOTH gates entirely — no checklist parsing, no count check. The
+    handler stamps ``bypass_used=True`` on the payload so
+    ``_persist_claim_diff`` writes it to the claim row, giving admins an
+    auditable record of which submissions came in via the bypass.
 
     The submission lives on the open claim row (persisted by
     ``_persist_claim_diff`` via the payload it threads through).
@@ -741,51 +755,84 @@ def _h_marked_ready(slug, before, actor, payload, reason):
     if before.marked_ready:
         raise InvalidTransition("already marked_ready")
 
-    # Lazy import: scripts.lib.schemas is a sibling import (already used
-    # elsewhere in this module), but the validation module pulls heavy
-    # bucket loaders — keep it off the top-level state.py import graph.
-    from scripts.lib.schemas import BLOCKING_COUNT_KEYS, MarkReadyRequest
-    from pydantic import ValidationError
+    # Owner-bypass shortcut: holders of ``claim.mark_ready_skip_gates``
+    # skip the form contract entirely. The route accepts an empty body
+    # in that case; we still re-check capabilities here (the handler is
+    # authoritative — the route's check is a UX shortcut to avoid a
+    # 400-then-retry envelope). We stamp ``bypass_used=True`` only on
+    # the bypass path so the non-bypass payload stays a clean
+    # ``MarkReadyRequest`` shape (which is ``extra="forbid"``); the
+    # non-bypass branch records ``bypass_used=False`` implicitly via
+    # ``_persist_claim_diff``'s ``payload.get("bypass_used")`` default.
+    from services.auth import capabilities as _capabilities
+    bypass = _capabilities.can(actor, "claim.mark_ready_skip_gates")
+    if bypass:
+        payload["bypass_used"] = True
 
-    try:
-        submission = MarkReadyRequest.model_validate(payload)
-    except ValidationError as e:
-        raise InvalidTransition(
-            "marked_ready payload invalid",
-            details={"validation_errors": e.errors()},
-        ) from e
+    if not bypass:
+        # Lazy import: scripts.lib.schemas is a sibling import (already used
+        # elsewhere in this module), but the validation module pulls heavy
+        # bucket loaders — keep it off the top-level state.py import graph.
+        from scripts.lib.schemas import BLOCKING_COUNT_KEYS, MarkReadyRequest
+        from pydantic import ValidationError
 
-    unchecked = [
-        k for k, v in submission.checklist.model_dump().items() if not v
-    ]
-    if unchecked:
-        raise InvalidTransition(
-            "checklist incomplete: all attestations must be checked",
-            details={"unchecked": unchecked},
+        try:
+            submission = MarkReadyRequest.model_validate(payload)
+        except ValidationError as e:
+            raise InvalidTransition(
+                "marked_ready payload invalid",
+                details={"validation_errors": e.errors()},
+            ) from e
+
+        unchecked = [
+            k for k, v in submission.checklist.model_dump().items() if not v
+        ]
+        if unchecked:
+            raise InvalidTransition(
+                "checklist incomplete: all attestations must be checked",
+                details={"unchecked": unchecked},
+            )
+
+        # Authoritative: re-compute live category counts against on-disk segs.
+        # The FE applies the same gate as a UX layer, but the server is the
+        # source of truth — a race against unsaved edits or a stale snapshot
+        # in the browser can mean the FE's view diverges.
+        from config import LOW_CONFIDENCE_THRESHOLD
+        from services.validation import validate_reciter_segments
+
+        result = validate_reciter_segments(slug)
+        if result is None:
+            raise InvalidTransition(
+                "marked_ready blocked: no segments found on bucket"
+            )
+
+        # ``category_counts.low_confidence`` is the length of the DETAIL list
+        # populated against ``LOW_CONFIDENCE_DETAIL_THRESHOLD = 1.0`` — i.e.
+        # every segment with confidence < 100%, often thousands. The FE
+        # accordion badge (and the form's blocking-counts panel) instead
+        # count items below the strict ``LOW_CONFIDENCE_THRESHOLD = 0.80``
+        # cutoff that drives the user's "is this blocking" intuition. The
+        # gate has to agree with what the reviewer just looked at, so
+        # recompute the LC count from the items list at the strict
+        # threshold; trusting ``category_counts.low_confidence`` directly
+        # would reject every reciter that has any segment with confidence
+        # in the 80–100% band — i.e. essentially all of them.
+        counts = dict(result.get("category_counts") or {})
+        lc_items = result.get("low_confidence") or []
+        counts["low_confidence"] = sum(
+            1 for it in lc_items
+            if (it.get("confidence") or 0.0) < LOW_CONFIDENCE_THRESHOLD
         )
-
-    # Authoritative: re-compute live category counts against on-disk segs.
-    # The FE applies the same gate as a UX layer, but the server is the
-    # source of truth — a race against unsaved edits or a stale snapshot
-    # in the browser can mean the FE's view diverges.
-    from services.validation import validate_reciter_segments
-
-    result = validate_reciter_segments(slug)
-    if result is None:
-        raise InvalidTransition(
-            "marked_ready blocked: no segments found on bucket"
-        )
-    counts = result.get("category_counts") or {}
-    nonzero = {
-        k: int(counts.get(k, 0))
-        for k in BLOCKING_COUNT_KEYS
-        if int(counts.get(k, 0)) > 0
-    }
-    if nonzero:
-        raise InvalidTransition(
-            "blocking validation counts must be zero before mark-ready",
-            details={"blocking_counts": nonzero},
-        )
+        nonzero = {
+            k: int(counts.get(k, 0))
+            for k in BLOCKING_COUNT_KEYS
+            if int(counts.get(k, 0)) > 0
+        }
+        if nonzero:
+            raise InvalidTransition(
+                "blocking validation counts must be zero before mark-ready",
+                details={"blocking_counts": nonzero},
+            )
 
     return _replace(before, marked_ready=True)
 

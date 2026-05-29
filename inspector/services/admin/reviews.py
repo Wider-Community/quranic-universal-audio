@@ -61,20 +61,28 @@ def _build_submission(row) -> MarkReadySubmission | None:
     """Assemble a ``MarkReadySubmission`` from a claims row, or None.
 
     Returns None when the row pre-dates the mark-ready form (legacy claims
-    with ``marked_ready_at`` set but no checklist JSON) or hasn't been
-    marked at all. The list-row helper skips reading the submission; the
-    drawer detail uses this directly.
+    with ``marked_ready_at`` set but neither a checklist NOR a bypass flag)
+    or hasn't been marked at all. The list-row helper skips reading the
+    submission; the drawer detail uses this directly.
+
+    Bypass submissions store ``mark_ready_checklist = NULL`` +
+    ``mark_ready_bypass_used = 1``; the returned object carries
+    ``checklist=None`` + ``bypass_used=True`` so the admin Reviews drawer
+    can render the bypass pill in lieu of the checklist list.
     """
-    raw = row["mark_ready_checklist"] if "mark_ready_checklist" in row.keys() else None
-    if not raw:
+    keys = row.keys()
+    raw_checklist = row["mark_ready_checklist"] if "mark_ready_checklist" in keys else None
+    bypass = bool(row["mark_ready_bypass_used"]) if "mark_ready_bypass_used" in keys else False
+
+    if not raw_checklist and not bypass:
         return None
-    checklist = _serde.json_loads(raw)
-    if not checklist:
-        return None
+
+    checklist = _serde.json_loads(raw_checklist) if raw_checklist else None
     return MarkReadySubmission(
         checklist=checklist,
         comment_checks=row["mark_ready_comment_checks"] or "",
         comment_issues=row["mark_ready_comment_issues"] or "",
+        bypass_used=bypass,
     )
 
 
@@ -180,7 +188,8 @@ def get_review_detail(slug: str) -> dict | None:
 
     current_row = conn.execute(
         "SELECT assignee_id, assignee_login_snapshot, claimed_at, marked_ready_at, "
-        "  mark_ready_checklist, mark_ready_comment_checks, mark_ready_comment_issues "
+        "  mark_ready_checklist, mark_ready_comment_checks, mark_ready_comment_issues, "
+        "  mark_ready_bypass_used "
         "FROM claims WHERE slug = ? AND released_at IS NULL",
         (slug,),
     ).fetchone()
@@ -197,7 +206,8 @@ def get_review_detail(slug: str) -> dict | None:
     history_rows = conn.execute(
         "SELECT assignee_id, assignee_login_snapshot, claimed_at, released_at, "
         "  marked_ready_at, close_reason, "
-        "  mark_ready_checklist, mark_ready_comment_checks, mark_ready_comment_issues "
+        "  mark_ready_checklist, mark_ready_comment_checks, mark_ready_comment_issues, "
+        "  mark_ready_bypass_used "
         "FROM claims WHERE slug = ? AND released_at IS NOT NULL "
         "ORDER BY claimed_at DESC",
         (slug,),

@@ -21,6 +21,7 @@
     import { get } from 'svelte/store';
 
     import { clickOutside } from '../../../../lib/actions/click-outside';
+    import { markReadyBypass } from '../../../../lib/api/claims-client';
     import type { ReciterTask } from '../../../../lib/api/reciter-task';
     import ClaimButton from '../../../../lib/components/ClaimButton.svelte';
     import type { CombinationSelection } from '../../../../lib/components/picker/combination-picker-types';
@@ -366,9 +367,24 @@
     }
     function onMarkReady(): void {
         if (chipActionBusy) return;
-        // Open the local form modal instead of POSTing directly. The
-        // modal owns the request; on success it calls `onMarkReadyDone`
-        // which bubbles up so the parent refreshes reciter-task.
+        // Owner-bypass shortcut: holders of ``claim.mark_ready_skip_gates``
+        // skip the modal entirely. POST an empty body, then bubble the
+        // existing ``markReady`` event so the parent refreshes reciter-task.
+        // ``claims-client.markReadyBypass`` surfaces its own error toast on
+        // failure — same envelope as the normal markReady path.
+        if (reciterTask?.predicates.can_skip_mark_ready_gates) {
+            const slug = $selectedReciter ?? '';
+            if (!slug) return;
+            chipActionBusy = 'mark';
+            markReadyBypass(slug)
+                .then(() => dispatch('markReady'))
+                .catch(() => {/* toast already surfaced */})
+                .finally(() => (chipActionBusy = ''));
+            return;
+        }
+        // Default path: open the form modal. The modal owns the request;
+        // on success it calls ``onMarkReadyDone`` which bubbles up so the
+        // parent refreshes reciter-task.
         markReadyOpen = true;
     }
     function onMarkReadyDone(): void {
@@ -477,7 +493,9 @@
                                 type="button"
                                 class="action ghost-accent"
                                 disabled={chipActionBusy !== ''}
-                                title="Submit the mark-ready form for an admin to review"
+                                title={reciterTask?.predicates.can_skip_mark_ready_gates
+                                    ? 'Mark ready as owner — skips the checklist and validation gates'
+                                    : 'Submit the mark-ready form for an admin to review'}
                                 on:click={onMarkReady}>Mark ready</button
                             >
                         {/if}

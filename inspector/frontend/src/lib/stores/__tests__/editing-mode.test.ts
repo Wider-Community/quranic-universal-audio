@@ -48,6 +48,7 @@ function _task(overrides: {
             can_edit_as_admin: false,
             can_edit_as_owner: false,
             can_mark_ready: false,
+            can_skip_mark_ready_gates: false,
             can_unmark_ready: false,
             can_release: false,
         },

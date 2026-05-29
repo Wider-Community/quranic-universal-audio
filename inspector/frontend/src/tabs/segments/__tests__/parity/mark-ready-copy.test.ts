@@ -70,7 +70,7 @@ describe('mark-ready copy module', () => {
     });
 
     it('blocking count keys exactly match the backend list', () => {
-        // The backend enforces the same five keys via BLOCKING_COUNT_KEYS
+        // The backend enforces the same six keys via BLOCKING_COUNT_KEYS
         // in scripts/lib/schemas/mark_ready.py — these must stay aligned.
         expect([...BLOCKING_COUNT_KEYS].sort()).toEqual([
             'basmala_amin',
@@ -78,6 +78,7 @@ describe('mark-ready copy module', () => {
             'cross_verse',
             'low_confidence',
             'low_confidence_v2',
+            'repetitions',
         ]);
     });
 

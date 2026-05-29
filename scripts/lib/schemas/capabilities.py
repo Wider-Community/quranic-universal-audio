@@ -252,6 +252,14 @@ CAPABILITIES: tuple[Capability, ...] = (
         contributor=True, maintainer=True,
     ),
     _c(
+        "claim.mark_ready_skip_gates", G_CLAIMS, "Skip mark-ready validation gates",
+        "Submit mark-ready without satisfying the form checklist or the "
+        "zero-count blocking-validation gate. Owners always hold this; "
+        "granting it to other tiers lets them bypass the safety rails — "
+        "use sparingly.",
+        contributor=False, maintainer=False,
+    ),
+    _c(
         "claim.unmark_ready", G_CLAIMS, "Unmark a claim",
         "Reopen your own marked-ready recitation to keep editing.",
         contributor=True, maintainer=True,

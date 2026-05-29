@@ -155,11 +155,18 @@ export interface AdminReviewClaimHistoryEntry {
  * Persisted shape of a mark-ready submission, read back by the admin
  * Reviews drawer. Cleared together with ``marked_ready_at`` on
  * unmark / release / reassign so a sent-back row presents as fresh.
+ *
+ * ``checklist`` is ``None`` for owner-bypass submissions (the holder of
+ * ``claim.mark_ready_skip_gates`` skipped the form entirely); the admin
+ * drawer renders a "submitted via owner bypass" pill in that case.
+ * ``bypass_used`` is the authoritative flag for that branch — the
+ * handler stamps it server-side, never trusting the FE to set it.
  */
 export interface MarkReadySubmission {
-  checklist: MarkReadyChecklist;
+  checklist?: MarkReadyChecklist | null;
   comment_checks?: string;
   comment_issues?: string;
+  bypass_used?: boolean;
   [k: string]: unknown;
 }
 /**

@@ -52,6 +52,13 @@ export interface Predicates {
     can_edit_as_admin: boolean;
     can_edit_as_owner: boolean;
     can_mark_ready: boolean;
+    /**
+     * Reviewer holds `claim.mark_ready_skip_gates`. When true, clicking
+     * Mark Ready POSTs directly with an empty body and skips the modal
+     * (no checklist, no blocking-counts gate). Owners hold this by default;
+     * other tiers only if the owner grants it via the Permissions tab.
+     */
+    can_skip_mark_ready_gates: boolean;
     can_unmark_ready: boolean;
     can_release: boolean;
 }

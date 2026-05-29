@@ -102,6 +102,21 @@ def can_unmark_ready(row, user) -> bool:
     )
 
 
+def can_skip_mark_ready_gates(row, user) -> bool:
+    """The reviewer holds ``claim.mark_ready_skip_gates`` AND would otherwise
+    be allowed to mark this row ready. Owners hold the capability by default;
+    the owner can grant it to other tiers via the Permissions tab.
+
+    Gated on ``can_mark_ready`` so the FE never surfaces the bypass shortcut
+    on a row the user can't even attempt to mark ready (wrong state, not the
+    claim holder, already marked, etc.). The segments footer reads this to
+    decide whether the Mark Ready button opens the modal or POSTs directly.
+    """
+    if not can_mark_ready(row, user):
+        return False
+    return _can(user, "claim.mark_ready_skip_gates")
+
+
 def can_release(row, user) -> bool:
     """Reviewer can release their own claim BEFORE they mark it ready.
 
@@ -130,6 +145,7 @@ def build_predicates(row, user, *, has_other_active_claim: bool) -> dict:
         "can_edit_as_admin": can_edit_as_admin(row, user),
         "can_edit_as_owner": can_edit_as_owner(row, user),
         "can_mark_ready": can_mark_ready(row, user),
+        "can_skip_mark_ready_gates": can_skip_mark_ready_gates(row, user),
         "can_unmark_ready": can_unmark_ready(row, user),
         "can_release": can_release(row, user),
     }

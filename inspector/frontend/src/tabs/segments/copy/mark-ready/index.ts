@@ -30,7 +30,7 @@ export const CHECKLIST_ORDER: readonly ChecklistKey[] = [
     'basmala_amin_intros',
 ] as const;
 
-/** Five validation `category_counts` keys that BLOCK submission. Mirrors
+/** Six validation `category_counts` keys that BLOCK submission. Mirrors
  *  `BLOCKING_COUNT_KEYS` on the backend. The reviewer must resolve or
  *  ignore each non-zero category before they can mark ready. */
 export const BLOCKING_COUNT_KEYS = [
@@ -39,6 +39,7 @@ export const BLOCKING_COUNT_KEYS = [
     'boundary_adj',
     'cross_verse',
     'basmala_amin',
+    'repetitions',
 ] as const;
 
 export type BlockingCountKey = (typeof BLOCKING_COUNT_KEYS)[number];
@@ -51,6 +52,7 @@ export const BLOCKING_LABELS: Record<BlockingCountKey, string> = {
     boundary_adj: 'May require boundary adjustment',
     cross_verse: 'Cross-verse',
     basmala_amin: 'Basmala + amin',
+    repetitions: 'Repetitions',
 };
 
 export interface MarkReadyCopy {

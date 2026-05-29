@@ -35,15 +35,18 @@ ChecklistKey = Literal[
     "basmala_amin_intros",
 ]
 
-# The five validation category_counts that gate submission. Both client
+# The six validation category_counts that gate submission. Both client
 # and server independently enforce these are zero — the server is
-# authoritative against the live segs on disk.
+# authoritative against the live segs on disk. ``repetitions`` is an
+# ignorable category like ``low_confidence``: any detected rep must be
+# split or marked ignored before the reviewer can mark ready.
 BLOCKING_COUNT_KEYS: tuple[str, ...] = (
     "low_confidence",
     "low_confidence_v2",
     "boundary_adj",
     "cross_verse",
     "basmala_amin",
+    "repetitions",
 )
 
 
@@ -88,10 +91,17 @@ class MarkReadySubmission(BaseModel):
     """Persisted shape of a mark-ready submission, read back by the admin
     Reviews drawer. Cleared together with ``marked_ready_at`` on
     unmark / release / reassign so a sent-back row presents as fresh.
+
+    ``checklist`` is ``None`` for owner-bypass submissions (the holder of
+    ``claim.mark_ready_skip_gates`` skipped the form entirely); the admin
+    drawer renders a "submitted via owner bypass" pill in that case.
+    ``bypass_used`` is the authoritative flag for that branch — the
+    handler stamps it server-side, never trusting the FE to set it.
     """
 
     model_config = ConfigDict(extra="allow")
 
-    checklist: MarkReadyChecklist
+    checklist: MarkReadyChecklist | None = None
     comment_checks: str = ""
     comment_issues: str = ""
+    bypass_used: bool = False

@@ -85,4 +85,13 @@ export const claim = (slug: string) => _post('claim', slug);
 export const release = (slug: string) => _post('release', slug);
 export const markReady = (slug: string, payload: MarkReadyRequest) =>
     _post('mark-ready', slug, payload as unknown as Record<string, unknown>);
+/**
+ * Owner-bypass mark-ready: POST with an empty body. The server checks
+ * the caller holds `claim.mark_ready_skip_gates` and, if so, skips the
+ * checklist validation + blocking-counts gate, stamping `bypass_used`
+ * onto the persisted submission. Call this only when the corresponding
+ * predicate `can_skip_mark_ready_gates` is true; otherwise the server
+ * will reject with a 400 (Pydantic validation failure on empty body).
+ */
+export const markReadyBypass = (slug: string) => _post('mark-ready', slug, {});
 export const unmarkReady = (slug: string) => _post('unmark-ready', slug);
