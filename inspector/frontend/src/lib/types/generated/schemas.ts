@@ -28,6 +28,23 @@ export interface AdminActivityEvent {
   reason?: string | null;
   [k: string]: unknown;
 }
+export interface AdminCapabilityRow {
+  id: string;
+  label: string;
+  description: string;
+  anon_eligible?: boolean;
+  owner_only_fixed?: boolean;
+  anonymous?: AdminCapabilityTierState;
+  contributor?: AdminCapabilityTierState;
+  maintainer?: AdminCapabilityTierState;
+  [k: string]: unknown;
+}
+export interface AdminCapabilityTierState {
+  allowed?: boolean | null;
+  applicable?: boolean;
+  is_default?: boolean;
+  [k: string]: unknown;
+}
 export interface AdminClaimEvent {
   slug: string;
   claimed_at?: string | null;
@@ -35,6 +52,16 @@ export interface AdminClaimEvent {
   marked_ready_at?: string | null;
   close_reason?: string | null;
   outcome?: string;
+  [k: string]: unknown;
+}
+export interface AdminPermissionGroup {
+  group: string;
+  capabilities?: AdminCapabilityRow[];
+  [k: string]: unknown;
+}
+export interface AdminPermissionsResponse {
+  groups?: AdminPermissionGroup[];
+  tiers?: string[];
   [k: string]: unknown;
 }
 export interface AdminRequestCounts {

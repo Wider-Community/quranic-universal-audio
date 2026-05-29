@@ -759,3 +759,34 @@ def set_admin_requests_cache(db_seq: int, status: str, value: object) -> None:
 def invalidate_admin_requests_cache() -> None:
     with _admin_requests_lock:
         _admin_requests.clear()
+
+
+# ---------------------------------------------------------------------------
+# Capability matrix — the resolved (registry default ⊕ permission_overrides)
+# grant map, keyed by db_seq. Any committed write bumps db_seq, so an override
+# toggle transparently invalidates this on the next read (no explicit hook).
+# A single tuple suffices: the matrix is process-global, not per-caller.
+# ---------------------------------------------------------------------------
+
+_capability_matrix_lock = _threading.Lock()
+_capability_matrix: "tuple[int, object] | None" = None
+
+
+def get_capability_matrix_cache(db_seq: int):
+    """Return the cached capability matrix iff built at ``db_seq``, else None."""
+    with _capability_matrix_lock:
+        if _capability_matrix is not None and _capability_matrix[0] == db_seq:
+            return _capability_matrix[1]
+    return None
+
+
+def set_capability_matrix_cache(db_seq: int, value: object) -> None:
+    global _capability_matrix
+    with _capability_matrix_lock:
+        _capability_matrix = (db_seq, value)
+
+
+def invalidate_capability_matrix_cache() -> None:
+    global _capability_matrix
+    with _capability_matrix_lock:
+        _capability_matrix = None

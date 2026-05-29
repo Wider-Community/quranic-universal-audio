@@ -28,7 +28,7 @@ from services import permissions
 from routes._admin_helpers import (
     MIN_REASON_CHARS as _MIN_REASON_CHARS,
     actor_for as _actor_for,
-    require_role_or_403 as _require_role_or_403,
+    require_capability_or_403 as _require_capability_or_403,
     require_signed_in_or_401 as _require_signed_in_or_401,
     validate_reason as _validate_reason,
 )
@@ -63,9 +63,9 @@ def access_grant():
     # access.grant() also enforces this, but we surface the 403 here for a
     # cleaner client experience (skip the validation path).
     if role == Role.OWNER:
-        err_resp = _require_role_or_403(user, Role.OWNER)
+        err_resp = _require_capability_or_403(user, "roles.assign_owner")
     else:
-        err_resp = _require_role_or_403(user, Role.MAINTAINER, Role.OWNER)
+        err_resp = _require_capability_or_403(user, "roles.assign_maintainer")
     if err_resp is not None:
         return err_resp
 
@@ -96,7 +96,7 @@ def access_revoke():
     user, err = _require_signed_in_or_401()
     if err is not None:
         return err
-    err_resp = _require_role_or_403(user, Role.MAINTAINER, Role.OWNER)
+    err_resp = _require_capability_or_403(user, "roles.assign_maintainer")
     if err_resp is not None:
         return err_resp
 
@@ -133,7 +133,7 @@ def access_update():
     user, err = _require_signed_in_or_401()
     if err is not None:
         return err
-    err_resp = _require_role_or_403(user, Role.MAINTAINER, Role.OWNER)
+    err_resp = _require_capability_or_403(user, "roles.assign_maintainer")
     if err_resp is not None:
         return err_resp
 

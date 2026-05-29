@@ -23,6 +23,7 @@ from scripts.lib.schemas import ReciterState, Role, Visibility
 from services import auth as auth_service
 from services import permissions
 from services import state as state_service
+from services.auth import capabilities as _capabilities
 
 
 def require_same_origin(fn):
@@ -98,6 +99,56 @@ def require_role(*allowed: Role):
     return wrap
 
 
+def require_capability(capability: str):
+    """Gate a route on a single capability via the resolver (``can()``).
+
+    The data-driven successor to ``require_role`` — instead of a fixed tier
+    list, the route names a capability and the owner-configurable matrix
+    decides which tiers pass. The wrapped handler receives the resolved
+    ``User | None`` as its first positional argument (same shape as
+    ``require_role``; ``None`` only for an ``anon_eligible`` capability hit by
+    an anonymous caller):
+
+        @require_capability("reviews.view")
+        def handler(user, slug): ...
+
+    Envelopes (matching ``require_role``):
+    - 401 ``{"error": "authentication required"}`` — anonymous caller on a
+      capability that is NOT anon-eligible (an action endpoint).
+    - 403 ``{"error": "insufficient permission for this action"}`` — signed-in
+      caller whose tier lacks the capability, or an anonymous caller denied an
+      anon-eligible (view) capability.
+
+    Pair with ``@require_same_origin`` on POST/PUT/DELETE for CSRF defense.
+    Unknown capability id raises at decoration time (a programmer error).
+    """
+    from scripts.lib.schemas import CAPABILITIES_BY_ID
+
+    cap = CAPABILITIES_BY_ID.get(capability)
+    if cap is None:
+        raise ValueError(f"require_capability: unknown capability {capability!r}")
+    anon_eligible = cap.anon_eligible
+
+    def wrap(fn):
+        @wraps(fn)
+        def inner(*args, **kwargs):
+            from flask import jsonify
+
+            user = auth_service.current_user()
+            if user is None and not anon_eligible:
+                return jsonify({"error": "authentication required"}), 401
+            if not _capabilities.can(user, capability):
+                return (
+                    jsonify({"error": "insufficient permission for this action"}),
+                    403,
+                )
+            return fn(user, *args, **kwargs)
+
+        return inner
+
+    return wrap
+
+
 def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = False):
     """Gate a route on (signed in + editable row + authorised actor).
 
@@ -141,8 +192,15 @@ def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = Fa
                     abort(403, description="reciter is marked ready for publish and frozen")
                 if row.visibility != Visibility.PUBLIC:
                     abort(403, description="reciter visibility blocks edits")
-                is_assignee = permissions.is_claim_holder(user, row)
-                is_admin = admin_bypass and permissions.is_maintainer(user)
+                # Tier dimension is now capability-driven; claim-holder stays
+                # an ownership check. A contributor whose ``segment.edit`` was
+                # toggled off loses self-edit; the admin-bypass arm consults
+                # ``segment.edit_as_admin`` instead of a hardcoded maintainer
+                # tier. Owners never reach here (handled above).
+                is_assignee = permissions.is_claim_holder(user, row) and _capabilities.can(
+                    user, "segment.edit"
+                )
+                is_admin = admin_bypass and _capabilities.can(user, "segment.edit_as_admin")
                 if not (is_assignee or is_admin):
                     abort(403, description="reciter is not editable by this user")
             g.current_user = user

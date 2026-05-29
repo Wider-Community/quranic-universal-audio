@@ -23,11 +23,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Iterable, TypedDict
 
-from scripts.lib.schemas import Role
-
 from . import activity_classification
 from services.state import catalog as catalog_service
-from services.auth import permissions
 from services.db import _serde, repo_activity, repo_transitions
 
 
@@ -133,17 +130,17 @@ def _to_card(
 def all_public_cards(
     months: int = 2,
     *,
-    caller_role: Role | None = None,
+    include_identity: bool = False,
 ) -> list[PublicActivityCard]:
     """Read + filter + transform audit log into the public feed.
 
     Records tombstoned in the activity-state store are filtered out for
-    everyone. When ``caller_role`` is an owner, each card gets the actor's
-    HF login; otherwise identity stays redacted.
+    everyone. When ``include_identity`` is True, each card gets the actor's
+    HF login; otherwise identity stays redacted. The caller (route layer)
+    resolves the ``identity.see_actor`` capability and passes the bool — this
+    service stays Flask- and capability-agnostic.
     """
-    include_actor = caller_role is not None and permissions.is_owner(
-        type("_R", (), {"role": caller_role})()
-    )
+    include_actor = include_identity
     deleted_ids = repo_activity.deleted_set()
 
     cards: list[PublicActivityCard] = []
@@ -164,10 +161,10 @@ def feed(
     cursor: int = 0,
     limit: int = 50,
     *,
-    caller_role: Role | None = None,
+    include_identity: bool = False,
 ) -> dict:
     """Return one page of the feed plus a next cursor."""
-    cards = all_public_cards(caller_role=caller_role)
+    cards = all_public_cards(include_identity=include_identity)
     total = len(cards)
     page = cards[cursor : cursor + limit]
     next_cursor = cursor + limit if cursor + limit < total else None

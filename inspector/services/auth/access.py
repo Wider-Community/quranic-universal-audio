@@ -78,6 +78,22 @@ def _require_role(actor: Actor, *allowed: Role) -> None:
         )
 
 
+def _require_capability(actor: Actor, capability: str) -> None:
+    """Capability gate raising ``NotAuthorized`` (the access-layer error
+    contract). Data-driven successor to ``_require_role`` so role mutation is
+    governed by ``roles.assign_maintainer`` / ``roles.assign_owner`` and the
+    picker + ``/api/admin/access/*`` endpoints enforce the SAME capabilities.
+    The structural owner-on-owner asymmetry below is NOT a capability — it
+    stays enforced regardless of any toggle. Lazy import avoids the
+    access↔capabilities import cycle at package init."""
+    from . import capabilities as _capabilities
+
+    if not _capabilities.can(actor, capability):
+        raise NotAuthorized(
+            f"actor role {actor.role!r} lacks capability {capability!r}"
+        )
+
+
 # ---- Mutations ----
 
 
@@ -94,9 +110,9 @@ def grant(
     if role == Role.CONTRIBUTOR:
         raise AccessError("CONTRIBUTOR is implicit; do not grant it explicitly")
     if role == Role.OWNER:
-        _require_role(actor, Role.OWNER)
+        _require_capability(actor, "roles.assign_owner")
     else:
-        _require_role(actor, Role.MAINTAINER, Role.OWNER)
+        _require_capability(actor, "roles.assign_maintainer")
 
     with _sync.durable_transaction():
         existing = repo_access.find_member(hf_user_id)
@@ -141,7 +157,7 @@ def revoke(
     claims are left untouched: a contributor is a valid claim holder, so a
     demoted reviewer keeps their work-in-progress. Only the role assignment is
     dropped + audited."""
-    _require_role(actor, Role.MAINTAINER, Role.OWNER)
+    _require_capability(actor, "roles.assign_maintainer")
     # Lazy import: avoids a state↔access import cycle at package init.
     from services.state import state as _state_service
 
@@ -190,9 +206,9 @@ def update(
     reason: str | None = None,
 ) -> Member:
     """Refresh login cache or change role tier on an active member."""
-    _require_role(actor, Role.MAINTAINER, Role.OWNER)
+    _require_capability(actor, "roles.assign_maintainer")
     if role == Role.OWNER:
-        _require_role(actor, Role.OWNER)
+        _require_capability(actor, "roles.assign_owner")
 
     with _sync.durable_transaction():
         target = repo_access.find_member(hf_user_id)

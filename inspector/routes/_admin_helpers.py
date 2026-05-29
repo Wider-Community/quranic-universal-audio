@@ -39,6 +39,18 @@ def require_role_or_403(user, *allowed: Role):
     return None
 
 
+def require_capability_or_403(user, capability: str):
+    """Return ``None`` if ``user`` holds ``capability`` (via the resolver), else
+    a 403 tuple. Capability-based sibling of ``require_role_or_403`` for routes
+    that gate inline rather than through the ``@require_capability`` decorator.
+    """
+    from services.auth import capabilities as _capabilities
+
+    if not _capabilities.can(user, capability):
+        return jsonify({"error": "insufficient permission for this action"}), 403
+    return None
+
+
 def actor_for(user) -> Actor:
     return Actor(
         hf_user_id=user.hf_user_id,

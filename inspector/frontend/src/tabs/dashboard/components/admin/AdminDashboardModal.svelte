@@ -1,18 +1,34 @@
 <script lang="ts">
-    /** Admin dashboard modal: wide Modal shell + top tab strip. Only the Users
-     * compartment ships now; the rest are disabled placeholders for the shape. */
+    /** Admin dashboard modal: wide Modal shell + top tab strip. The Permissions
+     * tab is owner-only — maintainers don't see it at all (the
+     * ``manage_permissions`` capability is owner-only fixed). */
     import Modal from '../../../../lib/components/Modal.svelte';
+    import { isOwner } from '../../../../lib/stores/current-user';
     import { adminDashboard, type AdminTab } from '../../stores/admin-dashboard.svelte';
+    import PermissionsCompartment from './PermissionsCompartment.svelte';
     import RequestsCompartment from './RequestsCompartment.svelte';
     import ReviewsCompartment from './reviews/ReviewsCompartment.svelte';
     import UsersCompartment from './UsersCompartment.svelte';
 
-    const TABS: { id: AdminTab; label: string; enabled: boolean }[] = [
+    type TabDef = { id: AdminTab; label: string; enabled: boolean; ownerOnly?: boolean };
+
+    const ALL_TABS: TabDef[] = [
         { id: 'users', label: 'Users', enabled: true },
         { id: 'requests', label: 'Requests', enabled: true },
         { id: 'reviews', label: 'Reviews', enabled: true },
-        { id: 'permissions', label: 'Permissions', enabled: false },
+        { id: 'permissions', label: 'Permissions', enabled: true, ownerOnly: true },
     ];
+
+    // Owner-only tabs vanish entirely for non-owners (not a disabled stub).
+    const tabs = $derived(ALL_TABS.filter((t) => !t.ownerOnly || $isOwner));
+
+    // If the visible tab set changes out from under the active tab (e.g. a
+    // live owner→maintainer demotion with the modal open), snap back to Users.
+    $effect(() => {
+        if (!tabs.some((t) => t.id === adminDashboard.activeTab)) {
+            adminDashboard.setTab('users');
+        }
+    });
 </script>
 
 <Modal
@@ -24,7 +40,7 @@
     <div slot="header" class="am-head">
         <h2 class="am-title">Admin dashboard</h2>
         <nav class="am-tabs">
-            {#each TABS as t (t.id)}
+            {#each tabs as t (t.id)}
                 <button
                     class="am-tab"
                     class:active={adminDashboard.activeTab === t.id}
@@ -49,6 +65,8 @@
         <RequestsCompartment />
     {:else if adminDashboard.activeTab === 'reviews'}
         <ReviewsCompartment />
+    {:else if adminDashboard.activeTab === 'permissions' && $isOwner}
+        <PermissionsCompartment />
     {/if}
 </Modal>
 

@@ -85,6 +85,7 @@ HIDDEN_EVENTS: frozenset[str] = frozenset({
     "access.role_granted",
     "access.role_revoked",
     "access.role_updated",
+    "access.permission_changed",
     # Owner-only public-feed tombstone (the only remaining mutation against
     # the activity sidecars).
     "admin.activity_deleted",

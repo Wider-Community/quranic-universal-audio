@@ -21,23 +21,21 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify
 
-from scripts.lib.schemas import Role
-
 from services.admin import reviews as reviews_service
 
-from utils.decorators import require_role, require_same_origin
+from utils.decorators import require_capability, require_same_origin
 
 admin_reviews_bp = Blueprint("admin_reviews", __name__, url_prefix="/api/admin")
 
 
 @admin_reviews_bp.route("/reviews/list")
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_capability("reviews.view")
 def list_reviews(user):
     return jsonify(reviews_service.list_reviews(caller_hf_id=user.hf_user_id))
 
 
 @admin_reviews_bp.route("/reviews/unviewed-count", methods=["GET"])
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_capability("reviews.view")
 def reviews_unviewed_count(user):
     """Marked-ready entries the caller hasn't viewed — drives the entry-button
     dot + the Reviews tab pill. Polled, so never cached."""
@@ -49,7 +47,7 @@ def reviews_unviewed_count(user):
 
 
 @admin_reviews_bp.route("/reviews/<slug>")
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_capability("reviews.view")
 def review_detail(user, slug):
     detail = reviews_service.get_review_detail(slug)
     if detail is None:
@@ -58,14 +56,14 @@ def review_detail(user, slug):
 
 
 @admin_reviews_bp.route("/reviews/<slug>/validation")
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_capability("reviews.view")
 def review_validation(user, slug):
     return jsonify(reviews_service.get_review_validation(slug))
 
 
 @admin_reviews_bp.route("/reviews/<slug>/view", methods=["POST"])
 @require_same_origin
-@require_role(Role.MAINTAINER, Role.OWNER)
+@require_capability("reviews.view")
 def mark_review_viewed(user, slug):
     """Mark ``slug`` viewed for the calling admin (fired on first drawer open
     of that slug in a session — General or Ops). Idempotent at the row level

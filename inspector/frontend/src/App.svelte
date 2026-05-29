@@ -81,6 +81,16 @@
             setActiveTab(TAB_NAMES.DASHBOARD);
         }
         void loadCurrentUser();
+
+        // Re-resolve identity + capabilities when the tab regains focus, so an
+        // owner's permission toggle (and role changes) reflect in the UI
+        // without a manual reload — the backend already enforces immediately;
+        // this keeps the affordances in sync for an idle, already-loaded user.
+        const onVisible = (): void => {
+            if (document.visibilityState === 'visible') void loadCurrentUser();
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => document.removeEventListener('visibilitychange', onVisible);
     });
 </script>
 

@@ -25,19 +25,24 @@ if TYPE_CHECKING:  # pragma: no cover
     from .auth import User
 
 
-def _is_admin(user) -> bool:
-    if user is None or getattr(user, "role", None) is None:
-        return False
-    return permissions.is_maintainer(user)
+def _can(user, capability: str) -> bool:
+    """Resolve one capability for ``user`` (``None`` → anonymous). Lazy import
+    keeps the resolver (which pulls services.db + cache) off this module's
+    import-time graph — predicates is imported during ``services.auth`` init."""
+    from . import capabilities as _capabilities
+
+    return _capabilities.can(user, capability)
 
 
 def can_claim(row, user, *, has_other_active_claim: bool = False) -> bool:
-    """``awaiting_review`` + ``public`` + signed in + (owner or no other active claim)."""
+    """``awaiting_review`` + ``public`` + ``claim.acquire`` + (owner or no other active claim)."""
     if user is None or row is None:
         return False
     if row.state != ReciterState.AWAITING_REVIEW:
         return False
     if row.visibility != Visibility.PUBLIC:
+        return False
+    if not _can(user, "claim.acquire"):
         return False
     if permissions.is_owner(user):
         return True  # owners exempt from one-claim-per-user rule
@@ -45,7 +50,8 @@ def can_claim(row, user, *, has_other_active_claim: bool = False) -> bool:
 
 
 def can_edit(row, user) -> bool:
-    """Active reviewer of the ``under_review`` row, not yet ``marked_ready``."""
+    """Active reviewer of the ``under_review`` row, not yet ``marked_ready``,
+    with the ``segment.edit`` capability for their tier."""
     if user is None or row is None:
         return False
     return (
@@ -53,12 +59,13 @@ def can_edit(row, user) -> bool:
         and not row.marked_ready
         and row.visibility == Visibility.PUBLIC
         and permissions.is_claim_holder(user, row)
+        and _can(user, "segment.edit")
     )
 
 
 def can_edit_as_admin(row, user) -> bool:
-    """Maintainer / owner editing any active claim row (admin override)."""
-    if not _is_admin(user) or row is None:
+    """Tier holding ``segment.edit_as_admin`` editing any active-claim row."""
+    if user is None or row is None or not _can(user, "segment.edit_as_admin"):
         return False
     return (
         row.state == ReciterState.UNDER_REVIEW
@@ -75,20 +82,23 @@ def can_edit_as_owner(row, user) -> bool:
 
 
 def can_mark_ready(row, user) -> bool:
-    """Same gate as can_edit + the row isn't already marked."""
+    """Same gate as can_edit + ``claim.mark_ready`` + not already marked."""
     if not can_edit(row, user):
+        return False
+    if not _can(user, "claim.mark_ready"):
         return False
     return not row.marked_ready
 
 
 def can_unmark_ready(row, user) -> bool:
-    """Reviewer can flip ready=False back to make edits."""
+    """Reviewer can flip ready=False back to make edits (``claim.unmark_ready``)."""
     if user is None or row is None:
         return False
     return (
         row.state == ReciterState.UNDER_REVIEW
         and row.marked_ready
         and permissions.is_claim_holder(user, row)
+        and _can(user, "claim.unmark_ready")
     )
 
 

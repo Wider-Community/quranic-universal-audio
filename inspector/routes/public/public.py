@@ -18,11 +18,13 @@ from __future__ import annotations
 
 from flask import Blueprint, Response, jsonify, request
 
-from services import auth as auth_service
 from services import permissions
 from services import public_activity as public_activity_service
 from services import public_state as public_state_service
 from services import search_normalize as search_normalize_service
+from services.auth import capabilities as cap_service
+
+from utils.decorators import require_capability
 
 
 public_bp = Blueprint("public", __name__, url_prefix="/api/public")
@@ -53,13 +55,15 @@ def _with_cache(payload, cache: str):
 
 
 @public_bp.route("/stats")
-def stats():
+@require_capability("view.catalog")
+def stats(user):
     """Counts per public bucket. Mutually exclusive at the reciter level."""
     return _with_cache(public_state_service.stats(), _LIST_CACHE)
 
 
 @public_bp.route("/activity")
-def activity():
+@require_capability("view.public_activity")
+def activity(user):
     """Paginated public activity feed.
 
     Six event kinds only — every other audit record is redacted at the
@@ -79,10 +83,11 @@ def activity():
     if limit < 1 or limit > 500:
         return jsonify({"error": "limit must be between 1 and 500"}), 400
 
-    caller = auth_service.current_user()
-    caller_role = permissions.role_of(caller) if caller is not None else None
+    # Identity disclosure on the rail is a toggleable capability (default
+    # owner-only). The service stays capability-agnostic — it takes a bool.
+    include_identity = cap_service.can(user, "identity.see_actor")
     payload = public_activity_service.feed(
-        cursor=cursor, limit=limit, caller_role=caller_role,
+        cursor=cursor, limit=limit, include_identity=include_identity,
     )
     resp = jsonify(payload)
     resp.headers["Cache-Control"] = "no-store"
@@ -90,7 +95,8 @@ def activity():
 
 
 @public_bp.route("/reciter/<reciter_id>")
-def reciter_detail(reciter_id: str):
+@require_capability("view.catalog")
+def reciter_detail(user, reciter_id: str):
     """Single-reciter detail payload for the dashboard detail page.
 
     For anonymous + contributor callers: returns the public shape, with
@@ -107,7 +113,7 @@ def reciter_detail(reciter_id: str):
     parameter is required (callers without a cookie just get the public
     shape).
     """
-    caller = auth_service.current_user()
+    caller = user
     is_admin = caller is not None and permissions.is_maintainer(caller)
 
     if is_admin:
@@ -128,7 +134,8 @@ def reciter_detail(reciter_id: str):
 
 
 @public_bp.route("/reciters")
-def reciters():
+@require_capability("view.catalog")
+def reciters(user):
     """Paginated reciter list.
 
     Query parameters:

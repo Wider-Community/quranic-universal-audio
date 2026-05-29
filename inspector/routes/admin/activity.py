@@ -15,13 +15,11 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
-from scripts.lib.schemas import Role
-
 from routes._admin_helpers import actor_for, validate_reason
 
 from services import activity_state as activity_state_service
 
-from utils.decorators import require_role, require_same_origin
+from utils.decorators import require_capability, require_same_origin
 
 
 public_activity_admin_bp = Blueprint(
@@ -31,7 +29,7 @@ public_activity_admin_bp = Blueprint(
 
 @public_activity_admin_bp.route("/<audit_id>", methods=["DELETE"])
 @require_same_origin
-@require_role(Role.OWNER)
+@require_capability("activity.delete")
 def delete_public(user, audit_id: str):
     """Owner-only: tombstone a public-feed card. Reason ≥10 chars required."""
     body = request.get_json(silent=True) or {}

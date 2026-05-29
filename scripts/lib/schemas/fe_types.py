@@ -19,6 +19,12 @@ committed to git so CI can ``git diff --exit-code`` it.
 """
 from __future__ import annotations
 
+from .admin_permissions import (
+    AdminCapabilityRow,
+    AdminCapabilityTierState,
+    AdminPermissionGroup,
+    AdminPermissionsResponse,
+)
 from .admin_requests import (
     AdminRequestCounts,
     AdminRequestRow,
@@ -74,7 +80,11 @@ from .segment import (
 __all__ = [
     "AdminActiveClaim",
     "AdminActivityEvent",
+    "AdminCapabilityRow",
+    "AdminCapabilityTierState",
     "AdminClaimEvent",
+    "AdminPermissionGroup",
+    "AdminPermissionsResponse",
     "AdminRequestCounts",
     "AdminRequestEvent",
     "AdminRequestRow",
