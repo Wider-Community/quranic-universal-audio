@@ -16,6 +16,20 @@ SURAH_INFO_PATH = DATA_DIR / "surah_info.json"
 # ``data_dir`` (bucket-resolved).
 RECITATION_SEGMENTS_PATH = DATA_DIR / "recitation_segments"
 
+# Dev-only: accordion-guide example flagging tool. Local scratch JSONL queue of
+# edit-history ops the maintainer flags while browsing the History panel, for
+# later conversion into guide examples. Lives under the gitignored ``.local/`` —
+# never the bucket, never git. Paired with the dev-only routes in
+# ``routes/auth/dev.py`` + ``services/segments/guide_flags.py``; absent on the
+# deployed Space (the routes 404 when dev mode is off). See
+# ``docs/reference/accordion-guides.md``.
+GUIDE_FLAGS_PATH = Path(
+    os.environ.get(
+        "INSPECTOR_GUIDE_FLAGS_PATH",
+        str(_REPO / ".local" / "guide_flags" / "flags.jsonl"),
+    )
+).resolve()
+
 # Bundled linguistic data (qpc_hafs, digital_khatt, phoneme_sub_costs) lives in
 # the repo's ``data/`` dir alongside ``surah_info.json``. Override the base dir
 # via INSPECTOR_QUA_DATA_PATH for standalone / Docker deployments.

@@ -35,6 +35,7 @@
         onPendingOpsDiscard,
     } from '../../utils/save/undo';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
+    import GuideFlagButton from './GuideFlagButton.svelte';
     import SegmentRow from '../list/SegmentRow.svelte';
     import HistoryOp from './HistoryOp.svelte';
 
@@ -102,6 +103,9 @@
         ? `${item.batchId}:${(group as EditOp[]).map((op) => op.op_id).join(',')}`
         : '';
     $: isUndoing = undoKey ? $undoPending.has(undoKey) : false;
+
+    // Dev-only guide flagging — typed view of the op group for GuideFlagButton.
+    $: flagGroup = group as EditOp[];
 </script>
 
 <div class="seg-history-batch" class:is-revert={item.isRevert}>
@@ -163,6 +167,10 @@
                     disabled={isUndoing}
                 >{isUndoing ? 'Undoing…' : 'Undo'}</button>
             {/if}
+        {/if}
+
+        {#if mode === 'history' && item.batchId && !item.isRevert && primary?.op_type !== 'pipeline'}
+            <GuideFlagButton chapter={item.chapter} batchId={item.batchId} group={flagGroup} />
         {/if}
     </div>
 
