@@ -11,8 +11,13 @@ The fixtures are a MINIMAL, PII-FREE slice of the real data:
   ``transitions``, ``claims``, ``requests``, ``role_assignments``,
   ``activity_*``, ``visitor_daily``) are NEVER read. A fail-safe allowlist
   means a future table can't leak by default.
-* Per-reciter content (``detailed.json``, ``segments.json``, the audio
-  manifest) for the chosen reciters — **no audio, no peaks** (kept tiny).
+* Per-reciter content for the chosen reciters: ``detailed.json`` + sidecar
+  JSON (``pipeline_meta``/``low_confidence_v2``/``auto_split_v1``), any
+  ``timestamps/`` shards, and the audio manifest. Excluded: ``audio/`` and
+  ``peaks/`` (heavy), and ``edit_history*.jsonl`` (heavy + holds actor PII).
+  Legacy top-level dirs (``wip/``, ``published/``, ``access/``, ``audit/``,
+  ``state/``, …) are never touched — fixtures only carry ``db/``,
+  ``reciters/<slug>/`` and ``catalog/audio_manifest/<slug>.json``.
 
 The result is staged locally. Publishing to the public dataset is a separate,
 explicit ``--publish`` step (outward-facing, hard to reverse).
@@ -209,6 +214,24 @@ def _copy_bucket_content(backend, slugs: list[str], stage_root: Path) -> dict:
             except Exception:
                 continue
             dst = stage_root / "reciters" / slug / fname
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(data)
+            n += 1
+        # Timestamps shards (released reciters only) — small per-chapter JSON
+        # that drives the Timestamps tab. No-op for non-released reciters.
+        try:
+            shards = backend.list_dir(f"reciters/{slug}/timestamps") or []
+        except Exception:
+            shards = []
+        for shard in shards:
+            name = Path(shard).name
+            if not name.endswith(".json"):
+                continue
+            try:
+                data = backend.read_bytes(f"reciters/{slug}/timestamps/{name}")
+            except Exception:
+                continue
+            dst = stage_root / "reciters" / slug / "timestamps" / name
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(data)
             n += 1
