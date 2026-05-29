@@ -23,6 +23,21 @@ confirm something that only happens in a deployed Space.
 > people pointing at one bucket would overwrite each other's data. So everyone
 > gets their own.
 
+### Workflow
+
+1. **Branch from `main`:** `git switch -c <your-name>/<topic> main`.
+2. **Develop in whichever tier fits** (see below).
+3. **Open a pull request into `main`** — once reviewed and merged, CI deploys
+   to production automatically.
+
+To preview a branch as a live deployment *before* merging, deploy it to your
+own Space (Tier 2):
+
+1. **Script (recommended):** `python inspector/scripts/deploy_space.py <your-space-id>`
+2. **HF CLI directly:** build the frontend (`cd inspector/frontend && npm run
+   build`), then `hf upload <your-space-id> . --repo-type space` from a staged
+   copy. The script does the staging for you, so option 1 is simpler.
+
 ### Tier 0 — Fixtures (no account, no token)
 
 Downloads a small public sample dataset and runs the app fully offline against
@@ -51,7 +66,7 @@ One command creates a private bucket under your account and seeds it from the
 same public sample:
 
 ```bash
-python inspector/scripts/bootstrap_dev_env.py <name>     # e.g. "alice"
+python inspector/scripts/bootstrap_dev_env.py <name>
 ```
 
 Then point your local app at it by adding two lines to `.env` at the repo root:
@@ -65,8 +80,6 @@ Run the app the same way as Tier 0 (`python inspector/app.py`). It now reads
 and writes your bucket. To start over, run
 `bootstrap_dev_env.py <name> --teardown` and bootstrap again.
 
-> Local dev **never touches the production bucket** — pointing a local process
-> at prod is refused unless you explicitly set `INSPECTOR_ALLOW_PROD_BUCKET=1`.
 
 ### Tier 2 — Your own dev Space (deployed)
 
@@ -112,23 +125,6 @@ For fast local reads the app auto-mounts your bucket as a local folder (via the
 `hf-mount` tool) if it's installed; otherwise it reads over the network. Either
 way it's automatic — you don't mount anything by hand.
 
-## Workflow
-
-1. **Branch from `main`:** `git switch -c <your-name>/<topic> main`.
-2. **Develop using whichever tier fits** (Tier 0 for frontend/UI and most
-   work; Tier 1 when you need real backend/DB/bucket behaviour; Tier 2 only to
-   confirm deployed behaviour).
-3. **Open a pull request into `main`.** Once it's reviewed and merged, CI
-   deploys to production automatically — you don't deploy by hand.
-
-To preview your branch as a live deployment *before* merging (Tier 2), push it
-to **your own** Space, either:
-
-1. **Script (recommended):** `python inspector/scripts/deploy_space.py <your-space-id>`
-2. **HF CLI directly:** build the frontend (`cd inspector/frontend && npm run
-   build`), then `hf upload <your-space-id> . --repo-type space` from a staged
-   copy. The script does the staging for you, so option 1 is simpler.
-
 ## Secrets
 
 For local Tiers 0–1 the only thing you ever set is your own `HF_TOKEN` (Tier 0
@@ -169,4 +165,4 @@ We're continuously improving the Inspector to make reviewing as smooth as possib
 - **Backend:** Python 3.11, Flask (Blueprints), `quranic-phonemizer`
 - **Frontend:** Svelte 5 (runes) + TypeScript + Vite — new code uses runes; some legacy Svelte 4 components remain
 - **Audio:** Web Audio API (waveform decoding/drawing), ffmpeg (server-side peak extraction)
-- **Storage:** SQLite (source of truth) synced to a Hugging Face bucket
+- **Storage:** SQLite synced to a Hugging Face bucket
