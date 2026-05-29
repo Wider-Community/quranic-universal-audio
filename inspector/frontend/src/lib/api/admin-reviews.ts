@@ -171,3 +171,41 @@ export async function reassignClaim(
         throw new Error(msg);
     }
 }
+
+// ---- Timestamps generation job ----
+
+export interface TimestampsJobLaunch {
+    job_id: string;
+    url: string | null;
+}
+
+/**
+ * Launch the in-container MFA timestamps job for an under-review reciter.
+ * Returns the launched job id; throws the server ``error`` string verbatim
+ * (including the 409 "a timestamps job is already running") so the caller can
+ * surface it inline. ``beams`` defaults server-side to ``[50]``.
+ */
+export async function generateTimestamps(
+    slug: string,
+    beams?: number[],
+): Promise<TimestampsJobLaunch> {
+    const resp = await fetch(
+        `/api/admin/generate-timestamps/${encodeURIComponent(slug)}`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(beams && beams.length ? { beams } : {}),
+        },
+    );
+    if (!resp.ok) {
+        let msg = `HTTP ${resp.status}`;
+        try {
+            const body = (await resp.json()) as { error?: string };
+            if (body?.error) msg = body.error;
+        } catch {
+            /* non-JSON body — keep status fallback */
+        }
+        throw new Error(msg);
+    }
+    return (await resp.json()) as TimestampsJobLaunch;
+}
