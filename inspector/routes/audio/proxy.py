@@ -23,9 +23,19 @@ The download-all + delete-cache + cache-status endpoints have been removed
 warm path. The 1-week post-RELEASED GC lives in
 ``services.audio_prefetch.sweep_due`` (see
 ``the inspector-audio skill``).
+
+Optional query params:
+
+* ``download=1`` — attach a ``Content-Disposition: attachment`` header so the
+  browser saves the chapter instead of playing it inline (drives the
+  dashboard footer's download button). Honoured on every branch (bucket,
+  in-memory, CDN stream-through).
+* ``chapter=<n>`` — surah number, used only to build the download filename
+  ``<reciter>-<NNN>.mp3``.
 """
 
 import logging
+import re
 from io import BytesIO
 
 import requests
@@ -46,7 +56,21 @@ _STREAM_CHUNK_BYTES = 64 * 1024
 _UPSTREAM_TIMEOUT_SECS = 30
 
 
-def _stream_cdn(url: str) -> Response:
+def _download_name(reciter: str, chapter: str) -> str:
+    """Build a safe download filename ``<reciter>-<NNN>.mp3``.
+
+    Strips the slug to ``[A-Za-z0-9_-]`` (the header value is otherwise
+    attacker-influenced) and zero-pads a numeric chapter to 3 digits. Falls
+    back to ``<reciter>.mp3`` when no usable chapter is supplied.
+    """
+    safe = re.sub(r"[^A-Za-z0-9_-]", "", reciter) or "surah"
+    chapter = chapter.strip()
+    if chapter.isdigit():
+        return f"{safe}-{int(chapter):03d}.mp3"
+    return f"{safe}.mp3"
+
+
+def _stream_cdn(url: str, disposition: str | None = None) -> Response:
     """Pull *url* from the CDN and stream it back to the caller as a
     same-origin response with explicit CORS headers. Forwards the browser's
     ``Range`` header so partial-content requests stay byte-range accurate.
@@ -79,6 +103,8 @@ def _stream_cdn(url: str) -> Response:
         "Cache-Control": immutable,
         "Access-Control-Allow-Origin": "*",
     }
+    if disposition:
+        out_headers["Content-Disposition"] = disposition
     # Forward Content-Length / Content-Range so the browser knows the
     # response size and which byte slice it just got (Werkzeug fills these
     # automatically only on local-file send_file paths).
@@ -117,6 +143,16 @@ def seg_audio_proxy(reciter):
     if not url:
         return jsonify({"error": "No url provided"}), 400
 
+    # When download=1, force a save (Content-Disposition: attachment) so the
+    # browser downloads the chapter instead of playing it inline — drives the
+    # dashboard footer's download button. `chapter` only shapes the filename.
+    download = request.args.get("download", "").strip().lower() in ("1", "true", "yes")
+    disposition = (
+        f'attachment; filename="{_download_name(reciter, request.args.get("chapter", ""))}"'
+        if download
+        else None
+    )
+
     src = audio_source.resolve(reciter, url)
     immutable = f"public, max-age={AUDIO_CACHE_MAX_AGE}, immutable"
 
@@ -133,6 +169,8 @@ def seg_audio_proxy(reciter):
         resp.headers["Cache-Control"] = immutable
         resp.headers["Accept-Ranges"] = "bytes"
         resp.headers["Access-Control-Allow-Origin"] = "*"
+        if disposition:
+            resp.headers["Content-Disposition"] = disposition
         return resp
 
     if src.data is not None:
@@ -145,6 +183,8 @@ def seg_audio_proxy(reciter):
         resp.headers["Cache-Control"] = immutable
         resp.headers["Accept-Ranges"] = "bytes"
         resp.headers["Access-Control-Allow-Origin"] = "*"
+        if disposition:
+            resp.headers["Content-Disposition"] = disposition
         return resp
 
-    return _stream_cdn(url)
+    return _stream_cdn(url, disposition)

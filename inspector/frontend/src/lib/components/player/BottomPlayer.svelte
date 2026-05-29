@@ -239,6 +239,38 @@
         onSpeedChange(next);
     }
 
+    /**
+     * Download the current chapter, delegating entirely to the browser's
+     * download manager — a transient <a download> click, no fetch/blob.
+     * Targets the real CDN file (entry.originUrl when routed via QF, else
+     * entry.url) through the same-origin audio-proxy with `download=1`, which
+     * adds `Content-Disposition: attachment` so the response saves instead of
+     * streaming inline.
+     */
+    function downloadSurah(): void {
+        const ctx = $playerContext;
+        const delivery = ctx.delivery;
+        const surahNum = ctx.surahNum;
+        if (!delivery || surahNum === null) return;
+        const entry = urls[String(surahNum)];
+        if (!entry) return;
+
+        const cdnUrl = entry.originUrl ?? entry.url;
+        const filename = `${delivery.slug}-${String(surahNum).padStart(3, '0')}.mp3`;
+        const href = cdnUrl.startsWith('/api/')
+            ? cdnUrl
+            : `/api/seg/audio-proxy/${delivery.slug}`
+              + `?url=${encodeURIComponent(cdnUrl)}&download=1&chapter=${surahNum}`;
+
+        const a = document.createElement('a');
+        a.href = href;
+        a.download = filename;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
     function onSeekFromBar(ev: CustomEvent<number>): void {
         dashPort.seek(ev.detail);
     }
@@ -260,6 +292,8 @@
     $: canNext = $playerContext.surahNum !== null
         && surahNums.indexOf($playerContext.surahNum) >= 0
         && surahNums.indexOf($playerContext.surahNum) < surahNums.length - 1;
+    $: canDownload = $playerContext.surahNum !== null
+        && !!urls[String($playerContext.surahNum)];
 </script>
 
 <div class="player" class:has-reciter={$playerContext.reciter !== null}>
@@ -323,6 +357,30 @@
                 on:click={cycleSpeed}
                 title="Playback speed"
             >{$playerContext.speed}×</button>
+            <button
+                type="button"
+                class="download-btn"
+                on:click={downloadSurah}
+                disabled={!canDownload}
+                aria-label="Download surah"
+                title="Download surah"
+            >
+                <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                >
+                    <path d="M12 3v12" />
+                    <path d="m7 10 5 5 5-5" />
+                    <path d="M5 21h14" />
+                </svg>
+            </button>
         </div>
     </div>
 
@@ -421,6 +479,27 @@
     .speed-btn:hover {
         border-color: var(--border-strong);
         color: var(--text-primary);
+    }
+    .download-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        color: var(--text-secondary);
+        background: transparent;
+        border: 0;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: color var(--t-fast), background var(--t-fast);
+    }
+    .download-btn:hover:not(:disabled) {
+        color: var(--text-primary);
+        background: var(--panel-2);
+    }
+    .download-btn:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
     }
     /* state-pill-btn removed: the delivery bucket is rendered inline
      * inside <ReciterChip>'s bottom row now, so keeping a second pill
