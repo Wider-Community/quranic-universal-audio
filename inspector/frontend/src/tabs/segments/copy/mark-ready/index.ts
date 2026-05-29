@@ -11,11 +11,10 @@
  * `MarkReadyChecklist` model in scripts/lib/schemas/mark_ready.py. A
  * parity test under __tests__ asserts both sides match.
  */
-import formMd from './form.md?raw';
+import type { MarkReadyChecklist } from '../../../../lib/types/generated/schemas';
 import checklistMd from './checklist.md?raw';
 import commentsMd from './comments.md?raw';
-
-import type { MarkReadyChecklist } from '../../../../lib/types/generated/schemas';
+import formMd from './form.md?raw';
 
 /** Literal union of checklist keys — single source of truth for the FE.
  *  Mirrors `ChecklistKey` on the backend. Adding a key requires updating

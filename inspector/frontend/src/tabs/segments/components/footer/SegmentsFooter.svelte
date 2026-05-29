@@ -23,7 +23,6 @@
     import { clickOutside } from '../../../../lib/actions/click-outside';
     import type { ReciterTask } from '../../../../lib/api/reciter-task';
     import ClaimButton from '../../../../lib/components/ClaimButton.svelte';
-    import MarkReadyModal from './MarkReadyModal.svelte';
     import type { CombinationSelection } from '../../../../lib/components/picker/combination-picker-types';
     import CombinationPicker from '../../../../lib/components/picker/CombinationPicker.svelte';
     import SurahPopover from '../../../../lib/components/player/SurahPopover.svelte';
@@ -73,6 +72,7 @@
         hideSavePreview,
         onSegSaveClick,
     } from '../../utils/save/actions';
+    import MarkReadyModal from './MarkReadyModal.svelte';
 
     export let reciterTask: ReciterTask | null = null;
     export let chipActionBusy: '' | 'unclaim' | 'mark' = '';

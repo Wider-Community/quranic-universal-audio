@@ -12,12 +12,12 @@
      */
     import { onDestroy, onMount } from 'svelte';
 
-    import { deletePublicActivity } from '../../../lib/api/public-activity-admin';
     import {
         fetchPublicActivity,
         type PublicActivityCard,
         type PublicEventKind,
     } from '../../../lib/api/public-activity';
+    import { deletePublicActivity } from '../../../lib/api/public-activity-admin';
     import { isOwner } from '../../../lib/stores/current-user';
     import { titleCaseSlug } from '../../../lib/utils/delivery-label';
     import { relativeTime } from '../../../lib/utils/relative-time';

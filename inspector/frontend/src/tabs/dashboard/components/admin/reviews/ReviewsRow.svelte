@@ -17,11 +17,11 @@
      * Ops drawer.
      */
     import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
-    import { adminDashboard } from '../../../stores/admin-dashboard.svelte';
-    import { LS_KEYS, TAB_NAMES } from '../../../../../lib/utils/constants';
-    import { setActiveTab } from '../../../../../lib/utils/active-tab';
-    import { selectedReciter } from '../../../../segments/stores/chapter';
     import type { AdminReviewRow } from '../../../../../lib/types/generated/schemas';
+    import { setActiveTab } from '../../../../../lib/utils/active-tab';
+    import { LS_KEYS, TAB_NAMES } from '../../../../../lib/utils/constants';
+    import { selectedReciter } from '../../../../segments/stores/chapter';
+    import { adminDashboard } from '../../../stores/admin-dashboard.svelte';
 
     let { row }: { row: AdminReviewRow } = $props();
 

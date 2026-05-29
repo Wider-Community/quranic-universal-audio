@@ -13,15 +13,15 @@
 
 import { describe, expect, it } from 'vitest';
 
+import type { MarkReadyChecklist } from '../../../../lib/types/generated/schemas';
 import {
     BLOCKING_COUNT_KEYS,
-    CHECKLIST_ORDER,
     BLOCKING_LABELS,
+    CHECKLIST_ORDER,
     emptyChecklist,
     isAllChecked,
     markReadyCopy,
 } from '../../copy/mark-ready';
-import type { MarkReadyChecklist } from '../../../../lib/types/generated/schemas';
 
 describe('mark-ready copy module', () => {
     it('exports exactly six checklist keys', () => {

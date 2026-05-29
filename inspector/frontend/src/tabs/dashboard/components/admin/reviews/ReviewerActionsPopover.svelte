@@ -17,7 +17,7 @@
      *
      * Mounted only when ``$isOwner`` (the parent gates the trigger).
      */
-    import { onMount, onDestroy } from 'svelte';
+    import { onDestroy,onMount } from 'svelte';
 
     import {
         forceReleaseClaim,
