@@ -67,6 +67,11 @@ _VOCAB_TABLES = ("riwayahs", "styles", "sources", "channels", "recording_context
 # exactly as a fresh ``init_db()`` created it: empty / default. Fail-safe.
 _SELECTIVE_TABLES = ("reciters", "deliveries", "delivery_states", "catalog_aliases")
 
+# State assigned to a chosen reciter that has no delivery_states row in the
+# source DB. Editable (opens in the Segments editor) and matches what aligned
+# reciters carry in the dev bucket.
+_DEFAULT_FIXTURE_STATE = "awaiting_review"
+
 # Per-reciter JSON pulled into the fixtures bucket tree (NO audio/, NO peaks/).
 _RECITER_FILES = (
     "detailed.json",
@@ -191,6 +196,27 @@ def build_fixtures_db(src_db_path: Path, out_db_path: Path, slugs: list[str]) ->
                 src, dst, "catalog_aliases",
                 f"WHERE new IN ({rid_marks})", tuple(reciter_ids),
             )
+        # The source DB may lack a delivery_states row for some chosen
+        # reciters (catalogued-but-never-projected gaps). Synthesize an
+        # editable state for any that are missing so every fixtures reciter
+        # opens in the Segments editor rather than rendering stateless.
+        have_state = {r[0] for r in dst.execute("SELECT slug FROM delivery_states")}
+        synthesized = 0
+        for slug in found_slugs:
+            if slug in have_state:
+                continue
+            row = dst.execute(
+                "SELECT added_at FROM deliveries WHERE slug=?", (slug,)
+            ).fetchone()
+            since = (row[0] if row and row[0] else "2024-01-01T00:00:00+00:00")
+            dst.execute(
+                "INSERT INTO delivery_states (slug, state, state_since, visibility) "
+                "VALUES (?, ?, ?, 'public')",
+                (slug, _DEFAULT_FIXTURE_STATE, since),
+            )
+            synthesized += 1
+        if synthesized:
+            counts["delivery_states_synthesized"] = synthesized
         dst.commit()
     finally:
         src.close()

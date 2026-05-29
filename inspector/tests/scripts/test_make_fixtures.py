@@ -46,7 +46,7 @@ def _seed_source(tmp_path: Path) -> Path:
     c.execute("INSERT INTO recording_contexts(slug, name) VALUES ('prayer','Prayer')")
     c.execute("INSERT INTO reciters(reciter_id, name_en) VALUES ('rec1','Reciter One')")
 
-    for slug in ("rec1_a", "rec1_b"):
+    for slug in ("rec1_a", "rec1_b", "rec1_c"):
         c.execute(
             "INSERT INTO deliveries(slug, reciter_id, riwayah, style, source, channel, "
             "audio_category, chapter_count, added_at, added_by_hf_id) "
@@ -131,3 +131,22 @@ def test_build_fixtures_db_rejects_unknown_slug(tmp_path):
     out = tmp_path / "fixtures" / "inspector.db"
     with pytest.raises(SystemExit):
         mod.build_fixtures_db(src, out, ["does_not_exist"])
+
+
+def test_build_fixtures_db_synthesizes_missing_state(tmp_path):
+    """rec1_c has a delivery but no delivery_states row in the source; the
+    builder must synthesize an editable state so it opens in the editor."""
+    mod = _load_script()
+    src = _seed_source(tmp_path)
+    out = tmp_path / "fixtures" / "inspector.db"
+
+    mod.build_fixtures_db(src, out, ["rec1_c"])
+    conn = sqlite3.connect(out)
+    try:
+        state = conn.execute(
+            "SELECT state FROM delivery_states WHERE slug='rec1_c'"
+        ).fetchone()
+        assert state is not None, "missing state row was not synthesized"
+        assert state[0] == mod._DEFAULT_FIXTURE_STATE
+    finally:
+        conn.close()
