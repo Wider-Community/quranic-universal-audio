@@ -19,9 +19,11 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 from services.admin import reviews as reviews_service
+from services.admin import timestamps_jobs as ts_jobs
+from services.state import state as state_service
 
 from utils.decorators import require_capability, require_same_origin
 
@@ -72,3 +74,43 @@ def mark_review_viewed(user, slug):
     if not ok:
         return jsonify({"error": "unknown slug"}), 404
     return jsonify({"ok": True})
+
+
+@admin_reviews_bp.route("/generate-timestamps/<slug>", methods=["POST"])
+@require_same_origin
+@require_capability("reviews.generate_timestamps")
+def generate_timestamps(user, slug):
+    """Launch the in-container MFA timestamps job for an under-review reciter.
+
+    Single-flight: rejects (409) if a job for ``slug`` is already running —
+    two jobs would race the same ``timestamps/`` shards. Does NOT transition
+    the reciter; the launched job id is linked via ``timestamps_job_ids``.
+    Returns 202 with ``{job_id, url}``.
+    """
+    if state_service.get_row(slug) is None:
+        return jsonify({"error": "unknown slug"}), 404
+    existing = ts_jobs.running_job_for(slug)
+    if existing:
+        return jsonify({"error": "a timestamps job is already running",
+                        "job_id": existing}), 409
+    body = request.get_json(silent=True) or {}
+    beams = body.get("beams")
+    if beams is not None and not (
+        isinstance(beams, list) and beams and all(isinstance(b, int) for b in beams)
+    ):
+        return jsonify({"error": "beams must be a non-empty list of ints"}), 400
+    try:
+        result = ts_jobs.launch(slug, beams=beams)
+    except Exception as exc:  # surfaced to the drawer
+        return jsonify({"error": str(exc)}), 502
+    return jsonify(result), 202
+
+
+@admin_reviews_bp.route("/jobs/<job_id>")
+@require_capability("reviews.generate_timestamps")
+def job_status(user, job_id):
+    """Live status + bounded log tail for a launched job (HF is authoritative)."""
+    try:
+        return jsonify(ts_jobs.job_status(job_id))
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502

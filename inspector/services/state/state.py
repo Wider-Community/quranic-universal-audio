@@ -154,6 +154,26 @@ def all_rows() -> list[ReciterRow]:
 # ----------------------------------------------------------------------
 
 
+def record_timestamps_job(slug: str, job_id: str) -> list[str]:
+    """Append ``job_id`` to a reciter's ``timestamps_job_ids`` WITHOUT a
+    lifecycle transition — the reciter stays in its current state.
+
+    This links a launched HF Job to the reciter (for the Reviews tab + status
+    proxy); it is job bookkeeping, not a state change, so it deliberately does
+    NOT route through ``transition()``. Persisted under ``durable_transaction``
+    (bucket sync). Returns the updated id list.
+    """
+    with _sync.durable_transaction():
+        row = get_row(slug)
+        if row is None:
+            raise UnknownReciter(slug)
+        ids = list(row.timestamps_job_ids)
+        if job_id and job_id not in ids:
+            ids.append(job_id)
+            repo_state.update_state(slug, timestamps_job_ids=ids)
+        return ids
+
+
 def _require_capability(actor: Actor, capability: str) -> None:
     """Tier-capability gate — the data-driven replacement for the legacy
     ``_require_maintainer`` / ``_require_owner`` / ``_require_contributor_or_higher``
