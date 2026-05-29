@@ -158,20 +158,27 @@ def verify(backend, bucket_id: str, token: str | None) -> bool:
 
 
 def delete_old(backend, bucket_id: str, token: str | None, *, dry_run: bool) -> int:
+    """Delete the legacy wip/ + published/ trees via batched bucket deletes."""
+    from huggingface_hub import batch_bucket_files  # type: ignore[import-not-found]
+
+    _CHUNK = 500
     deleted = 0
     for prefix in _LEGACY_PREFIXES:
         files = _list_files(bucket_id, token, prefix)
         log.info("delete %s/: %d files", prefix, len(files))
-        for src in files:
-            if dry_run:
+        if dry_run:
+            for src in files[:10]:
                 log.info("[dry-run] delete %s", src)
-                deleted += 1
-                continue
+            log.info("[dry-run] would delete %d files under %s/", len(files), prefix)
+            deleted += len(files)
+            continue
+        for i in range(0, len(files), _CHUNK):
+            batch = files[i:i + _CHUNK]
             try:
-                backend.delete(src)
-                deleted += 1
+                batch_bucket_files(bucket_id, delete=batch, token=token)
+                deleted += len(batch)
             except Exception as e:  # noqa: BLE001
-                log.error("delete FAILED %s: %s", src, e)
+                log.error("batch delete FAILED (%d files): %s", len(batch), e)
     log.info("delete summary: deleted=%d", deleted)
     return deleted
 
