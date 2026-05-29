@@ -144,7 +144,7 @@
                 <Avatar login={detail.login} role={shownRole} size={40} />
                 <div class="who">
                     <div class="top">
-                        <span class="login">@{detail.login ?? detail.hf_user_id}</span>
+                        <span class="login">@{detail.login ?? 'unknown'}</span>
                         <RolePicker
                             role={shownRole}
                             editable={canEditRole}

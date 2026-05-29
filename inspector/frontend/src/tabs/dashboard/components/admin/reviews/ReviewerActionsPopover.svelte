@@ -261,7 +261,7 @@
                         <span class="ucard-avatar fallback">{avatarInitials(resolved.login)}</span>
                     {/if}
                     <div class="ucard-meta">
-                        <div class="ucard-login">{resolved.login ?? resolved.hf_user_id}</div>
+                        <div class="ucard-login">{resolved.login ?? 'Unknown'}</div>
                         {#if resolved.role}
                             <div class="ucard-role">{resolved.role}</div>
                         {/if}
@@ -332,7 +332,7 @@
                                         <span class="ucard-avatar fallback">{avatarInitials(u.login)}</span>
                                     {/if}
                                     <div class="ucard-meta">
-                                        <div class="ucard-login">{u.login ?? u.hf_user_id}</div>
+                                        <div class="ucard-login">{u.login ?? 'Unknown'}</div>
                                         {#if u.role}
                                             <div class="ucard-role">{u.role}</div>
                                         {/if}

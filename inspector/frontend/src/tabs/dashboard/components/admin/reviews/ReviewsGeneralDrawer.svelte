@@ -240,7 +240,7 @@
                             >
                                 <span class="avatar">{initials(detail.current_claim.login)}</span>
                                 <div class="meta">
-                                    <div class="who">{detail.current_claim.login ?? detail.current_claim.assignee_id}</div>
+                                    <div class="who">{detail.current_claim.login ?? 'Unknown'}</div>
                                     <div class="since">
                                         claimed {fmtDate(detail.current_claim.claimed_at)} · {fmtRelative(detail.current_claim.claimed_at)}
                                         {#if detail.current_claim.marked_ready_at}
@@ -264,7 +264,7 @@
                             <div class="current-claim">
                                 <span class="avatar">{initials(detail.current_claim.login)}</span>
                                 <div class="meta">
-                                    <div class="who">{detail.current_claim.login ?? detail.current_claim.assignee_id}</div>
+                                    <div class="who">{detail.current_claim.login ?? 'Unknown'}</div>
                                     <div class="since">
                                         claimed {fmtDate(detail.current_claim.claimed_at)} · {fmtRelative(detail.current_claim.claimed_at)}
                                         {#if detail.current_claim.marked_ready_at}
@@ -327,11 +327,11 @@
                     <div class="empty-block">No prior claims.</div>
                 {:else}
                     <ul class="history-list">
-                        {#each reviewerHistory as h (h.claimed_at ?? h.assignee_id)}
+                        {#each reviewerHistory as h (`${h.assignee_id}_${h.claimed_at}`)}
                             <li class="history-row">
                                 <span class="avatar small">{initials(h.login)}</span>
                                 <div class="meta">
-                                    <div class="who">{h.login ?? h.assignee_id}</div>
+                                    <div class="who">{h.login ?? 'Unknown'}</div>
                                     <div class="dates">
                                         {fmtDate(h.claimed_at)} · {fmtDate(h.released_at)}
                                         {#if h.close_reason}<span class="close-reason">{h.close_reason.replace(/_/g, ' ')}</span>{/if}
