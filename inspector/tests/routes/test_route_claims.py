@@ -186,6 +186,44 @@ def test_claim_one_claim_per_user_returns_409(signed_in_client, state_persistenc
     assert "target_name" in body
 
 
+def test_claim_marked_ready_does_not_block_new_claim(signed_in_client, state_persistence):
+    """A contributor who has marked one reciter ready can claim another.
+
+    The one-claim-per-user policy only blocks on UNMARKED open claims —
+    marked-ready rows are admin-side until publish or send-back, so the
+    reviewer is free to pick up something new while they wait."""
+    _replace_state([
+        _row("marked", state="under_review", assignee_hf_id="u-1", marked_ready=True),
+        _row("fresh", state="awaiting_review"),
+    ])
+
+    client, _ = signed_in_client(hf_user_id="u-1", login="alice")
+    resp = client.post(
+        "/api/claim/fresh",
+        headers={"Origin": "http://localhost"},
+    )
+    assert resp.status_code == 200, resp.data
+    body = json.loads(resp.data)
+    assert body["state"] == "under_review"
+    assert body["assignee_hf_id"] == "u-1"
+
+
+def test_can_claim_predicate_ignores_marked_ready_holdings(signed_in_client):
+    """The ``can_claim`` predicate must mirror the policy — a user holding
+    only marked-ready rows should see ``can_claim=True`` on an awaiting
+    target (otherwise the FE would hide the Claim button after mark-ready
+    and the new policy would never be exercised from the UI)."""
+    _replace_state([
+        _row("marked", state="under_review", assignee_hf_id="u-1", marked_ready=True),
+        _row("fresh", state="awaiting_review"),
+    ])
+    client, _ = signed_in_client(hf_user_id="u-1", login="alice")
+    resp = client.get("/api/reciter-task/fresh")
+    assert resp.status_code == 200
+    preds = json.loads(resp.data)["predicates"]
+    assert preds["can_claim"] is True
+
+
 def test_claim_discarded_returns_400(signed_in_client, state_persistence):
     _replace_state([_row("test_slug", state="awaiting_review", visibility="discarded")])
 

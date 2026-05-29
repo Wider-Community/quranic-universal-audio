@@ -22,11 +22,22 @@ def get_open_claim(slug: str):
 
 
 def open_claim_for_user(assignee_id: str) -> str | None:
-    """Return a slug the user currently holds an open claim on, else None.
-    Backs the one-claim-per-non-owner check (an O(1) index lookup, replacing
-    the old all_rows() scan)."""
+    """Return a slug the user currently holds a *blocking* open claim on,
+    else None.
+
+    Backs the one-claim-per-non-owner check. ``marked_ready`` rows are
+    EXCLUDED — once the reviewer has submitted, the row is admin-side
+    until publish or send-back, so the contributor is free to claim
+    something new. ``released_at IS NULL`` keeps closed claims out
+    regardless of mark-ready state.
+
+    The plural ``open_claims_for_user`` does NOT apply this filter — it's
+    the role-revoke cascade target and must release every open claim
+    (marked or not).
+    """
     row = get_conn().execute(
-        "SELECT slug FROM claims WHERE assignee_id = ? AND released_at IS NULL LIMIT 1",
+        "SELECT slug FROM claims WHERE assignee_id = ? "
+        "AND released_at IS NULL AND marked_ready_at IS NULL LIMIT 1",
         (assignee_id,),
     ).fetchone()
     return row[0] if row else None

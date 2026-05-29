@@ -51,17 +51,15 @@ def claim(slug: str):
 
     # One-claim-per-user policy (application-level; state.py doesn't enforce).
     # Owners are exempt — they may hold multiple simultaneous claims.
+    # Marked-ready rows are NOT blocking: once the reviewer submits, the
+    # row is admin-side until publish or send-back, so the contributor is
+    # free to pick up a new one. ``repo_claims.open_claim_for_user`` bakes
+    # that filter into the SQL so this route, the ``can_claim`` predicate
+    # path, and the auto-claim path all agree.
     if not permissions_service.is_owner(user):
-        other = next(
-            (
-                r.slug for r in state_service.all_rows()
-                if r.state.value == "under_review"
-                and r.assignee_hf_id == user.hf_user_id
-                and r.slug != slug
-            ),
-            None,
-        )
-        if other is not None:
+        from services.db import repo_claims as _repo_claims
+        other = _repo_claims.open_claim_for_user(user.hf_user_id)
+        if other is not None and other != slug:
             other_name = catalog_service.display_name(other)
             target_name = catalog_service.display_name(slug)
             return jsonify({
