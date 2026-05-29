@@ -27,6 +27,8 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
+from scripts.lib.timestamps_shards import split_to_shards
+
 if TYPE_CHECKING:
     import numpy as np
 
@@ -1491,6 +1493,23 @@ def process(input_dir: Path,
                   shared_cmvn, words_data, mfa_failures, padding=padding)
     log.info("Wrote canonical (beam=%d) %s (%d verses)",
              canonical_beam, full_path, len(full_data))
+
+    # v2: also emit per-chapter occurrence-preserving shards next to the
+    # historical timestamps_full.json. ``canonical_results`` carries every
+    # aligned segment (pre-dedup), so build_raw_v2 keeps all occurrences;
+    # the inspector read-path dedups on serve. Written un-gzipped as
+    # ``<output_dir>/timestamps/<chapter>.json`` — the bucket layout the
+    # read-path expects. Additive: the v1 outputs above are untouched.
+    from scripts.lib.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
+    v2_doc = build_raw_v2(chapters, canonical_results, audio_category)
+    v2_shards = split_to_shards(
+        v2_doc, reciter=reciter, audio_category=audio_category, url_template="")
+    ts_dir = output_dir / "timestamps"
+    ts_dir.mkdir(parents=True, exist_ok=True)
+    for ch_num, shard_doc in v2_shards.items():
+        (ts_dir / f"{ch_num}.json").write_text(
+            json.dumps(shard_doc, ensure_ascii=False), encoding="utf-8")
+    log.info("Wrote %d v2 timestamps shard(s) -> %s", len(v2_shards), ts_dir)
 
     # Probe beams: each gets its own pair of files. Failure cascade is
     # computed at compare-time from the per-beam mfa_failures; we don't
