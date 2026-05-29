@@ -328,6 +328,18 @@ CAPABILITIES: tuple[Capability, ...] = (
         contributor=False, maintainer=True,
     ),
     _c(
+        "reviews.generate_timestamps", G_ADMIN, "Generate timestamps",
+        "Launch the MFA alignment job for an under-review recitation, "
+        "writing per-chapter timestamps to the bucket.",
+        contributor=False, maintainer=True,
+    ),
+    _c(
+        "timestamps.view_unreleased", G_ADMIN, "Preview unreleased timestamps",
+        "View generated timestamps in the Timestamps tab for recitations "
+        "not yet released (owner preview before publish).",
+        contributor=False, maintainer=False,
+    ),
+    _c(
         MANAGE_PERMISSIONS, G_ADMIN, "Manage permissions",
         "See and change this Permissions tab. Owner-only and fixed — it is "
         "the recovery anchor, so it can never be delegated or turned off.",
