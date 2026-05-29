@@ -43,6 +43,17 @@ class BitrateMode(str, Enum):
     UNKNOWN = "unknown"
 
 
+class ChapterBitrateMode(str, Enum):
+    """Per-chapter bitrate mode in the audio_manifest sidecar.
+
+    A single chapter file is one encoding — ``cbr`` or ``vbr`` (the per-delivery
+    ``BitrateMode`` adds rollup values like ``mostly_cbr`` / ``mixed`` that only
+    make sense aggregated across chapters)."""
+
+    CBR = "cbr"
+    VBR = "vbr"
+
+
 # ---------- vocab ----------
 
 

@@ -20,6 +20,7 @@ import sqlite3
 from scripts.lib.schemas import (
     Actor,
     AudioCategory,
+    Channel,
     Delivery,
     ReciterCatalog,
     ReciterEntry,
@@ -275,9 +276,58 @@ def add_audio_source(
     return source
 
 
+def add_source(
+    *,
+    actor: Actor,
+    source: Source,
+    reason: str | None = None,
+) -> Source:
+    """Idempotently add a vocab source so ``add_delivery``'s ``source`` FK can be
+    satisfied. A no-op (returns the existing row) when the slug is already
+    present — the intake ingest may resend ``vocab_additions`` it already
+    applied. Maintainer+; nesting-safe (enrolls in the caller's txn)."""
+    _require_maintainer(actor)
+    existing = repo_catalog.find_source(source.slug)
+    if existing is not None:
+        return existing
+    with _sync.durable_transaction():
+        repo_catalog.add_source(source)
+        audit.append(
+            event="catalog.audio_source_added",
+            actor=actor,
+            payload={"slug": source.slug, "name": source.name},
+            reason=reason,
+        )
+    return source
+
+
+def add_channel(
+    *,
+    actor: Actor,
+    channel: Channel,
+    reason: str | None = None,
+) -> Channel:
+    """Idempotently add a vocab channel so ``add_delivery``'s ``channel`` FK can
+    be satisfied. No-op when the slug already exists. Maintainer+; nesting-safe."""
+    _require_maintainer(actor)
+    existing = repo_catalog.find_channel(channel.slug)
+    if existing is not None:
+        return existing
+    with _sync.durable_transaction():
+        repo_catalog.add_channel(channel)
+        audit.append(
+            event="catalog.channel_added",
+            actor=actor,
+            payload={"slug": channel.slug, "name": channel.name},
+            reason=reason,
+        )
+    return channel
+
+
 __all__ = [
     "AudioCategory",
     "CatalogError",
+    "Channel",
     "Delivery",
     "InvalidCatalogChange",
     "NotAuthorizedForCatalog",
@@ -285,8 +335,10 @@ __all__ = [
     "ReciterEntry",
     "Source",
     "add_audio_source",
+    "add_channel",
     "add_delivery",
     "add_reciter",
+    "add_source",
     "edit_delivery",
     "edit_reciter",
     "find_delivery",
