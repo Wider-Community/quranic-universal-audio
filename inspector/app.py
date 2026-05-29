@@ -415,7 +415,10 @@ def _handle_unknown_reciter(e: UnknownReciter):
 
 @app.errorhandler(InvalidTransition)
 def _handle_invalid_transition(e: InvalidTransition):
-    return jsonify({"error": str(e)}), 400
+    body: dict = {"error": str(e)}
+    if getattr(e, "details", None):
+        body["details"] = e.details
+    return jsonify(body), 400
 
 
 @app.errorhandler(NotAuthorizedForTransition)

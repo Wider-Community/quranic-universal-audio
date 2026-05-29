@@ -24,6 +24,7 @@ from scripts.lib.schemas import (
     AdminReviewTransition,
     AdminReviewValidation,
     AdminReviewsResponse,
+    MarkReadySubmission,
     ReciterState,
 )
 
@@ -54,6 +55,27 @@ _SQL = (
     f"WHERE ds.state IN ({','.join(['?'] * len(_BUCKET_STATES))}) "
     "ORDER BY ds.slug"
 )
+
+
+def _build_submission(row) -> MarkReadySubmission | None:
+    """Assemble a ``MarkReadySubmission`` from a claims row, or None.
+
+    Returns None when the row pre-dates the mark-ready form (legacy claims
+    with ``marked_ready_at`` set but no checklist JSON) or hasn't been
+    marked at all. The list-row helper skips reading the submission; the
+    drawer detail uses this directly.
+    """
+    raw = row["mark_ready_checklist"] if "mark_ready_checklist" in row.keys() else None
+    if not raw:
+        return None
+    checklist = _serde.json_loads(raw)
+    if not checklist:
+        return None
+    return MarkReadySubmission(
+        checklist=checklist,
+        comment_checks=row["mark_ready_comment_checks"] or "",
+        comment_issues=row["mark_ready_comment_issues"] or "",
+    )
 
 
 def list_reviews(*, caller_hf_id: str) -> dict:
@@ -157,7 +179,8 @@ def get_review_detail(slug: str) -> dict | None:
         return None
 
     current_row = conn.execute(
-        "SELECT assignee_id, assignee_login_snapshot, claimed_at, marked_ready_at "
+        "SELECT assignee_id, assignee_login_snapshot, claimed_at, marked_ready_at, "
+        "  mark_ready_checklist, mark_ready_comment_checks, mark_ready_comment_issues "
         "FROM claims WHERE slug = ? AND released_at IS NULL",
         (slug,),
     ).fetchone()
@@ -168,12 +191,14 @@ def get_review_detail(slug: str) -> dict | None:
             login=current_row["assignee_login_snapshot"],
             claimed_at=current_row["claimed_at"],
             marked_ready_at=current_row["marked_ready_at"],
+            mark_ready_submission=_build_submission(current_row),
         )
 
     history_rows = conn.execute(
         "SELECT assignee_id, assignee_login_snapshot, claimed_at, released_at, "
-        "  marked_ready_at, close_reason "
-        "FROM claims WHERE slug = ? "
+        "  marked_ready_at, close_reason, "
+        "  mark_ready_checklist, mark_ready_comment_checks, mark_ready_comment_issues "
+        "FROM claims WHERE slug = ? AND released_at IS NOT NULL "
         "ORDER BY claimed_at DESC",
         (slug,),
     ).fetchall()
@@ -185,6 +210,7 @@ def get_review_detail(slug: str) -> dict | None:
             released_at=r["released_at"],
             marked_ready_at=r["marked_ready_at"],
             close_reason=r["close_reason"],
+            mark_ready_submission=_build_submission(r),
         )
         for r in history_rows
     ]

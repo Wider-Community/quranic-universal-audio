@@ -13,6 +13,11 @@
      */
     import { IssueRegistry } from '../../../../segments/domain/registry';
     import {
+        CHECKLIST_ORDER,
+        markReadyCopy,
+        type ChecklistKey,
+    } from '../../../../segments/copy/mark-ready';
+    import {
         fetchAdminReviewDetail,
         fetchAdminReviewValidation,
     } from '../../../../../lib/api/admin-reviews';
@@ -23,6 +28,13 @@
     } from '../../../../../lib/types/generated/schemas';
     import ExpandedTimeline from './ExpandedTimeline.svelte';
     import ReviewerActionsPopover from './ReviewerActionsPopover.svelte';
+
+    /** Read a checklist-item label from the same copy module the reviewer
+     *  saw. Single source of truth for human-facing strings. */
+    function checklistLabelFor(key: ChecklistKey): string {
+        const item = markReadyCopy.checklist.find((c) => c.key === key);
+        return item?.label ?? key;
+    }
 
     let {
         slug,
@@ -267,6 +279,43 @@
                     <div class="empty-block">No open claim on this recitation.</div>
                 {/if}
             </section>
+
+            <!-- Mark-ready submission (visible only when the reviewer has
+                 submitted the form on the open claim). Labels come from the
+                 same copy module the reviewer saw — single source of truth. -->
+            {#if detail.current_claim?.mark_ready_submission}
+                {@const sub = detail.current_claim.mark_ready_submission}
+                <section class="dsection mr-submission">
+                    <h3 class="dsection-head">
+                        Mark-ready submission
+                        {#if detail.current_claim.marked_ready_at}
+                            <span class="aside">submitted {fmtRelative(detail.current_claim.marked_ready_at)}</span>
+                        {/if}
+                    </h3>
+                    <ul class="mr-checklist">
+                        {#each CHECKLIST_ORDER as key (key)}
+                            <li class="mr-check-row" class:done={sub.checklist[key]}>
+                                <span class="mr-check-glyph" aria-hidden="true">
+                                    {sub.checklist[key] ? '✓' : '·'}
+                                </span>
+                                <span class="mr-check-label">{checklistLabelFor(key)}</span>
+                            </li>
+                        {/each}
+                    </ul>
+                    {#if (sub.comment_checks ?? '').trim()}
+                        <div class="mr-comment">
+                            <div class="mr-comment-label">{markReadyCopy.comments.checks.label}</div>
+                            <blockquote class="mr-comment-body">{sub.comment_checks}</blockquote>
+                        </div>
+                    {/if}
+                    {#if (sub.comment_issues ?? '').trim()}
+                        <div class="mr-comment">
+                            <div class="mr-comment-label">{markReadyCopy.comments.issues.label}</div>
+                            <blockquote class="mr-comment-body">{sub.comment_issues}</blockquote>
+                        </div>
+                    {/if}
+                </section>
+            {/if}
 
             <!-- Reviewer history -->
             <section class="dsection">
@@ -638,5 +687,68 @@
         font-size: var(--fs-meta);
         color: var(--text-faint);
         padding: var(--s-2) 0;
+    }
+
+    /* ---------- Mark-ready submission ---------- */
+    .mr-submission {
+        padding: var(--s-3);
+        background: var(--canvas-inset);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+    }
+    .mr-checklist {
+        list-style: none;
+        margin: 0 0 var(--s-3);
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .mr-check-row {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--s-2);
+        font-size: var(--fs-meta);
+        color: var(--text-secondary);
+        line-height: var(--lh-normal);
+    }
+    .mr-check-row.done .mr-check-label {
+        color: var(--text-primary);
+    }
+    .mr-check-glyph {
+        flex: 0 0 14px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-faint);
+        text-align: center;
+        line-height: 1.5;
+    }
+    .mr-check-row.done .mr-check-glyph {
+        color: var(--accent);
+        font-weight: 600;
+    }
+    .mr-comment {
+        margin-top: var(--s-3);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .mr-comment-label {
+        font-size: 10.5px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+    .mr-comment-body {
+        margin: 0;
+        padding: var(--s-2) var(--s-3);
+        background: var(--panel);
+        border-left: 2px solid var(--border-default);
+        border-radius: var(--r-1);
+        font-size: var(--fs-meta);
+        color: var(--text-primary);
+        line-height: var(--lh-normal);
+        white-space: pre-wrap;
+        word-break: break-word;
     }
 </style>

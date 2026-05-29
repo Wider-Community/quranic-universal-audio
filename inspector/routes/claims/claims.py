@@ -17,13 +17,16 @@ from __future__ import annotations
 
 import logging
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
+from pydantic import ValidationError
 
 from routes._admin_helpers import (
     actor_for as _actor_for,
     require_signed_in_or_401 as _require_user_or_401,
     row_to_dict as _row_to_dict,
 )
+
+from scripts.lib.schemas import MarkReadyRequest
 
 from services import auth as auth_service
 from services import catalog as catalog_service
@@ -92,13 +95,34 @@ def release(slug: str):
 @claims_bp.route("/mark-ready/<slug>", methods=["POST"])
 @require_same_origin
 def mark_ready(slug: str):
+    """Submit the mark-ready form for ``slug``.
+
+    Body MUST be a ``MarkReadyRequest``: a five-key checklist (all True) +
+    two optional comment strings. The state handler validates the payload,
+    re-computes live validation category counts, and rejects with a
+    structured 400 if either gate fails. The submission is persisted on
+    the open claim row alongside ``marked_ready_at``.
+    """
     user, err = _require_user_or_401()
     if err is not None:
         return err
+
+    # Pydantic owns the wire-shape contract; route translates a malformed
+    # body into a 400 with the same envelope as the count-gated path.
+    raw = request.get_json(silent=True) or {}
+    try:
+        submission = MarkReadyRequest.model_validate(raw)
+    except ValidationError as e:
+        return jsonify({
+            "error": "marked_ready payload invalid",
+            "details": {"validation_errors": e.errors()},
+        }), 400
+
     new_row = state_service.transition(
         slug,
         "reciter.marked_ready",
         actor=_actor_for(user),
+        payload=submission.model_dump(),
     )
     return jsonify(_row_to_dict(new_row))
 

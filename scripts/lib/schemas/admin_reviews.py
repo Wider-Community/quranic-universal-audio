@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .mark_ready import MarkReadySubmission
+
 
 class AdminReviewOpenClaim(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -31,6 +33,10 @@ class AdminReviewOpenClaim(BaseModel):
     login: str | None = None
     claimed_at: str | None = None
     marked_ready_at: str | None = None
+    # Populated only once the reviewer submits a mark-ready form. Null on
+    # rows that are claimed-but-not-marked. Cleared together with
+    # ``marked_ready_at`` on unmark / release / reassign.
+    mark_ready_submission: MarkReadySubmission | None = None
 
 
 class AdminReviewRow(BaseModel):
@@ -68,7 +74,12 @@ class AdminReviewsResponse(BaseModel):
 
 
 class AdminReviewClaimHistoryEntry(BaseModel):
-    """One claim row (open or closed) for the reviewer-history table."""
+    """One claim row (open or closed) for the reviewer-history table.
+
+    A closed claim that had a mark-ready submission keeps the submission
+    on the row — admins can audit past cycles' attestations even after a
+    send-back-and-re-mark.
+    """
 
     model_config = ConfigDict(extra="allow")
 
@@ -78,6 +89,7 @@ class AdminReviewClaimHistoryEntry(BaseModel):
     released_at: str | None = None
     marked_ready_at: str | None = None
     close_reason: str | None = None
+    mark_ready_submission: MarkReadySubmission | None = None
 
 
 class AdminReviewTransition(BaseModel):

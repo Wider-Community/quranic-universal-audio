@@ -186,16 +186,24 @@ CREATE INDEX ix_delivery_states_state ON delivery_states(state);
 -- claims first-class (current + history)
 -- ---------------------------------------------------------------------------
 CREATE TABLE claims (
-    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-    slug                    TEXT NOT NULL REFERENCES deliveries(slug),
-    assignee_id             TEXT NOT NULL REFERENCES users(hf_user_id),
-    assignee_login_snapshot TEXT,             -- login at claim time; NOT a live users.login_cache join
-    claimed_at              TEXT NOT NULL,
-    released_at             TEXT,
-    marked_ready_at         TEXT,
-    close_reason            TEXT,             -- NO CHECK: released|published|force_released|reassigned|...
-    opened_by_transition_id TEXT REFERENCES transitions(id),
-    closed_by_transition_id TEXT REFERENCES transitions(id)
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug                        TEXT NOT NULL REFERENCES deliveries(slug),
+    assignee_id                 TEXT NOT NULL REFERENCES users(hf_user_id),
+    assignee_login_snapshot     TEXT,             -- login at claim time; NOT a live users.login_cache join
+    claimed_at                  TEXT NOT NULL,
+    released_at                 TEXT,
+    marked_ready_at             TEXT,
+    close_reason                TEXT,             -- NO CHECK: released|published|force_released|reassigned|...
+    opened_by_transition_id     TEXT REFERENCES transitions(id),
+    closed_by_transition_id     TEXT REFERENCES transitions(id),
+    -- Mark-ready form submission (populated when the reviewer hits Mark
+    -- ready, NULL when claimed-but-not-marked). Cleared together with
+    -- ``marked_ready_at`` on unmark / release / reassign so a sent-back
+    -- row presents fresh. Persisted on closed claims too — admins can
+    -- audit past cycles' attestations after a send-back-and-re-mark.
+    mark_ready_checklist        TEXT,             -- JSON: MarkReadyChecklist (scripts/lib/schemas/mark_ready.py)
+    mark_ready_comment_checks   TEXT,             -- optional free text (additional checks performed)
+    mark_ready_comment_issues   TEXT              -- optional free text (notes / suspected false positives)
 );
 -- one open claim per slug
 CREATE UNIQUE INDEX ux_claim_open_slug ON claims(slug) WHERE released_at IS NULL;

@@ -16,6 +16,7 @@ import { SIGN_IN_MESSAGES } from '../sign-in-messages';
 import { loadCurrentUser } from '../stores/current-user';
 import { openSignInModal } from '../stores/sign-in-modal';
 import { pushToast } from '../stores/toast';
+import type { MarkReadyRequest } from '../types/generated/schemas';
 import type { ReciterRow } from './reciter-task';
 
 type RouteName = 'claim' | 'release' | 'mark-ready' | 'unmark-ready';
@@ -29,13 +30,22 @@ interface ErrorBody {
     existing_claim_name?: string | null;
     /** Display name for the reciter the user was trying to claim. */
     target_name?: string | null;
+    /** Structured server-side detail for a 400. The mark-ready route uses this
+     * to carry the offending category counts or unchecked checklist keys; the
+     * caller surfaces a richer message instead of the generic ``error``. */
+    details?: Record<string, unknown> | null;
 }
 
-async function _post(route: RouteName, slug: string): Promise<ReciterRow> {
+async function _post(
+    route: RouteName,
+    slug: string,
+    body?: Record<string, unknown>,
+): Promise<ReciterRow> {
     const res = await fetch(`/api/${route}/${encodeURIComponent(slug)}`, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (res.ok) {
         const row = (await res.json()) as ReciterRow;
@@ -44,18 +54,18 @@ async function _post(route: RouteName, slug: string): Promise<ReciterRow> {
         void loadCurrentUser();
         return row;
     }
-    let body: ErrorBody = {};
+    let errBody: ErrorBody = {};
     try {
-        body = (await res.json()) as ErrorBody;
+        errBody = (await res.json()) as ErrorBody;
     } catch {
         /* swallow */
     }
 
     if (res.status === 401) {
         openSignInModal(null, SIGN_IN_MESSAGES.claimExpired);
-    } else if (res.status === 409 && body.existing_claim) {
-        const existing = body.existing_claim_name || body.existing_claim;
-        const target = body.target_name || slug;
+    } else if (res.status === 409 && errBody.existing_claim) {
+        const existing = errBody.existing_claim_name || errBody.existing_claim;
+        const target = errBody.target_name || slug;
         pushToast({
             kind: 'warn',
             text: `Unclaim ${existing} first to claim ${target}.`,
@@ -64,14 +74,15 @@ async function _post(route: RouteName, slug: string): Promise<ReciterRow> {
     } else {
         pushToast({
             kind: 'error',
-            text: body.error || `Request failed (${res.status}).`,
+            text: errBody.error || `Request failed (${res.status}).`,
             ttl: 5000,
         });
     }
-    throw new Error(body.error || `${route} failed: ${res.status}`);
+    throw new Error(errBody.error || `${route} failed: ${res.status}`);
 }
 
 export const claim = (slug: string) => _post('claim', slug);
 export const release = (slug: string) => _post('release', slug);
-export const markReady = (slug: string) => _post('mark-ready', slug);
+export const markReady = (slug: string, payload: MarkReadyRequest) =>
+    _post('mark-ready', slug, payload as unknown as Record<string, unknown>);
 export const unmarkReady = (slug: string) => _post('unmark-ready', slug);

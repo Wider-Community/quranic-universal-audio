@@ -23,6 +23,7 @@
     import { clickOutside } from '../../../../lib/actions/click-outside';
     import type { ReciterTask } from '../../../../lib/api/reciter-task';
     import ClaimButton from '../../../../lib/components/ClaimButton.svelte';
+    import MarkReadyModal from './MarkReadyModal.svelte';
     import type { CombinationSelection } from '../../../../lib/components/picker/combination-picker-types';
     import CombinationPicker from '../../../../lib/components/picker/CombinationPicker.svelte';
     import SurahPopover from '../../../../lib/components/player/SurahPopover.svelte';
@@ -100,6 +101,7 @@
     }>();
 
     let pickerOpen = false;
+    let markReadyOpen = false;
     let surahOpen = false;
     let ayahOpen = false;
     let ayahFilterInput: HTMLInputElement | null = null;
@@ -364,6 +366,14 @@
     }
     function onMarkReady(): void {
         if (chipActionBusy) return;
+        // Open the local form modal instead of POSTing directly. The
+        // modal owns the request; on success it calls `onMarkReadyDone`
+        // which bubbles up so the parent refreshes reciter-task.
+        markReadyOpen = true;
+    }
+    function onMarkReadyDone(): void {
+        // The modal already POSTed and got 200; bubble the existing
+        // ``markReady`` event so SegmentsTab._refreshTask runs as before.
         dispatch('markReady');
     }
     function onClaimed(): void {
@@ -452,23 +462,33 @@
 
             {#if hasReciter && !showSavePreview}
                 <div class="reciter-actions">
-                    <ClaimButton slug={$selectedReciter || ''} task={reciterTask} {onClaimed} />
-                    {#if reciterTask?.predicates.can_mark_ready}
-                        <button
-                            type="button"
-                            class="action ghost-accent"
-                            disabled={chipActionBusy !== ''}
-                            title="Mark this reciter ready for a maintainer to publish"
-                            on:click={onMarkReady}>Mark ready</button
-                        >
-                    {/if}
-                    {#if reciterTask?.predicates.can_release}
-                        <button
-                            type="button"
-                            class="action ghost"
-                            disabled={chipActionBusy !== ''}
-                            on:click={onUnclaim}>Unclaim</button
-                        >
+                    {#if reciterTask?.row.marked_ready}
+                        <!-- After mark-ready submission the reviewer's affordances are
+                             fully locked. Only an admin can move forward (publish)
+                             or send back (force-release). The pill is a passive
+                             status indicator, not a button. -->
+                        <span class="status-pill marked-ready" title="Awaiting admin review">
+                            Marked ready · awaiting admin
+                        </span>
+                    {:else}
+                        <ClaimButton slug={$selectedReciter || ''} task={reciterTask} {onClaimed} />
+                        {#if reciterTask?.predicates.can_mark_ready}
+                            <button
+                                type="button"
+                                class="action ghost-accent"
+                                disabled={chipActionBusy !== ''}
+                                title="Submit the mark-ready form for an admin to review"
+                                on:click={onMarkReady}>Mark ready</button
+                            >
+                        {/if}
+                        {#if reciterTask?.predicates.can_release}
+                            <button
+                                type="button"
+                                class="action ghost"
+                                disabled={chipActionBusy !== ''}
+                                on:click={onUnclaim}>Unclaim</button
+                            >
+                        {/if}
                     {/if}
                 </div>
             {/if}
@@ -687,6 +707,13 @@
     />
 {/if}
 
+<MarkReadyModal
+    bind:open={markReadyOpen}
+    slug={$selectedReciter || ''}
+    onClose={() => (markReadyOpen = false)}
+    onSubmitted={onMarkReadyDone}
+/>
+
 <style>
     .segs-footer {
         position: fixed;
@@ -805,6 +832,21 @@
         align-items: center;
         gap: var(--s-2);
         flex: 0 0 auto;
+    }
+
+    /* Marked-ready status pill — replaces the entire action button group
+       once the reviewer has submitted. Passive: no hover, no cursor. */
+    .status-pill.marked-ready {
+        display: inline-flex;
+        align-items: center;
+        padding: 5px 12px;
+        font: 500 var(--fs-meta)/1 var(--font-sans);
+        color: var(--state-warn-fg);
+        background: oklch(from var(--state-warn-fg) l c h / 0.10);
+        border: 1px solid oklch(from var(--state-warn-fg) l c h / 0.40);
+        border-radius: var(--r-pill);
+        letter-spacing: 0.01em;
+        white-space: nowrap;
     }
     .save-group {
         display: inline-flex;

@@ -93,11 +93,18 @@ def can_unmark_ready(row, user) -> bool:
 
 
 def can_release(row, user) -> bool:
-    """Reviewer can release their own claim (regardless of marked_ready)."""
+    """Reviewer can release their own claim BEFORE they mark it ready.
+
+    Once marked_ready is True the row is in a terminal-for-reviewer state:
+    only ``can_unmark_ready`` (back out) or an admin force-release moves it.
+    Surfacing Unclaim here would let a reviewer skip the unmark step and
+    leave a stale ``marked_ready_at`` on a closed claim history row.
+    """
     if user is None or row is None:
         return False
     return (
         row.state == ReciterState.UNDER_REVIEW
+        and not row.marked_ready
         and permissions.is_claim_holder(user, row)
     )
 

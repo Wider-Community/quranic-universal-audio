@@ -15,7 +15,63 @@ import json
 import os
 from datetime import datetime, timezone
 
+import pytest
+
 os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+
+
+# Helpers ---------------------------------------------------------------
+# Mark-ready now takes a JSON body. The route's pydantic gate rejects
+# anything other than a five-key checklist (all True) + two optional
+# comment strings; the state handler additionally re-computes the live
+# validation counts. Tests that exercise the HTTP boundary use this
+# canonical payload and the ``_clean_validation`` fixture below to mock
+# the count gate so they don't need on-disk segs to pass.
+
+_FULL_CHECKLIST_BODY = {
+    "checklist": {
+        "failed_alignments": True,
+        "missing_words": True,
+        "low_confidence": True,
+        "repetitions": True,
+        "splits_wasl_waqf": True,
+        "basmala_amin_intros": True,
+    },
+    "comment_checks": "",
+    "comment_issues": "",
+}
+
+
+@pytest.fixture
+def _clean_validation(monkeypatch):
+    """Stub ``validate_reciter_segments`` to report all blocking counts at zero.
+
+    Mark-ready re-validates segments live in the state handler; the test
+    suite doesn't ship reciter segments, so we short-circuit to a clean
+    response. Tests that need a non-zero count override this in-test.
+    """
+    from services import validation as _validation
+    from services.state import state as _state
+
+    def _ok(_reciter):
+        return {
+            "category_counts": {
+                "low_confidence": 0,
+                "low_confidence_v2": 0,
+                "boundary_adj": 0,
+                "cross_verse": 0,
+                "basmala_amin": 0,
+            }
+        }
+
+    # Patch both the module export and the late-imported binding the
+    # handler uses (``from services.validation import …`` happens inside
+    # _h_marked_ready to keep state.py's import graph light).
+    monkeypatch.setattr(_validation, "validate_reciter_segments", _ok)
+    monkeypatch.setitem(
+        _validation.__dict__, "validate_reciter_segments", _ok,
+    )
+    return _ok
 
 
 def _replace_state(rows: list):
@@ -210,7 +266,7 @@ def test_release_maintainer_can_force_release(signed_in_client, state_persistenc
 # ---------------------------------------------------------------------------
 
 
-def test_mark_unmark_round_trip(signed_in_client, state_persistence):
+def test_mark_unmark_round_trip(signed_in_client, state_persistence, _clean_validation):
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
@@ -218,8 +274,9 @@ def test_mark_unmark_round_trip(signed_in_client, state_persistence):
     resp1 = client.post(
         "/api/mark-ready/test_slug",
         headers={"Origin": "http://localhost"},
+        json=_FULL_CHECKLIST_BODY,
     )
-    assert resp1.status_code == 200
+    assert resp1.status_code == 200, resp1.data
     assert json.loads(resp1.data)["marked_ready"] is True
 
     # State persists across requests via the FilesystemBackend, so the
@@ -234,15 +291,106 @@ def test_mark_unmark_round_trip(signed_in_client, state_persistence):
     assert json.loads(resp2.data)["marked_ready"] is False
 
 
-def test_mark_ready_non_assignee_returns_403(signed_in_client, state_persistence):
+def test_mark_ready_non_assignee_returns_403(
+    signed_in_client, state_persistence, _clean_validation,
+):
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="other")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(
         "/api/mark-ready/test_slug",
         headers={"Origin": "http://localhost"},
+        json=_FULL_CHECKLIST_BODY,
     )
     assert resp.status_code == 403
+
+
+def test_mark_ready_rejects_unchecked_checklist(
+    signed_in_client, state_persistence, _clean_validation,
+):
+    """Submit without all five attestations checked → 400 with details."""
+    _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
+
+    client, _ = signed_in_client(hf_user_id="u-1", login="alice")
+    body = {**_FULL_CHECKLIST_BODY, "checklist": {
+        **_FULL_CHECKLIST_BODY["checklist"],
+        "failed_alignments": False,
+    }}
+    resp = client.post(
+        "/api/mark-ready/test_slug",
+        headers={"Origin": "http://localhost"},
+        json=body,
+    )
+    assert resp.status_code == 400
+    payload = json.loads(resp.data)
+    assert "checklist incomplete" in payload["error"]
+    assert payload["details"]["unchecked"] == ["failed_alignments"]
+
+
+def test_mark_ready_rejects_nonzero_blocking_counts(
+    signed_in_client, state_persistence, monkeypatch,
+):
+    """Submit when a blocking validation category is non-zero → 400 with details."""
+    _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
+
+    def _has_lc(_reciter):
+        return {"category_counts": {
+            "low_confidence": 3,
+            "low_confidence_v2": 0,
+            "boundary_adj": 0,
+            "cross_verse": 0,
+            "basmala_amin": 0,
+        }}
+
+    from services import validation as _validation
+    monkeypatch.setattr(_validation, "validate_reciter_segments", _has_lc)
+    monkeypatch.setitem(_validation.__dict__, "validate_reciter_segments", _has_lc)
+
+    client, _ = signed_in_client(hf_user_id="u-1", login="alice")
+    resp = client.post(
+        "/api/mark-ready/test_slug",
+        headers={"Origin": "http://localhost"},
+        json=_FULL_CHECKLIST_BODY,
+    )
+    assert resp.status_code == 400
+    payload = json.loads(resp.data)
+    assert "blocking validation counts" in payload["error"]
+    assert payload["details"]["blocking_counts"] == {"low_confidence": 3}
+
+
+def test_mark_ready_rejects_malformed_body(
+    signed_in_client, state_persistence, _clean_validation,
+):
+    """Missing checklist field → 400 from the route-level pydantic gate."""
+    _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
+
+    client, _ = signed_in_client(hf_user_id="u-1", login="alice")
+    resp = client.post(
+        "/api/mark-ready/test_slug",
+        headers={"Origin": "http://localhost"},
+        json={"comment_checks": "without checklist"},
+    )
+    assert resp.status_code == 400
+    payload = json.loads(resp.data)
+    assert payload["error"] == "marked_ready payload invalid"
+    assert "validation_errors" in payload["details"]
+
+
+def test_release_blocked_after_marked_ready(
+    signed_in_client, state_persistence, _clean_validation,
+):
+    """Self-release on a marked-ready row must refuse — the reviewer
+    has to unmark first (or an admin force-releases)."""
+    _replace_state([
+        _row("test_slug", state="under_review", assignee_hf_id="u-1", marked_ready=True),
+    ])
+    client, _ = signed_in_client(hf_user_id="u-1", login="alice")
+    resp = client.post(
+        "/api/release/test_slug",
+        headers={"Origin": "http://localhost"},
+    )
+    assert resp.status_code == 400
+    assert "unmark ready first" in json.loads(resp.data)["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -320,11 +468,15 @@ def test_reciter_task_predicates_marked_ready_frozen(signed_in_client):
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.get("/api/reciter-task/test_slug")
     preds = json.loads(resp.data)["predicates"]
-    # Marked-ready means the row is frozen; can_edit/can_mark_ready are False.
+    # Marked-ready means the row is frozen for the reviewer; can_edit /
+    # can_mark_ready / can_release are all False. Only ``can_unmark_ready``
+    # remains as the thaw affordance — but the segments footer doesn't
+    # currently surface it; admins drive forward/sendback from the Reviews
+    # drawer.
     assert preds["can_edit"] is False
     assert preds["can_mark_ready"] is False
-    assert preds["can_unmark_ready"] is True  # the affordance to thaw
-    assert preds["can_release"] is True
+    assert preds["can_unmark_ready"] is True
+    assert preds["can_release"] is False
 
 
 # ---------------------------------------------------------------------------

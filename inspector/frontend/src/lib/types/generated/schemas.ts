@@ -109,6 +109,10 @@ export interface AdminRequestsResponse {
 }
 /**
  * One claim row (open or closed) for the reviewer-history table.
+ *
+ * A closed claim that had a mark-ready submission keeps the submission
+ * on the row — admins can audit past cycles' attestations even after a
+ * send-back-and-re-mark.
  */
 export interface AdminReviewClaimHistoryEntry {
   assignee_id: string;
@@ -117,7 +121,39 @@ export interface AdminReviewClaimHistoryEntry {
   released_at?: string | null;
   marked_ready_at?: string | null;
   close_reason?: string | null;
+  mark_ready_submission?: MarkReadySubmission | null;
   [k: string]: unknown;
+}
+/**
+ * Persisted shape of a mark-ready submission, read back by the admin
+ * Reviews drawer. Cleared together with ``marked_ready_at`` on
+ * unmark / release / reassign so a sent-back row presents as fresh.
+ */
+export interface MarkReadySubmission {
+  checklist: MarkReadyChecklist;
+  comment_checks?: string;
+  comment_issues?: string;
+  [k: string]: unknown;
+}
+/**
+ * The six attestation checkboxes. All MUST be True at submit time —
+ * the handler raises ``InvalidTransition`` otherwise.
+ *
+ * Keys are repeated in the FE copy module as a literal union; if you
+ * add one here, update the copy module, the markdown file, and the
+ * parity test.
+ *
+ * ``repetitions`` is a separate attestation from ``low_confidence``
+ * because repetitions, while also an ignorable category, exercises a
+ * distinct reviewer pass (detected-rep autosplits + listen-through).
+ */
+export interface MarkReadyChecklist {
+  failed_alignments: boolean;
+  missing_words: boolean;
+  low_confidence: boolean;
+  repetitions: boolean;
+  splits_wasl_waqf: boolean;
+  basmala_amin_intros: boolean;
 }
 /**
  * Full per-recitation payload for the General drawer.
@@ -148,6 +184,7 @@ export interface AdminReviewOpenClaim {
   login?: string | null;
   claimed_at?: string | null;
   marked_ready_at?: string | null;
+  mark_ready_submission?: MarkReadySubmission | null;
   [k: string]: unknown;
 }
 /**
@@ -515,6 +552,17 @@ export interface IntakeValidation {
   errors?: string[];
   warnings?: string[];
   [k: string]: unknown;
+}
+/**
+ * Request body for ``POST /api/mark-ready/<slug>``.
+ *
+ * Comment fields are optional and default to empty strings (not None) so
+ * the persisted-vs-omitted distinction is byte-stable through the wire.
+ */
+export interface MarkReadyRequest {
+  checklist: MarkReadyChecklist;
+  comment_checks?: string;
+  comment_issues?: string;
 }
 /**
  * One pipeline-op waveform slice. Migration #5 canonical shape.

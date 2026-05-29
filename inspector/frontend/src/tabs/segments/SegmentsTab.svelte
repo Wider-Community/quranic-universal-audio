@@ -11,7 +11,7 @@
     import { get, type Readable } from 'svelte/store';
 
     import { fetchJson } from '../../lib/api';
-    import { markReady, release } from '../../lib/api/claims-client';
+    import { release } from '../../lib/api/claims-client';
     import { getReciterTaskStore, type ReciterTask,refreshReciterTask } from '../../lib/api/reciter-task';
     import { loadQuranRefs } from '../../lib/refs/quran-refs';
     import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
@@ -134,14 +134,10 @@
         finally { chipActionBusy = ''; }
     }
     async function _markReady(): Promise<void> {
-        const slug = $selectedReciter;
-        if (!slug || chipActionBusy) return;
-        chipActionBusy = 'mark';
-        try {
-            await markReady(slug);
-            await _refreshTask();
-        } catch { /* toast already surfaced */ }
-        finally { chipActionBusy = ''; }
+        // SegmentsFooter mounts MarkReadyModal locally; the modal POSTs
+        // the submission itself, then dispatches ``markReady`` purely as
+        // a "refresh task" signal. This handler used to drive the POST.
+        await _refreshTask();
     }
 
     let cssFontSize: string = '';
