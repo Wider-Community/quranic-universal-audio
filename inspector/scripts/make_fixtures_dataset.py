@@ -218,9 +218,21 @@ def build_fixtures_db(src_db_path: Path, out_db_path: Path, slugs: list[str]) ->
         if synthesized:
             counts["delivery_states_synthesized"] = synthesized
         dst.commit()
+        # Collapse the WAL into a standalone inspector.db. The app's bucket
+        # pull reads ONLY db/inspector.db and discards -wal/-shm, so any data
+        # left in the WAL would vanish on first boot. DELETE mode checkpoints
+        # and drops the sidecar, yielding a self-contained file safe to ship.
+        dst.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        dst.execute("PRAGMA journal_mode=DELETE")
     finally:
         src.close()
 
+    # Defensively remove any leftover sidecars next to the output DB.
+    for side in (f"{out_db_path}-wal", f"{out_db_path}-shm"):
+        try:
+            Path(side).unlink()
+        except OSError:
+            pass
     return {"slugs": found_slugs, "reciter_ids": reciter_ids, "rows": counts}
 
 
