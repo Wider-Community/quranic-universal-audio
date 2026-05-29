@@ -27,9 +27,12 @@ Usage::
     python3 inspector/scripts/migrate_to_reciters_prefix.py \\
         --bucket prod --allow-prod --verify
 
-    # cleanup, only after the deploy is confirmed reading reciters/
+    # cleanup (two-key) — ONLY after the deploy reads reciters/ AND, for prod,
+    # the quranic-universal-aligner Space no longer reads published/ from this
+    # bucket (it enumerates published/ for its public reciter set). Without
+    # --confirm-delete this only previews.
     python3 inspector/scripts/migrate_to_reciters_prefix.py \\
-        --bucket prod --allow-prod --delete-old
+        --bucket prod --allow-prod --delete-old --confirm-delete
 """
 from __future__ import annotations
 
@@ -89,24 +92,26 @@ def _dest_for(src: str, prefix: str) -> str:
 
 
 def copy_all(backend, bucket_id: str, token: str | None, *, dry_run: bool) -> dict:
+    # Pre-list the destination once so idempotency is a local set lookup, not a
+    # per-file ``exists()`` round-trip (avoids a 404 storm on the first run).
+    existing = set(_list_files(bucket_id, token, _DEST_PREFIX))
+    log.info("%s/: %d pre-existing files", _DEST_PREFIX, len(existing))
     copied = skipped = failed = 0
     for prefix in _LEGACY_PREFIXES:
         files = _list_files(bucket_id, token, prefix)
         log.info("%s/: %d files", prefix, len(files))
         for src in files:
             dst = _dest_for(src, prefix)
-            try:
-                if backend.exists(dst):
-                    skipped += 1
-                    continue
-            except Exception:  # noqa: BLE001
-                pass
+            if dst in existing:
+                skipped += 1
+                continue
             if dry_run:
                 log.info("[dry-run] copy %s -> %s", src, dst)
                 copied += 1
                 continue
             try:
                 backend.copy(src, dst)
+                existing.add(dst)
                 copied += 1
             except Exception as e:  # noqa: BLE001
                 log.error("copy FAILED %s -> %s: %s", src, dst, e)
@@ -119,18 +124,15 @@ def copy_all(backend, bucket_id: str, token: str | None, *, dry_run: bool) -> di
 
 
 def verify(backend, bucket_id: str, token: str | None) -> bool:
+    existing = set(_list_files(bucket_id, token, _DEST_PREFIX))
     ok = True
     for prefix in _LEGACY_PREFIXES:
         files = _list_files(bucket_id, token, prefix)
-        missing: list[str] = []
-        for src in files:
-            dst = _dest_for(src, prefix)
-            try:
-                present = backend.exists(dst)
-            except Exception:  # noqa: BLE001
-                present = False
-            if not present:
-                missing.append(dst)
+        missing = [
+            _dest_for(src, prefix)
+            for src in files
+            if _dest_for(src, prefix) not in existing
+        ]
         log.info(
             "verify %s/: %d source files, %d missing under reciters/",
             prefix, len(files), len(missing),
@@ -171,6 +173,8 @@ def main() -> int:
                     help="After copy, assert every source file exists under reciters/.")
     ap.add_argument("--delete-old", action="store_true",
                     help="Delete wip/ + published/ (run only after the deploy reads reciters/).")
+    ap.add_argument("--confirm-delete", action="store_true",
+                    help="Second key for --delete-old; without it, --delete-old only previews.")
     ap.add_argument("--dry-run", action="store_true",
                     help="Print actions without copying/deleting.")
     args = ap.parse_args()
@@ -192,6 +196,21 @@ def main() -> int:
     log.info("bucket=%s delete_old=%s dry_run=%s", bucket_id, args.delete_old, args.dry_run)
 
     if args.delete_old:
+        if args.bucket == "prod":
+            log.warning(
+                "PROD --delete-old: the quranic-universal-aligner Space still "
+                "reads published/<slug>/ from this bucket (read-only mount; "
+                "repo_loader._list_published_delivery_slugs). Migrate that Space "
+                "off published/ FIRST — otherwise its preload (reciter dropdown + "
+                "segments/timestamps) breaks irreversibly when published/ is gone."
+            )
+        if not args.confirm_delete:
+            log.warning(
+                "--delete-old needs --confirm-delete to actually delete; "
+                "showing a dry-run preview instead."
+            )
+            delete_old(backend, bucket_id, token, dry_run=True)
+            return 0
         delete_old(backend, bucket_id, token, dry_run=args.dry_run)
         return 0
 
