@@ -2,7 +2,7 @@
 
 Packed representation: int8-quantized peaks at ``PEAKS_SLIM_BPS`` density,
 JSON-wrapped with base64-encoded payload, gzipped. Single canonical file at
-``wip/<slug>/peaks/<chapter>.json.gz`` -- replaces the v2 verbose float-JSON
+``reciters/<slug>/peaks/<chapter>.json.gz`` -- replaces the v2 verbose float-JSON
 which weighed ~95 MiB per reciter (~14 MiB for a 3-hour chapter) and parsed
 in ~400 ms on the FE.
 
@@ -58,7 +58,7 @@ _INT8_SCALE = 127
 
 
 class SlimPeaksDoc(TypedDict):
-    """Wire shape stored at ``wip/<slug>/peaks/<chapter>.json.gz`` (gzipped)."""
+    """Wire shape stored at ``reciters/<slug>/peaks/<chapter>.json.gz`` (gzipped)."""
 
     schema_version: int
     duration_ms: int

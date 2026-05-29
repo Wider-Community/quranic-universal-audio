@@ -6,14 +6,14 @@ in ``detailed.json`` so the validate fast-path can skip the per-segment
 computation.
 
 Parallel-then-promote flow (same shape as backfill_qalqala_letter.py):
-1. Read ``wip/<slug>/detailed.json``.
+1. Read ``reciters/<slug>/detailed.json``.
 2. Compute ``is_boundary_adj`` for every seg using the same classifier
    helper the runtime path uses — passes ``canonical`` phonemes so the
    phonemic side fires identically to today's validate output.
 3. Write the augmented doc to ``archive/backfill/<slug>/detailed.json``.
 4. Run validate in-memory against the backfilled bytes, compare to
    ``bench/ground_truth/<slug>.json``; abort on drift.
-5. On byte-equivalent match: atomically promote to ``wip/<slug>/detailed.json``.
+5. On byte-equivalent match: atomically promote to ``reciters/<slug>/detailed.json``.
 
 The Inspector runtime never reads canonical phonemes — the persisted
 ``is_boundary_adj`` already captures the phonemic-side detections at
@@ -33,7 +33,7 @@ package.
 
 Usage:
     python inspector/scripts/backfill_boundary_adj.py --slug bandar_baleela_mp3quran
-    python inspector/scripts/backfill_boundary_adj.py --all-wip
+    python inspector/scripts/backfill_boundary_adj.py --all
     python inspector/scripts/backfill_boundary_adj.py --slug X --dry-run
 """
 
@@ -53,7 +53,6 @@ if str(_INSPECTOR) not in sys.path:
 
 from adapters.detailed_json import load_entries_from_bytes  # noqa: E402
 from services import cache, data_dir  # noqa: E402
-from services import state as state_service  # noqa: E402
 from services.data_loader import get_word_counts, load_detailed  # noqa: E402
 from services.hf_bucket import get_backend  # noqa: E402
 from services.validation import validate_reciter_segments  # noqa: E402
@@ -207,23 +206,14 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--slug")
-    g.add_argument("--all-wip", action="store_true")
-    g.add_argument("--all-published", action="store_true")
     g.add_argument("--all", action="store_true",
-                   help="both wip + published")
+                   help="every reciter under reciters/")
     g.add_argument("--slugs", help="comma-separated")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    # Hydrate state so data_dir.kind_for resolves wip vs published correctly.
-    state_service.hydrate()
-
-    if args.all_wip:
-        slugs = sorted(data_dir.list_slugs("wip"))
-    elif args.all_published:
-        slugs = sorted(data_dir.list_slugs("published"))
-    elif args.all:
-        slugs = sorted(data_dir.list_slugs("wip")) + sorted(data_dir.list_slugs("published"))
+    if args.all:
+        slugs = sorted(data_dir.list_slugs())
     elif args.slugs:
         slugs = [s.strip() for s in args.slugs.split(",") if s.strip()]
     else:

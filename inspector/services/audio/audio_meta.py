@@ -221,7 +221,7 @@ def chapter_numbers(reciter: str) -> list[int]:
     map 1:1 to a surah; by_ayah keys are ``"<surah>:<ayah>"`` and collapse to
     their surah component. Used by the TS manifest builder so the released
     chapter set is derived from cached sidecar state instead of a per-slug
-    ``list_dir("published/<slug>/timestamps")`` bucket walk.
+    ``list_dir("reciters/<slug>/timestamps")`` bucket walk.
 
     The invariant this leans on: ``state == released`` ⇒ every
     audio chapter has timestamps published. Enforced by the

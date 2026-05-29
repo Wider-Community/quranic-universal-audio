@@ -63,7 +63,7 @@ _VOCAB_TABLES = ("riwayahs", "styles", "sources", "channels", "recording_context
 _SELECTIVE_TABLES = ("reciters", "deliveries", "delivery_states", "catalog_aliases")
 
 # Per-reciter JSON pulled into the fixtures bucket tree (NO audio/, NO peaks/).
-_WIP_FILES = (
+_RECITER_FILES = (
     "detailed.json",
     "segments.json",
     "low_confidence_v2.json",
@@ -197,25 +197,18 @@ def _copy_bucket_content(backend, slugs: list[str], stage_root: Path) -> dict:
     """Pull per-reciter JSON (no audio/peaks) + audio manifest into the stage."""
     summary: dict[str, int] = {}
     for slug in slugs:
-        # Detect wip vs published.
-        kind = None
-        for k in ("wip", "published"):
-            try:
-                backend.read_bytes(f"{k}/{slug}/detailed.json")
-                kind = k
-                break
-            except Exception:
-                continue
-        if kind is None:
-            print(f"   ! {slug}: no detailed.json under wip/ or published/ — skipping content")
+        try:
+            backend.read_bytes(f"reciters/{slug}/detailed.json")
+        except Exception:
+            print(f"   ! {slug}: no detailed.json under reciters/ — skipping content")
             continue
         n = 0
-        for fname in _WIP_FILES:
+        for fname in _RECITER_FILES:
             try:
-                data = backend.read_bytes(f"{kind}/{slug}/{fname}")
+                data = backend.read_bytes(f"reciters/{slug}/{fname}")
             except Exception:
                 continue
-            dst = stage_root / kind / slug / fname
+            dst = stage_root / "reciters" / slug / fname
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(data)
             n += 1
@@ -228,7 +221,7 @@ def _copy_bucket_content(backend, slugs: list[str], stage_root: Path) -> dict:
         except Exception:
             print(f"   ! {slug}: no audio_manifest — audio won't stream in fixtures")
         summary[slug] = n
-        print(f"   - {slug}: {n} content file(s) ({kind})")
+        print(f"   - {slug}: {n} content file(s)")
     return summary
 
 

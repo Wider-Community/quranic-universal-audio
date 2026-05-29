@@ -29,16 +29,12 @@ def smoke() -> int:
             == "audit/2026-05.jsonl"
         )
         assert (
-            storage_paths.segments_path("saad_al_ghamdi", "wip")
-            == "wip/saad_al_ghamdi/segments.json"
+            storage_paths.segments_path("saad_al_ghamdi")
+            == "reciters/saad_al_ghamdi/segments.json"
         )
         assert (
-            storage_paths.segments_path("saad_al_ghamdi", "published")
-            == "published/saad_al_ghamdi/segments.json"
-        )
-        assert (
-            storage_paths.published_timestamps_path("saad_al_ghamdi", 1)
-            == "published/saad_al_ghamdi/timestamps/1.json"
+            storage_paths.timestamps_path("saad_al_ghamdi", 1)
+            == "reciters/saad_al_ghamdi/timestamps/1.json"
         )
         assert (
             storage_paths.audio_manifest_path("saad_al_ghamdi_mp3quran")
@@ -76,27 +72,27 @@ def smoke() -> int:
             print("ok  FilesystemBackend.append_jsonl + iter_jsonl")
 
             # list_dir
-            backend.write_json_atomic("wip/saad_al_ghamdi/segments.json", {})
-            backend.write_json_atomic("wip/saad_al_ghamdi/detailed.json", {})
-            backend.write_json_atomic("wip/mishary_alafasi/segments.json", {})
-            slugs = backend.list_dir("wip")
+            backend.write_json_atomic("reciters/saad_al_ghamdi/segments.json", {})
+            backend.write_json_atomic("reciters/saad_al_ghamdi/detailed.json", {})
+            backend.write_json_atomic("reciters/mishary_alafasi/segments.json", {})
+            slugs = backend.list_dir("reciters")
             assert slugs == ["mishary_alafasi", "saad_al_ghamdi"]
             print("ok  FilesystemBackend.list_dir")
 
             # copy + move + delete
             backend.copy(
-                "wip/saad_al_ghamdi/segments.json",
-                "published/saad_al_ghamdi/segments.json",
+                "reciters/saad_al_ghamdi/segments.json",
+                "reciters/saad_al_ghamdi/segments.json.bak",
             )
-            assert backend.exists("published/saad_al_ghamdi/segments.json")
+            assert backend.exists("reciters/saad_al_ghamdi/segments.json.bak")
             backend.move(
-                "wip/mishary_alafasi/segments.json",
-                "published/mishary_alafasi/segments.json",
+                "reciters/mishary_alafasi/segments.json",
+                "reciters/mishary_alafasi/segments.json.bak",
             )
-            assert backend.exists("published/mishary_alafasi/segments.json")
-            assert not backend.exists("wip/mishary_alafasi/segments.json")
-            backend.delete("published/saad_al_ghamdi/segments.json")
-            assert not backend.exists("published/saad_al_ghamdi/segments.json")
+            assert backend.exists("reciters/mishary_alafasi/segments.json.bak")
+            assert not backend.exists("reciters/mishary_alafasi/segments.json")
+            backend.delete("reciters/saad_al_ghamdi/segments.json.bak")
+            assert not backend.exists("reciters/saad_al_ghamdi/segments.json.bak")
             print("ok  FilesystemBackend.copy + move + delete")
 
             # atomic — no .tmp file left behind

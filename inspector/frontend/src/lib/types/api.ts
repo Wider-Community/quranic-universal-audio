@@ -36,7 +36,7 @@ export type SurahInfoResponse = SurahInfoMap;
 /** GET /api/ts/config — display constants + read-path URLs. */
 export interface TsConfigResponse {
     /** "local"  — Flask serves shards from on-disk timestamps tree.
-     *  "bucket" — Flask serves shards from <bucket>/published/<slug>/timestamps/. */
+     *  "bucket" — Flask serves shards from <bucket>/reciters/<slug>/timestamps/. */
     mode: 'local' | 'bucket';
     /** Full URL the frontend fetches once to populate the in-memory manifest. */
     manifest_url: string;

@@ -100,7 +100,7 @@ def read_prefetched_peaks(slug: str, url: str) -> dict | None:
 
 
 def clear_prefetch(slug: str) -> None:
-    """Delete every artifact under ``wip/<slug>/audio/`` and ``wip/<slug>/peaks/``.
+    """Delete every artifact under ``reciters/<slug>/audio/`` and ``reciters/<slug>/peaks/``.
 
     Called by the post-RELEASED sweeper. The ``_done.json`` sentinel is
     deleted separately by the sweeper itself so it can survive a partial

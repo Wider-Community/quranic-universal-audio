@@ -1,7 +1,7 @@
 """Tests for ``services.auto_detect`` — server-side acceptance reconciler.
 
 The reconciler is the replacement for a manual "Accept" button: when the
-alignment pipeline writes files to ``wip/<slug>/``, it fires
+alignment pipeline writes files to ``reciters/<slug>/``, it fires
 ``reciter.alignment_completed`` with a synthetic system actor.
 """
 
@@ -84,9 +84,9 @@ def _seed_state(backend, *, slug: str, state: ReciterState):
 
 def test_hydrate_initial_seen_seeds_from_wip(auto_detect_env):
     svc, _, backend = auto_detect_env
-    # Pre-create a folder under wip/ — anything works as long as list_dir picks
+    # Pre-create a folder under reciters/ — anything works as long as list_dir picks
     # up the directory entry.
-    backend.write_json_atomic("wip/preexisting_slug/marker.json", {"x": 1})
+    backend.write_json_atomic("reciters/preexisting_slug/marker.json", {"x": 1})
     svc.hydrate_initial_seen()
     fired = svc.reconcile_once()
     # preexisting_slug is in the seen set + no state row exists in
@@ -95,13 +95,13 @@ def test_hydrate_initial_seen_seeds_from_wip(auto_detect_env):
 
 
 def test_hydrate_initial_seen_catches_up_stuck_awaiting_alignment(auto_detect_env):
-    """Server restart between upload and boot: wip/ contains a slug that's
+    """Server restart between upload and boot: reciters/ contains a slug that's
     still in AWAITING_ALIGNMENT. Without catch-up firing at hydrate time
     the row would stay stuck forever (reconcile_once only sees NEW slugs).
     """
     svc, state_service, backend = auto_detect_env
     _seed_state(backend, slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
-    backend.write_json_atomic("wip/rec_a/segments.json", {"x": 1})
+    backend.write_json_atomic("reciters/rec_a/segments.json", {"x": 1})
 
     svc.hydrate_initial_seen()
 
@@ -123,7 +123,7 @@ def test_reconcile_fires_on_new_wip_folder_for_awaiting_alignment(auto_detect_en
     _seed_state(backend, slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
 
     # Simulate the alignment pipeline writing files.
-    backend.write_json_atomic("wip/rec_a/detailed.json", {"entries": []})
+    backend.write_json_atomic("reciters/rec_a/detailed.json", {"entries": []})
 
     fired = svc.reconcile_once()
     assert fired == 1
@@ -135,7 +135,7 @@ def test_reconcile_fires_on_new_wip_folder_for_awaiting_alignment(auto_detect_en
 def test_reconcile_skips_slug_not_in_awaiting_alignment(auto_detect_env):
     svc, state_service, backend = auto_detect_env
     _seed_state(backend, slug="rec_a", state=ReciterState.CATALOGUED)
-    backend.write_json_atomic("wip/rec_a/detailed.json", {"entries": []})
+    backend.write_json_atomic("reciters/rec_a/detailed.json", {"entries": []})
 
     fired = svc.reconcile_once()
     assert fired == 0
@@ -147,7 +147,7 @@ def test_reconcile_skips_slug_not_in_awaiting_alignment(auto_detect_env):
 def test_reconcile_idempotent_across_calls(auto_detect_env):
     svc, state_service, backend = auto_detect_env
     _seed_state(backend, slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
-    backend.write_json_atomic("wip/rec_a/detailed.json", {"entries": []})
+    backend.write_json_atomic("reciters/rec_a/detailed.json", {"entries": []})
 
     fired_first = svc.reconcile_once()
     fired_second = svc.reconcile_once()
@@ -156,15 +156,15 @@ def test_reconcile_idempotent_across_calls(auto_detect_env):
 
 
 def test_reconcile_handles_no_state_row(auto_detect_env):
-    """A wip/<slug>/ folder for a slug that has no state row must not raise."""
+    """A reciters/<slug>/ folder for a slug that has no state row must not raise."""
     svc, _, backend = auto_detect_env
-    backend.write_json_atomic("wip/orphan_slug/x.json", {"x": 1})
+    backend.write_json_atomic("reciters/orphan_slug/x.json", {"x": 1})
     fired = svc.reconcile_once()
     assert fired == 0
 
 
 def test_reconcile_handles_missing_wip_dir(tmp_path, monkeypatch):
-    """If the wip/ directory doesn't exist on the bucket, list_dir returns [].
+    """If the reciters/ directory doesn't exist on the bucket, list_dir returns [].
     reconcile_once must not raise.
     """
     from services import auto_detect as auto_detect_service
@@ -197,7 +197,7 @@ def test_reconcile_applies_pending_edits(auto_detect_env):
         comments=None,
     )
 
-    backend.write_json_atomic("wip/rec_a/detailed.json", {"entries": []})
+    backend.write_json_atomic("reciters/rec_a/detailed.json", {"entries": []})
     fired = svc.reconcile_once()
     assert fired == 1
 

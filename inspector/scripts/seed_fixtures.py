@@ -17,7 +17,7 @@ What it does:
 
 1. ``snapshot_download`` the public fixtures dataset into ``inspector/.fixtures``
    (gitignored) — laid out exactly like a bucket (``db/inspector.db``,
-   ``wip/<slug>/...``).
+   ``reciters/<slug>/...``).
 2. Configure the app to use it by writing two lines to the repo-root ``.env``:
    ``INSPECTOR_BACKEND=filesystem`` and ``INSPECTOR_FILESYSTEM_ROOT=...``. If a
    ``.env`` already exists it is **never modified** — the lines are printed for

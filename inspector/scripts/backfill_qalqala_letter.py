@@ -10,16 +10,16 @@ Computed by reusing ``utils.arabic_text.last_arabic_letter`` + the qalqala
 check from ``services.validation.classifier`` — byte-equivalent to runtime.
 
 Parallel-then-promote flow (safe rollback):
-1. Read ``wip/<slug>/detailed.json``, compute the field for every seg.
+1. Read ``reciters/<slug>/detailed.json``, compute the field for every seg.
 2. Write the augmented doc to ``archive/backfill/<slug>/detailed.json``.
 3. Run validate against the backfilled bytes IN-MEMORY (no bucket promotion
    yet), normalize, compare to ``bench/ground_truth/<slug>.json``.
 4. Only on byte-equivalent match: atomically promote backfilled bytes to
-   ``wip/<slug>/detailed.json`` via ``data_dir.write_detailed_doc``.
+   ``reciters/<slug>/detailed.json`` via ``data_dir.write_detailed_doc``.
 
 Usage:
     python inspector/scripts/backfill_qalqala_letter.py --slug bandar_baleela_mp3quran
-    python inspector/scripts/backfill_qalqala_letter.py --all-wip
+    python inspector/scripts/backfill_qalqala_letter.py --all
     python inspector/scripts/backfill_qalqala_letter.py --slug X --dry-run
 """
 
@@ -39,7 +39,6 @@ if str(_INSPECTOR) not in sys.path:
 
 from adapters.detailed_json import load_entries_from_bytes  # noqa: E402
 from services import cache, data_dir  # noqa: E402
-from services import state as state_service  # noqa: E402
 from services.hf_bucket import get_backend  # noqa: E402
 from services.qalqala import compute_qalqala_letter  # noqa: E402
 from services.validation import validate_reciter_segments  # noqa: E402
@@ -134,7 +133,7 @@ def process_slug(slug: str, *, dry_run: bool) -> dict:
 
     # Step 1: write to archive/backfill/<slug>/detailed.json
     backend.write_json_atomic(archive, augmented_doc)
-    # Step 2: atomically promote to wip/<slug>/detailed.json
+    # Step 2: atomically promote to reciters/<slug>/detailed.json
     backend.write_json_atomic(data_dir.detailed_path(slug), augmented_doc)
     # Refresh caches with the promoted state.
     cache.invalidate_seg_caches(slug)
@@ -152,26 +151,15 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--slug")
-    g.add_argument("--all-wip", action="store_true")
-    g.add_argument("--all-published", action="store_true")
     g.add_argument("--all", action="store_true",
-                   help="both wip + published")
+                   help="every reciter under reciters/")
     g.add_argument("--slugs", help="comma-separated")
     ap.add_argument("--dry-run", action="store_true",
                     help="compute + drift-check but skip the bucket promotion")
     args = ap.parse_args()
 
-    # Hydrate state so data_dir.kind_for resolves wip vs published correctly
-    # — otherwise published slugs fall back to wip and read_detailed_bytes
-    # returns None.
-    state_service.hydrate()
-
-    if args.all_wip:
-        slugs = sorted(data_dir.list_slugs("wip"))
-    elif args.all_published:
-        slugs = sorted(data_dir.list_slugs("published"))
-    elif args.all:
-        slugs = sorted(data_dir.list_slugs("wip")) + sorted(data_dir.list_slugs("published"))
+    if args.all:
+        slugs = sorted(data_dir.list_slugs())
     elif args.slugs:
         slugs = [s.strip() for s in args.slugs.split(",") if s.strip()]
     else:

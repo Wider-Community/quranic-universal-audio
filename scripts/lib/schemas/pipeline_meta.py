@@ -2,8 +2,7 @@
 
 Persistent record of immutable facts emitted by the offline extraction
 pipeline so Inspector doesn't have to re-derive them at runtime. Lives at
-``wip/<slug>/pipeline_meta.json`` (and ``published/<slug>/pipeline_meta.json``
-after publish).
+``reciters/<slug>/pipeline_meta.json``.
 
 Currently records:
 

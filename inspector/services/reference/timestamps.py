@@ -3,7 +3,7 @@
 Bucket-only: manifest is composed from state (released reciters)
 + catalog (display + delivery metadata) + audio_manifest sidecars (URL
 template). Per-chapter shards read from
-``<bucket>/published/<slug>/timestamps/<chapter>.json`` on demand and gzip
+``<bucket>/reciters/<slug>/timestamps/<chapter>.json`` on demand and gzip
 through a small per-process LRU so chapter scrubbing within one reciter
 doesn't pay the bucket fetch + gzip cost on every shard hit.
 

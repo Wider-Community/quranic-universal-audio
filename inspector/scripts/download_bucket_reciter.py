@@ -49,14 +49,13 @@ def _setup_paths_and_env(bucket: str) -> None:
     os.environ["INSPECTOR_BUCKET_REPO"] = _BUCKETS[bucket]
 
 
-def _detect_kind(backend, slug: str) -> str | None:
-    for kind in ("wip", "published"):
-        try:
-            backend.read_bytes(f"{kind}/{slug}/detailed.json")
-            return kind
-        except Exception:
-            continue
-    return None
+def _reciter_exists(backend, slug: str) -> bool:
+    """True when ``reciters/<slug>/detailed.json`` is present on the bucket."""
+    try:
+        backend.read_bytes(f"reciters/{slug}/detailed.json")
+        return True
+    except Exception:
+        return False
 
 
 def _safe_list(backend, prefix: str) -> list[str]:
@@ -79,10 +78,9 @@ def _download_file(backend, src: str, dst: Path) -> bool:
 
 def download(backend, slug: str, out_dir: Path, *,
              include_audio: bool) -> dict:
-    kind = _detect_kind(backend, slug)
-    if kind is None:
-        raise SystemExit(f"slug {slug!r}: no detailed.json under wip/ or published/")
-    base = f"{kind}/{slug}"
+    if not _reciter_exists(backend, slug):
+        raise SystemExit(f"slug {slug!r}: no detailed.json under reciters/")
+    base = f"reciters/{slug}"
 
     out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -129,7 +127,6 @@ def download(backend, slug: str, out_dir: Path, *,
 
     return {
         "slug": slug,
-        "kind": kind,
         "out_dir": str(out_dir),
         "top_level_files": n_top,
         "peaks_files": n_peaks,
