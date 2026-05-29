@@ -114,23 +114,7 @@ class UnpublishedPayload(TypedDict):
     pass
 
 
-class BatchTimestampsRefreshPayload(TypedDict):
-    job_id: str
-
-
-class PublishedEditedPayload(TypedDict, total=False):
-    batch_id: str
-
-
 class DiscardedPayload(TypedDict, total=False):
-    pass
-
-
-class ForceSetStatePayload(TypedDict):
-    to_state: str
-
-
-class SeededPayload(TypedDict, total=False):
     pass
 
 
