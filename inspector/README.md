@@ -163,6 +163,6 @@ We're continuously improving the Inspector to make reviewing as smooth as possib
 ## Tech stack
 
 - **Backend:** Python 3.11, Flask (Blueprints), `quranic-phonemizer`
-- **Frontend:** Svelte 5 (runes) + TypeScript + Vite — new code uses runes; some legacy Svelte 4 components remain
+- **Frontend:** Svelte 4/5 + TypeScript + Vite
 - **Audio:** Web Audio API (waveform decoding/drawing), ffmpeg (server-side peak extraction)
 - **Storage:** SQLite synced to a Hugging Face bucket
