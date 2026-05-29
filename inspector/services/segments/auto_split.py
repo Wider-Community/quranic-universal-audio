@@ -87,3 +87,32 @@ def compute_auto_split(reciter: str, chapter: int, segment_uid: str) -> dict:
     return {"cursors": None, "refs": None,
             "kind": _find_segment_kind(reciter, chapter, segment_uid),
             "source": "miss"}
+
+
+def load_auto_split_map(reciter: str) -> dict[str, dict]:
+    """Return the whole precomputed Auto Split map for *reciter*, filtered.
+
+    The bulk sibling of :func:`compute_auto_split`: instead of one ``uid`` per
+    request it returns ``{segment_uid: {"cursors": [...], "refs": [...],
+    "kind": ...}}`` for *every* sidecar hit. The FE preloads this once (on
+    accordion open) so each Auto Split click is a zero-network O(1) map lookup
+    instead of a round trip, and can classify misses ("uid not in map")
+    client-side without the O(n) ``_find_segment_kind`` scan.
+
+    Applies the same validity gate ``compute_auto_split`` uses per-uid — an
+    entry missing any of ``cursors`` / ``refs`` / ``kind`` is dropped rather
+    than shipped half-shaped. Reads the O(1) in-memory ``load_auto_split``
+    cache (one bucket read per reciter per process).
+    """
+    by_uid, _meta = load_auto_split(reciter)
+    out: dict[str, dict] = {}
+    for uid, hit in by_uid.items():
+        if not isinstance(hit, dict):
+            continue
+        cursors = hit.get("cursors") or None
+        refs = hit.get("refs") or None
+        kind = hit.get("kind") or None
+        if cursors and refs and kind:
+            out[uid] = {"cursors": list(cursors), "refs": list(refs),
+                        "kind": kind}
+    return out

@@ -35,6 +35,7 @@
     import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
     import { IssueRegistry } from '../../domain/registry';
     import { accordionPin, clearAccordionPin, pinAccordion } from '../../stores/accordion-pin';
+    import { ensureAutoSplitMap } from '../../stores/auto-split';
     import { segAllData, selectedReciter } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
@@ -67,6 +68,14 @@
     // to the store directly and flow back in via this $: subscription.
     let openCategory: string | null = $valUiOpenCategory;
     $: openCategory = $valUiOpenCategory;
+
+    // Preload the Auto Split cursor map when an auto-split accordion opens so
+    // each Auto Split click is a zero-network O(1) lookup instead of a per-click
+    // round trip. Fire-and-forget + deduped (stores/auto-split.ts); the
+    // reciter-scoped map is dropped on switch by clearPerReciterState.
+    $: if ((openCategory === 'cross_verse' || openCategory === 'repetitions') && $selectedReciter) {
+        void ensureAutoSplitMap($selectedReciter);
+    }
 
     // Reset on chapter change
     let _prevChapter = chapter;

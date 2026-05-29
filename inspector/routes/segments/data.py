@@ -115,6 +115,24 @@ def seg_data(reciter, chapter):
     return orjson_cached_response(result)
 
 
+@seg_data_bp.route("/auto-split/<reciter>")
+def seg_auto_split_map(reciter):
+    """Return the full precomputed Auto Split cursor map for a reciter.
+
+    Read-only bulk sibling of the per-uid ``POST /api/seg/auto-split/<reciter>``
+    in ``routes/segments/edit.py``: the FE preloads the whole
+    ``{uid: {cursors, refs, kind}}`` map once (on auto-split accordion open) so
+    each Auto Split click is a zero-network O(1) lookup instead of a round trip.
+    Ungated + cached, matching the sibling read endpoints (``/validate``,
+    ``/all``) — the map is no more sensitive than ``/all`` (which already
+    exposes every uid + matched_ref). The map content is stable across a
+    session (the sidecar is offline-computed; edits only mint new uids that are
+    legitimate misses), so ETag revalidation returns 304 on repeat.
+    """
+    from services.auto_split import load_auto_split_map
+    return orjson_cached_response({"by_uid": load_auto_split_map(reciter)})
+
+
 @seg_data_bp.route("/all/<reciter>")
 def seg_all(reciter):
     """Return all segments across all chapters for a reciter."""
