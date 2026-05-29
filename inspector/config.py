@@ -125,7 +125,7 @@ PEAKS_WORKER_COUNT = 8                   # ThreadPoolExecutor workers for parall
 # missing/old version as a cache miss so existing peaks lazily recompute.
 #
 # v3 introduces the slim packed shape (int8-quantized, decimated, gzipped) at
-# ``wip/<slug>/peaks/<chapter>.json.gz``. See ``services/audio/peaks_slim.py``
+# ``reciters/<slug>/peaks/<chapter>.json.gz``. See ``services/audio/peaks_slim.py``
 # for the format. Pre-v3 ``.json`` files are migrated by
 # ``scripts/backfill_peaks_slim.py`` and preserved as ``.json.bak`` for
 # rollback. Reader (``audio_fetch.read_prefetched_peaks``) inflates v3 blobs

@@ -1,7 +1,7 @@
 """Timestamps tab routes (/api/ts/*).
 
 ``/manifest`` and ``/shard/<reciter>/<int:chapter>`` read from
-``<INSPECTOR_BUCKET_MOUNT>/published/<slug>/timestamps/...`` (composed in
+``<INSPECTOR_BUCKET_MOUNT>/reciters/<slug>/timestamps/...`` (composed in
 ``services/timestamps.py``). ``/config`` advertises manifest + shard URL
 templates so the frontend doesn't need its own env knob.
 """

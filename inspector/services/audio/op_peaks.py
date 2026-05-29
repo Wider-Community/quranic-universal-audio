@@ -3,7 +3,7 @@
 A history-peaks record (``edit_history_peaks.jsonl``) lets the History panel
 render an op's pre/post waveform with zero recompute. The cheap, complete way
 to produce one at save time is to **slice the already-baked 10 bps chapter
-peaks** (``wip/<slug>/peaks/<ch>.json.gz``) for the op's covering range —
+peaks** (``reciters/<slug>/peaks/<ch>.json.gz``) for the op's covering range —
 no ffmpeg, no float roundtrip — and re-encode the int8 sub-range as b64.
 
 Single source of truth for the op→record shape, reused by:

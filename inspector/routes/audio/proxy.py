@@ -2,7 +2,7 @@
 
 Single GET route. Lookup order:
 
-1. **Bucket-resident audio** — ``wip/<slug>/audio/<chapter>.mp3`` written
+1. **Bucket-resident audio** — ``reciters/<slug>/audio/<chapter>.mp3`` written
    by the katana extraction pipeline (`.local/extraction/upload_to_bucket.py`).
    Served via ``send_file`` (uses OS sendfile, honours Range + 304). The
    ``-c:a copy -f mp3`` step in ``audio_persist.py`` injects an Xing/Info

@@ -3,12 +3,12 @@ edit_history.jsonl into a parallel archive file, leaving the live edit-history
 free of the migration noise.
 
 Layout produced:
-    wip/<slug>/edit_history.jsonl                 — non-pad_migration batches only
+    reciters/<slug>/edit_history.jsonl                 — non-pad_migration batches only
     archive/pad_migration/<slug>/edit_history.jsonl — moved batches
     archive/pad_migration/<slug>/edit_history.jsonl.<ts>.bak — pre-purge copy
 
 Dry-run by default. Pass --apply to actually mutate the bucket.
-Pass --include-published to also process published/ slugs.
+Processes every reciter under reciters/.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from services import data_dir, storage_paths
-from services.hf_bucket import StorageNotFound, get_backend
+from services.storage import data_dir, storage_paths
+from services.storage.hf_bucket import StorageNotFound, get_backend
 
 
 PURGE_TYPE = "pad_migration"
@@ -65,12 +65,12 @@ def encode_jsonl(records: list[dict]) -> bytes:
     return ("\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n").encode("utf-8")
 
 
-def process_slug(backend, slug: str, kind: str, *, apply: bool, stamp: str) -> dict:
-    path = storage_paths.edit_history_path(slug, kind)
+def process_slug(backend, slug: str, *, apply: bool, stamp: str) -> dict:
+    path = storage_paths.edit_history_path(slug)
     try:
         raw = backend.read_bytes(path)
     except StorageNotFound:
-        return {"slug": slug, "kind": kind, "status": "missing", "bytes_before": 0,
+        return {"slug": slug, "status": "missing", "bytes_before": 0,
                 "bytes_after": 0, "batches_kept": 0, "batches_purged": 0}
 
     keep, purge, bad = split_records(raw)
@@ -81,7 +81,6 @@ def process_slug(backend, slug: str, kind: str, *, apply: bool, stamp: str) -> d
 
     result = {
         "slug": slug,
-        "kind": kind,
         "status": "ok",
         "bytes_before": bytes_before,
         "bytes_after": bytes_after,
@@ -112,24 +111,16 @@ def process_slug(backend, slug: str, kind: str, *, apply: bool, stamp: str) -> d
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true", help="Mutate the bucket (default: dry-run)")
-    ap.add_argument("--include-published", action="store_true",
-                    help="Also process published/ slugs (default: wip only)")
     ap.add_argument("--slug", help="Process only this slug (debugging)")
     args = ap.parse_args()
 
     backend = get_backend()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
-    targets: list[tuple[str, str]] = []
     if args.slug:
-        kind = data_dir.kind_for(args.slug)
-        targets.append((args.slug, kind))
+        targets = [args.slug]
     else:
-        for s in data_dir.list_slugs("wip"):
-            targets.append((s, "wip"))
-        if args.include_published:
-            for s in data_dir.list_slugs("published"):
-                targets.append((s, "published"))
+        targets = list(data_dir.list_slugs())
 
     print(f"Mode: {'APPLY' if args.apply else 'DRY-RUN'}")
     print(f"Stamp: {stamp}")
@@ -137,17 +128,17 @@ def main() -> int:
     print()
 
     rows = []
-    for slug, kind in targets:
-        r = process_slug(backend, slug, kind, apply=args.apply, stamp=stamp)
+    for slug in targets:
+        r = process_slug(backend, slug, apply=args.apply, stamp=stamp)
         rows.append(r)
 
     # Report
-    fmt = "{:<42} {:<10} {:<10} {:>12} {:>12} {:>12} {:>7} {:>8}"
-    print(fmt.format("slug", "kind", "status", "before", "after", "saved", "kept", "purged"))
+    fmt = "{:<42} {:<10} {:>12} {:>12} {:>12} {:>7} {:>8}"
+    print(fmt.format("slug", "status", "before", "after", "saved", "kept", "purged"))
     print("-" * 116)
     total_before = total_after = total_saved = total_purged = 0
     for r in rows:
-        print(fmt.format(r["slug"][:42], r["kind"], r["status"],
+        print(fmt.format(r["slug"][:42], r["status"],
                          r["bytes_before"], r["bytes_after"],
                          r.get("saved", 0), r["batches_kept"], r["batches_purged"]))
         total_before += r["bytes_before"]
@@ -155,7 +146,7 @@ def main() -> int:
         total_saved += r.get("saved", 0)
         total_purged += r["batches_purged"]
     print("-" * 116)
-    print(fmt.format("TOTAL", "", "", total_before, total_after, total_saved, "", total_purged))
+    print(fmt.format("TOTAL", "", total_before, total_after, total_saved, "", total_purged))
     print()
     if total_before:
         print(f"Reduction: {100 * total_saved / total_before:.1f}% across {len(rows)} files")

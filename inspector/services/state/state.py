@@ -114,23 +114,7 @@ class UnpublishedPayload(TypedDict):
     pass
 
 
-class BatchTimestampsRefreshPayload(TypedDict):
-    job_id: str
-
-
-class PublishedEditedPayload(TypedDict, total=False):
-    batch_id: str
-
-
 class DiscardedPayload(TypedDict, total=False):
-    pass
-
-
-class ForceSetStatePayload(TypedDict):
-    to_state: str
-
-
-class SeededPayload(TypedDict, total=False):
     pass
 
 
@@ -159,20 +143,6 @@ def snapshot() -> ReciterStateFile:
 
 def get_row(slug: str) -> ReciterRow | None:
     return repo_state.get_row(slug)
-
-
-def kind_for(slug: str) -> str | None:
-    """Return ``"wip"`` or ``"published"`` for ``slug`` based on its lifecycle.
-
-    Returns ``None`` if the slug isn't tracked. Used by routes that need to
-    pick a bucket subtree at runtime without hard-coding state knowledge.
-    """
-    row = get_row(slug)
-    if row is None:
-        return None
-    if row.state == ReciterState.RELEASED:
-        return "published"
-    return "wip"
 
 
 def all_rows() -> list[ReciterRow]:
@@ -521,7 +491,7 @@ def _h_catalog_edited(slug, before, actor, payload, reason):
 
 def _h_alignment_completed(slug, before, actor, payload, reason):
     """Server-side or admin-triggered acceptance: the alignment pipeline has
-    produced files under ``wip/<slug>/`` and the row is ready for human
+    produced files under ``reciters/<slug>/`` and the row is ready for human
     review.
 
     Side effect: if a pending user request exists for this slug, applies the

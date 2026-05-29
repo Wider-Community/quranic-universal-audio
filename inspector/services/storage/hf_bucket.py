@@ -38,6 +38,53 @@ logger = logging.getLogger(__name__)
 
 
 # ----------------------------------------------------------------------
+# Bucket identities + local safety guard
+# ----------------------------------------------------------------------
+
+# The production bucket holds live state. The SQLite substrate syncs
+# full-file (see services/db/sync.py), so a single stray write from a
+# local/dev process clobbers production — there is no row-level merge.
+PROD_BUCKET_REPO = "hetchyy/quranic-inspector-bucket"
+# Default for every NON-deployed process: local dev, scripts, the dev Space
+# image. Prod is opt-in only (see ``resolve_bucket_repo``).
+DEV_BUCKET_REPO = "hetchyy/quranic-inspector-bucket-dev"
+
+
+def is_deployed() -> bool:
+    """True inside a deployed HF Space (sits behind the TLS proxy)."""
+    return os.environ.get("INSPECTOR_BEHIND_PROXY") == "1"
+
+
+class ProdBucketRefused(RuntimeError):
+    """A non-deployed process tried to use the prod bucket without opt-in."""
+
+
+def resolve_bucket_repo() -> str:
+    """Return the bucket repo id to use, defaulting to dev (never prod).
+
+    ``INSPECTOR_BUCKET_REPO`` wins when set. With nothing set a non-deployed
+    process defaults to the dev bucket — local dev and scripts never silently
+    touch prod. Pointing a local process at prod requires an explicit
+    ``INSPECTOR_ALLOW_PROD_BUCKET=1`` acknowledgement; the deployed prod Space
+    is exempt (it sets the var explicitly and runs behind the proxy).
+    """
+    repo = (os.environ.get("INSPECTOR_BUCKET_REPO") or "").strip() or DEV_BUCKET_REPO
+    if (
+        repo == PROD_BUCKET_REPO
+        and not is_deployed()
+        and os.environ.get("INSPECTOR_ALLOW_PROD_BUCKET") != "1"
+    ):
+        raise ProdBucketRefused(
+            f"Refusing to use the PROD bucket ({PROD_BUCKET_REPO}) from a "
+            "local/non-deployed process: the SQLite DB syncs full-file, so a "
+            "stray write clobbers production state. Set INSPECTOR_BUCKET_REPO "
+            f"to a dev bucket (e.g. {DEV_BUCKET_REPO} or your own), or set "
+            "INSPECTOR_ALLOW_PROD_BUCKET=1 if you truly intend to."
+        )
+    return repo
+
+
+# ----------------------------------------------------------------------
 # Exceptions
 # ----------------------------------------------------------------------
 
@@ -571,9 +618,11 @@ def get_backend() -> StorageBackend:
 
     - ``INSPECTOR_BACKEND`` — ``bucket`` (default) | ``filesystem``
     - ``INSPECTOR_FILESYSTEM_ROOT`` — root path for ``FilesystemBackend``
-    - ``INSPECTOR_BUCKET_REPO`` — HF repo id (default
-      ``hetchyy/quranic-inspector-bucket`` for local + prod Space; dev
-      Space overrides to ``hetchyy/quranic-inspector-bucket-dev``)
+    - ``INSPECTOR_BUCKET_REPO`` — HF repo id. Defaults to the **dev** bucket
+      (``hetchyy/quranic-inspector-bucket-dev``) for every non-deployed
+      process; the prod bucket is refused locally unless
+      ``INSPECTOR_ALLOW_PROD_BUCKET=1`` (see ``resolve_bucket_repo``). The
+      prod Space sets this var explicitly and runs behind the proxy.
     - ``INSPECTOR_BUCKET_MOUNT`` — mount path inside deployed Space; unset
       in local mode (BucketBackend uses ``hf_hub_download`` instead)
     - ``INSPECTOR_HF_TOKEN`` / ``HF_TOKEN`` — write/read token
@@ -595,9 +644,9 @@ def get_backend() -> StorageBackend:
                 )
             backend: StorageBackend = FilesystemBackend(root)
         elif kind == "bucket":
-            bucket_id = os.environ.get(
-                "INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket"
-            )
+            # Defaults to the dev bucket; refuses prod from a local process
+            # unless explicitly acknowledged (see ``resolve_bucket_repo``).
+            bucket_id = resolve_bucket_repo()
             # Opt into the local FUSE mount on first use. No-op if app.py
             # already mounted at boot, under pytest, behind the Space
             # proxy, or if hf-mount isn't installed. Scripts that go

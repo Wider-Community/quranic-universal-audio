@@ -23,19 +23,30 @@ stay offline.
 
 from __future__ import annotations
 
+import hashlib
 import logging
+from datetime import datetime, timezone
+
+from pydantic import ValidationError
 
 from scripts.lib.schemas import (
     Actor,
+    AudioCategory,
+    AudioManifestSidecar,
+    Channel,
+    Delivery,
     IntakeSubmission,
     IntakeValidation,
     ProbeResponse,
+    Source,
 )
 from scripts.lib.schemas.intake_requests import IntakeSource
 from scripts.lib.schemas.state import SLUG_RE
 
 from services.db import _serde, repo_requests
 from services.db import sync as _sync
+from services.storage import storage_paths
+from services.storage.hf_bucket import get_backend
 
 from . import intake_validation
 from .intake_probe import probe_source
@@ -59,6 +70,24 @@ class IntakeValidationError(IntakeError):
 
 class NotIntakeRequest(IntakeError):
     """The id isn't a pending intake request (unknown / wrong kind / resolved)."""
+
+
+class IngestError(IntakeError):
+    """Base for ingest-mint failures."""
+
+
+class IngestBadRequest(IngestError):
+    """Malformed ingest body or the request row isn't an accepted slugless
+    intake awaiting ingest (route maps to 400)."""
+
+
+class IngestSlugCollision(IngestError):
+    """The proposed delivery slug already exists (route maps to 409)."""
+
+
+class IngestVocabMissing(IngestError):
+    """A delivery FK (source/channel/riwayah/style/reciter) is still missing
+    after applying ``vocab_additions`` (route maps to 422)."""
 
 
 # ---- Submit -----------------------------------------------------------------
@@ -168,6 +197,261 @@ def accept(request_id: str, *, actor: Actor, reciter_id: str | None = None) -> s
         )
     _invalidate()
     return request_id
+
+
+# ---- Ingest (owner / offline pipeline) --------------------------------------
+
+
+def ingest(request_id: str, payload: dict, actor: Actor) -> dict:
+    """Mint the catalog delivery for an accepted slugless intake and seed it
+    into the alignment queue, in ONE durable transaction.
+
+    Called server-to-server by the offline extraction/ingest pipeline once it
+    has fetched + probed the contributor audio and uploaded ``reciters/<slug>/``
+    content to the bucket. Steps (all atomic):
+
+    1. Validate the request row is ``status='accepted'``, ``slug IS NULL``, and
+       a slugless intake kind. (Idempotent: a row that already has ``slug`` set
+       was already ingested → 200 no-op with the existing slug.)
+    2. Apply ``vocab_additions`` (idempotent ``add_source`` / ``add_channel``) so
+       the delivery's source/channel FKs resolve.
+    3. ``catalog.add_reciter`` when ``reciter`` is provided and new (idempotent on
+       ``reciter_id``).
+    4. ``catalog.add_delivery`` (constructs a :class:`Delivery`; ``chapter_count``
+       derived from the manifest, ``added_*`` stamped from the actor + now).
+    5. Write the ``catalog/audio_manifest/<slug>.json`` sidecar.
+    6. ``state.transition(slug, "reciter.requested", ...)`` to seed
+       ``AWAITING_ALIGNMENT`` + its pending entry — the SAME path
+       ``existing_combo_edit`` uses, so ``auto_detect`` later flips it to
+       ``AWAITING_REVIEW`` when the content folder is noticed.
+    7. ``repo_requests.resolve_by_id`` to back-fill ``requests.slug``.
+
+    Returns ``{"ok": True, "slug": str, "state": "awaiting_alignment"}``.
+
+    Lazy ``catalog``/``state`` imports avoid an import cycle (state → catalog →
+    this package at init).
+    """
+    from services.state import audit, catalog as catalog_service, state as state_service
+
+    row = repo_requests.get_by_id(request_id)
+    if row is None:
+        raise NotIntakeRequest(request_id)
+    if row["kind"] not in _INTAKE_KINDS:
+        raise IngestBadRequest(
+            f"request {request_id} is kind {row['kind']!r}, not a slugless intake"
+        )
+    if row["status"] != "accepted":
+        raise IngestBadRequest(
+            f"request {request_id} is {row['status']!r}, not an accepted intake"
+        )
+    # Idempotent: already ingested (slug back-filled) → no-op.
+    if row["slug"]:
+        existing_slug = row["slug"]
+        r = state_service.get_row(existing_slug)
+        return {
+            "ok": True,
+            "slug": existing_slug,
+            "state": r.state.value if r is not None else None,
+        }
+
+    delivery_in = payload.get("delivery")
+    if not isinstance(delivery_in, dict):
+        raise IngestBadRequest("missing or malformed 'delivery'")
+    slug = (delivery_in.get("slug") or "").strip()
+    if not slug or not SLUG_RE.match(slug):
+        raise IngestBadRequest(f"invalid delivery slug: {slug!r}")
+
+    manifest_in = payload.get("audio_manifest")
+    if not isinstance(manifest_in, dict):
+        raise IngestBadRequest("missing or malformed 'audio_manifest'")
+    chapters_in = manifest_in.get("chapters")
+    if not isinstance(chapters_in, dict) or not chapters_in:
+        raise IngestBadRequest("'audio_manifest.chapters' must be a non-empty object")
+
+    # Slug collision (409) — check BEFORE opening the txn so the response is a
+    # clean 409 instead of a rolled-back IntegrityError.
+    if catalog_service.find_delivery(slug) is not None:
+        raise IngestSlugCollision(f"delivery slug {slug!r} already exists")
+
+    try:
+        audio_category = AudioCategory(delivery_in.get("audio_category"))
+    except ValueError as e:
+        raise IngestBadRequest(
+            f"invalid audio_category: {delivery_in.get('audio_category')!r}"
+        ) from e
+
+    reason = payload.get("reason")
+    reciter_in = payload.get("reciter")
+    vocab_in = payload.get("vocab_additions")
+
+    # Build + write the audio_manifest sidecar BEFORE the DB transaction. The
+    # bucket is NOT part of the SQLite txn, so a write inside it would orphan the
+    # sidecar on rollback (e.g. ``reciter.requested`` raising), or leave a
+    # committed delivery with no manifest if it ran after commit (the idempotent
+    # re-ingest no-op would never repair it). Writing first means a rollback only
+    # ever leaves a harmless orphan keyed by a slug with no delivery — overwritten
+    # verbatim on retry, never read in the meantime. Also keeps slow bucket I/O
+    # out from under the serialized SQLite write lock.
+    manifest = _build_manifest(slug, audio_category, chapters_in)
+    get_backend().write_json_atomic(
+        storage_paths.audio_manifest_path(slug),
+        manifest.model_dump(mode="json", by_alias=True),
+    )
+
+    with _sync.durable_transaction():
+        # vocab additions (idempotent — satisfies add_delivery's FKs).
+        _apply_vocab_additions(vocab_in, actor=actor, catalog_service=catalog_service)
+
+        # reciter (idempotent on reciter_id).
+        if isinstance(reciter_in, dict):
+            rid = (reciter_in.get("reciter_id") or "").strip()
+            if not rid:
+                raise IngestBadRequest("reciter.reciter_id is required when 'reciter' is set")
+            if catalog_service.find_reciter(rid) is None:
+                catalog_service.add_reciter(
+                    actor=actor,
+                    reciter_id=rid,
+                    name_en=reciter_in.get("name_en") or rid,
+                    name_ar=reciter_in.get("name_ar"),
+                    country=reciter_in.get("country"),
+                    reason=reason,
+                )
+
+        # delivery — construct the Delivery model (never a dict literal).
+        delivery = _build_delivery(
+            delivery_in, audio_category=audio_category,
+            chapter_count=len(chapters_in), actor=actor,
+        )
+        try:
+            catalog_service.add_delivery(actor=actor, delivery=delivery, reason=reason)
+        except catalog_service.InvalidCatalogChange as e:
+            # add_delivery wraps BOTH a duplicate-slug and an FK violation. The
+            # pre-txn find_delivery check normally catches collisions, so a
+            # duplicate here is a writer race; disambiguate for the right status.
+            if catalog_service.find_delivery(slug) is not None:
+                raise IngestSlugCollision(
+                    f"delivery slug {slug!r} already exists"
+                ) from e
+            raise IngestVocabMissing(str(e)) from e
+
+        # seed AWAITING_ALIGNMENT + pending entry (same path as existing_combo_edit).
+        new_row = state_service.transition(
+            slug,
+            "reciter.requested",
+            actor=actor,
+            payload={"proposed_edits": {}, "comments": None, "auto_claim": False},
+        )
+
+        # 7. back-fill requests.slug.
+        repo_requests.resolve_by_id(
+            request_id=request_id, status="accepted", transitioned_by=actor, slug=slug,
+        )
+
+        audit.append(
+            event="request.intake_ingested",
+            actor=actor,
+            slug=slug,
+            payload={"request_id": request_id, "kind": row["kind"]},
+            reason=reason,
+        )
+
+    _invalidate()
+    return {"ok": True, "slug": slug, "state": new_row.state.value}
+
+
+def _apply_vocab_additions(vocab_in, *, actor: Actor, catalog_service) -> None:
+    """Idempotently add any source/channel vocab the delivery's FKs need."""
+    if not isinstance(vocab_in, dict):
+        return
+    for src in vocab_in.get("sources") or []:
+        if not isinstance(src, dict):
+            continue
+        try:
+            source = Source(
+                slug=src["slug"], name=src["name"], url=src.get("url"),
+                audio_categories=src.get("audio_categories") or [],
+            )
+        except (KeyError, ValidationError) as e:
+            raise IngestBadRequest(f"invalid vocab source: {e}") from e
+        catalog_service.add_source(actor=actor, source=source)
+    for ch in vocab_in.get("channels") or []:
+        if not isinstance(ch, dict):
+            continue
+        try:
+            channel = Channel(
+                slug=ch["slug"], name=ch["name"], short=ch["short"],
+                host_patterns=ch.get("host_patterns") or [],
+            )
+        except (KeyError, ValidationError) as e:
+            raise IngestBadRequest(f"invalid vocab channel: {e}") from e
+        catalog_service.add_channel(actor=actor, channel=channel)
+
+
+def _build_delivery(
+    delivery_in: dict, *, audio_category: AudioCategory, chapter_count: int, actor: Actor
+) -> Delivery:
+    """Construct the :class:`Delivery` model from the ingest body. ``chapter_count``
+    is derived from the manifest; ``added_*`` are stamped server-side."""
+    try:
+        return Delivery(
+            slug=delivery_in["slug"],
+            reciter_id=delivery_in["reciter_id"],
+            riwayah=delivery_in["riwayah"],
+            style=delivery_in["style"],
+            source=delivery_in["source"],
+            channel=delivery_in["channel"],
+            audio_category=audio_category,
+            chapter_count=chapter_count,
+            recording_context=delivery_in.get("recording_context"),
+            recording_year=delivery_in.get("recording_year"),
+            added_at=datetime.now(timezone.utc),
+            added_by_hf_id=actor.hf_user_id,
+        )
+    except (KeyError, ValidationError) as e:
+        raise IngestBadRequest(f"invalid delivery: {e}") from e
+
+
+def _build_manifest(
+    slug: str, audio_category: AudioCategory, chapters_in: dict
+) -> AudioManifestSidecar:
+    """Build the audio_manifest sidecar model from the ingest chapter map.
+
+    The checksum is a stable digest of the sorted ``(key, url)`` pairs so a
+    re-ingest of the same chapters produces the same ``_meta.checksum``."""
+    chapters: dict[str, dict] = {}
+    for key, entry in chapters_in.items():
+        if not isinstance(entry, dict):
+            raise IngestBadRequest(f"audio_manifest chapter {key!r} is not an object")
+        url = entry.get("url")
+        if not isinstance(url, str) or not url:
+            raise IngestBadRequest(f"audio_manifest chapter {key!r} missing url")
+        chapters[str(key)] = {
+            "url": url,
+            "size_bytes": entry.get("size_bytes"),
+            "duration_sec": (
+                int(round(entry["duration_sec"]))
+                if isinstance(entry.get("duration_sec"), (int, float))
+                else None
+            ),
+            "bitrate_kbps": entry.get("bitrate_kbps"),
+            "bitrate_mode": entry.get("bitrate_mode"),
+        }
+    digest_src = "".join(
+        f"{k}={chapters[k]['url']};" for k in sorted(chapters)
+    ).encode("utf-8")
+    checksum = hashlib.sha256(digest_src).hexdigest()[:16]
+    try:
+        return AudioManifestSidecar(
+            slug=slug,
+            chapters=chapters,
+            **{"_meta": {
+                "checksum": checksum,
+                "chapter_count": len(chapters),
+                "category": audio_category.value,
+            }},
+        )
+    except ValidationError as e:
+        raise IngestBadRequest(f"invalid audio_manifest: {e}") from e
 
 
 # ---- Resolve: send back / discard (owner) -----------------------------------

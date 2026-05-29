@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sys as _sys
 
-from .auth import access, auth, hf_users, permissions, predicates, secrets_guard
+from .auth import access, auth, hf_users, permissions, predicates, secrets_guard, token_auth
 from .state import audit, catalog, pending_requests, request_archive, state
 from .storage import cache, data_dir, data_loader, hf_bucket, storage_paths
 from .audio import (
@@ -55,6 +55,7 @@ _LEGACY_ALIASES = {
     "permissions": permissions,
     "predicates": predicates,
     "secrets_guard": secrets_guard,
+    "token_auth": token_auth,
     "audit": audit,
     "catalog": catalog,
     "pending_requests": pending_requests,

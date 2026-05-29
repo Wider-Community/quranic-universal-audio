@@ -14,8 +14,8 @@
      * Row body click opens the General drawer (M2). Action button drawers
      * (Ops) land in M3.
      */
-    import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
     import { fetchAdminReviews } from '../../../../../lib/api/admin-reviews';
+    import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
     import type {
         AdminReviewRow,
         AdminReviewsResponse,

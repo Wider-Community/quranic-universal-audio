@@ -195,15 +195,11 @@ CREATE TABLE claims (
     marked_ready_at             TEXT,
     close_reason                TEXT,             -- NO CHECK: released|published|force_released|reassigned|...
     opened_by_transition_id     TEXT REFERENCES transitions(id),
-    closed_by_transition_id     TEXT REFERENCES transitions(id),
-    -- Mark-ready form submission (populated when the reviewer hits Mark
-    -- ready, NULL when claimed-but-not-marked). Cleared together with
-    -- ``marked_ready_at`` on unmark / release / reassign so a sent-back
-    -- row presents fresh. Persisted on closed claims too — admins can
-    -- audit past cycles' attestations after a send-back-and-re-mark.
-    mark_ready_checklist        TEXT,             -- JSON: MarkReadyChecklist (scripts/lib/schemas/mark_ready.py)
-    mark_ready_comment_checks   TEXT,             -- optional free text (additional checks performed)
-    mark_ready_comment_issues   TEXT              -- optional free text (notes / suspected false positives)
+    closed_by_transition_id     TEXT REFERENCES transitions(id)
+    -- NOTE: the mark_ready_* submission columns are added by migration 0007,
+    -- NOT here. They were briefly inlined into this init script, but existing
+    -- bucket DBs are already past user_version 1 and never re-run 0001 — so the
+    -- columns must arrive via an additive ALTER migration to reach live data.
 );
 -- one open claim per slug
 CREATE UNIQUE INDEX ux_claim_open_slug ON claims(slug) WHERE released_at IS NULL;

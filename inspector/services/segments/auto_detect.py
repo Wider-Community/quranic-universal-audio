@@ -1,7 +1,7 @@
 """Auto-detect reconciler — server-side acceptance of pending requests.
 
-When the alignment pipeline produces files under ``wip/<slug>/`` (Katana /
-HPC / CI job), this reconciler notices the new folder and fires
+When the alignment pipeline produces files under ``reciters/<slug>/`` (Katana
+/ HPC / CI job), this reconciler notices the new folder and fires
 ``reciter.alignment_completed`` for any slug in ``AWAITING_ALIGNMENT``.
 The state handler then applies the pending catalog edits (if any) and
 transitions the row to ``AWAITING_REVIEW`` ("Available for review" pill).
@@ -34,6 +34,7 @@ import time
 from scripts.lib.schemas import Actor, ReciterState, Role
 
 from services.state import state as state_service
+from services.storage import storage_paths
 from services.storage.hf_bucket import get_backend
 
 logger = logging.getLogger(__name__)
@@ -47,33 +48,46 @@ SYSTEM_ACTOR: Actor = Actor(
 )
 
 
-_seen_wip_slugs: set[str] = set()
+_seen_slugs: set[str] = set()
 _seen_lock = threading.Lock()
 _background_thread: threading.Thread | None = None
 
+# Content prefixes scanned for new reciter folders. ``wip`` is a transitional
+# alias kept for one release so reciters extracted by a not-yet-redeployed
+# Katana pipeline (which may still write ``wip/<slug>/``) are still discovered
+# during the reciters/ cutover. Drop ``"wip"`` once every writer targets
+# ``reciters/``.
+_SCAN_PREFIXES: tuple[str, ...] = (storage_paths.RECITERS_PREFIX, "wip")
+
+
+def _list_candidate_slugs(backend) -> set[str]:
+    """Union of slug folders across the scanned content prefixes."""
+    slugs: set[str] = set()
+    for prefix in _SCAN_PREFIXES:
+        try:
+            slugs.update(backend.list_dir(prefix))
+        except Exception:  # noqa: BLE001
+            logger.exception("auto_detect: list_dir(%r) failed", prefix)
+    return slugs
+
 
 def hydrate_initial_seen() -> None:
-    """Boot-time: snapshot current ``wip/`` slugs into the seen set, AND
-    fire ``alignment_completed`` for any slug that's still in
-    ``AWAITING_ALIGNMENT`` despite having files in ``wip/``.
+    """Boot-time: snapshot current reciter slugs into the seen set, AND
+    fire ``alignment_completed`` for any slug still in ``AWAITING_ALIGNMENT``
+    despite having content on the bucket.
 
-    The catch-up firing handles the case where a wip/ upload completed
-    while the server was down (or between an upload and a redeploy) —
-    without it, the slug would stay stuck in ``AWAITING_ALIGNMENT`` forever
-    because the seen-set diff in ``reconcile_once`` would never see the
-    folder as "new".
+    The catch-up firing handles the case where an upload completed while the
+    server was down (or between an upload and a redeploy) — without it, the
+    slug would stay stuck in ``AWAITING_ALIGNMENT`` forever because the
+    seen-set diff in ``reconcile_once`` would never see the folder as "new".
 
     Idempotent: a second call no-ops because the slugs are already in the
     seen set and the rows are no longer in ``AWAITING_ALIGNMENT``.
     """
     backend = get_backend()
-    try:
-        slugs = backend.list_dir("wip")
-    except Exception:  # noqa: BLE001
-        logger.exception("auto_detect: list_dir('wip') failed during initial seed")
-        return
+    slugs = _list_candidate_slugs(backend)
     with _seen_lock:
-        _seen_wip_slugs.update(slugs)
+        _seen_slugs.update(slugs)
 
     fired = 0
     for slug in slugs:
@@ -91,7 +105,7 @@ def hydrate_initial_seen() -> None:
                 slug,
             )
     logger.info(
-        "auto_detect: hydrated initial seen set (%d wip/ slugs, %d catch-up "
+        "auto_detect: hydrated initial seen set (%d slug(s), %d catch-up "
         "transition(s) fired)", len(slugs), fired,
     )
 
@@ -106,15 +120,11 @@ def reconcile_once() -> int:
     that don't yet have a state row or are in a different state.
     """
     backend = get_backend()
-    try:
-        current = set(backend.list_dir("wip"))
-    except Exception:  # noqa: BLE001
-        logger.exception("auto_detect: list_dir('wip') failed; skipping pass")
-        return 0
+    current = _list_candidate_slugs(backend)
 
     with _seen_lock:
-        new_slugs = current - _seen_wip_slugs
-        _seen_wip_slugs.update(current)
+        new_slugs = current - _seen_slugs
+        _seen_slugs.update(current)
 
     fired = 0
     transitioned: list[str] = []
@@ -176,7 +186,7 @@ def is_background_loop_running() -> bool:
 
     Surfaced via ``/healthz`` so a misconfigured deploy (no
     ``INSPECTOR_AUTO_DETECT=1``, so no periodic polling) is visible
-    instead of silently failing to react to new ``wip/`` uploads.
+    instead of silently failing to react to new ``reciters/`` uploads.
     """
     return _background_thread is not None and _background_thread.is_alive()
 
@@ -184,7 +194,7 @@ def is_background_loop_running() -> bool:
 def _reset_seen_for_tests() -> None:
     """Tests only — reset the seen set so each test starts clean."""
     with _seen_lock:
-        _seen_wip_slugs.clear()
+        _seen_slugs.clear()
 
 
 __all__ = [

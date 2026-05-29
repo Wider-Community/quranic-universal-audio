@@ -10,8 +10,8 @@
 
 import type {
     AdminReviewDetail,
-    AdminReviewValidation,
     AdminReviewsResponse,
+    AdminReviewValidation,
 } from '../types/generated/schemas';
 
 export async function fetchAdminReviews(signal?: AbortSignal): Promise<AdminReviewsResponse> {

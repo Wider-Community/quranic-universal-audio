@@ -186,10 +186,26 @@ def resolve_by_id(
 ) -> bool:
     """Resolve a pending request by id (slugless intake flow — no state machine).
     ``slug`` optionally links a freshly-minted delivery on accept. Returns False
-    if the id is unknown or already terminal."""
+    if the id is unknown or already terminal.
+
+    Back-fill exception: an already-``accepted`` intake row whose slug is still
+    NULL may be re-resolved to ``accepted`` *to attach* the minted ``slug`` (the
+    ingest step — accept flips the row to ``accepted`` before ingest mints the
+    delivery). The status doesn't change; only the slug is attached. Re-resolving
+    a non-accepted terminal row, or one whose slug is already set, returns
+    False."""
     row = get_by_id(request_id)
-    if row is None or row["status"] != "pending":
+    if row is None:
         return False
+    if row["status"] != "pending":
+        is_slug_backfill = (
+            status == "accepted"
+            and row["status"] == "accepted"
+            and row["slug"] is None
+            and slug is not None
+        )
+        if not is_slug_backfill:
+            return False
     return _resolve_row(
         row, status=status, transitioned_by=transitioned_by, reason=reason,
         slug=slug, closed_by_transition_id=closed_by_transition_id, at=at,

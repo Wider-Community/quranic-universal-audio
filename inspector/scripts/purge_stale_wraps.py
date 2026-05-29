@@ -21,8 +21,7 @@ Both fixes also drop ``has_repeated_words`` since the seg no longer
 represents a multi-pass reading.
 
 Dry-run by default. Pass ``--apply`` to actually mutate the bucket.
-By default scans both ``wip/`` and ``published/``; pass ``--wip-only`` to
-restrict.
+Scans every reciter under ``reciters/``.
 """
 
 from __future__ import annotations
@@ -37,8 +36,8 @@ import orjson
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from services import data_dir, storage_paths
-from services.hf_bucket import StorageNotFound, get_backend
+from services.storage import data_dir, storage_paths
+from services.storage.hf_bucket import StorageNotFound, get_backend
 from utils.repetitions import _word_position, is_wrap_consistent
 
 
@@ -102,13 +101,13 @@ def classify_wrap(matched_ref: str, wrap: list, vwc: dict) -> str | None:
 # Per-reciter pass
 # ---------------------------------------------------------------------------
 
-def process_slug(backend, slug: str, kind: str, *, vwc: dict, apply: bool,
+def process_slug(backend, slug: str, *, vwc: dict, apply: bool,
                  stamp: str) -> dict:
-    path = storage_paths.detailed_path(slug, kind)
+    path = storage_paths.detailed_path(slug)
     try:
         raw = backend.read_bytes(path)
     except StorageNotFound:
-        return {"slug": slug, "kind": kind, "status": "missing",
+        return {"slug": slug, "status": "missing",
                 "wraps_total": 0, "wraps_stale": 0, "wraps_corrupted": 0,
                 "segs_modified": 0, "details": []}
 
@@ -144,7 +143,7 @@ def process_slug(backend, slug: str, kind: str, *, vwc: dict, apply: bool,
                 seg.pop("has_repeated_words", None)
 
     result = {
-        "slug": slug, "kind": kind, "status": "ok",
+        "slug": slug, "status": "ok",
         "wraps_total": n_total, "wraps_stale": n_stale,
         "wraps_corrupted": n_corrupt, "segs_modified": n_mod,
         "details": details,
@@ -176,8 +175,6 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true",
                     help="Mutate the bucket (default: dry-run, only report)")
-    ap.add_argument("--wip-only", action="store_true",
-                    help="Skip published/ slugs (default: scan both tiers)")
     ap.add_argument("--slug", help="Process only this slug (debugging)")
     ap.add_argument("--show-details", action="store_true",
                     help="Print per-seg details (always shown when --slug)")
@@ -187,25 +184,16 @@ def main() -> int:
     vwc = _load_word_counts()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
-    targets: list[tuple[str, str]] = []
+    targets: list[str] = []
     if args.slug:
-        # Try wip first then published
-        for k in ("wip", "published"):
-            try:
-                backend.read_bytes(storage_paths.detailed_path(args.slug, k))
-                targets.append((args.slug, k))
-                break
-            except StorageNotFound:
-                continue
-        if not targets:
-            print(f"slug {args.slug!r} not found in wip or published")
+        try:
+            backend.read_bytes(storage_paths.detailed_path(args.slug))
+            targets.append(args.slug)
+        except StorageNotFound:
+            print(f"slug {args.slug!r} not found under reciters/")
             return 1
     else:
-        for s in data_dir.list_slugs("wip"):
-            targets.append((s, "wip"))
-        if not args.wip_only:
-            for s in data_dir.list_slugs("published"):
-                targets.append((s, "published"))
+        targets = list(data_dir.list_slugs())
 
     print(f"Mode:    {'APPLY' if args.apply else 'DRY-RUN'}")
     print(f"Stamp:   {stamp}")
@@ -213,18 +201,18 @@ def main() -> int:
     print()
 
     rows: list[dict] = []
-    for slug, kind in targets:
-        rows.append(process_slug(backend, slug, kind, vwc=vwc, apply=args.apply,
+    for slug in targets:
+        rows.append(process_slug(backend, slug, vwc=vwc, apply=args.apply,
                                  stamp=stamp))
 
-    fmt = "{:<42} {:<10} {:<8} {:>6} {:>6} {:>9} {:>6}"
-    print(fmt.format("slug", "kind", "status", "wraps", "stale", "corrupted", "modif"))
+    fmt = "{:<42} {:<8} {:>6} {:>6} {:>9} {:>6}"
+    print(fmt.format("slug", "status", "wraps", "stale", "corrupted", "modif"))
     print("-" * 96)
     tot_wraps = tot_stale = tot_corrupt = tot_mod = 0
     for r in rows:
         if r["wraps_total"] == 0 and not args.show_details:
             continue
-        print(fmt.format(r["slug"][:42], r["kind"], r["status"],
+        print(fmt.format(r["slug"][:42], r["status"],
                          r["wraps_total"], r["wraps_stale"],
                          r["wraps_corrupted"], r["segs_modified"]))
         tot_wraps += r["wraps_total"]
@@ -232,7 +220,7 @@ def main() -> int:
         tot_corrupt += r["wraps_corrupted"]
         tot_mod += r["segs_modified"]
     print("-" * 96)
-    print(fmt.format("TOTAL", "", "",
+    print(fmt.format("TOTAL", "",
                      tot_wraps, tot_stale, tot_corrupt, tot_mod))
     print()
 
@@ -240,7 +228,7 @@ def main() -> int:
         for r in rows:
             if not r["details"]:
                 continue
-            print(f"=== {r['slug']} ({r['kind']}) — {len(r['details'])} segs to clean")
+            print(f"=== {r['slug']} — {len(r['details'])} segs to clean")
             for d in r["details"]:
                 print(f"  [{d['verdict']:<9}] ref={d['ref']:<22} "
                       f"ts=[{d['time_start']},{d['time_end']}]  wrap={d['wrap']}")

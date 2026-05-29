@@ -19,18 +19,18 @@
         SegValLowConfidenceItem,
     } from '../../../../lib/types/api';
     import type { MarkReadyChecklist } from '../../../../lib/types/generated/schemas';
+    import {
+        BLOCKING_COUNT_KEYS,
+        BLOCKING_LABELS,
+        type BlockingCountKey,
+        emptyChecklist,
+        isAllChecked,
+        markReadyCopy,
+    } from '../../copy/mark-ready';
     import { segAllData } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import { segValidation, valUiOpenCategory } from '../../stores/validation';
     import { filterStaleIssues } from '../../utils/validation/stale';
-    import {
-        BLOCKING_COUNT_KEYS,
-        BLOCKING_LABELS,
-        emptyChecklist,
-        isAllChecked,
-        markReadyCopy,
-        type BlockingCountKey,
-    } from '../../copy/mark-ready';
 
     interface Props {
         open: boolean;

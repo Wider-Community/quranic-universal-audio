@@ -14,7 +14,7 @@ a byte-equal sidecar. Run as a drift check after the first pass.
 Usage::
 
     python inspector/scripts/backfill_deleted_basmala.py --slug some_reciter
-    python inspector/scripts/backfill_deleted_basmala.py --all-wip
+    python inspector/scripts/backfill_deleted_basmala.py --all
     python inspector/scripts/backfill_deleted_basmala.py --all --dry-run
 """
 
@@ -35,7 +35,6 @@ if str(_INSPECTOR) not in sys.path:
 from scripts.lib.pipeline_meta import collect_deleted_basmalas  # noqa: E402
 from scripts.lib.schemas import PipelineMeta  # noqa: E402
 from services.storage import data_dir  # noqa: E402
-from services.state import state as state_service  # noqa: E402
 
 
 def _utc_now_iso() -> str:
@@ -91,21 +90,14 @@ def main() -> int:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--slug")
     g.add_argument("--slugs", help="comma-separated")
-    g.add_argument("--all-wip", action="store_true")
-    g.add_argument("--all-published", action="store_true")
-    g.add_argument("--all", action="store_true", help="both wip + published")
+    g.add_argument("--all", action="store_true",
+                   help="every reciter under reciters/")
     ap.add_argument("--dry-run", action="store_true",
                     help="compute and report but do not write the sidecar")
     args = ap.parse_args()
 
-    state_service.hydrate()
-
-    if args.all_wip:
-        slugs = sorted(data_dir.list_slugs("wip"))
-    elif args.all_published:
-        slugs = sorted(data_dir.list_slugs("published"))
-    elif args.all:
-        slugs = sorted(data_dir.list_slugs("wip")) + sorted(data_dir.list_slugs("published"))
+    if args.all:
+        slugs = sorted(data_dir.list_slugs())
     elif args.slugs:
         slugs = [s.strip() for s in args.slugs.split(",") if s.strip()]
     else:

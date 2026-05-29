@@ -11,12 +11,6 @@
      * triggered only when the accordion block expands (the underlying call
      * walks the bucket and is too expensive to eager-fetch).
      */
-    import { IssueRegistry } from '../../../../segments/domain/registry';
-    import {
-        CHECKLIST_ORDER,
-        markReadyCopy,
-        type ChecklistKey,
-    } from '../../../../segments/copy/mark-ready';
     import {
         fetchAdminReviewDetail,
         fetchAdminReviewValidation,
@@ -26,6 +20,12 @@
         AdminReviewDetail,
         AdminReviewValidation,
     } from '../../../../../lib/types/generated/schemas';
+    import {
+        CHECKLIST_ORDER,
+        type ChecklistKey,
+        markReadyCopy,
+    } from '../../../../segments/copy/mark-ready';
+    import { IssueRegistry } from '../../../../segments/domain/registry';
     import ExpandedTimeline from './ExpandedTimeline.svelte';
     import ReviewerActionsPopover from './ReviewerActionsPopover.svelte';
 

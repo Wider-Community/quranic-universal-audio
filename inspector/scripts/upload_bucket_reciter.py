@@ -51,21 +51,9 @@ def _setup_paths_and_env(bucket: str) -> None:
     os.environ["INSPECTOR_BUCKET_REPO"] = _BUCKETS[bucket]
 
 
-def _detect_kind(backend, slug: str) -> str:
-    for kind in ("wip", "published"):
-        try:
-            backend.read_bytes(f"{kind}/{slug}/detailed.json")
-            return kind
-        except Exception:
-            continue
-    # Default to ``wip`` when the slug has no prior bucket footprint.
-    return "wip"
-
-
 def upload(backend, slug: str, src: Path, *,
            include_audio: bool, apply: bool) -> dict:
-    kind = _detect_kind(backend, slug)
-    base = f"{kind}/{slug}"
+    base = f"reciters/{slug}"
     log.info("Target: %s/", base)
 
     # 1. Plan: top-level files present locally → upload list.
@@ -122,7 +110,7 @@ def upload(backend, slug: str, src: Path, *,
     if not apply:
         log.warning("DRY RUN — pass --apply to write. Nothing pushed.")
         return {
-            "slug": slug, "kind": kind, "apply": False,
+            "slug": slug, "apply": False,
             "uploads_planned": len(to_upload),
             "orphan_deletes_planned": len(orphans),
         }
@@ -146,7 +134,7 @@ def upload(backend, slug: str, src: Path, *,
     log.info("Deleted %d orphan plain peaks files", n_del)
 
     return {
-        "slug": slug, "kind": kind, "apply": True,
+        "slug": slug, "apply": True,
         "uploaded": n_up, "deleted_orphans": n_del,
     }
 

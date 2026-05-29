@@ -201,7 +201,7 @@ def test_uid_persisted_on_next_save(tmp_reciter_dir, signed_in_client):
 
 def test_uid_deterministic_across_processes(tmp_path):
     """Backfill the same legacy fixture in two cold processes; UIDs must match."""
-    legacy_dir = tmp_path / "wip" / "legacy_reciter"
+    legacy_dir = tmp_path / "reciters" / "legacy_reciter"
     legacy_dir.mkdir(parents=True)
     legacy_path = legacy_dir / "detailed.json"
     legacy_doc = {
@@ -225,7 +225,7 @@ def test_uid_deterministic_across_processes(tmp_path):
         os.environ['INSPECTOR_BACKEND'] = 'filesystem'
         os.environ['INSPECTOR_FILESYSTEM_ROOT'] = os.environ['DATA_DIR']
         # Cold process: initialise the SQLite substrate like app boot does
-        # (load_detailed → kind_for → repo_state needs the schema present).
+        # (load_detailed → repo_state needs the schema present).
         os.environ['INSPECTOR_DB_PATH'] = os.path.join(os.environ['DATA_DIR'], 'inspector.db')
         from services import db
         db.init_db()

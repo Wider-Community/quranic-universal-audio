@@ -21,9 +21,12 @@ that's the wire format used by ``huggingface_hub.upload_file`` and the
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
 
-WipOrPublished = Literal["wip", "published"]
+# Single top-level prefix for ALL per-reciter content. Lifecycle state lives in
+# the DB (the source of truth) — content location is state-independent, so a
+# transition is a pure DB write and never moves files. Replaces the old
+# state-driven ``wip/`` + ``published/`` split (see data-migrations.md).
+RECITERS_PREFIX = "reciters"
 
 
 def state_path() -> str:
@@ -82,35 +85,35 @@ def discarded_requests_path() -> str:
     return "requests/discarded.json"
 
 
-def reciter_dir(slug: str, kind: WipOrPublished) -> str:
-    return f"{kind}/{slug}"
+def reciter_dir(slug: str) -> str:
+    return f"{RECITERS_PREFIX}/{slug}"
 
 
-def reciter_file(slug: str, kind: WipOrPublished, name: str) -> str:
-    return f"{kind}/{slug}/{name}"
+def reciter_file(slug: str, name: str) -> str:
+    return f"{RECITERS_PREFIX}/{slug}/{name}"
 
 
-def segments_path(slug: str, kind: WipOrPublished) -> str:
-    return reciter_file(slug, kind, "segments.json")
+def segments_path(slug: str) -> str:
+    return reciter_file(slug, "segments.json")
 
 
-def detailed_path(slug: str, kind: WipOrPublished) -> str:
-    return reciter_file(slug, kind, "detailed.json")
+def detailed_path(slug: str) -> str:
+    return reciter_file(slug, "detailed.json")
 
 
-def edit_history_path(slug: str, kind: WipOrPublished) -> str:
-    return reciter_file(slug, kind, "edit_history.jsonl")
+def edit_history_path(slug: str) -> str:
+    return reciter_file(slug, "edit_history.jsonl")
 
 
-def edit_history_peaks_path(slug: str, kind: WipOrPublished) -> str:
-    return reciter_file(slug, kind, "edit_history_peaks.jsonl")
+def edit_history_peaks_path(slug: str) -> str:
+    return reciter_file(slug, "edit_history_peaks.jsonl")
 
 
-def low_confidence_path(slug: str, kind: WipOrPublished) -> str:
-    return reciter_file(slug, kind, "low_confidence_v2.json")
+def low_confidence_path(slug: str) -> str:
+    return reciter_file(slug, "low_confidence_v2.json")
 
 
-def auto_split_path(slug: str, kind: WipOrPublished) -> str:
+def auto_split_path(slug: str) -> str:
     """Auto-split cursor sidecar — per-seg precomputed cursors + refs.
 
     Written offline by ``scripts/lib/auto_split_precompute.py`` once segments
@@ -118,10 +121,10 @@ def auto_split_path(slug: str, kind: WipOrPublished) -> str:
     Replaces the runtime MFA Space call the inspector used to make on every
     Auto Split button click.
     """
-    return reciter_file(slug, kind, "auto_split_v1.json")
+    return reciter_file(slug, "auto_split_v1.json")
 
 
-def pipeline_meta_path(slug: str, kind: WipOrPublished) -> str:
+def pipeline_meta_path(slug: str) -> str:
     """Per-reciter immutable extraction-time facts.
 
     Schema: ``scripts/lib/schemas/pipeline_meta.py::PipelineMeta``. Written
@@ -129,36 +132,26 @@ def pipeline_meta_path(slug: str, kind: WipOrPublished) -> str:
     by ``services/storage/data_loader.load_pipeline_meta``. Immutable
     post-extraction — never invalidated by save.
     """
-    return reciter_file(slug, kind, "pipeline_meta.json")
+    return reciter_file(slug, "pipeline_meta.json")
 
 
-def published_timestamps_path(slug: str, chapter: str | int) -> str:
-    """Timestamps live only under ``published/<slug>/timestamps/`` — not wip."""
-    return f"published/{slug}/timestamps/{chapter}.json"
+def timestamps_path(slug: str, chapter: str | int) -> str:
+    """Per-chapter timestamps shard. Only released reciters have these — the
+    Timestamps tab gates on DB state, not on file presence."""
+    return reciter_file(slug, f"timestamps/{chapter}.json")
 
 
 def prefetched_audio_dir(slug: str) -> str:
-    return f"wip/{slug}/audio"
+    return reciter_file(slug, "audio")
 
 
 def prefetched_audio_path(slug: str, chapter: str | int) -> str:
     """MP3 written by the katana extraction pipeline for in-review reciters."""
-    return f"wip/{slug}/audio/{chapter}.mp3"
-
-
-def _peaks_root(slug: str) -> str:
-    """Resolve the bucket root (``wip`` vs ``published``) for ``slug``.
-
-    Reciter state determines which subtree owns the peaks file. Lazy import
-    keeps this module free of the ``data_dir → storage_paths`` cycle
-    (``data_dir`` imports us at module load).
-    """
-    from . import data_dir
-    return data_dir.kind_for(slug)  # "wip" or "published"
+    return reciter_file(slug, f"audio/{chapter}.mp3")
 
 
 def prefetched_peaks_dir(slug: str) -> str:
-    return f"{_peaks_root(slug)}/{slug}/peaks"
+    return reciter_file(slug, "peaks")
 
 
 def prefetched_peaks_path(slug: str, chapter: str | int) -> str:
@@ -170,32 +163,28 @@ def prefetched_peaks_path(slug: str, chapter: str | int) -> str:
     ``unpack_slim`` so downstream consumers see a standard
     ``{duration_ms, peaks: list[list[float]]}`` dict.
 
-    Path is state-aware: ``wip/<slug>/...`` for in-flight reciters,
-    ``published/<slug>/...`` once they ship. No fallback — the kind lookup
-    is single-source-of-truth (``data_dir.kind_for``).
-
     Pre-v3 files (``<chapter>.json``) are migrated to ``.json.gz`` by
     ``scripts/backfill_peaks_slim.py`` and originals are renamed to
     ``.json.bak`` for rollback.
     """
-    return f"{_peaks_root(slug)}/{slug}/peaks/{chapter}.json.gz"
+    return reciter_file(slug, f"peaks/{chapter}.json.gz")
 
 
 def prefetched_peaks_legacy_path(slug: str, chapter: str | int) -> str:
     """Pre-v3 path (``<chapter>.json``). Used only by the backfill + rollback
     scripts -- runtime reads go through ``prefetched_peaks_path`` (v3 .gz)."""
-    return f"{_peaks_root(slug)}/{slug}/peaks/{chapter}.json"
+    return reciter_file(slug, f"peaks/{chapter}.json")
 
 
 def prefetched_peaks_backup_path(slug: str, chapter: str | int) -> str:
     """Backup name used during dev-bucket migration. Originals get renamed
     here so rollback can restore them. Cleaned up after prod cutover."""
-    return f"{_peaks_root(slug)}/{slug}/peaks/{chapter}.json.bak"
+    return reciter_file(slug, f"peaks/{chapter}.json.bak")
 
 
 def prefetch_done_marker_path(slug: str) -> str:
     """Sentinel written atomically last; presence ⇒ prefetch fully completed."""
-    return f"wip/{slug}/audio/_done.json"
+    return reciter_file(slug, "audio/_done.json")
 
 
 PER_RECITER_FILES: tuple[str, ...] = (

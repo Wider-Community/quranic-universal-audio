@@ -2,6 +2,7 @@ __pycache__/
 .pytest_cache
 .cache/
 .bucket/
+.fixtures/
 .vscode/
 .claude/
 .env

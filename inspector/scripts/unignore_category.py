@@ -202,9 +202,10 @@ def main(argv: list[str] | None = None) -> int:
     from utils.references import chapter_from_ref
     from scripts.lib.schemas import Actor
 
-    # Hydrate the state store so kind_for(slug) resolves published vs wip
-    # correctly. Without this, every slug defaults to "wip" and published
-    # reciters' files are unreadable.
+    # Hydrate the state store so the save/undo path sees the reciter's
+    # lifecycle state. Per-reciter content lives under a single
+    # ``reciters/<slug>/`` prefix regardless of state, so reads no longer
+    # depend on hydration — but the undo/save machinery still consults it.
     state_service.hydrate()
 
     entries = load_detailed(args.slug)
