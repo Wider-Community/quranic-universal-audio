@@ -242,7 +242,7 @@
                 {/each}
             </div>
 
-            <div class="facet-group channel-group">
+            <div class="facet-group">
                 <span class="facet-label">Channel</span>
                 {#each channelValues as [val, count] (val)}
                     <button
@@ -520,12 +520,6 @@
         gap: 6px;
         max-width: 100%;
         flex-wrap: wrap;
-    }
-    .channel-group {
-        max-width: 360px;
-        overflow-x: auto;
-        flex-wrap: nowrap;
-        scrollbar-width: thin;
     }
     .facet-label {
         font-size: 10.5px;
