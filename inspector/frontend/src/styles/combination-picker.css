@@ -58,17 +58,14 @@
     background: var(--accent);
 }
 
-/* Bucket-coloured dot used as a quiet section-head marker on the picker. */
-.state-dot {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--text-faint);
+/* Bucket group heads carry the labelled StatePill itself (with a count),
+   so the bucket state is stated once per group instead of repeated on every
+   row. Reset the uppercase/letter-spacing inherited from the base head so the
+   pill renders in its own title case. */
+.picker-section-head.bucket-head {
+    text-transform: none;
+    letter-spacing: normal;
 }
-.state-dot-available_for_review { background: var(--state-available-fg, var(--text-muted)); }
-.state-dot-under_review { background: var(--state-under-review-fg, var(--accent)); }
-.state-dot-published { background: var(--state-published-fg, var(--text-secondary)); }
 
 /* The row is now `[ReciterChip flex:1] [row-figures auto]`.
    The chip handles country circle + names + delivery meta + state pill;

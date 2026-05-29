@@ -22,6 +22,7 @@ from scripts.lib.schemas import ReciterState
 from services import auth as auth_service
 from services import state as state_service
 from services.admin import visitors as visitor_service
+from services.auth import capabilities as cap_service
 from services.db import repo_access
 from services.db import sync as _sync
 
@@ -218,6 +219,9 @@ def auth_me():
             "active_claim": None,
             "active_claims": [],
             "dev_mode": dev_mode,
+            # Anonymous still holds whatever anon-eligible capabilities the
+            # owner left on (e.g. view.catalog) — the FE gates on this list.
+            "capabilities": cap_service.capabilities_for(None),
         })
     # Page-entry recency: /api/me runs on every SPA load / focus, so this is
     # debounced (at most one write per user per window) and best-effort — a
@@ -240,4 +244,8 @@ def auth_me():
         "active_claim": active_claims[0] if active_claims else None,
         "active_claims": active_claims,
         "dev_mode": dev_mode,
+        # Resolved capability ids the caller currently holds — recomputed fresh
+        # per request (role + matrix are never cookied), so an owner's toggle
+        # reflects on this caller's next /api/me with no restart.
+        "capabilities": cap_service.capabilities_for(user),
     })

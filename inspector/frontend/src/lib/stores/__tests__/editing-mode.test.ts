@@ -19,6 +19,7 @@ function _user(overrides: Partial<CurrentUser> = {}): CurrentUser {
         active_claim: null,
         active_claims: [],
         dev_mode: false,
+        capabilities: [],
         ...overrides,
     };
 }
@@ -47,6 +48,7 @@ function _task(overrides: {
             can_edit_as_admin: false,
             can_edit_as_owner: false,
             can_mark_ready: false,
+            can_skip_mark_ready_gates: false,
             can_unmark_ready: false,
             can_release: false,
         },
@@ -73,14 +75,6 @@ describe('syncEditingMode', () => {
         expect(syncEditingMode(_user(), task)).toEqual({
             kind: 'view',
             viewReason: 'discarded',
-        });
-    });
-
-    it('returns view/completed for completed reciter', () => {
-        const task = _task({ state: 'completed' });
-        expect(syncEditingMode(_user(), task)).toEqual({
-            kind: 'view',
-            viewReason: 'completed',
         });
     });
 
@@ -166,6 +160,7 @@ describe('syncEditingMode', () => {
             active_claim: null,
             active_claims: [],
             dev_mode: false,
+            capabilities: [],
         };
         expect(syncEditingMode(anon, _task())).toEqual({
             kind: 'view',
@@ -187,25 +182,19 @@ describe('syncEditingMode', () => {
         expect(syncEditingMode(_user({ role: 'owner' }), task)).toEqual({ kind: 'owner' });
     });
 
-    it('returns owner for owner on a completed reciter', () => {
-        const task = _task({ state: 'completed' });
-        expect(syncEditingMode(_user({ role: 'owner' }), task)).toEqual({ kind: 'owner' });
-    });
-
     it('returns owner for owner on an awaiting_review row (no claim needed)', () => {
         const task = _task({ state: 'awaiting_review' });
         expect(syncEditingMode(_user({ role: 'owner' }), task)).toEqual({ kind: 'owner' });
     });
 
-    it('returns view/marked_ready for owner on a marked_ready row', () => {
+    it('returns owner for owner on a marked_ready row (override bypasses freeze)', () => {
         const task = _task({
             state: 'under_review',
             marked_ready: true,
             assignee_hf_id: 'other',
         });
         expect(syncEditingMode(_user({ role: 'owner' }), task)).toEqual({
-            kind: 'view',
-            viewReason: 'marked_ready',
+            kind: 'owner',
         });
     });
 
@@ -217,11 +206,4 @@ describe('syncEditingMode', () => {
         });
     });
 
-    it('maintainer still gets view/completed on completed reciter (no owner bypass)', () => {
-        const task = _task({ state: 'completed' });
-        expect(syncEditingMode(_user({ role: 'maintainer' }), task)).toEqual({
-            kind: 'view',
-            viewReason: 'completed',
-        });
-    });
 });

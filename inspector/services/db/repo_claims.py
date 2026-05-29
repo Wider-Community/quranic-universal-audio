@@ -67,7 +67,13 @@ def close_claim(
     released_at: datetime | None = None,
     closed_by_transition_id: str | None = None,
 ) -> bool:
-    """Close the open claim for ``slug``. Returns True if one was closed."""
+    """Close the open claim for ``slug``. Returns True if one was closed.
+
+    The mark-ready submission columns are intentionally preserved on the
+    closed row so admins can audit past cycles' attestations after a
+    send-back-and-re-mark. The OPEN-claim contract (next ``open_claim``
+    call writes fresh values) is what gives the reviewer a clean slate.
+    """
     ts = _serde.to_iso(released_at or _serde.now())
     cur = get_conn().execute(
         "UPDATE claims SET released_at = ?, close_reason = ?, closed_by_transition_id = ? "
@@ -77,13 +83,49 @@ def close_claim(
     return cur.rowcount > 0
 
 
-def set_marked_ready(slug: str, *, ready: bool, at: datetime | None = None) -> None:
-    """Stamp / clear marked_ready_at on the open claim."""
-    val = _serde.to_iso(at or _serde.now()) if ready else None
-    get_conn().execute(
-        "UPDATE claims SET marked_ready_at = ? WHERE slug = ? AND released_at IS NULL",
-        (val, slug),
-    )
+def set_marked_ready(
+    slug: str,
+    *,
+    ready: bool,
+    at: datetime | None = None,
+    checklist_json: str | None = None,
+    comment_checks: str = "",
+    comment_issues: str = "",
+    bypass_used: bool = False,
+) -> None:
+    """Stamp / clear ``marked_ready_at`` AND the submission columns on the
+    open claim.
+
+    When ``ready`` is True: stamps ``marked_ready_at`` and writes the
+    submission columns. Callers building the submission write should
+    JSON-encode the checklist via ``_serde.json_dumps``. Pass
+    ``bypass_used=True`` when the submission came from a holder of the
+    ``claim.mark_ready_skip_gates`` capability — ``checklist_json`` will
+    typically be ``None`` in that case (the bypass path doesn't carry
+    one).
+
+    When ``ready`` is False (unmark): clears all five columns. The closed
+    history row (if any) keeps its prior submission — only the OPEN
+    claim is reset, mirroring how ``marked_ready_at`` already worked.
+    """
+    if ready:
+        val = _serde.to_iso(at or _serde.now())
+        get_conn().execute(
+            "UPDATE claims SET marked_ready_at = ?, mark_ready_checklist = ?, "
+            "mark_ready_comment_checks = ?, mark_ready_comment_issues = ?, "
+            "mark_ready_bypass_used = ? "
+            "WHERE slug = ? AND released_at IS NULL",
+            (val, checklist_json, comment_checks, comment_issues,
+             1 if bypass_used else 0, slug),
+        )
+    else:
+        get_conn().execute(
+            "UPDATE claims SET marked_ready_at = NULL, mark_ready_checklist = NULL, "
+            "mark_ready_comment_checks = NULL, mark_ready_comment_issues = NULL, "
+            "mark_ready_bypass_used = NULL "
+            "WHERE slug = ? AND released_at IS NULL",
+            (slug,),
+        )
 
 
 def reassign(

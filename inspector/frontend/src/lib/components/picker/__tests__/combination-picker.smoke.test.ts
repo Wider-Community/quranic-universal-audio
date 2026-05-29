@@ -100,4 +100,27 @@ describe('CombinationPicker', () => {
         expect(picked.delivery).not.toBeNull();
         expect(picked.delivery.slug).toBeTruthy();
     });
+
+    it('states the bucket once per group head, not on every grouped row', async () => {
+        const { container } = render(CombinationPicker, {
+            props: { open: true, title: 'Switch reciter' },
+        });
+
+        await waitFor(() => {
+            expect(container.querySelector('.combo-row')).not.toBeNull();
+        });
+
+        // Two distinct buckets in the mock (available_for_review, published)
+        // → one labelled StatePill in each group head.
+        const headPills = container.querySelectorAll('.bucket-head .pill');
+        expect(headPills.length).toBe(2);
+        const headLabels = [...headPills].map((p) => p.textContent?.trim());
+        expect(headLabels).toContain('Available for review');
+        expect(headLabels).toContain('Published');
+
+        // The state pill must NOT be repeated on the grouped rows — the head
+        // already conveys it. (No active claim in this fixture, so every row
+        // is grouped.)
+        expect(container.querySelectorAll('.combo-row .pill').length).toBe(0);
+    });
 });

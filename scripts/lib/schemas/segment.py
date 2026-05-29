@@ -1,7 +1,7 @@
 """Per-reciter ``detailed.json`` segment schema.
 
 Shared source of truth for the per-segment shape inside
-``wip/<slug>/detailed.json`` and ``published/<slug>/detailed.json``.
+``reciters/<slug>/detailed.json``.
 Both the offline extraction pipeline (`.local/extraction/segments/outputs.py`)
 and the Inspector save flow (`inspector/services/segments/save.py`) MUST
 round-trip through this model — that is the structural fix for the

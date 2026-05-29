@@ -1,152 +1,153 @@
 # Inspector
 
-Flask web app for reviewing and editing Quran recitation alignment results. Three tabs: **Timestamps**, **Segments**, and **Audio**.
+The public website for Quranic Universal Audio — browse and play reciters,
+inspect word-level timestamps, and edit segment alignments. Flask + a Svelte
+single-page app, backed by a Hugging Face storage bucket.
 
-## Setup
+## Developing — three ways to run it
 
-Requires [Docker](https://docs.docker.com/get-docker/). From the repo root:
+The same code runs in three setups. Pick the lightest one that covers what
+you're working on; you can always move up a tier.
+
+| Tier | Run it with | Best for | What you need |
+|------|-------------|----------|---------------|
+| **0 — Fixtures (offline)** | `seed_fixtures.py` then `python inspector/app.py` | Frontend, UI, quick prototyping — most day-to-day work | **Nothing.** No HF account or token. |
+| **1 — Your dev bucket (local)** | local app pointed at your own bucket | Backend, database, state machine, real bucket data — the bulk of backend work | HF account + token + your own bucket (one command) |
+| **2 — Your dev Space (deployed)** | a personal HF Space | The final end-to-end check that the *deployed* app behaves like production (real login, gunicorn, the hourly daemons) | HF account + token + your own Space (one command) |
+
+Tier 1 is enough for almost everything. Reach for Tier 2 only when you need to
+confirm something that only happens in a deployed Space.
+
+> **Why a separate bucket per person (Tiers 1–2)?** The app's database is a
+> single SQLite file that's synced *whole* to its bucket on every write. Two
+> people pointing at one bucket would overwrite each other's data. So everyone
+> gets their own.
+
+### Workflow
+
+1. **Branch from `main`:** `git switch -c <your-name>/<topic> main`.
+2. **Develop in whichever tier fits** (see below).
+3. **Open a pull request into `main`** — once reviewed and merged, CI deploys
+   to production automatically.
+
+To preview a branch as a live deployment *before* merging, deploy it to your
+own Space (Tier 2):
+
+1. **Script (recommended):** `python inspector/scripts/deploy_space.py <your-space-id>`
+2. **HF CLI directly:** build the frontend (`cd inspector/frontend && npm run
+   build`), then `hf upload <your-space-id> . --repo-type space` from a staged
+   copy. The script does the staging for you, so option 1 is simpler.
+
+### Tier 0 — Fixtures (no account, no token)
+
+Downloads a small public sample dataset and runs the app fully offline against
+it.
 
 ```bash
-docker compose -f inspector/docker-compose.yml up
+python inspector/scripts/seed_fixtures.py        # download sample data + configure
+cd inspector/frontend && npm install && npm run build
+python inspector/app.py                          # → http://localhost:5000
 ```
 
-Open http://localhost:5000. The image is pulled from GHCR — no local build needed. `data/` at the repo root is mounted into the container, so edits save back to your working tree.
+For frontend work with hot-reload, run Vite alongside the Flask server:
 
-## Segments Reviewing
+```bash
+cd inspector/frontend && npm run dev             # → http://localhost:5173 (proxies /api)
+```
 
-The main editing interface in the **Segments** tab. Browse clips, review flagged errors, and fix them so timestamps can be generated.
+You're signed in as a synthetic **owner** automatically (no login). Use the
+in-app role switcher to test other roles. The fixtures bundle a couple of
+sample reciters so you can exercise the Dashboard and the Segments editor;
+audio streams from the public CDN when available.
 
-> **Important**: Make sure to save edits regularly to avoid losing work. The app does not auto-save, and unsaved changes might be lost if you refresh or navigate away.
+### Tier 1 — Your own dev bucket (local, real data)
 
-### Getting started
+One command creates a private bucket under your account and seeds it from the
+same public sample:
 
-Audio streams directly and waveforms load on demand — no setup needed. Optionally, click **Download All Audio** to cache audio locally (~1-2 GB) for offline editing. 
+```bash
+python inspector/scripts/bootstrap_dev_env.py <name>
+```
 
-**This is also needed if you notice segments' audio consistently don't match their text and play audio from neighbouring segments instead (CDN streaming issue with a small number of reciters).**
+Then point your local app at it by adding two lines to `.env` at the repo root:
 
-While audio downloads, browse another reciter's **edit history** to see what typical fixes look like — this is a good first-time orientation. 
+```bash
+INSPECTOR_BUCKET_REPO=<your-hf-user>/quranic-inspector-<name>
+HF_TOKEN=<your token>
+```
 
-You can also open the **statistics** panel for graphs on confidence scores, segment durations, words per segment, and other distribution metrics.
-
-<!-- screenshot: download button + statistics panel -->
-
-
-### Editing operations
-
-| Operation | Description |
-|-----------|-------------|
-| **Automatic fixes** | Pipeline automated removal of basmalas, isti'athas and other non-Quran segments, as well as merging accidental splits of كَلَّا ۖ بَلْ ۜ رَانَ and وَقِيلَ مَنْ͏ۜ رَاقࣲ — can be viewed in the edit history|
-| **Adjust** | Drag handles on the waveform to modify the segment's start and end time |
-| **Split** | Divide a segment into two at the playhead position |
-| **Merge** | Combine two adjacent segments into one |
-| **Edit Reference** | Change the Qur'anic reference (`surah:verse:word-surah:verse:word` format or shortcut `surah:verse`) |
-| **Delete** | Remove a segment entirely |
-| **Auto-fill** | Extend an adjacent segment to cover a missing word (available on Missing Words cards) |
-| **Ignore** | Dismiss the issue for this category, marking the segment as reviewed-and-correct |
+Run the app the same way as Tier 0 (`python inspector/app.py`). It now reads
+and writes your bucket. To start over, run
+`bootstrap_dev_env.py <name> --teardown` and bootstrap again.
 
 
-### Error categories
+### Tier 2 — Your own dev Space (deployed)
 
-Segments are validated automatically and upon every save. Issues appear in collapsible accordions grouped by category. The table below summarises each category, its priority, and the typical fix.
+When you need to verify deployed behaviour, deploy the same code to a personal
+Space:
 
-| Category | Priority | Typical fix |
-|----------|----------|-------------|
-| Failed Alignments | Must fix | Delete, merge, or edit reference |
-| Missing Verses | Must fix | Check failed alignments first |
-| Missing Words | Must fix | Auto-fix or edit reference |
-| Detected Repetitions | Should fix | Ignore or split |
-| Low Confidence | Should fix | Ignore, merge, or adjust |
-| Cross-verse | Highly recommended | Ignore or split at pause |
-| Qalqala | Highly recommended | Ignore or adjust boundary |
-| Muqatta'at | Display only | Edit if needed |
+```bash
+python inspector/scripts/bootstrap_dev_env.py <name> --deploy
+```
 
-> **General tip:** if a flagged segment has no actual error, click **Ignore** to so it disappears from the category and help us know that it is reviewed and correct.
+This creates the Space, attaches your bucket as its storage volume, wires its
+secrets, points it at your bucket, and pushes the current code. The Space uses
+**real Hugging Face login** (OAuth) like production — see [Secrets](#secrets)
+for what's set up for you.
 
----
+> **The only thing you do by hand on Hugging Face is create a token.** No
+> clicking in the HF UI to duplicate Spaces or buckets, attach storage, enter
+> secrets, or register an OAuth app — `bootstrap_dev_env.py` does all of it via
+> the API. (Use a token with write access to your own repos.)
 
-#### Failed Alignments
+To push code changes after that:
 
-The segment has no matched Qur'anic reference — alignment completely failed. This could mean the segment should be **deleted** (noise or silence), **merged** with the previous or next segment (the split was wrong), or it could be a valid segment that just wasn't detected — in that case, **edit the reference** to assign the correct text.
+```bash
+python inspector/scripts/deploy_space.py <your-hf-user>/quranic-inspector-<name>
+```
 
-<!-- screenshot: failed alignment example with action buttons -->
+## What's a bucket?
 
-#### Missing Verses
+A **bucket** is Hugging Face's S3-like file storage — a remote folder addressed
+as `hf://buckets/<owner>/<name>/`. The Inspector keeps everything that changes
+there: the SQLite database (`db/inspector.db`) and per-reciter content.
 
-A verse has zero segment coverage. Either the verse is genuinely missing from the audio, or all segments covering that verse failed alignment. Check the **Failed Alignments** category first — fixing those often resolves missing verses automatically.
+You mostly don't interact with it directly — the app reads and writes it for
+you. When you do need to poke at it:
 
-<!-- screenshot: missing verse card -->
+```bash
+hf buckets list                                  # your buckets
+hf buckets list <owner>/<name> -R                # list files
+hf buckets cp <owner>/<name>/db/inspector.db ./  # download a file
+```
 
-#### Missing Words
+For fast local reads the app auto-mounts your bucket as a local folder (via the
+`hf-mount` tool) if it's installed; otherwise it reads over the network. Either
+way it's automatic — you don't mount anything by hand.
 
-A gap in word indices between two segments within a verse. Most of the time, **auto-fill** handles this — it intelligently detects which adjacent segment the word belongs to and extends it. When using auto-fill, verify that the audio actually contains the word and it wasn't cut off at the boundary. If auto-fill is not available, **edit reference** directly on the relevant segment.
+## Secrets
 
-<!-- screenshot: missing words with auto-fill button -->
+For local Tiers 0–1 the only thing you ever set is your own `HF_TOKEN` (Tier 0
+needs nothing). For a Tier-2 Space, `bootstrap_dev_env.py` sets everything for
+you:
 
-#### Detected Repetitions
+| Secret / variable | Set by | Purpose |
+|---|---|---|
+| `HF_TOKEN` | bootstrap | Lets the Space read/write your bucket |
+| `INSPECTOR_SESSION_SECRET` | bootstrap (auto-generated) | Signs login cookies |
+| `INSPECTOR_BUCKET_REPO` | bootstrap | Points the Space at your bucket |
+| `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` | **Hugging Face, automatically** | Login — injected because the Space enables `hf_oauth`; you never register an OAuth app |
 
-The reciter repeated the same text (or part of it) detected in that segment. These can be false detections. **Ignore** if the detection is wrong, or **split** the segment based on how it was actually recited, including repetitions.
+Use a token scoped to your own repos. Get one at
+<https://huggingface.co/settings/tokens>.
 
-<!-- screenshot: repetition card -->
+## Tests
 
-#### Low Confidence
-
-Alignment confidence is below the threshold. This could be a genuine mismatch, model noise, or simply uncertainty on a segment that is fully correct. The fix varies: **ignore** if the segment sounds fine, **merge** if it was over-split, **adjust boundaries** if the timing is slightly off, or **edit reference** if the text is wrong.
-
-<!-- screenshot: low confidence card with slider -->
-
-#### Cross-verse
-
-A segment spans multiple verses. If the reciter recited them continuously (wasl) without pausing, **ignore** — the segment is correct as-is. If the reciter did pause between verses (waqf), **split** the segment at the pause point. This is highly recommended because verse-level timestamps and audio clips rely on accurate verse boundaries. In general, if there is 100-200+ flagged segments as cross-verse, a portion of them are likely segmentation failures of undetcted pauses. 
-
-<!-- screenshot: cross-verse segment -->
-
-#### Qalqala
-
-The last word of the segment ends with a qalqala letter (ق ط ب ج د), which is sometimes falsely detected as silence and segmented too early. Check the end of the segment audio to verify the qalqala sound is audible. Most of the time this is either **ignored** (sound is present) or **adjusted** so the boundary captures the full sound.
-
-This is especially important at verse boundaries — the HuggingFace dataset reconstructs audio clips for every verse, so a missing qalqala means the listener hears a cut-off ending. If the segment is mid-verse, it's less critical but still good to fix. The letter ق tends to have the most issues, but this varies by reciter and the silence thresholds used during segmentation.
-
-<!-- screenshot: qalqala segment with waveform showing the sound -->
-
-#### Muqatta'at
-
-Segments starting with huruf muqatta'at (e.g. الم, طه, يس). Flagged for manual checking only — no ignore needed. Edit if any issues are spotted.
-
-<!-- screenshot: muqatta'at segment -->
-
-<!-- screenshot: editing operations in action -->
-
-### Further quality checks
-
-The automatic error categories are best-effort and catch most issues, but some errors can go undetected. A few additional things you can do:
-
-1. **Listen through full chapters** — load a chapter in the main display and play through all its segments (use auto-play for convenience, or segment by segment for verifying audio cutoff boundaries). This catches errors that automated checks miss.
-2. **Use the filters** — combine filters on duration, word count, verses spanned, confidence, and silence between segments to explore and surface unusual combinations that might indicate problems.
-3. **Raise the confidence threshold** — the default low-confidence cutoff is 80%. Increasing it to 85 or 90 surfaces more segments for review. Lower confidence can be a genuine error, model noise or uncertainty, but checking these gives greater certainty that the data is correct.
-
-### Edit history
-
-Every save is recorded in the edit history. You can browse past edits, filter by edit type or error category, and sort. You can use the **Undo** button to reverse any edit. It is highly recommended to review the full edit history to verify all edits are sensible and changes have been saved correctly without bugs.
-
-History loads in the background after selecting a reciter and is also fetched on demand when opened, so chapter selection is not blocked by large history files.
-
-### Continuous refinement
-
-The first round of review (before the pull request is merged) focuses on fixing the critical issues. But improvement is ongoing — you can come back at any point to do further checks or optional edits. New edits automatically recompute timestamps and sync to the dataset.
-
-### Keyboard shortcuts
-
-| Key | Action |
-|-----|--------|
-| Space | Play / Pause |
-| ← / → | Seek backward / forward 3 seconds |
-| ↑ / ↓ | Previous / next segment |
-| , / . | Slower / faster playback speed |
-| J | Scroll current segment into view |
-| E | Edit reference of current segment |
-| S | Save changes |
-| Enter | Confirm trim or split |
-| Escape | Cancel edit |
+```bash
+cd inspector && python -m pytest tests/ -v       # backend
+cd inspector/frontend && npm run test            # frontend
+cd inspector/frontend && npm run check           # typecheck
+```
 
 ## Suggestions and feedback
 
@@ -162,7 +163,6 @@ We're continuously improving the Inspector to make reviewing as smooth as possib
 ## Tech stack
 
 - **Backend:** Python 3.11, Flask (Blueprints), `quranic-phonemizer`
-- **Frontend:** Svelte 4 + TypeScript + Vite
+- **Frontend:** Svelte 4/5 + TypeScript + Vite
 - **Audio:** Web Audio API (waveform decoding/drawing), ffmpeg (server-side peak extraction)
-- **Testing:** Pytest for backend; Vitest 4 + happy-dom + `@testing-library/svelte` for frontend; Playwright for end-to-end testing
-- **Packaging:** Multi-stage Docker image (Node build → Python runtime), published to GHCR via GitHub Actions on pushes to `main`
+- **Storage:** SQLite synced to a Hugging Face bucket

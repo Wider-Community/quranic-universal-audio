@@ -103,7 +103,7 @@ def test_redacts_non_allowlisted_events(monkeypatch):
     _install_audit(monkeypatch, [
         _record("claim.force_released"),
         _record("claim.reassigned"),
-        _record("admin.force_set_state"),
+        _record("admin.unlocked_for_revision"),
         _record("reciter.discarded"),
         _record("reciter.unmarked_ready"),
         _record("access.role_granted"),
@@ -159,9 +159,9 @@ def test_card_payload_omits_assignee_by_default(monkeypatch):
 
 
 def test_owner_caller_sees_actor_login(monkeypatch):
-    """Owners see actor identity on the public rail; lower tiers don't."""
-    from scripts.lib.schemas import Role
-
+    """include_identity=True surfaces actor identity on the public rail. The
+    route resolves the ``identity.see_actor`` capability (default owner-only)
+    into this bool; the service stays capability-agnostic."""
     from services.public_activity import all_public_cards
 
     _install_audit(monkeypatch, [
@@ -169,20 +169,20 @@ def test_owner_caller_sees_actor_login(monkeypatch):
     ])
     _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
 
-    cards = all_public_cards(caller_role=Role.OWNER)
+    cards = all_public_cards(include_identity=True)
     assert cards[0]["actor_login"] == "alice"
     assert cards[0]["actor_hf_user_id"] == "u-A"
 
 
 def test_maintainer_caller_does_not_see_actor(monkeypatch):
-    from scripts.lib.schemas import Role
-
+    """include_identity=False keeps actor identity redacted (the default for
+    non-owner callers without the identity.see_actor capability)."""
     from services.public_activity import all_public_cards
 
     _install_audit(monkeypatch, [_record("reciter.claimed", actor_login="alice")])
     _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
 
-    cards = all_public_cards(caller_role=Role.MAINTAINER)
+    cards = all_public_cards(include_identity=False)
     assert "actor_login" not in cards[0]
 
 

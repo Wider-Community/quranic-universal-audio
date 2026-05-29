@@ -24,6 +24,7 @@ function makeTask(canClaim: boolean): ReciterTask {
             can_edit_as_admin: false,
             can_edit_as_owner: false,
             can_mark_ready: false,
+            can_skip_mark_ready_gates: false,
             can_unmark_ready: false,
             can_release: false,
         },
@@ -39,6 +40,7 @@ describe('ClaimButton', () => {
             active_claim: 'some-other-slug',
             active_claims: ['some-other-slug'],
             dev_mode: false,
+            capabilities: [],
         });
 
         const { container } = render(ClaimButton, {
@@ -61,6 +63,7 @@ describe('ClaimButton', () => {
             active_claim: 'some-other-slug',
             active_claims: ['some-other-slug'],
             dev_mode: false,
+            capabilities: [],
         });
 
         const { container } = render(ClaimButton, {
@@ -82,6 +85,7 @@ describe('ClaimButton', () => {
             active_claim: null,
             active_claims: [],
             dev_mode: false,
+            capabilities: [],
         });
 
         const { container } = render(ClaimButton, {

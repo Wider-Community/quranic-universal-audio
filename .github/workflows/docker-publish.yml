@@ -25,7 +25,9 @@ on:
         options: ['true', 'false']
 
 permissions:
-  contents: read
+  # write (not read) so the reusable inspector-checks.yml frontend-checks
+  # job can push back lint autofixes — caller must grant >= called job.
+  contents: write
   packages: write
 
 concurrency:

@@ -1,9 +1,9 @@
 """Persistence for waveform peaks tied to history ops.
 
-Per-op JSONL at ``<bucket>/<kind>/<reciter>/edit_history_peaks.jsonl``,
+Per-op JSONL at ``<bucket>/reciters/<reciter>/edit_history_peaks.jsonl``,
 append-only. Lets the History panel render waveforms across sessions
 without re-computing — and survives the wip-audio sweeper (which GCs
-``wip/<slug>/{audio,peaks}/`` but not this root-level file), so anonymous
+``reciters/<slug>/{audio,peaks}/`` but not this root-level file), so anonymous
 viewers of a released reciter still get instant waveforms.
 
 Migration #5 canonical shape (one record per line)::

@@ -303,6 +303,32 @@ def add_source(source: Source) -> Source:
     return source
 
 
+def find_channel(slug: str) -> Channel | None:
+    r = get_conn().execute(
+        "SELECT slug, short, name, host_patterns FROM channels WHERE slug = ?", (slug,)
+    ).fetchone()
+    if r is None:
+        return None
+    return Channel(
+        slug=r["slug"], short=r["short"], name=r["name"],
+        host_patterns=_serde.json_loads(r["host_patterns"]) or [],
+    )
+
+
+def add_channel(channel: Channel) -> Channel:
+    """Append a vocab channel, raising ``Duplicate`` on an existing slug."""
+    if find_channel(channel.slug) is not None:
+        raise Duplicate(f"channel {channel.slug!r} already exists")
+    get_conn().execute(
+        "INSERT INTO channels(slug, short, name, host_patterns) VALUES (?,?,?,?)",
+        (
+            channel.slug, channel.short, channel.name,
+            _serde.json_dumps(list(channel.host_patterns)),
+        ),
+    )
+    return channel
+
+
 def refresh_derived() -> None:
     """Recompute + persist ``derived.source_channels`` from the deliveries.
 

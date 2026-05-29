@@ -19,6 +19,7 @@
     import type { IntakeSubmission } from '../../../../lib/types/generated/schemas';
     import { countryByName } from '../../../../lib/utils/countries';
     import { isPlausibleUrl } from '../../../../lib/utils/url';
+    import { openDetail } from '../../stores/dashboard-state';
     import {
         closeSubmitWizard,
         setStep,
@@ -161,9 +162,16 @@
         else if (step === 3) setStep(2);
         else if (step === 4) setStep(3);
     }
-    function doneExistingCombo(): void {
-        // existing_combo routes to RequestForm via StepReciter; nothing to submit.
+    function requestExistingCombo(): void {
+        // existing_combo path: hand off to the reciter-detail's RequestForm
+        // for the picked combination. ReciterDetail auto-opens the form when
+        // `openRequest` is true, matching the modal users get from the
+        // "Request alignment" button inside the detail view.
+        const reciterId = state.existingReciterSlug;
+        const comboSlug = state.existingComboSlug;
+        if (!reciterId || !comboSlug) return;
         closeSubmitWizard();
+        openDetail(reciterId, comboSlug, { openRequest: true });
     }
 
     // ---- submit ----
@@ -326,16 +334,17 @@
                 <div class="right">
                     <button type="button" class="ghost" on:click={closeSubmitWizard}>Cancel</button>
                     {#if skipSourceAndDetails}
-                        <!-- existing_combo mode: StepReciter renders its own
-                             routing button; the footer primary stays disabled
-                             until a combination is picked, then closes. -->
+                        <!-- existing_combo mode: skip steps 2-4 and hand off
+                             straight to the RequestForm hosted by ReciterDetail
+                             for the picked combination. -->
                         <button
                             type="button"
                             class="primary"
-                            on:click={doneExistingCombo}
+                            on:click={requestExistingCombo}
                             disabled={!canAdvanceStep1}
                         >
-                            Done
+                            Request
+                            <span class="primary-glyph" aria-hidden="true">›</span>
                         </button>
                     {:else if step < 4}
                         <button

@@ -1,9 +1,9 @@
 """Timestamp manifest + per-chapter shard server.
 
-Bucket-only: manifest is composed from state (released/completed reciters)
+Bucket-only: manifest is composed from state (released reciters)
 + catalog (display + delivery metadata) + audio_manifest sidecars (URL
 template). Per-chapter shards read from
-``<bucket>/published/<slug>/timestamps/<chapter>.json`` on demand and gzip
+``<bucket>/reciters/<slug>/timestamps/<chapter>.json`` on demand and gzip
 through a small per-process LRU so chapter scrubbing within one reciter
 doesn't pay the bucket fetch + gzip cost on every shard hit.
 
@@ -44,6 +44,11 @@ _lock = threading.Lock()
 _built = False
 _manifest_bytes: bytes | None = None
 _resource_bytes: dict[str, bytes] = {}
+# Slugs the manifest advertises (released + chapter-derivable). The shard route
+# gates on this so a guessed ``/shard/<slug>/<ch>`` URL can't serve a
+# non-released reciter's timestamps — the unified ``reciters/`` prefix no longer
+# isolates WIP timestamps by folder, so the released invariant is enforced here.
+_served_slugs: set[str] = set()
 
 _SHARD_LRU_CAP = 256
 _shard_lru: "OrderedDict[tuple[str, int], bytes]" = OrderedDict()
@@ -71,11 +76,8 @@ def _build_resource_bytes() -> dict[str, bytes]:
     return out
 
 
-_PUBLISHED_STATES = frozenset({"released", "completed"})
-
-
 def _published_reciter_slugs() -> list[str]:
-    """Return slugs of reciters in a ``released``/``completed`` lifecycle state.
+    """Return slugs of reciters in the ``released`` lifecycle state.
 
     State alone — no bucket I/O. The lifecycle gate
     ``awaiting_timestamps → released`` is what guarantees these slugs have
@@ -84,7 +86,7 @@ def _published_reciter_slugs() -> list[str]:
     return [
         row.slug
         for row in state_service.all_rows()
-        if row.state.value in _PUBLISHED_STATES
+        if row.state.value == "released"
     ]
 
 
@@ -156,7 +158,7 @@ def _ensure_built() -> None:
     Idempotent and thread-safe. Shards are NOT eagerly loaded — see
     ``_load_bucket_shard()``.
     """
-    global _built, _manifest_bytes
+    global _built, _manifest_bytes, _served_slugs
     if _built:
         return
     with _lock:
@@ -180,6 +182,7 @@ def _ensure_built() -> None:
             if block is not None:
                 reciters_block[slug] = block
 
+        _served_slugs = set(reciters_block)
         manifest = _build_manifest_dict(reciters_block)
         _manifest_bytes = gzip.compress(
             json.dumps(manifest, ensure_ascii=False).encode("utf-8"),
@@ -227,6 +230,11 @@ def manifest_bytes() -> bytes:
 
 def shard_bytes(reciter: str, chapter: int) -> bytes | None:
     _ensure_built()
+    # Only serve shards for reciters the manifest advertises (released + has
+    # chapters). Folder-level isolation is gone post-unification, so enforce the
+    # released gate here too — don't leak a non-released reciter's timestamps.
+    if reciter not in _served_slugs:
+        return None
     return _load_bucket_shard(reciter, chapter)
 
 

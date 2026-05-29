@@ -105,7 +105,7 @@ def test_force_release_by_contributor_returns_403(signed_in_client):
 def test_force_release_happy_path(signed_in_client, monkeypatch):
     _stub_state_persist(monkeypatch)
     _replace_state([_row("test_slug")])
-    client, _ = signed_in_client(role="maintainer", hf_user_id="u-mod", login="mod")
+    client, _ = signed_in_client(role="owner", hf_user_id="u-owner", login="owner1")
 
     res = client.post(
         "/api/admin/claim/force-release/test_slug",
@@ -119,22 +119,52 @@ def test_force_release_happy_path(signed_in_client, monkeypatch):
     assert body["original_assignee_hf_id"] == "u-target"
 
 
-def test_force_release_short_reason_returns_400(signed_in_client, monkeypatch):
+def test_force_release_by_maintainer_returns_403(signed_in_client, monkeypatch):
+    """Force-release is owner-only post claim-mutation tightening — maintainers
+    must use Send-back-to-UR for marked-ready, or escalate to an owner."""
     _stub_state_persist(monkeypatch)
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="maintainer")
     res = client.post(
         "/api/admin/claim/force-release/test_slug",
+        data=json.dumps({"reason": "Reviewer disappeared 9 days ago."}),
+        headers=_HEADERS,
+    )
+    assert res.status_code == 403
+
+
+def test_force_release_short_reason_succeeds(signed_in_client, monkeypatch):
+    """Reason is OPTIONAL on owner claim mutations — a short or empty string
+    is normalized to '' and the action proceeds. Action is still auditable
+    via actor + slug + transition row."""
+    _stub_state_persist(monkeypatch)
+    _replace_state([_row("test_slug")])
+    client, _ = signed_in_client(role="owner")
+    res = client.post(
+        "/api/admin/claim/force-release/test_slug",
         data=json.dumps({"reason": "too short"}),
         headers=_HEADERS,
     )
-    assert res.status_code == 400
+    assert res.status_code == 200, res.get_json()
+
+
+def test_force_release_no_reason_succeeds(signed_in_client, monkeypatch):
+    """Reason field can be omitted entirely."""
+    _stub_state_persist(monkeypatch)
+    _replace_state([_row("test_slug")])
+    client, _ = signed_in_client(role="owner")
+    res = client.post(
+        "/api/admin/claim/force-release/test_slug",
+        data=json.dumps({}),
+        headers=_HEADERS,
+    )
+    assert res.status_code == 200, res.get_json()
 
 
 def test_force_release_wrong_state_returns_400(signed_in_client, monkeypatch):
     _stub_state_persist(monkeypatch)
     _replace_state([_row("test_slug", state="awaiting_review", assignee_hf_id=None)])
-    client, _ = signed_in_client(role="maintainer")
+    client, _ = signed_in_client(role="owner")
     res = client.post(
         "/api/admin/claim/force-release/test_slug",
         data=json.dumps({"reason": "Trying to release the wrong state."}),
@@ -146,7 +176,7 @@ def test_force_release_wrong_state_returns_400(signed_in_client, monkeypatch):
 def test_force_release_missing_origin_returns_403(signed_in_client, monkeypatch):
     _stub_state_persist(monkeypatch)
     _replace_state([_row("test_slug")])
-    client, _ = signed_in_client(role="maintainer")
+    client, _ = signed_in_client(role="owner")
     res = client.post(
         "/api/admin/claim/force-release/test_slug",
         data=json.dumps({"reason": "Reviewer disappeared 9 days ago."}),
@@ -164,7 +194,7 @@ def test_reassign_happy_path(signed_in_client, monkeypatch):
     _stub_state_persist(monkeypatch)
     _stub_hf_users(monkeypatch, returns=_hf_user(hf_user_id="u-new", login="NewUser"))
     _replace_state([_row("test_slug")])
-    client, _ = signed_in_client(role="maintainer")
+    client, _ = signed_in_client(role="owner")
 
     res = client.post(
         "/api/admin/claim/reassign/test_slug",
@@ -178,11 +208,27 @@ def test_reassign_happy_path(signed_in_client, monkeypatch):
     assert body["to_user"]["hf_user_id"] == "u-new"
 
 
+def test_reassign_by_maintainer_returns_403(signed_in_client, monkeypatch):
+    """Reassign is owner-only — paired with force-release. A maintainer who
+    can mark quality (send-back) cannot transfer who owns the work."""
+    _stub_state_persist(monkeypatch)
+    _stub_hf_users(monkeypatch, returns=_hf_user())
+    _replace_state([_row("test_slug")])
+    client, _ = signed_in_client(role="maintainer")
+
+    res = client.post(
+        "/api/admin/claim/reassign/test_slug",
+        data=json.dumps({"to_login": "alice", "reason": "Hand-off attempt."}),
+        headers=_HEADERS,
+    )
+    assert res.status_code == 403
+
+
 def test_reassign_unknown_login_returns_400(signed_in_client, monkeypatch):
     _stub_state_persist(monkeypatch)
     _stub_hf_users(monkeypatch, returns=None)
     _replace_state([_row("test_slug")])
-    client, _ = signed_in_client(role="maintainer")
+    client, _ = signed_in_client(role="owner")
 
     res = client.post(
         "/api/admin/claim/reassign/test_slug",
@@ -204,7 +250,7 @@ def test_reassign_hf_outage_returns_502(signed_in_client, monkeypatch):
         raise hf_users.HfUserLookupError("network down")
 
     monkeypatch.setattr(hf_users, "lookup", _raise)
-    client, _ = signed_in_client(role="maintainer")
+    client, _ = signed_in_client(role="owner")
 
     res = client.post(
         "/api/admin/claim/reassign/test_slug",
@@ -218,7 +264,7 @@ def test_reassign_to_same_assignee_returns_400(signed_in_client, monkeypatch):
     _stub_state_persist(monkeypatch)
     _stub_hf_users(monkeypatch, returns=_hf_user(hf_user_id="u-target", login="target_user"))
     _replace_state([_row("test_slug")])
-    client, _ = signed_in_client(role="maintainer")
+    client, _ = signed_in_client(role="owner")
 
     res = client.post(
         "/api/admin/claim/reassign/test_slug",
@@ -234,7 +280,7 @@ def test_reassign_to_same_assignee_returns_400(signed_in_client, monkeypatch):
 def test_reassign_missing_to_login_returns_400(signed_in_client, monkeypatch):
     _stub_state_persist(monkeypatch)
     _replace_state([_row("test_slug")])
-    client, _ = signed_in_client(role="maintainer")
+    client, _ = signed_in_client(role="owner")
 
     res = client.post(
         "/api/admin/claim/reassign/test_slug",
@@ -244,18 +290,36 @@ def test_reassign_missing_to_login_returns_400(signed_in_client, monkeypatch):
     assert res.status_code == 400
 
 
-def test_reassign_short_reason_returns_400(signed_in_client, monkeypatch):
+def test_reassign_short_reason_succeeds(signed_in_client, monkeypatch):
+    """Reason is OPTIONAL on owner claim mutations (mirror of
+    force-release test). Short / empty reasons normalize to '' and the
+    action proceeds; audit row carries the actor + slug + event."""
     _stub_state_persist(monkeypatch)
     _stub_hf_users(monkeypatch, returns=_hf_user())
     _replace_state([_row("test_slug")])
-    client, _ = signed_in_client(role="maintainer")
+    client, _ = signed_in_client(role="owner")
 
     res = client.post(
         "/api/admin/claim/reassign/test_slug",
         data=json.dumps({"to_login": "alice", "reason": "short"}),
         headers=_HEADERS,
     )
-    assert res.status_code == 400
+    assert res.status_code == 200, res.get_json()
+
+
+def test_reassign_no_reason_succeeds(signed_in_client, monkeypatch):
+    """Reason field can be omitted entirely."""
+    _stub_state_persist(monkeypatch)
+    _stub_hf_users(monkeypatch, returns=_hf_user())
+    _replace_state([_row("test_slug")])
+    client, _ = signed_in_client(role="owner")
+
+    res = client.post(
+        "/api/admin/claim/reassign/test_slug",
+        data=json.dumps({"to_login": "alice"}),
+        headers=_HEADERS,
+    )
+    assert res.status_code == 200, res.get_json()
 
 
 def test_reassign_by_contributor_returns_403(signed_in_client):
@@ -263,88 +327,6 @@ def test_reassign_by_contributor_returns_403(signed_in_client):
     res = client.post(
         "/api/admin/claim/reassign/test_slug",
         data=json.dumps({"to_login": "alice", "reason": "Hand-off attempt."}),
-        headers=_HEADERS,
-    )
-    assert res.status_code == 403
-
-
-# ---------------------------------------------------------------------------
-# force-set-state
-# ---------------------------------------------------------------------------
-
-
-def test_force_set_state_allowed_pair_happy_path(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
-    _replace_state([_row("test_slug")])  # under_review
-    client, _ = signed_in_client(role="maintainer")
-
-    res = client.post(
-        "/api/admin/state/force-set/test_slug",
-        data=json.dumps({
-            "to_state": "awaiting_review",
-            "reason": "Alternative path to force-release for testing.",
-        }),
-        headers=_HEADERS,
-    )
-    assert res.status_code == 200, res.get_json()
-    assert res.get_json()["row"]["state"] == "awaiting_review"
-
-
-def test_force_set_state_disallowed_pair_returns_400(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
-    _replace_state([_row("test_slug", state="awaiting_review", assignee_hf_id=None)])
-    client, _ = signed_in_client(role="maintainer")
-
-    res = client.post(
-        "/api/admin/state/force-set/test_slug",
-        data=json.dumps({
-            "to_state": "completed",
-            "reason": "Attempting disallowed transition.",
-        }),
-        headers=_HEADERS,
-    )
-    assert res.status_code == 400
-
-
-def test_force_set_state_unknown_to_state_returns_400(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
-    _replace_state([_row("test_slug")])
-    client, _ = signed_in_client(role="maintainer")
-
-    res = client.post(
-        "/api/admin/state/force-set/test_slug",
-        data=json.dumps({
-            "to_state": "bogus_state",
-            "reason": "Should never reach state machine.",
-        }),
-        headers=_HEADERS,
-    )
-    assert res.status_code == 400
-    body = res.get_json()
-    assert "unknown to_state" in body["error"]
-
-
-def test_force_set_state_short_reason_returns_400(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
-    _replace_state([_row("test_slug")])
-    client, _ = signed_in_client(role="maintainer")
-
-    res = client.post(
-        "/api/admin/state/force-set/test_slug",
-        data=json.dumps({"to_state": "awaiting_review", "reason": "short"}),
-        headers=_HEADERS,
-    )
-    assert res.status_code == 400
-
-
-def test_force_set_state_by_contributor_returns_403(signed_in_client):
-    client, _ = signed_in_client(role="contributor")
-    res = client.post(
-        "/api/admin/state/force-set/test_slug",
-        data=json.dumps({
-            "to_state": "awaiting_review",
-            "reason": "Should be blocked by RBAC.",
-        }),
         headers=_HEADERS,
     )
     assert res.status_code == 403

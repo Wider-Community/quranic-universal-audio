@@ -36,7 +36,7 @@ export type SurahInfoResponse = SurahInfoMap;
 /** GET /api/ts/config — display constants + read-path URLs. */
 export interface TsConfigResponse {
     /** "local"  — Flask serves shards from on-disk timestamps tree.
-     *  "bucket" — Flask serves shards from <bucket>/published/<slug>/timestamps/. */
+     *  "bucket" — Flask serves shards from <bucket>/reciters/<slug>/timestamps/. */
     mode: 'local' | 'bucket';
     /** Full URL the frontend fetches once to populate the in-memory manifest. */
     manifest_url: string;
@@ -504,13 +504,6 @@ export interface SegSegmentPeaksResponse {
 // ===========================================================================
 // /api/audio/* — Audio tab
 // ===========================================================================
-
-/** GET /api/audio/sources — hierarchical {by_surah, by_ayah}. Loose shape. */
-export interface AudioSourcesResponse {
-    by_surah?: Record<string, unknown>;
-    by_ayah?: Record<string, unknown>;
-    [k: string]: unknown;
-}
 
 /** GET /api/audio/surahs/:category/:source/:slug */
 export interface AudioSurahEntry {

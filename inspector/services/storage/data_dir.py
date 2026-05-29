@@ -1,81 +1,62 @@
-"""Per-mode data directory resolver.
+"""Per-reciter data directory resolver.
 
 Wraps the storage backend with semantic helpers — callers pass a slug
 and get back the bytes/dict they need. Routes/services use this instead
 of touching ``RECITATION_SEGMENTS_PATH`` (legacy filesystem constant, kept
 only for tests on ``FilesystemBackend``).
 
-The ``kind`` (``wip`` vs ``published``) is consulted from the state
-service for any caller that doesn't already know — most don't, because
-the lifecycle decision belongs to the state machine, not to data IO.
+All per-reciter content lives under a single ``reciters/<slug>/`` prefix;
+lifecycle state is a DB attribute, not a folder choice, so these helpers
+need no notion of ``wip`` vs ``published``.
 
 """
 
 from __future__ import annotations
 
-from typing import Iterator, Literal
+from typing import Iterator
 
 from . import storage_paths
 from .hf_bucket import StorageNotFound, get_backend
-
-WipOrPublished = Literal["wip", "published"]
-
-
-def kind_for(slug: str) -> WipOrPublished:
-    """Return ``"wip"`` or ``"published"`` for ``slug``.
-
-    Delegates to ``state.kind_for(slug)``; falls back to ``"wip"`` when the
-    slug isn't tracked yet (e.g. mid-cutover, or test fixtures bypassing
-    state seeding).
-    """
-    # Lazy import to avoid a circular at module load (``state.py`` imports
-    # ``storage_paths`` and ``hf_bucket`` from this package).
-    from services.state import state as state_service
-
-    k = state_service.kind_for(slug)
-    return k if k in ("wip", "published") else "wip"
 
 
 # ---- path helpers (no I/O) ----
 
 
-def list_slugs(kind: WipOrPublished) -> list[str]:
-    """Return all slug subdirectories under ``wip/`` or ``published/``."""
-    return get_backend().list_dir(kind)
+def list_slugs() -> list[str]:
+    """Return all reciter slug subdirectories under ``reciters/``."""
+    return get_backend().list_dir(storage_paths.RECITERS_PREFIX)
 
 
-def reciter_file_path(slug: str, kind: WipOrPublished, name: str) -> str:
-    return storage_paths.reciter_file(slug, kind, name)
+def reciter_file_path(slug: str, name: str) -> str:
+    return storage_paths.reciter_file(slug, name)
 
 
-def segments_path(slug: str, kind: WipOrPublished | None = None) -> str:
-    return storage_paths.segments_path(slug, kind or kind_for(slug))
+def segments_path(slug: str) -> str:
+    return storage_paths.segments_path(slug)
 
 
-def detailed_path(slug: str, kind: WipOrPublished | None = None) -> str:
-    return storage_paths.detailed_path(slug, kind or kind_for(slug))
+def detailed_path(slug: str) -> str:
+    return storage_paths.detailed_path(slug)
 
 
-def edit_history_path(slug: str, kind: WipOrPublished | None = None) -> str:
-    return storage_paths.edit_history_path(slug, kind or kind_for(slug))
+def edit_history_path(slug: str) -> str:
+    return storage_paths.edit_history_path(slug)
 
 
-def edit_history_peaks_path(
-    slug: str, kind: WipOrPublished | None = None
-) -> str:
-    return storage_paths.edit_history_peaks_path(slug, kind or kind_for(slug))
+def edit_history_peaks_path(slug: str) -> str:
+    return storage_paths.edit_history_peaks_path(slug)
 
 
-def low_confidence_path(slug: str, kind: WipOrPublished | None = None) -> str:
-    return storage_paths.low_confidence_path(slug, kind or kind_for(slug))
+def low_confidence_path(slug: str) -> str:
+    return storage_paths.low_confidence_path(slug)
 
 
-def auto_split_path(slug: str, kind: WipOrPublished | None = None) -> str:
-    return storage_paths.auto_split_path(slug, kind or kind_for(slug))
+def auto_split_path(slug: str) -> str:
+    return storage_paths.auto_split_path(slug)
 
 
-def pipeline_meta_path(slug: str, kind: WipOrPublished | None = None) -> str:
-    return storage_paths.pipeline_meta_path(slug, kind or kind_for(slug))
+def pipeline_meta_path(slug: str) -> str:
+    return storage_paths.pipeline_meta_path(slug)
 
 
 def read_pipeline_meta_doc(slug: str) -> dict | None:
@@ -90,9 +71,9 @@ def write_pipeline_meta_doc(slug: str, doc: dict) -> None:
     get_backend().write_json_atomic(pipeline_meta_path(slug), doc)
 
 
-def has_reciter(slug: str, kind: WipOrPublished | None = None) -> bool:
-    """True if the reciter directory exists under the given subtree."""
-    return get_backend().exists(storage_paths.reciter_dir(slug, kind or kind_for(slug)))
+def has_reciter(slug: str) -> bool:
+    """True if the reciter directory exists under ``reciters/``."""
+    return get_backend().exists(storage_paths.reciter_dir(slug))
 
 
 # ---- high-level read/write helpers (these hide the backend entirely) ----
@@ -153,18 +134,18 @@ def iter_peaks_history(slug: str) -> Iterator[dict]:
     yield from get_backend().iter_jsonl(edit_history_peaks_path(slug))
 
 
-# ---- timestamps (published-only — wip reciters have no TS yet) ----
+# ---- timestamps (released reciters only — others have no TS yet) ----
 
 
 def read_timestamps_chapter(slug: str, chapter: int) -> bytes | None:
     """Return raw ``timestamps/<chapter>.json`` bytes, or ``None`` if absent.
 
-    Reads from ``<bucket>/published/<slug>/timestamps/<chapter>.json``.
-    Timestamps live only under ``published/`` — wip reciters have none.
+    Reads from ``<bucket>/reciters/<slug>/timestamps/<chapter>.json``. Only
+    released reciters have timestamps; the Timestamps tab gates on DB state.
     """
     try:
         return get_backend().read_bytes(
-            storage_paths.published_timestamps_path(slug, chapter)
+            storage_paths.timestamps_path(slug, chapter)
         )
     except StorageNotFound:
         return None

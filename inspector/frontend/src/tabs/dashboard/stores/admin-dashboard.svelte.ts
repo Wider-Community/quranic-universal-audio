@@ -1,10 +1,11 @@
 /**
  * Admin dashboard modal state (Svelte 5 rune store — the repo's first).
- * Owns open/closed + the active compartment tab. Future compartments
- * (requests / to_publish / permissions) slot into the `AdminTab` union.
+ * Owns open/closed + the active compartment tab. Future compartments slot
+ * into the `AdminTab` union (currently: users · requests · reviews ·
+ * permissions; reviews replaced the disabled `to_publish` placeholder).
  */
 
-export type AdminTab = 'users' | 'requests' | 'to_publish' | 'permissions';
+export type AdminTab = 'users' | 'requests' | 'reviews' | 'permissions';
 
 /** Sortable columns in the Users table (clicking a header sorts by these). */
 export type UsersSortKey =
@@ -22,6 +23,11 @@ class AdminDashboardStore {
      * the dot on the entry button. Polled by the button; refreshed by the
      * Requests compartment on load/view/resolve so both surfaces agree. */
     unviewedRequests = $state(0);
+    /** Caller's unviewed marked-ready review count. Drives the Reviews tab
+     * pill + (combined with ``unviewedRequests``) the entry-button dot.
+     * Polled by the button; refreshed by ReviewsCompartment on fetch + by
+     * the reviews store on optimistic drawer-open. */
+    unviewedReviews = $state(0);
 
     openModal(tab: AdminTab = 'users'): void {
         this.activeTab = tab;
@@ -38,6 +44,10 @@ class AdminDashboardStore {
 
     setUnviewedRequests(n: number): void {
         this.unviewedRequests = Math.max(0, n);
+    }
+
+    setUnviewedReviews(n: number): void {
+        this.unviewedReviews = Math.max(0, n);
     }
 }
 

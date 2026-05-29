@@ -165,7 +165,10 @@
 
     .modal {
         width: min(1080px, 92vw);
-        height: min(720px, 86vh);
+        /* Backdrop is offset by --player-h at the bottom, so the modal must
+         * size against the *reduced* area — otherwise vh-based max heights
+         * let the modal overflow into the player's z-index (110 > 100). */
+        height: min(720px, calc(86vh - var(--player-h, 72px)));
         background: var(--canvas);
         border: 1px solid var(--border-default);
         border-radius: var(--r-3);
@@ -178,7 +181,7 @@
     }
     .modal.wide {
         width: min(1480px, 95vw);
-        height: min(900px, 92vh);
+        height: min(900px, calc(92vh - var(--player-h, 72px)));
     }
     @keyframes modal-in {
         from { opacity: 0; transform: translateY(12px) scale(0.985); }

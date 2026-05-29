@@ -121,7 +121,7 @@ def _substrate_db(tmp_path):
     Bucket uploads are disabled (``set_sync_enabled(False)``) so the bulk of the
     suite doesn't pay snapshot/CAS cost; durability tests flip it back on. The
     DB file lives under the same ``tmp_path`` the content fixtures use, so the
-    SQLite substrate and the per-reciter ``wip/<slug>/`` FilesystemBackend
+    SQLite substrate and the per-reciter ``reciters/<slug>/`` FilesystemBackend
     content compose in one temp dir.
     """
     from services import db
@@ -139,6 +139,7 @@ def _substrate_db(tmp_path):
     _cache.invalidate_catalog_snapshot_cache()
     _cache.invalidate_admin_users_cache()
     _cache.invalidate_admin_requests_cache()
+    _cache.invalidate_capability_matrix_cache()
     yield
     db.reset()
     _sync.set_sync_enabled(True)
@@ -146,6 +147,7 @@ def _substrate_db(tmp_path):
     _cache.invalidate_catalog_snapshot_cache()
     _cache.invalidate_admin_users_cache()
     _cache.invalidate_admin_requests_cache()
+    _cache.invalidate_capability_matrix_cache()
 
 
 def _seed_delivery_chain(conn, slug: str, reciter_id: str = "r") -> None:
@@ -341,7 +343,7 @@ def state_persistence(tmp_path, monkeypatch):
     (via the autouse ``_substrate_db`` fixture) for state.
 
     Post-cutover, state persists across requests for free (it lives in SQLite).
-    This fixture just wires the FilesystemBackend for any ``wip/<slug>/`` content
+    This fixture just wires the FilesystemBackend for any ``reciters/<slug>/`` content
     a test reads, and yields it for inspection. Seed state via the ``seed_state``
     fixture / ``_seed_state`` helper, or by driving ``transition()``.
     """
@@ -423,9 +425,8 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
     Installs a ``FilesystemBackend`` against ``tmp_path`` (v2 backend
     abstraction), so routes/services/loaders read + write under the temp
     dir instead of the real bucket. The on-disk layout matches the bucket
-    layout (``wip/<slug>/segments.json``, etc.); the ``install`` helper
-    drops fixtures there and seeds the state file so ``data_dir.kind_for``
-    returns ``"wip"`` for installed reciters.
+    layout (``reciters/<slug>/segments.json``, etc.); the ``install`` helper
+    drops fixtures there and seeds a state row for installed reciters.
     """
     from datetime import datetime, timezone
 
@@ -447,14 +448,14 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         *,
         under_review_for: str | None = None,
     ) -> Path:
-        """Install a fixture under ``wip/<reciter>/`` and seed a state row.
+        """Install a fixture under ``reciters/<reciter>/`` and seed a state row.
 
         When ``under_review_for`` is given, the row is seeded as
         ``UNDER_REVIEW`` with that user as the active assignee — required
         for tests that POST to lock-gated routes (save/undo). Default
         ``AWAITING_REVIEW`` keeps existing tests unchanged.
         """
-        # Seed a state row so data_dir.kind_for(reciter) returns "wip".
+        # Seed a state row so lifecycle-gated routes (lock/save/undo) resolve.
         from services.db import repo_state as _repo_state
         if not _repo_state.exists(reciter):
             if under_review_for is None:
@@ -467,9 +468,9 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
                     assignee_login="test_user",
                 )
 
-        # Install fixture file at wip/<reciter>/detailed.json
+        # Install fixture file at reciters/<reciter>/detailed.json
         src = FIXTURES_DIR / f"{fixture_name}.detailed.json"
-        detailed_rel = _storage_paths.detailed_path(reciter, "wip")
+        detailed_rel = _storage_paths.detailed_path(reciter)
         with open(src, "rb") as f:
             backend.write_bytes_atomic(detailed_rel, f.read())
         dst_path = (tmp_path / detailed_rel).resolve()
@@ -478,7 +479,7 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         if history_src.exists():
             with open(history_src, "rb") as f:
                 backend.write_bytes_atomic(
-                    _storage_paths.edit_history_path(reciter, "wip"),
+                    _storage_paths.edit_history_path(reciter),
                     f.read(),
                 )
 
@@ -495,7 +496,7 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
             deleted_basmala_chapters=[],
         ).model_dump(mode="json")
         backend.write_json_atomic(
-            _storage_paths.pipeline_meta_path(reciter, "wip"),
+            _storage_paths.pipeline_meta_path(reciter),
             pipeline_meta_doc,
         )
 
@@ -509,7 +510,7 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
             doc = json.loads((tmp_path / detailed_rel).read_bytes())
             entries = doc.get("entries", [])
             meta = doc.get("_meta", {})
-            seg_rel = _storage_paths.segments_path(reciter, "wip")
+            seg_rel = _storage_paths.segments_path(reciter)
             if not backend.exists(seg_rel):
                 backend.write_json_atomic(seg_rel, {"_meta": meta})
             rebuild_segments_json(reciter, entries)
@@ -538,7 +539,7 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         )
 
     yield type("TmpReciter", (), {
-        "root": tmp_path / "wip",
+        "root": tmp_path / "reciters",
         "install": staticmethod(_install),
         "seed_under_review": staticmethod(_seed_under_review),
         "data_dir": tmp_path,

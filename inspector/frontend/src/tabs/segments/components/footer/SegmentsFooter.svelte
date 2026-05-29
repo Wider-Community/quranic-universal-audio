@@ -21,6 +21,7 @@
     import { get } from 'svelte/store';
 
     import { clickOutside } from '../../../../lib/actions/click-outside';
+    import { markReadyBypass } from '../../../../lib/api/claims-client';
     import type { ReciterTask } from '../../../../lib/api/reciter-task';
     import ClaimButton from '../../../../lib/components/ClaimButton.svelte';
     import type { CombinationSelection } from '../../../../lib/components/picker/combination-picker-types';
@@ -72,6 +73,7 @@
         hideSavePreview,
         onSegSaveClick,
     } from '../../utils/save/actions';
+    import MarkReadyModal from './MarkReadyModal.svelte';
 
     export let reciterTask: ReciterTask | null = null;
     export let chipActionBusy: '' | 'unclaim' | 'mark' = '';
@@ -100,6 +102,7 @@
     }>();
 
     let pickerOpen = false;
+    let markReadyOpen = false;
     let surahOpen = false;
     let ayahOpen = false;
     let ayahFilterInput: HTMLInputElement | null = null;
@@ -364,6 +367,29 @@
     }
     function onMarkReady(): void {
         if (chipActionBusy) return;
+        // Owner-bypass shortcut: holders of ``claim.mark_ready_skip_gates``
+        // skip the modal entirely. POST an empty body, then bubble the
+        // existing ``markReady`` event so the parent refreshes reciter-task.
+        // ``claims-client.markReadyBypass`` surfaces its own error toast on
+        // failure — same envelope as the normal markReady path.
+        if (reciterTask?.predicates.can_skip_mark_ready_gates) {
+            const slug = $selectedReciter ?? '';
+            if (!slug) return;
+            chipActionBusy = 'mark';
+            markReadyBypass(slug)
+                .then(() => dispatch('markReady'))
+                .catch(() => {/* toast already surfaced */})
+                .finally(() => (chipActionBusy = ''));
+            return;
+        }
+        // Default path: open the form modal. The modal owns the request;
+        // on success it calls ``onMarkReadyDone`` which bubbles up so the
+        // parent refreshes reciter-task.
+        markReadyOpen = true;
+    }
+    function onMarkReadyDone(): void {
+        // The modal already POSTed and got 200; bubble the existing
+        // ``markReady`` event so SegmentsTab._refreshTask runs as before.
         dispatch('markReady');
     }
     function onClaimed(): void {
@@ -452,23 +478,35 @@
 
             {#if hasReciter && !showSavePreview}
                 <div class="reciter-actions">
-                    <ClaimButton slug={$selectedReciter || ''} task={reciterTask} {onClaimed} />
-                    {#if reciterTask?.predicates.can_mark_ready}
-                        <button
-                            type="button"
-                            class="action ghost-accent"
-                            disabled={chipActionBusy !== ''}
-                            title="Mark this reciter ready for a maintainer to publish"
-                            on:click={onMarkReady}>Mark ready</button
-                        >
-                    {/if}
-                    {#if reciterTask?.predicates.can_release}
-                        <button
-                            type="button"
-                            class="action ghost"
-                            disabled={chipActionBusy !== ''}
-                            on:click={onUnclaim}>Unclaim</button
-                        >
+                    {#if reciterTask?.row.marked_ready}
+                        <!-- After mark-ready submission the reviewer's affordances are
+                             fully locked. Only an admin can move forward (publish)
+                             or send back (force-release). The pill is a passive
+                             status indicator, not a button. -->
+                        <span class="status-pill marked-ready" title="Awaiting admin review">
+                            Marked ready · awaiting admin
+                        </span>
+                    {:else}
+                        <ClaimButton slug={$selectedReciter || ''} task={reciterTask} {onClaimed} />
+                        {#if reciterTask?.predicates.can_mark_ready}
+                            <button
+                                type="button"
+                                class="action ghost-accent"
+                                disabled={chipActionBusy !== ''}
+                                title={reciterTask?.predicates.can_skip_mark_ready_gates
+                                    ? 'Mark ready as owner — skips the checklist and validation gates'
+                                    : 'Submit the mark-ready form for an admin to review'}
+                                on:click={onMarkReady}>Mark ready</button
+                            >
+                        {/if}
+                        {#if reciterTask?.predicates.can_release}
+                            <button
+                                type="button"
+                                class="action ghost"
+                                disabled={chipActionBusy !== ''}
+                                on:click={onUnclaim}>Unclaim</button
+                            >
+                        {/if}
                     {/if}
                 </div>
             {/if}
@@ -687,6 +725,13 @@
     />
 {/if}
 
+<MarkReadyModal
+    bind:open={markReadyOpen}
+    slug={$selectedReciter || ''}
+    onClose={() => (markReadyOpen = false)}
+    onSubmitted={onMarkReadyDone}
+/>
+
 <style>
     .segs-footer {
         position: fixed;
@@ -805,6 +850,21 @@
         align-items: center;
         gap: var(--s-2);
         flex: 0 0 auto;
+    }
+
+    /* Marked-ready status pill — replaces the entire action button group
+       once the reviewer has submitted. Passive: no hover, no cursor. */
+    .status-pill.marked-ready {
+        display: inline-flex;
+        align-items: center;
+        padding: 5px 12px;
+        font: 500 var(--fs-meta)/1 var(--font-sans);
+        color: var(--state-warn-fg);
+        background: oklch(from var(--state-warn-fg) l c h / 0.10);
+        border: 1px solid oklch(from var(--state-warn-fg) l c h / 0.40);
+        border-radius: var(--r-pill);
+        letter-spacing: 0.01em;
+        white-space: nowrap;
     }
     .save-group {
         display: inline-flex;

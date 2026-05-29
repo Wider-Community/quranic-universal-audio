@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sys as _sys
 
-from .auth import access, auth, hf_users, permissions, predicates, secrets_guard
+from .auth import access, auth, hf_users, permissions, predicates, secrets_guard, token_auth
 from .state import audit, catalog, pending_requests, request_archive, state
 from .storage import cache, data_dir, data_loader, hf_bucket, storage_paths
 from .audio import (
@@ -29,7 +29,6 @@ from .audio import (
 from .activity import (
     activity_classification,
     activity_state,
-    admin_activity,
     history_query,
     public_activity,
     search_normalize,
@@ -56,6 +55,7 @@ _LEGACY_ALIASES = {
     "permissions": permissions,
     "predicates": predicates,
     "secrets_guard": secrets_guard,
+    "token_auth": token_auth,
     "audit": audit,
     "catalog": catalog,
     "pending_requests": pending_requests,
@@ -74,7 +74,6 @@ _LEGACY_ALIASES = {
     "peaks_history": peaks_history,
     "activity_classification": activity_classification,
     "activity_state": activity_state,
-    "admin_activity": admin_activity,
     "history_query": history_query,
     "public_activity": public_activity,
     "search_normalize": search_normalize,

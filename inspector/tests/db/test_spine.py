@@ -37,9 +37,12 @@ def test_migration_creates_all_tables(fresh_db):
         "db_meta", "users", "role_assignments", "riwayahs", "styles", "sources",
         "channels", "recording_contexts", "catalog_meta", "catalog_aliases",
         "reciters", "deliveries", "transitions", "delivery_states", "claims",
-        "requests", "activity_dismissals", "activity_tombstones", "visitor_daily",
+        "requests", "activity_tombstones", "visitor_daily",
+        "request_views", "review_views",
     }
     assert expected <= names
+    # ``activity_dismissals`` was dropped in migration 0006 (admin notifs rail).
+    assert "activity_dismissals" not in names
 
 
 def test_rerun_migrations_is_noop(fresh_db):

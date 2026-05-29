@@ -1,8 +1,8 @@
 """Validate every artifact in a bucket reciter folder against the canonical
 ``scripts/lib/schemas`` definitions.
 
-Walks ``wip/<slug>/`` (or ``published/<slug>/`` if WIP is absent) on the
-configured bucket and audits every file we expect to find there:
+Walks ``reciters/<slug>/`` on the configured bucket and audits every file we
+expect to find there:
 
 * ``detailed.json``            -> ``DetailedDocument`` (pydantic v2)
 * ``segments.json``            -> structural check (no formal schema yet)
@@ -210,7 +210,7 @@ class FileResult:
 class AuditResult:
     slug: str
     bucket_id: str
-    kind: str            # "wip" or "published"
+    found: bool          # whether reciters/<slug>/ exists
     files: list[FileResult] = field(default_factory=list)
 
     def add(self, f: FileResult) -> None:
@@ -614,21 +614,16 @@ def _list_chapter_files(backend, prefix: str) -> list[str]:
 
 
 def audit(backend, bucket_id: str, slug: str) -> AuditResult:
-    """Walk ``wip/<slug>/`` if present, else ``published/<slug>/``."""
-    for kind in ("wip", "published"):
-        sentinel = f"{kind}/{slug}/detailed.json"
-        try:
-            backend.read_bytes(sentinel)
-            base = f"{kind}/{slug}"
-            result = AuditResult(slug=slug, bucket_id=bucket_id, kind=kind)
-            break
-        except Exception:
-            continue
-    else:
-        result = AuditResult(slug=slug, bucket_id=bucket_id, kind="missing")
-        result.add(FileResult(f"wip|published/{slug}/", "missing",
-                              "no detailed.json under either prefix"))
+    """Walk ``reciters/<slug>/``."""
+    base = f"reciters/{slug}"
+    try:
+        backend.read_bytes(f"{base}/detailed.json")
+    except Exception:
+        result = AuditResult(slug=slug, bucket_id=bucket_id, found=False)
+        result.add(FileResult(f"reciters/{slug}/", "missing",
+                              "no detailed.json under reciters/"))
         return result
+    result = AuditResult(slug=slug, bucket_id=bucket_id, found=True)
 
     # 1. Top-level JSON / JSONL artifacts.
     for suffix, fn, required in _TOP_LEVEL_AUDITORS:
@@ -708,18 +703,17 @@ class _LocalBackend:
     a freshly-downloaded slug on disk so the migration can be inspected
     before any bytes hit the bucket.
 
-    The local dir is expected to mirror the bucket layout:
-    ``<root>/[wip|published]/<slug>/...`` OR just ``<root>/<slug>/...``
-    (in which case audits treat it as ``wip``).
+    The local dir points at the slug folder itself (``<root>/...``); the
+    audit walker probes ``reciters/<slug>/x`` paths, so we strip that prefix
+    to map back onto the flat local layout.
     """
 
-    def __init__(self, root: Path, kind: str | None = None) -> None:
+    def __init__(self, root: Path) -> None:
         self.root = root.resolve()
-        self.kind = kind  # if set, we'll synthesise wip/<slug>/ prefix lookups
 
     def read_bytes(self, rel: str) -> bytes:
-        # Strip the optional wip/ or published/ prefix so the underlying
-        # local dir doesn't need that nesting.
+        # Strip the reciters/<slug>/ prefix so the underlying local dir
+        # doesn't need that nesting.
         rel = self._normalise(rel)
         p = self.root / rel
         if not p.is_file():
@@ -734,14 +728,12 @@ class _LocalBackend:
         return [f"{prefix}/{name}" for name in sorted(os.listdir(d))]
 
     def _normalise(self, rel: str) -> str:
-        if self.kind is not None:
-            # When the audit walker probes ``wip/<slug>/x`` and the local
-            # root already represents ``wip/<slug>/``, drop the prefix.
-            for k in ("wip/", "published/"):
-                if rel.startswith(k):
-                    parts = rel.split("/", 2)
-                    if len(parts) >= 3:
-                        return parts[2]
+        # When the audit walker probes ``reciters/<slug>/x`` and the local
+        # root already represents that slug folder, drop the prefix.
+        if rel.startswith("reciters/"):
+            parts = rel.split("/", 2)
+            if len(parts) >= 3:
+                return parts[2]
         return rel
 
 
@@ -750,7 +742,7 @@ def _render(result: AuditResult) -> str:
     lines.append("=" * 72)
     lines.append(f"Reciter:  {result.slug}")
     lines.append(f"Bucket:   {result.bucket_id}")
-    lines.append(f"Location: {result.kind}/{result.slug}/")
+    lines.append(f"Location: reciters/{result.slug}/")
     lines.append("=" * 72)
     status_icon = {"ok": "OK  ", "missing": "MISS", "error": "FAIL"}
     for f in result.files:
@@ -800,7 +792,7 @@ def main() -> int:
     _setup_paths_and_env(args.bucket)
 
     if args.local_path is not None:
-        backend = _LocalBackend(args.local_path, kind="wip")
+        backend = _LocalBackend(args.local_path)
         bucket_id = f"local:{args.local_path}"
     else:
         from services.storage.hf_bucket import get_backend
@@ -812,7 +804,7 @@ def main() -> int:
         out = {
             "slug": result.slug,
             "bucket": result.bucket_id,
-            "kind": result.kind,
+            "found": result.found,
             "files": [
                 {"path": f.path, "status": f.status, "detail": f.detail,
                  "size": f.size, "items_ok": f.items_ok,

@@ -167,7 +167,7 @@ CREATE INDEX ix_transitions_hash    ON transitions(content_hash);
 CREATE TABLE delivery_states (
     slug                     TEXT PRIMARY KEY REFERENCES deliveries(slug),
     state                    TEXT NOT NULL,    -- catalogued|awaiting_alignment|awaiting_review|
-                                               --   under_review|awaiting_timestamps|released|completed
+                                               --   under_review|awaiting_timestamps|released
     state_since              TEXT NOT NULL,
     visibility               TEXT NOT NULL DEFAULT 'public',   -- public | discarded
     visibility_reason        TEXT,
@@ -186,16 +186,20 @@ CREATE INDEX ix_delivery_states_state ON delivery_states(state);
 -- claims first-class (current + history)
 -- ---------------------------------------------------------------------------
 CREATE TABLE claims (
-    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-    slug                    TEXT NOT NULL REFERENCES deliveries(slug),
-    assignee_id             TEXT NOT NULL REFERENCES users(hf_user_id),
-    assignee_login_snapshot TEXT,             -- login at claim time; NOT a live users.login_cache join
-    claimed_at              TEXT NOT NULL,
-    released_at             TEXT,
-    marked_ready_at         TEXT,
-    close_reason            TEXT,             -- NO CHECK: released|published|force_released|reassigned|...
-    opened_by_transition_id TEXT REFERENCES transitions(id),
-    closed_by_transition_id TEXT REFERENCES transitions(id)
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug                        TEXT NOT NULL REFERENCES deliveries(slug),
+    assignee_id                 TEXT NOT NULL REFERENCES users(hf_user_id),
+    assignee_login_snapshot     TEXT,             -- login at claim time; NOT a live users.login_cache join
+    claimed_at                  TEXT NOT NULL,
+    released_at                 TEXT,
+    marked_ready_at             TEXT,
+    close_reason                TEXT,             -- NO CHECK: released|published|force_released|reassigned|...
+    opened_by_transition_id     TEXT REFERENCES transitions(id),
+    closed_by_transition_id     TEXT REFERENCES transitions(id)
+    -- NOTE: the mark_ready_* submission columns are added by migration 0007,
+    -- NOT here. They were briefly inlined into this init script, but existing
+    -- bucket DBs are already past user_version 1 and never re-run 0001 — so the
+    -- columns must arrive via an additive ALTER migration to reach live data.
 );
 -- one open claim per slug
 CREATE UNIQUE INDEX ux_claim_open_slug ON claims(slug) WHERE released_at IS NULL;

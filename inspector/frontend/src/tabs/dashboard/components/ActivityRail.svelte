@@ -5,25 +5,30 @@
      * visible (Page Visibility API via visible-poll); discards
      * in-flight responses that resolve after the tab hides.
      *
-     * Owner-only affordances (gated on the global ``isOwner`` store):
-     * - Actor login (``@alice · 2h ago``) rendered next to each card.
+     * Capability-gated affordances (default owner-only, but owner-toggleable
+     * via the Permissions tab):
+     * - Actor login (``@alice · 2h ago``) — ``identity.see_actor``.
      * - Trash icon to permanently delete a card from the public feed
-     *   (writes a tombstone; reason ≥10 chars required).
+     *   (writes a tombstone; reason ≥10 chars required) — ``activity.delete``.
      */
     import { onDestroy, onMount } from 'svelte';
 
-    import { deletePublicActivity } from '../../../lib/api/admin-activity';
     import {
         fetchPublicActivity,
         type PublicActivityCard,
         type PublicEventKind,
     } from '../../../lib/api/public-activity';
-    import { isOwner } from '../../../lib/stores/current-user';
+    import { deletePublicActivity } from '../../../lib/api/public-activity-admin';
+    import { can } from '../../../lib/stores/capabilities';
     import { titleCaseSlug } from '../../../lib/utils/delivery-label';
     import { relativeTime } from '../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../lib/utils/visible-poll';
     import AdminDashboardButton from './admin/AdminDashboardButton.svelte';
-    import AdminActivityRail from './AdminActivityRail.svelte';
+
+    // Capability-gated affordances (both default owner-only, so this matches
+    // the prior `$isOwner` behavior — but now reflects an owner's toggle).
+    const canDelete = can('activity.delete');
+    const canSeeActor = can('identity.see_actor');
 
     let cards: PublicActivityCard[] = [];
     let loading = true;
@@ -95,7 +100,6 @@
 
 <div class="rail-wrap">
     <AdminDashboardButton />
-    <AdminActivityRail />
 
     <aside class="activity" aria-label="Recent activity">
         <header>
@@ -112,24 +116,24 @@
         {:else}
             <ol class="list">
                 {#each cards as card (card.audit_id ?? card.ts + card.kind + card.name)}
-                    <li class="item" class:has-delete={$isOwner && card.audit_id}>
+                    <li class="item" class:has-delete={$canDelete && card.audit_id}>
                         <span class={dotClass(card.kind)} aria-hidden="true"></span>
                         <div class="body">
                             <p class="text">{formatLine(card)}</p>
                             <time class="time" datetime={card.ts}>
-                                {#if $isOwner && card.actor_login}
+                                {#if $canSeeActor && card.actor_login}
                                     <span class="actor">@{card.actor_login}</span>
                                     <span class="time-sep">·</span>
                                 {/if}
                                 {relativeTime(card.ts)}
                             </time>
                         </div>
-                        {#if $isOwner && card.audit_id}
+                        {#if $canDelete && card.audit_id}
                             <button
                                 class="delete"
                                 type="button"
                                 aria-label="Delete from public feed"
-                                title="Delete permanently (owner only)"
+                                title="Delete permanently from the public feed"
                                 on:click={() => onDelete(card)}
                             >
                                 🗑

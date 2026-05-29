@@ -11,7 +11,7 @@
     import { get, type Readable } from 'svelte/store';
 
     import { fetchJson } from '../../lib/api';
-    import { markReady, release } from '../../lib/api/claims-client';
+    import { release } from '../../lib/api/claims-client';
     import { getReciterTaskStore, type ReciterTask,refreshReciterTask } from '../../lib/api/reciter-task';
     import { loadQuranRefs } from '../../lib/refs/quran-refs';
     import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
@@ -104,6 +104,19 @@
     // after sign-in or after access revoke).
     $: setEditingMode(syncEditingMode($currentUser, reciterTask));
 
+    // Out-of-band reciter changes: the admin Reviews tab's Segments deep-link
+    // sets ``$selectedReciter`` directly (no picker event), so a reactive
+    // subscription is what triggers the same _bindTask + onReciterChange
+    // flow the picker fires. ``onPickerChange`` and ``loadReciters`` set
+    // ``_lastBoundReciter`` BEFORE updating the store so this block skips
+    // the work they've already done — no double-load.
+    let _lastBoundReciter: string | null = null;
+    $: if (typeof $selectedReciter === 'string' && $selectedReciter && $selectedReciter !== _lastBoundReciter) {
+        _lastBoundReciter = $selectedReciter;
+        _bindTask($selectedReciter);
+        void onReciterChange($selectedReciter);
+    }
+
     $: filterBarHidden = $segAllData === null;
 
     // Inline header actions — Unclaim and Mark-ready operate on the
@@ -121,14 +134,10 @@
         finally { chipActionBusy = ''; }
     }
     async function _markReady(): Promise<void> {
-        const slug = $selectedReciter;
-        if (!slug || chipActionBusy) return;
-        chipActionBusy = 'mark';
-        try {
-            await markReady(slug);
-            await _refreshTask();
-        } catch { /* toast already surfaced */ }
-        finally { chipActionBusy = ''; }
+        // SegmentsFooter mounts MarkReadyModal locally; the modal POSTs
+        // the submission itself, then dispatches ``markReady`` purely as
+        // a "refresh task" signal. This handler used to drive the POST.
+        await _refreshTask();
     }
 
     let cssFontSize: string = '';
@@ -146,6 +155,10 @@
                 localStorage.removeItem(LS_KEYS.SEG_RECITER);
             }
             if (validSaved) {
+                // Mark this slug as handled before updating the store so the
+                // out-of-band reactive subscription below skips it (we run
+                // _bindTask + onReciterChange imperatively right here).
+                _lastBoundReciter = validSaved;
                 selectedReciter.set(validSaved);
                 _bindTask(validSaved);
                 await onReciterChange(validSaved);
@@ -193,8 +206,11 @@
     ): void {
         // Identity + bucket flow through the reactive `ctxDelivery` derivation
         // keyed on `selectedReciter` (the picker reads the same catalog
-        // snapshot), so we only set the slug and rebind here.
+        // snapshot), so we only set the slug and rebind here. ``_lastBoundReciter``
+        // is set first so the out-of-band reactive subscription skips the
+        // work we run imperatively below — no double-load.
         const { slug } = ev.detail;
+        _lastBoundReciter = slug || null;
         selectedReciter.set(slug);
         _bindTask(slug || null);
         onReciterChange(slug);

@@ -274,10 +274,10 @@
                                 {#if status === 'open' && !row.viewed}
                                     <span class="unread" aria-label="Unviewed"></span>
                                 {/if}
+                                <span class="name-en">{displayName(row)}</span>
                                 {#if row.name_ar}
                                     <span class="name-ar" dir="rtl">{row.name_ar}</span>
                                 {/if}
-                                <span class="name-en">{displayName(row)}</span>
                                 {#if isIntake(row)}
                                     <span class="kind-badge" class:nr={row.kind === 'new_reciter'}>
                                         {kindLabel(row)}
@@ -543,10 +543,10 @@
     .identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
     .id-name { display: flex; align-items: baseline; gap: var(--s-2); min-width: 0; }
     .unread { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; align-self: center; }
-    .name-ar { font-size: var(--fs-h3); color: var(--text-primary); line-height: 1.2; white-space: nowrap; }
+    /* Latin leads at row-text size + primary; Arabic trails as a muted
+     * inline detail. Matches the Reviews tab convention. */
     .name-en { font-size: var(--fs-row); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    /* when an Arabic name leads, the Latin transliteration recedes */
-    .name-ar + .name-en { font-size: var(--fs-meta); color: var(--text-muted); }
+    .name-ar { font-size: 13px; color: var(--text-muted); line-height: 1.3; white-space: nowrap; unicode-bidi: isolate; }
 
     .id-meta { display: flex; align-items: baseline; gap: var(--s-2); font-size: var(--fs-meta); min-width: 0; }
     .id-meta .combo { color: var(--text-secondary); white-space: nowrap; }

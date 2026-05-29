@@ -9,11 +9,16 @@ on:
 jobs:
   frontend-checks:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: inspector/frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Need full ref so we can push back; token default is fine for branch pushes
+          token: ${{ github.token }}
 
       - uses: actions/setup-node@v4
         with:
@@ -21,9 +26,25 @@ jobs:
           cache: npm
           cache-dependency-path: inspector/frontend/package-lock.json
 
-      - name: Install and verify frontend
+      - name: Install deps
+        run: npm ci
+
+      - name: Autofix lint (import sort + other auto-fixable rules)
+        # Only push back on branch pushes — not PRs (ref starts with refs/pull/)
         run: |
-          npm ci
+          npx eslint --fix src/ || true
+          if ! git diff --quiet; then
+            if [[ "${{ github.ref }}" == refs/heads/* ]]; then
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git add -A
+              git commit -m "style(inspector-frontend): autofix import sort [skip ci]"
+              git push origin HEAD:${{ github.ref_name }}
+            fi
+          fi
+
+      - name: Lint, typecheck, test, build
+        run: |
           npm run lint
           npm run check
           npm run test

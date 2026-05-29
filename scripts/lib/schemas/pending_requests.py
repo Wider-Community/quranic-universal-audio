@@ -12,7 +12,7 @@ requests" for fast lookup by admin reviewers. If the file is missing or
 corrupted, the data is recoverable by replaying the audit log.
 
 Acceptance is implicit: when the alignment pipeline produces files under
-``wip/<slug>/``, Inspector's auto-detect reconciler fires
+``reciters/<slug>/``, Inspector's auto-detect reconciler fires
 ``reciter.alignment_completed``, the proposed edits are applied to the
 catalog, and the entry is cleared. Admins can also reject pre-acceptance
 (soft = back to CATALOGUED, hard = discard).

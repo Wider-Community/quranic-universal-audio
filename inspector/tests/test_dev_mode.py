@@ -56,6 +56,7 @@ def test_dev_mode_default_owner_when_cookie_missing(dev_mode_client):
     resp = dev_mode_client.get("/api/me")
     assert resp.status_code == 200
     body = json.loads(resp.data)
+    caps = body.pop("capabilities")
     assert body == {
         "login": "dev-owner",
         "hf_user_id": "dev-owner",
@@ -64,6 +65,10 @@ def test_dev_mode_default_owner_when_cookie_missing(dev_mode_client):
         "active_claims": [],
         "dev_mode": True,
     }
+    # Owner is a superuser → holds every registered capability.
+    from scripts.lib.schemas import CAPABILITIES
+
+    assert set(caps) == {c.id for c in CAPABILITIES}
 
 
 @pytest.mark.parametrize("role", ["owner", "maintainer", "contributor"])
@@ -91,6 +96,7 @@ def test_dev_mode_anonymous_cookie_yields_null_user(dev_mode_client):
         "active_claim": None,
         "active_claims": [],
         "dev_mode": True,
+        "capabilities": ["view.catalog", "view.public_activity"],
     }
 
 

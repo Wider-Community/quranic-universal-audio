@@ -70,7 +70,7 @@ def read_prefetched_audio_local_path(slug: str, url: str):
 def read_prefetched_peaks(slug: str, url: str) -> dict | None:
     """Return the chapter-overview peaks for ``url`` in the slim int8 envelope.
 
-    Reads ``<wip|published>/<slug>/peaks/<chapter>.json.gz`` and returns the
+    Reads ``reciters/<slug>/peaks/<chapter>.json.gz`` and returns the
     packed envelope verbatim: ``{schema_version:3, duration_ms, q:'int8',
     bps, n, peaks_b64}``. No dequant, no ``.tolist()`` — the FE-facing route
     sends this through unchanged and the browser inflates b64 → ``Int8Array``
@@ -100,7 +100,7 @@ def read_prefetched_peaks(slug: str, url: str) -> dict | None:
 
 
 def clear_prefetch(slug: str) -> None:
-    """Delete every artifact under ``wip/<slug>/audio/`` and ``wip/<slug>/peaks/``.
+    """Delete every artifact under ``reciters/<slug>/audio/`` and ``reciters/<slug>/peaks/``.
 
     Called by the post-RELEASED sweeper. The ``_done.json`` sentinel is
     deleted separately by the sweeper itself so it can survive a partial

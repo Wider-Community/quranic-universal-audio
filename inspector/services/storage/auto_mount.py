@@ -31,7 +31,11 @@ _BUCKET_ROOT = _INSPECTOR_DIR / ".bucket"
 _HF_MOUNT_FALLBACKS = ("~/bin/hf-mount", "/usr/local/bin/hf-mount",
                        "/opt/homebrew/bin/hf-mount")
 
-_DEFAULT_BUCKET = "hetchyy/quranic-inspector-bucket"
+from services.storage.hf_bucket import (DEV_BUCKET_REPO, PROD_BUCKET_REPO,
+                                         is_deployed)
+
+# Local default mirrors the storage backend: dev, never prod.
+_DEFAULT_BUCKET = DEV_BUCKET_REPO
 
 
 def _flavor_for(bucket: str) -> str:
@@ -100,7 +104,13 @@ def auto_mount(*, behind_proxy: bool | None = None,
             except OSError:
                 pass
 
-    bucket = os.environ.get("INSPECTOR_BUCKET_REPO", _DEFAULT_BUCKET)
+    bucket = os.environ.get("INSPECTOR_BUCKET_REPO") or _DEFAULT_BUCKET
+    # Never read-mount prod from a local process unless explicitly allowed —
+    # ``get_backend`` raises a clear ProdBucketRefused for the same condition.
+    if (bucket == PROD_BUCKET_REPO
+            and not is_deployed()
+            and os.environ.get("INSPECTOR_ALLOW_PROD_BUCKET") != "1"):
+        return None
     mount_dir = mount_dir_for(bucket)
     mount_dir.mkdir(parents=True, exist_ok=True)
 

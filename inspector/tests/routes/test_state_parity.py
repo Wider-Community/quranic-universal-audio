@@ -180,15 +180,41 @@ def test_release_propagates_to_all_endpoints(signed_in_client, state_persistence
     assert task_body["row"]["assignee_hf_id"] is None
 
 
-def test_mark_ready_propagates_to_all_endpoints(signed_in_client, state_persistence):
+def test_mark_ready_propagates_to_all_endpoints(
+    signed_in_client, state_persistence, monkeypatch,
+):
     """Mark-ready persists the marked_ready flag; bucket stays under_review."""
     _seed_catalog("test_slug")
     _seed_state([_state_row("test_slug", state="under_review", assignee_hf_id="u-1")])
+
+    # The mark-ready state handler re-validates the live segments to gate
+    # on five category_counts being zero. Tests don't ship segments — stub
+    # the validator to report a clean result so the gate passes.
+    from services import validation as _validation
+    def _ok(_reciter):
+        return {"category_counts": {
+            "low_confidence": 0, "low_confidence_v2": 0, "boundary_adj": 0,
+            "cross_verse": 0, "basmala_amin": 0,
+        }}
+    monkeypatch.setattr(_validation, "validate_reciter_segments", _ok)
+    monkeypatch.setitem(_validation.__dict__, "validate_reciter_segments", _ok)
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(
         "/api/mark-ready/test_slug",
         headers={"Origin": "http://localhost"},
+        json={
+            "checklist": {
+                "failed_alignments": True,
+                "missing_words": True,
+                "low_confidence": True,
+                "repetitions": True,
+                "splits_wasl_waqf": True,
+                "basmala_amin_intros": True,
+            },
+            "comment_checks": "",
+            "comment_issues": "",
+        },
     )
     assert resp.status_code == 200, resp.data
 

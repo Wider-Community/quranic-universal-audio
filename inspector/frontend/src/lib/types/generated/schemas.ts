@@ -28,6 +28,23 @@ export interface AdminActivityEvent {
   reason?: string | null;
   [k: string]: unknown;
 }
+export interface AdminCapabilityRow {
+  id: string;
+  label: string;
+  description: string;
+  anon_eligible?: boolean;
+  owner_only_fixed?: boolean;
+  anonymous?: AdminCapabilityTierState;
+  contributor?: AdminCapabilityTierState;
+  maintainer?: AdminCapabilityTierState;
+  [k: string]: unknown;
+}
+export interface AdminCapabilityTierState {
+  allowed?: boolean | null;
+  applicable?: boolean;
+  is_default?: boolean;
+  [k: string]: unknown;
+}
 export interface AdminClaimEvent {
   slug: string;
   claimed_at?: string | null;
@@ -35,6 +52,16 @@ export interface AdminClaimEvent {
   marked_ready_at?: string | null;
   close_reason?: string | null;
   outcome?: string;
+  [k: string]: unknown;
+}
+export interface AdminPermissionGroup {
+  group: string;
+  capabilities?: AdminCapabilityRow[];
+  [k: string]: unknown;
+}
+export interface AdminPermissionsResponse {
+  groups?: AdminPermissionGroup[];
+  tiers?: string[];
   [k: string]: unknown;
 }
 export interface AdminRequestCounts {
@@ -105,6 +132,140 @@ export interface AdminRequestsResponse {
   rows?: AdminRequestRow[];
   counts?: AdminRequestCounts;
   unviewed_count?: number;
+  [k: string]: unknown;
+}
+/**
+ * One claim row (open or closed) for the reviewer-history table.
+ *
+ * A closed claim that had a mark-ready submission keeps the submission
+ * on the row — admins can audit past cycles' attestations even after a
+ * send-back-and-re-mark.
+ */
+export interface AdminReviewClaimHistoryEntry {
+  assignee_id: string;
+  login?: string | null;
+  claimed_at?: string | null;
+  released_at?: string | null;
+  marked_ready_at?: string | null;
+  close_reason?: string | null;
+  mark_ready_submission?: MarkReadySubmission | null;
+  [k: string]: unknown;
+}
+/**
+ * Persisted shape of a mark-ready submission, read back by the admin
+ * Reviews drawer. Cleared together with ``marked_ready_at`` on
+ * unmark / release / reassign so a sent-back row presents as fresh.
+ *
+ * ``checklist`` is ``None`` for owner-bypass submissions (the holder of
+ * ``claim.mark_ready_skip_gates`` skipped the form entirely); the admin
+ * drawer renders a "submitted via owner bypass" pill in that case.
+ * ``bypass_used`` is the authoritative flag for that branch — the
+ * handler stamps it server-side, never trusting the FE to set it.
+ */
+export interface MarkReadySubmission {
+  checklist?: MarkReadyChecklist | null;
+  comment_checks?: string;
+  comment_issues?: string;
+  bypass_used?: boolean;
+  [k: string]: unknown;
+}
+/**
+ * The six attestation checkboxes. All MUST be True at submit time —
+ * the handler raises ``InvalidTransition`` otherwise.
+ *
+ * Keys are repeated in the FE copy module as a literal union; if you
+ * add one here, update the copy module, the markdown file, and the
+ * parity test.
+ *
+ * ``repetitions`` is a separate attestation from ``low_confidence``
+ * because repetitions, while also an ignorable category, exercises a
+ * distinct reviewer pass (detected-rep autosplits + listen-through).
+ */
+export interface MarkReadyChecklist {
+  failed_alignments: boolean;
+  missing_words: boolean;
+  low_confidence: boolean;
+  repetitions: boolean;
+  splits_wasl_waqf: boolean;
+  basmala_amin_intros: boolean;
+}
+/**
+ * Full per-recitation payload for the General drawer.
+ *
+ * Carries everything except the live validation counts (lazy-loaded via
+ * ``/api/admin/reviews/<slug>/validation`` only when the accordion expands —
+ * ``validate_reciter_segments`` walks the bucket and is too expensive to
+ * eager-fetch on every drawer open).
+ */
+export interface AdminReviewDetail {
+  slug: string;
+  state: string;
+  state_since?: string | null;
+  reciter_id: string;
+  name_ar?: string | null;
+  name_en?: string | null;
+  riwayah: string;
+  style: string;
+  channel: string;
+  current_claim?: AdminReviewOpenClaim | null;
+  claim_history?: AdminReviewClaimHistoryEntry[];
+  transitions?: AdminReviewTransition[];
+  timestamps_job_ids?: string[];
+  [k: string]: unknown;
+}
+export interface AdminReviewOpenClaim {
+  assignee_id: string;
+  login?: string | null;
+  claimed_at?: string | null;
+  marked_ready_at?: string | null;
+  mark_ready_submission?: MarkReadySubmission | null;
+  [k: string]: unknown;
+}
+/**
+ * One row from the ``transitions`` table, slim-shaped for the timeline.
+ */
+export interface AdminReviewTransition {
+  ts: string;
+  event: string;
+  from_state?: string | null;
+  to_state?: string | null;
+  actor_login?: string | null;
+  actor_role?: string | null;
+  reason?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminReviewRow {
+  slug: string;
+  state: string;
+  state_since?: string | null;
+  reciter_id: string;
+  name_ar?: string | null;
+  name_en?: string | null;
+  riwayah: string;
+  style: string;
+  channel: string;
+  open_claim?: AdminReviewOpenClaim | null;
+  unread?: boolean;
+  [k: string]: unknown;
+}
+/**
+ * Validation category counts for one slug.
+ *
+ * ``has_data`` is False when ``validate_reciter_segments`` returns None
+ * (no ``detailed.json`` on the bucket yet — typical for fresh
+ * ``awaiting_review`` rows that haven't been touched).
+ */
+export interface AdminReviewValidation {
+  slug: string;
+  category_counts?: {
+    [k: string]: number;
+  };
+  has_data?: boolean;
+  [k: string]: unknown;
+}
+export interface AdminReviewsResponse {
+  rows?: AdminReviewRow[];
+  unviewed_marked_ready?: number;
   [k: string]: unknown;
 }
 export interface AdminRoleEvent {
@@ -425,6 +586,17 @@ export interface IntakeValidation {
   errors?: string[];
   warnings?: string[];
   [k: string]: unknown;
+}
+/**
+ * Request body for ``POST /api/mark-ready/<slug>``.
+ *
+ * Comment fields are optional and default to empty strings (not None) so
+ * the persisted-vs-omitted distinction is byte-stable through the wire.
+ */
+export interface MarkReadyRequest {
+  checklist: MarkReadyChecklist;
+  comment_checks?: string;
+  comment_issues?: string;
 }
 /**
  * One pipeline-op waveform slice. Migration #5 canonical shape.

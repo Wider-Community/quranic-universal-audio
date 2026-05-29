@@ -2,7 +2,7 @@
 
 Phase 4 backend surface. Each route is a thin wrapper around a single
 ``state.transition`` call gated by maintainer+ role. State-machine
-handlers (`_h_force_released`, `_h_reassigned`, `_h_force_set_state`,
+handlers (`_h_force_released`, `_h_reassigned`,
 `_h_merge_rejected`) own all precondition + invariant checks; routes
 just authenticate, validate body shape, and dispatch.
 
@@ -18,11 +18,9 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
-from scripts.lib.schemas import ReciterState, Role
-
 from routes._admin_helpers import (
     actor_for,
-    require_role_or_403,
+    require_capability_or_403,
     require_signed_in_or_401,
     row_to_dict,
     validate_reason,
@@ -38,14 +36,18 @@ logger = logging.getLogger(__name__)
 admin_actions_bp = Blueprint("admin_actions", __name__, url_prefix="/api/admin")
 
 
-def _require_maintainer_or_above():
-    """Auth + maintainer-or-owner gate. Returns ``(user, None)`` or
+def _require_cap(capability: str):
+    """Auth + capability gate. Returns ``(user, None)`` or
     ``(None, (resp, status))``.
-    """
+
+    The data-driven replacement for the old fixed-tier inline gates: each
+    route names its capability and the owner-configurable matrix decides which
+    tiers pass. (Force-release / reassign default owner-only; send-back +
+    user-lookup default maintainer+.)"""
     user, err = require_signed_in_or_401()
     if err is not None:
         return None, err
-    err_resp = require_role_or_403(user, Role.MAINTAINER, Role.OWNER)
+    err_resp = require_capability_or_403(user, capability)
     if err_resp is not None:
         return None, err_resp
     return user, None
@@ -54,12 +56,15 @@ def _require_maintainer_or_above():
 @admin_actions_bp.route("/claim/force-release/<slug>", methods=["POST"])
 @require_same_origin
 def force_release(slug: str):
-    user, err = _require_maintainer_or_above()
+    user, err = _require_cap("claim.force_release")
     if err is not None:
         return err
 
     body = request.get_json(silent=True) or {}
-    reason, err = validate_reason(body)
+    # Reason is optional on owner claim mutations — the action is auditable
+    # via the actor + slug + transition row regardless. Sub-threshold strings
+    # are normalized to empty by validate_reason(required=False).
+    reason, err = validate_reason(body, required=False)
     if err is not None:
         return err
 
@@ -81,7 +86,7 @@ def force_release(slug: str):
 @admin_actions_bp.route("/claim/reassign/<slug>", methods=["POST"])
 @require_same_origin
 def reassign(slug: str):
-    user, err = _require_maintainer_or_above()
+    user, err = _require_cap("claim.reassign")
     if err is not None:
         return err
 
@@ -89,7 +94,8 @@ def reassign(slug: str):
     to_login = (body.get("to_login") or "").strip()
     if not to_login:
         return jsonify({"error": "to_login is required"}), 400
-    reason, err = validate_reason(body)
+    # Optional reason — same rationale as force-release.
+    reason, err = validate_reason(body, required=False)
     if err is not None:
         return err
 
@@ -131,39 +137,10 @@ def reassign(slug: str):
     })
 
 
-@admin_actions_bp.route("/state/force-set/<slug>", methods=["POST"])
-@require_same_origin
-def force_set_state(slug: str):
-    user, err = _require_maintainer_or_above()
-    if err is not None:
-        return err
-
-    body = request.get_json(silent=True) or {}
-    to_state_raw = (body.get("to_state") or "").strip()
-    if not to_state_raw:
-        return jsonify({"error": "to_state is required"}), 400
-    try:
-        ReciterState(to_state_raw)
-    except ValueError:
-        return jsonify({"error": f"unknown to_state {to_state_raw!r}"}), 400
-    reason, err = validate_reason(body)
-    if err is not None:
-        return err
-
-    new_row = state_service.transition(
-        slug,
-        "admin.force_set_state",
-        actor=actor_for(user),
-        payload={"to_state": to_state_raw},
-        reason=reason,
-    )
-    return jsonify({"row": row_to_dict(new_row)})
-
-
 @admin_actions_bp.route("/send-back/<slug>", methods=["POST"])
 @require_same_origin
 def send_back(slug: str):
-    user, err = _require_maintainer_or_above()
+    user, err = _require_cap("review.send_back")
     if err is not None:
         return err
 
@@ -184,7 +161,7 @@ def send_back(slug: str):
 @admin_actions_bp.route("/users/lookup", methods=["POST"])
 @require_same_origin
 def users_lookup():
-    _user, err = _require_maintainer_or_above()
+    _user, err = _require_cap("user.lookup")
     if err is not None:
         return err
 

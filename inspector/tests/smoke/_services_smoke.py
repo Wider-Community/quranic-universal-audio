@@ -4,9 +4,9 @@ Uses a ``FilesystemBackend`` against a tempdir — no HF deps. Run with
 ``python -m inspector.services._services_smoke``.
 
 Exercises the slug-bound state machine end-to-end (claim → mark-ready →
-unmark → release → claim → publish → timestamps → dataset_published →
-removed_from_dataset → unpublished), plus the role bootstrap + grant +
-revoke + update flows, plus catalog vocab-only stub round-trip.
+unmark → release → claim → publish → timestamps → unlocked_for_revision
+→ unpublished), plus the role bootstrap + grant + revoke + update flows,
+plus catalog vocab-only stub round-trip.
 """
 
 from __future__ import annotations
@@ -177,14 +177,12 @@ def smoke() -> int:
             assert row.state == ReciterState.CATALOGUED
             print("ok  state catalog.added → CATALOGUED")
 
-            # admin.force_set_state to push into awaiting_alignment then back
-            # awaiting_review (covers the bidirectional pairs).
+            # reciter.requested → AWAITING_ALIGNMENT (the canonical flow now
+            # that admin.force_set_state has been removed).
             row = state.transition(
                 "saad_al_ghamdi",
-                "admin.force_set_state",
-                actor=owner_actor,
-                payload={"to_state": "awaiting_alignment"},
-                reason="seed-from-test smoke harness",
+                "reciter.requested",
+                actor=contributor_actor,
             )
             assert row.state == ReciterState.AWAITING_ALIGNMENT
             row = state.transition(
@@ -296,26 +294,7 @@ def smoke() -> int:
             assert row.timestamps_job_ids == ["job_abc"]
             print("ok  state reciter.timestamps_completed → RELEASED")
 
-            # dataset_published
-            row = state.transition(
-                "saad_al_ghamdi",
-                "reciter.dataset_published",
-                actor=maintainer_actor,
-            )
-            assert row.state == ReciterState.COMPLETED
-            print("ok  state reciter.dataset_published → COMPLETED")
-
-            # removed_from_dataset
-            row = state.transition(
-                "saad_al_ghamdi",
-                "reciter.removed_from_dataset",
-                actor=maintainer_actor,
-                reason="dataset rebuild post-correction-of-verse-152",
-            )
-            assert row.state == ReciterState.RELEASED
-            print("ok  state reciter.removed_from_dataset → RELEASED")
-
-            # unlocked_for_revision — sets RevisionContext
+            # unlocked_for_revision — sets RevisionContext (exits RELEASED)
             row = state.transition(
                 "saad_al_ghamdi",
                 "admin.unlocked_for_revision",
@@ -351,10 +330,8 @@ def smoke() -> int:
             )
             state.transition(
                 "test_other",
-                "admin.force_set_state",
-                actor=owner_actor,
-                payload={"to_state": "awaiting_alignment"},
-                reason="harness pushes through alignment",
+                "reciter.requested",
+                actor=contributor_actor,
             )
             state.transition(
                 "test_other",
@@ -369,7 +346,7 @@ def smoke() -> int:
             row = state.transition(
                 "test_other",
                 "claim.reassigned",
-                actor=maintainer_actor,
+                actor=owner_actor,
                 payload={"new_assignee_hf_id": "200", "new_assignee_login": "maint_bob"},
                 reason="original claim holder went on leave for two weeks",
             )

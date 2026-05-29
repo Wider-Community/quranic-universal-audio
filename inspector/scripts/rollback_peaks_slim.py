@@ -35,15 +35,11 @@ logger = logging.getLogger("rollback_peaks_slim")
 
 
 def _iter_all_slugs(backend) -> list[str]:
-    """All reciter slugs under both ``wip/`` and ``published/`` -- mirrors
-    the backfill script so rollback restores files in either subtree."""
-    out: list[str] = []
-    for kind in ("wip", "published"):
-        try:
-            out.extend(backend.list_dir(kind))
-        except Exception:  # noqa: BLE001
-            continue
-    return sorted(set(out))
+    """All reciter slugs under ``reciters/`` -- mirrors the backfill script."""
+    try:
+        return sorted(set(backend.list_dir(storage_paths.RECITERS_PREFIX)))
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _iter_backups(backend, slug: str) -> list[str]:
@@ -112,7 +108,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--slug",
-        help="Limit rollback to one reciter slug (default: all under wip/).",
+        help="Limit rollback to one reciter slug (default: all under reciters/).",
     )
     parser.add_argument(
         "--dry-run",
@@ -127,7 +123,7 @@ def main() -> int:
     backend = get_backend()
     slugs = [args.slug] if args.slug else _iter_all_slugs(backend)
     if not slugs:
-        print("no wip/ or published/ slugs found", file=sys.stderr)
+        print("no reciters/ slugs found", file=sys.stderr)
         return 1
 
     totals: dict[str, int] = {}

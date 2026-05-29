@@ -27,7 +27,7 @@ PRODUCT.md
 # Local
 .local/
 .tmp/
-data/archive/
+.playwright-mcp
 
 # Release packaging output
 dist/

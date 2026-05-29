@@ -19,11 +19,26 @@ committed to git so CI can ``git diff --exit-code`` it.
 """
 from __future__ import annotations
 
+from .admin_permissions import (
+    AdminCapabilityRow,
+    AdminCapabilityTierState,
+    AdminPermissionGroup,
+    AdminPermissionsResponse,
+)
 from .admin_requests import (
     AdminRequestCounts,
     AdminRequestRow,
     AdminRequestsResponse,
     RequestChange,
+)
+from .admin_reviews import (
+    AdminReviewClaimHistoryEntry,
+    AdminReviewDetail,
+    AdminReviewOpenClaim,
+    AdminReviewRow,
+    AdminReviewTransition,
+    AdminReviewValidation,
+    AdminReviewsResponse,
 )
 from .admin_users import (
     AdminActiveClaim,
@@ -49,6 +64,11 @@ from .intake_requests import (
     ProbeResult,
     SourceLink,
 )
+from .mark_ready import (
+    MarkReadyChecklist,
+    MarkReadyRequest,
+    MarkReadySubmission,
+)
 from .peaks_history import PeaksRecord
 from .segment import (
     DetailedDocument,
@@ -60,11 +80,22 @@ from .segment import (
 __all__ = [
     "AdminActiveClaim",
     "AdminActivityEvent",
+    "AdminCapabilityRow",
+    "AdminCapabilityTierState",
     "AdminClaimEvent",
+    "AdminPermissionGroup",
+    "AdminPermissionsResponse",
     "AdminRequestCounts",
     "AdminRequestEvent",
     "AdminRequestRow",
     "AdminRequestsResponse",
+    "AdminReviewClaimHistoryEntry",
+    "AdminReviewDetail",
+    "AdminReviewOpenClaim",
+    "AdminReviewRow",
+    "AdminReviewTransition",
+    "AdminReviewValidation",
+    "AdminReviewsResponse",
     "AdminRoleEvent",
     "AdminUserDetail",
     "AdminUserRow",
@@ -82,6 +113,9 @@ __all__ = [
     "IntakeSource",
     "IntakeSubmission",
     "IntakeValidation",
+    "MarkReadyChecklist",
+    "MarkReadyRequest",
+    "MarkReadySubmission",
     "PeaksRecord",
     "ProbeResponse",
     "ProbeResult",

@@ -22,6 +22,12 @@ on:
         options: [auto, dev, prod]
         default: auto
 
+# contents: write is required because the reusable inspector-checks.yml
+# frontend-checks job pushes back lint autofixes; a reusable workflow can
+# never exceed the caller's grant, so the caller must allow write too.
+permissions:
+  contents: write
+
 concurrency:
   # Avoid two pushes deploying simultaneously — the Hub upload is idempotent
   # but parallel rebuilds on the Space waste container time.

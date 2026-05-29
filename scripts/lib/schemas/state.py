@@ -34,7 +34,6 @@ class ReciterState(str, Enum):
     UNDER_REVIEW = "under_review"
     AWAITING_TIMESTAMPS = "awaiting_timestamps"
     RELEASED = "released"
-    COMPLETED = "completed"
 
 
 class RevisionContext(BaseModel):
@@ -46,7 +45,7 @@ class RevisionContext(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    unlocked_from_state: Literal["released", "completed"]
+    unlocked_from_state: Literal["released"]
     unlocked_at: datetime
     unlocked_by_hf_id: str = Field(..., min_length=1)
     original_assignee_hf_id: str | None = None
@@ -72,7 +71,7 @@ class ReciterRow(BaseModel):
     revision_in_progress: RevisionContext | None = None
 
     # Set when the row enters RELEASED (timestamps_completed) to schedule the
-    # 1-week deletion of the prefetched audio under ``wip/<slug>/``. Cleared by
+    # 1-week deletion of the prefetched audio under ``reciters/<slug>/``. Cleared by
     # admin.unlocked_for_revision (which re-enqueues prefetch).
     prefetch_purge_at: datetime | None = None
 

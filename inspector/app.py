@@ -323,7 +323,7 @@ def _boot_substrate() -> None:
 
     Hard cut: the 6 legacy bucket JSON stores are no longer hydrated into
     memory — the DB pulled from the bucket IS the source of truth. Per-reciter
-    content under ``wip/<slug>/`` stays JSON-on-bucket and is read on demand.
+    content under ``reciters/<slug>/`` stays JSON-on-bucket and is read on demand.
 
     Boot order (matters): pull → migrate FIRST (a repo read before migration
     would hit an empty/old schema), THEN the boot-scan (which reads/writes the
@@ -354,7 +354,7 @@ def _boot_substrate() -> None:
             raise
         return
 
-    # Boot-scan: idempotent ``alignment_completed`` catch-up for ``wip/<slug>/``
+    # Boot-scan: idempotent ``alignment_completed`` catch-up for ``reciters/<slug>/``
     # dirs stuck in AWAITING_ALIGNMENT. Wrapped in ``deferred_sync`` so its loop
     # of N transitions produces ONE coalesced bucket upload, not N (avoids a
     # boot-time upload storm / cross-container CAS thrash).
@@ -415,7 +415,10 @@ def _handle_unknown_reciter(e: UnknownReciter):
 
 @app.errorhandler(InvalidTransition)
 def _handle_invalid_transition(e: InvalidTransition):
-    return jsonify({"error": str(e)}), 400
+    body: dict = {"error": str(e)}
+    if getattr(e, "details", None):
+        body["details"] = e.details
+    return jsonify(body), 400
 
 
 @app.errorhandler(NotAuthorizedForTransition)

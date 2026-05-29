@@ -20,6 +20,7 @@ import sqlite3
 from scripts.lib.schemas import (
     Actor,
     AudioCategory,
+    Channel,
     Delivery,
     ReciterCatalog,
     ReciterEntry,
@@ -27,7 +28,6 @@ from scripts.lib.schemas import (
 )
 
 from . import audit
-from services.auth import permissions
 from services.db import errors as db_errors, repo_catalog
 from services.db import sync as _sync
 
@@ -102,11 +102,18 @@ def display_name(slug: str) -> str | None:
 # ---- Authorization ----
 
 
-def _require_maintainer(actor: Actor) -> None:
-    if not permissions.is_maintainer(actor):
+def _require_capability(actor: Actor, capability: str) -> None:
+    """Capability gate for catalog mutations (data-driven; raises the
+    catalog-layer error). ``add_*`` → ``catalog.add``, ``edit_*`` →
+    ``catalog.edit``. These functions have no direct HTTP route — they run
+    inside server-triggered transitions (e.g. alignment_completed) — so this is
+    defense-in-depth that still routes through the single resolver rather than a
+    stray hardcoded tier check. Lazy import avoids an import cycle."""
+    from services.auth import capabilities as _capabilities
+
+    if not _capabilities.can(actor, capability):
         raise NotAuthorizedForCatalog(
-            f"actor role {actor.role!r} cannot mutate catalog; "
-            "requires MAINTAINER or OWNER"
+            f"actor role {actor.role!r} lacks capability {capability!r}"
         )
 
 
@@ -124,7 +131,7 @@ def add_reciter(
     notes: str | None = None,
     reason: str | None = None,
 ) -> ReciterEntry:
-    _require_maintainer(actor)
+    _require_capability(actor, "catalog.add")
     entry = ReciterEntry(
         reciter_id=reciter_id, name_en=name_en, name_ar=name_ar,
         country=country, notes=notes,
@@ -154,7 +161,7 @@ def edit_reciter(
     reason: str | None = None,
 ) -> ReciterEntry:
     """Mutate a reciter row in place. ``reciter_id`` is immutable."""
-    _require_maintainer(actor)
+    _require_capability(actor, "catalog.edit")
     # Compute the patch BEFORE opening a txn so a no-change call does no bucket
     # I/O / db_seq bump (matches the legacy "no _persist on empty patch").
     existing = repo_catalog.find_reciter(reciter_id)
@@ -189,7 +196,7 @@ def add_delivery(
     delivery: Delivery,
     reason: str | None = None,
 ) -> Delivery:
-    _require_maintainer(actor)
+    _require_capability(actor, "catalog.add")
     with _sync.durable_transaction():
         try:
             repo_catalog.add_delivery(delivery)
@@ -223,7 +230,7 @@ def edit_delivery(
     """Mutate a delivery row in place. ``slug``/``reciter_id`` immutable. Only
     the legacy editable surface (riwayah/style/recording_context/recording_year)
     is exposed. Invalid vocab FK → ``InvalidCatalogChange`` (SQLite FK)."""
-    _require_maintainer(actor)
+    _require_capability(actor, "catalog.edit")
     existing = repo_catalog.find_delivery(slug)
     if existing is None:
         raise InvalidCatalogChange(f"delivery slug {slug!r} not found")
@@ -260,7 +267,7 @@ def add_audio_source(
     source: Source,
     reason: str | None = None,
 ) -> Source:
-    _require_maintainer(actor)
+    _require_capability(actor, "catalog.add")
     with _sync.durable_transaction():
         try:
             repo_catalog.add_source(source)
@@ -275,9 +282,58 @@ def add_audio_source(
     return source
 
 
+def add_source(
+    *,
+    actor: Actor,
+    source: Source,
+    reason: str | None = None,
+) -> Source:
+    """Idempotently add a vocab source so ``add_delivery``'s ``source`` FK can be
+    satisfied. A no-op (returns the existing row) when the slug is already
+    present — the intake ingest may resend ``vocab_additions`` it already
+    applied. Maintainer+; nesting-safe (enrolls in the caller's txn)."""
+    _require_capability(actor, "catalog.add")
+    existing = repo_catalog.find_source(source.slug)
+    if existing is not None:
+        return existing
+    with _sync.durable_transaction():
+        repo_catalog.add_source(source)
+        audit.append(
+            event="catalog.audio_source_added",
+            actor=actor,
+            payload={"slug": source.slug, "name": source.name},
+            reason=reason,
+        )
+    return source
+
+
+def add_channel(
+    *,
+    actor: Actor,
+    channel: Channel,
+    reason: str | None = None,
+) -> Channel:
+    """Idempotently add a vocab channel so ``add_delivery``'s ``channel`` FK can
+    be satisfied. No-op when the slug already exists. Maintainer+; nesting-safe."""
+    _require_capability(actor, "catalog.add")
+    existing = repo_catalog.find_channel(channel.slug)
+    if existing is not None:
+        return existing
+    with _sync.durable_transaction():
+        repo_catalog.add_channel(channel)
+        audit.append(
+            event="catalog.channel_added",
+            actor=actor,
+            payload={"slug": channel.slug, "name": channel.name},
+            reason=reason,
+        )
+    return channel
+
+
 __all__ = [
     "AudioCategory",
     "CatalogError",
+    "Channel",
     "Delivery",
     "InvalidCatalogChange",
     "NotAuthorizedForCatalog",
@@ -285,8 +341,10 @@ __all__ = [
     "ReciterEntry",
     "Source",
     "add_audio_source",
+    "add_channel",
     "add_delivery",
     "add_reciter",
+    "add_source",
     "edit_delivery",
     "edit_reciter",
     "find_delivery",

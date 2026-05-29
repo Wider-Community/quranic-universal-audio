@@ -28,6 +28,13 @@ export interface CurrentUser {
      * deployed HF Space. Toggles the in-app role switcher UI.
      */
     dev_mode: boolean;
+    /**
+     * Resolved capability ids the caller currently holds (registry defaults ⊕
+     * owner overrides), recomputed fresh per request by the backend. Drives
+     * capability-aware UI gating via `lib/stores/capabilities.ts`. Anonymous
+     * still holds the anon-eligible view capabilities the owner left on.
+     */
+    capabilities: string[];
 }
 
 const _ANON: CurrentUser = {
@@ -37,6 +44,7 @@ const _ANON: CurrentUser = {
     active_claim: null,
     active_claims: [],
     dev_mode: false,
+    capabilities: [],
 };
 
 export const currentUser = writable<CurrentUser>(_ANON);

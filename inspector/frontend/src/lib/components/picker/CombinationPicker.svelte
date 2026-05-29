@@ -34,6 +34,7 @@
     import Modal from '../Modal.svelte';
     import ReciterChip from '../ReciterChip.svelte';
     import SearchInput from '../SearchInput.svelte';
+    import StatePill from '../StatePill.svelte';
     import type { CombinationSelection, InitialFilter } from './combination-picker-types';
     import PickerFilterRail from './PickerFilterRail.svelte';
     import PickerFooter from './PickerFooter.svelte';
@@ -334,8 +335,8 @@
                         {/each}
                     {/if}
                     {#each groupedRest as group (group.bucket)}
-                        <div class="picker-section-head">
-                            <span class="state-dot state-dot-{group.bucket}" aria-hidden="true"></span>
+                        <div class="picker-section-head bucket-head">
+                            <StatePill state={group.bucket} size="sm" />
                             <span class="head-count">{group.rows.length}</span>
                         </div>
                         {#each group.rows as c (c.delivery.slug)}
@@ -349,12 +350,15 @@
                                 on:click={() => commit(c)}
                                 on:mouseenter={() => (focusedIdx = idx)}
                             >
+                                <!-- No per-row state pill here: the section head
+                                     already groups by bucket, so repeating it on
+                                     every row is redundant noise. -->
                                 <ReciterChip
                                     name={c.reciter.name}
                                     nameAr={c.reciter.name_ar}
                                     country={c.reciter.country}
                                     subline={deliveryMeta(c.delivery)}
-                                    bucket={c.delivery.bucket}
+                                    bucket={null}
                                     variant="compact"
                                 />
                                 <div class="row-figures">

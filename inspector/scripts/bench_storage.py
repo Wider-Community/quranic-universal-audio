@@ -7,7 +7,7 @@ Run:
     INSPECTOR_BUCKET_REPO=hetchyy/quranic-inspector-bucket-dev \\
     python3 inspector/scripts/bench_storage.py [--mount /path]
 
-A scratch dir ``wip/__bench__/`` is created for writes and cleaned at exit.
+A scratch dir ``reciters/__bench__/`` is created for writes and cleaned at exit.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ BUCKET = os.environ.get(
     "INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket-dev"
 )
 SLUG = "mishary_rashid_al_afasy_mp3quran"
-SCRATCH = "wip/__bench__"
+SCRATCH = "reciters/__bench__"
 
 
 def time_call(fn, *args, **kwargs) -> tuple[float, object]:
@@ -67,10 +67,10 @@ def bench_reads(b: BucketBackend, n_warm: int = 5) -> None:
         ("state/reciter_state.json", "read_json", "store"),
         ("access/inspector_roles.json", "read_json", "store"),
         ("catalog/reciter_catalog.json", "read_json", "store-large"),
-        (f"published/{SLUG}/segments.json", "read_json", "reciter-md"),
-        (f"published/{SLUG}/detailed.json", "read_bytes", "reciter-big"),
-        (f"published/{SLUG}/edit_history.jsonl", "iter_jsonl", "history"),
-        (f"published/{SLUG}/timestamps/1.json", "read_bytes", "ts-chapter"),
+        (f"reciters/{SLUG}/segments.json", "read_json", "reciter-md"),
+        (f"reciters/{SLUG}/detailed.json", "read_bytes", "reciter-big"),
+        (f"reciters/{SLUG}/edit_history.jsonl", "iter_jsonl", "history"),
+        (f"reciters/{SLUG}/timestamps/1.json", "read_bytes", "ts-chapter"),
     ]
 
     for path, op, tag in targets:
@@ -117,13 +117,13 @@ def bench_reads(b: BucketBackend, n_warm: int = 5) -> None:
     samples = []
     for _ in range(3):
         invalidate_hffs()
-        dt, _ = time_call(b.list_dir, "wip")
+        dt, _ = time_call(b.list_dir, "reciters")
         samples.append(dt)
-    stats("list_dir   list_dir    wip/", samples, extra="[cold]")
+    stats("list_dir   list_dir    reciters/", samples, extra="[cold]")
 
     samples = []
     for _ in range(3):
-        dt, _ = time_call(b.exists, f"published/{SLUG}/segments.json")
+        dt, _ = time_call(b.exists, f"reciters/{SLUG}/segments.json")
         samples.append(dt)
     stats("exists     exists      segments.json", samples, extra="[mixed]")
 

@@ -50,7 +50,6 @@ ANALYSIS_LETTER_FONT_SIZE = "1.75rem"  # letter sub-row text size in analysis vi
 
 # Segments tab settings
 SEG_FONT_SIZE = "1.8rem"           # Arabic text size in segment cards
-LOW_CONF_DEFAULT_THRESHOLD = 80    # default % for low-confidence slider (50–99)
 SEG_WORD_SPACING = "0.2em"         # gap between words in segment cards
 
 # Auto-scroll animation mode for the segments list.
@@ -89,7 +88,24 @@ MIN_FULL_PEAK_BUCKETS = 100
 PEAKS_BUCKETS_PER_SEC = 30                # target peak density for segment-level peaks
 
 # Validation thresholds
+#
+# ``LOW_CONFIDENCE_THRESHOLD`` is the SINGLE source of truth for the badge
+# cutoff: classifier flags segments with confidence < this value as
+# ``low_confidence`` (services/validation/classifier.py), the
+# mark-ready gate counts items below this value
+# (services/state/state.py::_h_marked_ready), and the FE accordion's
+# slider default + form's blocking-counts panel derive from the
+# percentage form below (shipped via /api/seg/data as
+# ``low_conf_default_threshold``). Bump this and both layers agree.
 LOW_CONFIDENCE_THRESHOLD = 0.80
+# Percentage scale (0–99 int) the FE slider works in. Derived — never
+# edit this independently; the assertion below guards against drift.
+LOW_CONF_DEFAULT_THRESHOLD = int(round(LOW_CONFIDENCE_THRESHOLD * 100))
+assert 50 <= LOW_CONF_DEFAULT_THRESHOLD <= 99, (
+    f"LOW_CONFIDENCE_THRESHOLD={LOW_CONFIDENCE_THRESHOLD!r} produced an "
+    f"out-of-range slider default {LOW_CONF_DEFAULT_THRESHOLD}; the FE "
+    f"slider expects 50–99 (see frontend/.../config-loader.ts)."
+)
 # Minimum number of pipeline-stripped basmalas required before we flag the
 # remaining (non-stripped) chapters as "missed Basmala" candidates. Below this
 # count the reciter is treated as one who doesn't recite inter-chapter
@@ -125,7 +141,7 @@ PEAKS_WORKER_COUNT = 8                   # ThreadPoolExecutor workers for parall
 # missing/old version as a cache miss so existing peaks lazily recompute.
 #
 # v3 introduces the slim packed shape (int8-quantized, decimated, gzipped) at
-# ``wip/<slug>/peaks/<chapter>.json.gz``. See ``services/audio/peaks_slim.py``
+# ``reciters/<slug>/peaks/<chapter>.json.gz``. See ``services/audio/peaks_slim.py``
 # for the format. Pre-v3 ``.json`` files are migrated by
 # ``scripts/backfill_peaks_slim.py`` and preserved as ``.json.bak`` for
 # rollback. Reader (``audio_fetch.read_prefetched_peaks``) inflates v3 blobs

@@ -458,6 +458,5 @@
         font-size: 10.5px;
         color: var(--text-faint);
         line-height: 1.5;
-        max-width: 60ch;
     }
 </style>

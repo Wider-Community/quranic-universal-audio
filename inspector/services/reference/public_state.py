@@ -53,11 +53,11 @@ _BUCKET_PROGRESS: dict[PublicBucket, int] = {
     "published": 4,
 }
 
-# Internal lifecycle state → public bucket. Several internal states collapse
-# onto one bucket (UNDER_REVIEW + AWAITING_TIMESTAMPS → "under_review",
-# RELEASED + COMPLETED → "published"); CATALOGUED reads as still-requestable.
-# Single source of truth for both ``bucket_for`` (current state) and the
-# transitions replay in ``_bucket_dates_for_slug`` (historical states).
+# Internal lifecycle state → public bucket. Some internal states collapse onto
+# one bucket (UNDER_REVIEW + AWAITING_TIMESTAMPS → "under_review");
+# CATALOGUED reads as still-requestable. Single source of truth for both
+# ``bucket_for`` (current state) and the transitions replay in
+# ``_bucket_dates_for_slug`` (historical states).
 _STATE_TO_BUCKET: dict[ReciterState, PublicBucket] = {
     ReciterState.CATALOGUED: "available_for_request",
     ReciterState.AWAITING_ALIGNMENT: "requested",
@@ -65,7 +65,6 @@ _STATE_TO_BUCKET: dict[ReciterState, PublicBucket] = {
     ReciterState.UNDER_REVIEW: "under_review",
     ReciterState.AWAITING_TIMESTAMPS: "under_review",
     ReciterState.RELEASED: "published",
-    ReciterState.COMPLETED: "published",
 }
 
 # Full-mushaf chapter counts per audio category. Anything less is "partial".

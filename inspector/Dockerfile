@@ -137,7 +137,7 @@ COPY scripts/lib/ ./scripts/lib/
 # Linguistic data read by services/data_loader.py via config.py's _QUA_DATA,
 # plus surah_info.json read by services/data_loader.py at startup. These four
 # files are the entire on-disk data surface in deployed mode — everything else
-# (state, catalog, audit, per-reciter wip/published) lives in the bucket
+# (state, catalog, audit, per-reciter reciters/) lives in the bucket
 # mounted at /data/inspector-bucket. INSPECTOR_QUA_DATA_PATH=/app/data tells
 # config.py to look here instead of the default sibling-project path.
 COPY data/surah_info.json \

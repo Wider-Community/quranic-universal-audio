@@ -6,8 +6,8 @@ a per-caller overlay applied live (requester redaction for maintainers, the
 ``viewed`` flag, and the caller's unviewed-open count).
 
 ``mark_viewed()`` records that the calling admin has seen a request — written
-the first time they inline-expand it — mirroring the per-user dismissal pattern
-in ``services/activity/activity_state.py``.
+the first time they inline-expand it. Mirrors ``services/admin/reviews.py``'s
+per-admin ``review_views`` writer.
 
 The proposed-changes ``changes`` list is built strictly over the
 ``ProposedEdits`` field set (the same fields the request form can edit), with

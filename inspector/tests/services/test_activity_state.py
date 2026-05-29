@@ -1,8 +1,9 @@
-"""Tests for ``services/activity_state`` — bucket-resident store holding
-per-user dismissals + global tombstones for the activity rails.
+"""Tests for ``services/activity_state`` — facade over the global-tombstone
+sidecar that backs the owner-only "delete from public feed" action.
 
-This is the codebase's 5th bucket store (alongside state, access, catalog,
-audit) and follows the same hydrate / snapshot / write-through pattern.
+Per-user dismissals were dropped alongside the admin notifications rail
+(the Admin dashboard tabs are the discovery surface now); only the global
+tombstone path remains here.
 """
 
 from __future__ import annotations
@@ -44,92 +45,6 @@ def test_hydrate_empty_when_no_file(fresh_state):
     svc, _ = fresh_state
     snap = svc.snapshot()
     assert snap.deleted == []
-    assert snap.dismissals == {}
-
-
-# (Removed test_hydrate_loads_existing_file: bucket activity_state.json hydrate
-# no longer exists — the substrate DB is the source of truth.)
-
-
-# ---------------------------------------------------------------------------
-# Per-user dismissals
-# ---------------------------------------------------------------------------
-
-
-def test_dismiss_records_per_user(fresh_state, monkeypatch):
-    svc, _ = fresh_state
-    # Silence audit writes; we test the audit linkage separately.
-    from services import audit as audit_service
-
-    calls = []
-    monkeypatch.setattr(
-        audit_service, "append", lambda **kw: calls.append(kw),
-    )
-
-    actor_a = _actor("u-A", role="maintainer", login="alice")
-    actor_b = _actor("u-B", role="maintainer", login="bob")
-
-    svc.dismiss("abc123", actor=actor_a)
-    svc.dismiss("abc123", actor=actor_b)
-    svc.dismiss("xyz789", actor=actor_a)
-
-    snap = svc.snapshot()
-    assert sorted(snap.dismissals["u-A"]) == ["abc123", "xyz789"]
-    assert snap.dismissals["u-B"] == ["abc123"]
-
-
-def test_is_dismissed_scoped_to_user(fresh_state, monkeypatch):
-    svc, _ = fresh_state
-    from services import audit as audit_service
-    monkeypatch.setattr(audit_service, "append", lambda **kw: None)
-
-    svc.dismiss("abc123", actor=_actor("u-A", role="maintainer"))
-    assert svc.is_dismissed("abc123", "u-A") is True
-    assert svc.is_dismissed("abc123", "u-B") is False
-    assert svc.is_dismissed("nope", "u-A") is False
-
-
-def test_undismiss_removes_only_for_caller(fresh_state, monkeypatch):
-    svc, _ = fresh_state
-    from services import audit as audit_service
-    monkeypatch.setattr(audit_service, "append", lambda **kw: None)
-
-    actor_a = _actor("u-A", role="maintainer")
-    actor_b = _actor("u-B", role="maintainer")
-    svc.dismiss("shared", actor=actor_a)
-    svc.dismiss("shared", actor=actor_b)
-    svc.undismiss("shared", actor=actor_a)
-
-    assert svc.is_dismissed("shared", "u-A") is False
-    assert svc.is_dismissed("shared", "u-B") is True
-
-
-def test_dismiss_writes_audit_record(fresh_state, monkeypatch):
-    svc, _ = fresh_state
-    from services import audit as audit_service
-    calls = []
-    monkeypatch.setattr(
-        audit_service, "append", lambda **kw: calls.append(kw),
-    )
-    actor = _actor("u-A", role="maintainer", login="alice")
-    svc.dismiss("abc123", actor=actor)
-
-    assert len(calls) == 1
-    assert calls[0]["event"] == "activity.dismissed"
-    assert calls[0]["actor"] is actor
-    assert calls[0]["payload"] == {"audit_id": "abc123"}
-
-
-def test_dismiss_idempotent(fresh_state, monkeypatch):
-    svc, _ = fresh_state
-    from services import audit as audit_service
-    monkeypatch.setattr(audit_service, "append", lambda **kw: None)
-
-    actor = _actor("u-A", role="maintainer")
-    svc.dismiss("abc123", actor=actor)
-    svc.dismiss("abc123", actor=actor)
-
-    assert svc.snapshot().dismissals["u-A"] == ["abc123"]
 
 
 # ---------------------------------------------------------------------------
@@ -180,14 +95,12 @@ def test_delete_idempotent(fresh_state, monkeypatch):
 
 
 def test_writes_persist_to_substrate(fresh_state, monkeypatch):
-    """Dismiss/delete persist into the SQLite substrate (read back via snapshot)."""
+    """Delete persists into the SQLite substrate (read back via snapshot)."""
     svc, _ = fresh_state
     from services import audit as audit_service
     monkeypatch.setattr(audit_service, "append", lambda **kw: None)
 
-    svc.dismiss("abc123", actor=_actor("u-A", role="maintainer"))
     svc.delete("xyz789", actor=_actor("u-O", role="owner"), reason="ten chars+")
 
     snap = svc.snapshot()
     assert snap.deleted == ["xyz789"]
-    assert snap.dismissals == {"u-A": ["abc123"]}
