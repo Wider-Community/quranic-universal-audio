@@ -5,7 +5,7 @@
 ``services/timestamps.py``). ``/config`` advertises manifest + shard URL
 templates so the frontend doesn't need its own env knob.
 """
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response, jsonify, request
 
 from config import (
     UNIFIED_DISPLAY_MAX_HEIGHT,
@@ -75,8 +75,14 @@ def ts_manifest():
 
 @ts_bp.route("/shard/<reciter>/<int:chapter>")
 def ts_shard(reciter, chapter):
-    """Serve a per-chapter gzipped shard (local or bucket source)."""
-    body = ts_serve.shard_bytes(reciter, chapter)
+    """Serve a per-chapter gzipped shard (local or bucket source).
+
+    ``?full=1`` serves every occurrence (un-deduped) for the owner preview /
+    aligner "show all"; default serves the deduped single-take view. v1
+    shards ignore the flag (no occurrences to expand).
+    """
+    full = request.args.get("full") in ("1", "true", "yes")
+    body = ts_serve.shard_bytes(reciter, chapter, full=full)
     if body is None:
         return jsonify({"error": "Shard not found"}), 404
     return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)

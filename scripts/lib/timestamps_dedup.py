@@ -127,3 +127,35 @@ def canonical_occurrence(
         refresh_surahs=None, audio_category=audio_category,
     )
     return full_data
+
+
+def is_v2(doc: dict) -> bool:
+    """True if ``doc`` is a v2 (occurrence-list) document, else v1 (verse-map).
+
+    v2 verse values are lists of occurrences; v1 values are dicts
+    (``{"words": [...], ...}``). Detected from the first non-meta entry.
+    """
+    for key, val in doc.items():
+        if key == "_meta":
+            continue
+        return isinstance(val, list)
+    return False
+
+
+def project_chapter_shard(doc: dict, *, full: bool = False) -> dict:
+    """Return the per-chapter shard document to serve to the Timestamps tab.
+
+    - v1 doc → returned unchanged (back-compat for existing shards).
+    - v2 doc, ``full=False`` → deduped to the historical verse-map shape via
+      ``canonical_occurrence`` (the Timestamps tab sees today's single take).
+    - v2 doc, ``full=True`` → returned unchanged (every occurrence; for the
+      owner preview / aligner "show all" surface).
+
+    ``_meta`` is preserved either way. ``audio_category`` is read from
+    ``_meta`` (``"by_surah"`` / ``"by_ayah"`` or the ``_audio`` variants).
+    """
+    if not is_v2(doc) or full:
+        return doc
+    cat = (doc.get("_meta") or {}).get("audio_category") or "by_surah"
+    deduped = canonical_occurrence(doc, cat)
+    return {"_meta": doc.get("_meta", {}), **deduped}

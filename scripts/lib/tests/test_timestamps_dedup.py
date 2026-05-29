@@ -18,7 +18,9 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from scripts.lib.timestamps_dedup import build_raw_v2, canonical_occurrence  # noqa: E402
+from scripts.lib.timestamps_dedup import (  # noqa: E402
+    build_raw_v2, canonical_occurrence, is_v2, project_chapter_shard,
+)
 from scripts.lib.timestamps_pipeline import build_outputs  # noqa: E402
 
 CAT = "by_surah_audio"
@@ -168,3 +170,34 @@ def test_round_trip_by_ayah():
     v2 = build_raw_v2([copy.deepcopy(chapter)], copy.deepcopy(results), cat)
     got = canonical_occurrence(v2, cat)
     assert got == expected
+
+
+# --- read-path shard projection (is_v2 / project_chapter_shard) ---
+
+def test_is_v2_detection():
+    v2 = build_raw_v2([_chapter()], _results(), CAT)
+    assert is_v2(v2) is True
+    v1 = canonical_occurrence(v2, CAT)  # verse-map (values are dicts)
+    assert is_v2(v1) is False
+
+
+def test_project_v1_passthrough_identity():
+    v1 = {"_meta": {"audio_category": "by_surah"},
+          **canonical_occurrence(build_raw_v2([_chapter()], _results(), CAT), CAT)}
+    assert project_chapter_shard(v1) is v1  # unchanged for existing v1 shards
+
+
+def test_project_v2_dedup_matches_canonical():
+    v2 = build_raw_v2([_chapter()], _results(), CAT)
+    v2["_meta"]["audio_category"] = "by_surah"  # shard-convention (no _audio suffix)
+    served = project_chapter_shard(v2, full=False)
+    assert isinstance(served["1:1"], dict), "deduped verse value is a dict, not occurrences"
+    expected = canonical_occurrence(v2, "by_surah")  # also exercises the startswith fix
+    assert {k: v for k, v in served.items() if k != "_meta"} == expected
+    assert served["_meta"] is v2["_meta"]
+
+
+def test_project_v2_full_passthrough():
+    v2 = build_raw_v2([_chapter()], _results(), CAT)
+    assert project_chapter_shard(v2, full=True) is v2  # raw, every occurrence
+    assert isinstance(v2["1:1"], list)

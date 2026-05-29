@@ -707,7 +707,7 @@ def _normalize_from_results(chapters, results_by_ch, audio_category):
     occurrence. Failed segments go to ``failures`` (carrying ``seg`` + ref
     so run contiguity can be reconstructed downstream).
     """
-    by_surah = audio_category == "by_surah_audio"
+    by_surah = str(audio_category).startswith("by_surah")
     norm: dict[int, list] = {}
     failures: list[dict] = []
     for ch_idx, chapter in enumerate(chapters):
@@ -775,7 +775,7 @@ def _dedup_core(chapters_norm, seed_existing, *, completed_surahs,
             if vs is not None and ve is not None:
                 seg_bounds[ref] = [vs, ve]
 
-    by_surah = audio_category == "by_surah_audio"
+    by_surah = str(audio_category).startswith("by_surah")
     for ch in chapters_norm:
         ch_ref = ch["ch_ref"]
         if seed_existing is not None:

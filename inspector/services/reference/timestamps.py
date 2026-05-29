@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from config import DK_SCRIPT_PATH, QPC_HAFS_PATH
 from scripts.lib.schemas import ReciterCatalog
 from scripts.lib.timestamps_shards import SCHEMA_VERSION, derive_url_template
+from scripts.lib.timestamps_dedup import is_v2, project_chapter_shard
 from services.storage import data_dir
 from services.state import catalog as catalog_service
 from services.state import state as state_service
@@ -200,13 +201,33 @@ def _ensure_built() -> None:
         )
 
 
-def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
+def _shard_payload(raw: bytes, full: bool) -> bytes:
+    """Return the gzipped shard body to serve.
+
+    v1 shards (verse-map) pass through byte-identical — the entire current
+    bucket is v1, so this is a no-op for existing data. v2 shards
+    (occurrence lists) are deduped to the historical verse-map shape at read
+    time via ``project_chapter_shard``; ``full=True`` serves every occurrence
+    (owner preview / aligner "show all").
+    """
+    try:
+        doc = json.loads(raw)
+    except (ValueError, TypeError):
+        doc = None
+    if isinstance(doc, dict) and is_v2(doc):
+        served = project_chapter_shard(doc, full=full)
+        raw = json.dumps(served, ensure_ascii=False).encode("utf-8")
+    return gzip.compress(raw, compresslevel=6, mtime=0)
+
+
+def _load_bucket_shard(reciter: str, chapter: int, full: bool = False) -> bytes | None:
     """Read + gzip a per-chapter timestamps file from the bucket.
 
-    LRU-cached so chapter scrubbing within one reciter doesn't pay the
-    bucket fetch + gzip cost on every shard hit.
+    LRU-cached (keyed on the ``full`` view too) so chapter scrubbing within
+    one reciter doesn't pay the bucket fetch + gzip cost on every hit. v2
+    shards are deduped at read time — see ``_shard_payload``.
     """
-    key = (reciter, chapter)
+    key = (reciter, chapter, full)
     cached = _shard_lru.get(key)
     if cached is not None:
         _shard_lru.move_to_end(key)
@@ -214,7 +235,7 @@ def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
     raw = data_dir.read_timestamps_chapter(reciter, chapter)
     if raw is None:
         return None
-    body = gzip.compress(raw, compresslevel=6, mtime=0)
+    body = _shard_payload(raw, full)
     _shard_lru[key] = body
     _shard_lru.move_to_end(key)
     while len(_shard_lru) > _SHARD_LRU_CAP:
@@ -228,14 +249,16 @@ def manifest_bytes() -> bytes:
     return _manifest_bytes
 
 
-def shard_bytes(reciter: str, chapter: int) -> bytes | None:
+def shard_bytes(reciter: str, chapter: int, full: bool = False) -> bytes | None:
     _ensure_built()
     # Only serve shards for reciters the manifest advertises (released + has
     # chapters). Folder-level isolation is gone post-unification, so enforce the
     # released gate here too — don't leak a non-released reciter's timestamps.
+    # (Owner preview of under-review reciters lands with the
+    # ``timestamps.view_unreleased`` capability — separate increment.)
     if reciter not in _served_slugs:
         return None
-    return _load_bucket_shard(reciter, chapter)
+    return _load_bucket_shard(reciter, chapter, full)
 
 
 def resource_bytes(name: str) -> bytes | None:
