@@ -10,7 +10,8 @@ contributor gets their own bucket.
 What this does (all under your own namespace, using your own token):
 
 1. Create a private bucket ``<you>/quranic-inspector-<name>``.
-2. Seed it from the public fixtures dataset (server-side copy — no download).
+2. Seed it from the public fixtures dataset (Hub copy; small files round-trip
+   through the local cache, large Xet files copy server-side).
 3. Create a private docker Space ``<you>/quranic-inspector-<name>``.
 4. Attach the bucket as a Space volume at ``/data/inspector-bucket`` (where the
    image expects it) — so there's no manual "Attach bucket" click in the UI.
@@ -53,6 +54,13 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
+# Seeding the bucket (copy_files) routes non-Xet files through the local HF
+# cache, which uses symlinks. On Windows without Developer Mode/admin that
+# raises WinError 1314 ("required privilege is not held"). Disabling symlinks
+# makes the cache copy real files — required for the one-command bootstrap to
+# work cross-platform.
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -92,7 +100,7 @@ def _provision(api, *, user: str, name: str, deploy: bool, public_bucket: bool) 
     print(f"==> [1/6] Creating bucket {bucket_id} (private={not public_bucket})")
     create_bucket(f"quranic-inspector-{name}", private=not public_bucket, exist_ok=True)
 
-    print(f"==> [2/6] Seeding bucket from {FIXTURES_DATASET} (server-side copy)")
+    print(f"==> [2/6] Seeding bucket from {FIXTURES_DATASET}")
     copy_files(
         f"hf://datasets/{FIXTURES_DATASET}/",
         f"hf://buckets/{bucket_id}/",
@@ -198,8 +206,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.teardown:
         _teardown(api, user=user, name=args.name)
     else:
-        _provision(api, user=user, name=args.name,
-                   deploy=args.deploy, public_bucket=args.public_bucket)
+        try:
+            _provision(api, user=user, name=args.name,
+                       deploy=args.deploy, public_bucket=args.public_bucket)
+        except Exception:
+            # Provisioning is multi-step; a mid-flight failure can leave a
+            # partially-created bucket/Space. Don't auto-delete (the bucket may
+            # hold data), but point at the idempotent re-run and the teardown.
+            print(
+                f"\n!! Provisioning failed partway. Re-run "
+                f"`bootstrap_dev_env.py {args.name}` to resume (idempotent), or "
+                f"`bootstrap_dev_env.py {args.name} --teardown` to remove what "
+                f"was created.",
+                file=sys.stderr,
+            )
+            raise
     return 0
 
 
