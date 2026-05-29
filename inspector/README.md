@@ -115,10 +115,8 @@ way it's automatic — you don't mount anything by hand.
 
 ## Branches & deploying
 
-- Work on a branch named `dev-<your-name>` (e.g. `dev-alice`). Use a hyphen,
-  not `dev/alice` — git can't have both a `dev` branch and a `dev/…` branch.
-- Open a PR into `dev`. The shared `dev` branch auto-deploys to the team's
-  staging Space; `main` is production.
+- Work on a branch named `dev-<your-name>` (e.g. `dev-alice`).
+- Open a PR into `dev`. The shared `dev` branch auto-deploys to the team's staging Space; pushed to `main` auto-deploy to production space.
 
 To deploy your branch to **your own** Space, pick one:
 
@@ -168,4 +166,3 @@ We're continuously improving the Inspector to make reviewing as smooth as possib
 - **Frontend:** Svelte 5 (runes) + TypeScript + Vite — new code uses runes; some legacy Svelte 4 components remain
 - **Audio:** Web Audio API (waveform decoding/drawing), ffmpeg (server-side peak extraction)
 - **Storage:** SQLite (source of truth) synced to a Hugging Face bucket
-```

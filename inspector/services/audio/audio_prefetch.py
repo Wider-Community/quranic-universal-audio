@@ -1,7 +1,7 @@
 """Wip-audio sweeper: 1-week post-release cleanup of bucket audio + peaks.
 
 A daemon thread wakes hourly, scans the in-memory state store, and deletes
-``wip/<slug>/{audio,peaks}/`` for rows whose ``prefetch_purge_at`` is in the
+``reciters/<slug>/{audio,peaks}/`` for rows whose ``prefetch_purge_at`` is in the
 past. The single-worker Flask invariant guarantees one sweeper per deploy.
 
 Trigger flow (handled in ``services.state``):
