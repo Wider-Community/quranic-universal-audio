@@ -19,11 +19,13 @@
     // first caller (Dashboard, Segments-tab context resolver, or picker open)
     // wins and others share the cached snapshot.
     import { catalogData, loadCatalog } from '../../../tabs/dashboard/stores/catalog-data';
+    import { fetchAdminReviews } from '../../api/admin-reviews';
     import {
         type Axis,
         buildSchemaDescriptor,
         type SchemaDescriptor,
     } from '../../catalog/schema-descriptor';
+    import { hasCapability } from '../../stores/capabilities';
     import { currentUser } from '../../stores/current-user';
     import type { PublicBucket, PublicDelivery, PublicReciter } from '../../types/public-state';
     import type { BucketCounts } from '../../types/public-state';
@@ -38,6 +40,7 @@
     import type { CombinationSelection, InitialFilter } from './combination-picker-types';
     import PickerFilterRail from './PickerFilterRail.svelte';
     import PickerFooter from './PickerFooter.svelte';
+    import PickerReviewStatus from './PickerReviewStatus.svelte';
     import PickerStateTabs from './PickerStateTabs.svelte';
 
     interface Combo {
@@ -72,6 +75,15 @@
     let descriptor: SchemaDescriptor | null = null;
     let loading = true;
     let error: string | null = null;
+
+    // Per-slug claim/marked-ready overlay, populated only for callers who hold
+    // `reviews.view` — the same data the Admin → Reviews tab shows. Empty for
+    // everyone else; the picker renders nothing extra in that case.
+    interface ReviewStatus {
+        login: string | null;
+        markedReady: boolean;
+    }
+    let reviewStatus = new Map<string, ReviewStatus>();
 
     let search = initialFilter.search ?? '';
     let activeBucket: PublicBucket | null = initialFilter.bucket ?? null;
@@ -115,6 +127,29 @@
             error = (e as Error).message ?? 'Failed to load reciters';
         } finally {
             loading = false;
+        }
+        void loadReviewStatus();
+    }
+
+    // Lazy claim/marked-ready overlay — fired only when the caller holds
+    // `reviews.view`. Failures (e.g. a 403 from a cap mismatch) leave the map
+    // empty and never break the picker; the catalog still renders.
+    async function loadReviewStatus(): Promise<void> {
+        if (!hasCapability(get(currentUser), 'reviews.view')) return;
+        try {
+            const resp = await fetchAdminReviews();
+            const next = new Map<string, ReviewStatus>();
+            for (const row of resp.rows ?? []) {
+                if (row.open_claim) {
+                    next.set(row.slug, {
+                        login: row.open_claim.login ?? null,
+                        markedReady: (row.open_claim.marked_ready_at ?? null) !== null,
+                    });
+                }
+            }
+            reviewStatus = next;
+        } catch {
+            /* admin overlay is best-effort — picker works without it */
         }
     }
 
@@ -310,6 +345,7 @@
                         </div>
                         {#each mineRows as c (c.delivery.slug)}
                             {@const idx = orderedRows.indexOf(c)}
+                            {@const st = reviewStatus.get(c.delivery.slug)}
                             <!-- svelte-ignore a11y-click-events-have-key-events -->
                             <div
                                 class="combo-row"
@@ -327,6 +363,9 @@
                                     bucket={c.delivery.bucket}
                                     variant="compact"
                                 />
+                                {#if st}
+                                    <PickerReviewStatus login={st.login} markedReady={st.markedReady} />
+                                {/if}
                                 <div class="row-figures">
                                     <span class="coverage">{compactCoverageLabel(c.delivery)}</span>
                                     <span class="dur">{compactHoursLabel(c.delivery)}</span>
@@ -341,6 +380,7 @@
                         </div>
                         {#each group.rows as c (c.delivery.slug)}
                             {@const idx = orderedRows.indexOf(c)}
+                            {@const st = reviewStatus.get(c.delivery.slug)}
                             <!-- svelte-ignore a11y-click-events-have-key-events -->
                             <div
                                 class="combo-row"
@@ -361,6 +401,9 @@
                                     bucket={null}
                                     variant="compact"
                                 />
+                                {#if st}
+                                    <PickerReviewStatus login={st.login} markedReady={st.markedReady} />
+                                {/if}
                                 <div class="row-figures">
                                     <span class="coverage">{compactCoverageLabel(c.delivery)}</span>
                                     <span class="dur">{compactHoursLabel(c.delivery)}</span>

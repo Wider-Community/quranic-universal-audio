@@ -20,6 +20,7 @@
     import type { AdminReviewRow } from '../../../../../lib/types/generated/schemas';
     import { setActiveTab } from '../../../../../lib/utils/active-tab';
     import { LS_KEYS, TAB_NAMES } from '../../../../../lib/utils/constants';
+    import { initials } from '../../../../../lib/utils/initials';
     import { selectedReciter } from '../../../../segments/stores/chapter';
     import { adminDashboard } from '../../../stores/admin-dashboard.svelte';
 
@@ -27,14 +28,6 @@
 
     const isActive = $derived(reviewsStore.selectedSlug === row.slug);
     const isOpsActive = $derived(isActive && reviewsStore.openDrawer === 'ops');
-
-    function initials(login: string | null | undefined): string {
-        if (!login) return '?';
-        const trimmed = login.trim();
-        if (!trimmed) return '?';
-        const chars = trimmed.replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase();
-        return chars || trimmed.slice(0, 2).toUpperCase();
-    }
 
     function relativeAge(iso: string | null | undefined): string {
         if (!iso) return '';

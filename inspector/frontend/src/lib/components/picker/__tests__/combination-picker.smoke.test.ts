@@ -1,6 +1,8 @@
 import { fireEvent, render, waitFor } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { fetchAdminReviews } from '../../../api/admin-reviews';
+import { currentUser, resetCurrentUser } from '../../../stores/current-user';
 import type {
     PublicBucket,
     PublicDelivery,
@@ -57,8 +59,9 @@ vi.mock('../../../api/public-reciters', () => ({
             reciters: [
                 makeReciter('Alpha', [makeDelivery('alpha-hafs', 'available_for_review')]),
                 makeReciter('Beta', [makeDelivery('beta-hafs', 'published')]),
+                makeReciter('Gamma', [makeDelivery('gamma-hafs', 'under_review')]),
             ],
-            total: 2,
+            total: 3,
             next_cursor: null,
         }),
     ),
@@ -67,11 +70,47 @@ vi.mock('../../../api/public-reciters', () => ({
             available_for_request: 0,
             requested: 0,
             available_for_review: 1,
-            under_review: 0,
+            under_review: 1,
             published: 1,
         }),
     ),
 }));
+
+// Admin reviews overlay — the picker fetches this only when the caller holds
+// `reviews.view`. The Gamma row (under_review) is claimed by `reviewer-x` and
+// marked ready.
+vi.mock('../../../api/admin-reviews', () => ({
+    fetchAdminReviews: vi.fn(() =>
+        Promise.resolve({
+            rows: [
+                {
+                    slug: 'gamma-hafs',
+                    state: 'under_review',
+                    state_since: null,
+                    reciter_id: 'gamma',
+                    name_ar: null,
+                    name_en: 'Gamma',
+                    riwayah: 'hafs',
+                    style: 'murattal',
+                    channel: 'mp3quran',
+                    open_claim: {
+                        assignee_id: 'u-1',
+                        login: 'reviewer-x',
+                        claimed_at: '2026-01-01T00:00:00Z',
+                        marked_ready_at: '2026-01-02T00:00:00Z',
+                    },
+                    unread: false,
+                },
+            ],
+            unviewed_marked_ready: 0,
+        }),
+    ),
+}));
+
+afterEach(() => {
+    resetCurrentUser();
+    vi.mocked(fetchAdminReviews).mockClear();
+});
 
 describe('CombinationPicker', () => {
     it('emits a non-null delivery on first row click', async () => {
@@ -110,17 +149,60 @@ describe('CombinationPicker', () => {
             expect(container.querySelector('.combo-row')).not.toBeNull();
         });
 
-        // Two distinct buckets in the mock (available_for_review, published)
-        // → one labelled StatePill in each group head.
+        // Three distinct buckets in the mock (available_for_review,
+        // under_review, published) → one labelled StatePill in each group head.
         const headPills = container.querySelectorAll('.bucket-head .pill');
-        expect(headPills.length).toBe(2);
+        expect(headPills.length).toBe(3);
         const headLabels = [...headPills].map((p) => p.textContent?.trim());
         expect(headLabels).toContain('Available for review');
+        expect(headLabels).toContain('Under review');
         expect(headLabels).toContain('Published');
 
         // The state pill must NOT be repeated on the grouped rows — the head
         // already conveys it. (No active claim in this fixture, so every row
         // is grouped.)
         expect(container.querySelectorAll('.combo-row .pill').length).toBe(0);
+    });
+
+    it('shows claimer + ready badge on under_review rows when the caller holds reviews.view', async () => {
+        currentUser.set({
+            login: 'admin',
+            hf_user_id: 'admin-1',
+            role: 'maintainer',
+            active_claim: null,
+            active_claims: [],
+            dev_mode: false,
+            capabilities: ['reviews.view'],
+        });
+
+        const { container } = render(CombinationPicker, {
+            props: { open: true, title: 'Switch reciter' },
+        });
+
+        const status = await waitFor(() => {
+            const el = container.querySelector<HTMLElement>('.review-status');
+            expect(el).not.toBeNull();
+            return el!;
+        });
+
+        expect(fetchAdminReviews).toHaveBeenCalled();
+        expect(status.textContent).toContain('reviewer-x');
+        expect(status.querySelector('.ready-badge')).not.toBeNull();
+        // Only the under_review (Gamma) row carries the overlay.
+        expect(container.querySelectorAll('.review-status').length).toBe(1);
+    });
+
+    it('omits review status and skips the admin fetch without reviews.view', async () => {
+        // currentUser stays anonymous (no capabilities) via afterEach reset.
+        const { container } = render(CombinationPicker, {
+            props: { open: true, title: 'Switch reciter' },
+        });
+
+        await waitFor(() => {
+            expect(container.querySelector('.combo-row')).not.toBeNull();
+        });
+
+        expect(container.querySelector('.review-status')).toBeNull();
+        expect(fetchAdminReviews).not.toHaveBeenCalled();
     });
 });
