@@ -65,9 +65,8 @@ Run the app the same way as Tier 0 (`python inspector/app.py`). It now reads
 and writes your bucket. To start over, run
 `bootstrap_dev_env.py <name> --teardown` and bootstrap again.
 
-> Local dev **never touches the production bucket.** It defaults to the shared
-> dev bucket, and pointing it at production is refused unless you explicitly set
-> `INSPECTOR_ALLOW_PROD_BUCKET=1`.
+> Local dev **never touches the production bucket** — pointing a local process
+> at prod is refused unless you explicitly set `INSPECTOR_ALLOW_PROD_BUCKET=1`.
 
 ### Tier 2 — Your own dev Space (deployed)
 
@@ -113,12 +112,17 @@ For fast local reads the app auto-mounts your bucket as a local folder (via the
 `hf-mount` tool) if it's installed; otherwise it reads over the network. Either
 way it's automatic — you don't mount anything by hand.
 
-## Branches & deploying
+## Workflow
 
-- Work on a branch named `dev-<your-name>` (e.g. `dev-alice`).
-- Open a PR into `dev`. The shared `dev` branch auto-deploys to the team's staging Space; pushed to `main` auto-deploy to production space.
+1. **Branch from `main`:** `git switch -c <your-name>/<topic> main`.
+2. **Develop using whichever tier fits** (Tier 0 for frontend/UI and most
+   work; Tier 1 when you need real backend/DB/bucket behaviour; Tier 2 only to
+   confirm deployed behaviour).
+3. **Open a pull request into `main`.** Once it's reviewed and merged, CI
+   deploys to production automatically — you don't deploy by hand.
 
-To deploy your branch to **your own** Space, pick one:
+To preview your branch as a live deployment *before* merging (Tier 2), push it
+to **your own** Space, either:
 
 1. **Script (recommended):** `python inspector/scripts/deploy_space.py <your-space-id>`
 2. **HF CLI directly:** build the frontend (`cd inspector/frontend && npm run
