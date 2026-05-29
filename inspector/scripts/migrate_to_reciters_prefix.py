@@ -91,36 +91,48 @@ def _dest_for(src: str, prefix: str) -> str:
     return f"{_DEST_PREFIX}/{rest}"
 
 
-def copy_all(backend, bucket_id: str, token: str | None, *, dry_run: bool) -> dict:
-    # Pre-list the destination once so idempotency is a local set lookup, not a
-    # per-file ``exists()`` round-trip (avoids a 404 storm on the first run).
-    existing = set(_list_files(bucket_id, token, _DEST_PREFIX))
-    log.info("%s/: %d pre-existing files", _DEST_PREFIX, len(existing))
-    copied = skipped = failed = 0
+def _slugs(bucket_id: str, token: str | None, prefix: str) -> list[str]:
+    """Distinct slug dirs directly under ``prefix`` on the bucket."""
+    out: set[str] = set()
+    for path in _list_files(bucket_id, token, prefix):
+        parts = path.split("/")
+        if len(parts) >= 2:
+            out.add(parts[1])
+    return sorted(out)
+
+
+def copy_all(bucket_id: str, token: str | None, *, dry_run: bool) -> dict:
+    """Server-side per-slug copy of wip/ + published/ into reciters/.
+
+    Uses ``huggingface_hub.copy_files`` directory copy, which transfers
+    Xet-tracked files by content hash (instant, no download/upload) and only
+    auto-falls-back to read+reupload for the few non-Xet small files — the
+    per-file ``BucketBackend.copy`` path read+reuploaded everything (its
+    ``get_bucket_file_metadata`` returns no xet_hash) and was ~1000× slower.
+    Re-running is cheap: existing Xet files re-copy by hash in place.
+    """
+    from huggingface_hub import copy_files  # type: ignore[import-not-found]
+
+    copied = failed = 0
     for prefix in _LEGACY_PREFIXES:
-        files = _list_files(bucket_id, token, prefix)
-        log.info("%s/: %d files", prefix, len(files))
-        for src in files:
-            dst = _dest_for(src, prefix)
-            if dst in existing:
-                skipped += 1
-                continue
+        slugs = _slugs(bucket_id, token, prefix)
+        log.info("%s/: %d slugs", prefix, len(slugs))
+        for slug in slugs:
+            src = f"hf://buckets/{bucket_id}/{prefix}/{slug}/"
+            dst = f"hf://buckets/{bucket_id}/{_DEST_PREFIX}/{slug}/"
             if dry_run:
-                log.info("[dry-run] copy %s -> %s", src, dst)
+                log.info("[dry-run] copy_files %s -> %s", src, dst)
                 copied += 1
                 continue
             try:
-                backend.copy(src, dst)
-                existing.add(dst)
+                copy_files(src, dst)
                 copied += 1
+                log.info("copied %s -> %s", src, dst)
             except Exception as e:  # noqa: BLE001
-                log.error("copy FAILED %s -> %s: %s", src, dst, e)
+                log.error("copy_files FAILED %s -> %s: %s", src, dst, e)
                 failed += 1
-    log.info(
-        "copy summary: copied=%d skipped(existing)=%d failed=%d",
-        copied, skipped, failed,
-    )
-    return {"copied": copied, "skipped": skipped, "failed": failed}
+    log.info("copy summary: slugs_copied=%d failed=%d", copied, failed)
+    return {"slugs_copied": copied, "failed": failed}
 
 
 def verify(backend, bucket_id: str, token: str | None) -> bool:
@@ -214,7 +226,7 @@ def main() -> int:
         delete_old(backend, bucket_id, token, dry_run=args.dry_run)
         return 0
 
-    copy_all(backend, bucket_id, token, dry_run=args.dry_run)
+    copy_all(bucket_id, token, dry_run=args.dry_run)
     if args.verify and not args.dry_run:
         if not verify(backend, bucket_id, token):
             return 1
