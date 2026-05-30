@@ -97,6 +97,25 @@ def ts_shard(reciter, chapter):
     return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)
 
 
+@ts_bp.route("/validation/<reciter>")
+def ts_validation(reciter):
+    """Verse-level ts-validation flags for the Timestamps-tab accordion.
+
+    Owner-preview only (same ``timestamps.view_unreleased`` gate as the
+    ``?full=1`` shard preview). Returns ``{"_meta", "verses"}`` from the
+    reciter's ``ts_validation.json`` — an empty doc when the reciter is viewable
+    but never ran with probe beams, so the FE shows an empty panel. Non-viewable
+    reciters get 404 (no leak of unreleased existence).
+    """
+    allow_unreleased = _capabilities.can(
+        auth_service.current_user(), "timestamps.view_unreleased"
+    )
+    doc = ts_serve.ts_validation_doc(reciter, allow_unreleased=allow_unreleased)
+    if doc is None:
+        return jsonify({"error": "Not found"}), 404
+    return orjson_response(doc)
+
+
 @ts_bp.route("/resource/<name>")
 def ts_resource(name):
     """Serve gzipped reference data referenced by the manifest's `resources` block."""

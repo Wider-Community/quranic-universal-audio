@@ -50,7 +50,25 @@ def _now_iso() -> str:
 # Private bucket holding the MFA runtime (mfa-runtime/) + the staged job code
 # (code/). Mounted read-only at /aux in the job.
 ALIGNER_BUCKET = os.environ.get("INSPECTOR_ALIGNER_BUCKET", "hetchyy/aligner-bucket")
-JOB_IMAGE = "condaforge/mambaforge:latest"
+
+# Job image. Two modes, selected by ``INSPECTOR_JOB_IMAGE``:
+#   - Prebuilt mode (set ``INSPECTOR_JOB_IMAGE`` to the private HF Docker Space
+#     ``hf.co/spaces/hetchyy/quran-ts-job``): the MFA framework + pip deps are
+#     baked into ``/env`` (see .local/spaces/quran_ts_job/Dockerfile). No ~300 MB
+#     conda solve per launch — the image is pulled from cache (~30-60 s). The
+#     gitignored acoustic MODEL is NOT baked; it stays bucket-mounted at /aux.
+#   - Bootstrap mode (default, stock ``condaforge/mambaforge:latest``): installs
+#     the stack at runtime via ``_INSTALL``. Kept as the default until the Space
+#     image is built + the private-image pull is verified (Phase-13 recon hit a
+#     401 on private-Space job images); flip the env once confirmed.
+JOB_IMAGE = os.environ.get("INSPECTOR_JOB_IMAGE", "condaforge/mambaforge:latest")
+# Whether the image still needs the runtime conda/pip install. True for the
+# stock mambaforge base; the prebuilt Space already has /env. Defaults to the
+# bootstrap path unless an explicit prebuilt image is configured.
+_NEEDS_BOOTSTRAP = (
+    os.environ.get("INSPECTOR_JOB_IMAGE_BOOTSTRAP",
+                   "1" if "mambaforge" in JOB_IMAGE else "0") == "1"
+)
 JOB_FLAVOR = os.environ.get("INSPECTOR_TS_JOB_FLAVOR", "cpu-upgrade")
 JOB_TIMEOUT = os.environ.get("INSPECTOR_TS_JOB_TIMEOUT", "2h")
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -58,6 +76,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # python 3.11 pin: 3.14 breaks MFA (Path.copy() conflict). quranic-phonemizer
 # is public on PyPI. The MFA acoustic model is pulled from the bucket at
 # runtime (not installed), keeping the gitignored stack out of any image.
+# Bootstrap-mode only — the prebuilt image bakes this same set into /env.
 _INSTALL = (
     "mamba install -y -c conda-forge python=3.11 montreal-forced-aligner "
     "&& /opt/conda/bin/pip install gradio soundfile tgt numpy PyYAML requests psutil "
@@ -65,6 +84,15 @@ _INSTALL = (
     "&& mkdir -p /scratch"
 )
 _ENTRYPOINT = "python /aux/code/scripts/jobs/generate_timestamps.py"
+
+
+def _job_command() -> list[str]:
+    """Container command. Bootstrap mode installs the stack first; prebuilt mode
+    activates the baked ``/env`` conda env and runs the entrypoint directly."""
+    if _NEEDS_BOOTSTRAP:
+        return ["bash", "-lc", f"{_INSTALL} && {_ENTRYPOINT}"]
+    return ["bash", "-lc",
+            f"mkdir -p /scratch && conda run -p /env --no-capture-output {_ENTRYPOINT}"]
 
 
 def _job_id(job) -> str | None:
@@ -191,7 +219,7 @@ def launch(slug: str, *, settings: TsJobSettings) -> dict:
 
     job = run_job(
         image=JOB_IMAGE,
-        command=["bash", "-lc", f"{_INSTALL} && {_ENTRYPOINT}"],
+        command=_job_command(),
         flavor=flavor,
         timeout=timeout,
         env=env,
@@ -299,14 +327,22 @@ def job_status(job_id: str, *, log_tail: int = 400) -> dict:
 
     if status in _TERMINAL:
         existing = read_job_record(job_id)
+        base = dict(existing) if existing else {"job_id": job_id, "slug": "", "type": "ts"}
+        changed = False
+        # The job self-writes its terminal status + timestamps but NOT its logs;
+        # if it was hard-killed (OOM/timeout) it may still read running/unknown.
+        # Reconcile both, idempotently — only rewrite when something actually changed.
         if existing is None or existing.get("status") in (None, "running", "unknown"):
-            base = existing or {"job_id": job_id, "slug": "", "type": "ts"}
+            base["status"] = status
+            base.setdefault("ended_at", _now_iso())
+            changed = True
+        if logs and not base.get("logs"):
+            base["logs"] = logs
+            base["log_truncated"] = truncated
+            changed = True
+        if changed:
             try:
-                rec = TsJobRecord.model_validate({
-                    **base, "status": status, "ended_at": _now_iso(),
-                    "logs": logs, "log_truncated": truncated,
-                })
-                _write_job_record(rec)
+                _write_job_record(TsJobRecord.model_validate(base))
             except Exception as exc:  # noqa: BLE001
                 log.warning("backstop record %s failed: %s", job_id, exc)
 

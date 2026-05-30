@@ -52,6 +52,10 @@ def low_confidence_path(slug: str) -> str:
     return storage_paths.low_confidence_path(slug)
 
 
+def ts_validation_path(slug: str) -> str:
+    return storage_paths.ts_validation_path(slug)
+
+
 def auto_split_path(slug: str) -> str:
     return storage_paths.auto_split_path(slug)
 
@@ -99,6 +103,14 @@ def read_detailed_bytes(slug: str) -> bytes | None:
 def read_low_confidence_doc(slug: str) -> dict | None:
     try:
         return get_backend().read_json(low_confidence_path(slug))  # type: ignore[return-value]
+    except StorageNotFound:
+        return None
+
+
+def read_ts_validation_doc(slug: str) -> dict | None:
+    """Return the parsed ``ts_validation.json`` doc, or ``None`` if absent."""
+    try:
+        return get_backend().read_json(ts_validation_path(slug))  # type: ignore[return-value]
     except StorageNotFound:
         return None
 

@@ -27,6 +27,7 @@ import type {
     TsVbrResponse,
 } from '../../../lib/types/api';
 import type { Letter, PhonemeInterval, TsVerseData, TsWord } from '../../../lib/types/domain';
+import type { TsValidationDoc } from '../../../lib/types/generated/schemas';
 
 // ---------------------------------------------------------------------------
 // Singleton caches
@@ -419,6 +420,27 @@ export function tsPlayUrl(reciter: string, audioUrl: string, audioCategory: stri
     return (audioCategory === 'by_surah_audio' && audioUrl && !audioUrl.startsWith('/api/'))
         ? `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`
         : audioUrl;
+}
+
+/**
+ * Verse-level ts-validation flags for the owner preview (Timestamps tab).
+ *
+ * Backed by ``reciters/<slug>/ts_validation.json`` (multi-beam generate-job
+ * output). 404 → caller lacks the ``timestamps.view_unreleased`` capability
+ * for an unreleased reciter; returns ``null`` so the panel stays hidden. A
+ * viewable reciter with no flags returns an empty ``verses`` map. Only call
+ * this when the user holds the preview capability (avoids a wasted bucket read
+ * per reciter-load for public users on the single worker).
+ */
+export async function loadTsValidation(reciter: string): Promise<TsValidationDoc | null> {
+    if (!reciter) return null;
+    try {
+        const resp = await fetch(`/api/ts/validation/${encodeURIComponent(reciter)}`);
+        if (!resp.ok) return null; // 404 (not viewable) or transient — hide panel
+        return (await resp.json()) as TsValidationDoc;
+    } catch {
+        return null;
+    }
 }
 
 /**

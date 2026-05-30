@@ -23,6 +23,8 @@
         isBookmarked,
         removeBookmark,
     } from '../../lib/stores/bookmarks';
+    import { hasCapability } from '../../lib/stores/capabilities';
+    import { currentUser } from '../../lib/stores/current-user';
     import { pendingTsNavigation } from '../../lib/stores/navigation';
     import type { TsConfigResponse, TsDataResponse } from '../../lib/types/api';
     import type { TsReciter } from '../../lib/types/domain';
@@ -37,6 +39,7 @@
     import TimestampsShortcutsGuide from './components/TimestampsShortcutsGuide.svelte';
     import TimestampsViewControls from './components/TimestampsViewControls.svelte';
     import TimestampsWaveform from './components/TimestampsWaveform.svelte';
+    import TsValidationPanel from './components/TsValidationPanel.svelte';
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
         assembleVerseFromShard,
@@ -50,6 +53,7 @@
         loadDk,
         loadManifest,
         loadQpc,
+        loadTsValidation,
         loadVbrChapters,
         loadVerseTranslations,
         tsPlayUrl,
@@ -67,6 +71,7 @@
         viewMode,
     } from './stores/display';
     import { tsLoading } from './stores/loading';
+    import { tsValidation } from './stores/validation';
     import {
         autoAdvancing,
         loopTarget,
@@ -234,7 +239,18 @@
         selectedVerse.set('');
         clearDisplay();
         tsVbrChapters.set(new Set());
+        tsValidation.set(null);
         if (!reciter) return;
+
+        // Owner preview only: load verse-level ts-validation flags. Gated on
+        // the capability so public users never trigger the bucket read on the
+        // single worker (the server 404s them anyway).
+        if (hasCapability(get(currentUser), 'timestamps.view_unreleased')) {
+            void loadTsValidation(reciter).then((doc) => {
+                // Ignore a stale response if the reciter changed mid-flight.
+                if (get(selectedReciter) === reciter) tsValidation.set(doc);
+            });
+        }
 
         try {
             const m = await loadManifest();
@@ -285,6 +301,19 @@
         const chapter = get(selectedChapter);
         if (!reciter || !chapter || verseRef === '') return;
         await loadTimestampVerse(reciter, parseInt(chapter, 10), verseRef);
+    }
+
+    /** Jump the cascade to a ts-validation-flagged verse (may switch chapter). */
+    async function jumpToFlaggedVerse(verseKey: string): Promise<void> {
+        const reciter = get(selectedReciter);
+        const surah = parseInt(verseKey.split(':')[0] ?? '0', 10);
+        if (!reciter || !surah) return;
+        if (get(selectedChapter) !== String(surah)) {
+            selectedChapter.set(String(surah));
+            await populateVersesFor(reciter, surah);
+        }
+        selectedVerse.set(verseKey);
+        await loadTimestampVerse(reciter, surah, verseKey);
     }
 
     async function loadTimestampVerse(
@@ -727,6 +756,16 @@
         on:verseChange={(e) => onVerseChange(e.detail)}
     />
 
+    {#if $tsValidation}
+        <div class="ts-validation-row">
+            <TsValidationPanel
+                doc={$tsValidation}
+                activeVerse={$selectedVerse}
+                onselect={jumpToFlaggedVerse}
+            />
+        </div>
+    {/if}
+
     {#if currentVerseKey}
         <div class="ts-bookmark-row">
             <button
@@ -782,6 +821,10 @@
     .waveform-words-row.ts-region-loading {
         opacity: 0.55;
         pointer-events: none;
+    }
+    .ts-validation-row {
+        max-width: 720px;
+        margin: 8px auto 2px;
     }
     .ts-bookmark-row {
         display: flex;

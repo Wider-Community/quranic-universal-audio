@@ -293,6 +293,26 @@ def shard_bytes(
     return _load_bucket_shard(reciter, chapter, full)
 
 
+def ts_validation_doc(
+    reciter: str,
+    allow_unreleased: bool = False,
+) -> dict | None:
+    """Verse-level ``ts_validation.json`` for a reciter, or ``None``.
+
+    Same released/owner-preview gate as ``shard_bytes`` (capability check lives
+    in the route). Returns ``None`` when the reciter isn't viewable or the
+    sidecar is absent (reciter was never run with probe beams). Not cached:
+    owner-preview-only traffic, and the file is re-written whenever a job
+    re-runs — reading the small doc directly avoids a stale cache.
+    """
+    _ensure_built()
+    if reciter not in _served_slugs and not allow_unreleased:
+        return None  # not viewable → route returns 404
+    # Viewable but never run with probe beams → empty doc (not a 404) so the
+    # FE can render an empty panel.
+    return data_dir.read_ts_validation_doc(reciter) or {"_meta": {}, "verses": {}}
+
+
 def resource_bytes(name: str) -> bytes | None:
     _ensure_built()
     return _resource_bytes.get(name)

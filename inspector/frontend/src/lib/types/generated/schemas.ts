@@ -683,3 +683,33 @@ export interface TsJobSettings {
   batch_size?: number | null;
   download_workers?: number | null;
 }
+/**
+ * The ``ts_validation.json`` document — meta + verse-keyed flags.
+ */
+export interface TsValidationDoc {
+  _meta?: TsValidationMeta;
+  verses?: {
+    [k: string]: TsValidationVerse;
+  };
+  [k: string]: unknown;
+}
+/**
+ * Provenance for one ts-validation run.
+ */
+export interface TsValidationMeta {
+  created_at?: string;
+  reciter?: string;
+  aligner_model?: string;
+  method?: string;
+  beams?: number[];
+  canonical_beam?: number;
+  [k: string]: unknown;
+}
+/**
+ * Per-verse beam-agreement summary.
+ */
+export interface TsValidationVerse {
+  failed_beams?: number[];
+  min_passing_beam?: number | null;
+  [k: string]: unknown;
+}

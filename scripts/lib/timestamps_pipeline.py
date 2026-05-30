@@ -336,6 +336,68 @@ def _matched_ref_to_output_key(matched_ref: str) -> str | None:
         return matched_ref  # compound key for cross-verse
 
 
+def build_ts_validation(chapters, results_by_beam, beams, *,
+                        reciter: str, method: str,
+                        aligner_model: str = DEFAULT_ALIGNER_MODEL) -> dict:
+    """Verse-level beam-agreement summary across every aligned beam.
+
+    Each beam in ``beams`` is an independent alignment pass; the widest
+    (``max(beams)``) is canonical. A verse *passes* under beam ``b`` when every
+    segment mapping to that verse aligned (``status == "ok"``) under ``b``. A
+    verse is *flagged* when it fails under at least one beam it was tested
+    under — tighter beams disagreeing with the canonical pass is the
+    low-confidence signal. This is the verse-level analogue of the segment-level
+    ``low_confidence_v2.json`` probe and feeds the Timestamps-tab "ts-validation"
+    accordion (owner preview).
+
+    Returns a plain dict (no pydantic dep — runs inside the HF job container):
+    ``{"_meta": {...}, "verses": {verse_key: {"failed_beams": [...],
+    "min_passing_beam": int|None}}}``. With a single beam (no probes) ``verses``
+    is empty — there is nothing to compare against.
+    """
+    canonical_beam = max(beams) if beams else 0
+    # verse_key -> {beam: all_segments_ok_under_beam}
+    pass_by_beam: dict[str, dict[int, bool]] = {}
+    for b in beams:
+        for ch_idx, seg_list in (results_by_beam.get(b) or {}).items():
+            segments = (chapters[ch_idx].get("segments", [])
+                        if 0 <= ch_idx < len(chapters) else [])
+            for seg_idx, rec in seg_list:
+                if not (0 <= seg_idx < len(segments)):
+                    continue
+                vkey = _matched_ref_to_output_key(
+                    segments[seg_idx].get("matched_ref", "") or "")
+                if not vkey:
+                    continue
+                ok = (rec or {}).get("status") == "ok"
+                by_beam = pass_by_beam.setdefault(vkey, {})
+                by_beam[b] = by_beam.get(b, True) and ok
+
+    verses: dict[str, dict] = {}
+    for vkey, by_beam in pass_by_beam.items():
+        tested = [b for b in beams if b in by_beam]
+        failed = sorted((b for b in tested if not by_beam[b]), reverse=True)
+        if not failed:
+            continue  # aligned under every beam it was tested → confident
+        passing = [b for b in tested if by_beam[b]]
+        verses[vkey] = {
+            "failed_beams": failed,
+            "min_passing_beam": min(passing) if passing else None,
+        }
+
+    return {
+        "_meta": {
+            "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "reciter": reciter,
+            "aligner_model": aligner_model,
+            "method": method,
+            "beams": sorted(set(beams), reverse=True),
+            "canonical_beam": canonical_beam,
+        },
+        "verses": verses,
+    }
+
+
 def _seg_covered_ayahs(matched_ref: str) -> set[tuple[int, int]]:
     """Extract the set of (surah, ayah) pairs a segment's matched_ref covers.
 
@@ -903,10 +965,11 @@ def process(input_dir: Path,
 
     Each value in ``beams`` runs as an independent alignment pass over
     the same audio. The widest beam (``max(beams)``) is the canonical
-    pass — it always drives ``timestamps[_full].json`` regardless of the
-    order ``beams`` was supplied in. Every other beam writes
-    ``timestamps[_full].beam_<N>.json`` and its failures feed the
-    cascade in ``beam_diff_report.txt``.
+    pass — it always drives the ``timestamps/<ch>.json`` v2 shards
+    regardless of the order ``beams`` was supplied in. The remaining
+    (narrower) beams are folded into a single verse-level
+    ``ts_validation.json`` sidecar — verses that align under the canonical
+    beam but fail under a tighter beam are flagged as low-confidence.
 
     When ``mfa_app_path`` is set and ``workers > 1``, the alignment
     fan-out runs across a ProcessPoolExecutor (true parallelism, GIL
@@ -919,10 +982,9 @@ def process(input_dir: Path,
     """
     if not beams:
         raise ValueError("beams must contain at least one value")
-    # Canonical = widest beam, regardless of input order.
+    # Canonical = widest beam, regardless of input order. The narrower beams
+    # feed the verse-level ts_validation.json sidecar (built after alignment).
     canonical_beam = max(beams)
-    probe_beams = sorted((b for b in beams if b != canonical_beam),
-                         reverse=True)
     use_pool = mfa_app_path is not None and workers > 1
     if not use_pool and backend is None:
         raise ValueError("backend is required when not using the process pool")
@@ -1489,11 +1551,16 @@ def process(input_dir: Path,
     log.info("Wrote %d v2 timestamps shard(s) (beam=%d) -> %s",
              n_shards, canonical_beam, ts_dir)
 
-    # Probe beams → v2 sidecar shards ``<chapter>.beam_<N>.json`` (same format,
-    # for beam comparison) — no legacy single-file.
-    for b in probe_beams:
-        nb, fb = _emit_v2(results_by_beam[b], suffix=f".beam_{b}")
-        log.info("Wrote %d v2 probe shard(s) (beam=%d, %d failures)", nb, b, fb)
+    # Probe beams → ONE verse-level ``ts_validation.json`` sidecar (the
+    # verse-level analogue of low_confidence_v2.json) instead of per-beam
+    # shard files. Flags verses whose alignment disagrees under tighter beams;
+    # served owner-gated to the Timestamps-tab "ts-validation" accordion.
+    ts_validation = build_ts_validation(
+        chapters, results_by_beam, beams, reciter=reciter, method=method)
+    (output_dir / "ts_validation.json").write_text(
+        json.dumps(ts_validation, ensure_ascii=False), encoding="utf-8")
+    log.info("Wrote ts_validation.json: %d flagged verse(s) across beams %s",
+             len(ts_validation["verses"]), ts_validation["_meta"]["beams"])
 
     _cleanup([], tmp_dir)
     return output_dir

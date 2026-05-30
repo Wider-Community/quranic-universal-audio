@@ -44,6 +44,11 @@
     let liveStatus = $state<TimestampsJobStatus | null>(null);
     let viewingRecord = $state<TsJobRecord | null>(null); // a past run opened read-only
     let stopPoll: (() => void) | null = null;
+    // Epoch-ms start of the live job (launch time, or the resumed record's
+    // started_at) + a 1 s tick so the elapsed timer re-renders while polling.
+    // Kept client-side so the hot poll path stays a single HF round-trip.
+    let liveStartedAt = $state<number | null>(null);
+    let nowTick = $state(0);
 
     // ---- history ----
     let history = $state<TsJobRecord[]>([]);
@@ -89,10 +94,19 @@
         activeJobId = null;
         liveStatus = null;
         viewingRecord = null;
+        liveStartedAt = null;
         formError = null;
         void s;
         void loadHistory();
         return () => teardownPoll();
+    });
+
+    // Tick once a second while a job is live so the elapsed timer re-renders.
+    $effect(() => {
+        if (!isLive) return;
+        nowTick = Date.now();
+        const id = setInterval(() => (nowTick = Date.now()), 1000);
+        return () => clearInterval(id);
     });
 
     function teardownPoll(): void {
@@ -100,10 +114,12 @@
         stopPoll = null;
     }
 
-    function startPolling(jobId: string): void {
+    function startPolling(jobId: string, startedAtMs: number | null = null): void {
         teardownPoll();
         viewingRecord = null;
         activeJobId = jobId;
+        liveStartedAt = startedAtMs;
+        nowTick = Date.now();
         liveStatus = { job_id: jobId, status: 'running', logs: [] };
         stopPoll = visiblePoll<TimestampsJobStatus>({
             intervalMs: 2500,
@@ -140,7 +156,7 @@
         launching = true;
         try {
             const { job_id } = await generateTimestamps(slug, settings);
-            startPolling(job_id);
+            startPolling(job_id, Date.now());
         } catch (err) {
             formError = (err as Error).message ?? 'Failed to launch job';
         } finally {
@@ -153,17 +169,33 @@
         if (!jid) return;
         // A still-running past job → resume live polling; else show its record.
         if (!TERMINAL.has(rec.status ?? '')) {
-            startPolling(jid);
+            startPolling(jid, parseIso(rec.started_at));
             return;
         }
         teardownPoll();
         activeJobId = jid;
         liveStatus = null;
+        liveStartedAt = null;
+        let record: TsJobRecord;
         try {
-            viewingRecord = (await fetchJobRecord(jid)) ?? rec;
+            record = (await fetchJobRecord(jid)) ?? rec;
         } catch {
-            viewingRecord = rec;
+            record = rec;
         }
+        // Backfill logs from HF if the durable record never captured them
+        // (job completed while the drawer was closed → the poll backstop that
+        // persists logs never ran). Best-effort: silent if retention expired.
+        if (!record.logs?.length) {
+            try {
+                const live = await fetchJobStatus(jid);
+                if (live.logs?.length) {
+                    record = { ...record, logs: live.logs, log_truncated: live.log_truncated };
+                }
+            } catch {
+                /* HF log retention expired — nothing to backfill */
+            }
+        }
+        viewingRecord = record;
     }
 
     function shortId(id: string | undefined): string {
@@ -176,6 +208,34 @@
         return Number.isNaN(d) ? '' : new Date(d).toLocaleString();
     }
 
+    function parseIso(iso: string | null | undefined): number | null {
+        if (!iso) return null;
+        const ms = Date.parse(iso);
+        return Number.isNaN(ms) ? null : ms;
+    }
+
+    /** Human "1h 02m" / "3m 12s" / "45s" from a duration in ms. */
+    function fmtDuration(ms: number | null | undefined): string {
+        if (ms == null || !Number.isFinite(ms) || ms < 0) return '';
+        const total = Math.floor(ms / 1000);
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
+        if (h) return `${h}h ${String(m).padStart(2, '0')}m`;
+        if (m) return `${m}m ${String(s).padStart(2, '0')}s`;
+        return `${s}s`;
+    }
+
+    function durationFromIso(start?: string | null, end?: string | null): number | null {
+        const a = parseIso(start);
+        const b = parseIso(end);
+        return a != null && b != null ? b - a : null;
+    }
+
+    function histDuration(rec: TsJobRecord): string {
+        return fmtDuration(durationFromIso(rec.started_at, rec.ended_at));
+    }
+
     // The logs + status currently shown in the pane (live job OR opened record).
     const paneStatus = $derived(liveStatus?.status ?? viewingRecord?.status ?? null);
     const paneLogs = $derived(liveStatus?.logs ?? viewingRecord?.logs ?? []);
@@ -183,6 +243,14 @@
         liveStatus?.log_truncated ?? viewingRecord?.log_truncated ?? false,
     );
     const isLive = $derived(!!liveStatus && !TERMINAL.has(liveStatus.status));
+
+    // Elapsed (live job) or total (opened completed record) for the pane header.
+    const paneDuration = $derived.by(() => {
+        if (isLive) {
+            return liveStartedAt != null ? fmtDuration(nowTick - liveStartedAt) : '';
+        }
+        return fmtDuration(durationFromIso(viewingRecord?.started_at, viewingRecord?.ended_at));
+    });
 
     function badgeClass(status: string | null): string {
         if (!status) return '';
@@ -277,6 +345,9 @@
                     {#if paneStatus}
                         <span class="badge {badgeClass(paneStatus)}">{paneStatus}</span>
                     {/if}
+                    {#if paneDuration}
+                        <span class="dur" title={isLive ? 'elapsed' : 'duration'}>{paneDuration}</span>
+                    {/if}
                     {#if isLive}<span class="live-dot" title="polling">●</span>{/if}
                 </h3>
                 {#if paneLogs.length}
@@ -311,6 +382,9 @@
                                     {#if rec.settings?.persist_audio}· audio{/if}
                                     {#if rec.settings?.gen_peaks}· peaks{/if}
                                 </span>
+                                {#if histDuration(rec)}
+                                    <span class="hist-dur" title="duration">{histDuration(rec)}</span>
+                                {/if}
                                 <span class="hist-time">{fmtTime(rec.started_at)}</span>
                             </button>
                         </li>
@@ -533,6 +607,12 @@
     .badge.run { color: var(--text-secondary); }
     .live-dot { color: var(--accent); font-size: 9px; animation: pulse 1.4s ease-in-out infinite; }
     @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+    .dur {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+    }
 
     .logs {
         margin: 0;
@@ -570,5 +650,6 @@
     .hist-row.active { border-color: var(--accent); }
     .hist-id { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
     .hist-meta { font-size: 10.5px; color: var(--text-muted); flex: 1; }
+    .hist-dur { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
     .hist-time { font-size: 10px; color: var(--text-faint); font-family: var(--font-mono); white-space: nowrap; }
 </style>
