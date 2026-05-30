@@ -1476,54 +1476,38 @@ def process(input_dir: Path,
 
         return full_data, words_data, mfa_failures
 
-    # Canonical (widest beam) — drives timestamps[_full].json + reuses
-    # existing_data when resuming/refreshing.
-    full_data, words_data, mfa_failures = _build_outputs(
-        canonical_results,
-        existing_data if load_existing else None)
-    if mfa_failures:
-        log.warning("Canonical beam %d: %d MFA failures",
-                    canonical_beam, len(mfa_failures))
-
-    full_path = output_dir / "timestamps_full.json"
-    words_path = output_dir / "timestamps.json"
-    _write_output(full_path, meta, method, canonical_beam,
-                  shared_cmvn, full_data, mfa_failures, padding=padding)
-    _write_output(words_path, meta, method, canonical_beam,
-                  shared_cmvn, words_data, mfa_failures, padding=padding)
-    log.info("Wrote canonical (beam=%d) %s (%d verses)",
-             canonical_beam, full_path, len(full_data))
-
-    # v2: also emit per-chapter occurrence-preserving shards next to the
-    # historical timestamps_full.json. ``canonical_results`` carries every
-    # aligned segment (pre-dedup), so build_raw_v2 keeps all occurrences;
-    # the inspector read-path dedups on serve. Written un-gzipped as
-    # ``<output_dir>/timestamps/<chapter>.json`` — the bucket layout the
-    # read-path expects. Additive: the v1 outputs above are untouched.
+    # v2 is the ONLY persisted timestamps format: per-chapter occurrence-
+    # preserving shards at ``<output_dir>/timestamps/<chapter>.json``.
+    # ``canonical_results`` carries every aligned segment (pre-dedup) so
+    # build_raw_v2 keeps all occurrences; the inspector read-path dedups on
+    # serve and downstream consumers derive whatever projection they need.
+    # The historical timestamps_full.json / timestamps.json (single-file +
+    # word-only) are intentionally NOT written (decision: one canonical v2).
     from scripts.lib.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
-    v2_doc = build_raw_v2(chapters, canonical_results, audio_category)
-    v2_shards = split_to_shards(
-        v2_doc, reciter=reciter, audio_category=audio_category, url_template="")
     ts_dir = output_dir / "timestamps"
     ts_dir.mkdir(parents=True, exist_ok=True)
-    for ch_num, shard_doc in v2_shards.items():
-        (ts_dir / f"{ch_num}.json").write_text(
-            json.dumps(shard_doc, ensure_ascii=False), encoding="utf-8")
-    log.info("Wrote %d v2 timestamps shard(s) -> %s", len(v2_shards), ts_dir)
 
-    # Probe beams: each gets its own pair of files. Failure cascade is
-    # computed at compare-time from the per-beam mfa_failures; we don't
-    # write a separate review sidecar.
+    def _emit_v2(results_by_ch, suffix=""):
+        v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
+        shards = split_to_shards(
+            v2_doc, reciter=reciter, audio_category=audio_category, url_template="")
+        for ch_num, shard_doc in shards.items():
+            (ts_dir / f"{ch_num}{suffix}.json").write_text(
+                json.dumps(shard_doc, ensure_ascii=False), encoding="utf-8")
+        fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
+        return len(shards), fails
+
+    n_shards, n_fail = _emit_v2(canonical_results)
+    if n_fail:
+        log.warning("Canonical beam %d: %d MFA failures", canonical_beam, n_fail)
+    log.info("Wrote %d v2 timestamps shard(s) (beam=%d) -> %s",
+             n_shards, canonical_beam, ts_dir)
+
+    # Probe beams → v2 sidecar shards ``<chapter>.beam_<N>.json`` (same format,
+    # for beam comparison) — no legacy single-file.
     for b in probe_beams:
-        pf, pw, fails = _build_outputs(results_by_beam[b], None)
-        full_p = output_dir / f"timestamps_full.beam_{b}.json"
-        words_p = output_dir / f"timestamps.beam_{b}.json"
-        _write_output(full_p, meta, method, b, shared_cmvn, pf, fails,
-                      padding=padding)
-        _write_output(words_p, meta, method, b, shared_cmvn, pw, fails,
-                      padding=padding)
-        log.info("Wrote beam=%d %s (%d verses, %d failures)",
-                 b, full_p, len(pf), len(fails))
+        nb, fb = _emit_v2(results_by_beam[b], suffix=f".beam_{b}")
+        log.info("Wrote %d v2 probe shard(s) (beam=%d, %d failures)", nb, b, fb)
 
     _cleanup([], tmp_dir)
     return output_dir

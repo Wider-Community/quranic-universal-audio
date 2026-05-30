@@ -36,7 +36,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # runtime (not installed), keeping the gitignored stack out of any image.
 _INSTALL = (
     "mamba install -y -c conda-forge python=3.11 montreal-forced-aligner "
-    "&& /opt/conda/bin/pip install soundfile tgt numpy PyYAML requests psutil "
+    "&& /opt/conda/bin/pip install gradio soundfile tgt numpy PyYAML requests psutil "
     "'quranic-phonemizer>=2.0' 'huggingface_hub>=1.8.0' "
     "&& mkdir -p /scratch"
 )

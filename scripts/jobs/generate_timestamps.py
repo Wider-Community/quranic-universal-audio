@@ -24,9 +24,11 @@ Env:
 See docs/planning/inspector-deploy/v2/phases/13-timestamps-job.md.
 """
 
+import json
 import logging
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -87,11 +89,47 @@ def main() -> int:
         slug, os.cpu_count(), workers, beams, batch_size, dl_workers, app_path,
     )
 
+    # Inject the per-chapter audio source: detailed.json entries carry no
+    # ``audio`` field post-migration (#5) — URLs live in the audio manifest,
+    # bytes live in the bucket. Resolve bucket file first (no CDN dependency),
+    # manifest URL fallback. process() then reads it from a temp detailed.json
+    # (kept named ``<slug>/`` so ``input_dir.name`` stays the slug); output
+    # still goes to the real reciter dir in the bucket.
+    doc = json.loads(detailed.read_text(encoding="utf-8"))
+    manifest_path = mount / "catalog" / "audio_manifest" / f"{slug}.json"
+    chapters_meta = {}
+    if manifest_path.exists():
+        try:
+            chapters_meta = (json.loads(manifest_path.read_text(encoding="utf-8"))
+                             or {}).get("chapters", {}) or {}
+        except Exception as exc:
+            log.warning("could not read manifest %s: %s", manifest_path, exc)
+    audio_dir = reciter_dir / "audio"
+    entries = doc.get("entries", [])
+    injected = 0
+    for entry in entries:
+        ref = str(entry.get("ref", ""))
+        local = audio_dir / f"{ref}.mp3"
+        if local.exists():
+            entry["audio"] = str(local)
+            injected += 1
+        else:
+            url = (chapters_meta.get(ref) or {}).get("url")
+            if url:
+                entry["audio"] = url
+                injected += 1
+    log.info("injected audio source for %d/%d chapters", injected, len(entries))
+
+    job_input = Path(tempfile.mkdtemp()) / slug
+    job_input.mkdir(parents=True, exist_ok=True)
+    (job_input / "detailed.json").write_text(
+        json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+
     # In-container MFA: pool path engages when workers>1 AND mfa_app_path is
     # set (process() gates on this). LocalMfaBackend covers the serial
     # fallback. process() writes v2 shards into reciter_dir/timestamps/.
     process(
-        input_dir=reciter_dir,
+        input_dir=job_input,
         backend=LocalMfaBackend(app_path),
         method=method,
         beams=beams,
