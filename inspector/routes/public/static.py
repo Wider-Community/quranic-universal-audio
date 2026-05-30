@@ -11,10 +11,13 @@ picks its own cache discipline:
 """
 from __future__ import annotations
 
+import orjson
 from flask import Blueprint, Response, jsonify
 
 from services import catalog as catalog_service
+from services import db as db_service
 from services import quran_refs as quran_refs_service
+from services.storage import cache
 
 static_bp = Blueprint("static_data", __name__, url_prefix="/api/static")
 
@@ -38,9 +41,16 @@ def catalog_json() -> Response:
     reads ``reciters[]`` + ``deliveries[]`` to build the Timestamps tab
     reciter dropdown.
     """
-    snapshot = catalog_service.snapshot()
-    body = snapshot.model_dump(mode="json", by_alias=True)
-    response = jsonify(body)
+    # Byte-cache keyed on db_seq: the snapshot model is already db_seq-cached,
+    # but the model_dump + serialize ran per request. Hand back cached bytes on
+    # a warm hit; rebuild only when a committed write has bumped db_seq.
+    seq = db_service.current_db_seq()
+    body = cache.get_catalog_json_bytes_cache(seq)
+    if body is None:
+        snapshot = catalog_service.snapshot()
+        body = orjson.dumps(snapshot.model_dump(mode="json", by_alias=True))
+        cache.set_catalog_json_bytes_cache(seq, body)
+    response = Response(body, mimetype="application/json")
     response.headers["Cache-Control"] = _CATALOG_CACHE_CONTROL
     return response
 

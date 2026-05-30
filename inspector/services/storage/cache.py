@@ -695,6 +695,30 @@ def invalidate_catalog_snapshot_cache() -> None:
         _catalog_snapshot = None
 
 
+# Serialized ``/api/static/catalog.json`` bytes, keyed on db_seq. The snapshot
+# model is already db_seq-cached, but ``model_dump(mode="json", by_alias=True)``
+# + ``orjson.dumps`` still ran per request on the single worker (the TS reciter
+# dropdown + dashboard forms all hit this). Cache the final bytes so a warm
+# request is a dict-keyed handback. Self-invalidating via db_seq (any committed
+# write bumps it), same pattern as ``_public_reciters`` / ``_admin_users``.
+_catalog_json_bytes_lock = _threading.Lock()
+_catalog_json_bytes: "tuple[int, bytes] | None" = None
+
+
+def get_catalog_json_bytes_cache(db_seq: int):
+    """Return cached catalog.json bytes iff serialized at ``db_seq``, else None."""
+    with _catalog_json_bytes_lock:
+        if _catalog_json_bytes is not None and _catalog_json_bytes[0] == db_seq:
+            return _catalog_json_bytes[1]
+    return None
+
+
+def set_catalog_json_bytes_cache(db_seq: int, value: bytes) -> None:
+    global _catalog_json_bytes
+    with _catalog_json_bytes_lock:
+        _catalog_json_bytes = (db_seq, value)
+
+
 # ---------------------------------------------------------------------------
 # Admin Users list — assembled read model (5 GROUP-BY aggregations merged in
 # Python). Maintainer/owner-only and low-frequency, but the assembly touches
