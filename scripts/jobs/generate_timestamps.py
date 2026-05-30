@@ -77,10 +77,11 @@ def main() -> int:
         return 3
 
     beams = _beams(os.environ.get("BEAMS", "50"))
-    # Cap default workers: each pool worker extracts its own ~few-hundred-MB
-    # MFA model, so defaulting to os.cpu_count() (64 on cpu-upgrade) would OOM.
-    # 16 is a safe ceiling; override via WORKERS / INSPECTOR_TS_JOB_WORKERS.
-    workers = int(os.environ.get("WORKERS") or min(os.cpu_count() or 1, 16))
+    # Cap default workers: each pool worker extracts its own ~92 MB MFA model
+    # at init, so too many OOM/race during simultaneous KalpyEngine init (16
+    # crashed mid-init on cpu-upgrade; 8 verified safe). Override via WORKERS /
+    # INSPECTOR_TS_JOB_WORKERS once a flavor's headroom is benched.
+    workers = int(os.environ.get("WORKERS") or min(os.cpu_count() or 1, 8))
     batch_size = int(os.environ.get("BATCH_SIZE", str(DEFAULT_BATCH_SIZE)))
     dl_workers = int(os.environ.get("DOWNLOAD_WORKERS", str(DEFAULT_DOWNLOAD_WORKERS)))
     padding = os.environ.get("PADDING", DEFAULT_PADDING)
