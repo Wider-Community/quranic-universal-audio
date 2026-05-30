@@ -141,19 +141,16 @@ def iter_peaks_history(slug: str) -> Iterator[dict]:
 def read_timestamps_chapter(slug: str, chapter: int) -> bytes | None:
     """Return decompressed timestamps-shard JSON bytes for a chapter, or ``None``.
 
-    Prefers the gzipped v2 shard ``timestamps/<chapter>.json.gz`` (the job's
-    output) and inflates it; falls back to the uncompressed legacy
-    ``timestamps/<chapter>.json`` for pre-v2 released reciters. Either way the
-    caller receives raw JSON bytes.
+    Reads the gzipped v2 shard ``timestamps/<chapter>.json.gz`` (the job's
+    canonical output) and inflates it; the caller receives raw JSON bytes.
+    The pre-v2 uncompressed ``.json`` shards of the 6 already-published
+    reciters are migrated by re-running the job — there is no read-time
+    fallback for them.
     """
     backend = get_backend()
     try:
         gz = backend.read_bytes(storage_paths.timestamps_path_gz(slug, chapter))
         return gzip.decompress(gz)
-    except StorageNotFound:
-        pass
-    try:
-        return backend.read_bytes(storage_paths.timestamps_path(slug, chapter))
     except StorageNotFound:
         return None
 
