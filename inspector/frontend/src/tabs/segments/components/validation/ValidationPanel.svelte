@@ -50,8 +50,9 @@
     import { resolveCardLeadSeg } from '../../utils/validation/card-lead-seg';
     import { filterStaleIssues } from '../../utils/validation/stale';
     import { _fetchPeaks } from '../../utils/waveform/utils';
-    import { hasAccordionGuide } from '../../guides/registry';
-    import AccordionGuideModal from './AccordionGuideModal.svelte';
+    import { currentUser } from '../../../../lib/stores/current-user';
+    import { hasAccordionGuide, isGuideRead } from '../../guides/registry';
+    import { openGuideModal } from '../../stores/guides';
     import ErrorCard from './ErrorCard.svelte';
 
     // ---- Props ----
@@ -108,8 +109,6 @@
     const QALQALA_LETTERS_ORDER: ReadonlyArray<string> = ['\u0642', '\u0637', '\u0628', '\u062c', '\u062f'];
     let activeQalqalaLetter: string | null = null;
     let qalqalaEndOfVerse: boolean = false;
-    let guideCategory: string | null = null;
-    let guideOpener: HTMLElement | null = null;
 
     // ---- Virtualization constants ----
     /** Fallback card height (px) before real measurement. MissingVersesCard with
@@ -737,12 +736,9 @@
     function openGuide(e: MouseEvent, type: string): void {
         e.preventDefault();
         e.stopPropagation();
-        guideCategory = type;
-        guideOpener = e.currentTarget as HTMLElement;
-    }
-
-    function closeGuide(): void {
-        guideCategory = null;
+        // Drive the shared modal host (mounted in SegmentsTab) so the same
+        // path serves both this button and the onboarding gate modal.
+        openGuideModal(type, e.currentTarget as HTMLElement);
     }
 
     // ---- Stable composite each-key for issue cards ----
@@ -813,21 +809,23 @@
                 on:toggle={(e) => handleAccordionToggle(e, cat.type)}
             >
                 <summary class="val-summary">
+                    {#if hasAccordionGuide(cat.type)}
+                        <button
+                            type="button"
+                            class="val-guide-btn"
+                            class:unread={$currentUser.hf_user_id != null
+                                && !isGuideRead($currentUser.guides_read, cat.type)}
+                            aria-label={`Open guide for ${cat.name}`}
+                            title={`Open guide for ${cat.name}`}
+                            on:click={(e) => openGuide(e, cat.type)}
+                        >?</button>
+                    {/if}
                     <span class="val-summary-main">
                         <span class="val-summary-title">{cat.name}</span>
                         <span class="val-count {cat.countClass}" data-lc-count>
                             {(cat.isLowConf || cat.isQalqala) ? cat.visibleItems.length : cat.summaryCount}
                         </span>
                     </span>
-                    {#if hasAccordionGuide(cat.type)}
-                        <button
-                            type="button"
-                            class="val-guide-btn"
-                            aria-label={`Open guide for ${cat.name}`}
-                            title={`Open guide for ${cat.name}`}
-                            on:click={(e) => openGuide(e, cat.type)}
-                        >?</button>
-                    {/if}
                 </summary>
 
                 <!-- LC slider (Low Confidence only) -->
@@ -907,13 +905,5 @@
                 {/if}
             </details>
         {/each}
-
-        {#if guideCategory}
-            <AccordionGuideModal
-                category={guideCategory}
-                opener={guideOpener}
-                on:close={closeGuide}
-            />
-        {/if}
     </div>
 {/if}

@@ -26,8 +26,12 @@
     import HistoryPanel from './components/history/HistoryPanel.svelte';
     import SegmentsList from './components/list/SegmentsList.svelte';
     import SavePreview from './components/save/SavePreview.svelte';
+    import AccordionGuideModal from './components/validation/AccordionGuideModal.svelte';
+    import GuidesGateModal from './components/validation/GuidesGateModal.svelte';
     import ValidationPanel from './components/validation/ValidationPanel.svelte';
     import ShortcutsGuide from './ShortcutsGuide.svelte';
+    import { allGuidesRead } from './guides/registry';
+    import { closeGuideModal, guideModal } from './stores/guides';
     import { clearAccordionPin } from './stores/accordion-pin';
     import { autoSaveEnabled } from './stores/autosave';
     import {
@@ -75,12 +79,18 @@
         if (reciterTaskStore) {
             _taskUnsubscribe = reciterTaskStore.subscribe((v) => {
                 reciterTask = v;
-                setEditingMode(syncEditingMode($currentUser, v));
             });
-        } else {
-            setEditingMode(syncEditingMode($currentUser, null));
         }
     }
+
+    // Recompute the edit gate whenever the user (incl. guides_read) OR the task
+    // changes. Threading allGuidesRead here is what lifts the first-edit
+    // onboarding gate the instant the user opens the final guide — no task
+    // poll needed. Replaces the imperative setEditingMode calls that used to
+    // live in the task subscription / refresh paths.
+    $: setEditingMode(
+        syncEditingMode($currentUser, reciterTask, allGuidesRead($currentUser.guides_read)),
+    );
 
     // Refresh task immediately after a state-mutating action; the polling
     // tick still fires every 30 s but acting users shouldn't wait for it.
@@ -89,7 +99,7 @@
         if (!slug) return;
         const fresh = await refreshReciterTask(slug);
         reciterTask = fresh;
-        setEditingMode(syncEditingMode($currentUser, fresh));
+        // editingMode recomputes via the reactive statement on reciterTask.
         // /api/me's active_claim derives from state — pull a fresh copy too.
         void loadCurrentUser();
         // Force a catalog refetch so every surface lands the new bucket
@@ -362,6 +372,22 @@
         on:markReady={_markReady}
         on:claimed={_refreshTask}
     />
+
+    <!-- Guide modal host: a single instance driven by the `guideModal` store so
+         a guide can be opened from the per-accordion ? button AND the onboarding
+         gate (which must reach guides even for reciters that surface no
+         accordion). -->
+    {#if $guideModal}
+        <AccordionGuideModal
+            category={$guideModal.category}
+            opener={$guideModal.opener}
+            on:close={closeGuideModal}
+        />
+    {/if}
+
+    <!-- First-edit onboarding gate / browsable guide index. Self-subscribes to
+         the `guidesGate` store; opens guides via the host above. -->
+    <GuidesGateModal />
 </div>
 
 <style>

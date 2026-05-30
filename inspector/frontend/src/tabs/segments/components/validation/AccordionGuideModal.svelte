@@ -1,11 +1,14 @@
 <script lang="ts">
     import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+    import { get } from 'svelte/store';
 
+    import { recordGuideViewed } from '../../../../lib/api/guide-views';
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
+    import { currentUser, loadCurrentUser, markGuideReadLocally } from '../../../../lib/stores/current-user';
     import type { HistoryBatch } from '../../../../lib/types/domain';
     import { getGuideExample } from '../../guides/examples';
     import { guideTitleFromBlocks, parseGuideSource } from '../../guides/parser';
-    import { getAccordionGuide } from '../../guides/registry';
+    import { getAccordionGuide, guideViewKey, isGuideRead } from '../../guides/registry';
     import type { GuideExample } from '../../guides/types';
     import {
         buildEditChains,
@@ -29,6 +32,29 @@
 
     $: if (audio) {
         previewCtx.attachAudioEl(audio.element());
+    }
+
+    // Record-on-open: opening a guide marks it read (per the product rule
+    // "once it's opened, it goes away"). The host reuses this instance across
+    // categories (the gate modal opens guides back-to-back), so this tracks the
+    // last category recorded rather than firing only on mount. Idempotent: the
+    // server write is INSERT-OR-IGNORE and the local update dedups.
+    let _recordedFor: string | null = null;
+    $: if (category && category !== _recordedFor) {
+        _recordedFor = category;
+        void recordGuideRead(category);
+    }
+
+    async function recordGuideRead(cat: string): Promise<void> {
+        const u = get(currentUser);
+        if (u.hf_user_id == null) return;            // anonymous: nothing to persist
+        if (isGuideRead(u.guides_read, cat)) return; // already read — skip the POST
+        // Optimistic FIRST: clear the cyan badge (and lift the edit gate on the
+        // last guide) instantly, instead of waiting on the POST — which blocks
+        // on a full inspector.db → bucket sync inside durable_transaction.
+        markGuideReadLocally(guideViewKey(cat));
+        const ok = await recordGuideViewed(cat);     // background persist
+        if (!ok) void loadCurrentUser();             // failure → resync truth from /api/me
     }
 
     $: guideSource = getAccordionGuide(category);

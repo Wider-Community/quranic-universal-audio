@@ -173,6 +173,7 @@ describe('CombinationPicker', () => {
             active_claims: [],
             dev_mode: false,
             capabilities: ['reviews.view'],
+            guides_read: [],
         });
 
         const { container } = render(CombinationPicker, {

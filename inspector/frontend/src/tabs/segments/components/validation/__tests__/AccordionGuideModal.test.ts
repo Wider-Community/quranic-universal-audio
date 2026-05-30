@@ -3,8 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { makeSegment } from '../../../__tests__/helpers/make-segment';
 import { segAllData } from '../../../stores/chapter';
+import { closeGuideModal } from '../../../stores/guides';
 import { segValidation } from '../../../stores/validation';
-import ValidationPanel from '../ValidationPanel.svelte';
+import GuideModalHarness from './GuideModalHarness.svelte';
 
 class FakeIntersectionObserver {
   observe(): void {}
@@ -33,12 +34,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
   segAllData.set(null);
   segValidation.set(null);
+  closeGuideModal();
 });
 
 describe('ValidationPanel accordion guide modal', () => {
   it('opens a code-stored text guide from the help button without fetching', async () => {
     vi.stubGlobal('fetch', vi.fn());
-    const { getByLabelText, getByText } = render(ValidationPanel);
+    const { getByLabelText, getByText } = render(GuideModalHarness);
 
     await fireEvent.click(getByLabelText('Open guide for Low Confidence'));
 
@@ -50,7 +52,7 @@ describe('ValidationPanel accordion guide modal', () => {
   });
 
   it('renders history examples without edit controls', async () => {
-    const { getByLabelText, getByText, queryByText } = render(ValidationPanel);
+    const { getByLabelText, getByText, queryByText } = render(GuideModalHarness);
 
     await fireEvent.click(getByLabelText('Open guide for Low Confidence'));
 

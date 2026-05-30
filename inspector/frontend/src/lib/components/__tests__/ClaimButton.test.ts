@@ -41,6 +41,7 @@ describe('ClaimButton', () => {
             active_claims: ['some-other-slug'],
             dev_mode: false,
             capabilities: [],
+            guides_read: [],
         });
 
         const { container } = render(ClaimButton, {
@@ -64,6 +65,7 @@ describe('ClaimButton', () => {
             active_claims: ['some-other-slug'],
             dev_mode: false,
             capabilities: [],
+            guides_read: [],
         });
 
         const { container } = render(ClaimButton, {
@@ -86,6 +88,7 @@ describe('ClaimButton', () => {
             active_claims: [],
             dev_mode: false,
             capabilities: [],
+            guides_read: [],
         });
 
         const { container } = render(ClaimButton, {

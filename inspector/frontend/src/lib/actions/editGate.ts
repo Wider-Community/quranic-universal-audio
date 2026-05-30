@@ -28,6 +28,7 @@ import { get } from 'svelte/store';
 import { SIGN_IN_MESSAGES } from '../sign-in-messages';
 import { showEditPopover } from '../stores/edit-popover';
 import { editingMode } from '../stores/editing-mode';
+import { openGuidesGate } from '../stores/guides-gate';
 import { openSignInModal } from '../stores/sign-in-modal';
 
 export interface EditGateParams {
@@ -52,6 +53,10 @@ export function editGate(node: HTMLElement, params: EditGateParams = {}) {
         event.preventDefault();
         if (mode.kind === 'view' && mode.viewReason === 'unauthenticated') {
             openSignInModal(null, SIGN_IN_MESSAGES.edit);
+        } else if (mode.kind === 'view' && mode.viewReason === 'guides_unread') {
+            // Onboarding gate: open the blocking guide checklist instead of the
+            // generic popover — the user must read every guide before editing.
+            openGuidesGate('gate');
         } else {
             showEditPopover(node, mode);
         }

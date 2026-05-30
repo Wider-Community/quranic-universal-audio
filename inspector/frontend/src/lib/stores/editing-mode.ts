@@ -24,6 +24,7 @@ export type ViewReason =
     | 'not-claimable'     // logged in, row is in a non-claim state (e.g. awaiting_alignment)
     | 'released'          // post-publish, awaiting timestamp generation
     | 'marked_ready'      // user marked-ready their own claim and the row is frozen
+    | 'guides_unread'     // would-be editor who hasn't read the onboarding guides yet
     | 'discarded';        // reciter is admin-soft-deleted
 
 export interface EditingMode {
@@ -68,10 +69,18 @@ export function setEditingMode(mode: EditingMode): void {
  *   8. maintainer && row.state == under_review && !marked_ready → maintainer
  *   9. row.state in {catalogued, awaiting_alignment, awaiting_timestamps} → view / not-claimable
  *   10. else → view / wrong-assignee
+ *
+ * One-time onboarding gate: before returning ANY editable kind (owner #4,
+ * editor #7, maintainer #8), if `!allGuidesRead` the result is
+ * view / guides_unread instead. Applies to every editing role — no dev-mode
+ * exemption. `allGuidesRead` defaults to `true` so callers/tests that don't
+ * pass it are never gated — only the segments tab threads the real per-user
+ * value (`allGuidesRead($currentUser.guides_read)`).
  */
 export function syncEditingMode(
     user: CurrentUser | null,
     task: ReciterTask | null,
+    allGuidesRead: boolean = true,
 ): EditingMode {
     if (user === null || user.hf_user_id === null) {
         return { kind: 'view', viewReason: 'unauthenticated' };
@@ -86,8 +95,10 @@ export function syncEditingMode(
         return { kind: 'view', viewReason: 'discarded' };
     }
     // Owner fast-path: can edit any public reciter regardless of state or
-    // marked_ready freeze (owner override is total — bypasses both).
+    // marked_ready freeze (owner override is total — bypasses both). The
+    // one-time guide gate still applies (all editing roles read once).
     if (user.role === 'owner') {
+        if (!allGuidesRead) return { kind: 'view', viewReason: 'guides_unread' };
         return { kind: 'owner' };
     }
     if (row.state === 'released') {
@@ -98,9 +109,16 @@ export function syncEditingMode(
             return { kind: 'view', viewReason: 'marked_ready' };
         }
         if (!row.marked_ready && isAssignee) {
+            // One-time onboarding gate: every editing role must have read all
+            // guides before their first edit. No dev-mode exemption — the gate
+            // must be visible/testable locally, and dev is never prod.
+            if (!allGuidesRead) {
+                return { kind: 'view', viewReason: 'guides_unread' };
+            }
             return { kind: 'editor' };
         }
         if (!row.marked_ready && user.role === 'maintainer') {
+            if (!allGuidesRead) return { kind: 'view', viewReason: 'guides_unread' };
             return { kind: 'maintainer' };
         }
         return { kind: 'view', viewReason: 'wrong-assignee' };

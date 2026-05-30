@@ -20,6 +20,7 @@ function _user(overrides: Partial<CurrentUser> = {}): CurrentUser {
         active_claims: [],
         dev_mode: false,
         capabilities: [],
+        guides_read: [],
         ...overrides,
     };
 }
@@ -161,6 +162,7 @@ describe('syncEditingMode', () => {
             active_claims: [],
             dev_mode: false,
             capabilities: [],
+            guides_read: [],
         };
         expect(syncEditingMode(anon, _task())).toEqual({
             kind: 'view',
@@ -203,6 +205,66 @@ describe('syncEditingMode', () => {
         expect(syncEditingMode(_user({ role: 'owner' }), task)).toEqual({
             kind: 'view',
             viewReason: 'discarded',
+        });
+    });
+
+    // ------------------------------------------------------------------
+    // First-edit onboarding gate (allGuidesRead, 3rd arg)
+    // ------------------------------------------------------------------
+
+    it('gates the would-be editor as view/guides_unread when guides are unread', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user(), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'guides_unread',
+        });
+    });
+
+    it('lets the editor through once all guides are read', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user(), task, true)).toEqual({ kind: 'editor' });
+    });
+
+    it('defaults to ungated (allGuidesRead omitted ⇒ true)', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user(), task)).toEqual({ kind: 'editor' });
+    });
+
+    it('does NOT exempt dev-mode — the gate must be visible/testable locally', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user({ dev_mode: true }), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'guides_unread',
+        });
+    });
+
+    it('gates maintainers too (all editing roles read once)', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'other' });
+        expect(syncEditingMode(_user({ role: 'maintainer' }), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'guides_unread',
+        });
+    });
+
+    it('lets a maintainer through once all guides are read', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'other' });
+        expect(syncEditingMode(_user({ role: 'maintainer' }), task, true)).toEqual({
+            kind: 'maintainer',
+        });
+    });
+
+    it('gates owners too (the owner fast-path still honours the guide gate)', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user({ role: 'owner' }), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'guides_unread',
+        });
+    });
+
+    it('lets an owner through once all guides are read', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user({ role: 'owner' }), task, true)).toEqual({
+            kind: 'owner',
         });
     });
 

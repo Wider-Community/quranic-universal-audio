@@ -23,6 +23,7 @@ def register_blueprints(app):
     from routes.admin.reviews import admin_reviews_bp
     from routes.admin.users import admin_users_bp
     from routes.auth.auth import auth_bp
+    from routes.auth.guides import guides_bp
     from routes.auth.health import health_bp
     from routes.claims.claims import claims_bp
     from routes.claims.requests import requests_bp
@@ -42,6 +43,7 @@ def register_blueprints(app):
 
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(guides_bp)
     app.register_blueprint(claims_bp)
     app.register_blueprint(public_bp)
     app.register_blueprint(access_admin_bp)

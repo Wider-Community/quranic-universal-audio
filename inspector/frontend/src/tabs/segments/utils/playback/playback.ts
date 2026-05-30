@@ -12,6 +12,15 @@
  * (Trim / Split L/R / Split region) still live in `play-range.ts` — that
  * module is untouched.
  *
+ * One narrow exception to "play through naturally": deleting a segment is a
+ * pure state edit that does NOT touch the chapter audio file, so the bytes of
+ * a deleted region linger between its surviving neighbours. `_maybeSkipDeletedGap`
+ * (driven by `_drawLoop`) reconciles chapter-continuous playback against the
+ * CURRENT segment list — once the playhead crosses into a region covered by no
+ * displayed segment it seeks forward to the next segment that still exists,
+ * instead of bleeding through the orphaned audio. Contiguous boundaries leave
+ * no gap, so normal playback stays seamless.
+ *
  * A small rAF (`_drawLoop`) is started by `startSegAnimation` (DOM 'play'
  * event re-emission via the AudioPort) and stopped by `stopSegAnimation`
  * (DOM 'pause' / 'ended'). Each frame draws the playhead on the active row
@@ -88,9 +97,86 @@ let _segRange: AudioRange | null = null;
 const _drawLoop: AnimationLoop = createAnimationLoop(() => {
     const m = get(editMode);
     if (m === 'trim' || m === 'split') return;
-    drawActivePlayhead(segPort.currentTimeMs());
+    const t = segPort.currentTimeMs();
+    // Skip past deleted-segment gaps before drawing — on a skip the playhead
+    // is seeked this frame, so let the next tick draw it at the new position.
+    if (_maybeSkipDeletedGap(t)) return;
+    drawActivePlayhead(t);
     updateSegHighlight();
 });
+
+/**
+ * Chapter-continuous autoplay gap-skip.
+ *
+ * Deleting a segment drops it from the list but leaves the chapter audio file
+ * untouched, so the deleted region's bytes still sit between its surviving
+ * neighbours. Under chapter-continuous playback (autoplay ON, CBR) nothing
+ * bounds the playhead, so it would otherwise sail straight through that
+ * now-orphaned audio. This reconciles playback against the CURRENT segment
+ * list: once the playhead crosses the active segment's end into a region
+ * covered by NO displayed segment, seek forward to the next segment that still
+ * exists (chosen by time, so a manual scrub into a far gap jumps forward, never
+ * back). If nothing remains ahead, stop rather than play the chapter's trailing
+ * audio.
+ *
+ * Contiguous boundaries leave no gap — the playhead lands inside the next
+ * segment, so segment-to-segment playback stays seamless and this is a no-op.
+ * VBR is unaffected: it plays isolated per-segment clips and never reaches the
+ * chapter-continuous draw loop. Bounded plays (autoplay-OFF, accordion) enforce
+ * their own `stop` policy via `_segRange` and are short-circuited here.
+ *
+ * @returns true when it seeked or stopped (caller skips this frame's draw).
+ */
+function _maybeSkipDeletedGap(timeMs: number): boolean {
+    if (get(editMode)) return false;
+    if (_segRange) return false; // bounded range owns its own boundary policy
+    if (!get(autoPlayEnabled)) return false;
+    const active = get(playingSegmentIndex);
+    if (!active || active.origin === 'accordion') return false;
+    const seg = getSegByChapterIndex(active.chapter, active.index);
+    if (!seg) return false;
+    // Still inside the active segment — nothing to skip.
+    if (timeMs < seg.time_end) return false;
+
+    const displayed = get(displayedSegments);
+    if (!displayed) return false;
+    const activeUrl = _curChapterUrl();
+
+    // Rolled into a contiguous neighbour? Let chapter-continuous playback carry
+    // on; `onSegTimeUpdate` migrates the highlight as the playhead crosses in.
+    const inSegment = displayed.some(
+        (s) => timeMs >= s.time_start && timeMs < s.time_end
+            && audioSrcMatches(s.audio_url, activeUrl),
+    );
+    if (inSegment) return false;
+
+    // In a gap. Find the nearest segment that still exists ahead of the
+    // playhead (smallest time_start ≥ timeMs on the active chapter audio).
+    let next: Segment | null = null;
+    for (const s of displayed) {
+        if (!audioSrcMatches(s.audio_url, activeUrl)) continue;
+        if (s.time_start >= timeMs && (!next || s.time_start < next.time_start)) {
+            next = s;
+        }
+    }
+
+    if (!next) {
+        // No surviving segment ahead — stop at the gap instead of bleeding into
+        // the chapter's trailing audio.
+        segPort.pause();
+        setPlayingSegment(null);
+        _drawLoop.stop();
+        return true;
+    }
+
+    // Jump the active pair (drives class:playing + the playhead row) and seek
+    // to the surviving segment. `segCurrentIdx`, warmup, and on-demand peaks are
+    // reconciled by `onSegTimeUpdate`'s next tick once the playhead lands inside
+    // `next` and its crossing block fires.
+    setPlayingSegment({ chapter: next.chapter ?? active.chapter, index: next.index });
+    segPort.seek(next.time_start);
+    return true;
+}
 
 /** Reset playhead draw-state refs so the draw layer does not point to nodes
  *  destroyed by the next {#each} reconciliation. Called by filters-apply.ts
