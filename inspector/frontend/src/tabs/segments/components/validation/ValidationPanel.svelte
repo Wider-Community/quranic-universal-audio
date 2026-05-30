@@ -24,7 +24,6 @@
     import { get } from 'svelte/store';
 
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
-    import { currentUser } from '../../../../lib/stores/current-user';
     import type {
         SegValAnyItem,
         SegValidateResponse,
@@ -35,13 +34,11 @@
     import { TAB_NAMES } from '../../../../lib/utils/constants';
     import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
     import { IssueRegistry } from '../../domain/registry';
-    import { hasAccordionGuide, isGuideRead } from '../../guides/registry';
     import { accordionPin, clearAccordionPin, pinAccordion } from '../../stores/accordion-pin';
     import { ensureAutoSplitMap } from '../../stores/auto-split';
     import { segAllData, selectedReciter } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
-    import { openGuideModal } from '../../stores/guides';
     import { playingSegmentIndex } from '../../stores/playback';
     import { segValidation, valUiLcThreshold, valUiMeasuredCardHeight,valUiOpenCategory, valUiScrollTop } from '../../stores/validation';
     import {
@@ -733,14 +730,6 @@
         });
     }
 
-    function openGuide(e: MouseEvent, type: string): void {
-        e.preventDefault();
-        e.stopPropagation();
-        // Drive the shared modal host (mounted in SegmentsTab) so the same
-        // path serves both this button and the onboarding gate modal.
-        openGuideModal(type, e.currentTarget as HTMLElement);
-    }
-
     // ---- Stable composite each-key for issue cards ----
     // Object-reference keying caused every ErrorCard to remount whenever
     // `$segValidation` republished (re-validate after save). A composite
@@ -809,17 +798,6 @@
                 on:toggle={(e) => handleAccordionToggle(e, cat.type)}
             >
                 <summary class="val-summary">
-                    {#if hasAccordionGuide(cat.type)}
-                        <button
-                            type="button"
-                            class="val-guide-btn"
-                            class:unread={$currentUser.hf_user_id != null
-                                && !isGuideRead($currentUser.guides_read, cat.type)}
-                            aria-label={`Open guide for ${cat.name}`}
-                            title={`Open guide for ${cat.name}`}
-                            on:click={(e) => openGuide(e, cat.type)}
-                        >?</button>
-                    {/if}
                     <span class="val-summary-main">
                         <span class="val-summary-title">{cat.name}</span>
                         <span class="val-count {cat.countClass}" data-lc-count>

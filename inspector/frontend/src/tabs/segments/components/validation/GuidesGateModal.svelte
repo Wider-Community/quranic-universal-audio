@@ -134,6 +134,35 @@
                         </li>
                     {/each}
                 </ul>
+
+                <!-- Optional keyboard-shortcut reference. Not part of the required
+                     reading — collapsed by default, never gates editing. Covers
+                     just playback + editing (the keys a reviewer actually uses
+                     mid-edit); segment/filter actions are discoverable in the UI. -->
+                <details class="guides-gate-shortcuts">
+                    <summary>Keyboard shortcuts <span class="guides-gate-optional">optional</span></summary>
+                    <div class="guides-gate-shortcuts-body">
+                        <div class="gs-col">
+                            <h4>Playback</h4>
+                            <dl>
+                                <dt>Space</dt><dd>Play / pause</dd>
+                                <dt>&larr; / &rarr;</dt><dd>Seek &plusmn;3 s</dd>
+                                <dt>&uarr; / &darr;</dt><dd>Prev / next segment</dd>
+                                <dt>, / .</dt><dd>Slower / faster playback</dd>
+                                <dt>J</dt><dd>Scroll current segment into view</dd>
+                            </dl>
+                        </div>
+                        <div class="gs-col">
+                            <h4>Editing</h4>
+                            <dl>
+                                <dt>E</dt><dd>Edit reference of current segment</dd>
+                                <dt>Enter</dt><dd>Confirm trim / split</dd>
+                                <dt>Escape</dt><dd>Cancel trim / split</dd>
+                                <dt>S</dt><dd>Save changes</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </details>
             </div>
 
             <footer class="guides-gate-footer">
@@ -303,6 +332,75 @@
         border-color: var(--accent);
         color: var(--accent);
         box-shadow: 0 0 0 1px var(--accent-tint);
+    }
+
+    /* Optional shortcuts reference — muted, clearly secondary to the guides. */
+    .guides-gate-shortcuts {
+        margin-top: 16px;
+        border: 1px solid #243049;
+        border-radius: 8px;
+        background: #0e1726;
+    }
+    .guides-gate-shortcuts > summary {
+        cursor: pointer;
+        list-style: none;
+        padding: 10px 12px;
+        font-size: 0.85rem;
+        color: #c2cce4;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .guides-gate-shortcuts > summary::-webkit-details-marker { display: none; }
+    .guides-gate-shortcuts > summary::before {
+        content: '▸';
+        color: #6b7796;
+        font-size: 0.8rem;
+        transition: transform 0.15s ease;
+    }
+    .guides-gate-shortcuts[open] > summary::before { transform: rotate(90deg); }
+    .guides-gate-optional {
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #7f8bab;
+        border: 1px solid #2c3a59;
+        border-radius: 999px;
+        padding: 1px 7px;
+    }
+
+    .guides-gate-shortcuts-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px 20px;
+        padding: 4px 14px 14px;
+    }
+    .gs-col h4 {
+        margin: 0 0 6px;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #8b97b4;
+    }
+    .gs-col dl {
+        margin: 0;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 10px;
+        font-size: 0.82rem;
+    }
+    .gs-col dt {
+        font-family: var(--font-mono, ui-monospace, monospace);
+        color: var(--accent);
+        white-space: nowrap;
+    }
+    .gs-col dd {
+        margin: 0;
+        color: #aeb9d4;
+    }
+
+    @media (max-width: 460px) {
+        .guides-gate-shortcuts-body { grid-template-columns: 1fr; }
     }
 
     .guides-gate-footer {
