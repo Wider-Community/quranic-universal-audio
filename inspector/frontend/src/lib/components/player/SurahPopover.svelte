@@ -1,7 +1,7 @@
 <script lang="ts">
     /**
-     * Surah picker popover — grid layout matching the ayah picker.
-     * Each cell shows name_en (top) · number (middle) · name_ar (bottom).
+     * Surah picker popover — 6-column grid matching the ayah picker style.
+     * Each cell: number (left, small) · name_en / name_ar stacked on the right.
      */
     import { createEventDispatcher, onMount, tick } from 'svelte';
 
@@ -73,9 +73,11 @@
                 aria-selected={value === it.n}
                 on:click={() => pick(it.n)}
             >
-                <span class="name-en">{it.nameEn}</span>
                 <span class="num">{it.n}</span>
-                <span class="name-ar">{it.nameAr}</span>
+                <span class="names">
+                    <span class="name-en">{it.nameEn}</span>
+                    <span class="name-ar">{it.nameAr}</span>
+                </span>
             </button>
         {:else}
             <div class="empty">No matches</div>
@@ -107,23 +109,22 @@
     .grid {
         flex: 1 1 auto;
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
-        gap: 4px;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 3px;
         overflow-y: auto;
     }
     .cell {
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
         align-items: center;
-        justify-content: center;
-        gap: 2px;
-        padding: 6px 4px;
+        gap: 4px;
+        padding: 4px 5px;
         background: transparent;
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
         color: var(--text-secondary);
         cursor: pointer;
-        min-height: 58px;
+        overflow: hidden;
         transition:
             border-color var(--t-fast),
             color var(--t-fast),
@@ -139,39 +140,47 @@
         color: var(--accent);
         background: var(--accent-tint);
     }
-    .name-en {
-        font-size: 9.5px;
-        line-height: 1.2;
-        text-align: center;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        max-width: 100%;
-        color: var(--text-muted);
-    }
-    .cell:hover .name-en,
-    .cell.active .name-en {
-        color: inherit;
-    }
     .num {
         font-family: var(--font-mono);
-        font-size: 13px;
+        font-size: 10px;
         font-variant-numeric: tabular-nums;
-        font-weight: 600;
+        flex-shrink: 0;
+        min-width: 14px;
+        text-align: right;
+        color: var(--text-faint);
         line-height: 1;
-        color: inherit;
+        align-self: center;
     }
-    .name-ar {
-        font-size: 10.5px;
-        line-height: 1.2;
-        text-align: center;
+    .cell.active .num {
+        color: var(--accent);
+    }
+    .names {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        overflow: hidden;
+        flex: 1;
+        min-width: 0;
+    }
+    .name-en {
+        font-size: 9px;
+        line-height: 1.25;
+        white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        color: var(--text-secondary);
+    }
+    .name-ar {
+        font-size: 9.5px;
+        line-height: 1.25;
         white-space: nowrap;
-        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
         direction: rtl;
         color: var(--text-muted);
     }
+    .cell:hover .name-en,
+    .cell.active .name-en,
     .cell:hover .name-ar,
     .cell.active .name-ar {
         color: inherit;
