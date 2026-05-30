@@ -76,6 +76,7 @@ from .segment import (
     DetailedMeta,
     DetailedSegment,
 )
+from .ts_job_record import TsJobRecord, TsJobSettings
 
 __all__ = [
     "AdminActiveClaim",
@@ -121,5 +122,7 @@ __all__ = [
     "ProbeResult",
     "RequestChange",
     "SourceLink",
+    "TsJobRecord",
+    "TsJobSettings",
     "VisitorDayStat",
 ]

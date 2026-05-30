@@ -646,3 +646,40 @@ export interface ProbeResult {
   reachable?: boolean;
   [k: string]: unknown;
 }
+/**
+ * One job run's durable record (settings + status + logs).
+ *
+ * ``status`` mirrors HF's lowercased stage (``running`` / ``succeeded`` /
+ * ``failed`` / ``error`` / ``timed-out`` …). ``logs`` is a bounded tail;
+ * ``log_truncated`` flags that earlier lines were dropped.
+ */
+export interface TsJobRecord {
+  schema_version?: number;
+  job_id: string;
+  slug: string;
+  type?: string;
+  settings?: TsJobSettings;
+  status?: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  url?: string | null;
+  logs?: string[];
+  log_truncated?: boolean;
+  error?: string | null;
+}
+/**
+ * Job parameters chosen by the admin in the launch form.
+ *
+ * ``beams`` is the resolved list passed to ``align_batch_multi_beam`` —
+ * ``[alignment_beam, *probe_beams]`` (deduped). Canonical beam = ``max(beams)``.
+ */
+export interface TsJobSettings {
+  beams?: number[];
+  persist_audio?: boolean;
+  gen_peaks?: boolean;
+  workers?: number | null;
+  flavor?: string | null;
+  timeout?: string | null;
+  batch_size?: number | null;
+  download_workers?: number | null;
+}

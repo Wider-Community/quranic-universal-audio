@@ -110,6 +110,7 @@ from .state import (
     RevisionContext,
     Visibility,
 )
+from .ts_job_record import TsJobRecord, TsJobSettings
 
 __all__ = [
     "ActivityState",
@@ -191,6 +192,8 @@ __all__ = [
     "Source",
     "SourceLink",
     "Style",
+    "TsJobRecord",
+    "TsJobSettings",
     "Visibility",
     "VisitorDayStat",
     "Vocab",
