@@ -168,6 +168,14 @@
                             <h3 class="accordion-guide-heading">{block.text}</h3>
                         {:else if block.type === 'paragraph'}
                             <p>{block.text}</p>
+                        {:else if block.type === 'callout'}
+                            <div class="accordion-guide-callout" role="note">
+                                <span class="accordion-guide-callout-icon" aria-hidden="true">🎯</span>
+                                <div class="accordion-guide-callout-body">
+                                    <div class="accordion-guide-callout-label">Goal</div>
+                                    <p class="accordion-guide-callout-text">{block.text}</p>
+                                </div>
+                            </div>
                         {:else if block.type === 'component'}
                             {#if GUIDE_COMPONENTS[block.name]}
                                 <svelte:component this={GUIDE_COMPONENTS[block.name]} />
@@ -333,6 +341,49 @@
         margin: 18px 0 8px;
         color: #f0f3ff;
         font-size: 1rem;
+    }
+
+    /* "By the end…" outcome callout — a tinted goal card that sets the
+       expectation apart from the surrounding explanatory prose. */
+    .accordion-guide-callout {
+        display: flex;
+        gap: 12px;
+        margin: 14px 0 16px;
+        padding: 13px 15px;
+        border: 1px solid rgba(52, 211, 153, 0.32);
+        border-left: 3px solid #34d399;
+        border-radius: 8px;
+        background: linear-gradient(
+            135deg,
+            rgba(16, 185, 129, 0.12),
+            rgba(16, 185, 129, 0.05)
+        );
+    }
+
+    .accordion-guide-callout-icon {
+        flex: none;
+        font-size: 1.1rem;
+        line-height: 1.4;
+    }
+
+    .accordion-guide-callout-body {
+        min-width: 0;
+    }
+
+    .accordion-guide-callout-label {
+        margin-bottom: 3px;
+        color: #6ee7b7;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+    }
+
+    .accordion-guide-callout-text {
+        margin: 0;
+        color: #d9f5e8;
+        font-size: 0.92rem;
+        line-height: 1.5;
     }
 
     .accordion-guide-muted,

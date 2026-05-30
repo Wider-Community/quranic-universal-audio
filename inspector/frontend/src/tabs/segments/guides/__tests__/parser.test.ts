@@ -27,6 +27,33 @@ Second paragraph.
     ]);
   });
 
+  it('parses blockquote lines into a callout block and joins consecutive lines', () => {
+    const blocks = parseGuideSource(`
+Intro paragraph.
+
+> By the end this should be zero
+> — resolved or ignored.
+
+::example{id="one"}
+`);
+
+    expect(blocks).toEqual([
+      { type: 'paragraph', text: 'Intro paragraph.' },
+      { type: 'callout', text: 'By the end this should be zero — resolved or ignored.' },
+      { type: 'example', id: 'one' },
+    ]);
+  });
+
+  it('ends a callout when plain prose follows without a blank line', () => {
+    const blocks = parseGuideSource(`> Goal line.
+Back to prose.`);
+
+    expect(blocks).toEqual([
+      { type: 'callout', text: 'Goal line.' },
+      { type: 'paragraph', text: 'Back to prose.' },
+    ]);
+  });
+
   it('turns malformed directives into non-crashing placeholder blocks', () => {
     const blocks = parseGuideSource('::example{}');
 

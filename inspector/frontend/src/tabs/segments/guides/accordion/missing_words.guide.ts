@@ -9,7 +9,7 @@ Sometimes both the audio and the word(s) is missing. Fill it and adjust the segm
 
 A word present in the text but audio is partially / fully missing in the segment tends to surface under Low Confidence or Boundary Adjustment instead.
 
-By the end this should be zero — every recited word placed, unless there are issues in the audio.
+> By the end this should be zero — every recited word placed, unless there are issues in the audio.
 
 ## Auto-fill handles it
 

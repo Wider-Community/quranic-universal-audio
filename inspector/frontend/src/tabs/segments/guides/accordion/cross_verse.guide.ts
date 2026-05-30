@@ -3,7 +3,7 @@ const source = `
 
 A cross-verse segment spans a verse boundary. We split it because the published dataset stores one row per verse, so each verse can be searched and played on its own. How you split depends on what the reciter did, and the boundary tag is kept as metadata either way.
 
-By the end this should be zero — all split. Auto-split usually is mostly accurate, but cursors might need some adjusting in some cases, especially in Wasl.
+> By the end this should be zero — all split. Auto-split usually is mostly accurate, but cursors might need some adjusting in some cases, especially in Wasl.
 
 ## Waqf — the reciter paused
 
