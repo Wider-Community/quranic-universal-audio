@@ -37,6 +37,9 @@ let _catalog: Promise<TsCatalogResponse> | null = null;
 let _manifest: Promise<TsManifestResponse> | null = null;
 let _qpc: Promise<Record<string, { text?: string }>> | null = null;
 let _dk: Promise<Record<string, { text?: string }>> | null = null;
+// Resolved snapshots for the synchronous qpcIfReady/dkIfReady fast path.
+let _qpcValue: Record<string, { text?: string }> | null = null;
+let _dkValue: Record<string, { text?: string }> | null = null;
 
 /** Bounded LRU for chapter shards — covers current + adjacent + two pre-rolls. */
 const SHARD_CACHE_SIZE = 4;
@@ -213,10 +216,23 @@ export async function loadQpc(): Promise<Record<string, { text?: string }>> {
         _qpc = (async () => {
             const m = await loadManifest();
             const url = _resourceUrl(m, 'qpc_hafs');
-            return _fetchGzipJson<Record<string, { text?: string }>>(url);
+            const v = await _fetchGzipJson<Record<string, { text?: string }>>(url);
+            _qpcValue = v;
+            return v;
         })();
     }
     return _qpc;
+}
+
+/** Synchronous snapshot of the qpc/dk word-text dicts, or null if not yet
+ *  resolved. Lets the verse loaders paint a verse immediately with whatever
+ *  text is already cached and fill the rest in once the ~3MB dicts land,
+ *  instead of blocking first paint on them. */
+export function qpcIfReady(): Record<string, { text?: string }> | null {
+    return _qpcValue;
+}
+export function dkIfReady(): Record<string, { text?: string }> | null {
+    return _dkValue;
 }
 
 /**
@@ -228,7 +244,9 @@ export async function loadDk(): Promise<Record<string, { text?: string }>> {
         _dk = (async () => {
             const m = await loadManifest();
             const url = _resourceUrl(m, 'digital_khatt');
-            return _fetchGzipJson<Record<string, { text?: string }>>(url);
+            const v = await _fetchGzipJson<Record<string, { text?: string }>>(url);
+            _dkValue = v;
+            return v;
         })();
     }
     return _dk;
@@ -667,6 +685,8 @@ export function _resetForTests(): void {
     _manifest = null;
     _qpc = null;
     _dk = null;
+    _qpcValue = null;
+    _dkValue = null;
     _shards.clear();
     _vbrChapters.clear();
 }

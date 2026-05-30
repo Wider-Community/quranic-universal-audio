@@ -23,7 +23,7 @@
         removeBookmark,
     } from '../../lib/stores/bookmarks';
     import { pendingTsNavigation } from '../../lib/stores/navigation';
-    import type { TsConfigResponse, TsDataResponse } from '../../lib/types/api';
+    import type { TsConfigResponse, TsDataResponse, TsShardResponse } from '../../lib/types/api';
     import type { TsReciter } from '../../lib/types/domain';
     import { getActiveTab } from '../../lib/utils/active-tab';
     import { LS_KEYS } from '../../lib/utils/constants';
@@ -41,6 +41,7 @@
         audioUrlFor,
         catalogReciterRows,
         chapterVerseRefs,
+        dkIfReady,
         getRandomTarget,
         loadCatalog,
         loadChapterShard,
@@ -50,6 +51,7 @@
         loadQpc,
         loadVbrChapters,
         loadVerseTranslations,
+        qpcIfReady,
         tsPlayUrl,
     } from './services/ts_client';
     import { ensureChapterPeaks } from '../../lib/utils/peaks-fetch';
@@ -112,6 +114,12 @@
 
     async function init(): Promise<void> {
         loadConfig().then((cfg) => tsConfig.set(cfg as TsConfigResponse));
+
+        // Prefetch the ~3MB word-text dicts at mount, concurrent with the
+        // manifest/catalog/surah-info loads, so the two-phase verse load's
+        // text-fill resolves fast. They no longer gate first paint.
+        void loadQpc().catch(() => {});
+        void loadDk().catch(() => {});
 
         const savedView = localStorage.getItem(LS_KEYS.TS_VIEW_MODE);
         if (savedView === TS_VIEW_MODES.ANALYSIS || savedView === TS_VIEW_MODES.ANIMATION) {
@@ -290,21 +298,16 @@
         if (get(tsLoading)) return;
         tsLoading.set(true);
         try {
-            // vbr resolves concurrently (cached singleton in the common case)
-            // instead of a serial await after the shard.
-            const [shard, qpc, dk, vbr] = await Promise.all([
+            // Only the shard + vbr gate first paint; qpc/dk word-text is filled
+            // in by the two-phase helper so the ~3MB dicts never block the verse.
+            const [shard, vbr] = await Promise.all([
                 loadChapterShard(reciter, chapter),
-                loadQpc(),
-                loadDk(),
                 loadVbrChapters(reciter),
             ]);
             tsVbrChapters.set(new Set(vbr));
-            const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk);
-            if (!data) {
+            if (!ingestVerseDeferText(reciter, shard, verseRef, true)) {
                 alert('Error: verse not found in shard');
-                return;
             }
-            ingestVerseData(data);
         } catch (e) {
             console.error('Error loading timestamp verse:', e);
             alert('Failed to load verse');
@@ -346,36 +349,34 @@
             return;
         }
 
-        const [shard, qpc, dk, vbr] = await Promise.all([
+        const [shard, vbr] = await Promise.all([
             loadChapterShard(target.reciter, target.chapter),
-            loadQpc(),
-            loadDk(),
             loadVbrChapters(target.reciter),
         ]);
         tsVbrChapters.set(new Set(vbr));
-        const data = assembleVerseFromShard(target.reciter, shard, target.verseRef, qpc, dk);
-        if (!data) {
-            console.error('Random target verse missing from shard:', target);
-            return;
-        }
 
-        const reciterChanged = get(selectedReciter) !== data.reciter;
+        // target.reciter/target.chapter == the assembled data's reciter/chapter
+        // (the shard is keyed by chapter, the verseRef's surah == that chapter),
+        // so the store cascade can run before assembling the words.
+        const reciterChanged = get(selectedReciter) !== target.reciter;
         if (reciterChanged) {
-            selectedReciter.set(data.reciter);
-            localStorage.setItem(LS_KEYS.TS_RECITER, data.reciter);
+            selectedReciter.set(target.reciter);
+            localStorage.setItem(LS_KEYS.TS_RECITER, target.reciter);
             try {
                 const m = await loadManifest();
-                chapters.set(m.reciters[data.reciter]?.ts_chapters ?? []);
+                chapters.set(m.reciters[target.reciter]?.ts_chapters ?? []);
             } catch {
                 chapters.set([]);
             }
         }
-        if (reciterChanged || get(selectedChapter) !== String(data.chapter)) {
-            selectedChapter.set(String(data.chapter));
-            await populateVersesFor(data.reciter, data.chapter);
+        if (reciterChanged || get(selectedChapter) !== String(target.chapter)) {
+            selectedChapter.set(String(target.chapter));
+            await populateVersesFor(target.reciter, target.chapter);
         }
 
-        ingestVerseData(data, autoplay);
+        if (!ingestVerseDeferText(target.reciter, shard, target.verseRef, autoplay)) {
+            console.error('Random target verse missing from shard:', target);
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -520,6 +521,41 @@
         } catch {
             /* prewarm is best-effort */
         }
+    }
+
+    /** Assemble + ingest a verse, deferring the heavy qpc/dk word-text dicts
+     *  (~3MB gz) off the first-paint path. Paints immediately with whatever text
+     *  is already cached (empty on the very first verse of a session → waveform
+     *  + audio + phonemes render now, Arabic word text fills in a beat later),
+     *  then re-assembles with full text once the dicts resolve — display-only,
+     *  never re-touching audio (verse timing is text-independent). Returns false
+     *  when the verse isn't in the shard. */
+    function ingestVerseDeferText(
+        reciter: string,
+        shard: TsShardResponse,
+        verseRef: string,
+        autoplay: boolean,
+    ): boolean {
+        const data = assembleVerseFromShard(
+            reciter, shard, verseRef, qpcIfReady() ?? {}, dkIfReady() ?? {});
+        if (!data) return false;
+        ingestVerseData(data, autoplay);
+        // Phase 2: re-assemble with full text once the dicts land, if this is
+        // still the loaded verse. Skipped when both were already resident.
+        if (qpcIfReady() === null || dkIfReady() === null) {
+            void Promise.all([loadQpc(), loadDk()]).then(([qpc, dk]) => {
+                const lv = get(loadedVerse);
+                if (!lv || lv.data.reciter !== reciter || lv.data.verse_ref !== verseRef) return;
+                const full = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk);
+                if (!full) return;
+                loadedVerse.set({
+                    data: full,
+                    tsSegOffset: full.time_start_ms / 1000,
+                    tsSegEnd: full.time_end_ms / 1000,
+                });
+            }).catch(() => {});
+        }
+        return true;
     }
 
     function ingestVerseData(data: TsDataResponse, autoplay: boolean = true): void {
