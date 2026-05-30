@@ -3,6 +3,7 @@ import { get } from 'svelte/store';
 import { fetchJson } from '../../../../lib/api';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../../../lib/types/api';
 import type { Segment, SegmentPeaks } from '../../../../lib/types/domain';
+import { b64ToInt8 } from '../../../../lib/utils/peaks-decode';
 import { getWaveformPeaks, setWaveformPeaks } from '../../../../lib/utils/waveform-cache';
 import {
     getAdjacentSegments,
@@ -81,9 +82,9 @@ export function indexHistoryPeaksRecords(
             || typeof b64 !== 'string' || b64.length === 0) continue;
         const durationMs = endMs - startMs;
         if (durationMs <= 0) continue;
-        // Pass b64.length as a generous cap so `_b64ToInt8` decodes the full
+        // Pass b64.length as a generous cap so `b64ToInt8` decodes the full
         // payload (it min()s against the decoded byte length).
-        const peaks = _b64ToInt8(b64, b64.length);
+        const peaks = b64ToInt8(b64, b64.length);
         if (peaks.length === 0) continue;
         pushSegPeaksEntry(url, {
             startMs,
@@ -200,31 +201,6 @@ function _stableHash(input: string): string {
     return (h >>> 0).toString(16).padStart(8, '0').slice(0, 8);
 }
 
-/**
- * Decode a base64-encoded int8 buffer into a fresh ``Int8Array``.
- *
- * Chapter peaks travel the wire in the slim envelope
- * ``{q:'int8', n, peaks_b64, bps, duration_ms}`` per audio URL; FE decodes
- * ``peaks_b64`` → ``Int8Array(n * 2)`` once on receive and the drawer reads
- * the typed array directly via ``peaks-view.ts``. See
- * ``the inspector-audio skill``.
- *
- * Why ``atob`` + ``charCodeAt``: fastest browser-portable path at chapter
- * scale (≤ 144 KB per chapter). ``Uint8Array.from`` with a callback pays a
- * function call per byte; ``Response.arrayBuffer`` has higher fixed
- * overhead than the loop saves below ~1 MB.
- */
-function _b64ToInt8(b64: string, n: number): Int8Array {
-    const bin = atob(b64);
-    const len = Math.min(bin.length, n * 2);
-    const out = new Int8Array(len);
-    for (let i = 0; i < len; i++) {
-        // charCodeAt returns 0-255; reinterpret as signed int8.
-        out[i] = (bin.charCodeAt(i) << 24) >> 24;
-    }
-    return out;
-}
-
 export function _fetchPeaks(reciter: string, chapters: Array<number | string>): void {
     if (_peaksPollTimer) { clearTimeout(_peaksPollTimer); _peaksPollTimer = null; }
     if (!chapters || chapters.length === 0) return;
@@ -258,7 +234,7 @@ export function _fetchPeaks(reciter: string, chapters: Array<number | string>): 
             };
             if (entry.q !== 'int8' || typeof entry.peaks_b64 !== 'string' || typeof entry.n !== 'number') continue;
             setWaveformPeaks(audioUrl, {
-                peaks: _b64ToInt8(entry.peaks_b64, entry.n),
+                peaks: b64ToInt8(entry.peaks_b64, entry.n),
                 duration_ms: entry.duration_ms ?? 0,
             });
         }
