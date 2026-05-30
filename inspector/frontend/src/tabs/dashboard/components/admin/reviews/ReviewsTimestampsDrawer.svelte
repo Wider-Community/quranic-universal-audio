@@ -325,9 +325,9 @@
     .drawer {
         position: absolute;
         top: 0; right: 0; bottom: 0;
-        width: 62%;
-        max-width: 720px;
-        min-width: 440px;
+        width: 46%;
+        max-width: 540px;
+        min-width: 420px;
         background: var(--panel);
         border-left: 1px solid var(--border-quiet);
         z-index: 5;
