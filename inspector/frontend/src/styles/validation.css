@@ -84,6 +84,41 @@
     overflow-wrap: anywhere;
 }
 
+.val-guide-btn {
+    /* Sit to the LEFT of the disclosure arrow (a summary::before pseudo, which
+       is otherwise always the first flex item). order:-1 pulls the button
+       ahead of it. */
+    order: -1;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #384563;
+    border-radius: 50%;
+    background: #101a33;
+    color: #bfc9e5;
+    cursor: pointer;
+    font-size: 0.78rem;
+    line-height: 1;
+}
+
+.val-guide-btn:hover,
+.val-guide-btn:focus-visible {
+    background: #1c2b50;
+    color: #fff;
+    outline: none;
+}
+
+/* Unread: the signed-in user hasn't opened this guide yet. Swap the neutral
+   border for the app's signature cyan accent (+ a faint halo) so the ? pops
+   out as a deliberate, not-yet-read entry point. Clears once opened. */
+.val-guide-btn.unread {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-tint);
+}
+
 .lc-slider-row {
     display: flex;
     align-items: center;
