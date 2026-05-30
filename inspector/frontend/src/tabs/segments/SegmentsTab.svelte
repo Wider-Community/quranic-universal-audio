@@ -344,7 +344,7 @@
     <!-- StatsPanel transitively imports chart.js (~85 KB br). Lazy-load so
          the charts chunk only ships when a maintainer/owner actually views
          the Segments tab — Dashboard / non-admin visitors never pay this cost. -->
-    {#if $currentUser.role === 'maintainer' || $currentUser.role === 'owner'}
+    {#if ($currentUser.role === 'maintainer' || $currentUser.role === 'owner') && !$historyVisible && !$savePreviewVisible}
         {#await import('./components/stats/StatsPanel.svelte') then mod}
             <svelte:component this={mod.default} />
         {/await}
