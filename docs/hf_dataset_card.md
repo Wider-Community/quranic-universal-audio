@@ -1,5 +1,5 @@
 ---
-license: apache-2.0
+license: cc-by-4.0
 task_categories:
 - automatic-speech-recognition
 language:
@@ -114,7 +114,7 @@ dataset_info:
   <br>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/releases/latest"><img src="https://img.shields.io/github/v/release/Wider-Community/quranic-universal-audio?label=Release&color=4a5568" alt="Latest Release"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
-  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-4a5568" alt="License"></a>
+  <a href="https://github.com/Wider-Community/quranic-universal-audio/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-CC%20BY%204.0-4a5568" alt="License"></a>
 </p>
 
 <h1 align="center">Qur'anic Universal Ayahs</h1>
@@ -283,4 +283,4 @@ Audio is processed through a multi-stage pipeline:
 
 ## License
 
-[Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)

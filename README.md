@@ -14,15 +14,13 @@
   <a href="https://discord.gg/cZ3V2FynXz"><img src="https://img.shields.io/badge/Discord-Join-5865f2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
-<p align="center">The all-in-one audio and timing hub for Qur'anic apps, developers, and researchers. A community-verified dataset of 350+ reciters with word- and letter-level timestamps across 16 riwayat.</p>
-
-https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
+<p align="center">The all-in-one audio and timing hub for Qur'anic apps, developers, and researchers. A community-verified unifying recitations at scale with word- and letter-level timestamps.</p>
 
 ## Key Highlights
 
-- **Unified Qur'anic audio hub** — A single consistent schema with comprehensive metadata for all recitations. No more chasing scattered websites, CDN APIs, YouTube playlists, and raw files with different formats, surah/ayah splits, and inconsistent reciter names.
+- **Unified Qur'anic audio hub** — A single consistent schema with comprehensive metadata for all recitations instead of scattered websites, CDN APIs, YouTube playlists, and raw files with different formats and inconsistent metadata.
 
-- **Large-scale, multi-riwayah, multi-style** — Full Qur'an coverage for [350+ reciters and 14 riwayat](data/RECITERS.md) spanning mujawwad, murattal, muallim, taraweeh and children repeat styles, with dedicated handling of wording and verse numbering differences across riwayat.
+- **Large-scale, multi-riwayah, multi-style** — Full Qur'an coverage for hundreds of recitations spanning mujawwad, murattal, muallim, taraweeh and children repeat styles.
 
 - **Phoneme-first alignment** — 20ms phoneme-level precision eliminates ambiguity at word boundaries and resolves tajweed effects like idgham where sounds merge across words. Powered by a state-of-the-art Qur'an-specific ASR model trained on hundreds of hours of diverse recitations, robust across styles, voices, and recording conditions.
 
@@ -34,12 +32,7 @@ https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
 
 - **Fully reproducible** — Every JSON file includes creation timestamp, models, parameters, config that produced it, with full traceability backed by Git versioning and documented GitHub Releases.
 
-## Data Access
-
-To access the audio or timestamps:
-
-1. **Direct download** — JSON files in [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)
-2. **Hugging Face Dataset** — [quranic-universal-ayahs](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)
+<!-- ## Data Access -->
 
 ## Technical Overview
 
@@ -47,22 +40,20 @@ To access the audio or timestamps:
   <img src="docs/quranic_universal_aligner_pipeline.svg" alt="Pipeline diagram">
 </p>
 
-The repository uses the following components:
-
 | Component | Description |
 |-----------|-------------|
-| [`data/`](data/) | Reference data, audio manifests, alignment output, and timestamps, alongside schemas and documentation |
 | [`Quranic Universal Aligner`](https://huggingface.co/spaces/hetchyy/quranic-universal-aligner) | Demo running on Hugging Face GPU demonstrating, also available via [API](docs/client_api.md) |
-| [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results (segments + timestamps validation lives here) |
-| [`scripts/lib/audio_manifest.py`](scripts/lib/audio_manifest.py) | Pre-pipeline audio manifest validation library (URL reachability, format, coverage) |
-| [`Request Form`](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) | Community request form and system for new reciter processing |
+| [`inspector/`](inspector/) | Entry website for browsing reciters, viewing timestmaps interactively and editing alignment results |
 | [quranic-phonemizer](https://github.com/Hetchy/Quranic-Phonemizer) | External package — Qur'an-specific G2P; the foundation that allows phoneme-level alignment |
 
 ## Contributing
 
-This is a community-based project. While the pipeline is ~95% automated, manual review is essential to guarantee quality. No expertise in tajweed or recitation rules is needed — fixing errors means things like missing words, over/under-segmentation, and low-confidence segments, all done through the inspector UI.
+Visit the [website](https://hetchyy-quranic-universal-audio.hf.space/) and read the overview info and editing guide to get started in contributing recitations and reviewing.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started, or [open an issue](https://github.com/Wider-Community/quranic-universal-audio/issues) for bugs and suggestions.
+Issues and pull requests are welcome. If you've found a bug or have a feature idea, open an [issue](https://github.com/Wider-Community/quranic-universal-audio/issues) or jump into the Discord.
+
+To contribute code to the webapp directly, fork the repo and see [inspector/README.md](inspector/README.md) for setup instructions.
 
 ## License
 
+[CC BY 4.0](LICENSE) — free to share and adapt with attribution.
