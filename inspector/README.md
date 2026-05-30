@@ -151,7 +151,7 @@ cd inspector/frontend && npm run check           # typecheck
 
 ## Tech stack
 
-- **Backend:** Python 3.11, Flask (Blueprints), `quranic-phonemizer`
+- **Backend:** Python 3.11, Flask (Blueprints)
 - **Frontend:** Svelte 4/5 + TypeScript + Vite
 - **Audio:** Web Audio API (waveform decoding/drawing), ffmpeg (server-side peak extraction)
 - **Storage:** SQLite synced to a Hugging Face bucket
