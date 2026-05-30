@@ -451,7 +451,7 @@
         position: absolute;
         bottom: calc(100% + var(--s-2));
         right: 0;
-        width: min(420px, calc(100vw - var(--s-4) * 2));
+        width: min(560px, calc(100vw - var(--s-4) * 2));
         padding: var(--s-2);
         background: var(--panel);
         border: 1px solid var(--border-default);

@@ -1,7 +1,7 @@
 <script lang="ts">
     /**
      * Surah picker popover — 6-column grid matching the ayah picker style.
-     * Each cell: number (left, small) · name_en / name_ar stacked on the right.
+     * Each cell: number (left, small, muted) · name_en / name_ar stacked right.
      */
     import { createEventDispatcher, onMount, tick } from 'svelte';
 
@@ -118,12 +118,13 @@
         flex-direction: row;
         align-items: center;
         gap: 4px;
-        padding: 4px 5px;
+        padding: 5px 6px;
         background: transparent;
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
         color: var(--text-secondary);
         cursor: pointer;
+        min-height: 36px;
         overflow: hidden;
         transition:
             border-color var(--t-fast),
@@ -140,16 +141,16 @@
         color: var(--accent);
         background: var(--accent-tint);
     }
+    /* Fixed width so 1–114 all reserve the same column */
     .num {
         font-family: var(--font-mono);
         font-size: 10px;
         font-variant-numeric: tabular-nums;
+        width: 20px;
         flex-shrink: 0;
-        min-width: 14px;
         text-align: right;
         color: var(--text-faint);
         line-height: 1;
-        align-self: center;
     }
     .cell.active .num {
         color: var(--accent);
@@ -157,14 +158,14 @@
     .names {
         display: flex;
         flex-direction: column;
-        gap: 1px;
+        gap: 2px;
         overflow: hidden;
         flex: 1;
         min-width: 0;
     }
     .name-en {
         font-size: 9px;
-        line-height: 1.25;
+        line-height: 1.2;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -172,7 +173,7 @@
     }
     .name-ar {
         font-size: 9.5px;
-        line-height: 1.25;
+        line-height: 1.2;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
