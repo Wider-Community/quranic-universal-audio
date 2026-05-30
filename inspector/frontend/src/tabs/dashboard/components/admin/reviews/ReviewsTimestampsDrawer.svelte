@@ -204,17 +204,19 @@
     <div class="drawer-body">
         <!-- Settings -->
         <section class="dsection">
-            <h3 class="dsection-head">Settings</h3>
             <div class="form">
-                <div class="beam-row">
-                    <label class="field beam-field">
-                        <span>Alignment beam</span>
-                        <input class="num" type="number" min="1" bind:value={beam} />
-                    </label>
-                    <label class="field">
-                        <span>Probe beams <em>optional</em></span>
-                        <input type="text" bind:value={probeBeamsRaw} placeholder="e.g. 35, 75" />
-                    </label>
+                <div class="settings-top">
+                    <h3 class="dsection-head settings-head">Settings</h3>
+                    <div class="beam-row">
+                        <label class="field beam-field">
+                            <span>Alignment beam</span>
+                            <input class="num" type="number" min="1" bind:value={beam} />
+                        </label>
+                        <label class="field">
+                            <span>Probe beams <em>optional</em></span>
+                            <input type="text" bind:value={probeBeamsRaw} placeholder="e.g. 35, 75" />
+                        </label>
+                    </div>
                 </div>
                 <p class="beams-preview">
                     <span class="lbl">beams</span>
@@ -398,13 +400,22 @@
         display: flex;
         flex-direction: column;
         gap: var(--s-4);
-        max-width: 420px;
+        max-width: 470px;
     }
+    /* "Settings" rides alongside the input row instead of claiming its own
+       line — kills the empty band under a lone heading. */
+    .settings-top {
+        display: flex;
+        align-items: flex-end;
+        gap: var(--s-4);
+    }
+    .settings-head { margin: 0 0 9px; flex-shrink: 0; }
+    .settings-top .beam-row { flex: 1; }
     /* Numeric beam sits beside the wider probe list — a 2-digit value never
        needs full width, and the pairing kills the stacked-box monotony. */
     .beam-row {
         display: grid;
-        grid-template-columns: 7.5rem 1fr;
+        grid-template-columns: 7rem 1fr;
         gap: var(--s-3);
         align-items: end;
     }
