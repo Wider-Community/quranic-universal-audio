@@ -69,7 +69,6 @@
 <svelte:window onkeydown={onKeydown} />
 
 {#if open}
-    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <div class="guides-gate-backdrop" role="presentation" onclick={onBackdropClick}>
         <div
             class="guides-gate-modal"

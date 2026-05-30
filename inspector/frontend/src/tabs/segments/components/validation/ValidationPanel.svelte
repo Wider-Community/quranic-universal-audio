@@ -24,6 +24,7 @@
     import { get } from 'svelte/store';
 
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
+    import { currentUser } from '../../../../lib/stores/current-user';
     import type {
         SegValAnyItem,
         SegValidateResponse,
@@ -34,11 +35,13 @@
     import { TAB_NAMES } from '../../../../lib/utils/constants';
     import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
     import { IssueRegistry } from '../../domain/registry';
+    import { hasAccordionGuide, isGuideRead } from '../../guides/registry';
     import { accordionPin, clearAccordionPin, pinAccordion } from '../../stores/accordion-pin';
     import { ensureAutoSplitMap } from '../../stores/auto-split';
     import { segAllData, selectedReciter } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
+    import { openGuideModal } from '../../stores/guides';
     import { playingSegmentIndex } from '../../stores/playback';
     import { segValidation, valUiLcThreshold, valUiMeasuredCardHeight,valUiOpenCategory, valUiScrollTop } from '../../stores/validation';
     import {
@@ -50,9 +53,6 @@
     import { resolveCardLeadSeg } from '../../utils/validation/card-lead-seg';
     import { filterStaleIssues } from '../../utils/validation/stale';
     import { _fetchPeaks } from '../../utils/waveform/utils';
-    import { currentUser } from '../../../../lib/stores/current-user';
-    import { hasAccordionGuide, isGuideRead } from '../../guides/registry';
-    import { openGuideModal } from '../../stores/guides';
     import ErrorCard from './ErrorCard.svelte';
 
     // ---- Props ----

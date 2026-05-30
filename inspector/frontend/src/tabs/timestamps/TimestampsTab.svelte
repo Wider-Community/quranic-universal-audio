@@ -16,6 +16,7 @@
     import { onMount } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { shadowPrewarm } from '../../lib/playback/shadow-audio';
     import {
         addBookmark,
         bookmarks,
@@ -27,6 +28,7 @@
     import type { TsReciter } from '../../lib/types/domain';
     import { getActiveTab } from '../../lib/utils/active-tab';
     import { LS_KEYS } from '../../lib/utils/constants';
+    import { ensureChapterPeaks } from '../../lib/utils/peaks-fetch';
     import { surahInfoReady } from '../../lib/utils/surah-info';
     import AnimationDisplay from './components/AnimationDisplay.svelte';
     import TimestampsAudio from './components/TimestampsAudio.svelte';
@@ -52,8 +54,6 @@
         loadVerseTranslations,
         tsPlayUrl,
     } from './services/ts_client';
-    import { ensureChapterPeaks } from '../../lib/utils/peaks-fetch';
-    import { shadowPrewarm } from '../../lib/playback/shadow-audio';
     import {
         granularity,
         showLetters,
@@ -66,13 +66,13 @@
         verseTranslations,
         viewMode,
     } from './stores/display';
+    import { tsLoading } from './stores/loading';
     import {
         autoAdvancing,
         loopTarget,
         tsPort,
         tsVbrChapters,
     } from './stores/playback';
-    import { tsLoading } from './stores/loading';
     import {
         chapters,
         loadedVerse,

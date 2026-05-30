@@ -4,7 +4,7 @@
  * buttons block. With `editingMode` in `guides_unread`, pressing E must open
  * the guide gate instead of beginning an edit; in an editable mode it proceeds.
  */
-import { readable, get } from 'svelte/store';
+import { get,readable } from 'svelte/store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { editingMode } from '../../../../lib/stores/editing-mode';
@@ -20,10 +20,13 @@ vi.mock('../edit/reference', () => ({ beginRefEdit: (...args: unknown[]) => begi
 // displayedSegments is a derived (read-only) store; override just it with a
 // one-segment list so KeyE resolves a target. Spread the original so every
 // other export keeps working for the rest of the import graph.
-vi.mock('../../stores/filters', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('../../stores/filters')>()),
-    displayedSegments: readable([{ index: 0, chapter: 1 }]),
-}));
+vi.mock('../../stores/filters', async (importOriginal) => {
+    const original = await importOriginal();
+    return {
+        ...(original as object),
+        displayedSegments: readable([{ index: 0, chapter: 1 }]),
+    };
+});
 
 import { handleSegmentsKey } from '../keyboard';
 

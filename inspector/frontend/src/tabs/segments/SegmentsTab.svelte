@@ -29,9 +29,8 @@
     import AccordionGuideModal from './components/validation/AccordionGuideModal.svelte';
     import GuidesGateModal from './components/validation/GuidesGateModal.svelte';
     import ValidationPanel from './components/validation/ValidationPanel.svelte';
-    import ShortcutsGuide from './ShortcutsGuide.svelte';
     import { allGuidesRead } from './guides/registry';
-    import { closeGuideModal, guideModal } from './stores/guides';
+    import ShortcutsGuide from './ShortcutsGuide.svelte';
     import { clearAccordionPin } from './stores/accordion-pin';
     import { autoSaveEnabled } from './stores/autosave';
     import {
@@ -45,6 +44,7 @@
     } from './stores/chapter';
     import { dirtyTick,isDirtyStore } from './stores/dirty';
     import { activeFilters } from './stores/filters';
+    import { closeGuideModal, guideModal } from './stores/guides';
     import { historyVisible } from './stores/history';
     import { savedFilterView, targetSegmentIndex } from './stores/navigation';
     import { segAudioElement, segListElement, waveformContainer } from './stores/playback';

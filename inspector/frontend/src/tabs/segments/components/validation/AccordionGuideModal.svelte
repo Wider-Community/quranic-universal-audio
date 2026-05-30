@@ -17,9 +17,9 @@
     } from '../../stores/history';
     import { createPreviewPlaybackContext } from '../../utils/playback/preview';
     import { indexHistoryPeaksRecords } from '../../utils/waveform/utils';
-    import SegmentRow from '../list/SegmentRow.svelte';
     import EditChainRow from '../history/EditChainRow.svelte';
     import HistoryOp from '../history/HistoryOp.svelte';
+    import SegmentRow from '../list/SegmentRow.svelte';
 
     export let category: string;
     export let opener: HTMLElement | null = null;
