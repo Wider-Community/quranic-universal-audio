@@ -69,6 +69,7 @@
         tsPort,
         tsVbrChapters,
     } from './stores/playback';
+    import { tsLoading } from './stores/loading';
     import {
         chapters,
         loadedVerse,
@@ -280,14 +281,21 @@
         chapter: number,
         verseRef: string,
     ): Promise<void> {
-        document.body.classList.add('loading');
+        // Single-flight: ignore re-entry while a load is in flight (the old
+        // body-level `pointer-events:none` gave this for free; tsLoading now
+        // does it locally). Guards keyboard/auto/click paths uniformly.
+        if (get(tsLoading)) return;
+        tsLoading.set(true);
         try {
-            const [shard, qpc, dk] = await Promise.all([
+            // vbr resolves concurrently (cached singleton in the common case)
+            // instead of a serial await after the shard.
+            const [shard, qpc, dk, vbr] = await Promise.all([
                 loadChapterShard(reciter, chapter),
                 loadQpc(),
                 loadDk(),
+                loadVbrChapters(reciter),
             ]);
-            tsVbrChapters.set(new Set(await loadVbrChapters(reciter)));
+            tsVbrChapters.set(new Set(vbr));
             const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk);
             if (!data) {
                 alert('Error: verse not found in shard');
@@ -298,7 +306,7 @@
             console.error('Error loading timestamp verse:', e);
             alert('Failed to load verse');
         } finally {
-            document.body.classList.remove('loading');
+            tsLoading.set(false);
         }
     }
 
@@ -306,53 +314,65 @@
         reciter: string | null = null,
         autoplay: boolean = true,
     ): Promise<void> {
-        document.body.classList.add('loading');
+        if (get(tsLoading)) return; // single-flight (storm guard)
+        tsLoading.set(true);
         try {
-            const target = reciter
-                ? consumePreroll('same') ?? await getRandomTarget({ reciter })
-                : consumePreroll('any') ?? await getRandomTarget();
-            if (!target) {
-                console.warn('No timestamp data available');
-                return;
-            }
-
-            const [shard, qpc, dk] = await Promise.all([
-                loadChapterShard(target.reciter, target.chapter),
-                loadQpc(),
-                loadDk(),
-            ]);
-            tsVbrChapters.set(new Set(await loadVbrChapters(target.reciter)));
-            const data = assembleVerseFromShard(target.reciter, shard, target.verseRef, qpc, dk);
-            if (!data) {
-                console.error('Random target verse missing from shard:', target);
-                return;
-            }
-
-            const reciterChanged = get(selectedReciter) !== data.reciter;
-            if (reciterChanged) {
-                selectedReciter.set(data.reciter);
-                localStorage.setItem(LS_KEYS.TS_RECITER, data.reciter);
-                try {
-                    const m = await loadManifest();
-                    chapters.set(m.reciters[data.reciter]?.ts_chapters ?? []);
-                } catch {
-                    chapters.set([]);
-                }
-            }
-            if (reciterChanged || get(selectedChapter) !== String(data.chapter)) {
-                selectedChapter.set(String(data.chapter));
-                await populateVersesFor(data.reciter, data.chapter);
-            }
-
-            ingestVerseData(data, autoplay);
+            await loadRandomTimestampInner(reciter, autoplay);
         } catch (e) {
             console.error('Error loading random timestamp:', e);
         } finally {
-            document.body.classList.remove('loading');
+            tsLoading.set(false);
             // Refresh both pre-rolls in parallel — fire-and-forget; the cache
             // they leave behind makes the next click instant.
             primePrerolls();
         }
+    }
+
+    /** Body of the random load WITHOUT the single-flight guard, so the
+     *  bookmark-deep-link path (which already holds tsLoading) can fall back
+     *  to it without self-deadlocking on the guard. */
+    async function loadRandomTimestampInner(
+        reciter: string | null,
+        autoplay: boolean,
+    ): Promise<void> {
+        const target = reciter
+            ? consumePreroll('same') ?? await getRandomTarget({ reciter })
+            : consumePreroll('any') ?? await getRandomTarget();
+        if (!target) {
+            console.warn('No timestamp data available');
+            return;
+        }
+
+        const [shard, qpc, dk, vbr] = await Promise.all([
+            loadChapterShard(target.reciter, target.chapter),
+            loadQpc(),
+            loadDk(),
+            loadVbrChapters(target.reciter),
+        ]);
+        tsVbrChapters.set(new Set(vbr));
+        const data = assembleVerseFromShard(target.reciter, shard, target.verseRef, qpc, dk);
+        if (!data) {
+            console.error('Random target verse missing from shard:', target);
+            return;
+        }
+
+        const reciterChanged = get(selectedReciter) !== data.reciter;
+        if (reciterChanged) {
+            selectedReciter.set(data.reciter);
+            localStorage.setItem(LS_KEYS.TS_RECITER, data.reciter);
+            try {
+                const m = await loadManifest();
+                chapters.set(m.reciters[data.reciter]?.ts_chapters ?? []);
+            } catch {
+                chapters.set([]);
+            }
+        }
+        if (reciterChanged || get(selectedChapter) !== String(data.chapter)) {
+            selectedChapter.set(String(data.chapter));
+            await populateVersesFor(data.reciter, data.chapter);
+        }
+
+        ingestVerseData(data, autoplay);
     }
 
     // ---------------------------------------------------------------------
@@ -376,7 +396,8 @@
         ayah: number,
         autoplay: boolean = true,
     ): Promise<void> {
-        document.body.classList.add('loading');
+        if (get(tsLoading)) return; // single-flight
+        tsLoading.set(true);
         const verseRef = `${surah}:${ayah}`;
         try {
             const m = await loadManifest();
@@ -407,12 +428,13 @@
             }
             // No published reciter has this exact verse — fall back to random
             // so the tab still shows something rather than an empty state.
+            // Use the inner (un-guarded) form: we already hold tsLoading.
             console.warn(`No reciter found for ${verseRef}; falling back to random`);
-            await loadRandomTimestamp(null, autoplay);
+            await loadRandomTimestampInner(null, autoplay);
         } catch (e) {
             console.error('Error loading bookmarked verse:', e);
         } finally {
-            document.body.classList.remove('loading');
+            tsLoading.set(false);
             primePrerolls();
         }
     }
@@ -690,7 +712,7 @@
             on:randomCurrent={() => loadRandomTimestamp(get(selectedReciter) || null)}
         />
 
-        <div class="waveform-words-row">
+        <div class="waveform-words-row" class:ts-region-loading={$tsLoading}>
             <TimestampsWaveform bind:this={waveformTabEl} />
             <div hidden={$viewMode === TS_VIEW_MODES.ANIMATION}>
                 <UnifiedDisplay bind:this={unifiedEl} />
@@ -703,6 +725,16 @@
 </div>
 
 <style>
+    /* Localized load dim: only the waveform+display region fades while a verse
+       loads, instead of the old document.body 50% full-page grey-out. Keeps the
+       previous verse visible (least jarring) and leaves controls interactive. */
+    .waveform-words-row {
+        transition: opacity 0.12s ease;
+    }
+    .waveform-words-row.ts-region-loading {
+        opacity: 0.55;
+        pointer-events: none;
+    }
     .ts-bookmark-row {
         display: flex;
         justify-content: center;
