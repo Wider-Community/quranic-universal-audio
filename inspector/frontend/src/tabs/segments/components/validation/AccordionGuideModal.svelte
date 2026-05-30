@@ -7,6 +7,7 @@
     import OverviewContent from '../../../../lib/components/info/OverviewContent.svelte';
     import { currentUser, loadCurrentUser, markGuideReadLocally } from '../../../../lib/stores/current-user';
     import type { HistoryBatch } from '../../../../lib/types/domain';
+    import EditingGuideContent from '../../guides/editing/EditingGuideContent.svelte';
     import { getGuideExample } from '../../guides/examples';
     import { guideTitleFromBlocks, parseGuideSource } from '../../guides/parser';
     import { getAccordionGuide, guideViewKey, isGuideRead } from '../../guides/registry';
@@ -18,7 +19,6 @@
     } from '../../stores/history';
     import { createPreviewPlaybackContext } from '../../utils/playback/preview';
     import { indexHistoryPeaksRecords } from '../../utils/waveform/utils';
-    import EditingGuideContent from '../../guides/editing/EditingGuideContent.svelte';
     import EditChainRow from '../history/EditChainRow.svelte';
     import HistoryOp from '../history/HistoryOp.svelte';
     import SegmentRow from '../list/SegmentRow.svelte';

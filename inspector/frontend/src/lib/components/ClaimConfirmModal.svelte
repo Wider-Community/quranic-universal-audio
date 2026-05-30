@@ -11,12 +11,12 @@
 <script lang="ts">
     import { get } from 'svelte/store';
 
+    import { loadCatalog } from '../../tabs/dashboard/stores/catalog-data';
     import { claim } from '../api/claims-client';
     import { refreshReciterTask } from '../api/reciter-task';
     import { claimConfirmModal, closeClaimConfirm } from '../stores/claim-confirm-modal';
     import { currentUser, loadCurrentUser } from '../stores/current-user';
     import { titleCaseSlug } from '../utils/delivery-label';
-    import { loadCatalog } from '../../tabs/dashboard/stores/catalog-data';
 
     let busy = false;
 

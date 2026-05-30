@@ -2,9 +2,9 @@ import { render, waitFor } from '@testing-library/svelte';
 import { get } from 'svelte/store';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { selectedReciter } from '../../../tabs/segments/stores/chapter';
 import { claimConfirmModal, closeClaimConfirm } from '../../stores/claim-confirm-modal';
 import { editPopover, showEditPopover } from '../../stores/edit-popover';
-import { selectedReciter } from '../../../tabs/segments/stores/chapter';
 import EditAffordancePopover from '../EditAffordancePopover.svelte';
 
 afterEach(() => {

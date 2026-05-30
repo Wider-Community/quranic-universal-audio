@@ -8,7 +8,6 @@
      * `overview.md`.
      */
     import StatePill from '../StatePill.svelte';
-
     import type { InlineToken } from './info-doc';
     import { overviewDoc } from './overview';
 </script>

@@ -1,10 +1,10 @@
 import { get } from 'svelte/store';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { selectedReciter } from '../../../tabs/segments/stores/chapter';
 import { activeTab } from '../active-tab';
 import { LS_KEYS, TAB_NAMES } from '../constants';
 import { gotoSegments } from '../goto-segments';
-import { selectedReciter } from '../../../tabs/segments/stores/chapter';
 
 afterEach(() => {
     selectedReciter.set('');

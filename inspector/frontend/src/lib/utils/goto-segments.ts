@@ -9,9 +9,9 @@
  * so a refresh lands back on the same reciter.
  */
 
+import { selectedReciter } from '../../tabs/segments/stores/chapter';
 import { setActiveTab } from './active-tab';
 import { LS_KEYS, TAB_NAMES } from './constants';
-import { selectedReciter } from '../../tabs/segments/stores/chapter';
 
 export function gotoSegments(slug: string): void {
     if (!slug) return;

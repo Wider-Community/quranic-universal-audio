@@ -71,13 +71,13 @@
         viewMode,
     } from './stores/display';
     import { tsLoading } from './stores/loading';
-    import { tsValidation } from './stores/validation';
     import {
         autoAdvancing,
         loopTarget,
         tsPort,
         tsVbrChapters,
     } from './stores/playback';
+    import { tsValidation } from './stores/validation';
     import {
         chapters,
         loadedVerse,

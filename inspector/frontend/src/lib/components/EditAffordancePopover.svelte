@@ -5,16 +5,15 @@
 -->
 <script lang="ts">
     import { onDestroy, onMount, tick } from 'svelte';
-
     import { get } from 'svelte/store';
 
+    import { selectedReciter } from '../../tabs/segments/stores/chapter';
     import { refreshReciterTask } from '../api/reciter-task';
     import { openClaimConfirm } from '../stores/claim-confirm-modal';
     import {
         editPopover,
         hideEditPopover,
     } from '../stores/edit-popover';
-    import { selectedReciter } from '../../tabs/segments/stores/chapter';
 
     let popoverEl: HTMLDivElement | null = null;
     let top = 0;
