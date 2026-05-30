@@ -407,6 +407,21 @@ export function audioUrlFor(
 }
 
 /**
+ * Resolve the URL the `<audio>` element should actually load for a TS verse.
+ *
+ * by_surah audio is routed through the audio-proxy so the bucket-mounted file
+ * (or CDN stream-through) is served via sendfile + Range/304; by_ayah / already
+ * proxied URLs pass through. ONE source of truth so the prewarm path and the
+ * real-play path produce byte-identical URLs (otherwise the shadow-audio prewarm
+ * fills a different cache key than playback reads → silent miss).
+ */
+export function tsPlayUrl(reciter: string, audioUrl: string, audioCategory: string): string {
+    return (audioCategory === 'by_surah_audio' && audioUrl && !audioUrl.startsWith('/api/'))
+        ? `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`
+        : audioUrl;
+}
+
+/**
  * Pure port of `inspector/services/ts_query.py:get_verse_data`.
  *
  * Builds the full `TsVerseData` payload from a shard verse row plus

@@ -50,7 +50,10 @@
         loadQpc,
         loadVbrChapters,
         loadVerseTranslations,
+        tsPlayUrl,
     } from './services/ts_client';
+    import { ensureChapterPeaks } from '../../lib/utils/peaks-fetch';
+    import { shadowPrewarm } from '../../lib/playback/shadow-audio';
     import {
         granularity,
         showLetters,
@@ -464,19 +467,59 @@
     }
 
     /** Re-roll both pre-rolls. Their shards are pre-fetched into the LRU
-     *  by `getRandomTarget` itself, so consuming the pre-roll is dict-fast. */
+     *  by `getRandomTarget` itself, so consuming the pre-roll is dict-fast.
+     *  Each resolved target ALSO warms its chapter peaks (both kinds) and —
+     *  for random-any only — its audio, so a Random click / auto-advance to a
+     *  pre-rolled target renders the waveform from cache and reaches `canplay`
+     *  in low tens of ms. */
     function primePrerolls(): void {
         const reciter = get(selectedReciter) || null;
         if (reciter) {
             getRandomTarget({ reciter })
-                .then((t) => { nextRandomSame = t; })
+                .then((t) => { nextRandomSame = t; warmPreroll(t, false); })
                 .catch(() => { nextRandomSame = null; });
         } else {
             nextRandomSame = null;
         }
+        // Warm random-any LAST and with audio: the shadow-audio helper has a
+        // single URL slot, so the most-common auto-advance/Random default wins
+        // it. random-current gets peaks prewarmed but not audio.
         getRandomTarget()
-            .then((t) => { nextRandomAny = t; })
+            .then((t) => { nextRandomAny = t; warmPreroll(t, true); })
             .catch(() => { nextRandomAny = null; });
+    }
+
+    /** Fire-and-forget warmers for a pre-roll target. Always warms the chapter
+     *  peaks (deduped per chapter in ensureChapterPeaks); warms audio only when
+     *  `warmAudio` (single shadow-audio slot). No-op for the currently-loaded
+     *  verse. Every step is wrapped so one failure never rejects the other. */
+    async function warmPreroll(
+        t: { reciter: string; chapter: number; verseRef: string } | null,
+        warmAudio: boolean,
+    ): Promise<void> {
+        if (!t) return;
+        const cur = get(loadedVerse)?.data;
+        if (cur && cur.reciter === t.reciter && cur.chapter === t.chapter
+            && cur.verse_ref === t.verseRef) {
+            return;
+        }
+        // Peaks: cheap GET-once-per-chapter, cached by reciter:chapter.
+        ensureChapterPeaks(t.reciter, t.chapter).catch(() => {});
+        if (!warmAudio) return;
+        try {
+            const shard = await loadChapterShard(t.reciter, t.chapter); // LRU hit
+            const meta = shard._meta;
+            const head = t.verseRef.split('-')[0] ?? t.verseRef;
+            const [s, a] = head.split(':');
+            const surah = parseInt(s ?? '0', 10);
+            const ayah = parseInt(a ?? '0', 10);
+            const rawUrl = audioUrlFor(meta, surah, ayah);
+            if (!rawUrl) return;
+            const cat = meta.audio_category === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio';
+            shadowPrewarm(tsPlayUrl(t.reciter, rawUrl, cat));
+        } catch {
+            /* prewarm is best-effort */
+        }
     }
 
     function ingestVerseData(data: TsDataResponse, autoplay: boolean = true): void {
@@ -493,11 +536,7 @@
         // sendfile + Range/304. Falls through to a CDN stream-through inside
         // the proxy when the chapter isn't prefetched. Sending the browser
         // straight at the CDN URL wastes the prefetch and bills upstream.
-        const playUrl = (data.audio_category === 'by_surah_audio'
-            && data.audio_url
-            && !data.audio_url.startsWith('/api/'))
-            ? `/api/seg/audio-proxy/${data.reciter}?url=${encodeURIComponent(data.audio_url)}`
-            : data.audio_url;
+        const playUrl = tsPlayUrl(data.reciter, data.audio_url, data.audio_category);
         tsPort.setSource({
             audioUrl: data.audio_url,
             cbrSrc: playUrl,
