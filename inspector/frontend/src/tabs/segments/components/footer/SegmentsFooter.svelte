@@ -1080,7 +1080,7 @@
     .pop-surah {
         left: 50%;
         transform: translateX(-50%);
-        width: min(560px, calc(100vw - var(--s-4) * 2));
+        width: min(700px, calc(100vw - var(--s-4) * 2));
     }
     .pop-ayah {
         left: 50%;

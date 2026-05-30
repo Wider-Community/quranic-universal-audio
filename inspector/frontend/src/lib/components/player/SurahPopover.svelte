@@ -90,7 +90,7 @@
         width: 100%;
         display: flex;
         flex-direction: column;
-        max-height: min(480px, 70vh);
+        max-height: min(520px, 75vh);
     }
     .search {
         flex: 0 0 auto;
@@ -118,13 +118,13 @@
         flex-direction: row;
         align-items: center;
         gap: 4px;
-        padding: 5px 6px;
+        padding: 7px 6px;
         background: transparent;
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
         color: var(--text-secondary);
         cursor: pointer;
-        min-height: 36px;
+        min-height: 47px;
         overflow: hidden;
         transition:
             border-color var(--t-fast),
@@ -141,10 +141,10 @@
         color: var(--accent);
         background: var(--accent-tint);
     }
-    /* Fixed width so 1–114 all reserve the same column */
+    /* Fixed width reserves the same column for 1–114 */
     .num {
         font-family: var(--font-mono);
-        font-size: 10px;
+        font-size: 10.5px;
         font-variant-numeric: tabular-nums;
         width: 20px;
         flex-shrink: 0;
@@ -164,7 +164,7 @@
         min-width: 0;
     }
     .name-en {
-        font-size: 9px;
+        font-size: 10px;
         line-height: 1.2;
         white-space: nowrap;
         overflow: hidden;
@@ -172,7 +172,7 @@
         color: var(--text-secondary);
     }
     .name-ar {
-        font-size: 9.5px;
+        font-size: 10.5px;
         line-height: 1.2;
         white-space: nowrap;
         overflow: hidden;
