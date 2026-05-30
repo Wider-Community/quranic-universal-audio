@@ -115,6 +115,34 @@ def _status_str(info) -> str:
     return str(stage if stage is not None else status or "").lower()
 
 
+def _resolve_launched_job_id(slug: str) -> str | None:
+    """Return the canonical HF job id for the most recently launched job for
+    ``slug``. ``run_job()``'s returned id is transient and does not match the
+    container's injected ``JOB_ID``; ``list_jobs`` reports the canonical id
+    (the one the job self-writes its record under). Picks the newest
+    non-terminal job with our label."""
+    from huggingface_hub import list_jobs
+
+    try:
+        candidates = []
+        for job in list_jobs():
+            labels = getattr(job, "labels", {}) or {}
+            if labels.get("task") == "timestamps" and labels.get("reciter") == slug:
+                candidates.append(job)
+        # Prefer the newest non-terminal job with our label (the one just
+        # launched). If the new job isn't listed yet (brief post-submit race),
+        # the caller falls back to run_job()'s id — job_status() later reconciles
+        # via the terminal-status backstop once the canonical id is known.
+        for job in reversed(candidates):
+            if _status_str(job) not in _TERMINAL:
+                return _job_id(job)
+        if candidates:
+            return _job_id(candidates[-1])
+    except Exception as exc:  # never block a launch on a list failure
+        log.warning("resolve launched job id for %s failed: %s", slug, exc)
+    return None
+
+
 def launch(slug: str, *, settings: TsJobSettings) -> dict:
     """Launch the timestamps job for ``slug`` and link its id to the reciter.
 
@@ -174,7 +202,12 @@ def launch(slug: str, *, settings: TsJobSettings) -> dict:
         ],
         labels={"task": "timestamps", "reciter": slug},
     )
-    job_id = _job_id(job)
+    # CAVEAT: ``run_job()`` returns a transient submission id that does NOT
+    # match the container's injected ``JOB_ID`` (the canonical id ``list_jobs``
+    # / ``inspect_job`` use, and the one the job self-writes its record under).
+    # Resolve the canonical id from the freshly-labelled job so the launcher,
+    # the reciter link, and the job's self-written record all agree.
+    job_id = _resolve_launched_job_id(slug) or _job_id(job)
     url = getattr(job, "url", None)
     if job_id:
         state_service.record_timestamps_job(slug, job_id)
