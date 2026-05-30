@@ -110,10 +110,6 @@
         void loadCatalog(true);
     }
 
-    // Re-sync editing mode whenever the currentUser store updates (e.g.
-    // after sign-in or after access revoke).
-    $: setEditingMode(syncEditingMode($currentUser, reciterTask));
-
     // Out-of-band reciter changes: the admin Reviews tab's Segments deep-link
     // sets ``$selectedReciter`` directly (no picker event), so a reactive
     // subscription is what triggers the same _bindTask + onReciterChange
