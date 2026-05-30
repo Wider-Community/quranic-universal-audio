@@ -12,6 +12,7 @@
     } from '../../../lib/catalog/schema-descriptor';
     import PickerFilterRail from '../../../lib/components/picker/PickerFilterRail.svelte';
     import SearchInput from '../../../lib/components/SearchInput.svelte';
+    import { openInfoModal } from '../../../lib/stores/info-modal';
     import { playerContext } from '../../../lib/stores/player-context';
     import { bucketRank, type PublicDelivery, type PublicReciter } from '../../../lib/types/public-state';
     import { axisLabel as axisLabelOf, tagLabel as tagLabelOf } from '../../../lib/utils/axis-labels';
@@ -21,7 +22,6 @@
     import ActivityRail from '../components/ActivityRail.svelte';
     import type { RowEntry } from '../components/CatalogTable.svelte';
     import CatalogTable from '../components/CatalogTable.svelte';
-    import InfoModal from '../components/info/InfoModal.svelte';
     import SubmitWizard from '../components/submit/SubmitWizard.svelte';
     import { catalogData, loadCatalog } from '../stores/catalog-data';
     import {
@@ -39,7 +39,6 @@
         void loadCatalog();
     });
 
-    let infoOpen = false;
     let descriptor: SchemaDescriptor | null = null;
     $: allDeliveries = $catalogData.reciters.flatMap((r) => r.deliveries);
     $: if (allDeliveries.length > 0 && descriptor === null) {
@@ -180,7 +179,7 @@
                     class="info-btn"
                     aria-label="About this project"
                     title="About this project"
-                    on:click={() => (infoOpen = true)}
+                    on:click={openInfoModal}
                 >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" />
@@ -325,6 +324,33 @@
         transform: rotate(90deg);
     }
     .sr-label { letter-spacing: 0.01em; }
+
+    .info-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        flex-shrink: 0;
+        background: transparent;
+        color: var(--text-muted);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+        cursor: pointer;
+        transition: color var(--t-fast),
+                    border-color var(--t-fast),
+                    background var(--t-fast);
+    }
+    .info-btn:hover {
+        color: var(--text-primary);
+        border-color: var(--border-strong);
+        background: var(--panel);
+    }
+    .info-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }
+    .info-btn svg { display: block; }
 
     .grid {
         display: grid;

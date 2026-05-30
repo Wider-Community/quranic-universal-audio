@@ -84,3 +84,90 @@ def test_backstop_sets_terminal_status_on_running_record(fake_hf, monkeypatch):
     assert written["status"] == "failed"
     assert written["logs"] == ["line1", "line2"]
     assert written.get("ended_at")  # backfilled
+
+
+# ---------------------------------------------------------------------------
+# complete_timestamps_job — auto-release orchestrator
+# ---------------------------------------------------------------------------
+
+
+def _seed_marked_ready(slug: str = "rec_a") -> None:
+    """Seed an under_review reciter with an open, marked-ready claim."""
+    from tests.conftest import _seed_state
+
+    _seed_state(slug, state="under_review", assignee_hf_id="u-rev",
+                marked_ready=True)
+
+
+def test_complete_publishes_marked_ready(monkeypatch):
+    from services.state import state as state_service
+
+    _seed_marked_ready("rec_a")
+    monkeypatch.setattr(timestamps_jobs, "_has_any_shard", lambda slug: True)
+
+    out = timestamps_jobs.complete_timestamps_job("rec_a", "job-1")
+
+    assert out["released"] is True
+    assert out["state"] == "released"
+    row = state_service.get_row("rec_a")
+    assert row.state.value == "released"
+    assert row.assignee_hf_id is None
+    assert row.timestamps_job_ids == ["job-1"]
+
+
+def test_complete_noop_when_already_released(monkeypatch):
+    from tests.conftest import _seed_state
+
+    _seed_state("rec_a", state="released")
+    monkeypatch.setattr(timestamps_jobs, "_has_any_shard", lambda slug: True)
+
+    out = timestamps_jobs.complete_timestamps_job("rec_a", "job-1")
+
+    assert out["released"] is False
+    assert out["reason"] == "already released"
+
+
+def test_complete_noop_when_not_marked_ready(monkeypatch):
+    from services.state import state as state_service
+    from tests.conftest import _seed_state
+
+    _seed_state("rec_a", state="under_review", assignee_hf_id="u-rev")
+    monkeypatch.setattr(timestamps_jobs, "_has_any_shard", lambda slug: True)
+
+    out = timestamps_jobs.complete_timestamps_job("rec_a", "job-1")
+
+    assert out["released"] is False
+    assert state_service.get_row("rec_a").state.value == "under_review"
+
+
+def test_complete_refuses_when_no_shards(monkeypatch):
+    from services.state import state as state_service
+
+    _seed_marked_ready("rec_a")
+    monkeypatch.setattr(timestamps_jobs, "_has_any_shard", lambda slug: False)
+
+    out = timestamps_jobs.complete_timestamps_job("rec_a", "job-1")
+
+    assert out["released"] is False
+    assert out["reason"] == "no shards"
+    assert state_service.get_row("rec_a").state.value == "under_review"
+
+
+def test_complete_is_idempotent_on_double_call(monkeypatch):
+    from services.state import state as state_service
+
+    _seed_marked_ready("rec_a")
+    monkeypatch.setattr(timestamps_jobs, "_has_any_shard", lambda slug: True)
+
+    first = timestamps_jobs.complete_timestamps_job("rec_a", "job-1")
+    second = timestamps_jobs.complete_timestamps_job("rec_a", "job-1")
+
+    assert first["released"] is True
+    assert second["released"] is False  # already released → no-op
+    assert state_service.get_row("rec_a").state.value == "released"
+
+
+def test_complete_unknown_slug_is_noop():
+    out = timestamps_jobs.complete_timestamps_job("nope", "job-1")
+    assert out["released"] is False
+    assert out["reason"] == "unknown slug"

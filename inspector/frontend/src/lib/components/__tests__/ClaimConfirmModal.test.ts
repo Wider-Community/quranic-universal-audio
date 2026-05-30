@@ -56,7 +56,7 @@ describe('ClaimConfirmModal', () => {
         openClaimConfirm('reciter-x');
 
         const confirm = await waitFor(() => getByText('Confirm'));
-        expect(container.textContent).toContain('Claiming this reciter');
+        expect(container.textContent).toContain('Claiming this recitation');
         confirm.click();
         await waitFor(() => expect(claimMock).toHaveBeenCalledWith('reciter-x'));
     });

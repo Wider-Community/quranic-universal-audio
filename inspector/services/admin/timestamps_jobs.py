@@ -7,14 +7,19 @@ v2 per-chapter shards into the inspector bucket. Status is read live from HF
 (``inspect_job`` / ``fetch_job_logs``); the launched id is appended to the
 reciter's ``timestamps_job_ids``.
 
-Each run also gets a durable record at ``jobs/ts/<job_id>.json`` (settings +
-status + logs) so the side panel can show past runs after HF log retention
-expires. The record is written at launch (``running``), overwritten by the
-job on completion, and backstopped by ``job_status`` if the job is killed
-before self-writing. No SQLite — the record is a plain bucket file.
+Each run also gets a durable record at ``reciters/<slug>/jobs/ts/<job_id>.json``
+(settings + status + logs) so the side panel can show past runs after HF log
+retention expires. The record is written at launch (``running``), overwritten
+by the job on completion, and backstopped by ``job_status`` if the job is
+killed before self-writing. No SQLite — the record is a plain bucket file.
 
-Launching does NOT transition the reciter — it stays UNDER_REVIEW; this is
-job bookkeeping, not a lifecycle change. See
+Launching does NOT transition the reciter at launch — it stays UNDER_REVIEW
+(marked_ready) while the job runs, so a failed job is recoverable (just re-run).
+On *success* the reciter is published: ``complete_timestamps_job`` fires
+``reciter.published`` (under_review marked_ready → released) with
+``SYSTEM_ACTOR``. Two triggers reach it: the job POSTs to the webhook route on
+success (prod), and ``job_status`` calls it as an idempotent fallback when the
+drawer poll sees a terminal-success status (dev / missed webhook). See
 docs/planning/inspector-deploy/v2/phases/13-timestamps-job.md.
 """
 
@@ -36,6 +41,11 @@ log = logging.getLogger("inspector")
 _TERMINAL = ("succeeded", "completed", "failed", "error", "errored",
              "timed-out", "timeout", "stopped", "canceled", "cancelled",
              "deleted")
+# Terminal stages that mean the alignment finished cleanly. HF has reported
+# both "succeeded" and "completed" for clean exits across job types, so the
+# auto-release path treats either as success (the job's own self-POST always
+# sends the literal "succeeded").
+_TERMINAL_SUCCESS = ("succeeded", "completed")
 
 
 def _job_record_path(slug: str, job_id: str) -> str:
@@ -183,7 +193,7 @@ def _resolve_launched_job_id(slug: str) -> str | None:
     return None
 
 
-def launch(slug: str, *, settings: TsJobSettings) -> dict:
+def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = None) -> dict:
     """Launch the timestamps job for ``slug`` and link its id to the reciter.
 
     ``settings`` carries the admin's form choices (beams, persist_audio,
@@ -191,6 +201,15 @@ def launch(slug: str, *, settings: TsJobSettings) -> dict:
     Writes the initial ``running`` job record at launch so the panel can show
     it even if the job dies before self-writing. Returns ``{"job_id", "url"}``.
     Caller must enforce single-flight via ``running_job_for`` first.
+
+    Does NOT transition the reciter — it stays UNDER_REVIEW (marked_ready) while
+    the job runs. On *success* the reciter is published by
+    ``complete_timestamps_job`` (webhook + poll fallback). ``webhook_base`` is
+    the public URL root the route resolves from ``request.url_root`` (deployed
+    ProxyFix → ``https://…hf.space/``); combined with the
+    ``INSPECTOR_WEBHOOK_SECRET`` env it's threaded to the job so it can POST the
+    completion callback. Both absent (dev) → no callback; the poll fallback
+    releases instead.
     """
     from huggingface_hub import Volume, get_token, run_job
 
@@ -229,13 +248,25 @@ def launch(slug: str, *, settings: TsJobSettings) -> dict:
     flavor = settings.flavor or JOB_FLAVOR
     timeout = settings.timeout or JOB_TIMEOUT
 
+    secrets = {"HF_TOKEN": get_token()}
+    # Completion callback: thread the webhook URL + shared secret only when both
+    # the server has a secret configured AND we resolved a public base URL. The
+    # job POSTs {slug, job_id, status:"succeeded"} here on success so the
+    # reciter publishes immediately (the poll fallback covers the rest).
+    webhook_secret = os.environ.get("INSPECTOR_WEBHOOK_SECRET", "").strip()
+    if webhook_secret and webhook_base:
+        env["INSPECTOR_WEBHOOK_URL"] = (
+            webhook_base.rstrip("/") + "/api/webhooks/ts-job-complete"
+        )
+        secrets["INSPECTOR_WEBHOOK_SECRET"] = webhook_secret
+
     job = run_job(
         image=JOB_IMAGE,
         command=_job_command(),
         flavor=flavor,
         timeout=timeout,
         env=env,
-        secrets={"HF_TOKEN": get_token()},
+        secrets=secrets,
         volumes=[
             Volume(type="bucket", source=bucket, mount_path="/data"),
             Volume(type="bucket", source=ALIGNER_BUCKET, mount_path="/aux", read_only=True),
@@ -369,5 +400,89 @@ def job_status(slug: str, job_id: str, *, log_tail: int = 400) -> dict:
             except Exception as exc:  # noqa: BLE001
                 log.warning("backstop record %s failed: %s", job_id, exc)
 
+    # Auto-release fallback: if the job finished cleanly, publish the reciter.
+    # Idempotent + best-effort — the webhook is the primary trigger in prod;
+    # this catches dev (job can't reach localhost) when the drawer is polling,
+    # and any missed/late webhook. Never let a release failure break status.
+    if status in _TERMINAL_SUCCESS:
+        try:
+            complete_timestamps_job(slug, job_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("auto-release on poll for %s failed: %s", slug, exc)
+
     return {"job_id": job_id, "status": status, "logs": logs,
             "log_truncated": truncated}
+
+
+def complete_timestamps_job(slug: str, job_id: str) -> dict:
+    """Publish ``slug`` after its timestamps job succeeded. Idempotent.
+
+    The single auto-release path, reached from both the job-completion webhook
+    (prod) and the ``job_status`` poll fallback (dev / missed webhook). Reads
+    the row first and only fires when it's genuinely publishable, so a
+    double-fire (webhook + poll, or two concurrent webhooks) no-ops the loser:
+
+    - ``released`` → already done, no-op.
+    - ``under_review`` + ``marked_ready`` + at least one shard on the bucket →
+      ``reciter.published`` (→ released) via ``SYSTEM_ACTOR`` (role OWNER, so
+      the ``reciter.publish`` gate passes).
+    - anything else (not marked_ready, no shards, other state) → log + no-op.
+
+    The ``transition()`` call is wrapped in ``StateError`` handling to absorb
+    the TOCTOU window where two callers both read ``under_review`` before
+    either commits (the single-writer + ``BEGIN IMMEDIATE`` serializes them; the
+    loser's handler raises ``_state_precondition`` once the row is already
+    released). Returns ``{slug, state, released: bool, reason?}``.
+    """
+    # Lazy import: SYSTEM_ACTOR lives in the segments package, which pulls
+    # bucket loaders — keep it off this module's import-time graph.
+    from services.segments.auto_detect import SYSTEM_ACTOR
+
+    row = state_service.get_row(slug)
+    if row is None:
+        return {"slug": slug, "state": None, "released": False,
+                "reason": "unknown slug"}
+    if row.state.value == "released":
+        return {"slug": slug, "state": "released", "released": False,
+                "reason": "already released"}
+    if row.state.value != "under_review" or not row.marked_ready:
+        log.info("complete_timestamps_job(%s): not publishable (state=%s "
+                 "marked_ready=%s) — leaving as-is", slug, row.state.value,
+                 row.marked_ready)
+        return {"slug": slug, "state": row.state.value, "released": False,
+                "reason": "not marked-ready / wrong state"}
+    if not _has_any_shard(slug):
+        log.warning("complete_timestamps_job(%s): job %s succeeded but no "
+                    "timestamps shards on the bucket — not publishing",
+                    slug, job_id)
+        return {"slug": slug, "state": row.state.value, "released": False,
+                "reason": "no shards"}
+
+    try:
+        new_row = state_service.transition(
+            slug, "reciter.published", actor=SYSTEM_ACTOR,
+            payload={"job_id": job_id},
+        )
+    except state_service.StateError as exc:
+        # Lost a double-fire race, or the row changed under us (e.g. reviewer
+        # un-marked). Benign — the winning caller (or a re-run) handles it.
+        log.info("complete_timestamps_job(%s): transition skipped: %s", slug, exc)
+        return {"slug": slug, "state": (state_service.get_row(slug) or row).state.value,
+                "released": False, "reason": "transition skipped"}
+    log.info("complete_timestamps_job(%s): published (job=%s)", slug, job_id)
+    return {"slug": slug, "state": new_row.state.value, "released": True}
+
+
+def _has_any_shard(slug: str) -> bool:
+    """True if at least one per-chapter timestamps shard exists for ``slug``.
+
+    Guards auto-release against a job that exits 0 without writing shards. One
+    cheap bucket listing of ``reciters/<slug>/timestamps/``."""
+    try:
+        names = get_backend().list_dir(f"reciters/{slug}/timestamps")
+        return any(str(n).endswith((".json", ".json.gz")) for n in names)
+    except StorageNotFound:
+        return False
+    except Exception as exc:  # noqa: BLE001 — never let the check break release
+        log.warning("shard-existence check for %s failed: %s", slug, exc)
+        return False

@@ -26,6 +26,12 @@ Env:
                      live-ffmpeg the waveform. Independent of PERSIST_AUDIO.
   JOB_ID             HF-injected job id; used to self-write the durable
                      record at reciters/<slug>/jobs/ts/<JOB_ID>.json
+  INSPECTOR_WEBHOOK_URL     (optional) Inspector endpoint to POST on success so
+                            the reciter auto-publishes. Threaded in by launch()
+                            only when a webhook secret is configured + a public
+                            URL is resolvable (deployed). Absent in dev.
+  INSPECTOR_WEBHOOK_SECRET  (optional) shared secret sent as the
+                            X-Inspector-Job-Secret header with the callback.
 
 See docs/planning/inspector-deploy/v2/phases/13-timestamps-job.md + the
 side-panel plan.
@@ -200,6 +206,33 @@ def _write_record(mount: Path, slug: str, settings: dict, *, status: str,
         log.warning("could not write job record: %s", exc)
 
 
+def _notify_complete(slug: str, status: str) -> None:
+    """POST the completion callback to the Inspector so the reciter publishes.
+
+    Best-effort: the Inspector's poll fallback releases anyway if this fails or
+    isn't configured. Only fires when both the URL + secret env are present (the
+    launcher threads them only in deployed mode). Short timeout — never block
+    the job's exit on a slow/unreachable server.
+    """
+    url = os.environ.get("INSPECTOR_WEBHOOK_URL", "").strip()
+    secret = os.environ.get("INSPECTOR_WEBHOOK_SECRET", "").strip()
+    job_id = os.environ.get("JOB_ID", "").strip()
+    if not url or not secret or not job_id:
+        return
+    try:
+        import requests
+
+        resp = requests.post(
+            url,
+            json={"slug": slug, "job_id": job_id, "status": status},
+            headers={"X-Inspector-Job-Secret": secret},
+            timeout=15,
+        )
+        log.info("completion callback %s → HTTP %s", url, resp.status_code)
+    except Exception as exc:  # noqa: BLE001 — poll fallback covers a miss
+        log.warning("completion callback failed: %s", exc)
+
+
 def main() -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -332,6 +365,9 @@ def main() -> int:
     # peaks. Runs after alignment so a slow/failed bake never risks the shards.
     if gen_peaks:
         _bake_missing_peaks(reciter_dir, entries)
+    # Tell the Inspector the job succeeded so it auto-publishes the reciter.
+    # Best-effort; the Inspector's poll fallback covers a missed callback.
+    _notify_complete(slug, "succeeded")
     log.info("done slug=%s", slug)
     return 0
 

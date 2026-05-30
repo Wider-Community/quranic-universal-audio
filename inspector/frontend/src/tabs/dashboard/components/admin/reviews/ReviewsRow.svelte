@@ -9,11 +9,12 @@
      *            (muted, trailing) + reviewer (initials avatar + login).
      *   Line 2 — riwayah · style · channel as muted dotted text.
      *   Right  — age (relative, mono; stale ⚠ when a claim is > 7d old) +
-     *            actions (Segments, plus Generate TS on under-review rows).
+     *            actions (Segments, plus Generate TS on marked-ready rows).
      *
      * Row body click → General drawer. Segments button switches to the
      * top-level Segments tab with this slug pre-selected. Generate TS
-     * launches the MFA timestamps job for under-review recitations.
+     * launches the MFA timestamps job — shown only on marked-ready rows
+     * because generating timestamps publishes the reciter on success.
      */
     import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
     import type { AdminReviewRow } from '../../../../../lib/types/generated/schemas';
@@ -26,7 +27,11 @@
     let { row }: { row: AdminReviewRow } = $props();
 
     const isActive = $derived(reviewsStore.selectedSlug === row.slug);
-    const isUnderReview = $derived(row.state === 'under_review');
+    // Generate TS publishes on success, so it's offered only once the reviewer
+    // has marked the reciter ready — not on every under_review row.
+    const isMarkedReady = $derived(
+        row.state === 'under_review' && !!row.open_claim?.marked_ready_at,
+    );
     const isTsActive = $derived(isActive && reviewsStore.openDrawer === 'timestamps');
 
     function relativeAge(iso: string | null | undefined): string {
@@ -166,13 +171,13 @@
         </span>
         <div class="actions">
             <button class="btn" type="button" onclick={onSegments}>Segments</button>
-            {#if isUnderReview}
+            {#if isMarkedReady}
                 <button
                     class="btn"
                     class:armed={isTsActive}
                     type="button"
                     onclick={onGenerateTimestamps}
-                    title="Generate timestamps — settings, logs & history"
+                    title="Generate timestamps & publish — settings, logs & history"
                 >Generate TS</button>
             {/if}
         </div>

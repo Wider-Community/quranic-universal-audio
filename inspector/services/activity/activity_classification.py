@@ -39,9 +39,9 @@ PUBLIC_EVENTS: dict[str, str] = {
     "reciter.requested": "requested",
     "reciter.alignment_completed": "available_review",
     "reciter.claimed": "under_review",
-    # `reciter.published` is the human "publish this reciter" action; the
-    # downstream `reciter.timestamps_completed` is a pipeline event and is
-    # hidden from the rail to avoid duplicating the same milestone.
+    # `reciter.published` is the single "this reciter is now live" milestone —
+    # fired by the system when the timestamps job succeeds (publish == released;
+    # there is no separate timestamps-completed event any more).
     "reciter.published": "published",
 }
 
@@ -80,7 +80,6 @@ HIDDEN_EVENTS: frozenset[str] = frozenset({
     # would otherwise have claimed for the requester, but they already hold
     # another UNDER_REVIEW slug (or were demoted). Audit trail only.
     "reciter.auto_claim_skipped",
-    "reciter.timestamps_completed",
     "access.role_granted",
     "access.role_revoked",
     "access.role_updated",

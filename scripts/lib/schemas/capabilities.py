@@ -329,8 +329,9 @@ CAPABILITIES: tuple[Capability, ...] = (
     ),
     _c(
         "reviews.generate_timestamps", G_ADMIN, "Generate timestamps",
-        "Launch the MFA alignment job for an under-review recitation, "
-        "writing per-chapter timestamps to the bucket.",
+        "Launch the MFA alignment job for a marked-ready recitation, writing "
+        "per-chapter timestamps to the bucket. On success the recitation is "
+        "auto-published (also requires the Publish capability).",
         contributor=False, maintainer=True,
     ),
     _c(

@@ -2,8 +2,8 @@
     /**
      * Reviews Timestamps drawer.
      *
-     * Opens from the "Generate TS" button on an under-review row. Three
-     * sections:
+     * Opens from the "Generate TS" button on a marked-ready row (generating
+     * timestamps publishes the reciter on success). Three sections:
      *   1. Settings form — alignment beam, probe beams, persist-audio +
      *      gen-peaks toggles, collapsible Advanced (workers/flavor/timeout).
      *   2. Live log pane — after launch (or selecting a running job), polls

@@ -415,7 +415,7 @@
     /* Persistent guide/shortcuts entry point at the top of the tab. */
     .seg-guide-bar {
         display: flex;
-        justify-content: flex-end;
+        justify-content: flex-start;
         margin-bottom: var(--s-2, 8px);
     }
     .seg-guide-entry {

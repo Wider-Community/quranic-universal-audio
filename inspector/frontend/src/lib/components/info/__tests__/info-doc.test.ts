@@ -39,6 +39,14 @@ describe('parseInline', () => {
     it('always returns at least one token', () => {
         expect(parseInline('plain')).toEqual([{ bold: false, text: 'plain' }]);
     });
+
+    it('parses a markdown link into an href run with surrounding text', () => {
+        expect(parseInline('Feel free to [open an issue](https://x.test/i) or reach out.')).toEqual([
+            { bold: false, text: 'Feel free to ' },
+            { bold: false, text: 'open an issue', href: 'https://x.test/i' },
+            { bold: false, text: ' or reach out.' },
+        ]);
+    });
 });
 
 describe('parseInfoDoc', () => {

@@ -34,6 +34,7 @@ from services import permissions as permissions_service
 from services import predicates as predicates_service
 from services import state as state_service
 from services.auth import capabilities as capabilities_service
+from services.errors import Codes, error_body
 
 from utils.decorators import require_same_origin
 
@@ -127,10 +128,11 @@ def mark_ready(slug: str):
         try:
             submission = MarkReadyRequest.model_validate(raw)
         except ValidationError as e:
-            return jsonify({
-                "error": "marked_ready payload invalid",
-                "details": {"validation_errors": e.errors()},
-            }), 400
+            return jsonify(error_body(
+                "Your mark-ready submission was incomplete. Please review and resubmit.",
+                code=Codes.MARK_READY_PAYLOAD,
+                details={"validation_errors": e.errors()},
+            )), 400
         payload = submission.model_dump()
 
     new_row = state_service.transition(

@@ -40,6 +40,8 @@
         switch (reason) {
             case 'claimable':
                 return 'Claim to edit';
+            case 'holds-other-claim':
+                return 'Finish your current claim first';
             case 'wrong-assignee':
                 return 'Being edited by someone else';
             case 'marked_ready':
@@ -59,6 +61,8 @@
         switch (reason) {
             case 'claimable':
                 return 'This reciter is available to work on. Claim it (button below) to start editing its segments.';
+            case 'holds-other-claim':
+                return 'This reciter is available, but you can work on one claim at a time. Unclaim your current reciter (or mark it ready) before claiming this one.';
             case 'wrong-assignee':
                 return 'Another contributor currently holds this reciter. You can browse it read-only, or claim a different one from the dashboard.';
             case 'marked_ready':

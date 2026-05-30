@@ -8,10 +8,12 @@ import lowConfidenceV2Guide from './accordion/low_confidence_v2.guide';
 import missingVersesGuide from './accordion/missing_verses.guide';
 import missingWordsGuide from './accordion/missing_words.guide';
 import muqattaatGuide from './accordion/muqattaat.guide';
+import overviewGuide from './accordion/overview.guide';
 import qalqalaGuide from './accordion/qalqala.guide';
 import repetitionsGuide from './accordion/repetitions.guide';
 
 const accordionGuides: Readonly<Record<string, string>> = Object.freeze({
+    overview: overviewGuide,
     general_editing: generalEditingGuide,
     failed: failedGuide,
     missing_verses: missingVersesGuide,
@@ -60,6 +62,7 @@ export function guideViewKey(category: string): string {
  * Order is the canonical reading order.
  */
 export const REQUIRED_GUIDE_KEYS: readonly string[] = Object.freeze([
+    'overview',
     'general_editing',
     'failed',
     'missing_verses',

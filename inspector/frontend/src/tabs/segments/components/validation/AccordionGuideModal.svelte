@@ -4,6 +4,7 @@
 
     import { recordGuideViewed } from '../../../../lib/api/guide-views';
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
+    import OverviewContent from '../../../../lib/components/info/OverviewContent.svelte';
     import { currentUser, loadCurrentUser, markGuideReadLocally } from '../../../../lib/stores/current-user';
     import type { HistoryBatch } from '../../../../lib/types/domain';
     import { getGuideExample } from '../../guides/examples';
@@ -27,6 +28,7 @@
     // instead of the data-driven example cards.
     const GUIDE_COMPONENTS: Record<string, typeof EditingGuideContent> = {
         'editing-guide': EditingGuideContent,
+        overview: OverviewContent,
     };
 
     export let category: string;

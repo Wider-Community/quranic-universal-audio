@@ -18,6 +18,7 @@
      */
     import { currentUser } from '../../../../lib/stores/current-user';
     import { closeGuidesGate, guidesGate } from '../../../../lib/stores/guides-gate';
+    import { openInfoModal } from '../../../../lib/stores/info-modal';
     import { guideTitleFromBlocks, parseGuideSource } from '../../guides/parser';
     import {
         allGuidesRead,
@@ -50,6 +51,13 @@
     const readCount = $derived(items.filter((i) => i.read).length);
 
     function read(key: string, ev: MouseEvent): void {
+        // The overview isn't a category accordion — it opens as the same
+        // narrow "About" modal the dashboard ⓘ uses (identical look), stacked
+        // above the gate. Opening it records the `overview` read like any guide.
+        if (key === 'overview') {
+            openInfoModal();
+            return;
+        }
         openGuideModal(key, ev.currentTarget as HTMLElement);
     }
 
@@ -96,14 +104,6 @@
 
             <div class="guides-gate-body">
                 <p class="guides-gate-intro">
-                    {#if mode === 'gate'}
-                        Editing unlocks once you've read all
-                        guides. They explain what each validation
-                        flag means and what's expected by the end of a review.
-                    {:else}
-                        A quick reference for every validation category. Open any
-                        guide to see real examples.
-                    {/if}
                 </p>
 
                 <div class="guides-gate-progress" aria-hidden="true">

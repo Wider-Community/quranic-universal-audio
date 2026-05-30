@@ -87,11 +87,11 @@
                     </button>
                 </div>
             {:else}
-                <h2 id="claim-confirm-title" class="claim-title">Claim this reciter for review?</h2>
+                <h2 id="claim-confirm-title" class="claim-title">Claim this recitation for review?</h2>
                 <p class="claim-body">
-                    Claiming this reciter will let you edit and fix its segments. You can hold one
-                    claim at a time, until you finish editing and mark it as ready. You can also
-                    unclaim at any time.
+                    Claiming this recitation will let you edit and fix its segments independently. You can hold one
+                    claim at a time, released when you finish editing and mark it as ready. You can also
+                    unclaim at any time or switch to a different one.
                 </p>
                 <div class="claim-actions">
                     <button

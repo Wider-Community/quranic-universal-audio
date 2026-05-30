@@ -22,6 +22,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
+from routes._admin_helpers import require_capability_or_403
 from scripts.lib.schemas import TsJobSettings
 from services.admin import reviews as reviews_service
 from services.admin import timestamps_jobs as ts_jobs
@@ -82,15 +83,23 @@ def mark_review_viewed(user, slug):
 @require_same_origin
 @require_capability("reviews.generate_timestamps")
 def generate_timestamps(user, slug):
-    """Launch the in-container MFA timestamps job for an under-review reciter.
+    """Launch the in-container MFA timestamps job for a marked-ready reciter.
+
+    Generating timestamps IS publishing: on success the reciter is auto-released
+    (``reciter.published``), so the caller must also hold ``reciter.publish``
+    (checked inline — a second ``@require_capability`` decorator can't stack, it
+    would inject ``user`` twice). The button is only shown on marked-ready rows.
 
     Single-flight: rejects (409) if a job for ``slug`` is already running —
     two jobs would race the same ``timestamps/`` shards. Does NOT transition
-    the reciter; the launched job id is linked via ``timestamps_job_ids``.
-    Returns 202 with ``{job_id, url}``.
+    the reciter at launch; the launched job id is linked via
+    ``timestamps_job_ids``. Returns 202 with ``{job_id, url}``.
     """
     if state_service.get_row(slug) is None:
         return jsonify({"error": "unknown slug"}), 404
+    err = require_capability_or_403(user, "reciter.publish")
+    if err is not None:
+        return err
     existing = ts_jobs.running_job_for(slug)
     if existing:
         return jsonify({"error": "a timestamps job is already running",
@@ -100,8 +109,13 @@ def generate_timestamps(user, slug):
         settings = _parse_ts_settings(body)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    # Public URL root for the job's completion callback. Deployed: ProxyFix
+    # makes this the real https Space URL; dev: localhost (unreachable by the
+    # job — the poll fallback releases instead). launch() only uses it when a
+    # webhook secret is configured.
+    webhook_base = request.url_root
     try:
-        result = ts_jobs.launch(slug, settings=settings)
+        result = ts_jobs.launch(slug, settings=settings, webhook_base=webhook_base)
     except Exception as exc:  # surfaced to the drawer
         return jsonify({"error": str(exc)}), 502
     return jsonify(result), 202

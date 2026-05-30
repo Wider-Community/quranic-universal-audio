@@ -69,7 +69,7 @@
         return r.state === 'under_review' && !r.open_claim?.marked_ready_at;
     }
     function isPublished(r: AdminReviewRow): boolean {
-        return r.state === 'awaiting_timestamps' || r.state === 'released';
+        return r.state === 'released';
     }
     function isAvailable(r: AdminReviewRow): boolean {
         return r.state === 'awaiting_review';

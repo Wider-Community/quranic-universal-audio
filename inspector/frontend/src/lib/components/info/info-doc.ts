@@ -1,18 +1,21 @@
 /**
- * Tiny line-oriented parser for the dashboard info modal.
+ * Tiny line-oriented parser for the project-overview content.
  *
- * Turns the markdown-ish `overview.md` (imported `?raw`) into a flat list
- * of typed blocks the modal renders. Deliberately minimal — headings,
- * paragraphs, bullet lists, inline `**bold**`, and one custom `::lifecycle`
- * directive whose rows render as real `StatePill`s. This mirrors the
- * accordion-guide parser pattern but stays self-contained in the dashboard
- * tab (no cross-tab import). Edit the wording in `overview.md`, never here.
+ * Turns the markdown-ish `overview.md` (imported `?raw`) into a flat list of
+ * typed blocks `OverviewContent` renders. Deliberately minimal — headings,
+ * paragraphs, bullet lists, inline `**bold**` + `[text](href)` links, and one
+ * custom `::lifecycle` directive whose rows render as real `StatePill`s. Lives
+ * in `lib/` because the content is shared cross-tab: the dashboard `InfoModal`
+ * and the segments first-edit gate (via AccordionGuideModal's `::component`)
+ * both render it. Edit the wording in `overview.md`, never here.
  */
-import { PUBLIC_BUCKETS, type PublicBucket } from '../../../../lib/types/public-state';
+import { PUBLIC_BUCKETS, type PublicBucket } from '../../types/public-state';
 
 export interface InlineToken {
     bold: boolean;
     text: string;
+    /** Present on `[text](href)` link runs; renders as an external anchor. */
+    href?: string;
 }
 
 export interface LifecycleRow {
@@ -31,17 +34,22 @@ export interface InfoDoc {
     blocks: InfoBlock[];
 }
 
-const BOLD_RE = /\*\*([^*]+)\*\*/g;
+// Matches either `**bold**` (group 1) or `[text](href)` (groups 2 + 3).
+const INLINE_RE = /\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)]+)\)/g;
 const BUCKETS = new Set<string>(PUBLIC_BUCKETS);
 
-/** Split a line into bold / plain runs. Always returns ≥1 token. */
+/** Split a line into bold / link / plain runs. Always returns ≥1 token. */
 export function parseInline(text: string): InlineToken[] {
     const tokens: InlineToken[] = [];
     let last = 0;
-    for (const m of text.matchAll(BOLD_RE)) {
+    for (const m of text.matchAll(INLINE_RE)) {
         const idx = m.index ?? 0;
         if (idx > last) tokens.push({ bold: false, text: text.slice(last, idx) });
-        tokens.push({ bold: true, text: m[1] });
+        if (m[1] !== undefined) {
+            tokens.push({ bold: true, text: m[1] });
+        } else {
+            tokens.push({ bold: false, text: m[2] ?? '', href: m[3] ?? '' });
+        }
         last = idx + m[0].length;
     }
     if (last < text.length) tokens.push({ bold: false, text: text.slice(last) });

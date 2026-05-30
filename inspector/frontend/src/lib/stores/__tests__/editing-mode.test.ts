@@ -87,20 +87,37 @@ describe('syncEditingMode', () => {
         });
     });
 
-    it('returns view/published for an awaiting_timestamps reciter (post-publish, not pre-review)', () => {
-        const task = _task({ state: 'awaiting_timestamps' });
-        expect(syncEditingMode(_user(), task)).toEqual({
-            kind: 'view',
-            viewReason: 'published',
-        });
-    });
-
     it('returns view/claimable for an awaiting_review reciter (free to claim)', () => {
         const task = _task({ state: 'awaiting_review' });
         expect(syncEditingMode(_user(), task)).toEqual({
             kind: 'view',
             viewReason: 'claimable',
         });
+    });
+
+    it('returns view/holds-other-claim when the user already holds a different claim', () => {
+        // One-at-a-time: an existing claim on another reciter takes precedence
+        // over "claim this one" so the popover doesn't dangle a dead button.
+        const task = _task({ state: 'awaiting_review' });
+        expect(syncEditingMode(_user({ active_claim: 'some-other' }), task)).toEqual({
+            kind: 'view',
+            viewReason: 'holds-other-claim',
+        });
+    });
+
+    it('still shows claimable when the held claim IS this reciter', () => {
+        const task = _task({ state: 'awaiting_review' });
+        expect(syncEditingMode(_user({ active_claim: 'test_slug' }), task)).toEqual({
+            kind: 'view',
+            viewReason: 'claimable',
+        });
+    });
+
+    it('owner with another claim still gets owner (multi-claim exempt)', () => {
+        const task = _task({ state: 'awaiting_review' });
+        expect(
+            syncEditingMode(_user({ role: 'owner', active_claim: 'some-other' }), task),
+        ).toEqual({ kind: 'owner' });
     });
 
     it('returns view/marked_ready when assignee marked their own claim', () => {

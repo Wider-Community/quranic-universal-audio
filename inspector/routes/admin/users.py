@@ -22,6 +22,7 @@ from routes._admin_helpers import actor_for as _actor_for
 from services.admin import users as users_service
 from services.admin import visitors as visitor_service
 from services.auth import access as access_service
+from services.errors import Codes, error_body
 
 from utils.decorators import require_capability, require_same_origin
 
@@ -83,7 +84,7 @@ def set_user_role(user, hf_user_id):
             login=login,
         )
     except users_service.LastOwnerError as e:
-        return jsonify({"error": str(e)}), 409
+        return jsonify(error_body(str(e), code=Codes.LAST_OWNER)), 409
     except access_service.NotAuthorized as e:
         return jsonify({"error": str(e)}), 403
     except access_service.MemberNotFound:

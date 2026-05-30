@@ -24,6 +24,8 @@ from services import auth as auth_service
 from services import permissions
 from services import state as state_service
 from services.auth import capabilities as _capabilities
+from services.errors import Codes, api_error
+from services.state.labels import humanize_state
 
 
 def require_same_origin(fn):
@@ -132,15 +134,18 @@ def require_capability(capability: str):
     def wrap(fn):
         @wraps(fn)
         def inner(*args, **kwargs):
-            from flask import jsonify
-
             user = auth_service.current_user()
             if user is None and not anon_eligible:
-                return jsonify({"error": "authentication required"}), 401
+                return api_error(
+                    "Please sign in to continue.",
+                    code=Codes.AUTH_REQUIRED,
+                    status=401,
+                )
             if not _capabilities.can(user, capability):
-                return (
-                    jsonify({"error": "insufficient permission for this action"}),
-                    403,
+                return api_error(
+                    "You don't have permission for this action.",
+                    code=Codes.FORBIDDEN_CAPABILITY,
+                    status=403,
                 )
             return fn(user, *args, **kwargs)
 
@@ -174,24 +179,52 @@ def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = Fa
         def wrapper(*args, **kwargs):
             user = auth_service.current_user()
             if user is None:
-                abort(401, description="authentication required")
+                return api_error(
+                    "Please sign in to edit.", code=Codes.AUTH_REQUIRED, status=401
+                )
             slug = kwargs.get(reciter_param)
             if not slug:
                 abort(400, description=f"missing {reciter_param!r} in route")
             row = state_service.get_row(slug)
             if row is None:
-                abort(404, description="unknown reciter")
+                return api_error(
+                    "That reciter couldn't be found.",
+                    code=Codes.UNKNOWN_RECITER,
+                    status=404,
+                )
             if permissions.is_owner(user):
                 # Owners bypass state and marked_ready; only visibility applies.
                 if row.visibility != Visibility.PUBLIC:
-                    abort(403, description="reciter visibility blocks edits")
+                    return api_error(
+                        "This reciter isn't available for editing.",
+                        code=Codes.VISIBILITY_BLOCKED,
+                        status=403,
+                        context={"visibility": row.visibility.value},
+                    )
             else:
                 if row.state != ReciterState.UNDER_REVIEW:
-                    abort(403, description="reciter is not in an editable state")
+                    return api_error(
+                        "This reciter isn't in an editable state right now.",
+                        code=Codes.NOT_EDITABLE_STATE,
+                        status=403,
+                        context={
+                            "current_state": row.state.value,
+                            "state_label": humanize_state(row.state),
+                        },
+                    )
                 if row.marked_ready:
-                    abort(403, description="reciter is marked ready for publish and frozen")
+                    return api_error(
+                        "This reciter is marked ready for publish and is locked.",
+                        code=Codes.MARKED_READY_FROZEN,
+                        status=403,
+                    )
                 if row.visibility != Visibility.PUBLIC:
-                    abort(403, description="reciter visibility blocks edits")
+                    return api_error(
+                        "This reciter isn't available for editing.",
+                        code=Codes.VISIBILITY_BLOCKED,
+                        status=403,
+                        context={"visibility": row.visibility.value},
+                    )
                 # Tier dimension is now capability-driven; claim-holder stays
                 # an ownership check. A contributor whose ``segment.edit`` was
                 # toggled off loses self-edit; the admin-bypass arm consults
@@ -202,7 +235,11 @@ def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = Fa
                 )
                 is_admin = admin_bypass and _capabilities.can(user, "segment.edit_as_admin")
                 if not (is_assignee or is_admin):
-                    abort(403, description="reciter is not editable by this user")
+                    return api_error(
+                        "You need an active claim on this reciter to edit it.",
+                        code=Codes.NOT_CLAIM_HOLDER,
+                        status=403,
+                    )
             g.current_user = user
             g.current_row = row
             return fn(*args, **kwargs)

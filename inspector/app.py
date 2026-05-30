@@ -93,6 +93,7 @@ from services.data_loader import load_surah_info_lite
 # Phonemizer was eagerly initialized here. It's now imported lazily inside
 # inspector/scripts/backfill_boundary_adj.py (the only remaining consumer).
 from services.secrets_guard import MissingSecret, get_session_secret
+from services.errors import Codes, error_body
 from services.state.state import InvalidTransition, NotAuthorizedForTransition, UnknownReciter
 from utils.json_response import orjson_response
 
@@ -269,7 +270,7 @@ register_blueprints(app)
 # is the only thing that touches the bucket.
 # ---------------------------------------------------------------------------
 
-_ANON_SKIP_PREFIXES = ("/assets/", "/fonts/")
+_ANON_SKIP_PREFIXES = ("/assets/", "/fonts/", "/api/webhooks/")
 _ANON_SKIP_PATHS = {"/healthz", "/favicon.ico"}
 
 
@@ -399,20 +400,36 @@ def _handle_http_exception(e: HTTPException):
 
 @app.errorhandler(UnknownReciter)
 def _handle_unknown_reciter(e: UnknownReciter):
-    return jsonify({"error": f"unknown reciter: {e}"}), 404
+    return jsonify(error_body(f"unknown reciter: {e}", code=Codes.UNKNOWN_RECITER)), 404
 
 
 @app.errorhandler(InvalidTransition)
 def _handle_invalid_transition(e: InvalidTransition):
-    body: dict = {"error": str(e)}
-    if getattr(e, "details", None):
-        body["details"] = e.details
-    return jsonify(body), 400
+    return (
+        jsonify(
+            error_body(
+                str(e),
+                code=getattr(e, "code", None) or Codes.STATE_PRECONDITION,
+                context=getattr(e, "context", None),
+                details=getattr(e, "details", None),
+            )
+        ),
+        400,
+    )
 
 
 @app.errorhandler(NotAuthorizedForTransition)
 def _handle_not_authorized_transition(e: NotAuthorizedForTransition):
-    return jsonify({"error": str(e)}), 403
+    return (
+        jsonify(
+            error_body(
+                str(e),
+                code=getattr(e, "code", None) or Codes.NOT_AUTHORIZED,
+                context=getattr(e, "context", None),
+            )
+        ),
+        403,
+    )
 
 
 @app.errorhandler(Exception)

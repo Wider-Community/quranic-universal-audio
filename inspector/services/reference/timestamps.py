@@ -81,8 +81,9 @@ def _published_reciter_slugs() -> list[str]:
     """Return slugs of reciters in the ``released`` lifecycle state.
 
     State alone — no bucket I/O. The lifecycle gate
-    ``awaiting_timestamps → released`` is what guarantees these slugs have
-    timestamps published; we don't re-verify by walking the bucket dir.
+    ``under_review → released`` (publish fires only on timestamps-job success)
+    is what guarantees these slugs have timestamps published; we don't re-verify
+    by walking the bucket dir.
     """
     return [
         row.slug

@@ -15,9 +15,13 @@
     export let title: string | null = null;
     /** Accessible label for the close button. */
     export let closeLabel = 'Close';
-    /** ``'wide'`` gives a near-fullscreen shell (admin dashboard). Default
-     * leaves every existing caller unchanged. */
-    export let size: 'default' | 'wide' = 'default';
+    /** ``'wide'`` gives a near-fullscreen shell (admin dashboard);
+     * ``'narrow'`` hugs its content (reading-width info / prose modals).
+     * Default leaves every existing caller unchanged. */
+    export let size: 'default' | 'wide' | 'narrow' = 'default';
+    /** Raise the modal above other stacked overlays (e.g. opened on top of the
+     * segments guides gate). Default keeps the normal layer. */
+    export let elevated = false;
 
     const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -103,6 +107,7 @@
 {#if open}
     <div
         class="backdrop"
+        class:elevated
         on:click={onBackdropClick}
         on:keydown={onKey}
         role="presentation"
@@ -110,6 +115,7 @@
         <div
             class="modal"
             class:wide={size === 'wide'}
+            class:narrow={size === 'narrow'}
             bind:this={modalEl}
             role="dialog"
             aria-modal="true"
@@ -161,6 +167,9 @@
         padding: var(--s-6);
         animation: backdrop-in var(--t-slow) var(--ease-out-quart);
     }
+    /* Stack above the segments guides gate (z 950) / accordion guide (z 1000)
+     * when an info modal is opened on top of them. */
+    .backdrop.elevated { z-index: 1000; }
     @keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 
     .modal {
@@ -182,6 +191,13 @@
     .modal.wide {
         width: min(1480px, 95vw);
         height: min(900px, calc(92vh - var(--player-h, 72px)));
+    }
+    /* Reading-width shell that hugs its content vertically, capped to the
+     * viewport (body scrolls past the cap). */
+    .modal.narrow {
+        width: min(640px, 94vw);
+        height: auto;
+        max-height: calc(86vh - var(--player-h, 72px));
     }
     @keyframes modal-in {
         from { opacity: 0; transform: translateY(12px) scale(0.985); }

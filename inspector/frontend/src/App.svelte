@@ -7,6 +7,7 @@
     import ClaimConfirmModal from './lib/components/ClaimConfirmModal.svelte';
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import ExternalLinks from './lib/components/ExternalLinks.svelte';
+    import InfoModal from './lib/components/info/InfoModal.svelte';
     import SignInModal from './lib/components/SignInModal.svelte';
     import ToastHost from './lib/components/ToastHost.svelte';
     import { dashPort } from './lib/playback/dash-port';
@@ -158,6 +159,10 @@
 <SignInModal />
 <ClaimConfirmModal />
 <ToastHost />
+
+<!-- Project-overview modal — opened from the dashboard ⓘ and the segments
+     guides gate; single host so it looks identical everywhere. -->
+<InfoModal />
 
 <!-- Quran.Foundation bookmarks sidebar. -->
 <BookmarksPanel />

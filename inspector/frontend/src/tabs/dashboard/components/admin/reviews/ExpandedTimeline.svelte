@@ -33,7 +33,6 @@
     ]);
 
     const JOB_EVENTS = new Set<string>([
-        'reciter.timestamps_completed',
         'reciter.alignment_completed',
     ]);
 
@@ -48,7 +47,6 @@
         switch (to_state) {
             case 'under_review': return 'under-review';
             case 'awaiting_review': return 'available';
-            case 'awaiting_timestamps':
             case 'released': return 'published';
             default: return '';
         }
@@ -66,7 +64,6 @@
         'reciter.unmarked_ready':         'unmarked ready',
         'reciter.merge_rejected':         'sent back to under review',
         'reciter.published':              'published',
-        'reciter.timestamps_completed':   'timestamps completed',
         'reciter.unpublished':            'unpublished',
         'reciter.discarded':              'discarded',
         'reciter.undiscarded':            'undiscarded',

@@ -244,6 +244,9 @@ def test_claim_already_under_review_returns_400(signed_in_client, state_persiste
         headers={"Origin": "http://localhost"},
     )
     assert resp.status_code == 400
+    payload = json.loads(resp.data)
+    assert payload["code"] == "STATE_PRECONDITION"
+    assert payload["context"]["state_label"] == "under review"
 
 
 def test_claim_missing_origin_returns_403(signed_in_client, state_persistence):
@@ -361,7 +364,7 @@ def test_mark_ready_rejects_unchecked_checklist(
     )
     assert resp.status_code == 400
     payload = json.loads(resp.data)
-    assert "checklist incomplete" in payload["error"]
+    assert payload["code"] == "MARK_READY_CHECKLIST"
     assert payload["details"]["unchecked"] == ["failed_alignments"]
 
 
@@ -403,7 +406,7 @@ def test_mark_ready_rejects_nonzero_blocking_counts(
     )
     assert resp.status_code == 400
     payload = json.loads(resp.data)
-    assert "blocking validation counts" in payload["error"]
+    assert payload["code"] == "MARK_READY_BLOCKING_COUNTS"
     assert payload["details"]["blocking_counts"] == {"low_confidence": 3}
 
 
@@ -491,7 +494,7 @@ def test_mark_ready_rejects_malformed_body(
     )
     assert resp.status_code == 400
     payload = json.loads(resp.data)
-    assert payload["error"] == "marked_ready payload invalid"
+    assert payload["code"] == "MARK_READY_PAYLOAD"
     assert "validation_errors" in payload["details"]
 
 
@@ -509,7 +512,7 @@ def test_release_blocked_after_marked_ready(
         headers={"Origin": "http://localhost"},
     )
     assert resp.status_code == 400
-    assert "unmark ready first" in json.loads(resp.data)["error"]
+    assert json.loads(resp.data)["code"] == "RELEASE_BLOCKED_MARKED_READY"
 
 
 # ---------------------------------------------------------------------------
@@ -574,7 +577,7 @@ def test_mark_ready_non_owner_still_requires_form_body(
     )
     assert resp.status_code == 400
     payload = json.loads(resp.data)
-    assert payload["error"] == "marked_ready payload invalid"
+    assert payload["code"] == "MARK_READY_PAYLOAD"
 
 
 def test_mark_ready_owner_bypass_predicate_surfaces(signed_in_client, state_persistence):

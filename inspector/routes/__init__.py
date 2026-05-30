@@ -40,6 +40,7 @@ def register_blueprints(app):
     from routes.qf_auth import qf_auth_bp
     from routes.qf_content import qf_content_bp
     from routes.bookmarks import bookmarks_bp
+    from routes.webhooks.ts_jobs import webhooks_bp
 
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
@@ -64,6 +65,7 @@ def register_blueprints(app):
     app.register_blueprint(qf_auth_bp)
     app.register_blueprint(qf_content_bp)
     app.register_blueprint(bookmarks_bp)
+    app.register_blueprint(webhooks_bp)
     app.register_blueprint(static_bp)
 
     # Dev-only blueprint. Registered unconditionally so the route exists for

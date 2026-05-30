@@ -21,9 +21,10 @@ export type EditingKind = 'view' | 'editor' | 'maintainer' | 'owner';
 export type ViewReason =
     | 'unauthenticated'   // not logged in
     | 'claimable'         // logged in, row is free to claim (awaiting_review)
+    | 'holds-other-claim' // free to claim, but the user already holds another active claim
     | 'wrong-assignee'    // logged in, but another contributor holds the claim
     | 'not-available'     // pre-review: catalogued / awaiting_alignment (not editable yet)
-    | 'published'         // post-publish: awaiting_timestamps / released (read-only)
+    | 'published'         // post-publish: released (read-only)
     | 'marked_ready'      // user marked-ready their own claim and the row is frozen
     | 'guides_unread'     // would-be editor who hasn't read the onboarding guides yet
     | 'discarded';        // reciter is admin-soft-deleted
@@ -78,7 +79,7 @@ export function setEditingMode(mode: EditingMode): void {
  *   - under_review, someone else's claim     → wrong-assignee
  *   - under_review, marked-ready, yours      → marked_ready (frozen)
  *   - catalogued / awaiting_alignment        → not-available (pre-review)
- *   - awaiting_timestamps / released         → published (read-only)
+ *   - released                               → published (read-only)
  *
  * Owner override is total: an owner edits any public reciter regardless of
  * state, claim, or marked_ready freeze — but still reads the guides once.
@@ -140,7 +141,16 @@ function _resolveEditAccess(user: CurrentUser, task: ReciterTask): EditingMode {
 
     switch (row.state) {
         case 'awaiting_review':
-            // Free to claim — nobody is reviewing it yet.
+            // Free to claim — nobody is reviewing it yet. But a non-owner can
+            // only hold one claim at a time: if they already hold a different
+            // one, surface THAT (precedence over "claim it") so the popover
+            // doesn't dangle a button that the confirm modal would only reject.
+            if (
+                user.active_claim !== null &&
+                user.active_claim !== row.slug
+            ) {
+                return { kind: 'view', viewReason: 'holds-other-claim' };
+            }
             return { kind: 'view', viewReason: 'claimable' };
 
         case 'under_review':
@@ -163,10 +173,8 @@ function _resolveEditAccess(user: CurrentUser, task: ReciterTask): EditingMode {
             // Pre-review: the recitation isn't ready for editing yet.
             return { kind: 'view', viewReason: 'not-available' };
 
-        case 'awaiting_timestamps':
         case 'released':
-            // Post-publish: read-only. (awaiting_timestamps = published, word
-            // timestamps generating; released = done.)
+            // Post-publish: read-only (timestamps generated, reciter live).
             return { kind: 'view', viewReason: 'published' };
 
         default:

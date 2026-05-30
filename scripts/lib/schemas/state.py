@@ -32,8 +32,11 @@ class ReciterState(str, Enum):
     AWAITING_ALIGNMENT = "awaiting_alignment"
     AWAITING_REVIEW = "awaiting_review"
     UNDER_REVIEW = "under_review"
-    AWAITING_TIMESTAMPS = "awaiting_timestamps"
     RELEASED = "released"
+    # NOTE: ``awaiting_timestamps`` was removed — publishing now goes straight
+    # ``under_review → released`` when the timestamps job succeeds (the reciter
+    # stays under_review while the job runs). See ``_h_published`` and
+    # ``services.admin.timestamps_jobs.complete_timestamps_job``.
 
 
 class RevisionContext(BaseModel):

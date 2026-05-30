@@ -1,12 +1,12 @@
 """Admin Reviews-tab read model (Flask-free).
 
 Single whole-table JOIN over ``delivery_states`` + ``deliveries`` + ``reciters``
-+ open ``claims``, filtered to the four states the Reviews tab covers
-(``awaiting_review``, ``under_review``, ``awaiting_timestamps``, ``released``).
++ open ``claims``, filtered to the three states the Reviews tab covers
+(``awaiting_review``, ``under_review``, ``released``).
 
 The FE further splits ``under_review`` into "Marked ready" vs "Under review"
-on ``open_claim.marked_ready_at`` and collapses ``awaiting_timestamps``+
-``released`` into one "Published" bucket; the wire stays canonical.
+on ``open_claim.marked_ready_at``; ``released`` is the "Published" bucket. The
+wire stays canonical.
 
 No caching today — the row count is small (a few hundred), the query is one
 JOIN, and the data refreshes after every admin action. If profiling shows we
@@ -37,7 +37,6 @@ from services.db.connection import get_conn
 _BUCKET_STATES: tuple[str, ...] = (
     ReciterState.AWAITING_REVIEW.value,
     ReciterState.UNDER_REVIEW.value,
-    ReciterState.AWAITING_TIMESTAMPS.value,
     ReciterState.RELEASED.value,
 )
 

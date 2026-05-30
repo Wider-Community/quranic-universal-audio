@@ -17,7 +17,9 @@ from services.reference import timestamps as ts_manifest
 from services.state import state as state_service
 
 
-def _seed_awaiting_timestamps(slug: str = "rec_a") -> None:
+def _seed_marked_ready(slug: str = "rec_a") -> None:
+    """Seed an under_review reciter with an open, marked-ready claim — the
+    pre-publish state the timestamps job runs against."""
     from tests.conftest import _seed_catalog, _seed_state
 
     _seed_catalog(
@@ -29,16 +31,17 @@ def _seed_awaiting_timestamps(slug: str = "rec_a") -> None:
             added_by_hf_id="seed",
         )],
     )
-    _seed_state(slug, state="awaiting_timestamps")
+    _seed_state(slug, state="under_review", assignee_hf_id="u-rev",
+                marked_ready=True)
 
 
 def test_transition_drops_manifest_cache():
-    _seed_awaiting_timestamps("rec_a")
+    _seed_marked_ready("rec_a")
     ts_manifest.manifest_bytes()  # warm the process cache
     assert ts_manifest._built is True
 
     state_service.transition(
-        "rec_a", "reciter.timestamps_completed",
+        "rec_a", "reciter.published",
         actor=Actor(hf_user_id="u-O", login_at_time="o", role=Role.OWNER),
         payload={"job_id": "job-1"},
     )
@@ -50,7 +53,7 @@ def test_transition_drops_manifest_cache():
 def test_transition_invokes_invalidate_hook(monkeypatch):
     """The drop goes through ``timestamps.invalidate()`` (the lazy import in
     ``state.transition`` resolves to the same module object we patch here)."""
-    _seed_awaiting_timestamps("rec_a")
+    _seed_marked_ready("rec_a")
     calls: list[int] = []
     real = ts_manifest.invalidate
     monkeypatch.setattr(
@@ -58,7 +61,7 @@ def test_transition_invokes_invalidate_hook(monkeypatch):
     )
 
     state_service.transition(
-        "rec_a", "reciter.timestamps_completed",
+        "rec_a", "reciter.published",
         actor=Actor(hf_user_id="u-O", login_at_time="o", role=Role.OWNER),
         payload={"job_id": "job-1"},
     )
