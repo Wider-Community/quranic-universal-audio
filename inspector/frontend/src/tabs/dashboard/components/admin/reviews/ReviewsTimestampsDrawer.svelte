@@ -21,10 +21,10 @@
         type TimestampsJobSettings,
         type TimestampsJobStatus,
     } from '../../../../../lib/api/admin-reviews';
-    import type { TsJobRecord } from '../../../../../lib/types/generated/schemas';
     import { refreshReciterTask } from '../../../../../lib/api/reciter-task';
     import { loadCurrentUser } from '../../../../../lib/stores/current-user';
     import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
+    import type { TsJobRecord } from '../../../../../lib/types/generated/schemas';
     import { visiblePoll } from '../../../../../lib/utils/visible-poll';
     import { loadCatalog } from '../../../stores/catalog-data';
 
