@@ -159,7 +159,12 @@ export class AudioRange {
         this._cancelGap();
         this._detachCanplay();
         this.loop.stop();
-        if (!this.audioEl.paused) this.audioEl.pause();
+        // Port mode: pause via the port so we hit the LIVE element (the cached
+        // `this.audioEl` is the construction-time snapshot and goes stale across
+        // a `port.adoptElement(...)` rotation — pausing it would no-op the stale
+        // node and leave the active element playing).
+        if (this.port) this.port.pause();
+        else if (!this.audioEl.paused) this.audioEl.pause();
     }
 
     setRange(spec: AudioRangeSpec): void {
@@ -204,7 +209,16 @@ export class AudioRange {
         // Pause-resilient: keep the rAF chain alive while the audio is paused
         // (post-seek transient, advance gap cooldown, external user pause).
         // We just don't tick onTick or check the boundary — those resume on unpause.
-        if (this.audioEl.paused) return;
+        //
+        // Port mode reads `port.paused` (delegates to the LIVE `port.element`)
+        // instead of the cached `this.audioEl`. Otherwise an element rotation
+        // via `port.adoptElement(...)` (TS-tab gapless shadow transplant)
+        // leaves AudioRange polling the detached old element — which is paused
+        // by definition post-swap, so every frame returns here and no tick / no
+        // boundary fires. Manifests as: audio plays through the new verse but
+        // highlights are frozen and auto-advance never triggers at verse end.
+        const paused = this.port ? this.port.paused : this.audioEl.paused;
+        if (paused) return;
 
         // Coordinate space:
         //   - Port mode: file-absolute everywhere. `port.currentTimeMs()`
