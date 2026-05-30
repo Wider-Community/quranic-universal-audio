@@ -368,6 +368,10 @@ def job_status(slug: str, job_id: str, *, log_tail: int = 400) -> dict:
 
     info = inspect_job(job_id=job_id)
     status = _status_str(info)
+    # Canonical HF job page URL (keyed on the id we pass, so always correct).
+    # Surfaced so the panel can link out — HF streams logs live there, whereas
+    # fetch_job_logs only returns the tail in bulk near completion.
+    url = getattr(info, "url", None)
     logs: list[str] = []
     truncated = False
     try:
@@ -410,7 +414,7 @@ def job_status(slug: str, job_id: str, *, log_tail: int = 400) -> dict:
         except Exception as exc:  # noqa: BLE001
             log.warning("auto-release on poll for %s failed: %s", slug, exc)
 
-    return {"job_id": job_id, "status": status, "logs": logs,
+    return {"job_id": job_id, "status": status, "url": url, "logs": logs,
             "log_truncated": truncated}
 
 
