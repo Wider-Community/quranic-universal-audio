@@ -97,8 +97,8 @@
             <div class="guides-gate-body">
                 <p class="guides-gate-intro">
                     {#if mode === 'gate'}
-                        Editing unlocks once you've read all {REQUIRED_GUIDE_KEYS.length}
-                        guides — a one-time step. They explain what each validation
+                        Editing unlocks once you've read all
+                        guides. They explain what each validation
                         flag means and what's expected by the end of a review.
                     {:else}
                         A quick reference for every validation category. Open any

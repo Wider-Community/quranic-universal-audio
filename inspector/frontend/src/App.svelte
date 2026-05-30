@@ -4,6 +4,7 @@
     import { signIn, signOut } from './lib/api/auth-client';
     import BookmarksPanel from './lib/components/BookmarksPanel.svelte';
     import DevRoleSwitcher from './lib/components/DevRoleSwitcher.svelte';
+    import ClaimConfirmModal from './lib/components/ClaimConfirmModal.svelte';
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import ExternalLinks from './lib/components/ExternalLinks.svelte';
     import SignInModal from './lib/components/SignInModal.svelte';
@@ -155,6 +156,7 @@
 
 <!-- Root-mounted sign-in modal + toast host (Phase 3). -->
 <SignInModal />
+<ClaimConfirmModal />
 <ToastHost />
 
 <!-- Quran.Foundation bookmarks sidebar. -->

@@ -1,7 +1,9 @@
 import { render } from '@testing-library/svelte';
+import { get } from 'svelte/store';
 import { describe, expect, it } from 'vitest';
 
 import type { ReciterTask } from '../../api/reciter-task';
+import { claimConfirmModal, closeClaimConfirm } from '../../stores/claim-confirm-modal';
 import { currentUser } from '../../stores/current-user';
 import ClaimButton from '../ClaimButton.svelte';
 
@@ -104,5 +106,32 @@ describe('ClaimButton', () => {
         expect(btn!.classList.contains('seg-btn')).toBe(true);
         expect(btn!.classList.contains('primary')).toBe(true);
         expect(btn!.classList.contains('lg')).toBe(false);
+    });
+
+    it('is labelled "Claim review" and opens the confirm modal on click (no immediate claim)', () => {
+        closeClaimConfirm();
+        currentUser.set({
+            login: 'me',
+            hf_user_id: 'u-1',
+            role: 'contributor',
+            active_claim: null,
+            active_claims: [],
+            dev_mode: false,
+            capabilities: [],
+            guides_read: [],
+        });
+
+        const { container } = render(ClaimButton, {
+            props: { slug: 'target', task: makeTask(true), onClaimed: null },
+        });
+
+        const btn = container.querySelector('button')!;
+        expect(btn.textContent?.trim()).toBe('Claim review');
+        expect(get(claimConfirmModal).open).toBe(false);
+
+        btn.click();
+        const state = get(claimConfirmModal);
+        expect(state.open).toBe(true);
+        expect(state.slug).toBe('target');
     });
 });

@@ -21,6 +21,7 @@
     import ActivityRail from '../components/ActivityRail.svelte';
     import type { RowEntry } from '../components/CatalogTable.svelte';
     import CatalogTable from '../components/CatalogTable.svelte';
+    import InfoModal from '../components/info/InfoModal.svelte';
     import SubmitWizard from '../components/submit/SubmitWizard.svelte';
     import { catalogData, loadCatalog } from '../stores/catalog-data';
     import {
@@ -38,6 +39,7 @@
         void loadCatalog();
     });
 
+    let infoOpen = false;
     let descriptor: SchemaDescriptor | null = null;
     $: allDeliveries = $catalogData.reciters.flatMap((r) => r.deliveries);
     $: if (allDeliveries.length > 0 && descriptor === null) {
@@ -172,6 +174,19 @@
                 >
                     <span class="sr-glyph" aria-hidden="true">+</span>
                     <span class="sr-label">Submit recitation</span>
+                </button>
+                <button
+                    type="button"
+                    class="info-btn"
+                    aria-label="About this project"
+                    title="About this project"
+                    on:click={() => (infoOpen = true)}
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" />
+                        <path d="M12 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                        <circle cx="12" cy="7.5" r="1.25" fill="currentColor" />
+                    </svg>
                 </button>
             </div>
             <div class="sort">

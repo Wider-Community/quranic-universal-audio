@@ -1326,7 +1326,7 @@ const data = {
     },
     "basmala_nonfatiha": {
         "id": "basmala_nonfatiha",
-        "title": "Basmala before a non-Fātiḥa surah",
+        "title": "Basmala before a non-Fatiha surah",
         "description": "The opening basmala/istiʿādha isn't part of the surah's verses — deleted.",
         "render": "history_op",
         "chapter": 2,
@@ -1863,7 +1863,7 @@ const data = {
     "basmala_added_voice": {
         "id": "basmala_added_voice",
         "title": "Basmala in a different voice",
-        "description": "The Fātiḥa basmala here was a generic insert, not the reciter — deleted.",
+        "description": "The Fatiha basmala here was a generic insert, not the reciter — deleted. If it is in the reciter voice, keep it.",
         "render": "history_op",
         "chapter": 1,
         "clip_base_ms": 3620,
@@ -1897,8 +1897,8 @@ const data = {
     },
     "amin_trim": {
         "id": "amin_trim",
-        "title": "Partial āmīn after al-Fātiḥa",
-        "description": "A trailing 'āmīn' (common in prayer recitations) trimmed off the last verse.",
+        "title": "Partial Amin after Al-Fatiha",
+        "description": "A trailing Amin trimmed off the last verse.",
         "render": "history_op",
         "chapter": 1,
         "clip_base_ms": 23866,

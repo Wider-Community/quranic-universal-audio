@@ -16,9 +16,11 @@
     import Modal from '../../../lib/components/Modal.svelte';
     import StatePill from '../../../lib/components/StatePill.svelte';
     import { SIGN_IN_MESSAGES } from '../../../lib/sign-in-messages';
+    import { openClaimConfirm } from '../../../lib/stores/claim-confirm-modal';
     import { currentUser, isAdmin, isOwner, isSignedIn } from '../../../lib/stores/current-user';
     import { playerContext } from '../../../lib/stores/player-context';
     import { openSignInModal } from '../../../lib/stores/sign-in-modal';
+    import { gotoSegments } from '../../../lib/utils/goto-segments';
     import {
         type AdminDiscardedDelivery,
         type AdminViewReciter,
@@ -84,6 +86,19 @@
 
     function openReview(d: PublicDelivery): void {
         formState = { mode: 'review', delivery: d };
+    }
+
+    /** "Claim review" on an available-for-review row: route to the Segments
+     *  tab with this reciter selected (reusing the shared deep-link), then open
+     *  the claim-confirm modal. Sign-in is gated first, mirroring openRequest. */
+    function claimReview(d: PublicDelivery): void {
+        if (!isSignedIn($currentUser)) {
+            openSignInModal(null, SIGN_IN_MESSAGES.claim);
+            return;
+        }
+        closeDetail();
+        gotoSegments(d.slug);
+        openClaimConfirm(d.slug);
     }
 
     function closeForm(): void {
@@ -358,6 +373,13 @@
                                                     title="Review submitted request"
                                                     on:click|stopPropagation={() => openReview(d)}
                                                 ><StatePill state={d.bucket} size="sm" /></button>
+                                            {:else if d.bucket === 'available_for_review'}
+                                                <button
+                                                    type="button"
+                                                    class="request-btn"
+                                                    title="Claim this reciter to review and edit its segments"
+                                                    on:click|stopPropagation={() => claimReview(d)}
+                                                >Claim review</button>
                                             {:else}
                                                 <StatePill state={d.bucket} size="sm" />
                                             {/if}
@@ -434,6 +456,13 @@
                                                     title="Review submitted request"
                                                     on:click|stopPropagation={() => openReview(d)}
                                                 ><StatePill state={d.bucket} size="sm" /></button>
+                                            {:else if d.bucket === 'available_for_review'}
+                                                <button
+                                                    type="button"
+                                                    class="request-btn"
+                                                    title="Claim this reciter to review and edit its segments"
+                                                    on:click|stopPropagation={() => claimReview(d)}
+                                                >Claim review</button>
                                             {:else}
                                                 <StatePill state={d.bucket} size="sm" />
                                             {/if}

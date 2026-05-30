@@ -6,10 +6,15 @@
 <script lang="ts">
     import { onDestroy, onMount, tick } from 'svelte';
 
+    import { get } from 'svelte/store';
+
+    import { refreshReciterTask } from '../api/reciter-task';
+    import { openClaimConfirm } from '../stores/claim-confirm-modal';
     import {
         editPopover,
         hideEditPopover,
     } from '../stores/edit-popover';
+    import { selectedReciter } from '../../tabs/segments/stores/chapter';
 
     let popoverEl: HTMLDivElement | null = null;
     let top = 0;
@@ -20,16 +25,29 @@
     $: title = state ? _titleFor(state.mode.viewReason) : '';
     $: body = state ? _bodyFor(state.mode.viewReason) : '';
 
+    // The popover only fires inside the Segments tab, so the current reciter
+    // is the segments `selectedReciter`. The `claimable` reason gets a
+    // "Claim review" action that opens the confirm modal for it.
+    function _onClaimReview() {
+        const slug = get(selectedReciter);
+        hideEditPopover();
+        if (slug) {
+            openClaimConfirm(slug, { onClaimed: () => void refreshReciterTask(slug) });
+        }
+    }
+
     function _titleFor(reason: string | undefined): string {
         switch (reason) {
+            case 'claimable':
+                return 'Claim to edit';
             case 'wrong-assignee':
-                return 'Reciter under review';
+                return 'Being edited by someone else';
             case 'marked_ready':
-                return 'Awaiting publish';
-            case 'released':
-                return 'Awaiting timestamps';
-            case 'not-claimable':
-                return 'Not available for editing';
+                return 'Locked for publish';
+            case 'published':
+                return 'Already published';
+            case 'not-available':
+                return 'Not ready to edit yet';
             case 'discarded':
                 return 'Reciter unavailable';
             default:
@@ -39,16 +57,18 @@
 
     function _bodyFor(reason: string | undefined): string {
         switch (reason) {
+            case 'claimable':
+                return 'This reciter is available to work on. Claim it (button below) to start editing its segments.';
             case 'wrong-assignee':
-                return 'This reciter is currently being reviewed by another contributor.';
+                return 'Another contributor currently holds this reciter. You can browse it read-only, or claim a different one from the dashboard.';
             case 'marked_ready':
-                return "You marked this reciter ready for publish. Click 'Continue editing' in the banner to make changes.";
-            case 'released':
-                return 'This reciter is awaiting timestamp generation; edits are locked.';
-            case 'not-claimable':
-                return 'This reciter is in a pipeline state and cannot be claimed yet.';
+                return "You marked this reciter ready for publish, so it's locked. Choose “Continue editing” in the banner to make changes.";
+            case 'published':
+                return 'This reciter is published and read-only. View its word timestamps on the Timestamps tab.';
+            case 'not-available':
+                return "This reciter hasn't been prepared for editing yet. It'll open once its recitation has been processed.";
             case 'discarded':
-                return 'This reciter is not available for editing.';
+                return 'This reciter has been discarded and is not available for editing.';
             default:
                 return 'This reciter is not available for editing.';
         }
@@ -117,12 +137,21 @@
         <div class="edit-popover__title">{title}</div>
         <div class="edit-popover__body">{body}</div>
         <div class="edit-popover__actions">
+            {#if state.mode.viewReason === 'claimable'}
+                <button
+                    type="button"
+                    class="edit-popover__cta"
+                    on:click={_onClaimReview}
+                >
+                    Claim review
+                </button>
+            {/if}
             <button
                 type="button"
                 class="edit-popover__dismiss"
                 on:click={hideEditPopover}
             >
-                OK
+                {state.mode.viewReason === 'claimable' ? 'Cancel' : 'OK'}
             </button>
         </div>
     </div>
@@ -166,5 +195,17 @@
     }
     .edit-popover__dismiss:hover {
         border-color: rgba(255, 255, 255, 0.5);
+    }
+    .edit-popover__cta {
+        background: #f0a500;
+        color: #1a1a1a;
+        border: 0;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .edit-popover__cta:hover {
+        background: #ffba2c;
     }
 </style>

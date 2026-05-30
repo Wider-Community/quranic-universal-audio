@@ -151,7 +151,7 @@
                 </div>
                 <div class="seg-text-times {ec('time')}" class:seg-text-time-editing={mode === 'adjust'}>
                     {#if placeholder}
-                        <span class="seg-text-duration eg-ph">Time &amp; duration</span>
+                        <span class="seg-text-duration eg-ph">Time from - Time to | &amp; duration</span>
                     {:else}
                         <span class="seg-text-time-range">
                             <span class="seg-text-time">{timeFrom}</span>

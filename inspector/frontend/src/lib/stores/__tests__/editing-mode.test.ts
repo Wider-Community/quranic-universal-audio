@@ -79,11 +79,27 @@ describe('syncEditingMode', () => {
         });
     });
 
-    it('returns view/released for post-publish reciter', () => {
+    it('returns view/published for a released reciter', () => {
         const task = _task({ state: 'released' });
         expect(syncEditingMode(_user(), task)).toEqual({
             kind: 'view',
-            viewReason: 'released',
+            viewReason: 'published',
+        });
+    });
+
+    it('returns view/published for an awaiting_timestamps reciter (post-publish, not pre-review)', () => {
+        const task = _task({ state: 'awaiting_timestamps' });
+        expect(syncEditingMode(_user(), task)).toEqual({
+            kind: 'view',
+            viewReason: 'published',
+        });
+    });
+
+    it('returns view/claimable for an awaiting_review reciter (free to claim)', () => {
+        const task = _task({ state: 'awaiting_review' });
+        expect(syncEditingMode(_user(), task)).toEqual({
+            kind: 'view',
+            viewReason: 'claimable',
         });
     });
 
@@ -141,12 +157,12 @@ describe('syncEditingMode', () => {
         });
     });
 
-    it('returns view/not-claimable for catalogued / awaiting_alignment rows', () => {
-        for (const state of ['catalogued', 'awaiting_alignment', 'awaiting_timestamps'] as const) {
+    it('returns view/not-available for pre-review (catalogued / awaiting_alignment) rows', () => {
+        for (const state of ['catalogued', 'awaiting_alignment'] as const) {
             const task = _task({ state });
             expect(syncEditingMode(_user(), task)).toEqual({
                 kind: 'view',
-                viewReason: 'not-claimable',
+                viewReason: 'not-available',
             });
         }
     });
@@ -265,6 +281,48 @@ describe('syncEditingMode', () => {
         const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
         expect(syncEditingMode(_user({ role: 'owner' }), task, true)).toEqual({
             kind: 'owner',
+        });
+    });
+
+    // ------------------------------------------------------------------
+    // Gate ORDER: sign-in > state/ownership denial > guides_unread
+    // The guide gate must be LAST — a user who can't edit for a state/
+    // ownership reason should see THAT, not "read the guides first".
+    // ------------------------------------------------------------------
+
+    it('shows the state denial (not guides) for a non-claimant with unread guides', () => {
+        // Contributor on someone else's claim: wrong-assignee must win even
+        // though guides are unread.
+        const task = _task({ state: 'under_review', assignee_hf_id: 'other' });
+        expect(syncEditingMode(_user(), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'wrong-assignee',
+        });
+    });
+
+    it('shows claimable (not guides) on an unclaimed row with unread guides', () => {
+        const task = _task({ state: 'awaiting_review' });
+        expect(syncEditingMode(_user(), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'claimable',
+        });
+    });
+
+    it('shows published (not guides) on a released row with unread guides', () => {
+        const task = _task({ state: 'released' });
+        expect(syncEditingMode(_user(), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'published',
+        });
+    });
+
+    it('only reaches guides_unread once the user actually holds an editable position', () => {
+        // Assignee on their own under_review claim → the one case that SHOULD
+        // hit the guide gate.
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user(), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'guides_unread',
         });
     });
 

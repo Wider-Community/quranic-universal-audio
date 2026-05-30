@@ -135,6 +135,6 @@
         you can also press <strong>Save</strong> yourself at any time. Nothing is ever locked in —
         the <strong>History</strong> panel lists every edit, and you can <strong>undo</strong> any
         of them. You can filter history by the kind of edit or by validation category to find and
-        double-check a change.
+        double-check a change. You can always check out a published reciter's history to better understand the edits and types of common issues.
     </p>
 </div>
