@@ -20,7 +20,9 @@
 from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
+from pydantic import ValidationError
 
+from scripts.lib.schemas import TsJobSettings
 from services.admin import reviews as reviews_service
 from services.admin import timestamps_jobs as ts_jobs
 from services.state import state as state_service
@@ -94,16 +96,49 @@ def generate_timestamps(user, slug):
         return jsonify({"error": "a timestamps job is already running",
                         "job_id": existing}), 409
     body = request.get_json(silent=True) or {}
-    beams = body.get("beams")
-    if beams is not None and not (
-        isinstance(beams, list) and beams and all(isinstance(b, int) for b in beams)
-    ):
-        return jsonify({"error": "beams must be a non-empty list of ints"}), 400
     try:
-        result = ts_jobs.launch(slug, beams=beams)
+        settings = _parse_ts_settings(body)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    try:
+        result = ts_jobs.launch(slug, settings=settings)
     except Exception as exc:  # surfaced to the drawer
         return jsonify({"error": str(exc)}), 502
     return jsonify(result), 202
+
+
+def _parse_ts_settings(body: dict) -> TsJobSettings:
+    """Validate + normalize the launch form body into ``TsJobSettings``.
+
+    Beams = [alignment_beam, *probe_beams] (deduped, order-preserving). Raises
+    ``ValueError`` with a user-facing message on any invalid field.
+    """
+    beam = body.get("beam", 50)
+    probe = body.get("probe_beams") or []
+    if not isinstance(beam, int) or beam <= 0:
+        raise ValueError("beam must be a positive integer")
+    if not isinstance(probe, list) or not all(isinstance(b, int) and b > 0 for b in probe):
+        raise ValueError("probe_beams must be a list of positive integers")
+    beams: list[int] = []
+    for b in [beam, *probe]:
+        if b not in beams:
+            beams.append(b)
+    workers = body.get("workers")
+    if workers is not None and (not isinstance(workers, int) or not 1 <= workers <= 64):
+        raise ValueError("workers must be an integer in 1..64")
+    try:
+        return TsJobSettings(
+            beams=beams,
+            persist_audio=bool(body.get("persist_audio", False)),
+            gen_peaks=bool(body.get("gen_peaks", False)),
+            workers=workers,
+            flavor=body.get("flavor") or None,
+            timeout=body.get("timeout") or None,
+            batch_size=body.get("batch_size") or None,
+            download_workers=body.get("download_workers") or None,
+        )
+    except ValidationError as exc:
+        raise ValueError(f"invalid settings: {exc.errors()[0].get('msg', exc)}") from exc
 
 
 @admin_reviews_bp.route("/jobs/<job_id>")
@@ -114,3 +149,22 @@ def job_status(user, job_id):
         return jsonify(ts_jobs.job_status(job_id))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
+
+
+@admin_reviews_bp.route("/jobs/<job_id>/record")
+@require_capability("reviews.generate_timestamps")
+def job_record(user, job_id):
+    """Persisted record (settings + status + full logs) for one past job."""
+    rec = ts_jobs.read_job_record(job_id)
+    if rec is None:
+        return jsonify({"error": "no record for job"}), 404
+    return jsonify(rec)
+
+
+@admin_reviews_bp.route("/reciters/<slug>/ts-jobs")
+@require_capability("reviews.generate_timestamps")
+def reciter_ts_jobs(user, slug):
+    """Persisted timestamps-job records for ``slug`` (newest first)."""
+    if state_service.get_row(slug) is None:
+        return jsonify({"error": "unknown slug"}), 404
+    return jsonify({"jobs": ts_jobs.list_job_records(slug)})
