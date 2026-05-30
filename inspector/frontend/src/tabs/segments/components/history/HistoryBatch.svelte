@@ -35,8 +35,8 @@
         onPendingOpsDiscard,
     } from '../../utils/save/undo';
     import { deriveOpIssueDelta } from '../../utils/validation/classified-issues';
-    import GuideFlagButton from './GuideFlagButton.svelte';
     import SegmentRow from '../list/SegmentRow.svelte';
+    import GuideFlagButton from './GuideFlagButton.svelte';
     import HistoryOp from './HistoryOp.svelte';
 
     // Props ------------------------------------------------------------------
