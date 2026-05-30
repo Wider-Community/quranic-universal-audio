@@ -243,10 +243,10 @@
         tsValidation.set(null);
         if (!reciter) return;
 
-        // Owner preview only: load verse-level ts-validation flags. Gated on
-        // the capability so public users never trigger the bucket read on the
-        // single worker (the server 404s them anyway).
-        if (hasCapability(get(currentUser), 'timestamps.view_unreleased')) {
+        // Owner + maintainer only: load verse-level ts-validation flags.
+        // Gated on the capability so public users never trigger the bucket
+        // read on the single worker (the server 403s them anyway).
+        if (hasCapability(get(currentUser), 'timestamps.view_validation')) {
             void loadTsValidation(reciter).then((doc) => {
                 // Ignore a stale response if the reciter changed mid-flight.
                 if (get(selectedReciter) === reciter) tsValidation.set(doc);

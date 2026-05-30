@@ -475,14 +475,16 @@ export function tsPlayUrl(reciter: string, audioUrl: string, audioCategory: stri
 }
 
 /**
- * Verse-level ts-validation flags for the owner preview (Timestamps tab).
+ * Verse-level ts-validation flags for the Timestamps-tab accordion.
  *
  * Backed by ``reciters/<slug>/ts_validation.json`` (multi-beam generate-job
- * output). 404 → caller lacks the ``timestamps.view_unreleased`` capability
- * for an unreleased reciter; returns ``null`` so the panel stays hidden. A
- * viewable reciter with no flags returns an empty ``verses`` map. Only call
- * this when the user holds the preview capability (avoids a wasted bucket read
- * per reciter-load for public users on the single worker).
+ * output). 403 → caller lacks ``timestamps.view_validation``; 404 → caller
+ * holds it but the reciter isn't viewable (unreleased and the caller doesn't
+ * hold ``timestamps.view_unreleased``). Both return ``null`` so the panel
+ * stays hidden. A viewable reciter with no flags returns an empty ``verses``
+ * map. Only call this when the user holds the view-validation capability
+ * (avoids a wasted bucket read per reciter-load for public users on the
+ * single worker).
  */
 export async function loadTsValidation(reciter: string): Promise<TsValidationDoc | null> {
     if (!reciter) return null;
