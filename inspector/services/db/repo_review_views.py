@@ -46,25 +46,37 @@ def viewed_at_for_user(hf_user_id: str) -> dict[str, str]:
     return {r["slug"]: r["viewed_at"] for r in rows}
 
 
-def count_unviewed_marked_ready_for_user(hf_user_id: str) -> int:
-    """Marked-ready entries this admin hasn't viewed since the latest mark.
+def count_unviewed_for_user(hf_user_id: str) -> int:
+    """Reviews-tab entries this admin hasn't viewed since their latest event.
 
-    Single COUNT over open claims with a non-null ``marked_ready_at``,
-    joined against ``delivery_states`` (the slug must still be under review —
-    skips claims orphaned by a manual force-set on a parallel surface), with
-    a NOT-EXISTS / less-than predicate on ``review_views``.
+    Two notification signals share one per-(user, slug) ``viewed_at`` cutoff:
+
+    - **marked-ready** — an open claim's ``marked_ready_at`` (under_review only).
+    - **job-finished** — ``delivery_states.last_job_finished_at``, stamped on a
+      timestamps job's terminal state (success → released / Published bucket,
+      failure → still under_review / Marked-ready bucket).
+
+    A row counts when the LATER of the two events is newer than the admin's
+    ``viewed_at`` (or unviewed). ISO-8601 UTC strings compare lexically. Single
+    COUNT over ``delivery_states`` LEFT JOIN the open claim — cheap enough for
+    the polled dot.
     """
     return int(get_conn().execute(
-        "SELECT COUNT(*) FROM claims c "
-        "JOIN delivery_states ds ON ds.slug = c.slug "
-        "WHERE c.released_at IS NULL "
-        "  AND c.marked_ready_at IS NOT NULL "
-        "  AND ds.state = 'under_review' "
+        "SELECT COUNT(*) FROM delivery_states ds "
+        "LEFT JOIN claims c ON c.slug = ds.slug AND c.released_at IS NULL "
+        "WHERE ("
+        "    (ds.state = 'under_review' AND c.marked_ready_at IS NOT NULL) "
+        "    OR ds.last_job_finished_at IS NOT NULL"
+        "  ) "
         "  AND NOT EXISTS ("
         "    SELECT 1 FROM review_views v "
-        "    WHERE v.slug = c.slug "
+        "    WHERE v.slug = ds.slug "
         "      AND v.hf_user_id = ? "
-        "      AND v.viewed_at >= c.marked_ready_at"
+        "      AND v.viewed_at >= MAX("
+        "        IFNULL(CASE WHEN ds.state = 'under_review' "
+        "                    THEN c.marked_ready_at END, ''), "
+        "        IFNULL(ds.last_job_finished_at, '')"
+        "      )"
         "  )",
         (hf_user_id,),
     ).fetchone()[0])

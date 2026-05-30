@@ -135,7 +135,7 @@
     <div class="identity">
         <div class="id-name">
             {#if showUnread}
-                <span class="unread" aria-label="new marked-ready" title="New marked ready"></span>
+                <span class="unread" aria-label="needs attention" title="New since you last viewed — marked ready or a finished timestamps job"></span>
             {/if}
             {#if row.name_en}
                 <span class="name-en">{row.name_en}</span>

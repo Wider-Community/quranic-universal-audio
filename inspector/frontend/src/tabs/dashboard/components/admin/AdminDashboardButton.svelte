@@ -56,7 +56,7 @@
             parts.push(`${unviewedRequests} unviewed request${unviewedRequests === 1 ? '' : 's'}`);
         }
         if (unviewedReviews > 0) {
-            parts.push(`${unviewedReviews} marked-ready review${unviewedReviews === 1 ? '' : 's'}`);
+            parts.push(`${unviewedReviews} review update${unviewedReviews === 1 ? '' : 's'}`);
         }
         return parts.join(' · ');
     });

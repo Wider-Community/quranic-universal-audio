@@ -59,12 +59,14 @@ def ts_job_complete():
     if not slug or not job_id:
         return jsonify({"error": "slug and job_id are required"}), 400
 
-    if status not in _SUCCESS:
-        # Not a success — nothing to publish. Ack so the job stops retrying.
-        return jsonify({"ok": True, "released": False, "reason": "non-success status"})
-
     try:
-        result = ts_jobs.complete_timestamps_job(slug, job_id)
+        if status in _SUCCESS:
+            # Publish the reciter (+ light the Published-bucket dot).
+            result = ts_jobs.complete_timestamps_job(slug, job_id)
+        else:
+            # Failed/cancelled/etc. — no publish, just light the Marked-ready
+            # dot so the admin knows the run finished and needs attention.
+            result = ts_jobs.note_timestamps_job_failed(slug)
     except Exception as exc:  # noqa: BLE001 — surface as 502, the job may retry
         log.warning("ts-job-complete webhook for %s failed: %s", slug, exc)
         return jsonify({"error": str(exc)}), 502

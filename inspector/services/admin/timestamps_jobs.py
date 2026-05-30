@@ -404,15 +404,18 @@ def job_status(slug: str, job_id: str, *, log_tail: int = 400) -> dict:
             except Exception as exc:  # noqa: BLE001
                 log.warning("backstop record %s failed: %s", job_id, exc)
 
-    # Auto-release fallback: if the job finished cleanly, publish the reciter.
-    # Idempotent + best-effort — the webhook is the primary trigger in prod;
-    # this catches dev (job can't reach localhost) when the drawer is polling,
-    # and any missed/late webhook. Never let a release failure break status.
+    # Terminal-state fallbacks (idempotent + best-effort). The webhook is the
+    # primary trigger in prod; this catches dev (job can't reach localhost) when
+    # the drawer is polling, and any missed/late webhook. Never break status.
+    #   success → publish the reciter (+ light the Published-bucket dot)
+    #   failure → light the Marked-ready-bucket dot (no state change)
     if status in _TERMINAL_SUCCESS:
         try:
             complete_timestamps_job(slug, job_id)
         except Exception as exc:  # noqa: BLE001
             log.warning("auto-release on poll for %s failed: %s", slug, exc)
+    elif status in _TERMINAL:
+        note_timestamps_job_failed(slug)
 
     return {"job_id": job_id, "status": status, "url": url, "logs": logs,
             "log_truncated": truncated}
@@ -473,8 +476,32 @@ def complete_timestamps_job(slug: str, job_id: str) -> dict:
         log.info("complete_timestamps_job(%s): transition skipped: %s", slug, exc)
         return {"slug": slug, "state": (state_service.get_row(slug) or row).state.value,
                 "released": False, "reason": "transition skipped"}
+    # Light the Reviews-tab dot on the (now released) Published-bucket row.
+    _note_job_finished(slug)
     log.info("complete_timestamps_job(%s): published (job=%s)", slug, job_id)
     return {"slug": slug, "state": new_row.state.value, "released": True}
+
+
+def note_timestamps_job_failed(slug: str) -> dict:
+    """Record a FAILED timestamps job so the Reviews-tab dot lights up.
+
+    No lifecycle change — the reciter stays under_review (marked_ready) and is
+    re-runnable. Just stamps ``last_job_finished_at`` (best-effort) so the admin
+    is notified on the Marked-ready bucket. Idempotent-ish: each terminal
+    failure re-stamps, re-lighting the dot until the admin views the row."""
+    row = state_service.get_row(slug)
+    if row is None:
+        return {"slug": slug, "noted": False, "reason": "unknown slug"}
+    _note_job_finished(slug)
+    return {"slug": slug, "noted": True, "state": row.state.value}
+
+
+def _note_job_finished(slug: str) -> None:
+    """Best-effort ``last_job_finished_at`` stamp — never raise into callers."""
+    try:
+        state_service.mark_timestamps_job_finished(slug)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("mark_timestamps_job_finished(%s) failed: %s", slug, exc)
 
 
 def _has_any_shard(slug: str) -> bool:

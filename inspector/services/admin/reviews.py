@@ -43,7 +43,7 @@ _BUCKET_STATES: tuple[str, ...] = (
 
 _SQL = (
     "SELECT "
-    "  ds.slug, ds.state, ds.state_since, "
+    "  ds.slug, ds.state, ds.state_since, ds.last_job_finished_at, "
     "  d.reciter_id, d.riwayah, d.style, d.channel, "
     "  r.name_ar, r.name_en, "
     "  c.assignee_id, c.assignee_login_snapshot, c.claimed_at, c.marked_ready_at "
@@ -106,17 +106,25 @@ def list_reviews(*, caller_hf_id: str) -> dict:
                 marked_ready_at=r["marked_ready_at"],
             )
 
-        # ``unread`` is strict: only marked-ready rows ever qualify, so the
-        # FE can render the dot from this flag alone without re-deriving
-        # the bucket predicate. Non-marked-ready rows default to False.
-        unread = False
+        # ``unread`` = the latest actionable event for this row is newer than
+        # this admin's last view of the slug. Two signals share one viewed_at
+        # cutoff: a marked-ready submission (under_review only) and a finished
+        # timestamps job (``last_job_finished_at`` — success→released/Published,
+        # failure→under_review/Marked-ready). ISO strings sort lexically. Mirrors
+        # repo_review_views.count_unviewed_for_user so the per-row dot and the
+        # polled aggregate agree.
+        events: list[str] = []
         if (
             r["state"] == ReciterState.UNDER_REVIEW.value
-            and open_claim is not None
-            and open_claim.marked_ready_at is not None
+            and r["marked_ready_at"] is not None
         ):
+            events.append(r["marked_ready_at"])
+        if r["last_job_finished_at"] is not None:
+            events.append(r["last_job_finished_at"])
+        unread = False
+        if events:
             seen_at = viewed.get(r["slug"])
-            unread = seen_at is None or seen_at < open_claim.marked_ready_at
+            unread = seen_at is None or seen_at < max(events)
 
         rows.append(AdminReviewRow(
             slug=r["slug"],
@@ -140,9 +148,11 @@ def list_reviews(*, caller_hf_id: str) -> dict:
 
 
 def unviewed_marked_ready_count(*, caller_hf_id: str) -> int:
-    """Marked-ready rows the caller hasn't viewed. Drives the entry-button
-    dot poller. Cheap COUNT — never cached (per-caller + polled)."""
-    return repo_review_views.count_unviewed_marked_ready_for_user(caller_hf_id)
+    """Reviews rows the caller hasn't viewed — marked-ready submissions AND
+    finished timestamps jobs (success→published / failure→marked-ready). Drives
+    the entry-button dot poller. Cheap COUNT — never cached (per-caller +
+    polled). (Name kept for call-site stability; semantics now cover both.)"""
+    return repo_review_views.count_unviewed_for_user(caller_hf_id)
 
 
 def mark_viewed(slug: str, *, caller_hf_id: str) -> bool:

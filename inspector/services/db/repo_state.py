@@ -26,6 +26,10 @@ _WRITABLE: dict[str, Any] = {
     "visibility": lambda v: v.value if hasattr(v, "value") else v,
     "visibility_reason": lambda v: v,
     "last_save_at": _serde.to_iso,
+    # Set by job-completion bookkeeping (no lifecycle transition); read directly
+    # by the Reviews-tab unread queries. Deliberately NOT surfaced on ReciterRow
+    # (_assemble reads named columns only), so no schema/codegen change.
+    "last_job_finished_at": _serde.to_iso,
     "created_by_transition_id": lambda v: v,
     "timestamps_job_ids": lambda v: _serde.json_dumps(v or []),
     "revision_in_progress": lambda v: (
