@@ -23,6 +23,7 @@
     import { adminDashboard } from '../../../stores/admin-dashboard.svelte';
     import ReviewsGeneralDrawer from './ReviewsGeneralDrawer.svelte';
     import ReviewsRow from './ReviewsRow.svelte';
+    import ReviewsTimestampsDrawer from './ReviewsTimestampsDrawer.svelte';
 
     let resp = $state<AdminReviewsResponse | null>(null);
     let loading = $state(true);
@@ -346,6 +347,11 @@
                 slug={reviewsStore.selectedSlug}
                 onclose={() => reviewsStore.close()}
                 onaction={refetch}
+            />
+        {:else if reviewsStore.openDrawer === 'timestamps'}
+            <ReviewsTimestampsDrawer
+                slug={reviewsStore.selectedSlug}
+                onclose={() => reviewsStore.close()}
             />
         {/if}
     {/if}

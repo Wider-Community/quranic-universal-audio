@@ -16,7 +16,6 @@
      * top-level Segments tab with this slug pre-selected. Generate TS
      * launches the MFA timestamps job for under-review recitations.
      */
-    import { generateTimestamps } from '../../../../../lib/api/admin-reviews';
     import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
     import type { AdminReviewRow } from '../../../../../lib/types/generated/schemas';
     import { setActiveTab } from '../../../../../lib/utils/active-tab';
@@ -29,12 +28,7 @@
 
     const isActive = $derived(reviewsStore.selectedSlug === row.slug);
     const isUnderReview = $derived(row.state === 'under_review');
-
-    // Generate-timestamps launch state (under-review rows only). Inline
-    // feedback — disable while in-flight, surface the server error (incl. the
-    // 409 "already running") in the button title.
-    let tsBusy = $state(false);
-    let tsError = $state<string | null>(null);
+    const isTsActive = $derived(isActive && reviewsStore.openDrawer === 'timestamps');
 
     function relativeAge(iso: string | null | undefined): string {
         if (!iso) return '';
@@ -115,18 +109,9 @@
         adminDashboard.close();
     }
 
-    async function onGenerateTimestamps(e: MouseEvent): Promise<void> {
+    function onGenerateTimestamps(e: MouseEvent): void {
         e.stopPropagation();
-        if (tsBusy) return;
-        tsBusy = true;
-        tsError = null;
-        try {
-            await generateTimestamps(row.slug);
-        } catch (err) {
-            tsError = (err as Error).message ?? 'Failed to launch job';
-        } finally {
-            tsBusy = false;
-        }
+        reviewsStore.open(row.slug, 'timestamps');
     }
 </script>
 
@@ -177,12 +162,11 @@
         {#if isUnderReview}
             <button
                 class="btn"
-                class:err={!!tsError}
+                class:armed={isTsActive}
                 type="button"
                 onclick={onGenerateTimestamps}
-                disabled={tsBusy}
-                title={tsError ?? 'Run MFA alignment to generate timestamps'}
-            >{tsBusy ? 'Generating…' : 'Generate TS'}</button>
+                title="Generate timestamps — settings, logs & history"
+            >Generate TS</button>
         {/if}
     </td>
 </tr>
@@ -338,10 +322,13 @@
         transition: border-color var(--t-fast), color var(--t-fast), background-color var(--t-fast);
     }
     .cell.actions .btn + .btn { margin-left: var(--s-1); }
-    .cell.actions .btn:hover:not(:disabled) {
+    .cell.actions .btn:hover {
         border-color: var(--border-default);
         color: var(--text-primary);
     }
-    .cell.actions .btn:disabled { opacity: 0.6; cursor: progress; }
-    .cell.actions .btn.err { border-color: var(--state-error-fg); color: var(--state-error-fg); }
+    .cell.actions .btn.armed {
+        border-color: var(--accent);
+        color: var(--accent-strong);
+        background: var(--accent-tint-soft);
+    }
 </style>

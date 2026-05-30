@@ -23,7 +23,7 @@
 
 import { markReviewViewed } from '../api/admin-reviews';
 
-export type ReviewsDrawerKind = 'general';
+export type ReviewsDrawerKind = 'general' | 'timestamps';
 
 export type ReviewsSort = 'stalled' | 'name';
 
