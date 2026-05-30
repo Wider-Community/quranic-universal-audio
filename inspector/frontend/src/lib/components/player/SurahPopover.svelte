@@ -1,8 +1,7 @@
 <script lang="ts">
     /**
-     * Surah picker popover — single-click select. Plain scrollable list
-     * with a text filter input; avoids the SearchableSelect double-click
-     * (first click focuses input, second click selects).
+     * Surah picker popover — grid layout matching the ayah picker.
+     * Each cell shows name_en (top) · number (middle) · name_ar (bottom).
      */
     import { createEventDispatcher, onMount, tick } from 'svelte';
 
@@ -24,13 +23,17 @@
 
     interface Item {
         n: number;
+        nameEn: string;
+        nameAr: string;
         label: string;
     }
 
     $: items = ready
         ? surahNums.map((n) => {
-              void getSurahInfo();
-              return { n, label: surahOptionText(n) } as Item;
+              const info = getSurahInfo()[String(n)];
+              const nameEn = info?.name_en ?? String(n);
+              const nameAr = info?.name_ar.replace(/^سُورَةُ\s*/, '') ?? '';
+              return { n, nameEn, nameAr, label: surahOptionText(n) } as Item;
           })
         : [];
     $: filtered = query.trim()
@@ -60,18 +63,19 @@
         placeholder="Filter surahs…"
         autocomplete="off"
     />
-    <div class="list" role="listbox">
+    <div class="grid" role="listbox">
         {#each filtered as it (it.n)}
             <button
                 type="button"
-                class="row"
+                class="cell"
                 class:active={value === it.n}
                 role="option"
                 aria-selected={value === it.n}
                 on:click={() => pick(it.n)}
             >
+                <span class="name-en">{it.nameEn}</span>
                 <span class="num">{it.n}</span>
-                <span class="label">{it.label.replace(/^\d+\s*/, '')}</span>
+                <span class="name-ar">{it.nameAr}</span>
             </button>
         {:else}
             <div class="empty">No matches</div>
@@ -80,19 +84,11 @@
 </div>
 
 <style>
-    /* Inherit the wrapper width from the consumer so the popover never
-     * overflows its anchor (the player-stack row in the segments footer
-     * is ~232px wide; the dashboard's surah-trigger is ~140px). Each call
-     * site sets an explicit width on its `.pop-*` container — we just
-     * fill it. Clamps below cap the popover at a comfortable 320px max
-     * even when the anchor is wider (e.g. the dashboard delivery cluster). */
     .wrap {
         width: 100%;
-        max-width: 320px;
-        min-width: 180px;
         display: flex;
         flex-direction: column;
-        max-height: min(420px, 60vh);
+        max-height: min(480px, 70vh);
     }
     .search {
         flex: 0 0 auto;
@@ -103,53 +99,85 @@
         border-radius: var(--r-2);
         font-size: var(--fs-meta);
         outline: none;
+        margin-bottom: var(--s-2);
     }
     .search:focus {
         border-color: var(--accent);
     }
-    .list {
+    .grid {
         flex: 1 1 auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+        gap: 4px;
         overflow-y: auto;
-        margin-top: var(--s-2);
+    }
+    .cell {
         display: flex;
         flex-direction: column;
-        gap: 1px;
-    }
-    .row {
-        display: flex;
-        align-items: baseline;
-        gap: var(--s-2);
-        padding: 6px var(--s-2);
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 6px 4px;
         background: transparent;
-        border: 0;
-        text-align: left;
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
         color: var(--text-secondary);
         cursor: pointer;
-        border-radius: var(--r-2);
-        font-size: var(--fs-meta);
+        min-height: 58px;
+        transition:
+            border-color var(--t-fast),
+            color var(--t-fast),
+            background var(--t-fast);
     }
-    .row:hover {
-        background: var(--canvas-inset);
+    .cell:hover {
+        border-color: var(--border-strong);
         color: var(--text-primary);
+        background: var(--panel-2);
     }
-    .row.active {
-        background: var(--canvas-inset);
+    .cell.active {
+        border-color: var(--accent);
         color: var(--accent);
+        background: var(--accent-tint);
+    }
+    .name-en {
+        font-size: 9.5px;
+        line-height: 1.2;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
+        color: var(--text-muted);
+    }
+    .cell:hover .name-en,
+    .cell.active .name-en {
+        color: inherit;
     }
     .num {
         font-family: var(--font-mono);
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        line-height: 1;
+        color: inherit;
+    }
+    .name-ar {
         font-size: 10.5px;
-        color: var(--text-faint);
-        min-width: 22px;
-        text-align: right;
+        line-height: 1.2;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
+        direction: rtl;
+        color: var(--text-muted);
     }
-    .row.active .num {
-        color: var(--accent);
-    }
-    .label {
-        flex: 1 1 auto;
+    .cell:hover .name-ar,
+    .cell.active .name-ar {
+        color: inherit;
     }
     .empty {
+        grid-column: 1 / -1;
         padding: var(--s-3);
         color: var(--text-muted);
         font-size: var(--fs-meta);

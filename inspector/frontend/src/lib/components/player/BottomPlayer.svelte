@@ -451,11 +451,7 @@
         position: absolute;
         bottom: calc(100% + var(--s-2));
         right: 0;
-        /* Clip to the trigger anchor's neighbourhood. 240px gives the
-         * search input + a comfortable list view without sprawling
-         * across the player width. SurahPopover is width:100% inside. */
-        width: 240px;
-        max-width: calc(100vw - var(--s-4) * 2);
+        width: min(420px, calc(100vw - var(--s-4) * 2));
         padding: var(--s-2);
         background: var(--panel);
         border: 1px solid var(--border-default);
