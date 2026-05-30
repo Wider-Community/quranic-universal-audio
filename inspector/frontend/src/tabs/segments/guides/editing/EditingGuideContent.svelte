@@ -8,7 +8,6 @@
      * Plain language throughout (no jargon); this is required reading, so it
      * leads with a banner saying so.
      */
-    import AnatomyCard from './AnatomyCard.svelte';
     import MockSegCard from './MockSegCard.svelte';
     import { synthPeaks } from './synth-peaks';
     import ValActionMock from './ValActionMock.svelte';
@@ -28,9 +27,9 @@
         piece to the Quran words it thinks were recited.
     </p>
     <p>Here’s what a single segment card shows:</p>
-    <AnatomyCard peaks={wave} />
-
-    <!-- The actions -->
+    <div class="eg-card-frame">
+        <MockSegCard peaks={wave} placeholder />
+    </div>
 
     <!-- Adjust -->
     <h3 class="eg-h">Adjust — fix the start/end times</h3>
@@ -47,7 +46,7 @@
         <span class="eg-ink-end">red</span> line is the end. Move them three ways: drag a line on
         the waveform, tap the <strong>‹ ›</strong> steppers for fine nudges, or type an exact time
         into the time field. Press <strong>Apply</strong> to keep it, <strong>Cancel</strong> to
-        drop it.
+        drop it. 
     </p>
 
     <!-- Split -->
@@ -85,7 +84,7 @@
         <code>s:v</code> selects the whole verse, <code>s:v:w</code> selects just that one word. Press <strong>Enter</strong> to
         confirm, <strong>Esc</strong> to cancel.
 
-        Entering an empty reference or "(no match)" causes it to be a failed alignment.
+        Entering an empty reference causes it to be a failed alignment.
     </p>
 
     <!-- Merge -->
@@ -102,8 +101,7 @@
     <!-- Delete -->
     <h3 class="eg-h">Delete — remove a segment</h3>
     <p>
-        Use <strong>Delete</strong> for a segment that shouldn’t exist — silence, noise, or a
-        duplicate. It’s removed from the list (you can always undo it later).
+        Use <strong>Delete</strong> for a segment that shouldn’t exist — silence, noise, non-Quran speech, weird audio issues. It’s removed from the list (you can always undo it later).
     </p>
     <div class="eg-card-frame">
         <MockSegCard peaks={waveB} emphasize={['delete']} />
@@ -118,8 +116,7 @@
         <div class="eg-special-col">
             <ValActionMock kind="autofill" />
             <p class="eg-note">
-                <strong>Auto-fill</strong> fills in a <em>missing word</em> for you — it only adds
-                the word that’s missing, nothing else.
+                <strong>Auto-fill</strong> fills in a <em>missing word</em> for you.
             </p>
         </div>
         <div class="eg-special-col">
@@ -138,6 +135,6 @@
         you can also press <strong>Save</strong> yourself at any time. Nothing is ever locked in —
         the <strong>History</strong> panel lists every edit, and you can <strong>undo</strong> any
         of them. You can filter history by the kind of edit or by validation category to find and
-        double-check a change. Take your time and verify as you go.
+        double-check a change.
     </p>
 </div>

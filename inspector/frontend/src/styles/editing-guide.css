@@ -126,30 +126,6 @@
 .eg-ink-end { color: #f44336; font-weight: 600; }
 .eg-ink-split { color: #d4c020; font-weight: 600; }
 
-/* ---- anatomy legend ---- */
-.eg-legend {
-    list-style: none;
-    margin: 4px 0 6px;
-    padding: 0;
-    display: grid;
-    gap: 6px;
-}
-.eg-legend-item {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    font-size: 0.88rem;
-    color: #c2cce0;
-}
-.eg-legend-item strong { color: #eef2ff; }
-.eg-dot {
-    flex: 0 0 auto;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    transform: translateY(1px);
-}
-
 .eg-note {
     color: #aeb9d4;
     font-size: 0.9rem;
