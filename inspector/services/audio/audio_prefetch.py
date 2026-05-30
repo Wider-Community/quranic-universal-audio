@@ -1,8 +1,14 @@
-"""Wip-audio sweeper: 1-week post-release cleanup of bucket audio + peaks.
+"""Wip-audio sweeper: 1-week post-release cleanup of bucket audio.
 
 A daemon thread wakes hourly, scans the in-memory state store, and deletes
-``reciters/<slug>/{audio,peaks}/`` for rows whose ``prefetch_purge_at`` is in the
-past. The single-worker Flask invariant guarantees one sweeper per deploy.
+``reciters/<slug>/audio/`` (the multi-MB chapter mp3s) for rows whose
+``prefetch_purge_at`` is in the past. The single-worker Flask invariant
+guarantees one sweeper per deploy.
+
+``reciters/<slug>/peaks/`` is PRESERVED (no longer swept): the slim 10bps
+chapter peaks are ~6 KB/chapter and are the Timestamps tab's fast-path waveform
+source — recomputing them live is a 289-762ms ffmpeg decode per verse. Only the
+big audio bytes are GC'd; playback streams from the CDN via the audio-proxy.
 
 Trigger flow (handled in ``services.state``):
 

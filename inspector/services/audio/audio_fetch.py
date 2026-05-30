@@ -100,15 +100,22 @@ def read_prefetched_peaks(slug: str, url: str) -> dict | None:
 
 
 def clear_prefetch(slug: str) -> None:
-    """Delete every artifact under ``reciters/<slug>/audio/`` and ``reciters/<slug>/peaks/``.
+    """Delete the multi-MB ``reciters/<slug>/audio/`` chapter files post-release.
 
-    Called by the post-RELEASED sweeper. The ``_done.json`` sentinel is
-    deleted separately by the sweeper itself so it can survive a partial
-    failure here.
+    Called by the post-RELEASED sweeper. The ``_done.json`` sentinel (inside
+    ``audio/``) is deleted separately by the sweeper itself so it can survive a
+    partial failure here.
+
+    ``peaks/`` is intentionally PRESERVED: the slim 10bps chapter peaks are tiny
+    (~6 KB/chapter) and are the Timestamps tab's fast-path waveform source
+    (``ensureChapterPeaks`` → ``/api/seg/peaks``). Recomputing them live costs a
+    289-762ms ffmpeg decode per verse, so keeping them is the whole point of
+    baking them. The audio bytes themselves stay swept — playback streams from
+    the CDN via the audio-proxy.
     """
     backend = get_backend()
-    for d in (storage_paths.prefetched_audio_dir(slug), storage_paths.prefetched_peaks_dir(slug)):
-        try:
-            backend.delete(d)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("clear_prefetch: failed deleting %s: %s", d, e)
+    try:
+        backend.delete(storage_paths.prefetched_audio_dir(slug))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("clear_prefetch: failed deleting %s: %s",
+                       storage_paths.prefetched_audio_dir(slug), e)

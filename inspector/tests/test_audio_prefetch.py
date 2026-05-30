@@ -124,8 +124,9 @@ def test_sweep_due_purges_overdue_rows_and_clears_stamp(tmp_reciter_dir):
     purged = audio_prefetch.sweep_due()
     assert purged == 1
 
+    # Audio bytes are swept; slim peaks are PRESERVED (TS fast-path source).
     assert not backend.exists(storage_paths.prefetched_audio_path("slug_x", "1"))
-    assert not backend.exists(storage_paths.prefetched_peaks_path("slug_x", "1"))
+    assert backend.exists(storage_paths.prefetched_peaks_path("slug_x", "1"))
     refreshed = state.get_row("slug_x")
     assert refreshed.prefetch_purge_at is None
 
