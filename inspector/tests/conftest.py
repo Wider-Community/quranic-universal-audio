@@ -182,7 +182,6 @@ def _seed_state(
     last_save_at=None,
     reciter_id: str = "rid",
     timestamps_job_ids=None,
-    prefetch_purge_at=None,
     revision_in_progress=None,
 ) -> None:
     """Seed a ``delivery_states`` row (+ FK chain), synthesizing an open
@@ -218,7 +217,6 @@ def _seed_state(
             visibility_reason=visibility_reason,
             last_save_at=last_save_at,
             timestamps_job_ids=list(timestamps_job_ids or []),
-            prefetch_purge_at=prefetch_purge_at,
             revision_in_progress=revision_in_progress,
         )
         if assignee_hf_id is not None:

@@ -535,7 +535,7 @@ def set_audio_manifest_url_index_cache(slug: str, idx: dict[str, str]) -> None:
 
 # Audio cache status (thread-safe). Note: the audio download-progress dict
 # (_AUDIO_DL_PROGRESS + helpers) lived here until the prefetch worker was
-# removed; the sweeper that survives doesn't need progress tracking.
+# removed; no background audio worker remains.
 _AUDIO_CACHE_STATUS: dict[str, dict] = {}
 
 

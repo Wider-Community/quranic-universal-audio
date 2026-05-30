@@ -373,17 +373,6 @@ def _boot_substrate() -> None:
         except Exception as e:  # noqa: BLE001
             logger.warning("auto_detect background loop wiring failed: %s", e)
 
-    # Wip-audio sweeper: hourly TTL GC of bucket audio/peaks. Opt-in via
-    # ``INSPECTOR_WIP_SWEEPER=1`` (prod Dockerfile sets it).
-    if os.environ.get("INSPECTOR_WIP_SWEEPER") == "1":
-        try:
-            from services import audio_prefetch
-
-            audio_prefetch.start_cleanup_daemon()
-            logger.info("wip-audio sweeper: hourly daemon started")
-        except Exception as e:  # noqa: BLE001
-            logger.warning("wip-audio sweeper wiring failed: %s", e)
-
     # Visitor-analytics flush: hourly drain of in-memory traffic counters into
     # visitor_daily (one bucket upload/hour). Opt-in via
     # ``INSPECTOR_VISITOR_ANALYTICS=1`` (prod Dockerfile sets it).

@@ -81,7 +81,6 @@ HIDDEN_EVENTS: frozenset[str] = frozenset({
     # another UNDER_REVIEW slug (or were demoted). Audit trail only.
     "reciter.auto_claim_skipped",
     "reciter.timestamps_completed",
-    "admin.clear_prefetch_purge_at",
     "access.role_granted",
     "access.role_revoked",
     "access.role_updated",

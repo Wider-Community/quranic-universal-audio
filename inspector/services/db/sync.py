@@ -58,7 +58,7 @@ _last_error: str | None = None
 # ``_SYNC_ENABLED`` is True in production; tests disable it via
 # ``set_sync_enabled(False)`` so the bulk of the suite doesn't pay snapshot
 # cost (dedicated durability tests flip it back on). ``_defer_depth`` lets a
-# boot-scan / sweeper batch wrap N transitions in ``deferred_sync()`` so the
+# boot-scan or other batch loop wrap N transitions in ``deferred_sync()`` so the
 # loop uploads ONCE instead of once-per-commit (the boot/bucket-storm fix).
 _SYNC_ENABLED = True
 _defer_depth: ContextVar[int] = ContextVar("db_sync_defer_depth", default=0)
@@ -336,8 +336,8 @@ def mark_durable() -> None:
 def deferred_sync() -> Iterator[None]:
     """Coalesce uploads across a batch of commits into ONE upload on exit.
 
-    Boot-scan (``hydrate_initial_seen``) and the wip sweeper apply N transitions
-    in a loop; without this each would CAS-upload, storming the bucket at boot.
+    Boot-scan (``hydrate_initial_seen``) applies N transitions in a loop;
+    without this each would CAS-upload, storming the bucket at boot.
     The outermost block uploads once (only if the body didn't raise and at least
     one transaction actually committed). Re-entrant via a depth counter.
     """

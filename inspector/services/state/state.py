@@ -196,9 +196,9 @@ def _require_capability(actor: Actor, capability: str) -> None:
 
 # Event → tier capability. Authoritative map of which capability each gated
 # transition enforces (the handler hardcodes the same id inline). Events absent
-# here have NO tier gate by design: server-/sweeper-driven
-# (``reciter.alignment_completed``, ``reciter.timestamps_completed``,
-# ``admin.clear_prefetch_purge_at``) or pure ownership (``reciter.released`` =
+# here have NO tier gate by design: server-driven
+# (``reciter.alignment_completed`` and ``reciter.timestamps_completed``) or
+# pure ownership (``reciter.released`` =
 # claim-holder-or-maintainer). The parity test asserts every mapped event
 # rejects an under-privileged actor.
 _EVENT_CAPABILITY: dict[str, str] = {
@@ -360,14 +360,13 @@ def _persist_state(before: ReciterRow | None, new_row: ReciterRow, *, tid: str) 
             last_save_at=new_row.last_save_at,
             created_by_transition_id=tid,
             timestamps_job_ids=list(new_row.timestamps_job_ids),
-            prefetch_purge_at=new_row.prefetch_purge_at,
             revision_in_progress=new_row.revision_in_progress,
         )
         return
     updates: dict[str, Any] = {}
     for col in (
         "state", "state_since", "visibility", "visibility_reason",
-        "last_save_at", "timestamps_job_ids", "prefetch_purge_at",
+        "last_save_at", "timestamps_job_ids",
         "revision_in_progress",
     ):
         if getattr(new_row, col) != getattr(before, col):
@@ -552,7 +551,6 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
         before,
         state=ReciterState.AWAITING_REVIEW,
         state_since=_now(),
-        prefetch_purge_at=None,
     )
 
 
@@ -743,7 +741,6 @@ def _h_released(slug, before, actor, payload, reason):
         assignee_login=None,
         assignee_since=None,
         marked_ready=False,
-        prefetch_purge_at=None,
     )
 
 
@@ -922,7 +919,6 @@ def _h_timestamps_completed(slug, before, actor, payload, reason):
         state=ReciterState.RELEASED,
         state_since=_now(),
         timestamps_job_ids=job_ids,
-        prefetch_purge_at=_now() + timedelta(days=7),
     )
 
 
@@ -940,7 +936,6 @@ def _h_unpublished(slug, before, actor, payload, reason):
         state=ReciterState.AWAITING_REVIEW,
         state_since=_now(),
         revision_in_progress=None,
-        prefetch_purge_at=None,
     )
 
 
@@ -963,7 +958,6 @@ def _h_unlocked_for_revision(slug, before, actor, payload, reason):
         state=ReciterState.AWAITING_REVIEW,
         state_since=_now(),
         revision_in_progress=context,
-        prefetch_purge_at=None,
     )
 
 
@@ -1037,17 +1031,6 @@ def _h_reassigned(slug, before, actor, payload, reason):
     )
 
 
-def _h_clear_prefetch_purge_at(slug, before, actor, payload, reason):
-    """Sweeper-only event. Clears ``prefetch_purge_at`` after the audio +
-    peaks directories are deleted, so the same row doesn't re-trigger on the
-    next hourly tick. State-preserving."""
-    if before is None:
-        raise UnknownReciter(slug)
-    if before.prefetch_purge_at is None:
-        return before
-    return _replace(before, prefetch_purge_at=None)
-
-
 _HANDLERS: dict[str, Any] = {
     "catalog.added": _h_catalog_added,
     "catalog.edited": _h_catalog_edited,
@@ -1068,7 +1051,6 @@ _HANDLERS: dict[str, Any] = {
     "claim.force_released": _h_force_released,
     "claim.reassigned": _h_reassigned,
     "admin.unlocked_for_revision": _h_unlocked_for_revision,
-    "admin.clear_prefetch_purge_at": _h_clear_prefetch_purge_at,
 }
 
 

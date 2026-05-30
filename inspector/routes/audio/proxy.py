@@ -20,9 +20,7 @@ Single GET route. Lookup order:
 
 The download-all + delete-cache + cache-status endpoints have been removed
 — bucket audio is populated by the offline pipeline, not by a Space-side
-warm path. The 1-week post-RELEASED GC lives in
-``services.audio_prefetch.sweep_due`` (see
-``the inspector-audio skill``).
+warm path, and is never GC'd.
 
 Optional query params:
 

@@ -187,7 +187,6 @@ def build(src: dict, *, allow_orphans: bool = False) -> dict:
                 row.slug, state=row.state, state_since=row.state_since,
                 visibility=row.visibility, visibility_reason=row.visibility_reason,
                 last_save_at=row.last_save_at, timestamps_job_ids=row.timestamps_job_ids,
-                prefetch_purge_at=row.prefetch_purge_at,
                 revision_in_progress=row.revision_in_progress,
             )
             stats["states"] += 1

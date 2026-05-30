@@ -2,7 +2,7 @@
 
 The canonical event log is ``transitions`` (``repo_transitions``). This module
 keeps the legacy ``audit.append(event, …)`` signature so the ~16 call sites
-(state, catalog, access, activity, audio_prefetch) don't churn. It delegates
+(state, catalog, access, activity) don't churn. It delegates
 to ``repo_transitions.append`` which enrolls in the caller's active
 ``transaction()`` (a SAVEPOINT when nested) — so the transition row commits
 atomically with the state/claim/catalog write that motivated it, and its

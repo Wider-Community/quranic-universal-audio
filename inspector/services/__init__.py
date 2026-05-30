@@ -20,7 +20,6 @@ from .storage import cache, data_dir, data_loader, hf_bucket, storage_paths
 from .audio import (
     audio_fetch,
     audio_meta,
-    audio_prefetch,
     audio_source,
     peaks,
     peaks_history,
@@ -69,7 +68,6 @@ _LEGACY_ALIASES = {
     "storage_paths": storage_paths,
     "audio_fetch": audio_fetch,
     "audio_meta": audio_meta,
-    "audio_prefetch": audio_prefetch,
     "audio_source": audio_source,
     "peaks": peaks,
     "peaks_history": peaks_history,

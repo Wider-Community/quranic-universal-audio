@@ -149,10 +149,6 @@ def timestamps_path_gz(slug: str, chapter: str | int) -> str:
     return reciter_file(slug, f"timestamps/{chapter}.json.gz")
 
 
-def prefetched_audio_dir(slug: str) -> str:
-    return reciter_file(slug, "audio")
-
-
 def prefetched_audio_path(slug: str, chapter: str | int) -> str:
     """MP3 written by the katana extraction pipeline for in-review reciters."""
     return reciter_file(slug, f"audio/{chapter}.mp3")
@@ -188,11 +184,6 @@ def prefetched_peaks_backup_path(slug: str, chapter: str | int) -> str:
     """Backup name used during dev-bucket migration. Originals get renamed
     here so rollback can restore them. Cleaned up after prod cutover."""
     return reciter_file(slug, f"peaks/{chapter}.json.bak")
-
-
-def prefetch_done_marker_path(slug: str) -> str:
-    """Sentinel written atomically last; presence ⇒ prefetch fully completed."""
-    return reciter_file(slug, "audio/_done.json")
 
 
 PER_RECITER_FILES: tuple[str, ...] = (

@@ -1,14 +1,13 @@
-"""Bucket-resident audio read primitives + cleanup.
+"""Bucket-resident audio read primitives.
 
 Used by:
 - ``audio_source.resolve`` — picks bucket vs CDN path for the audio proxy.
 - ``routes/segments/peaks.py`` — slim-envelope peaks reader.
-- ``audio_prefetch.sweep_due`` — post-release cleanup.
 
-No background worker. No CDN downloads. Bucket audio is written by the
-katana extraction pipeline (``.local/extraction/upload_to_bucket.py`` +
-``.local/extraction/segments/audio_persist.py``); the inspector only reads
-and (via the sweeper) deletes.
+No background worker. No CDN downloads. Bucket audio + slim peaks are written by
+the katana extraction pipeline (``.local/extraction/upload_to_bucket.py`` +
+``.local/extraction/segments/audio_persist.py``) and the timestamps job; the
+inspector only reads them — nothing is GC'd.
 
 No Flask imports — callable from any thread.
 """
@@ -97,25 +96,3 @@ def read_prefetched_peaks(slug: str, url: str) -> dict | None:
     except Exception:  # noqa: BLE001
         return None
     return unpack_slim_envelope(blob)
-
-
-def clear_prefetch(slug: str) -> None:
-    """Delete the multi-MB ``reciters/<slug>/audio/`` chapter files post-release.
-
-    Called by the post-RELEASED sweeper. The ``_done.json`` sentinel (inside
-    ``audio/``) is deleted separately by the sweeper itself so it can survive a
-    partial failure here.
-
-    ``peaks/`` is intentionally PRESERVED: the slim 10bps chapter peaks are tiny
-    (~6 KB/chapter) and are the Timestamps tab's fast-path waveform source
-    (``ensureChapterPeaks`` → ``/api/seg/peaks``). Recomputing them live costs a
-    289-762ms ffmpeg decode per verse, so keeping them is the whole point of
-    baking them. The audio bytes themselves stay swept — playback streams from
-    the CDN via the audio-proxy.
-    """
-    backend = get_backend()
-    try:
-        backend.delete(storage_paths.prefetched_audio_dir(slug))
-    except Exception as e:  # noqa: BLE001
-        logger.warning("clear_prefetch: failed deleting %s: %s",
-                       storage_paths.prefetched_audio_dir(slug), e)

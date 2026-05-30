@@ -57,6 +57,14 @@ def test_existing_db_at_v6_gets_mark_ready_columns():
             opened_by_transition_id TEXT,
             closed_by_transition_id TEXT
         );
+        -- Minimal stand-in for the real 0001 delivery_states so the full chain
+        -- (incl. 0011's DROP COLUMN prefetch_purge_at) applies; a real v6 DB has
+        -- this table with the column.
+        CREATE TABLE delivery_states (
+            slug              TEXT PRIMARY KEY,
+            state             TEXT NOT NULL,
+            prefetch_purge_at TEXT
+        );
         PRAGMA user_version = 6;
         """
     )

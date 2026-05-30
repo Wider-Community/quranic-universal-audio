@@ -28,7 +28,6 @@ _WRITABLE: dict[str, Any] = {
     "last_save_at": _serde.to_iso,
     "created_by_transition_id": lambda v: v,
     "timestamps_job_ids": lambda v: _serde.json_dumps(v or []),
-    "prefetch_purge_at": _serde.to_iso,
     "revision_in_progress": lambda v: (
         None if v is None else _serde.json_dumps(
             v.model_dump(mode="json") if hasattr(v, "model_dump") else v
@@ -48,7 +47,6 @@ def _assemble(ds, claim) -> ReciterRow:
         "visibility_reason": ds["visibility_reason"],
         "last_save_at": _serde.from_iso(ds["last_save_at"]),
         "timestamps_job_ids": _serde.json_loads(ds["timestamps_job_ids"]) or [],
-        "prefetch_purge_at": _serde.from_iso(ds["prefetch_purge_at"]),
         "revision_in_progress": (
             RevisionContext.model_validate(rip_raw) if rip_raw else None
         ),
@@ -117,22 +115,20 @@ def upsert_state(
     last_save_at: datetime | None = None,
     created_by_transition_id: str | None = None,
     timestamps_job_ids: list[str] | None = None,
-    prefetch_purge_at: datetime | None = None,
     revision_in_progress=None,
 ) -> None:
     """Insert or replace the full delivery_states row for ``slug``."""
     get_conn().execute(
         "INSERT INTO delivery_states(slug, state, state_since, visibility, "
         "visibility_reason, last_save_at, created_by_transition_id, "
-        "timestamps_job_ids, prefetch_purge_at, revision_in_progress) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?) "
+        "timestamps_job_ids, revision_in_progress) "
+        "VALUES (?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT(slug) DO UPDATE SET "
         "  state=excluded.state, state_since=excluded.state_since, "
         "  visibility=excluded.visibility, visibility_reason=excluded.visibility_reason, "
         "  last_save_at=excluded.last_save_at, "
         "  created_by_transition_id=excluded.created_by_transition_id, "
         "  timestamps_job_ids=excluded.timestamps_job_ids, "
-        "  prefetch_purge_at=excluded.prefetch_purge_at, "
         "  revision_in_progress=excluded.revision_in_progress",
         (
             slug,
@@ -143,7 +139,6 @@ def upsert_state(
             _serde.to_iso(last_save_at),
             created_by_transition_id,
             _serde.json_dumps(timestamps_job_ids or []),
-            _serde.to_iso(prefetch_purge_at),
             _WRITABLE["revision_in_progress"](revision_in_progress),
         ),
     )

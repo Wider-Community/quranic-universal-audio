@@ -70,11 +70,6 @@ class ReciterRow(BaseModel):
     timestamps_job_ids: list[str] = Field(default_factory=list)
     revision_in_progress: RevisionContext | None = None
 
-    # Set when the row enters RELEASED (timestamps_completed) to schedule the
-    # 1-week deletion of the prefetched audio under ``reciters/<slug>/``. Cleared by
-    # admin.unlocked_for_revision (which re-enqueues prefetch).
-    prefetch_purge_at: datetime | None = None
-
     @field_validator("slug")
     @classmethod
     def _validate_slug(cls, v: str) -> str:

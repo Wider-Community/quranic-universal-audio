@@ -85,7 +85,6 @@ def test_timestamps_completed_is_hidden_not_public():
     "admin.unlocked_for_revision",
     # Always hidden.
     "catalog.edited",
-    "admin.clear_prefetch_purge_at",
     "access.role_granted",
     "access.role_revoked",
     "access.role_updated",

@@ -84,11 +84,9 @@ def test_retained_columns_roundtrip(fresh_db):
             state_since=_dt(),
             last_save_at=_dt("2026-03-03T00:00:00+00:00"),
             timestamps_job_ids=["job-1", "job-2"],
-            prefetch_purge_at=_dt("2026-03-10T00:00:00+00:00"),
         )
     row = repo_state.get_row("d1")
     assert row.timestamps_job_ids == ["job-1", "job-2"]
-    assert row.prefetch_purge_at == _dt("2026-03-10T00:00:00+00:00")
     assert row.last_save_at == _dt("2026-03-03T00:00:00+00:00")
 
 
