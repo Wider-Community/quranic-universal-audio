@@ -23,7 +23,7 @@
 </script>
 
 <div class="eg-card-frame">
-    <MockSegCard {peaks} />
+    <MockSegCard {peaks} placeholder />
 </div>
 
 <ul class="eg-legend">

@@ -35,22 +35,34 @@
         mode?: Mode;
         compact?: boolean;
         emphasize?: string[];
+        /** Anatomy mode: show each slot's NAME ("Reference", "Confidence", …)
+         *  in place of a value, so the card reads as a labelled diagram. */
+        placeholder?: boolean;
     }
 
     let {
         peaks,
         index = '#664',
+        // Reference and Arabic are kept in sync: 2:250:1-2:250:5 is exactly the
+        // five words shown ("And when they went forth …", al-Baqarah 250).
         refText = '2:250:1-2:250:5',
         conf = '100.0%',
         confLevel = 'high',
         timeFrom = '01:21:22.337',
         timeTo = '01:21:27.200',
         duration = '4.9s',
-        arabic = 'وَلَمَّا بَرَزُوا',
+        arabic = 'وَلَمَّا بَرَزُوا لِجَالُوتَ وَجُنُودِهِ قَالُوا',
         mode = 'default',
         compact = false,
         emphasize = [],
+        placeholder = false,
     }: Props = $props();
+
+    // In placeholder (anatomy) mode each slot shows its own name.
+    const dIndex = $derived(placeholder ? 'Segment number' : index);
+    const dRef = $derived(placeholder ? 'Reference' : refText);
+    const dConf = $derived(placeholder ? 'Confidence' : conf);
+    const dArabic = $derived(placeholder ? 'Quran reference text' : arabic);
 
     const hasEmph = $derived(emphasize.length > 0);
 
@@ -127,27 +139,31 @@
         <div class="seg-text conf-{confLevel}">
             <div class="seg-text-meta">
                 <div class="seg-text-header">
-                    <span class="seg-text-index {ec('index')}">{index}</span>
+                    <span class="seg-text-index {ec('index')}" class:eg-ph={placeholder}>{dIndex}</span>
                     <span class="seg-text-sep">|</span>
                     {#if mode === 'reference'}
-                        <input class="seg-text-ref-input {ec('ref')}" value={refText} readonly tabindex="-1" />
+                        <input class="seg-text-ref-input {ec('ref')}" value={dRef} readonly tabindex="-1" />
                     {:else}
-                        <span class="seg-text-ref {ec('ref')}">{refText}</span>
+                        <span class="seg-text-ref {ec('ref')}" class:eg-ph={placeholder}>{dRef}</span>
                     {/if}
                     <span class="seg-text-sep">|</span>
-                    <span class="seg-text-conf conf-{confLevel} {ec('conf')}">{conf}</span>
+                    <span class="seg-text-conf conf-{confLevel} {ec('conf')}" class:eg-ph={placeholder}>{dConf}</span>
                 </div>
                 <div class="seg-text-times {ec('time')}" class:seg-text-time-editing={mode === 'adjust'}>
-                    <span class="seg-text-time-range">
-                        <span class="seg-text-time">{timeFrom}</span>
-                        <span class="seg-time-sep">&ndash;</span>
-                        <span class="seg-text-time">{timeTo}</span>
-                    </span>
-                    <span class="seg-text-sep">|</span>
-                    <span class="seg-text-duration">{duration}</span>
+                    {#if placeholder}
+                        <span class="seg-text-duration eg-ph">Time &amp; duration</span>
+                    {:else}
+                        <span class="seg-text-time-range">
+                            <span class="seg-text-time">{timeFrom}</span>
+                            <span class="seg-time-sep">&ndash;</span>
+                            <span class="seg-text-time">{timeTo}</span>
+                        </span>
+                        <span class="seg-text-sep">|</span>
+                        <span class="seg-text-duration">{duration}</span>
+                    {/if}
                 </div>
             </div>
-            <div class="seg-text-body {ec('arabic')}">{arabic}</div>
+            <div class="seg-text-body {ec('arabic')}" class:eg-ph-text={placeholder}>{dArabic}</div>
         </div>
     {/if}
 </div>

@@ -63,6 +63,23 @@
     background: #16213e;
 }
 
+/* Anatomy placeholders: a slot shows its own NAME, not a value. Italic so it
+ * reads as a label; keeps the slot's own colour (cyan ref, green conf, …). */
+.eg-static .eg-ph {
+    font-style: italic;
+    opacity: 0.92;
+}
+/* The big reference-text slot uses an Arabic serif + RTL; a placeholder label
+ * is plain English, so render it normally and muted. */
+.eg-static .seg-text-body.eg-ph-text {
+    font-family: inherit;
+    font-size: 1rem;
+    direction: ltr;
+    text-align: right;
+    font-style: italic;
+    color: #9aa6c8;
+}
+
 /* ---- emphasis / dim ---- */
 .eg-static .is-dim {
     opacity: 0.32;
