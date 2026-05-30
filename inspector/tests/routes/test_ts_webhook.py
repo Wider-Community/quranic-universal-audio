@@ -80,9 +80,16 @@ def test_webhook_publishes_on_success(flask_client, monkeypatch):
     assert calls == [("rec_a", "job-1")]
 
 
-def test_webhook_ignores_non_success_status(flask_client, monkeypatch):
+def test_webhook_notifies_on_failure_without_publishing(flask_client, monkeypatch):
+    from services.admin import timestamps_jobs
+
     monkeypatch.setenv("INSPECTOR_WEBHOOK_SECRET", _SECRET)
-    calls = _spy_complete(monkeypatch)
+    published = _spy_complete(monkeypatch)
+    noted: list[str] = []
+    monkeypatch.setattr(
+        timestamps_jobs, "note_timestamps_job_failed",
+        lambda slug: (noted.append(slug), {"slug": slug, "noted": True})[1],
+    )
 
     resp = flask_client.post(
         _URL,
@@ -91,8 +98,8 @@ def test_webhook_ignores_non_success_status(flask_client, monkeypatch):
     )
 
     assert resp.status_code == 200
-    assert resp.get_json()["released"] is False
-    assert calls == []  # never published a failed job
+    assert published == []        # a failed job is never published
+    assert noted == ["rec_a"]     # but it lights the Marked-ready dot
 
 
 def test_webhook_requires_slug_and_job_id(flask_client, monkeypatch):

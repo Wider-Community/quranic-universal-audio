@@ -108,14 +108,18 @@ class ReciterRow(BaseModel):
         ):
             raise ValueError("marked_ready requires under_review + assignee_hf_id")
 
-        # revision_in_progress is only legal on awaiting_review (set by
-        # admin.unlocked_for_revision; cleared by reciter.published).
-        if (
-            self.revision_in_progress is not None
-            and state != ReciterState.AWAITING_REVIEW
+        # revision_in_progress is set by admin.unlocked_for_revision on
+        # awaiting_review and must survive the revision window — a claim moves
+        # the row to under_review (keeping the breadcrumb) and reciter.published
+        # clears it on the way to awaiting_timestamps. So it is legal on
+        # awaiting_review + under_review, and must be absent everywhere else.
+        if self.revision_in_progress is not None and state not in (
+            ReciterState.AWAITING_REVIEW,
+            ReciterState.UNDER_REVIEW,
         ):
             raise ValueError(
-                f"revision_in_progress only valid on awaiting_review (got {state.value!r})"
+                "revision_in_progress only valid on awaiting_review/under_review "
+                f"(got {state.value!r})"
             )
 
         # If assignee_login is set, assignee_hf_id must also be set.

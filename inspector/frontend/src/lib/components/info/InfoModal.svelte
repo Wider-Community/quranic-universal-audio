@@ -34,5 +34,31 @@
 </script>
 
 <Modal open={$infoModalOpen} size="narrow" elevated title={overviewDoc.title} on:close={closeInfoModal}>
+    <div slot="header" class="info-head">
+        <h2 class="info-title">{overviewDoc.title}</h2>
+    </div>
     <OverviewContent />
 </Modal>
+
+<style>
+    .info-head {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        min-width: 0;
+        /* Mirror the 32px close button on the right so the title centers across
+         * the whole header, not just the space to its left. */
+        padding-left: 32px;
+    }
+    .info-title {
+        margin: 0;
+        font-size: var(--fs-h3);
+        font-weight: 500;
+        letter-spacing: 0.005em;
+        color: var(--text-primary);
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+</style>

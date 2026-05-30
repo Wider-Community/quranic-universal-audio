@@ -67,3 +67,43 @@ def test_transition_invokes_invalidate_hook(monkeypatch):
     )
 
     assert calls == [1]
+
+
+def test_manifest_self_heals_on_db_seq_without_explicit_invalidate(monkeypatch):
+    """The db_seq check is the AUTHORITATIVE rebuild trigger — even if the
+    explicit ``invalidate()`` never fires (it sits after the durable upload in
+    ``state.transition`` and is skipped if that step raises), a committed state
+    change bumps ``db_seq`` so the next manifest request rebuilds. This is the
+    fix for "released reciter missing from the TS tab until a Space restart"."""
+    _seed_marked_ready("rec_a")  # under_review + marked_ready + catalog(114/by_surah)
+    ts_manifest.manifest_bytes()  # warm
+    assert "rec_a" not in ts_manifest._served_slugs  # under_review → not served
+
+    # Neuter the explicit drop so ONLY the db_seq check can refresh the cache.
+    monkeypatch.setattr(ts_manifest, "invalidate", lambda: None)
+
+    state_service.transition(
+        "rec_a", "reciter.published",
+        actor=Actor(hf_user_id="u-O", login_at_time="o", role=Role.OWNER),
+        payload={"job_id": "job-1"},
+    )
+    # _built is still True (invalidate was a no-op), but db_seq advanced →
+    # _ensure_built rebuilds on the next request and now serves the released slug.
+    ts_manifest.manifest_bytes()
+    assert "rec_a" in ts_manifest._served_slugs
+
+
+def test_manifest_cache_hit_when_db_seq_unchanged(monkeypatch):
+    """No rebuild when the DB hasn't advanced — the db_seq guard is a cache
+    HIT, not a forced rebuild on every request."""
+    _seed_marked_ready("rec_a")
+    ts_manifest.manifest_bytes()  # warm + set _built_seq
+    calls: list[int] = []
+    real_build = ts_manifest._build_manifest_dict
+    monkeypatch.setattr(
+        ts_manifest, "_build_manifest_dict",
+        lambda block: (calls.append(1), real_build(block))[1],
+    )
+    ts_manifest.manifest_bytes()  # same db_seq → no rebuild
+    ts_manifest.manifest_bytes()
+    assert calls == []

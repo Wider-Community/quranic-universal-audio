@@ -18,6 +18,7 @@ from services.audio_meta import vbr_chapters_for_reciter
 from services import auth as auth_service
 from services import timestamps as ts_serve
 from services.auth import capabilities as _capabilities
+from utils.decorators import require_capability
 from utils.json_response import orjson_response
 
 ts_bp = Blueprint("ts", __name__, url_prefix="/api/ts")
@@ -98,18 +99,21 @@ def ts_shard(reciter, chapter):
 
 
 @ts_bp.route("/validation/<reciter>")
-def ts_validation(reciter):
+@require_capability("timestamps.view_validation")
+def ts_validation(user, reciter):
     """Verse-level ts-validation flags for the Timestamps-tab accordion.
 
-    Owner-preview only (same ``timestamps.view_unreleased`` gate as the
-    ``?full=1`` shard preview). Returns ``{"_meta", "verses"}`` from the
-    reciter's ``ts_validation.json`` — an empty doc when the reciter is viewable
-    but never ran with probe beams, so the FE shows an empty panel. Non-viewable
-    reciters get 404 (no leak of unreleased existence).
+    Gated on ``timestamps.view_validation`` (owner + maintainer by default;
+    hidden to contributors/anon). Within that, the unreleased-reciter bypass
+    reuses ``timestamps.view_unreleased`` — a maintainer therefore sees flags
+    for released recitations only, while an owner sees everything.
+
+    Returns ``{"_meta", "verses"}`` from the reciter's ``ts_validation.json`` —
+    an empty doc when the reciter is viewable but never ran with probe beams,
+    so the FE shows an empty panel. Non-viewable reciters get 404 (no leak of
+    unreleased existence).
     """
-    allow_unreleased = _capabilities.can(
-        auth_service.current_user(), "timestamps.view_unreleased"
-    )
+    allow_unreleased = _capabilities.can(user, "timestamps.view_unreleased")
     doc = ts_serve.ts_validation_doc(reciter, allow_unreleased=allow_unreleased)
     if doc is None:
         return jsonify({"error": "Not found"}), 404

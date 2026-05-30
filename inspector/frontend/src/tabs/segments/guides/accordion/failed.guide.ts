@@ -9,7 +9,7 @@ A failed alignment is an audio segment the model couldn't resolve.
 
 - Occasionaly, a non-failed segment that is a slip, stutter, or audio issue has text that does not match the audio. In this case, we intentionally mark it as failed on purpose by entering an empty reference. It then drops out of the published timestamps, the verse still reconstructs cleanly, and anyone viewing the reciter can see at a glance that it was an audio or recitation issue — not a gap in the pipeline.
 
-By the end of a review this should reach zero — unless some were failed intentionally, in which case it stays above zero by design.
+> By the end of a review this should reach zero — unless some were failed intentionally, in which case it stays above zero by design.
 
 ## The model was wrong — fix it
 

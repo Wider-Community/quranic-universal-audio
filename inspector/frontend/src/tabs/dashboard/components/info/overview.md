@@ -6,11 +6,11 @@ Qur'anic Universal Audio aims to generate accurate verse-, word- and letter-leve
 
 Doing that well depends on a second goal: unifying recitations in one place. We collect reciters, normalize their metadata, and bring together their different audio, styles, riwayahs, sources/channels, CDNs and versions under a single catalog. From there, anyone can contribute — submit a new recitation, edit a reciter's metadata, or review the generated alignment.
 
-## Use Cases
+## Use cases
 
 - **Verse playback** — play or seek any ayah or ayah range straight from the original surah audio.
 - **Follow-along** — word-by-word highlighting synced to the recitation.
-- **Word study** — replay the sound of individual words for learners.
+- **Pronuciation learning** — replay the sound of individual words/letters for learners.
 - **Tajweed research** — measure ghunnah and madd durations from letter timestamps, study cross-word effects and silent-letter interactions, and support tajweed teaching.
 - **ML research** — a large, diverse corpus (reciters, paces, styles, riwayat) for speech recognition, tajweed, recitation start/stop detection, and reciter identification.
 

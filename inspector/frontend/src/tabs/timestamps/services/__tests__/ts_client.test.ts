@@ -7,8 +7,25 @@ import {
     audioUrlFor,
     chapterVerseRefs,
     resolveVbrChaptersForReciter,
+    type TsReciterAudio,
     vbrChaptersFromManifest,
 } from '../ts_client';
+
+// Audio routing is sourced from the manifest's reciter block — these helpers
+// build the same data the production code passes in (was a snapshot inside the
+// shard's `_meta`; now lives on the manifest).
+const RA_SURAH: TsReciterAudio = {
+    audio_category: 'by_surah',
+    url_template: 'server7.mp3quran.net/s_gmd/{surah:03d}.mp3',
+};
+const RA_AYAH: TsReciterAudio = {
+    audio_category: 'by_ayah',
+    url_template: 'everyayah.com/data/Saad_40k/{surah:03d}{ayah:03d}.mp3',
+};
+const RA_COMPOUND: TsReciterAudio = {
+    audio_category: 'by_ayah',
+    url_template: 'example.com/{surah:03d}{ayah:03d}.mp3',
+};
 
 vi.mock('../../../../lib/api', () => ({
     fetchArrayBuffer: vi.fn(),
@@ -148,6 +165,68 @@ describe('audioUrlFor', () => {
 });
 
 // ---------------------------------------------------------------------------
+// assembleVerseFromShard — manifest-vs-shard precedence
+//
+// Regression coverage: shards baked before the audio-manifest sidecar landed
+// have an empty `_meta.url_template`, and pre-cutover shards stamp the legacy
+// long-form `by_surah_audio` into `_meta.audio_category`. Both used to silently
+// break audio playback (empty URL → "unsupported format <site root>") and the
+// surah-audio offset adjustment (long form bypassed the `=== 'by_surah'`
+// branch, leaving word timings absolute-to-chapter while audio played from 0).
+// `reciterAudio` (manifest-sourced) MUST win over the shard `_meta`.
+// ---------------------------------------------------------------------------
+
+describe('assembleVerseFromShard — manifest precedence over stale _meta', () => {
+    it('uses manifest url_template even when shard `_meta.url_template` is empty', () => {
+        const stale: TsShardResponse = {
+            _meta: {
+                schema_version: 1,
+                reciter: 'r',
+                chapter: 1,
+                // Legacy long form on disk; the type narrows to short form,
+                // so cast through `unknown` to represent the real drift.
+                audio_category: 'by_surah_audio' as unknown as 'by_surah',
+                url_template: '',                                // stale on disk
+            },
+            '1:1': {
+                words: [makeWord(1, 5000, 6000)],
+                verse_start_ms: 5000,
+                verse_end_ms: 6000,
+            },
+        };
+        const reciterAudio: TsReciterAudio = {
+            audio_category: 'by_surah',
+            url_template: 'server7.mp3quran.net/shur/{surah:03d}.mp3',
+        };
+        const result = assembleVerseFromShard('r', stale, '1:1', fakeQpc, fakeDk, reciterAudio);
+        expect(result).not.toBeNull();
+        // URL came from the manifest, NOT the shard's empty template.
+        expect(result!.audio_url).toBe('https://server7.mp3quran.net/shur/001.mp3');
+        // Short form wins; the legacy long form in `_meta` is ignored, so the
+        // by_surah offset branch runs and word times are 0-anchored to the verse.
+        expect(result!.audio_category).toBe('by_surah_audio');
+        expect(result!.time_start_ms).toBe(5000);
+        expect(result!.words[0]!.start).toBeCloseTo(0);
+    });
+
+    it('falls back to shard `_meta.audio_urls` when manifest template is empty', () => {
+        const shard: TsShardResponse = {
+            _meta: {
+                schema_version: 1, reciter: 'r', chapter: 1,
+                audio_category: 'by_ayah', url_template: '',
+                audio_urls: { '1:1': 'https://cdn/1-1.mp3' },
+            },
+            '1:1': { words: [makeWord(1, 0, 500)] },
+        };
+        const reciterAudio: TsReciterAudio = {
+            audio_category: 'by_ayah', url_template: '',
+        };
+        const result = assembleVerseFromShard('r', shard, '1:1', fakeQpc, fakeDk, reciterAudio);
+        expect(result!.audio_url).toBe('https://cdn/1-1.mp3');
+    });
+});
+
+// ---------------------------------------------------------------------------
 // assembleVerseFromShard — by_ayah path
 // ---------------------------------------------------------------------------
 
@@ -155,7 +234,7 @@ describe('assembleVerseFromShard (by_ayah)', () => {
     const shard = byAyahShard();
 
     it('builds a verse with second-scaled timings, location strings, and intervals', () => {
-        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk);
+        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk, RA_AYAH);
         expect(result).not.toBeNull();
         expect(result!.reciter).toBe('saad_al_ghamdi');
         expect(result!.chapter).toBe(1);
@@ -180,13 +259,13 @@ describe('assembleVerseFromShard (by_ayah)', () => {
     });
 
     it('time_start_ms stays 0 and time_end_ms tracks the last interval for by_ayah', () => {
-        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk);
+        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk, RA_AYAH);
         expect(result!.time_start_ms).toBe(0);
         expect(result!.time_end_ms).toBe(1100); // last interval end (ms)
     });
 
     it('returns null for an unknown verse ref', () => {
-        expect(assembleVerseFromShard('saad_al_ghamdi', shard, '99:99', fakeQpc, fakeDk)).toBeNull();
+        expect(assembleVerseFromShard('saad_al_ghamdi', shard, '99:99', fakeQpc, fakeDk, RA_AYAH)).toBeNull();
     });
 });
 
@@ -198,7 +277,7 @@ describe('assembleVerseFromShard (by_surah)', () => {
     const shard = bySurahShard();
 
     it('subtracts the verse start offset from word/letter/interval timings', () => {
-        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk);
+        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk, RA_SURAH);
         expect(result!.audio_category).toBe('by_surah_audio');
 
         // Verse starts at 5s of the surah file → all timings shift by -5s.
@@ -243,7 +322,7 @@ describe('assembleVerseFromShard (compound refs)', () => {
             },
         };
 
-        const result = assembleVerseFromShard('r', compound, '37:151:3-37:152:2', fakeQpc, fakeDk);
+        const result = assembleVerseFromShard('r', compound, '37:151:3-37:152:2', fakeQpc, fakeDk, RA_COMPOUND);
         expect(result).not.toBeNull();
         expect(result!.verse_ref).toBe('37:151:3-37:152:2');
         expect(result!.words.map((w) => w.location)).toEqual([

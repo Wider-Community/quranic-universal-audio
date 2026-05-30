@@ -198,6 +198,22 @@ def record_timestamps_job(slug: str, job_id: str) -> list[str]:
         return ids
 
 
+def mark_timestamps_job_finished(slug: str) -> None:
+    """Stamp ``last_job_finished_at = now`` on a reciter WITHOUT a lifecycle
+    transition — pure notification bookkeeping (like ``record_timestamps_job``).
+
+    Called when a timestamps job reaches a terminal state (success *and*
+    failure) so the Reviews-tab dot lights up: success → on the now-released
+    row (Published bucket), failure → on the still-under_review row (Marked
+    ready bucket). The unread predicate compares this against the admin's
+    per-slug ``viewed_at``. Persisted under ``durable_transaction`` (bucket sync).
+    """
+    with _sync.durable_transaction():
+        if get_row(slug) is None:
+            raise UnknownReciter(slug)
+        repo_state.update_state(slug, last_job_finished_at=_now())
+
+
 def _require_capability(actor: Actor, capability: str) -> None:
     """Tier-capability gate — the data-driven replacement for the legacy
     ``_require_maintainer`` / ``_require_owner`` / ``_require_contributor_or_higher``

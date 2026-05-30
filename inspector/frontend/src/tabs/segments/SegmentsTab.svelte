@@ -318,31 +318,33 @@
     style:--seg-font-size={cssFontSize || null}
     style:--seg-word-spacing={cssWordSpacing || null}
 >
-    <!-- Persistent entry point to the review guides + shortcuts. Opens the same
-         modal the first-edit gate uses, in voluntary `browse` mode — available
-         any time, not just when a blocked edit triggers the gate. The cyan
-         unread dot mirrors the old per-accordion ? badge: shown only to a
-         signed-in user who still has guides left to read. -->
-    <div class="seg-guide-bar">
-        <button
-            type="button"
-            class="seg-guide-entry"
-            class:unread={$currentUser.hf_user_id != null
-                && !allGuidesRead($currentUser.guides_read)}
-            on:click={() => openGuidesGate('browse')}
-        >
-            <span class="seg-guide-entry-icon" aria-hidden="true">📖</span>
-            <span>Editing guide</span>
-            {#if $currentUser.hf_user_id != null && !allGuidesRead($currentUser.guides_read)}
-                <span class="seg-guide-entry-dot" aria-label="Unread guides"></span>
-            {/if}
-        </button>
-    </div>
+    {#if !$historyVisible && !$savePreviewVisible}
+        <!-- Persistent entry point to the review guides + shortcuts. Opens the same
+             modal the first-edit gate uses, in voluntary `browse` mode — available
+             any time, not just when a blocked edit triggers the gate. The cyan
+             unread dot mirrors the old per-accordion ? badge: shown only to a
+             signed-in user who still has guides left to read. -->
+        <div class="seg-guide-bar">
+            <button
+                type="button"
+                class="seg-guide-entry"
+                class:unread={$currentUser.hf_user_id != null
+                    && !allGuidesRead($currentUser.guides_read)}
+                on:click={() => openGuidesGate('browse')}
+            >
+                <span class="seg-guide-entry-icon" aria-hidden="true">📖</span>
+                <span>Editing guide</span>
+                {#if $currentUser.hf_user_id != null && !allGuidesRead($currentUser.guides_read)}
+                    <span class="seg-guide-entry-dot" aria-label="Unread guides"></span>
+                {/if}
+            </button>
+        </div>
+    {/if}
 
     <!-- StatsPanel transitively imports chart.js (~85 KB br). Lazy-load so
          the charts chunk only ships when a maintainer/owner actually views
          the Segments tab — Dashboard / non-admin visitors never pay this cost. -->
-    {#if $currentUser.role === 'maintainer' || $currentUser.role === 'owner'}
+    {#if ($currentUser.role === 'maintainer' || $currentUser.role === 'owner') && !$historyVisible && !$savePreviewVisible}
         {#await import('./components/stats/StatsPanel.svelte') then mod}
             <svelte:component this={mod.default} />
         {/await}

@@ -533,6 +533,16 @@ def set_audio_manifest_url_index_cache(slug: str, idx: dict[str, str]) -> None:
     _audio_manifest_url_index.set(slug, idx)
 
 
+def invalidate_audio_manifest_cache() -> None:
+    """Drop ALL cached audio-manifest sidecars + their URL indexes.
+
+    The TS manifest build derives ``url_template`` / ``vbr_chapters`` from these
+    sidecars; clearing them alongside a manifest rebuild guards against a stale
+    sidecar (e.g. a re-extracted reciter) leaking old URLs into the manifest."""
+    _audio_manifest.clear()
+    _audio_manifest_url_index.clear()
+
+
 # Audio cache status (thread-safe). Note: the audio download-progress dict
 # (_AUDIO_DL_PROGRESS + helpers) lived here until the prefetch worker was
 # removed; no background audio worker remains.

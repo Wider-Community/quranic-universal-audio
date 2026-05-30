@@ -21,8 +21,14 @@
         type TimestampsJobSettings,
         type TimestampsJobStatus,
     } from '../../../../../lib/api/admin-reviews';
+    import { refreshReciterTask } from '../../../../../lib/api/reciter-task';
+    import { loadCurrentUser } from '../../../../../lib/stores/current-user';
+    import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
     import type { TsJobRecord } from '../../../../../lib/types/generated/schemas';
     import { visiblePoll } from '../../../../../lib/utils/visible-poll';
+    import { loadCatalog } from '../../../stores/catalog-data';
+
+    const SUCCESS = new Set(['succeeded', 'completed']);
 
     let { slug, onclose }: { slug: string; onclose: () => void } = $props();
 
@@ -49,6 +55,10 @@
     // Kept client-side so the hot poll path stays a single HF round-trip.
     let liveStartedAt = $state<number | null>(null);
     let nowTick = $state(0);
+    // HF job page URL for the active job — logs stream live there (the in-panel
+    // tail only fills in near completion). Seeded from the launch response and
+    // refreshed by each poll.
+    let liveUrl = $state<string | null>(null);
 
     // ---- history ----
     let history = $state<TsJobRecord[]>([]);
@@ -95,6 +105,7 @@
         liveStatus = null;
         viewingRecord = null;
         liveStartedAt = null;
+        liveUrl = null;
         formError = null;
         void s;
         void loadHistory();
@@ -114,21 +125,44 @@
         stopPoll = null;
     }
 
-    function startPolling(jobId: string, startedAtMs: number | null = null): void {
+    /**
+     * A succeeded job auto-publishes the reciter (under_review → released)
+     * server-side, with no user action — so every client cache that read the
+     * old state is stale. Resync the shared ones (mirrors
+     * SegmentsTab._refreshTask): the dashboard catalog list (load-once),
+     * the Segments tab's reciter-task (30s poll), the current-user claim
+     * state, and the Reviews list (the row moves Marked-ready → Published).
+     * The detail modal refetches on open, so it needs nothing.
+     */
+    async function resyncAfterPublish(): Promise<void> {
+        void loadCatalog(true);
+        void refreshReciterTask(slug);
+        void loadCurrentUser();
+        reviewsStore.requestRefresh();
+    }
+
+    function startPolling(
+        jobId: string,
+        startedAtMs: number | null = null,
+        url: string | null = null,
+    ): void {
         teardownPoll();
         viewingRecord = null;
         activeJobId = jobId;
         liveStartedAt = startedAtMs;
+        liveUrl = url;
         nowTick = Date.now();
-        liveStatus = { job_id: jobId, status: 'running', logs: [] };
+        liveStatus = { job_id: jobId, status: 'running', url, logs: [] };
         stopPoll = visiblePoll<TimestampsJobStatus>({
             intervalMs: 2500,
             fetcher: (signal) => fetchJobStatus(slug, jobId, signal),
             onResult: (res) => {
                 liveStatus = res;
+                if (res.url) liveUrl = res.url; // refresh canonical URL once known
                 if (TERMINAL.has(res.status)) {
                     teardownPoll();
                     void loadHistory(); // refresh the persisted record
+                    if (SUCCESS.has(res.status)) void resyncAfterPublish();
                 }
             },
             onError: () => {
@@ -155,8 +189,8 @@
         };
         launching = true;
         try {
-            const { job_id } = await generateTimestamps(slug, settings);
-            startPolling(job_id, Date.now());
+            const { job_id, url } = await generateTimestamps(slug, settings);
+            startPolling(job_id, Date.now(), url);
         } catch (err) {
             formError = (err as Error).message ?? 'Failed to launch job';
         } finally {
@@ -169,13 +203,14 @@
         if (!jid) return;
         // A still-running past job → resume live polling; else show its record.
         if (!TERMINAL.has(rec.status ?? '')) {
-            startPolling(jid, parseIso(rec.started_at));
+            startPolling(jid, parseIso(rec.started_at), rec.url ?? null);
             return;
         }
         teardownPoll();
         activeJobId = jid;
         liveStatus = null;
         liveStartedAt = null;
+        liveUrl = null;
         let record: TsJobRecord;
         try {
             record = (await fetchJobRecord(slug, jid)) ?? rec;
@@ -243,6 +278,9 @@
         liveStatus?.log_truncated ?? viewingRecord?.log_truncated ?? false,
     );
     const isLive = $derived(!!liveStatus && !TERMINAL.has(liveStatus.status));
+    // HF job page link for the active pane (live job or opened record). HF
+    // streams logs live there — the in-panel tail only fills near completion.
+    const paneUrl = $derived(liveStatus?.url ?? liveUrl ?? viewingRecord?.url ?? null);
 
     // Elapsed (live job) or total (opened completed record) for the pane header.
     const paneDuration = $derived.by(() => {
@@ -349,7 +387,25 @@
                         <span class="dur" title={isLive ? 'elapsed' : 'duration'}>{paneDuration}</span>
                     {/if}
                     {#if isLive}<span class="live-dot" title="polling">●</span>{/if}
+                    {#if paneUrl}
+                        <a
+                            class="hf-link"
+                            href={paneUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Open the job on Hugging Face — logs stream live there"
+                        >Open on HF ↗</a>
+                    {/if}
                 </h3>
+                {#if isLive}
+                    <div class="hf-hint">
+                        In-panel logs fill in near the end — {#if paneUrl}<a
+                            href={paneUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >open on HF</a>{:else}open the job on HF{/if} to watch them stream live.
+                    </div>
+                {/if}
                 {#if paneLogs.length}
                     <pre class="logs">{paneTruncated ? '… (earlier lines truncated)\n' : ''}{paneLogs.join('\n')}</pre>
                 {:else}
@@ -613,6 +669,28 @@
         color: var(--text-muted);
         font-variant-numeric: tabular-nums;
     }
+    /* Link out to the HF job page (live log stream). Rides the log header,
+       pushed to the right so it reads as a secondary affordance. */
+    .hf-link {
+        margin-left: auto;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: none;
+        color: var(--accent-strong);
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .hf-link:hover { text-decoration: underline; }
+    .hf-hint {
+        font-size: var(--fs-meta);
+        color: var(--text-muted);
+        margin: 0 0 var(--s-2);
+        line-height: 1.4;
+    }
+    .hf-hint a { color: var(--accent-strong); text-decoration: none; }
+    .hf-hint a:hover { text-decoration: underline; }
 
     .logs {
         margin: 0;

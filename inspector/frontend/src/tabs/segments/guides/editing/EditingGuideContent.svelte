@@ -66,6 +66,10 @@
         and pre-places the cuts for you — you confirm and adjust slightly if needed.
     </p>
 
+    <p class="eg-note">
+        In Adjust and Split, you can zoom anywhere on the waveform with the mouse wheel for increased precision.
+    </p>
+
     <!-- Edit Ref -->
     <h3 class="eg-h">Edit Ref — change which words it covers</h3>
     <p>
@@ -84,7 +88,7 @@
         <code>s:v</code> selects the whole verse, <code>s:v:w</code> selects just that one word. Press <strong>Enter</strong> to
         confirm, <strong>Esc</strong> to cancel.
 
-        Entering an empty reference causes it to be a failed alignment.
+        Entering an empty reference causes it to be a failed alignment with empty text (sometimes useful, see the failed alignments guide).
     </p>
 
     <!-- Merge -->
@@ -128,6 +132,21 @@
         </div>
     </div>
 
+    <!-- What to edit -->
+    <h3 class="eg-h">What to edit</h3>
+    <p>
+        The bare minimum is fixing all the validation category mistakes (the mark ready form will tell you when those are cleared).
+        Since it is not possible to automatically flag every potential error, it is recommended to do some additional checks, such as:
+    </p>
+    <div style="margin-left: 3em;">
+        <ul>
+            <li>Listening to entire surahs (using the surah picker) and verifying no issues with segment boundaries and references</li>
+            <li>Checking for any audio quality issues</li>
+            <li>Increasing the low confidence threshold beyond the default and reviewing those segments as well</li>
+            <li>Using filters to search for potnetially problematic segments (e.g. 1 or 2 words, many words, very short/long duration segments, etc.)</li>
+        </ul>
+    </div>
+
     <!-- Saving & history -->
     <h3 class="eg-h">Saving, and undoing anything</h3>
     <p>
@@ -135,6 +154,10 @@
         you can also press <strong>Save</strong> yourself at any time. Nothing is ever locked in —
         the <strong>History</strong> panel lists every edit, and you can <strong>undo</strong> any
         of them. You can filter history by the kind of edit or by validation category to find and
-        double-check a change. You can always check out a published reciter's history to better understand the edits and types of common issues.
+        double-check a change.
+    </p>
+
+    <p>
+        You can always check out a published reciter's history to better understand the edits and types of common issues. It is also recommended to review your edits thoroughly, either from the history after you are done, or by turning autosave off and using manual save occasionally to review the staged changes before confirming the save.
     </p>
 </div>

@@ -199,6 +199,8 @@ export interface TimestampsJobSettings {
 export interface TimestampsJobStatus {
     job_id: string;
     status: string;
+    /** Canonical HF job page URL — logs stream live there. */
+    url?: string | null;
     logs: string[];
     log_truncated?: boolean;
 }

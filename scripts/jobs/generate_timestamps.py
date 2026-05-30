@@ -357,6 +357,9 @@ def main() -> int:
         log.exception("alignment failed for %s", slug)
         _write_record(mount, slug, settings, status="failed",
                       started_at=started_at, error=str(exc))
+        # Notify the Inspector so the Reviews-tab dot lights up on the
+        # (still-under_review) reciter. Best-effort; poll fallback covers a miss.
+        _notify_complete(slug, "failed")
         return 1
 
     _write_record(mount, slug, settings, status="succeeded", started_at=started_at)

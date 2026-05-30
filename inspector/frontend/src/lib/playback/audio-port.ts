@@ -189,6 +189,32 @@ export class AudioPort {
         if (el) this._attachDomListeners(el);
     }
 
+    /** Adopt a warm element that already has its `src` loaded — typically
+     *  one returned from `shadow-audio.ts::consumeWarm`. Skips the load +
+     *  canplay wait the normal `attachElement` + `loadCovering` flow incurs,
+     *  because the element is already past `canplay` and (usually) seeked
+     *  to a target offset.
+     *
+     *  - Detaches any prior element, re-binds DOM listeners to the new one.
+     *  - Synthesises a CBR `_window` matching the element's current `src` so
+     *    a subsequent `loadCovering` call short-circuits via fast path 1.
+     *  - Does NOT call `play()` — the caller decides when to start playback
+     *    (typically via `seekAndPlay(verseStartMs)` right after adopt).
+     *
+     *  VBR is not supported by adopt — the clip-URL routing requires the
+     *  port to know the window's `startMs` at adopt time, and the warm
+     *  element pool only stores CBR full-chapter URLs. */
+    adoptElement(el: HTMLAudioElement, srcUrl: string): void {
+        this.attachElement(el);
+        this._window = {
+            startMs: 0,
+            endMs: Number.POSITIVE_INFINITY,
+            offsetMs: 0,
+            src: srcUrl,
+            isClip: false,
+        };
+    }
+
     get element(): HTMLAudioElement | null {
         return this.el;
     }

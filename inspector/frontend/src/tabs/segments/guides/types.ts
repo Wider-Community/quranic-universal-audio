@@ -49,6 +49,13 @@ export interface GuideExample {
 export type GuideBlock =
     | { type: 'heading'; level: 1 | 2; text: string }
     | { type: 'paragraph'; text: string }
+    /**
+     * A highlighted "outcome" callout — the *expectation at the end of review*
+     * for a category (the "By the end this should be zero…" lines). Authored as
+     * blockquote-style `> ` lines in the guide source; consecutive `> ` lines
+     * join into one callout. Rendered as a tinted goal card in the modal.
+     */
+    | { type: 'callout'; text: string }
     | { type: 'example'; id: string }
     /**
      * A custom Svelte body, referenced by name. Lets a guide render bespoke

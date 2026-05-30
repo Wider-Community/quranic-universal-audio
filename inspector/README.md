@@ -149,20 +149,9 @@ cd inspector/frontend && npm run test            # frontend
 cd inspector/frontend && npm run check           # typecheck
 ```
 
-## Suggestions and feedback
-
-We're continuously improving the Inspector to make reviewing as smooth as possible. If you have ideas, we'd love to hear them — [open an issue](https://github.com/Wider-Community/quranic-universal-audio/issues) about any of the following:
-
-- Feedback on the current error categories, their accuracy in flagging segments, and how well they help you find real issues
-- Suggestions for new error categories or detection improvements
-- Ideas for new fix types or ways to reduce common errors in the pipeline
-- Ways to improve the reviewer experience, make it more enjoyable, and reduce the time it takes to review a reciter
-- General UI improvements, new features, or bug reports
-- General improvements for the timestamps and audio tabs experience
-
 ## Tech stack
 
-- **Backend:** Python 3.11, Flask (Blueprints), `quranic-phonemizer`
+- **Backend:** Python 3.11, Flask (Blueprints)
 - **Frontend:** Svelte 4/5 + TypeScript + Vite
 - **Audio:** Web Audio API (waveform decoding/drawing), ffmpeg (server-side peak extraction)
 - **Storage:** SQLite synced to a Hugging Face bucket

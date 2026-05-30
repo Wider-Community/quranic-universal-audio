@@ -9,7 +9,7 @@ Three small, related cases:
 
 3. Basmala in other surahs: the pipeline already removes the basmala before non-Fatiha surahs since they are not verses, but occasionally this might be undetected — so first segment of surahs where there was no basmala deletions are flagged. This may be wrong so confirm, either remove the basmala from the segment or ignore.
 
-By the end this should be zero — resolved or ignored.
+> By the end this should be zero — resolved or ignored.
 
 ::example{id="basmala_nonfatiha"}
 ::example{id="basmala_added_voice"}
