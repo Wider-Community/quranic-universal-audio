@@ -16,7 +16,7 @@
     import { onMount } from 'svelte';
     import { get } from 'svelte/store';
 
-    import { shadowPrewarm } from '../../lib/playback/shadow-audio';
+    import { consumeWarm, recycleAsShadow, shadowPrewarm } from '../../lib/playback/shadow-audio';
     import {
         addBookmark,
         bookmarks,
@@ -74,7 +74,9 @@
     import { tsLoading } from './stores/loading';
     import {
         autoAdvancing,
+        currentTime,
         loopTarget,
+        tsAudioElement,
         tsPort,
         tsVbrChapters,
     } from './stores/playback';
@@ -540,34 +542,33 @@
 
     /** Re-roll both pre-rolls. Their shards are pre-fetched into the LRU
      *  by `getRandomTarget` itself, so consuming the pre-roll is dict-fast.
-     *  Each resolved target ALSO warms its chapter peaks (both kinds) and —
-     *  for random-any only — its audio, so a Random click / auto-advance to a
-     *  pre-rolled target renders the waveform from cache and reaches `canplay`
-     *  in low tens of ms. */
+     *  Each resolved target ALSO warms its chapter peaks (both kinds) AND
+     *  its audio into a slot-specific shadow `<audio>` element, so the
+     *  consume path can transplant the already-decoded element into the
+     *  visible slot — no second decode pass on the play click. */
     function primePrerolls(): void {
         const reciter = get(selectedReciter) || null;
         if (reciter) {
             getRandomTarget({ reciter })
-                .then((t) => { nextRandomSame = t; warmPreroll(t, false); })
+                .then((t) => { nextRandomSame = t; warmPreroll(t, 'same'); })
                 .catch(() => { nextRandomSame = null; });
         } else {
             nextRandomSame = null;
         }
-        // Warm random-any LAST and with audio: the shadow-audio helper has a
-        // single URL slot, so the most-common auto-advance/Random default wins
-        // it. random-current gets peaks prewarmed but not audio.
         getRandomTarget()
-            .then((t) => { nextRandomAny = t; warmPreroll(t, true); })
+            .then((t) => { nextRandomAny = t; warmPreroll(t, 'any'); })
             .catch(() => { nextRandomAny = null; });
     }
 
-    /** Fire-and-forget warmers for a pre-roll target. Always warms the chapter
-     *  peaks (deduped per chapter in ensureChapterPeaks); warms audio only when
-     *  `warmAudio` (single shadow-audio slot). No-op for the currently-loaded
-     *  verse. Every step is wrapped so one failure never rejects the other. */
+    /** Fire-and-forget warmers for a pre-roll target. Warms the chapter peaks
+     *  (deduped in `ensureChapterPeaks`) and an audio shadow element keyed by
+     *  `slot` ('same' = random-current, 'any' = random-any). The shadow
+     *  element seeks to the verse start so the decoder warms at the verse
+     *  position (not byte 0), making `consumeWarm` on transplant return an
+     *  element that's ready to play within a frame. */
     async function warmPreroll(
         t: { reciter: string; chapter: number; verseRef: string } | null,
-        warmAudio: boolean,
+        slot: 'same' | 'any',
     ): Promise<void> {
         if (!t) return;
         const cur = get(loadedVerse)?.data;
@@ -577,7 +578,6 @@
         }
         // Peaks: cheap GET-once-per-chapter, cached by reciter:chapter.
         ensureChapterPeaks(t.reciter, t.chapter).catch(() => {});
-        if (!warmAudio) return;
         try {
             // Shard for the per-verse audio_urls fallback only; url_template +
             // audio_category come from the manifest (warm cache singleton).
@@ -596,7 +596,33 @@
             );
             if (!rawUrl) return;
             const cat = reciterAudio.audio_category === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio';
-            shadowPrewarm(tsPlayUrl(t.reciter, rawUrl, cat));
+            const playUrl = tsPlayUrl(t.reciter, rawUrl, cat);
+
+            // For by_surah_audio, the playback element starts the verse at the
+            // verse's offset within the chapter file. Recompute that offset so
+            // the shadow can seek there and warm the decoder at the actual
+            // play position. For by_ayah the file IS the verse → seek 0.
+            let seekSec = 0;
+            if (cat === 'by_surah_audio') {
+                const rawRow = shard[t.verseRef] as unknown;
+                const isObjRow = !!rawRow && typeof rawRow === 'object' && !Array.isArray(rawRow);
+                const objRow = isObjRow ? rawRow as Record<string, unknown> : null;
+                const segStartMs = objRow && typeof objRow.verse_start_ms === 'number'
+                    ? (objRow.verse_start_ms as number)
+                    : null;
+                const wordsRaw: unknown[] = Array.isArray(rawRow)
+                    ? rawRow
+                    : (objRow && Array.isArray(objRow.words) ? objRow.words : []);
+                const firstWord = wordsRaw[0];
+                const firstWordStart = Array.isArray(firstWord) && typeof firstWord[1] === 'number'
+                    ? (firstWord[1] as number)
+                    : null;
+                const startMs = segStartMs !== null && firstWordStart !== null
+                    ? Math.min(segStartMs, firstWordStart)
+                    : (segStartMs ?? firstWordStart ?? 0);
+                seekSec = startMs / 1000;
+            }
+            shadowPrewarm(playUrl, { slot, seekSec });
         } catch {
             /* prewarm is best-effort */
         }
@@ -617,11 +643,12 @@
         // the proxy when the chapter isn't prefetched. Sending the browser
         // straight at the CDN URL wastes the prefetch and bills upstream.
         const playUrl = tsPlayUrl(data.reciter, data.audio_url, data.audio_category);
+        const vbr = get(tsVbrChapters).has(data.chapter);
         tsPort.setSource({
             audioUrl: data.audio_url,
             cbrSrc: playUrl,
             reciter: data.reciter,
-            vbr: get(tsVbrChapters).has(data.chapter),
+            vbr,
         });
         // Auto-next reaches here right after AudioRange.`_pauseAndFlush` ramped
         // the gain to 0. The eventual `setRange→_uncut` lifting it back to 1
@@ -631,10 +658,83 @@
         // play() (autoplay policy). Lift the cut on the same tick as the
         // load so the next play() sees gain=1 immediately.
         tsPort.uncut();
-        audioComp?.load(playUrl, tsSegOffset, autoplay);
+
+        // Element-reuse fast path: if a shadow slot was prewarmed for this
+        // URL, transplant the already-decoded element into the visible slot
+        // instead of re-loading + re-decoding on the current visible element.
+        // VBR plays through the segment-clip endpoint which is per-verse, so
+        // the chapter-URL shadow doesn't apply — fall through to the normal
+        // load path in that case.
+        const warm = !vbr ? consumeWarm(playUrl) : null;
+        if (warm && audioComp) {
+            adoptWarmElement(warm, playUrl, tsSegOffset, autoplay);
+        } else {
+            audioComp?.load(playUrl, tsSegOffset, autoplay);
+        }
         autoAdvancing.set(false);
         // Verse change invalidates any active loop target.
         loopTarget.set(null);
+    }
+
+    /** Swap the visible `<audio>` with a prewarmed shadow element. The shadow
+     *  already has `src` loaded and is seeked at (or near) the verse start;
+     *  this is the gapless path that avoids the visible element's
+     *  load → canplay → seek → decode round trip.
+     *
+     *  After the swap:
+     *    - `tsPort` re-binds DOM listeners to the new element and synthesises
+     *      its `_window` so future `loadCovering` short-circuits.
+     *    - `tsAudioElement` store updates so reactive consumers (SpeedControl,
+     *      waveform interactions) rebind.
+     *    - The old visible element is recycled back into the 'any' shadow slot
+     *      for the next rotation.
+     *
+     *  The Svelte `bind:this` references inside `AudioElement.svelte` /
+     *  `AudioPlayer.svelte` go stale, but they're only read at mount time
+     *  for the initial port attach + onError path. The runtime path goes
+     *  through `tsPort` and `tsAudioElement`, both updated here. */
+    function adoptWarmElement(
+        warmEl: HTMLAudioElement,
+        srcUrl: string,
+        seekSec: number,
+        autoplay: boolean,
+    ): void {
+        const oldEl = tsPort.element;
+        if (!oldEl || !oldEl.parentNode) {
+            // Fallback when the visible element isn't in the DOM yet (mount
+            // races) — fall through to the normal load path.
+            audioComp?.load(srcUrl, seekSec, autoplay);
+            return;
+        }
+        // Mirror the visible element's user-facing attributes before the
+        // physical DOM swap so the user sees no flash.
+        warmEl.controls = oldEl.controls;
+        warmEl.id = oldEl.id;
+        // Preserve playback rate so the speed selector stays in sync.
+        warmEl.playbackRate = oldEl.playbackRate;
+        warmEl.hidden = false;
+        warmEl.style.display = '';
+        warmEl.removeAttribute('aria-hidden');
+
+        oldEl.pause();
+        oldEl.parentNode.replaceChild(warmEl, oldEl);
+
+        // Re-wire the port + reactive consumers. `adoptElement` synthesises a
+        // CBR `_window` so `seekAndPlay` doesn't trigger a fresh load.
+        tsPort.adoptElement(warmEl, srcUrl);
+        tsAudioElement.set(warmEl);
+
+        // Recycle the previously-visible element back into the 'any' slot so
+        // the next prewarm has a target. Its Web Audio kill-switch graph (if
+        // wired) is preserved via the per-element WeakMap in audio-graph.ts.
+        recycleAsShadow(oldEl, 'any');
+
+        if (autoplay) {
+            tsPort.seekAndPlay(seekSec * 1000);
+        } else {
+            tsPort.seek(seekSec * 1000);
+        }
+        currentTime.set(tsPort.currentTimeMs() / 1000);
     }
 
     function clearDisplay(): void {
