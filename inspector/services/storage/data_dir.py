@@ -13,6 +13,7 @@ need no notion of ``wip`` vs ``published``.
 
 from __future__ import annotations
 
+import gzip
 from typing import Iterator
 
 from . import storage_paths
@@ -138,15 +139,21 @@ def iter_peaks_history(slug: str) -> Iterator[dict]:
 
 
 def read_timestamps_chapter(slug: str, chapter: int) -> bytes | None:
-    """Return raw ``timestamps/<chapter>.json`` bytes, or ``None`` if absent.
+    """Return decompressed timestamps-shard JSON bytes for a chapter, or ``None``.
 
-    Reads from ``<bucket>/reciters/<slug>/timestamps/<chapter>.json``. Only
-    released reciters have timestamps; the Timestamps tab gates on DB state.
+    Prefers the gzipped v2 shard ``timestamps/<chapter>.json.gz`` (the job's
+    output) and inflates it; falls back to the uncompressed legacy
+    ``timestamps/<chapter>.json`` for pre-v2 released reciters. Either way the
+    caller receives raw JSON bytes.
     """
+    backend = get_backend()
     try:
-        return get_backend().read_bytes(
-            storage_paths.timestamps_path(slug, chapter)
-        )
+        gz = backend.read_bytes(storage_paths.timestamps_path_gz(slug, chapter))
+        return gzip.decompress(gz)
+    except StorageNotFound:
+        pass
+    try:
+        return backend.read_bytes(storage_paths.timestamps_path(slug, chapter))
     except StorageNotFound:
         return None
 

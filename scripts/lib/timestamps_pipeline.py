@@ -27,7 +27,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from scripts.lib.timestamps_shards import split_to_shards
+from scripts.lib.timestamps_shards import gzip_shard, split_to_shards
 
 if TYPE_CHECKING:
     import numpy as np
@@ -1479,8 +1479,7 @@ def process(input_dir: Path,
         shards = split_to_shards(
             v2_doc, reciter=reciter, audio_category=audio_category, url_template="")
         for ch_num, shard_doc in shards.items():
-            (ts_dir / f"{ch_num}{suffix}.json").write_text(
-                json.dumps(shard_doc, ensure_ascii=False), encoding="utf-8")
+            (ts_dir / f"{ch_num}{suffix}.json.gz").write_bytes(gzip_shard(shard_doc))
         fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
         return len(shards), fails
 

@@ -77,7 +77,10 @@ def main() -> int:
         return 3
 
     beams = _beams(os.environ.get("BEAMS", "50"))
-    workers = int(os.environ.get("WORKERS", str(os.cpu_count() or 1)))
+    # Cap default workers: each pool worker extracts its own ~few-hundred-MB
+    # MFA model, so defaulting to os.cpu_count() (64 on cpu-upgrade) would OOM.
+    # 16 is a safe ceiling; override via WORKERS / INSPECTOR_TS_JOB_WORKERS.
+    workers = int(os.environ.get("WORKERS") or min(os.cpu_count() or 1, 16))
     batch_size = int(os.environ.get("BATCH_SIZE", str(DEFAULT_BATCH_SIZE)))
     dl_workers = int(os.environ.get("DOWNLOAD_WORKERS", str(DEFAULT_DOWNLOAD_WORKERS)))
     padding = os.environ.get("PADDING", DEFAULT_PADDING)
