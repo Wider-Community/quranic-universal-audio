@@ -214,16 +214,10 @@
                         </label>
                         <label class="field">
                             <span>Probe beams <em>optional</em></span>
-                            <input type="text" bind:value={probeBeamsRaw} placeholder="e.g. 35, 75" />
+                            <input type="text" bind:value={probeBeamsRaw} placeholder="e.g. 2, 5" />
                         </label>
                     </div>
                 </div>
-                <p class="beams-preview">
-                    <span class="lbl">beams</span>
-                    <code>[{beamsPreview.join(', ')}]</code>
-                    <span class="lbl">canonical</span>
-                    <code>{beamsPreview.length ? Math.max(...beamsPreview) : '—'}</code>
-                </p>
 
                 <div class="toggles">
                     <label class="check">
@@ -457,24 +451,6 @@
         border-color: var(--accent);
         box-shadow: 0 0 0 3px var(--accent-tint-soft);
     }
-    /* Derived summary — reads as an echo of the inputs, not another control. */
-    .beams-preview {
-        display: flex;
-        align-items: baseline;
-        gap: var(--s-2);
-        margin: calc(-1 * var(--s-2)) 0 0;
-        font-size: 11px;
-        font-family: var(--font-mono);
-        color: var(--text-muted);
-    }
-    .beams-preview .lbl {
-        color: var(--text-faint);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        font-size: 9.5px;
-    }
-    .beams-preview code { color: var(--text-secondary); }
-
     .toggles { display: flex; flex-direction: column; gap: var(--s-2); }
     .check {
         display: flex;
