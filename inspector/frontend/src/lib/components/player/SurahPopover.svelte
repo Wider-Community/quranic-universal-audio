@@ -90,7 +90,9 @@
         width: 100%;
         display: flex;
         flex-direction: column;
-        max-height: min(520px, 75vh);
+        /* 487px = 9 complete rows (447px grid) + 40px search+margin — avoids partial row clip */
+        max-height: min(487px, 75vh);
+        overflow: hidden;
     }
     .search {
         flex: 0 0 auto;
@@ -108,10 +110,12 @@
     }
     .grid {
         flex: 1 1 auto;
+        min-height: 0;
         display: grid;
         grid-template-columns: repeat(6, 1fr);
         gap: 3px;
         overflow-y: auto;
+        padding-bottom: 3px;
     }
     .cell {
         display: flex;
