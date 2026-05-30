@@ -43,7 +43,6 @@
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
         assembleVerseFromShard,
-        audioUrlFor,
         catalogReciterRows,
         chapterVerseRefs,
         getRandomTarget,
@@ -56,6 +55,8 @@
         loadTsValidation,
         loadVbrChapters,
         loadVerseTranslations,
+        reciterAudioFromManifest,
+        resolveAudioUrl,
         tsPlayUrl,
     } from './services/ts_client';
     import {
@@ -277,17 +278,29 @@
     }
 
     /** Populate the verses store from a chapter shard. Caches on ts_client's
-     *  shard LRU so subsequent verse picks within the chapter are free. */
+     *  shard LRU so subsequent verse picks within the chapter are free.
+     *
+     *  ``audio_url`` is derived from the MANIFEST's reciter block, not the
+     *  shard's `_meta.url_template` (stale on shards baked before the audio
+     *  manifest landed); the shard's `_meta.audio_urls` rides as last-resort
+     *  per-verse fallback when no template applies. */
     async function populateVersesFor(reciter: string, chapter: number): Promise<void> {
         try {
-            const shard = await loadChapterShard(reciter, chapter);
+            const [shard, manifest] = await Promise.all([
+                loadChapterShard(reciter, chapter),
+                loadManifest(),
+            ]);
+            const reciterAudio = reciterAudioFromManifest(manifest, reciter);
             const meta = shard._meta;
             const refs = chapterVerseRefs(shard);
             const opts: TsVerseOption[] = refs.map((ref) => {
                 const [s, a] = ref.split('-', 1)[0]!.split(':');
                 const surahN = parseInt(s ?? '0', 10);
                 const ayahN = parseInt(a ?? '0', 10);
-                return { ref, audio_url: audioUrlFor(meta, surahN, ayahN) };
+                const audio_url = reciterAudio
+                    ? resolveAudioUrl(reciterAudio.url_template, meta.audio_urls, surahN, ayahN)
+                    : '';
+                return { ref, audio_url };
             });
             verses.set(opts);
         } catch (e) {
@@ -329,15 +342,24 @@
         try {
             // qpc/dk are prewarmed at mount + browser-cached, so awaiting them
             // here is a warm-cache hit in the steady state; the shard is what
-            // actually gates paint. vbr resolves concurrently too.
-            const [shard, qpc, dk, vbr] = await Promise.all([
+            // actually gates paint. vbr resolves concurrently too. The manifest
+            // is also a warm cache here (loaded at mount + cached forever) —
+            // we await it to get the authoritative reciter-audio block.
+            const [shard, qpc, dk, vbr, manifest] = await Promise.all([
                 loadChapterShard(reciter, chapter),
                 loadQpc(),
                 loadDk(),
                 loadVbrChapters(reciter),
+                loadManifest(),
             ]);
+            const reciterAudio = reciterAudioFromManifest(manifest, reciter);
+            if (!reciterAudio) {
+                console.error('Manifest missing reciter block:', reciter);
+                alert('Failed to load verse');
+                return;
+            }
             tsVbrChapters.set(new Set(vbr));
-            const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk);
+            const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk, reciterAudio);
             if (!data) {
                 alert('Error: verse not found in shard');
                 return;
@@ -384,14 +406,22 @@
             return;
         }
 
-        const [shard, qpc, dk, vbr] = await Promise.all([
+        const [shard, qpc, dk, vbr, manifest] = await Promise.all([
             loadChapterShard(target.reciter, target.chapter),
             loadQpc(),
             loadDk(),
             loadVbrChapters(target.reciter),
+            loadManifest(),
         ]);
+        const reciterAudio = reciterAudioFromManifest(manifest, target.reciter);
+        if (!reciterAudio) {
+            console.error('Manifest missing reciter block:', target.reciter);
+            return;
+        }
         tsVbrChapters.set(new Set(vbr));
-        const data = assembleVerseFromShard(target.reciter, shard, target.verseRef, qpc, dk);
+        const data = assembleVerseFromShard(
+            target.reciter, shard, target.verseRef, qpc, dk, reciterAudio,
+        );
         if (!data) {
             console.error('Random target verse missing from shard:', target);
             return;
@@ -452,8 +482,12 @@
                 try {
                     const shard = await loadChapterShard(reciter, surah);
                     if (!chapterVerseRefs(shard).includes(verseRef)) continue;
+                    const reciterAudio = reciterAudioFromManifest(m, reciter);
+                    if (!reciterAudio) continue;
                     tsVbrChapters.set(new Set(await loadVbrChapters(reciter)));
-                    const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk);
+                    const data = assembleVerseFromShard(
+                        reciter, shard, verseRef, qpc, dk, reciterAudio,
+                    );
                     if (!data) continue;
                     selectedReciter.set(data.reciter);
                     localStorage.setItem(LS_KEYS.TS_RECITER, data.reciter);
@@ -545,15 +579,23 @@
         ensureChapterPeaks(t.reciter, t.chapter).catch(() => {});
         if (!warmAudio) return;
         try {
-            const shard = await loadChapterShard(t.reciter, t.chapter); // LRU hit
-            const meta = shard._meta;
+            // Shard for the per-verse audio_urls fallback only; url_template +
+            // audio_category come from the manifest (warm cache singleton).
+            const [shard, manifest] = await Promise.all([
+                loadChapterShard(t.reciter, t.chapter),
+                loadManifest(),
+            ]);
+            const reciterAudio = reciterAudioFromManifest(manifest, t.reciter);
+            if (!reciterAudio) return;
             const head = t.verseRef.split('-')[0] ?? t.verseRef;
             const [s, a] = head.split(':');
             const surah = parseInt(s ?? '0', 10);
             const ayah = parseInt(a ?? '0', 10);
-            const rawUrl = audioUrlFor(meta, surah, ayah);
+            const rawUrl = resolveAudioUrl(
+                reciterAudio.url_template, shard._meta.audio_urls, surah, ayah,
+            );
             if (!rawUrl) return;
-            const cat = meta.audio_category === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio';
+            const cat = reciterAudio.audio_category === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio';
             shadowPrewarm(tsPlayUrl(t.reciter, rawUrl, cat));
         } catch {
             /* prewarm is best-effort */
