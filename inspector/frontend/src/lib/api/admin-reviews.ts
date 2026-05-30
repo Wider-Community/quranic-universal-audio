@@ -236,22 +236,31 @@ export async function generateTimestamps(
     return (await resp.json()) as TimestampsJobLaunch;
 }
 
-/** Live status + log tail for a running job (poll this). */
+/** Live status + log tail for a running job (poll this). Reciter-scoped: the
+ *  durable record lives under ``reciters/<slug>/jobs/ts/``. */
 export async function fetchJobStatus(
+    slug: string,
     jobId: string,
     signal?: AbortSignal,
 ): Promise<TimestampsJobStatus> {
-    const resp = await fetch(`/api/admin/jobs/${encodeURIComponent(jobId)}`, { signal });
+    const resp = await fetch(
+        `/api/admin/reciters/${encodeURIComponent(slug)}/jobs/${encodeURIComponent(jobId)}`,
+        { signal },
+    );
     if (!resp.ok) return _unwrapError(resp);
     return (await resp.json()) as TimestampsJobStatus;
 }
 
 /** Persisted record (settings + status + full logs) for one past job, or null. */
 export async function fetchJobRecord(
+    slug: string,
     jobId: string,
     signal?: AbortSignal,
 ): Promise<TsJobRecord | null> {
-    const resp = await fetch(`/api/admin/jobs/${encodeURIComponent(jobId)}/record`, { signal });
+    const resp = await fetch(
+        `/api/admin/reciters/${encodeURIComponent(slug)}/jobs/${encodeURIComponent(jobId)}/record`,
+        { signal },
+    );
     if (resp.status === 404) return null;
     if (!resp.ok) return _unwrapError(resp);
     return (await resp.json()) as TsJobRecord;

@@ -38,9 +38,17 @@ _TERMINAL = ("succeeded", "completed", "failed", "error", "errored",
              "deleted")
 
 
-def _job_record_path(job_id: str) -> str:
-    """Bucket path for a job's durable record. Top-level ``jobs/<type>/`` so
-    other job kinds can share the namespace later."""
+def _job_record_path(slug: str, job_id: str) -> str:
+    """Bucket path for a job's durable record. Per-reciter under
+    ``reciters/<slug>/jobs/ts/`` — colocated with all the reciter's other
+    content (detailed/audio/peaks/timestamps/edit_history), consistent with the
+    bucket convention that everything for a reciter lives under its folder."""
+    return f"reciters/{slug}/jobs/ts/{job_id}.json"
+
+
+def _legacy_job_record_path(job_id: str) -> str:
+    """Pre-2026-05 top-level path. Read-only fallback so records written before
+    the per-reciter move still surface in the panel."""
     return f"jobs/ts/{job_id}.json"
 
 
@@ -52,19 +60,23 @@ def _now_iso() -> str:
 ALIGNER_BUCKET = os.environ.get("INSPECTOR_ALIGNER_BUCKET", "hetchyy/aligner-bucket")
 
 # Job image. Two modes, selected by ``INSPECTOR_JOB_IMAGE``:
-#   - Prebuilt mode (set ``INSPECTOR_JOB_IMAGE`` to the private HF Docker Space
+#   - Prebuilt mode (set ``INSPECTOR_JOB_IMAGE`` to the HF Docker Space
 #     ``hf.co/spaces/hetchyy/quran-ts-job``): the MFA framework + pip deps are
 #     baked into ``/env`` (see .local/spaces/quran_ts_job/Dockerfile). No ~300 MB
 #     conda solve per launch — the image is pulled from cache (~30-60 s). The
-#     gitignored acoustic MODEL is NOT baked; it stays bucket-mounted at /aux.
+#     gitignored acoustic MODEL is NOT baked; it stays bucket-mounted at /aux, so
+#     the image is open-source-only. The Space is PUBLIC: HF Jobs cannot pull a
+#     *private* Space image (verified — private 500s "Failed to call Jobs
+#     backend"; public pulls fine), and nothing private is in the image.
 #   - Bootstrap mode (default, stock ``condaforge/mambaforge:latest``): installs
-#     the stack at runtime via ``_INSTALL``. Kept as the default until the Space
-#     image is built + the private-image pull is verified (Phase-13 recon hit a
-#     401 on private-Space job images); flip the env once confirmed.
-JOB_IMAGE = os.environ.get("INSPECTOR_JOB_IMAGE", "condaforge/mambaforge:latest")
-# Whether the image still needs the runtime conda/pip install. True for the
-# stock mambaforge base; the prebuilt Space already has /env. Defaults to the
-# bootstrap path unless an explicit prebuilt image is configured.
+#     the stack at runtime via ``_INSTALL``. Stays the default fallback; flip the
+#     env to the prebuilt image in each deploy that wants the faster startup.
+# Default = the verified prebuilt image (fast startup, no ~300 MB solve).
+# Instant rollback: set INSPECTOR_JOB_IMAGE=condaforge/mambaforge:latest
+# (or INSPECTOR_JOB_IMAGE_BOOTSTRAP=1) to fall back to the runtime install.
+JOB_IMAGE = os.environ.get("INSPECTOR_JOB_IMAGE", "hf.co/spaces/hetchyy/quran-ts-job")
+# Whether the image still needs the runtime conda/pip install. True only for the
+# stock mambaforge base; the prebuilt Space already has /env.
 _NEEDS_BOOTSTRAP = (
     os.environ.get("INSPECTOR_JOB_IMAGE_BOOTSTRAP",
                    "1" if "mambaforge" in JOB_IMAGE else "0") == "1"
@@ -262,19 +274,30 @@ def _write_job_record(rec: TsJobRecord) -> None:
     """Write the durable job record to the bucket (best-effort)."""
     try:
         get_backend().write_json_atomic(
-            _job_record_path(rec.job_id), rec.model_dump(exclude_none=True))
+            _job_record_path(rec.slug, rec.job_id), rec.model_dump(exclude_none=True))
     except Exception as exc:  # noqa: BLE001
         log.warning("write job record %s failed: %s", rec.job_id, exc)
 
 
-def read_job_record(job_id: str) -> dict | None:
+def _read_record_bytes(slug: str, job_id: str) -> bytes | None:
+    """Read the record bytes, preferring the per-reciter path and falling back
+    to the legacy top-level ``jobs/ts/`` location for pre-move records."""
+    backend = get_backend()
+    for path in (_job_record_path(slug, job_id), _legacy_job_record_path(job_id)):
+        try:
+            return backend.read_bytes(path)
+        except StorageNotFound:
+            continue
+        except Exception as exc:  # noqa: BLE001
+            log.warning("read job record %s failed: %s", job_id, exc)
+            return None
+    return None
+
+
+def read_job_record(slug: str, job_id: str) -> dict | None:
     """Return the persisted record for one job, or None if absent/unreadable."""
-    try:
-        raw = get_backend().read_bytes(_job_record_path(job_id))
-    except StorageNotFound:
-        return None
-    except Exception as exc:  # noqa: BLE001
-        log.warning("read job record %s failed: %s", job_id, exc)
+    raw = _read_record_bytes(slug, job_id)
+    if raw is None:
         return None
     try:
         return TsJobRecord.model_validate(json.loads(raw)).model_dump(exclude_none=True)
@@ -288,21 +311,21 @@ def read_job_record(job_id: str) -> dict | None:
 def list_job_records(slug: str) -> list[dict]:
     """Persisted records for every job linked to ``slug`` (newest first).
 
-    Reads ``jobs/ts/<id>.json`` for each id in the reciter's
+    Reads ``reciters/<slug>/jobs/ts/<id>.json`` for each id in the reciter's
     ``timestamps_job_ids``. Missing records (e.g. a launch that never wrote)
     surface as a minimal stub so the panel can still show the id."""
     row = state_service.get_row(slug)
     ids = list(getattr(row, "timestamps_job_ids", []) or []) if row else []
     out: list[dict] = []
     for jid in ids:
-        rec = read_job_record(jid)
+        rec = read_job_record(slug, jid)
         out.append(rec or {"job_id": jid, "slug": slug, "type": "ts",
                            "status": "unknown"})
     out.reverse()  # timestamps_job_ids is append-order → newest last
     return out
 
 
-def job_status(job_id: str, *, log_tail: int = 400) -> dict:
+def job_status(slug: str, job_id: str, *, log_tail: int = 400) -> dict:
     """Live status + bounded log tail for a job (HF is authoritative).
 
     Backstop: when HF reports a terminal status but the persisted record is
@@ -326,8 +349,8 @@ def job_status(job_id: str, *, log_tail: int = 400) -> dict:
         log.warning("fetch_job_logs(%s) failed: %s", job_id, exc)
 
     if status in _TERMINAL:
-        existing = read_job_record(job_id)
-        base = dict(existing) if existing else {"job_id": job_id, "slug": "", "type": "ts"}
+        existing = read_job_record(slug, job_id)
+        base = dict(existing) if existing else {"job_id": job_id, "slug": slug, "type": "ts"}
         changed = False
         # The job self-writes its terminal status + timestamps but NOT its logs;
         # if it was hard-killed (OOM/timeout) it may still read running/unknown.

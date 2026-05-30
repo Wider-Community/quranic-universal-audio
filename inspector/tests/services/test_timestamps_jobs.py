@@ -42,12 +42,12 @@ def test_backstop_backfills_logs_on_logless_succeeded_record(fake_hf, monkeypatc
     existing = {"job_id": "j1", "slug": "r", "type": "ts",
                 "status": "succeeded", "started_at": "t0", "ended_at": "t1",
                 "logs": []}
-    monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda jid: dict(existing))
+    monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: dict(existing))
     written = {}
     monkeypatch.setattr(timestamps_jobs, "_write_job_record",
                         lambda rec: written.update(rec.model_dump(exclude_none=True)))
 
-    out = timestamps_jobs.job_status("j1")
+    out = timestamps_jobs.job_status("r", "j1")
 
     assert out["status"] == "succeeded"
     assert out["logs"] == ["line1", "line2"]
@@ -60,11 +60,11 @@ def test_backstop_backfills_logs_on_logless_succeeded_record(fake_hf, monkeypatc
 def test_backstop_noop_when_record_already_has_logs(fake_hf, monkeypatch):
     existing = {"job_id": "j1", "slug": "r", "type": "ts",
                 "status": "succeeded", "logs": ["old"]}
-    monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda jid: dict(existing))
+    monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: dict(existing))
     writes = []
     monkeypatch.setattr(timestamps_jobs, "_write_job_record", lambda rec: writes.append(rec))
 
-    timestamps_jobs.job_status("j1")
+    timestamps_jobs.job_status("r", "j1")
 
     assert writes == []  # nothing changed → no rewrite
 
@@ -73,12 +73,12 @@ def test_backstop_sets_terminal_status_on_running_record(fake_hf, monkeypatch):
     fake_hf["stage"] = "failed"
     existing = {"job_id": "j1", "slug": "r", "type": "ts", "status": "running",
                 "started_at": "t0", "logs": []}
-    monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda jid: dict(existing))
+    monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: dict(existing))
     written = {}
     monkeypatch.setattr(timestamps_jobs, "_write_job_record",
                         lambda rec: written.update(rec.model_dump(exclude_none=True)))
 
-    out = timestamps_jobs.job_status("j1")
+    out = timestamps_jobs.job_status("r", "j1")
 
     assert out["status"] == "failed"
     assert written["status"] == "failed"

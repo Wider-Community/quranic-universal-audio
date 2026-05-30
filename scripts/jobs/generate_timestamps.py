@@ -25,7 +25,7 @@ Env:
                      just persisted ones), so the Timestamps tab never has to
                      live-ffmpeg the waveform. Independent of PERSIST_AUDIO.
   JOB_ID             HF-injected job id; used to self-write the durable
-                     record at jobs/ts/<JOB_ID>.json
+                     record at reciters/<slug>/jobs/ts/<JOB_ID>.json
 
 See docs/planning/inspector-deploy/v2/phases/13-timestamps-job.md + the
 side-panel plan.
@@ -173,7 +173,7 @@ def _bake_missing_peaks(reciter_dir: Path, entries: list) -> None:
 
 def _write_record(mount: Path, slug: str, settings: dict, *, status: str,
                   started_at: str, error: str | None = None) -> None:
-    """Self-write the durable job record to ``jobs/ts/<JOB_ID>.json``.
+    """Self-write the durable job record to ``reciters/<slug>/jobs/ts/<JOB_ID>.json``.
 
     HF injects ``JOB_ID``; if it's absent (e.g. local dry-run) we skip — the
     launcher's initial record still exists. Best-effort: a record-write
@@ -190,7 +190,7 @@ def _write_record(mount: Path, slug: str, settings: dict, *, status: str,
             status=status, started_at=started_at, ended_at=_now_iso(),
             url=os.environ.get("JOB_URL") or None, error=error,
         )
-        dest = mount / "jobs" / "ts" / f"{job_id}.json"
+        dest = mount / "reciters" / slug / "jobs" / "ts" / f"{job_id}.json"
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(
             json.dumps(rec.model_dump(exclude_none=True), ensure_ascii=False),

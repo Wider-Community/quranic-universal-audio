@@ -141,21 +141,24 @@ def _parse_ts_settings(body: dict) -> TsJobSettings:
         raise ValueError(f"invalid settings: {exc.errors()[0].get('msg', exc)}") from exc
 
 
-@admin_reviews_bp.route("/jobs/<job_id>")
+@admin_reviews_bp.route("/reciters/<slug>/jobs/<job_id>")
 @require_capability("reviews.generate_timestamps")
-def job_status(user, job_id):
-    """Live status + bounded log tail for a launched job (HF is authoritative)."""
+def job_status(user, slug, job_id):
+    """Live status + bounded log tail for a launched job (HF is authoritative).
+
+    Reciter-scoped: the durable record lives at ``reciters/<slug>/jobs/ts/`` so
+    the slug is needed to read/backstop it (the drawer always has it)."""
     try:
-        return jsonify(ts_jobs.job_status(job_id))
+        return jsonify(ts_jobs.job_status(slug, job_id))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
 
 
-@admin_reviews_bp.route("/jobs/<job_id>/record")
+@admin_reviews_bp.route("/reciters/<slug>/jobs/<job_id>/record")
 @require_capability("reviews.generate_timestamps")
-def job_record(user, job_id):
+def job_record(user, slug, job_id):
     """Persisted record (settings + status + full logs) for one past job."""
-    rec = ts_jobs.read_job_record(job_id)
+    rec = ts_jobs.read_job_record(slug, job_id)
     if rec is None:
         return jsonify({"error": "no record for job"}), 404
     return jsonify(rec)

@@ -123,7 +123,7 @@
         liveStatus = { job_id: jobId, status: 'running', logs: [] };
         stopPoll = visiblePoll<TimestampsJobStatus>({
             intervalMs: 2500,
-            fetcher: (signal) => fetchJobStatus(jobId, signal),
+            fetcher: (signal) => fetchJobStatus(slug, jobId, signal),
             onResult: (res) => {
                 liveStatus = res;
                 if (TERMINAL.has(res.status)) {
@@ -178,7 +178,7 @@
         liveStartedAt = null;
         let record: TsJobRecord;
         try {
-            record = (await fetchJobRecord(jid)) ?? rec;
+            record = (await fetchJobRecord(slug, jid)) ?? rec;
         } catch {
             record = rec;
         }
@@ -187,7 +187,7 @@
         // persists logs never ran). Best-effort: silent if retention expired.
         if (!record.logs?.length) {
             try {
-                const live = await fetchJobStatus(jid);
+                const live = await fetchJobStatus(slug, jid);
                 if (live.logs?.length) {
                     record = { ...record, logs: live.logs, log_truncated: live.log_truncated };
                 }
