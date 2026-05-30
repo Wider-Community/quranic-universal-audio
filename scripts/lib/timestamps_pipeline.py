@@ -3,7 +3,7 @@
 
 Reads detailed.json from the segment extraction pipeline, downloads full
 surah audio, slices segments, sends batches through a caller-provided MFA
-backend, and writes timestamps.json / timestamps_full.json.
+backend, and writes per-chapter v2 timestamps shards.
 """
 
 from __future__ import annotations
@@ -1041,23 +1041,10 @@ def process(input_dir: Path,
         ]
 
     if not chapters_to_process:
+        # Nothing new to align — the v2 shards from the prior run already
+        # stand. No legacy timestamps_full.json / timestamps.json is written
+        # (single canonical v2 format).
         log.info("No segments to process (all complete or skipped)")
-        if existing_data:
-            for ref, val in existing_data.items():
-                words = val.get("words", [])
-                if words and "verse_start_ms" not in val:
-                    val["verse_start_ms"] = words[0][1]
-                    val["verse_end_ms"] = words[-1][2]
-            _write_output(output_dir / "timestamps_full.json", meta,
-                          method, canonical_beam, shared_cmvn,
-                          existing_data, padding=padding)
-            words_data = {}
-            for ref, val in existing_data.items():
-                words_only = [[w[0], w[1], w[2]] for w in val["words"]]
-                words_data[ref] = words_only
-            _write_output(output_dir / "timestamps.json", meta,
-                          method, canonical_beam, shared_cmvn, words_data,
-                          padding=padding)
         return output_dir
 
     # --- Producer-consumer pipeline ---
