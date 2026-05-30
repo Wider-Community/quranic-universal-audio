@@ -1,14 +1,11 @@
 const source = `
 # Low Confidence
 
-Listen first. Low confidence is a signal to check the segment, not an automatic instruction to edit it.
+Low confidence are calculations and algorithms that mark segments where the model wasn't sure its text matched the audio. It's a signal to check, not proof of an error — most are correct and align perfectly, so use the ignore button.
 
-::example{id="low_conf_reference_correction"}
+When something is off, the cause varies and so does the fix — it can be any edit. By the end this should be zero: each one either corrected or ignored.
 
-If the words are right but the boundary is too wide or clipped, adjust the timing instead of changing the reference.
-
-::example{id="low_conf_trim_timing"}
-::example{id="low_conf_split_phrase"}
+::example{id="lowconf_wrong_word"}
 `;
 
 export default source;

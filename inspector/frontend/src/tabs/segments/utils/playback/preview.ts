@@ -63,6 +63,10 @@ export interface PreviewPlaybackContext {
     /** Click-handler for a row's play button. Toggles play/pause for the
      *  same row, switches the active range to a different row otherwise. */
     toggle(uid: string): void;
+    /** Register a same-origin guide clip whose internal time 0 maps to original
+     *  file ms `baseMs`. Playback for rows on this `url` is rebased into the
+     *  clip; cards still display original times. Keyed by clip url. */
+    setClipBase(url: string, baseMs: number): void;
     /** Tear down the AudioRange + listeners; call from panel onDestroy. */
     dispose(): void;
     /** Which row is the current playback target (set on play, cleared on
@@ -102,6 +106,11 @@ export function createPreviewPlaybackContext(opts: { persistPeaks?: boolean } = 
     let range: AudioRange | null = null;
     let curUid: string | null = null;
     let curRow: RowEntry | null = null;
+    /** clip url → clip-start in original ms (guide examples only). */
+    const clipBaseByUrl = new Map<string, number>();
+    /** clip base for the currently-playing row (added back to onTick time so
+     *  the playhead maps onto the card's original-time waveform range). */
+    let curClipBase = 0;
     let unsubPlay: (() => void) | null = null;
     let unsubPause: (() => void) | null = null;
     /** Dedup peak fetches per (url, start, end) — registering the same
@@ -116,11 +125,14 @@ export function createPreviewPlaybackContext(opts: { persistPeaks?: boolean } = 
         // union range; the green child slice (drawn by the split overlay)
         // sits inside it and the playhead sweeps only across that slice
         // because AudioRange stops audio at the playback range.
+        //
+        // For a guide clip the AudioRange runs in clip-relative time, so add
+        // `curClipBase` back to map onto the card's original-time waveform.
         drawSegPlayhead(
             curRow.canvas as SegCanvas,
             curRow.wfStartMs,
             curRow.wfEndMs,
-            timeMs,
+            timeMs + curClipBase,
             curRow.audioUrl,
         );
     }
@@ -262,6 +274,10 @@ export function createPreviewPlaybackContext(opts: { persistPeaks?: boolean } = 
         }
     }
 
+    function setClipBase(url: string, baseMs: number): void {
+        clipBaseByUrl.set(url, baseMs);
+    }
+
     function _stop(): void {
         if (range) {
             range.dispose();
@@ -299,6 +315,7 @@ export function createPreviewPlaybackContext(opts: { persistPeaks?: boolean } = 
 
         curUid = uid;
         curRow = row;
+        curClipBase = clipBaseByUrl.get(row.audioUrl) ?? 0;
         _activeSeg.set({ uid });
 
         // On-demand peaks compute, against the *visual* range so the
@@ -315,26 +332,31 @@ export function createPreviewPlaybackContext(opts: { persistPeaks?: boolean } = 
         // cross-chapter history/save-preview rows keep the same VBR/CBR
         // routing as main row playback.
         const reciter = get(selectedReciter);
-        const isVbr = row.chapter != null
+        // Guide clips are self-contained same-origin files (`/guide-audio/`):
+        // always plain CBR, no by-surah proxy wrap, and never routed through
+        // the VBR segment-clip endpoint keyed on the *current* reciter (whose
+        // VBR set is unrelated to the example's source).
+        const isGuideClip = curClipBase > 0 || row.audioUrl.startsWith('/guide-audio/');
+        const isVbr = !isGuideClip && row.chapter != null
             && (get(reciterVbrChapters)?.has(row.chapter) ?? false);
         // by_surah chapter URLs MUST be wrapped through the audio-proxy: the
         // per-panel port has the Web Audio kill-switch enabled, and a raw
         // cross-origin CDN src on a `crossorigin="anonymous"` element makes
         // `MediaElementAudioSourceNode` output zeroes (no ACAO header from
-        // the CDN). Same wrap chapter-actions.ts applies for main playback;
-        // before this History rows skipped it and silently played zeroes
-        // after 767bb9a7 enriched their `audio_url` from null → CDN.
+        // the CDN). Same-origin guide clips don't need (or want) the wrap.
         port.setSource({
             audioUrl: row.audioUrl,
-            cbrSrc: wrapCbrSrcIfBySurah(row.audioUrl, reciter),
+            cbrSrc: isGuideClip ? row.audioUrl : wrapCbrSrcIfBySurah(row.audioUrl, reciter),
             reciter: reciter || null,
             vbr: isVbr,
         });
 
-        // File-absolute spec — port owns transport.
+        // Port owns transport. For a guide clip the range is rebased into the
+        // clip's own timeline (clip 0 = original `curClipBase` ms); for normal
+        // rows `curClipBase` is 0 and this is the file-absolute spec unchanged.
         range = new AudioRange({
             port,
-            range: { startMs: row.startMs, endMs: row.endMs },
+            range: { startMs: row.startMs - curClipBase, endMs: row.endMs - curClipBase },
             policy: { kind: 'stop' },
             onTick: _onTick,
             onBoundary: _onBoundary,
@@ -354,6 +376,8 @@ export function createPreviewPlaybackContext(opts: { persistPeaks?: boolean } = 
         port.dispose();
         rows.clear();
         fetched.clear();
+        clipBaseByUrl.clear();
+        curClipBase = 0;
         curUid = null;
         curRow = null;
         _activeSeg.set(null);
@@ -365,6 +389,7 @@ export function createPreviewPlaybackContext(opts: { persistPeaks?: boolean } = 
         registerRow,
         deregisterRow,
         toggle,
+        setClipBase,
         dispose,
         activeSeg: { subscribe: _activeSeg.subscribe },
         playingSeg: { subscribe: _playingSeg.subscribe },

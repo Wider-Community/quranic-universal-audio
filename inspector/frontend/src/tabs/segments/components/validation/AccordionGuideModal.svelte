@@ -9,9 +9,12 @@
     import type { GuideExample } from '../../guides/types';
     import {
         buildEditChains,
+        type HistorySnapshot,
+        snapToSeg,
     } from '../../stores/history';
     import { createPreviewPlaybackContext } from '../../utils/playback/preview';
     import { indexHistoryPeaksRecords } from '../../utils/waveform/utils';
+    import SegmentRow from '../list/SegmentRow.svelte';
     import EditChainRow from '../history/EditChainRow.svelte';
     import HistoryOp from '../history/HistoryOp.svelte';
 
@@ -34,7 +37,14 @@
     $: {
         for (const block of blocks) {
             if (block.type !== 'example') continue;
-            indexHistoryPeaksRecords(getGuideExample(block.id)?.peaks);
+            const ex = getGuideExample(block.id);
+            indexHistoryPeaksRecords(ex?.peaks);
+            // Register the clip's base offset so playback rebases into the
+            // short same-origin clip while cards keep original timestamps.
+            const clipUrl = ex?.peaks?.[0]?.url;
+            if (clipUrl && ex?.clip_base_ms != null) {
+                previewCtx.setClipBase(clipUrl, ex.clip_base_ms);
+            }
         }
     }
 
@@ -137,6 +147,23 @@
                                     {/if}
                                 </header>
 
+                                {#each (example.context ?? []).filter((c) => c.position === 'before') as ctx}
+                                    <div class="accordion-guide-context">
+                                        <div class="accordion-guide-context-label">{ctx.label}</div>
+                                        {#each ctx.segments as snap}
+                                            <SegmentRow
+                                                seg={snapToSeg(snap as HistorySnapshot, example.chapter)}
+                                                readOnly={true}
+                                                showChapter={true}
+                                                showPlayBtn={true}
+                                                mode="history"
+                                                instanceRole="history"
+                                                {previewCtx}
+                                            />
+                                        {/each}
+                                    </div>
+                                {/each}
+
                                 {#if example.render === 'edit_chain'}
                                     {@const chain = guideChain(example)}
                                     {#if chain}
@@ -151,6 +178,23 @@
                                         {previewCtx}
                                     />
                                 {/if}
+
+                                {#each (example.context ?? []).filter((c) => c.position === 'after') as ctx}
+                                    <div class="accordion-guide-context">
+                                        <div class="accordion-guide-context-label">{ctx.label}</div>
+                                        {#each ctx.segments as snap}
+                                            <SegmentRow
+                                                seg={snapToSeg(snap as HistorySnapshot, example.chapter)}
+                                                readOnly={true}
+                                                showChapter={true}
+                                                showPlayBtn={true}
+                                                mode="history"
+                                                instanceRole="history"
+                                                {previewCtx}
+                                            />
+                                        {/each}
+                                    </div>
+                                {/each}
                             </article>
                             {/if}
                         {/if}
@@ -280,6 +324,24 @@
         color: #aeb8d4;
         font-size: 0.88rem;
         line-height: 1.45;
+    }
+
+    .accordion-guide-context {
+        margin: 8px 0;
+        padding: 8px 10px;
+        border: 1px dashed #2c3a5c;
+        border-left: 3px solid #3a4a73;
+        border-radius: 6px;
+        background: #0d1428;
+        opacity: 0.85;
+    }
+
+    .accordion-guide-context-label {
+        margin-bottom: 6px;
+        color: #9aa6c8;
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
 
     @media (max-width: 720px) {

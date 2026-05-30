@@ -50,6 +50,7 @@
     import { resolveCardLeadSeg } from '../../utils/validation/card-lead-seg';
     import { filterStaleIssues } from '../../utils/validation/stale';
     import { _fetchPeaks } from '../../utils/waveform/utils';
+    import { hasAccordionGuide } from '../../guides/registry';
     import AccordionGuideModal from './AccordionGuideModal.svelte';
     import ErrorCard from './ErrorCard.svelte';
 
@@ -818,13 +819,15 @@
                             {(cat.isLowConf || cat.isQalqala) ? cat.visibleItems.length : cat.summaryCount}
                         </span>
                     </span>
-                    <button
-                        type="button"
-                        class="val-guide-btn"
-                        aria-label={`Open guide for ${cat.name}`}
-                        title={`Open guide for ${cat.name}`}
-                        on:click={(e) => openGuide(e, cat.type)}
-                    >?</button>
+                    {#if hasAccordionGuide(cat.type)}
+                        <button
+                            type="button"
+                            class="val-guide-btn"
+                            aria-label={`Open guide for ${cat.name}`}
+                            title={`Open guide for ${cat.name}`}
+                            on:click={(e) => openGuide(e, cat.type)}
+                        >?</button>
+                    {/if}
                 </summary>
 
                 <!-- LC slider (Low Confidence only) -->

@@ -42,7 +42,10 @@ describe('ValidationPanel accordion guide modal', () => {
 
     await fireEvent.click(getByLabelText('Open guide for Low Confidence'));
 
-    await waitFor(() => expect(getByText('Listen first. Low confidence is a signal to check the segment, not an automatic instruction to edit it.')).toBeTruthy());
+    await waitFor(() => expect(
+      getByText((_, el) => el?.tagName === 'P'
+        && (el.textContent ?? '').includes("the model wasn't sure its text matched the audio")),
+    ).toBeTruthy());
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -51,7 +54,7 @@ describe('ValidationPanel accordion guide modal', () => {
 
     await fireEvent.click(getByLabelText('Open guide for Low Confidence'));
 
-    await waitFor(() => expect(getByText('Reference correction')).toBeTruthy());
+    await waitFor(() => expect(getByText('Wrong word, low confidence')).toBeTruthy());
     expect(queryByText('Undo')).toBeNull();
     expect(queryByText('Discard')).toBeNull();
   });
