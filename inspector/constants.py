@@ -19,6 +19,7 @@ VALIDATION_CATEGORIES = (
 # the two in lockstep when adding a guide. ``GUIDE_VIEW_KEY_ALIASES`` maps any
 # raw category the FE might post to its stored key.
 GUIDE_VIEW_KEYS = (
+    "general_editing",
     "failed", "missing_verses", "missing_words", "low_confidence",
     "boundary_adj", "repetitions", "cross_verse", "qalqala",
     "muqattaat", "basmala_amin",

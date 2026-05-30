@@ -17,9 +17,17 @@
     } from '../../stores/history';
     import { createPreviewPlaybackContext } from '../../utils/playback/preview';
     import { indexHistoryPeaksRecords } from '../../utils/waveform/utils';
+    import EditingGuideContent from '../../guides/editing/EditingGuideContent.svelte';
     import EditChainRow from '../history/EditChainRow.svelte';
     import HistoryOp from '../history/HistoryOp.svelte';
     import SegmentRow from '../list/SegmentRow.svelte';
+
+    // Custom guide bodies, keyed by the `::component{name="…"}` directive name.
+    // Lets a guide (the editing guide) render a bespoke illustrated component
+    // instead of the data-driven example cards.
+    const GUIDE_COMPONENTS: Record<string, typeof EditingGuideContent> = {
+        'editing-guide': EditingGuideContent,
+    };
 
     export let category: string;
     export let opener: HTMLElement | null = null;
@@ -158,6 +166,12 @@
                             <h3 class="accordion-guide-heading">{block.text}</h3>
                         {:else if block.type === 'paragraph'}
                             <p>{block.text}</p>
+                        {:else if block.type === 'component'}
+                            {#if GUIDE_COMPONENTS[block.name]}
+                                <svelte:component this={GUIDE_COMPONENTS[block.name]} />
+                            {:else}
+                                <p class="accordion-guide-error">Unknown guide component: {block.name}</p>
+                            {/if}
                         {:else if block.type === 'missing'}
                             <p class="accordion-guide-error">{block.message}</p>
                         {:else if block.type === 'example'}

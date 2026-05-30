@@ -1,7 +1,9 @@
 import type { GuideBlock } from './types';
 
 const EXAMPLE_DIRECTIVE_RE = /^::example\{([^}]*)\}$/;
+const COMPONENT_DIRECTIVE_RE = /^::component\{([^}]*)\}$/;
 const ID_ATTR_RE = /\bid="([^"]+)"/;
+const NAME_ATTR_RE = /\bname="([^"]+)"/;
 
 function flushParagraph(lines: string[], blocks: GuideBlock[]): void {
     if (lines.length === 0) return;
@@ -22,6 +24,16 @@ export function parseGuideSource(source: string): GuideBlock[] {
 
         if (line.startsWith('::')) {
             flushParagraph(paragraph, blocks);
+            const component = COMPONENT_DIRECTIVE_RE.exec(line);
+            if (component) {
+                const name = NAME_ATTR_RE.exec(component[1] ?? '')?.[1];
+                if (!name) {
+                    blocks.push({ type: 'missing', message: `Component directive is missing a name: ${line}` });
+                    continue;
+                }
+                blocks.push({ type: 'component', name });
+                continue;
+            }
             const example = EXAMPLE_DIRECTIVE_RE.exec(line);
             if (!example) {
                 blocks.push({ type: 'missing', message: `Unsupported guide directive: ${line}` });

@@ -11,6 +11,7 @@
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/components.css';
+import './styles/editing-guide.css';
 import './styles/filters.css';
 import './styles/history.css';
 import './styles/segments.css';

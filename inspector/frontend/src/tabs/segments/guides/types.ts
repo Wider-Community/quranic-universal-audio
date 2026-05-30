@@ -50,4 +50,11 @@ export type GuideBlock =
     | { type: 'heading'; level: 1 | 2; text: string }
     | { type: 'paragraph'; text: string }
     | { type: 'example'; id: string }
+    /**
+     * A custom Svelte body, referenced by name. Lets a guide render bespoke
+     * illustrated content (the editing guide's annotated mock cards) instead of
+     * the data-driven `example` cards. The name maps to a component in
+     * `AccordionGuideModal`'s `GUIDE_COMPONENTS` registry.
+     */
+    | { type: 'component'; name: string }
     | { type: 'missing'; message: string };
