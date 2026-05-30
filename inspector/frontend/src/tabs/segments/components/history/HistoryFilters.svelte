@@ -18,7 +18,6 @@
     import {
         buildDisplayItems,
         chainHasWaslAnnotation,
-        clearFilters,
         editChains,
         filterErrCats,
         filterHasWasl,
@@ -239,12 +238,6 @@
         </div>
     </div>
 
-    <button
-        id="seg-history-filter-clear"
-        class="btn btn-sm btn-cancel"
-        class:hidden-none={!hasFilters}
-        on:click={() => clearFilters()}
-    >Clear Filters</button>
 </div>
 
 <style>
