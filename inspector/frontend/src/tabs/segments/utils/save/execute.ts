@@ -5,7 +5,7 @@
 
 import { get as storeGet } from 'svelte/store';
 
-import { friendlyError, type ApiErrorBody } from '../../../../lib/errors/friendly';
+import { type ApiErrorBody,friendlyError } from '../../../../lib/errors/friendly';
 import { SIGN_IN_MESSAGES } from '../../../../lib/sign-in-messages';
 import { openSignInModal } from '../../../../lib/stores/sign-in-modal';
 import { pushToast } from '../../../../lib/stores/toast';

@@ -3,8 +3,8 @@
 
     import { signIn, signOut } from './lib/api/auth-client';
     import BookmarksPanel from './lib/components/BookmarksPanel.svelte';
-    import DevRoleSwitcher from './lib/components/DevRoleSwitcher.svelte';
     import ClaimConfirmModal from './lib/components/ClaimConfirmModal.svelte';
+    import DevRoleSwitcher from './lib/components/DevRoleSwitcher.svelte';
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import ExternalLinks from './lib/components/ExternalLinks.svelte';
     import InfoModal from './lib/components/info/InfoModal.svelte';

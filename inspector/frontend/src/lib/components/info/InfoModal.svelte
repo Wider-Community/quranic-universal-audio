@@ -17,9 +17,8 @@
     import { currentUser, markGuideReadLocally } from '../../stores/current-user';
     import { closeInfoModal, infoModalOpen } from '../../stores/info-modal';
     import Modal from '../Modal.svelte';
-
-    import OverviewContent from './OverviewContent.svelte';
     import { overviewDoc } from './overview';
+    import OverviewContent from './OverviewContent.svelte';
 
     $effect(() => {
         if ($infoModalOpen) void recordOverviewRead();

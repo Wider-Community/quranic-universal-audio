@@ -20,7 +20,6 @@
     import { currentUser, isAdmin, isOwner, isSignedIn } from '../../../lib/stores/current-user';
     import { playerContext } from '../../../lib/stores/player-context';
     import { openSignInModal } from '../../../lib/stores/sign-in-modal';
-    import { gotoSegments } from '../../../lib/utils/goto-segments';
     import {
         type AdminDiscardedDelivery,
         type AdminViewReciter,
@@ -37,6 +36,7 @@
         totalHoursLabel,
     } from '../../../lib/utils/delivery-label';
     import { compareDeliveries } from '../../../lib/utils/delivery-sort';
+    import { gotoSegments } from '../../../lib/utils/goto-segments';
     import RequestForm from '../components/RequestForm.svelte';
     import StateTimeline from '../components/StateTimeline.svelte';
     import { loadCatalog } from '../stores/catalog-data';
