@@ -206,49 +206,58 @@
         <section class="dsection">
             <h3 class="dsection-head">Settings</h3>
             <div class="form">
-                <label class="field">
-                    <span>Alignment beam</span>
-                    <input type="number" min="1" bind:value={beam} />
-                </label>
-                <label class="field">
-                    <span>Probe beams (comma-separated, optional)</span>
-                    <input type="text" bind:value={probeBeamsRaw} placeholder="e.g. 35, 75" />
-                </label>
-                <div class="beams-preview">
-                    beams = [{beamsPreview.join(', ')}] · canonical =
-                    {beamsPreview.length ? Math.max(...beamsPreview) : '—'}
+                <div class="beam-row">
+                    <label class="field beam-field">
+                        <span>Alignment beam</span>
+                        <input class="num" type="number" min="1" bind:value={beam} />
+                    </label>
+                    <label class="field">
+                        <span>Probe beams <em>optional</em></span>
+                        <input type="text" bind:value={probeBeamsRaw} placeholder="e.g. 35, 75" />
+                    </label>
                 </div>
+                <p class="beams-preview">
+                    <span class="lbl">beams</span>
+                    <code>[{beamsPreview.join(', ')}]</code>
+                    <span class="lbl">canonical</span>
+                    <code>{beamsPreview.length ? Math.max(...beamsPreview) : '—'}</code>
+                </p>
 
-                <label class="check">
-                    <input type="checkbox" bind:checked={persistAudio} />
-                    <span>Persist CDN-downloaded audio back to the bucket (Xing-injected)</span>
-                </label>
-                <label class="check" class:disabled={!persistAudio}>
-                    <input type="checkbox" bind:checked={genPeaks} disabled={!persistAudio} />
-                    <span>Also generate v3 peaks for persisted chapters</span>
-                </label>
+                <div class="toggles">
+                    <label class="check">
+                        <input type="checkbox" bind:checked={persistAudio} />
+                        <span>Persist CDN audio to bucket <em>Xing-injected</em></span>
+                    </label>
+                    <label class="check sub" class:disabled={!persistAudio}>
+                        <input type="checkbox" bind:checked={genPeaks} disabled={!persistAudio} />
+                        <span>Generate v3 peaks for persisted chapters</span>
+                    </label>
+                </div>
 
                 <button
                     type="button"
                     class="adv-toggle"
                     onclick={() => (advancedOpen = !advancedOpen)}
+                    aria-expanded={advancedOpen}
                 >
                     {advancedOpen ? '▾' : '▸'} Advanced
                 </button>
                 {#if advancedOpen}
                     <div class="advanced">
                         <label class="field">
-                            <span>Workers (blank → server default)</span>
-                            <input type="number" min="1" max="64" bind:value={workers} />
+                            <span>Workers <em>blank → server default</em></span>
+                            <input class="num" type="number" min="1" max="64" bind:value={workers} />
                         </label>
-                        <label class="field">
-                            <span>Flavor</span>
-                            <input type="text" bind:value={flavor} placeholder="cpu-upgrade" />
-                        </label>
-                        <label class="field">
-                            <span>Timeout</span>
-                            <input type="text" bind:value={timeout} placeholder="2h" />
-                        </label>
+                        <div class="beam-row">
+                            <label class="field">
+                                <span>Flavor</span>
+                                <input type="text" bind:value={flavor} placeholder="cpu-upgrade" />
+                            </label>
+                            <label class="field beam-field">
+                                <span>Timeout</span>
+                                <input type="text" bind:value={timeout} placeholder="2h" />
+                            </label>
+                        </div>
                     </div>
                 {/if}
 
@@ -385,43 +394,99 @@
         gap: var(--s-2);
     }
 
-    .form { display: flex; flex-direction: column; gap: var(--s-3); }
-    .field { display: flex; flex-direction: column; gap: 4px; }
+    .form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-4);
+        max-width: 420px;
+    }
+    /* Numeric beam sits beside the wider probe list — a 2-digit value never
+       needs full width, and the pairing kills the stacked-box monotony. */
+    .beam-row {
+        display: grid;
+        grid-template-columns: 7.5rem 1fr;
+        gap: var(--s-3);
+        align-items: end;
+    }
+    .field { display: flex; flex-direction: column; gap: var(--s-1); min-width: 0; }
     .field span {
         font-size: 10.5px;
         color: var(--text-faint);
         font-family: var(--font-mono);
         letter-spacing: 0.02em;
+        text-transform: uppercase;
+        display: flex;
+        gap: 0.4em;
+        align-items: baseline;
+    }
+    .field span em {
+        font-style: normal;
+        text-transform: none;
+        letter-spacing: 0;
+        color: var(--text-faint);
+        opacity: 0.7;
+        font-size: 9.5px;
     }
     .field input {
         background: var(--canvas);
         border: 1px solid var(--border-quiet);
-        border-radius: var(--r-1);
-        padding: 6px 10px;
+        border-radius: var(--r-2);
+        padding: 7px 10px;
         color: var(--text-primary);
         font: inherit;
         font-size: var(--fs-body);
+        transition: border-color var(--t-fast) var(--ease-out-quart),
+                    box-shadow var(--t-fast) var(--ease-out-quart);
     }
+    .field input.num { font-variant-numeric: tabular-nums; }
+    .field input::placeholder { color: var(--text-faint); }
+    .field input:hover { border-color: var(--border-default); }
     .field input:focus {
         outline: 0;
-        border-color: var(--accent-tint);
-        box-shadow: 0 0 0 2px var(--accent-tint-soft);
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-tint-soft);
     }
+    /* Derived summary — reads as an echo of the inputs, not another control. */
     .beams-preview {
+        display: flex;
+        align-items: baseline;
+        gap: var(--s-2);
+        margin: calc(-1 * var(--s-2)) 0 0;
         font-size: 11px;
         font-family: var(--font-mono);
         color: var(--text-muted);
     }
+    .beams-preview .lbl {
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-size: 9.5px;
+    }
+    .beams-preview code { color: var(--text-secondary); }
+
+    .toggles { display: flex; flex-direction: column; gap: var(--s-2); }
     .check {
         display: flex;
         align-items: flex-start;
         gap: var(--s-2);
-        font-size: var(--fs-body);
+        font-size: var(--fs-meta);
         color: var(--text-secondary);
         line-height: 1.4;
+        cursor: pointer;
     }
-    .check.disabled { opacity: 0.5; }
-    .check input { margin-top: 2px; }
+    /* Dependent toggle nests under its parent so the relationship is structural. */
+    .check.sub {
+        margin-left: var(--s-5);
+        padding-left: var(--s-3);
+        border-left: 1px solid var(--border-quiet);
+    }
+    .check.disabled { opacity: 0.45; cursor: default; }
+    .check span em {
+        font-style: normal;
+        color: var(--text-faint);
+        font-size: 10px;
+    }
+    .check input { margin-top: 1px; accent-color: var(--accent); cursor: inherit; }
 
     .adv-toggle {
         align-self: flex-start;
@@ -432,6 +497,7 @@
         font: inherit;
         font-size: var(--fs-meta);
         padding: 0;
+        transition: color var(--t-fast) var(--ease-out-quart);
     }
     .adv-toggle:hover { color: var(--text-primary); }
     .advanced {
@@ -442,20 +508,25 @@
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
         background: var(--panel-2);
+        margin-top: calc(-1 * var(--s-2));
     }
 
     .form-error { color: var(--state-error-fg); font-size: var(--fs-meta); }
+    /* Primary commit — full-width anchor of the form, not a floating button. */
     .launch {
-        align-self: flex-start;
+        width: 100%;
+        margin-top: var(--s-1);
         background: var(--accent);
         color: var(--accent-fg);
         border: 0;
-        padding: 6px 16px;
-        border-radius: var(--r-1);
+        padding: 9px 16px;
+        border-radius: var(--r-2);
         cursor: pointer;
         font: inherit;
-        font-size: var(--fs-meta);
-        font-weight: 500;
+        font-size: var(--fs-body);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        transition: background var(--t-fast) var(--ease-out-quart);
     }
     .launch:hover:not(:disabled) { background: var(--accent-strong); }
     .launch:disabled { opacity: 0.6; cursor: not-allowed; }
