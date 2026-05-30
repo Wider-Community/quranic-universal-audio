@@ -21,7 +21,9 @@ Env:
   BATCH_SIZE / DOWNLOAD_WORKERS / PADDING / METHOD  pipeline tunables
   PERSIST_AUDIO      "1" → download missing chapter audio from the CDN and
                      write it (Xing-injected) back to reciters/<slug>/audio/
-  GEN_PEAKS          "1" → also compute v3 slim peaks for persisted chapters
+  GEN_PEAKS          "1" → also compute v3 slim peaks for EVERY chapter (not
+                     just persisted ones), so the Timestamps tab never has to
+                     live-ffmpeg the waveform. Independent of PERSIST_AUDIO.
   JOB_ID             HF-injected job id; used to self-write the durable
                      record at jobs/ts/<JOB_ID>.json
 
@@ -130,6 +132,43 @@ def _persist_chapter_audio(url: str, audio_dest: Path, peaks_dest: Path,
                 Path(tmp).unlink(missing_ok=True)
             except OSError:
                 pass
+
+
+def _bake_missing_peaks(reciter_dir: Path, entries: list) -> None:
+    """Bake slim v3 peaks for every by_surah chapter that doesn't have them yet.
+
+    Decouples peak baking from ``PERSIST_AUDIO``: ``_persist_chapter_audio``
+    only bakes for chapters it freshly downloads, so chapters that already had
+    bucket audio (or that we aligned straight from the CDN url) would otherwise
+    ship without peaks and force the Timestamps tab onto the 289-762ms live
+    ffmpeg path per verse. Computes from ``entry["audio"]`` (local bucket file
+    or CDN url), skips existing files + by_ayah refs, best-effort.
+    """
+    from scripts.lib.peaks_compute import compute_audio_peaks, pack_slim  # noqa: E402
+
+    peaks_dir = reciter_dir / "peaks"
+    peaks_dir.mkdir(parents=True, exist_ok=True)
+    baked = skipped = failed = 0
+    for entry in entries:
+        ref = str(entry.get("ref", ""))
+        src = entry.get("audio")
+        if not ref or ":" in ref or not src:
+            continue
+        dest = peaks_dir / f"{ref}.json.gz"
+        if dest.exists():
+            skipped += 1
+            continue
+        try:
+            hd = compute_audio_peaks(str(src))
+            if not hd or not hd.get("peaks"):
+                failed += 1
+                continue
+            dest.write_bytes(pack_slim(hd))
+            baked += 1
+        except Exception as exc:  # noqa: BLE001
+            log.warning("peaks bake failed for ch%s: %s", ref, exc)
+            failed += 1
+    log.info("peaks bake pass: baked=%d skipped=%d failed=%d", baked, skipped, failed)
 
 
 def _write_record(mount: Path, slug: str, settings: dict, *, status: str,
@@ -288,6 +327,11 @@ def main() -> int:
         return 1
 
     _write_record(mount, slug, settings, status="succeeded", started_at=started_at)
+    # Peaks bake pass: independent of PERSIST_AUDIO so every chapter (incl. ones
+    # that already had bucket audio or aligned straight from the CDN) gets slim
+    # peaks. Runs after alignment so a slow/failed bake never risks the shards.
+    if gen_peaks:
+        _bake_missing_peaks(reciter_dir, entries)
     log.info("done slug=%s", slug)
     return 0
 

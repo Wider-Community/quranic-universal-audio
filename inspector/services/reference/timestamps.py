@@ -91,6 +91,28 @@ def _published_reciter_slugs() -> list[str]:
     ]
 
 
+def _ts_chapters_for(slug: str, delivery) -> list[int]:
+    """Resolve the chapter list the manifest advertises for ``slug``.
+
+    For a fully-documented complete by_surah mushaf (``delivery.chapter_count ==
+    114``) derive ``1..114`` from the catalog (DB) — robust to a sidecar whose
+    chapter keys are partial/corrupt, and provably contiguous so no advertised
+    chapter can 404 (the released gate guarantees all 114 shards exist).
+    Everything else (partial reciters, by_ayah, no delivery) falls back to the
+    gap-accurate sidecar keys.
+
+    NOTE: ``url_template`` + ``vbr_chapters`` still come from the sidecar (see
+    ``_bucket_reciter_block``), so this hardens the chapter list but does not yet
+    avoid the per-slug sidecar read — moving those two fields into the catalog is
+    the follow-up that would let the manifest build skip the bucket entirely.
+    """
+    if (delivery is not None
+            and getattr(delivery.audio_category, "value", delivery.audio_category) == "by_surah"
+            and delivery.chapter_count == 114):
+        return list(range(1, 115))
+    return chapter_numbers(slug)
+
+
 def _url_template(slug: str, audio_category: str) -> str:
     """Resolve the audio URL template from the in-memory audio_manifest sidecar cache.
 
@@ -116,6 +138,7 @@ def _bucket_reciter_block(
     slug: str,
     ts_chapters: list[int],
     catalog: ReciterCatalog,
+    delivery=None,
 ) -> dict | None:
     """Compose a manifest reciter block for a bucket-mode reciter.
 
@@ -124,9 +147,11 @@ def _bucket_reciter_block(
     to slug-derived defaults when the catalog has no delivery for ``slug``.
 
     The caller passes one shared ``catalog`` snapshot so the manifest build
-    doesn't re-snapshot (deep-copy) per reciter inside ``_ensure_built``.
+    doesn't re-snapshot (deep-copy) per reciter inside ``_ensure_built``, and
+    the pre-resolved ``delivery`` so we don't re-``find_delivery`` it here.
     """
-    delivery = catalog.find_delivery(slug)
+    if delivery is None:
+        delivery = catalog.find_delivery(slug)
     reciter = (
         catalog.find_reciter(delivery.reciter_id) if delivery is not None else None
     )
@@ -168,18 +193,18 @@ def _ensure_built() -> None:
         catalog = catalog_service.snapshot()
         reciters_block: dict[str, dict] = {}
         for slug in _published_reciter_slugs():
-            chapters = chapter_numbers(slug)
+            delivery = catalog.find_delivery(slug)
+            chapters = _ts_chapters_for(slug, delivery)
             if not chapters:
-                # No audio_manifest sidecar (or unparseable keys) — skip the
-                # reciter rather than emit a block with an empty chapter list
-                # the FE can't render. Surfaces as "missing from dropdown",
-                # same shape as the pre-fix bucket-empty case.
+                # No catalog-derivable chapters AND no audio_manifest sidecar
+                # (or unparseable keys) — skip rather than emit an empty chapter
+                # list the FE can't render. Surfaces as "missing from dropdown".
                 log.warning(
                     "timestamps: skipping %s — no chapter numbers derivable "
-                    "from audio_manifest sidecar", slug,
+                    "from catalog or audio_manifest sidecar", slug,
                 )
                 continue
-            block = _bucket_reciter_block(slug, chapters, catalog)
+            block = _bucket_reciter_block(slug, chapters, catalog, delivery)
             if block is not None:
                 reciters_block[slug] = block
 
