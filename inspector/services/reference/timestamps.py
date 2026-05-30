@@ -43,6 +43,15 @@ _RESOURCE_PATHS = {
 # lookups so we don't need to hold the lock past `_ensure_built()`.
 _lock = threading.Lock()
 _built = False
+# The ``db_seq`` the cache was built at. The manifest is a projection of which
+# slugs are ``released`` (+ catalog/sidecar metadata), so it MUST rebuild
+# whenever the committed DB advances. Keying on ``db_seq`` (mirrors
+# ``catalog.snapshot()``) makes the cache self-healing: any in-process state
+# commit bumps ``db_seq``, so the next manifest request rebuilds — no reliance
+# on the explicit post-commit ``invalidate()`` (which sits after the durable
+# upload in ``state.transition`` and is skipped if that step raises). ``None``
+# forces a rebuild (boot / explicit invalidate).
+_built_seq: int | None = None
 _manifest_bytes: bytes | None = None
 _resource_bytes: dict[str, bytes] = {}
 # Slugs the manifest advertises (released + chapter-derivable). The shard route
@@ -185,11 +194,16 @@ def _ensure_built() -> None:
     Idempotent and thread-safe. Shards are NOT eagerly loaded — see
     ``_load_bucket_shard()``.
     """
-    global _built, _manifest_bytes, _served_slugs
-    if _built:
+    global _built, _built_seq, _manifest_bytes, _served_slugs
+    # Lazy import (keeps this module light, like catalog.snapshot()'s db import).
+    from services import db as _db
+
+    seq = _db.current_db_seq()
+    if _built and _built_seq == seq:
         return
     with _lock:
-        if _built:
+        # Re-check inside the lock; another thread may have just rebuilt at seq.
+        if _built and _built_seq == seq:
             return
         catalog = catalog_service.snapshot()
         reciters_block: dict[str, dict] = {}
@@ -220,6 +234,7 @@ def _ensure_built() -> None:
         _resource_bytes.clear()
         _resource_bytes.update(_build_resource_bytes())
         _built = True
+        _built_seq = seq
         log.info(
             "timestamps: built manifest (%d reciters, %d resources)",
             len(reciters_block),
@@ -320,10 +335,21 @@ def resource_bytes(name: str) -> bytes | None:
 
 
 def invalidate() -> None:
-    """Drop the cached manifest + shards. Tests / future hot-reload hook."""
-    global _built, _manifest_bytes
+    """Drop the cached manifest + shards.
+
+    The ``db_seq`` check in ``_ensure_built`` is the authoritative rebuild
+    trigger; this explicit drop is retained for tests and as a belt-and-braces
+    hook (``state.transition`` still calls it post-commit). Also clears the
+    audio-manifest sidecar caches the manifest build derives URLs from, so a
+    re-extracted reciter's stale sidecar can't leak old URLs into the rebuild.
+    """
+    global _built, _built_seq, _manifest_bytes
     with _lock:
         _built = False
+        _built_seq = None
         _manifest_bytes = None
         _shard_lru.clear()
         _resource_bytes.clear()
+    # Outside the lock — different module's cache, no ordering dependency.
+    from services.storage import cache as _cache
+    _cache.invalidate_audio_manifest_cache()

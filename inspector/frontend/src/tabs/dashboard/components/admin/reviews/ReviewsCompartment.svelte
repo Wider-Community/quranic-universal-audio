@@ -34,7 +34,8 @@
     let refetchSeq = $state(0);
 
     $effect(() => {
-        refetchSeq;  // tracked dep
+        refetchSeq;  // tracked dep (local)
+        reviewsStore.refreshSeq;  // tracked dep (external — e.g. job published a row)
         const ac = new AbortController();
         loading = true;
         error = null;

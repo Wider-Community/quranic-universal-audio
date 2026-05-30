@@ -51,6 +51,16 @@ class ReviewsStore {
      * server flag on the next compartment refetch is the durable truth. */
     viewedThisSession = $state<Set<string>>(new Set());
 
+    /** Monotonic refresh signal. Bumping it makes the Reviews compartment
+     * refetch its list — used when an out-of-band change (e.g. a timestamps
+     * job publishing a reciter) moves a row between buckets. */
+    refreshSeq = $state(0);
+
+    /** Ask the Reviews compartment to refetch (e.g. after a job publishes). */
+    requestRefresh(): void {
+        this.refreshSeq += 1;
+    }
+
     /** Open a drawer of ``kind`` against ``slug``. On the first open for a
      * given slug in this session, fire the best-effort viewed-mark POST —
      * caller is expected to handle cross-store counter sync (lives under

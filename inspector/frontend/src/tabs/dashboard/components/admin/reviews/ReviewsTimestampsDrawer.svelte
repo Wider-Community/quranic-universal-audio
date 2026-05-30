@@ -22,7 +22,13 @@
         type TimestampsJobStatus,
     } from '../../../../../lib/api/admin-reviews';
     import type { TsJobRecord } from '../../../../../lib/types/generated/schemas';
+    import { refreshReciterTask } from '../../../../../lib/api/reciter-task';
+    import { loadCurrentUser } from '../../../../../lib/stores/current-user';
+    import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
     import { visiblePoll } from '../../../../../lib/utils/visible-poll';
+    import { loadCatalog } from '../../../stores/catalog-data';
+
+    const SUCCESS = new Set(['succeeded', 'completed']);
 
     let { slug, onclose }: { slug: string; onclose: () => void } = $props();
 
@@ -119,6 +125,22 @@
         stopPoll = null;
     }
 
+    /**
+     * A succeeded job auto-publishes the reciter (under_review → released)
+     * server-side, with no user action — so every client cache that read the
+     * old state is stale. Resync the shared ones (mirrors
+     * SegmentsTab._refreshTask): the dashboard catalog list (load-once),
+     * the Segments tab's reciter-task (30s poll), the current-user claim
+     * state, and the Reviews list (the row moves Marked-ready → Published).
+     * The detail modal refetches on open, so it needs nothing.
+     */
+    async function resyncAfterPublish(): Promise<void> {
+        void loadCatalog(true);
+        void refreshReciterTask(slug);
+        void loadCurrentUser();
+        reviewsStore.requestRefresh();
+    }
+
     function startPolling(
         jobId: string,
         startedAtMs: number | null = null,
@@ -140,6 +162,7 @@
                 if (TERMINAL.has(res.status)) {
                     teardownPoll();
                     void loadHistory(); // refresh the persisted record
+                    if (SUCCESS.has(res.status)) void resyncAfterPublish();
                 }
             },
             onError: () => {
