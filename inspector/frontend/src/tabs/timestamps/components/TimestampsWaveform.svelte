@@ -26,14 +26,14 @@
     import { get } from 'svelte/store';
 
     import WaveformCanvas from '../../../lib/components/WaveformCanvas.svelte';
-    import type { PeakBucket, SegmentPeaks } from '../../../lib/types/domain';
+    import type { AudioPeaks, PeakBucket, SegmentPeaks } from '../../../lib/types/domain';
     import {
         LETTER_HIGHLIGHT_COLOR,
         PREVIEW_PLAYHEAD_COLOR,
         WAVEFORM_BG_COLOR,
         WAVEFORM_STROKE_COLOR,
     } from '../../../lib/utils/constants';
-    import { fetchSegmentPeaks } from '../../../lib/utils/peaks-fetch';
+    import { ensureChapterPeaks, fetchSegmentPeaks, pickChapterPeaks } from '../../../lib/utils/peaks-fetch';
     import { drawWaveformPeaks } from '../../../lib/utils/waveform-draw';
     import {
         granularity,
@@ -94,7 +94,9 @@
 
     // ---- Peaks ----
 
-    let peaks: PeakBucket[] | null = null;
+    // PeakBucket[] from the ffmpeg fallback; Int8Array from the baked 10bps
+    // chapter-peaks fast path (pre-sliced to the verse window).
+    let peaks: PeakBucket[] | Int8Array | null = null;
     let fetchGen = 0;
 
     /** Per-tab LRU keyed by `${url}:${startMs}:${endMs}`. */
@@ -213,6 +215,34 @@
         $loadedVerse?.tsSegEnd ?? 0,
     );
 
+    function _clearPeaks(): void {
+        peaks = null;
+        _baseImageData = null;
+        _baseCacheKey = null;
+    }
+
+    /** Slice a chapter int8 [min,max] envelope down to a VERSE-LOCAL Int8Array
+     *  for the chapter-absolute window [startMs,endMs]. floor(start)/ceil(end)
+     *  bucket convention (matches the drawer) so the verse fully covers its
+     *  peaks; the slice may run ≤1 bucket (≤100ms at 10bps) wide of the exact
+     *  window — acceptable per the 10bps decision. Keeping the result
+     *  verse-local means all zoom/overlay/playhead math (slice-relative) stays
+     *  untouched. */
+    function _sliceVerseLocal(
+        chapterPeaks: Int8Array,
+        durationMs: number,
+        startMs: number,
+        endMs: number,
+    ): Int8Array | null {
+        const pairs = chapterPeaks.length >> 1;
+        if (pairs <= 0 || durationMs <= 0) return null;
+        const pairsPerMs = pairs / durationMs;
+        const startPair = Math.max(0, Math.floor(startMs * pairsPerMs));
+        const endPair = Math.min(pairs, Math.ceil(endMs * pairsPerMs));
+        if (endPair <= startPair) return null;
+        return chapterPeaks.slice(startPair * 2, endPair * 2);
+    }
+
     async function reactToVerse(
         url: string | null,
         reciter: string,
@@ -220,30 +250,46 @@
         startSec: number,
         endSec: number,
     ): Promise<void> {
-        if (!url) {
-            peaks = null;
-            _baseImageData = null;
-            _baseCacheKey = null;
-            return;
-        }
+        if (!url) { _clearPeaks(); return; }
         const startMs = Math.max(0, Math.round(startSec * 1000));
         const endMs = Math.round(endSec * 1000);
-        if (endMs <= startMs) {
-            peaks = null;
-            _baseImageData = null;
-            _baseCacheKey = null;
-            return;
-        }
-        if (!reciter) {
-            peaks = null;
-            _baseImageData = null;
-            _baseCacheKey = null;
-            return;
-        }
+        if (endMs <= startMs) { _clearPeaks(); return; }
+        if (!reciter) { _clearPeaks(); return; }
 
         const key = `${url}:${startMs}:${endMs}`;
         const gen = ++fetchGen;
 
+        // FAST PATH: baked 10bps chapter peaks (server-cached, sliced
+        // client-side). For a by_surah reciter this is one ~6KB GET per chapter
+        // then a ~2µs slice per verse — replacing the 289-762ms per-verse
+        // ffmpeg POST. Falls through to ffmpeg only when the chapter has no
+        // baked peaks (un-backfilled / pre-publish / by_ayah without a match).
+        if (chapter) {
+            let chMap: Record<string, AudioPeaks> | null = null;
+            try {
+                chMap = await ensureChapterPeaks(reciter, chapter);
+            } catch {
+                chMap = null;
+            }
+            if (gen !== fetchGen) return; // a newer verse landed mid-fetch
+            const chEntry = chMap ? pickChapterPeaks(chMap, url) : null;
+            if (chEntry && chEntry.peaks instanceof Int8Array && chEntry.duration_ms > 0) {
+                const sliced = _sliceVerseLocal(chEntry.peaks, chEntry.duration_ms, startMs, endMs);
+                if (sliced && sliced.length) {
+                    peaks = sliced;
+                    _baseImageData = null;
+                    _baseCacheKey = null;
+                    await tick();
+                    if (gen !== fetchGen) return;
+                    _captureBase(key);
+                    drawOverlays();
+                    return;
+                }
+            }
+        }
+
+        // FALLBACK: per-verse ffmpeg peaks (verse-relative PeakBucket[]). Kept
+        // for reciters/chapters whose slim peaks aren't baked yet.
         let entry: SegmentPeaks | null | undefined = _lruGet(key);
         if (!entry) {
             try {
@@ -253,12 +299,7 @@
                 return;
             }
             if (gen !== fetchGen) return;
-            if (!entry || !entry.peaks?.length) {
-                peaks = null;
-                _baseImageData = null;
-                _baseCacheKey = null;
-                return;
-            }
+            if (!entry || !entry.peaks?.length) { _clearPeaks(); return; }
             _lruSet(key, entry);
         }
 
