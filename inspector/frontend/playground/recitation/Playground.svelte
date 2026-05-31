@@ -245,12 +245,19 @@
                     <em>{config[key as 'wordRevealMs']}</em>
                 </label>
             {/each}
-            <label class="row">
+            <div class="row">
                 <span>easing</span>
-                <select bind:value={config.easing}>
-                    {#each EASING_OPTIONS as o}<option value={o.value}>{o.label}</option>{/each}
-                </select>
-            </label>
+                <div class="pills">
+                    {#each EASING_OPTIONS as o}
+                        <button
+                            type="button"
+                            class="pill"
+                            class:on={config.easing === o.value}
+                            onclick={() => (config.easing = o.value)}
+                        >{o.label}</button>
+                    {/each}
+                </div>
+            </div>
         </fieldset>
 
         <fieldset>
@@ -273,12 +280,18 @@
 
         <fieldset>
             <legend>Behaviour</legend>
-            <label class="row"><span>granularity</span>
-                <select bind:value={config.granularity}>
-                    <option value="word">word</option>
-                    <option value="char">char</option>
-                </select>
-            </label>
+            <div class="row"><span>granularity</span>
+                <div class="pills">
+                    {#each ['word', 'char'] as g}
+                        <button
+                            type="button"
+                            class="pill"
+                            class:on={config.granularity === g}
+                            onclick={() => (config.granularity = g as 'word' | 'char')}
+                        >{g}</button>
+                    {/each}
+                </div>
+            </div>
             <label class="check"><input type="checkbox" bind:checked={config.clearOnOverflow} /> clear on overflow</label>
             <label class="check"><input type="checkbox" bind:checked={config.clearOnAyahEnd} /> clear on ayah end</label>
             <label class="check"><input type="checkbox" bind:checked={config.autoExpandOnPlay} /> auto-expand on play</label>
@@ -410,6 +423,19 @@
     .row select { flex: 1; background: var(--canvas-inset); border: 1px solid var(--border-quiet); color: var(--text-primary); border-radius: var(--r-1); padding: 3px 6px; }
     .row em { width: 44px; text-align: right; font-style: normal; font-family: var(--font-mono); color: var(--text-faint); }
     .sw { width: 16px; height: 16px; border-radius: var(--r-1); border: 1px solid var(--border-default); flex: 0 0 auto; }
+    .pills { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
+    .pill {
+        padding: 4px 9px;
+        font-size: 10.5px;
+        color: var(--text-secondary);
+        background: var(--canvas-inset);
+        border: 1px solid var(--border-quiet);
+        border-radius: 999px;
+        cursor: pointer;
+        transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+    }
+    .pill:hover { border-color: var(--border-strong); color: var(--text-primary); }
+    .pill.on { border-color: var(--accent); color: var(--accent); background: var(--accent-tint); }
     .check { display: flex; align-items: center; gap: var(--s-2); margin-top: 6px; font-size: var(--fs-meta); color: var(--text-secondary); }
     .actions { display: flex; gap: var(--s-2); margin-top: var(--s-2); }
     .actions button, .loader button, .row2 button, .picker-wrap button {
