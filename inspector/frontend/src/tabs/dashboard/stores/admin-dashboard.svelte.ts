@@ -5,7 +5,7 @@
  * permissions; reviews replaced the disabled `to_publish` placeholder).
  */
 
-export type AdminTab = 'users' | 'requests' | 'reviews' | 'permissions';
+export type AdminTab = 'users' | 'requests' | 'reviews' | 'releases' | 'permissions';
 
 /** Sortable columns in the Users table (clicking a header sorts by these). */
 export type UsersSortKey =

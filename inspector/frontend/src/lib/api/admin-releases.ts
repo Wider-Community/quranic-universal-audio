@@ -1,0 +1,136 @@
+/**
+ * Admin Releases-tab API client (v2 dataset/release tracks).
+ *
+ * - fetchReleasesStatus    per-recitation status grid (TS / HF / GH badges)
+ * - fetchReleasePreview    dry-run diff + auto-version + CHANGELOG preview
+ * - publishHf              launch HF dataset publish for a slug
+ * - cutRelease             launch the global GH release cut job
+ *
+ * Types are defined inline here until the response schemas are promoted to
+ * ``scripts/lib/schemas/`` + codegen'd. The shapes mirror the Pydantic-free
+ * jsonify payloads emitted by ``inspector/routes/admin/releases.py``.
+ */
+
+export interface ReleaseRow {
+    /** Plan §per_recitation_releases: version is text — job_id for ts,
+     * HF commit sha for hf. */
+    version: string;
+    produced_at: string;
+    /** Set on the HF row when a subsequent TS regen invalidates the parquet,
+     * or on a GH membership when the slug's TS regenerates after the cut.
+     * Cleared by re-publishing. */
+    stale_since?: string | null;
+}
+
+export interface GhReleaseMember {
+    change_kind: 'added' | 'refresh' | 'unchanged';
+    stale_since?: string | null;
+    release_id?: number;
+    ts_version?: string;
+}
+
+export interface ReleaseStatusRow {
+    slug: string;
+    name_en: string | null;
+    riwayah: string;
+    style: string;
+    channel: string;
+    gh_release_eligible: boolean;
+    ts: ReleaseRow | null;
+    hf: ReleaseRow | null;
+    gh: GhReleaseMember | null;
+}
+
+export interface LatestGhRelease {
+    version: string;
+    produced_at: string;
+    external_uri?: string | null;
+}
+
+export interface ReleasesStatusResponse {
+    latest_gh_release: LatestGhRelease | null;
+    recitations: ReleaseStatusRow[];
+}
+
+export interface ReleasePreviewRow {
+    slug: string;
+    name_en: string | null;
+    riwayah: string;
+    style: string;
+    channel: string;
+    ts_version: string;
+}
+
+export interface ReleasePreviewResponse {
+    /** ``null`` when nothing changed since the previous release — operator
+     * must supply an explicit ``version`` to force a cut. */
+    computed_version: string | null;
+    needs_manual_version: boolean;
+    previous_version: string | null;
+    change_counts: {
+        added: number;
+        refresh: number;
+        unchanged: number;
+    };
+    added: ReleasePreviewRow[];
+    refreshed: ReleasePreviewRow[];
+    changelog_preview_md: string;
+    /** Echoed back on confirm so the route can 409 a stale preview. */
+    expected_version_at_preview: string | null;
+}
+
+export interface LaunchResponse {
+    job_id: string;
+    url: string | null;
+}
+
+async function _unwrap<T>(resp: Response): Promise<T> {
+    if (resp.ok) return (await resp.json()) as T;
+    let msg = `HTTP ${resp.status}`;
+    try {
+        const body = (await resp.json()) as { error?: string };
+        if (body?.error) msg = body.error;
+    } catch {
+        /* non-JSON body — keep status fallback */
+    }
+    throw new Error(msg);
+}
+
+export async function fetchReleasesStatus(signal?: AbortSignal): Promise<ReleasesStatusResponse> {
+    const resp = await fetch('/api/admin/releases/status', { signal });
+    return _unwrap<ReleasesStatusResponse>(resp);
+}
+
+export async function fetchReleasePreview(signal?: AbortSignal): Promise<ReleasePreviewResponse> {
+    const resp = await fetch('/api/admin/release-preview', { signal });
+    return _unwrap<ReleasePreviewResponse>(resp);
+}
+
+/** Launch the HF dataset publish job for a slug. Returns the launched job
+ *  id; throws the server error verbatim (e.g. the 409 "a cut_release is in
+ *  flight"). */
+export async function publishHf(slug: string): Promise<LaunchResponse> {
+    const resp = await fetch(
+        `/api/admin/publish-hf/${encodeURIComponent(slug)}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+    );
+    return _unwrap<LaunchResponse>(resp);
+}
+
+export interface CutReleaseBody {
+    version?: string;
+    operator_note?: string;
+    expected_version_at_preview?: string | null;
+}
+
+/** Launch the global GH cut job. Owner-only via ``release.cut_gh``.
+ *  ``expected_version_at_preview`` carries the version the preview computed;
+ *  the server 409s if it drifted (forces a re-preview). */
+export async function cutRelease(body: CutReleaseBody): Promise<LaunchResponse> {
+    const resp = await fetch('/api/admin/cut-release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    return _unwrap<LaunchResponse>(resp);
+}
