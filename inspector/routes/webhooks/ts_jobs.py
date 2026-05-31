@@ -24,6 +24,7 @@ import os
 from flask import Blueprint, jsonify, request
 
 from services.admin import timestamps_jobs as ts_jobs
+from services.admin.jobs import hf_publish, cut_release
 
 log = logging.getLogger("inspector")
 
@@ -69,5 +70,89 @@ def ts_job_complete():
             result = ts_jobs.note_timestamps_job_failed(slug)
     except Exception as exc:  # noqa: BLE001 — surface as 502, the job may retry
         log.warning("ts-job-complete webhook for %s failed: %s", slug, exc)
+        return jsonify({"error": str(exc)}), 502
+    return jsonify({"ok": True, **result})
+
+
+def _check_secret() -> tuple[bool, tuple]:
+    """Shared auth: HMAC-compare the ``X-Inspector-Job-Secret`` header.
+
+    Returns ``(ok, (response, status))``. When the env isn't set we 503
+    (the poll fallback handles completion in dev).
+    """
+    secret = os.environ.get("INSPECTOR_WEBHOOK_SECRET", "").strip()
+    if not secret:
+        return False, (jsonify({"error": "webhook disabled"}), 503)
+    provided = request.headers.get(_SECRET_HEADER, "")
+    if not provided or not hmac.compare_digest(provided, secret):
+        return False, (jsonify({"error": "unauthorized"}), 401)
+    return True, (None, None)
+
+
+@webhooks_bp.route("/hf-publish-complete", methods=["POST"])
+def hf_publish_complete():
+    """Record a successful HF dataset push. Idempotent on (slug, version).
+
+    Body: ``{"slug", "job_id", "status", "version", "external_uri",
+    "launched_by", "validation_summary"}``. Only acts on a success status.
+    """
+    ok, err = _check_secret()
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    slug = (body.get("slug") or "").strip()
+    job_id = (body.get("job_id") or "").strip()
+    status = (body.get("status") or "").strip().lower()
+    version = (body.get("version") or "").strip() or job_id
+    if not slug or not job_id:
+        return jsonify({"error": "slug and job_id are required"}), 400
+    if status not in _SUCCESS:
+        return jsonify({"ok": True, "skipped": "non-success status"})
+    try:
+        result = hf_publish.complete(
+            slug, job_id,
+            version=version,
+            external_uri=body.get("external_uri"),
+            launched_by=body.get("launched_by"),
+            validation_summary=body.get("validation_summary"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("hf-publish-complete webhook for %s failed: %s", slug, exc)
+        return jsonify({"error": str(exc)}), 502
+    return jsonify({"ok": True, **result})
+
+
+@webhooks_bp.route("/release-cut-complete", methods=["POST"])
+def release_cut_complete():
+    """Record a successful global GH release cut. Idempotent on (version).
+
+    Body: ``{"job_id", "status", "version", "external_uri", "operator_note",
+    "launched_by", "members": [...], "validation_summary"}``. Only acts on a
+    success status. ``members`` carries the per-recitation membership rows
+    the job produced.
+    """
+    ok, err = _check_secret()
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    job_id = (body.get("job_id") or "").strip()
+    status = (body.get("status") or "").strip().lower()
+    version = (body.get("version") or "").strip()
+    if not job_id or not version:
+        return jsonify({"error": "job_id and version are required"}), 400
+    if status not in _SUCCESS:
+        return jsonify({"ok": True, "skipped": "non-success status"})
+    try:
+        result = cut_release.complete(
+            None, job_id,
+            version=version,
+            external_uri=body.get("external_uri"),
+            operator_note=body.get("operator_note"),
+            launched_by=body.get("launched_by"),
+            members=body.get("members") or [],
+            validation_summary=body.get("validation_summary"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("release-cut-complete webhook (v=%s) failed: %s", version, exc)
         return jsonify({"error": str(exc)}), 502
     return jsonify({"ok": True, **result})

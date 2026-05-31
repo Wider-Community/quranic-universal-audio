@@ -1,0 +1,195 @@
+"""GH release cut kind — global dataset snapshot.
+
+Launches an HF Job that runs ``scripts/jobs/cut_release.py``. The job:
+
+  1. Reads the bucket catalog to discover every recitation whose channel is
+     ``gh_release_eligible`` AND has a current ``per_recitation_releases(track='ts')``.
+  2. Builds per-recitation tier files (verse / word / letter — top-down
+     projection) + catalog.json + per-recitation manifest.json.
+  3. Packs each recitation into a ``<slug>.zip`` (store-only for `.gz` entries,
+     deflate-9 for JSON; deterministic mtime=0).
+  4. Computes ``content_hash`` = SHA-256(letter_tier.json.gz_bytes ||
+     catalog.json_bytes) per recitation.
+  5. Builds the dataset-level ``manifest.json`` + ``CHANGELOG.md`` (diff
+     against the previous gh_release).
+  6. Creates the GH release tag via the GH API (fine-grained app token) and
+     uploads every asset.
+
+On webhook completion (with ``version`` in the payload), ``complete()`` here
+inserts a ``gh_releases`` row + N ``gh_release_recitations`` rows and fires
+``released({track:'gh', version, recitation_count})``.
+
+Global single-flight: only one cut at a time across the system.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from datetime import datetime, timezone
+
+from scripts.lib.schemas import Actor
+from services.db import repo_releases
+from services.db.sync import durable_transaction
+from services.state import audit
+from services.storage.hf_bucket import resolve_bucket_repo
+
+from . import base
+
+log = logging.getLogger("inspector")
+
+KIND = "cut_release"
+
+JOB_FLAVOR = os.environ.get("INSPECTOR_CUT_JOB_FLAVOR", "cpu-upgrade")
+JOB_TIMEOUT = os.environ.get("INSPECTOR_CUT_JOB_TIMEOUT", "1h")
+
+
+def launch(*, version: str | None = None,
+           operator_note: str | None = None,
+           launched_by: str | None = None,
+           webhook_base: str | None = None) -> dict:
+    """Launch a cut-release job. Returns ``{job_id, url}``.
+
+    Global single-flight — refuses if another cut is in flight.
+    """
+    from huggingface_hub import Volume, get_token, run_job
+
+    busy = base.running_job_for(kind=KIND)
+    if busy is not None:
+        raise RuntimeError(
+            f"cut_release already in flight: kind={busy[0]} id={busy[1]}")
+
+    base.stage_job_code()
+    bucket = resolve_bucket_repo()
+    env = {
+        "INSPECTOR_BUCKET_MOUNT": "/data",
+        "PYTHONPATH": "/aux/code",
+    }
+    if version:
+        env["RELEASE_VERSION"] = version
+    if operator_note:
+        env["OPERATOR_NOTE"] = operator_note
+    if launched_by:
+        env["LAUNCHED_BY"] = launched_by
+    secrets = {"HF_TOKEN": get_token()}
+    gh_token = os.environ.get("INSPECTOR_GH_RELEASE_TOKEN", "").strip()
+    if gh_token:
+        secrets["GH_RELEASE_TOKEN"] = gh_token
+    webhook_secret = os.environ.get("INSPECTOR_WEBHOOK_SECRET", "").strip()
+    if webhook_secret and webhook_base:
+        env["INSPECTOR_WEBHOOK_URL"] = (
+            webhook_base.rstrip("/") + "/api/webhooks/release-cut-complete"
+        )
+        secrets["INSPECTOR_WEBHOOK_SECRET"] = webhook_secret
+
+    entrypoint = "python /aux/code/scripts/jobs/cut_release.py"
+    if base.NEEDS_BOOTSTRAP:
+        command = ["bash", "-lc",
+                   "/opt/conda/bin/pip install orjson requests "
+                   "&& " + entrypoint]
+    else:
+        command = ["bash", "-lc",
+                   f"conda run -p /env --no-capture-output {entrypoint}"]
+
+    job = run_job(
+        image=base.JOB_IMAGE,
+        command=command,
+        flavor=JOB_FLAVOR,
+        timeout=JOB_TIMEOUT,
+        env=env,
+        secrets=secrets,
+        volumes=[
+            Volume(type="bucket", source=bucket, mount_path="/data"),
+            Volume(type="bucket", source=base.ALIGNER_BUCKET, mount_path="/aux",
+                   read_only=True),
+        ],
+        labels={"task": KIND, "reciter": "_global"},
+    )
+    job_id = base.hf_job_id(job) or ""
+    url = getattr(job, "url", None)
+    log.info("launched cut_release job %s (version=%s)", job_id, version)
+    return {"job_id": job_id, "url": url}
+
+
+def complete(slug: str | None, job_id: str, *,
+             version: str | None = None,
+             external_uri: str | None = None,
+             operator_note: str | None = None,
+             launched_by: str | None = None,
+             members: list[dict] | None = None,
+             validation_summary: dict | None = None) -> dict:
+    """Record a GH release in the DB. Idempotent on (version).
+
+    Inserts ``gh_releases`` + N ``gh_release_recitations`` rows, supersedes
+    prior gh_releases, fires ``released({track:'gh', version, ...})``.
+
+    ``members`` is the per-recitation membership list from the job: each
+    entry has ``slug, catalog_snapshot, zip_sha256, zip_bytes, coverage_ayahs,
+    content_hash, ts_version, change_kind``.
+    """
+    if version is None:
+        log.warning("cut_release.complete called without version")
+        return {"ok": False, "reason": "no version"}
+    members = members or []
+    now = datetime.now(timezone.utc)
+    actor = Actor(
+        hf_user_id="SYSTEM_ACTOR",
+        login_at_time=launched_by or "system",
+        role="owner",
+    )
+    with durable_transaction() as _:
+        existing = repo_releases.latest_gh_release()
+        if existing and existing.get("version") == version:
+            log.info("cut_release.complete(%s): already recorded", version)
+            return {"ok": True, "skipped": "duplicate", "release_id": existing["id"]}
+        # Supersede prior current gh_releases FIRST — the partial-unique on
+        # ``version WHERE superseded_at IS NULL`` allows multiple rows only if
+        # they're all superseded; the at-most-one-current invariant requires
+        # the prior current row to be marked before INSERTing the new one.
+        repo_releases.supersede_prior_gh_releases(except_id=-1, at=now)
+        release_id = repo_releases.insert_gh_release(
+            version=version,
+            produced_at=now,
+            produced_by="SYSTEM_ACTOR",
+            produced_by_job_id=job_id,
+            launched_by=launched_by,
+            external_uri=external_uri,
+            operator_note=operator_note,
+            validation_summary=validation_summary,
+        )
+        for m in members:
+            repo_releases.insert_gh_release_recitation(
+                release_id=release_id,
+                slug=m["slug"],
+                catalog_snapshot=m["catalog_snapshot"],
+                zip_sha256=m["zip_sha256"],
+                zip_bytes=int(m["zip_bytes"]),
+                coverage_ayahs=int(m["coverage_ayahs"]),
+                content_hash=m.get("content_hash"),
+                ts_version=m["ts_version"],
+                change_kind=m["change_kind"],
+            )
+        audit.append(
+            "released",
+            actor=actor,
+            slug=None,
+            payload={
+                "track": "gh",
+                "version": version,
+                "recitation_count": len(members),
+                "job_id": job_id,
+            },
+            reason="cut_release",
+        )
+    log.info("cut_release.complete(%s): recorded %d recitations",
+             version, len(members))
+    return {"ok": True, "release_id": release_id,
+            "recitation_count": len(members)}
+
+
+def register() -> None:
+    # The poll fallback only triggers for jobs whose ``complete()`` can be
+    # called with just (slug, job_id). cut_release.complete() needs the full
+    # membership payload, which only the webhook + job-side cooperation
+    # provides — so don't register for poll dispatch; webhook is mandatory.
+    return
