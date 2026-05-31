@@ -27,9 +27,6 @@ export function titleCaseSlug(slug: string | null | undefined): string {
 const BITRATE_MODE_LABEL: Record<string, string> = {
     cbr: 'cbr',
     vbr: 'vbr',
-    abr: 'abr',
-    mostly_cbr: 'mostly cbr',
-    mostly_vbr: 'mostly vbr',
     mixed: 'mixed',
     unknown: '',
 };

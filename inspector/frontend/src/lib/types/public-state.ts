@@ -82,7 +82,7 @@ export interface PublicDelivery {
     coverage_kind: 'full' | 'partial';
     state_since: string | null;
     bitrate_kbps_nominal: number | null;
-    bitrate_mode: string; // cbr | vbr | abr | mixed | unknown
+    bitrate_mode: string; // cbr | vbr | mixed | unknown
     total_duration_sec: number | null;
     bucket: PublicBucket;
     /**

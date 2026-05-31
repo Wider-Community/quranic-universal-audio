@@ -139,6 +139,7 @@ G_CLAIMS = "Claims & review"
 G_ROLES = "Roles & access"
 G_MODERATION = "Activity & moderation"
 G_ADMIN = "Admin surfaces"
+G_RELEASES = "Releases & distribution"
 G_IDENTITY = "Identity disclosure"
 
 
@@ -355,7 +356,21 @@ CAPABILITIES: tuple[Capability, ...] = (
         contributor=False, maintainer=False, owner_only_fixed=True,
     ),
 
-    # --- H. Identity disclosure ---
+    # --- H. Releases & distribution (v2) ---
+    _c(
+        "release.publish_hf", G_RELEASES, "Publish to HF dataset",
+        "Push a recitation's data to the public HF dataset (per-recitation track).",
+        contributor=False, maintainer=True,
+    ),
+    _c(
+        "release.cut_gh", G_RELEASES, "Cut a GH release",
+        "Cut a new global GitHub release snapshot containing every currently "
+        "eligible recitation. Owner-only by default — it's the public-facing "
+        "version bump.",
+        contributor=False, maintainer=False,
+    ),
+
+    # --- I. Identity disclosure ---
     _c(
         "identity.see_actor", G_IDENTITY, "See who did what",
         "Reveal the actor's login and id on the activity rail and request "

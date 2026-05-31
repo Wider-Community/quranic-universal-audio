@@ -50,7 +50,7 @@ _TEMPLATES: dict[str, str] = {
     "requested": "{name} has been requested",
     "available_review": "{name} is now available for review",
     "under_review": "{name} is now under review",
-    "published": "{name} is now published",
+    "released": "{name} is now released",
 }
 
 

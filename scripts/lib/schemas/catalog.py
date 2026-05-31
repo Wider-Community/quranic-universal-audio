@@ -34,11 +34,11 @@ class AudioCategory(str, Enum):
 
 
 class BitrateMode(str, Enum):
+    """Collapsed v2 enum. Legacy ``mostly_cbr`` / ``mostly_vbr`` / ``abr``
+    were collapsed into ``mixed`` by migration 0014."""
+
     CBR = "cbr"
     VBR = "vbr"
-    ABR = "abr"
-    MOSTLY_CBR = "mostly_cbr"
-    MOSTLY_VBR = "mostly_vbr"
     MIXED = "mixed"
     UNKNOWN = "unknown"
 
@@ -47,8 +47,8 @@ class ChapterBitrateMode(str, Enum):
     """Per-chapter bitrate mode in the audio_manifest sidecar.
 
     A single chapter file is one encoding — ``cbr`` or ``vbr`` (the per-delivery
-    ``BitrateMode`` adds rollup values like ``mostly_cbr`` / ``mixed`` that only
-    make sense aggregated across chapters)."""
+    ``BitrateMode`` adds the rollup value ``mixed`` that only makes sense
+    aggregated across chapters)."""
 
     CBR = "cbr"
     VBR = "vbr"
@@ -77,6 +77,10 @@ class Style(_ShortNamed):
 
 class Channel(_ShortNamed):
     host_patterns: list[str] = Field(default_factory=list)
+    #: Drives GH release inclusion. True for public-CDN channels whose audio
+    #: can be linked from a public release manifest. Seeded for mp3quran /
+    #: everyayah / qul / quranicaudio / tvquran / archive_org in migration 0014.
+    gh_release_eligible: bool = Field(default=False)
 
 
 class Source(BaseModel):

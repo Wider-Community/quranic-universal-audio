@@ -77,9 +77,11 @@ def _vocab(conn) -> Vocab:
         Channel(
             slug=r["slug"], short=r["short"], name=r["name"],
             host_patterns=_serde.json_loads(r["host_patterns"]) or [],
+            gh_release_eligible=bool(r["gh_release_eligible"]),
         )
         for r in conn.execute(
-            "SELECT slug, short, name, host_patterns FROM channels ORDER BY slug"
+            "SELECT slug, short, name, host_patterns, gh_release_eligible "
+            "FROM channels ORDER BY slug"
         )
     ]
     contexts = [
@@ -248,8 +250,13 @@ def load_vocab(vocab: Vocab) -> None:
         )
     for c in vocab.channels:
         conn.execute(
-            "INSERT OR IGNORE INTO channels(slug,short,name,host_patterns) VALUES (?,?,?,?)",
-            (c.slug, c.short, c.name, _serde.json_dumps(list(c.host_patterns))),
+            "INSERT OR IGNORE INTO channels(slug,short,name,host_patterns,gh_release_eligible) "
+            "VALUES (?,?,?,?,?)",
+            (
+                c.slug, c.short, c.name,
+                _serde.json_dumps(list(c.host_patterns)),
+                int(c.gh_release_eligible),
+            ),
         )
     for rc in vocab.recording_contexts:
         conn.execute("INSERT OR IGNORE INTO recording_contexts(slug,name) VALUES (?,?)",
@@ -305,13 +312,15 @@ def add_source(source: Source) -> Source:
 
 def find_channel(slug: str) -> Channel | None:
     r = get_conn().execute(
-        "SELECT slug, short, name, host_patterns FROM channels WHERE slug = ?", (slug,)
+        "SELECT slug, short, name, host_patterns, gh_release_eligible "
+        "FROM channels WHERE slug = ?", (slug,)
     ).fetchone()
     if r is None:
         return None
     return Channel(
         slug=r["slug"], short=r["short"], name=r["name"],
         host_patterns=_serde.json_loads(r["host_patterns"]) or [],
+        gh_release_eligible=bool(r["gh_release_eligible"]),
     )
 
 
@@ -320,10 +329,12 @@ def add_channel(channel: Channel) -> Channel:
     if find_channel(channel.slug) is not None:
         raise Duplicate(f"channel {channel.slug!r} already exists")
     get_conn().execute(
-        "INSERT INTO channels(slug, short, name, host_patterns) VALUES (?,?,?,?)",
+        "INSERT INTO channels(slug, short, name, host_patterns, gh_release_eligible) "
+        "VALUES (?,?,?,?,?)",
         (
             channel.slug, channel.short, channel.name,
             _serde.json_dumps(list(channel.host_patterns)),
+            int(channel.gh_release_eligible),
         ),
     )
     return channel
