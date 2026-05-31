@@ -54,9 +54,10 @@
     let charCache: HighlightCache | null = null;
     let lastRevealIdx = -1;
     let globalActive = -1;
-    /** Page-local reading index of the most recent active word — used to keep
-     *  words reached during a silence gap (no word active). */
-    let lastPageActive = -1;
+    /** High-water mark: the furthest reading index recited on this page. Words
+     *  ≤ this stay `reached` (revealed), so a repeat / look-back only moves the
+     *  active cursor back over them — it never un-reveals a word. */
+    let maxReached = -1;
 
     const ayahRanges = $derived(ayahUnitRanges(units));
     const ayahEndIdx = $derived(
@@ -93,7 +94,7 @@
         pageCount = null;
         globalActive = -1;
         lastRevealIdx = -1;
-        lastPageActive = -1;
+        maxReached = -1;
     });
 
     // Layout-affecting config changes force a re-measure (re-page) of the line.
@@ -179,10 +180,11 @@
 
     /** Word-granularity highlight from per-word occurrence intervals.
      *  active  = the word whose any occurrence span contains t (a repeat
-     *            re-lights the existing word — no duplicate text)
-     *  reached = words before it in reading order (look-back un-reaches later
-     *            words). During a silence gap (no active) words stay reached up
-     *            to the last active position. */
+     *            re-lights the existing word — no duplicate text), or none
+     *            during a silence gap.
+     *  reached = a high-water mark: every word recited so far stays revealed.
+     *            A repeat / look-back moves the active cursor back over them but
+     *            never un-reveals (un-reaches) them. */
     function sweepWord(t: number): void {
         if (!wordCache) return;
         const items = wordCache.items;
@@ -194,14 +196,13 @@
                 break;
             }
         }
-        if (active >= 0) lastPageActive = active;
+        if (active > maxReached) maxReached = active;
         for (let i = 0; i < items.length; i++) {
             const el = items[i]?.el;
             if (!el) continue;
             const isActive = i === active;
-            const isReached = (active >= 0 ? i < active : i <= lastPageActive) && !isActive;
             el.classList.toggle('active', isActive);
-            el.classList.toggle('reached', isReached);
+            el.classList.toggle('reached', i <= maxReached && !isActive);
         }
     }
 
@@ -223,7 +224,7 @@
         pageAyahKey = ayahKey;
         pageCount = null;
         lastRevealIdx = -1;
-        lastPageActive = -1;
+        maxReached = -1;
         // The structure effect re-measures + sweeps once the new page renders.
     }
 
