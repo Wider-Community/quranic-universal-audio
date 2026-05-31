@@ -168,6 +168,27 @@ def job_status(user, slug, job_id):
         return jsonify({"error": str(exc)}), 502
 
 
+@admin_reviews_bp.route("/reciters/<slug>/jobs/<job_id>/cancel", methods=["POST"])
+@require_same_origin
+@require_capability("reviews.generate_timestamps")
+def cancel_job(user, slug, job_id):
+    """Cancel an in-flight timestamps job for ``slug``.
+
+    Same gate as launching (``reviews.generate_timestamps``) — anyone who can
+    start a job can stop it. Returns 200 on success with the reconciled
+    status, 404 if the slug is unknown, 502 if the HF API call failed (the
+    job stays in whatever state HF reports — caller can retry)."""
+    if state_service.get_row(slug) is None:
+        return jsonify({"error": "unknown slug"}), 404
+    try:
+        result = ts_jobs.cancel_job(slug, job_id)
+    except Exception as exc:  # surfaced to the drawer
+        return jsonify({"error": str(exc)}), 502
+    if not result.get("canceled"):
+        return jsonify({"error": result.get("reason", "cancel failed")}), 502
+    return jsonify(result)
+
+
 @admin_reviews_bp.route("/reciters/<slug>/jobs/<job_id>/record")
 @require_capability("reviews.generate_timestamps")
 def job_record(user, slug, job_id):

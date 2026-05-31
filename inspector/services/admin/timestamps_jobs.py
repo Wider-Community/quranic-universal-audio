@@ -482,6 +482,50 @@ def complete_timestamps_job(slug: str, job_id: str) -> dict:
     return {"slug": slug, "state": new_row.state.value, "released": True}
 
 
+def cancel_job(slug: str, job_id: str) -> dict:
+    """Cancel an in-flight timestamps job and reconcile its durable record.
+
+    Calls ``huggingface_hub.cancel_job`` (the API documented in the hf-jobs
+    skill) so the HF runtime hard-kills the container. We then overwrite the
+    persisted ``running`` record with ``status=canceled`` so the side-panel
+    history is accurate even if HF's poll backstop hasn't run yet — same
+    pattern ``job_status`` uses for terminal reconciliation. No lifecycle
+    transition: cancelling leaves the reciter in its current state
+    (typically ``under_review`` marked_ready), so a fresh launch picks it up.
+    """
+    from huggingface_hub import cancel_job as _hf_cancel_job
+
+    if state_service.get_row(slug) is None:
+        return {"slug": slug, "job_id": job_id, "canceled": False,
+                "reason": "unknown slug"}
+    try:
+        _hf_cancel_job(job_id=job_id)
+    except Exception as exc:  # noqa: BLE001 — surfaced to the caller
+        log.warning("cancel_job(%s, %s) HF call failed: %s", slug, job_id, exc)
+        return {"slug": slug, "job_id": job_id, "canceled": False,
+                "reason": str(exc)}
+
+    # Best-effort durable-record reconciliation. Mirrors ``job_status``'s
+    # terminal backstop: only rewrite when something actually changes so
+    # repeat cancels are idempotent.
+    existing = read_job_record(slug, job_id)
+    if existing is None or existing.get("status") in (None, "running", "unknown"):
+        base = dict(existing) if existing else {
+            "job_id": job_id, "slug": slug, "type": "ts",
+        }
+        base["status"] = "canceled"
+        base.setdefault("ended_at", _now_iso())
+        try:
+            _write_job_record(TsJobRecord.model_validate(base))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("cancel record write %s failed: %s", job_id, exc)
+
+    # Light the Reviews-tab dot — same notify path as failure.
+    _note_job_finished(slug)
+    log.info("cancel_job(%s, %s): HF cancel issued", slug, job_id)
+    return {"slug": slug, "job_id": job_id, "canceled": True}
+
+
 def note_timestamps_job_failed(slug: str) -> dict:
     """Record a FAILED timestamps job so the Reviews-tab dot lights up.
 
