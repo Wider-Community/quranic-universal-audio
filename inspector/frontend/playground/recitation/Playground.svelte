@@ -219,6 +219,18 @@
         const s = t % 60;
         return `${m}:${s.toString().padStart(2, '0')}`;
     }
+    /** Best-effort CSS-color → #rrggbb for the native color input. Passes hex
+     *  through, converts rgb(); var()/oklch fall back to a cyan so the picker
+     *  still opens (picking writes a real hex back). */
+    function resolveHex(c: string): string {
+        if (/^#[0-9a-fA-F]{6}$/.test(c)) return c;
+        const m = c.match(/^rgba?\(([^)]+)\)/);
+        if (m && m[1]) {
+            const [r, g, b] = m[1].split(',').map((s) => parseInt(s.trim(), 10));
+            return '#' + [r, g, b].map((n) => (n ?? 0).toString(16).padStart(2, '0')).join('');
+        }
+        return '#5cc8e6';
+    }
     function resetConfig(): void {
         config = { ...DEFAULT_RECITATION_CONFIG };
     }
@@ -262,7 +274,15 @@
 
         <fieldset>
             <legend>Effects</legend>
-            <label class="row"><span>highlight</span><input type="text" bind:value={config.highlightColor} /><span class="sw" style="background:{config.highlightColor}"></span></label>
+            <div class="row"><span>highlight</span>
+                <input type="text" bind:value={config.highlightColor} />
+                <input
+                    type="color"
+                    class="cpick"
+                    value={resolveHex(config.highlightColor)}
+                    oninput={(e) => (config.highlightColor = e.currentTarget.value)}
+                />
+            </div>
             <label class="row"><span>reached opacity</span><input type="range" min="0" max="1" step="0.02" bind:value={config.reachedOpacity} /><em>{config.reachedOpacity}</em></label>
             <label class="row"><span>unreached opacity</span><input type="range" min="0" max="1" step="0.02" bind:value={config.unreachedOpacity} /><em>{config.unreachedOpacity}</em></label>
             <label class="row"><span>active scale</span><input type="range" min="1" max="1.5" step="0.01" bind:value={config.activeScale} /><em>{config.activeScale}</em></label>
@@ -301,7 +321,15 @@
         <fieldset>
             <legend>Timeline markers</legend>
             <label class="check"><input type="checkbox" bind:checked={config.markersShow} /> show markers</label>
-            <label class="row"><span>color</span><input type="text" bind:value={config.markerColor} /><span class="sw" style="background:{config.markerColor}"></span></label>
+            <div class="row"><span>color</span>
+                <input type="text" bind:value={config.markerColor} />
+                <input
+                    type="color"
+                    class="cpick"
+                    value={resolveHex(config.markerColor)}
+                    oninput={(e) => (config.markerColor = e.currentTarget.value)}
+                />
+            </div>
             <label class="row"><span>width px</span><input type="range" min="1" max="6" step="1" bind:value={config.markerWidthPx} /><em>{config.markerWidthPx}</em></label>
             <label class="row"><span>height px</span><input type="range" min="3" max="16" step="1" bind:value={config.markerHeightPx} /><em>{config.markerHeightPx}</em></label>
             <label class="row"><span>opacity</span><input type="range" min="0" max="1" step="0.05" bind:value={config.markerOpacity} /><em>{config.markerOpacity}</em></label>
@@ -422,7 +450,18 @@
     .row input[type='text'] { flex: 1; background: var(--canvas-inset); border: 1px solid var(--border-quiet); color: var(--text-primary); border-radius: var(--r-1); padding: 3px 6px; }
     .row select { flex: 1; background: var(--canvas-inset); border: 1px solid var(--border-quiet); color: var(--text-primary); border-radius: var(--r-1); padding: 3px 6px; }
     .row em { width: 44px; text-align: right; font-style: normal; font-family: var(--font-mono); color: var(--text-faint); }
-    .sw { width: 16px; height: 16px; border-radius: var(--r-1); border: 1px solid var(--border-default); flex: 0 0 auto; }
+    .cpick {
+        width: 28px;
+        height: 24px;
+        padding: 0;
+        border: 1px solid var(--border-default);
+        border-radius: var(--r-1);
+        background: transparent;
+        cursor: pointer;
+        flex: 0 0 auto;
+    }
+    .cpick::-webkit-color-swatch-wrapper { padding: 2px; }
+    .cpick::-webkit-color-swatch { border: none; border-radius: 2px; }
     .pills { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
     .pill {
         padding: 4px 9px;
