@@ -102,7 +102,7 @@
                 selectReciter();
             }
         } catch (e) {
-            error = `manifest unavailable — demo only (run the dev backend on :5001 for live data): ${String(e)}`;
+            error = `manifest unavailable — demo only (start the dev backend; the playground proxies to it via the launch config): ${String(e)}`;
         }
     });
 
