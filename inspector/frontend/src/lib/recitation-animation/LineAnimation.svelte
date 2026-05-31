@@ -105,6 +105,20 @@
         pageCount = null;
     });
 
+    // Re-measure once webfonts finish loading. The display font (DigitalKhatt)
+    // loads async; a first measure against the fallback font has different
+    // metrics and would otherwise lock in a too-small page on cold load.
+    $effect(() => {
+        if (typeof document === 'undefined' || !document.fonts) return;
+        let cancelled = false;
+        void document.fonts.ready.then(() => {
+            if (!cancelled) pageCount = null;
+        });
+        return () => {
+            cancelled = true;
+        };
+    });
+
     // Rebuild caches + measure fit after each render. Settles the fitted page
     // count in two passes (measure-all → render-fitted), then sweeps. Runs
     // post-DOM-commit, so the spans exist.
