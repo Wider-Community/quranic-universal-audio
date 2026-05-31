@@ -380,7 +380,20 @@
                     onSeekToWord={seekMs}
                 />
             {/if}
-            <div class="bar" role="slider" tabindex="0" aria-label="seek" aria-valuenow={posMs} onclick={onBarClick}>
+            <div
+                class="bar"
+                role="slider"
+                tabindex="0"
+                aria-label="seek"
+                aria-valuemin={0}
+                aria-valuemax={durationMs}
+                aria-valuenow={posMs}
+                onclick={onBarClick}
+                onkeydown={(e) => {
+                    if (e.key === 'ArrowLeft') seekMs(posMs - 5000);
+                    else if (e.key === 'ArrowRight') seekMs(posMs + 5000);
+                }}
+            >
                 <div class="track"><div class="fill" style="width:{pct}%"></div></div>
                 <TimelineAyahMarkers {ayahs} {durationMs} {config} onSeek={seekMs} />
             </div>
@@ -448,7 +461,6 @@
     .row.col > span { width: auto; }
     .row input[type='range'] { flex: 1; }
     .row input[type='text'] { flex: 1; background: var(--canvas-inset); border: 1px solid var(--border-quiet); color: var(--text-primary); border-radius: var(--r-1); padding: 3px 6px; }
-    .row select { flex: 1; background: var(--canvas-inset); border: 1px solid var(--border-quiet); color: var(--text-primary); border-radius: var(--r-1); padding: 3px 6px; }
     .row em { width: 44px; text-align: right; font-style: normal; font-family: var(--font-mono); color: var(--text-faint); }
     .cpick {
         width: 28px;
