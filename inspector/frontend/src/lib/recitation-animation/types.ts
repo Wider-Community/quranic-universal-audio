@@ -13,7 +13,15 @@ export interface AnimLetter {
     end: number | null;
 }
 
-/** One animatable word with chapter-absolute timing (seconds). */
+/** A single occurrence's time span (seconds). A word has more than one when the
+ *  reciter repeats it. */
+export interface TimeSpan {
+    start: number;
+    end: number;
+}
+
+/** One animatable word with chapter-absolute timing (seconds). Each canonical
+ *  word appears once; repeats are collapsed into multiple `intervals`. */
 export interface AnimUnit {
     /** "surah:ayah:word". */
     location: string;
@@ -25,10 +33,12 @@ export interface AnimUnit {
     word: number;
     /** Display text (Arabic), already DK/QPC-resolved. */
     text: string;
-    /** Chapter-absolute start (seconds). */
+    /** First occurrence's start (seconds). */
     start: number;
-    /** Chapter-absolute end (seconds). */
+    /** Last occurrence's end (seconds). */
     end: number;
+    /** Every occurrence's span, ascending — ≥1 entry; >1 when repeated. */
+    intervals: TimeSpan[];
     letters: AnimLetter[];
 }
 

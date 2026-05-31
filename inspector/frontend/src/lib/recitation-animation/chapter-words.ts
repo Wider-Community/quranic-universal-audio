@@ -65,6 +65,7 @@ export function buildChapterRecitation(
                 text: w.display_text || w.text,
                 start,
                 end,
+                intervals: [{ start, end }],
                 letters: w.letters.map((lt) => ({
                     char: lt.char,
                     start: lt.start === null ? null : lt.start + offsetSec,
@@ -74,13 +75,31 @@ export function buildChapterRecitation(
         }
     }
 
-    // Chapter-absolute order. Stable on (start, then location word index).
-    units.sort((a, b) => (a.start - b.start) || (a.word - b.word));
+    // Collapse repeats by INDEX (location = "surah:ayah:word"), not by text — a
+    // reciter who repeats / goes back re-emits the same word index in the TS
+    // file with a new time span. Each canonical word is rendered once (reading
+    // order); every occurrence's span is kept on `intervals` so the highlight
+    // can travel back and re-light it instead of duplicating the text.
+    const byLoc = new Map<string, AnimUnit>();
+    for (const u of units) {
+        const existing = byLoc.get(u.location);
+        if (existing) {
+            existing.intervals.push({ start: u.start, end: u.end });
+            if (u.start < existing.start) existing.start = u.start;
+            if (u.end > existing.end) existing.end = u.end;
+        } else {
+            byLoc.set(u.location, u);
+        }
+    }
+    const deduped = [...byLoc.values()].sort(
+        (a, b) => a.surah - b.surah || a.ayah - b.ayah || a.word - b.word,
+    );
+    for (const u of deduped) u.intervals.sort((a, b) => a.start - b.start);
 
-    // Per-ayah boundaries, in playback order.
+    // Per-ayah boundaries, in reading order.
     const ayahs: AyahBoundary[] = [];
     const byKey = new Map<string, AyahBoundary>();
-    for (const u of units) {
+    for (const u of deduped) {
         const startMs = Math.round(u.start * 1000);
         const endMs = Math.round(u.end * 1000);
         const existing = byKey.get(u.ayahKey);
@@ -101,11 +120,11 @@ export function buildChapterRecitation(
     }
     ayahs.sort((a, b) => a.startMs - b.startMs);
 
-    const contentEndMs = units.length
-        ? Math.round(Math.max(...units.map((u) => u.end)) * 1000)
+    const contentEndMs = deduped.length
+        ? Math.round(Math.max(...deduped.map((u) => u.end)) * 1000)
         : 0;
 
-    return { reciter, chapter, units, ayahs, contentEndMs };
+    return { reciter, chapter, units: deduped, ayahs, contentEndMs };
 }
 
 /** Inclusive [start, end) unit index range for each ayah, keyed by ayahKey.

@@ -315,6 +315,15 @@
                     oninput={(e) => (config.highlightColor = e.currentTarget.value)}
                 />
             </div>
+            <div class="row"><span>base text</span>
+                <input type="text" bind:value={config.baseColor} />
+                <input
+                    type="color"
+                    class="cpick"
+                    value={resolveHex(config.baseColor)}
+                    oninput={(e) => (config.baseColor = e.currentTarget.value)}
+                />
+            </div>
             <label class="row"><span>reached opacity</span><input type="range" min="0" max="1" step="0.02" bind:value={config.reachedOpacity} /><em>{config.reachedOpacity}</em></label>
             <label class="row"><span>unreached opacity</span><input type="range" min="0" max="1" step="0.02" bind:value={config.unreachedOpacity} /><em>{config.unreachedOpacity}</em></label>
             <label class="row">

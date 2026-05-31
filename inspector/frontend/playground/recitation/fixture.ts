@@ -46,6 +46,7 @@ export function demoRecitation(): ChapterRecitation {
             text,
             start,
             end,
+            intervals: [{ start, end }],
             letters: [],
         });
     }

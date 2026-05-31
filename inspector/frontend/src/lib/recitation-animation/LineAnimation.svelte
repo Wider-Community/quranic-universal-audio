@@ -17,7 +17,7 @@
     import { ayahUnitRanges } from './chapter-words';
     import { cssVarText, type RecitationAnimConfig } from './config';
     import { buildAnimStructure, type AnimSourceWord } from './engine/build-structure';
-    import { activeIndexAt, sweepHighlights } from './engine/highlight';
+    import { sweepHighlights } from './engine/highlight';
     import {
         clearHighlights,
         indexCache,
@@ -54,6 +54,9 @@
     let charCache: HighlightCache | null = null;
     let lastRevealIdx = -1;
     let globalActive = -1;
+    /** Page-local reading index of the most recent active word — used to keep
+     *  words reached during a silence gap (no word active). */
+    let lastPageActive = -1;
 
     const ayahRanges = $derived(ayahUnitRanges(units));
     const ayahEndIdx = $derived(
@@ -90,6 +93,7 @@
         pageCount = null;
         globalActive = -1;
         lastRevealIdx = -1;
+        lastPageActive = -1;
     });
 
     // Layout-affecting config changes force a re-measure (re-page) of the line.
@@ -163,10 +167,55 @@
     }
 
     function doSweep(): void {
-        const cache = config.granularity === 'char' && charCache ? charCache : wordCache;
-        if (!cache) return;
         const t = (getTimeMs() + config.leadMs) / 1000;
-        lastRevealIdx = sweepHighlights(cache, t, lastRevealIdx, { mode: 'class' });
+        if (config.granularity === 'char') {
+            if (charCache) {
+                lastRevealIdx = sweepHighlights(charCache, t, lastRevealIdx, { mode: 'class' });
+            }
+            return;
+        }
+        sweepWord(t);
+    }
+
+    /** Word-granularity highlight from per-word occurrence intervals.
+     *  active  = the word whose any occurrence span contains t (a repeat
+     *            re-lights the existing word — no duplicate text)
+     *  reached = words before it in reading order (look-back un-reaches later
+     *            words). During a silence gap (no active) words stay reached up
+     *            to the last active position. */
+    function sweepWord(t: number): void {
+        if (!wordCache) return;
+        const items = wordCache.items;
+        let active = -1;
+        for (let i = 0; i < pageUnits.length; i++) {
+            const u = pageUnits[i];
+            if (u && u.intervals.some((iv) => t >= iv.start && t < iv.end)) {
+                active = i;
+                break;
+            }
+        }
+        if (active >= 0) lastPageActive = active;
+        for (let i = 0; i < items.length; i++) {
+            const el = items[i]?.el;
+            if (!el) continue;
+            const isActive = i === active;
+            const isReached = (active >= 0 ? i < active : i <= lastPageActive) && !isActive;
+            el.classList.toggle('active', isActive);
+            el.classList.toggle('reached', isReached);
+        }
+    }
+
+    /** Reading index of the word whose any occurrence span contains `t`, or -1
+     *  during a silence gap. Interval-aware (handles repeats / look-back). */
+    function activeUnitAt(t: number): number {
+        const n = units.length;
+        if (n === 0) return -1;
+        const inIv = (u: AnimUnit): boolean =>
+            u.intervals.some((iv) => t >= iv.start && t < iv.end);
+        if (globalActive >= 0 && globalActive < n && inIv(units[globalActive]!)) return globalActive;
+        if (globalActive + 1 < n && inIv(units[globalActive + 1]!)) return globalActive + 1;
+        for (let i = 0; i < n; i++) if (inIv(units[i]!)) return i;
+        return -1;
     }
 
     function repaginate(start: number, ayahKey: string): void {
@@ -174,13 +223,14 @@
         pageAyahKey = ayahKey;
         pageCount = null;
         lastRevealIdx = -1;
+        lastPageActive = -1;
         // The structure effect re-measures + sweeps once the new page renders.
     }
 
     function tick(): void {
         if (!units.length) return;
         const t = (getTimeMs() + config.leadMs) / 1000;
-        const ga = activeIndexAt(units, t, globalActive);
+        const ga = activeUnitAt(t);
         if (ga >= 0) {
             const activeAyah = units[ga]!.ayahKey;
 
@@ -192,9 +242,14 @@
                 return;
             }
 
-            // Out of space → restart the line from the active word.
+            // Active word off the current page — overflow forward, or look-back
+            // to an earlier page → re-page to the word so the highlight shows.
             const localActive = ga - pageStart;
-            if (config.clearOnOverflow && pageCount !== null && localActive >= pageCount) {
+            if (
+                config.clearOnOverflow
+                && pageCount !== null
+                && (localActive >= pageCount || localActive < 0)
+            ) {
                 repaginate(ga, activeAyah);
                 globalActive = ga;
                 return;
@@ -261,15 +316,15 @@
         font-size: var(--ra-font-size);
         letter-spacing: var(--ra-letter-spacing);
         word-spacing: var(--ra-word-spacing);
-        color: var(--text-muted);
+        color: var(--ra-base-color);
     }
 
     /* End-of-ayah marker (۝ + Arabic-Indic numeral). Quiet divider; always
-     *  visible (not part of the reveal). Inherits the line font; gets the base
-     *  outline. */
+     *  visible (not part of the reveal). Inherits the line font + base color;
+     *  gets the base outline. */
     .ra-ayah-marker {
         display: inline-block;
-        color: var(--text-faint);
+        color: var(--ra-base-color);
         text-shadow: var(--ra-word-shadow);
     }
 
@@ -278,6 +333,7 @@
      *  word silhouette rather than each joined letter. */
     .ra-word {
         display: inline-block;
+        cursor: pointer;
         opacity: var(--ra-unreached-opacity);
         text-shadow: var(--ra-word-shadow);
         transition:

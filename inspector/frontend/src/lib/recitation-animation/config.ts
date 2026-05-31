@@ -35,6 +35,8 @@ export interface RecitationAnimConfig {
     // ---- effects ----
     /** Color of the currently-active word/char. */
     highlightColor: string;
+    /** Color of non-active text (reached + unreached words, the ۝ marker). */
+    baseColor: string;
     /** Opacity of already-recited units (0..1). */
     reachedOpacity: number;
     /** Opacity of not-yet-reached units (0..1). */
@@ -123,6 +125,7 @@ export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
     easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
 
     highlightColor: 'var(--accent)',
+    baseColor: 'var(--text-muted)',
     reachedOpacity: 0.62,
     unreachedOpacity: 0,
     wordActiveEmphasisMs: 180,
@@ -195,6 +198,7 @@ export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
         '--ra-clear-fade': `${cfg.clearFadeMs}ms`,
         '--ra-easing': cfg.easing,
         '--ra-highlight': cfg.highlightColor,
+        '--ra-base-color': cfg.baseColor,
         '--ra-reached-opacity': String(cfg.reachedOpacity),
         '--ra-unreached-opacity': String(cfg.unreachedOpacity),
         '--ra-active-scale': String(cfg.activeScale),
