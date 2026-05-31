@@ -32,7 +32,29 @@
         resolveAudioUrl,
     } from '../../src/tabs/timestamps/services/ts_client';
 
-    let config = $state<RecitationAnimConfig>({ ...DEFAULT_RECITATION_CONFIG });
+    // Persist the tuned config across reloads — WSL Vite has no HMR, so the
+    // page is reloaded constantly; without this, every reload wiped the config
+    // back to defaults (e.g. unreachedOpacity → 0, making words vanish).
+    const LS_CONFIG = 'recitation-pg-config';
+    function loadConfig(): RecitationAnimConfig {
+        try {
+            const raw = localStorage.getItem(LS_CONFIG);
+            if (raw) {
+                return { ...DEFAULT_RECITATION_CONFIG, ...(JSON.parse(raw) as Partial<RecitationAnimConfig>) };
+            }
+        } catch {
+            /* ignore */
+        }
+        return { ...DEFAULT_RECITATION_CONFIG };
+    }
+    let config = $state<RecitationAnimConfig>(loadConfig());
+    $effect(() => {
+        try {
+            localStorage.setItem(LS_CONFIG, JSON.stringify(config));
+        } catch {
+            /* ignore */
+        }
+    });
 
     let manifest: TsManifestResponse | null = null;
     let reciters = $state<string[]>([]);
