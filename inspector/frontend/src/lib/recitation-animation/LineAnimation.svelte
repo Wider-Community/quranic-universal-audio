@@ -186,8 +186,11 @@
 
 <style>
     .ra-line {
+        /* RTL: first (recitation-order) word sits at the right, the line fills
+         *  leftward, overflow clips on the left. `unicode-bidi: plaintext`
+         *  must NOT be used here — it reorders the inline-block word boxes
+         *  left-to-right. Plain `direction: rtl` flows the words right-to-left. */
         direction: rtl;
-        unicode-bidi: plaintext;
         text-align: right;
         white-space: nowrap;
         overflow: hidden;
