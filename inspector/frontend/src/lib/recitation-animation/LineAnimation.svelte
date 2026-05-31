@@ -202,6 +202,11 @@
         letter-spacing: var(--ra-letter-spacing);
         word-spacing: var(--ra-word-spacing);
         color: var(--text-muted);
+        /* Base outline on all glyphs (text-stroke + paint-order are inherited),
+         *  painted BEHIND the fill so it adds separation without thinning the
+         *  letters. 0 width = off. Helps crowded short-ayah legibility. */
+        -webkit-text-stroke: var(--ra-base-stroke) var(--ra-base-stroke-color);
+        paint-order: stroke fill;
     }
 
     /* Word granularity: the word is the animated unit. */
@@ -225,6 +230,7 @@
         color: var(--ra-highlight);
         transform: scale(var(--ra-active-scale));
         text-shadow: 0 0 var(--ra-active-glow) var(--ra-highlight);
+        -webkit-text-stroke: var(--ra-active-stroke) var(--ra-active-stroke-color);
     }
 
     /* Char granularity: the word stays lit; characters are the animated unit. */
@@ -245,6 +251,7 @@
         opacity: 1;
         color: var(--ra-highlight);
         text-shadow: 0 0 var(--ra-active-glow) var(--ra-highlight);
+        -webkit-text-stroke: var(--ra-active-stroke) var(--ra-active-stroke-color);
     }
 
     @media (prefers-reduced-motion: reduce) {

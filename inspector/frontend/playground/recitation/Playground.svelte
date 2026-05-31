@@ -85,11 +85,16 @@
     });
     const pct = $derived(durationMs > 0 ? Math.min(100, (posMs / durationMs) * 100) : 0);
     const verseNums = $derived(ayahs.map((a) => a.ayah));
-    const currentAyah = $derived(
-        ayahs.findLast?.((a) => a.startMs <= posMs)?.ayah
-            ?? ayahs.find((a) => a.startMs <= posMs && a.endMs >= posMs)?.ayah
-            ?? null,
-    );
+    // Current ayah = the last boundary whose start has passed (ayahs are sorted
+    // ascending by startMs). Plain loop — `findLast` isn't in the es2022 lib.
+    const currentAyah = $derived.by(() => {
+        let cur: number | null = null;
+        for (const a of ayahs) {
+            if (a.startMs <= posMs) cur = a.ayah;
+            else break;
+        }
+        return cur;
+    });
     const exportJson = $derived(JSON.stringify(config, null, 2));
 
     onMount(async () => {
@@ -250,7 +255,7 @@
 
         <fieldset>
             <legend>Timing (ms)</legend>
-            {#each [['wordRevealMs', 'word reveal', 0, 1200], ['charRevealMs', 'char reveal', 0, 800], ['activeEmphasisMs', 'active emphasis', 0, 800], ['clearFadeMs', 'clear fade', 0, 1200], ['leadMs', 'lead (early)', -400, 400]] as [key, label, min, max]}
+            {#each [['wordRevealMs', 'word reveal', 0, 1200], ['charRevealMs', 'char reveal', 0, 800], ['clearFadeMs', 'clear fade', 0, 1200], ['leadMs', 'lead (early)', -400, 400]] as [key, label, min, max]}
                 <label class="row">
                     <span>{label}</span>
                     <input type="range" min={min} max={max} step="10" bind:value={config[key as 'wordRevealMs']} />
@@ -285,8 +290,32 @@
             </div>
             <label class="row"><span>reached opacity</span><input type="range" min="0" max="1" step="0.02" bind:value={config.reachedOpacity} /><em>{config.reachedOpacity}</em></label>
             <label class="row"><span>unreached opacity</span><input type="range" min="0" max="1" step="0.02" bind:value={config.unreachedOpacity} /><em>{config.unreachedOpacity}</em></label>
-            <label class="row"><span>active scale</span><input type="range" min="1" max="1.5" step="0.01" bind:value={config.activeScale} /><em>{config.activeScale}</em></label>
+            <label class="row">
+                <span>active emphasis</span>
+                <input
+                    type="range" min="0" max="800" step="10"
+                    value={config.granularity === 'char' ? config.charActiveEmphasisMs : config.wordActiveEmphasisMs}
+                    oninput={(e) => {
+                        const v = +e.currentTarget.value;
+                        if (config.granularity === 'char') config.charActiveEmphasisMs = v;
+                        else config.wordActiveEmphasisMs = v;
+                    }}
+                />
+                <em>{config.granularity === 'char' ? config.charActiveEmphasisMs : config.wordActiveEmphasisMs}</em>
+                <span class="gtag">{config.granularity}</span>
+            </label>
+            <label class="row"><span>active scale</span><input type="range" min="1" max="1.5" step="0.01" bind:value={config.activeScale} /><em>{config.activeScale}</em><span class="gtag">word</span></label>
             <label class="row"><span>active glow px</span><input type="range" min="0" max="30" step="1" bind:value={config.activeGlowPx} /><em>{config.activeGlowPx}</em></label>
+            <label class="row"><span>active stroke</span><input type="range" min="0" max="3" step="0.25" bind:value={config.activeStrokePx} /><em>{config.activeStrokePx}</em></label>
+            <div class="row"><span>stroke color</span>
+                <input type="text" bind:value={config.activeStrokeColor} />
+                <input type="color" class="cpick" value={resolveHex(config.activeStrokeColor)} oninput={(e) => (config.activeStrokeColor = e.currentTarget.value)} />
+            </div>
+            <label class="row"><span>base stroke</span><input type="range" min="0" max="3" step="0.25" bind:value={config.baseStrokePx} /><em>{config.baseStrokePx}</em></label>
+            <div class="row"><span>base stroke col</span>
+                <input type="text" bind:value={config.baseStrokeColor} />
+                <input type="color" class="cpick" value={resolveHex(config.baseStrokeColor)} oninput={(e) => (config.baseStrokeColor = e.currentTarget.value)} />
+            </div>
         </fieldset>
 
         <fieldset>
@@ -474,6 +503,16 @@
     }
     .cpick::-webkit-color-swatch-wrapper { padding: 2px; }
     .cpick::-webkit-color-swatch { border: none; border-radius: 2px; }
+    .gtag {
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--accent);
+        border: 1px solid var(--border-quiet);
+        border-radius: 999px;
+        padding: 1px 5px;
+        flex: 0 0 auto;
+    }
     .pills { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
     .pill {
         padding: 4px 9px;

@@ -22,8 +22,6 @@ export interface RecitationAnimConfig {
     wordRevealMs: number;
     /** Opacity reveal duration for a character in char granularity. */
     charRevealMs: number;
-    /** Transition duration for the active highlight (color / scale / glow). */
-    activeEmphasisMs: number;
     /** Fade-out duration when a page clears (overflow or ayah end). */
     clearFadeMs: number;
     /** Light a unit this many ms before its true start (negative = lag). */
@@ -40,10 +38,25 @@ export interface RecitationAnimConfig {
     reachedOpacity: number;
     /** Opacity of not-yet-reached units (0..1). */
     unreachedOpacity: number;
-    /** Scale transform on the active unit (1 = none). */
+    /** Active-highlight transition duration (color/scale/glow/stroke), split by
+     *  granularity — chars are smaller + stream faster than words, so they
+     *  usually want a quicker emphasis. The active granularity's value drives
+     *  `--ra-active-emphasis`. */
+    wordActiveEmphasisMs: number;
+    charActiveEmphasisMs: number;
+    /** Scale transform on the active unit (1 = none). Word granularity only —
+     *  inline Arabic chars can't transform without breaking cursive joining. */
     activeScale: number;
-    /** Glow (text-shadow blur, px) on the active unit (0 = none). */
+    /** Glow (text-shadow blur px) on the active unit (0 = none). */
     activeGlowPx: number;
+    /** Outline (text-stroke) on the ACTIVE unit — makes the current word/char
+     *  pop. Width px + color; 0 = off. Painted behind the fill (paint-order). */
+    activeStrokePx: number;
+    activeStrokeColor: string;
+    /** Outline (text-stroke) on ALL line text — aids legibility + separation of
+     *  crowded short ayahs against the background. Width px + color; 0 = off. */
+    baseStrokePx: number;
+    baseStrokeColor: string;
 
     // ---- typography ----
     fontFamily: string;
@@ -83,7 +96,6 @@ export const EASING_OPTIONS: { label: string; value: string }[] = [
 export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
     wordRevealMs: 260,
     charRevealMs: 140,
-    activeEmphasisMs: 180,
     clearFadeMs: 220,
     leadMs: 0,
 
@@ -92,8 +104,14 @@ export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
     highlightColor: 'var(--accent)',
     reachedOpacity: 0.62,
     unreachedOpacity: 0,
+    wordActiveEmphasisMs: 180,
+    charActiveEmphasisMs: 110,
     activeScale: 1,
     activeGlowPx: 0,
+    activeStrokePx: 0,
+    activeStrokeColor: 'var(--accent)',
+    baseStrokePx: 0,
+    baseStrokeColor: 'oklch(0.13 0.03 285 / 0.7)',
 
     // Matches the timestamps-tab animation: the dataset's display text is
     // DigitalKhatt-encoded, so it must render in the DigitalKhatt webfont
@@ -120,12 +138,15 @@ export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
     markerHoverLabel: true,
 };
 
-/** Project the line-animation slice of config to CSS custom properties. */
+/** Project the line-animation slice of config to CSS custom properties.
+ *  The active-unit effects (emphasis/scale/glow) resolve to the *current*
+ *  granularity's value, so the same CSS rules render word- or char-tuned. */
 export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
+    const isChar = cfg.granularity === 'char';
     return {
         '--ra-word-reveal': `${cfg.wordRevealMs}ms`,
         '--ra-char-reveal': `${cfg.charRevealMs}ms`,
-        '--ra-active-emphasis': `${cfg.activeEmphasisMs}ms`,
+        '--ra-active-emphasis': `${isChar ? cfg.charActiveEmphasisMs : cfg.wordActiveEmphasisMs}ms`,
         '--ra-clear-fade': `${cfg.clearFadeMs}ms`,
         '--ra-easing': cfg.easing,
         '--ra-highlight': cfg.highlightColor,
@@ -133,6 +154,10 @@ export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
         '--ra-unreached-opacity': String(cfg.unreachedOpacity),
         '--ra-active-scale': String(cfg.activeScale),
         '--ra-active-glow': `${cfg.activeGlowPx}px`,
+        '--ra-active-stroke': `${cfg.activeStrokePx}px`,
+        '--ra-active-stroke-color': cfg.activeStrokeColor,
+        '--ra-base-stroke': `${cfg.baseStrokePx}px`,
+        '--ra-base-stroke-color': cfg.baseStrokeColor,
         '--ra-font': cfg.fontFamily,
         '--ra-font-size': `${cfg.fontSizePx}px`,
         '--ra-line-height': String(cfg.lineHeight),
