@@ -169,8 +169,14 @@ def read_record_bytes(kind: str, slug: str | None, job_id: str) -> bytes | None:
 
 
 def stage_job_code() -> None:
-    """Upload scripts/lib + scripts/jobs to ``aligner-bucket/code/`` so the
-    HF Job container can import them. Idempotent (Xet skips unchanged content).
+    """Upload scripts/lib + scripts/jobs + static refs to
+    ``aligner-bucket/code/`` so the HF Job container can import them.
+    Idempotent (Xet skips unchanged content).
+
+    Static refs (``data/qpc_hafs.json`` + ``data/surah_info.json``) are
+    required by ``publish_hf.py`` for text derivation and by ``cut_release.py``
+    for static-refs hashing + the release bundle. They're shipped under
+    ``code/data/`` so the job can read them at ``/aux/code/data/<file>``.
     """
     from huggingface_hub import batch_bucket_files
 
@@ -184,6 +190,12 @@ def stage_job_code() -> None:
                 continue
             rel = path.relative_to(REPO_ROOT).as_posix()
             adds.append((str(path), f"code/{rel}"))
+    # Static refs — small enough (qpc_hafs.json ~12 MB, surah_info.json ~400 KB)
+    # that re-uploading on every launch is fine when unchanged Xet de-dups them.
+    for ref_name in ("qpc_hafs.json", "surah_info.json"):
+        ref_path = REPO_ROOT / "data" / ref_name
+        if ref_path.exists():
+            adds.append((str(ref_path), f"code/data/{ref_name}"))
     if adds:
         batch_bucket_files(ALIGNER_BUCKET, add=adds)
         log.info("staged %d job-code files to %s/code/", len(adds), ALIGNER_BUCKET)

@@ -82,11 +82,14 @@ def launch(*, version: str | None = None,
         )
         secrets["INSPECTOR_WEBHOOK_SECRET"] = webhook_secret
 
+    # cut_release.py is stdlib-only on the runtime side (urllib for GH API,
+    # sqlite3 for DB reads). The prebuilt /env already has scripts.lib deps;
+    # bootstrap mode just needs Python 3.11.
     entrypoint = "python /aux/code/scripts/jobs/cut_release.py"
     if base.NEEDS_BOOTSTRAP:
         command = ["bash", "-lc",
-                   "/opt/conda/bin/pip install orjson requests "
-                   "&& " + entrypoint]
+                   "mamba install -y -c conda-forge python=3.11 "
+                   f"&& {entrypoint}"]
     else:
         command = ["bash", "-lc",
                    f"conda run -p /env --no-capture-output {entrypoint}"]

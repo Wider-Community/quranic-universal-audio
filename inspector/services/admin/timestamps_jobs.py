@@ -465,11 +465,36 @@ def complete_timestamps_job(slug: str, job_id: str) -> dict:
         return {"slug": slug, "state": row.state.value, "released": False,
                 "reason": "no shards"}
 
+    # v2: wrap transition + release-row write in one outer durable_transaction
+    # so they commit atomically. ``durable_transaction()`` is nesting-safe —
+    # the inner ``state.transition`` uses a SAVEPOINT and only the outermost
+    # boundary uploads (avoids double-bucket-write). The TS gen completion is
+    # the source-of-truth event for ``per_recitation_releases(track='ts')``:
+    # it inserts the new ts row, supersedes the prior current ts row, and
+    # stamps the slug's HF/GH releases as stale (TS regen invalidates them).
+    from datetime import datetime, timezone
+
+    from services.db import repo_releases
+    from services.db.sync import durable_transaction
     try:
-        new_row = state_service.transition(
-            slug, "reciter.published", actor=SYSTEM_ACTOR,
-            payload={"job_id": job_id},
-        )
+        with durable_transaction() as _:
+            new_row = state_service.transition(
+                slug, "reciter.published", actor=SYSTEM_ACTOR,
+                payload={"job_id": job_id},
+            )
+            now = datetime.now(timezone.utc)
+            # Supersede prior current ts row FIRST — partial-unique on (track,
+            # slug) WHERE superseded_at IS NULL blocks two current rows.
+            repo_releases.supersede_current("ts", slug, except_id=-1, at=now)
+            repo_releases.insert_per_recitation_release(
+                track="ts", slug=slug, version=job_id,
+                produced_at=now,
+                produced_by="SYSTEM_ACTOR",
+                produced_by_job_id=job_id,
+            )
+            # Stamp the HF + most-recent-GH membership as stale (re-publishing
+            # clears stale in v1; no explicit ack endpoint).
+            repo_releases.stamp_stale_on_ts_regen(slug, at=now)
     except state_service.StateError as exc:
         # Lost a double-fire race, or the row changed under us (e.g. reviewer
         # un-marked). Benign — the winning caller (or a re-run) handles it.
