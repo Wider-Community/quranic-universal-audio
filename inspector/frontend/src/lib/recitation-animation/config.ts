@@ -162,11 +162,32 @@ export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
     filmstripHeightPx: 40,
 };
 
+/** 8-direction text-shadow that outlines the rendered text *silhouette*. Unlike
+ *  per-glyph `-webkit-text-stroke` (which traces each letter and shows seams
+ *  where Arabic letters join), this outlines the word's outer border. '' when
+ *  width ≤ 0. */
+function outlineShadow(px: number, color: string): string {
+    if (!px || px <= 0) return '';
+    const o = `${px}px`;
+    const n = `-${px}px`;
+    return [
+        `${o} 0 0 ${color}`, `${n} 0 0 ${color}`,
+        `0 ${o} 0 ${color}`, `0 ${n} 0 ${color}`,
+        `${o} ${o} 0 ${color}`, `${n} ${o} 0 ${color}`,
+        `${o} ${n} 0 ${color}`, `${n} ${n} 0 ${color}`,
+    ].join(', ');
+}
+
 /** Project the line-animation slice of config to CSS custom properties.
  *  The active-unit effects (emphasis/scale/glow) resolve to the *current*
  *  granularity's value, so the same CSS rules render word- or char-tuned. */
 export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
     const isChar = cfg.granularity === 'char';
+    const baseOutline = outlineShadow(cfg.baseStrokePx, cfg.baseStrokeColor);
+    const activeOutline = cfg.activeStrokePx > 0
+        ? outlineShadow(cfg.activeStrokePx, cfg.activeStrokeColor)
+        : baseOutline;
+    const glow = cfg.activeGlowPx > 0 ? `0 0 ${cfg.activeGlowPx}px ${cfg.highlightColor}` : '';
     return {
         '--ra-word-reveal': `${cfg.wordRevealMs}ms`,
         '--ra-char-reveal': `${cfg.charRevealMs}ms`,
@@ -177,11 +198,9 @@ export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
         '--ra-reached-opacity': String(cfg.reachedOpacity),
         '--ra-unreached-opacity': String(cfg.unreachedOpacity),
         '--ra-active-scale': String(cfg.activeScale),
-        '--ra-active-glow': `${cfg.activeGlowPx}px`,
-        '--ra-active-stroke': `${cfg.activeStrokePx}px`,
-        '--ra-active-stroke-color': cfg.activeStrokeColor,
-        '--ra-base-stroke': `${cfg.baseStrokePx}px`,
-        '--ra-base-stroke-color': cfg.baseStrokeColor,
+        // Word-silhouette outline (base) + active outline/glow, as text-shadow.
+        '--ra-word-shadow': baseOutline || 'none',
+        '--ra-word-shadow-active': [glow, activeOutline].filter(Boolean).join(', ') || 'none',
         '--ra-font': cfg.fontFamily,
         '--ra-font-size': `${cfg.fontSizePx}px`,
         '--ra-line-height': String(cfg.lineHeight),

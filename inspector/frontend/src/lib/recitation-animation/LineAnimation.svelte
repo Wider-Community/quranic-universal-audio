@@ -181,26 +181,31 @@
         if (!units.length) return;
         const t = (getTimeMs() + config.leadMs) / 1000;
         const ga = activeIndexAt(units, t, globalActive);
-        if (ga < 0) return;
-        const activeAyah = units[ga]!.ayahKey;
+        if (ga >= 0) {
+            const activeAyah = units[ga]!.ayahKey;
 
-        // Ayah finished → restart from the new ayah's first word.
-        if (config.clearOnAyahEnd && activeAyah !== pageAyahKey) {
-            const range = ayahRanges.get(activeAyah);
-            repaginate(range ? range[0] : ga, activeAyah);
+            // Ayah finished → restart from the new ayah's first word.
+            if (config.clearOnAyahEnd && activeAyah !== pageAyahKey) {
+                const range = ayahRanges.get(activeAyah);
+                repaginate(range ? range[0] : ga, activeAyah);
+                globalActive = ga;
+                return;
+            }
+
+            // Out of space → restart the line from the active word.
+            const localActive = ga - pageStart;
+            if (config.clearOnOverflow && pageCount !== null && localActive >= pageCount) {
+                repaginate(ga, activeAyah);
+                globalActive = ga;
+                return;
+            }
+
             globalActive = ga;
-            return;
         }
 
-        // Out of space → restart the line from the active word.
-        const localActive = ga - pageStart;
-        if (config.clearOnOverflow && pageCount !== null && localActive >= pageCount) {
-            repaginate(ga, activeAyah);
-            globalActive = ga;
-            return;
-        }
-
-        globalActive = ga;
+        // Always sweep. During a silence gap (ga < 0) this clears the active
+        // highlight — the just-finished word goes `reached`, nothing is active.
+        // On look-back the time-based sweep travels the highlight backward.
         doSweep();
     }
 
@@ -227,7 +232,7 @@
             tabindex="-1"
             onclick={() => onSeekToWord?.((pageUnits[i]?.start ?? 0) * 1000)}
             onkeydown={() => {}}
-        >{#if w.hasChars}{#each w.chars as ch, ci (ci)}<span
+        >{#if config.granularity === 'char' && w.hasChars}{#each w.chars as ch, ci (ci)}<span
                     class="ra-char"
                     data-start={ch.start}
                     data-end={ch.end}
@@ -257,24 +262,24 @@
         letter-spacing: var(--ra-letter-spacing);
         word-spacing: var(--ra-word-spacing);
         color: var(--text-muted);
-        /* Base outline on all glyphs (text-stroke + paint-order are inherited),
-         *  painted BEHIND the fill so it adds separation without thinning the
-         *  letters. 0 width = off. Helps crowded short-ayah legibility. */
-        -webkit-text-stroke: var(--ra-base-stroke) var(--ra-base-stroke-color);
-        paint-order: stroke fill;
     }
 
     /* End-of-ayah marker (۝ + Arabic-Indic numeral). Quiet divider; always
-     *  visible (not part of the reveal). Inherits the line font + base stroke. */
+     *  visible (not part of the reveal). Inherits the line font; gets the base
+     *  outline. */
     .ra-ayah-marker {
         display: inline-block;
         color: var(--text-faint);
+        text-shadow: var(--ra-word-shadow);
     }
 
-    /* Word granularity: the word is the animated unit. */
+    /* Word granularity: the word is the animated unit. Word mode renders the
+     *  word as plain text (not per-char spans), so the outline traces the whole
+     *  word silhouette rather than each joined letter. */
     .ra-word {
         display: inline-block;
         opacity: var(--ra-unreached-opacity);
+        text-shadow: var(--ra-word-shadow);
         transition:
             opacity var(--ra-word-reveal) var(--ra-easing),
             color var(--ra-active-emphasis) var(--ra-easing),
@@ -291,8 +296,7 @@
         opacity: 1;
         color: var(--ra-highlight);
         transform: scale(var(--ra-active-scale));
-        text-shadow: 0 0 var(--ra-active-glow) var(--ra-highlight);
-        -webkit-text-stroke: var(--ra-active-stroke) var(--ra-active-stroke-color);
+        text-shadow: var(--ra-word-shadow-active);
     }
 
     /* Char granularity: the word stays lit; characters are the animated unit. */
@@ -301,6 +305,7 @@
     }
     .ra-line.ra-chars .ra-char {
         opacity: var(--ra-unreached-opacity);
+        text-shadow: var(--ra-word-shadow);
         transition:
             opacity var(--ra-char-reveal) var(--ra-easing),
             color var(--ra-active-emphasis) var(--ra-easing),
@@ -312,8 +317,7 @@
     .ra-line.ra-chars .ra-char:global(.active) {
         opacity: 1;
         color: var(--ra-highlight);
-        text-shadow: 0 0 var(--ra-active-glow) var(--ra-highlight);
-        -webkit-text-stroke: var(--ra-active-stroke) var(--ra-active-stroke-color);
+        text-shadow: var(--ra-word-shadow-active);
     }
 
     @media (prefers-reduced-motion: reduce) {

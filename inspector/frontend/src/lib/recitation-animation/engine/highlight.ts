@@ -36,6 +36,25 @@ export function sweepHighlights(
     const items = cache.items;
     if (items.length === 0) return lastIdx;
 
+    if (opts.mode === 'class') {
+        // Purely time-based per item (the page is one line, O(n) is cheap):
+        //   active  = the unit currently being recited (start ≤ t < end)
+        //   reached = a unit already finished (t ≥ end)
+        // This makes silence GAPS clear the active highlight (the just-finished
+        // word goes `reached`, nothing is active), and makes BACKWARD jumps
+        // (look-back / repeats) travel the highlight back — units after the new
+        // time lose `reached` and revert to unreached. No lastIdx fast-path.
+        let active = -1;
+        for (let i = 0; i < items.length; i++) {
+            const it = items[i]!;
+            const isActive = timeSec >= it.start && timeSec < it.end;
+            applyClass(cache, i, 'active', isActive);
+            applyClass(cache, i, 'reached', !isActive && timeSec >= it.end);
+            if (isActive) active = i;
+        }
+        return active;
+    }
+
     let newIdx = -1;
     const lastItem = lastIdx >= 0 && lastIdx < items.length ? items[lastIdx] : undefined;
     const nextItem = lastIdx + 1 < items.length ? items[lastIdx + 1] : undefined;
@@ -59,16 +78,6 @@ export function sweepHighlights(
     }
 
     if (newIdx === lastIdx) return newIdx;
-
-    if (opts.mode === 'class') {
-        // Full reconcile: correct after both forward ticks and backward seeks.
-        // Page is one line of words, so O(n) here is cheap.
-        for (let i = 0; i < items.length; i++) {
-            applyClass(cache, i, 'active', i === newIdx);
-            applyClass(cache, i, 'reached', newIdx >= 0 && i < newIdx);
-        }
-        return newIdx;
-    }
 
     if (lastIdx >= 0 && lastIdx < items.length) {
         applyClass(cache, lastIdx, 'active', false);
