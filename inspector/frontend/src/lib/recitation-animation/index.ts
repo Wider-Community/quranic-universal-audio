@@ -2,7 +2,7 @@
  * Recitation-animation feature — shared, surface-agnostic.
  *
  * Public surface: the collapsible section + line animation, the ayah picker,
- * the timeline markers, the chapter-words assembly, and the tunable config.
+ * the ayah filmstrip, the chapter-words assembly, and the tunable config.
  * Wired into the dashboard now; designed for the timestamps tab to re-adopt
  * later (same footer + section). No tab-store coupling lives here.
  */
@@ -10,7 +10,7 @@
 export { default as RecitationSection } from './RecitationSection.svelte';
 export { default as LineAnimation } from './LineAnimation.svelte';
 export { default as AyahPicker } from './AyahPicker.svelte';
-export { default as TimelineAyahMarkers } from './TimelineAyahMarkers.svelte';
+export { default as AyahFilmstrip } from './AyahFilmstrip.svelte';
 
 export {
     buildChapterRecitation,
@@ -20,9 +20,11 @@ export {
 export {
     DEFAULT_RECITATION_CONFIG,
     EASING_OPTIONS,
+    FILMSTRIP_MOTIONS,
     cssVars,
     cssVarText,
     recitationConfig,
+    type FilmstripMotion,
     type Granularity,
     type RecitationAnimConfig,
 } from './config';

@@ -7,12 +7,13 @@
     import { onMount } from 'svelte';
 
     import {
+        AyahFilmstrip,
         AyahPicker,
         buildChapterRecitation,
         DEFAULT_RECITATION_CONFIG,
         EASING_OPTIONS,
+        FILMSTRIP_MOTIONS,
         RecitationSection,
-        TimelineAyahMarkers,
         type AnimUnit,
         type AssembledVerse,
         type AyahBoundary,
@@ -55,6 +56,7 @@
     let demoT = 0; // ms virtual clock for demo mode (read each frame, not reactive)
 
     let section = $state<{ refresh: () => void } | undefined>(undefined);
+    let filmstrip = $state<{ refresh: () => void } | undefined>(undefined);
     let pickerOpen = $state(false);
     let showExport = $state(false);
 
@@ -200,12 +202,18 @@
         posMs = clamped;
         if (mode === 'demo') {
             demoT = clamped;
-            if (!playing) section?.refresh();
+            if (!playing) {
+                section?.refresh();
+                filmstrip?.refresh();
+            }
             return;
         }
         if (!audioEl) return;
         audioEl.currentTime = clamped / 1000;
-        if (audioEl.paused) section?.refresh();
+        if (audioEl.paused) {
+            section?.refresh();
+            filmstrip?.refresh();
+        }
     }
     function onBarClick(e: MouseEvent): void {
         const el = e.currentTarget as HTMLElement;
@@ -343,26 +351,32 @@
             </div>
             <label class="check"><input type="checkbox" bind:checked={config.clearOnOverflow} /> clear on overflow</label>
             <label class="check"><input type="checkbox" bind:checked={config.clearOnAyahEnd} /> clear on ayah end</label>
+            <label class="check"><input type="checkbox" bind:checked={config.centerLine} /> center line</label>
+            <label class="check"><input type="checkbox" bind:checked={config.showAyahMarker} /> show ۝ ayah marker</label>
             <label class="check"><input type="checkbox" bind:checked={config.autoExpandOnPlay} /> auto-expand on play</label>
             <label class="check"><input type="checkbox" bind:checked={config.collapsedByDefault} /> collapsed by default</label>
         </fieldset>
 
         <fieldset>
-            <legend>Timeline markers</legend>
-            <label class="check"><input type="checkbox" bind:checked={config.markersShow} /> show markers</label>
-            <div class="row"><span>color</span>
-                <input type="text" bind:value={config.markerColor} />
-                <input
-                    type="color"
-                    class="cpick"
-                    value={resolveHex(config.markerColor)}
-                    oninput={(e) => (config.markerColor = e.currentTarget.value)}
-                />
+            <legend>Filmstrip</legend>
+            <label class="check"><input type="checkbox" bind:checked={config.filmstripShow} /> show filmstrip</label>
+            <div class="row"><span>motion</span>
+                <div class="pills">
+                    {#each FILMSTRIP_MOTIONS as m}
+                        <button
+                            type="button"
+                            class="pill"
+                            class:on={config.filmstripMotion === m.value}
+                            onclick={() => (config.filmstripMotion = m.value)}
+                        >{m.label}</button>
+                    {/each}
+                </div>
             </div>
-            <label class="row"><span>width px</span><input type="range" min="1" max="6" step="1" bind:value={config.markerWidthPx} /><em>{config.markerWidthPx}</em></label>
-            <label class="row"><span>height px</span><input type="range" min="3" max="16" step="1" bind:value={config.markerHeightPx} /><em>{config.markerHeightPx}</em></label>
-            <label class="row"><span>opacity</span><input type="range" min="0" max="1" step="0.05" bind:value={config.markerOpacity} /><em>{config.markerOpacity}</em></label>
-            <label class="check"><input type="checkbox" bind:checked={config.markerHoverLabel} /> hover label</label>
+            <label class="row"><span>proportional</span><input type="range" min="0" max="1" step="0.05" bind:value={config.filmstripProportional} /><em>{config.filmstripProportional}</em></label>
+            <label class="row"><span>min cell px</span><input type="range" min="24" max="80" step="1" bind:value={config.filmstripMinCellPx} /><em>{config.filmstripMinCellPx}</em></label>
+            <label class="row"><span>max cell px</span><input type="range" min="60" max="240" step="2" bind:value={config.filmstripMaxCellPx} /><em>{config.filmstripMaxCellPx}</em></label>
+            <label class="row"><span>gap px</span><input type="range" min="0" max="16" step="1" bind:value={config.filmstripGapPx} /><em>{config.filmstripGapPx}</em></label>
+            <label class="row"><span>height px</span><input type="range" min="28" max="72" step="2" bind:value={config.filmstripHeightPx} /><em>{config.filmstripHeightPx}</em></label>
         </fieldset>
 
         <div class="actions">
@@ -409,6 +423,17 @@
                     onSeekToWord={seekMs}
                 />
             {/if}
+            {#if ayahs.length}
+                <AyahFilmstrip
+                    bind:this={filmstrip}
+                    {ayahs}
+                    {durationMs}
+                    {getTimeMs}
+                    {playing}
+                    {config}
+                    onSeek={seekMs}
+                />
+            {/if}
             <div
                 class="bar"
                 role="slider"
@@ -424,7 +449,6 @@
                 }}
             >
                 <div class="track"><div class="fill" style="width:{pct}%"></div></div>
-                <TimelineAyahMarkers {ayahs} {durationMs} {config} onSeek={seekMs} />
             </div>
             <div class="row2">
                 <button class="play" onclick={toggle} aria-label="play/pause">{playing ? '❚❚' : '►'}</button>

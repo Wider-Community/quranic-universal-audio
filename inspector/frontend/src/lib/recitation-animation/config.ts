@@ -15,6 +15,7 @@
 import { writable } from 'svelte/store';
 
 export type Granularity = 'word' | 'char';
+export type FilmstripMotion = 'hybrid' | 'tuner' | 'snap';
 
 export interface RecitationAnimConfig {
     // ---- timing (ms) ----
@@ -71,18 +72,31 @@ export interface RecitationAnimConfig {
     clearOnOverflow: boolean;
     /** Clear + restart from word 1 when the ayah changes. */
     clearOnAyahEnd: boolean;
+    /** Center the fitted line (vs right-aligned RTL fill). */
+    centerLine: boolean;
+    /** Append the ۝ end-of-ayah marker (Arabic-Indic numeral) after each ayah. */
+    showAyahMarker: boolean;
 
     // ---- section chrome ----
     autoExpandOnPlay: boolean;
     collapsedByDefault: boolean;
 
-    // ---- timeline ayah markers ----
-    markersShow: boolean;
-    markerColor: string;
-    markerWidthPx: number;
-    markerHeightPx: number;
-    markerOpacity: number;
-    markerHoverLabel: boolean;
+    // ---- ayah filmstrip (center-anchored nav strip above the bar) ----
+    filmstripShow: boolean;
+    /** Motion model: `hybrid` (continuous tuner-center, drag snaps to ayah),
+     *  `tuner` (continuous, drag scrubs exact time), `snap` (center on ayah
+     *  change only, drag = carousel snap). */
+    filmstripMotion: FilmstripMotion;
+    /** 0 = all cells equal (min width); 1 = fully duration-proportional. */
+    filmstripProportional: number;
+    /** Min cell width (px) — must fit the widest verse number. */
+    filmstripMinCellPx: number;
+    /** Max cell width (px) — caps long ayahs. */
+    filmstripMaxCellPx: number;
+    /** Gap between cells (px). */
+    filmstripGapPx: number;
+    /** Strip height (px). */
+    filmstripHeightPx: number;
 }
 
 /** Easing presets offered in the playground (ease-out only — no bounce). */
@@ -91,6 +105,13 @@ export const EASING_OPTIONS: { label: string; value: string }[] = [
     { label: 'Out · expo', value: 'cubic-bezier(0.16, 1, 0.3, 1)' },
     { label: 'Out · cubic', value: 'cubic-bezier(0.33, 1, 0.68, 1)' },
     { label: 'Linear', value: 'linear' },
+];
+
+/** Filmstrip motion models offered in the playground. */
+export const FILMSTRIP_MOTIONS: { label: string; value: FilmstripMotion }[] = [
+    { label: 'Hybrid', value: 'hybrid' },
+    { label: 'Tuner', value: 'tuner' },
+    { label: 'Snap', value: 'snap' },
 ];
 
 export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
@@ -110,7 +131,7 @@ export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
     activeGlowPx: 0,
     activeStrokePx: 0,
     activeStrokeColor: 'var(--accent)',
-    baseStrokePx: 0,
+    baseStrokePx: 0.35,
     baseStrokeColor: 'oklch(0.13 0.03 285 / 0.7)',
 
     // Matches the timestamps-tab animation: the dataset's display text is
@@ -126,16 +147,19 @@ export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
     granularity: 'word',
     clearOnOverflow: true,
     clearOnAyahEnd: true,
+    centerLine: true,
+    showAyahMarker: true,
 
     autoExpandOnPlay: true,
     collapsedByDefault: false,
 
-    markersShow: true,
-    markerColor: 'var(--accent)',
-    markerWidthPx: 2,
-    markerHeightPx: 7,
-    markerOpacity: 0.5,
-    markerHoverLabel: true,
+    filmstripShow: true,
+    filmstripMotion: 'hybrid',
+    filmstripProportional: 0.7,
+    filmstripMinCellPx: 40,
+    filmstripMaxCellPx: 120,
+    filmstripGapPx: 4,
+    filmstripHeightPx: 40,
 };
 
 /** Project the line-animation slice of config to CSS custom properties.
@@ -163,6 +187,7 @@ export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
         '--ra-line-height': String(cfg.lineHeight),
         '--ra-word-spacing': `${cfg.wordSpacingPx}px`,
         '--ra-letter-spacing': `${cfg.letterSpacingPx}px`,
+        '--ra-align': cfg.centerLine ? 'center' : 'right',
     };
 }
 

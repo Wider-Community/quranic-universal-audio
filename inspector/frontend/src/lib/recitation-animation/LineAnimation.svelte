@@ -13,6 +13,7 @@
      * driven by CSS custom properties projected from `RecitationAnimConfig`,
      * so the throwaway playground can tune it live.
      */
+    import { toArabicNumeral } from '../utils/arabic-text';
     import { ayahUnitRanges } from './chapter-words';
     import { cssVarText, type RecitationAnimConfig } from './config';
     import { buildAnimStructure, type AnimSourceWord } from './engine/build-structure';
@@ -24,6 +25,9 @@
     } from './engine/index-cache';
     import { fittedPrefixLength } from './line-window';
     import type { AnimUnit } from './types';
+
+    /** U+06DD ARABIC END OF AYAH — the same glyph segment cards use. */
+    const AYAH_END = '۝';
 
     interface Props {
         units: AnimUnit[];
@@ -42,19 +46,26 @@
     let rootEl = $state<HTMLDivElement | undefined>(undefined);
     let pageStart = $state(0);
     let pageAyahKey = $state('');
+    /** Words rendered on the current page; null = "measure the remainder". */
+    let pageCount = $state<number | null>(null);
 
     // ---- imperative per-frame state (not reactive) ----
     let wordCache: HighlightCache | null = null;
     let charCache: HighlightCache | null = null;
     let lastRevealIdx = -1;
     let globalActive = -1;
-    let lastVisibleLocal = -1;
 
     const ayahRanges = $derived(ayahUnitRanges(units));
-    const pageEnd = $derived(
+    const ayahEndIdx = $derived(
         config.clearOnAyahEnd
             ? (ayahRanges.get(pageAyahKey)?.[1] ?? units.length)
             : units.length,
+    );
+    // While measuring (pageCount null) render the whole remainder so the fit
+    // probe sees every candidate; once measured, render exactly the fitted set
+    // (which `text-align` then centers).
+    const pageEnd = $derived(
+        pageCount === null ? ayahEndIdx : Math.min(pageStart + pageCount, ayahEndIdx),
     );
     const pageUnits = $derived(units.slice(pageStart, pageEnd));
     const structure = $derived(
@@ -76,21 +87,39 @@
         void units; // track
         pageStart = 0;
         pageAyahKey = units[0]?.ayahKey ?? '';
+        pageCount = null;
         globalActive = -1;
         lastRevealIdx = -1;
     });
 
-    // Rebuild caches + remeasure after every render of the page (and on config
-    // changes that affect layout). Runs post-DOM-commit, so the spans exist.
+    // Layout-affecting config changes force a re-measure (re-page) of the line.
+    // Kept separate from color/timing tweaks so tuning those doesn't re-page.
+    $effect(() => {
+        void config.fontSizePx;
+        void config.lineHeight;
+        void config.wordSpacingPx;
+        void config.letterSpacingPx;
+        void config.fontFamily;
+        void config.granularity;
+        void config.showAyahMarker;
+        pageCount = null;
+    });
+
+    // Rebuild caches + measure fit after each render. Settles the fitted page
+    // count in two passes (measure-all → render-fitted), then sweeps. Runs
+    // post-DOM-commit, so the spans exist.
     $effect(() => {
         void structure; // re-run when the page content changes
-        void config; // re-measure when font / spacing / granularity changes
         if (!rootEl) return;
         wordCache = indexCache(rootEl, '.ra-word');
         charCache = config.granularity === 'char' ? indexCache(rootEl, '.ra-char') : null;
         clearHighlights(rootEl);
         lastRevealIdx = -1;
-        measureFits();
+        const fitted = measureFits();
+        if (pageCount === null || fitted < pageCount) {
+            pageCount = fitted; // re-renders the fitted set; this effect re-runs
+            return; // sweep on the stabilized pass
+        }
         doSweep();
     });
 
@@ -106,8 +135,9 @@
         return () => cancelAnimationFrame(raf);
     });
 
-    function measureFits(): void {
-        if (!rootEl) return;
+    /** Count of leading words that fully fit the line (always ≥1). */
+    function measureFits(): number {
+        if (!rootEl) return 1;
         const rowRect = rootEl.getBoundingClientRect();
         const eps = 0.75;
         const fits: boolean[] = [];
@@ -115,7 +145,7 @@
             const r = el.getBoundingClientRect();
             fits.push(r.left >= rowRect.left - eps && r.right <= rowRect.right + eps);
         });
-        lastVisibleLocal = fittedPrefixLength(fits) - 1;
+        return fittedPrefixLength(fits);
     }
 
     function doSweep(): void {
@@ -128,6 +158,7 @@
     function repaginate(start: number, ayahKey: string): void {
         pageStart = start;
         pageAyahKey = ayahKey;
+        pageCount = null;
         lastRevealIdx = -1;
         // The structure effect re-measures + sweeps once the new page renders.
     }
@@ -149,7 +180,7 @@
 
         // Out of space → restart the line from the active word.
         const localActive = ga - pageStart;
-        if (config.clearOnOverflow && lastVisibleLocal >= 0 && localActive > lastVisibleLocal) {
+        if (config.clearOnOverflow && pageCount !== null && localActive >= pageCount) {
             repaginate(ga, activeAyah);
             globalActive = ga;
             return;
@@ -165,8 +196,15 @@
     }
 </script>
 
-<div bind:this={rootEl} class="ra-line" class:ra-chars={config.granularity === 'char'} style={cssVarText(config)}>
+<div
+    bind:this={rootEl}
+    class="ra-line"
+    class:ra-chars={config.granularity === 'char'}
+    style={cssVarText(config)}
+    style:text-align={pageCount === null ? 'right' : null}
+>
     {#each structure as w, i (pageStart + '-' + i)}
+        {@const u = pageUnits[i]}
         {#if i > 0}{' '}{/if}<span
             class="ra-word"
             data-start={w.start}
@@ -180,7 +218,7 @@
                     data-start={ch.start}
                     data-end={ch.end}
                     data-group-id={ch.groupId}
-                >{ch.text}</span>{/each}{:else}{w.word.display_text || w.word.text}{/if}</span>
+                >{ch.text}</span>{/each}{:else}{w.word.display_text || w.word.text}{/if}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
     {/each}
 </div>
 
@@ -191,7 +229,10 @@
          *  must NOT be used here — it reorders the inline-block word boxes
          *  left-to-right. Plain `direction: rtl` flows the words right-to-left. */
         direction: rtl;
-        text-align: right;
+        /* Default alignment from config (`--ra-align`); the component overrides
+         *  to `right` for the one-frame measure pass so the fitted-prefix probe
+         *  isn't offset by centering. */
+        text-align: var(--ra-align);
         white-space: nowrap;
         overflow: hidden;
         width: 100%;
@@ -207,6 +248,13 @@
          *  letters. 0 width = off. Helps crowded short-ayah legibility. */
         -webkit-text-stroke: var(--ra-base-stroke) var(--ra-base-stroke-color);
         paint-order: stroke fill;
+    }
+
+    /* End-of-ayah marker (۝ + Arabic-Indic numeral). Quiet divider; always
+     *  visible (not part of the reveal). Inherits the line font + base stroke. */
+    .ra-ayah-marker {
+        display: inline-block;
+        color: var(--text-faint);
     }
 
     /* Word granularity: the word is the animated unit. */

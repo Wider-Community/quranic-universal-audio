@@ -87,3 +87,19 @@ export function splitIntoCharGroups(text: string): string[] {
     if (current) groups.push(current);
     return groups;
 }
+
+/** Arabic-Indic digits ٠..٩ (U+0660–U+0669); index = Western digit value. */
+export const ARABIC_DIGITS: readonly string[] = [
+    '٠', '١', '٢', '٣', '٤',
+    '٥', '٦', '٧', '٨', '٩',
+];
+
+/** Convert a non-negative integer to Arabic-Indic numerals (e.g. 12 → ١٢).
+ *  Mirrors `tabs/segments/utils/data/references.ts::_toArabicNumeral`; lives
+ *  here so the shared recitation-animation lib stays free of `tabs/*` imports. */
+export function toArabicNumeral(n: number): string {
+    return String(n)
+        .split('')
+        .map((d) => ARABIC_DIGITS[+d] ?? d)
+        .join('');
+}
