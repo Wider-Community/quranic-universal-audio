@@ -484,9 +484,17 @@
     }
     .panel {
         overflow-y: auto;
+        overflow-x: hidden; /* no horizontal scrollbar in the controls sidebar */
         padding: var(--s-4);
         border-right: 1px solid var(--border-default);
         background: var(--panel);
+    }
+    /* Let flex inputs shrink below their intrinsic width so a row never forces
+     *  the sidebar wider than it is (default min-width:auto would). */
+    .row > input,
+    .row > select,
+    .row > .pills {
+        min-width: 0;
     }
     h1 { font-size: var(--fs-h3); margin: 0 0 var(--s-1); }
     .tag {
@@ -502,6 +510,10 @@
     .hint { color: var(--text-muted); font-size: var(--fs-meta); margin: 0 0 var(--s-3); }
     code { font-family: var(--font-mono); color: var(--text-secondary); }
     fieldset {
+        /* Fieldsets default to min-inline-size:min-content, which makes them
+         *  grow past the panel to fit a wide row. Reset so they obey the panel
+         *  width and rows shrink to fit (no horizontal scroll/clip). */
+        min-inline-size: 0;
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
         margin: 0 0 var(--s-3);
