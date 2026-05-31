@@ -21,9 +21,12 @@
         playing: boolean;
         config: RecitationAnimConfig;
         onSeek: (ms: number) => void;
+        /** Preview-highlight the ayah spanning this time (e.g. progress-bar
+         *  hover). null = no preview. */
+        hoverMs?: number | null;
     }
 
-    let { ayahs, getTimeMs, playing, config, onSeek }: Props = $props();
+    let { ayahs, getTimeMs, playing, config, onSeek, hoverMs = null }: Props = $props();
 
     const clamp = (lo: number, hi: number, v: number): number => Math.min(hi, Math.max(lo, v));
     const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
@@ -87,6 +90,7 @@
         return last;
     }
     const activeIdx = $derived(indexForTime(nowMs));
+    const hoverIdx = $derived(hoverMs == null ? -1 : indexForTime(hoverMs));
 
     function fill(i: number): number {
         const c = cells[i];
@@ -246,6 +250,7 @@
                     class="cell"
                     class:active={i === activeIdx}
                     class:reached={i < activeIdx}
+                    class:preview={i === hoverIdx && i !== activeIdx}
                     style:width="{c.w}px"
                     style:margin-right="{config.filmstripGapPx}px"
                 >
@@ -310,6 +315,15 @@
     .cell.active {
         border-color: var(--accent);
         background: var(--accent-tint-soft);
+    }
+    /* Progress-bar hover preview — the verse spanned by the hovered time. */
+    .cell.preview {
+        border-color: var(--accent-strong);
+        border-style: dashed;
+        background: var(--accent-tint);
+    }
+    .cell.preview .cell-num {
+        color: var(--accent-strong);
     }
     .cell-fill {
         position: absolute;

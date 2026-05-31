@@ -57,6 +57,7 @@
 
     let section = $state<{ refresh: () => void } | undefined>(undefined);
     let filmstrip = $state<{ refresh: () => void } | undefined>(undefined);
+    let hoverMs = $state<number | null>(null);
     let pickerOpen = $state(false);
     let showExport = $state(false);
 
@@ -215,11 +216,29 @@
             filmstrip?.refresh();
         }
     }
-    function onBarClick(e: MouseEvent): void {
+    function barMsAt(e: { clientX: number; currentTarget: EventTarget | null }): number {
         const el = e.currentTarget as HTMLElement;
         const rect = el.getBoundingClientRect();
         const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-        seekMs(ratio * durationMs);
+        return ratio * durationMs;
+    }
+    /** Start of the ayah spanning `ms` (ayahs sorted ascending). */
+    function ayahStartAtTime(ms: number): number {
+        let start = ms;
+        for (const a of ayahs) {
+            if (a.startMs <= ms) start = a.startMs;
+            else break;
+        }
+        return start;
+    }
+    function onBarClick(e: MouseEvent): void {
+        const ms = barMsAt(e);
+        // Hybrid/snap quantize bar seeks to ayah starts, like cell clicks; tuner
+        // seeks to the exact time.
+        seekMs(config.filmstripMotion === 'tuner' ? ms : ayahStartAtTime(ms));
+    }
+    function onBarHover(e: PointerEvent): void {
+        hoverMs = config.filmstripShow ? barMsAt(e) : null;
     }
     function seekToAyah(v: number): void {
         const b = ayahs.find((a) => a.ayah === v);
@@ -431,6 +450,7 @@
                     {getTimeMs}
                     {playing}
                     {config}
+                    {hoverMs}
                     onSeek={seekMs}
                 />
             {/if}
@@ -443,6 +463,8 @@
                 aria-valuemax={durationMs}
                 aria-valuenow={posMs}
                 onclick={onBarClick}
+                onpointermove={onBarHover}
+                onpointerleave={() => (hoverMs = null)}
                 onkeydown={(e) => {
                     if (e.key === 'ArrowLeft') seekMs(posMs - 5000);
                     else if (e.key === 'ArrowRight') seekMs(posMs + 5000);
@@ -492,7 +514,6 @@
     /* Let flex inputs shrink below their intrinsic width so a row never forces
      *  the sidebar wider than it is (default min-width:auto would). */
     .row > input,
-    .row > select,
     .row > .pills {
         min-width: 0;
     }
