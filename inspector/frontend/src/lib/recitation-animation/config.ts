@@ -95,10 +95,14 @@ export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
     activeScale: 1,
     activeGlowPx: 0,
 
-    fontFamily: '"Scheherazade New", "Amiri", "Noto Naskh Arabic", "Traditional Arabic", serif',
+    // Matches the timestamps-tab animation: the dataset's display text is
+    // DigitalKhatt-encoded, so it must render in the DigitalKhatt webfont
+    // (@font-face in styles/base.css → /fonts/DigitalKhattV2.otf). Fallbacks
+    // are other naskh faces for when the font hasn't loaded.
+    fontFamily: "'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif",
     fontSizePx: 34,
     lineHeight: 1.9,
-    wordSpacingPx: 0,
+    wordSpacingPx: 5,
     letterSpacingPx: 0,
 
     granularity: 'word',
