@@ -82,6 +82,37 @@ def current_release(track: str, slug: str) -> dict | None:
     return dict(r) if r else None
 
 
+def release_by_version(track: str, slug: str, version: str) -> dict | None:
+    """Return ANY row (current OR superseded) for ``(track, slug, version)``.
+
+    Idempotency guard for ``complete()`` handlers: a webhook retried after a
+    newer publish would otherwise re-insert under a now-stale version. Using
+    this lookup, the handler skips when the (track, slug, version) triple
+    has already been recorded — superseded rows count.
+    """
+    r = get_conn().execute(
+        "SELECT * FROM per_recitation_releases "
+        "WHERE track = ? AND slug = ? AND version = ? "
+        "ORDER BY id DESC LIMIT 1",
+        (track, slug, version),
+    ).fetchone()
+    return dict(r) if r else None
+
+
+def gh_release_by_version(version: str) -> dict | None:
+    """Return ANY gh_releases row (current OR superseded) for ``version``.
+
+    Same idempotency rationale as ``release_by_version`` — a webhook retry
+    after a subsequent cut shouldn't replay the row.
+    """
+    r = get_conn().execute(
+        "SELECT * FROM gh_releases WHERE version = ? "
+        "ORDER BY id DESC LIMIT 1",
+        (version,),
+    ).fetchone()
+    return dict(r) if r else None
+
+
 def stamp_stale_on_ts_regen(slug: str, *, at: datetime) -> int:
     """Mark the current ``hf`` row for ``slug`` (if any) as stale, AND mark
     that slug's row in the most-recent ``gh_releases`` (if it was a member)

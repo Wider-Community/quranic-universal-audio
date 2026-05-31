@@ -474,6 +474,10 @@ def _rebase_row(row: dict, actual_start_ms: int) -> None:
         return
     row["duration_ms"] = row["duration_ms"] + delta
     row["clip_start"] = actual_start_ms
+    # clip_end is computed from clip_start + duration_ms so the invariant
+    # holds after rebase. Leaving clip_end unchanged would silently de-sync
+    # the row's audio-window arithmetic.
+    row["clip_end"] = actual_start_ms + row["duration_ms"]
     row["word_timestamps"] = [[w[0], w[1] + delta, w[2] + delta]
                               for w in row["word_timestamps"]]
     row["segments"] = [[s[0], s[1], s[2] + delta, s[3] + delta]

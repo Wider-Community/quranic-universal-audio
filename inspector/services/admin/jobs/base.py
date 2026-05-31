@@ -196,6 +196,11 @@ def stage_job_code() -> None:
         ref_path = REPO_ROOT / "data" / ref_name
         if ref_path.exists():
             adds.append((str(ref_path), f"code/data/{ref_name}"))
+    # LICENSE is shipped as a GH release asset by cut_release.py — needs to be
+    # reachable in the staged code dir at /aux/code/LICENSE.
+    license_path = REPO_ROOT / "LICENSE"
+    if license_path.exists():
+        adds.append((str(license_path), "code/LICENSE"))
     if adds:
         batch_bucket_files(ALIGNER_BUCKET, add=adds)
         log.info("staged %d job-code files to %s/code/", len(adds), ALIGNER_BUCKET)

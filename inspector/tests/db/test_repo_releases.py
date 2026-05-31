@@ -144,6 +144,44 @@ def test_gh_release_supersede(fresh_db):
     assert latest["id"] == id2
 
 
+def test_release_by_version_finds_superseded(fresh_db):
+    """``release_by_version`` returns ANY row matching (track, slug, version),
+    including superseded ones. Idempotency guard for webhook retries after a
+    later publish has superseded the prior row."""
+    now = _now()
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        id1 = repo_releases.insert_per_recitation_release(
+            track="hf", slug=slug, version="rev-A", produced_at=now, produced_by="a",
+        )
+        repo_releases.supersede_current("hf", slug, except_id=-1, at=now)
+        repo_releases.insert_per_recitation_release(
+            track="hf", slug=slug, version="rev-B", produced_at=now, produced_by="a",
+        )
+    found = repo_releases.release_by_version("hf", slug, "rev-A")
+    assert found is not None
+    assert found["id"] == id1
+    assert found["superseded_at"] is not None
+    # Non-existent version → None.
+    assert repo_releases.release_by_version("hf", slug, "rev-X") is None
+
+
+def test_gh_release_by_version_finds_superseded(fresh_db):
+    """Same idempotency guard for gh_releases."""
+    now = _now()
+    with db.transaction():
+        id1 = repo_releases.insert_gh_release(version="v0.1.0", produced_at=now,
+                                              produced_by="a")
+        repo_releases.supersede_prior_gh_releases(except_id=-1, at=now)
+        repo_releases.insert_gh_release(version="v0.2.0", produced_at=now,
+                                        produced_by="a")
+    found = repo_releases.gh_release_by_version("v0.1.0")
+    assert found is not None
+    assert found["id"] == id1
+    assert found["superseded_at"] is not None
+    assert repo_releases.gh_release_by_version("v9.9.9") is None
+
+
 def test_content_hash_constraints(fresh_db):
     """zip_bytes must be > 0 and coverage_ayahs must be in [0, 6236]."""
     import sqlite3

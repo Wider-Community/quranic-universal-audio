@@ -257,16 +257,21 @@ def _gzip_deterministic(doc: dict) -> bytes:
 
 def _build_catalog_json(rec: dict, audio_manifest: dict | None,
                         verses: dict) -> bytes:
-    """Per-recitation catalog.json bytes (orjson-equivalent serialisation)."""
-    chapter_urls: dict[str, str] = {}
+    """Per-recitation catalog.json bytes (orjson-equivalent serialisation).
+
+    ``chapter_urls`` is keyed by chapter string (``"1"``) for by_surah and by
+    ``"surah:ayah"`` for by_ayah — consumers interpret based on the recitation's
+    ``audio_category``. Plan §"GH release `catalog.json` schema": "fully
+    populated for every chapter the recitation covers" — both shapes are
+    "what the source audio actually serves" so this is the consumer-actionable
+    URL set without contraction.
+    """
+    audio_urls: dict[str, str] = {}
     if audio_manifest:
         for k, v in audio_manifest.items():
             if k == "_meta" or not isinstance(v, str):
                 continue
-            # by_surah → "1": url. by_ayah → "1:1": url. We only ship per-chapter
-            # urls in the catalog; per-verse urls are derivable per the row in HF.
-            if ":" not in k:
-                chapter_urls[k] = v
+            audio_urls[k] = v
     surahs = {key.split(":", 1)[0] for key in verses if not key.startswith("_")}
     coverage_ayahs = sum(1 for k in verses if not k.startswith("_"))
     catalog = {
@@ -284,7 +289,7 @@ def _build_catalog_json(rec: dict, audio_manifest: dict | None,
         "recording_year": rec.get("recording_year"),
         "variant_label": rec.get("variant_label"),
         "audio": {
-            "chapter_urls": chapter_urls,
+            "chapter_urls": audio_urls,
             "sample_rate_hz": rec.get("sample_rate_hz"),
             "channels": rec.get("channels"),
             "bitrate_mode": rec.get("bitrate_mode"),
@@ -666,6 +671,11 @@ def main() -> int:
             log.warning("  %s: no timestamps shards — skipping", slug)
             continue
 
+        # Load detailed.json so the intra-segment gapless check has segments
+        # to validate (plan §"Boundary enforcement" — the four checks include
+        # intra-segment gapless, which needs segment word-ranges).
+        detailed_segments = _segments_per_verse_from_detailed(slug)
+
         # Boundary validate (source-relative ms — verses dict already in that frame).
         for_validate = {
             k: {
@@ -678,7 +688,7 @@ def main() -> int:
                                    if isinstance(v, dict) else 0),
                 "words": [(int(w[0]), int(w[1]), int(w[2]))
                           for w in (v.get("words") or [])],
-                "segments": [],  # not enforced at cut time; publish_hf already gated it
+                "segments": detailed_segments.get(k, []),
             }
             for k, v in verses.items() if not k.startswith("_") and isinstance(v, dict)
         }
@@ -890,8 +900,57 @@ def _fetch_url_json(url: str) -> dict | None:
     try:
         with urllib.request.urlopen(url, timeout=30) as resp:
             return json.loads(resp.read())
-    except Exception:
+    except Exception as exc:
+        # Legitimate when there's no prior release (first cut) — but a real
+        # network/JSON error should be loud enough to investigate later.
+        log.warning("could not fetch %s: %s", url, exc)
         return None
+
+
+def _segments_per_verse_from_detailed(slug: str) -> dict[str, list]:
+    """Return ``{"surah:ayah": [(word_from, word_to, time_start, time_end), ...]}``
+    extracted from the slug's ``detailed.json``.
+
+    Used to feed the boundary validator's intra-segment gapless check at cut
+    time. Returns an empty dict if detailed.json is missing/malformed —
+    publish_hf already enforced the invariants upstream and we don't want a
+    missing detailed.json to block the cut.
+    """
+    path = _bucket_root() / "reciters" / slug / "detailed.json"
+    if not path.exists():
+        log.warning("  %s: detailed.json missing — intra-segment check degraded", slug)
+        return {}
+    try:
+        doc = json.loads(path.read_bytes())
+    except (json.JSONDecodeError, OSError) as exc:
+        log.warning("  %s: detailed.json unparseable (%s)", slug, exc)
+        return {}
+    out: dict[str, list] = {}
+    for entry in doc.get("entries", []):
+        ref = entry.get("ref")
+        if not ref:
+            continue
+        # by_ayah → ref is "surah:ayah"; by_surah → ref is chapter number.
+        # Fan-out via segments' matched_ref to align with the timestamps shape.
+        for seg in entry.get("segments", []) or []:
+            mref = seg.get("matched_ref", "")
+            if not mref:
+                continue
+            sp = mref.split("-", 1)[0].split(":")
+            ep = mref.split("-", 1)[1].split(":") if "-" in mref else sp
+            try:
+                s_surah = int(sp[0]); s_ayah = int(sp[1]); e_ayah = int(ep[1])
+            except (ValueError, IndexError):
+                continue
+            w_from = seg.get("word_from", seg.get("start_word", 1))
+            w_to = seg.get("word_to", seg.get("end_word", w_from))
+            t_start = int(seg.get("time_start", 0))
+            t_end = int(seg.get("time_end", 0))
+            for a in range(s_ayah, e_ayah + 1):
+                vref = f"{s_surah}:{a}"
+                out.setdefault(vref, []).append(
+                    (int(w_from), int(w_to), t_start, t_end))
+    return out
 
 
 if __name__ == "__main__":

@@ -68,10 +68,19 @@ def publish_hf(user, slug: str):
             "error": "this recitation has no current TS release — "
                      "generate timestamps before publishing to HF",
         }), 409
+    # Cross-kind single-flight on the slug.
     busy = jobs_base.running_job_for(slug=slug)
     if busy is not None:
         return jsonify({"error": "a job is already running for this slug",
                         "kind": busy[0], "job_id": busy[1]}), 409
+    # Global single-flight against an in-flight cut_release: a publish landing
+    # mid-cut would risk a per_recitation_releases(track='hf') row whose
+    # timestamps are about to be frozen into a new gh_release — wait for the
+    # cut to complete before publishing.
+    cut_busy = jobs_base.running_job_for(kind="cut_release")
+    if cut_busy is not None:
+        return jsonify({"error": "a cut_release is in flight — wait for it to finish",
+                        "kind": cut_busy[0], "job_id": cut_busy[1]}), 409
     webhook_base = request.url_root
     try:
         result = hf_publish_jobs.launch(slug, webhook_base=webhook_base)
@@ -143,10 +152,6 @@ def release_preview(user):
         else:
             unchanged.append(row_payload)
 
-    # Removed = slugs in prior release but not in current candidate set.
-    candidate_slugs = {r["slug"] for r in candidates}
-    removed = sorted(set(prior_members) - candidate_slugs)
-
     # Compute the auto-version (preview-only — actual cut recomputes inside
     # the job, possibly with a content_hash-driven reclassification).
     prior_version = prior["version"] if prior else None
@@ -164,15 +169,17 @@ def release_preview(user):
         "computed_version": computed_version,
         "needs_manual_version": needs_override,
         "previous_version": prior_version,
+        # Plan §change_kind: enum is {added, refresh, unchanged}. ``removed`` is
+        # NOT a change_kind — once a slug ships in a GH release it stays in
+        # subsequent releases (any drop is an operational decision outside the
+        # cut flow). Do not surface it here.
         "change_counts": {
             "added": len(added),
             "refresh": len(refreshed),
             "unchanged": len(unchanged),
-            "removed": len(removed),
         },
         "added": added,
         "refreshed": refreshed,
-        "removed_slugs": removed,
         "changelog_preview_md": _render_changelog_preview(
             computed_version or "v?.?.?",
             prior_version, added, refreshed,

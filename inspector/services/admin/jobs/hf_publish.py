@@ -126,10 +126,14 @@ def complete(slug: str | None, job_id: str, *,
         role="owner",
     )
     with durable_transaction() as _:
-        # Idempotency: if a row for (hf, slug, version) already exists, no-op.
-        existing = repo_releases.current_release("hf", slug)
-        if existing and existing.get("version") == version:
-            log.info("hf_publish.complete(%s, %s): already recorded", slug, version)
+        # Idempotency: if any row (current OR superseded) for
+        # (hf, slug, version) already exists, no-op. The partial-unique on
+        # (track, slug) WHERE superseded_at IS NULL only blocks two CURRENT
+        # rows — a retry after a later supersede must NOT re-INSERT.
+        existing_any = repo_releases.release_by_version("hf", slug, version)
+        if existing_any is not None:
+            log.info("hf_publish.complete(%s, %s): already recorded (id=%s)",
+                     slug, version, existing_any.get("id"))
             return {"ok": True, "skipped": "duplicate"}
         # Supersede prior current row FIRST — the partial-unique blocks two
         # current rows for (hf, slug) so we can't insert before clearing.

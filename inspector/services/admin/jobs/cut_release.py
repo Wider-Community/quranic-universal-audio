@@ -141,10 +141,15 @@ def complete(slug: str | None, job_id: str, *,
         role="owner",
     )
     with durable_transaction() as _:
-        existing = repo_releases.latest_gh_release()
-        if existing and existing.get("version") == version:
-            log.info("cut_release.complete(%s): already recorded", version)
-            return {"ok": True, "skipped": "duplicate", "release_id": existing["id"]}
+        # Idempotency: any row (current OR superseded) with this version → no-op.
+        # ``latest_gh_release`` only sees the current row; a retry after a
+        # subsequent cut would miss its prior self.
+        existing_any = repo_releases.gh_release_by_version(version)
+        if existing_any is not None:
+            log.info("cut_release.complete(%s): already recorded (id=%s)",
+                     version, existing_any.get("id"))
+            return {"ok": True, "skipped": "duplicate",
+                    "release_id": existing_any["id"]}
         # Supersede prior current gh_releases FIRST — the partial-unique on
         # ``version WHERE superseded_at IS NULL`` allows multiple rows only if
         # they're all superseded; the at-most-one-current invariant requires
