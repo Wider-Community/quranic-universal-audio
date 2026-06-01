@@ -32,7 +32,10 @@
         type ConsumedShuffle,
         primeShuffle,
     } from '../../lib/playback/shuffle-prewarm';
-    import { recitationConfigStore } from '../../lib/recitation-animation/recitation-settings';
+    import {
+        recitationConfigStore,
+        recitationFocus,
+    } from '../../lib/recitation-animation/recitation-settings';
     import { hasCapability } from '../../lib/stores/capabilities';
     import { currentUser } from '../../lib/stores/current-user';
     import { pendingTsNavigation } from '../../lib/stores/navigation';
@@ -102,6 +105,10 @@
         lv: TsLoadedVerse;
     }
     let chapterVerses: ChapVerse[] = [];
+    /** Ascending list of ayah start ms — mirrors `chapterVerses` (which is
+     *  sorted at assembly time, line ~297). Memoised so the keyboard handlers
+     *  don't `chapterVerses.map(...)` per keydown. */
+    let chapterStartMs: number[] = [];
     let loadedChapterKey = ''; // `${slug}:${chapter}` currently assembled
     let focusRef = '';
     let manifestSlugs = new Set<string>();
@@ -296,6 +303,11 @@
             }
             verses.sort((a, b) => a.startMs - b.startMs);
             chapterVerses = verses;
+            // Memoised ascending startMs feeds `adjacentAyahStartMs` (which now
+            // trusts sorted input) without allocating + sorting on every
+            // keypress / drag. Reassigned alongside chapterVerses to keep both
+            // reactive views in lockstep.
+            chapterStartMs = verses.map((v) => v.startMs);
             loadedChapterKey = key;
             selectedReciter.set(slug);
             selectedChapter.set(String(chapter));
@@ -338,6 +350,15 @@
         focusRef = v.ref;
         loadedVerse.set(v.lv);
         selectedVerse.set(v.ref);
+        // Publish to the shell-level focus store so NowReciting's filmstrip
+        // bookmark button can mirror the focus without running its own rAF.
+        // Verse refs are "surah:ayah" (chapterVerseRefs); parse defensively.
+        const [s, a] = v.ref.split(':');
+        const surah = Number(s);
+        const ayah = Number(a);
+        if (Number.isFinite(surah) && Number.isFinite(ayah) && surah > 0 && ayah > 0) {
+            recitationFocus.set({ surah, ayah });
+        }
     }
 
     /** Focus the verse containing `ms` (chapter-absolute), else the nearest
@@ -655,7 +676,7 @@
             case 'ArrowLeft': {
                 e.preventDefault();
                 exitLoop();
-                const t = adjacentAyahStartMs(chapterVerses.map((v) => v.startMs), cur * 1000, -1);
+                const t = adjacentAyahStartMs(chapterStartMs, cur * 1000, -1);
                 if (t !== null) dashPort.seek(t);
                 refreshDisplays();
                 break;
@@ -663,7 +684,7 @@
             case 'ArrowRight': {
                 e.preventDefault();
                 exitLoop();
-                const t = adjacentAyahStartMs(chapterVerses.map((v) => v.startMs), cur * 1000, 1);
+                const t = adjacentAyahStartMs(chapterStartMs, cur * 1000, 1);
                 if (t !== null) dashPort.seek(t);
                 refreshDisplays();
                 break;
@@ -752,7 +773,12 @@
         return () => { unsubTab(); unsubShuf(); unsubLoop(); };
     });
 
-    onDestroy(stopTick);
+    onDestroy(() => {
+        stopTick();
+        // Don't leak this tab's last focus to other surfaces (Dashboard's
+        // NowReciting subscribes to it).
+        recitationFocus.set(null);
+    });
 </script>
 
 <svelte:window on:keydown={onKeydown} />
@@ -772,11 +798,6 @@
     style:--analysis-letter-font-size={cfg?.analysis_letter_font_size ?? ''}
 >
     <main>
-        <div class="waveform-words-row" class:ts-region-loading={$tsLoading}>
-            <TimestampsWaveform bind:this={waveformTabEl} />
-            <UnifiedDisplay bind:this={unifiedEl} />
-        </div>
-
         {#if $tsValidation}
             <div class="ts-validation-row">
                 <TsValidationPanel
@@ -786,6 +807,11 @@
                 />
             </div>
         {/if}
+
+        <div class="waveform-words-row" class:ts-region-loading={$tsLoading}>
+            <TimestampsWaveform bind:this={waveformTabEl} />
+            <UnifiedDisplay bind:this={unifiedEl} />
+        </div>
     </main>
 </div>
 
@@ -802,7 +828,7 @@
         pointer-events: none;
     }
     .ts-validation-row {
-        max-width: 720px;
-        margin: 8px auto 2px;
+        width: 100%;
+        margin: 0 0 8px;
     }
 </style>

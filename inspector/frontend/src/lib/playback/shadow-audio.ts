@@ -199,6 +199,28 @@ export function recycleAsShadow(el: HTMLAudioElement, slot: SlotKey = 'any'): vo
     }
 }
 
+/** Dispose any in-flight warm load on a slot. Detaches `src`, removes the
+ *  element from the DOM, and clears the slot map entry — so the next
+ *  `shadowPrewarm(slot)` allocates a fresh element with no carried-over
+ *  listeners or browser-buffered bytes from the abandoned target. Used by
+ *  the shuffle look-ahead to prevent stacking warmups when the user
+ *  rapidly cycles modes; without it, the abandoned fetch can keep the
+ *  audio-proxy worker busy until the browser gets around to aborting. */
+export function cancelWarm(slot: SlotKey = 'any'): void {
+    const existing = _slots.get(slot);
+    if (!existing) return;
+    const el = existing.el;
+    try {
+        el.pause();
+        el.removeAttribute('src');
+        el.load();
+        if (document.body.contains(el)) el.remove();
+    } catch {
+        /* ignore */
+    }
+    _slots.delete(slot);
+}
+
 /** Test-only reset. Tears down both slots so unit tests start fresh. */
 export function _resetShadowForTest(): void {
     for (const slot of _slots.values()) {

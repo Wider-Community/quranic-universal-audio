@@ -19,7 +19,7 @@
  * around that offset (see shadow-audio.ts).
  */
 import type { TsRandomTarget } from '../recitation-data/ts-source';
-import { consumeWarm, shadowPrewarm } from './shadow-audio';
+import { cancelWarm, consumeWarm, shadowPrewarm } from './shadow-audio';
 
 /** HTMLMediaElement.HAVE_CURRENT_DATA — enough decoded to play at the position. */
 const HAVE_CURRENT_DATA = 2;
@@ -76,6 +76,13 @@ export function consumeShuffle(): ConsumedShuffle | null {
     return { ...p, el };
 }
 
+/** Abandon any pending shuffle warmup — both the in-memory `_pending` slot
+ *  AND the shadow element's in-flight fetch. Called when shuffle mode is
+ *  cycled or before priming a new target, so rapid mode changes don't stack
+ *  audio-proxy connections under the single-worker backend (without the
+ *  explicit `cancelWarm`, the browser does eventually abort the prior load,
+ *  but it can hold the proxy socket open in the meantime). */
 export function clearShuffle(): void {
     _pending = null;
+    cancelWarm(SHUFFLE_SLOT);
 }

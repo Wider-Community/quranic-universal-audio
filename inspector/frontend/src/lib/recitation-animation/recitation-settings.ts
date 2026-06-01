@@ -12,7 +12,7 @@
  *
  * Mutations go through the exported helpers so the footer stays declarative.
  */
-import { get, writable } from 'svelte/store';
+import { derived, get, writable, type Readable } from 'svelte/store';
 
 import type { FilmstripMotion, RecitationAnimConfig } from './config';
 import { loadPrefs, savePrefs } from './nowreciting-prefs';
@@ -27,6 +27,24 @@ export const recitationAvailable = writable<boolean>(false);
  *  ms). Published by NowReciting; read by the footer seek buttons to jump
  *  ayah-by-ayah. Empty when nothing published is loaded. */
 export const recitationAyahs = writable<AyahBoundary[]>([]);
+
+/** Memoised ascending list of ayah `startMs` from the loaded chapter — feeds
+ *  `adjacentAyahStartMs` / `nearestAyahStartMs` without an alloc + sort on
+ *  every keypress / drag-release (Baqarah ≈ 286 entries; held arrow keys
+ *  used to spam `.map() + [...].sort()`). The producer (NowReciting) already
+ *  builds `recitationAyahs` in temporal order, so we just project the field. */
+export const recitationAyahStarts: Readable<number[]> = derived(
+    recitationAyahs,
+    ($ayahs) => $ayahs.map((a) => a.startMs),
+);
+
+/** Surah/ayah currently under the playhead — published by the Timestamps tab
+ *  while its per-frame tick is running (the tab already locates the focus
+ *  verse via `focusAt(ms)` for its own use). Read by NowReciting's filmstrip
+ *  bookmark button so it doesn't need a separate rAF loop scanning `ayahs`
+ *  every frame just to mirror what the tab already knows. `null` outside
+ *  Timestamps or before the first focus arrives — callers gate on it. */
+export const recitationFocus = writable<{ surah: number; ayah: number } | null>(null);
 
 // Persist config + collapse on every change (skip the initial subscribe fire).
 let persistReady = false;

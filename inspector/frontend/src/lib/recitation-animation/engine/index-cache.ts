@@ -35,12 +35,31 @@ export function indexCache(container: HTMLElement, selector: string): HighlightC
     return { items, groupIndex };
 }
 
-/** Strip all active/reached classes + inline opacity from a container's spans. */
-export function clearHighlights(container: HTMLElement): void {
-    container
-        .querySelectorAll<HTMLElement>('.ra-word, .ra-char')
-        .forEach((el) => {
-            el.classList.remove('active', 'reached');
-            el.style.removeProperty('opacity');
-        });
+/** Strip all active/reached classes + inline opacity from a container's spans.
+ *
+ *  Pass the previously-built `HighlightCache`(s) instead of querying the DOM
+ *  again — the re-page effect already builds them right before this, so
+ *  reusing the cached element refs avoids a second `querySelectorAll`
+ *  traversal of the same line. Falls back to a fresh DOM query when no
+ *  caches are supplied (e.g. paranoid teardown / tests). */
+export function clearHighlights(
+    container: HTMLElement,
+    ...caches: (HighlightCache | null)[]
+): void {
+    if (caches.length === 0 || caches.every((c) => !c)) {
+        container
+            .querySelectorAll<HTMLElement>('.ra-word, .ra-char')
+            .forEach((el) => {
+                el.classList.remove('active', 'reached');
+                el.style.removeProperty('opacity');
+            });
+        return;
+    }
+    for (const cache of caches) {
+        if (!cache) continue;
+        for (const item of cache.items) {
+            item.el.classList.remove('active', 'reached');
+            item.el.style.removeProperty('opacity');
+        }
+    }
 }

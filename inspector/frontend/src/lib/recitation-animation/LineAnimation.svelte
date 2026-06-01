@@ -63,6 +63,25 @@
     let lastActive = -1;
 
     const ayahRanges = $derived(ayahUnitRanges(units));
+
+    // Flat sorted-by-start list of every occurrence interval across all units,
+    // for binary-search active lookup on fast-path miss. Each `units[i]` has
+    // ≥1 ascending intervals (`types.ts::AnimUnit`); reading-order is normally
+    // also temporal order so this is usually `units.map(u => u.intervals[0])`,
+    // but repeats can interleave — sort defensively. Built once per chapter
+    // (≈6.2k entries for Baqarah ≈ 150 KB, ~negligible).
+    interface SortedInterval { start: number; end: number; unitIdx: number; }
+    const sortedIntervals = $derived.by((): SortedInterval[] => {
+        const out: SortedInterval[] = [];
+        for (let i = 0; i < units.length; i++) {
+            const u = units[i]!;
+            for (const iv of u.intervals) {
+                out.push({ start: iv.start, end: iv.end, unitIdx: i });
+            }
+        }
+        out.sort((a, b) => a.start - b.start);
+        return out;
+    });
     const ayahEndIdx = $derived(
         config.clearOnAyahEnd
             ? (ayahRanges.get(pageAyahKey)?.[1] ?? units.length)
@@ -141,7 +160,9 @@
         if (!rootEl) return;
         wordCache = indexCache(rootEl, '.ra-word');
         charCache = config.granularity === 'char' ? indexCache(rootEl, '.ra-char') : null;
-        clearHighlights(rootEl);
+        // Reuse the freshly-built caches' element refs instead of a second
+        // `querySelectorAll` over the same line.
+        clearHighlights(rootEl, wordCache, charCache);
         const fitted = measureFits();
         if (pageCount === null || fitted < pageCount) {
             pageCount = fitted; // re-renders the fitted set; this effect re-runs
@@ -183,13 +204,60 @@
         return fittedPrefixLength(fits);
     }
 
-    function doSweep(): void {
-        const t = (getTimeMs() + config.leadMs) / 1000;
+    /** Active-unit lookup with O(1) fast-path and O(log N) bsearch fallback.
+     *  Returns the unit's GLOBAL index plus the occurrence interval containing
+     *  `t` (sweepChar needs the interval bounds to remap the canonical letter
+     *  timeline on repeats). null = silence gap. */
+    interface ActiveHit { unitIdx: number; ivStart: number; ivEnd: number; }
+    function findActive(t: number): ActiveHit | null {
+        const n = units.length;
+        if (n === 0) return null;
+        // Fast path: same unit as last frame, or the next unit. Covers the
+        // common forward-playback case in O(1) — no allocation, no bsearch.
+        for (const cand of [globalActive, globalActive + 1]) {
+            if (cand < 0 || cand >= n) continue;
+            const u = units[cand]!;
+            for (const iv of u.intervals) {
+                if (t >= iv.start && t < iv.end) {
+                    return { unitIdx: cand, ivStart: iv.start, ivEnd: iv.end };
+                }
+            }
+        }
+        // Fallback: bsearch the flat sorted interval list. Handles seek-back,
+        // silence gaps, and repeats where a later reading-order unit's first
+        // occurrence has not yet started but an earlier unit's repeat has.
+        const arr = sortedIntervals;
+        if (arr.length === 0 || t < arr[0]!.start) return null;
+        let lo = 0;
+        let hi = arr.length - 1;
+        while (lo < hi) {
+            const mid = (lo + hi + 1) >> 1;
+            if (arr[mid]!.start <= t) lo = mid;
+            else hi = mid - 1;
+        }
+        const iv = arr[lo]!;
+        if (t < iv.end) return { unitIdx: iv.unitIdx, ivStart: iv.start, ivEnd: iv.end };
+        return null;
+    }
+
+    function doSweep(t?: number, hit?: ActiveHit | null): void {
+        const tt = t ?? (getTimeMs() + config.leadMs) / 1000;
+        // `tick()` already computed `findActive` to drive paging; reuse its
+        // result rather than re-bsearching. Structure-effect callers omit it.
+        const h = hit !== undefined ? hit : findActive(tt);
         if (config.granularity === 'char') {
-            sweepChar(t);
+            sweepChar(tt, h);
             return;
         }
-        sweepWord(t);
+        sweepWord(h);
+    }
+
+    /** Translate a global unit index to its page-local position, or -1 if the
+     *  active unit is off the current page. */
+    function pageLocal(globalIdx: number): number {
+        if (globalIdx < 0) return -1;
+        const local = globalIdx - pageStart;
+        return local >= 0 && local < pageUnits.length ? local : -1;
     }
 
     /** Word-granularity highlight from per-word occurrence intervals.
@@ -201,17 +269,10 @@
      *            and the words now AHEAD of it (already recited) revert to
      *            unreached. During a silence gap the trail up to the last active
      *            word stays revealed (so a pause doesn't blank the line). */
-    function sweepWord(t: number): void {
+    function sweepWord(hit: ActiveHit | null): void {
         if (!wordCache) return;
         const items = wordCache.items;
-        let active = -1;
-        for (let i = 0; i < pageUnits.length; i++) {
-            const u = pageUnits[i];
-            if (u && u.intervals.some((iv) => t >= iv.start && t < iv.end)) {
-                active = i;
-                break;
-            }
-        }
+        const active = pageLocal(hit?.unitIdx ?? -1);
         if (active >= 0) lastActive = active;
         for (let i = 0; i < items.length; i++) {
             const el = items[i]?.el;
@@ -234,25 +295,14 @@
      *  Walk order matches the DOM: `.ra-char` spans exist only for words with
      *  `hasChars`, in `structure` order, so the flat `charCache` index advances
      *  in lockstep with the rendered spans. */
-    function sweepChar(t: number): void {
+    function sweepChar(t: number, hit: ActiveHit | null): void {
         if (!charCache) return;
         const items = charCache.items;
 
-        // Active word (local index) + the occurrence interval containing t.
-        let active = -1;
-        let occStart = 0;
-        let occEnd = 0;
-        for (let i = 0; i < pageUnits.length; i++) {
-            const u = pageUnits[i];
-            if (!u) continue;
-            const iv = u.intervals.find((v) => t >= v.start && t < v.end);
-            if (iv) {
-                active = i;
-                occStart = iv.start;
-                occEnd = iv.end;
-                break;
-            }
-        }
+        // Active word (local page index) + the occurrence interval containing t.
+        const active = pageLocal(hit?.unitIdx ?? -1);
+        const occStart = hit?.ivStart ?? 0;
+        const occEnd = hit?.ivEnd ?? 0;
         if (active >= 0) lastActive = active;
 
         // Remap playback time into the active word's canonical letter timeline.
@@ -275,15 +325,13 @@
             // Words before the active cursor are reached; after it, unreached.
             // During a silence gap (active < 0) keep the trail up to lastActive.
             const wordReached = active >= 0 ? wi < active : wi <= lastActive;
-            // Mark word-level state too (not just chars). Only the ACTIVE word
-            // renders letter-by-letter; prev/upcoming words use this to fall
-            // back to the whole-word silhouette (word-mode look) — see CSS.
+            // Mark word-level state too (not just chars). In char mode, CSS
+            // hides per-letter spans for non-active words so Arabic keeps its
+            // joined whole-word silhouette. Cross-word co-timed letters are the
+            // exception: if a non-current word has an active char, that word
+            // must also become active or the highlighted char is hidden.
             const wordEl = wordCache?.items[wi]?.el;
-            if (wordEl) {
-                const wActive = wi === active;
-                wordEl.classList.toggle('active', wActive);
-                wordEl.classList.toggle('reached', wordReached && !wActive);
-            }
+            let wordHasActiveChar = false;
             for (let k = 0; k < chars.length; k++) {
                 const el = items[ci]?.el;
                 ci++;
@@ -305,23 +353,16 @@
                     if (t >= ch.start && t < ch.end) { isActive = true; isReached = false; }
                     else if (t >= ch.end) isReached = true; // keep co-timed trail revealed
                 }
+                if (isActive) wordHasActiveChar = true;
                 el.classList.toggle('active', isActive);
                 el.classList.toggle('reached', isReached);
             }
+            if (wordEl) {
+                const wActive = wi === active || wordHasActiveChar;
+                wordEl.classList.toggle('active', wActive);
+                wordEl.classList.toggle('reached', wordReached && !wActive);
+            }
         }
-    }
-
-    /** Reading index of the word whose any occurrence span contains `t`, or -1
-     *  during a silence gap. Interval-aware (handles repeats / look-back). */
-    function activeUnitAt(t: number): number {
-        const n = units.length;
-        if (n === 0) return -1;
-        const inIv = (u: AnimUnit): boolean =>
-            u.intervals.some((iv) => t >= iv.start && t < iv.end);
-        if (globalActive >= 0 && globalActive < n && inIv(units[globalActive]!)) return globalActive;
-        if (globalActive + 1 < n && inIv(units[globalActive + 1]!)) return globalActive + 1;
-        for (let i = 0; i < n; i++) if (inIv(units[i]!)) return i;
-        return -1;
     }
 
     function repaginate(start: number, ayahKey: string): void {
@@ -335,7 +376,8 @@
     function tick(): void {
         if (!units.length) return;
         const t = (getTimeMs() + config.leadMs) / 1000;
-        const ga = activeUnitAt(t);
+        const hit = findActive(t);
+        const ga = hit?.unitIdx ?? -1;
         if (ga >= 0) {
             const activeAyah = units[ga]!.ayahKey;
 
@@ -366,7 +408,7 @@
         // Always sweep. During a silence gap (ga < 0) this clears the active
         // highlight — the just-finished word goes `reached`, nothing is active.
         // On look-back the time-based sweep travels the highlight backward.
-        doSweep();
+        doSweep(t, hit);
     }
 
     /** Force a reveal update — call after a seek while paused. */

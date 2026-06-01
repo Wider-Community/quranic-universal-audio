@@ -20,7 +20,7 @@
     import { adjacentAyahStartMs, nearestAyahStartMs } from '../../playback/ayah-seek';
     import { dashPort } from '../../playback/dash-port';
     import { exitLoop } from '../../playback/loop';
-    import { recitationAyahs } from '../../recitation-animation/recitation-settings';
+    import { recitationAyahStarts } from '../../recitation-animation/recitation-settings';
     import {
         loadPersistedSlice,
         persistSlice,
@@ -234,8 +234,8 @@
     function seekBack(): void {
         exitLoop(); // any deliberate seek drops loop mode
         const cur = dashPort.currentTimeMs();
-        if ($recitationAyahs.length) {
-            const t = adjacentAyahStartMs($recitationAyahs.map((a) => a.startMs), cur, -1);
+        if ($recitationAyahStarts.length) {
+            const t = adjacentAyahStartMs($recitationAyahStarts, cur, -1);
             if (t !== null) { dashPort.seek(t); return; }
         }
         dashPort.seek(Math.max(0, cur - 15_000));
@@ -243,8 +243,8 @@
     function seekForward(): void {
         exitLoop();
         const cur = dashPort.currentTimeMs();
-        if ($recitationAyahs.length) {
-            const t = adjacentAyahStartMs($recitationAyahs.map((a) => a.startMs), cur, 1);
+        if ($recitationAyahStarts.length) {
+            const t = adjacentAyahStartMs($recitationAyahStarts, cur, 1);
             if (t !== null) { dashPort.seek(t); return; }
         }
         dashPort.seek(cur + 15_000);
@@ -323,8 +323,8 @@
         // shared shell player). Falls back to the raw target for non-timestamped
         // playback, where no ayah boundaries exist.
         let target = ev.detail;
-        if ($recitationAyahs.length) {
-            const snapped = nearestAyahStartMs($recitationAyahs.map((a) => a.startMs), target);
+        if ($recitationAyahStarts.length) {
+            const snapped = nearestAyahStartMs($recitationAyahStarts, target);
             if (snapped !== null) target = snapped;
         }
         dashPort.seek(target);

@@ -85,14 +85,22 @@
     );
     const pad = $derived(cw / 2); // leading/trailing spacer so edges can center
 
+    // Cells are produced in temporal order from `ayahs` (built by
+    // loadChapterRecitation), so startMs is ascending. Binary search the
+    // largest i where cells[i].startMs <= t — this collapses the original
+    // "inside [start,end)" and "last with start <= t" branches (both return
+    // the same idx for non-overlapping cells).
     function indexForTime(t: number): number {
-        let last = -1;
-        for (let i = 0; i < cells.length; i++) {
-            const c = cells[i]!;
-            if (t >= c.startMs && t < c.endMs) return i;
-            if (t >= c.startMs) last = i;
+        const n = cells.length;
+        if (n === 0 || t < cells[0]!.startMs) return -1;
+        let lo = 0;
+        let hi = n - 1;
+        while (lo < hi) {
+            const mid = (lo + hi + 1) >> 1;
+            if (cells[mid]!.startMs <= t) lo = mid;
+            else hi = mid - 1;
         }
-        return last;
+        return lo;
     }
     const activeIdx = $derived(indexForTime(nowMs));
     const hoverIdx = $derived(hoverMs == null ? -1 : indexForTime(hoverMs));
@@ -102,12 +110,6 @@
     // playing it equals the active cell; while dragging it follows the drag,
     // showing which ayah a release will snap to. -1 (off) outside snap mode.
     const cursorIdx = $derived(config.filmstripMotion === 'snap' ? nearestCell(offset) : -1);
-
-    function fill(i: number): number {
-        const c = cells[i];
-        if (!c) return 0;
-        return clamp(0, 1, (nowMs - c.startMs) / c.dur);
-    }
 
     function offsetForCellCenter(i: number): number {
         const c = cells[i];
@@ -156,6 +158,24 @@
         };
         raf = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(raf);
+    });
+
+    // Per-frame fill is driven by ONE CSS variable on the container instead of
+    // a `style:width` write on every cell (which previously rebuilt N inline
+    // styles per frame — 286 for Baqarah). The active cell reads the var via
+    // `.cell.active .cell-fill { width: var(--cell-active-fill, 0%) }`;
+    // reached cells are pinned to 100% and future cells to 0% in plain CSS.
+    $effect(() => {
+        if (!containerEl) return;
+        const i = activeIdx;
+        if (i < 0) {
+            containerEl.style.removeProperty('--cell-active-fill');
+            return;
+        }
+        const c = cells[i];
+        if (!c) return;
+        const f = clamp(0, 1, (nowMs - c.startMs) / c.dur);
+        containerEl.style.setProperty('--cell-active-fill', f * 100 + '%');
     });
 
     // Snap mode: glide the active cell to center when the ayah changes. Yields
@@ -283,7 +303,7 @@
                     style:width="{c.w}px"
                     style:margin-right="{config.filmstripGapPx}px"
                 >
-                    <div class="cell-fill" style:width="{fill(i) * 100}%"></div>
+                    <div class="cell-fill"></div>
                     <span class="cell-num">{c.ayah}</span>
                 </div>
             {/each}
@@ -378,10 +398,17 @@
     .cell-fill {
         position: absolute;
         inset: 0 auto 0 0;
+        width: 0;
         background: var(--accent-tint);
         pointer-events: none;
     }
+    /* Active cell width is driven by `--cell-active-fill` on the .filmstrip
+       container, written once per rAF tick by the imperative effect. */
+    .cell.active .cell-fill {
+        width: var(--cell-active-fill, 0%);
+    }
     .cell.reached .cell-fill {
+        width: 100%;
         background: var(--accent-tint-soft);
     }
     .cell-num {

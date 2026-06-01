@@ -32,6 +32,7 @@
         recitationAvailable,
         recitationAyahs,
         recitationConfigStore,
+        recitationFocus,
         recitationOpen,
         setHighlight,
         SIZE_MAX,
@@ -57,9 +58,11 @@
     let ayahs = $state<AyahBoundary[]>([]);
     let rootH = $state(0);
     // Surah:ayah under the playhead — drives the filmstrip bookmark button.
-    // Updated by a rAF tick (Timestamps-only) so it follows playback + seeks.
-    let focusSurah = $state(0);
-    let focusAyah = $state(0);
+    // Sourced from `recitationFocus`, which TimestampsTab writes from its
+    // existing per-frame tick (`focusAt(ms)`). No separate rAF needed; the
+    // tab already locates the focus verse for its own use.
+    const focusSurah = $derived($recitationFocus?.surah ?? 0);
+    const focusAyah = $derived($recitationFocus?.ayah ?? 0);
 
     let section = $state<{ refresh: () => void } | undefined>(undefined);
     let filmstrip = $state<{ refresh: () => void } | undefined>(undefined);
@@ -87,41 +90,14 @@
 
     // ---- Filmstrip bookmark (Timestamps tab only) ----
     const isTimestamps = $derived($activeTab === TAB_NAMES.TIMESTAMPS);
-    const showBookmarks = $derived(shown && isTimestamps);
     const focusKey = $derived(focusSurah && focusAyah ? bookmarkKey(focusSurah, focusAyah) : '');
     const focusBookmarked = $derived(focusKey ? isBookmarked($bookmarks, focusKey) : false);
-
-    function ayahAtMs(ms: number): AyahBoundary | null {
-        let hit: AyahBoundary | null = null;
-        for (const b of ayahs) {
-            if (ms >= b.startMs) hit = b; // last boundary started ≤ playhead
-            else break;
-        }
-        return hit ?? ayahs[0] ?? null;
-    }
 
     function toggleFocusBookmark(): void {
         if (!focusSurah || !focusAyah) return;
         if (focusBookmarked) removeBookmark(focusKey);
         else addBookmark(focusSurah, focusAyah);
     }
-
-    // Track the verse under the playhead while the strip is shown on Timestamps.
-    $effect(() => {
-        if (!showBookmarks || !ayahs.length) {
-            focusSurah = 0;
-            focusAyah = 0;
-            return;
-        }
-        let raf = 0;
-        const tick = (): void => {
-            const b = ayahAtMs(dashPort.currentTimeMs());
-            if (b) { focusSurah = b.surah; focusAyah = b.ayah; }
-            raf = requestAnimationFrame(tick);
-        };
-        tick();
-        return () => cancelAnimationFrame(raf);
-    });
 
     function seek(ms: number): void {
         exitLoop(); // filmstrip / line click is deliberate navigation → drop loop
