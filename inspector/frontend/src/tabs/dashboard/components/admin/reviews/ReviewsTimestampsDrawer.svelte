@@ -733,15 +733,6 @@
         background: var(--state-error-bg, var(--panel-2));
     }
     .cancel-job:disabled { opacity: 0.6; cursor: not-allowed; }
-    .hf-hint {
-        font-size: var(--fs-meta);
-        color: var(--text-muted);
-        margin: 0 0 var(--s-2);
-        line-height: 1.4;
-    }
-    .hf-hint a { color: var(--accent-strong); text-decoration: none; }
-    .hf-hint a:hover { text-decoration: underline; }
-
     .logs {
         margin: 0;
         max-height: 320px;
