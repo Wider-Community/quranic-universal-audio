@@ -36,7 +36,7 @@ function initial(): DashboardState {
     return {
         view: { kind: 'list' },
         activeFilters: {},
-        sort: 'recent',
+        sort: 'status',
         search: '',
     };
 }
