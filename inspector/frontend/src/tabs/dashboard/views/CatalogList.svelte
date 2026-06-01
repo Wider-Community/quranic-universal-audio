@@ -16,7 +16,7 @@
     import { playerContext } from '../../../lib/stores/player-context';
     import { bucketRank, type PublicDelivery, type PublicReciter } from '../../../lib/types/public-state';
     import { axisLabel as axisLabelOf, tagLabel as tagLabelOf } from '../../../lib/utils/axis-labels';
-    import { defaultCombination } from '../../../lib/utils/default-combination';
+    import { compareDeliveries } from '../../../lib/utils/delivery-sort';
     import { type FacetSpec, recomputeFacets } from '../../../lib/utils/facets';
     import { match } from '../../../lib/utils/fuzzy-match';
     import ActivityRail from '../components/ActivityRail.svelte';
@@ -91,17 +91,19 @@
             copy.sort((a, b) => {
                 const s = bucketRank(a.reciter.primary_bucket) - bucketRank(b.reciter.primary_bucket);
                 if (s !== 0) return s;
-                return a.reciter.name.localeCompare(b.reciter.name);
+                return compareRecency(a, b);
             });
         } else {
-            copy.sort((a, b) => {
-                const ax = a.reciter.last_activity ?? '';
-                const bx = b.reciter.last_activity ?? '';
-                if (ax === bx) return a.reciter.name.localeCompare(b.reciter.name);
-                return ax < bx ? 1 : -1;
-            });
+            copy.sort(compareRecency);
         }
         return copy;
+    }
+
+    function compareRecency(a: RowEntry, b: RowEntry): number {
+        const ax = a.reciter.last_activity ?? '';
+        const bx = b.reciter.last_activity ?? '';
+        if (ax === bx) return a.reciter.name.localeCompare(b.reciter.name);
+        return ax < bx ? 1 : -1;
     }
 
     function hasActiveFacets(): boolean {
@@ -125,8 +127,9 @@
         // `"<surah>:<ayah>"`, which the BottomPlayer's `urls[String(surahNum)]`
         // lookup misses. Prefer a visible by_surah delivery so the play button
         // honors active facets; bail if there's none.
-        const playable = row.visibleDeliveries.filter((d) => d.audio_category !== 'by_ayah');
-        const delivery = defaultCombination(playable);
+        const delivery = [...row.visibleDeliveries]
+            .filter((d) => d.audio_category !== 'by_ayah')
+            .sort(compareDeliveries)[0];
         if (!delivery) return;
         playerContext.update((s) => ({
             ...s,
@@ -195,8 +198,8 @@
                         value={$dashboardState.sort}
                         on:change={onSortChange}
                     >
+                        <option value="status">State</option>
                         <option value="recent">Recently updated</option>
-                        <option value="status">Status</option>
                         <option value="alphabetical">A → Z</option>
                         <option value="combinations">Most combinations</option>
                     </select>

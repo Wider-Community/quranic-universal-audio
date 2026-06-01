@@ -14,6 +14,7 @@
      *      after completion.
      */
     import {
+        cancelJob,
         fetchJobRecord,
         fetchJobStatus,
         fetchTsJobRecords,
@@ -43,6 +44,8 @@
     let timeout = $state('');
 
     let launching = $state(false);
+    let canceling = $state(false);
+    let cancelError = $state<string | null>(null);
     let formError = $state<string | null>(null);
 
     // ---- live job + logs ----
@@ -195,6 +198,30 @@
             formError = (err as Error).message ?? 'Failed to launch job';
         } finally {
             launching = false;
+        }
+    }
+
+    /**
+     * Cancel the currently-live job. Asks for confirmation first — cancelling
+     * is destructive (any in-progress alignment work is thrown out). The next
+     * poll tick picks up ``status=canceled`` and the live pane flips to the
+     * terminal view automatically.
+     */
+    async function onCancel(): Promise<void> {
+        if (!activeJobId || canceling) return;
+        if (!window.confirm(
+            'Cancel this timestamps job? Any in-progress alignment work will be lost.',
+        )) return;
+        cancelError = null;
+        canceling = true;
+        try {
+            await cancelJob(slug, activeJobId);
+            // Let the poll loop catch the new terminal status — no manual
+            // status mutation here so the live pane stays one source of truth.
+        } catch (err) {
+            cancelError = (err as Error).message ?? 'Cancel failed';
+        } finally {
+            canceling = false;
         }
     }
 
@@ -396,15 +423,18 @@
                             title="Open the job on Hugging Face — logs stream live there"
                         >Open on HF ↗</a>
                     {/if}
+                    {#if isLive}
+                        <button
+                            type="button"
+                            class="cancel-job"
+                            onclick={onCancel}
+                            disabled={canceling}
+                            title="Cancel this job — any in-progress alignment work is lost"
+                        >{canceling ? 'Cancelling…' : 'Cancel job'}</button>
+                    {/if}
                 </h3>
-                {#if isLive}
-                    <div class="hf-hint">
-                        In-panel logs fill in near the end — {#if paneUrl}<a
-                            href={paneUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >open on HF</a>{:else}open the job on HF{/if} to watch them stream live.
-                    </div>
+                {#if cancelError}
+                    <div class="form-error" role="alert">{cancelError}</div>
                 {/if}
                 {#if paneLogs.length}
                     <pre class="logs">{paneTruncated ? '… (earlier lines truncated)\n' : ''}{paneLogs.join('\n')}</pre>
@@ -683,15 +713,26 @@
         white-space: nowrap;
     }
     .hf-link:hover { text-decoration: underline; }
-    .hf-hint {
-        font-size: var(--fs-meta);
-        color: var(--text-muted);
-        margin: 0 0 var(--s-2);
-        line-height: 1.4;
+    /* Cancel-job button rides the same log header as ``hf-link``; quieter
+       than ``launch`` (destructive secondary affordance) — error-tinted text
+       so the intent is unambiguous next to "Open on HF ↗". */
+    .cancel-job {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        background: transparent;
+        color: var(--state-error-fg);
+        border: 1px solid var(--state-error-fg);
+        border-radius: var(--r-1);
+        padding: 2px 8px;
+        cursor: pointer;
+        white-space: nowrap;
     }
-    .hf-hint a { color: var(--accent-strong); text-decoration: none; }
-    .hf-hint a:hover { text-decoration: underline; }
-
+    .cancel-job:hover:not(:disabled) {
+        background: var(--state-error-bg, var(--panel-2));
+    }
+    .cancel-job:disabled { opacity: 0.6; cursor: not-allowed; }
     .logs {
         margin: 0;
         max-height: 320px;

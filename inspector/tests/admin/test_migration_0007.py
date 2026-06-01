@@ -65,6 +65,21 @@ def test_existing_db_at_v6_gets_mark_ready_columns():
             state             TEXT NOT NULL,
             prefetch_purge_at TEXT
         );
+        -- Minimal stand-in for 0001's catalog vocab + deliveries so migration
+        -- 0014 (releases) can ALTER channels and reference deliveries(slug).
+        CREATE TABLE channels (
+            slug          TEXT PRIMARY KEY,
+            short         TEXT NOT NULL,
+            name          TEXT NOT NULL,
+            host_patterns TEXT NOT NULL DEFAULT '[]'
+        );
+        CREATE TABLE deliveries (
+            slug                 TEXT PRIMARY KEY,
+            bitrate_mode         TEXT NOT NULL DEFAULT 'unknown',
+            -- 0015 nulls kbps on mixed rows, so the column must exist
+            -- even in this minimal v6 stub.
+            bitrate_kbps_nominal INTEGER
+        );
         PRAGMA user_version = 6;
         """
     )

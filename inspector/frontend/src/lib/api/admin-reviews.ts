@@ -268,6 +268,23 @@ export async function fetchJobRecord(
     return (await resp.json()) as TsJobRecord;
 }
 
+/**
+ * Cancel an in-flight timestamps job. Backend hits ``huggingface_hub.cancel_job``
+ * (hard-kills the container) and reconciles the durable record to
+ * ``status=canceled``. Reciter state is untouched — a re-launch is still valid.
+ */
+export async function cancelJob(
+    slug: string,
+    jobId: string,
+): Promise<{ slug: string; job_id: string; canceled: boolean }> {
+    const resp = await fetch(
+        `/api/admin/reciters/${encodeURIComponent(slug)}/jobs/${encodeURIComponent(jobId)}/cancel`,
+        { method: 'POST' },
+    );
+    if (!resp.ok) return _unwrapError(resp);
+    return (await resp.json()) as { slug: string; job_id: string; canceled: boolean };
+}
+
 /** Persisted timestamps-job records for a reciter (newest first). */
 export async function fetchTsJobRecords(
     slug: string,

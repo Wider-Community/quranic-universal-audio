@@ -42,7 +42,10 @@ def _record(event, *, slug="husary_qdc", to_state=None,
     ("catalog.added", "added"),
     ("reciter.alignment_completed", "available_review"),
     ("reciter.claimed", "under_review"),
-    ("reciter.published", "published"),
+    # `released` covers BOTH HF dataset push + GH release cut in v2.
+    # `reciter.published` (TS gen completion) is HIDDEN in v2 — it's admin
+    # infrastructure, not a public-release milestone.
+    ("released", "released"),
 ])
 def test_public_events_classified_with_kind(event, expected_kind):
     from services import activity_classification as ac
@@ -68,6 +71,8 @@ def test_awaiting_alignment_state_transition_classified_public_requested():
     "reciter.marked_ready",
     "reciter.unmarked_ready",
     "reciter.merge_rejected",
+    # v2: TS-gen completion is admin infrastructure (was wrongly PUBLIC in v1).
+    "reciter.published",
     "reciter.unpublished",
     "reciter.discarded",
     "reciter.undiscarded",

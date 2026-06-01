@@ -46,7 +46,19 @@ DEFAULT_TIMEOUT = 900
 DEFAULT_BATCH_SIZE = 500  # segments per MFA upload
 BATCH_DELAY_SECONDS = 5  # pause between MFA batches to avoid rate-limiting
 DOWNLOAD_LOG_INTERVAL = 500  # log download progress every N verses
-DEFAULT_DOWNLOAD_WORKERS = 8
+# Lowered from 8 → 4: each producer worker buffers a full ffmpeg PCM (up to
+# ~400 MB for a 3h surah) via subprocess.run(capture_output=True). At 8
+# parallel × big-audio reciters this peaks ≥3 GB of stdout in Python memory
+# and saturates the bucket FUSE I/O, which is what stalled Husary/Mishary.
+# Override per launch with DOWNLOAD_WORKERS env / settings.download_workers.
+DEFAULT_DOWNLOAD_WORKERS = 4
+# Hard cap on a single chapter's ffmpeg decode. Anchored to the worst case
+# observed: 191 MB CBR-128k MP3 → 382 MB PCM, ~22s local, ~100s in an 8-way
+# parallel CPU-bound burst; 600s leaves ~6× headroom for the bucket FUSE
+# path. Without this, a stuck ffmpeg pins a producer thread indefinitely
+# (subprocess.run has no implicit timeout) and the job sits silent until HF
+# kills it at its outer timeout.
+LOAD_AUDIO_TIMEOUT_SEC = 600
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
@@ -257,7 +269,12 @@ def download_audio(url: str) -> Path:
 
 
 def load_audio_int16(path: Path) -> np.ndarray:
-    """Load audio as 16kHz mono int16 via ffmpeg."""
+    """Load audio as 16kHz mono int16 via ffmpeg.
+
+    Bounded by ``LOAD_AUDIO_TIMEOUT_SEC`` — without it a stuck ffmpeg
+    (bucket FUSE read stall, kernel paging under memory pressure, malformed
+    stream) pins the calling producer thread indefinitely.
+    """
     import numpy as np
     cmd = [
         "ffmpeg", "-i", str(path),
@@ -266,7 +283,8 @@ def load_audio_int16(path: Path) -> np.ndarray:
         "-v", "quiet",
         "pipe:1",
     ]
-    result = subprocess.run(cmd, capture_output=True, check=True)
+    result = subprocess.run(
+        cmd, capture_output=True, check=True, timeout=LOAD_AUDIO_TIMEOUT_SEC)
     return np.frombuffer(result.stdout, dtype=np.int16)
 
 
@@ -1125,17 +1143,40 @@ def process(input_dir: Path,
             log.warning("Surah %s: no audio source, skipping", ch_ref)
             return ch_idx, ch_ref, 0
 
+        # Per-chapter start log. Without this, a producer-side stall (slow
+        # ffmpeg decode, blocked seg_queue.put) is invisible until the first
+        # 500-segment milestone — too coarse for diagnosing hangs on
+        # big-audio reciters. Keep it short; one line per chapter @ 114
+        # chapters is fine.
+        try:
+            src_label = audio_src if _is_url(audio_src) else f"bucket:{ch_ref}.mp3"
+            src_size_mb = (Path(audio_src).stat().st_size / 1e6
+                           if not _is_url(audio_src) and Path(audio_src).exists()
+                           else None)
+        except OSError:
+            src_label, src_size_mb = audio_src, None
+        if src_size_mb is not None:
+            log.info("ch%s: start (src=%s, %.0fMB)", ch_ref, src_label, src_size_mb)
+        else:
+            log.info("ch%s: start (src=%s)", ch_ref, src_label)
+        t_start = time.time()
+
         try:
             if _is_url(audio_src):
                 audio_file = download_audio(audio_src)
             else:
                 audio_file = Path(audio_src)
+            t_dl = time.time()
             audio_int16 = load_audio_int16(audio_file)
+            t_decode = time.time()
             if _is_url(audio_src):
                 audio_file.unlink()
+        except subprocess.TimeoutExpired:
+            log.warning("ch%s: ffmpeg decode TIMED OUT after %ds — skipping chapter",
+                        ch_ref, LOAD_AUDIO_TIMEOUT_SEC)
+            return ch_idx, ch_ref, 0
         except Exception as e:
-            log.warning("Surah %s: audio download/convert failed: %s",
-                        ch_ref, e)
+            log.warning("ch%s: audio download/convert failed: %s", ch_ref, e)
             return ch_idx, ch_ref, 0
 
         count = 0
@@ -1164,6 +1205,13 @@ def process(input_dir: Path,
             seg_queue.put((mfa_ref, str(wav_path), ch_idx, seg_idx))
             count += 1
 
+        # Done log mirrors the start log: download / decode / total split so a
+        # slow chapter can be isolated (FUSE-bound dl vs CPU-bound decode vs
+        # MFA-bound queue back-pressure on the put loop).
+        t_end = time.time()
+        log.info("ch%s: done in %.1fs (dl=%.1fs decode=%.1fs slice+queue=%.1fs, segs=%d)",
+                 ch_ref, t_end - t_start,
+                 t_dl - t_start, t_decode - t_dl, t_end - t_decode, count)
         return ch_idx, ch_ref, count
 
     n_to_process = len(chapters_to_process)

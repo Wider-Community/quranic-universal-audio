@@ -60,7 +60,9 @@ def test_classifies_allowlisted_events(monkeypatch):
         _record("catalog.added"),
         _record("reciter.alignment_completed"),
         _record("reciter.claimed"),
-        _record("reciter.published"),
+        # v2: the public release event is `released` (covers HF push + GH cut).
+        # `reciter.published` (TS-gen completion) is HIDDEN now — admin-only.
+        _record("released"),
         _record("state.transition", to_state="awaiting_alignment"),
     ])
     _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
@@ -70,7 +72,7 @@ def test_classifies_allowlisted_events(monkeypatch):
     assert kinds == [
         "added",
         "available_review",
-        "published",
+        "released",
         "requested",
         "under_review",
     ]
@@ -126,7 +128,8 @@ def test_skips_failed_audit_records(monkeypatch):
 def test_card_text_uses_display_name_not_slug(monkeypatch):
     from services.public_activity import all_public_cards
 
-    _install_audit(monkeypatch, [_record("reciter.published", slug="husary_qdc")])
+    # v2: `released` is the public-facing publish event.
+    _install_audit(monkeypatch, [_record("released", slug="husary_qdc")])
     _install_catalog(monkeypatch, {"husary_qdc": "Mahmoud Khalil Al-Husary"})
 
     cards = all_public_cards()

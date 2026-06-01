@@ -39,10 +39,11 @@ PUBLIC_EVENTS: dict[str, str] = {
     "reciter.requested": "requested",
     "reciter.alignment_completed": "available_review",
     "reciter.claimed": "under_review",
-    # `reciter.published` is the single "this reciter is now live" milestone —
-    # fired by the system when the timestamps job succeeds (publish == released;
-    # there is no separate timestamps-completed event any more).
-    "reciter.published": "published",
+    # `released` is the single v2 public-facing release event. Fires for BOTH
+    # HF dataset pushes (per-recitation) and GH release cuts (global), with the
+    # payload's ``track`` discriminating. v1's `reciter.published` (TS-gen
+    # completion) is admin infrastructure now and lives in HIDDEN_EVENTS.
+    "released": "released",
 }
 
 
@@ -59,6 +60,10 @@ HIDDEN_EVENTS: frozenset[str] = frozenset({
     "reciter.marked_ready",
     "reciter.unmarked_ready",
     "reciter.merge_rejected",
+    # `reciter.published` was wrongly on the public rail in v1 — it fires on
+    # TS-gen completion, which is admin infrastructure (not a public-release
+    # milestone). The v2 public `released` event covers HF / GH publishes.
+    "reciter.published",
     "reciter.unpublished",
     "reciter.discarded",
     "reciter.undiscarded",

@@ -6,6 +6,7 @@
     import { isOwner } from '../../../../lib/stores/current-user';
     import { adminDashboard, type AdminTab } from '../../stores/admin-dashboard.svelte';
     import PermissionsCompartment from './PermissionsCompartment.svelte';
+    import ReleasesCompartment from './releases/ReleasesCompartment.svelte';
     import RequestsCompartment from './RequestsCompartment.svelte';
     import ReviewsCompartment from './reviews/ReviewsCompartment.svelte';
     import UsersCompartment from './UsersCompartment.svelte';
@@ -16,6 +17,7 @@
         { id: 'users', label: 'Users', enabled: true },
         { id: 'requests', label: 'Requests', enabled: true },
         { id: 'reviews', label: 'Reviews', enabled: true },
+        { id: 'releases', label: 'Releases', enabled: true },
         { id: 'permissions', label: 'Permissions', enabled: true, ownerOnly: true },
     ];
 
@@ -65,6 +67,8 @@
         <RequestsCompartment />
     {:else if adminDashboard.activeTab === 'reviews'}
         <ReviewsCompartment />
+    {:else if adminDashboard.activeTab === 'releases'}
+        <ReleasesCompartment />
     {:else if adminDashboard.activeTab === 'permissions' && $isOwner}
         <PermissionsCompartment />
     {/if}
