@@ -384,6 +384,16 @@ def _boot_substrate() -> None:
         except Exception as e:  # noqa: BLE001
             logger.warning("visitor analytics wiring failed: %s", e)
 
+    # Tajweed phonemizer: load the ~250 ms quranic_phonemizer DB once at boot
+    # so the first /api/ts/tajweed call doesn't pay that latency. Fire-and-
+    # forget — a failed init just means the first request takes the hit, the
+    # route still works.
+    try:
+        from services import tajweed as _tj
+        _tj.init_phonemizer()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("tajweed phonemizer warm-init failed: %s", e)
+
 
 _boot_substrate()
 

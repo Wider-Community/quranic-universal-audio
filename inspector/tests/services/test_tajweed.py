@@ -97,3 +97,48 @@ def test_no_stops_returns_immutable_tuple():
     assert isinstance(out, tuple)
     with pytest.raises(AttributeError):
         out.append("nope")  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------------
+# Route tests — GET /api/ts/tajweed/<verse_ref>?stops=...
+# ---------------------------------------------------------------------------
+
+
+def test_route_no_stops(flask_client):
+    """No-stops query returns the same bridge the service does, JSON-shaped."""
+    resp = flask_client.get("/api/ts/tajweed/2:8")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["verse_ref"] == "2:8"
+    assert body["stops"] == []
+    assert body["bridges"] == [
+        {"before_word_idx": 4, "rule": "idgham_ghunnah_noon", "side": "curr"}
+    ]
+
+
+def test_route_with_stops_query_param(flask_client):
+    """Comma-separated ``stops`` query suppresses the cross-word rule at the
+    pause boundary — mirrors what the FE will send after inferring stops from
+    MFA word-end gaps."""
+    resp = flask_client.get("/api/ts/tajweed/2:8?stops=2:8:3")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["stops"] == ["2:8:3"]
+    assert body["bridges"] == []
+
+
+def test_route_empty_stops_param_is_treated_as_no_stops(flask_client):
+    """``?stops=`` (empty string) should NOT split into one empty stop ref."""
+    resp = flask_client.get("/api/ts/tajweed/2:8?stops=")
+    assert resp.status_code == 200
+    assert resp.get_json()["stops"] == []
+
+
+def test_route_compound_verse_ref(flask_client):
+    """Compound refs flow through the path converter (the ``<path:>`` type
+    keeps the dash intact, where ``<string:>`` would split on it)."""
+    resp = flask_client.get("/api/ts/tajweed/37:151-37:152")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    rules = [b["rule"] for b in body["bridges"]]
+    assert "idgham_shafawi" in rules
