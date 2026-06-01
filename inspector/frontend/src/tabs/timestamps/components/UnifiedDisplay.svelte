@@ -147,6 +147,28 @@
         return Number.isFinite(n) ? n : 0;
     }
 
+    /** Does this phoneme carry a cross-word-merger signature? Same predicate
+     *  the backend uses on the phonemizer side — mirrored here so the FE can
+     *  defensively check that the actual SHARD phoneme at the predicted bridge
+     *  position is what the rule would have produced.
+     *
+     *  MFA captures what the reciter ACTUALLY said. The phonemizer (without
+     *  stops) emits what tajweed says SHOULD be said. They diverge in two
+     *  cases: (a) MFA word-end gaps signal a pause we already pass as stops
+     *  to the backend; (b) reciter chose pause-form pronunciation without a
+     *  perceptible timing gap (waqf marks ۗ ۖ etc. — the tanween's ``n`` just
+     *  vanishes from the audio while the timing stays continuous). The
+     *  backend can't see (b); this check catches it on the FE by demanding
+     *  the actual peeled phoneme look like a merger before we render. */
+    const GHUNNAH_TILDE = '̃';
+    const PHARYNGEAL = 'ˤ';
+    function isMergerPhoneme(p: string | undefined): boolean {
+        if (!p) return false;
+        if (p.includes(GHUNNAH_TILDE) || p.includes('ñ')) return true;
+        const base = p.replaceAll(PHARYNGEAL, '');
+        return base.length >= 2 && base[0] === base[1];
+    }
+
     function buildRendered(
         words: TsWord[],
         intervals: PhonemeInterval[],
@@ -182,6 +204,15 @@
             if (!indices || indices.length === 0) continue;
             const pi = b.side === 'curr' ? indices[0] : indices[indices.length - 1];
             if (pi === undefined || pi < 0) continue;
+            // Defensive: the phonemizer (the bridge's source of truth) speaks
+            // in tajweed-ideal pronunciation, MFA captures what the reciter
+            // actually said. They almost always agree (MFA was built against
+            // the same phonemizer dictionary), but a reciter who pause-formed
+            // a tanween across a waqf mark without taking a timing gap is the
+            // exception: the merger phoneme physically isn't in the shard.
+            // Require the peeled phoneme to BE the merger before rendering.
+            const phone = intervals[pi]?.phone;
+            if (!isMergerPhoneme(phone)) continue;
             bridgePhoneByBlock.set(i, pi);
             excluded.add(pi);
         }
