@@ -1863,7 +1863,7 @@ const data = {
     "basmala_added_voice": {
         "id": "basmala_added_voice",
         "title": "Basmala in a different voice",
-        "description": "The Fatiha basmala here was a generic insert, not the reciter — deleted. If it is in the reciter voice, keep it.",
+        "description": "The Fatiha basmala here was a generic insert, not the reciter — deleted. This creates a missing verse entry; fine. If it is in the reciter voice, keep it.",
         "render": "history_op",
         "chapter": 1,
         "clip_base_ms": 3620,

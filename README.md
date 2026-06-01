@@ -30,7 +30,7 @@
 
 - **Submit your own recitations:** Add your favorite reciters and different audio sources to the catalog and we handle the processing — typically within a few days.
 
-- **Comprehensive metadata and versioning:** Each recitation is tagged with a consistent schemas and metadata and versioned with a full history to track segment updates and timestamp corrections over time.
+- **Comprehensive metadata and versioning:** Each recitation is governed by consistent schemas and metadata and versioned with a full history to track segment updates and timestamp corrections over time.
 
 <!-- ## How we compare -->
 
