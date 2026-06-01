@@ -17,6 +17,13 @@
      * (same pattern as ReviewsCompartment). 30 s poll picks up new in-flight
      * state; the launch path also invalidates the server-side 5 s cache so
      * the next poll reflects the new state immediately.
+     *
+     * The backend filters rows server-side to "bucketable" only — inert
+     * catalog entries (no TS, no HF, no GH, not released, eligible channel)
+     * never reach the wire. So ``allRows.length === 0`` is the canonical
+     * "no release activity yet" signal — we render an explicit empty state
+     * and hide the filter bar in that case (chip counts over an empty set
+     * are noise).
      */
     import {
         fetchReleasesStatus,
@@ -310,7 +317,19 @@
             onJumpToInFlight={scrollToInFlight}
         />
 
-        <!-- Sticky filter bar — mirrors Reviews. -->
+        {#if allRows.length === 0}
+            <div class="zero-state">
+                <h3>No reciters in the release pipeline yet</h3>
+                <p>
+                    Reciters land here once they finish review and timestamp
+                    generation. Open the <strong>Reviews</strong> tab to
+                    claim a reciter, mark it ready, and run
+                    <em>Generate timestamps</em> — successful runs auto-release
+                    the reciter and surface them here as ready to publish.
+                </p>
+            </div>
+        {:else}
+            <!-- Sticky filter bar — mirrors Reviews. -->
         <div class="filter-bar">
             <span class="search">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
@@ -428,6 +447,7 @@
                 {/if}
             {/each}
         </div>
+        {/if}
     {/if}
 
     {#if cutModalOpen}
@@ -669,4 +689,30 @@
         padding: 0;
     }
     .clear-link:hover { color: var(--accent-strong); text-decoration: underline; }
+
+    .zero-state {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-2);
+        padding: var(--s-6) var(--s-4);
+        margin-top: var(--s-3);
+        background: var(--panel-2);
+        border: 1px dashed var(--border-quiet);
+        border-radius: var(--r-1);
+        color: var(--text-secondary);
+    }
+    .zero-state h3 {
+        margin: 0;
+        font-size: var(--fs-body);
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+    .zero-state p {
+        margin: 0;
+        font-size: var(--fs-meta);
+        line-height: 1.5;
+        max-width: 64ch;
+    }
+    .zero-state strong { color: var(--text-primary); font-weight: 500; }
+    .zero-state em { font-style: normal; color: var(--accent); }
 </style>
