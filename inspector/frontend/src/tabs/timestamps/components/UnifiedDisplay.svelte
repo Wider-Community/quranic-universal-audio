@@ -215,10 +215,11 @@
             const prevIdx = prev.phoneme_indices;
             const currIdx = curr.phoneme_indices;
             let pi: number | undefined;
+            let piInPrev = false;
             if (prevIdx && prevIdx.length > 0) {
                 for (let k = 0; k < Math.min(SCAN_WINDOW, prevIdx.length); k++) {
                     const idx = prevIdx[prevIdx.length - 1 - k]!;
-                    if (isMergerPhoneme(intervals[idx]?.phone)) { pi = idx; break; }
+                    if (isMergerPhoneme(intervals[idx]?.phone)) { pi = idx; piInPrev = true; break; }
                 }
             }
             if (pi === undefined && currIdx && currIdx.length > 0) {
@@ -230,6 +231,12 @@
             if (pi === undefined || pi < 0) continue;
             bridgePhoneByBlock.set(i, pi);
             excluded.add(pi);
+            // When bridge is in prev word's tail, exclude any phonemes after it —
+            // those are vowels of the merged letter that MFA segmented into the prev word.
+            if (piInPrev && prevIdx) {
+                const piPos = prevIdx.indexOf(pi);
+                for (let j = piPos + 1; j < prevIdx.length; j++) excluded.add(prevIdx[j]!);
+            }
         }
 
         const blocks: RenderedBlock[] = [];
