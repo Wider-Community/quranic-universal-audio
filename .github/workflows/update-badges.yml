@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.BADGE_PUSH_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
