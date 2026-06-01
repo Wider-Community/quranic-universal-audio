@@ -70,7 +70,7 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
             if (stamped.has(di)) continue;
             const span = chars[di];
             if (!span) continue;
-            const displayChar = span.text.replace(/^​/, ''); // strip ZWSP for matching
+            const displayChar = span.text.replace(/^\u200B/, ''); // strip ZWSP for matching
             if (mfaIdx < letters.length) {
                 const lt = letters[mfaIdx];
                 if (!lt) {

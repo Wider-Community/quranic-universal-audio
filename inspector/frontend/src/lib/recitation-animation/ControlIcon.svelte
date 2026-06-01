@@ -97,8 +97,11 @@
     };
 </script>
 
-<span class="ci" style:width="{size}px" style:height="{size}px" aria-hidden="true"
-    >{@html `<svg viewBox="0 0 24 24" width="100%" height="100%">${P[name] ?? ''}</svg>`}</span>
+<span class="ci" style:width="{size}px" style:height="{size}px" aria-hidden="true">
+    <!-- Static internal SVG table (no user input) — safe to inline. -->
+    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+    {@html `<svg viewBox="0 0 24 24" width="100%" height="100%">${P[name] ?? ''}</svg>`}
+</span>
 
 <style>
     .ci { display: inline-flex; line-height: 0; }
