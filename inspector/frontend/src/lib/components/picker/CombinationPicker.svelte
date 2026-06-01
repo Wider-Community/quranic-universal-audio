@@ -90,8 +90,8 @@
     let activeFilters: Record<string, Set<string>> = {};
     let focusedIdx = -1;
 
-    let searchInputEl: SearchInput | null = null;
-    let listEl: HTMLDivElement | null = null;
+    let searchInputEl: SearchInput | null = $state(null);
+    let listEl: HTMLDivElement | null = $state(null);
 
     // Group order for non-pinned rows.
     const GROUP_ORDER: PublicBucket[] = [
