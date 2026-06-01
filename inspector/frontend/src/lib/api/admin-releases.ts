@@ -63,9 +63,12 @@ export interface ReleasesSummary {
     days_since_cut: number | null;
 }
 
-/** A live HF Job — ``slug`` is null for the global ``cut_release`` kind. */
+/** A live HF Job — ``slug`` is null for the global ``cut_release`` kind.
+ *  ``timestamps`` is the in-container MFA job (first publish OR regen); it
+ *  surfaces here so a regen on a released row shows in the "In progress"
+ *  bucket (it has no other in-flight signal — there's no state change). */
 export interface InFlightJob {
-    kind: 'hf_publish' | 'cut_release';
+    kind: 'hf_publish' | 'cut_release' | 'timestamps';
     slug: string | null;
     job_id: string;
     started_at: string | null;
@@ -138,6 +141,19 @@ export async function fetchReleasePreview(signal?: AbortSignal): Promise<Release
 export async function publishHf(slug: string): Promise<LaunchResponse> {
     const resp = await fetch(
         `/api/admin/publish-hf/${encodeURIComponent(slug)}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+    );
+    return _unwrap<LaunchResponse>(resp);
+}
+
+/** Launch an MFA timestamps-regeneration job for an already-released slug.
+ *  POSTs to the existing generate-timestamps route (no change). On success the
+ *  reciter stays released but its HF/GH releases are stamped stale, moving the
+ *  row to "Stale on HF" so the operator re-publishes. Throws the server error
+ *  verbatim (e.g. the 409 "a timestamps job is already running"). */
+export async function regenerateTs(slug: string): Promise<LaunchResponse> {
+    const resp = await fetch(
+        `/api/admin/generate-timestamps/${encodeURIComponent(slug)}`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' } },
     );
     return _unwrap<LaunchResponse>(resp);

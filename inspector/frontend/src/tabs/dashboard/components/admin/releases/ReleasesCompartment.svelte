@@ -28,6 +28,7 @@
     import {
         fetchReleasesStatus,
         publishHf,
+        regenerateTs,
         type InFlightJob,
         type ReleaseStatusRow,
         type ReleasesStatusResponse,
@@ -43,6 +44,7 @@
 
     let cutModalOpen = $state(false);
     let busySlug = $state<string | null>(null);
+    let busyRegenSlug = $state<string | null>(null);
     let rowError = $state<{ slug: string; message: string } | null>(null);
 
     // Trigger refetch from internal mutations (publish action) without
@@ -281,6 +283,23 @@
         }
     }
 
+    /** Re-run MFA alignment for a published reciter. The launch invalidates the
+     *  server in-flight cache, so the refetch surfaces the row in "In progress";
+     *  on completion the HF release is stale-stamped → it lands in "Stale on HF". */
+    async function onRegenerate(slug: string): Promise<void> {
+        if (busyRegenSlug !== null) return;
+        busyRegenSlug = slug;
+        rowError = null;
+        try {
+            await regenerateTs(slug);
+            refetch();
+        } catch (e) {
+            rowError = { slug, message: (e as Error).message ?? 'Regenerate failed' };
+        } finally {
+            busyRegenSlug = null;
+        }
+    }
+
     function onCutComplete(): void {
         cutModalOpen = false;
         refetch();
@@ -435,8 +454,10 @@
                                                 bucket={section.key}
                                                 inFlightJob={section.key === 'in_flight' ? jobForSlug(row.slug) : null}
                                                 busy={busySlug === row.slug}
+                                                regenBusy={busyRegenSlug === row.slug}
                                                 errorMessage={rowError?.slug === row.slug ? rowError.message : null}
                                                 onPublish={onPublish}
+                                                onRegenerate={onRegenerate}
                                             />
                                         {/each}
                                     </div>

@@ -10,7 +10,11 @@
      *
      * ``bucket`` drives the action: Re-publish for stale / published_current,
      * Publish-to-HF for waiting, spinner+job link for in_flight, no button
-     * for excluded. The action is gated by ``release.publish_hf`` per the
+     * for excluded. Published (current + stale) rows ALSO expose a secondary
+     * "Regenerate TS" action that re-runs MFA alignment — on completion the row
+     * lands in "Stale on HF" (the HF release got stale-stamped) ready to
+     * re-publish. Publish is gated by ``release.publish_hf``; regen by
+     * ``reviews.generate_timestamps`` + ``reciter.publish`` — all per the
      * capability registry (NOT a hardcoded role per CLAUDE.md).
      */
     import { can } from '../../../../../lib/stores/capabilities';
@@ -37,12 +41,25 @@
         /** Optional inline error (e.g. 409 from publish) — rendered below the
          *  meta cluster, mirrors Reviews row pattern. */
         errorMessage?: string | null;
+        /** Set to true while the row's Regenerate-TS button is racing the
+         *  launch response; the parent toggles it to disable the row's action. */
+        regenBusy?: boolean;
         onPublish?: (slug: string) => void;
+        /** Re-run MFA alignment for a published (current/stale) reciter. */
+        onRegenerate?: (slug: string) => void;
     }
     let { row, bucket, inFlightJob = null, busy = false,
-          errorMessage = null, onPublish }: Props = $props();
+          errorMessage = null, regenBusy = false, onPublish, onRegenerate }: Props = $props();
 
     const canPublish = can('release.publish_hf');
+    // Regen is publish-equivalent (re-runs the MFA job that auto-publishes),
+    // so it needs both the generate + publish caps — same pair the Reviews-tab
+    // Generate-TS action checks.
+    const canGenerateTs = can('reviews.generate_timestamps');
+    const canReciterPublish = can('reciter.publish');
+    // Only published rows can be regenerated — waiting rows have never been
+    // published (Publish is their action), in_flight/excluded have no action.
+    const showRegen = $derived(bucket === 'published_current' || bucket === 'stale_hf');
 
     function fmtRelative(iso: string | null | undefined): string {
         if (!iso) return '';
@@ -144,17 +161,32 @@
             <span class="action-faint" title="Channel is not in the GH release allow-list">
                 read-only
             </span>
-        {:else if onPublish && $canPublish}
-            <button
-                class="btn"
-                class:btn-warn={bucket === 'stale_hf'}
-                type="button"
-                onclick={(e) => { e.stopPropagation(); onPublish?.(row.slug); }}
-                disabled={busy || !row.ts}
-                title={!row.ts ? 'Generate timestamps before publishing' : ''}
-            >
-                {busy ? 'Launching…' : actionLabel()}
-            </button>
+        {:else}
+            <span class="actions">
+                {#if showRegen && onRegenerate && $canGenerateTs && $canReciterPublish}
+                    <button
+                        class="btn btn-ghost"
+                        type="button"
+                        onclick={(e) => { e.stopPropagation(); onRegenerate?.(row.slug); }}
+                        disabled={busy || regenBusy}
+                        title="Re-run MFA alignment — re-publish afterwards to refresh HF/GH"
+                    >
+                        {regenBusy ? 'Launching…' : 'Regenerate TS'}
+                    </button>
+                {/if}
+                {#if onPublish && $canPublish}
+                    <button
+                        class="btn"
+                        class:btn-warn={bucket === 'stale_hf'}
+                        type="button"
+                        onclick={(e) => { e.stopPropagation(); onPublish?.(row.slug); }}
+                        disabled={busy || regenBusy || !row.ts}
+                        title={!row.ts ? 'Generate timestamps before publishing' : ''}
+                    >
+                        {busy ? 'Launching…' : actionLabel()}
+                    </button>
+                {/if}
+            </span>
         {/if}
     </div>
 
@@ -280,6 +312,12 @@
         border-color: var(--border-quiet);
     }
 
+    .actions {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s-2);
+    }
+
     .btn {
         background: transparent;
         border: 1px solid var(--border-quiet);
@@ -295,6 +333,16 @@
     .btn:hover:not(:disabled) {
         border-color: var(--accent);
         color: var(--accent-strong);
+    }
+    /* Secondary action — quieter than the primary Publish button so the
+     * publish CTA stays dominant on published rows. */
+    .btn-ghost {
+        color: var(--text-muted);
+        padding: 4px 10px;
+    }
+    .btn-ghost:hover:not(:disabled) {
+        border-color: var(--border-default);
+        color: var(--text-primary);
     }
     .btn-warn {
         border-color: oklch(0.84 0.130 70);
