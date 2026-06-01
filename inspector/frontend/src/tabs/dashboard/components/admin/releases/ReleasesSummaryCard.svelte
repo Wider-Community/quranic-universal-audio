@@ -44,6 +44,14 @@
 
     const canCut = can('release.cut_gh');
 
+    // Trigger is armed (accent-bordered, ready to fire) whenever the parent
+    // has nothing disabling it. A cut_release in-flight surfaces as its own
+    // muted "Cutting…" state — separate from the generic disabled treatment.
+    const isCutInFlight = $derived(
+        inFlight.some((j) => j.kind === 'cut_release'),
+    );
+    const isArmed = $derived(cutDisabledReason === null && !isCutInFlight);
+
     function fmtBytes(n: number): string {
         if (!n) return '0 B';
         const u = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -81,6 +89,7 @@
 
     function jobLabel(j: InFlightJob): string {
         if (j.kind === 'cut_release') return 'Cutting GH release';
+        if (j.kind === 'timestamps') return `Generating timestamps ${j.slug ?? '?'}`;
         return `Publishing ${j.slug ?? '?'}`;
     }
 </script>
@@ -141,12 +150,19 @@
         {#if $canCut}
             <button
                 class="cut-btn"
+                class:armed={isArmed}
+                class:in-flight={isCutInFlight}
                 type="button"
                 onclick={onCut}
                 disabled={cutDisabledReason !== null}
                 title={cutDisabledReason ?? ''}
             >
-                {summary ? 'Cut new release' : 'Cut first release'}
+                {#if isCutInFlight}
+                    <span class="cut-pulse" aria-hidden="true"></span>
+                    <span>Cutting</span>
+                {:else}
+                    {summary ? 'Cut release' : 'Cut first release'}
+                {/if}
             </button>
         {/if}
     </div>
@@ -206,25 +222,61 @@
     }
     .metric-faint { color: var(--text-faint); }
 
+    /* Trigger inherits the ReviewsRow .btn vocabulary — ghost outline at rest,
+     * accent-bordered when armed, muted pulse when a cut is in flight. No
+     * solid-fill pill; cut release is owner-only and high-consequence and
+     * should read as restrained until the operator engages it. */
     .cut-btn {
-        background: var(--accent);
-        color: var(--text-on-accent);
-        border: 0;
+        background: transparent;
+        border: 1px solid var(--border-quiet);
+        color: var(--text-muted);
         border-radius: var(--r-1);
-        padding: 6px 14px;
+        padding: 4px 12px;
         font: inherit;
         font-size: var(--fs-meta);
         font-weight: 500;
         cursor: pointer;
         white-space: nowrap;
-        transition: background-color var(--t-fast);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: border-color var(--t-fast),
+                    color var(--t-fast),
+                    background-color var(--t-fast);
     }
-    .cut-btn:hover:not(:disabled) { background: var(--accent-strong); }
-    .cut-btn:disabled {
-        background: var(--panel);
-        color: var(--text-faint);
-        border: 1px solid var(--border-quiet);
+    .cut-btn:hover:not(:disabled) {
+        border-color: var(--border-default);
+        color: var(--text-primary);
+    }
+    .cut-btn.armed {
+        border-color: var(--accent);
+        color: var(--accent-strong);
+        background: var(--accent-tint-soft);
+    }
+    .cut-btn.armed:hover {
+        background: var(--accent-tint);
+        border-color: var(--accent-strong);
+    }
+    .cut-btn.in-flight {
+        border-color: var(--accent-tint);
+        color: var(--accent-strong);
+        background: transparent;
         cursor: not-allowed;
+    }
+    .cut-btn:disabled:not(.in-flight) {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    .cut-pulse {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: cut-pulse var(--t-slow) ease-in-out infinite;
+    }
+    @keyframes cut-pulse {
+        0%, 100% { opacity: 1;    transform: scale(1); }
+        50%      { opacity: 0.35; transform: scale(0.85); }
     }
 
     /* In-flight strip — sits above the version line. Matches the chip-style
