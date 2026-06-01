@@ -98,6 +98,10 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     job_id = base.hf_job_id(job) or ""
     url = getattr(job, "url", None)
     log.info("launched hf_publish job %s for %s", job_id, slug)
+    # Bust the in-flight cache so the next /releases/status fetch reflects
+    # the new job without waiting for the 5 s TTL.
+    from services.storage import cache as _cache
+    _cache.invalidate_in_flight_jobs_cache()
     return {"job_id": job_id, "url": url}
 
 
@@ -155,6 +159,11 @@ def complete(slug: str | None, job_id: str, *,
             reason="hf_publish",
         )
     log.info("hf_publish.complete(%s, %s): recorded", slug, version)
+    # Terminal transition — invalidate the in-flight cache so the FE drops
+    # the row from "In progress" on the next fetch instead of waiting up to
+    # ~5 s for the TTL.
+    from services.storage import cache as _cache
+    _cache.invalidate_in_flight_jobs_cache()
     return {"ok": True, "release_id": new_id}
 
 

@@ -134,6 +134,63 @@ def running_job_for(*, kind: str | None = None, slug: str | None = None) -> tupl
     return None
 
 
+def list_in_flight_jobs(kinds: tuple[str, ...]) -> list[dict]:
+    """Return ``[{kind, slug, job_id, started_at}, ...]`` for live jobs whose
+    ``labels.task`` is in ``kinds``. ``slug`` is None for global kinds.
+
+    Used by the Releases-tab status endpoint to surface "what's running right
+    now" to the operator. Wrapped in a 5 s TTL cache
+    (``services/storage/cache.py``) — ``list_jobs()`` is rate-limited at the
+    HF side and the FE polls every 30 s; the cache absorbs the poll + same-
+    page re-renders cheaply. ``hf_publish.launch`` / ``cut_release.launch``
+    and their ``complete()`` handlers explicitly invalidate so a freshly
+    launched job (or a just-terminated one) shows up immediately.
+    """
+    from services.storage import cache as _cache
+    from huggingface_hub import list_jobs
+
+    cached = _cache.get_in_flight_jobs_cache(kinds)
+    if cached is not None:
+        return cached
+    out: list[dict] = []
+    try:
+        for job in list_jobs():
+            labels = getattr(job, "labels", {}) or {}
+            j_kind = labels.get("task")
+            if j_kind not in kinds:
+                continue
+            status = hf_status_str(job)
+            if status not in ("running", "pending", "updating"):
+                continue
+            slug = labels.get("reciter")
+            if slug == "_global":
+                slug = None
+            # ``created_at`` on the HF Jobs SDK is a datetime; ISO-format it
+            # for the wire. ``started_at`` is set when execution actually
+            # begins (post-pending) — prefer it when present.
+            started = (
+                getattr(job, "started_at", None)
+                or getattr(job, "created_at", None)
+            )
+            if started is not None and not isinstance(started, str):
+                try:
+                    started = started.isoformat()
+                except Exception:
+                    started = None
+            out.append({
+                "kind": j_kind,
+                "slug": slug,
+                "job_id": hf_job_id(job) or "",
+                "started_at": started,
+            })
+    except Exception as exc:
+        log.warning("list_in_flight_jobs(%s) failed: %s", kinds, exc)
+        # Don't cache failures — the next call should retry the HF API.
+        return []
+    _cache.set_in_flight_jobs_cache(kinds, out)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Job-record I/O — kind-aware. Read prefers the v2 per-kind path, falls back
 # to the legacy top-level path so old records still surface.

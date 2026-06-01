@@ -111,6 +111,10 @@ def launch(*, version: str | None = None,
     job_id = base.hf_job_id(job) or ""
     url = getattr(job, "url", None)
     log.info("launched cut_release job %s (version=%s)", job_id, version)
+    # Same rationale as hf_publish.launch — drop the in-flight cache so the
+    # next /releases/status reflects the new job without TTL latency.
+    from services.storage import cache as _cache
+    _cache.invalidate_in_flight_jobs_cache()
     return {"job_id": job_id, "url": url}
 
 
@@ -191,6 +195,10 @@ def complete(slug: str | None, job_id: str, *,
         )
     log.info("cut_release.complete(%s): recorded %d recitations",
              version, len(members))
+    # Terminal transition — drop the in-flight cache so the FE removes the
+    # cut row from "In progress" on the next fetch.
+    from services.storage import cache as _cache
+    _cache.invalidate_in_flight_jobs_cache()
     return {"ok": True, "release_id": release_id,
             "recitation_count": len(members)}
 

@@ -25,6 +25,7 @@ capability gate via ``@require_capability``.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
@@ -303,32 +304,71 @@ def cut_release(user):
 @admin_releases_bp.route("/releases/status", methods=["GET"])
 @require_capability("reviews.view")
 def releases_status(user):
-    """Per-recitation release status for the FE grid.
+    """Per-recitation release status + summary + in-flight jobs for the FE.
 
     Returns:
       {
-        "latest_gh_release": {version, produced_at} | null,
+        "latest_gh_release": {version, produced_at, external_uri} | null,
+        "summary": {                          # latest cut + aggregate metrics
+          "version", "produced_at", "external_uri",
+          "member_count", "total_bytes", "days_since_cut"
+        } | null,
+        "in_flight": [                        # live HF Jobs (5 s TTL cache)
+          {"kind", "slug" | null, "job_id", "started_at"}, ...
+        ],
         "recitations": [{
-          slug, name_en, riwayah, channel,
+          slug, name_en, name_ar, state,
+          riwayah, style, channel,
           gh_release_eligible: bool,
           ts: {version, produced_at} | null,
           hf: {version, produced_at, stale_since} | null,
-          gh: {release_version, change_kind, stale_since} | null,
+          gh: {change_kind, stale_since, release_id, ts_version} | null,
         }, ...]
       }
 
-    Gated by ``reviews.view`` (any admin who can see the queue can see the
-    status grid; actions are gated by the per-action capabilities above).
+    Gated by ``reviews.view`` (any admin who sees the review queue sees this
+    grid; the action gates above own who can mutate). FE buckets rows into
+    state sections; ``state`` (released / under_review / awaiting_review)
+    drives the "Waiting to publish" predicate, ``in_flight`` drives the
+    "In progress" predicate.
     """
     conn = get_conn()
     latest_gh = repo_releases.latest_gh_release()
+
+    # Aggregated summary row for the top card. None when no release cut yet.
+    summary_row = repo_releases.latest_gh_release_summary()
+    summary: dict | None = None
+    if summary_row is not None:
+        produced_at = summary_row.get("produced_at")
+        days_since_cut: int | None = None
+        if produced_at:
+            try:
+                # produced_at is ISO-8601 UTC ("YYYY-MM-DDTHH:MM:SSZ"); replace
+                # Z so fromisoformat handles it on Python < 3.11.
+                dt = datetime.fromisoformat(produced_at.replace("Z", "+00:00"))
+                days_since_cut = max(0, (datetime.now(timezone.utc) - dt).days)
+            except Exception:
+                days_since_cut = None
+        summary = {
+            "version": summary_row.get("version"),
+            "produced_at": produced_at,
+            "external_uri": summary_row.get("external_uri"),
+            "member_count": int(summary_row.get("member_count") or 0),
+            "total_bytes": int(summary_row.get("total_bytes") or 0),
+            "days_since_cut": days_since_cut,
+        }
+
+    in_flight = jobs_base.list_in_flight_jobs(("hf_publish", "cut_release"))
+
     deliveries = conn.execute("""
         SELECT d.slug, d.riwayah, d.style, d.channel,
                c.gh_release_eligible,
-               r.name_en
+               r.name_en, r.name_ar,
+               ds.state
         FROM deliveries d
-        JOIN channels c ON c.slug = d.channel
-        JOIN reciters r ON r.reciter_id = d.reciter_id
+        JOIN channels        c  ON c.slug = d.channel
+        JOIN reciters        r  ON r.reciter_id = d.reciter_id
+        LEFT JOIN delivery_states ds ON ds.slug = d.slug
         ORDER BY d.slug
     """).fetchall()
 
@@ -341,6 +381,8 @@ def releases_status(user):
         out.append({
             "slug": slug,
             "name_en": d["name_en"],
+            "name_ar": d["name_ar"],
+            "state": d["state"],
             "riwayah": d["riwayah"],
             "style": d["style"],
             "channel": d["channel"],
@@ -354,6 +396,8 @@ def releases_status(user):
         "latest_gh_release": _slim_release_row(
             latest_gh, fields=("version", "produced_at", "external_uri"),
         ),
+        "summary": summary,
+        "in_flight": in_flight,
         "recitations": out,
     })
 

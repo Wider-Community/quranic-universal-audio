@@ -193,6 +193,27 @@ def latest_gh_release() -> dict | None:
     return dict(r) if r else None
 
 
+def latest_gh_release_summary() -> dict | None:
+    """Most-recent gh_release + aggregated member metrics in one row.
+
+    Returns ``{id, version, produced_at, external_uri, member_count, total_bytes}``
+    or None when no release has been cut yet. Feeds the Releases-tab summary
+    card so the FE can render ``v0.4.2 · 42 recitations · 11.8 MB · cut 7d ago``
+    without a second roundtrip + per-member SUM on the FE.
+    """
+    r = get_conn().execute(
+        "SELECT gr.id, gr.version, gr.produced_at, gr.external_uri, "
+        "       COUNT(grr.slug)            AS member_count, "
+        "       COALESCE(SUM(grr.zip_bytes), 0) AS total_bytes "
+        "FROM gh_releases gr "
+        "LEFT JOIN gh_release_recitations grr ON grr.release_id = gr.id "
+        "WHERE gr.superseded_at IS NULL "
+        "GROUP BY gr.id "
+        "ORDER BY gr.id DESC LIMIT 1"
+    ).fetchone()
+    return dict(r) if r else None
+
+
 def insert_gh_release_recitation(
     *,
     release_id: int,

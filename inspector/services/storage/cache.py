@@ -824,3 +824,53 @@ def invalidate_capability_matrix_cache() -> None:
     global _capability_matrix
     with _capability_matrix_lock:
         _capability_matrix = None
+
+
+# ---------------------------------------------------------------------------
+# In-flight HF Jobs — short TTL wrapper around ``huggingface_hub.list_jobs()``.
+#
+# The Releases tab polls in-flight state every 30 s; ``list_jobs()`` is
+# rate-limited and ~200-400 ms per call. Cache the filtered result for 5 s so
+# the poll + any same-page re-render share the same fetch, then expire so
+# state catches up if no mutation invalidates first. Explicit invalidation
+# fires on every ``hf_publish.launch`` / ``cut_release.launch`` and inside
+# the ``complete()`` handlers so a just-launched job (or a just-terminated
+# one) shows up in the next call regardless of TTL.
+#
+# Keyed by the ``kinds`` tuple so a call for ``("hf_publish", "cut_release")``
+# doesn't collide with a future call filtered to a single kind.
+# ---------------------------------------------------------------------------
+
+import time as _time
+
+_jobs_in_flight_lock = _threading.Lock()
+_jobs_in_flight: "tuple[float, tuple[str, ...], list[dict]] | None" = None
+_JOBS_IN_FLIGHT_TTL_S = 5.0
+
+
+def get_in_flight_jobs_cache(kinds: tuple[str, ...]) -> list[dict] | None:
+    """Return cached list iff stamped < TTL ago AND for the same ``kinds``."""
+    with _jobs_in_flight_lock:
+        if _jobs_in_flight is None:
+            return None
+        stamped_at, cached_kinds, value = _jobs_in_flight
+        if cached_kinds != kinds:
+            return None
+        if _time.time() - stamped_at > _JOBS_IN_FLIGHT_TTL_S:
+            return None
+        return value
+
+
+def set_in_flight_jobs_cache(kinds: tuple[str, ...], value: list[dict]) -> None:
+    global _jobs_in_flight
+    with _jobs_in_flight_lock:
+        _jobs_in_flight = (_time.time(), kinds, value)
+
+
+def invalidate_in_flight_jobs_cache() -> None:
+    """Drop the cached list. Called by ``jobs.{hf_publish,cut_release}.launch``
+    and by their ``complete()`` handlers so the FE sees the new state on the
+    very next fetch (instead of waiting up to ~5 s for the TTL)."""
+    global _jobs_in_flight
+    with _jobs_in_flight_lock:
+        _jobs_in_flight = None
