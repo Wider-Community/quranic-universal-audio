@@ -4,7 +4,6 @@ import { fetchJson } from '../../../../lib/api';
 import type { TsShardResponse, TsShardWord } from '../../../../lib/types/api';
 import {
     assembleVerseFromShard,
-    audioUrlFor,
     chapterVerseRefs,
     resolveVbrChaptersForReciter,
     type TsReciterAudio,
@@ -106,63 +105,6 @@ const fakeDk = {
     '1:1:1': { text: 'بسم[dk]' },
     '37:151:3': { text: 'ثلاث[dk]' },
 };
-
-// ---------------------------------------------------------------------------
-// audioUrlFor
-// ---------------------------------------------------------------------------
-
-describe('audioUrlFor', () => {
-    it('expands by_surah templates with zero-padded surah', () => {
-        const meta: TsShardResponse['_meta'] = {
-            schema_version: 1, reciter: 'r', chapter: 1, audio_category: 'by_surah',
-            url_template: 'server7.mp3quran.net/s_gmd/{surah:03d}.mp3',
-        };
-        expect(audioUrlFor(meta, 1, 1)).toBe('https://server7.mp3quran.net/s_gmd/001.mp3');
-        expect(audioUrlFor(meta, 36, 1)).toBe('https://server7.mp3quran.net/s_gmd/036.mp3');
-    });
-
-    it('expands by_ayah templates with both zero-padded fields', () => {
-        const meta: TsShardResponse['_meta'] = {
-            schema_version: 1, reciter: 'r', chapter: 1, audio_category: 'by_ayah',
-            url_template: 'everyayah.com/data/X/{surah:03d}{ayah:03d}.mp3',
-        };
-        expect(audioUrlFor(meta, 2, 7)).toBe('https://everyayah.com/data/X/002007.mp3');
-    });
-
-    it('preserves an existing https:// prefix in the template', () => {
-        const meta: TsShardResponse['_meta'] = {
-            schema_version: 1, reciter: 'r', chapter: 1, audio_category: 'by_surah',
-            url_template: 'https://example.com/{surah}.mp3',
-        };
-        expect(audioUrlFor(meta, 5, 1)).toBe('https://example.com/5.mp3');
-    });
-
-    it('falls back to per-verse audio_urls when template is empty', () => {
-        const meta: TsShardResponse['_meta'] = {
-            schema_version: 1, reciter: 'r', chapter: 1, audio_category: 'by_ayah',
-            url_template: '',
-            audio_urls: { '1:1': 'https://x/1-1.mp3', '1:2': 'https://x/1-2.mp3' },
-        };
-        expect(audioUrlFor(meta, 1, 1)).toBe('https://x/1-1.mp3');
-        expect(audioUrlFor(meta, 1, 2)).toBe('https://x/1-2.mp3');
-    });
-
-    it('falls back to chapter-keyed by_surah audio_urls when present', () => {
-        const meta: TsShardResponse['_meta'] = {
-            schema_version: 1, reciter: 'r', chapter: 1, audio_category: 'by_surah',
-            url_template: '',
-            audio_urls: { '1': 'https://x/001.mp3' },
-        };
-        expect(audioUrlFor(meta, 1, 5)).toBe('https://x/001.mp3');
-    });
-
-    it('returns empty string when neither template nor fallback is set', () => {
-        expect(audioUrlFor({
-            schema_version: 1, reciter: 'r', chapter: 1, audio_category: 'by_ayah',
-            url_template: '',
-        }, 1, 1)).toBe('');
-    });
-});
 
 // ---------------------------------------------------------------------------
 // assembleVerseFromShard — manifest-vs-shard precedence

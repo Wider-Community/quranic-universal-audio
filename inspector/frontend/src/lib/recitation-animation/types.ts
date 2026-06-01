@@ -63,11 +63,3 @@ export interface ChapterRecitation {
      *  audio element hasn't reported its real length yet. */
     contentEndMs: number;
 }
-
-/** The slice of playback the animation reads. An AudioPort satisfies this. */
-export interface RecitationPlayback {
-    /** Chapter-absolute current time in ms. */
-    currentTimeMs(): number;
-    /** Seek to a chapter-absolute ms position. */
-    seek(ms: number): void;
-}

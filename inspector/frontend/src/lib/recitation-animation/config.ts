@@ -12,8 +12,6 @@
  * `--t-*`) so the section blends with the live dark theme.
  */
 
-import { writable } from 'svelte/store';
-
 export type Granularity = 'word' | 'char';
 export type FilmstripMotion = 'hybrid' | 'tuner' | 'snap';
 
@@ -101,24 +99,8 @@ export interface RecitationAnimConfig {
     filmstripHeightPx: number;
 }
 
-/** Easing presets offered in the playground (ease-out only — no bounce). */
-export const EASING_OPTIONS: { label: string; value: string }[] = [
-    { label: 'Out · quart', value: 'cubic-bezier(0.25, 1, 0.5, 1)' },
-    { label: 'Out · expo', value: 'cubic-bezier(0.16, 1, 0.3, 1)' },
-    { label: 'Out · cubic', value: 'cubic-bezier(0.33, 1, 0.68, 1)' },
-    { label: 'Linear', value: 'linear' },
-];
-
-/** Filmstrip motion models offered in the playground. */
-export const FILMSTRIP_MOTIONS: { label: string; value: FilmstripMotion }[] = [
-    { label: 'Hybrid', value: 'hybrid' },
-    { label: 'Tuner', value: 'tuner' },
-    { label: 'Snap', value: 'snap' },
-];
-
-// Locked baseline from the playground prototype (the values the user tuned and
-// confirmed). Both the dashboard surface and the throwaway playground read this
-// as their starting point. Five of these stay user-tunable on the dashboard via
+// Locked baseline tuned in the prototype. The dashboard surface reads this as
+// its starting point. Five values stay user-tunable on the dashboard via
 // CustomizePanel (motion, granularity, highlightColor, unreachedOpacity,
 // fontSizePx); the rest are fixed.
 export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
@@ -235,9 +217,3 @@ export function cssVarText(cfg: RecitationAnimConfig): string {
         .join('; ');
 }
 
-/** Writable config store — used by the playground (live binding) and as a
- *  convenience for any surface that wants reactive config. Surfaces that just
- *  consume locked values should import `DEFAULT_RECITATION_CONFIG` directly. */
-export const recitationConfig = writable<RecitationAnimConfig>({
-    ...DEFAULT_RECITATION_CONFIG,
-});
