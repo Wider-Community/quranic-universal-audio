@@ -53,18 +53,26 @@ def publish_hf(user, slug: str):
 
     Pre-flight:
       - the slug must exist
-      - it must have a current ``per_recitation_releases(track='ts')`` row
-        (you can't publish what hasn't been timestamped)
+      - it must have either a current ``per_recitation_releases(track='ts')``
+        row OR ``delivery_states.state='released'`` — the latter covers
+        reciters timestamped before migration 0014 introduced the ledger
       - no other job for this slug may be in flight (cross-kind single-flight)
 
     Returns 202 ``{job_id, url}`` on launch, 404 / 409 / 502 on the obvious
     failure modes. The launched job will POST the completion webhook on
     success; the 120 s poll worker is the safety net.
     """
-    if state_service.get_row(slug) is None:
+    state_row = state_service.get_row(slug)
+    if state_row is None:
         return jsonify({"error": "unknown slug"}), 404
     ts_row = repo_releases.current_release("ts", slug)
-    if ts_row is None:
+    # Accept "released" state as proof-of-TS when no ledger row exists:
+    # reciters timestamped before migration 0014 have files in the bucket
+    # but no per_recitation_releases row. They're publishable nonetheless.
+    is_legacy_released = (
+        ts_row is None and state_row.state.value == "released"
+    )
+    if ts_row is None and not is_legacy_released:
         return jsonify({
             "error": "this recitation has no current TS release — "
                      "generate timestamps before publishing to HF",
@@ -326,6 +334,14 @@ def releases_status(user):
         }, ...]
       }
 
+    Only rows the FE compartment will place in a visible bucket are
+    returned (see ``_is_bucketable``) — inert catalog entries are dropped
+    server-side so chip facet counts reflect actual release activity.
+
+    Released reciters timestamped before migration 0014 (no ledger row
+    but ``state='released'``) get a synthetic ``ts: {version: 'legacy',
+    produced_at: state_since}`` so the FE bucketing finds them.
+
     Gated by ``reviews.view`` (any admin who sees the review queue sees this
     grid; the action gates above own who can mutate). FE buckets rows into
     state sections; ``state`` (released / under_review / awaiting_review)
@@ -364,7 +380,7 @@ def releases_status(user):
         SELECT d.slug, d.riwayah, d.style, d.channel,
                c.gh_release_eligible,
                r.name_en, r.name_ar,
-               ds.state
+               ds.state, ds.state_since
         FROM deliveries d
         JOIN channels        c  ON c.slug = d.channel
         JOIN reciters        r  ON r.reciter_id = d.reciter_id
@@ -372,13 +388,25 @@ def releases_status(user):
         ORDER BY d.slug
     """).fetchall()
 
+    in_flight_slugs = {j["slug"] for j in in_flight if j.get("slug")}
+
     out: list[dict] = []
     for d in deliveries:
         slug = d["slug"]
         ts = repo_releases.current_release("ts", slug)
         hf = repo_releases.current_release("hf", slug)
         gh = repo_releases.latest_gh_release_member(slug)
-        out.append({
+        ts_payload = _slim_release_row(ts, fields=("version", "produced_at"))
+        # Legacy bridge: released reciters timestamped before migration 0014
+        # have no per_recitation_releases ledger row but DO have timestamps
+        # in the bucket. Synthesize a minimal record so the FE bucketing
+        # treats them as TS-bearing (lands them in "Waiting to publish").
+        if ts_payload is None and d["state"] == "released":
+            ts_payload = {
+                "version": "legacy",
+                "produced_at": d["state_since"],
+            }
+        row = {
             "slug": slug,
             "name_en": d["name_en"],
             "name_ar": d["name_ar"],
@@ -387,11 +415,13 @@ def releases_status(user):
             "style": d["style"],
             "channel": d["channel"],
             "gh_release_eligible": bool(d["gh_release_eligible"]),
-            "ts": _slim_release_row(ts, fields=("version", "produced_at")),
+            "ts": ts_payload,
             "hf": _slim_release_row(hf, fields=("version", "produced_at", "stale_since")),
             "gh": _slim_release_row(gh, fields=("change_kind", "stale_since",
                                                 "release_id", "ts_version")),
-        })
+        }
+        if _is_bucketable(row, in_flight_slugs):
+            out.append(row)
     return jsonify({
         "latest_gh_release": _slim_release_row(
             latest_gh, fields=("version", "produced_at", "external_uri"),
@@ -400,6 +430,32 @@ def releases_status(user):
         "in_flight": in_flight,
         "recitations": out,
     })
+
+
+def _is_bucketable(row: dict, in_flight_slugs: set[str]) -> bool:
+    """True iff the FE compartment will assign ``row`` to a visible bucket.
+
+    Mirrors ``bucketOf()`` in ``ReleasesCompartment.svelte``. Filters out
+    inert catalog rows (no TS, no HF, no GH membership, not released) so
+    the FE never sees facet chips counting reciters that have no release
+    activity. Priority-first like the FE — any single match returns True.
+    """
+    if row["slug"] in in_flight_slugs:
+        return True
+    if row["hf"] is not None:
+        return True
+    if row["gh"] is not None:
+        return True
+    if row["state"] == "released" and row["ts"] is not None:
+        return True
+    # Excluded: only surface ineligible rows that would otherwise be
+    # release candidates — keeps the section from becoming a giant
+    # "every reciter from an ineligible channel" dump.
+    if not row["gh_release_eligible"] and (
+        row["ts"] is not None or row["state"] == "released"
+    ):
+        return True
+    return False
 
 
 def _slim_release_row(row: dict | None, *, fields: tuple[str, ...]) -> dict | None:
