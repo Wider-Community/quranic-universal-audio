@@ -3,7 +3,8 @@
  * upcoming verse plays AND get adopted as the active playback element on
  * consume.
  *
- * Two slots: 'same' (random-current pre-roll) and 'any' (random-any pre-roll).
+ * Slots: 'any' (recycle bin for the formerly-visible element) and 'shuf' (the
+ * shuffle look-ahead — one target for the current mode).
  * Each slot holds a hidden `<audio crossorigin='anonymous' preload='auto'>`
  * loaded with a URL and seeked to the verse start, so by the time the user
  * clicks Random / auto-advance fires:
@@ -25,7 +26,7 @@
 
 const DEDUPE_MS = 30_000;
 
-type SlotKey = 'same' | 'any';
+type SlotKey = 'any' | 'shuf';
 
 interface Slot {
     el: HTMLAudioElement;

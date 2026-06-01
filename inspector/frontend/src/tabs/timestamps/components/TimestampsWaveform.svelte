@@ -26,12 +26,13 @@
     import { get } from 'svelte/store';
 
     import WaveformCanvas from '../../../lib/components/WaveformCanvas.svelte';
+    import { dashPort } from '../../../lib/playback/dash-port';
+    import { recitationConfigStore } from '../../../lib/recitation-animation/recitation-settings';
     import type { AudioPeaks, PeakBucket, SegmentPeaks } from '../../../lib/types/domain';
+    import { analogousTriad } from '../../../lib/utils/color-derive';
     import {
-        LETTER_HIGHLIGHT_COLOR,
         PREVIEW_PLAYHEAD_COLOR,
         WAVEFORM_BG_COLOR,
-        WAVEFORM_STROKE_COLOR,
     } from '../../../lib/utils/constants';
     import { ensureChapterPeaks, fetchSegmentPeaks, pickChapterPeaks } from '../../../lib/utils/peaks-fetch';
     import { drawWaveformPeaks } from '../../../lib/utils/waveform-draw';
@@ -41,12 +42,11 @@
         showPhonemes,
         TS_GRANULARITIES,
         TS_VIEW_MODES,
-        tsConfig,
         tsHoveredElement,
         tsWaveformHoverTime,
         viewMode,
     } from '../stores/display';
-    import { loopTarget, tsPort } from '../stores/playback';
+    import { loopTarget } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { tsZoom, tsZoomAnimating } from '../stores/zoom';
     import { TS_PAN_HALF_CANVAS_VIEWS_PER_SEC } from '../utils/constants';
@@ -58,9 +58,6 @@
     const TS_WAVEFORM_HEIGHT = 200;
     /** Max in-component peaks slices retained across verse switches. */
     const PEAKS_LRU_SIZE = 5;
-
-    // Fallback word color if /api/ts/config hasn't loaded yet.
-    const WORD_COLOR_FALLBACK = '#f0a500';
 
     // Pixel tolerance for "same boundary" deduplication across tiers.
     const BOUNDARY_DEDUP_EPS = 1;
@@ -137,7 +134,13 @@
         ($viewMode === TS_VIEW_MODES.ANALYSIS && $showLetters)
         || ($viewMode === TS_VIEW_MODES.ANIMATION && $granularity === TS_GRANULARITIES.CHARACTERS);
     $: phonemesActive = $viewMode === TS_VIEW_MODES.ANALYSIS && $showPhonemes;
-    $: wordColor = $tsConfig?.anim_highlight_color ?? WORD_COLOR_FALLBACK;
+    // Waveform overlay colors derive from the SHARED recitation accent so the
+    // word/letter/phoneme bands + boundary strokes match the analysis display
+    // and the now-reciting animation (one analogous family).
+    $: triad = analogousTriad($recitationConfigStore.highlightColor);
+    $: wordColor = triad.word;
+    $: letterColor = triad.letter;
+    $: phonemeColor = triad.phoneme;
 
     // Redraw when toggles / hover store / loop store change so overlays update
     // even while paused. Subscriptions on `$tsHoveredElement` and `$loopTarget`
@@ -409,7 +412,7 @@
         const tToX = _zoom
             ? (t: number): number => ((t - _zoom!.viewStart) / (_zoom!.viewEnd - _zoom!.viewStart)) * width
             : (t: number): number => (t / duration) * width;
-        const audioPaused = !tsPort.element || tsPort.paused;
+        const audioPaused = !dashPort.element || dashPort.paused;
 
         // 1.5. Dim silence-region peaks. MFA phoneme tiling is vocal-only in
         //      this dataset, so silence is inferred from inter-word gaps plus
@@ -450,27 +453,27 @@
                 loopColor = wordColor;
                 loopAlpha = PLAYING_ALPHA_WORD;
             } else if (loop.kind === 'letter') {
-                loopColor = LETTER_HIGHLIGHT_COLOR;
+                loopColor = letterColor;
                 loopAlpha = PLAYING_ALPHA_LETTER;
             } else {
-                loopColor = WAVEFORM_STROKE_COLOR;
+                loopColor = phonemeColor;
                 loopAlpha = PLAYING_ALPHA_PHONEME;
             }
             _fillBand(ctx, tToX(loop.startSec), tToX(loop.endSec), height, loopColor, loopAlpha);
         }
 
         // 2a. Playing-current fills — always show the tiers currently active,
-        //     based on tsPort.currentTimeMs, in both Analysis and Animation modes.
+        //     based on dashPort.currentTimeMs, in both Analysis and Animation modes.
         //     Drawn below hover so hover stays visually dominant.
-        if (tsPort.element) {
-            const t = tsPort.currentTimeMs() / 1000 - segOffset;
+        if (dashPort.element) {
+            const t = dashPort.currentTimeMs() / 1000 - segOffset;
             const curW = findWordAt(t, words, false);
             if (curW) _fillBand(ctx, tToX(curW.start), tToX(curW.end), height, wordColor, PLAYING_ALPHA_WORD);
             if (lettersActive && curW) {
                 for (const l of curW.letters) {
                     if (l.start == null || l.end == null) continue;
                     if (t >= l.start && t < l.end) {
-                        _fillBand(ctx, tToX(l.start), tToX(l.end), height, LETTER_HIGHLIGHT_COLOR, PLAYING_ALPHA_LETTER);
+                        _fillBand(ctx, tToX(l.start), tToX(l.end), height, letterColor, PLAYING_ALPHA_LETTER);
                         break;
                     }
                 }
@@ -478,7 +481,7 @@
             if (phonemesActive) {
                 for (const iv of intervals) {
                     if (t >= iv.start && t < iv.end) {
-                        _fillBand(ctx, tToX(iv.start), tToX(iv.end), height, WAVEFORM_STROKE_COLOR, PLAYING_ALPHA_PHONEME);
+                        _fillBand(ctx, tToX(iv.start), tToX(iv.end), height, phonemeColor, PLAYING_ALPHA_PHONEME);
                         break;
                     }
                 }
@@ -497,7 +500,7 @@
                 for (const l of w.letters) {
                     if (l.start == null || l.end == null) continue;
                     if (t >= l.start && t < l.end) {
-                        _fillBand(ctx, tToX(l.start), tToX(l.end), height, LETTER_HIGHLIGHT_COLOR, HOVER_ALPHA_LETTER);
+                        _fillBand(ctx, tToX(l.start), tToX(l.end), height, letterColor, HOVER_ALPHA_LETTER);
                         break;
                     }
                 }
@@ -505,7 +508,7 @@
             if (phonemesActive) {
                 for (const iv of intervals) {
                     if (t >= iv.start && t < iv.end) {
-                        _fillBand(ctx, tToX(iv.start), tToX(iv.end), height, WAVEFORM_STROKE_COLOR, HOVER_ALPHA_PHONEME);
+                        _fillBand(ctx, tToX(iv.start), tToX(iv.end), height, phonemeColor, HOVER_ALPHA_PHONEME);
                         break;
                     }
                 }
@@ -518,9 +521,9 @@
                 if (hover.kind === 'word') {
                     _fillBand(ctx, sx, ex, height, wordColor, HOVER_ALPHA_WORD);
                 } else if (hover.kind === 'letter') {
-                    _fillBand(ctx, sx, ex, height, LETTER_HIGHLIGHT_COLOR, HOVER_ALPHA_LETTER);
+                    _fillBand(ctx, sx, ex, height, letterColor, HOVER_ALPHA_LETTER);
                 } else {
-                    _fillBand(ctx, sx, ex, height, WAVEFORM_STROKE_COLOR, HOVER_ALPHA_PHONEME);
+                    _fillBand(ctx, sx, ex, height, phonemeColor, HOVER_ALPHA_PHONEME);
                 }
             }
         }
@@ -567,15 +570,15 @@
         }
 
         // Draw phoneme → letter → word so the strongest tier renders on top.
-        _strokeLines(ctx, phonemeXs, height, WAVEFORM_STROKE_COLOR, PHONEME_LINE_WIDTH);
-        _strokeLines(ctx, letterXs, height, LETTER_HIGHLIGHT_COLOR, LETTER_LINE_WIDTH);
+        _strokeLines(ctx, phonemeXs, height, phonemeColor, PHONEME_LINE_WIDTH);
+        _strokeLines(ctx, letterXs, height, letterColor, LETTER_LINE_WIDTH);
         _strokeLines(ctx, wordXs, height, wordColor, WORD_LINE_WIDTH);
 
         // 4. Playhead. Zoom-aware via `tToX` — playback outside the visible
         // window gets `px` past [0, width], clipped by canvas (i.e. no visible
         // playhead until playback re-enters the view).
-        if (!tsPort.element) return;
-        const time = tsPort.currentTimeMs() / 1000 - segOffset;
+        if (!dashPort.element) return;
+        const time = dashPort.currentTimeMs() / 1000 - segOffset;
         const px = tToX(time);
 
         ctx.strokeStyle = PREVIEW_PLAYHEAD_COLOR;
@@ -659,7 +662,7 @@
     }
 
     function onCanvasClick(e: MouseEvent): void {
-        if (!tsPort.element || !tsPort.element.duration) return;
+        if (!dashPort.element || !dashPort.element.duration) return;
         const lv = get(loadedVerse);
         if (!lv) return;
         const t = _pointerTime(e);
@@ -679,16 +682,16 @@
             const wi = words.indexOf(w);
             if (cur.kind === 'word' && cur.wordIndex === wi) return;
             loopTarget.set({ kind: 'word', startSec: w.start, endSec: w.end, wordIndex: wi });
-            tsPort.seek((w.start + lv.tsSegOffset) * 1000);
-            if (tsPort.paused) tsPort.play();
+            dashPort.seek((w.start + lv.tsSegOffset) * 1000);
+            if (dashPort.paused) dashPort.play();
             drawOverlays();
             return;
         }
 
         // Snap to enclosing word's start.
-        tsPort.seek((w.start + lv.tsSegOffset) * 1000);
+        dashPort.seek((w.start + lv.tsSegOffset) * 1000);
         // Start playback if paused — matches block-click behavior.
-        if (tsPort.paused) tsPort.play();
+        if (dashPort.paused) dashPort.play();
         drawOverlays();
     }
 

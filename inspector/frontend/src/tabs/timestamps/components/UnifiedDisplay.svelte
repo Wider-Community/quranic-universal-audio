@@ -16,6 +16,7 @@
     import { onDestroy, untrack } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { dashPort } from '../../../lib/playback/dash-port';
     import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
     import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../../lib/utils/arabic-text';
     import {
@@ -27,7 +28,7 @@
         verseTranslations,
     } from '../stores/display';
     import type { TsLoopTarget } from '../stores/playback';
-    import { autoMode, loopTarget, tsPort } from '../stores/playback';
+    import { autoMode, loopTarget } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
@@ -281,8 +282,8 @@
 
         const intervals = lv.data.intervals;
         const words = lv.data.words;
-        const portReady = !!tsPort.element;
-        const portPaused = tsPort.paused;
+        const portReady = !!dashPort.element;
+        const portPaused = dashPort.paused;
         const hoverTime = get(tsWaveformHoverTime);
 
         // Current phoneme (skip geminate_end)
@@ -407,13 +408,13 @@
     }
 
     function getSegRelTime(segOffset: number): number {
-        if (!tsPort.element) return 0;
+        if (!dashPort.element) return 0;
         // While paused, waveform hover drives a preview: treat the hovered
         // slice-relative time as the "current" time so block highlights
         // (active word / letter / phoneme) follow the pointer.
         const hoverT = get(tsWaveformHoverTime);
-        if (hoverT != null && tsPort.paused) return hoverT;
-        return tsPort.currentTimeMs() / 1000 - segOffset;
+        if (hoverT != null && dashPort.paused) return hoverT;
+        return dashPort.currentTimeMs() / 1000 - segOffset;
     }
 
     /** Scroll the active mega-block into view (keyboard `J`). */
@@ -426,10 +427,10 @@
     // ---- Click handlers: seek audio on click ----
 
     function seekToTime(absTime: number): void {
-        if (!tsPort.element) return;
-        tsPort.seek(absTime * 1000);
+        if (!dashPort.element) return;
+        dashPort.seek(absTime * 1000);
         // Clicking a block always starts playback — resumes if paused.
-        if (tsPort.paused) tsPort.play();
+        if (dashPort.paused) dashPort.play();
         // Force a repaint immediately after user seek (not waiting on timeupdate)
         updateHighlights();
     }
@@ -476,17 +477,17 @@
                 && cur.childIndex === target.childIndex;
             if (same) return;
             loopTarget.set(target);
-            if (tsPort.element) {
-                tsPort.seek(absSeek * 1000);
-                if (tsPort.paused) tsPort.play();
+            if (dashPort.element) {
+                dashPort.seek(absSeek * 1000);
+                if (dashPort.paused) dashPort.play();
             }
             updateHighlights();
             return;
         }
         // No loop active → pure seek.
-        if (!tsPort.element) return;
-        tsPort.seek(absSeek * 1000);
-        if (tsPort.paused) tsPort.play();
+        if (!dashPort.element) return;
+        dashPort.seek(absSeek * 1000);
+        if (dashPort.paused) dashPort.play();
         updateHighlights();
     }
 

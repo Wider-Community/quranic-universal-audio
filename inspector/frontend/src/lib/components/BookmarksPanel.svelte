@@ -143,13 +143,13 @@
     .bookmarks-panel {
         position: fixed;
         top: 0;
-        right: 0;
+        left: 0;
         width: 340px;
         max-width: 90vw;
         height: 100vh;
         background: #0f1530;
-        border-left: 1px solid #2a3a6a;
-        box-shadow: -8px 0 24px rgba(0, 0, 0, 0.45);
+        border-right: 1px solid #2a3a6a;
+        box-shadow: 8px 0 24px rgba(0, 0, 0, 0.45);
         z-index: 1000;
         display: flex;
         flex-direction: column;

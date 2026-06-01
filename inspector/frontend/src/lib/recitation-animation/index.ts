@@ -11,6 +11,7 @@ export { default as RecitationSection } from './RecitationSection.svelte';
 export { default as LineAnimation } from './LineAnimation.svelte';
 export { default as AyahPicker } from './AyahPicker.svelte';
 export { default as AyahFilmstrip } from './AyahFilmstrip.svelte';
+export { default as ControlIcon } from './ControlIcon.svelte';
 
 export {
     buildChapterRecitation,

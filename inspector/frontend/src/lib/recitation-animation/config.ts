@@ -116,35 +116,40 @@ export const FILMSTRIP_MOTIONS: { label: string; value: FilmstripMotion }[] = [
     { label: 'Snap', value: 'snap' },
 ];
 
+// Locked baseline from the playground prototype (the values the user tuned and
+// confirmed). Both the dashboard surface and the throwaway playground read this
+// as their starting point. Five of these stay user-tunable on the dashboard via
+// CustomizePanel (motion, granularity, highlightColor, unreachedOpacity,
+// fontSizePx); the rest are fixed.
 export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
-    wordRevealMs: 260,
-    charRevealMs: 140,
-    clearFadeMs: 220,
+    wordRevealMs: 600,
+    charRevealMs: 80,
+    clearFadeMs: 600,
     leadMs: 0,
 
-    easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+    easing: 'cubic-bezier(0.25, 1, 0.5, 1)', // ease-out quart (never linear)
 
-    highlightColor: 'var(--accent)',
-    baseColor: 'var(--text-muted)',
-    reachedOpacity: 0.62,
-    unreachedOpacity: 0,
-    wordActiveEmphasisMs: 180,
-    charActiveEmphasisMs: 110,
-    activeScale: 1,
-    activeGlowPx: 0,
+    highlightColor: '#4abad9',
+    baseColor: '#e1e4e5',
+    reachedOpacity: 0.8,
+    unreachedOpacity: 0.2,
+    wordActiveEmphasisMs: 210,
+    charActiveEmphasisMs: 0,
+    activeScale: 1.05,
+    activeGlowPx: 5,
     activeStrokePx: 0,
-    activeStrokeColor: 'var(--accent)',
-    baseStrokePx: 0.35,
-    baseStrokeColor: 'oklch(0.13 0.03 285 / 0.7)',
+    activeStrokeColor: '#000000',
+    baseStrokePx: 1.5,
+    baseStrokeColor: '#000000',
 
     // Matches the timestamps-tab animation: the dataset's display text is
     // DigitalKhatt-encoded, so it must render in the DigitalKhatt webfont
     // (@font-face in styles/base.css → /fonts/DigitalKhattV2.otf). Fallbacks
     // are other naskh faces for when the font hasn't loaded.
     fontFamily: "'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif",
-    fontSizePx: 34,
-    lineHeight: 1.9,
-    wordSpacingPx: 5,
+    fontSizePx: 26,
+    lineHeight: 2,
+    wordSpacingPx: 8,
     letterSpacingPx: 0,
 
     granularity: 'word',
@@ -158,11 +163,11 @@ export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
 
     filmstripShow: true,
     filmstripMotion: 'hybrid',
-    filmstripProportional: 0.7,
-    filmstripMinCellPx: 40,
-    filmstripMaxCellPx: 120,
-    filmstripGapPx: 4,
-    filmstripHeightPx: 40,
+    filmstripProportional: 1,
+    filmstripMinCellPx: 30,
+    filmstripMaxCellPx: 170,
+    filmstripGapPx: 5,
+    filmstripHeightPx: 36,
 };
 
 /** 8-direction text-shadow that outlines the rendered text *silhouette*. Unlike
@@ -191,6 +196,10 @@ export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
         ? outlineShadow(cfg.activeStrokePx, cfg.activeStrokeColor)
         : baseOutline;
     const glow = cfg.activeGlowPx > 0 ? `0 0 ${cfg.activeGlowPx}px ${cfg.highlightColor}` : '';
+    // Vertical headroom so an active word scaled by `activeScale` (>1) isn't
+    // clipped by the fixed-height, overflow-hidden line box. Round up to a
+    // whole px; 0 when no scale.
+    const scalePad = Math.ceil(Math.max(0, cfg.activeScale - 1) * cfg.fontSizePx);
     return {
         '--ra-word-reveal': `${cfg.wordRevealMs}ms`,
         '--ra-char-reveal': `${cfg.charRevealMs}ms`,
@@ -202,9 +211,14 @@ export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
         '--ra-reached-opacity': String(cfg.reachedOpacity),
         '--ra-unreached-opacity': String(cfg.unreachedOpacity),
         '--ra-active-scale': String(cfg.activeScale),
+        '--ra-scale-pad': `${scalePad}px`,
         // Word-silhouette outline (base) + active outline/glow, as text-shadow.
         '--ra-word-shadow': baseOutline || 'none',
         '--ra-word-shadow-active': [glow, activeOutline].filter(Boolean).join(', ') || 'none',
+        // Glow-only (no outline) — used by the active CHAR in char granularity so
+        // the active letter glows without re-stroking each glyph (the legibility
+        // stroke stays on the word silhouette in char mode).
+        '--ra-glow': glow || 'none',
         '--ra-font': cfg.fontFamily,
         '--ra-font-size': `${cfg.fontSizePx}px`,
         '--ra-line-height': String(cfg.lineHeight),

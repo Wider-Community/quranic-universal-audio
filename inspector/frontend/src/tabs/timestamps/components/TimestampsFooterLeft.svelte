@@ -1,0 +1,202 @@
+<script lang="ts">
+    /**
+     * Timestamps footer — left cluster (BottomPlayer `meta` slot when the
+     * Timestamps tab is active). A tri-state shuffle cycle button sits beside
+     * the published-only reciter picker chip (no state pill); the picker
+     * drop-up lists the other TS-capable reciters.
+     *
+     * The analysis cluster (loop / letters / phonemes / translations / help)
+     * lives in the player CENTER — see TimestampsFooterAnalysis. The
+     * bookmark + panel buttons live on the now-reciting filmstrip.
+     */
+    import { onMount } from 'svelte';
+
+    import { clickOutside } from '../../../lib/actions/click-outside';
+    import ReciterChip from '../../../lib/components/ReciterChip.svelte';
+    import { playerContext } from '../../../lib/stores/player-context';
+    import { LS_KEYS } from '../../../lib/utils/constants';
+    import { combinationCompact } from '../../../lib/utils/delivery-label';
+    import { catalogData } from '../../dashboard/stores/catalog-data';
+    import { loadManifest } from '../services/ts_client';
+    import {
+        findTsEntryBySlug,
+        resolveTsDeliveries,
+        type TsPublishedEntry,
+    } from '../services/ts-published';
+    import { cycleShuffle, shuffleMode } from '../stores/shuffle';
+
+    // Tri-state shuffle: 0 off · 1 ayah (same reciter) · 2 both (random
+    // reciter + ayah). Off/ayah share the single-reciter glyph (ayah just
+    // highlights it); both swaps to the random-reciter glyph.
+    const SHUFFLE_LABEL = ['Shuffle: off', 'Shuffle ayah (same reciter)', 'Shuffle reciter + ayah'];
+    const shuffleSrc = $derived($shuffleMode === 2 ? '/icons/reciter_random.svg' : '/icons/reciter.svg');
+
+    let manifestSlugs = $state(new Set<string>());
+    let pickerOpen = $state(false);
+
+    onMount(() => {
+        void loadManifest()
+            .then((m) => { manifestSlugs = new Set(Object.keys(m.reciters)); })
+            .catch(() => {});
+    });
+
+    const entries = $derived(resolveTsDeliveries($catalogData.reciters, manifestSlugs));
+    const curSlug = $derived($playerContext.delivery?.slug ?? '');
+    const curEntry = $derived(findTsEntryBySlug($catalogData.reciters, manifestSlugs, curSlug));
+    const hasMany = $derived(entries.length > 1);
+
+    function pick(e: TsPublishedEntry): void {
+        pickerOpen = false;
+        if (e.delivery.slug === curSlug) return;
+        try { localStorage.setItem(LS_KEYS.TS_RECITER, e.delivery.slug); } catch { /* ignore */ }
+        playerContext.update((s) => ({
+            ...s,
+            reciter: e.reciter,
+            delivery: e.delivery,
+            surahNum: s.surahNum ?? 1,
+            positionMs: 0,
+        }));
+    }
+</script>
+
+<div class="tfl">
+    <!-- Reciter picker (published only, no state pill) -->
+    <div class="picker-wrap" use:clickOutside={() => (pickerOpen = false)}>
+        <button
+            type="button" class="picker-trigger" class:interactive={hasMany}
+            onclick={() => { if (hasMany) pickerOpen = !pickerOpen; }}
+            disabled={!hasMany && !curEntry}
+            aria-haspopup={hasMany ? 'listbox' : undefined}
+            aria-expanded={hasMany ? pickerOpen : undefined}
+        >
+            {#if curEntry}
+                <ReciterChip
+                    name={curEntry.reciter.name}
+                    nameAr={curEntry.reciter.name_ar}
+                    country={curEntry.reciter.country}
+                    subline={combinationCompact(curEntry.delivery)}
+                    bucket={null}
+                    switchable={hasMany}
+                />
+            {:else}
+                <span class="muted">Pick a reciter</span>
+            {/if}
+        </button>
+
+        {#if pickerOpen && hasMany}
+            <div class="dropup" role="listbox" aria-label="Pick reciter">
+                {#each entries as e (e.delivery.slug)}
+                    <button
+                        type="button" class="opt" class:active={e.delivery.slug === curSlug}
+                        role="option" aria-selected={e.delivery.slug === curSlug}
+                        onclick={() => pick(e)}
+                    >
+                        <ReciterChip
+                            name={e.reciter.name}
+                            nameAr={e.reciter.name_ar}
+                            country={e.reciter.country}
+                            subline={combinationCompact(e.delivery)}
+                            bucket={null}
+                            variant="compact"
+                        />
+                    </button>
+                {/each}
+            </div>
+        {/if}
+    </div>
+
+    <!-- Tri-state shuffle cycle (double-height, right of the picker) -->
+    <button
+        type="button" class="shuffle-btn" class:on={$shuffleMode !== 0}
+        aria-label={SHUFFLE_LABEL[$shuffleMode]} title={SHUFFLE_LABEL[$shuffleMode]}
+        onclick={cycleShuffle}
+    ><img class="shuffle-img" src={shuffleSrc} alt="" aria-hidden="true" /></button>
+</div>
+
+<style>
+    .tfl {
+        display: inline-flex;
+        align-items: stretch;
+        gap: var(--s-2);
+        min-width: 0;
+    }
+    /* Double-height shuffle button — matches the picker chip's height. */
+    .shuffle-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 34px;
+        align-self: stretch;
+        color: var(--text-muted);
+        background: var(--panel-2);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+        cursor: pointer;
+        transition: color var(--t-fast), background var(--t-fast), border-color var(--t-fast);
+    }
+    .shuffle-btn:hover { color: var(--text-primary); border-color: var(--border-strong); background: var(--panel); }
+    .shuffle-btn.on { color: var(--accent); background: var(--accent-tint); border-color: var(--accent); }
+    .shuffle-img {
+        width: 18px;
+        height: 18px;
+        opacity: 0.6;
+        transition: opacity var(--t-fast);
+    }
+    .shuffle-btn:hover .shuffle-img { opacity: 0.9; }
+    .shuffle-btn.on .shuffle-img { opacity: 1; }
+
+    .picker-wrap { position: relative; min-width: 0; }
+    .picker-trigger {
+        display: inline-flex;
+        align-items: center;
+        max-width: 100%;
+        min-width: 0;
+        padding: 4px var(--s-2) 4px 4px;
+        background: var(--panel-2);
+        border: 1px solid var(--border-quiet);
+        border-radius: 999px;
+        color: inherit;
+        cursor: default;
+        font: inherit;
+        text-align: left;
+    }
+    .picker-trigger.interactive { cursor: pointer; }
+    .picker-trigger.interactive:hover { border-color: var(--border-strong); background: var(--panel); }
+    .picker-trigger:disabled { opacity: 0.7; }
+    .muted { color: var(--text-muted); padding-inline: var(--s-2); font-size: var(--fs-meta); }
+
+    .dropup {
+        position: absolute;
+        bottom: calc(100% + var(--s-2));
+        left: 0;
+        min-width: 320px;
+        max-width: 480px;
+        max-height: min(360px, 50vh);
+        overflow-y: auto;
+        background: var(--panel);
+        border: 1px solid var(--border-default);
+        border-radius: var(--r-3);
+        box-shadow: 0 16px 48px oklch(0 0 0 / 0.45);
+        z-index: 50;
+        padding: var(--s-2);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    .opt {
+        display: flex;
+        align-items: center;
+        padding: 6px var(--s-2);
+        background: transparent;
+        border: 0;
+        border-radius: var(--r-2);
+        cursor: pointer;
+        text-align: left;
+        font: inherit;
+        color: var(--text-primary);
+        transition: background var(--t-fast);
+    }
+    .opt:hover { background: var(--accent-tint-soft); }
+    .opt.active { background: var(--accent-tint); }
+</style>

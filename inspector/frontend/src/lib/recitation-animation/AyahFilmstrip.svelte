@@ -24,9 +24,14 @@
         /** Preview-highlight the ayah spanning this time (e.g. progress-bar
          *  hover). null = no preview. */
         hoverMs?: number | null;
+        /** Active progress-bar *drag* time — the strip scroll-follows it (both
+         *  motion modes) while non-null, suspending the playback driver. null =
+         *  not scrubbing. */
+        scrubMs?: number | null;
     }
 
-    let { ayahs, getTimeMs, playing, config, onSeek, hoverMs = null }: Props = $props();
+    let { ayahs, getTimeMs, playing, config, onSeek, hoverMs = null, scrubMs = null }: Props =
+        $props();
 
     const clamp = (lo: number, hi: number, v: number): number => Math.min(hi, Math.max(lo, v));
     const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
@@ -91,6 +96,12 @@
     }
     const activeIdx = $derived(indexForTime(nowMs));
     const hoverIdx = $derived(hoverMs == null ? -1 : indexForTime(hoverMs));
+    // Snap mode has no moving needle (the strip is always centered on the active
+    // cell), so instead we highlight the cell under where the invisible needle
+    // would sit — i.e. the nearest cell to the current scroll offset. While
+    // playing it equals the active cell; while dragging it follows the drag,
+    // showing which ayah a release will snap to. -1 (off) outside snap mode.
+    const cursorIdx = $derived(config.filmstripMotion === 'snap' ? nearestCell(offset) : -1);
 
     function fill(i: number): number {
         const c = cells[i];
@@ -137,7 +148,7 @@
         let raf = 0;
         const loop = (): void => {
             nowMs = getTimeMs();
-            if (!dragging && config.filmstripMotion !== 'snap') {
+            if (!dragging && scrubMs == null && config.filmstripMotion !== 'snap') {
                 animate = false;
                 offset = continuousOffset(nowMs);
             }
@@ -147,12 +158,24 @@
         return () => cancelAnimationFrame(raf);
     });
 
-    // Snap mode: glide the active cell to center when the ayah changes.
+    // Snap mode: glide the active cell to center when the ayah changes. Yields
+    // to a progress-bar scrub (the scroll-follow effect owns offset then).
     $effect(() => {
         void activeIdx;
-        if (config.filmstripMotion !== 'snap' || dragging || activeIdx < 0 || cw === 0) return;
+        if (config.filmstripMotion !== 'snap' || dragging || scrubMs != null
+            || activeIdx < 0 || cw === 0) return;
         animate = true;
         offset = offsetForCellCenter(activeIdx);
+    });
+
+    // Progress-bar drag → scroll-follow the dragged time (both motion modes).
+    // Direct offset write (no CSS transition) mirrors the strip's own drag, so
+    // it tracks the pointer smoothly; the playback driver above is suspended
+    // while scrubMs is non-null. On release the parent seeks + the strip settles.
+    $effect(() => {
+        if (scrubMs == null || cw === 0) return;
+        animate = false;
+        offset = clamp(0, lastRight, continuousOffset(scrubMs));
     });
 
     // Drag — pan the strip; release scrubs (tuner) or snaps to an ayah.
@@ -243,7 +266,12 @@
             }
         }}
     >
-        <div class="track" class:animate style:transform="translateX({-offset}px)">
+        <div
+            class="track"
+            class:animate
+            class:snap-glide={config.filmstripMotion === 'snap'}
+            style:transform="translateX({-offset}px)"
+        >
             <div class="pad" style:width="{pad}px"></div>
             {#each cells as c, i (c.ayah)}
                 <div
@@ -251,6 +279,7 @@
                     class:active={i === activeIdx}
                     class:reached={i < activeIdx}
                     class:preview={i === hoverIdx && i !== activeIdx}
+                    class:cursor={i === cursorIdx}
                     style:width="{c.w}px"
                     style:margin-right="{config.filmstripGapPx}px"
                 >
@@ -260,7 +289,9 @@
             {/each}
             <div class="pad" style:width="{pad}px"></div>
         </div>
-        <div class="needle" aria-hidden="true"></div>
+        {#if config.filmstripMotion !== 'snap'}
+            <div class="needle" aria-hidden="true"></div>
+        {/if}
         <div class="fade fade-l" aria-hidden="true"></div>
         <div class="fade fade-r" aria-hidden="true"></div>
     </div>
@@ -278,6 +309,13 @@
     .filmstrip:active {
         cursor: grabbing;
     }
+    /* The strip is a focusable slider (tabindex/role) so clicking or arrowing
+       it focuses the container; suppress the browser's ring around the WHOLE
+       strip — the active cell's accent border already marks position. */
+    .filmstrip:focus,
+    .filmstrip:focus-visible {
+        outline: none;
+    }
     .track {
         position: absolute;
         top: 50%;
@@ -290,6 +328,11 @@
     }
     .track.animate {
         transition: transform var(--t-base, 200ms) var(--ease-out-quart, ease);
+    }
+    /* Snap mode glides whole-ayah hops, so it gets a longer, more dramatic
+       slide-and-settle (ease-out-expo) than hybrid's quick release snap. */
+    .track.snap-glide.animate {
+        transition: transform 560ms cubic-bezier(0.16, 1, 0.3, 1);
     }
     .pad {
         flex: 0 0 auto;
@@ -315,6 +358,13 @@
     .cell.active {
         border-color: var(--accent);
         background: var(--accent-tint-soft);
+    }
+    /* Snap-mode cursor cell — the ayah under the invisible needle (active cell
+     *  while playing, drag target while scrubbing). An inset accent ring keeps it
+     *  distinct from `.active`'s tinted fill so both can show at once mid-drag. */
+    .cell.cursor {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
     }
     /* Progress-bar hover preview — the verse spanned by the hovered time. */
     .cell.preview {
@@ -375,7 +425,8 @@
         background: linear-gradient(to left, var(--panel), transparent);
     }
     @media (prefers-reduced-motion: reduce) {
-        .track.animate {
+        .track.animate,
+        .track.snap-glide.animate {
             transition: none;
         }
     }

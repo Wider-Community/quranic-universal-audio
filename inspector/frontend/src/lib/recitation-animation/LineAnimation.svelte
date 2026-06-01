@@ -17,7 +17,6 @@
     import { ayahUnitRanges } from './chapter-words';
     import { cssVarText, type RecitationAnimConfig } from './config';
     import { buildAnimStructure, type AnimSourceWord } from './engine/build-structure';
-    import { sweepHighlights } from './engine/highlight';
     import {
         clearHighlights,
         indexCache,
@@ -48,11 +47,16 @@
     let pageAyahKey = $state('');
     /** Words rendered on the current page; null = "measure the remainder". */
     let pageCount = $state<number | null>(null);
+    /** Set for the frame a layout/granularity switch re-pages the line, so the
+     *  per-word opacity/color transitions are suppressed (words snap straight to
+     *  their new-mode state). Without this, switching letter→word fades every
+     *  word from char-mode opacity:1 down to the dim unreached level at once,
+     *  reading as a flash of all-words-active. Cleared once the sweep settles. */
+    let suppressTransition = $state(false);
 
     // ---- imperative per-frame state (not reactive) ----
     let wordCache: HighlightCache | null = null;
     let charCache: HighlightCache | null = null;
-    let lastRevealIdx = -1;
     let globalActive = -1;
     /** Reading index of the last active word (the cursor). On a jump-back it
      *  decreases; used to keep the trail revealed during a silence gap. */
@@ -77,8 +81,12 @@
                 (u): AnimSourceWord => ({
                     text: u.text,
                     display_text: u.text,
-                    start: u.start,
-                    end: u.end,
+                    // Letter timings are anchored to the FIRST occurrence; a
+                    // repeated word's `u.start/u.end` are expanded to span every
+                    // occurrence (min..max), which would stretch the char
+                    // fallback range. Use the first occurrence's span instead.
+                    start: u.intervals[0]?.start ?? u.start,
+                    end: u.intervals[0]?.end ?? u.end,
                     letters: u.letters,
                 }),
             ),
@@ -92,7 +100,6 @@
         pageAyahKey = units[0]?.ayahKey ?? '';
         pageCount = null;
         globalActive = -1;
-        lastRevealIdx = -1;
         lastActive = -1;
     });
 
@@ -107,6 +114,9 @@
         void config.granularity;
         void config.showAyahMarker;
         pageCount = null;
+        // Snap (no fade) across this re-page so a granularity switch doesn't
+        // flash every word lit; re-enabled once the sweep below settles.
+        suppressTransition = true;
     });
 
     // Re-measure once webfonts finish loading. The display font (DigitalKhatt)
@@ -132,13 +142,20 @@
         wordCache = indexCache(rootEl, '.ra-word');
         charCache = config.granularity === 'char' ? indexCache(rootEl, '.ra-char') : null;
         clearHighlights(rootEl);
-        lastRevealIdx = -1;
         const fitted = measureFits();
         if (pageCount === null || fitted < pageCount) {
             pageCount = fitted; // re-renders the fitted set; this effect re-runs
             return; // sweep on the stabilized pass
         }
         doSweep();
+        // The corrected per-word classes are now committed with transitions
+        // off; re-enable smooth transitions once this paints (double rAF so
+        // the snapped state lands first, then subsequent frames animate).
+        if (suppressTransition) {
+            requestAnimationFrame(() =>
+                requestAnimationFrame(() => { suppressTransition = false; }),
+            );
+        }
     });
 
     // rAF loop — only alive while playing.
@@ -169,9 +186,7 @@
     function doSweep(): void {
         const t = (getTimeMs() + config.leadMs) / 1000;
         if (config.granularity === 'char') {
-            if (charCache) {
-                lastRevealIdx = sweepHighlights(charCache, t, lastRevealIdx, { mode: 'class' });
-            }
+            sweepChar(t);
             return;
         }
         sweepWord(t);
@@ -208,6 +223,94 @@
         }
     }
 
+    /** Char-granularity highlight — occurrence-aware, mirroring {@link sweepWord}.
+     *  The naive time-based char sweep keyed each letter off its single canonical
+     *  [start,end]; on a repeat / look-back the audio time is past every letter
+     *  of the repeated word, so the whole word read `reached` and the active
+     *  letter never travelled back. Instead we locate the active word's CURRENT
+     *  occurrence interval and remap `t` onto the word's canonical letter
+     *  timeline, so repeats re-reveal letter-by-letter.
+     *
+     *  Walk order matches the DOM: `.ra-char` spans exist only for words with
+     *  `hasChars`, in `structure` order, so the flat `charCache` index advances
+     *  in lockstep with the rendered spans. */
+    function sweepChar(t: number): void {
+        if (!charCache) return;
+        const items = charCache.items;
+
+        // Active word (local index) + the occurrence interval containing t.
+        let active = -1;
+        let occStart = 0;
+        let occEnd = 0;
+        for (let i = 0; i < pageUnits.length; i++) {
+            const u = pageUnits[i];
+            if (!u) continue;
+            const iv = u.intervals.find((v) => t >= v.start && t < v.end);
+            if (iv) {
+                active = i;
+                occStart = iv.start;
+                occEnd = iv.end;
+                break;
+            }
+        }
+        if (active >= 0) lastActive = active;
+
+        // Remap playback time into the active word's canonical letter timeline.
+        // The letters are anchored to the FIRST occurrence (`intervals[0]`), so
+        // we map the CURRENT occurrence's progress onto that span. (Using the
+        // unit's start/end is wrong for repeats: they expand to cover every
+        // occurrence, overshooting all letters → nothing animates on a repeat.)
+        let localT = -1;
+        if (active >= 0) {
+            const canon = pageUnits[active]!.intervals[0] ?? { start: occStart, end: occEnd };
+            const span = occEnd - occStart;
+            const frac = span > 0 ? (t - occStart) / span : 0;
+            localT = canon.start + frac * (canon.end - canon.start);
+        }
+
+        let ci = 0;
+        for (let wi = 0; wi < structure.length; wi++) {
+            const sw = structure[wi];
+            const chars = sw && sw.hasChars ? sw.chars : [];
+            // Words before the active cursor are reached; after it, unreached.
+            // During a silence gap (active < 0) keep the trail up to lastActive.
+            const wordReached = active >= 0 ? wi < active : wi <= lastActive;
+            // Mark word-level state too (not just chars). Only the ACTIVE word
+            // renders letter-by-letter; prev/upcoming words use this to fall
+            // back to the whole-word silhouette (word-mode look) — see CSS.
+            const wordEl = wordCache?.items[wi]?.el;
+            if (wordEl) {
+                const wActive = wi === active;
+                wordEl.classList.toggle('active', wActive);
+                wordEl.classList.toggle('reached', wordReached && !wActive);
+            }
+            for (let k = 0; k < chars.length; k++) {
+                const el = items[ci]?.el;
+                ci++;
+                if (!el) continue;
+                let isActive = false;
+                let isReached = wordReached;
+                const ch = chars[k]!;
+                if (wi === active && localT >= 0) {
+                    isActive = localT >= ch.start && localT < ch.end;
+                    isReached = !isActive && localT >= ch.end;
+                } else if (active >= 0 && sw && (ch.start !== sw.start || ch.end !== sw.end)) {
+                    // Cross-word idgham/ghunnah: a real-timed letter in a
+                    // NON-active word that's co-timed with the active letter
+                    // must light together. The analysis tab does this because
+                    // it highlights each letter purely by time, not scoped to
+                    // the active word; mirror that here using raw playback time
+                    // against the letter's own interval. Fallback (word-timed)
+                    // chars are skipped so an overlapping word isn't flooded.
+                    if (t >= ch.start && t < ch.end) { isActive = true; isReached = false; }
+                    else if (t >= ch.end) isReached = true; // keep co-timed trail revealed
+                }
+                el.classList.toggle('active', isActive);
+                el.classList.toggle('reached', isReached);
+            }
+        }
+    }
+
     /** Reading index of the word whose any occurrence span contains `t`, or -1
      *  during a silence gap. Interval-aware (handles repeats / look-back). */
     function activeUnitAt(t: number): number {
@@ -225,7 +328,6 @@
         pageStart = start;
         pageAyahKey = ayahKey;
         pageCount = null;
-        lastRevealIdx = -1;
         lastActive = -1;
         // The structure effect re-measures + sweeps once the new page renders.
     }
@@ -277,6 +379,7 @@
     bind:this={rootEl}
     class="ra-line"
     class:ra-chars={config.granularity === 'char'}
+    class:ra-no-transition={suppressTransition}
     style={cssVarText(config)}
     style:text-align={pageCount === null ? 'right' : null}
 >
@@ -290,7 +393,10 @@
             tabindex="-1"
             onclick={() => onSeekToWord?.((pageUnits[i]?.start ?? 0) * 1000)}
             onkeydown={() => {}}
-        >{#if config.granularity === 'char' && w.hasChars}{#each w.chars as ch, ci (ci)}<span
+        >{#if config.granularity === 'char' && w.hasChars}<span
+                    class="ra-word-ink"
+                    aria-hidden="true"
+                >{w.word.display_text || w.word.text}</span>{#each w.chars as ch, ci (ci)}<span
                     class="ra-char"
                     data-start={ch.start}
                     data-end={ch.end}
@@ -314,6 +420,11 @@
         overflow: hidden;
         width: 100%;
         height: calc(var(--ra-font-size) * var(--ra-line-height));
+        /* Reserve vertical headroom so an active word scaled by `activeScale`
+         *  (>1) isn't clipped top/bottom by `overflow:hidden`. content-box keeps
+         *  `height` the text row; the padding adds the scale headroom around it. */
+        padding-block: var(--ra-scale-pad, 0px);
+        box-sizing: content-box;
         line-height: var(--ra-line-height);
         font-family: var(--ra-font);
         font-size: var(--ra-font-size);
@@ -347,36 +458,88 @@
     }
     /* `reached` / `active` are toggled imperatively by the engine, so scope
      *  only `.ra-word` and keep the state class global (else Svelte prunes /
-     *  warns it as unused). */
-    .ra-word:global(.reached) {
-        opacity: var(--ra-reached-opacity);
+     *  warns it as unused). Word-mode only — char mode reuses the same word-level
+     *  classes for a different purpose (whole-word fallback, see below). */
+    .ra-line:not(.ra-chars) .ra-word:global(.reached) {
+        opacity: 1; /* visited words stay fully visible (no reached-dim) */
     }
-    .ra-word:global(.active) {
+    .ra-line:not(.ra-chars) .ra-word:global(.active) {
         opacity: 1;
         color: var(--ra-highlight);
         transform: scale(var(--ra-active-scale));
         text-shadow: var(--ra-word-shadow-active);
     }
 
-    /* Char granularity: the word stays lit; characters are the animated unit. */
+    /* Char granularity: the word stays lit; characters are the animated unit.
+     *  The legibility stroke is drawn ONCE at the word-silhouette level via the
+     *  `.ra-word-ink` underlay (a transparent-fill copy of the whole word that
+     *  carries the outline), so cursive-joined letters are never individually
+     *  stroked — a per-char outline shows dark seams across the joins. */
     .ra-line.ra-chars .ra-word {
         opacity: 1;
+        position: relative;
+        /* Don't inherit the word outline down to each char span. */
+        text-shadow: none;
+    }
+    .ra-line.ra-chars .ra-word-ink {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        color: transparent;
+        text-shadow: var(--ra-word-shadow);
+        white-space: nowrap;
+        pointer-events: none;
+        /* Tie the stroke's strength to the upcoming-text level so it never
+         *  dominates a faint fill (which read as inverted/dark text when the
+         *  letters were Dim or Hidden). At Hidden (0) the outline vanishes too. */
+        opacity: var(--ra-unreached-opacity);
     }
     .ra-line.ra-chars .ra-char {
+        position: relative;
+        z-index: 1;
         opacity: var(--ra-unreached-opacity);
-        text-shadow: var(--ra-word-shadow);
         transition:
             opacity var(--ra-char-reveal) var(--ra-easing),
             color var(--ra-active-emphasis) var(--ra-easing),
             text-shadow var(--ra-active-emphasis) var(--ra-easing);
     }
     .ra-line.ra-chars .ra-char:global(.reached) {
-        opacity: var(--ra-reached-opacity);
+        opacity: 1; /* visited words stay fully visible (no reached-dim) */
     }
     .ra-line.ra-chars .ra-char:global(.active) {
         opacity: 1;
         color: var(--ra-highlight);
-        text-shadow: var(--ra-word-shadow-active);
+        /* Glow only — never re-stroke the active letter. */
+        text-shadow: var(--ra-glow);
+    }
+
+    /* Char mode: only the ACTIVE word is shown letter-by-letter. Previous and
+     *  upcoming words fall back to the WHOLE-WORD silhouette so they read like
+     *  word mode — splitting a word into per-letter spans breaks Arabic cursive
+     *  joining (isolated forms with visible seams, the "letter borders"). The
+     *  `.ra-word-ink` underlay is already the full word as one joined text node,
+     *  so for non-active words we fill it (make it the visible text) and hide the
+     *  per-letter spans. Independent of the upcoming-visibility (eye) setting —
+     *  the ink still carries the unreached opacity for dimming. */
+    .ra-line.ra-chars .ra-word:not(:global(.active)) .ra-word-ink {
+        color: var(--ra-base-color);
+    }
+    .ra-line.ra-chars .ra-word:not(:global(.active)) .ra-char {
+        opacity: 0;
+    }
+    /* Already-recited words stay fully visible, like word-mode reached. */
+    .ra-line.ra-chars .ra-word:global(.reached) .ra-word-ink {
+        opacity: 1;
+    }
+
+    /* One-frame transition kill across a granularity / layout re-page so words
+     *  snap to their new-mode opacity instead of all fading together (the
+     *  letter→word flash). */
+    .ra-line.ra-no-transition .ra-word,
+    .ra-line.ra-no-transition.ra-chars .ra-word,
+    .ra-line.ra-no-transition.ra-chars .ra-char,
+    .ra-line.ra-no-transition.ra-chars .ra-word-ink {
+        transition: none;
     }
 
     @media (prefers-reduced-motion: reduce) {

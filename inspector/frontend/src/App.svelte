@@ -8,17 +8,22 @@
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import ExternalLinks from './lib/components/ExternalLinks.svelte';
     import InfoModal from './lib/components/info/InfoModal.svelte';
+    import BottomPlayer from './lib/components/player/BottomPlayer.svelte';
+    import NowReciting from './lib/components/player/NowReciting.svelte';
+    import PlayerMetaChip from './lib/components/player/PlayerMetaChip.svelte';
     import SignInModal from './lib/components/SignInModal.svelte';
     import ToastHost from './lib/components/ToastHost.svelte';
     import { dashPort } from './lib/playback/dash-port';
-    import { toggleBookmarksPanel } from './lib/stores/bookmarks';
     import { currentUser, isSignedIn, loadCurrentUser } from './lib/stores/current-user';
+    import { playerContext } from './lib/stores/player-context';
+    import type { PublicDelivery } from './lib/types/public-state';
     import { activeTab as activeTabStore, getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS, TAB_NAMES } from './lib/utils/constants';
     import DashboardTab from './tabs/dashboard/DashboardTab.svelte';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
     import { segPort } from './tabs/segments/stores/playback';
-    import { tsPort } from './tabs/timestamps/stores/playback';
+    import TimestampsFooterAnalysis from './tabs/timestamps/components/TimestampsFooterAnalysis.svelte';
+    import TimestampsFooterLeft from './tabs/timestamps/components/TimestampsFooterLeft.svelte';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
 
     // `activeTab` follows the shared store so external navigation (e.g. the
@@ -42,9 +47,18 @@
     function applyTabSideEffects(tab: string): void {
         if (!tab) return;
         localStorage.setItem(LS_KEYS.ACTIVE_TAB, tab);
-        if (tab !== TAB_NAMES.TIMESTAMPS) tsPort.pause();
+        // The shared shell player (dashPort) now drives BOTH Dashboard and
+        // Timestamps, so we deliberately DON'T pause it on a Dashboard↔Timestamps
+        // switch — that continuity (audio + animation + waveform cursor) is the
+        // whole point. Segments owns its own transport (segPort) and shows its
+        // own footer, so we silence + hide the shared player there.
+        if (tab === TAB_NAMES.SEGMENTS) dashPort.pause();
         if (tab !== TAB_NAMES.SEGMENTS) segPort.pause();
-        if (tab !== TAB_NAMES.DASHBOARD) dashPort.pause();
+    }
+
+    function onCombinationSelect(ev: CustomEvent<PublicDelivery>): void {
+        const d = ev.detail;
+        playerContext.update((s) => ({ ...s, delivery: d, positionMs: 0 }));
     }
 
     function _onSignIn() {
@@ -105,9 +119,6 @@
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => setActiveTab(TAB_NAMES.SEGMENTS)}>Segments</button>
         </div>
         <div class="auth-controls">
-            <button type="button" class="auth-btn" title="Bookmarks" on:click={toggleBookmarksPanel}>
-                ☆ Bookmarks
-            </button>
             {#if $currentUser.dev_mode}
                 <!-- Local dev only — never rendered on the deployed Space. -->
                 <DevRoleSwitcher />
@@ -148,6 +159,34 @@
         </div>
     {/if}
 
+    <!-- ============ Shared shell player ============
+         One BottomPlayer + NowReciting for the whole app so playback,
+         animation, and the waveform cursor survive Dashboard↔Timestamps
+         switches (the player never unmounts). Hidden on Segments, which owns
+         its own footer/transport. The Timestamps tab fills the player's
+         `meta` (shuffle cycle + published-only reciter picker) and
+         `center-trail` (analysis row) slots; Dashboard uses the default chip. -->
+    <div hidden={activeTab === TAB_NAMES.SEGMENTS}>
+        <NowReciting />
+        <BottomPlayer>
+            <svelte:fragment slot="meta">
+                {#if activeTab === TAB_NAMES.TIMESTAMPS}
+                    <TimestampsFooterLeft />
+                {:else}
+                    <PlayerMetaChip
+                        reciter={$playerContext.reciter}
+                        delivery={$playerContext.delivery}
+                        on:select={onCombinationSelect}
+                    />
+                {/if}
+            </svelte:fragment>
+            <svelte:fragment slot="center-trail">
+                {#if activeTab === TAB_NAMES.TIMESTAMPS}
+                    <TimestampsFooterAnalysis />
+                {/if}
+            </svelte:fragment>
+        </BottomPlayer>
+    </div>
 
 </div>
 
