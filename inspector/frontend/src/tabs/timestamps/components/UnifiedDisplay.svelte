@@ -154,40 +154,35 @@
     ): RenderedBlock[] {
         if (!words.length) return [];
 
-        // Map Quran word number (1-based, from `location`) → first array index
-        // where it appears. Shards routinely contain duplicate occurrences of
-        // the same word (repeat-pass / partial retake artefacts — verified
-        // empirically: ~30% of verses have at least one duplicate). Using the
-        // array index as a proxy for the word number silently misplaces the
-        // bridge once a duplicate shifts subsequent positions; resolve via
-        // `location` so the bridge always lands on the FIRST occurrence (the
-        // one closest in time to the boundary the rule actually applies at).
-        const firstArrIdxByWordNum = new Map<number, number>();
-        for (let i = 0; i < words.length; i++) {
-            const wn = wordNumOf(words[i]!);
-            if (wn > 0 && !firstArrIdxByWordNum.has(wn)) {
-                firstArrIdxByWordNum.set(wn, i);
-            }
-        }
+        // Shards intentionally carry duplicate word occurrences when the
+        // reciter repeats a phrase (the second take is part of the
+        // recitation, not a pathology). For each shard pair we therefore
+        // ask: are these two adjacent occurrences a real (N-1 → N) Quran
+        // boundary? If they are AND the backend predicted a bridge for that
+        // boundary, render it in this specific pair. Pairs that are
+        // restart-bounded (next word number ≤ this one) get no bridge — the
+        // cross-word rule legitimately can't fire across a repetition jump.
+        // This yields one bridge tile per real adjacent crossing, including
+        // the second tile in a (16,17,18,19, 17,18,19, 20) repeat sequence.
+        const bridgeByWordNum = new Map<number, BridgeInfo>();
+        for (const b of bridgeInfos) bridgeByWordNum.set(b.before_word_idx, b);
 
-        // For each bridge, resolve the curr-word block's array position via
-        // the lookup. Peel the phoneme from the SAME first-occurrence block on
-        // whichever side the backend specified — the merger phoneme is
-        // physically in that occurrence's phone list (later duplicates carry
-        // copies but we only render the first).
         const bridgePhoneByBlock = new Map<number, number>();
         const excluded = new Set<number>();
-        for (const b of bridgeInfos) {
-            const currArrIdx = firstArrIdxByWordNum.get(b.before_word_idx);
-            if (currArrIdx === undefined || currArrIdx === 0) continue;
-            const prevArrIdx = firstArrIdxByWordNum.get(b.before_word_idx - 1);
-            if (prevArrIdx === undefined) continue;
-            const src = b.side === 'curr' ? words[currArrIdx] : words[prevArrIdx];
-            const indices = src?.phoneme_indices;
+        for (let i = 1; i < words.length; i++) {
+            const prev = words[i - 1]!;
+            const curr = words[i]!;
+            const prevWn = wordNumOf(prev);
+            const currWn = wordNumOf(curr);
+            if (prevWn === 0 || currWn === 0 || currWn !== prevWn + 1) continue;
+            const b = bridgeByWordNum.get(currWn);
+            if (!b) continue;
+            const src = b.side === 'curr' ? curr : prev;
+            const indices = src.phoneme_indices;
             if (!indices || indices.length === 0) continue;
             const pi = b.side === 'curr' ? indices[0] : indices[indices.length - 1];
             if (pi === undefined || pi < 0) continue;
-            bridgePhoneByBlock.set(currArrIdx, pi);
+            bridgePhoneByBlock.set(i, pi);
             excluded.add(pi);
         }
 
