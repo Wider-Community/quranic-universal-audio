@@ -74,8 +74,11 @@ def test_existing_db_at_v6_gets_mark_ready_columns():
             host_patterns TEXT NOT NULL DEFAULT '[]'
         );
         CREATE TABLE deliveries (
-            slug         TEXT PRIMARY KEY,
-            bitrate_mode TEXT NOT NULL DEFAULT 'unknown'
+            slug                 TEXT PRIMARY KEY,
+            bitrate_mode         TEXT NOT NULL DEFAULT 'unknown',
+            -- 0015 nulls kbps on mixed rows, so the column must exist
+            -- even in this minimal v6 stub.
+            bitrate_kbps_nominal INTEGER
         );
         PRAGMA user_version = 6;
         """
