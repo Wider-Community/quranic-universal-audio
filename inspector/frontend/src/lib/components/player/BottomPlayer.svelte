@@ -15,8 +15,12 @@
 
     import { clickOutside } from '../../actions/click-outside';
     import { fetchSurahsForDelivery, type SurahEntry } from '../../api/audio-surahs';
+    import { takeAdoptedSource } from '../../playback/adopt-signal';
     import { ensureAudioContextRunning } from '../../playback/audio-graph';
+    import { adjacentAyahStartMs, nearestAyahStartMs } from '../../playback/ayah-seek';
     import { dashPort } from '../../playback/dash-port';
+    import { exitLoop } from '../../playback/loop';
+    import { recitationAyahStarts } from '../../recitation-animation/recitation-settings';
     import {
         loadPersistedSlice,
         persistSlice,
@@ -26,7 +30,6 @@
         setIsPlaying,
         setPosition,
         setSpeed,
-        setSurah,
     } from '../../stores/player-context';
     import type { PublicDelivery } from '../../types/public-state';
     import { DASHBOARD_SPEEDS } from '../../utils/speed-control';
@@ -50,7 +53,10 @@
         const unsubPlay = dashPort.onPlay(() => setIsPlaying(true));
         const unsubPause = dashPort.onPause(() => setIsPlaying(false));
         const unsubLoad = dashPort.onLoad(() => {
-            const dur = audioEl?.duration ?? 0;
+            // Read the LIVE element off the port, not `audioEl` — a gapless
+            // shuffle adopt swaps `dashPort.element` to a prewarmed element,
+            // leaving the template-bound `audioEl` stale.
+            const dur = dashPort.element?.duration ?? 0;
             setPosition(0, Number.isFinite(dur) ? dur * 1000 : 0);
             // Swap-complete (canplay): if the user wasn't already in a
             // mid-play buffering stall, this is the moment audio is ready
@@ -59,7 +65,8 @@
             setIsLoading(false);
         });
         const unsubTime = dashPort.onTimeUpdate((fileMs) => {
-            setPosition(fileMs, audioEl?.duration ? audioEl.duration * 1000 : undefined);
+            const dur = dashPort.element?.duration;
+            setPosition(fileMs, dur ? dur * 1000 : undefined);
         });
         const unsubWaiting = dashPort.onWaiting(() => setIsLoading(true));
         const unsubPlaying = dashPort.onPlaying(() => setIsLoading(false));
@@ -124,12 +131,29 @@
                 .filter(Number.isFinite)
                 .sort((a, b) => a - b);
             if (available.length > 0 && available[0] !== surahNum) {
-                setSurah(available[0]!);
+                playerContext.update((s) => ({ ...s, surahNum: available[0]!, positionMs: 0 }));
                 return;
             }
         }
 
         if (surahNum !== lastSurahNum || deliverySwitched) {
+            // Gapless-shuffle adopt: the Timestamps fire path already swapped a
+            // prewarmed element onto dashPort and started it, then set this
+            // signal before mutating playerContext. The source is already
+            // satisfied — do bookkeeping only and return, so we DON'T pause +
+            // re-decode (which would reintroduce the gap we just avoided).
+            // `urls`/`lastDeliverySlug`/`persistSlice` were already handled by
+            // the `deliverySwitched` block above.
+            const adopted = takeAdoptedSource();
+            if (adopted
+                && adopted.deliverySlug === delivery.slug
+                && adopted.surahNum === surahNum
+                && dashPort.window?.src === adopted.srcUrl) {
+                lastSurahNum = surahNum;
+                setIsLoading(false);
+                setIsPlaying(true);
+                return;
+            }
             // Stop the previous chapter immediately. Without this, the
             // old MP3 keeps playing until _swapTo writes el.src for the
             // new source — audible as a chunk of the wrong reciter when
@@ -172,6 +196,11 @@
                 }
             }
             lastSurahNum = surahNum;
+            // Persist the settled reciter+surah so a refresh resumes here. The
+            // `deliverySwitched` block above persists with the *incoming* surah,
+            // which may be corrected to the first available chapter; this final
+            // write captures the surah actually loaded (and surah-only changes).
+            persistSlice({ deliverySlug: delivery.slug, surahNum, speed: ctx.speed });
         }
     }
 
@@ -180,45 +209,79 @@
             dashPort.pause();
             return;
         }
+        await resumePlayback();
+    }
+
+    async function resumePlayback(): Promise<void> {
         await ensureAudioContextRunning();
-        // preload="none" means the element has no buffered media until
-        // loadCovering points it at the proxy URL. Browsers ignore play()
-        // when src is empty, so we ensure coverage first.
         if (dashPort.source) {
             dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
         }
-        // If the element isn't yet at HAVE_FUTURE_DATA (readyState >= 3),
-        // play() will be queued until canplay fires. Surface that as a
-        // loading state so the user sees the ring instead of an instant
-        // pause icon with no audio.
         if (audioEl && audioEl.readyState < 3) {
             setIsLoading(true);
         }
         dashPort.play();
     }
 
+    async function seekAndResume(targetMs: number): Promise<void> {
+        await ensureAudioContextRunning();
+        if (dashPort.source) {
+            dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
+        }
+        dashPort.seek(targetMs);
+        if (audioEl && audioEl.readyState < 3) {
+            setIsLoading(true);
+        }
+        dashPort.play();
+    }
+
+    function setSurahAndResume(surahNum: number): void {
+        playerContext.update((s) => ({
+            ...s,
+            surahNum,
+            positionMs: 0,
+            isPlaying: true,
+        }));
+    }
+
+    // Whenever ayah boundaries are loaded for whatever's selected, the seek
+    // buttons jump ayah-by-ayah (prev/next ayah start; back restarts the current
+    // ayah if >1.5s in) — no bucket/condition gate. With no boundaries (e.g. a
+    // non-timestamped reciter) they fall back to the ±15s nudge.
     function seekBack(): void {
-        dashPort.seek(Math.max(0, dashPort.currentTimeMs() - 15_000));
+        exitLoop(); // any deliberate seek drops loop mode
+        const cur = dashPort.currentTimeMs();
+        if ($recitationAyahStarts.length) {
+            const t = adjacentAyahStartMs($recitationAyahStarts, cur, -1);
+            if (t !== null) { void seekAndResume(t); return; }
+        }
+        void seekAndResume(Math.max(0, cur - 15_000));
     }
     function seekForward(): void {
-        dashPort.seek(dashPort.currentTimeMs() + 15_000);
+        exitLoop();
+        const cur = dashPort.currentTimeMs();
+        if ($recitationAyahStarts.length) {
+            const t = adjacentAyahStartMs($recitationAyahStarts, cur, 1);
+            if (t !== null) { void seekAndResume(t); return; }
+        }
+        void seekAndResume(cur + 15_000);
     }
 
     function prevSurah(): void {
         const ctx = $playerContext;
         if (ctx.surahNum === null) return;
         const idx = surahNums.indexOf(ctx.surahNum);
-        if (idx > 0) setSurah(surahNums[idx - 1]!);
+        if (idx > 0) { exitLoop(); setSurahAndResume(surahNums[idx - 1]!); }
     }
     function nextSurah(): void {
         const ctx = $playerContext;
         if (ctx.surahNum === null) return;
         const idx = surahNums.indexOf(ctx.surahNum);
-        if (idx >= 0 && idx < surahNums.length - 1) setSurah(surahNums[idx + 1]!);
+        if (idx >= 0 && idx < surahNums.length - 1) { exitLoop(); setSurahAndResume(surahNums[idx + 1]!); }
     }
 
     function onSurahChange(ev: CustomEvent<number>): void {
-        setSurah(ev.detail);
+        setSurahAndResume(ev.detail);
         surahPopoverOpen = false;
     }
 
@@ -272,7 +335,16 @@
     }
 
     function onSeekFromBar(ev: CustomEvent<number>): void {
-        dashPort.seek(ev.detail);
+        exitLoop(); // dragging the progress bar is a deliberate seek → drop loop
+        // Snap the release to the nearest ayah start (both tabs — the bar is the
+        // shared shell player). Falls back to the raw target for non-timestamped
+        // playback, where no ayah boundaries exist.
+        let target = ev.detail;
+        if ($recitationAyahStarts.length) {
+            const snapped = nearestAyahStartMs($recitationAyahStarts, target);
+            if (snapped !== null) target = snapped;
+        }
+        void seekAndResume(target);
     }
 
     function onCombinationSelect(ev: CustomEvent<PublicDelivery>): void {
@@ -281,6 +353,7 @@
             ...s,
             delivery: d,
             positionMs: 0,
+            isPlaying: true,
         }));
     }
 
@@ -304,28 +377,19 @@
     />
 
     <div class="row">
-        <PlayerMetaChip
-            reciter={$playerContext.reciter}
-            delivery={$playerContext.delivery}
-            on:select={onCombinationSelect}
-        />
+        <!-- Left zone: tab-specific reciter picker (meta) pinned to the far
+             left; the surah picker is pushed to the inner edge so it sits just
+             left of the transport. Default meta = dashboard combination chip;
+             the Timestamps tab fills it with a published-only picker + shuffle. -->
+        <div class="zone zone-left">
+            <slot name="meta">
+                <PlayerMetaChip
+                    reciter={$playerContext.reciter}
+                    delivery={$playerContext.delivery}
+                    on:select={onCombinationSelect}
+                />
+            </slot>
 
-        <div class="controls">
-            <PlayerControls
-                isPlaying={$playerContext.isPlaying}
-                isLoading={$playerContext.isLoading}
-                canPlay={$playerContext.delivery !== null && $playerContext.surahNum !== null}
-                canStepBack={canPrev}
-                canStepForward={canNext}
-                on:toggle={togglePlay}
-                on:seekBack={seekBack}
-                on:seekForward={seekForward}
-                on:prev={prevSurah}
-                on:next={nextSurah}
-            />
-        </div>
-
-        <div class="right">
             <div class="surah-trigger-wrap" use:clickOutside={() => (surahPopoverOpen = false)}>
                 <button
                     type="button"
@@ -351,12 +415,41 @@
                     </div>
                 {/if}
             </div>
-            <button
-                type="button"
-                class="speed-btn"
-                on:click={cycleSpeed}
-                title="Playback speed"
-            >{$playerContext.speed}×</button>
+        </div>
+
+        <!-- Center: the transport ONLY, so the play button lands on the true
+             viewport center — aligned with the now-reciting collapse chip
+             (both columns flanking it are equal `1fr`). Shared by both tabs. -->
+        <div class="controls">
+            <PlayerControls
+                isPlaying={$playerContext.isPlaying}
+                isLoading={$playerContext.isLoading}
+                canPlay={$playerContext.delivery !== null && $playerContext.surahNum !== null}
+                canStepBack={canPrev}
+                canStepForward={canNext}
+                on:toggle={togglePlay}
+                on:seekBack={seekBack}
+                on:seekForward={seekForward}
+                on:prev={prevSurah}
+                on:next={nextSurah}
+            />
+        </div>
+
+        <!-- Right zone: speed + tab-specific analysis at the inner edge (just
+             right of the transport); download pinned to the far right. -->
+        <div class="zone zone-right">
+            <div class="right-inner">
+                <button
+                    type="button"
+                    class="speed-btn"
+                    on:click={cycleSpeed}
+                    title="Playback speed"
+                >{$playerContext.speed}×</button>
+
+                <!-- Tab-specific cluster (Timestamps: analysis row). -->
+                <slot name="center-trail"></slot>
+            </div>
+
             <button
                 type="button"
                 class="download-btn"
@@ -406,19 +499,31 @@
         grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
         align-items: center;
         gap: var(--s-4);
-        height: calc(var(--player-h, 72px) - 14px);
+        height: calc(var(--player-h, 92px) - 14px);
+    }
+    /* The two side zones are equal `1fr` columns flanking the `auto` transport
+       column, so the play button (center of the symmetric transport) sits on
+       the viewport center — aligned with the now-reciting collapse chip.
+       `space-between` pushes the inner items (surah / speed+analysis) up against
+       the transport and pins meta / download to the outer edges. */
+    .zone {
+        display: flex;
+        align-items: center;
+        gap: var(--s-4);
+        min-width: 0;
+        justify-content: space-between;
+    }
+    .right-inner {
+        display: flex;
+        align-items: center;
+        gap: var(--s-4);
+        min-width: 0;
     }
     .controls {
         display: flex;
         align-items: center;
         justify-content: center;
         gap: var(--s-3);
-    }
-    .right {
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        gap: var(--s-2);
     }
     .surah-trigger-wrap { position: relative; }
     .surah-trigger {
@@ -450,7 +555,8 @@
     .surah-pop {
         position: absolute;
         bottom: calc(100% + var(--s-2));
-        right: 0;
+        left: 50%;
+        transform: translateX(-50%);
         width: min(700px, calc(100vw - var(--s-4) * 2));
         padding: var(--s-2);
         background: var(--panel);

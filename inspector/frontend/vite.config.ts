@@ -9,10 +9,15 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 // Two-stack mode: run a second parallel dev stack by overriding these:
 //   INSPECTOR_VITE_PORT     — dev server port (default 5173)
 //   INSPECTOR_BACKEND_PORT  — Flask port the proxy points at (default 5000)
+//   INSPECTOR_BACKEND_HOST  — Flask host (default 127.0.0.1). Override when the
+//     dev server runs in WSL2 but the backend runs on Windows: WSL2 NAT can't
+//     reach Windows via 127.0.0.1, so pass the host gateway IP
+//     (`ip route show default | grep -oP 'via \K[0-9.]+'`).
 // e.g. `INSPECTOR_VITE_PORT=5174 INSPECTOR_BACKEND_PORT=5001 npm run dev`
 const VITE_PORT = Number(process.env.INSPECTOR_VITE_PORT) || 5173;
 const BACKEND_PORT = Number(process.env.INSPECTOR_BACKEND_PORT) || 5000;
-const BACKEND_TARGET = `http://127.0.0.1:${BACKEND_PORT}`;
+const BACKEND_HOST = process.env.INSPECTOR_BACKEND_HOST || '127.0.0.1';
+const BACKEND_TARGET = `http://${BACKEND_HOST}:${BACKEND_PORT}`;
 
 export default defineConfig(({ mode }) => ({
   root: here,

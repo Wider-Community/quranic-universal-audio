@@ -3,15 +3,15 @@
      * TsValidationPanel — verse-level ts-validation accordion (owner preview).
      *
      * The verse-level analogue of the Segments tab's "Low Confidence v2"
-     * accordion. Lists verses the multi-beam generate-timestamps job flagged
-     * (aligned under the canonical beam but failed under a tighter probe beam).
+     * accordion. Shows compact verse chips grouped by highest failed beam.
      * Clicking a verse jumps the cascade to it so the owner can inspect the
      * alignment on the waveform. Hidden entirely when there are no flags.
      *
      * Decoupled from the Segments ValidationPanel (which is segments-store /
      * IssueRegistry coupled) — this only needs the sidecar doc + a select cb.
      */
-    import type { TsValidationDoc, TsValidationVerse } from '../../../lib/types/generated/schemas';
+    import type { TsValidationDoc } from '../../../lib/types/generated/schemas';
+    import { groupTsValidationVerses } from '../utils/validation-groups';
 
     let {
         doc,
@@ -20,59 +20,53 @@
     }: {
         doc: TsValidationDoc | null;
         activeVerse?: string;
-        onselect: (verseKey: string) => void;
+        onselect: (_verseKey: string) => void;
     } = $props();
 
-    let open = $state(true);
+    let open = $state(false);
 
-    /** Numeric surah:ayah[:word…] compare so 2:7 sorts before 2:10. */
-    function cmpRef(a: string, b: string): number {
-        const pa = a.split(/[:-]/).map((n) => parseInt(n, 10) || 0);
-        const pb = b.split(/[:-]/).map((n) => parseInt(n, 10) || 0);
-        for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-            const d = (pa[i] ?? 0) - (pb[i] ?? 0);
-            if (d) return d;
-        }
-        return 0;
-    }
+    const groups = $derived(groupTsValidationVerses(doc));
+    const total = $derived(groups.reduce((sum, group) => sum + group.refs.length, 0));
+    const groupKey = $derived(groups.map((group) => `${group.beam}:${group.refs.join(',')}`).join('|'));
 
-    const entries = $derived.by(() => {
-        const verses = doc?.verses ?? {};
-        return Object.entries(verses)
-            .map(([ref, flag]) => ({ ref, flag: flag as TsValidationVerse }))
-            .sort((a, b) => cmpRef(a.ref, b.ref));
+    $effect(() => {
+        groupKey;
+        open = false;
     });
 
-    function summary(flag: TsValidationVerse): string {
-        const failed = flag?.failed_beams ?? [];
-        const minPass = flag?.min_passing_beam ?? null;
-        const failTxt = failed.length ? `fails @ beam ${failed.join(', ')}` : '';
-        const okTxt = minPass != null ? `ok from ${minPass}` : 'never aligned';
-        return [failTxt, okTxt].filter(Boolean).join(' · ');
+    function severityColor(index: number, count: number): string {
+        if (count <= 1) return 'hsl(2 76% 53%)';
+        const t = index / (count - 1);
+        const hue = 2 + (44 - 2) * t;
+        const saturation = 76 + (88 - 76) * t;
+        const lightness = 53 - (53 - 50) * t;
+        return `hsl(${hue} ${saturation}% ${lightness}%)`;
     }
 </script>
 
-{#if entries.length}
+{#if groups.length}
     <details class="tsval" bind:open>
         <summary>
             Low-confidence verses
-            <span class="count">{entries.length}</span>
+            <span class="count">{total}</span>
         </summary>
-        <ul>
-            {#each entries as e (e.ref)}
-                <li>
+        <div class="rows">
+            {#each groups as group, i (group.beam)}
+                <div class="beam-row" style:--severity-color={severityColor(i, groups.length)}>
+                    {#each group.refs as ref (ref)}
                     <button
                         type="button"
-                        class="row"
-                        class:active={e.ref === activeVerse}
-                        onclick={() => onselect(e.ref)}
+                        class="chip"
+                        class:active={ref === activeVerse}
+                        aria-label={`Jump to low-confidence verse ${ref}`}
+                        onclick={() => onselect(ref)}
                     >
-                        <span class="ref">{e.ref}</span>
-                        <span class="sum">{summary(e.flag)}</span>
+                        {ref}
                     </button>
-                </li>
+                    {/each}
+                </div>
             {/each}
-        </ul>
+        </div>
     </details>
 {/if}
 
@@ -82,10 +76,11 @@
         border-radius: var(--r-2);
         background: var(--panel-2);
         font-size: var(--fs-meta);
+        width: 100%;
     }
     .tsval > summary {
         cursor: pointer;
-        padding: 6px 10px;
+        padding: 7px 10px;
         font-family: var(--font-mono);
         font-size: 10.5px;
         letter-spacing: 0.04em;
@@ -104,23 +99,44 @@
         background: var(--state-error-bg, var(--panel));
         color: var(--state-error-fg, var(--text-secondary));
     }
-    ul { list-style: none; margin: 0; padding: 4px; display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow: auto; }
-    .row {
+    .rows {
         display: flex;
-        align-items: baseline;
-        gap: var(--s-3);
-        width: 100%;
-        text-align: left;
-        background: transparent;
-        border: 1px solid transparent;
-        border-radius: var(--r-1);
-        padding: 4px 8px;
-        cursor: pointer;
-        font: inherit;
-        color: var(--text-secondary);
+        flex-direction: column;
+        gap: 5px;
+        max-height: 180px;
+        overflow: auto;
+        padding: 4px 8px 8px;
     }
-    .row:hover { background: var(--panel); border-color: var(--border-quiet); }
-    .row.active { border-color: var(--accent); }
-    .ref { font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); white-space: nowrap; }
-    .sum { font-size: 10.5px; color: var(--text-muted); }
+    .beam-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        padding: 2px 0 2px 8px;
+        border-left: 3px solid var(--severity-color);
+    }
+    .chip {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 46px;
+        min-height: 24px;
+        background: color-mix(in srgb, var(--severity-color) 14%, var(--panel));
+        border: 1px solid color-mix(in srgb, var(--severity-color) 54%, var(--border-quiet));
+        border-radius: var(--r-1);
+        padding: 3px 8px;
+        cursor: pointer;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-primary);
+        line-height: 1;
+    }
+    .chip:hover {
+        background: color-mix(in srgb, var(--severity-color) 24%, var(--panel));
+        border-color: var(--severity-color);
+    }
+    .chip.active {
+        background: color-mix(in srgb, var(--severity-color) 28%, var(--panel));
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
+    }
 </style>

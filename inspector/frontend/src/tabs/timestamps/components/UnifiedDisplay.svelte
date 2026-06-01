@@ -16,8 +16,9 @@
     import { onDestroy, untrack } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { dashPort } from '../../../lib/playback/dash-port';
     import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
-    import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../../lib/utils/arabic-text';
+    import type { BridgeInfo } from '../../../lib/types/generated/schemas';
     import {
         showLetters,
         showPhonemes,
@@ -27,14 +28,12 @@
         verseTranslations,
     } from '../stores/display';
     import type { TsLoopTarget } from '../stores/playback';
-    import { autoMode, loopTarget, tsPort } from '../stores/playback';
-    import { loadedVerse } from '../stores/verse';
+    import { autoMode, loopTarget } from '../stores/playback';
+    import { loadedTajweedBridges, loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
 
     // ---- Local structural state (derived declaratively from loadedVerse) ----
-
-    interface BridgeInfo { fromPrev: number[]; fromCurr: number[]; }
 
     interface RenderedLetter {
         chars: string;
@@ -65,8 +64,16 @@
     // Container ref used for imperative highlight updates.
     let rootEl: HTMLDivElement;
 
-    // Reactive: rebuild rendered structure whenever loadedVerse changes.
-    $: rendered = buildRendered($loadedVerse?.data.words ?? [], $loadedVerse?.data.intervals ?? []);
+    // Reactive: rebuild rendered structure whenever loadedVerse OR its bridges
+    // change. Bridges arrive asynchronously after the verse paints (the
+    // /api/ts/tajweed fetch is independent), so we re-run buildRendered when
+    // they land — that's what flips the cross-word phoneme out of the regular
+    // mega-phoneme row and into the gold bridge tile.
+    $: rendered = buildRendered(
+        $loadedVerse?.data.words ?? [],
+        $loadedVerse?.data.intervals ?? [],
+        $loadedTajweedBridges,
+    );
 
     // Reset previous-index cache when structure changes (new verse, etc.)
     $: rendered, (_prevActiveWordIdx = -1);
@@ -106,77 +113,6 @@
 
     // ---- Pure helpers (state-free) ----
 
-    function getLastBaseLetter(word: TsWord): string {
-        const bare = stripTashkeel(word.text || '');
-        return bare.length ? bare[bare.length - 1] ?? '' : '';
-    }
-
-    function getFirstBaseLetter(word: TsWord): string {
-        const bare = stripTashkeel(word.text || '');
-        for (const ch of bare) {
-            if (ch !== '\u0671' && ch !== '\u0627') return ch;
-        }
-        return bare.length ? bare[0] ?? '' : '';
-    }
-
-    function hasTanween(word: TsWord): boolean {
-        const text = word.text || '';
-        const lastBase = stripTashkeel(text);
-        const endsWithAlef =
-            lastBase.length > 0 &&
-            (lastBase[lastBase.length - 1] === '\u0627' ||
-                lastBase[lastBase.length - 1] === '\u0649');
-        if (endsWithAlef) return /[\u064B\u08F0]/.test(text);
-        const tail = text.slice(-3);
-        return /[\u064C\u064D\u08F1\u08F2]/.test(tail);
-    }
-
-    function computeBridgeAtBoundary(
-        prevWord: TsWord,
-        currWord: TsWord,
-        intervals: PhonemeInterval[],
-    ): BridgeInfo | null {
-        const fromPrev: number[] = [];
-        const fromCurr: number[] = [];
-
-        const currIndices = currWord.phoneme_indices || [];
-        const prevEndsNoon = getLastBaseLetter(prevWord) === '\u0646';
-        const prevHasTanween = hasTanween(prevWord);
-        const noonOrTanween = prevEndsNoon || prevHasTanween;
-
-        for (const pi of currIndices) {
-            const iv = intervals[pi];
-            const phone = iv?.phone;
-            if (!phone) break;
-            const requiredLetter = IDGHAM_GHUNNAH_START[phone];
-            if (!requiredLetter) break;
-            if (noonOrTanween && getFirstBaseLetter(currWord) === requiredLetter) {
-                fromCurr.push(pi);
-            } else {
-                break;
-            }
-        }
-
-        const prevIndices = prevWord.phoneme_indices || [];
-        if (
-            getLastBaseLetter(prevWord) === '\u0645' &&
-            getFirstBaseLetter(currWord) === '\u0645'
-        ) {
-            for (let k = prevIndices.length - 1; k >= 0; k--) {
-                const pi = prevIndices[k];
-                if (pi === undefined) continue;
-                const iv = intervals[pi];
-                const phone = iv?.phone;
-                if (phone === 'm\u0303') fromPrev.push(pi);
-                else break;
-            }
-            fromPrev.reverse();
-        }
-
-        if (fromPrev.length === 0 && fromCurr.length === 0) return null;
-        return { fromPrev, fromCurr };
-    }
-
     function letterGroupsFor(word: TsWord): RenderedLetter[] {
         const letters = word.letters || [];
         const groups: RenderedLetter[] = [];
@@ -203,25 +139,97 @@
         return groups;
     }
 
-    function buildRendered(words: TsWord[], intervals: PhonemeInterval[]): RenderedBlock[] {
+    /** Parse the trailing word number from a ``surah:ayah:word`` location.
+     *  Returns 0 when the location is malformed — caller filters those out. */
+    function wordNumOf(word: TsWord): number {
+        const parts = word.location.split(':');
+        const n = parseInt(parts[parts.length - 1] ?? '0', 10);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    /** Does this shard phoneme carry the merger signature for our 8 cross-word
+     *  rules? Mirrors the backend's :func:`_is_merger_phoneme` (pharyngeal-aware
+     *  doubled-prefix + ghunnah tilde) — *required on the FE* because MFA's
+     *  word-segmentation can put the merged phoneme on the OTHER side of the
+     *  boundary than the phonemizer's per-word convention says it should be
+     *  (e.g. Ahmed Talib 46:29: phonemizer-without-stops puts ``m̃`` at curr's
+     *  first position of ``مِّنَ``; MFA appended it to the prev word's tail on
+     *  ``نَفَرࣰا`` after the trigger letter's vowel). The backend's ``side`` is a
+     *  hint built from the phonemizer's per-letter output; we override it with
+     *  the actual shard placement so the bridge tile shows the real merger
+     *  phoneme, never an adjacent haraka. */
+    const GHUNNAH_TILDE = '̃';
+    const PHARYNGEAL = 'ˤ';
+    function isMergerPhoneme(p: string | undefined): boolean {
+        if (!p) return false;
+        if (p.includes(GHUNNAH_TILDE) || p.includes('ñ')) return true;
+        const base = p.replaceAll(PHARYNGEAL, '');
+        return base.length >= 2 && base[0] === base[1];
+    }
+
+    function buildRendered(
+        words: TsWord[],
+        intervals: PhonemeInterval[],
+        bridgeInfos: BridgeInfo[],
+    ): RenderedBlock[] {
         if (!words.length) return [];
 
-        // Pre-compute bridges per boundary + exclusion sets per word
-        const bridges: Array<BridgeInfo | null> = [];
-        for (let wi = 1; wi < words.length; wi++) {
-            const prev = words[wi - 1];
-            const curr = words[wi];
-            bridges[wi] =
-                prev && curr ? computeBridgeAtBoundary(prev, curr, intervals) : null;
-        }
-        const exclude: Set<number>[] = words.map(() => new Set<number>());
-        for (let wi = 1; wi < words.length; wi++) {
-            const b = bridges[wi];
+        // Shards intentionally carry duplicate word occurrences when the
+        // reciter repeats a phrase (the second take is part of the
+        // recitation, not a pathology). For each shard pair we therefore
+        // ask: are these two adjacent occurrences a real (N-1 → N) Quran
+        // boundary? If they are AND the backend predicted a bridge for that
+        // boundary, render it in this specific pair. Pairs that are
+        // restart-bounded (next word number ≤ this one) get no bridge — the
+        // cross-word rule legitimately can't fire across a repetition jump.
+        // This yields one bridge tile per real adjacent crossing, including
+        // the second tile in a (16,17,18,19, 17,18,19, 20) repeat sequence.
+        const bridgeByWordNum = new Map<number, BridgeInfo>();
+        for (const b of bridgeInfos) bridgeByWordNum.set(b.before_word_idx, b);
+
+        const bridgePhoneByBlock = new Map<number, number>();
+        const excluded = new Set<number>();
+        for (let i = 1; i < words.length; i++) {
+            const prev = words[i - 1]!;
+            const curr = words[i]!;
+            const prevWn = wordNumOf(prev);
+            const currWn = wordNumOf(curr);
+            if (prevWn === 0 || currWn === 0 || currWn !== prevWn + 1) continue;
+            const b = bridgeByWordNum.get(currWn);
             if (!b) continue;
-            const exPrev = exclude[wi - 1];
-            const exCurr = exclude[wi];
-            if (exPrev) b.fromPrev.forEach((pi) => exPrev.add(pi));
-            if (exCurr) b.fromCurr.forEach((pi) => exCurr.add(pi));
+
+            // The backend's ``side`` hint is built from the phonemizer's
+            // per-letter output, which assumes a stable convention for where
+            // the merged phoneme lives. MFA shards don't always agree — the
+            // same idgham can land at prev's tail or curr's head depending on
+            // how the aligner segmented the audio (Ahmed Talib 46:29 word 17→
+            // 18 shafawi: ``m̃`` lands at prev[-2] because MFA pulled the
+            // dammah of ``مُّن`` into the prev word along with the geminated
+            // meem). So we ignore the hint and scan a small window from both
+            // sides of the boundary, picking the first merger phoneme found —
+            // ghunnah-tilde or doubled-consonant prefix. If neither side has
+            // a merger within the window the rule didn't fire in this
+            // recording (waqf without timing gap), and we suppress the bridge
+            // so the tile never shows a stray haraka.
+            const SCAN_WINDOW = 3;
+            const prevIdx = prev.phoneme_indices;
+            const currIdx = curr.phoneme_indices;
+            let pi: number | undefined;
+            if (prevIdx && prevIdx.length > 0) {
+                for (let k = 0; k < Math.min(SCAN_WINDOW, prevIdx.length); k++) {
+                    const idx = prevIdx[prevIdx.length - 1 - k]!;
+                    if (isMergerPhoneme(intervals[idx]?.phone)) { pi = idx; break; }
+                }
+            }
+            if (pi === undefined && currIdx && currIdx.length > 0) {
+                for (let k = 0; k < Math.min(SCAN_WINDOW, currIdx.length); k++) {
+                    const idx = currIdx[k]!;
+                    if (isMergerPhoneme(intervals[idx]?.phone)) { pi = idx; break; }
+                }
+            }
+            if (pi === undefined || pi < 0) continue;
+            bridgePhoneByBlock.set(i, pi);
+            excluded.add(pi);
         }
 
         const blocks: RenderedBlock[] = [];
@@ -229,25 +237,21 @@
             const word = words[wi];
             if (!word) continue;
 
-            // Bridge before this block (not before the first block)
+            // Bridge before this block (never before the first block).
             let bridge: RenderedBridge | null = null;
-            const b = bridges[wi];
-            if (wi > 0 && b) {
-                const all = [...b.fromPrev, ...b.fromCurr];
-                const phs: RenderedPhoneme[] = [];
-                for (const pi of all) {
-                    const iv = intervals[pi];
-                    if (iv && !iv.geminate_end) phs.push({ interval: iv, index: pi });
+            const bridgePi = bridgePhoneByBlock.get(wi);
+            if (bridgePi !== undefined) {
+                const iv = intervals[bridgePi];
+                if (iv && !iv.geminate_end) {
+                    bridge = { phonemes: [{ interval: iv, index: bridgePi }] };
                 }
-                if (phs.length) bridge = { phonemes: phs };
             }
 
-            // Phoneme row excluding bridge-moved ones
+            // Phoneme row, excluding any index claimed by an adjacent bridge.
             const indices = word.phoneme_indices || [];
-            const ex = exclude[wi] ?? new Set<number>();
             const phonemes: RenderedPhoneme[] = [];
             for (const pi of indices) {
-                if (ex.has(pi)) continue;
+                if (excluded.has(pi)) continue;
                 const iv = intervals[pi];
                 if (iv && !iv.geminate_end) phonemes.push({ interval: iv, index: pi });
             }
@@ -281,8 +285,8 @@
 
         const intervals = lv.data.intervals;
         const words = lv.data.words;
-        const portReady = !!tsPort.element;
-        const portPaused = tsPort.paused;
+        const portReady = !!dashPort.element;
+        const portPaused = dashPort.paused;
         const hoverTime = get(tsWaveformHoverTime);
 
         // Current phoneme (skip geminate_end)
@@ -407,13 +411,13 @@
     }
 
     function getSegRelTime(segOffset: number): number {
-        if (!tsPort.element) return 0;
+        if (!dashPort.element) return 0;
         // While paused, waveform hover drives a preview: treat the hovered
         // slice-relative time as the "current" time so block highlights
         // (active word / letter / phoneme) follow the pointer.
         const hoverT = get(tsWaveformHoverTime);
-        if (hoverT != null && tsPort.paused) return hoverT;
-        return tsPort.currentTimeMs() / 1000 - segOffset;
+        if (hoverT != null && dashPort.paused) return hoverT;
+        return dashPort.currentTimeMs() / 1000 - segOffset;
     }
 
     /** Scroll the active mega-block into view (keyboard `J`). */
@@ -426,10 +430,10 @@
     // ---- Click handlers: seek audio on click ----
 
     function seekToTime(absTime: number): void {
-        if (!tsPort.element) return;
-        tsPort.seek(absTime * 1000);
+        if (!dashPort.element) return;
+        dashPort.seek(absTime * 1000);
         // Clicking a block always starts playback — resumes if paused.
-        if (tsPort.paused) tsPort.play();
+        if (dashPort.paused) dashPort.play();
         // Force a repaint immediately after user seek (not waiting on timeupdate)
         updateHighlights();
     }
@@ -476,17 +480,17 @@
                 && cur.childIndex === target.childIndex;
             if (same) return;
             loopTarget.set(target);
-            if (tsPort.element) {
-                tsPort.seek(absSeek * 1000);
-                if (tsPort.paused) tsPort.play();
+            if (dashPort.element) {
+                dashPort.seek(absSeek * 1000);
+                if (dashPort.paused) dashPort.play();
             }
             updateHighlights();
             return;
         }
         // No loop active → pure seek.
-        if (!tsPort.element) return;
-        tsPort.seek(absSeek * 1000);
-        if (tsPort.paused) tsPort.play();
+        if (!dashPort.element) return;
+        dashPort.seek(absSeek * 1000);
+        if (dashPort.paused) dashPort.play();
         updateHighlights();
     }
 

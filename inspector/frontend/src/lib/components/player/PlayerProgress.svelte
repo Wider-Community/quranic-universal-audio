@@ -1,6 +1,10 @@
 <script lang="ts">
-    /** Full-width scrub bar + time readout. Click + drag to seek. */
+    /** Full-width scrub bar + time readout. Click + drag to seek. Pointer
+     *  hover / drag also publishes the hovered time to `progressHoverMs` so the
+     *  dashboard now-reciting filmstrip can preview the matching ayah cell. */
     import { createEventDispatcher, onDestroy } from 'svelte';
+
+    import { progressHoverMs, progressScrubMs } from '../../stores/progress-hover';
 
     export let positionMs = 0;
     export let durationMs = 0;
@@ -37,6 +41,10 @@
         if (durationMs <= 0) return;
         dragging = true;
         dragRatio = ratioFromX(ev.clientX);
+        // Drag owns the scrub signal (scrolls the filmstrip); drop any hover
+        // preview so the two don't show at once.
+        progressHoverMs.set(null);
+        progressScrubMs.set(dragRatio * durationMs);
         (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp, { once: true });
@@ -44,17 +52,30 @@
     function onPointerMove(ev: PointerEvent): void {
         if (!dragging) return;
         dragRatio = ratioFromX(ev.clientX);
+        progressScrubMs.set(dragRatio * durationMs);
     }
     function onPointerUp(ev: PointerEvent): void {
         if (!dragging) return;
         const final = ratioFromX(ev.clientX);
         dragging = false;
         window.removeEventListener('pointermove', onPointerMove);
+        progressScrubMs.set(null);
         dispatch('seek', final * durationMs);
+    }
+
+    // Hover (non-drag) → publish the time under the pointer for the filmstrip.
+    function onHover(ev: PointerEvent): void {
+        if (dragging || durationMs <= 0) return;
+        progressHoverMs.set(ratioFromX(ev.clientX) * durationMs);
+    }
+    function onLeave(): void {
+        if (!dragging) progressHoverMs.set(null);
     }
 
     onDestroy(() => {
         window.removeEventListener('pointermove', onPointerMove);
+        progressHoverMs.set(null);
+        progressScrubMs.set(null);
     });
 </script>
 
@@ -70,6 +91,8 @@
         aria-valuenow={positionMs}
         tabindex="0"
         on:pointerdown={onPointerDown}
+        on:pointermove={onHover}
+        on:pointerleave={onLeave}
     >
         <div class="track">
             <div class="fill" style={`width: ${pct}%`}></div>

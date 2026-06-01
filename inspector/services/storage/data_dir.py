@@ -14,10 +14,42 @@ need no notion of ``wip`` vs ``published``.
 from __future__ import annotations
 
 import gzip
+import os
+import threading
 from typing import Iterator
 
 from . import storage_paths
 from .hf_bucket import StorageNotFound, get_backend
+
+
+# ---------------------------------------------------------------------------
+# Read-only TS-shard bucket override (dev convenience)
+# ---------------------------------------------------------------------------
+#
+# The dev bucket carries state/catalog but not the heavy per-chapter timestamp
+# shards (those live in prod). For local prototyping against real recitations,
+# ``INSPECTOR_TS_READ_BUCKET`` redirects *timestamp-shard reads only* to a named
+# bucket, read through the HF API + token — leaving the default backend (state,
+# DB, all writes) on its own bucket so prod state is never touched.
+#
+# READ-ONLY by construction: this backend is only ever handed to ``read_bytes``.
+# It deliberately bypasses ``resolve_bucket_repo``'s prod refusal (which guards
+# the DB full-file sync, irrelevant to a pure read). Never route writes here.
+_ts_read_backend = None
+_ts_read_lock = threading.Lock()
+
+
+def _ts_read_backend_or_default():
+    repo = (os.environ.get("INSPECTOR_TS_READ_BUCKET") or "").strip()
+    if not repo:
+        return get_backend()
+    global _ts_read_backend
+    if _ts_read_backend is None:
+        with _ts_read_lock:
+            if _ts_read_backend is None:
+                from .hf_bucket import BucketBackend
+                _ts_read_backend = BucketBackend(bucket_id=repo)
+    return _ts_read_backend
 
 
 # ---- path helpers (no I/O) ----
@@ -159,10 +191,17 @@ def read_timestamps_chapter(slug: str, chapter: int) -> bytes | None:
     reciters are migrated by re-running the job — there is no read-time
     fallback for them.
     """
-    backend = get_backend()
+    backend = _ts_read_backend_or_default()
     try:
         gz = backend.read_bytes(storage_paths.timestamps_path_gz(slug, chapter))
         return gzip.decompress(gz)
+    except StorageNotFound:
+        pass
+    # Pre-v2 released reciters store the shard uncompressed as
+    # ``timestamps/<chapter>.json`` (the gz path's docstring promises this
+    # fallback). Return the raw JSON bytes directly.
+    try:
+        return backend.read_bytes(storage_paths.timestamps_path(slug, chapter))
     except StorageNotFound:
         return None
 

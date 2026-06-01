@@ -12,7 +12,7 @@
 import { get, writable } from 'svelte/store';
 
 import { fetchPublicReciters, fetchPublicStats } from '../../../lib/api/public-reciters';
-import type { BucketCounts, PublicReciter } from '../../../lib/types/public-state';
+import type { BucketCounts, PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
 
 export interface CatalogSnapshot {
     loading: boolean;
@@ -22,7 +22,7 @@ export interface CatalogSnapshot {
 }
 
 const initial: CatalogSnapshot = {
-    loading: false,
+    loading: true,
     error: null,
     reciters: [],
     stats: null,
@@ -61,4 +61,20 @@ export async function loadCatalog(force = false): Promise<void> {
         }
     })();
     return inflight;
+}
+
+/**
+ * Resolve a persisted delivery slug back to its `{reciter, delivery}` pair
+ * from the loaded catalog. Returns null if the catalog isn't loaded yet or the
+ * slug no longer exists (e.g. the combination was discarded). Used to restore
+ * the dashboard player after a refresh.
+ */
+export function resolveDeliverySlug(
+    slug: string,
+): { reciter: PublicReciter; delivery: PublicDelivery } | null {
+    for (const reciter of get(catalogData).reciters) {
+        const delivery = reciter.deliveries.find((d) => d.slug === slug);
+        if (delivery) return { reciter, delivery };
+    }
+    return null;
 }

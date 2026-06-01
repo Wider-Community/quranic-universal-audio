@@ -4,6 +4,11 @@ flask
 # bodies (Timestamps shards in routes/timestamps.py) are outside the allow-list
 # so they're skipped — no double-compression.
 flask-compress>=1.14
+# Tajweed-rule G2P used by the TS Analysis tab to compute cross-word bridge
+# phonemes per-verse (services/reference/tajweed.py). Single ~250 ms boot cost
+# + lru_cached per (verse_ref, stop_refs); no bucket I/O. Was removed in
+# 8973d648 when no runtime caller existed — re-added for ts-tajweed bridges.
+quranic-phonemizer>=2.2
 orjson
 # numpy backs services/audio/peaks_slim.py (slim peaks pack/unpack on hot path).
 # Was transitive via quranic-phonemizer until 8973d648; pinned directly now.

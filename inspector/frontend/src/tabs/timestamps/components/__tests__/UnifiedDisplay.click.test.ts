@@ -10,9 +10,10 @@ import { cleanup, fireEvent,render } from '@testing-library/svelte';
 import { get } from 'svelte/store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { dashPort } from '../../../../lib/playback/dash-port';
 import { makeAudioStub as makePortAudioStub } from '../../../../lib/playback/__tests__/raf-harness';
 import type { TsVerseData, TsWord } from '../../../../lib/types/domain';
-import { loopTarget, tsAudioElement, tsPort } from '../../stores/playback';
+import { loopTarget } from '../../stores/playback';
 import type { TsLoadedVerse } from '../../stores/verse';
 import { loadedVerse } from '../../stores/verse';
 import { TS_CLICK_DELAY_MS } from '../../utils/constants';
@@ -58,18 +59,16 @@ function makeAudioStub(): HTMLAudioElement {
     return makePortAudioStub({ src: 'http://audio/1.mp3', readyState: 4 }) as unknown as HTMLAudioElement;
 }
 
-/** Bind both legacy (`tsAudioElement`) and port (`tsPort`) so the click
- *  handlers — which read through `tsPort` after the Phase 6 migration —
- *  can write `audio.currentTime` via `tsPort.seek`. The port needs a
- *  CBR source so `loadCovering` can resolve and the in-memory window
- *  has offsetMs=0. */
+/** Bind the SHARED player (`dashPort`) — UnifiedDisplay's click handlers seek
+ *  through `dashPort` after the shared-player migration, so the click path
+ *  writes `audio.currentTime` via `dashPort.seek`. The port needs a CBR source
+ *  so `loadCovering` can resolve and the in-memory window has offsetMs=0. */
 function bindAudio(audio: HTMLAudioElement): void {
-    tsAudioElement.set(audio);
-    tsPort.attachElement(audio);
-    tsPort.setSource({ audioUrl: 'http://audio/1.mp3', reciter: null, vbr: false });
+    dashPort.attachElement(audio);
+    dashPort.setSource({ audioUrl: 'http://audio/1.mp3', reciter: null, vbr: false });
     // Synthesize the loaded window so currentTimeMs returns immediately
     // without needing a canplay round-trip in the test fixture.
-    const r = tsPort.loadCovering(0, 10_000);
+    const r = dashPort.loadCovering(0, 10_000);
     // The makeAudioStub has _fireEvent for synchronous canplay dispatch.
     (audio as unknown as { _fireEvent: (t: string) => void })._fireEvent('canplay');
     void r.ready;
@@ -88,8 +87,7 @@ describe('UnifiedDisplay — click / dblclick in loop mode', () => {
         vi.useRealTimers();
         loadedVerse.set(null);
         loopTarget.set(null);
-        tsAudioElement.set(null);
-        tsPort.attachElement(null);
+        dashPort.attachElement(null);
     });
 
     it('single-click on a DIFFERENT word while looped swaps the loop target', () => {
@@ -166,5 +164,6 @@ describe('UnifiedDisplay — click / dblclick in loop mode', () => {
         expect(get(loopTarget)).toBeNull();
         // Word 2 starts at 5s; seek = word.start + tsSegOffset (0) = 5.
         expect(audio.currentTime).toBeCloseTo(5, 6);
+        expect((audio as unknown as { play: ReturnType<typeof vi.fn> }).play).toHaveBeenCalled();
     });
 });

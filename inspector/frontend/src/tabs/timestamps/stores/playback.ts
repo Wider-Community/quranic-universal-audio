@@ -20,8 +20,7 @@ export const autoAdvancing = writable<boolean>(false);
 /** Audio element current time (seconds, absolute). Updated per animation frame. */
 export const currentTime = writable<number>(0);
 
-/** The <audio> element driving timestamps-tab playback. Set by TimestampsAudio
- *  on mount; cleared to null on destroy. Consumers null-check before use.
+/** The <audio> element driving timestamps-tab playback.
  *
  *  @deprecated Use `tsPort` instead. The audio element is now wrapped by
  *  the port; this export is retained transitionally. The Timestamps tab
@@ -29,10 +28,9 @@ export const currentTime = writable<number>(0);
  *  carries the offset translation needed for clip-relative `currentTime`. */
 export const tsAudioElement = writable<HTMLAudioElement | null>(null);
 
-/** Single AudioPort for the Timestamps tab. TimestampsAudio attaches the
- *  bound `<audio>` element on mount; every consumer (waveform clicks,
- *  keyboard nudges, karaoke tick reads) imports this port and reads
- *  file-absolute milliseconds.
+/** Single AudioPort for the Timestamps tab. Every consumer (waveform
+ *  clicks, keyboard nudges, karaoke tick reads) imports this port and
+ *  reads file-absolute milliseconds.
  *
  *  Coordinate space: file-absolute ms — always. The Timestamps tab is
  *  CBR-only today, so file-absolute equals `audio.currentTime * 1000`,
@@ -48,21 +46,10 @@ export const tsPortReady = writable<boolean>(false);
 export const tsVbrChapters = writable<Set<number>>(new Set());
 
 /**
- * Looped element. While non-null, playback repeats `[startSec, endSec)` on
- * every rAF frame (see TimestampsAudio._tick) and the region is permanently
- * highlighted on the waveform + in the analysis/animation pane. Mutually
- * exclusive with autoMode — toggling either one clears the other.
- *
- * Same-target detection uses `kind + wordIndex + childIndex` (no float compares).
+ * Region loop state now lives in `lib/playback/loop` so the shared footer +
+ * filmstrip (lib components) can also clear it. Re-exported here so existing
+ * `../stores/playback` imports of `loopTarget` / `TsLoopTarget` keep working.
+ * `exitLoop()` force-drops loop mode on any deliberate navigation.
  */
-export interface TsLoopTarget {
-    kind: 'word' | 'letter' | 'phoneme';
-    /** Slice-relative seconds. */
-    startSec: number;
-    endSec: number;
-    /** Owning word index (flat). Set even for letter/phoneme targets. */
-    wordIndex: number;
-    /** For 'letter': index within word.letters. For 'phoneme': flat intervals index. */
-    childIndex?: number;
-}
-export const loopTarget = writable<TsLoopTarget | null>(null);
+export { exitLoop, loopTarget } from '../../../lib/playback/loop';
+export type { TsLoopTarget } from '../../../lib/playback/loop';

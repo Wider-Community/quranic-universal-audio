@@ -3,7 +3,8 @@
  * upcoming verse plays AND get adopted as the active playback element on
  * consume.
  *
- * Two slots: 'same' (random-current pre-roll) and 'any' (random-any pre-roll).
+ * Slots: 'any' (recycle bin for the formerly-visible element) and 'shuf' (the
+ * shuffle look-ahead — one target for the current mode).
  * Each slot holds a hidden `<audio crossorigin='anonymous' preload='auto'>`
  * loaded with a URL and seeked to the verse start, so by the time the user
  * clicks Random / auto-advance fires:
@@ -25,7 +26,7 @@
 
 const DEDUPE_MS = 30_000;
 
-type SlotKey = 'same' | 'any';
+type SlotKey = 'any' | 'shuf';
 
 interface Slot {
     el: HTMLAudioElement;
@@ -196,6 +197,28 @@ export function recycleAsShadow(el: HTMLAudioElement, slot: SlotKey = 'any'): vo
     } else {
         _slots.set(slot, { el, url: null, seekSec: 0, lastFiredAt: 0 });
     }
+}
+
+/** Dispose any in-flight warm load on a slot. Detaches `src`, removes the
+ *  element from the DOM, and clears the slot map entry — so the next
+ *  `shadowPrewarm(slot)` allocates a fresh element with no carried-over
+ *  listeners or browser-buffered bytes from the abandoned target. Used by
+ *  the shuffle look-ahead to prevent stacking warmups when the user
+ *  rapidly cycles modes; without it, the abandoned fetch can keep the
+ *  audio-proxy worker busy until the browser gets around to aborting. */
+export function cancelWarm(slot: SlotKey = 'any'): void {
+    const existing = _slots.get(slot);
+    if (!existing) return;
+    const el = existing.el;
+    try {
+        el.pause();
+        el.removeAttribute('src');
+        el.load();
+        if (document.body.contains(el)) el.remove();
+    } catch {
+        /* ignore */
+    }
+    _slots.delete(slot);
 }
 
 /** Test-only reset. Tears down both slots so unit tests start fresh. */

@@ -44,6 +44,9 @@ def to_iso(dt: datetime | None) -> str | None:
 def from_iso(s: str | None) -> datetime | None:
     if s is None:
         return None
+    # Python < 3.11 fromisoformat() doesn't handle the trailing "Z" suffix.
+    if isinstance(s, str) and s.endswith("Z"):
+        s = s[:-1] + "+00:00"
     dt = datetime.fromisoformat(s)
     # Stored values are always UTC; force tz-awareness for inputs that lack a
     # suffix (e.g. legacy strings) so round-trips stay deterministic.

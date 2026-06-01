@@ -64,8 +64,8 @@ export async function fetchSegmentPeaks(
 // ---------------------------------------------------------------------------
 
 /** Bounded in-flight + result cache keyed by `${reciter}:${chapter}` — NOT by
- *  audio URL, so FE-derived URL drift (audioUrlFor's https-prepend vs the raw
- *  sidecar URL the route keys by) can never make the lookup silently miss. */
+ *  audio URL, so FE-derived URL drift (e.g. https-prepend vs the raw sidecar
+ *  URL the route keys by) can never make the lookup silently miss. */
 const CHAPTER_PEAKS_CACHE = 8;
 const _chapterPeaks = new Map<string, Promise<Record<string, AudioPeaks>>>();
 

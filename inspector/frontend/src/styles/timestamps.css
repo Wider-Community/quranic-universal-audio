@@ -67,15 +67,15 @@
  * independent. Alpha values match the waveform hover fills for visual
  * consistency across panels. */
 .mega-word:hover {
-    background: rgba(240, 165, 0, 0.15);
+    background: color-mix(in srgb, var(--anim-highlight-color, #f0a500) 15%, transparent);
 }
 
 .mega-letter:not(.null-ts):hover {
-    background: rgba(46, 196, 182, 0.22);
+    background: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 22%, transparent);
 }
 
 .mega-phoneme:hover {
-    background: rgba(67, 97, 238, 0.25);
+    background: color-mix(in srgb, var(--ts-phoneme-color, #4361ee) 25%, transparent);
 }
 
 /* Waveform-hover preview while audio is playing. Keep the playing token louder
@@ -87,15 +87,15 @@
 }
 
 .mega-letter.hover-preview {
-    background: rgba(46, 196, 182, 0.3);
+    background: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 30%, transparent);
     color: #e7fffb;
-    border-color: rgba(46, 196, 182, 0.35);
+    border-color: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 35%, transparent);
 }
 
 .mega-phoneme.hover-preview {
-    background: rgba(67, 97, 238, 0.3);
+    background: color-mix(in srgb, var(--ts-phoneme-color, #4361ee) 30%, transparent);
     color: #e6ebff;
-    border-color: rgba(67, 97, 238, 0.35);
+    border-color: color-mix(in srgb, var(--ts-phoneme-color, #4361ee) 35%, transparent);
 }
 
 /* Word-by-word translation tier — sits first in the .mega-block column, above
@@ -184,9 +184,9 @@
 }
 
 .mega-letter.active {
-    background: #2ec4b6;
+    background: var(--ts-letter-color, #2ec4b6);
     color: white;
-    border-color: #2ec4b6;
+    border-color: var(--ts-letter-color, #2ec4b6);
 }
 
 .mega-phonemes {
@@ -243,9 +243,9 @@
 
 /* Active states */
 .mega-phoneme.active {
-    background: #4361ee;
+    background: var(--ts-phoneme-color, #4361ee);
     color: white;
-    border-color: #4361ee;
+    border-color: var(--ts-phoneme-color, #4361ee);
 }
 
 .mega-block.active .mega-word {
@@ -258,25 +258,25 @@
 .mega-block.active .mega-phoneme {
     background: #1a1a3e;
     color: #ccc;
-    border-color: #4361ee44;
+    border-color: color-mix(in srgb, var(--ts-phoneme-color, #4361ee) 27%, transparent);
 }
 
 .mega-block.active .mega-phoneme.active {
-    background: #4361ee;
+    background: var(--ts-phoneme-color, #4361ee);
     color: white;
-    border-color: #4361ee;
+    border-color: var(--ts-phoneme-color, #4361ee);
 }
 
 .mega-block.active .mega-letter {
     background: #1a1a3e;
     color: #ccc;
-    border-color: #2ec4b644;
+    border-color: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 27%, transparent);
 }
 
 .mega-block.active .mega-letter.active {
-    background: #2ec4b6;
+    background: var(--ts-letter-color, #2ec4b6);
     color: white;
-    border-color: #2ec4b6;
+    border-color: var(--ts-letter-color, #2ec4b6);
 }
 
 .mega-block.active .mega-letter.null-ts {
@@ -285,23 +285,14 @@
     border-color: transparent;
 }
 
-.mega-block.past .mega-letter {
-    color: #444;
-}
-
 .mega-letters.hidden,
 .mega-phonemes.hidden {
     display: none;
 }
 
-.mega-block.past .mega-word {
-    color: #665500;
-    border-color: #444;
-}
-
-.mega-block.past .mega-phoneme {
-    color: #555;
-}
+/* Past (already-recited) tokens render identically to upcoming ones — no
+   legacy brown/grey recolor, no dimming. The active token is the only
+   emphasized state. */
 
 /* ============ Loop perma-highlight ============ */
 /* Outline — not background — so `.active`/`.past` styles remain readable
@@ -316,13 +307,13 @@
     z-index: 1;
 }
 .mega-letter.loop {
-    outline: 2px solid #2ec4b6;
+    outline: 2px solid var(--ts-letter-color, #2ec4b6);
     outline-offset: 2px;
     position: relative;
     z-index: 1;
 }
 .mega-phoneme.loop {
-    outline: 2px solid #4361ee;
+    outline: 2px solid var(--ts-phoneme-color, #4361ee);
     outline-offset: 2px;
     position: relative;
     z-index: 1;
