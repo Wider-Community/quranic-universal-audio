@@ -9,13 +9,17 @@
      * lives in the player CENTER — see TimestampsFooterAnalysis. The
      * bookmark + panel buttons live on the now-reciting filmstrip.
      */
-    import { onMount } from 'svelte';
+    import { onMount, tick } from 'svelte';
+    import { get } from 'svelte/store';
 
     import { clickOutside } from '../../../lib/actions/click-outside';
     import ReciterChip from '../../../lib/components/ReciterChip.svelte';
+    import SearchInput from '../../../lib/components/SearchInput.svelte';
+    import { dashPort } from '../../../lib/playback/dash-port';
     import { playerContext } from '../../../lib/stores/player-context';
     import { LS_KEYS } from '../../../lib/utils/constants';
     import { combinationCompact } from '../../../lib/utils/delivery-label';
+    import { match } from '../../../lib/utils/fuzzy-match';
     import { catalogData } from '../../dashboard/stores/catalog-data';
     import { loadManifest } from '../services/ts_client';
     import {
@@ -23,7 +27,7 @@
         resolveTsDeliveries,
         type TsPublishedEntry,
     } from '../services/ts-published';
-    import { cycleShuffle, shuffleMode } from '../stores/shuffle';
+    import { cycleShuffle, requestManualShuffle, shuffleMode } from '../stores/shuffle';
 
     // Tri-state shuffle: 0 off · 1 ayah (same reciter) · 2 both (random
     // reciter + ayah). Off/ayah share the single-reciter glyph (ayah just
@@ -33,6 +37,8 @@
 
     let manifestSlugs = $state(new Set<string>());
     let pickerOpen = $state(false);
+    let pickerSearch = $state('');
+    let searchInputEl: SearchInput | null = null;
 
     onMount(() => {
         void loadManifest()
@@ -41,12 +47,38 @@
     });
 
     const entries = $derived(resolveTsDeliveries($catalogData.reciters, manifestSlugs));
+    const filteredEntries = $derived(
+        pickerSearch
+            ? entries.filter(
+                  (e) =>
+                      match(e.reciter.name, pickerSearch)
+                      || (e.reciter.name_ar ? match(e.reciter.name_ar, pickerSearch) : false),
+              )
+            : entries,
+    );
     const curSlug = $derived($playerContext.delivery?.slug ?? '');
     const curEntry = $derived(findTsEntryBySlug($catalogData.reciters, manifestSlugs, curSlug));
     const hasMany = $derived(entries.length > 1);
 
-    function pick(e: TsPublishedEntry): void {
+    function closePicker(): void {
         pickerOpen = false;
+        pickerSearch = '';
+    }
+
+    async function togglePicker(): Promise<void> {
+        if (!hasMany) return;
+        if (pickerOpen) {
+            closePicker();
+            return;
+        }
+        pickerOpen = true;
+        pickerSearch = '';
+        await tick();
+        searchInputEl?.focus();
+    }
+
+    function pick(e: TsPublishedEntry): void {
+        closePicker();
         if (e.delivery.slug === curSlug) return;
         try { localStorage.setItem(LS_KEYS.TS_RECITER, e.delivery.slug); } catch { /* ignore */ }
         playerContext.update((s) => ({
@@ -55,16 +87,23 @@
             delivery: e.delivery,
             surahNum: s.surahNum ?? 1,
             positionMs: 0,
+            isPlaying: true,
         }));
+    }
+
+    function onShuffleClick(): void {
+        const wasPaused = dashPort.paused;
+        cycleShuffle();
+        if (wasPaused && get(shuffleMode) !== 0) requestManualShuffle();
     }
 </script>
 
 <div class="tfl">
     <!-- Reciter picker (published only, no state pill) -->
-    <div class="picker-wrap" use:clickOutside={() => (pickerOpen = false)}>
+    <div class="picker-wrap" use:clickOutside={closePicker}>
         <button
             type="button" class="picker-trigger" class:interactive={hasMany}
-            onclick={() => { if (hasMany) pickerOpen = !pickerOpen; }}
+            onclick={togglePicker}
             disabled={!hasMany && !curEntry}
             aria-haspopup={hasMany ? 'listbox' : undefined}
             aria-expanded={hasMany ? pickerOpen : undefined}
@@ -85,22 +124,37 @@
 
         {#if pickerOpen && hasMany}
             <div class="dropup" role="listbox" aria-label="Pick reciter">
-                {#each entries as e (e.delivery.slug)}
-                    <button
-                        type="button" class="opt" class:active={e.delivery.slug === curSlug}
-                        role="option" aria-selected={e.delivery.slug === curSlug}
-                        onclick={() => pick(e)}
-                    >
-                        <ReciterChip
-                            name={e.reciter.name}
-                            nameAr={e.reciter.name_ar}
-                            country={e.reciter.country}
-                            subline={combinationCompact(e.delivery)}
-                            bucket={null}
-                            variant="compact"
-                        />
-                    </button>
-                {/each}
+                <div class="dropup-search">
+                    <SearchInput
+                        bind:this={searchInputEl}
+                        value={pickerSearch}
+                        placeholder="Search reciters"
+                        count={filteredEntries.length}
+                        total={entries.length}
+                        ariaLabel="Search reciters"
+                        on:input={(e) => { pickerSearch = e.detail; }}
+                    />
+                </div>
+                <div class="dropup-list">
+                    {#each filteredEntries as e (e.delivery.slug)}
+                        <button
+                            type="button" class="opt" class:active={e.delivery.slug === curSlug}
+                            role="option" aria-selected={e.delivery.slug === curSlug}
+                            onclick={() => pick(e)}
+                        >
+                            <ReciterChip
+                                name={e.reciter.name}
+                                nameAr={e.reciter.name_ar}
+                                country={e.reciter.country}
+                                subline={combinationCompact(e.delivery)}
+                                bucket={null}
+                                variant="compact"
+                            />
+                        </button>
+                    {:else}
+                        <p class="empty">No results</p>
+                    {/each}
+                </div>
             </div>
         {/if}
     </div>
@@ -109,7 +163,7 @@
     <button
         type="button" class="shuffle-btn" class:on={$shuffleMode !== 0}
         aria-label={SHUFFLE_LABEL[$shuffleMode]} title={SHUFFLE_LABEL[$shuffleMode]}
-        onclick={cycleShuffle}
+        onclick={onShuffleClick}
     ><img class="shuffle-img" src={shuffleSrc} alt="" aria-hidden="true" /></button>
 </div>
 
@@ -173,7 +227,7 @@
         min-width: 320px;
         max-width: 480px;
         max-height: min(360px, 50vh);
-        overflow-y: auto;
+        overflow: hidden;
         background: var(--panel);
         border: 1px solid var(--border-default);
         border-radius: var(--r-3);
@@ -182,7 +236,29 @@
         padding: var(--s-2);
         display: flex;
         flex-direction: column;
+        gap: var(--s-2);
+    }
+    .dropup-search {
+        flex: 0 0 auto;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+    .dropup-list {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
         gap: 2px;
+    }
+    .empty {
+        margin: 0;
+        padding: var(--s-3) var(--s-2);
+        color: var(--text-faint);
+        font-size: var(--fs-meta);
+        font-style: italic;
+        text-align: center;
     }
     .opt {
         display: flex;

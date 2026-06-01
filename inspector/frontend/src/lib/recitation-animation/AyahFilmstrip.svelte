@@ -260,6 +260,15 @@
             ? continuousOffset(nowMs)
             : (activeIdx >= 0 ? offsetForCellCenter(activeIdx) : offset);
     }
+
+    /** Force the new chapter's first ayah into view before audio canplay. */
+    export function showFirstAyah(): void {
+        const first = cells[0];
+        if (!first) return;
+        nowMs = first.startMs;
+        animate = true;
+        offset = offsetForCellCenter(0);
+    }
 </script>
 
 {#if config.filmstripShow && cells.length}

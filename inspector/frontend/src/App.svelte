@@ -58,7 +58,7 @@
 
     function onCombinationSelect(ev: CustomEvent<PublicDelivery>): void {
         const d = ev.detail;
-        playerContext.update((s) => ({ ...s, delivery: d, positionMs: 0 }));
+        playerContext.update((s) => ({ ...s, delivery: d, positionMs: 0, isPlaying: true }));
     }
 
     function _onSignIn() {

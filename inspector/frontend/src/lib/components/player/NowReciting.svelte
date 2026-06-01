@@ -10,9 +10,11 @@
      *
      * The display CONTROLS live in this component's handle row — flanking the
      * collapse chip, 3 on each side (upcoming-eye · word/letter · motion |
-     * size− · droplet · size+). Config + collapse state are shared via the
+     * droplet · size− · size+). Config + collapse state are shared via the
      * recitation store; below the handle sit the line + the filmstrip.
      */
+    import { tick } from 'svelte';
+
     import { dashPort } from '../../playback/dash-port';
     import { exitLoop } from '../../playback/loop';
     import {
@@ -65,7 +67,7 @@
     const focusAyah = $derived($recitationFocus?.ayah ?? 0);
 
     let section = $state<{ refresh: () => void } | undefined>(undefined);
-    let filmstrip = $state<{ refresh: () => void } | undefined>(undefined);
+    let filmstrip = $state<{ refresh: () => void; showFirstAyah: () => void } | undefined>(undefined);
     let colorInput = $state<HTMLInputElement | undefined>(undefined);
 
     const config = $derived($recitationConfigStore);
@@ -86,7 +88,10 @@
     const playing = $derived($playerContext.isPlaying);
     const shown = $derived(isPublished && units.length > 0);
 
-    const getTimeMs = (): number => dashPort.currentTimeMs();
+    const getTimeMs = (): number => {
+        if (!dashPort.window && !playing) return $playerContext.positionMs;
+        return dashPort.currentTimeMs();
+    };
 
     // ---- Filmstrip bookmark (Timestamps tab only) ----
     const isTimestamps = $derived($activeTab === TAB_NAMES.TIMESTAMPS);
@@ -102,6 +107,7 @@
     function seek(ms: number): void {
         exitLoop(); // filmstrip / line click is deliberate navigation → drop loop
         dashPort.seek(ms);
+        dashPort.play();
         if (!playing) {
             section?.refresh();
             filmstrip?.refresh();
@@ -120,11 +126,15 @@
         const chapter = surahNum;
         const controller = new AbortController();
         void loadChapterRecitation(slug, chapter, controller.signal)
-            .then((res) => {
+            .then(async (res) => {
                 if (controller.signal.aborted) return;
                 units = res?.units ?? [];
                 ayahs = res?.ayahs ?? [];
                 recitationAyahs.set(ayahs);
+                await tick();
+                if (controller.signal.aborted) return;
+                section?.refresh();
+                filmstrip?.showFirstAyah();
             })
             .catch(() => {
                 if (!controller.signal.aborted) {
@@ -170,7 +180,7 @@
     <div class="now-reciting" bind:clientHeight={rootH}>
         <!-- Handle row: the recitation display controls flank the collapse chip,
              3 on each side. Left = upcoming-eye · word/letter · filmstrip motion;
-             right = size− · highlight droplet · size+. Collapsing hides the
+             right = highlight droplet · size− · size+. Collapsing hides the
              recitation LINE *and* this settings row (only the chip stays); the
              filmstrip stays. Chevron points up when collapsed (expand), down
              when expanded (collapse). -->
@@ -215,6 +225,24 @@
 
             {#if $recitationOpen}
                 <div class="nr-ctrls" role="group" aria-label="Text size & color">
+                    <div class="nr-swatch-wrap">
+                        <button
+                            type="button" class="nr-btn swatch"
+                            aria-label="Highlight color"
+                            title="Highlight color"
+                            style:color={config.highlightColor}
+                            onclick={() => colorInput?.click()}
+                        ><ControlIcon name="droplet" /></button>
+                        <input
+                            bind:this={colorInput}
+                            type="color"
+                            class="nr-color-input"
+                            value={config.highlightColor}
+                            oninput={(e) => setHighlight(e.currentTarget.value)}
+                            tabindex="-1"
+                            aria-hidden="true"
+                        />
+                    </div>
                     <button
                         type="button" class="nr-btn"
                         aria-label="Decrease text size"
@@ -223,13 +251,6 @@
                         onclick={sizeDown}
                     ><ControlIcon name="size-down" size={16} /></button>
                     <button
-                        type="button" class="nr-btn swatch"
-                        aria-label="Highlight color"
-                        title="Highlight color"
-                        style:color={config.highlightColor}
-                        onclick={() => colorInput?.click()}
-                    ><ControlIcon name="droplet" /></button>
-                    <button
                         type="button" class="nr-btn"
                         aria-label="Increase text size"
                         title="Larger text"
@@ -237,16 +258,6 @@
                         onclick={sizeUp}
                     ><ControlIcon name="size-up" size={16} /></button>
                 </div>
-
-                <input
-                    bind:this={colorInput}
-                    type="color"
-                    class="nr-color-input"
-                    value={config.highlightColor}
-                    oninput={(e) => setHighlight(e.currentTarget.value)}
-                    tabindex="-1"
-                    aria-hidden="true"
-                />
             {/if}
         </div>
 
@@ -312,11 +323,17 @@
     }
     /* Handle row: display controls flank the collapse chip (3 each side). */
     .nr-handle {
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
         gap: var(--s-2);
         min-height: 22px;
+    }
+    .nr-swatch-wrap {
+        position: relative;
+        display: inline-flex;
+        flex: 0 0 auto;
     }
     .nr-ctrls {
         display: inline-flex;
@@ -341,11 +358,14 @@
     .nr-btn.swatch:hover:not(:disabled) { background: var(--panel-2); filter: brightness(1.12); }
     .nr-color-input {
         position: absolute;
-        width: 0;
-        height: 0;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
         padding: 0;
         border: 0;
         opacity: 0;
+        cursor: pointer;
         pointer-events: none;
     }
     .strip-wrap {

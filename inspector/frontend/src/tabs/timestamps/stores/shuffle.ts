@@ -29,6 +29,11 @@ function load(key: string): boolean {
 
 export const shuffleReciter = writable<boolean>(load(LS_SHUFFLE_RECITER));
 export const shuffleAyah = writable<boolean>(load(LS_SHUFFLE_AYAH));
+export const manualShuffleRequest = writable<number>(0);
+
+export function requestManualShuffle(): void {
+    manualShuffleRequest.update((n) => n + 1);
+}
 
 shuffleReciter.subscribe((v) => {
     try {

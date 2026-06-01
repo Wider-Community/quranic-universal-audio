@@ -75,7 +75,7 @@
     } from './stores/display';
     import { tsLoading } from './stores/loading';
     import { exitLoop, loopTarget } from './stores/playback';
-    import { shuffleAyah, shuffleMode } from './stores/shuffle';
+    import { manualShuffleRequest, shuffleAyah, shuffleMode } from './stores/shuffle';
     import { tsValidation } from './stores/validation';
     import {
         loadedTajweedBridges,
@@ -253,6 +253,7 @@
             delivery,
             surahNum: chapter,
             positionMs: 0,
+            isPlaying: autoplay || s.isPlaying,
         }));
     }
 
@@ -442,7 +443,7 @@
     // ---------------------------------------------------------------------
     // Shuffle / navigation jumps
     // ---------------------------------------------------------------------
-    async function shuffleJump(): Promise<void> {
+    async function shuffleJump(autoplay = true): Promise<void> {
         exitLoop();
         const cur = get(playerContext);
         const curSlug = cur.delivery?.slug ?? '';
@@ -464,12 +465,12 @@
             // In-chapter jump is already gapless (plain seek) — drop the warm el.
             if (consumed) discardWarm(consumed.el);
             const v = chapterVerses.find((x) => x.ref === target.verseRef);
-            if (v) { setFocus(v); dashPort.seek(v.startMs); if (dashPort.paused) tryPlay(); }
+            if (v) seekFocus(v, autoplay);
         } else if (consumed) {
-            adoptGapless(consumed);
+            adoptGapless(consumed, autoplay);
         } else {
             // Cross-source look-ahead miss → gapped fallback.
-            await jumpToTarget(target.reciter, target.chapter, target.verseRef);
+            await jumpToTarget(target.reciter, target.chapter, target.verseRef, autoplay);
         }
         void primeShuffleSlot(); // re-arm the next jump
     }
@@ -481,10 +482,10 @@
     /** Gapless cross-source jump: adopt the prewarmed element onto dashPort and
      *  start it WITHOUT a fresh load, then update playerContext (guarded by the
      *  adopt signal so BottomPlayer.reactToContext doesn't re-load + re-decode). */
-    function adoptGapless(c: ConsumedShuffle): void {
+    function adoptGapless(c: ConsumedShuffle, autoplay: boolean): void {
         const entry = findTsEntryBySlug(get(catalogData).reciters, manifestSlugs, c.target.reciter);
         if (!entry) { discardWarm(c.el); return; }
-        const wasPlaying = !dashPort.paused;
+        const shouldPlay = autoplay || !dashPort.paused;
         const startMs = c.seekSec * 1000;
 
         // Match the triple BottomPlayer would build so its eventual setSource is
@@ -496,9 +497,9 @@
         dashPort.adoptElement(c.el, c.proxyUrl);
         if (oldEl && oldEl !== c.el) recycleAsShadow(oldEl, 'any');
 
-        if (wasPlaying) dashPort.seekAndPlay(startMs); else dashPort.seek(startMs);
+        if (shouldPlay) dashPort.seekAndPlay(startMs); else dashPort.seek(startMs);
         setIsLoading(false);
-        setIsPlaying(wasPlaying);
+        setIsPlaying(shouldPlay);
 
         pendingSeekRef = c.target.verseRef; // syncChapter focuses it once data lands
         _autoplayPending = false;           // already playing the adopted element
@@ -508,6 +509,7 @@
             delivery: entry.delivery,
             surahNum: c.target.chapter,
             positionMs: startMs,
+            isPlaying: shouldPlay,
         }));
     }
 
@@ -557,29 +559,50 @@
 
     /** Jump to (reciter, chapter, verseRef). Same chapter → seek in place.
      *  Different chapter/reciter → switch the shared context + queue the seek. */
-    async function jumpToTarget(slug: string, chapter: number, verseRef: string): Promise<void> {
+    async function jumpToTarget(
+        slug: string,
+        chapter: number,
+        verseRef: string,
+        autoplay = true,
+    ): Promise<void> {
         const curSlug = get(playerContext).delivery?.slug ?? '';
         const curChapter = get(playerContext).surahNum ?? 0;
         if (slug === curSlug && chapter === curChapter) {
             const v = chapterVerses.find((x) => x.ref === verseRef);
-            if (v) { setFocus(v); dashPort.seek(v.startMs); if (dashPort.paused) tryPlay(); }
+            if (v) seekFocus(v, autoplay);
             return;
         }
         const entry = findTsEntryBySlug(get(catalogData).reciters, manifestSlugs, slug);
         if (!entry) return;
         pendingSeekRef = verseRef;
-        _autoplayPending = !dashPort.paused; // keep playing across the jump
+        _autoplayPending = autoplay || !dashPort.paused; // keep or create playback across the jump
         playerContext.update((s) => ({
             ...s,
             reciter: entry.reciter,
             delivery: entry.delivery,
             surahNum: chapter,
             positionMs: 0,
+            isPlaying: _autoplayPending,
         }));
     }
 
     function tryPlay(): void {
         try { dashPort.play(); } catch { /* autoplay policy */ }
+    }
+
+    function seekFocus(v: ChapVerse, autoplay = true): void {
+        const wasPlaying = !dashPort.paused;
+        setFocus(v);
+        dashPort.seek(v.startMs);
+        if (autoplay || wasPlaying) tryPlay();
+        refreshDisplays();
+    }
+
+    function seekMsAndResume(targetMs: number): void {
+        dashPort.seek(targetMs);
+        tryPlay();
+        focusAt(targetMs);
+        refreshDisplays();
     }
 
     /** Step to the prev/next ayah in the current chapter (keyboard [ / ]). */
@@ -590,9 +613,7 @@
         if (ni < 0 || ni >= chapterVerses.length) return;
         exitLoop();
         const v = chapterVerses[ni]!;
-        setFocus(v);
-        dashPort.seek(v.startMs);
-        refreshDisplays();
+        seekFocus(v);
     }
 
     /** Validation panel click — jump the focus (+ playhead) to a flagged verse,
@@ -632,6 +653,7 @@
                     delivery: e.delivery,
                     surahNum: surah,
                     positionMs: 0,
+                    isPlaying: autoplay || s.isPlaying,
                 }));
                 return;
             } catch {
@@ -699,16 +721,14 @@
                 e.preventDefault();
                 exitLoop();
                 const t = adjacentAyahStartMs(chapterStartMs, cur * 1000, -1);
-                if (t !== null) dashPort.seek(t);
-                refreshDisplays();
+                if (t !== null) seekMsAndResume(t);
                 break;
             }
             case 'ArrowRight': {
                 e.preventDefault();
                 exitLoop();
                 const t = adjacentAyahStartMs(chapterStartMs, cur * 1000, 1);
-                if (t !== null) dashPort.seek(t);
-                refreshDisplays();
+                if (t !== null) seekMsAndResume(t);
                 break;
             }
             case 'ArrowUp': {
@@ -717,8 +737,7 @@
                 if (!lv) break;
                 const t = cur - lv.tsSegOffset;
                 const prev = wordBoundaryScan(lv.data.words, t, 'up');
-                dashPort.seek(((prev ?? 0) + lv.tsSegOffset) * 1000);
-                refreshDisplays();
+                seekMsAndResume(((prev ?? 0) + lv.tsSegOffset) * 1000);
                 break;
             }
             case 'ArrowDown': {
@@ -727,8 +746,7 @@
                 if (!lv) break;
                 const t = cur - lv.tsSegOffset;
                 const next = wordBoundaryScan(lv.data.words, t, 'down');
-                if (next !== null) dashPort.seek((next + lv.tsSegOffset) * 1000);
-                refreshDisplays();
+                if (next !== null) seekMsAndResume((next + lv.tsSegOffset) * 1000);
                 break;
             }
             case 'KeyR':
@@ -779,6 +797,13 @@
         // primes the first slot once data is loaded.
         const reprime = (): void => { if (_primedOnce) void primeShuffleSlot(); };
         const unsubShuf = shuffleMode.subscribe(reprime);
+        let lastManualShuffle = get(manualShuffleRequest);
+        const unsubManualShuffle = manualShuffleRequest.subscribe((n) => {
+            if (n === lastManualShuffle) return;
+            lastManualShuffle = n;
+            if (!_primedOnce) return;
+            void shuffleJump(true);
+        });
         // Capture the loop's verse anchor on engage (null→set) and drop it on
         // exit. The loop setters (footer button, dbl-click, waveform click) all
         // run against the CURRENT focus verse, so the live `loadedVerse` at the
@@ -792,7 +817,7 @@
             }
         });
         _primedOnce = true;
-        return () => { unsubTab(); unsubShuf(); unsubLoop(); };
+        return () => { unsubTab(); unsubShuf(); unsubManualShuffle(); unsubLoop(); };
     });
 
     onDestroy(() => {

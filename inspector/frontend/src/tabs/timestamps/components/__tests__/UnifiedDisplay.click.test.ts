@@ -164,5 +164,6 @@ describe('UnifiedDisplay — click / dblclick in loop mode', () => {
         expect(get(loopTarget)).toBeNull();
         // Word 2 starts at 5s; seek = word.start + tsSegOffset (0) = 5.
         expect(audio.currentTime).toBeCloseTo(5, 6);
+        expect((audio as unknown as { play: ReturnType<typeof vi.fn> }).play).toHaveBeenCalled();
     });
 });

@@ -30,7 +30,6 @@
         setIsPlaying,
         setPosition,
         setSpeed,
-        setSurah,
     } from '../../stores/player-context';
     import type { PublicDelivery } from '../../types/public-state';
     import { DASHBOARD_SPEEDS } from '../../utils/speed-control';
@@ -132,7 +131,7 @@
                 .filter(Number.isFinite)
                 .sort((a, b) => a - b);
             if (available.length > 0 && available[0] !== surahNum) {
-                setSurah(available[0]!);
+                playerContext.update((s) => ({ ...s, surahNum: available[0]!, positionMs: 0 }));
                 return;
             }
         }
@@ -210,21 +209,39 @@
             dashPort.pause();
             return;
         }
+        await resumePlayback();
+    }
+
+    async function resumePlayback(): Promise<void> {
         await ensureAudioContextRunning();
-        // preload="none" means the element has no buffered media until
-        // loadCovering points it at the proxy URL. Browsers ignore play()
-        // when src is empty, so we ensure coverage first.
         if (dashPort.source) {
             dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
         }
-        // If the element isn't yet at HAVE_FUTURE_DATA (readyState >= 3),
-        // play() will be queued until canplay fires. Surface that as a
-        // loading state so the user sees the ring instead of an instant
-        // pause icon with no audio.
         if (audioEl && audioEl.readyState < 3) {
             setIsLoading(true);
         }
         dashPort.play();
+    }
+
+    async function seekAndResume(targetMs: number): Promise<void> {
+        await ensureAudioContextRunning();
+        if (dashPort.source) {
+            dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
+        }
+        dashPort.seek(targetMs);
+        if (audioEl && audioEl.readyState < 3) {
+            setIsLoading(true);
+        }
+        dashPort.play();
+    }
+
+    function setSurahAndResume(surahNum: number): void {
+        playerContext.update((s) => ({
+            ...s,
+            surahNum,
+            positionMs: 0,
+            isPlaying: true,
+        }));
     }
 
     // Whenever ayah boundaries are loaded for whatever's selected, the seek
@@ -236,35 +253,35 @@
         const cur = dashPort.currentTimeMs();
         if ($recitationAyahStarts.length) {
             const t = adjacentAyahStartMs($recitationAyahStarts, cur, -1);
-            if (t !== null) { dashPort.seek(t); return; }
+            if (t !== null) { void seekAndResume(t); return; }
         }
-        dashPort.seek(Math.max(0, cur - 15_000));
+        void seekAndResume(Math.max(0, cur - 15_000));
     }
     function seekForward(): void {
         exitLoop();
         const cur = dashPort.currentTimeMs();
         if ($recitationAyahStarts.length) {
             const t = adjacentAyahStartMs($recitationAyahStarts, cur, 1);
-            if (t !== null) { dashPort.seek(t); return; }
+            if (t !== null) { void seekAndResume(t); return; }
         }
-        dashPort.seek(cur + 15_000);
+        void seekAndResume(cur + 15_000);
     }
 
     function prevSurah(): void {
         const ctx = $playerContext;
         if (ctx.surahNum === null) return;
         const idx = surahNums.indexOf(ctx.surahNum);
-        if (idx > 0) { exitLoop(); setSurah(surahNums[idx - 1]!); }
+        if (idx > 0) { exitLoop(); setSurahAndResume(surahNums[idx - 1]!); }
     }
     function nextSurah(): void {
         const ctx = $playerContext;
         if (ctx.surahNum === null) return;
         const idx = surahNums.indexOf(ctx.surahNum);
-        if (idx >= 0 && idx < surahNums.length - 1) { exitLoop(); setSurah(surahNums[idx + 1]!); }
+        if (idx >= 0 && idx < surahNums.length - 1) { exitLoop(); setSurahAndResume(surahNums[idx + 1]!); }
     }
 
     function onSurahChange(ev: CustomEvent<number>): void {
-        setSurah(ev.detail);
+        setSurahAndResume(ev.detail);
         surahPopoverOpen = false;
     }
 
@@ -327,7 +344,7 @@
             const snapped = nearestAyahStartMs($recitationAyahStarts, target);
             if (snapped !== null) target = snapped;
         }
-        dashPort.seek(target);
+        void seekAndResume(target);
     }
 
     function onCombinationSelect(ev: CustomEvent<PublicDelivery>): void {
@@ -336,6 +353,7 @@
             ...s,
             delivery: d,
             positionMs: 0,
+            isPlaying: true,
         }));
     }
 
