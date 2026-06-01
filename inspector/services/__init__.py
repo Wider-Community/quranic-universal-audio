@@ -42,7 +42,7 @@ from .segments import (
     segments_query,
     undo,
 )
-from .reference import public_state, quran_refs, timestamps
+from .reference import public_state, quran_refs, tajweed, timestamps
 from . import validation
 
 # Alias each submodule into sys.modules under its legacy ``services.X`` name so
@@ -86,6 +86,7 @@ _LEGACY_ALIASES = {
     "undo": undo,
     "public_state": public_state,
     "quran_refs": quran_refs,
+    "tajweed": tajweed,
     "timestamps": timestamps,
 }
 
