@@ -231,11 +231,23 @@
             if (pi === undefined || pi < 0) continue;
             bridgePhoneByBlock.set(i, pi);
             excluded.add(pi);
-            // When bridge is in prev word's tail, exclude any phonemes after it —
-            // those are vowels of the merged letter that MFA segmented into the prev word.
-            if (piInPrev && prevIdx) {
-                const piPos = prevIdx.indexOf(pi);
-                for (let j = piPos + 1; j < prevIdx.length; j++) excluded.add(prevIdx[j]!);
+            // When bridge is in prev word's tail, also exclude:
+            //  - tail overflow: prev word phonemes after the bridge (vowels MFA put in the prev segment)
+            //  - head underflow: curr word phonemes whose start ≤ bridge end (vowel of the merged
+            //    letter that MFA put at the head of the curr segment instead)
+            if (piInPrev) {
+                if (prevIdx) {
+                    const piPos = prevIdx.indexOf(pi);
+                    for (let j = piPos + 1; j < prevIdx.length; j++) excluded.add(prevIdx[j]!);
+                }
+                const bridgeEnd = intervals[pi]!.end;
+                if (currIdx) {
+                    for (const idx of currIdx) {
+                        const iv = intervals[idx];
+                        if (!iv || iv.start > bridgeEnd) break;
+                        excluded.add(idx);
+                    }
+                }
             }
         }
 
