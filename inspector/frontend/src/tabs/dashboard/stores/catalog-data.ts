@@ -22,7 +22,7 @@ export interface CatalogSnapshot {
 }
 
 const initial: CatalogSnapshot = {
-    loading: false,
+    loading: true,
     error: null,
     reciters: [],
     stats: null,
