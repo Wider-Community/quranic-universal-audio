@@ -2,15 +2,18 @@
 
 Covers:
 - ``GET /api/admin/releases/status``:
-  * legacy released reciter (no ledger row) gets a synthetic ``ts: {version:
-    'legacy'}`` so the FE bucketing finds it.
-  * ledger row wins over the legacy fallback when both exist.
+  * a released reciter with a current ledger row is bucketable (lands in
+    "Waiting to publish" when there's no HF row yet).
   * inert rows (no TS / HF / GH / not released) are dropped by the
     ``_is_bucketable`` server-side filter — the wire payload only contains
     rows the FE will actually render.
   * eligible vs ineligible channel scoping for the "Excluded" bucket.
+  * a slug appearing in ``in_flight`` is bucketable even if it would
+    otherwise be inert.
 - ``POST /api/admin/publish-hf/<slug>``:
-  * accepts a legacy released slug (state='released', no ledger) without 409.
+  * 409s when no current ledger row exists (the gate is strict — the
+    canonical fix is to backfill the ledger via ``admin_db.py``, not to
+    let the route guess from delivery state).
 
 The autouse ``_substrate_db`` fixture gives us a fresh migrated SQLite per
 test. ``list_in_flight_jobs`` is mocked to ``[]`` so we don't hit the live
@@ -130,12 +133,14 @@ def _seed_ledger_ts(slug: str, version: str = "real-job-id") -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_status_legacy_released_synthesizes_ts(signed_in_client, monkeypatch):
-    """A released-state reciter with no ledger row appears in the response
-    with ``ts: {version: 'legacy', produced_at: state_since}``."""
+def test_status_released_with_ledger_is_waiting(signed_in_client, monkeypatch):
+    """A released-state reciter with a current track='ts' ledger row appears
+    in the response — the FE will bucket it as "Waiting to publish" because
+    state='released', ts != null, hf == null."""
     client, _user = signed_in_client(role="maintainer")
     _stub_jobs_api(monkeypatch)
-    _seed_released("ar.legacy-released", channel="mp3quran")
+    _seed_released("ar.ready_to_publish", channel="mp3quran")
+    _seed_ledger_ts("ar.ready_to_publish", version="real-job-id-123")
 
     resp = client.get("/api/admin/releases/status")
     assert resp.status_code == 200, resp.get_data(as_text=True)
@@ -144,29 +149,26 @@ def test_status_legacy_released_synthesizes_ts(signed_in_client, monkeypatch):
     rows = body["recitations"]
     assert len(rows) == 1
     row = rows[0]
-    assert row["slug"] == "ar.legacy-released"
+    assert row["slug"] == "ar.ready_to_publish"
     assert row["state"] == "released"
     assert row["gh_release_eligible"] is True
-    assert row["ts"] is not None
-    assert row["ts"]["version"] == "legacy"
-    assert row["ts"]["produced_at"]  # state_since ISO string
+    assert row["ts"] == {"version": "real-job-id-123", "produced_at": row["ts"]["produced_at"]}
     assert row["hf"] is None
     assert row["gh"] is None
 
 
-def test_status_ledger_wins_over_legacy_fallback(signed_in_client, monkeypatch):
-    """When BOTH a released state row AND a ledger row exist, the ledger
-    row wins (synthetic 'legacy' marker not used)."""
+def test_status_released_without_ledger_is_filtered(signed_in_client, monkeypatch):
+    """A released-state row with NO ledger entry is dropped — the ledger
+    is the source of truth for TS-existence. The canonical fix for that
+    state is a one-shot backfill via ``admin_db.py``, not a route bridge."""
     client, _user = signed_in_client(role="maintainer")
     _stub_jobs_api(monkeypatch)
-    _seed_released("ar.ledgered", channel="mp3quran")
-    _seed_ledger_ts("ar.ledgered", version="real-job-id-123")
+    _seed_released("ar.no_ledger", channel="mp3quran")
+    # No _seed_ledger_ts call — the ledger stays empty.
 
     resp = client.get("/api/admin/releases/status")
     body = resp.get_json()
-    assert len(body["recitations"]) == 1
-    ts = body["recitations"][0]["ts"]
-    assert ts["version"] == "real-job-id-123"
+    assert body["recitations"] == []
 
 
 def test_status_inert_rows_filtered(signed_in_client, monkeypatch, seed_state):
@@ -177,8 +179,9 @@ def test_status_inert_rows_filtered(signed_in_client, monkeypatch, seed_state):
     _stub_jobs_api(monkeypatch)
     _seed_eligible_channel("mp3quran")
 
-    # Released + has TS (via legacy bridge) — bucketable.
+    # Released + ledgered → bucketable.
     _seed_released("ar.visible", channel="mp3quran")
+    _seed_ledger_ts("ar.visible")
     # Awaiting review — no TS, no HF, no GH — dropped.
     _seed_delivery_on_channel("ar.inert", channel="mp3quran", reciter_id="r2")
     seed_state("ar.inert", state="awaiting_review")
@@ -236,14 +239,13 @@ def test_status_in_flight_slug_is_bucketable(signed_in_client, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_publish_hf_accepts_legacy_released(signed_in_client, monkeypatch):
-    """publish-hf no longer 409s on a released-state slug just because the
-    ledger is empty (the migration-0014 backfill gap)."""
+def test_publish_hf_accepts_ledgered_slug(signed_in_client, monkeypatch):
+    """publish-hf accepts a slug that has a current track='ts' ledger row."""
     client, _user = signed_in_client(role="maintainer")
     _stub_jobs_api(monkeypatch)
-    _seed_released("ar_legacy_ready", channel="mp3quran")
+    _seed_released("ar_ready", channel="mp3quran")
+    _seed_ledger_ts("ar_ready")
 
-    # Stub the actual launch so we don't hit HF Jobs.
     from services.admin.jobs import hf_publish as hf_publish_jobs
 
     monkeypatch.setattr(
@@ -251,20 +253,20 @@ def test_publish_hf_accepts_legacy_released(signed_in_client, monkeypatch):
         lambda slug, webhook_base=None: {"job_id": "j_test", "url": None},
     )
 
-    resp = client.post("/api/admin/publish-hf/ar_legacy_ready", headers=_HEADERS)
+    resp = client.post("/api/admin/publish-hf/ar_ready", headers=_HEADERS)
     assert resp.status_code == 202, resp.get_data(as_text=True)
-    assert resp.get_json() == {"job_id": "j_test", "url": None}
 
 
-def test_publish_hf_rejects_no_ts_and_not_released(signed_in_client, monkeypatch, seed_state):
-    """Without a ledger row AND without released state, publish-hf still
-    409s — we haven't loosened the legitimate gate."""
+def test_publish_hf_rejects_no_ledger(signed_in_client, monkeypatch, seed_state):
+    """Without a ledger row publish-hf 409s — the ledger is the source of
+    truth for TS-existence. Released-state alone is not sufficient (backfill
+    the ledger via admin_db.py for legacy slugs)."""
     client, _user = signed_in_client(role="maintainer")
     _stub_jobs_api(monkeypatch)
     _seed_eligible_channel("mp3quran")
-    _seed_delivery_on_channel("ar_not_ready", channel="mp3quran", reciter_id="r6")
-    seed_state("ar_not_ready", state="awaiting_review")
+    _seed_delivery_on_channel("ar_no_ledger", channel="mp3quran", reciter_id="r6")
+    seed_state("ar_no_ledger", state="released")
 
-    resp = client.post("/api/admin/publish-hf/ar_not_ready", headers=_HEADERS)
+    resp = client.post("/api/admin/publish-hf/ar_no_ledger", headers=_HEADERS)
     assert resp.status_code == 409
     assert "has no current TS release" in resp.get_json()["error"]

@@ -53,26 +53,18 @@ def publish_hf(user, slug: str):
 
     Pre-flight:
       - the slug must exist
-      - it must have either a current ``per_recitation_releases(track='ts')``
-        row OR ``delivery_states.state='released'`` — the latter covers
-        reciters timestamped before migration 0014 introduced the ledger
+      - it must have a current ``per_recitation_releases(track='ts')`` row
+        (you can't publish what hasn't been timestamped)
       - no other job for this slug may be in flight (cross-kind single-flight)
 
     Returns 202 ``{job_id, url}`` on launch, 404 / 409 / 502 on the obvious
     failure modes. The launched job will POST the completion webhook on
     success; the 120 s poll worker is the safety net.
     """
-    state_row = state_service.get_row(slug)
-    if state_row is None:
+    if state_service.get_row(slug) is None:
         return jsonify({"error": "unknown slug"}), 404
     ts_row = repo_releases.current_release("ts", slug)
-    # Accept "released" state as proof-of-TS when no ledger row exists:
-    # reciters timestamped before migration 0014 have files in the bucket
-    # but no per_recitation_releases row. They're publishable nonetheless.
-    is_legacy_released = (
-        ts_row is None and state_row.state.value == "released"
-    )
-    if ts_row is None and not is_legacy_released:
+    if ts_row is None:
         return jsonify({
             "error": "this recitation has no current TS release — "
                      "generate timestamps before publishing to HF",
@@ -338,10 +330,6 @@ def releases_status(user):
     returned (see ``_is_bucketable``) — inert catalog entries are dropped
     server-side so chip facet counts reflect actual release activity.
 
-    Released reciters timestamped before migration 0014 (no ledger row
-    but ``state='released'``) get a synthetic ``ts: {version: 'legacy',
-    produced_at: state_since}`` so the FE bucketing finds them.
-
     Gated by ``reviews.view`` (any admin who sees the review queue sees this
     grid; the action gates above own who can mutate). FE buckets rows into
     state sections; ``state`` (released / under_review / awaiting_review)
@@ -374,13 +362,18 @@ def releases_status(user):
             "days_since_cut": days_since_cut,
         }
 
-    in_flight = jobs_base.list_in_flight_jobs(("hf_publish", "cut_release"))
+    # ``timestamps`` is watched too: a running first-publish OR regen MFA job
+    # surfaces in the "In progress" bucket (a regen on a released row has no
+    # other in-flight signal — there's no state change). hf_publish + cut_release
+    # are the dataset/GH tracks.
+    in_flight = jobs_base.list_in_flight_jobs(
+        ("hf_publish", "cut_release", "timestamps"))
 
     deliveries = conn.execute("""
         SELECT d.slug, d.riwayah, d.style, d.channel,
                c.gh_release_eligible,
                r.name_en, r.name_ar,
-               ds.state, ds.state_since
+               ds.state
         FROM deliveries d
         JOIN channels        c  ON c.slug = d.channel
         JOIN reciters        r  ON r.reciter_id = d.reciter_id
@@ -396,16 +389,6 @@ def releases_status(user):
         ts = repo_releases.current_release("ts", slug)
         hf = repo_releases.current_release("hf", slug)
         gh = repo_releases.latest_gh_release_member(slug)
-        ts_payload = _slim_release_row(ts, fields=("version", "produced_at"))
-        # Legacy bridge: released reciters timestamped before migration 0014
-        # have no per_recitation_releases ledger row but DO have timestamps
-        # in the bucket. Synthesize a minimal record so the FE bucketing
-        # treats them as TS-bearing (lands them in "Waiting to publish").
-        if ts_payload is None and d["state"] == "released":
-            ts_payload = {
-                "version": "legacy",
-                "produced_at": d["state_since"],
-            }
         row = {
             "slug": slug,
             "name_en": d["name_en"],
@@ -415,7 +398,7 @@ def releases_status(user):
             "style": d["style"],
             "channel": d["channel"],
             "gh_release_eligible": bool(d["gh_release_eligible"]),
-            "ts": ts_payload,
+            "ts": _slim_release_row(ts, fields=("version", "produced_at")),
             "hf": _slim_release_row(hf, fields=("version", "produced_at", "stale_since")),
             "gh": _slim_release_row(gh, fields=("change_kind", "stale_since",
                                                 "release_id", "ts_version")),
