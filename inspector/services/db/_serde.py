@@ -44,7 +44,7 @@ def to_iso(dt: datetime | None) -> str | None:
 def from_iso(s: str | None) -> datetime | None:
     if s is None:
         return None
-    # Python < 3.11 fromisoformat() doesn't handle the trailing "Z" suffix.
+    # Python < 3.11 fromisoformat() rejects the trailing "Z" suffix.
     if isinstance(s, str) and s.endswith("Z"):
         s = s[:-1] + "+00:00"
     dt = datetime.fromisoformat(s)

@@ -38,7 +38,7 @@
     let manifestSlugs = $state(new Set<string>());
     let pickerOpen = $state(false);
     let pickerSearch = $state('');
-    let searchInputEl: SearchInput | null = null;
+    let searchInputEl: SearchInput | null = $state(null);
 
     onMount(() => {
         void loadManifest()
