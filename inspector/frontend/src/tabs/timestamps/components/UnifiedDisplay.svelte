@@ -147,6 +147,26 @@
         return Number.isFinite(n) ? n : 0;
     }
 
+    /** Does this shard phoneme carry the merger signature for our 8 cross-word
+     *  rules? Mirrors the backend's :func:`_is_merger_phoneme` (pharyngeal-aware
+     *  doubled-prefix + ghunnah tilde) — *required on the FE* because MFA's
+     *  word-segmentation can put the merged phoneme on the OTHER side of the
+     *  boundary than the phonemizer's per-word convention says it should be
+     *  (e.g. Ahmed Talib 46:29: phonemizer-without-stops puts ``m̃`` at curr's
+     *  first position of ``مِّنَ``; MFA appended it to the prev word's tail on
+     *  ``نَفَرࣰا`` after the trigger letter's vowel). The backend's ``side`` is a
+     *  hint built from the phonemizer's per-letter output; we override it with
+     *  the actual shard placement so the bridge tile shows the real merger
+     *  phoneme, never an adjacent haraka. */
+    const GHUNNAH_TILDE = '̃';
+    const PHARYNGEAL = 'ˤ';
+    function isMergerPhoneme(p: string | undefined): boolean {
+        if (!p) return false;
+        if (p.includes(GHUNNAH_TILDE) || p.includes('ñ')) return true;
+        const base = p.replaceAll(PHARYNGEAL, '');
+        return base.length >= 2 && base[0] === base[1];
+    }
+
     function buildRendered(
         words: TsWord[],
         intervals: PhonemeInterval[],
@@ -177,10 +197,36 @@
             if (prevWn === 0 || currWn === 0 || currWn !== prevWn + 1) continue;
             const b = bridgeByWordNum.get(currWn);
             if (!b) continue;
-            const src = b.side === 'curr' ? curr : prev;
-            const indices = src.phoneme_indices;
-            if (!indices || indices.length === 0) continue;
-            const pi = b.side === 'curr' ? indices[0] : indices[indices.length - 1];
+
+            // The backend's ``side`` hint is built from the phonemizer's
+            // per-letter output, which assumes a stable convention for where
+            // the merged phoneme lives. MFA shards don't always agree — the
+            // same idgham can land at prev's tail or curr's head depending on
+            // how the aligner segmented the audio (Ahmed Talib 46:29 word 17→
+            // 18 shafawi: ``m̃`` lands at prev[-2] because MFA pulled the
+            // dammah of ``مُّن`` into the prev word along with the geminated
+            // meem). So we ignore the hint and scan a small window from both
+            // sides of the boundary, picking the first merger phoneme found —
+            // ghunnah-tilde or doubled-consonant prefix. If neither side has
+            // a merger within the window the rule didn't fire in this
+            // recording (waqf without timing gap), and we suppress the bridge
+            // so the tile never shows a stray haraka.
+            const SCAN_WINDOW = 3;
+            const prevIdx = prev.phoneme_indices;
+            const currIdx = curr.phoneme_indices;
+            let pi: number | undefined;
+            if (prevIdx && prevIdx.length > 0) {
+                for (let k = 0; k < Math.min(SCAN_WINDOW, prevIdx.length); k++) {
+                    const idx = prevIdx[prevIdx.length - 1 - k]!;
+                    if (isMergerPhoneme(intervals[idx]?.phone)) { pi = idx; break; }
+                }
+            }
+            if (pi === undefined && currIdx && currIdx.length > 0) {
+                for (let k = 0; k < Math.min(SCAN_WINDOW, currIdx.length); k++) {
+                    const idx = currIdx[k]!;
+                    if (isMergerPhoneme(intervals[idx]?.phone)) { pi = idx; break; }
+                }
+            }
             if (pi === undefined || pi < 0) continue;
             bridgePhoneByBlock.set(i, pi);
             excluded.add(pi);
