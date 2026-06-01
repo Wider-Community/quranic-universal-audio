@@ -10,6 +10,7 @@ import { derived, writable } from 'svelte/store';
 
 import type { TsReciter, TsVerseData } from '../../../lib/types/domain';
 import type { SelectOption } from '../../../lib/types/ui';
+import type { BridgeInfo } from '../../../lib/types/generated/schemas';
 import { surahOptionText } from '../../../lib/utils/surah-info';
 
 /** A verse option as served by /api/ts/verses. */
@@ -50,6 +51,13 @@ export const selectedVerse = writable<string>('');
 
 /** Currently-loaded verse data (null before first load). */
 export const loadedVerse = writable<TsLoadedVerse | null>(null);
+
+/** Cross-word tajweed bridges for the currently-loaded verse (empty when none
+ *  fire or fetch is in-flight). UnifiedDisplay consumes this to render the
+ *  gold bridge tile between word blocks; populated by TimestampsTab from
+ *  ``/api/ts/tajweed/<verse_ref>?stops=…`` keyed by the MFA-inferred stops.
+ *  Stored as a flat array since the data is tiny (≤ ~5 bridges/verse). */
+export const loadedTajweedBridges = writable<BridgeInfo[]>([]);
 
 // ---------------------------------------------------------------------------
 // Derived dropdown options

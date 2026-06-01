@@ -18,7 +18,7 @@
 
     import { dashPort } from '../../../lib/playback/dash-port';
     import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
-    import { IDGHAM_GHUNNAH_START, stripTashkeel } from '../../../lib/utils/arabic-text';
+    import type { BridgeInfo } from '../../../lib/types/generated/schemas';
     import {
         showLetters,
         showPhonemes,
@@ -29,13 +29,11 @@
     } from '../stores/display';
     import type { TsLoopTarget } from '../stores/playback';
     import { autoMode, loopTarget } from '../stores/playback';
-    import { loadedVerse } from '../stores/verse';
+    import { loadedTajweedBridges, loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
 
     // ---- Local structural state (derived declaratively from loadedVerse) ----
-
-    interface BridgeInfo { fromPrev: number[]; fromCurr: number[]; }
 
     interface RenderedLetter {
         chars: string;
@@ -66,8 +64,16 @@
     // Container ref used for imperative highlight updates.
     let rootEl: HTMLDivElement;
 
-    // Reactive: rebuild rendered structure whenever loadedVerse changes.
-    $: rendered = buildRendered($loadedVerse?.data.words ?? [], $loadedVerse?.data.intervals ?? []);
+    // Reactive: rebuild rendered structure whenever loadedVerse OR its bridges
+    // change. Bridges arrive asynchronously after the verse paints (the
+    // /api/ts/tajweed fetch is independent), so we re-run buildRendered when
+    // they land — that's what flips the cross-word phoneme out of the regular
+    // mega-phoneme row and into the gold bridge tile.
+    $: rendered = buildRendered(
+        $loadedVerse?.data.words ?? [],
+        $loadedVerse?.data.intervals ?? [],
+        $loadedTajweedBridges,
+    );
 
     // Reset previous-index cache when structure changes (new verse, etc.)
     $: rendered, (_prevActiveWordIdx = -1);
@@ -107,77 +113,6 @@
 
     // ---- Pure helpers (state-free) ----
 
-    function getLastBaseLetter(word: TsWord): string {
-        const bare = stripTashkeel(word.text || '');
-        return bare.length ? bare[bare.length - 1] ?? '' : '';
-    }
-
-    function getFirstBaseLetter(word: TsWord): string {
-        const bare = stripTashkeel(word.text || '');
-        for (const ch of bare) {
-            if (ch !== '\u0671' && ch !== '\u0627') return ch;
-        }
-        return bare.length ? bare[0] ?? '' : '';
-    }
-
-    function hasTanween(word: TsWord): boolean {
-        const text = word.text || '';
-        const lastBase = stripTashkeel(text);
-        const endsWithAlef =
-            lastBase.length > 0 &&
-            (lastBase[lastBase.length - 1] === '\u0627' ||
-                lastBase[lastBase.length - 1] === '\u0649');
-        if (endsWithAlef) return /[\u064B\u08F0]/.test(text);
-        const tail = text.slice(-3);
-        return /[\u064C\u064D\u08F1\u08F2]/.test(tail);
-    }
-
-    function computeBridgeAtBoundary(
-        prevWord: TsWord,
-        currWord: TsWord,
-        intervals: PhonemeInterval[],
-    ): BridgeInfo | null {
-        const fromPrev: number[] = [];
-        const fromCurr: number[] = [];
-
-        const currIndices = currWord.phoneme_indices || [];
-        const prevEndsNoon = getLastBaseLetter(prevWord) === '\u0646';
-        const prevHasTanween = hasTanween(prevWord);
-        const noonOrTanween = prevEndsNoon || prevHasTanween;
-
-        for (const pi of currIndices) {
-            const iv = intervals[pi];
-            const phone = iv?.phone;
-            if (!phone) break;
-            const requiredLetter = IDGHAM_GHUNNAH_START[phone];
-            if (!requiredLetter) break;
-            if (noonOrTanween && getFirstBaseLetter(currWord) === requiredLetter) {
-                fromCurr.push(pi);
-            } else {
-                break;
-            }
-        }
-
-        const prevIndices = prevWord.phoneme_indices || [];
-        if (
-            getLastBaseLetter(prevWord) === '\u0645' &&
-            getFirstBaseLetter(currWord) === '\u0645'
-        ) {
-            for (let k = prevIndices.length - 1; k >= 0; k--) {
-                const pi = prevIndices[k];
-                if (pi === undefined) continue;
-                const iv = intervals[pi];
-                const phone = iv?.phone;
-                if (phone === 'm\u0303') fromPrev.push(pi);
-                else break;
-            }
-            fromPrev.reverse();
-        }
-
-        if (fromPrev.length === 0 && fromCurr.length === 0) return null;
-        return { fromPrev, fromCurr };
-    }
-
     function letterGroupsFor(word: TsWord): RenderedLetter[] {
         const letters = word.letters || [];
         const groups: RenderedLetter[] = [];
@@ -204,25 +139,48 @@
         return groups;
     }
 
-    function buildRendered(words: TsWord[], intervals: PhonemeInterval[]): RenderedBlock[] {
+    /** Resolve a bridge phoneme index (always exactly one — the phonemizer's
+     *  cross-word merge collapses to a single phoneme by construction).
+     *  ``side === "curr"`` peels the FIRST phoneme of the curr word; ``"prev"``
+     *  peels the LAST phoneme of the prev word. Returns -1 when the chosen
+     *  position has no phoneme (defensive — a malformed shard could lose one).
+     */
+    function bridgePhonemeIdx(
+        words: TsWord[],
+        beforeWordIdx: number,
+        side: 'prev' | 'curr',
+    ): number {
+        if (side === 'curr') {
+            const w = words[beforeWordIdx];
+            const indices = w?.phoneme_indices;
+            return indices && indices.length > 0 ? (indices[0] ?? -1) : -1;
+        }
+        const w = words[beforeWordIdx - 1];
+        const indices = w?.phoneme_indices;
+        return indices && indices.length > 0 ? (indices[indices.length - 1] ?? -1) : -1;
+    }
+
+    function buildRendered(
+        words: TsWord[],
+        intervals: PhonemeInterval[],
+        bridgeInfos: BridgeInfo[],
+    ): RenderedBlock[] {
         if (!words.length) return [];
 
-        // Pre-compute bridges per boundary + exclusion sets per word
-        const bridges: Array<BridgeInfo | null> = [];
-        for (let wi = 1; wi < words.length; wi++) {
-            const prev = words[wi - 1];
-            const curr = words[wi];
-            bridges[wi] =
-                prev && curr ? computeBridgeAtBoundary(prev, curr, intervals) : null;
-        }
-        const exclude: Set<number>[] = words.map(() => new Set<number>());
-        for (let wi = 1; wi < words.length; wi++) {
-            const b = bridges[wi];
-            if (!b) continue;
-            const exPrev = exclude[wi - 1];
-            const exCurr = exclude[wi];
-            if (exPrev) b.fromPrev.forEach((pi) => exPrev.add(pi));
-            if (exCurr) b.fromCurr.forEach((pi) => exCurr.add(pi));
+        // Map each cross-word tajweed bridge to a phoneme index, keyed by the
+        // word the bridge tile sits BEFORE. `before_word_idx` is 1-based to
+        // match shard locations; words[] is 0-indexed, so subtract one. We
+        // drop any bridge whose phoneme can't be resolved (e.g. -1 from a
+        // malformed shard) so it falls back to in-word rendering.
+        const bridgePhoneByBlock = new Map<number, number>();
+        const excluded = new Set<number>();
+        for (const b of bridgeInfos) {
+            const blockIdx = b.before_word_idx - 1;
+            if (blockIdx <= 0 || blockIdx >= words.length) continue;
+            const pi = bridgePhonemeIdx(words, blockIdx, b.side);
+            if (pi < 0) continue;
+            bridgePhoneByBlock.set(blockIdx, pi);
+            excluded.add(pi);
         }
 
         const blocks: RenderedBlock[] = [];
@@ -230,25 +188,21 @@
             const word = words[wi];
             if (!word) continue;
 
-            // Bridge before this block (not before the first block)
+            // Bridge before this block (never before the first block).
             let bridge: RenderedBridge | null = null;
-            const b = bridges[wi];
-            if (wi > 0 && b) {
-                const all = [...b.fromPrev, ...b.fromCurr];
-                const phs: RenderedPhoneme[] = [];
-                for (const pi of all) {
-                    const iv = intervals[pi];
-                    if (iv && !iv.geminate_end) phs.push({ interval: iv, index: pi });
+            const bridgePi = bridgePhoneByBlock.get(wi);
+            if (bridgePi !== undefined) {
+                const iv = intervals[bridgePi];
+                if (iv && !iv.geminate_end) {
+                    bridge = { phonemes: [{ interval: iv, index: bridgePi }] };
                 }
-                if (phs.length) bridge = { phonemes: phs };
             }
 
-            // Phoneme row excluding bridge-moved ones
+            // Phoneme row, excluding any index claimed by an adjacent bridge.
             const indices = word.phoneme_indices || [];
-            const ex = exclude[wi] ?? new Set<number>();
             const phonemes: RenderedPhoneme[] = [];
             for (const pi of indices) {
-                if (ex.has(pi)) continue;
+                if (excluded.has(pi)) continue;
                 const iv = intervals[pi];
                 if (iv && !iv.geminate_end) phonemes.push({ interval: iv, index: pi });
             }

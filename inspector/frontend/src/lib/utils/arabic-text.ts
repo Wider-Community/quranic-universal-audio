@@ -1,17 +1,14 @@
 /**
- * Shared Arabic text utilities — used by timestamps tab for cross-word
- * ghunna detection and animation character matching.
+ * Shared Arabic text utilities — tashkeel stripping, character grouping,
+ * letter-equivalence helpers shared across timestamps and animation tabs.
+ *
+ * Cross-word tajweed bridge detection used to live here as
+ * ``IDGHAM_GHUNNAH_START``; it now flows from the backend route
+ * ``GET /api/ts/tajweed/<verse_ref>`` (powered by ``quranic_phonemizer``)
+ * and is consumed via ``loadTajweedBridges`` in ``lib/recitation-data``.
  */
 
 export const TASHKEEL = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u08F0-\u08F2]/g;
-
-/** Idgham ghunnah phonemes at START of current word -> required Arabic start letter */
-export const IDGHAM_GHUNNAH_START: Record<string, string> = {
-    'ñ': '\u0646',  // ن
-    'j̃': '\u064A',  // ي
-    'w̃': '\u0648',  // و
-    'm̃': '\u0645',  // م
-};
 
 export const ZWSP = '\u2060';        // Word Joiner
 export const DAGGER_ALEF = '\u0670'; // Superscript Alef
