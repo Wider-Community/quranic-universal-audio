@@ -142,3 +142,44 @@ def test_route_compound_verse_ref(flask_client):
     body = resp.get_json()
     rules = [b["rule"] for b in body["bridges"]]
     assert "idgham_shafawi" in rules
+
+
+# ---------------------------------------------------------------------------
+# Regressions found by the .local/scripts/validate_tajweed_bridges.py harness.
+# Each represents a class of bug the data-driven validation caught.
+# ---------------------------------------------------------------------------
+
+
+def test_tanween_carrier_with_silent_trailing_letter_triggers():
+    """``2:5: هُدًى مِّن`` — the idgham_ghunnah_tanween source rule sits on the
+    د (the consonant carrying the fathatan), NOT on the trailing silent ى.
+    The original code only inspected ``prev.entries[-1].source_rules`` and
+    missed every tanween case where the carrier is followed by ا / ى / و.
+    The trigger-scan now walks backward to find the rule-bearing entry."""
+    out = bridges_for_verse("2:5", ())
+    rules_at_boundary = {b.before_word_idx: b.rule for b in out}
+    assert rules_at_boundary.get(4) == "idgham_ghunnah_tanween"
+
+
+def test_word_internal_mutajanisayn_is_not_a_bridge():
+    """``2:233: أَرَدتُّمْ أَن`` — the prev word `أَرَدتُّمْ` carries an internal
+    idgham_mutajanisayn_kamil (د → ت silently within the word). The rule
+    fires on a non-terminal entry of prev_w. The original code wrongly
+    promoted it to a cross-word bridge into the next word `أَن`. Cross-word
+    qualification now requires curr_w's first letter to target the same
+    rule — which it doesn't here."""
+    out = bridges_for_verse("2:233", ())
+    boundaries = {b.before_word_idx for b in out}
+    assert 46 not in boundaries, "word-internal mutajanisayn must not promote"
+
+
+def test_tanween_with_internal_shaddah_picks_curr_side():
+    """``2:36: قَرَارࣱ وَمَتَـٰعٌ`` — the trigger letter raa carries shaddah so
+    its own phonemes contain a geminate ``rˤrˤ``. That word-internal
+    gemination is NOT the cross-word merger; the merger ``w̃`` lives on
+    next word's وَ. Side detection must check the trigger's LAST phoneme
+    only (``u``, the vowel), not any phoneme on the trigger."""
+    out = bridges_for_verse("2:36", ())
+    rules_at_boundary = {b.before_word_idx: (b.rule, b.side) for b in out}
+    # 2:36 has a tanween-meem (vowel side=curr) before وَمَتَـٰعٌ at word 17.
+    assert rules_at_boundary.get(17) == ("idgham_ghunnah_tanween", "curr")

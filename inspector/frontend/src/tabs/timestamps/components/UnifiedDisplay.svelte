@@ -139,25 +139,12 @@
         return groups;
     }
 
-    /** Resolve a bridge phoneme index (always exactly one — the phonemizer's
-     *  cross-word merge collapses to a single phoneme by construction).
-     *  ``side === "curr"`` peels the FIRST phoneme of the curr word; ``"prev"``
-     *  peels the LAST phoneme of the prev word. Returns -1 when the chosen
-     *  position has no phoneme (defensive — a malformed shard could lose one).
-     */
-    function bridgePhonemeIdx(
-        words: TsWord[],
-        beforeWordIdx: number,
-        side: 'prev' | 'curr',
-    ): number {
-        if (side === 'curr') {
-            const w = words[beforeWordIdx];
-            const indices = w?.phoneme_indices;
-            return indices && indices.length > 0 ? (indices[0] ?? -1) : -1;
-        }
-        const w = words[beforeWordIdx - 1];
-        const indices = w?.phoneme_indices;
-        return indices && indices.length > 0 ? (indices[indices.length - 1] ?? -1) : -1;
+    /** Parse the trailing word number from a ``surah:ayah:word`` location.
+     *  Returns 0 when the location is malformed — caller filters those out. */
+    function wordNumOf(word: TsWord): number {
+        const parts = word.location.split(':');
+        const n = parseInt(parts[parts.length - 1] ?? '0', 10);
+        return Number.isFinite(n) ? n : 0;
     }
 
     function buildRendered(
@@ -167,19 +154,40 @@
     ): RenderedBlock[] {
         if (!words.length) return [];
 
-        // Map each cross-word tajweed bridge to a phoneme index, keyed by the
-        // word the bridge tile sits BEFORE. `before_word_idx` is 1-based to
-        // match shard locations; words[] is 0-indexed, so subtract one. We
-        // drop any bridge whose phoneme can't be resolved (e.g. -1 from a
-        // malformed shard) so it falls back to in-word rendering.
+        // Map Quran word number (1-based, from `location`) → first array index
+        // where it appears. Shards routinely contain duplicate occurrences of
+        // the same word (repeat-pass / partial retake artefacts — verified
+        // empirically: ~30% of verses have at least one duplicate). Using the
+        // array index as a proxy for the word number silently misplaces the
+        // bridge once a duplicate shifts subsequent positions; resolve via
+        // `location` so the bridge always lands on the FIRST occurrence (the
+        // one closest in time to the boundary the rule actually applies at).
+        const firstArrIdxByWordNum = new Map<number, number>();
+        for (let i = 0; i < words.length; i++) {
+            const wn = wordNumOf(words[i]!);
+            if (wn > 0 && !firstArrIdxByWordNum.has(wn)) {
+                firstArrIdxByWordNum.set(wn, i);
+            }
+        }
+
+        // For each bridge, resolve the curr-word block's array position via
+        // the lookup. Peel the phoneme from the SAME first-occurrence block on
+        // whichever side the backend specified — the merger phoneme is
+        // physically in that occurrence's phone list (later duplicates carry
+        // copies but we only render the first).
         const bridgePhoneByBlock = new Map<number, number>();
         const excluded = new Set<number>();
         for (const b of bridgeInfos) {
-            const blockIdx = b.before_word_idx - 1;
-            if (blockIdx <= 0 || blockIdx >= words.length) continue;
-            const pi = bridgePhonemeIdx(words, blockIdx, b.side);
-            if (pi < 0) continue;
-            bridgePhoneByBlock.set(blockIdx, pi);
+            const currArrIdx = firstArrIdxByWordNum.get(b.before_word_idx);
+            if (currArrIdx === undefined || currArrIdx === 0) continue;
+            const prevArrIdx = firstArrIdxByWordNum.get(b.before_word_idx - 1);
+            if (prevArrIdx === undefined) continue;
+            const src = b.side === 'curr' ? words[currArrIdx] : words[prevArrIdx];
+            const indices = src?.phoneme_indices;
+            if (!indices || indices.length === 0) continue;
+            const pi = b.side === 'curr' ? indices[0] : indices[indices.length - 1];
+            if (pi === undefined || pi < 0) continue;
+            bridgePhoneByBlock.set(currArrIdx, pi);
             excluded.add(pi);
         }
 

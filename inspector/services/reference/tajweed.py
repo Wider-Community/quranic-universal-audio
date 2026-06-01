@@ -52,6 +52,7 @@ BRIDGE_RULES: frozenset[TajweedRule] = frozenset(
 
 
 _GHUNNAH_MARK = "̃"  # combining tilde used on nasalised idgham phonemes
+_PHARYNGEAL = "ˤ"  # ˤ — superscript glottal stop suffix on emphatic consonants
 
 
 def _is_merger_phoneme(p: str) -> bool:
@@ -64,16 +65,18 @@ def _is_merger_phoneme(p: str) -> bool:
       ``ñ`` (``m̃``, ``ñ``, ``j̃``, ``w̃``).
     - **Gemination-family** (``idgham_bila_ghunnah_*``,
       ``idgham_mutamathilayn``, ``idgham_mutaqaribayn``,
-      ``idgham_mutajanisayn_kamil``) — the phoneme starts with a doubled
-      consonant (``ll``, ``rˤrˤ``, ``mm``, ``nn``, ``bb``, ``tt``…).
+      ``idgham_mutajanisayn_kamil``) — the phoneme is a doubled consonant
+      (``ll``, ``mm``, ``bb``, ``tt`` …), optionally pharyngealised
+      (``rˤrˤ``, ``sˤsˤ``, ``tˤtˤ``, ``ðˤðˤ`` …). The pharyngeal modifier
+      ``ˤ`` (U+02E4) is dropped before comparing so the doubled-prefix
+      check fires on both forms.
     """
     if not p:
         return False
     if _GHUNNAH_MARK in p or "ñ" in p:
         return True
-    # Doubled-consonant prefix — handles single-codepoint repeats and the
-    # ``rˤrˤ``/``ðˤðˤ`` pair (pharyngealised repeat).
-    if len(p) >= 2 and p[0] == p[1]:
+    base = p.replace(_PHARYNGEAL, "")
+    if len(base) >= 2 and base[0] == base[1]:
         return True
     return False
 
@@ -155,28 +158,51 @@ def bridges_for_verse(
         prev_w, curr_w = words[i], words[i + 1]
         if not prev_w.letter_mappings or not curr_w.letter_mappings:
             continue
-        prev_last = prev_w.letter_mappings[-1]
-        src_rules = {t.rule for t in prev_last.tajweed_rules if t.is_source}
-        in_scope = src_rules & BRIDGE_RULES
-        if not in_scope:
+
+        # Find the trigger entry: the LAST entry in prev_w that carries an
+        # in-scope source rule whose target letter actually lives on
+        # curr_w[0]. For noon-sukun and meem-sukun cases this is literally
+        # the last letter (``ن``, ``م``). For tanween cases the trigger sits
+        # on the consonant CARRYING the tanween diacritic — the last entries
+        # are silent alef/alef-maksura/ى that hang off the tanween
+        # (``هُدًى``: trigger=``د``, last=``ى`` silent). The cross-word check
+        # against curr_w's first entry's ``target_rules`` rejects word-internal
+        # firings of the same rule (``أَرَدتُّمْ``: ``د → ت`` mutajanisayn fires
+        # within the word; no bridge into the next word).
+        curr_first_targets = {t.rule for t in curr_w.letter_mappings[0].tajweed_rules}
+        trigger = None
+        trigger_rule = None
+        for e in reversed(prev_w.letter_mappings):
+            in_scope = {t.rule for t in e.tajweed_rules if t.is_source} & BRIDGE_RULES
+            cross_word = in_scope & curr_first_targets
+            if cross_word:
+                trigger = e
+                trigger_rule = sorted(cross_word, key=lambda r: r.value)[0]
+                break
+        if trigger is None or trigger_rule is None:
             continue
-        # If multiple in-scope rules fire on the same letter, pick deterministically.
-        rule = sorted(in_scope, key=lambda r: r.value)[0]
 
         # Side: where did the phonemizer put the merged result? Match by
-        # signature on the SOURCE letter — if any of its phonemes bears a
-        # ghunnah-tilde or gemination prefix, the merger lives at prev's tail
-        # (shafawi). Otherwise the source either went silent or kept only its
-        # base vowel/consonant (tanween-carrier case), and the merger sits at
-        # the target letter's head. Reading the phonemizer's own output this
-        # way avoids hardcoding a per-rule prev/curr table.
-        side = "prev" if any(_is_merger_phoneme(p) for p in prev_last.phonemes) else "curr"
+        # signature on the TRIGGER letter's LAST phoneme — when the merger
+        # lives on prev (shafawi: ``لَهُم → … m̃``), it surfaces as the trigger
+        # letter's terminal phoneme. Checking ANY phoneme on the trigger
+        # would over-fire on tanween carriers whose own shaddah produces a
+        # word-internal geminate (``قَرَارࣱ → aˤ, rˤrˤ, u``: the ``rˤrˤ`` is the
+        # shaddah on the carrier, NOT the cross-word merger; the merger
+        # actually sits on the next word's first letter).
+        side = (
+            "prev"
+            if trigger.phonemes and _is_merger_phoneme(trigger.phonemes[-1])
+            else "curr"
+        )
 
         before_word_idx = _resolve_word_idx(curr_w.location)
         if before_word_idx == 0:
             # Malformed location (muqattaat or unexpected form) — skip.
             continue
 
-        out.append(BridgeInfo(before_word_idx=before_word_idx, rule=rule.value, side=side))
+        out.append(
+            BridgeInfo(before_word_idx=before_word_idx, rule=trigger_rule.value, side=side)
+        )
 
     return tuple(out)
