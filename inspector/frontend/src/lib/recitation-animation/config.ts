@@ -1,12 +1,11 @@
 /**
- * Recitation-animation config — the lock target for the throwaway playground.
+ * Recitation-animation config.
  *
  * Tunable surface (timing, easing, effects, typography, behaviour, markers).
- * The playground binds a writable copy of `DEFAULT_RECITATION_CONFIG` to live
- * controls; once a look is locked, the exported defaults are edited to the
- * chosen values and the components read them statically. Values project to
- * CSS custom properties via `cssVars()` so the hot path is pure CSS
- * transitions (no per-frame JS style writes beyond opacity).
+ * Components read the locked `DEFAULT_RECITATION_CONFIG` statically; the
+ * five user-tunable values flow through `recitationConfigStore`. Values
+ * project to CSS custom properties via `cssVars()` so the hot path is pure
+ * CSS transitions (no per-frame JS style writes beyond opacity).
  *
  * Defaults are grounded in `styles/tokens.css` (`--accent`, `--ease-out-*`,
  * `--t-*`) so the section blends with the live dark theme.
