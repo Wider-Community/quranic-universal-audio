@@ -32,6 +32,13 @@ export interface GhReleaseMember {
 export interface ReleaseStatusRow {
     slug: string;
     name_en: string | null;
+    /** Arabic display name — surfaces in RTL on the row identity line. */
+    name_ar: string | null;
+    /** Lifecycle state from ``delivery_states`` (``awaiting_review`` /
+     *  ``under_review`` / ``released`` / ``awaiting_alignment``) or ``null``
+     *  when the slug hasn't entered the state machine yet. Drives the
+     *  "Waiting to publish" predicate (released + no HF row + has TS). */
+    state: string | null;
     riwayah: string;
     style: string;
     channel: string;
@@ -47,8 +54,27 @@ export interface LatestGhRelease {
     external_uri?: string | null;
 }
 
+export interface ReleasesSummary {
+    version: string | null;
+    produced_at: string | null;
+    external_uri: string | null;
+    member_count: number;
+    total_bytes: number;
+    days_since_cut: number | null;
+}
+
+/** A live HF Job — ``slug`` is null for the global ``cut_release`` kind. */
+export interface InFlightJob {
+    kind: 'hf_publish' | 'cut_release';
+    slug: string | null;
+    job_id: string;
+    started_at: string | null;
+}
+
 export interface ReleasesStatusResponse {
     latest_gh_release: LatestGhRelease | null;
+    summary: ReleasesSummary | null;
+    in_flight: InFlightJob[];
     recitations: ReleaseStatusRow[];
 }
 
