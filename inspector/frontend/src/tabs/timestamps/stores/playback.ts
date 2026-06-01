@@ -20,8 +20,7 @@ export const autoAdvancing = writable<boolean>(false);
 /** Audio element current time (seconds, absolute). Updated per animation frame. */
 export const currentTime = writable<number>(0);
 
-/** The <audio> element driving timestamps-tab playback. Set by TimestampsAudio
- *  on mount; cleared to null on destroy. Consumers null-check before use.
+/** The <audio> element driving timestamps-tab playback.
  *
  *  @deprecated Use `tsPort` instead. The audio element is now wrapped by
  *  the port; this export is retained transitionally. The Timestamps tab
@@ -29,10 +28,9 @@ export const currentTime = writable<number>(0);
  *  carries the offset translation needed for clip-relative `currentTime`. */
 export const tsAudioElement = writable<HTMLAudioElement | null>(null);
 
-/** Single AudioPort for the Timestamps tab. TimestampsAudio attaches the
- *  bound `<audio>` element on mount; every consumer (waveform clicks,
- *  keyboard nudges, karaoke tick reads) imports this port and reads
- *  file-absolute milliseconds.
+/** Single AudioPort for the Timestamps tab. Every consumer (waveform
+ *  clicks, keyboard nudges, karaoke tick reads) imports this port and
+ *  reads file-absolute milliseconds.
  *
  *  Coordinate space: file-absolute ms — always. The Timestamps tab is
  *  CBR-only today, so file-absolute equals `audio.currentTime * 1000`,
