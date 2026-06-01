@@ -115,16 +115,85 @@ def test_complete_publishes_marked_ready(monkeypatch):
     assert row.timestamps_job_ids == ["job-1"]
 
 
-def test_complete_noop_when_already_released(monkeypatch):
+def _seed_released_with_ledger(slug: str, *, ts_version: str, hf_version: str | None = None) -> None:
+    """Seed a released reciter with a current ``ts`` (and optional ``hf``)
+    per_recitation_releases row — the post-first-publish shape a regen acts on."""
+    from datetime import datetime, timezone
+
+    from services import db
+    from services.db import repo_releases
     from tests.conftest import _seed_state
 
-    _seed_state("rec_a", state="released")
+    _seed_state(slug, state="released")
+    now = datetime.now(timezone.utc)
+    with db.transaction():
+        repo_releases.insert_per_recitation_release(
+            track="ts", slug=slug, version=ts_version, produced_at=now,
+            produced_by="SYSTEM_ACTOR", produced_by_job_id=ts_version,
+        )
+        if hf_version is not None:
+            repo_releases.insert_per_recitation_release(
+                track="hf", slug=slug, version=hf_version, produced_at=now,
+                produced_by="SYSTEM_ACTOR",
+            )
+
+
+def test_complete_regen_idempotent_when_ts_already_recorded(monkeypatch):
+    """A poll re-fire of an already-recorded job (released + the job's ts row
+    present) is a no-op — no duplicate ts row, no extra audit event."""
+    from services.db import repo_releases
+
+    _seed_released_with_ledger("rec_a", ts_version="job-1")
     monkeypatch.setattr(timestamps_jobs, "_has_any_shard", lambda slug: True)
 
     out = timestamps_jobs.complete_timestamps_job("rec_a", "job-1")
 
     assert out["released"] is False
-    assert out["reason"] == "already released"
+    assert out["reason"] == "ts already recorded"
+    # Still exactly one current ts row at the original version.
+    assert repo_releases.current_release("ts", "rec_a")["version"] == "job-1"
+
+
+def test_complete_regen_on_released_row(monkeypatch):
+    """A fresh TS run (new job_id) on a released reciter: no transition, new ts
+    row supersedes the prior, HF release stamped stale, ts_regenerated audited."""
+    from services.db import repo_releases, repo_transitions
+    from services.state import state as state_service
+
+    _seed_released_with_ledger("rec_a", ts_version="job-old", hf_version="sha-old")
+    monkeypatch.setattr(timestamps_jobs, "_has_any_shard", lambda slug: True)
+
+    out = timestamps_jobs.complete_timestamps_job("rec_a", "job-new")
+
+    assert out["released"] is False
+    assert out["regenerated"] is True
+    # State unchanged — no released → released transition.
+    assert state_service.get_row("rec_a").state.value == "released"
+    # New ts row is current; the prior one is superseded.
+    assert repo_releases.current_release("ts", "rec_a")["version"] == "job-new"
+    assert repo_releases.release_by_version("ts", "rec_a", "job-old")["superseded_at"] is not None
+    # HF membership stamped stale so the operator is driven to re-publish.
+    assert repo_releases.current_release("hf", "rec_a")["stale_since"] is not None
+    # Audit trail carries the distinct regen event.
+    events = [r for r in repo_transitions.for_slug("rec_a")
+              if r["event"] == "reciter.ts_regenerated"]
+    assert len(events) == 1
+    assert events[0]["payload"]["job_id"] == "job-new"
+
+
+def test_complete_regen_refuses_when_no_shards(monkeypatch):
+    """A regen job that exits 0 without writing shards records nothing."""
+    from services.db import repo_releases
+
+    _seed_released_with_ledger("rec_a", ts_version="job-old")
+    monkeypatch.setattr(timestamps_jobs, "_has_any_shard", lambda slug: False)
+
+    out = timestamps_jobs.complete_timestamps_job("rec_a", "job-new")
+
+    assert out["released"] is False
+    assert out["reason"] == "no shards"
+    # No new ts row — the prior remains current.
+    assert repo_releases.current_release("ts", "rec_a")["version"] == "job-old"
 
 
 def test_complete_noop_when_not_marked_ready(monkeypatch):

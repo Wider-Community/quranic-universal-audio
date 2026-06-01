@@ -15,11 +15,21 @@ killed before self-writing. No SQLite — the record is a plain bucket file.
 
 Launching does NOT transition the reciter at launch — it stays UNDER_REVIEW
 (marked_ready) while the job runs, so a failed job is recoverable (just re-run).
-On *success* the reciter is published: ``complete_timestamps_job`` fires
-``reciter.published`` (under_review marked_ready → released) with
-``SYSTEM_ACTOR``. Two triggers reach it: the job POSTs to the webhook route on
-success (prod), and ``job_status`` calls it as an idempotent fallback when the
-drawer poll sees a terminal-success status (dev / missed webhook). See
+On *success* ``complete_timestamps_job`` takes one of two paths by current state:
+
+  - **First publish** (under_review marked_ready) → fires ``reciter.published``
+    (→ released) with ``SYSTEM_ACTOR``.
+  - **Regenerate** (already released) → NO transition (there is no
+    released → released edge). It records the new ``ts`` release, supersedes the
+    prior one, stamps the slug's HF/GH releases stale, and writes a
+    ``reciter.ts_regenerated`` audit event so the operator is driven to
+    re-publish from the Releases tab.
+
+Two triggers reach it: the job POSTs to the webhook route on success (prod), and
+``job_status`` calls it as an idempotent fallback when the drawer poll sees a
+terminal-success status (dev / missed webhook). Both paths are idempotent on the
+``(track='ts', slug, version=job_id)`` triple, so the repeated poll dispatch is a
+no-op after the first. See
 docs/planning/inspector-deploy/v2/phases/13-timestamps-job.md.
 """
 
@@ -289,6 +299,11 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
             settings=settings.model_copy(update={"flavor": flavor, "timeout": timeout}),
             status="running", started_at=_now_iso(), url=url,
         ))
+    # Bust the in-flight cache so the next /releases/status fetch shows the
+    # running job immediately (the Releases tab watches the ``timestamps`` kind
+    # so a regen lands in "In progress" without waiting for the 5 s TTL).
+    from services.storage import cache as _cache
+    _cache.invalidate_in_flight_jobs_cache()
     log.info("launched timestamps job %s for %s (flavor=%s)", job_id, slug, flavor)
     return {"job_id": job_id, "url": url}
 
@@ -422,24 +437,28 @@ def job_status(slug: str, job_id: str, *, log_tail: int = 400) -> dict:
 
 
 def complete_timestamps_job(slug: str, job_id: str) -> dict:
-    """Publish ``slug`` after its timestamps job succeeded. Idempotent.
+    """Record a succeeded timestamps job for ``slug``. Idempotent.
 
-    The single auto-release path, reached from both the job-completion webhook
-    (prod) and the ``job_status`` poll fallback (dev / missed webhook). Reads
-    the row first and only fires when it's genuinely publishable, so a
-    double-fire (webhook + poll, or two concurrent webhooks) no-ops the loser:
+    The single completion path, reached from both the job-completion webhook
+    (prod) and the ``job_status`` poll fallback (dev / missed webhook). It reads
+    the row first and branches by current state, so a double-fire (webhook +
+    poll, or two concurrent webhooks) no-ops the loser:
 
-    - ``released`` → already done, no-op.
+    - ``released`` → **regenerate** (``_regenerate_timestamps_on_released``): no
+      transition, just records the new ``ts`` release + stamps HF/GH stale.
+      Idempotent on ``(track='ts', slug, version=job_id)``: the first publish's
+      ``ts`` row (version=job_id) makes the poll re-fire of that same job a
+      no-op, while a fresh regen run carries a new job_id and proceeds.
     - ``under_review`` + ``marked_ready`` + at least one shard on the bucket →
-      ``reciter.published`` (→ released) via ``SYSTEM_ACTOR`` (role OWNER, so
-      the ``reciter.publish`` gate passes).
+      first publish: ``reciter.published`` (→ released) via ``SYSTEM_ACTOR``
+      (role OWNER, so the ``reciter.publish`` gate passes).
     - anything else (not marked_ready, no shards, other state) → log + no-op.
 
     The ``transition()`` call is wrapped in ``StateError`` handling to absorb
     the TOCTOU window where two callers both read ``under_review`` before
     either commits (the single-writer + ``BEGIN IMMEDIATE`` serializes them; the
     loser's handler raises ``_state_precondition`` once the row is already
-    released). Returns ``{slug, state, released: bool, reason?}``.
+    released). Returns ``{slug, state, released: bool, regenerated?: bool, reason?}``.
     """
     # Lazy import: SYSTEM_ACTOR lives in the segments package, which pulls
     # bucket loaders — keep it off this module's import-time graph.
@@ -450,8 +469,7 @@ def complete_timestamps_job(slug: str, job_id: str) -> dict:
         return {"slug": slug, "state": None, "released": False,
                 "reason": "unknown slug"}
     if row.state.value == "released":
-        return {"slug": slug, "state": "released", "released": False,
-                "reason": "already released"}
+        return _regenerate_timestamps_on_released(slug, job_id)
     if row.state.value != "under_review" or not row.marked_ready:
         log.info("complete_timestamps_job(%s): not publishable (state=%s "
                  "marked_ready=%s) — leaving as-is", slug, row.state.value,
@@ -503,8 +521,70 @@ def complete_timestamps_job(slug: str, job_id: str) -> dict:
                 "released": False, "reason": "transition skipped"}
     # Light the Reviews-tab dot on the (now released) Published-bucket row.
     _note_job_finished(slug)
+    # Drop the now-terminal job from the Releases-tab in-flight signal promptly.
+    from services.storage import cache as _cache
+    _cache.invalidate_in_flight_jobs_cache()
     log.info("complete_timestamps_job(%s): published (job=%s)", slug, job_id)
     return {"slug": slug, "state": new_row.state.value, "released": True}
+
+
+def _regenerate_timestamps_on_released(slug: str, job_id: str) -> dict:
+    """Record a TS regen for an already-``released`` reciter — no transition.
+
+    The first publish fires ``reciter.published`` (under_review → released). A
+    second-and-onwards TS run on the same reciter must NOT re-fire that edge
+    (there is no released → released transition). Instead it records the new
+    ``ts`` release, supersedes the prior current one, stamps the slug's HF + most
+    recent-GH releases stale (so the operator is driven to re-publish), and
+    writes a ``reciter.ts_regenerated`` audit row — visibly distinct from the
+    first publish.
+
+    Idempotent: the poll fallback re-dispatches every terminal-success job, so we
+    skip when ``(track='ts', slug, version=job_id)`` is already recorded. The
+    first publish's ``ts`` row (version=job_id) therefore also makes a later poll
+    re-fire of that same job a no-op here. Returns
+    ``{slug, state: 'released', released: False, regenerated: bool, reason?}``.
+    """
+    from datetime import datetime, timezone
+
+    from services.db import repo_releases
+    from services.db.sync import durable_transaction
+    from services.segments.auto_detect import SYSTEM_ACTOR
+    from services.state import audit
+
+    if repo_releases.release_by_version("ts", slug, job_id) is not None:
+        log.info("complete_timestamps_job(%s): ts %s already recorded — no-op",
+                 slug, job_id)
+        return {"slug": slug, "state": "released", "released": False,
+                "reason": "ts already recorded"}
+    if not _has_any_shard(slug):
+        log.warning("complete_timestamps_job(%s): regen job %s succeeded but no "
+                    "timestamps shards on the bucket — not recording", slug, job_id)
+        return {"slug": slug, "state": "released", "released": False,
+                "reason": "no shards"}
+
+    now = datetime.now(timezone.utc)
+    with durable_transaction() as _:
+        # Supersede prior current ts row FIRST — partial-unique on (track, slug)
+        # WHERE superseded_at IS NULL blocks two current rows.
+        repo_releases.supersede_current("ts", slug, except_id=-1, at=now)
+        repo_releases.insert_per_recitation_release(
+            track="ts", slug=slug, version=job_id, produced_at=now,
+            produced_by="SYSTEM_ACTOR", produced_by_job_id=job_id,
+        )
+        # Re-publishing clears stale; TS regen sets it on the HF/GH membership.
+        repo_releases.stamp_stale_on_ts_regen(slug, at=now)
+        audit.append(
+            "reciter.ts_regenerated", actor=SYSTEM_ACTOR, slug=slug,
+            from_state="released", to_state="released",
+            payload={"job_id": job_id},
+        )
+    _note_job_finished(slug)
+    from services.storage import cache as _cache
+    _cache.invalidate_in_flight_jobs_cache()
+    log.info("complete_timestamps_job(%s): ts regenerated (job=%s)", slug, job_id)
+    return {"slug": slug, "state": "released", "released": False,
+            "regenerated": True}
 
 
 def cancel_job(slug: str, job_id: str) -> dict:

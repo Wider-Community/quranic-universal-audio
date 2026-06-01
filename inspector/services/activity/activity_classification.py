@@ -64,6 +64,9 @@ HIDDEN_EVENTS: frozenset[str] = frozenset({
     # TS-gen completion, which is admin infrastructure (not a public-release
     # milestone). The v2 public `released` event covers HF / GH publishes.
     "reciter.published",
+    # Audit-only: a TS regen on an already-released reciter (no transition).
+    # Operator-facing via the Releases tab's stale-stamp, not the public rail.
+    "reciter.ts_regenerated",
     "reciter.unpublished",
     "reciter.discarded",
     "reciter.undiscarded",

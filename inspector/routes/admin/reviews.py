@@ -83,20 +83,40 @@ def mark_review_viewed(user, slug):
 @require_same_origin
 @require_capability("reviews.generate_timestamps")
 def generate_timestamps(user, slug):
-    """Launch the in-container MFA timestamps job for a marked-ready reciter.
+    """Launch the in-container MFA timestamps job for a reciter.
 
-    Generating timestamps IS publishing: on success the reciter is auto-released
-    (``reciter.published``), so the caller must also hold ``reciter.publish``
+    Two valid entry states (same route, same caps):
+
+    - **First publish** — ``under_review`` + ``marked_ready``. On success the
+      reciter is auto-released (``reciter.published``). Surfaced from the Reviews
+      tab.
+    - **Regenerate** — already ``released``. On success the reciter stays
+      released; its HF/GH releases are stamped stale so the operator re-publishes
+      (``reciter.ts_regenerated``). Surfaced from the Releases tab.
+
+    Any other state (catalogued / awaiting_alignment / awaiting_review /
+    under_review-without-mark-ready) has nothing to publish → 409. Generating
+    timestamps IS publishing, so the caller must also hold ``reciter.publish``
     (checked inline — a second ``@require_capability`` decorator can't stack, it
-    would inject ``user`` twice). The button is only shown on marked-ready rows.
+    would inject ``user`` twice).
 
     Single-flight: rejects (409) if a job for ``slug`` is already running —
     two jobs would race the same ``timestamps/`` shards. Does NOT transition
     the reciter at launch; the launched job id is linked via
     ``timestamps_job_ids``. Returns 202 with ``{job_id, url}``.
     """
-    if state_service.get_row(slug) is None:
+    row = state_service.get_row(slug)
+    if row is None:
         return jsonify({"error": "unknown slug"}), 404
+    is_first_publish = row.state.value == "under_review" and row.marked_ready
+    is_regen = row.state.value == "released"
+    if not (is_first_publish or is_regen):
+        return jsonify({
+            "error": "timestamps can only be generated for a marked-ready "
+                     "reciter (first publish) or an already-released reciter "
+                     "(regenerate)",
+            "state": row.state.value,
+        }), 409
     err = require_capability_or_403(user, "reciter.publish")
     if err is not None:
         return err
