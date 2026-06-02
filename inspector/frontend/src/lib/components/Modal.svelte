@@ -130,6 +130,13 @@
                         on:click={() => dispatch('close')}
                     >×</button>
                 </header>
+            {:else}
+                <button
+                    type="button"
+                    class="modal-close floating-close"
+                    aria-label={closeLabel}
+                    on:click={() => dispatch('close')}
+                >×</button>
             {/if}
 
             <div class="modal-body">
@@ -164,6 +171,7 @@
     @keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 
     .modal {
+        position: relative;
         width: min(1080px, 92vw);
         /* Backdrop is offset by --player-h at the bottom, so the modal must
          * size against the *reduced* area — otherwise vh-based max heights
@@ -237,5 +245,30 @@
         flex-shrink: 0;
         font-size: var(--fs-meta);
         color: var(--text-muted);
+    }
+    .floating-close {
+        position: absolute;
+        top: var(--s-4);
+        right: var(--s-4);
+        z-index: 10;
+        background: var(--panel);
+        border: 1px solid var(--border-quiet);
+    }
+
+    @media (max-width: 767px) {
+        .backdrop {
+            padding: var(--s-2);
+        }
+        .modal {
+            width: 100%;
+            height: 100%;
+        }
+        .modal-header {
+            align-items: flex-start;
+            padding: var(--s-3) var(--s-4);
+        }
+        .modal-close {
+            margin-top: -2px;
+        }
     }
 </style>

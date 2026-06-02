@@ -227,4 +227,23 @@
     /* Hover styling is owned by the parent <button>; the chip itself is
      * presentation-only, so we expose a class hook instead. */
     .chip:hover .switch { color: var(--text-secondary); }
+
+    @media (max-width: 540px) {
+        .flag {
+            display: none !important;
+        }
+        .line-bot {
+            display: none !important;
+        }
+        .name-ar,
+        .line-top .dot {
+            display: none !important;
+        }
+        .line-top {
+            font-size: 13px !important;
+        }
+        .chip {
+            gap: 0 !important;
+        }
+    }
 </style>

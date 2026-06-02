@@ -6,7 +6,6 @@
      * dashboardState.view.kind === 'detail'. Filter state persists across
      * modal open/close.
      */
-    import BottomPlayer from '../../lib/components/player/BottomPlayer.svelte';
     import AdminDashboardModal from './components/admin/AdminDashboardModal.svelte';
     import CatalogList from './views/CatalogList.svelte';
     import ReciterDetail from './views/ReciterDetail.svelte';
@@ -16,7 +15,6 @@
     <CatalogList />
     <ReciterDetail />
     <AdminDashboardModal />
-    <BottomPlayer />
 </div>
 
 <style>

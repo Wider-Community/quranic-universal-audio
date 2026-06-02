@@ -116,6 +116,19 @@
     --gutter:        24px;
     --player-h:      72px;
     --seg-footer-h:  72px;
+    --header-h:      76px;
+    --sidebar-w:     260px; /* aliases --rail-w for responsive tasks */
+
+    /* ---------- radius shorthands (task 02) ---------- */
+    --radius-sm:     4px;
+    --radius-md:     6px;
+    --radius-lg:     8px;
+}
+
+@media (max-width: 767px) {
+    :root {
+        --player-h: 132px;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -33,6 +33,7 @@
         border: 1px solid var(--border-default);
         border-radius: var(--r-1);
         font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
         font-size: 10.5px;
         color: var(--text-secondary);
         margin-right: 4px;
@@ -49,4 +50,13 @@
         padding: 0;
     }
     .cancel:hover { color: var(--text-primary); }
+
+    @media (max-width: 767px) {
+        .hints {
+            display: none;
+        }
+        .row {
+            justify-content: flex-end;
+        }
+    }
 </style>

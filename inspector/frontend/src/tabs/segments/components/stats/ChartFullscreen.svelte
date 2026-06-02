@@ -140,4 +140,14 @@
         font-weight: 600;
         color: #e0e0e0;
     }
+    @media (max-width: 899px) {
+        .seg-stats-fs-inner {
+            width: 95vw;
+            height: 75vh;
+            padding: 8px;
+        }
+        .seg-stats-fs-title {
+            font-size: 0.85rem;
+        }
+    }
 </style>

@@ -401,6 +401,19 @@
 /* ...and flip to near-black on the gold active background for contrast. */
 .ts-auto-btn.active .ts-auto-icon { filter: brightness(0.08); }
 
+@media (max-width: 899px) {
+    .ts-view-controls {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .ts-view-mode-group {
+        flex: 1;
+    }
+    .ts-view-btn, .ts-mode-btn {
+        padding: 6px 4px;
+    }
+}
+
 /* ============ Animation display ============ */
 #animation-display {
     direction: rtl;

@@ -244,7 +244,7 @@
 
 <div class="audio-controls">
     <button class="btn btn-nav" disabled={prevDisabled}
-        title="Previous verse ([)" on:click={() => dispatch('prev')}>&#9664; Prev</button>
+        title="Previous verse ([)" on:click={() => dispatch('prev')}>&#9664;<span class="nav-label"> Prev</span></button>
     <AudioPlayer
         bind:this={_player}
         controls
@@ -257,5 +257,11 @@
         on:error={onError}
     />
     <button class="btn btn-nav" disabled={nextDisabled}
-        title="Next verse (])" on:click={() => dispatch('next')}>Next &#9654;</button>
+        title="Next verse (])" on:click={() => dispatch('next')}><span class="nav-label">Next </span>&#9654;</button>
 </div>
+
+<style>
+    @media (max-width: 899px) {
+        .nav-label { display: none; }
+    }
+</style>

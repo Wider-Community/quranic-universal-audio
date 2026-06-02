@@ -1,11 +1,11 @@
 <script lang="ts">
     /**
-     * Dashboard-scoped persistent BottomPlayer.
+     * Persistent BottomPlayer — visible on Dashboard and Segments tabs.
      *
-     * Pinned to the viewport bottom while the Dashboard tab is active.
-     * The App-shell `hidden` cascade hides it when the Dashboard tab is
-     * inactive (transport keeps its position; explicit play required on
-     * tab return).
+     * On Dashboard: full-width bar pinned to viewport bottom.
+     * On Segments: auto-collapses to a floating mini-pill positioned above
+     * the SegmentsFooter (uses --seg-footer-actual-h for offset).
+     * Hidden entirely on the Timestamps tab via App-shell wrapper.
      *
      * Owns the dashPort, binds the <audio> element, subscribes to
      * player-context for source changes, drives controls via dashPort,
@@ -17,6 +17,8 @@
     import { fetchSurahsForDelivery, type SurahEntry } from '../../api/audio-surahs';
     import { ensureAudioContextRunning } from '../../playback/audio-graph';
     import { dashPort } from '../../playback/dash-port';
+    import { activeTab as activeTabStore } from '../../utils/active-tab';
+    import { TAB_NAMES } from '../../utils/constants';
     import {
         loadPersistedSlice,
         persistSlice,
@@ -41,11 +43,26 @@
     let lastSurahNum: number | null = null;
     let surahPopoverOpen = false;
 
+    let isCollapsed = false;
+    let isMobile = false;
+
+    $: onSegmentsTab = $activeTabStore === TAB_NAMES.SEGMENTS;
+    $: if (onSegmentsTab && !isCollapsed) isCollapsed = true;
+
+    function checkMobile(): void {
+        if (typeof window !== 'undefined') {
+            isMobile = window.innerWidth <= 767;
+        }
+    }
+
     onMount(() => {
         dashPort.attachElement(audioEl);
         const slice = loadPersistedSlice();
         if (slice.speed && slice.speed !== 1) setSpeed(slice.speed);
         dashPort.setPlaybackRate(slice.speed);
+
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
 
         const unsubPlay = dashPort.onPlay(() => setIsPlaying(true));
         const unsubPause = dashPort.onPause(() => setIsPlaying(false));
@@ -72,6 +89,7 @@
             unsubWaiting();
             unsubPlaying();
             dashPort.attachElement(null);
+            window.removeEventListener('resize', checkMobile);
         };
     });
 
@@ -80,6 +98,16 @@
     });
 
     $: void reactToContext($playerContext);
+
+    $: {
+        if (typeof document !== 'undefined') {
+            if (isCollapsed) {
+                document.documentElement.style.setProperty('--player-h', '52px');
+            } else {
+                document.documentElement.style.removeProperty('--player-h');
+            }
+        }
+    }
 
     async function reactToContext(ctx: typeof $playerContext): Promise<void> {
         const delivery = ctx.delivery;
@@ -95,6 +123,9 @@
         }
         const wasPlaying = ctx.isPlaying;
         const deliverySwitched = delivery.slug !== lastDeliverySlug;
+        if (deliverySwitched || surahNum !== lastSurahNum) {
+            isCollapsed = false;
+        }
         // True only when switching away from an already-loaded combination
         // (not on initial load from null). Used to auto-play on paused switch.
         const isActiveCombinationSwitch = deliverySwitched && lastDeliverySlug !== null;
@@ -255,76 +286,131 @@
     // `by_ayah` sidecars key chapters as `"<surah>:<ayah>"`, so `Number("1:1")`
     // → NaN. Filter to finite ints so the popover / prev / next controls never
     // surface "Surah NaN" even if a stray by_ayah delivery slips through.
-    $: surahNums = Object.keys(urls).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+    $: surahNums = Object.keys(urls)
+        .map(Number)
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b);
     $: canPrev = $playerContext.surahNum !== null && surahNums.indexOf($playerContext.surahNum) > 0;
-    $: canNext = $playerContext.surahNum !== null
-        && surahNums.indexOf($playerContext.surahNum) >= 0
-        && surahNums.indexOf($playerContext.surahNum) < surahNums.length - 1;
+    $: canNext =
+        $playerContext.surahNum !== null &&
+        surahNums.indexOf($playerContext.surahNum) >= 0 &&
+        surahNums.indexOf($playerContext.surahNum) < surahNums.length - 1;
 </script>
 
-<div class="player" class:has-reciter={$playerContext.reciter !== null}>
+<div class="player" class:has-reciter={$playerContext.reciter !== null} class:collapsed={isCollapsed} class:segments-tab={onSegmentsTab}>
+    <button
+        type="button"
+        class="collapse-tab"
+        on:click={() => (isCollapsed = !isCollapsed)}
+        aria-label={isCollapsed ? 'Expand player' : 'Collapse player'}
+        title={isCollapsed ? 'Expand player' : 'Collapse player'}
+    >
+        {isCollapsed ? '▲' : '▼'}
+    </button>
+
     <PlayerProgress
         positionMs={$playerContext.positionMs}
         durationMs={$playerContext.durationMs}
         on:seek={onSeekFromBar}
     />
 
-    <div class="row">
-        <PlayerMetaChip
-            reciter={$playerContext.reciter}
-            delivery={$playerContext.delivery}
-            on:select={onCombinationSelect}
-        />
+    {#if !isCollapsed}
+        <div class="row">
+            <div class="meta-wrap">
+                <PlayerMetaChip
+                    reciter={$playerContext.reciter}
+                    delivery={$playerContext.delivery}
+                    on:select={onCombinationSelect}
+                />
+            </div>
 
-        <div class="controls">
-            <PlayerControls
-                isPlaying={$playerContext.isPlaying}
-                isLoading={$playerContext.isLoading}
-                canPlay={$playerContext.delivery !== null && $playerContext.surahNum !== null}
-                canStepBack={canPrev}
-                canStepForward={canNext}
-                on:toggle={togglePlay}
-                on:seekBack={seekBack}
-                on:seekForward={seekForward}
-                on:prev={prevSurah}
-                on:next={nextSurah}
-            />
+            <div class="controls">
+                <PlayerControls
+                    isPlaying={$playerContext.isPlaying}
+                    isLoading={$playerContext.isLoading}
+                    canPlay={$playerContext.delivery !== null && $playerContext.surahNum !== null}
+                    canStepBack={canPrev}
+                    canStepForward={canNext}
+                    on:toggle={togglePlay}
+                    on:seekBack={seekBack}
+                    on:seekForward={seekForward}
+                    on:prev={prevSurah}
+                    on:next={nextSurah}
+                />
+            </div>
+
+            <div class="right">
+                <div class="surah-trigger-wrap" use:clickOutside={() => (surahPopoverOpen = false)}>
+                    <button
+                        type="button"
+                        class="surah-trigger"
+                        on:click={() => (surahPopoverOpen = !surahPopoverOpen)}
+                        disabled={surahNums.length === 0}
+                        aria-expanded={surahPopoverOpen}
+                        aria-haspopup="dialog"
+                    >
+                        {#if $playerContext.surahNum}
+                            Surah <span class="num">{$playerContext.surahNum}</span>
+                        {:else}
+                            Pick surah
+                        {/if}
+                    </button>
+                    {#if surahPopoverOpen}
+                        <div class="surah-pop">
+                            <SurahPopover
+                                {surahNums}
+                                value={$playerContext.surahNum}
+                                on:change={onSurahChange}
+                            />
+                        </div>
+                    {/if}
+                </div>
+                <button type="button" class="speed-btn" on:click={cycleSpeed} title="Playback speed"
+                    >{$playerContext.speed}×</button
+                >
+            </div>
         </div>
-
-        <div class="right">
-            <div class="surah-trigger-wrap" use:clickOutside={() => (surahPopoverOpen = false)}>
+    {:else}
+        <!-- Collapsed mobile/desktop layout -->
+        <div
+            class="collapsed-row"
+            role="button"
+            tabindex="0"
+            on:click={() => isCollapsed = false}
+            on:keydown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    isCollapsed = false;
+                }
+            }}
+        >
+            <div class="collapsed-meta">
+                <span class="collapsed-title">
+                    {#if $playerContext.reciter}
+                        {$playerContext.reciter.name}
+                    {:else}
+                        No reciter selected
+                    {/if}
+                </span>
+                <span class="collapsed-subtitle">
+                    {#if $playerContext.surahNum}
+                        · Surah {$playerContext.surahNum}
+                    {/if}
+                </span>
+            </div>
+            <div class="collapsed-controls">
                 <button
                     type="button"
-                    class="surah-trigger"
-                    on:click={() => (surahPopoverOpen = !surahPopoverOpen)}
-                    disabled={surahNums.length === 0}
-                    aria-expanded={surahPopoverOpen}
-                    aria-haspopup="dialog"
+                    class="collapsed-play-btn"
+                    class:loading={$playerContext.isLoading}
+                    disabled={$playerContext.delivery === null || $playerContext.surahNum === null || $playerContext.isLoading}
+                    on:click|stopPropagation={togglePlay}
                 >
-                    {#if $playerContext.surahNum}
-                        Surah <span class="num">{$playerContext.surahNum}</span>
-                    {:else}
-                        Pick surah
-                    {/if}
+                    {$playerContext.isPlaying ? '⏸' : '▶'}
                 </button>
-                {#if surahPopoverOpen}
-                    <div class="surah-pop">
-                        <SurahPopover
-                            surahNums={surahNums}
-                            value={$playerContext.surahNum}
-                            on:change={onSurahChange}
-                        />
-                    </div>
-                {/if}
             </div>
-            <button
-                type="button"
-                class="speed-btn"
-                on:click={cycleSpeed}
-                title="Playback speed"
-            >{$playerContext.speed}×</button>
         </div>
-    </div>
+    {/if}
 
     <audio bind:this={audioEl} preload="none"></audio>
 </div>
@@ -342,6 +428,15 @@
         display: flex;
         flex-direction: column;
         box-shadow: 0 -8px 24px oklch(0 0 0 / 0.25);
+        transition: min-height var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    padding var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    background var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    bottom var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    right var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    left var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    width var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    border-radius var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    box-shadow var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1);
     }
     .row {
         display: grid;
@@ -362,7 +457,9 @@
         justify-content: flex-end;
         gap: var(--s-2);
     }
-    .surah-trigger-wrap { position: relative; }
+    .surah-trigger-wrap {
+        position: relative;
+    }
     .surah-trigger {
         display: inline-flex;
         align-items: center;
@@ -374,7 +471,9 @@
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
         cursor: pointer;
-        transition: border-color var(--t-fast), color var(--t-fast);
+        transition:
+            border-color var(--t-fast),
+            color var(--t-fast);
     }
     .surah-trigger:hover:not(:disabled) {
         border-color: var(--border-strong);
@@ -414,7 +513,9 @@
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
         cursor: pointer;
-        transition: border-color var(--t-fast), color var(--t-fast);
+        transition:
+            border-color var(--t-fast),
+            color var(--t-fast);
         min-width: 36px;
         text-align: center;
     }
@@ -427,5 +528,200 @@
      * on the right was duplication. The chip already opens the
      * combination picker on click — losing the bucket button doesn't
      * cost a navigation affordance. */
-    audio { display: none; }
+    audio {
+        display: none;
+    }
+
+    .meta-wrap {
+        min-width: 0;
+    }
+
+    /* Task 09 — mobile player: stacks reciter chip + controls vertically */
+    @media (max-width: 767px) {
+        .player {
+            height: auto;
+            min-height: var(--player-h, 132px);
+            padding: 10px 12px 8px;
+            transition: min-height var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                        padding var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                        background var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Stack the main row vertically */
+        .row {
+            grid-template-columns: 1fr;
+            height: auto;
+            gap: 6px;
+        }
+
+        /* Meta chip fills full width */
+        .meta-wrap {
+            width: 100%;
+        }
+        .meta-wrap :global(.wrap),
+        .meta-wrap :global(.meta) {
+            width: 100%;
+            display: flex;
+        }
+
+        /* Controls row centred */
+        .controls {
+            justify-content: center;
+        }
+
+        /* Right group centred */
+        .right {
+            justify-content: center;
+            flex-wrap: wrap;
+            padding-right: 0;
+        }
+
+        /* Shrink type inside player */
+        .speed-btn {
+            font-size: 10.5px;
+            min-width: 28px;
+        }
+        .surah-trigger {
+            font-size: 10px;
+            padding: 3px 6px;
+        }
+    }
+
+    /* Collapsed player styles — stays full-width, just shrinks vertically */
+    .player.collapsed {
+        min-height: 0 !important;
+        padding: 0 !important;
+    }
+    .player.collapsed:hover {
+        background: var(--panel-2);
+    }
+    
+    /* Make progress line full bleed in collapsed state */
+    .player.collapsed :global(.progress) {
+        gap: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+    }
+    .player.collapsed :global(.progress .time) {
+        display: none !important;
+    }
+    .player.collapsed :global(.progress .bar) {
+        height: 4px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+    }
+    .player.collapsed :global(.progress .bar .track) {
+        height: 4px !important;
+        border-radius: 0 !important;
+    }
+
+    .collapsed-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 8px 14px;
+        min-height: 48px;
+    }
+    .collapsed-row:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+    }
+    .collapsed-meta {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        flex: 1;
+        gap: var(--s-1);
+        padding-right: var(--s-2);
+    }
+    .collapsed-title {
+        font-size: var(--fs-body);
+        font-weight: 500;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .collapsed-subtitle {
+        font-size: var(--fs-meta);
+        color: var(--text-secondary);
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    .collapsed-controls {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        flex-shrink: 0;
+    }
+    .collapsed-play-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: var(--accent-fg);
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 11px;
+        box-shadow: var(--shadow-sm);
+        position: relative;
+        transition: background var(--t-fast), transform var(--t-fast);
+    }
+    .collapsed-play-btn:hover:not(:disabled) {
+        background: var(--accent-strong);
+        transform: scale(1.05);
+    }
+    .collapsed-play-btn:active:not(:disabled) {
+        transform: scale(0.95);
+    }
+    .collapsed-play-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .collapsed-play-btn.loading {
+        cursor: progress;
+    }
+    .collapsed-play-btn.loading::before {
+        content: '';
+        position: absolute;
+        inset: -3px;
+        border-radius: 50%;
+        border: 2px solid var(--accent);
+        animation: player-ring-pulse 1.2s ease-in-out infinite;
+        pointer-events: none;
+    }
+    .collapse-tab {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        height: 18px;
+        padding: 0 12px;
+        border-radius: 100px;
+        background: var(--panel-2);
+        color: var(--text-faint);
+        border: 1px solid var(--border-quiet);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 8px;
+        line-height: 1;
+        z-index: 10;
+        transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+        box-shadow: var(--shadow-sm);
+        white-space: nowrap;
+    }
+    .collapse-tab:hover {
+        background: var(--accent-tint-soft);
+        border-color: var(--accent);
+        color: var(--accent);
+    }
+
 </style>

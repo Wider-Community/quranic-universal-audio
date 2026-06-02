@@ -30,6 +30,8 @@ export interface DashboardState {
     activeFilters: Record<string, Set<string>>;
     sort: DashboardSort;
     search: string;
+    filterDrawerOpen: boolean;
+    activityDrawerOpen: boolean;
 }
 
 function initial(): DashboardState {
@@ -38,10 +40,20 @@ function initial(): DashboardState {
         activeFilters: {},
         sort: 'recent',
         search: '',
+        filterDrawerOpen: false,
+        activityDrawerOpen: false,
     };
 }
 
 export const dashboardState = writable<DashboardState>(initial());
+
+export function setFilterDrawer(open: boolean): void {
+    dashboardState.update((s) => ({ ...s, filterDrawerOpen: open }));
+}
+
+export function setActivityDrawer(open: boolean): void {
+    dashboardState.update((s) => ({ ...s, activityDrawerOpen: open }));
+}
 
 export function toggleFacet(axisKey: string, tag: string): void {
     dashboardState.update((s) => {
@@ -65,6 +77,8 @@ export function clearAllFilters(): void {
         ...s,
         activeFilters: {},
         search: '',
+        filterDrawerOpen: false,
+        activityDrawerOpen: false,
     }));
 }
 

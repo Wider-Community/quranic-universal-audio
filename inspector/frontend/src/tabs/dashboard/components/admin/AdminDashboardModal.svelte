@@ -103,4 +103,38 @@
         background: var(--accent-tint);
         border-radius: 999px;
     }
+
+    @media (max-width: 767px) {
+        .am-head {
+            flex-direction: column;
+            align-items: stretch;
+            gap: var(--s-3);
+            margin-right: 28px; /* Leave space for the close (x) button */
+        }
+        .am-title {
+            font-size: var(--fs-body);
+        }
+        .am-tabs {
+            width: 100%;
+            height: auto;
+            flex-wrap: wrap;
+            gap: var(--s-1);
+        }
+        .am-tab {
+            flex: 1 1 auto;
+            justify-content: center;
+            font-size: 12px;
+            padding: var(--s-2) var(--s-1);
+            border: 1px solid var(--border-quiet);
+            border-radius: var(--r-2);
+            background: var(--panel);
+        }
+        .am-tab.active {
+            background: var(--panel-2);
+            border-color: var(--accent);
+        }
+        .am-tab.active::after {
+            display: none; /* Hide desktop bottom-line active indicator on mobile */
+        }
+    }
 </style>
