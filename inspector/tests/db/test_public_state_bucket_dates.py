@@ -31,9 +31,13 @@ def _step(slug: str, from_state: str | None, to_state: str) -> None:
 
 def test_bucket_dates_collapse_and_reentry(fresh_db):
     seed_delivery("d1")
-    # A non-linear lifecycle:
+    # A non-linear lifecycle, including a now-removed legacy state in the
+    # historical log:
     #   catalogued → awaiting_alignment → awaiting_review → under_review
-    #   → awaiting_timestamps  (same "under_review" bucket — must collapse)
+    #   → awaiting_timestamps  (LEGACY state, removed from the enum → the replay
+    #                           skips it; prev bucket stays "under_review", so it
+    #                           does not add an entry — same net effect as the old
+    #                           same-bucket collapse)
     #   → awaiting_review      (regression: re-enter "available_for_review")
     #   → under_review         (re-enter "under_review")
     seq = [
@@ -55,8 +59,8 @@ def test_bucket_dates_collapse_and_reentry(fresh_db):
     assert len(dates["requested"]) == 1
     # awaiting_review entered twice (initial + regression) → two timestamps.
     assert len(dates["available_for_review"]) == 2
-    # under_review entered twice; the awaiting_timestamps step in between stays
-    # in the same bucket and must NOT add a third entry.
+    # under_review entered twice; the legacy awaiting_timestamps step in between
+    # is skipped (unknown state) and must NOT add a third entry.
     assert len(dates["under_review"]) == 2
     assert "published" not in dates
 

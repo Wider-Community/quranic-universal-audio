@@ -64,7 +64,7 @@ def _audit_record() -> dict:
         "event": "reciter.released",
         "slug": "rid_hafs_mur",
         "from_state": "under_review",
-        "to_state": "awaiting_timestamps",
+        "to_state": "awaiting_review",
         "actor": {"hf_user_id": "owner1", "login_at_time": "owner", "role": "owner"},
         "payload": {},
         "request_id": "req_seed0001",

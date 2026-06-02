@@ -53,17 +53,17 @@ _BUCKET_PROGRESS: dict[PublicBucket, int] = {
     "published": 4,
 }
 
-# Internal lifecycle state → public bucket. Some internal states collapse onto
-# one bucket (UNDER_REVIEW + AWAITING_TIMESTAMPS → "under_review");
-# CATALOGUED reads as still-requestable. Single source of truth for both
-# ``bucket_for`` (current state) and the transitions replay in
-# ``_bucket_dates_for_slug`` (historical states).
+# Internal lifecycle state → public bucket. CATALOGUED reads as
+# still-requestable. Single source of truth for both ``bucket_for`` (current
+# state) and the transitions replay in ``_bucket_dates_for_slug`` (historical
+# states). The legacy ``awaiting_timestamps`` state is gone; any historical
+# transition row carrying that string is skipped by the replay's ValueError
+# guard (it collapsed onto "under_review" anyway).
 _STATE_TO_BUCKET: dict[ReciterState, PublicBucket] = {
     ReciterState.CATALOGUED: "available_for_request",
     ReciterState.AWAITING_ALIGNMENT: "requested",
     ReciterState.AWAITING_REVIEW: "available_for_review",
     ReciterState.UNDER_REVIEW: "under_review",
-    ReciterState.AWAITING_TIMESTAMPS: "under_review",
     ReciterState.RELEASED: "published",
 }
 
@@ -138,8 +138,8 @@ def bucket_for(row: ReciterRow | None) -> PublicBucket:
     if row is None:
         return "available_for_request"
     try:
-        # marked_ready stays internal-only; AWAITING_TIMESTAMPS still reads as
-        # "under_review" publicly until it actually transitions to RELEASED.
+        # marked_ready stays internal-only; an under_review reciter reads as
+        # "under_review" publicly until its timestamps job publishes it RELEASED.
         return _STATE_TO_BUCKET[row.state]
     except KeyError:
         # Defensive — new ReciterState members must be added to _STATE_TO_BUCKET
@@ -184,10 +184,11 @@ def _bucket_dates_for_slug(slug: str) -> dict[str, list[str]]:
 
     Returns ``{bucket: [iso, ...]}`` in chronological order — one timestamp per
     *distinct* entry into that bucket. Consecutive transitions that stay in the
-    same bucket (e.g. UNDER_REVIEW → AWAITING_TIMESTAMPS, both "under_review")
-    collapse to a single entry; a bucket re-entered after regressing away
-    (e.g. under_review → available_for_review → under_review) records a fresh
-    timestamp. Buckets never entered are absent.
+    same bucket collapse to a single entry; a bucket re-entered after regressing
+    away (e.g. under_review → available_for_review → under_review) records a
+    fresh timestamp. Buckets never entered are absent. Historical
+    ``awaiting_timestamps`` rows (a removed state) hit the ValueError guard
+    below and are skipped.
 
     Modal-only: called from the per-open ``detail`` / ``admin_view`` paths, one
     indexed ``transitions`` query per delivery — never the cached list path.

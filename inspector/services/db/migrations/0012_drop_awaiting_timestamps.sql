@@ -1,0 +1,22 @@
+-- Inspector SQLite substrate — migration 0012.
+--
+-- The ``awaiting_timestamps`` lifecycle state was removed: publishing now goes
+-- straight ``under_review → released`` when the timestamps job succeeds (the
+-- reciter stays under_review while the job runs). See
+-- ``scripts/lib/schemas/state.py::ReciterState`` and
+-- ``services/state/state.py::_h_published``.
+--
+-- ``delivery_states.state`` is plain TEXT (no CHECK constraint on the value
+-- set), so this is a pure data sweep, not a schema change. It should match
+-- ZERO rows: ``awaiting_timestamps`` was never reachable (neither
+-- ``reciter.published`` nor the old ``reciter.timestamps_completed`` had any
+-- caller before this change). The UPDATE is defensive only — any stray row is
+-- mapped back to ``awaiting_review`` (a valid, assignee-free state) so a
+-- ``ReciterRow`` round-trip can't fail validation on a now-unknown enum value.
+-- Historical ``transitions.to_state = 'awaiting_timestamps'`` audit strings are
+-- left untouched (the public-state replay skips unknown states defensively).
+--
+-- Conventions match prior migrations: no transaction control (the runner wraps
+-- in BEGIN/COMMIT + user_version).
+
+UPDATE delivery_states SET state = 'awaiting_review' WHERE state = 'awaiting_timestamps';

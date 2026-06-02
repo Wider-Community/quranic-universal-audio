@@ -196,17 +196,14 @@
         _range?.stop();
     }
 
-    function onTimeUpdate(): void {
+    function onTimeUpdate(_fileMs: number): void {
         // AudioRange's rAF loop owns boundary enforcement at frame precision.
         // Keep the handler only as a tick when audio is paused (so the playhead
         // store catches a manual seek the rAF doesn't see while paused).
         if (tsPort.paused) currentTime.set(tsPort.currentTimeMs() / 1000);
     }
 
-    function onError(): void {
-        const audio = _player?.element();
-        if (!audio) return;
-        const err = audio.error;
+    function onError(err: MediaError | null): void {
         const code = err ? err.code : 0;
         const msgs: Record<number, string> = {
             1: 'aborted',
@@ -214,7 +211,7 @@
             3: 'decode error',
             4: 'unsupported format',
         };
-        console.error('Audio load error:', msgs[code] || `code ${code}`, audio.src);
+        console.error('Audio load error:', msgs[code] || `code ${code}`, tsPort.element?.src);
         _suppressAutoPause = false;
         if (_suppressAutoPauseTimer) {
             clearTimeout(_suppressAutoPauseTimer);
@@ -224,6 +221,16 @@
         dispatch('error');
     }
 
+    /** Port subscription unsubs, set on mount and torn down on destroy.
+     *  Routed through `tsPort` (not Svelte `on:*` on AudioPlayer) so the
+     *  Element-Reuse fix (TimestampsTab.svelte::adoptWarmElement) keeps
+     *  emitting these events after the visible `<audio>` is DOM-swapped
+     *  for a prewarmed element: AudioPort re-attaches its DOM listeners
+     *  to the new element via `attachElement`, so port subscribers follow
+     *  the active element across rotations. Svelte `on:*` listeners on the
+     *  detached element would be silently lost. */
+    const _portUnsubs: Array<() => void> = [];
+
     onMount(() => {
         const el = _player?.element() ?? null;
         tsAudioElement.set(el);
@@ -231,9 +238,18 @@
             tsPort.attachElement(el);
             tsPortReady.set(true);
         }
+        _portUnsubs.push(
+            tsPort.onPlay(onPlay),
+            tsPort.onPause(onPause),
+            tsPort.onEnded(onEnded),
+            tsPort.onTimeUpdate(onTimeUpdate),
+            tsPort.onError(onError),
+        );
     });
 
     onDestroy(() => {
+        for (const off of _portUnsubs) off();
+        _portUnsubs.length = 0;
         if (_suppressAutoPauseTimer) clearTimeout(_suppressAutoPauseTimer);
         _disposeRange();
         tsAudioElement.set(null);
@@ -250,11 +266,6 @@
         controls
         showSpeedControl={false}
         lsSpeedKey={LS_KEYS.TS_SPEED}
-        on:play={onPlay}
-        on:pause={onPause}
-        on:ended={onEnded}
-        on:timeupdate={onTimeUpdate}
-        on:error={onError}
     />
     <button class="btn btn-nav" disabled={nextDisabled}
         title="Next verse (])" on:click={() => dispatch('next')}><span class="nav-label">Next </span>&#9654;</button>

@@ -24,6 +24,7 @@ from services import state as state_service
 from services.admin import visitors as visitor_service
 from services.auth import capabilities as cap_service
 from services.db import repo_access
+from services.db import repo_guides
 from services.db import sync as _sync
 
 logger = logging.getLogger(__name__)
@@ -222,6 +223,9 @@ def auth_me():
             # Anonymous still holds whatever anon-eligible capabilities the
             # owner left on (e.g. view.catalog) — the FE gates on this list.
             "capabilities": cap_service.capabilities_for(None),
+            # No identity → no per-user read marks. Stable empty list keeps the
+            # FE schema uniform (it gates the unread border / edit gate on this).
+            "guides_read": [],
         })
     # Page-entry recency: /api/me runs on every SPA load / focus, so this is
     # debounced (at most one write per user per window) and best-effort — a
@@ -248,4 +252,18 @@ def auth_me():
         # per request (role + matrix are never cookied), so an owner's toggle
         # reflects on this caller's next /api/me with no restart.
         "capabilities": cap_service.capabilities_for(user),
+        # Guide view keys this user has opened — drives the unread border on
+        # each accordion ? and the first-edit onboarding gate. Best-effort: a
+        # read failure must never break identity resolution.
+        "guides_read": _guides_read_safe(user.hf_user_id),
     })
+
+
+def _guides_read_safe(hf_user_id: str) -> list[str]:
+    """``repo_guides.read_views`` wrapped so a DB hiccup degrades to ``[]``
+    rather than 500-ing identity resolution (the FE just shows guides unread)."""
+    try:
+        return repo_guides.read_views(hf_user_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("auth.me: read_views failed (continuing)")
+        return []

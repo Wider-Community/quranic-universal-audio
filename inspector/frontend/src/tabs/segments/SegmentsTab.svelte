@@ -16,6 +16,7 @@
     import { loadQuranRefs } from '../../lib/refs/quran-refs';
     import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
     import { setEditingMode, syncEditingMode } from '../../lib/stores/editing-mode';
+    import { openGuidesGate } from '../../lib/stores/guides-gate';
     import type { SegReciter } from '../../lib/types/domain';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady } from '../../lib/utils/surah-info';
@@ -26,8 +27,10 @@
     import HistoryPanel from './components/history/HistoryPanel.svelte';
     import SegmentsList from './components/list/SegmentsList.svelte';
     import SavePreview from './components/save/SavePreview.svelte';
+    import AccordionGuideModal from './components/validation/AccordionGuideModal.svelte';
+    import GuidesGateModal from './components/validation/GuidesGateModal.svelte';
     import ValidationPanel from './components/validation/ValidationPanel.svelte';
-    import ShortcutsGuide from './ShortcutsGuide.svelte';
+    import { allGuidesRead } from './guides/registry';
     import { clearAccordionPin } from './stores/accordion-pin';
     import { autoSaveEnabled } from './stores/autosave';
     import {
@@ -41,6 +44,7 @@
     } from './stores/chapter';
     import { dirtyTick,isDirtyStore } from './stores/dirty';
     import { activeFilters } from './stores/filters';
+    import { closeGuideModal, guideModal } from './stores/guides';
     import { historyVisible } from './stores/history';
     import { savedFilterView, targetSegmentIndex } from './stores/navigation';
     import { segAudioElement, segListElement, waveformContainer } from './stores/playback';
@@ -75,12 +79,18 @@
         if (reciterTaskStore) {
             _taskUnsubscribe = reciterTaskStore.subscribe((v) => {
                 reciterTask = v;
-                setEditingMode(syncEditingMode($currentUser, v));
             });
-        } else {
-            setEditingMode(syncEditingMode($currentUser, null));
         }
     }
+
+    // Recompute the edit gate whenever the user (incl. guides_read) OR the task
+    // changes. Threading allGuidesRead here is what lifts the first-edit
+    // onboarding gate the instant the user opens the final guide — no task
+    // poll needed. Replaces the imperative setEditingMode calls that used to
+    // live in the task subscription / refresh paths.
+    $: setEditingMode(
+        syncEditingMode($currentUser, reciterTask, allGuidesRead($currentUser.guides_read)),
+    );
 
     // Refresh task immediately after a state-mutating action; the polling
     // tick still fires every 30 s but acting users shouldn't wait for it.
@@ -89,7 +99,7 @@
         if (!slug) return;
         const fresh = await refreshReciterTask(slug);
         reciterTask = fresh;
-        setEditingMode(syncEditingMode($currentUser, fresh));
+        // editingMode recomputes via the reactive statement on reciterTask.
         // /api/me's active_claim derives from state — pull a fresh copy too.
         void loadCurrentUser();
         // Force a catalog refetch so every surface lands the new bucket
@@ -99,10 +109,6 @@
         // back on unclaim) re-flows everywhere with no manual re-resolve.
         void loadCatalog(true);
     }
-
-    // Re-sync editing mode whenever the currentUser store updates (e.g.
-    // after sign-in or after access revoke).
-    $: setEditingMode(syncEditingMode($currentUser, reciterTask));
 
     // Out-of-band reciter changes: the admin Reviews tab's Segments deep-link
     // sets ``$selectedReciter`` directly (no picker event), so a reactive
@@ -312,12 +318,33 @@
     style:--seg-font-size={cssFontSize || null}
     style:--seg-word-spacing={cssWordSpacing || null}
 >
-    <ShortcutsGuide />
+    {#if !$historyVisible && !$savePreviewVisible}
+        <!-- Persistent entry point to the review guides + shortcuts. Opens the same
+             modal the first-edit gate uses, in voluntary `browse` mode — available
+             any time, not just when a blocked edit triggers the gate. The cyan
+             unread dot mirrors the old per-accordion ? badge: shown only to a
+             signed-in user who still has guides left to read. -->
+        <div class="seg-guide-bar">
+            <button
+                type="button"
+                class="seg-guide-entry"
+                class:unread={$currentUser.hf_user_id != null
+                    && !allGuidesRead($currentUser.guides_read)}
+                on:click={() => openGuidesGate('browse')}
+            >
+                <span class="seg-guide-entry-icon" aria-hidden="true">📖</span>
+                <span>Editing guide</span>
+                {#if $currentUser.hf_user_id != null && !allGuidesRead($currentUser.guides_read)}
+                    <span class="seg-guide-entry-dot" aria-label="Unread guides"></span>
+                {/if}
+            </button>
+        </div>
+    {/if}
 
     <!-- StatsPanel transitively imports chart.js (~85 KB br). Lazy-load so
          the charts chunk only ships when a maintainer/owner actually views
          the Segments tab — Dashboard / non-admin visitors never pay this cost. -->
-    {#if $currentUser.role === 'maintainer' || $currentUser.role === 'owner'}
+    {#if ($currentUser.role === 'maintainer' || $currentUser.role === 'owner') && !$historyVisible && !$savePreviewVisible}
         {#await import('./components/stats/StatsPanel.svelte') then mod}
             <svelte:component this={mod.default} />
         {/await}
@@ -362,6 +389,21 @@
         on:markReady={_markReady}
         on:claimed={_refreshTask}
     />
+
+    <!-- Guide modal host: a single instance driven by the `guideModal` store.
+         A guide opens from the guide-index checklist (top entry point / gate),
+         which must reach guides even for reciters that surface no accordion. -->
+    {#if $guideModal}
+        <AccordionGuideModal
+            category={$guideModal.category}
+            opener={$guideModal.opener}
+            on:close={closeGuideModal}
+        />
+    {/if}
+
+    <!-- First-edit onboarding gate / browsable guide index. Self-subscribes to
+         the `guidesGate` store; opens guides via the host above. -->
+    <GuidesGateModal />
 </div>
 
 <style>
@@ -370,5 +412,46 @@
        footer min-height is `--seg-footer-h` (60px); add a token cushion. */
     #segments-panel-inner {
         padding-bottom: calc(var(--seg-footer-actual-h, var(--seg-footer-h, 60px)) + var(--s-3));
+    }
+
+    /* Persistent guide/shortcuts entry point at the top of the tab. */
+    .seg-guide-bar {
+        display: flex;
+        justify-content: flex-start;
+        margin-bottom: var(--s-2, 8px);
+    }
+    .seg-guide-entry {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 12px;
+        border: 1px solid #2c3a59;
+        border-radius: 8px;
+        background: #101a33;
+        color: #c5cfe7;
+        font-size: 0.84rem;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .seg-guide-entry:hover,
+    .seg-guide-entry:focus-visible {
+        background: #16223f;
+        border-color: #3a4a6e;
+        color: #fff;
+        outline: none;
+    }
+    .seg-guide-entry-icon { font-size: 0.95rem; line-height: 1; }
+    /* Unread: a signed-in reviewer still has required guides to read. Mirror the
+       old per-accordion ? badge — cyan accent border + halo. */
+    .seg-guide-entry.unread {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent-tint);
+    }
+    .seg-guide-entry-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 2px var(--accent-tint);
     }
 </style>

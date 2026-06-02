@@ -24,6 +24,7 @@
     import { get } from 'svelte/store';
 
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
+    import { currentUser } from '../../../../lib/stores/current-user';
     import type {
         SegValAnyItem,
         SegValidateResponse,
@@ -34,10 +35,13 @@
     import { TAB_NAMES } from '../../../../lib/utils/constants';
     import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
     import { IssueRegistry } from '../../domain/registry';
+    import { hasAccordionGuide, isGuideRead } from '../../guides/registry';
     import { accordionPin, clearAccordionPin, pinAccordion } from '../../stores/accordion-pin';
+    import { ensureAutoSplitMap } from '../../stores/auto-split';
     import { segAllData, selectedReciter } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
+    import { openGuideModal } from '../../stores/guides';
     import { playingSegmentIndex } from '../../stores/playback';
     import { segValidation, valUiLcThreshold, valUiMeasuredCardHeight,valUiOpenCategory, valUiScrollTop } from '../../stores/validation';
     import {
@@ -49,7 +53,6 @@
     import { resolveCardLeadSeg } from '../../utils/validation/card-lead-seg';
     import { filterStaleIssues } from '../../utils/validation/stale';
     import { _fetchPeaks } from '../../utils/waveform/utils';
-    import AccordionGuideModal from './AccordionGuideModal.svelte';
     import ErrorCard from './ErrorCard.svelte';
 
     // ---- Props ----
@@ -67,6 +70,14 @@
     // to the store directly and flow back in via this $: subscription.
     let openCategory: string | null = $valUiOpenCategory;
     $: openCategory = $valUiOpenCategory;
+
+    // Preload the Auto Split cursor map when an auto-split accordion opens so
+    // each Auto Split click is a zero-network O(1) lookup instead of a per-click
+    // round trip. Fire-and-forget + deduped (stores/auto-split.ts); the
+    // reciter-scoped map is dropped on switch by clearPerReciterState.
+    $: if ((openCategory === 'cross_verse' || openCategory === 'repetitions') && $selectedReciter) {
+        void ensureAutoSplitMap($selectedReciter);
+    }
 
     // Reset on chapter change
     let _prevChapter = chapter;
@@ -98,8 +109,6 @@
     const QALQALA_LETTERS_ORDER: ReadonlyArray<string> = ['\u0642', '\u0637', '\u0628', '\u062c', '\u062f'];
     let activeQalqalaLetter: string | null = null;
     let qalqalaEndOfVerse: boolean = false;
-    let guideCategory: string | null = null;
-    let guideOpener: HTMLElement | null = null;
 
     // ---- Virtualization constants ----
     /** Fallback card height (px) before real measurement. MissingVersesCard with
@@ -727,12 +736,9 @@
     function openGuide(e: MouseEvent, type: string): void {
         e.preventDefault();
         e.stopPropagation();
-        guideCategory = type;
-        guideOpener = e.currentTarget as HTMLElement;
-    }
-
-    function closeGuide(): void {
-        guideCategory = null;
+        // Drive the shared modal host (mounted in SegmentsTab) so the same
+        // path serves both this button and the onboarding gate modal.
+        openGuideModal(type, e.currentTarget as HTMLElement);
     }
 
     // ---- Stable composite each-key for issue cards ----
@@ -803,19 +809,23 @@
                 on:toggle={(e) => handleAccordionToggle(e, cat.type)}
             >
                 <summary class="val-summary">
+                    {#if hasAccordionGuide(cat.type)}
+                        <button
+                            type="button"
+                            class="val-guide-btn"
+                            class:unread={$currentUser.hf_user_id != null
+                                && !isGuideRead($currentUser.guides_read, cat.type)}
+                            aria-label={`Open guide for ${cat.name}`}
+                            title={`Open guide for ${cat.name}`}
+                            on:click={(e) => openGuide(e, cat.type)}
+                        >?</button>
+                    {/if}
                     <span class="val-summary-main">
                         <span class="val-summary-title">{cat.name}</span>
                         <span class="val-count {cat.countClass}" data-lc-count>
                             {(cat.isLowConf || cat.isQalqala) ? cat.visibleItems.length : cat.summaryCount}
                         </span>
                     </span>
-                    <button
-                        type="button"
-                        class="val-guide-btn"
-                        aria-label={`Open guide for ${cat.name}`}
-                        title={`Open guide for ${cat.name}`}
-                        on:click={(e) => openGuide(e, cat.type)}
-                    >?</button>
                 </summary>
 
                 <!-- LC slider (Low Confidence only) -->
@@ -895,13 +905,5 @@
                 {/if}
             </details>
         {/each}
-
-        {#if guideCategory}
-            <AccordionGuideModal
-                category={guideCategory}
-                opener={guideOpener}
-                on:close={closeGuide}
-            />
-        {/if}
     </div>
 {/if}

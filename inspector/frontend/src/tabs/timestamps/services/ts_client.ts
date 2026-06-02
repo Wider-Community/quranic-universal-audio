@@ -27,6 +27,7 @@ import type {
     TsVbrResponse,
 } from '../../../lib/types/api';
 import type { Letter, PhonemeInterval, TsVerseData, TsWord } from '../../../lib/types/domain';
+import type { TsValidationDoc } from '../../../lib/types/generated/schemas';
 
 // ---------------------------------------------------------------------------
 // Singleton caches
@@ -376,34 +377,124 @@ export async function loadVbrChapters(reciter: string): Promise<number[]> {
 }
 
 /**
- * Templated audio URL for `(surah, ayah)` against a shard's `_meta`.
- *
- * `url_template` carries `{surah:03d}` / `{ayah:03d}` placeholders for
- * by_ayah reciters and just `{surah:03d}` for by_surah. Empty template
- * falls back to per-verse `audio_urls` keyed `"<surah>:<ayah>"` (by_ayah)
- * or `"<surah>"` (by_surah).
+ * Authoritative per-reciter audio metadata, sourced from the manifest's reciter
+ * block. The shard's `_meta.url_template` + `_meta.audio_category` are job-time
+ * snapshots that can drift (empty template if the audio-manifest sidecar was
+ * created after timestamps extraction, legacy long-form `by_surah_audio`
+ * audio_category on pre-cutover shards) — the manifest is the live source the
+ * backend just rebuilt against the current sidecar. Resolve from there.
  */
-export function audioUrlFor(
-    meta: TsShardResponse['_meta'],
+export interface TsReciterAudio {
+    /** Templated audio URL with `{surah:03d}` / `{ayah:03d}` placeholders. Empty
+     *  string when the audio manifest can't be expressed as a single template;
+     *  callers then fall back to the shard's per-verse `audio_urls` map. */
+    url_template: string;
+    /** Short form (`'by_surah'` / `'by_ayah'`) — the contract the FE drives
+     *  audio routing + offset logic from. The legacy long form lives on stale
+     *  shards but never flows through this struct. */
+    audio_category: 'by_surah' | 'by_ayah';
+}
+
+/** Look up a reciter's authoritative audio metadata from a loaded manifest.
+ *  Returns null when the manifest doesn't advertise the reciter (caller should
+ *  treat as "audio unavailable" rather than fall back to stale shard `_meta`). */
+export function reciterAudioFromManifest(
+    manifest: TsManifestResponse,
+    reciter: string,
+): TsReciterAudio | null {
+    const block = manifest.reciters?.[reciter];
+    if (!block) return null;
+    return {
+        url_template: block.url_template ?? '',
+        audio_category: block.audio_category,
+    };
+}
+
+/**
+ * Resolve the audio URL for `(surah, ayah)` given the live `url_template`
+ * (from the manifest) plus the shard's per-verse `audio_urls` map as a
+ * fallback when no template applies.
+ *
+ * `url_template` carries `{surah:03d}` / `{ayah:03d}` placeholders for by_ayah
+ * reciters and just `{surah:03d}` for by_surah; protocol-less templates get an
+ * `https://` prefix. Empty template falls back to `audio_urls` keyed
+ * `"<surah>:<ayah>"` (by_ayah) or `"<surah>"` (by_surah). Returns the empty
+ * string when nothing is resolvable — caller must NOT push that into an
+ * `<audio>` element (browser resolves "" to the page URL and errors).
+ */
+export function resolveAudioUrl(
+    urlTemplate: string,
+    audioUrlsFallback: Record<string, string> | undefined,
     surah: number,
     ayah: number,
 ): string {
-    const tmpl = meta.url_template;
-    if (tmpl) {
-        const httpsTmpl = /^https?:\/\//i.test(tmpl) ? tmpl : `https://${tmpl}`;
+    if (urlTemplate) {
+        const httpsTmpl = /^https?:\/\//i.test(urlTemplate) ? urlTemplate : `https://${urlTemplate}`;
         return httpsTmpl
             .replace(/\{surah:03d\}/g, String(surah).padStart(3, '0'))
             .replace(/\{ayah:03d\}/g, String(ayah).padStart(3, '0'))
             .replace(/\{surah\}/g, String(surah))
             .replace(/\{ayah\}/g, String(ayah));
     }
-    const fallback = meta.audio_urls;
-    if (!fallback) return '';
+    if (!audioUrlsFallback) return '';
     return (
-        fallback[`${surah}:${ayah}`]
-        ?? fallback[String(surah)]
+        audioUrlsFallback[`${surah}:${ayah}`]
+        ?? audioUrlsFallback[String(surah)]
         ?? ''
     );
+}
+
+/**
+ * @deprecated Prefer `resolveAudioUrl(manifestBlock.url_template,
+ * shard._meta.audio_urls, surah, ayah)`. Reading `url_template` from the shard
+ * `_meta` directly trusts a job-time snapshot that can be stale (empty
+ * template, legacy long-form audio_category). Retained as a thin wrapper for
+ * existing unit tests that synthesise a `_meta`-shaped fixture.
+ */
+export function audioUrlFor(
+    meta: TsShardResponse['_meta'],
+    surah: number,
+    ayah: number,
+): string {
+    return resolveAudioUrl(meta.url_template, meta.audio_urls, surah, ayah);
+}
+
+/**
+ * Resolve the URL the `<audio>` element should actually load for a TS verse.
+ *
+ * by_surah audio is routed through the audio-proxy so the bucket-mounted file
+ * (or CDN stream-through) is served via sendfile + Range/304; by_ayah / already
+ * proxied URLs pass through. ONE source of truth so the prewarm path and the
+ * real-play path produce byte-identical URLs (otherwise the shadow-audio prewarm
+ * fills a different cache key than playback reads → silent miss).
+ */
+export function tsPlayUrl(reciter: string, audioUrl: string, audioCategory: string): string {
+    return (audioCategory === 'by_surah_audio' && audioUrl && !audioUrl.startsWith('/api/'))
+        ? `/api/seg/audio-proxy/${reciter}?url=${encodeURIComponent(audioUrl)}`
+        : audioUrl;
+}
+
+/**
+ * Verse-level ts-validation flags for the Timestamps-tab accordion.
+ *
+ * Backed by ``reciters/<slug>/ts_validation.json`` (multi-beam generate-job
+ * output). 403 → caller lacks ``timestamps.view_validation``; 404 → caller
+ * holds it but the reciter isn't viewable (unreleased and the caller doesn't
+ * hold ``timestamps.view_unreleased``). Both return ``null`` so the panel
+ * stays hidden. A viewable reciter with no flags returns an empty ``verses``
+ * map. Only call this when the user holds the view-validation capability
+ * (avoids a wasted bucket read per reciter-load for public users on the
+ * single worker).
+ */
+export async function loadTsValidation(reciter: string): Promise<TsValidationDoc | null> {
+    if (!reciter) return null;
+    try {
+        const resp = await fetch(`/api/ts/validation/${encodeURIComponent(reciter)}`);
+        if (!resp.ok) return null; // 404 (not viewable) or transient — hide panel
+        return (await resp.json()) as TsValidationDoc;
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -413,14 +504,21 @@ export function audioUrlFor(
  * QPC / DK lookups. Handles compound refs (`"37:151:3-37:152:2"`) and
  * the `by_surah_audio` offset adjustment that subtracts the verse's
  * start time so the audio element starts at zero.
- */
-/**
+ *
  * Identity flows top-down. The caller already knows which slug it fetched
  * `shard` for (it's in the URL), so we take `reciter` as a param and return
  * it on the result. The shard's `_meta.reciter` is ignored for identity —
  * it can drift from the bucket folder slug (pre-cutover legacy slugs are
  * still embedded in some `timestamps_full.json` sources) and trusting it
  * silently breaks every manifest-lookup downstream.
+ *
+ * Audio routing (`audio_url` + `audio_category`) is sourced from
+ * ``reciterAudio`` — the manifest's reciter block — NOT from the shard's
+ * `_meta`. Shards bake those fields at job time and drift afterwards
+ * (sidecar regenerated → URL template changes; legacy long-form audio_category
+ * outlives the short-form FE convention). The shard's `_meta.audio_urls`
+ * still rides as the per-verse fallback when ``reciterAudio.url_template``
+ * is empty (rare — only when the sidecar can't be expressed as a template).
  */
 export function assembleVerseFromShard(
     reciter: string,
@@ -428,6 +526,7 @@ export function assembleVerseFromShard(
     verseRef: string,
     qpc: Record<string, { text?: string }>,
     dk: Record<string, { text?: string }>,
+    reciterAudio: TsReciterAudio,
 ): TsVerseData | null {
     const verse = shard[verseRef];
     if (!verse || verseRef === '_meta') return null;
@@ -504,17 +603,23 @@ export function assembleVerseFromShard(
         });
     }
 
-    // Audio URL — derived from shard `_meta` (template or fallback map).
+    // Audio URL — template comes from the manifest's reciter block (live,
+    // authoritative), per-verse fallback comes from the shard's `_meta.audio_urls`
+    // (rare, only when the sidecar can't be expressed as a single template).
     const surahNum = isCompound ? compoundSurah : chapter;
     const ayahNum = isCompound
         ? compoundStartAyah
         : parseInt(verseRef.split(':')[1] ?? '0', 10);
-    const audioUrl = audioUrlFor(meta, surahNum, ayahNum);
+    const audioUrl = resolveAudioUrl(
+        reciterAudio.url_template, meta.audio_urls, surahNum, ayahNum,
+    );
 
-    // The TsVerseData type expects the long form ("by_*_audio"); the shard
-    // stores the short form. Map here.
+    // The TsVerseData type expects the long form ("by_*_audio") — the manifest
+    // carries the short form. Map here. (Stale shards stamp the long form into
+    // `_meta.audio_category`; ignoring it eliminates the legacy-form trap that
+    // used to flip a by_surah reciter to the by_ayah branch below.)
     const audioCategory: 'by_ayah_audio' | 'by_surah_audio' =
-        meta.audio_category === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio';
+        reciterAudio.audio_category === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio';
 
     let timeStartMs = 0;
     let timeEndMs = 0;

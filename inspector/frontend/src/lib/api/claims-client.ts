@@ -12,6 +12,7 @@
  * surfaced UX (toast/modal) so the caller usually doesn't need to do more.
  */
 
+import { friendlyError } from '../errors/friendly';
 import { SIGN_IN_MESSAGES } from '../sign-in-messages';
 import { loadCurrentUser } from '../stores/current-user';
 import { openSignInModal } from '../stores/sign-in-modal';
@@ -74,7 +75,7 @@ async function _post(
     } else {
         pushToast({
             kind: 'error',
-            text: errBody.error || `Request failed (${res.status}).`,
+            text: friendlyError(errBody, res.status),
             ttl: 5000,
         });
     }

@@ -1,5 +1,9 @@
 import { get } from 'svelte/store';
 
+import { SIGN_IN_MESSAGES } from '../../../lib/sign-in-messages';
+import { editingMode } from '../../../lib/stores/editing-mode';
+import { openGuidesGate } from '../../../lib/stores/guides-gate';
+import { openSignInModal } from '../../../lib/stores/sign-in-modal';
 import { LS_KEYS } from '../../../lib/utils/constants';
 import { shouldHandleKey } from '../../../lib/utils/keyboard-guard';
 import { cycleSpeedStore } from '../../../lib/utils/speed-control';
@@ -21,6 +25,26 @@ import { confirmSplit } from './edit/split';
 import { confirmTrim } from './edit/trim';
 import { onSegPlayClick, playFromSegment } from './playback/playback';
 import { confirmSaveFromPreview, hideSavePreview, onSegSaveClick } from './save/actions';
+
+/**
+ * Honour the same edit gate as the `editGate` action for keyboard-initiated
+ * edits — clicks go through `editGate`, but keyboard shortcuts (E/S/Enter) would
+ * otherwise bypass it. Returns `true` when editing is blocked (the caller must
+ * NOT perform the mutation) and surfaces the right prompt: the sign-in modal for
+ * anonymous, the guide onboarding modal for `guides_unread`. Other view reasons
+ * (wrong-assignee, marked_ready, …) just block silently — the buttons already
+ * explain those via the popover, and a keyboard path has no anchor element.
+ */
+function gateKeyboardEdit(): boolean {
+    const mode = get(editingMode);
+    if (mode.kind !== 'view') return false; // editable — let the edit proceed
+    if (mode.viewReason === 'unauthenticated') {
+        openSignInModal(null, SIGN_IN_MESSAGES.edit);
+    } else if (mode.viewReason === 'guides_unread') {
+        openGuidesGate('gate');
+    }
+    return true;
+}
 
 /**
  * Handle a keydown event for the Segments tab.
@@ -101,6 +125,7 @@ export function handleSegmentsKey(e: KeyboardEvent): boolean {
 
         case 'KeyS': {
             if (isDirty()) {
+                if (gateKeyboardEdit()) return true;
                 onSegSaveClick();
                 return true;
             }
@@ -122,6 +147,7 @@ export function handleSegmentsKey(e: KeyboardEvent): boolean {
 
         case 'Enter':
             if (get(savePreviewVisible)) {
+                if (gateKeyboardEdit()) return true;
                 confirmSaveFromPreview();
                 return true;
             } else {
@@ -132,6 +158,7 @@ export function handleSegmentsKey(e: KeyboardEvent): boolean {
                     // chapter aren't in `displayedSegments`.
                     const seg = getEditingSeg();
                     if (seg) {
+                        if (gateKeyboardEdit()) return true;
                         if (mode === 'trim') confirmTrim(seg);
                         else if (mode === 'split') confirmSplit(seg);
                         return true;
@@ -147,7 +174,13 @@ export function handleSegmentsKey(e: KeyboardEvent): boolean {
             const seg = displayed
                 ? displayed.find(s => s.index === curIdx)
                 : null;
-            if (seg) { beginRefEdit(seg, null); return true; }
+            if (seg) {
+                // The live keyboard bypass: E begins a ref-edit that the
+                // (use:editGate) buttons would have blocked. Gate it too.
+                if (gateKeyboardEdit()) return true;
+                beginRefEdit(seg, null);
+                return true;
+            }
             return false;
         }
 

@@ -225,9 +225,9 @@ def chapter_numbers(reciter: str) -> list[int]:
 
     The invariant this leans on: ``state == released`` ⇒ every
     audio chapter has timestamps published. Enforced by the
-    ``awaiting_timestamps → released`` transition. A reciter that violates
-    the invariant degrades to a shard 404 on click; the manifest stays
-    consistent with itself.
+    ``under_review → released`` publish transition, which fires only after the
+    timestamps job succeeds. A reciter that violates the invariant degrades to
+    a shard 404 on click; the manifest stays consistent with itself.
     """
     out: set[int] = set()
     for k in _chapters(reciter).keys():

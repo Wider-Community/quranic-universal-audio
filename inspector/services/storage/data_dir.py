@@ -13,6 +13,7 @@ need no notion of ``wip`` vs ``published``.
 
 from __future__ import annotations
 
+import gzip
 from typing import Iterator
 
 from . import storage_paths
@@ -49,6 +50,10 @@ def edit_history_peaks_path(slug: str) -> str:
 
 def low_confidence_path(slug: str) -> str:
     return storage_paths.low_confidence_path(slug)
+
+
+def ts_validation_path(slug: str) -> str:
+    return storage_paths.ts_validation_path(slug)
 
 
 def auto_split_path(slug: str) -> str:
@@ -102,6 +107,14 @@ def read_low_confidence_doc(slug: str) -> dict | None:
         return None
 
 
+def read_ts_validation_doc(slug: str) -> dict | None:
+    """Return the parsed ``ts_validation.json`` doc, or ``None`` if absent."""
+    try:
+        return get_backend().read_json(ts_validation_path(slug))  # type: ignore[return-value]
+    except StorageNotFound:
+        return None
+
+
 def read_auto_split_doc(slug: str) -> dict | None:
     """Return the parsed ``auto_split_v1.json`` doc, or ``None`` if absent."""
     try:
@@ -138,15 +151,18 @@ def iter_peaks_history(slug: str) -> Iterator[dict]:
 
 
 def read_timestamps_chapter(slug: str, chapter: int) -> bytes | None:
-    """Return raw ``timestamps/<chapter>.json`` bytes, or ``None`` if absent.
+    """Return decompressed timestamps-shard JSON bytes for a chapter, or ``None``.
 
-    Reads from ``<bucket>/reciters/<slug>/timestamps/<chapter>.json``. Only
-    released reciters have timestamps; the Timestamps tab gates on DB state.
+    Reads the gzipped v2 shard ``timestamps/<chapter>.json.gz`` (the job's
+    canonical output) and inflates it; the caller receives raw JSON bytes.
+    The pre-v2 uncompressed ``.json`` shards of the 6 already-published
+    reciters are migrated by re-running the job — there is no read-time
+    fallback for them.
     """
+    backend = get_backend()
     try:
-        return get_backend().read_bytes(
-            storage_paths.timestamps_path(slug, chapter)
-        )
+        gz = backend.read_bytes(storage_paths.timestamps_path_gz(slug, chapter))
+        return gzip.decompress(gz)
     except StorageNotFound:
         return None
 

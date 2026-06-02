@@ -328,6 +328,27 @@ CAPABILITIES: tuple[Capability, ...] = (
         contributor=False, maintainer=True,
     ),
     _c(
+        "reviews.generate_timestamps", G_ADMIN, "Generate timestamps",
+        "Launch the MFA alignment job for a marked-ready recitation, writing "
+        "per-chapter timestamps to the bucket. On success the recitation is "
+        "auto-published (also requires the Publish capability).",
+        contributor=False, maintainer=True,
+    ),
+    _c(
+        "timestamps.view_unreleased", G_ADMIN, "Preview unreleased timestamps",
+        "View generated timestamps in the Timestamps tab for recitations "
+        "not yet released (owner preview before publish).",
+        contributor=False, maintainer=False,
+    ),
+    _c(
+        "timestamps.view_validation", G_ADMIN, "View validation flags",
+        "See the verse-level low-confidence accordion on the Timestamps tab "
+        "(multi-beam alignment flags from the generate-timestamps job). "
+        "Independent of unreleased preview — a holder without "
+        "view_unreleased still sees flags for released recitations only.",
+        contributor=False, maintainer=True,
+    ),
+    _c(
         MANAGE_PERMISSIONS, G_ADMIN, "Manage permissions",
         "See and change this Permissions tab. Owner-only and fixed — it is "
         "the recovery anchor, so it can never be delegated or turned off.",

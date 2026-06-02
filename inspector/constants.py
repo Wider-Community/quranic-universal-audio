@@ -11,6 +11,36 @@ VALIDATION_CATEGORIES = (
     "muqattaat", "qalqala",
 )
 
+# Accordion-guide "view keys" \u2014 the canonical set a signed-in user can mark as
+# read via ``POST /api/guides/viewed``. Collapsed form: ``low_confidence_v2``
+# folds into ``low_confidence`` (one required reading), so the alias never
+# appears here or in the ``guide_views`` table. This is the same set as the FE
+# registry's ``REQUIRED_GUIDE_KEYS`` (tabs/segments/guides/registry.ts) \u2014 keep
+# the two in lockstep when adding a guide. ``GUIDE_VIEW_KEY_ALIASES`` maps any
+# raw category the FE might post to its stored key.
+GUIDE_VIEW_KEYS = (
+    "overview",
+    "general_editing",
+    "failed", "missing_verses", "missing_words", "low_confidence",
+    "boundary_adj", "repetitions", "cross_verse", "qalqala",
+    "muqattaat", "basmala_amin",
+)
+GUIDE_VIEW_KEY_ALIASES = {
+    "low_confidence_v2": "low_confidence",
+}
+
+
+def guide_view_key(category: str) -> str | None:
+    """Collapse a raw guide category to its stored view key, or None if unknown.
+
+    Mirrors the FE ``guideViewKey`` so the same input resolves identically on
+    both sides; returns None for anything outside the known set (the route
+    rejects with 400) so the table can never accrue arbitrary keys.
+    """
+    key = GUIDE_VIEW_KEY_ALIASES.get(category, category)
+    return key if key in GUIDE_VIEW_KEYS else None
+
+
 # Quranic stop/pause signs (sili, qili, small meem, jeem)
 STOP_SIGNS = set('\u06D6\u06D7\u06D8\u06DA')
 

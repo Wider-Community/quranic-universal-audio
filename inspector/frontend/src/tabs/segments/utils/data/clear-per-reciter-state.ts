@@ -9,6 +9,7 @@
 
 import { clearWaveformCache } from '../../../../lib/utils/waveform-cache';
 import { clearAccordionPin } from '../../stores/accordion-pin';
+import { clearAutoSplitMap } from '../../stores/auto-split';
 import {
     pickerDisplayChapter,
     reciterVbrChapters,
@@ -53,6 +54,7 @@ export function clearPerReciterState(): void {
 
     clearValidation();
     clearAccordionPin();
+    clearAutoSplitMap();
     clearStats();
 
     savedChains.set(null);

@@ -35,6 +35,13 @@ export interface CurrentUser {
      * still holds the anon-eligible view capabilities the owner left on.
      */
     capabilities: string[];
+    /**
+     * Validation-accordion guide *view keys* this user has opened (see
+     * `tabs/segments/guides/registry.ts`). Drives the cyan unread border on
+     * each `?` and the first-edit onboarding gate. Global per user, durable,
+     * write-once. Empty for anonymous.
+     */
+    guides_read: string[];
 }
 
 const _ANON: CurrentUser = {
@@ -45,6 +52,7 @@ const _ANON: CurrentUser = {
     active_claims: [],
     dev_mode: false,
     capabilities: [],
+    guides_read: [],
 };
 
 export const currentUser = writable<CurrentUser>(_ANON);
@@ -85,4 +93,19 @@ export async function loadCurrentUser(): Promise<CurrentUser> {
 /** Force the store back to anonymous. Use after explicit logout. */
 export function resetCurrentUser(): void {
     currentUser.set(_ANON);
+}
+
+/**
+ * Optimistically record a guide *view key* as read (after a successful
+ * `POST /api/guides/viewed`). Idempotent + signed-in only — anonymous has no
+ * server-side row, so we never mutate the anon store. Pass the already-collapsed
+ * view key (use `guideViewKey` from the guides registry). Updating the store
+ * clears the unread border and may lift the edit gate without a `/api/me`
+ * round-trip.
+ */
+export function markGuideReadLocally(viewKey: string): void {
+    currentUser.update((u) => {
+        if (u.hf_user_id === null || u.guides_read.includes(viewKey)) return u;
+        return { ...u, guides_read: [...u.guides_read, viewKey] };
+    });
 }

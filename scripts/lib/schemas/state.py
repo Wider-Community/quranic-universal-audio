@@ -32,8 +32,11 @@ class ReciterState(str, Enum):
     AWAITING_ALIGNMENT = "awaiting_alignment"
     AWAITING_REVIEW = "awaiting_review"
     UNDER_REVIEW = "under_review"
-    AWAITING_TIMESTAMPS = "awaiting_timestamps"
     RELEASED = "released"
+    # NOTE: ``awaiting_timestamps`` was removed — publishing now goes straight
+    # ``under_review → released`` when the timestamps job succeeds (the reciter
+    # stays under_review while the job runs). See ``_h_published`` and
+    # ``services.admin.timestamps_jobs.complete_timestamps_job``.
 
 
 class RevisionContext(BaseModel):
@@ -70,11 +73,6 @@ class ReciterRow(BaseModel):
     timestamps_job_ids: list[str] = Field(default_factory=list)
     revision_in_progress: RevisionContext | None = None
 
-    # Set when the row enters RELEASED (timestamps_completed) to schedule the
-    # 1-week deletion of the prefetched audio under ``reciters/<slug>/``. Cleared by
-    # admin.unlocked_for_revision (which re-enqueues prefetch).
-    prefetch_purge_at: datetime | None = None
-
     @field_validator("slug")
     @classmethod
     def _validate_slug(cls, v: str) -> str:
@@ -110,14 +108,18 @@ class ReciterRow(BaseModel):
         ):
             raise ValueError("marked_ready requires under_review + assignee_hf_id")
 
-        # revision_in_progress is only legal on awaiting_review (set by
-        # admin.unlocked_for_revision; cleared by reciter.published).
-        if (
-            self.revision_in_progress is not None
-            and state != ReciterState.AWAITING_REVIEW
+        # revision_in_progress is set by admin.unlocked_for_revision on
+        # awaiting_review and must survive the revision window — a claim moves
+        # the row to under_review (keeping the breadcrumb) and reciter.published
+        # clears it on the way to awaiting_timestamps. So it is legal on
+        # awaiting_review + under_review, and must be absent everywhere else.
+        if self.revision_in_progress is not None and state not in (
+            ReciterState.AWAITING_REVIEW,
+            ReciterState.UNDER_REVIEW,
         ):
             raise ValueError(
-                f"revision_in_progress only valid on awaiting_review (got {state.value!r})"
+                "revision_in_progress only valid on awaiting_review/under_review "
+                f"(got {state.value!r})"
             )
 
         # If assignee_login is set, assignee_hf_id must also be set.

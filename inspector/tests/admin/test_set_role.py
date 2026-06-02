@@ -82,7 +82,7 @@ def test_last_owner_self_demote_409(signed_in_client):
 
     resp = client.post("/api/admin/users/o/role", json={"role": "contributor"}, headers=ORIGIN)
     assert resp.status_code == 409, resp.get_json()
-    assert "last" in resp.get_json()["error"].lower()
+    assert resp.get_json()["code"] == "LAST_OWNER"
     assert _role("o") == "owner"  # unchanged
 
 

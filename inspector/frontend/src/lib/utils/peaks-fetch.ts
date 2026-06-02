@@ -11,8 +11,10 @@
  */
 
 import { fetchJson } from '../api';
-import type { SegSegmentPeaksRequest, SegSegmentPeaksResponse } from '../types/api';
-import type { SegmentPeaks } from '../types/domain';
+import type { SegPeaksResponse, SegSegmentPeaksRequest, SegSegmentPeaksResponse } from '../types/api';
+import type { AudioPeaks, SegmentPeaks } from '../types/domain';
+import { b64ToInt8 } from './peaks-decode';
+import { normalizeAudioUrl, setWaveformPeaks } from './waveform-cache';
 
 /**
  * Fetch peaks for a single audio slice via the ffmpeg + HTTP-Range fallback
@@ -51,4 +53,95 @@ export async function fetchSegmentPeaks(
     );
     const key = `${url}:${startMs}:${endMs}`;
     return data.peaks?.[key] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Baked chapter peaks (the FAST path) — slim 10bps int8 chapter overview,
+// server-cached + sliced client-side. This is what the Segments tab uses
+// (_fetchPeaks) and what the Timestamps waveform now prefers over the per-verse
+// ffmpeg fallback above. ~6KB/chapter, decode ~0.175ms once/chapter, then each
+// verse is a ~2µs array slice (vs 289-762ms ffmpeg).
+// ---------------------------------------------------------------------------
+
+/** Bounded in-flight + result cache keyed by `${reciter}:${chapter}` — NOT by
+ *  audio URL, so FE-derived URL drift (audioUrlFor's https-prepend vs the raw
+ *  sidecar URL the route keys by) can never make the lookup silently miss. */
+const CHAPTER_PEAKS_CACHE = 8;
+const _chapterPeaks = new Map<string, Promise<Record<string, AudioPeaks>>>();
+
+/**
+ * Fetch + decode the baked slim chapter peaks for one chapter, returning the
+ * decoded `{audioUrl: AudioPeaks}` map (one entry for by_surah, one-per-verse
+ * for by_ayah). Concurrent calls for the same chapter dedupe via the in-flight
+ * promise. Returns an empty map when the chapter has no baked peaks (the caller
+ * then falls through to the ffmpeg `fetchSegmentPeaks` path).
+ *
+ * The `?h=` cache-buster is intentionally omitted: TS doesn't know the audio
+ * URL list up front and released-reciter audio is frozen, so the route's
+ * 1-day `Cache-Control` is safe. Decode goes through the shared `b64ToInt8`.
+ */
+export function ensureChapterPeaks(
+    reciter: string,
+    chapter: number,
+): Promise<Record<string, AudioPeaks>> {
+    const key = `${reciter}:${chapter}`;
+    const hit = _chapterPeaks.get(key);
+    if (hit) return hit;
+    const promise = (async () => {
+        const data = await fetchJson<SegPeaksResponse>(
+            `/api/seg/peaks/${encodeURIComponent(reciter)}?chapters=${chapter}`,
+        );
+        const out: Record<string, AudioPeaks> = {};
+        for (const [url, raw] of Object.entries(data.peaks ?? {})) {
+            const env = raw as unknown as {
+                q?: string; n?: number; peaks_b64?: string; duration_ms?: number;
+            };
+            if (env.q !== 'int8' || typeof env.peaks_b64 !== 'string' || typeof env.n !== 'number') {
+                continue;
+            }
+            const ap: AudioPeaks = {
+                peaks: b64ToInt8(env.peaks_b64, env.n),
+                duration_ms: env.duration_ms ?? 0,
+            };
+            out[url] = ap;
+            // Also populate the cross-tab URL-keyed cache (harmless; lets any
+            // URL-keyed consumer hit). TS lookups go through pickChapterPeaks.
+            if (url) setWaveformPeaks(url, ap);
+        }
+        return out;
+    })();
+    _chapterPeaks.set(key, promise);
+    promise.catch(() => _chapterPeaks.delete(key)); // allow retry on failure
+    while (_chapterPeaks.size > CHAPTER_PEAKS_CACHE) {
+        const oldest = _chapterPeaks.keys().next().value;
+        if (oldest === undefined || oldest === key) break;
+        _chapterPeaks.delete(oldest);
+    }
+    return promise;
+}
+
+/**
+ * Pick the chapter-peaks entry for a verse out of an {@link ensureChapterPeaks}
+ * map. by_surah chapters yield exactly one entry (the whole chapter) → used
+ * directly, immune to URL drift. by_ayah chapters yield one entry per verse →
+ * matched on the verse's audio URL (proxy-normalised). Returns null when
+ * nothing matches; the caller falls back to the ffmpeg `/segment-peaks` path.
+ */
+export function pickChapterPeaks(
+    map: Record<string, AudioPeaks>,
+    audioUrl: string,
+): AudioPeaks | null {
+    const entries = Object.values(map);
+    if (entries.length === 1) return entries[0]!;
+    if (entries.length === 0) return null;
+    const want = normalizeAudioUrl(audioUrl);
+    for (const [url, ap] of Object.entries(map)) {
+        if (normalizeAudioUrl(url) === want) return ap;
+    }
+    return null;
+}
+
+/** Test seam — clears the chapter-peaks cache. */
+export function _resetChapterPeaksForTests(): void {
+    _chapterPeaks.clear();
 }

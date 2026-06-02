@@ -1,40 +1,38 @@
 <script lang="ts">
     /**
-     * One recitation row in the Reviews tab landing list (table-format).
+     * One recitation row in the Reviews tab landing list.
      *
-     * Emits a ``<tr>`` so all rows across all state sections share the same
-     * column widths (defined in ReviewsCompartment.svelte with
-     * ``table-layout: fixed`` + ``<colgroup>``). Cells, in order:
-     *   1. Reciter — Latin name dominant (primary, 15px) + Arabic trailing
-     *      inline (muted, 13px). Per user feedback: English not smaller, first.
-     *   2. Riwayah · 3. Style · 4. Channel — taxonomy chips
-     *   5. Reviewer — initials avatar + login (or em dash when unclaimed)
-     *   6. Age — relative time in mono
-     *   7. Actions — Segments + Ops buttons
+     * Two-zone flex row (mirrors the Requests-tab ``.req-head``): a growing
+     * identity block on the left, an intrinsic-width meta cluster on the
+     * right, vertically centered against the two identity lines.
+     *   Line 1 — unread dot + Latin name (primary, first) + Arabic name
+     *            (muted, trailing) + reviewer (initials avatar + login).
+     *   Line 2 — riwayah · style · channel as muted dotted text.
+     *   Right  — age (relative, mono; stale ⚠ when a claim is > 7d old) +
+     *            actions (Segments, plus Generate TS on marked-ready rows).
      *
      * Row body click → General drawer. Segments button switches to the
-     * top-level Segments tab with this slug pre-selected. Ops opens the
-     * Ops drawer.
+     * top-level Segments tab with this slug pre-selected. Generate TS
+     * launches the MFA timestamps job — shown only on marked-ready rows
+     * because generating timestamps publishes the reciter on success.
      */
     import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
     import type { AdminReviewRow } from '../../../../../lib/types/generated/schemas';
     import { setActiveTab } from '../../../../../lib/utils/active-tab';
     import { LS_KEYS, TAB_NAMES } from '../../../../../lib/utils/constants';
+    import { initials } from '../../../../../lib/utils/initials';
     import { selectedReciter } from '../../../../segments/stores/chapter';
     import { adminDashboard } from '../../../stores/admin-dashboard.svelte';
 
     let { row }: { row: AdminReviewRow } = $props();
 
     const isActive = $derived(reviewsStore.selectedSlug === row.slug);
-    const isOpsActive = $derived(isActive && reviewsStore.openDrawer === 'ops');
-
-    function initials(login: string | null | undefined): string {
-        if (!login) return '?';
-        const trimmed = login.trim();
-        if (!trimmed) return '?';
-        const chars = trimmed.replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase();
-        return chars || trimmed.slice(0, 2).toUpperCase();
-    }
+    // Generate TS publishes on success, so it's offered only once the reviewer
+    // has marked the reciter ready — not on every under_review row.
+    const isMarkedReady = $derived(
+        row.state === 'under_review' && !!row.open_claim?.marked_ready_at,
+    );
+    const isTsActive = $derived(isActive && reviewsStore.openDrawer === 'timestamps');
 
     function relativeAge(iso: string | null | undefined): string {
         if (!iso) return '';
@@ -91,7 +89,7 @@
     /** Open a drawer and, on the first open for this slug, optimistically
      * decrement the dashboard counter so the entry-button dot / tab pill
      * also drop in sync. The compartment's next fetch reconciles. */
-    function openDrawer(kind: 'general' | 'ops'): void {
+    function openDrawer(kind: 'general'): void {
         const wasUnread = showUnread;
         reviewsStore.open(row.slug, kind);
         if (wasUnread) {
@@ -101,11 +99,6 @@
 
     function onRowClick(): void {
         openDrawer('general');
-    }
-
-    function onOps(e: MouseEvent): void {
-        e.stopPropagation();
-        openDrawer('ops');
     }
 
     function onSegments(e: MouseEvent): void {
@@ -119,11 +112,17 @@
         setActiveTab(TAB_NAMES.SEGMENTS);
         adminDashboard.close();
     }
+
+    function onGenerateTimestamps(e: MouseEvent): void {
+        e.stopPropagation();
+        reviewsStore.open(row.slug, 'timestamps');
+    }
 </script>
 
-<tr
+<div
     class="row"
     class:active={isActive}
+    role="button"
     tabindex="0"
     onclick={onRowClick}
     onkeydown={(e) => {
@@ -133,52 +132,72 @@
         }
     }}
 >
-    <td class="cell reciter">
-        <div class="reciter-inner">
+    <div class="identity">
+        <div class="id-name">
             {#if showUnread}
-                <span class="unread" aria-label="new marked-ready" title="New marked ready"></span>
+                <span class="unread" aria-label="needs attention" title="New since you last viewed — marked ready or a finished timestamps job"></span>
             {/if}
             {#if row.name_en}
-                <span class="reciter-lt">{row.name_en}</span>
+                <span class="name-en">{row.name_en}</span>
             {/if}
             {#if row.name_ar}
-                <span class="reciter-ar" dir="rtl">{row.name_ar}</span>
+                <span class="name-ar" dir="rtl">{row.name_ar}</span>
+            {/if}
+            {#if hasReviewer}
+                <span class="reviewer">
+                    <span class="avatar">{initials(reviewerLogin)}</span>
+                    <span class="who">{reviewerLogin}</span>
+                </span>
             {/if}
         </div>
-    </td>
-    <td class="cell taxonomy"><span class="chip">{row.riwayah}</span></td>
-    <td class="cell taxonomy"><span class="chip">{row.style}</span></td>
-    <td class="cell taxonomy"><span class="chip channel">{row.channel}</span></td>
-    <td class="cell reviewer" class:unassigned={!hasReviewer}>
-        <span class="avatar">{hasReviewer ? initials(reviewerLogin) : ''}</span>
-        <span class="who">{hasReviewer ? reviewerLogin : '—'}</span>
-    </td>
-    <td class="cell age" class:stale={isStale}>
-        {#if isStale}
-            <span
-                class="stale-warn"
-                aria-label="Claim open more than 7 days"
-                title="Claim open more than 7 days — consider reassigning or releasing"
-            >⚠</span>
-        {/if}
-        {age}
-    </td>
-    <td class="cell actions">
-        <button class="btn" type="button" onclick={onSegments}>Segments</button>
-        <button
-            class="btn"
-            class:armed={isOpsActive}
-            type="button"
-            onclick={onOps}
-        >Ops</button>
-    </td>
-</tr>
+        <div class="id-meta">
+            <span class="combo">{row.riwayah}</span>
+            <span class="sep">·</span>
+            <span class="combo">{row.style}</span>
+            <span class="sep">·</span>
+            <span class="combo channel">{row.channel}</span>
+        </div>
+    </div>
+    <div class="row-meta">
+        <span class="age" class:stale={isStale}>
+            {#if isStale}
+                <span
+                    class="stale-warn"
+                    aria-label="Claim open more than 7 days"
+                    title="Claim open more than 7 days — consider reassigning or releasing"
+                >⚠</span>
+            {/if}
+            {age}
+        </span>
+        <div class="actions">
+            <button class="btn" type="button" onclick={onSegments}>Segments</button>
+            {#if isMarkedReady}
+                <button
+                    class="btn"
+                    class:armed={isTsActive}
+                    type="button"
+                    onclick={onGenerateTimestamps}
+                    title="Generate timestamps & publish — settings, logs & history"
+                >Generate TS</button>
+            {/if}
+        </div>
+    </div>
+</div>
 
 <style>
+    /* Two-zone flex row (mirrors the Requests-tab .req-head): identity grows,
+     * meta cluster keeps its intrinsic width on the right. align-items:center
+     * vertically centers the right cluster against the two identity lines. */
     .row {
+        display: flex;
+        align-items: center;
+        gap: var(--s-5);
+        padding: var(--s-2) var(--s-3);
+        border-bottom: 1px solid var(--border-quiet);
         cursor: pointer;
         transition: background-color var(--t-fast);
     }
+    .row:last-child { border-bottom: 0; }
     .row:hover { background: var(--panel); }
     .row:focus-visible {
         outline: 0;
@@ -190,29 +209,24 @@
         box-shadow: inset 0 0 0 1px var(--accent-tint);
     }
 
-    .cell {
-        padding: var(--s-2) var(--s-3);
-        border-bottom: 1px solid var(--border-quiet);
-        vertical-align: middle;
+    .identity {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
     }
-    .row:last-child .cell { border-bottom: 0; }
 
-    /* reciter — Latin primary first, Arabic trailing muted. The cell itself
-     * stays a `table-cell` so the colgroup width applies; flex lives on the
-     * inner wrapper. (Setting `display: flex` on a <td> opts it out of the
-     * table layout entirely and collapses the fixed column widths.) */
-    .cell.reciter { overflow: hidden; }
-    .reciter-inner {
+    /* Line 1 — Latin primary first, Arabic trailing muted, reviewer last. */
+    .id-name {
         display: flex;
         align-items: baseline;
-        gap: var(--s-3);
+        gap: var(--s-2);
         min-width: 0;
-        overflow: hidden;
     }
-    /* Unread mark — mirrors the Requests-tab .unread dot for visual parity.
-     * Centered against the row baseline (baseline alignment on the flex
-     * parent would push it under the text), so override to center. */
-    .reciter-inner .unread {
+    /* Unread mark — mirrors the Requests-tab .unread dot. Centered against
+     * the text baseline (baseline alignment would push it under the text). */
+    .unread {
         width: 7px;
         height: 7px;
         border-radius: 50%;
@@ -220,7 +234,7 @@
         flex-shrink: 0;
         align-self: center;
     }
-    .reciter-lt {
+    .name-en {
         font-size: 14px;
         color: var(--text-primary);
         line-height: 1.3;
@@ -229,7 +243,7 @@
         text-overflow: ellipsis;
         flex: 0 1 auto;
     }
-    .reciter-ar {
+    .name-ar {
         font-size: 13px;
         color: var(--text-muted);
         unicode-bidi: isolate;
@@ -238,39 +252,17 @@
         text-overflow: ellipsis;
         flex: 0 1 auto;
     }
-
-    .cell.taxonomy { color: var(--text-secondary); }
-    .chip {
+    /* Reviewer rides the identity line as a small avatar + login. Omitted
+     * entirely when unclaimed (Available / Published rows) — no placeholder. */
+    .reviewer {
         display: inline-flex;
         align-items: center;
-        padding: 2px 8px;
-        border-radius: var(--r-1);
-        background: var(--panel-2);
-        color: var(--text-secondary);
-        font-size: 10.5px;
-        font-family: var(--font-mono);
-        letter-spacing: 0.02em;
-        font-variant-numeric: tabular-nums;
-        border: 1px solid transparent;
+        gap: 6px;
+        flex-shrink: 0;
+        align-self: center;
         white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 100%;
     }
-    .chip.channel {
-        background: transparent;
-        border-color: var(--border-quiet);
-        color: var(--text-muted);
-    }
-
-    .cell.reviewer {
-        font-size: var(--fs-body);
-        color: var(--text-secondary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .cell.reviewer .avatar {
+    .reviewer .avatar {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -281,28 +273,47 @@
         color: var(--accent-strong);
         font-size: 9.5px;
         font-weight: 600;
-        vertical-align: -5px;
-        margin-right: 6px;
     }
-    .cell.reviewer.unassigned { color: var(--text-faint); }
-    .cell.reviewer.unassigned .avatar {
-        background: transparent;
-        border: 1px dashed var(--border-default);
+    .reviewer .who {
+        font-size: var(--fs-meta);
+        color: var(--text-secondary);
     }
 
-    .cell.age {
+    /* Line 2 — riwayah · style · channel as muted dotted text. */
+    .id-meta {
+        display: flex;
+        align-items: baseline;
+        gap: var(--s-2);
+        font-size: var(--fs-meta);
+        min-width: 0;
+    }
+    .id-meta .combo {
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+    .id-meta .combo.channel { color: var(--text-muted); }
+    .id-meta .sep { color: var(--text-faint); }
+
+    /* Right cluster — age + actions, free to clip at the right edge. */
+    .row-meta {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s-3);
+        white-space: nowrap;
+    }
+
+    .age {
         font-family: var(--font-mono);
         font-size: 11px;
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
-        text-align: right;
         white-space: nowrap;
     }
     /* Stale-reviewer nudge: any under_review row whose claim opened > 7d ago
-     * surfaces a warning glyph beside the age. The age text itself shifts to
-     * the warning tone so the row scans as "this needs attention" at a
-     * glance, without the visual weight of a dedicated cell. */
-    .cell.age.stale { color: var(--state-error-fg); }
+     * surfaces a warning glyph beside the age, and the age text shifts to the
+     * warning tone so the row scans as "needs attention" at a glance. */
+    .age.stale { color: var(--state-error-fg); }
     .stale-warn {
         display: inline-block;
         margin-right: 4px;
@@ -312,24 +323,28 @@
         cursor: help;
     }
 
-    .cell.actions { white-space: nowrap; }
-    .cell.actions .btn {
+    .actions {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s-1);
+    }
+    .actions .btn {
         background: transparent;
         border: 1px solid var(--border-quiet);
         color: var(--text-secondary);
         font: inherit;
         font-size: var(--fs-meta);
-        padding: 3px 10px;
+        padding: 4px 12px;
         border-radius: var(--r-1);
         cursor: pointer;
+        white-space: nowrap;
         transition: border-color var(--t-fast), color var(--t-fast), background-color var(--t-fast);
     }
-    .cell.actions .btn + .btn { margin-left: var(--s-1); }
-    .cell.actions .btn:hover {
+    .actions .btn:hover {
         border-color: var(--border-default);
         color: var(--text-primary);
     }
-    .cell.actions .btn.armed {
+    .actions .btn.armed {
         border-color: var(--accent);
         color: var(--accent-strong);
         background: var(--accent-tint-soft);

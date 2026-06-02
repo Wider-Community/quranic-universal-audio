@@ -58,7 +58,7 @@ _last_error: str | None = None
 # ``_SYNC_ENABLED`` is True in production; tests disable it via
 # ``set_sync_enabled(False)`` so the bulk of the suite doesn't pay snapshot
 # cost (dedicated durability tests flip it back on). ``_defer_depth`` lets a
-# boot-scan / sweeper batch wrap N transitions in ``deferred_sync()`` so the
+# boot-scan or other batch loop wrap N transitions in ``deferred_sync()`` so the
 # loop uploads ONCE instead of once-per-commit (the boot/bucket-storm fix).
 _SYNC_ENABLED = True
 _defer_depth: ContextVar[int] = ContextVar("db_sync_defer_depth", default=0)
@@ -336,11 +336,13 @@ def mark_durable() -> None:
 def deferred_sync() -> Iterator[None]:
     """Coalesce uploads across a batch of commits into ONE upload on exit.
 
-    Boot-scan (``hydrate_initial_seen``) and the wip sweeper apply N transitions
-    in a loop; without this each would CAS-upload, storming the bucket at boot.
+    Boot-scan (``hydrate_initial_seen``) applies N transitions in a loop;
+    without this each would CAS-upload, storming the bucket at boot.
     The outermost block uploads once (only if the body didn't raise and at least
-    one durable boundary ran). Re-entrant via a depth counter.
+    one transaction actually committed). Re-entrant via a depth counter.
     """
+    outermost = _defer_depth.get() == 0
+    entry_seq = connection.current_db_seq() if outermost else 0
     token = _defer_depth.set(_defer_depth.get() + 1)
     raised = False
     try:
@@ -351,8 +353,14 @@ def deferred_sync() -> Iterator[None]:
     finally:
         depth = _defer_depth.get()
         _defer_depth.reset(token)
+        # Outermost block uploads — but only if the batch actually advanced the
+        # seq. A no-op batch (e.g. a boot scan that found nothing stuck) has
+        # nothing newer than the bytes we just pulled, so uploading would only
+        # trip the equal-seq CAS guard against the previous container's nonce
+        # and log a spurious ERR on every restart. Skip it.
         if depth == 1 and not raised and _SYNC_ENABLED:
-            upload()
+            if connection.current_db_seq() > entry_seq:
+                upload()
 
 
 @contextmanager

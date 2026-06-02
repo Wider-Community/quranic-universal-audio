@@ -16,17 +16,21 @@
     import { onMount } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { consumeWarm, recycleAsShadow, shadowPrewarm } from '../../lib/playback/shadow-audio';
     import {
         addBookmark,
         bookmarks,
         isBookmarked,
         removeBookmark,
     } from '../../lib/stores/bookmarks';
+    import { hasCapability } from '../../lib/stores/capabilities';
+    import { currentUser } from '../../lib/stores/current-user';
     import { pendingTsNavigation } from '../../lib/stores/navigation';
     import type { TsConfigResponse, TsDataResponse } from '../../lib/types/api';
     import type { TsReciter } from '../../lib/types/domain';
     import { getActiveTab } from '../../lib/utils/active-tab';
     import { LS_KEYS } from '../../lib/utils/constants';
+    import { ensureChapterPeaks } from '../../lib/utils/peaks-fetch';
     import { surahInfoReady } from '../../lib/utils/surah-info';
     import AnimationDisplay from './components/AnimationDisplay.svelte';
     import TimestampsAudio from './components/TimestampsAudio.svelte';
@@ -35,10 +39,10 @@
     import TimestampsShortcutsGuide from './components/TimestampsShortcutsGuide.svelte';
     import TimestampsViewControls from './components/TimestampsViewControls.svelte';
     import TimestampsWaveform from './components/TimestampsWaveform.svelte';
+    import TsValidationPanel from './components/TsValidationPanel.svelte';
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
         assembleVerseFromShard,
-        audioUrlFor,
         catalogReciterRows,
         chapterVerseRefs,
         getRandomTarget,
@@ -48,8 +52,12 @@
         loadDk,
         loadManifest,
         loadQpc,
+        loadTsValidation,
         loadVbrChapters,
         loadVerseTranslations,
+        reciterAudioFromManifest,
+        resolveAudioUrl,
+        tsPlayUrl,
     } from './services/ts_client';
     import {
         granularity,
@@ -63,12 +71,16 @@
         verseTranslations,
         viewMode,
     } from './stores/display';
+    import { tsLoading } from './stores/loading';
     import {
         autoAdvancing,
+        currentTime,
         loopTarget,
+        tsAudioElement,
         tsPort,
         tsVbrChapters,
     } from './stores/playback';
+    import { tsValidation } from './stores/validation';
     import {
         chapters,
         loadedVerse,
@@ -108,6 +120,14 @@
 
     async function init(): Promise<void> {
         loadConfig().then((cfg) => tsConfig.set(cfg as TsConfigResponse));
+
+        // Prefetch the ~3MB word-text dicts at mount, concurrent with the
+        // manifest/catalog/surah-info loads. They're shared immutable reference
+        // data (same for every reciter/verse) — loaded once in the background
+        // here and browser-cached, so verse loads hit a warm cache rather than
+        // the user paying the download on a click.
+        void loadQpc().catch(() => {});
+        void loadDk().catch(() => {});
 
         const savedView = localStorage.getItem(LS_KEYS.TS_VIEW_MODE);
         if (savedView === TS_VIEW_MODES.ANALYSIS || savedView === TS_VIEW_MODES.ANIMATION) {
@@ -222,7 +242,18 @@
         selectedVerse.set('');
         clearDisplay();
         tsVbrChapters.set(new Set());
+        tsValidation.set(null);
         if (!reciter) return;
+
+        // Owner + maintainer only: load verse-level ts-validation flags.
+        // Gated on the capability so public users never trigger the bucket
+        // read on the single worker (the server 403s them anyway).
+        if (hasCapability(get(currentUser), 'timestamps.view_validation')) {
+            void loadTsValidation(reciter).then((doc) => {
+                // Ignore a stale response if the reciter changed mid-flight.
+                if (get(selectedReciter) === reciter) tsValidation.set(doc);
+            });
+        }
 
         try {
             const m = await loadManifest();
@@ -249,17 +280,29 @@
     }
 
     /** Populate the verses store from a chapter shard. Caches on ts_client's
-     *  shard LRU so subsequent verse picks within the chapter are free. */
+     *  shard LRU so subsequent verse picks within the chapter are free.
+     *
+     *  ``audio_url`` is derived from the MANIFEST's reciter block, not the
+     *  shard's `_meta.url_template` (stale on shards baked before the audio
+     *  manifest landed); the shard's `_meta.audio_urls` rides as last-resort
+     *  per-verse fallback when no template applies. */
     async function populateVersesFor(reciter: string, chapter: number): Promise<void> {
         try {
-            const shard = await loadChapterShard(reciter, chapter);
+            const [shard, manifest] = await Promise.all([
+                loadChapterShard(reciter, chapter),
+                loadManifest(),
+            ]);
+            const reciterAudio = reciterAudioFromManifest(manifest, reciter);
             const meta = shard._meta;
             const refs = chapterVerseRefs(shard);
             const opts: TsVerseOption[] = refs.map((ref) => {
                 const [s, a] = ref.split('-', 1)[0]!.split(':');
                 const surahN = parseInt(s ?? '0', 10);
                 const ayahN = parseInt(a ?? '0', 10);
-                return { ref, audio_url: audioUrlFor(meta, surahN, ayahN) };
+                const audio_url = reciterAudio
+                    ? resolveAudioUrl(reciterAudio.url_template, meta.audio_urls, surahN, ayahN)
+                    : '';
+                return { ref, audio_url };
             });
             verses.set(opts);
         } catch (e) {
@@ -275,20 +318,50 @@
         await loadTimestampVerse(reciter, parseInt(chapter, 10), verseRef);
     }
 
+    /** Jump the cascade to a ts-validation-flagged verse (may switch chapter). */
+    async function jumpToFlaggedVerse(verseKey: string): Promise<void> {
+        const reciter = get(selectedReciter);
+        const surah = parseInt(verseKey.split(':')[0] ?? '0', 10);
+        if (!reciter || !surah) return;
+        if (get(selectedChapter) !== String(surah)) {
+            selectedChapter.set(String(surah));
+            await populateVersesFor(reciter, surah);
+        }
+        selectedVerse.set(verseKey);
+        await loadTimestampVerse(reciter, surah, verseKey);
+    }
+
     async function loadTimestampVerse(
         reciter: string,
         chapter: number,
         verseRef: string,
     ): Promise<void> {
-        document.body.classList.add('loading');
+        // Single-flight: ignore re-entry while a load is in flight (the old
+        // body-level `pointer-events:none` gave this for free; tsLoading now
+        // does it locally). Guards keyboard/auto/click paths uniformly.
+        if (get(tsLoading)) return;
+        tsLoading.set(true);
         try {
-            const [shard, qpc, dk] = await Promise.all([
+            // qpc/dk are prewarmed at mount + browser-cached, so awaiting them
+            // here is a warm-cache hit in the steady state; the shard is what
+            // actually gates paint. vbr resolves concurrently too. The manifest
+            // is also a warm cache here (loaded at mount + cached forever) —
+            // we await it to get the authoritative reciter-audio block.
+            const [shard, qpc, dk, vbr, manifest] = await Promise.all([
                 loadChapterShard(reciter, chapter),
                 loadQpc(),
                 loadDk(),
+                loadVbrChapters(reciter),
+                loadManifest(),
             ]);
-            tsVbrChapters.set(new Set(await loadVbrChapters(reciter)));
-            const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk);
+            const reciterAudio = reciterAudioFromManifest(manifest, reciter);
+            if (!reciterAudio) {
+                console.error('Manifest missing reciter block:', reciter);
+                alert('Failed to load verse');
+                return;
+            }
+            tsVbrChapters.set(new Set(vbr));
+            const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk, reciterAudio);
             if (!data) {
                 alert('Error: verse not found in shard');
                 return;
@@ -298,7 +371,7 @@
             console.error('Error loading timestamp verse:', e);
             alert('Failed to load verse');
         } finally {
-            document.body.classList.remove('loading');
+            tsLoading.set(false);
         }
     }
 
@@ -306,53 +379,73 @@
         reciter: string | null = null,
         autoplay: boolean = true,
     ): Promise<void> {
-        document.body.classList.add('loading');
+        if (get(tsLoading)) return; // single-flight (storm guard)
+        tsLoading.set(true);
         try {
-            const target = reciter
-                ? consumePreroll('same') ?? await getRandomTarget({ reciter })
-                : consumePreroll('any') ?? await getRandomTarget();
-            if (!target) {
-                console.warn('No timestamp data available');
-                return;
-            }
-
-            const [shard, qpc, dk] = await Promise.all([
-                loadChapterShard(target.reciter, target.chapter),
-                loadQpc(),
-                loadDk(),
-            ]);
-            tsVbrChapters.set(new Set(await loadVbrChapters(target.reciter)));
-            const data = assembleVerseFromShard(target.reciter, shard, target.verseRef, qpc, dk);
-            if (!data) {
-                console.error('Random target verse missing from shard:', target);
-                return;
-            }
-
-            const reciterChanged = get(selectedReciter) !== data.reciter;
-            if (reciterChanged) {
-                selectedReciter.set(data.reciter);
-                localStorage.setItem(LS_KEYS.TS_RECITER, data.reciter);
-                try {
-                    const m = await loadManifest();
-                    chapters.set(m.reciters[data.reciter]?.ts_chapters ?? []);
-                } catch {
-                    chapters.set([]);
-                }
-            }
-            if (reciterChanged || get(selectedChapter) !== String(data.chapter)) {
-                selectedChapter.set(String(data.chapter));
-                await populateVersesFor(data.reciter, data.chapter);
-            }
-
-            ingestVerseData(data, autoplay);
+            await loadRandomTimestampInner(reciter, autoplay);
         } catch (e) {
             console.error('Error loading random timestamp:', e);
         } finally {
-            document.body.classList.remove('loading');
+            tsLoading.set(false);
             // Refresh both pre-rolls in parallel — fire-and-forget; the cache
             // they leave behind makes the next click instant.
             primePrerolls();
         }
+    }
+
+    /** Body of the random load WITHOUT the single-flight guard, so the
+     *  bookmark-deep-link path (which already holds tsLoading) can fall back
+     *  to it without self-deadlocking on the guard. */
+    async function loadRandomTimestampInner(
+        reciter: string | null,
+        autoplay: boolean,
+    ): Promise<void> {
+        const target = reciter
+            ? consumePreroll('same') ?? await getRandomTarget({ reciter })
+            : consumePreroll('any') ?? await getRandomTarget();
+        if (!target) {
+            console.warn('No timestamp data available');
+            return;
+        }
+
+        const [shard, qpc, dk, vbr, manifest] = await Promise.all([
+            loadChapterShard(target.reciter, target.chapter),
+            loadQpc(),
+            loadDk(),
+            loadVbrChapters(target.reciter),
+            loadManifest(),
+        ]);
+        const reciterAudio = reciterAudioFromManifest(manifest, target.reciter);
+        if (!reciterAudio) {
+            console.error('Manifest missing reciter block:', target.reciter);
+            return;
+        }
+        tsVbrChapters.set(new Set(vbr));
+        const data = assembleVerseFromShard(
+            target.reciter, shard, target.verseRef, qpc, dk, reciterAudio,
+        );
+        if (!data) {
+            console.error('Random target verse missing from shard:', target);
+            return;
+        }
+
+        const reciterChanged = get(selectedReciter) !== data.reciter;
+        if (reciterChanged) {
+            selectedReciter.set(data.reciter);
+            localStorage.setItem(LS_KEYS.TS_RECITER, data.reciter);
+            try {
+                const m = await loadManifest();
+                chapters.set(m.reciters[data.reciter]?.ts_chapters ?? []);
+            } catch {
+                chapters.set([]);
+            }
+        }
+        if (reciterChanged || get(selectedChapter) !== String(data.chapter)) {
+            selectedChapter.set(String(data.chapter));
+            await populateVersesFor(data.reciter, data.chapter);
+        }
+
+        ingestVerseData(data, autoplay);
     }
 
     // ---------------------------------------------------------------------
@@ -376,7 +469,8 @@
         ayah: number,
         autoplay: boolean = true,
     ): Promise<void> {
-        document.body.classList.add('loading');
+        if (get(tsLoading)) return; // single-flight
+        tsLoading.set(true);
         const verseRef = `${surah}:${ayah}`;
         try {
             const m = await loadManifest();
@@ -390,8 +484,12 @@
                 try {
                     const shard = await loadChapterShard(reciter, surah);
                     if (!chapterVerseRefs(shard).includes(verseRef)) continue;
+                    const reciterAudio = reciterAudioFromManifest(m, reciter);
+                    if (!reciterAudio) continue;
                     tsVbrChapters.set(new Set(await loadVbrChapters(reciter)));
-                    const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk);
+                    const data = assembleVerseFromShard(
+                        reciter, shard, verseRef, qpc, dk, reciterAudio,
+                    );
                     if (!data) continue;
                     selectedReciter.set(data.reciter);
                     localStorage.setItem(LS_KEYS.TS_RECITER, data.reciter);
@@ -407,12 +505,13 @@
             }
             // No published reciter has this exact verse — fall back to random
             // so the tab still shows something rather than an empty state.
+            // Use the inner (un-guarded) form: we already hold tsLoading.
             console.warn(`No reciter found for ${verseRef}; falling back to random`);
-            await loadRandomTimestamp(null, autoplay);
+            await loadRandomTimestampInner(null, autoplay);
         } catch (e) {
             console.error('Error loading bookmarked verse:', e);
         } finally {
-            document.body.classList.remove('loading');
+            tsLoading.set(false);
             primePrerolls();
         }
     }
@@ -442,19 +541,91 @@
     }
 
     /** Re-roll both pre-rolls. Their shards are pre-fetched into the LRU
-     *  by `getRandomTarget` itself, so consuming the pre-roll is dict-fast. */
+     *  by `getRandomTarget` itself, so consuming the pre-roll is dict-fast.
+     *  Each resolved target ALSO warms its chapter peaks (both kinds) AND
+     *  its audio into a slot-specific shadow `<audio>` element, so the
+     *  consume path can transplant the already-decoded element into the
+     *  visible slot — no second decode pass on the play click. */
     function primePrerolls(): void {
         const reciter = get(selectedReciter) || null;
         if (reciter) {
             getRandomTarget({ reciter })
-                .then((t) => { nextRandomSame = t; })
+                .then((t) => { nextRandomSame = t; warmPreroll(t, 'same'); })
                 .catch(() => { nextRandomSame = null; });
         } else {
             nextRandomSame = null;
         }
         getRandomTarget()
-            .then((t) => { nextRandomAny = t; })
+            .then((t) => { nextRandomAny = t; warmPreroll(t, 'any'); })
             .catch(() => { nextRandomAny = null; });
+    }
+
+    /** Fire-and-forget warmers for a pre-roll target. Warms the chapter peaks
+     *  (deduped in `ensureChapterPeaks`) and an audio shadow element keyed by
+     *  `slot` ('same' = random-current, 'any' = random-any). The shadow
+     *  element seeks to the verse start so the decoder warms at the verse
+     *  position (not byte 0), making `consumeWarm` on transplant return an
+     *  element that's ready to play within a frame. */
+    async function warmPreroll(
+        t: { reciter: string; chapter: number; verseRef: string } | null,
+        slot: 'same' | 'any',
+    ): Promise<void> {
+        if (!t) return;
+        const cur = get(loadedVerse)?.data;
+        if (cur && cur.reciter === t.reciter && cur.chapter === t.chapter
+            && cur.verse_ref === t.verseRef) {
+            return;
+        }
+        // Peaks: cheap GET-once-per-chapter, cached by reciter:chapter.
+        ensureChapterPeaks(t.reciter, t.chapter).catch(() => {});
+        try {
+            // Shard for the per-verse audio_urls fallback only; url_template +
+            // audio_category come from the manifest (warm cache singleton).
+            const [shard, manifest] = await Promise.all([
+                loadChapterShard(t.reciter, t.chapter),
+                loadManifest(),
+            ]);
+            const reciterAudio = reciterAudioFromManifest(manifest, t.reciter);
+            if (!reciterAudio) return;
+            const head = t.verseRef.split('-')[0] ?? t.verseRef;
+            const [s, a] = head.split(':');
+            const surah = parseInt(s ?? '0', 10);
+            const ayah = parseInt(a ?? '0', 10);
+            const rawUrl = resolveAudioUrl(
+                reciterAudio.url_template, shard._meta.audio_urls, surah, ayah,
+            );
+            if (!rawUrl) return;
+            const cat = reciterAudio.audio_category === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio';
+            const playUrl = tsPlayUrl(t.reciter, rawUrl, cat);
+
+            // For by_surah_audio, the playback element starts the verse at the
+            // verse's offset within the chapter file. Recompute that offset so
+            // the shadow can seek there and warm the decoder at the actual
+            // play position. For by_ayah the file IS the verse → seek 0.
+            let seekSec = 0;
+            if (cat === 'by_surah_audio') {
+                const rawRow = shard[t.verseRef] as unknown;
+                const isObjRow = !!rawRow && typeof rawRow === 'object' && !Array.isArray(rawRow);
+                const objRow = isObjRow ? rawRow as Record<string, unknown> : null;
+                const segStartMs = objRow && typeof objRow.verse_start_ms === 'number'
+                    ? (objRow.verse_start_ms as number)
+                    : null;
+                const wordsRaw: unknown[] = Array.isArray(rawRow)
+                    ? rawRow
+                    : (objRow && Array.isArray(objRow.words) ? objRow.words : []);
+                const firstWord = wordsRaw[0];
+                const firstWordStart = Array.isArray(firstWord) && typeof firstWord[1] === 'number'
+                    ? (firstWord[1] as number)
+                    : null;
+                const startMs = segStartMs !== null && firstWordStart !== null
+                    ? Math.min(segStartMs, firstWordStart)
+                    : (segStartMs ?? firstWordStart ?? 0);
+                seekSec = startMs / 1000;
+            }
+            shadowPrewarm(playUrl, { slot, seekSec });
+        } catch {
+            /* prewarm is best-effort */
+        }
     }
 
     function ingestVerseData(data: TsDataResponse, autoplay: boolean = true): void {
@@ -471,16 +642,13 @@
         // sendfile + Range/304. Falls through to a CDN stream-through inside
         // the proxy when the chapter isn't prefetched. Sending the browser
         // straight at the CDN URL wastes the prefetch and bills upstream.
-        const playUrl = (data.audio_category === 'by_surah_audio'
-            && data.audio_url
-            && !data.audio_url.startsWith('/api/'))
-            ? `/api/seg/audio-proxy/${data.reciter}?url=${encodeURIComponent(data.audio_url)}`
-            : data.audio_url;
+        const playUrl = tsPlayUrl(data.reciter, data.audio_url, data.audio_category);
+        const vbr = get(tsVbrChapters).has(data.chapter);
         tsPort.setSource({
             audioUrl: data.audio_url,
             cbrSrc: playUrl,
             reciter: data.reciter,
-            vbr: get(tsVbrChapters).has(data.chapter),
+            vbr,
         });
         // Auto-next reaches here right after AudioRange.`_pauseAndFlush` ramped
         // the gain to 0. The eventual `setRange→_uncut` lifting it back to 1
@@ -490,10 +658,83 @@
         // play() (autoplay policy). Lift the cut on the same tick as the
         // load so the next play() sees gain=1 immediately.
         tsPort.uncut();
-        audioComp?.load(playUrl, tsSegOffset, autoplay);
+
+        // Element-reuse fast path: if a shadow slot was prewarmed for this
+        // URL, transplant the already-decoded element into the visible slot
+        // instead of re-loading + re-decoding on the current visible element.
+        // VBR plays through the segment-clip endpoint which is per-verse, so
+        // the chapter-URL shadow doesn't apply — fall through to the normal
+        // load path in that case.
+        const warm = !vbr ? consumeWarm(playUrl) : null;
+        if (warm && audioComp) {
+            adoptWarmElement(warm, playUrl, tsSegOffset, autoplay);
+        } else {
+            audioComp?.load(playUrl, tsSegOffset, autoplay);
+        }
         autoAdvancing.set(false);
         // Verse change invalidates any active loop target.
         loopTarget.set(null);
+    }
+
+    /** Swap the visible `<audio>` with a prewarmed shadow element. The shadow
+     *  already has `src` loaded and is seeked at (or near) the verse start;
+     *  this is the gapless path that avoids the visible element's
+     *  load → canplay → seek → decode round trip.
+     *
+     *  After the swap:
+     *    - `tsPort` re-binds DOM listeners to the new element and synthesises
+     *      its `_window` so future `loadCovering` short-circuits.
+     *    - `tsAudioElement` store updates so reactive consumers (SpeedControl,
+     *      waveform interactions) rebind.
+     *    - The old visible element is recycled back into the 'any' shadow slot
+     *      for the next rotation.
+     *
+     *  The Svelte `bind:this` references inside `AudioElement.svelte` /
+     *  `AudioPlayer.svelte` go stale, but they're only read at mount time
+     *  for the initial port attach + onError path. The runtime path goes
+     *  through `tsPort` and `tsAudioElement`, both updated here. */
+    function adoptWarmElement(
+        warmEl: HTMLAudioElement,
+        srcUrl: string,
+        seekSec: number,
+        autoplay: boolean,
+    ): void {
+        const oldEl = tsPort.element;
+        if (!oldEl || !oldEl.parentNode) {
+            // Fallback when the visible element isn't in the DOM yet (mount
+            // races) — fall through to the normal load path.
+            audioComp?.load(srcUrl, seekSec, autoplay);
+            return;
+        }
+        // Mirror the visible element's user-facing attributes before the
+        // physical DOM swap so the user sees no flash.
+        warmEl.controls = oldEl.controls;
+        warmEl.id = oldEl.id;
+        // Preserve playback rate so the speed selector stays in sync.
+        warmEl.playbackRate = oldEl.playbackRate;
+        warmEl.hidden = false;
+        warmEl.style.display = '';
+        warmEl.removeAttribute('aria-hidden');
+
+        oldEl.pause();
+        oldEl.parentNode.replaceChild(warmEl, oldEl);
+
+        // Re-wire the port + reactive consumers. `adoptElement` synthesises a
+        // CBR `_window` so `seekAndPlay` doesn't trigger a fresh load.
+        tsPort.adoptElement(warmEl, srcUrl);
+        tsAudioElement.set(warmEl);
+
+        // Recycle the previously-visible element back into the 'any' slot so
+        // the next prewarm has a target. Its Web Audio kill-switch graph (if
+        // wired) is preserved via the per-element WeakMap in audio-graph.ts.
+        recycleAsShadow(oldEl, 'any');
+
+        if (autoplay) {
+            tsPort.seekAndPlay(seekSec * 1000);
+        } else {
+            tsPort.seek(seekSec * 1000);
+        }
+        currentTime.set(tsPort.currentTimeMs() / 1000);
     }
 
     function clearDisplay(): void {
@@ -657,6 +898,16 @@
         on:verseChange={(e) => onVerseChange(e.detail)}
     />
 
+    {#if $tsValidation}
+        <div class="ts-validation-row">
+            <TsValidationPanel
+                doc={$tsValidation}
+                activeVerse={$selectedVerse}
+                onselect={jumpToFlaggedVerse}
+            />
+        </div>
+    {/if}
+
     {#if currentVerseKey}
         <div class="ts-bookmark-row">
             <button
@@ -690,7 +941,7 @@
             on:randomCurrent={() => loadRandomTimestamp(get(selectedReciter) || null)}
         />
 
-        <div class="waveform-words-row">
+        <div class="waveform-words-row" class:ts-region-loading={$tsLoading}>
             <TimestampsWaveform bind:this={waveformTabEl} />
             <div hidden={$viewMode === TS_VIEW_MODES.ANIMATION}>
                 <UnifiedDisplay bind:this={unifiedEl} />
@@ -703,6 +954,20 @@
 </div>
 
 <style>
+    /* Localized load dim: only the waveform+display region fades while a verse
+       loads, instead of the old document.body 50% full-page grey-out. Keeps the
+       previous verse visible (least jarring) and leaves controls interactive. */
+    .waveform-words-row {
+        transition: opacity 0.12s ease;
+    }
+    .waveform-words-row.ts-region-loading {
+        opacity: 0.55;
+        pointer-events: none;
+    }
+    .ts-validation-row {
+        max-width: 720px;
+        margin: 8px auto 2px;
+    }
     .ts-bookmark-row {
         display: flex;
         justify-content: center;

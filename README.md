@@ -1,44 +1,40 @@
 <h1 align="center">Qur'anic Universal Audio</h1>
 
 <p align="center">
-  <a href="https://huggingface.co/spaces/hetchyy/quranic-universal-aligner"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Demo-Qur'anic%20Universal%20Aligner-E8C32E" alt="Demo - Qur'anic Universal Aligner"></a>
-  <a href="https://huggingface.co/spaces/hetchyy/Quran-reciter-requests"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Request-Align%20a%20Reciter-E8C32E" alt="Request - Align a Reciter"></a>
+  <a href="https://huggingface.co/spaces/hetchyy/quranic-universal-aligner"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Tool-Qur'anic%20Universal%20Aligner-E8C32E" alt="Demo - Qur'anic Universal Aligner"></a>
+  <a href="https://hetchyy-quranic-universal-audio.hf.space/"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Website-Qur'anic%20Universal%20Audio-E8C32E" alt="App - Qur'anic Universal Audio"></a>
   <a href="https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Qur'anic%20Universal%20Ayahs-E8C32E" alt="Dataset - Qur'anic Universal Ayahs"></a>
-  <br>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Unsegmented-832%20reciters%20%C2%B7%2014,320h-d4842a" alt="Unsegmented"></a>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-16%20%2F%2020-f0ad4e" alt="Riwayat"></a>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Segmented-14%20reciters%20%C2%B7%20336h-d4842a" alt="Segmented"></a>
+  <!-- <br> -->
+  <!-- <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Unsegmented-832%20reciters%20%C2%B7%2014,320h-d4842a" alt="Unsegmented"></a> -->
+  <!-- <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-16%20%2F%2020-f0ad4e" alt="Riwayat"></a> -->
+  <!-- <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Segmented-14%20reciters%20%C2%B7%20336h-d4842a" alt="Segmented"></a> -->
   <br>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/releases/latest"><img src="https://img.shields.io/github/v/release/Wider-Community/quranic-universal-audio?label=Release&color=4a5568" alt="Latest Release"></a>
   <a href="https://github.com/Wider-Community/quranic-universal-audio"><img src="https://img.shields.io/github/stars/Wider-Community/quranic-universal-audio?style=social" alt="GitHub stars"></a>
+  <a href="https://discord.gg/cZ3V2FynXz"><img src="https://img.shields.io/badge/Discord-Join-5865f2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
-<p align="center">The all-in-one audio and timing hub for Qur'anic apps, developers, and researchers. A community-verified dataset of 350+ reciters with word- and letter-level timestamps across 16 riwayat.</p>
-
-https://github.com/user-attachments/assets/b81e805b-129e-4be9-af51-94d3babd4bd2
+<p align="center">The all-in-one audio and timing hub for Qur'anic apps, developers, and researchers. A timestamps visualizer, editing tool and community-verified dataset unifying recitations at scale with word- and letter-level timestamps.</p>
 
 ## Key Highlights
 
-- **Unified Qur'anic audio hub** — A single consistent schema with comprehensive metadata for all recitations. No more chasing scattered websites, CDN APIs, YouTube playlists, and raw files with different formats, surah/ayah splits, and inconsistent reciter names.
+- **Unified Qur'anic audio hub:** A single consistent schema with comprehensive metadata for reciters and recitations instead of scattered websites, CDN APIs, YouTube playlists, and raw files with different formats.
 
-- **Large-scale, multi-riwayah, multi-style** — Full Qur'an coverage for [350+ reciters and 14 riwayat](data/RECITERS.md) spanning mujawwad, murattal, muallim, taraweeh and children repeat styles, with dedicated handling of wording and verse numbering differences across riwayat.
+- **Large-scale, multi-riwayah, multi-style:** Full Qur'an coverage for hundreds of recitations and thousands of hours spanning mujawwad, murattal, muallim, taraweeh and children repeat styles, and different riwayat.
 
-- **Phoneme-first alignment** — 20ms phoneme-level precision eliminates ambiguity at word boundaries and resolves tajweed effects like idgham where sounds merge across words. Powered by a state-of-the-art Qur'an-specific ASR model trained on hundreds of hours of diverse recitations, robust across styles, voices, and recording conditions.
+- **Phoneme-first alignment:** 20ms phoneme-level precision eliminates ambiguity at word boundaries and disambiguate tajweed effects where sounds merge across words.
 
-- **Repetition-safe, gap-free timestamps** — The pipeline transcribes each silence-based segment independently, so repeated words/verses are detected and timestamped correctly. Word timestamps are padded to fill alignment artefacts, reflecting natural recitation and keeping highlighting perfectly synchronized with no visual gaps. See the [comparison with QUL timestamps](docs/qul_vs_mfa_timestamps.md).
+- **Repetition-safe, gap-free timestamps:** The pipeline transcribes each silence-based segment independently, so repeated words/verses are detected and timestamped correctly. See the [comparison with QUL timestamps](docs/qul_vs_mfa_timestamps.md).
 
-- **Community-driven validation** — No trusting a black-box pipeline. Every stage is automatically checked by dedicated validators and human-correctable through an inspector UI. Review flagged errors like missing words or misaligned boundaries, fix them visually, and the corrections feed back into the dataset.
+- **Community-driven validation:** No trusting a black-box pipeline. Every stage is automatically checked by dedicated validators and human-correctable through an interactive editing UI. Review flagged errors like missing words or misaligned boundaries, fix them visually, and feed corrections back into the dataset.
 
-- **Automated request-to-release pipeline** — [Request alignment](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) or [add a new reciter](docs/adding-a-reciter.md) in any supported format and the tooling handles preparation, normalisation, and verification, going from submission to verified release in hours.
+- **Submit your own recitations:** Add your favorite reciters and different audio sources to the catalog and we handle the processing — typically within a few days.
 
-- **Fully reproducible** — Every JSON file includes creation timestamp, models, parameters, config that produced it, with full traceability backed by Git versioning and documented GitHub Releases.
+- **Comprehensive metadata and versioning:** Each recitation is tagged with a consistent schemas and metadata and versioned with a full history to track segment updates and timestamp corrections over time.
 
-## Data Access
+<!-- ## How we compare -->
 
-To access the audio or timestamps:
-
-1. **Direct download** — JSON files in [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)
-2. **Hugging Face Dataset** — [quranic-universal-ayahs](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)
+<!-- ## Data Access -->
 
 ## Technical Overview
 
@@ -46,22 +42,20 @@ To access the audio or timestamps:
   <img src="docs/quranic_universal_aligner_pipeline.svg" alt="Pipeline diagram">
 </p>
 
-The repository uses the following components:
-
 | Component | Description |
 |-----------|-------------|
-| [`data/`](data/) | Reference data, audio manifests, alignment output, and timestamps, alongside schemas and documentation |
-| [`Quranic Universal Aligner`](https://huggingface.co/spaces/hetchyy/quranic-universal-aligner) | Demo running on Hugging Face GPU demonstrating, also available via [API](docs/client_api.md) |
-| [`inspector/`](inspector/) | Flask web app for browsing, validating, and editing alignment results (segments + timestamps validation lives here) |
-| [`scripts/lib/audio_manifest.py`](scripts/lib/audio_manifest.py) | Pre-pipeline audio manifest validation library (URL reachability, format, coverage) |
-| [`Request Form`](https://huggingface.co/spaces/hetchyy/Quran-reciter-requests) | Community request form and system for new reciter processing |
+| [`Quranic Universal Aligner`](https://huggingface.co/spaces/hetchyy/quranic-universal-aligner) | Demo running on Hugging Face GPU demonstrating our alignmnet toolkit, also available via [API](docs/client_api.md) |
+| [`inspector/`](inspector/) | Entry website for browsing reciters, viewing timestmaps interactively and editing alignment results |
 | [quranic-phonemizer](https://github.com/Hetchy/Quranic-Phonemizer) | External package — Qur'an-specific G2P; the foundation that allows phoneme-level alignment |
 
 ## Contributing
 
-This is a community-based project. While the pipeline is ~95% automated, manual review is essential to guarantee quality. No expertise in tajweed or recitation rules is needed — fixing errors means things like missing words, over/under-segmentation, and low-confidence segments, all done through the inspector UI.
+Visit the [website](https://hetchyy-quranic-universal-audio.hf.space/) and read the overview info and editing guide to get started in contributing recitations and reviewing.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started, or [open an issue](https://github.com/Wider-Community/quranic-universal-audio/issues) for bugs and suggestions.
+Issues and pull requests are welcome. If you've found a bug or have a feature idea, open an [issue](https://github.com/Wider-Community/quranic-universal-audio/issues) or jump into the Discord.
+
+To contribute code to the webapp directly, fork the repo and see [inspector/README.md](inspector/README.md) for setup instructions.
 
 ## License
 
+[CC BY 4.0](LICENSE) — free to share and adapt with attribution.

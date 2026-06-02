@@ -324,6 +324,61 @@ describe('AudioPort — attachElement', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 7b. adoptElement — element-reuse fast path
+// ---------------------------------------------------------------------------
+
+describe('AudioPort — adoptElement', () => {
+    it('binds the new element and synthesises a CBR window without re-loading', async () => {
+        // Set up an already-loaded element (simulating a prewarmed shadow).
+        const warm = makeAudioStub({ src: 'http://cdn/x.mp3', readyState: 4 });
+        port.setSource({ audioUrl: 'http://cdn/x.mp3', reciter: 'r1', vbr: false });
+
+        port.adoptElement(warm as unknown as HTMLAudioElement, 'http://cdn/x.mp3');
+
+        // Window synthesised — no canplay needed.
+        expect(port.window).toMatchObject({
+            startMs: 0,
+            endMs: Number.POSITIVE_INFINITY,
+            offsetMs: 0,
+            isClip: false,
+            src: 'http://cdn/x.mp3',
+        });
+        // No load() called on the adopted element — we're trusting it was
+        // already past canplay when it was handed in.
+        expect(warm.load).not.toHaveBeenCalled();
+        // Subsequent loadCovering short-circuits via fast path 1.
+        const r = port.loadCovering(0, 1000);
+        expect(r.swapped).toBe(false);
+        await r.ready;
+    });
+
+    it('detaches DOM listeners from the prior element when adopting', async () => {
+        port.setSource({ audioUrl: 'http://cdn/a.mp3', reciter: 'r1', vbr: false });
+        port.loadCovering(0, 1000);
+        expect(audio._listeners.get('canplay')?.size).toBe(1);
+
+        const warm = makeAudioStub({ src: 'http://cdn/b.mp3', readyState: 4 });
+        port.adoptElement(warm as unknown as HTMLAudioElement, 'http://cdn/b.mp3');
+
+        // Old element's listeners detached.
+        expect(audio._listeners.get('canplay')?.size).toBe(0);
+        expect(port.element).toBe(warm);
+    });
+
+    it('seekAndPlay after adopt operates on the new element', async () => {
+        const warm = makeAudioStub({ src: 'http://cdn/x.mp3', readyState: 4 });
+        port.setSource({ audioUrl: 'http://cdn/x.mp3', reciter: 'r1', vbr: false });
+        port.adoptElement(warm as unknown as HTMLAudioElement, 'http://cdn/x.mp3');
+
+        port.seekAndPlay(5000);
+        expect(warm.currentTime).toBeCloseTo(5.0, 5);
+        expect(warm.play).toHaveBeenCalledTimes(1);
+        // Original element untouched.
+        expect(audio.play).not.toHaveBeenCalled();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // 8. dispose
 // ---------------------------------------------------------------------------
 

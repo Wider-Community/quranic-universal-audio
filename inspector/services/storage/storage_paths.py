@@ -113,6 +113,18 @@ def low_confidence_path(slug: str) -> str:
     return reciter_file(slug, "low_confidence_v2.json")
 
 
+def ts_validation_path(slug: str) -> str:
+    """Verse-level timestamps-validation sidecar — ``ts_validation.json``.
+
+    Written by the multi-beam generate-timestamps job
+    (``scripts/lib/timestamps_pipeline.py::build_ts_validation``); flags verses
+    whose alignment disagrees under tighter probe beams. Served owner-gated to
+    the Timestamps-tab "ts-validation" accordion (preview of unreleased
+    reciters). Schema: ``scripts/lib/schemas/ts_validation.py``.
+    """
+    return reciter_file(slug, "ts_validation.json")
+
+
 def auto_split_path(slug: str) -> str:
     """Auto-split cursor sidecar — per-seg precomputed cursors + refs.
 
@@ -136,13 +148,17 @@ def pipeline_meta_path(slug: str) -> str:
 
 
 def timestamps_path(slug: str, chapter: str | int) -> str:
-    """Per-chapter timestamps shard. Only released reciters have these — the
-    Timestamps tab gates on DB state, not on file presence."""
+    """Per-chapter timestamps shard (legacy uncompressed). Only released
+    reciters have these — the Timestamps tab gates on DB state, not file
+    presence."""
     return reciter_file(slug, f"timestamps/{chapter}.json")
 
 
-def prefetched_audio_dir(slug: str) -> str:
-    return reciter_file(slug, "audio")
+def timestamps_path_gz(slug: str, chapter: str | int) -> str:
+    """Gzipped per-chapter v2 shard. The job writes these; the read-path
+    prefers them and inflates, falling back to ``timestamps/<chapter>.json``
+    for pre-v2 released reciters."""
+    return reciter_file(slug, f"timestamps/{chapter}.json.gz")
 
 
 def prefetched_audio_path(slug: str, chapter: str | int) -> str:
@@ -182,17 +198,13 @@ def prefetched_peaks_backup_path(slug: str, chapter: str | int) -> str:
     return reciter_file(slug, f"peaks/{chapter}.json.bak")
 
 
-def prefetch_done_marker_path(slug: str) -> str:
-    """Sentinel written atomically last; presence ⇒ prefetch fully completed."""
-    return reciter_file(slug, "audio/_done.json")
-
-
 PER_RECITER_FILES: tuple[str, ...] = (
     "segments.json",
     "detailed.json",
     "edit_history.jsonl",
     "edit_history_peaks.jsonl",
     "low_confidence_v2.json",
+    "ts_validation.json",
     "auto_split_v1.json",
     "pipeline_meta.json",
 )

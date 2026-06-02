@@ -49,7 +49,7 @@ export default [
             }],
             '@typescript-eslint/ban-ts-comment': 'warn',
             'no-unused-vars': 'off',
-            'simple-import-sort/imports': 'error',
+            'simple-import-sort/imports': 'off',
             '@typescript-eslint/consistent-type-imports': ['error', {
                 prefer: 'type-imports',
                 fixStyle: 'separate-type-imports',

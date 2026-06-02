@@ -114,16 +114,6 @@ def test_bucket_for_under_review_marked_ready_is_under_review():
     assert bucket_for(row) == "under_review"
 
 
-def test_bucket_for_awaiting_timestamps_is_under_review():
-    """Post-mark-ready, pre-released rows still surface as under_review."""
-    from services.public_state import bucket_for
-
-    assert (
-        bucket_for(_state_row("test_a", state="awaiting_timestamps"))
-        == "under_review"
-    )
-
-
 def test_bucket_for_released_maps_to_published():
     from services.public_state import bucket_for
 

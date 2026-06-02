@@ -20,7 +20,6 @@ from .storage import cache, data_dir, data_loader, hf_bucket, storage_paths
 from .audio import (
     audio_fetch,
     audio_meta,
-    audio_prefetch,
     audio_source,
     peaks,
     peaks_history,
@@ -37,6 +36,7 @@ from .activity import (
 from .segments import (
     auto_detect,
     auto_split,
+    guide_flags,
     qalqala,
     save,
     segments_query,
@@ -68,7 +68,6 @@ _LEGACY_ALIASES = {
     "storage_paths": storage_paths,
     "audio_fetch": audio_fetch,
     "audio_meta": audio_meta,
-    "audio_prefetch": audio_prefetch,
     "audio_source": audio_source,
     "peaks": peaks,
     "peaks_history": peaks_history,
@@ -80,6 +79,7 @@ _LEGACY_ALIASES = {
     "stats": stats,
     "auto_detect": auto_detect,
     "auto_split": auto_split,
+    "guide_flags": guide_flags,
     "qalqala": qalqala,
     "save": save,
     "segments_query": segments_query,

@@ -2,8 +2,7 @@
 
 Per-op JSONL at ``<bucket>/reciters/<reciter>/edit_history_peaks.jsonl``,
 append-only. Lets the History panel render waveforms across sessions
-without re-computing — and survives the wip-audio sweeper (which GCs
-``reciters/<slug>/{audio,peaks}/`` but not this root-level file), so anonymous
+without re-computing; this root-level file is never GC'd, so anonymous
 viewers of a released reciter still get instant waveforms.
 
 Migration #5 canonical shape (one record per line)::

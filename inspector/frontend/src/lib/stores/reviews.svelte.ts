@@ -1,9 +1,9 @@
 /**
  * Reviews tab selection + drawer state + filters (Svelte 5 rune store).
  *
- * Lifecycle: row body click opens the General drawer; the Ops button on
- * each row opens the Ops drawer. ``close()`` clears selection too so the
- * scrim, the X button, and Esc all funnel through one path.
+ * Lifecycle: row body click opens the General drawer. ``close()`` clears
+ * selection too so the scrim, the X button, and Esc all funnel through one
+ * path.
  *
  * Filters and sort persist across modal open/close (the store is a
  * module-level singleton). They reset on page reload — see
@@ -23,7 +23,7 @@
 
 import { markReviewViewed } from '../api/admin-reviews';
 
-export type ReviewsDrawerKind = 'general' | 'ops';
+export type ReviewsDrawerKind = 'general' | 'timestamps';
 
 export type ReviewsSort = 'stalled' | 'name';
 
@@ -51,6 +51,16 @@ class ReviewsStore {
      * server flag on the next compartment refetch is the durable truth. */
     viewedThisSession = $state<Set<string>>(new Set());
 
+    /** Monotonic refresh signal. Bumping it makes the Reviews compartment
+     * refetch its list — used when an out-of-band change (e.g. a timestamps
+     * job publishing a reciter) moves a row between buckets. */
+    refreshSeq = $state(0);
+
+    /** Ask the Reviews compartment to refetch (e.g. after a job publishes). */
+    requestRefresh(): void {
+        this.refreshSeq += 1;
+    }
+
     /** Open a drawer of ``kind`` against ``slug``. On the first open for a
      * given slug in this session, fire the best-effort viewed-mark POST —
      * caller is expected to handle cross-store counter sync (lives under
@@ -75,11 +85,6 @@ class ReviewsStore {
      * session — drives the row's local dot-suppression guard. */
     isViewedThisSession(slug: string): boolean {
         return this.viewedThisSession.has(slug);
-    }
-
-    /** Swap drawer kind without changing the selected row. */
-    setDrawer(kind: ReviewsDrawerKind): void {
-        this.openDrawer = kind;
     }
 
     /** Close all — clears selection too so the active-row ring drops. */

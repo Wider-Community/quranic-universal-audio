@@ -61,15 +61,6 @@ def test_awaiting_alignment_state_transition_classified_public_requested():
     assert ac.public_kind_for(record) == "requested"
 
 
-def test_timestamps_completed_is_hidden_not_public():
-    """`reciter.timestamps_completed` was demoted from public to hidden in
-    favour of `reciter.published` taking over the `published` kind."""
-    from services import activity_classification as ac
-
-    assert "reciter.timestamps_completed" not in ac.PUBLIC_EVENTS
-    assert ac.classify(_record("reciter.timestamps_completed")) == "hidden"
-
-
 @pytest.mark.parametrize("event", [
     # Former ADMIN_ONLY_EVENTS — admin notifications rail retired; these
     # are now hidden (the Admin dashboard tabs cover them).
@@ -85,7 +76,6 @@ def test_timestamps_completed_is_hidden_not_public():
     "admin.unlocked_for_revision",
     # Always hidden.
     "catalog.edited",
-    "admin.clear_prefetch_purge_at",
     "access.role_granted",
     "access.role_revoked",
     "access.role_updated",

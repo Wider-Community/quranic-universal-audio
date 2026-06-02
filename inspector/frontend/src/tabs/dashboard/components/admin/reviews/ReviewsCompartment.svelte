@@ -22,8 +22,8 @@
     } from '../../../../../lib/types/generated/schemas';
     import { adminDashboard } from '../../../stores/admin-dashboard.svelte';
     import ReviewsGeneralDrawer from './ReviewsGeneralDrawer.svelte';
-    import ReviewsOpsDrawer from './ReviewsOpsDrawer.svelte';
     import ReviewsRow from './ReviewsRow.svelte';
+    import ReviewsTimestampsDrawer from './ReviewsTimestampsDrawer.svelte';
 
     let resp = $state<AdminReviewsResponse | null>(null);
     let loading = $state(true);
@@ -34,7 +34,8 @@
     let refetchSeq = $state(0);
 
     $effect(() => {
-        refetchSeq;  // tracked dep
+        refetchSeq;  // tracked dep (local)
+        reviewsStore.refreshSeq;  // tracked dep (external — e.g. job published a row)
         const ac = new AbortController();
         loading = true;
         error = null;
@@ -69,7 +70,7 @@
         return r.state === 'under_review' && !r.open_claim?.marked_ready_at;
     }
     function isPublished(r: AdminReviewRow): boolean {
-        return r.state === 'awaiting_timestamps' || r.state === 'released';
+        return r.state === 'released';
     }
     function isAvailable(r: AdminReviewRow): boolean {
         return r.state === 'awaiting_review';
@@ -242,7 +243,7 @@
                 {/each}
             </div>
 
-            <div class="facet-group channel-group">
+            <div class="facet-group">
                 <span class="facet-label">Channel</span>
                 {#each channelValues as [val, count] (val)}
                     <button
@@ -312,22 +313,11 @@
                             {#if sectionRows.length === 0}
                                 <div class="empty-line">No items.</div>
                             {:else}
-                                <table class="reviews-table">
-                                    <colgroup>
-                                        <col class="col-reciter" />
-                                        <col class="col-riwayah" />
-                                        <col class="col-style" />
-                                        <col class="col-channel" />
-                                        <col class="col-reviewer" />
-                                        <col class="col-age" />
-                                        <col class="col-actions" />
-                                    </colgroup>
-                                    <tbody>
-                                        {#each sectionRows as row (row.slug)}
-                                            <ReviewsRow {row} />
-                                        {/each}
-                                    </tbody>
-                                </table>
+                                <div class="row-list">
+                                    {#each sectionRows as row (row.slug)}
+                                        <ReviewsRow {row} />
+                                    {/each}
+                                </div>
                             {/if}
                         </div>
                     {/if}
@@ -348,11 +338,10 @@
                 onclose={() => reviewsStore.close()}
                 onaction={refetch}
             />
-        {:else if reviewsStore.openDrawer === 'ops'}
-            <ReviewsOpsDrawer
+        {:else if reviewsStore.openDrawer === 'timestamps'}
+            <ReviewsTimestampsDrawer
                 slug={reviewsStore.selectedSlug}
                 onclose={() => reviewsStore.close()}
-                onaction={refetch}
             />
         {/if}
     {/if}
@@ -451,21 +440,9 @@
         padding: var(--s-3) var(--s-1);
     }
 
-    /* Shared column widths across every section's table — table-layout: fixed
-     * makes the browser honor these exactly, so columns align row-to-row and
-     * section-to-section without any per-row coordination. */
-    .reviews-table {
-        width: 100%;
-        border-collapse: collapse;
-        table-layout: fixed;
-    }
-    /* col-reciter is left implicit (auto) so it absorbs leftover width. */
-    .reviews-table col.col-riwayah   { width: 110px; }
-    .reviews-table col.col-style     { width: 95px; }
-    .reviews-table col.col-channel   { width: 130px; }
-    .reviews-table col.col-reviewer  { width: 150px; }
-    .reviews-table col.col-age       { width: 60px; }
-    .reviews-table col.col-actions   { width: 160px; }
+    /* Rows own their own flex layout + dividers (ReviewsRow.svelte); the list
+     * is just a stacking container now (no rigid table grid). */
+    .row-list { display: flex; flex-direction: column; }
 
     .drawer-scrim {
         position: absolute;
@@ -520,12 +497,6 @@
         gap: 6px;
         max-width: 100%;
         flex-wrap: wrap;
-    }
-    .channel-group {
-        max-width: 360px;
-        overflow-x: auto;
-        flex-wrap: nowrap;
-        scrollbar-width: thin;
     }
     .facet-label {
         font-size: 10.5px;

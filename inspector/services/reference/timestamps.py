@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from config import DK_SCRIPT_PATH, QPC_HAFS_PATH
 from scripts.lib.schemas import ReciterCatalog
 from scripts.lib.timestamps_shards import SCHEMA_VERSION, derive_url_template
+from scripts.lib.timestamps_dedup import is_v2, project_chapter_shard
 from services.storage import data_dir
 from services.state import catalog as catalog_service
 from services.state import state as state_service
@@ -42,6 +43,15 @@ _RESOURCE_PATHS = {
 # lookups so we don't need to hold the lock past `_ensure_built()`.
 _lock = threading.Lock()
 _built = False
+# The ``db_seq`` the cache was built at. The manifest is a projection of which
+# slugs are ``released`` (+ catalog/sidecar metadata), so it MUST rebuild
+# whenever the committed DB advances. Keying on ``db_seq`` (mirrors
+# ``catalog.snapshot()``) makes the cache self-healing: any in-process state
+# commit bumps ``db_seq``, so the next manifest request rebuilds — no reliance
+# on the explicit post-commit ``invalidate()`` (which sits after the durable
+# upload in ``state.transition`` and is skipped if that step raises). ``None``
+# forces a rebuild (boot / explicit invalidate).
+_built_seq: int | None = None
 _manifest_bytes: bytes | None = None
 _resource_bytes: dict[str, bytes] = {}
 # Slugs the manifest advertises (released + chapter-derivable). The shard route
@@ -80,14 +90,37 @@ def _published_reciter_slugs() -> list[str]:
     """Return slugs of reciters in the ``released`` lifecycle state.
 
     State alone — no bucket I/O. The lifecycle gate
-    ``awaiting_timestamps → released`` is what guarantees these slugs have
-    timestamps published; we don't re-verify by walking the bucket dir.
+    ``under_review → released`` (publish fires only on timestamps-job success)
+    is what guarantees these slugs have timestamps published; we don't re-verify
+    by walking the bucket dir.
     """
     return [
         row.slug
         for row in state_service.all_rows()
         if row.state.value == "released"
     ]
+
+
+def _ts_chapters_for(slug: str, delivery) -> list[int]:
+    """Resolve the chapter list the manifest advertises for ``slug``.
+
+    For a fully-documented complete by_surah mushaf (``delivery.chapter_count ==
+    114``) derive ``1..114`` from the catalog (DB) — robust to a sidecar whose
+    chapter keys are partial/corrupt, and provably contiguous so no advertised
+    chapter can 404 (the released gate guarantees all 114 shards exist).
+    Everything else (partial reciters, by_ayah, no delivery) falls back to the
+    gap-accurate sidecar keys.
+
+    NOTE: ``url_template`` + ``vbr_chapters`` still come from the sidecar (see
+    ``_bucket_reciter_block``), so this hardens the chapter list but does not yet
+    avoid the per-slug sidecar read — moving those two fields into the catalog is
+    the follow-up that would let the manifest build skip the bucket entirely.
+    """
+    if (delivery is not None
+            and getattr(delivery.audio_category, "value", delivery.audio_category) == "by_surah"
+            and delivery.chapter_count == 114):
+        return list(range(1, 115))
+    return chapter_numbers(slug)
 
 
 def _url_template(slug: str, audio_category: str) -> str:
@@ -115,6 +148,7 @@ def _bucket_reciter_block(
     slug: str,
     ts_chapters: list[int],
     catalog: ReciterCatalog,
+    delivery=None,
 ) -> dict | None:
     """Compose a manifest reciter block for a bucket-mode reciter.
 
@@ -123,9 +157,11 @@ def _bucket_reciter_block(
     to slug-derived defaults when the catalog has no delivery for ``slug``.
 
     The caller passes one shared ``catalog`` snapshot so the manifest build
-    doesn't re-snapshot (deep-copy) per reciter inside ``_ensure_built``.
+    doesn't re-snapshot (deep-copy) per reciter inside ``_ensure_built``, and
+    the pre-resolved ``delivery`` so we don't re-``find_delivery`` it here.
     """
-    delivery = catalog.find_delivery(slug)
+    if delivery is None:
+        delivery = catalog.find_delivery(slug)
     reciter = (
         catalog.find_reciter(delivery.reciter_id) if delivery is not None else None
     )
@@ -158,27 +194,32 @@ def _ensure_built() -> None:
     Idempotent and thread-safe. Shards are NOT eagerly loaded — see
     ``_load_bucket_shard()``.
     """
-    global _built, _manifest_bytes, _served_slugs
-    if _built:
+    global _built, _built_seq, _manifest_bytes, _served_slugs
+    # Lazy import (keeps this module light, like catalog.snapshot()'s db import).
+    from services import db as _db
+
+    seq = _db.current_db_seq()
+    if _built and _built_seq == seq:
         return
     with _lock:
-        if _built:
+        # Re-check inside the lock; another thread may have just rebuilt at seq.
+        if _built and _built_seq == seq:
             return
         catalog = catalog_service.snapshot()
         reciters_block: dict[str, dict] = {}
         for slug in _published_reciter_slugs():
-            chapters = chapter_numbers(slug)
+            delivery = catalog.find_delivery(slug)
+            chapters = _ts_chapters_for(slug, delivery)
             if not chapters:
-                # No audio_manifest sidecar (or unparseable keys) — skip the
-                # reciter rather than emit a block with an empty chapter list
-                # the FE can't render. Surfaces as "missing from dropdown",
-                # same shape as the pre-fix bucket-empty case.
+                # No catalog-derivable chapters AND no audio_manifest sidecar
+                # (or unparseable keys) — skip rather than emit an empty chapter
+                # list the FE can't render. Surfaces as "missing from dropdown".
                 log.warning(
                     "timestamps: skipping %s — no chapter numbers derivable "
-                    "from audio_manifest sidecar", slug,
+                    "from catalog or audio_manifest sidecar", slug,
                 )
                 continue
-            block = _bucket_reciter_block(slug, chapters, catalog)
+            block = _bucket_reciter_block(slug, chapters, catalog, delivery)
             if block is not None:
                 reciters_block[slug] = block
 
@@ -193,6 +234,7 @@ def _ensure_built() -> None:
         _resource_bytes.clear()
         _resource_bytes.update(_build_resource_bytes())
         _built = True
+        _built_seq = seq
         log.info(
             "timestamps: built manifest (%d reciters, %d resources)",
             len(reciters_block),
@@ -200,13 +242,33 @@ def _ensure_built() -> None:
         )
 
 
-def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
+def _shard_payload(raw: bytes, full: bool) -> bytes:
+    """Return the gzipped shard body to serve.
+
+    v1 shards (verse-map) pass through byte-identical — the entire current
+    bucket is v1, so this is a no-op for existing data. v2 shards
+    (occurrence lists) are deduped to the historical verse-map shape at read
+    time via ``project_chapter_shard``; ``full=True`` serves every occurrence
+    (owner preview / aligner "show all").
+    """
+    try:
+        doc = json.loads(raw)
+    except (ValueError, TypeError):
+        doc = None
+    if isinstance(doc, dict) and is_v2(doc):
+        served = project_chapter_shard(doc, full=full)
+        raw = json.dumps(served, ensure_ascii=False).encode("utf-8")
+    return gzip.compress(raw, compresslevel=6, mtime=0)
+
+
+def _load_bucket_shard(reciter: str, chapter: int, full: bool = False) -> bytes | None:
     """Read + gzip a per-chapter timestamps file from the bucket.
 
-    LRU-cached so chapter scrubbing within one reciter doesn't pay the
-    bucket fetch + gzip cost on every shard hit.
+    LRU-cached (keyed on the ``full`` view too) so chapter scrubbing within
+    one reciter doesn't pay the bucket fetch + gzip cost on every hit. v2
+    shards are deduped at read time — see ``_shard_payload``.
     """
-    key = (reciter, chapter)
+    key = (reciter, chapter, full)
     cached = _shard_lru.get(key)
     if cached is not None:
         _shard_lru.move_to_end(key)
@@ -214,7 +276,7 @@ def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
     raw = data_dir.read_timestamps_chapter(reciter, chapter)
     if raw is None:
         return None
-    body = gzip.compress(raw, compresslevel=6, mtime=0)
+    body = _shard_payload(raw, full)
     _shard_lru[key] = body
     _shard_lru.move_to_end(key)
     while len(_shard_lru) > _SHARD_LRU_CAP:
@@ -228,14 +290,43 @@ def manifest_bytes() -> bytes:
     return _manifest_bytes
 
 
-def shard_bytes(reciter: str, chapter: int) -> bytes | None:
+def shard_bytes(
+    reciter: str,
+    chapter: int,
+    full: bool = False,
+    allow_unreleased: bool = False,
+) -> bytes | None:
     _ensure_built()
     # Only serve shards for reciters the manifest advertises (released + has
     # chapters). Folder-level isolation is gone post-unification, so enforce the
     # released gate here too — don't leak a non-released reciter's timestamps.
-    if reciter not in _served_slugs:
+    # ``allow_unreleased`` is the owner-preview bypass: the route sets it when
+    # the caller holds ``timestamps.view_unreleased`` (capability check lives in
+    # the route — this service stays Flask-free), letting an owner read a
+    # generated-but-unreleased reciter's shards.
+    if reciter not in _served_slugs and not allow_unreleased:
         return None
-    return _load_bucket_shard(reciter, chapter)
+    return _load_bucket_shard(reciter, chapter, full)
+
+
+def ts_validation_doc(
+    reciter: str,
+    allow_unreleased: bool = False,
+) -> dict | None:
+    """Verse-level ``ts_validation.json`` for a reciter, or ``None``.
+
+    Same released/owner-preview gate as ``shard_bytes`` (capability check lives
+    in the route). Returns ``None`` when the reciter isn't viewable or the
+    sidecar is absent (reciter was never run with probe beams). Not cached:
+    owner-preview-only traffic, and the file is re-written whenever a job
+    re-runs — reading the small doc directly avoids a stale cache.
+    """
+    _ensure_built()
+    if reciter not in _served_slugs and not allow_unreleased:
+        return None  # not viewable → route returns 404
+    # Viewable but never run with probe beams → empty doc (not a 404) so the
+    # FE can render an empty panel.
+    return data_dir.read_ts_validation_doc(reciter) or {"_meta": {}, "verses": {}}
 
 
 def resource_bytes(name: str) -> bytes | None:
@@ -244,10 +335,21 @@ def resource_bytes(name: str) -> bytes | None:
 
 
 def invalidate() -> None:
-    """Drop the cached manifest + shards. Tests / future hot-reload hook."""
-    global _built, _manifest_bytes
+    """Drop the cached manifest + shards.
+
+    The ``db_seq`` check in ``_ensure_built`` is the authoritative rebuild
+    trigger; this explicit drop is retained for tests and as a belt-and-braces
+    hook (``state.transition`` still calls it post-commit). Also clears the
+    audio-manifest sidecar caches the manifest build derives URLs from, so a
+    re-extracted reciter's stale sidecar can't leak old URLs into the rebuild.
+    """
+    global _built, _built_seq, _manifest_bytes
     with _lock:
         _built = False
+        _built_seq = None
         _manifest_bytes = None
         _shard_lru.clear()
         _resource_bytes.clear()
+    # Outside the lock — different module's cache, no ordering dependency.
+    from services.storage import cache as _cache
+    _cache.invalidate_audio_manifest_cache()

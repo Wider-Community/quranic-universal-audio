@@ -11,6 +11,7 @@
     import { onMount } from 'svelte';
     import { fade } from 'svelte/transition';
 
+    import { loadCatalogJson } from '../../../../lib/resources/catalog';
     import { catalogData } from '../../stores/catalog-data';
     import { submitWizard } from '../../stores/submit-wizard';
 
@@ -55,9 +56,7 @@
 
     onMount(async () => {
         try {
-            const resp = await fetch('/api/static/catalog.json');
-            if (!resp.ok) return;
-            const cat = await resp.json();
+            const cat = await loadCatalogJson();
             riwayatOptions = (cat?.vocab?.riwayat ?? []).map((r: VocabRow) => ({ slug: r.slug, short: r.short, name: r.name }));
             styleOptions = (cat?.vocab?.styles ?? []).map((s: VocabRow) => ({ slug: s.slug, name: s.name }));
             contextOptions = (cat?.vocab?.recording_contexts ?? []).map((c: VocabRow) => ({ slug: c.slug, name: c.name }));

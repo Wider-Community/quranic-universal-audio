@@ -63,7 +63,9 @@ def set_role(
 
     losing_owner = current == Role.OWNER and target_role != Role.OWNER
     if losing_owner and repo_access.active_owner_count() <= 1:
-        raise LastOwnerError("cannot remove the last remaining owner")
+        raise LastOwnerError(
+            "You can't remove the last owner — promote another owner first."
+        )
 
     reason = f"Role set to {target_role.value} via admin dashboard"
 

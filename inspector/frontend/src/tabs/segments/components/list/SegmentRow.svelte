@@ -30,6 +30,7 @@
     import { quranRefs } from '../../../../lib/refs/quran-refs';
     import type { Segment } from '../../../../lib/types/domain';
     import { clearAccordionPin } from '../../stores/accordion-pin';
+    import { ensureAutoSplitMap } from '../../stores/auto-split';
     import {
         getAdjacentSegments,
         pickerDisplayChapter,
@@ -578,11 +579,11 @@
     }
 
     /** Cross-verse + repetitions accordions show *Auto Split* on every
-     *  candidate row — the FE no longer holds the eligibility-set sidecar
-     *  (saves ~30 KB on cold reciter-select). On click we POST to
-     *  ``/api/seg/auto-split`` and branch on the response: cursors → auto
-     *  panel; null (offline pre-compute miss) → manual split panel.
-     *  Backend caches the parsed sidecar so per-uid compute is O(1). */
+     *  candidate row. Cursor positions come from an offline-precomputed sidecar
+     *  (`auto_split_v1.json`, keyed by segment_uid). The whole map is preloaded
+     *  once on accordion open (stores/auto-split.ts), so the click below is a
+     *  zero-network O(1) lookup; a miss (uid not in map) degrades to manual
+     *  split, same UX as a non-candidate row. */
     $: isAutoSplitCandidate = (validationCategory === 'cross_verse' && isCrossVerse(seg.matched_ref))
         || (validationCategory === 'repetitions' && !!(seg as any).wrap_word_ranges);
     $: isAutoSplit = isAutoSplitCandidate && !!seg.segment_uid;
@@ -593,23 +594,36 @@
         let initialRefs: string[] | null = null;
         if (isAutoSplit) {
             const reciter = get(selectedReciter);
-            if (reciter) {
-                const resp = await fetchJsonOrNull<{
-                    cursors: number[] | null;
-                    refs: string[] | null;
-                }>(
-                    `/api/seg/auto-split/${encodeURIComponent(reciter)}`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            segment_uid: seg.segment_uid,
-                            chapter: rowChapter,
-                        }),
-                    },
-                );
-                initialSplits = resp?.cursors ?? null;
-                initialRefs = resp?.refs ?? null;
+            if (reciter && seg.segment_uid) {
+                // Fast path: the map is preloaded on accordion open, so this
+                // awaits an already-resolved (or in-flight, deduped) promise —
+                // no per-click round trip. A miss is "uid not in map", resolved
+                // without any server call.
+                const map = await ensureAutoSplitMap(reciter);
+                if (map) {
+                    const hit = map[seg.segment_uid] ?? null;
+                    initialSplits = hit?.cursors ?? null;
+                    initialRefs = hit?.refs ?? null;
+                } else {
+                    // Preload failed (network error): fall back to the per-uid
+                    // POST so a transient GET failure still yields cursors.
+                    const resp = await fetchJsonOrNull<{
+                        cursors: number[] | null;
+                        refs: string[] | null;
+                    }>(
+                        `/api/seg/auto-split/${encodeURIComponent(reciter)}`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                segment_uid: seg.segment_uid,
+                                chapter: rowChapter,
+                            }),
+                        },
+                    );
+                    initialSplits = resp?.cursors ?? null;
+                    initialRefs = resp?.refs ?? null;
+                }
                 // cursors === null is the offline-precompute miss case;
                 // enterEditWithBuffer with nulls degrades to manual split.
             }

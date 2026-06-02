@@ -110,6 +110,8 @@ from .state import (
     RevisionContext,
     Visibility,
 )
+from .ts_job_record import TsJobRecord, TsJobSettings
+from .ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 
 __all__ = [
     "ActivityState",
@@ -191,6 +193,11 @@ __all__ = [
     "Source",
     "SourceLink",
     "Style",
+    "TsJobRecord",
+    "TsJobSettings",
+    "TsValidationDoc",
+    "TsValidationMeta",
+    "TsValidationVerse",
     "Visibility",
     "VisitorDayStat",
     "Vocab",

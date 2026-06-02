@@ -8,6 +8,7 @@ import { loadOptional } from '../helpers/optional';
 
 const regMod = await loadOptional<{ IssueRegistry: any }>('../../domain/registry');
 const registry = regMod?.IssueRegistry ?? null;
+const acMod = await loadOptional<{ applyCommand: any }>('../../domain/apply-command');
 
 describe.skipIf(!registry)('registry behavior — parametrized', () => {
   for (const cat of ALL_CATEGORIES) {
@@ -26,7 +27,6 @@ describe.skipIf(!registry)('registry behavior — parametrized', () => {
     });
 
     it(`edit through applyCommand never mutates ignored_categories (${cat})`, async () => {
-      const acMod = await loadOptional<{ applyCommand: any }>('../../domain/apply-command');
       if (!acMod) throw new Error('phase-3 module not present');
       const seg = makeSegment(0, 0, 1000, { segment_uid: `uid-${cat}` });
       const result = acMod.applyCommand(

@@ -33,7 +33,9 @@ from scripts.lib.schemas import (
 )
 
 from . import audit
+from .labels import humanize_state
 from services.auth import permissions
+from services.errors import Codes
 from services import db as _db
 from services.db import _serde, repo_access, repo_claims, repo_state, repo_transitions
 from services.db import sync as _sync
@@ -64,18 +66,44 @@ class InvalidTransition(StateError):
     The database is unchanged; no transition row is written. Callers should
     surface HTTP 400 with the message.
 
-    Optional ``details`` carry structured context the FE can render (e.g.
-    the offending category counts for a mark-ready submission). The app-
-    level error handler at ``app.py`` includes them in the JSON envelope.
+    Optional ``details`` carry structured payloads the FE can render (e.g.
+    the offending category counts for a mark-ready submission). Optional
+    ``code`` is a stable machine constant (``services.errors.Codes``) the FE
+    maps to friendly copy; ``context`` carries display data (e.g. a humanized
+    ``state_label``). The app-level error handler at ``app.py`` includes them
+    in the JSON envelope.
     """
 
-    def __init__(self, message: str, *, details: dict | None = None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: dict | None = None,
+        code: str | None = None,
+        context: dict | None = None,
+    ):
         super().__init__(message)
         self.details = details or None
+        self.code = code
+        self.context = context or None
 
 
 class NotAuthorizedForTransition(StateError):
-    pass
+    """Raised when the actor's tier/ownership doesn't permit a transition (→ 403).
+
+    Optional ``code``/``context`` mirror ``InvalidTransition`` for the FE
+    translation layer."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str | None = None,
+        context: dict | None = None,
+    ):
+        super().__init__(message)
+        self.code = code
+        self.context = context or None
 
 
 # ----------------------------------------------------------------------
@@ -99,11 +127,7 @@ class MergeRejectedPayload(TypedDict, total=False):
 
 
 class PublishedPayload(TypedDict, total=False):
-    pass
-
-
-class TimestampsCompletedPayload(TypedDict):
-    job_id: str
+    job_id: str  # the succeeded timestamps job (already linked at launch)
 
 
 class UnlockedForRevisionPayload(TypedDict):
@@ -154,6 +178,42 @@ def all_rows() -> list[ReciterRow]:
 # ----------------------------------------------------------------------
 
 
+def record_timestamps_job(slug: str, job_id: str) -> list[str]:
+    """Append ``job_id`` to a reciter's ``timestamps_job_ids`` WITHOUT a
+    lifecycle transition — the reciter stays in its current state.
+
+    This links a launched HF Job to the reciter (for the Reviews tab + status
+    proxy); it is job bookkeeping, not a state change, so it deliberately does
+    NOT route through ``transition()``. Persisted under ``durable_transaction``
+    (bucket sync). Returns the updated id list.
+    """
+    with _sync.durable_transaction():
+        row = get_row(slug)
+        if row is None:
+            raise UnknownReciter(slug)
+        ids = list(row.timestamps_job_ids)
+        if job_id and job_id not in ids:
+            ids.append(job_id)
+            repo_state.update_state(slug, timestamps_job_ids=ids)
+        return ids
+
+
+def mark_timestamps_job_finished(slug: str) -> None:
+    """Stamp ``last_job_finished_at = now`` on a reciter WITHOUT a lifecycle
+    transition — pure notification bookkeeping (like ``record_timestamps_job``).
+
+    Called when a timestamps job reaches a terminal state (success *and*
+    failure) so the Reviews-tab dot lights up: success → on the now-released
+    row (Published bucket), failure → on the still-under_review row (Marked
+    ready bucket). The unread predicate compares this against the admin's
+    per-slug ``viewed_at``. Persisted under ``durable_transaction`` (bucket sync).
+    """
+    with _sync.durable_transaction():
+        if get_row(slug) is None:
+            raise UnknownReciter(slug)
+        repo_state.update_state(slug, last_job_finished_at=_now())
+
+
 def _require_capability(actor: Actor, capability: str) -> None:
     """Tier-capability gate — the data-driven replacement for the legacy
     ``_require_maintainer`` / ``_require_owner`` / ``_require_contributor_or_higher``
@@ -170,17 +230,19 @@ def _require_capability(actor: Actor, capability: str) -> None:
 
     if not _capabilities.can(actor, capability):
         raise NotAuthorizedForTransition(
-            f"actor role {actor.role!r} lacks capability {capability!r}"
+            "You don't have permission for this action.",
+            code=Codes.FORBIDDEN_CAPABILITY,
         )
 
 
 # Event → tier capability. Authoritative map of which capability each gated
 # transition enforces (the handler hardcodes the same id inline). Events absent
-# here have NO tier gate by design: server-/sweeper-driven
-# (``reciter.alignment_completed``, ``reciter.timestamps_completed``,
-# ``admin.clear_prefetch_purge_at``) or pure ownership (``reciter.released`` =
+# here have NO tier gate by design: server-driven
+# (``reciter.alignment_completed``) or pure ownership (``reciter.released`` =
 # claim-holder-or-maintainer). The parity test asserts every mapped event
-# rejects an under-privileged actor.
+# rejects an under-privileged actor. Note: ``reciter.published`` is gated by
+# ``reciter.publish`` but is fired by the system (SYSTEM_ACTOR, role OWNER) on
+# timestamps-job success, which passes the gate.
 _EVENT_CAPABILITY: dict[str, str] = {
     "catalog.added": "catalog.add",
     "catalog.edited": "catalog.edit",
@@ -204,14 +266,16 @@ _EVENT_CAPABILITY: dict[str, str] = {
 def _require_claim_holder_or_maintainer(actor: Actor, row: ReciterRow) -> None:
     if not permissions.is_claim_holder_or_maintainer(actor, row):
         raise NotAuthorizedForTransition(
-            "only the current assignee or a maintainer may release this reciter"
+            "Only the contributor who claimed this reciter (or a maintainer) can do that.",
+            code=Codes.NOT_CLAIM_HOLDER,
         )
 
 
 def _require_claim_holder(actor: Actor, row: ReciterRow) -> None:
     if not permissions.is_claim_holder(actor, row):
         raise NotAuthorizedForTransition(
-            "only the current assignee may perform this action"
+            "Only the contributor who currently holds this reciter can do that.",
+            code=Codes.NOT_CLAIM_HOLDER,
         )
 
 
@@ -224,9 +288,28 @@ def _require_reason(reason: str | None, event: str) -> str:
     norm = permissions.normalize_reason(reason)
     if norm is None:
         raise InvalidTransition(
-            f"{event} requires reason ≥ {permissions.MIN_REASON_CHARS} chars"
+            f"Please provide a reason (at least {permissions.MIN_REASON_CHARS} characters).",
+            code=Codes.REASON_REQUIRED,
+            context={"action": event, "min_chars": permissions.MIN_REASON_CHARS},
         )
     return norm
+
+
+def _state_precondition(action: str, before: ReciterRow, message: str | None = None) -> InvalidTransition:
+    """Build a ``STATE_PRECONDITION`` ``InvalidTransition`` for a rejected
+    transition whose row is in the wrong state. ``before`` must be non-None
+    (all call sites guard ``before is None`` first). The FE renders friendly
+    copy from ``code`` + ``context.state_label``; the prose is a plain fallback."""
+    label = humanize_state(before.state)
+    return InvalidTransition(
+        message or f"This action isn't available while the reciter is {label}.",
+        code=Codes.STATE_PRECONDITION,
+        context={
+            "action": action,
+            "current_state": before.state.value,
+            "state_label": label,
+        },
+    )
 
 
 # ----------------------------------------------------------------------
@@ -340,14 +423,13 @@ def _persist_state(before: ReciterRow | None, new_row: ReciterRow, *, tid: str) 
             last_save_at=new_row.last_save_at,
             created_by_transition_id=tid,
             timestamps_job_ids=list(new_row.timestamps_job_ids),
-            prefetch_purge_at=new_row.prefetch_purge_at,
             revision_in_progress=new_row.revision_in_progress,
         )
         return
     updates: dict[str, Any] = {}
     for col in (
         "state", "state_since", "visibility", "visibility_reason",
-        "last_save_at", "timestamps_job_ids", "prefetch_purge_at",
+        "last_save_at", "timestamps_job_ids",
         "revision_in_progress",
     ):
         if getattr(new_row, col) != getattr(before, col):
@@ -516,9 +598,7 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.AWAITING_ALIGNMENT:
-        raise InvalidTransition(
-            f"alignment_completed requires AWAITING_ALIGNMENT, got {before.state.value}"
-        )
+        raise _state_precondition("alignment_completed", before)
 
     # The auto_claim requester is captured by ``_apply_event`` BEFORE this
     # handler resolves the pending request; the follow-up ``reciter.claimed``
@@ -532,7 +612,6 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
         before,
         state=ReciterState.AWAITING_REVIEW,
         state_since=_now(),
-        prefetch_purge_at=None,
     )
 
 
@@ -560,12 +639,12 @@ def _h_requested(slug, before, actor, payload, reason):
 
     if before is not None:
         if before.state != ReciterState.CATALOGUED:
-            raise InvalidTransition(
-                f"requested requires CATALOGUED or no row, got {before.state.value}"
-            )
+            raise _state_precondition("requested", before)
         if before.visibility != Visibility.PUBLIC:
             raise InvalidTransition(
-                f"cannot request a {before.visibility.value!r} reciter"
+                "This reciter isn't available to request.",
+                code=Codes.VISIBILITY_BLOCKED,
+                context={"visibility": before.visibility.value},
             )
 
     # Defense-in-depth: also checked by the route layer.
@@ -625,9 +704,7 @@ def _h_request_rejected_soft(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.AWAITING_ALIGNMENT:
-        raise InvalidTransition(
-            f"request_rejected_soft requires AWAITING_ALIGNMENT, got {before.state.value}"
-        )
+        raise _state_precondition("request_rejected_soft", before)
     _require_capability(actor, "request.reject_soft")
     norm_reason = _require_reason(reason, "request_rejected_soft")
 
@@ -651,9 +728,7 @@ def _h_request_rejected_hard(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.AWAITING_ALIGNMENT:
-        raise InvalidTransition(
-            f"request_rejected_hard requires AWAITING_ALIGNMENT, got {before.state.value}"
-        )
+        raise _state_precondition("request_rejected_hard", before)
     _require_capability(actor, "request.reject_hard")
     norm_reason = _require_reason(reason, "request_rejected_hard")
 
@@ -674,12 +749,12 @@ def _h_claimed(slug, before, actor, payload, reason):
         raise UnknownReciter(slug)
     _require_capability(actor, "claim.acquire")
     if before.state != ReciterState.AWAITING_REVIEW:
-        raise InvalidTransition(
-            f"claimed requires AWAITING_REVIEW, got {before.state.value}"
-        )
+        raise _state_precondition("claimed", before)
     if before.visibility != Visibility.PUBLIC:
         raise InvalidTransition(
-            f"cannot claim a {before.visibility.value!r} reciter"
+            "This reciter isn't available to claim.",
+            code=Codes.VISIBILITY_BLOCKED,
+            context={"visibility": before.visibility.value},
         )
 
     # Payload contributes assignee_login at write time (display cache).
@@ -700,9 +775,7 @@ def _h_released(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.UNDER_REVIEW:
-        raise InvalidTransition(
-            f"released requires UNDER_REVIEW, got {before.state.value}"
-        )
+        raise _state_precondition("released", before)
     # A reviewer who has already marked ready must unmark first (or an
     # admin must force-release / send-back). Self-release on a marked
     # row would silently drop the submission and leave a half-finished
@@ -712,7 +785,9 @@ def _h_released(slug, before, actor, payload, reason):
     # the gate fires only when the claim holder owns the marked row.
     if before.marked_ready and permissions.is_claim_holder(actor, before):
         raise InvalidTransition(
-            "release blocked: unmark ready first, or ask an admin to send back"
+            "You've marked this reciter ready for publish. Choose “Continue editing” "
+            "to reopen it, or ask an admin to send it back.",
+            code=Codes.RELEASE_BLOCKED_MARKED_READY,
         )
     _require_claim_holder_or_maintainer(actor, before)
     return _replace(
@@ -723,7 +798,6 @@ def _h_released(slug, before, actor, payload, reason):
         assignee_login=None,
         assignee_since=None,
         marked_ready=False,
-        prefetch_purge_at=None,
     )
 
 
@@ -747,9 +821,7 @@ def _h_marked_ready(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.UNDER_REVIEW:
-        raise InvalidTransition(
-            f"marked_ready requires UNDER_REVIEW, got {before.state.value}"
-        )
+        raise _state_precondition("marked_ready", before)
     _require_capability(actor, "claim.mark_ready")
     _require_claim_holder(actor, before)
     if before.marked_ready:
@@ -780,7 +852,8 @@ def _h_marked_ready(slug, before, actor, payload, reason):
             submission = MarkReadyRequest.model_validate(payload)
         except ValidationError as e:
             raise InvalidTransition(
-                "marked_ready payload invalid",
+                "Your mark-ready submission was incomplete. Please review and resubmit.",
+                code=Codes.MARK_READY_PAYLOAD,
                 details={"validation_errors": e.errors()},
             ) from e
 
@@ -789,7 +862,8 @@ def _h_marked_ready(slug, before, actor, payload, reason):
         ]
         if unchecked:
             raise InvalidTransition(
-                "checklist incomplete: all attestations must be checked",
+                "Please check every box in the list before marking ready.",
+                code=Codes.MARK_READY_CHECKLIST,
                 details={"unchecked": unchecked},
             )
 
@@ -803,7 +877,8 @@ def _h_marked_ready(slug, before, actor, payload, reason):
         result = validate_reciter_segments(slug)
         if result is None:
             raise InvalidTransition(
-                "marked_ready blocked: no segments found on bucket"
+                "Can't mark ready — this reciter has no saved segments yet.",
+                code=Codes.MARK_READY_NO_SEGMENTS,
             )
 
         # ``category_counts.low_confidence`` is the length of the DETAIL list
@@ -830,7 +905,8 @@ def _h_marked_ready(slug, before, actor, payload, reason):
         }
         if nonzero:
             raise InvalidTransition(
-                "blocking validation counts must be zero before mark-ready",
+                "Fix all blocking validation issues before marking ready.",
+                code=Codes.MARK_READY_BLOCKING_COUNTS,
                 details={"blocking_counts": nonzero},
             )
 
@@ -841,9 +917,7 @@ def _h_unmarked_ready(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.UNDER_REVIEW:
-        raise InvalidTransition(
-            f"unmarked_ready requires UNDER_REVIEW, got {before.state.value}"
-        )
+        raise _state_precondition("unmarked_ready", before)
     _require_capability(actor, "claim.unmark_ready")
     _require_claim_holder(actor, before)
     if not before.marked_ready:
@@ -855,8 +929,10 @@ def _h_merge_rejected(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.UNDER_REVIEW or not before.marked_ready:
-        raise InvalidTransition(
-            "merge_rejected requires UNDER_REVIEW + marked_ready=true"
+        raise _state_precondition(
+            "merge_rejected",
+            before,
+            "This reciter must be marked ready before it can be sent back.",
         )
     _require_capability(actor, "review.send_back")
     _require_reason(reason, "merge_rejected")
@@ -864,35 +940,27 @@ def _h_merge_rejected(slug, before, actor, payload, reason):
 
 
 def _h_published(slug, before, actor, payload, reason):
+    """Publish a marked-ready reciter straight to RELEASED.
+
+    This is the sole publication edge: a reciter stays ``under_review``
+    (marked_ready) while its timestamps job runs, and is published only when
+    the job succeeds — fired by ``services.admin.timestamps_jobs``
+    ``complete_timestamps_job`` with ``SYSTEM_ACTOR`` (role OWNER, so the
+    ``reciter.publish`` gate passes). There is no intermediate
+    ``awaiting_timestamps`` state any more: publish == "timestamps generated +
+    released". The job id (already linked at launch via
+    ``record_timestamps_job``) is re-appended idempotently for the audit.
+    Closes the open claim and clears ``revision_in_progress``.
+    """
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.UNDER_REVIEW or not before.marked_ready:
-        raise InvalidTransition(
-            "published requires UNDER_REVIEW + marked_ready=true"
+        raise _state_precondition(
+            "published",
+            before,
+            "This reciter must be marked ready before it can be published.",
         )
     _require_capability(actor, "reciter.publish")
-    # Side effects (bucket move, dispatch, TS job enqueue) are Phase 5+; here
-    # we just write the state transition. revision_in_progress is cleared on
-    # publish (if it was set by admin.unlocked_for_revision).
-    return _replace(
-        before,
-        state=ReciterState.AWAITING_TIMESTAMPS,
-        state_since=_now(),
-        assignee_hf_id=None,
-        assignee_login=None,
-        assignee_since=None,
-        marked_ready=False,
-        revision_in_progress=None,
-    )
-
-
-def _h_timestamps_completed(slug, before, actor, payload, reason):
-    if before is None:
-        raise UnknownReciter(slug)
-    if before.state != ReciterState.AWAITING_TIMESTAMPS:
-        raise InvalidTransition(
-            f"timestamps_completed requires AWAITING_TIMESTAMPS, got {before.state.value}"
-        )
     job_id = payload.get("job_id")
     job_ids = list(before.timestamps_job_ids)
     if job_id and job_id not in job_ids:
@@ -901,8 +969,12 @@ def _h_timestamps_completed(slug, before, actor, payload, reason):
         before,
         state=ReciterState.RELEASED,
         state_since=_now(),
+        assignee_hf_id=None,
+        assignee_login=None,
+        assignee_since=None,
+        marked_ready=False,
         timestamps_job_ids=job_ids,
-        prefetch_purge_at=_now() + timedelta(days=7),
+        revision_in_progress=None,
     )
 
 
@@ -910,9 +982,7 @@ def _h_unpublished(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.RELEASED:
-        raise InvalidTransition(
-            f"unpublished requires RELEASED, got {before.state.value}"
-        )
+        raise _state_precondition("unpublished", before)
     _require_capability(actor, "reciter.unpublish")
     _require_reason(reason, "unpublished")
     return _replace(
@@ -920,7 +990,6 @@ def _h_unpublished(slug, before, actor, payload, reason):
         state=ReciterState.AWAITING_REVIEW,
         state_since=_now(),
         revision_in_progress=None,
-        prefetch_purge_at=None,
     )
 
 
@@ -928,9 +997,7 @@ def _h_unlocked_for_revision(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.RELEASED:
-        raise InvalidTransition(
-            f"unlocked_for_revision requires RELEASED, got {before.state.value}"
-        )
+        raise _state_precondition("unlocked_for_revision", before)
     _require_capability(actor, "reciter.unlock_for_revision")
     context = RevisionContext(
         unlocked_from_state="released",
@@ -943,7 +1010,6 @@ def _h_unlocked_for_revision(slug, before, actor, payload, reason):
         state=ReciterState.AWAITING_REVIEW,
         state_since=_now(),
         revision_in_progress=context,
-        prefetch_purge_at=None,
     )
 
 
@@ -970,9 +1036,7 @@ def _h_force_released(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.UNDER_REVIEW:
-        raise InvalidTransition(
-            f"claim.force_released requires UNDER_REVIEW, got {before.state.value}"
-        )
+        raise _state_precondition("claim.force_released", before)
     # Owner-only: claim-mutation surfaces (force-release + reassign) are
     # an owner privilege; maintainers gate quality (send-back-to-UR) but
     # don't manage who reviews. See Reviews-tab plan §"Reassign popover".
@@ -995,9 +1059,7 @@ def _h_reassigned(slug, before, actor, payload, reason):
     if before is None:
         raise UnknownReciter(slug)
     if before.state != ReciterState.UNDER_REVIEW:
-        raise InvalidTransition(
-            f"claim.reassigned requires UNDER_REVIEW, got {before.state.value}"
-        )
+        raise _state_precondition("claim.reassigned", before)
     # Owner-only — pairs with _h_force_released (see comment there).
     _require_capability(actor, "claim.reassign")
     new_hf = payload.get("new_assignee_hf_id")
@@ -1017,17 +1079,6 @@ def _h_reassigned(slug, before, actor, payload, reason):
     )
 
 
-def _h_clear_prefetch_purge_at(slug, before, actor, payload, reason):
-    """Sweeper-only event. Clears ``prefetch_purge_at`` after the audio +
-    peaks directories are deleted, so the same row doesn't re-trigger on the
-    next hourly tick. State-preserving."""
-    if before is None:
-        raise UnknownReciter(slug)
-    if before.prefetch_purge_at is None:
-        return before
-    return _replace(before, prefetch_purge_at=None)
-
-
 _HANDLERS: dict[str, Any] = {
     "catalog.added": _h_catalog_added,
     "catalog.edited": _h_catalog_edited,
@@ -1041,14 +1092,12 @@ _HANDLERS: dict[str, Any] = {
     "reciter.unmarked_ready": _h_unmarked_ready,
     "reciter.merge_rejected": _h_merge_rejected,
     "reciter.published": _h_published,
-    "reciter.timestamps_completed": _h_timestamps_completed,
     "reciter.unpublished": _h_unpublished,
     "reciter.discarded": _h_discarded,
     "reciter.undiscarded": _h_undiscarded,
     "claim.force_released": _h_force_released,
     "claim.reassigned": _h_reassigned,
     "admin.unlocked_for_revision": _h_unlocked_for_revision,
-    "admin.clear_prefetch_purge_at": _h_clear_prefetch_purge_at,
 }
 
 

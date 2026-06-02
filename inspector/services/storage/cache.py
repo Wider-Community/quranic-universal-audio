@@ -533,9 +533,19 @@ def set_audio_manifest_url_index_cache(slug: str, idx: dict[str, str]) -> None:
     _audio_manifest_url_index.set(slug, idx)
 
 
+def invalidate_audio_manifest_cache() -> None:
+    """Drop ALL cached audio-manifest sidecars + their URL indexes.
+
+    The TS manifest build derives ``url_template`` / ``vbr_chapters`` from these
+    sidecars; clearing them alongside a manifest rebuild guards against a stale
+    sidecar (e.g. a re-extracted reciter) leaking old URLs into the manifest."""
+    _audio_manifest.clear()
+    _audio_manifest_url_index.clear()
+
+
 # Audio cache status (thread-safe). Note: the audio download-progress dict
 # (_AUDIO_DL_PROGRESS + helpers) lived here until the prefetch worker was
-# removed; the sweeper that survives doesn't need progress tracking.
+# removed; no background audio worker remains.
 _AUDIO_CACHE_STATUS: dict[str, dict] = {}
 
 
@@ -693,6 +703,30 @@ def invalidate_catalog_snapshot_cache() -> None:
     global _catalog_snapshot
     with _catalog_snapshot_lock:
         _catalog_snapshot = None
+
+
+# Serialized ``/api/static/catalog.json`` bytes, keyed on db_seq. The snapshot
+# model is already db_seq-cached, but ``model_dump(mode="json", by_alias=True)``
+# + ``orjson.dumps`` still ran per request on the single worker (the TS reciter
+# dropdown + dashboard forms all hit this). Cache the final bytes so a warm
+# request is a dict-keyed handback. Self-invalidating via db_seq (any committed
+# write bumps it), same pattern as ``_public_reciters`` / ``_admin_users``.
+_catalog_json_bytes_lock = _threading.Lock()
+_catalog_json_bytes: "tuple[int, bytes] | None" = None
+
+
+def get_catalog_json_bytes_cache(db_seq: int):
+    """Return cached catalog.json bytes iff serialized at ``db_seq``, else None."""
+    with _catalog_json_bytes_lock:
+        if _catalog_json_bytes is not None and _catalog_json_bytes[0] == db_seq:
+            return _catalog_json_bytes[1]
+    return None
+
+
+def set_catalog_json_bytes_cache(db_seq: int, value: bytes) -> None:
+    global _catalog_json_bytes
+    with _catalog_json_bytes_lock:
+        _catalog_json_bytes = (db_seq, value)
 
 
 # ---------------------------------------------------------------------------

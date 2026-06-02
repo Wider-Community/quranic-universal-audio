@@ -20,6 +20,7 @@ function _user(overrides: Partial<CurrentUser> = {}): CurrentUser {
         active_claims: [],
         dev_mode: false,
         capabilities: [],
+        guides_read: [],
         ...overrides,
     };
 }
@@ -78,12 +79,45 @@ describe('syncEditingMode', () => {
         });
     });
 
-    it('returns view/released for post-publish reciter', () => {
+    it('returns view/published for a released reciter', () => {
         const task = _task({ state: 'released' });
         expect(syncEditingMode(_user(), task)).toEqual({
             kind: 'view',
-            viewReason: 'released',
+            viewReason: 'published',
         });
+    });
+
+    it('returns view/claimable for an awaiting_review reciter (free to claim)', () => {
+        const task = _task({ state: 'awaiting_review' });
+        expect(syncEditingMode(_user(), task)).toEqual({
+            kind: 'view',
+            viewReason: 'claimable',
+        });
+    });
+
+    it('returns view/holds-other-claim when the user already holds a different claim', () => {
+        // One-at-a-time: an existing claim on another reciter takes precedence
+        // over "claim this one" so the popover doesn't dangle a dead button.
+        const task = _task({ state: 'awaiting_review' });
+        expect(syncEditingMode(_user({ active_claim: 'some-other' }), task)).toEqual({
+            kind: 'view',
+            viewReason: 'holds-other-claim',
+        });
+    });
+
+    it('still shows claimable when the held claim IS this reciter', () => {
+        const task = _task({ state: 'awaiting_review' });
+        expect(syncEditingMode(_user({ active_claim: 'test_slug' }), task)).toEqual({
+            kind: 'view',
+            viewReason: 'claimable',
+        });
+    });
+
+    it('owner with another claim still gets owner (multi-claim exempt)', () => {
+        const task = _task({ state: 'awaiting_review' });
+        expect(
+            syncEditingMode(_user({ role: 'owner', active_claim: 'some-other' }), task),
+        ).toEqual({ kind: 'owner' });
     });
 
     it('returns view/marked_ready when assignee marked their own claim', () => {
@@ -140,12 +174,12 @@ describe('syncEditingMode', () => {
         });
     });
 
-    it('returns view/not-claimable for catalogued / awaiting_alignment rows', () => {
-        for (const state of ['catalogued', 'awaiting_alignment', 'awaiting_timestamps'] as const) {
+    it('returns view/not-available for pre-review (catalogued / awaiting_alignment) rows', () => {
+        for (const state of ['catalogued', 'awaiting_alignment'] as const) {
             const task = _task({ state });
             expect(syncEditingMode(_user(), task)).toEqual({
                 kind: 'view',
-                viewReason: 'not-claimable',
+                viewReason: 'not-available',
             });
         }
     });
@@ -161,6 +195,7 @@ describe('syncEditingMode', () => {
             active_claims: [],
             dev_mode: false,
             capabilities: [],
+            guides_read: [],
         };
         expect(syncEditingMode(anon, _task())).toEqual({
             kind: 'view',
@@ -203,6 +238,108 @@ describe('syncEditingMode', () => {
         expect(syncEditingMode(_user({ role: 'owner' }), task)).toEqual({
             kind: 'view',
             viewReason: 'discarded',
+        });
+    });
+
+    // ------------------------------------------------------------------
+    // First-edit onboarding gate (allGuidesRead, 3rd arg)
+    // ------------------------------------------------------------------
+
+    it('gates the would-be editor as view/guides_unread when guides are unread', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user(), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'guides_unread',
+        });
+    });
+
+    it('lets the editor through once all guides are read', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user(), task, true)).toEqual({ kind: 'editor' });
+    });
+
+    it('defaults to ungated (allGuidesRead omitted ⇒ true)', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user(), task)).toEqual({ kind: 'editor' });
+    });
+
+    it('does NOT exempt dev-mode — the gate must be visible/testable locally', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user({ dev_mode: true }), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'guides_unread',
+        });
+    });
+
+    it('gates maintainers too (all editing roles read once)', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'other' });
+        expect(syncEditingMode(_user({ role: 'maintainer' }), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'guides_unread',
+        });
+    });
+
+    it('lets a maintainer through once all guides are read', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'other' });
+        expect(syncEditingMode(_user({ role: 'maintainer' }), task, true)).toEqual({
+            kind: 'maintainer',
+        });
+    });
+
+    it('gates owners too (the owner fast-path still honours the guide gate)', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user({ role: 'owner' }), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'guides_unread',
+        });
+    });
+
+    it('lets an owner through once all guides are read', () => {
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user({ role: 'owner' }), task, true)).toEqual({
+            kind: 'owner',
+        });
+    });
+
+    // ------------------------------------------------------------------
+    // Gate ORDER: sign-in > state/ownership denial > guides_unread
+    // The guide gate must be LAST — a user who can't edit for a state/
+    // ownership reason should see THAT, not "read the guides first".
+    // ------------------------------------------------------------------
+
+    it('shows the state denial (not guides) for a non-claimant with unread guides', () => {
+        // Contributor on someone else's claim: wrong-assignee must win even
+        // though guides are unread.
+        const task = _task({ state: 'under_review', assignee_hf_id: 'other' });
+        expect(syncEditingMode(_user(), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'wrong-assignee',
+        });
+    });
+
+    it('shows claimable (not guides) on an unclaimed row with unread guides', () => {
+        const task = _task({ state: 'awaiting_review' });
+        expect(syncEditingMode(_user(), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'claimable',
+        });
+    });
+
+    it('shows published (not guides) on a released row with unread guides', () => {
+        const task = _task({ state: 'released' });
+        expect(syncEditingMode(_user(), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'published',
+        });
+    });
+
+    it('only reaches guides_unread once the user actually holds an editable position', () => {
+        // Assignee on their own under_review claim → the one case that SHOULD
+        // hit the guide gate.
+        const task = _task({ state: 'under_review', assignee_hf_id: 'u-1' });
+        expect(syncEditingMode(_user(), task, false)).toEqual({
+            kind: 'view',
+            viewReason: 'guides_unread',
         });
     });
 

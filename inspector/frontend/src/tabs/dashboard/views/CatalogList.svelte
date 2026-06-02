@@ -12,6 +12,7 @@
     } from '../../../lib/catalog/schema-descriptor';
     import PickerFilterRail from '../../../lib/components/picker/PickerFilterRail.svelte';
     import SearchInput from '../../../lib/components/SearchInput.svelte';
+    import { openInfoModal } from '../../../lib/stores/info-modal';
     import { playerContext } from '../../../lib/stores/player-context';
     import { bucketRank, type PublicDelivery, type PublicReciter } from '../../../lib/types/public-state';
     import { axisLabel as axisLabelOf, tagLabel as tagLabelOf } from '../../../lib/utils/axis-labels';
@@ -157,14 +158,37 @@
 
     <section class="body">
         <div class="toolbar">
-            <div class="search">
-                <SearchInput
-                    value={$dashboardState.search}
-                    placeholder="Search reciters"
-                    count={sorted.length}
-                    total={totalReciters}
-                    on:input={(e) => setSearch(e.detail)}
-                />
+            <div class="search-group">
+                <div class="search">
+                    <SearchInput
+                        value={$dashboardState.search}
+                        placeholder="Search reciters"
+                        count={sorted.length}
+                        total={totalReciters}
+                        on:input={(e) => setSearch(e.detail)}
+                    />
+                </div>
+                <button
+                    type="button"
+                    class="submit-recitation"
+                    on:click={openSubmitWizard}
+                >
+                    <span class="sr-glyph" aria-hidden="true">+</span>
+                    <span class="sr-label">Submit recitation</span>
+                </button>
+                <button
+                    type="button"
+                    class="info-btn"
+                    aria-label="About this project"
+                    title="About this project"
+                    on:click={openInfoModal}
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" />
+                        <path d="M12 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                        <circle cx="12" cy="7.5" r="1.25" fill="currentColor" />
+                    </svg>
+                </button>
             </div>
             <div class="sort">
                 <label>
@@ -180,14 +204,6 @@
                     </select>
                 </label>
             </div>
-            <button
-                type="button"
-                class="submit-recitation"
-                on:click={openSubmitWizard}
-            >
-                <span class="sr-glyph" aria-hidden="true">+</span>
-                <span class="sr-label">Submit recitation</span>
-            </button>
         </div>
         {#if $catalogData.loading}
             <div class="state">Loading reciters…</div>
@@ -284,6 +300,14 @@
         padding: 0 0 var(--s-2);
         flex-wrap: nowrap;
     }
+    .search-group {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        min-width: 0;
+        flex: 1 1 auto;
+        max-width: 420px;
+    }
     /* Mobile toolbar: tighten gap, hide sort label, keep everything on one row, shrink search input and submit button */
     @media (max-width: 767px) {
         .toolbar {
@@ -291,8 +315,13 @@
             flex-wrap: nowrap;
         }
         .label-hide-mobile { display: none; }
+        .search-group {
+            gap: var(--s-1);
+            flex: 1 1 auto;
+            min-width: min-content;
+        }
         .search {
-            min-width: 100px;
+            min-width: 80px;
         }
         .sr-label {
             display: none;
@@ -306,8 +335,7 @@
     }
     .search {
         flex: 1 1 auto;
-        min-width: 140px;
-        max-width: 420px;
+        min-width: 120px;
     }
     .sort {
         flex-shrink: 0;
@@ -377,6 +405,32 @@
     .desktop-only-activity {
         display: contents;
     }
+    .info-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        flex-shrink: 0;
+        background: transparent;
+        color: var(--text-muted);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+        cursor: pointer;
+        transition: color var(--t-fast),
+                    border-color var(--t-fast),
+                    background var(--t-fast);
+    }
+    .info-btn:hover {
+        color: var(--text-primary);
+        border-color: var(--border-strong);
+        background: var(--panel);
+    }
+    .info-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }
+    .info-btn svg { display: block; }
     .grid {
         display: grid;
         grid-template-columns: var(--sidebar-w, 260px) minmax(0, 1fr) var(--activity-w, 300px);

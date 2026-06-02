@@ -64,14 +64,14 @@ def test_release_clears_assignee(fresh_db):
     with db.transaction():
         repo_state.upsert_state("d1", state=ReciterState.UNDER_REVIEW, state_since=_dt())
         repo_claims.open_claim(slug="d1", assignee_id="rev1", assignee_login="reviewer")
-    # release: close claim + move state out of under_review
+    # release: close claim + move state out of under_review (publish → released)
     with db.transaction():
         repo_claims.close_claim(slug="d1", close_reason="released")
         repo_state.update_state(
-            "d1", state=ReciterState.AWAITING_TIMESTAMPS, state_since=_dt()
+            "d1", state=ReciterState.RELEASED, state_since=_dt()
         )
     row = repo_state.get_row("d1")
-    assert row.state == ReciterState.AWAITING_TIMESTAMPS
+    assert row.state == ReciterState.RELEASED
     assert row.assignee_hf_id is None  # ReciterRow invariant holds
 
 
@@ -84,11 +84,9 @@ def test_retained_columns_roundtrip(fresh_db):
             state_since=_dt(),
             last_save_at=_dt("2026-03-03T00:00:00+00:00"),
             timestamps_job_ids=["job-1", "job-2"],
-            prefetch_purge_at=_dt("2026-03-10T00:00:00+00:00"),
         )
     row = repo_state.get_row("d1")
     assert row.timestamps_job_ids == ["job-1", "job-2"]
-    assert row.prefetch_purge_at == _dt("2026-03-10T00:00:00+00:00")
     assert row.last_save_at == _dt("2026-03-03T00:00:00+00:00")
 
 

@@ -171,3 +171,111 @@ export async function reassignClaim(
         throw new Error(msg);
     }
 }
+
+// ---- Timestamps generation job ----
+
+import type { TsJobRecord } from '../types/generated/schemas';
+
+export interface TimestampsJobLaunch {
+    job_id: string;
+    url: string | null;
+}
+
+/** Launch-form settings (maps to the backend ``_parse_ts_settings`` body). */
+export interface TimestampsJobSettings {
+    beam: number;
+    probe_beams: number[];
+    persist_audio: boolean;
+    gen_peaks: boolean;
+    // Advanced (omitted → server defaults).
+    workers?: number | null;
+    flavor?: string | null;
+    timeout?: string | null;
+    batch_size?: number | null;
+    download_workers?: number | null;
+}
+
+/** Live status + bounded log tail proxied from HF. */
+export interface TimestampsJobStatus {
+    job_id: string;
+    status: string;
+    /** Canonical HF job page URL — logs stream live there. */
+    url?: string | null;
+    logs: string[];
+    log_truncated?: boolean;
+}
+
+async function _unwrapError(resp: Response): Promise<never> {
+    let msg = `HTTP ${resp.status}`;
+    try {
+        const body = (await resp.json()) as { error?: string };
+        if (body?.error) msg = body.error;
+    } catch {
+        /* non-JSON body — keep status fallback */
+    }
+    throw new Error(msg);
+}
+
+/**
+ * Launch the in-container MFA timestamps job for an under-review reciter.
+ * Returns the launched job id; throws the server ``error`` string verbatim
+ * (including the 409 "a timestamps job is already running") so the caller can
+ * surface it inline.
+ */
+export async function generateTimestamps(
+    slug: string,
+    settings: TimestampsJobSettings,
+): Promise<TimestampsJobLaunch> {
+    const resp = await fetch(
+        `/api/admin/generate-timestamps/${encodeURIComponent(slug)}`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings),
+        },
+    );
+    if (!resp.ok) return _unwrapError(resp);
+    return (await resp.json()) as TimestampsJobLaunch;
+}
+
+/** Live status + log tail for a running job (poll this). Reciter-scoped: the
+ *  durable record lives under ``reciters/<slug>/jobs/ts/``. */
+export async function fetchJobStatus(
+    slug: string,
+    jobId: string,
+    signal?: AbortSignal,
+): Promise<TimestampsJobStatus> {
+    const resp = await fetch(
+        `/api/admin/reciters/${encodeURIComponent(slug)}/jobs/${encodeURIComponent(jobId)}`,
+        { signal },
+    );
+    if (!resp.ok) return _unwrapError(resp);
+    return (await resp.json()) as TimestampsJobStatus;
+}
+
+/** Persisted record (settings + status + full logs) for one past job, or null. */
+export async function fetchJobRecord(
+    slug: string,
+    jobId: string,
+    signal?: AbortSignal,
+): Promise<TsJobRecord | null> {
+    const resp = await fetch(
+        `/api/admin/reciters/${encodeURIComponent(slug)}/jobs/${encodeURIComponent(jobId)}/record`,
+        { signal },
+    );
+    if (resp.status === 404) return null;
+    if (!resp.ok) return _unwrapError(resp);
+    return (await resp.json()) as TsJobRecord;
+}
+
+/** Persisted timestamps-job records for a reciter (newest first). */
+export async function fetchTsJobRecords(
+    slug: string,
+    signal?: AbortSignal,
+): Promise<TsJobRecord[]> {
+    const resp = await fetch(
+        `/api/admin/reciters/${encodeURIComponent(slug)}/ts-jobs`, { signal });
+    if (!resp.ok) return _unwrapError(resp);
+    const body = (await resp.json()) as { jobs?: TsJobRecord[] };
+    return body.jobs ?? [];
+}

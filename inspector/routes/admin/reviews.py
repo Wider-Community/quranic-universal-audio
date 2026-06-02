@@ -19,9 +19,14 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
+from pydantic import ValidationError
 
+from routes._admin_helpers import require_capability_or_403
+from scripts.lib.schemas import TsJobSettings
 from services.admin import reviews as reviews_service
+from services.admin import timestamps_jobs as ts_jobs
+from services.state import state as state_service
 
 from utils.decorators import require_capability, require_same_origin
 
@@ -72,3 +77,111 @@ def mark_review_viewed(user, slug):
     if not ok:
         return jsonify({"error": "unknown slug"}), 404
     return jsonify({"ok": True})
+
+
+@admin_reviews_bp.route("/generate-timestamps/<slug>", methods=["POST"])
+@require_same_origin
+@require_capability("reviews.generate_timestamps")
+def generate_timestamps(user, slug):
+    """Launch the in-container MFA timestamps job for a marked-ready reciter.
+
+    Generating timestamps IS publishing: on success the reciter is auto-released
+    (``reciter.published``), so the caller must also hold ``reciter.publish``
+    (checked inline — a second ``@require_capability`` decorator can't stack, it
+    would inject ``user`` twice). The button is only shown on marked-ready rows.
+
+    Single-flight: rejects (409) if a job for ``slug`` is already running —
+    two jobs would race the same ``timestamps/`` shards. Does NOT transition
+    the reciter at launch; the launched job id is linked via
+    ``timestamps_job_ids``. Returns 202 with ``{job_id, url}``.
+    """
+    if state_service.get_row(slug) is None:
+        return jsonify({"error": "unknown slug"}), 404
+    err = require_capability_or_403(user, "reciter.publish")
+    if err is not None:
+        return err
+    existing = ts_jobs.running_job_for(slug)
+    if existing:
+        return jsonify({"error": "a timestamps job is already running",
+                        "job_id": existing}), 409
+    body = request.get_json(silent=True) or {}
+    try:
+        settings = _parse_ts_settings(body)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    # Public URL root for the job's completion callback. Deployed: ProxyFix
+    # makes this the real https Space URL; dev: localhost (unreachable by the
+    # job — the poll fallback releases instead). launch() only uses it when a
+    # webhook secret is configured.
+    webhook_base = request.url_root
+    try:
+        result = ts_jobs.launch(slug, settings=settings, webhook_base=webhook_base)
+    except Exception as exc:  # surfaced to the drawer
+        return jsonify({"error": str(exc)}), 502
+    return jsonify(result), 202
+
+
+def _parse_ts_settings(body: dict) -> TsJobSettings:
+    """Validate + normalize the launch form body into ``TsJobSettings``.
+
+    Beams = [alignment_beam, *probe_beams] (deduped, order-preserving). Raises
+    ``ValueError`` with a user-facing message on any invalid field.
+    """
+    beam = body.get("beam", 50)
+    probe = body.get("probe_beams") or []
+    if not isinstance(beam, int) or beam <= 0:
+        raise ValueError("beam must be a positive integer")
+    if not isinstance(probe, list) or not all(isinstance(b, int) and b > 0 for b in probe):
+        raise ValueError("probe_beams must be a list of positive integers")
+    beams: list[int] = []
+    for b in [beam, *probe]:
+        if b not in beams:
+            beams.append(b)
+    workers = body.get("workers")
+    if workers is not None and (not isinstance(workers, int) or not 1 <= workers <= 64):
+        raise ValueError("workers must be an integer in 1..64")
+    try:
+        return TsJobSettings(
+            beams=beams,
+            persist_audio=bool(body.get("persist_audio", False)),
+            gen_peaks=bool(body.get("gen_peaks", False)),
+            workers=workers,
+            flavor=body.get("flavor") or None,
+            timeout=body.get("timeout") or None,
+            batch_size=body.get("batch_size") or None,
+            download_workers=body.get("download_workers") or None,
+        )
+    except ValidationError as exc:
+        raise ValueError(f"invalid settings: {exc.errors()[0].get('msg', exc)}") from exc
+
+
+@admin_reviews_bp.route("/reciters/<slug>/jobs/<job_id>")
+@require_capability("reviews.generate_timestamps")
+def job_status(user, slug, job_id):
+    """Live status + bounded log tail for a launched job (HF is authoritative).
+
+    Reciter-scoped: the durable record lives at ``reciters/<slug>/jobs/ts/`` so
+    the slug is needed to read/backstop it (the drawer always has it)."""
+    try:
+        return jsonify(ts_jobs.job_status(slug, job_id))
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
+@admin_reviews_bp.route("/reciters/<slug>/jobs/<job_id>/record")
+@require_capability("reviews.generate_timestamps")
+def job_record(user, slug, job_id):
+    """Persisted record (settings + status + full logs) for one past job."""
+    rec = ts_jobs.read_job_record(slug, job_id)
+    if rec is None:
+        return jsonify({"error": "no record for job"}), 404
+    return jsonify(rec)
+
+
+@admin_reviews_bp.route("/reciters/<slug>/ts-jobs")
+@require_capability("reviews.generate_timestamps")
+def reciter_ts_jobs(user, slug):
+    """Persisted timestamps-job records for ``slug`` (newest first)."""
+    if state_service.get_row(slug) is None:
+        return jsonify({"error": "unknown slug"}), 404
+    return jsonify({"jobs": ts_jobs.list_job_records(slug)})

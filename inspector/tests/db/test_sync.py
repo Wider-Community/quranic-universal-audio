@@ -78,6 +78,37 @@ def test_cas_conflict_from_other_container(synced):
     assert sync._last_error and "CAS conflict" in sync._last_error
 
 
+def test_deferred_sync_uploads_when_batch_commits(synced):
+    # A batch that commits ≥1 transaction uploads ONCE on outermost exit.
+    sync.set_sync_enabled(True)
+    with sync.deferred_sync():
+        _commit_user()  # bumps db_seq 0 -> 1
+    meta = _serde.json_loads(sync._read_direct(sync.SEQ_BUCKET_PATH))
+    assert meta["seq"] == 1 and meta["nonce"] == sync._NONCE
+
+
+def test_deferred_sync_skips_upload_when_batch_is_noop(synced):
+    # The boot-after-restart scenario: this container pulled the bucket DB
+    # (seq written by a *different* container's nonce) and the boot scan finds
+    # nothing to catch up, so the deferred batch commits nothing. It must NOT
+    # upload — otherwise the equal-seq CAS guard refuses against the other
+    # nonce and logs a spurious ERR on every restart.
+    sync.set_sync_enabled(True)
+    _commit_user()  # local seq -> 1 (committed outside the batch; no upload)
+    sync._write_direct(
+        sync.SEQ_BUCKET_PATH,
+        _serde.json_dumps(
+            {"seq": 1, "nonce": "other-container", "ts": "x"}
+        ).encode(),
+    )
+    with sync.deferred_sync():  # no commit inside → no-op
+        pass
+    # sidecar left untouched (we never tried to clobber) and no conflict logged
+    meta = _serde.json_loads(sync._read_direct(sync.SEQ_BUCKET_PATH))
+    assert meta["nonce"] == "other-container"
+    assert sync._last_error is None
+
+
 def test_daily_snapshot_and_retention(synced):
     _commit_user()
     today = datetime(2026, 5, 20, tzinfo=timezone.utc)

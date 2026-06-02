@@ -646,3 +646,70 @@ export interface ProbeResult {
   reachable?: boolean;
   [k: string]: unknown;
 }
+/**
+ * One job run's durable record (settings + status + logs).
+ *
+ * ``status`` mirrors HF's lowercased stage (``running`` / ``succeeded`` /
+ * ``failed`` / ``error`` / ``timed-out`` …). ``logs`` is a bounded tail;
+ * ``log_truncated`` flags that earlier lines were dropped.
+ */
+export interface TsJobRecord {
+  schema_version?: number;
+  job_id: string;
+  slug: string;
+  type?: string;
+  settings?: TsJobSettings;
+  status?: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  url?: string | null;
+  logs?: string[];
+  log_truncated?: boolean;
+  error?: string | null;
+}
+/**
+ * Job parameters chosen by the admin in the launch form.
+ *
+ * ``beams`` is the resolved list passed to ``align_batch_multi_beam`` —
+ * ``[alignment_beam, *probe_beams]`` (deduped). Canonical beam = ``max(beams)``.
+ */
+export interface TsJobSettings {
+  beams?: number[];
+  persist_audio?: boolean;
+  gen_peaks?: boolean;
+  workers?: number | null;
+  flavor?: string | null;
+  timeout?: string | null;
+  batch_size?: number | null;
+  download_workers?: number | null;
+}
+/**
+ * The ``ts_validation.json`` document — meta + verse-keyed flags.
+ */
+export interface TsValidationDoc {
+  _meta?: TsValidationMeta;
+  verses?: {
+    [k: string]: TsValidationVerse;
+  };
+  [k: string]: unknown;
+}
+/**
+ * Provenance for one ts-validation run.
+ */
+export interface TsValidationMeta {
+  created_at?: string;
+  reciter?: string;
+  aligner_model?: string;
+  method?: string;
+  beams?: number[];
+  canonical_beam?: number;
+  [k: string]: unknown;
+}
+/**
+ * Per-verse beam-agreement summary.
+ */
+export interface TsValidationVerse {
+  failed_beams?: number[];
+  min_passing_beam?: number | null;
+  [k: string]: unknown;
+}

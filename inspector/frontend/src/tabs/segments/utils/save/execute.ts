@@ -5,6 +5,7 @@
 
 import { get as storeGet } from 'svelte/store';
 
+import { type ApiErrorBody,friendlyError } from '../../../../lib/errors/friendly';
 import { SIGN_IN_MESSAGES } from '../../../../lib/sign-in-messages';
 import { openSignInModal } from '../../../../lib/stores/sign-in-modal';
 import { pushToast } from '../../../../lib/stores/toast';
@@ -231,16 +232,16 @@ export async function executeSave(isAutoSave = false): Promise<void> {
                 break;
             }
             if (!res.ok) {
-                let errMsg = `Save failed (${res.status})`;
+                let body: ApiErrorBody | undefined;
                 try {
-                    const body = await res.json() as { error?: string };
-                    if (body?.error) errMsg = `Save failed: ${body.error}`;
+                    body = await res.json() as ApiErrorBody;
                 } catch { /* non-JSON body */ }
-                console.error(`Save error (ch ${ch}, ${res.status}):`, errMsg);
+                // Keep the raw backend prose for the console; show friendly copy.
+                console.error(`Save error (ch ${ch}, ${res.status}):`, body?.error ?? '(no body)');
                 if (res.status === 401) {
                     openSignInModal(null, SIGN_IN_MESSAGES.save);
                 } else {
-                    pushToast({ kind: 'error', text: errMsg, ttl: 6000 });
+                    pushToast({ kind: 'error', text: friendlyError(body, res.status), ttl: 6000 });
                 }
                 allOk = false;
                 break;

@@ -52,12 +52,11 @@ _seen_slugs: set[str] = set()
 _seen_lock = threading.Lock()
 _background_thread: threading.Thread | None = None
 
-# Content prefixes scanned for new reciter folders. ``wip`` is a transitional
-# alias kept for one release so reciters extracted by a not-yet-redeployed
-# Katana pipeline (which may still write ``wip/<slug>/``) are still discovered
-# during the reciters/ cutover. Drop ``"wip"`` once every writer targets
-# ``reciters/``.
-_SCAN_PREFIXES: tuple[str, ...] = (storage_paths.RECITERS_PREFIX, "wip")
+# Content prefixes scanned for new reciter folders. The legacy ``wip``
+# transitional alias has been dropped now that every writer (the Katana
+# extraction pipeline included) targets ``reciters/``; the stale ``wip/`` and
+# ``published/`` bucket trees were removed in the same cleanup.
+_SCAN_PREFIXES: tuple[str, ...] = (storage_paths.RECITERS_PREFIX,)
 
 
 def _list_candidate_slugs(backend) -> set[str]:

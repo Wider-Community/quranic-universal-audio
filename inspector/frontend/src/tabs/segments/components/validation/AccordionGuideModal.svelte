@@ -1,19 +1,35 @@
 <script lang="ts">
     import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+    import { get } from 'svelte/store';
 
+    import { recordGuideViewed } from '../../../../lib/api/guide-views';
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
+    import OverviewContent from '../../../../lib/components/info/OverviewContent.svelte';
+    import { currentUser, loadCurrentUser, markGuideReadLocally } from '../../../../lib/stores/current-user';
     import type { HistoryBatch } from '../../../../lib/types/domain';
+    import EditingGuideContent from '../../guides/editing/EditingGuideContent.svelte';
     import { getGuideExample } from '../../guides/examples';
     import { guideTitleFromBlocks, parseGuideSource } from '../../guides/parser';
-    import { getAccordionGuide } from '../../guides/registry';
+    import { getAccordionGuide, guideViewKey, isGuideRead } from '../../guides/registry';
     import type { GuideExample } from '../../guides/types';
     import {
         buildEditChains,
+        type HistorySnapshot,
+        snapToSeg,
     } from '../../stores/history';
     import { createPreviewPlaybackContext } from '../../utils/playback/preview';
     import { indexHistoryPeaksRecords } from '../../utils/waveform/utils';
     import EditChainRow from '../history/EditChainRow.svelte';
     import HistoryOp from '../history/HistoryOp.svelte';
+    import SegmentRow from '../list/SegmentRow.svelte';
+
+    // Custom guide bodies, keyed by the `::component{name="…"}` directive name.
+    // Lets a guide (the editing guide) render a bespoke illustrated component
+    // instead of the data-driven example cards.
+    const GUIDE_COMPONENTS: Record<string, typeof EditingGuideContent> = {
+        'editing-guide': EditingGuideContent,
+        overview: OverviewContent,
+    };
 
     export let category: string;
     export let opener: HTMLElement | null = null;
@@ -28,13 +44,43 @@
         previewCtx.attachAudioEl(audio.element());
     }
 
+    // Record-on-open: opening a guide marks it read (per the product rule
+    // "once it's opened, it goes away"). The host reuses this instance across
+    // categories (the gate modal opens guides back-to-back), so this tracks the
+    // last category recorded rather than firing only on mount. Idempotent: the
+    // server write is INSERT-OR-IGNORE and the local update dedups.
+    let _recordedFor: string | null = null;
+    $: if (category && category !== _recordedFor) {
+        _recordedFor = category;
+        void recordGuideRead(category);
+    }
+
+    async function recordGuideRead(cat: string): Promise<void> {
+        const u = get(currentUser);
+        if (u.hf_user_id == null) return;            // anonymous: nothing to persist
+        if (isGuideRead(u.guides_read, cat)) return; // already read — skip the POST
+        // Optimistic FIRST: clear the cyan badge (and lift the edit gate on the
+        // last guide) instantly, instead of waiting on the POST — which blocks
+        // on a full inspector.db → bucket sync inside durable_transaction.
+        markGuideReadLocally(guideViewKey(cat));
+        const ok = await recordGuideViewed(cat);     // background persist
+        if (!ok) void loadCurrentUser();             // failure → resync truth from /api/me
+    }
+
     $: guideSource = getAccordionGuide(category);
     $: blocks = guideSource ? parseGuideSource(guideSource) : [];
     $: title = guideTitleFromBlocks(blocks, category);
     $: {
         for (const block of blocks) {
             if (block.type !== 'example') continue;
-            indexHistoryPeaksRecords(getGuideExample(block.id)?.peaks);
+            const ex = getGuideExample(block.id);
+            indexHistoryPeaksRecords(ex?.peaks);
+            // Register the clip's base offset so playback rebases into the
+            // short same-origin clip while cards keep original timestamps.
+            const clipUrl = ex?.peaks?.[0]?.url;
+            if (clipUrl && ex?.clip_base_ms != null) {
+                previewCtx.setClipBase(clipUrl, ex.clip_base_ms);
+            }
         }
     }
 
@@ -122,6 +168,20 @@
                             <h3 class="accordion-guide-heading">{block.text}</h3>
                         {:else if block.type === 'paragraph'}
                             <p>{block.text}</p>
+                        {:else if block.type === 'callout'}
+                            <div class="accordion-guide-callout" role="note">
+                                <span class="accordion-guide-callout-icon" aria-hidden="true">🎯</span>
+                                <div class="accordion-guide-callout-body">
+                                    <div class="accordion-guide-callout-label">Goal</div>
+                                    <p class="accordion-guide-callout-text">{block.text}</p>
+                                </div>
+                            </div>
+                        {:else if block.type === 'component'}
+                            {#if GUIDE_COMPONENTS[block.name]}
+                                <svelte:component this={GUIDE_COMPONENTS[block.name]} />
+                            {:else}
+                                <p class="accordion-guide-error">Unknown guide component: {block.name}</p>
+                            {/if}
                         {:else if block.type === 'missing'}
                             <p class="accordion-guide-error">{block.message}</p>
                         {:else if block.type === 'example'}
@@ -137,6 +197,23 @@
                                     {/if}
                                 </header>
 
+                                {#each (example.context ?? []).filter((c) => c.position === 'before') as ctx}
+                                    <div class="accordion-guide-context">
+                                        <div class="accordion-guide-context-label">{ctx.label}</div>
+                                        {#each ctx.segments as snap}
+                                            <SegmentRow
+                                                seg={snapToSeg(snap as HistorySnapshot, example.chapter)}
+                                                readOnly={true}
+                                                showChapter={true}
+                                                showPlayBtn={true}
+                                                mode="history"
+                                                instanceRole="history"
+                                                {previewCtx}
+                                            />
+                                        {/each}
+                                    </div>
+                                {/each}
+
                                 {#if example.render === 'edit_chain'}
                                     {@const chain = guideChain(example)}
                                     {#if chain}
@@ -151,6 +228,23 @@
                                         {previewCtx}
                                     />
                                 {/if}
+
+                                {#each (example.context ?? []).filter((c) => c.position === 'after') as ctx}
+                                    <div class="accordion-guide-context">
+                                        <div class="accordion-guide-context-label">{ctx.label}</div>
+                                        {#each ctx.segments as snap}
+                                            <SegmentRow
+                                                seg={snapToSeg(snap as HistorySnapshot, example.chapter)}
+                                                readOnly={true}
+                                                showChapter={true}
+                                                showPlayBtn={true}
+                                                mode="history"
+                                                instanceRole="history"
+                                                {previewCtx}
+                                            />
+                                        {/each}
+                                    </div>
+                                {/each}
                             </article>
                             {/if}
                         {/if}
@@ -249,6 +343,49 @@
         font-size: 1rem;
     }
 
+    /* "By the end…" outcome callout — a tinted goal card that sets the
+       expectation apart from the surrounding explanatory prose. */
+    .accordion-guide-callout {
+        display: flex;
+        gap: 12px;
+        margin: 14px 0 16px;
+        padding: 13px 15px;
+        border: 1px solid rgba(52, 211, 153, 0.32);
+        border-left: 3px solid #34d399;
+        border-radius: 8px;
+        background: linear-gradient(
+            135deg,
+            rgba(16, 185, 129, 0.12),
+            rgba(16, 185, 129, 0.05)
+        );
+    }
+
+    .accordion-guide-callout-icon {
+        flex: none;
+        font-size: 1.1rem;
+        line-height: 1.4;
+    }
+
+    .accordion-guide-callout-body {
+        min-width: 0;
+    }
+
+    .accordion-guide-callout-label {
+        margin-bottom: 3px;
+        color: #6ee7b7;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+    }
+
+    .accordion-guide-callout-text {
+        margin: 0;
+        color: #d9f5e8;
+        font-size: 0.92rem;
+        line-height: 1.5;
+    }
+
     .accordion-guide-muted,
     .accordion-guide-error {
         margin: 0;
@@ -280,6 +417,24 @@
         color: #aeb8d4;
         font-size: 0.88rem;
         line-height: 1.45;
+    }
+
+    .accordion-guide-context {
+        margin: 8px 0;
+        padding: 8px 10px;
+        border: 1px dashed #2c3a5c;
+        border-left: 3px solid #3a4a73;
+        border-radius: 6px;
+        background: #0d1428;
+        opacity: 0.85;
+    }
+
+    .accordion-guide-context-label {
+        margin-bottom: 6px;
+        color: #9aa6c8;
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
 
     @media (max-width: 720px) {

@@ -76,17 +76,6 @@ def test_classifies_allowlisted_events(monkeypatch):
     ]
 
 
-def test_timestamps_completed_no_longer_public(monkeypatch):
-    """``reciter.timestamps_completed`` was demoted from public to hidden in
-    favour of ``reciter.published`` taking over the ``published`` kind."""
-    from services.public_activity import all_public_cards
-
-    _install_audit(monkeypatch, [_record("reciter.timestamps_completed")])
-    _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
-
-    assert all_public_cards() == []
-
-
 def test_marked_ready_is_redacted_from_public_feed(monkeypatch):
     """marked_ready is internal-only — never surfaces on the public feed."""
     from services.public_activity import all_public_cards

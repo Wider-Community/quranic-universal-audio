@@ -132,7 +132,7 @@ def flush(*, now: datetime | None = None) -> bool:
     return True
 
 
-# ---- hourly flush daemon (mirrors the wip-audio sweeper) ----
+# ---- hourly flush daemon ----
 
 _FLUSH_THREAD: threading.Thread | None = None
 _FLUSH_STARTED = False

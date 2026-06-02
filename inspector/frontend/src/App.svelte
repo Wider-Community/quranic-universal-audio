@@ -1,24 +1,30 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onDestroy, onMount } from 'svelte';
 
     import { signIn, signOut } from './lib/api/auth-client';
     import BookmarksPanel from './lib/components/BookmarksPanel.svelte';
+    import ClaimConfirmModal from './lib/components/ClaimConfirmModal.svelte';
     import DevRoleSwitcher from './lib/components/DevRoleSwitcher.svelte';
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import ExternalLinks from './lib/components/ExternalLinks.svelte';
     import BottomPlayer from './lib/components/player/BottomPlayer.svelte';
+    import InfoModal from './lib/components/info/InfoModal.svelte';
     import SignInModal from './lib/components/SignInModal.svelte';
     import ToastHost from './lib/components/ToastHost.svelte';
     import { dashPort } from './lib/playback/dash-port';
     import { toggleBookmarksPanel } from './lib/stores/bookmarks';
     import { currentUser, isSignedIn, loadCurrentUser } from './lib/stores/current-user';
-    import { activeTab as activeTabStore, getActiveTab, setActiveTab } from './lib/utils/active-tab';
+    import {
+        activeTab as activeTabStore,
+        getActiveTab,
+        setActiveTab,
+    } from './lib/utils/active-tab';
     import { LS_KEYS, TAB_NAMES } from './lib/utils/constants';
     import DashboardTab from './tabs/dashboard/DashboardTab.svelte';
     import {
         dashboardState,
         setFilterDrawer,
-        setActivityDrawer
+        setActivityDrawer,
     } from './tabs/dashboard/stores/dashboard-state';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
     import { segPort } from './tabs/segments/stores/playback';
@@ -28,8 +34,11 @@
     // `activeTab` follows the shared store so external navigation (e.g. the
     // Bookmarks sidebar calling setActiveTab) switches tabs here too.
     let activeTab = getActiveTab();
+    const unsubActiveTab = activeTabStore.subscribe((value) => {
+        activeTab = value;
+    });
+    onDestroy(unsubActiveTab);
 
-    $: activeTab = $activeTabStore;
     // Lazy-mount tabs: defer Timestamps/Segments mount until the user actually
     // visits them. Once visited, the tab stays in the DOM (hidden) so its
     // state (loaded reciter, scroll position, edits) survives tab switches.
@@ -81,11 +90,7 @@
         // bundle used only by the Segments tab. Deferred to SegmentsTab's
         // onMount so Dashboard/Timestamps-only visitors don't pay the cost.
         const savedTab = localStorage.getItem(LS_KEYS.ACTIVE_TAB);
-        const validTabs: string[] = [
-            TAB_NAMES.DASHBOARD,
-            TAB_NAMES.TIMESTAMPS,
-            TAB_NAMES.SEGMENTS,
-        ];
+        const validTabs: string[] = [TAB_NAMES.DASHBOARD, TAB_NAMES.TIMESTAMPS, TAB_NAMES.SEGMENTS];
         if (savedTab && validTabs.includes(savedTab)) {
             setActiveTab(savedTab);
         } else {
@@ -129,7 +134,12 @@
 <svelte:window on:scroll={handleScroll} />
 
 <div class="container">
-    <header id="header" class="header" class:has-dash-controls={activeTab === TAB_NAMES.DASHBOARD} class:header--hidden={!showHeader}>
+    <header
+        id="header"
+        class="header"
+        class:has-dash-controls={activeTab === TAB_NAMES.DASHBOARD}
+        class:header--hidden={!showHeader}
+    >
         <div class="header-left">
             <!-- Mobile-only filter toggle: shows left drawer -->
             {#if activeTab === TAB_NAMES.DASHBOARD}
@@ -139,8 +149,15 @@
                     aria-label="Filters"
                     on:click={() => setFilterDrawer(true)}
                 >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
                     </svg>
                 </button>
             {/if}
@@ -149,8 +166,21 @@
 
         <div class="header-center">
             <nav class="tab-bar" id="tabs">
-                <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => setActiveTab(TAB_NAMES.DASHBOARD)}>
-                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <button
+                    class="tab-btn"
+                    class:active={activeTab === TAB_NAMES.DASHBOARD}
+                    data-tab={TAB_NAMES.DASHBOARD}
+                    on:click={() => setActiveTab(TAB_NAMES.DASHBOARD)}
+                >
+                    <svg
+                        class="tab-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
                         <rect x="3" y="3" width="7" height="9" />
                         <rect x="14" y="3" width="7" height="5" />
                         <rect x="14" y="12" width="7" height="9" />
@@ -158,15 +188,41 @@
                     </svg>
                     <span class="tab-label">Dashboard</span>
                 </button>
-                <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => setActiveTab(TAB_NAMES.TIMESTAMPS)}>
-                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <button
+                    class="tab-btn"
+                    class:active={activeTab === TAB_NAMES.TIMESTAMPS}
+                    data-tab={TAB_NAMES.TIMESTAMPS}
+                    on:click={() => setActiveTab(TAB_NAMES.TIMESTAMPS)}
+                >
+                    <svg
+                        class="tab-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
                         <circle cx="12" cy="12" r="10" />
                         <polyline points="12 6 12 12 16 14" />
                     </svg>
                     <span class="tab-label">Timestamps</span>
                 </button>
-                <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => setActiveTab(TAB_NAMES.SEGMENTS)}>
-                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <button
+                    class="tab-btn"
+                    class:active={activeTab === TAB_NAMES.SEGMENTS}
+                    data-tab={TAB_NAMES.SEGMENTS}
+                    on:click={() => setActiveTab(TAB_NAMES.SEGMENTS)}
+                >
+                    <svg
+                        class="tab-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
                         <path d="M3 10L3 14M7 6L7 18M11 3L11 21M15 8L15 16M19 11L19 13" />
                     </svg>
                     <span class="tab-label">Segments</span>
@@ -176,17 +232,37 @@
 
         <div class="header-right">
             <div class="auth-controls">
-                <button type="button" class="auth-btn favorite-btn" id="favoriteBtn" title="Bookmarks" on:click={toggleBookmarksPanel}>
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                <button
+                    type="button"
+                    class="auth-btn favorite-btn"
+                    id="favoriteBtn"
+                    title="Bookmarks"
+                    on:click={toggleBookmarksPanel}
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        width="13"
+                        height="13"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                    >
+                        <polygon
+                            points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+                        />
                     </svg>
                     <span class="bm-label">Bookmarks</span>
                 </button>
                 <!-- Mobile-only activity drawer toggle -->
                 {#if activeTab === TAB_NAMES.DASHBOARD}
-                    <button class="icon-btn icon-only-mobile" aria-label="Activity" id="openRight" on:click={() => setActivityDrawer(true)}>
+                    <button
+                        class="icon-btn icon-only-mobile"
+                        aria-label="Activity"
+                        id="openRight"
+                        on:click={() => setActivityDrawer(true)}
+                    >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+                            <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
                         </svg>
                     </button>
                 {/if}
@@ -201,7 +277,9 @@
                                 <span class="auth-role">·{$currentUser.role}</span>
                             {/if}
                         </span>
-                        <button type="button" class="auth-btn" on:click={_onSignOut}>Sign out</button>
+                        <button type="button" class="auth-btn" on:click={_onSignOut}
+                            >Sign out</button
+                        >
                     {:else}
                         <button type="button" class="auth-btn auth-btn--cta" on:click={_onSignIn}>
                             Sign in with HF
@@ -232,8 +310,6 @@
             <SegmentsTab />
         </div>
     {/if}
-
-
 </div>
 
 <!-- BottomPlayer is only needed on the Dashboard tab.
@@ -249,7 +325,12 @@
 
 <!-- Root-mounted sign-in modal + toast host (Phase 3). -->
 <SignInModal />
+<ClaimConfirmModal />
 <ToastHost />
+
+<!-- Project-overview modal — opened from the dashboard ⓘ and the segments
+     guides gate; single host so it looks identical everywhere. -->
+<InfoModal />
 
 <!-- Quran.Foundation bookmarks sidebar. -->
 <BookmarksPanel />
@@ -271,11 +352,6 @@
         margin-bottom: 0;
         transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    .header.header--hidden {
-        @media (max-width: 899px) {
-            transform: translateY(-100%);
-        }
-    }
     .header-left {
         display: flex;
         align-items: center;
@@ -284,14 +360,21 @@
     }
     .header-center {
         justify-self: center;
+        align-self: stretch;
+        display: flex;
+        align-items: flex-end;
     }
     .header-right {
         justify-self: end;
     }
 
     /* Filter btn & activity icon: hidden on desktop, shown on mobile */
-    .icon-btn.filter-btn   { display: none; }
-    .icon-btn.icon-only-mobile { display: none; }
+    .icon-btn.filter-btn {
+        display: none;
+    }
+    .icon-btn.icon-only-mobile {
+        display: none;
+    }
 
     /* icon-btn base style */
     .icon-btn {
@@ -305,19 +388,27 @@
         border: 1px solid var(--border-quiet);
         color: var(--text-secondary);
         cursor: pointer;
-        transition: background 0.15s, border-color 0.15s, color 0.15s;
+        transition:
+            background 0.15s,
+            border-color 0.15s,
+            color 0.15s;
     }
     .icon-btn:hover {
         background: var(--panel-2);
         border-color: var(--border-default);
         color: var(--text-primary);
     }
-    .icon-btn svg { width: 16px; height: 16px; display: block; }
+    .icon-btn svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+    }
 
     .tab-bar {
         display: flex;
-        align-items: center;
+        align-items: flex-end;
         gap: 0;
+        margin-bottom: -1px;
     }
     .auth-controls {
         display: flex;
@@ -347,7 +438,10 @@
         border-radius: 6px;
         cursor: pointer;
         font-size: 0.9rem;
-        transition: background 0.2s, border-color 0.2s, color 0.2s;
+        transition:
+            background 0.2s,
+            border-color 0.2s,
+            color 0.2s;
     }
     .auth-btn:hover {
         background: #1a2a4e;
@@ -387,7 +481,9 @@
         .tab-panel {
             padding: 0 12px;
         }
-        :global(:root) { --header-h: 98px; }
+        :global(:root) {
+            --header-h: 98px;
+        }
 
         .header {
             grid-template-columns: auto 1fr;
@@ -400,6 +496,9 @@
         }
         .header.has-dash-controls {
             grid-template-columns: auto auto 1fr auto;
+        }
+        .header.header--hidden {
+            transform: translateY(-100%);
         }
 
         /* Dissolve wrappers so children become direct grid items */
@@ -422,6 +521,8 @@
             grid-row: 2;
             grid-column: 1 / -1;
             width: 100%;
+            margin-bottom: 0;
+            align-items: center;
         }
 
         /* Row 3 — filter | bookmark | activity | user */
@@ -441,7 +542,9 @@
         .header.has-dash-controls .favorite-btn {
             grid-column: 2;
         }
-        .bm-label { display: none; } /* hide "Bookmarks" label */
+        .bm-label {
+            display: none;
+        } /* hide "Bookmarks" label */
         .icon-only-mobile {
             grid-row: 3;
             grid-column: 3;

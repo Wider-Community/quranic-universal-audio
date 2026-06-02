@@ -60,6 +60,33 @@ def test_save_non_assignee_returns_403(signed_in_client, tmp_reciter_dir):
         headers=_HEADERS,
     )
     assert res.status_code == 403
+    assert res.get_json()["code"] == "NOT_CLAIM_HOLDER"
+
+
+def test_save_wrong_state_returns_403_with_state_label(signed_in_client, tmp_reciter_dir):
+    """A non-owner saving a row that isn't UNDER_REVIEW gets NOT_EDITABLE_STATE
+    plus a humanized ``context.state_label`` for the FE to render."""
+    from scripts.lib.schemas import ReciterState
+
+    reciter = "fixture_reciter"
+    tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
+    # Close the claim + flip the row to AWAITING_REVIEW (not editable).
+    from services import db as _db
+    from services.db import repo_claims, repo_state
+    with _db.transaction():
+        repo_claims.close_claim(slug=reciter, close_reason="test")
+        repo_state.update_state(reciter, state=ReciterState.AWAITING_REVIEW)
+
+    client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
+    res = client.post(
+        f"/api/seg/save/{reciter}/112",
+        data=json.dumps({"segments": [], "operations": []}),
+        headers=_HEADERS,
+    )
+    assert res.status_code == 403
+    body = res.get_json()
+    assert body["code"] == "NOT_EDITABLE_STATE"
+    assert body["context"]["state_label"] == "available for review"
 
 
 def test_save_maintainer_can_override_assignee(signed_in_client, tmp_reciter_dir):
@@ -111,7 +138,7 @@ def test_save_marked_ready_returns_403(signed_in_client, tmp_reciter_dir):
         headers=_HEADERS,
     )
     assert res.status_code == 403
-    assert "marked ready" in res.get_json()["error"].lower()
+    assert res.get_json()["code"] == "MARKED_READY_FROZEN"
 
 
 def test_save_owner_bypasses_state_check(signed_in_client, tmp_reciter_dir):

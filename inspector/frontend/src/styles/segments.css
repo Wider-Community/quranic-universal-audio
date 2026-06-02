@@ -509,6 +509,14 @@
     cursor: not-allowed;
 }
 
+/* Multi-cursor split: a boundary nudge pair is rendered between every pair of
+ * region pills, but only the two flanking the selected region are interactable.
+ * Inactive pairs mute their split-line underline so the active boundary's
+ * bright accent draws the eye (the buttons themselves dim via :disabled). */
+.seg-edit-inline .seg-edit-buttons .seg-nudge-pair.inactive {
+    border-bottom-color: oklch(0.45 0.03 95 / 0.4);
+}
+
 /* Replay button — sits between the START / END nudger pairs in the trim
  * toolbar. Cold-starts a fresh loop from the live `currentStart`. Uses
  * the same neutral tinted ink as the cursor nudgers so the toolbar reads

@@ -76,6 +76,8 @@ from .segment import (
     DetailedMeta,
     DetailedSegment,
 )
+from .ts_job_record import TsJobRecord, TsJobSettings
+from .ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 
 __all__ = [
     "AdminActiveClaim",
@@ -121,5 +123,10 @@ __all__ = [
     "ProbeResult",
     "RequestChange",
     "SourceLink",
+    "TsJobRecord",
+    "TsJobSettings",
+    "TsValidationDoc",
+    "TsValidationMeta",
+    "TsValidationVerse",
     "VisitorDayStat",
 ]

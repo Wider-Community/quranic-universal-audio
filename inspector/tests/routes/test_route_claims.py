@@ -186,6 +186,44 @@ def test_claim_one_claim_per_user_returns_409(signed_in_client, state_persistenc
     assert "target_name" in body
 
 
+def test_claim_marked_ready_does_not_block_new_claim(signed_in_client, state_persistence):
+    """A contributor who has marked one reciter ready can claim another.
+
+    The one-claim-per-user policy only blocks on UNMARKED open claims —
+    marked-ready rows are admin-side until publish or send-back, so the
+    reviewer is free to pick up something new while they wait."""
+    _replace_state([
+        _row("marked", state="under_review", assignee_hf_id="u-1", marked_ready=True),
+        _row("fresh", state="awaiting_review"),
+    ])
+
+    client, _ = signed_in_client(hf_user_id="u-1", login="alice")
+    resp = client.post(
+        "/api/claim/fresh",
+        headers={"Origin": "http://localhost"},
+    )
+    assert resp.status_code == 200, resp.data
+    body = json.loads(resp.data)
+    assert body["state"] == "under_review"
+    assert body["assignee_hf_id"] == "u-1"
+
+
+def test_can_claim_predicate_ignores_marked_ready_holdings(signed_in_client):
+    """The ``can_claim`` predicate must mirror the policy — a user holding
+    only marked-ready rows should see ``can_claim=True`` on an awaiting
+    target (otherwise the FE would hide the Claim button after mark-ready
+    and the new policy would never be exercised from the UI)."""
+    _replace_state([
+        _row("marked", state="under_review", assignee_hf_id="u-1", marked_ready=True),
+        _row("fresh", state="awaiting_review"),
+    ])
+    client, _ = signed_in_client(hf_user_id="u-1", login="alice")
+    resp = client.get("/api/reciter-task/fresh")
+    assert resp.status_code == 200
+    preds = json.loads(resp.data)["predicates"]
+    assert preds["can_claim"] is True
+
+
 def test_claim_discarded_returns_400(signed_in_client, state_persistence):
     _replace_state([_row("test_slug", state="awaiting_review", visibility="discarded")])
 
@@ -206,6 +244,9 @@ def test_claim_already_under_review_returns_400(signed_in_client, state_persiste
         headers={"Origin": "http://localhost"},
     )
     assert resp.status_code == 400
+    payload = json.loads(resp.data)
+    assert payload["code"] == "STATE_PRECONDITION"
+    assert payload["context"]["state_label"] == "under review"
 
 
 def test_claim_missing_origin_returns_403(signed_in_client, state_persistence):
@@ -323,7 +364,7 @@ def test_mark_ready_rejects_unchecked_checklist(
     )
     assert resp.status_code == 400
     payload = json.loads(resp.data)
-    assert "checklist incomplete" in payload["error"]
+    assert payload["code"] == "MARK_READY_CHECKLIST"
     assert payload["details"]["unchecked"] == ["failed_alignments"]
 
 
@@ -365,7 +406,7 @@ def test_mark_ready_rejects_nonzero_blocking_counts(
     )
     assert resp.status_code == 400
     payload = json.loads(resp.data)
-    assert "blocking validation counts" in payload["error"]
+    assert payload["code"] == "MARK_READY_BLOCKING_COUNTS"
     assert payload["details"]["blocking_counts"] == {"low_confidence": 3}
 
 
@@ -453,7 +494,7 @@ def test_mark_ready_rejects_malformed_body(
     )
     assert resp.status_code == 400
     payload = json.loads(resp.data)
-    assert payload["error"] == "marked_ready payload invalid"
+    assert payload["code"] == "MARK_READY_PAYLOAD"
     assert "validation_errors" in payload["details"]
 
 
@@ -471,7 +512,7 @@ def test_release_blocked_after_marked_ready(
         headers={"Origin": "http://localhost"},
     )
     assert resp.status_code == 400
-    assert "unmark ready first" in json.loads(resp.data)["error"]
+    assert json.loads(resp.data)["code"] == "RELEASE_BLOCKED_MARKED_READY"
 
 
 # ---------------------------------------------------------------------------
@@ -536,7 +577,7 @@ def test_mark_ready_non_owner_still_requires_form_body(
     )
     assert resp.status_code == 400
     payload = json.loads(resp.data)
-    assert payload["error"] == "marked_ready payload invalid"
+    assert payload["code"] == "MARK_READY_PAYLOAD"
 
 
 def test_mark_ready_owner_bypass_predicate_surfaces(signed_in_client, state_persistence):

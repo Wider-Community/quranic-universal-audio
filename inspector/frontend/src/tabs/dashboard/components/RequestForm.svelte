@@ -25,6 +25,7 @@
         rejectRequestSoft,
         submitRequest,
     } from '../../../lib/api/requests';
+    import { loadCatalogJson } from '../../../lib/resources/catalog';
     import { isOwner } from '../../../lib/stores/current-user';
     import type {
         PublicDelivery,
@@ -90,19 +91,16 @@
 
     onMount(async () => {
         try {
-            const resp = await fetch('/api/static/catalog.json');
-            if (resp.ok) {
-                const cat = await resp.json();
-                riwayatOptions = (cat?.vocab?.riwayat ?? []).map(
-                    (r: { slug: string; short?: string; name: string }) => ({ slug: r.slug, short: r.short, name: r.name }),
-                );
-                styleOptions = (cat?.vocab?.styles ?? []).map(
-                    (s: { slug: string; name: string }) => ({ slug: s.slug, name: s.name }),
-                );
-                contextOptions = (cat?.vocab?.recording_contexts ?? []).map(
-                    (c: { slug: string; name: string }) => ({ slug: c.slug, name: c.name }),
-                );
-            }
+            const cat = await loadCatalogJson();
+            riwayatOptions = (cat?.vocab?.riwayat ?? []).map(
+                (r: { slug: string; short?: string; name: string }) => ({ slug: r.slug, short: r.short, name: r.name }),
+            );
+            styleOptions = (cat?.vocab?.styles ?? []).map(
+                (s: { slug: string; name: string }) => ({ slug: s.slug, name: s.name }),
+            );
+            contextOptions = (cat?.vocab?.recording_contexts ?? []).map(
+                (c: { slug: string; name: string }) => ({ slug: c.slug, name: c.name }),
+            );
         } catch {
             // Vocab fetch is best-effort; if it fails the dropdowns will show
             // raw slug strings of whatever the user typed/selected.

@@ -5,7 +5,7 @@
 ``services/timestamps.py``). ``/config`` advertises manifest + shard URL
 templates so the frontend doesn't need its own env knob.
 """
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response, jsonify, request
 
 from config import (
     UNIFIED_DISPLAY_MAX_HEIGHT,
@@ -15,7 +15,10 @@ from config import (
     ANALYSIS_WORD_FONT_SIZE, ANALYSIS_LETTER_FONT_SIZE,
 )
 from services.audio_meta import vbr_chapters_for_reciter
+from services import auth as auth_service
 from services import timestamps as ts_serve
+from services.auth import capabilities as _capabilities
+from utils.decorators import require_capability
 from utils.json_response import orjson_response
 
 ts_bp = Blueprint("ts", __name__, url_prefix="/api/ts")
@@ -75,11 +78,46 @@ def ts_manifest():
 
 @ts_bp.route("/shard/<reciter>/<int:chapter>")
 def ts_shard(reciter, chapter):
-    """Serve a per-chapter gzipped shard (local or bucket source)."""
-    body = ts_serve.shard_bytes(reciter, chapter)
+    """Serve a per-chapter gzipped shard (local or bucket source).
+
+    ``?full=1`` serves every occurrence (un-deduped) for the owner preview /
+    aligner "show all"; default serves the deduped single-take view. v1
+    shards ignore the flag (no occurrences to expand).
+    """
+    full = request.args.get("full") in ("1", "true", "yes")
+    # Owner preview: holders of ``timestamps.view_unreleased`` may read shards
+    # for generated-but-unreleased reciters; everyone else stays released-only.
+    allow_unreleased = _capabilities.can(
+        auth_service.current_user(), "timestamps.view_unreleased"
+    )
+    body = ts_serve.shard_bytes(
+        reciter, chapter, full=full, allow_unreleased=allow_unreleased
+    )
     if body is None:
         return jsonify({"error": "Shard not found"}), 404
     return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)
+
+
+@ts_bp.route("/validation/<reciter>")
+@require_capability("timestamps.view_validation")
+def ts_validation(user, reciter):
+    """Verse-level ts-validation flags for the Timestamps-tab accordion.
+
+    Gated on ``timestamps.view_validation`` (owner + maintainer by default;
+    hidden to contributors/anon). Within that, the unreleased-reciter bypass
+    reuses ``timestamps.view_unreleased`` — a maintainer therefore sees flags
+    for released recitations only, while an owner sees everything.
+
+    Returns ``{"_meta", "verses"}`` from the reciter's ``ts_validation.json`` —
+    an empty doc when the reciter is viewable but never ran with probe beams,
+    so the FE shows an empty panel. Non-viewable reciters get 404 (no leak of
+    unreleased existence).
+    """
+    allow_unreleased = _capabilities.can(user, "timestamps.view_unreleased")
+    doc = ts_serve.ts_validation_doc(reciter, allow_unreleased=allow_unreleased)
+    if doc is None:
+        return jsonify({"error": "Not found"}), 404
+    return orjson_response(doc)
 
 
 @ts_bp.route("/resource/<name>")

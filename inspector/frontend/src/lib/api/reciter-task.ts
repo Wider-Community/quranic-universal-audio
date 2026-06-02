@@ -21,7 +21,6 @@ export type ReciterTaskState =
     | 'awaiting_alignment'
     | 'awaiting_review'
     | 'under_review'
-    | 'awaiting_timestamps'
     | 'released';
 
 export type Visibility = 'public' | 'discarded';

@@ -7,7 +7,7 @@ on the FE — the wire only carries the canonical state + open-claim shape:
 
 * Marked ready = ``state == "under_review"`` AND ``open_claim.marked_ready_at`` set
 * Under review = ``state == "under_review"`` AND ``open_claim.marked_ready_at`` null
-* Published    = ``state IN ("awaiting_timestamps", "released")``
+* Published    = ``state == "released"``
 * Available    = ``state == "awaiting_review"``
 
 Timestamps are ISO-8601 UTC strings exactly as stored in the substrate; the

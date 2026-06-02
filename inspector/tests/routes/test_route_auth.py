@@ -60,6 +60,8 @@ def test_me_anonymous_returns_null_shape(flask_client):
         "dev_mode": False,
         # Anonymous holds the anon-eligible view capabilities by default.
         "capabilities": ["view.catalog", "view.public_activity"],
+        # No identity → no guide read marks.
+        "guides_read": [],
     }
 
 

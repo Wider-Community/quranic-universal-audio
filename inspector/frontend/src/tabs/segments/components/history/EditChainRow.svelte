@@ -30,6 +30,7 @@
     import { onChainUndoClick, onPendingOpsDiscard } from '../../utils/save/undo';
     import { classifiedIssuesOf } from '../../utils/validation/classified-issues';
     import SegmentRow from '../list/SegmentRow.svelte';
+    import GuideFlagButton from './GuideFlagButton.svelte';
     import HistoryArrows from './HistoryArrows.svelte';
 
     // Props ------------------------------------------------------------------
@@ -49,6 +50,8 @@
     $: leafSnaps = computeChainLeafSnaps(chain);
     $: chapter = chain.rootBatch?.chapter ?? null;
     $: chainBatchIds = getChainBatchIds(chain);
+    // Dev-only guide flagging — flatten the chain's ops for GuideFlagButton.
+    $: chainOps = chain.ops.map((co) => co.op);
     /** Op ids whose enclosing batch is unsaved (`batch_id == null`). The
      *  save-preview Discard button hands these to `onPendingOpsDiscard`
      *  so the entire pending chain reverts atomically. */
@@ -233,6 +236,9 @@
                 use:editGate
                 on:click|stopPropagation={handleChainDiscardClick}
             >Discard</button>
+        {/if}
+        {#if variant !== 'guide' && mode === 'history' && chainBatchIds.length > 0}
+            <GuideFlagButton {chapter} batchId={chainBatchIds[0] ?? null} group={chainOps} />
         {/if}
     </div>
 

@@ -3,7 +3,7 @@
 
 Reads detailed.json from the segment extraction pipeline, downloads full
 surah audio, slices segments, sends batches through a caller-provided MFA
-backend, and writes timestamps.json / timestamps_full.json.
+backend, and writes per-chapter v2 timestamps shards.
 """
 
 from __future__ import annotations
@@ -26,6 +26,8 @@ from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
+
+from scripts.lib.timestamps_shards import gzip_shard, split_to_shards
 
 if TYPE_CHECKING:
     import numpy as np
@@ -332,6 +334,68 @@ def _matched_ref_to_output_key(matched_ref: str) -> str | None:
         return f"{start_sura}:{start_ayah}"
     else:
         return matched_ref  # compound key for cross-verse
+
+
+def build_ts_validation(chapters, results_by_beam, beams, *,
+                        reciter: str, method: str,
+                        aligner_model: str = DEFAULT_ALIGNER_MODEL) -> dict:
+    """Verse-level beam-agreement summary across every aligned beam.
+
+    Each beam in ``beams`` is an independent alignment pass; the widest
+    (``max(beams)``) is canonical. A verse *passes* under beam ``b`` when every
+    segment mapping to that verse aligned (``status == "ok"``) under ``b``. A
+    verse is *flagged* when it fails under at least one beam it was tested
+    under — tighter beams disagreeing with the canonical pass is the
+    low-confidence signal. This is the verse-level analogue of the segment-level
+    ``low_confidence_v2.json`` probe and feeds the Timestamps-tab "ts-validation"
+    accordion (owner preview).
+
+    Returns a plain dict (no pydantic dep — runs inside the HF job container):
+    ``{"_meta": {...}, "verses": {verse_key: {"failed_beams": [...],
+    "min_passing_beam": int|None}}}``. With a single beam (no probes) ``verses``
+    is empty — there is nothing to compare against.
+    """
+    canonical_beam = max(beams) if beams else 0
+    # verse_key -> {beam: all_segments_ok_under_beam}
+    pass_by_beam: dict[str, dict[int, bool]] = {}
+    for b in beams:
+        for ch_idx, seg_list in (results_by_beam.get(b) or {}).items():
+            segments = (chapters[ch_idx].get("segments", [])
+                        if 0 <= ch_idx < len(chapters) else [])
+            for seg_idx, rec in seg_list:
+                if not (0 <= seg_idx < len(segments)):
+                    continue
+                vkey = _matched_ref_to_output_key(
+                    segments[seg_idx].get("matched_ref", "") or "")
+                if not vkey:
+                    continue
+                ok = (rec or {}).get("status") == "ok"
+                by_beam = pass_by_beam.setdefault(vkey, {})
+                by_beam[b] = by_beam.get(b, True) and ok
+
+    verses: dict[str, dict] = {}
+    for vkey, by_beam in pass_by_beam.items():
+        tested = [b for b in beams if b in by_beam]
+        failed = sorted((b for b in tested if not by_beam[b]), reverse=True)
+        if not failed:
+            continue  # aligned under every beam it was tested → confident
+        passing = [b for b in tested if by_beam[b]]
+        verses[vkey] = {
+            "failed_beams": failed,
+            "min_passing_beam": min(passing) if passing else None,
+        }
+
+    return {
+        "_meta": {
+            "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "reciter": reciter,
+            "aligner_model": aligner_model,
+            "method": method,
+            "beams": sorted(set(beams), reverse=True),
+            "canonical_beam": canonical_beam,
+        },
+        "verses": verses,
+    }
 
 
 def _seg_covered_ayahs(matched_ref: str) -> set[tuple[int, int]]:
@@ -689,6 +753,200 @@ def mfa_wait_result(event_id, headers, base_url, timeout=DEFAULT_TIMEOUT):
 # Main processing
 # ---------------------------------------------------------------------------
 
+def _normalize_from_results(chapters, results_by_ch, audio_category):
+    """Convert raw MFA results to per-chapter ordered occurrences + failures.
+
+    The conversion + per-verse word routing half of the former
+    ``_build_outputs`` closure, factored out so the deduped projection
+    (``_dedup_core``) is shared between the live pipeline and the
+    read-path ``canonical_occurrence`` (single implementation, no drift).
+
+    Returns ``(norm, failures)`` where ``norm[ch_idx]`` is a list of
+    occurrences in result order::
+
+        {"ch_ref", "seg_index", "matched_ref", "time_start", "time_end",
+         "words_by_verse": {verse_key: [converted_word, ...]}, "segment_uid"}
+
+    No repeat-pass skip and no word merge — every accepted segment is one
+    occurrence. Failed segments go to ``failures`` (carrying ``seg`` + ref
+    so run contiguity can be reconstructed downstream).
+    """
+    by_surah = str(audio_category).startswith("by_surah")
+    norm: dict[int, list] = {}
+    failures: list[dict] = []
+    for ch_idx, chapter in enumerate(chapters):
+        ch_ref = str(chapter.get("ref", ""))
+        segs = chapter.get("segments", [])
+        verse_prefix = (f"{ch_ref}:" if (not by_surah and ":" in ch_ref) else None)
+        ch_occ = []
+        for seg_idx, result in results_by_ch.get(ch_idx, []):
+            if seg_idx >= len(segs):
+                continue
+            seg = segs[seg_idx]
+            matched_ref = seg.get("matched_ref", "")
+            if result.get("status") != "ok":
+                failures.append({
+                    "verse": ch_ref, "seg": seg_idx,
+                    "ref": matched_ref,
+                    "error": result.get("error", "unknown"),
+                })
+                continue
+            seg_offset_ms = seg.get("time_start", 0)
+            seg_end_ms = seg.get("time_end", seg_offset_ms)
+            raw_words = result.get("words", [])
+            if verse_prefix is not None:
+                raw_words = [w for w in raw_words
+                             if w.get("location", "").startswith(verse_prefix)]
+            words_by_verse: dict[str, list] = {}
+            for w in raw_words:
+                verse_key = w["location"].rsplit(":", 1)[0]
+                words_by_verse.setdefault(verse_key, []).append(
+                    _convert_word(w, seg_offset_ms))
+            ch_occ.append({
+                "ch_ref": ch_ref,
+                "seg_index": seg_idx,
+                "matched_ref": matched_ref,
+                "time_start": seg_offset_ms,
+                "time_end": seg_end_ms,
+                "words_by_verse": words_by_verse,
+                "segment_uid": seg.get("segment_uid"),
+            })
+        if ch_occ:
+            norm[ch_idx] = ch_occ
+    return norm, failures
+
+
+def _dedup_core(chapters_norm, seed_existing, *, completed_surahs,
+                completed_refs, refresh_surahs, audio_category):
+    """Repeat-pass skip + word merge + verse bounds over normalized occurrences.
+
+    The deduped half of the former ``_build_outputs`` closure. Operates on
+    the normalized form (already-converted, verse-routed words) so the live
+    pipeline (fresh results) and the read-path (stored v2) produce identical
+    output. ``chapters_norm`` entries are
+    ``{"ch_ref", "matched_refs": [positional matched_ref], "occurrences": [...]}``.
+
+    Returns ``(full_data, words_data)``.
+    """
+    full_data: dict = dict(seed_existing) if seed_existing else {}
+    words_data: dict = {}
+    seg_bounds: dict[str, list[int]] = {}
+    if seed_existing:
+        for ref, val in seed_existing.items():
+            words_data[ref] = [[w[0], w[1], w[2]] for w in val["words"]]
+            vs = val.get("verse_start_ms")
+            ve = val.get("verse_end_ms")
+            if vs is not None and ve is not None:
+                seg_bounds[ref] = [vs, ve]
+
+    by_surah = str(audio_category).startswith("by_surah")
+    for ch in chapters_norm:
+        ch_ref = ch["ch_ref"]
+        if seed_existing is not None:
+            if by_surah:
+                if ch_ref in completed_surahs and ch_ref not in (refresh_surahs or set()):
+                    continue
+            else:
+                if ch_ref in completed_refs:
+                    continue
+        occurrences = ch["occurrences"]
+        if not occurrences:
+            continue
+
+        if by_surah:
+            repeat_skip = _repeat_pass_skip_indices(
+                [{"matched_ref": m} for m in ch["matched_refs"]])
+            if repeat_skip:
+                log.info("Surah %s: dropping %d re-pass home seg(s): %s",
+                         ch_ref, len(repeat_skip), sorted(repeat_skip))
+            for occ in occurrences:
+                if occ["seg_index"] in repeat_skip:
+                    continue
+                matched_ref = occ["matched_ref"]
+                seg_offset_ms = occ["time_start"]
+                seg_end_ms = occ["time_end"]
+                seg_home_key = _matched_ref_to_output_key(matched_ref)
+                seg_is_single_home = (seg_home_key is not None
+                                      and ":" in seg_home_key
+                                      and "-" not in seg_home_key)
+                if seg_is_single_home:
+                    cur = seg_bounds.get(seg_home_key)
+                    if cur is None:
+                        seg_bounds[seg_home_key] = [seg_offset_ms, seg_end_ms]
+                    else:
+                        cur[0] = min(cur[0], seg_offset_ms)
+                        cur[1] = max(cur[1], seg_end_ms)
+                if not occ["words_by_verse"]:
+                    continue
+                for verse_key, verse_words in occ["words_by_verse"].items():
+                    entry = full_data.setdefault(
+                        verse_key, {"words": [], "_provenance": []})
+                    if "_provenance" not in entry:
+                        entry["_provenance"] = [True] * len(entry["words"])
+                    _merge_seg_words(entry, matched_ref, verse_key, verse_words)
+        else:
+            all_words = []
+            for occ in occurrences:
+                for verse_words in occ["words_by_verse"].values():
+                    all_words.extend(verse_words)
+            if all_words:
+                full_data[ch_ref] = {"words": all_words}
+
+    for ref in list(full_data.keys()):
+        if ref.startswith("0:"):
+            del full_data[ref]
+
+    for ref, val in full_data.items():
+        val.pop("_home_indices", None)
+        val.pop("_provenance", None)
+        words = val["words"]
+        words.sort(key=lambda w: w[1])
+        bound = seg_bounds.get(ref)
+        word_start = words[0][1] if words else None
+        word_end = max((w[2] for w in words), default=None)
+        if bound is not None and words:
+            val["verse_start_ms"] = min(bound[0], word_start)
+            val["verse_end_ms"] = max(bound[1], word_end)
+        elif bound is not None:
+            val["verse_start_ms"] = bound[0]
+            val["verse_end_ms"] = bound[1]
+        elif words:
+            val["verse_start_ms"] = word_start
+            val["verse_end_ms"] = word_end
+
+    for ref, val in full_data.items():
+        if ref not in words_data:
+            words_data[ref] = [[w[0], w[1], w[2]] for w in val["words"]]
+
+    return full_data, words_data
+
+
+def build_outputs(results_by_ch, seed_existing, *, chapters,
+                  completed_surahs, completed_refs, refresh_surahs,
+                  audio_category):
+    """Module-level form of the former ``_build_outputs`` closure.
+
+    ``_normalize_from_results`` (convert + verse-route) → ``_dedup_core``
+    (skip + merge + bounds). ``canonical_occurrence`` reuses the SAME
+    ``_dedup_core`` over stored v2, so the deduped projection cannot drift
+    from what the pipeline wrote. Returns ``(full_data, words_data, mfa_failures)``.
+    """
+    norm, failures = _normalize_from_results(chapters, results_by_ch, audio_category)
+    chapters_norm = []
+    for ch_idx, chapter in enumerate(chapters):
+        chapters_norm.append({
+            "ch_ref": str(chapter.get("ref", "")),
+            "matched_refs": [s.get("matched_ref", "")
+                             for s in chapter.get("segments", [])],
+            "occurrences": norm.get(ch_idx, []),
+        })
+    full_data, words_data = _dedup_core(
+        chapters_norm, seed_existing,
+        completed_surahs=completed_surahs, completed_refs=completed_refs,
+        refresh_surahs=refresh_surahs, audio_category=audio_category)
+    return full_data, words_data, failures
+
+
 def process(input_dir: Path,
             backend: MfaBackend | None,
             method: str,
@@ -707,10 +965,11 @@ def process(input_dir: Path,
 
     Each value in ``beams`` runs as an independent alignment pass over
     the same audio. The widest beam (``max(beams)``) is the canonical
-    pass — it always drives ``timestamps[_full].json`` regardless of the
-    order ``beams`` was supplied in. Every other beam writes
-    ``timestamps[_full].beam_<N>.json`` and its failures feed the
-    cascade in ``beam_diff_report.txt``.
+    pass — it always drives the ``timestamps/<ch>.json`` v2 shards
+    regardless of the order ``beams`` was supplied in. The remaining
+    (narrower) beams are folded into a single verse-level
+    ``ts_validation.json`` sidecar — verses that align under the canonical
+    beam but fail under a tighter beam are flagged as low-confidence.
 
     When ``mfa_app_path`` is set and ``workers > 1``, the alignment
     fan-out runs across a ProcessPoolExecutor (true parallelism, GIL
@@ -723,10 +982,9 @@ def process(input_dir: Path,
     """
     if not beams:
         raise ValueError("beams must contain at least one value")
-    # Canonical = widest beam, regardless of input order.
+    # Canonical = widest beam, regardless of input order. The narrower beams
+    # feed the verse-level ts_validation.json sidecar (built after alignment).
     canonical_beam = max(beams)
-    probe_beams = sorted((b for b in beams if b != canonical_beam),
-                         reverse=True)
     use_pool = mfa_app_path is not None and workers > 1
     if not use_pool and backend is None:
         raise ValueError("backend is required when not using the process pool")
@@ -845,23 +1103,10 @@ def process(input_dir: Path,
         ]
 
     if not chapters_to_process:
+        # Nothing new to align — the v2 shards from the prior run already
+        # stand. No legacy timestamps_full.json / timestamps.json is written
+        # (single canonical v2 format).
         log.info("No segments to process (all complete or skipped)")
-        if existing_data:
-            for ref, val in existing_data.items():
-                words = val.get("words", [])
-                if words and "verse_start_ms" not in val:
-                    val["verse_start_ms"] = words[0][1]
-                    val["verse_end_ms"] = words[-1][2]
-            _write_output(output_dir / "timestamps_full.json", meta,
-                          method, canonical_beam, shared_cmvn,
-                          existing_data, padding=padding)
-            words_data = {}
-            for ref, val in existing_data.items():
-                words_only = [[w[0], w[1], w[2]] for w in val["words"]]
-                words_data[ref] = words_only
-            _write_output(output_dir / "timestamps.json", meta,
-                          method, canonical_beam, shared_cmvn, words_data,
-                          padding=padding)
         return output_dir
 
     # --- Producer-consumer pipeline ---
@@ -1280,37 +1525,42 @@ def process(input_dir: Path,
 
         return full_data, words_data, mfa_failures
 
-    # Canonical (widest beam) — drives timestamps[_full].json + reuses
-    # existing_data when resuming/refreshing.
-    full_data, words_data, mfa_failures = _build_outputs(
-        canonical_results,
-        existing_data if load_existing else None)
-    if mfa_failures:
-        log.warning("Canonical beam %d: %d MFA failures",
-                    canonical_beam, len(mfa_failures))
+    # v2 is the ONLY persisted timestamps format: per-chapter occurrence-
+    # preserving shards at ``<output_dir>/timestamps/<chapter>.json``.
+    # ``canonical_results`` carries every aligned segment (pre-dedup) so
+    # build_raw_v2 keeps all occurrences; the inspector read-path dedups on
+    # serve and downstream consumers derive whatever projection they need.
+    # The historical timestamps_full.json / timestamps.json (single-file +
+    # word-only) are intentionally NOT written (decision: one canonical v2).
+    from scripts.lib.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
+    ts_dir = output_dir / "timestamps"
+    ts_dir.mkdir(parents=True, exist_ok=True)
 
-    full_path = output_dir / "timestamps_full.json"
-    words_path = output_dir / "timestamps.json"
-    _write_output(full_path, meta, method, canonical_beam,
-                  shared_cmvn, full_data, mfa_failures, padding=padding)
-    _write_output(words_path, meta, method, canonical_beam,
-                  shared_cmvn, words_data, mfa_failures, padding=padding)
-    log.info("Wrote canonical (beam=%d) %s (%d verses)",
-             canonical_beam, full_path, len(full_data))
+    def _emit_v2(results_by_ch, suffix=""):
+        v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
+        shards = split_to_shards(
+            v2_doc, reciter=reciter, audio_category=audio_category, url_template="")
+        for ch_num, shard_doc in shards.items():
+            (ts_dir / f"{ch_num}{suffix}.json.gz").write_bytes(gzip_shard(shard_doc))
+        fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
+        return len(shards), fails
 
-    # Probe beams: each gets its own pair of files. Failure cascade is
-    # computed at compare-time from the per-beam mfa_failures; we don't
-    # write a separate review sidecar.
-    for b in probe_beams:
-        pf, pw, fails = _build_outputs(results_by_beam[b], None)
-        full_p = output_dir / f"timestamps_full.beam_{b}.json"
-        words_p = output_dir / f"timestamps.beam_{b}.json"
-        _write_output(full_p, meta, method, b, shared_cmvn, pf, fails,
-                      padding=padding)
-        _write_output(words_p, meta, method, b, shared_cmvn, pw, fails,
-                      padding=padding)
-        log.info("Wrote beam=%d %s (%d verses, %d failures)",
-                 b, full_p, len(pf), len(fails))
+    n_shards, n_fail = _emit_v2(canonical_results)
+    if n_fail:
+        log.warning("Canonical beam %d: %d MFA failures", canonical_beam, n_fail)
+    log.info("Wrote %d v2 timestamps shard(s) (beam=%d) -> %s",
+             n_shards, canonical_beam, ts_dir)
+
+    # Probe beams → ONE verse-level ``ts_validation.json`` sidecar (the
+    # verse-level analogue of low_confidence_v2.json) instead of per-beam
+    # shard files. Flags verses whose alignment disagrees under tighter beams;
+    # served owner-gated to the Timestamps-tab "ts-validation" accordion.
+    ts_validation = build_ts_validation(
+        chapters, results_by_beam, beams, reciter=reciter, method=method)
+    (output_dir / "ts_validation.json").write_text(
+        json.dumps(ts_validation, ensure_ascii=False), encoding="utf-8")
+    log.info("Wrote ts_validation.json: %d flagged verse(s) across beams %s",
+             len(ts_validation["verses"]), ts_validation["_meta"]["beams"])
 
     _cleanup([], tmp_dir)
     return output_dir

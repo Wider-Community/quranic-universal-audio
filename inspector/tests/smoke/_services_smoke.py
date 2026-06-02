@@ -268,7 +268,9 @@ def smoke() -> int:
             assert row.assignee_hf_id == "300"  # assignee retained
             print("ok  state reciter.merge_rejected (assignee retained)")
 
-            # mark again, then publish (maintainer)
+            # mark again, then publish (maintainer). Publish now goes straight
+            # under_review (marked_ready) → released — no awaiting_timestamps
+            # hop — and carries the succeeded job id for the audit.
             state.transition(
                 "saad_al_ghamdi",
                 "reciter.marked_ready",
@@ -278,21 +280,12 @@ def smoke() -> int:
                 "saad_al_ghamdi",
                 "reciter.published",
                 actor=maintainer_actor,
-            )
-            assert row.state == ReciterState.AWAITING_TIMESTAMPS
-            assert row.assignee_hf_id is None
-            print("ok  state reciter.published → AWAITING_TIMESTAMPS")
-
-            # timestamps_completed
-            row = state.transition(
-                "saad_al_ghamdi",
-                "reciter.timestamps_completed",
-                actor=maintainer_actor,
                 payload={"job_id": "job_abc"},
             )
             assert row.state == ReciterState.RELEASED
+            assert row.assignee_hf_id is None
             assert row.timestamps_job_ids == ["job_abc"]
-            print("ok  state reciter.timestamps_completed → RELEASED")
+            print("ok  state reciter.published → RELEASED (job linked)")
 
             # unlocked_for_revision — sets RevisionContext (exits RELEASED)
             row = state.transition(
