@@ -154,13 +154,10 @@
 <style>
     .backdrop {
         position: fixed;
-        left: 0;
-        right: 0;
-        top: 0;
-        bottom: var(--player-h, 72px);
+        inset: 0;
         background: oklch(0.06 0.005 268 / 0.72);
         backdrop-filter: blur(3px);
-        z-index: 100;
+        z-index: 120;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -169,15 +166,12 @@
     }
     /* Stack above the segments guides gate (z 950) / accordion guide (z 1000)
      * when an info modal is opened on top of them. */
-    .backdrop.elevated { z-index: 1000; }
+    .backdrop.elevated { z-index: 1050; }
     @keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 
     .modal {
         width: min(1080px, 92vw);
-        /* Backdrop is offset by --player-h at the bottom, so the modal must
-         * size against the *reduced* area — otherwise vh-based max heights
-         * let the modal overflow into the player's z-index (110 > 100). */
-        height: min(720px, calc(86vh - var(--player-h, 72px)));
+        height: min(720px, 86vh);
         background: var(--canvas);
         border: 1px solid var(--border-default);
         border-radius: var(--r-3);
@@ -190,14 +184,12 @@
     }
     .modal.wide {
         width: min(1480px, 95vw);
-        height: min(900px, calc(92vh - var(--player-h, 72px)));
+        height: min(900px, 92vh);
     }
-    /* Reading-width shell that hugs its content vertically, capped to the
-     * viewport (body scrolls past the cap). */
     .modal.narrow {
         width: min(640px, 94vw);
         height: auto;
-        max-height: calc(86vh - var(--player-h, 72px));
+        max-height: 86vh;
     }
     @keyframes modal-in {
         from { opacity: 0; transform: translateY(12px) scale(0.985); }
