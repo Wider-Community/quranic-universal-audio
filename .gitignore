@@ -26,6 +26,9 @@ PRODUCT.md
 
 # Local
 .local/
+# Standalone private repos (own git, siblings of .local) — see CLAUDE.md
+quranic-universal-aligner/
+quranic-universal-timestamps/
 .tmp/
 .playwright-mcp
 

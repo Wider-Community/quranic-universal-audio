@@ -8,9 +8,9 @@ that we can reconstruct the *reading sequence* — the ordered list of
 section refs as the reciter actually performed them — which is what we
 hand to MFA to time-locate the boundary between consecutive passes.
 
-The math is borrowed verbatim from
-``.local/spaces/quranic_universal_aligner/src/core/segment_types.py`` —
-ported so the inspector doesn't depend on the .local tree.
+The math is borrowed from the quranic-universal-aligner repo
+(``src/core/segment_types.py``); kept inline so the inspector has no
+cross-repo dependency.
 """
 from __future__ import annotations
 

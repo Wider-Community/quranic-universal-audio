@@ -82,7 +82,7 @@ ALIGNER_BUCKET = os.environ.get("INSPECTOR_ALIGNER_BUCKET", "hetchyy/aligner-buc
 # Job image. Two modes, selected by ``INSPECTOR_JOB_IMAGE``:
 #   - Prebuilt mode (set ``INSPECTOR_JOB_IMAGE`` to the HF Docker Space
 #     ``hf.co/spaces/hetchyy/quran-ts-job``): the MFA framework + pip deps are
-#     baked into ``/env`` (see .local/spaces/quran_ts_job/Dockerfile). No ~300 MB
+#     baked into ``/env`` (see .local/quran_ts_job/Dockerfile). No ~300 MB
 #     conda solve per launch — the image is pulled from cache (~30-60 s). The
 #     gitignored acoustic MODEL is NOT baked; it stays bucket-mounted at /aux, so
 #     the image is open-source-only. The Space is PUBLIC: HF Jobs cannot pull a

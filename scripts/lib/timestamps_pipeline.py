@@ -138,7 +138,7 @@ class SpaceMfaBackend:
 
 
 class LocalMfaBackend:
-    """Direct adapter around .local/spaces/mfa_aligner/app.py.
+    """Direct adapter around the quranic-universal-timestamps repo's app.py.
 
     Used when running on Katana / locally with the MFA Space code imported
     in-process (no HTTP). Single-thread aligner — the pipeline parallelises

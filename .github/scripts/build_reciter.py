@@ -1449,7 +1449,10 @@ def build_segment_shards(slug: str, *, dry_run: bool = False) -> None:
 # Global resources (qpc, dk, font) — fetched once per Inspector session
 # ---------------------------------------------------------------------------
 
-# Source paths under .local/spaces/quranic_universal_aligner/data/.
+# Quran reference assets (qpc text, digital-khatt script, font) ship from the
+# standalone quranic-universal-aligner repo's data/ dir (gitignored sibling of
+# .local inside this repo). Override with QUA_ALIGNER_DATA_DIR.
+# Local-only step (no CI caller); missing files are skipped with a warning below.
 # Tuple shape: (manifest_key, source_path, dataset_path, gzip).
 _RESOURCE_SPECS = [
     ("qpc_hafs",
@@ -1459,7 +1462,10 @@ _RESOURCE_SPECS = [
     ("digital_khatt_otf",
      "DigitalKhattV2.otf", "DigitalKhattV2.otf", False),
 ]
-_QUA_DATA_DIR = ROOT / ".local" / "spaces" / "quranic_universal_aligner" / "data"
+_QUA_DATA_DIR = Path(
+    os.environ.get("QUA_ALIGNER_DATA_DIR")
+    or ROOT / "quranic-universal-aligner" / "data"
+)
 
 
 def _hash_file_payload(path: Path, *, gzip_it: bool) -> tuple[bytes, str]:

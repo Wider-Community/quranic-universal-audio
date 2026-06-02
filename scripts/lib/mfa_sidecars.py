@@ -22,7 +22,7 @@ CLI::
     python3 -m scripts.lib.mfa_sidecars \
         --reciter-dir /srv/scratch/.../<slug> \
         --audio-dir   /srv/scratch/.../<slug>/audio \
-        --mfa-app-path .local/spaces/mfa_aligner/app.py
+        --mfa-app-path quranic-universal-timestamps/app.py
 
 Both ``run_probe`` and ``run_precompute`` keep working standalone (when
 called without a runtime they self-manage). This orchestrator is the
