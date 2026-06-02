@@ -11,10 +11,13 @@ mfa_aligner/
 quranic_universal_aligner/
 reciter_requests/
 
-# --- Top-level scripts: only scripts/lib/ ships at runtime ---
+# --- Top-level scripts: scripts/lib/ + scripts/jobs/ ship at runtime.
+# jobs/ holds the HF-Job entrypoints uploaded by stage_job_code on launch;
+# the Dockerfile COPYs them so they're in the deployed image first.
 scripts/*
 !scripts/__init__.py
 !scripts/lib
+!scripts/jobs
 
 # --- Data: per-reciter data lives in the bucket (mounted at runtime),
 # not baked into the image. Only the four small linguistic JSON files are
@@ -36,9 +39,11 @@ data/**/validation.log
 data/**/beam_diff_report.txt
 data/**/*.bak
 
-# --- Repo metadata + docs ---
+# --- Repo metadata + docs. .github/config/ stays (job-side config_loader
+# reads .github/config/repo.yml after stage_job_code uploads it).
 .git/
-.github/
+.github/*
+!.github/config
 .claude/
 .notion/
 .vscode/
