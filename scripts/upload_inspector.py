@@ -9,19 +9,20 @@ https://huggingface.co/hetchyy
 
 Build steps:
 
-1. Build the frontend (``inspector/frontend`` → ``dist/``).
-2. Stage the Space-shaped tree in a temp dir. Whatever the Dockerfile COPYs
-   MUST be staged here — ``upload_folder`` runs with ``delete_patterns="*"``,
-   so the staged tree *is* the entire Space build context:
-     - ``Dockerfile``               (copied from ``inspector/Dockerfile``)
-     - ``inspector/...``            (code + frontend ``dist/``)
-     - ``scripts/__init__.py`` + ``scripts/lib/...`` + ``scripts/jobs/...``
-     - ``.github/config/...``       (job-side ``config_loader`` reads repo.yml)
-     - ``LICENSE``                  (cut_release job asset upload)
-     - ``data/{surah_info,qpc_hafs,digital_khatt_v2_script,phoneme_sub_costs}.json``
-     - ``.dockerignore``
-     - ``README.md`` (Space frontmatter)
-3. ``upload_folder`` to the Space repo (Hugging Face git+xet under the hood).
+1. Stage the Space build context: every git-tracked file, copied verbatim,
+   plus two Space-specific overlays (root ``Dockerfile`` + frontmatter
+   ``README.md``). The image's contents are defined solely by
+   ``inspector/Dockerfile`` + ``.dockerignore`` (both tracked, both consumed
+   identically here and by ``docker-publish.yml``'s repo-root build), so there
+   is no hand-maintained file allowlist to drift from the Dockerfile's ``COPY``
+   set — ``.dockerignore`` prunes at build time. The frontend ``dist/`` is
+   built inside the image (Dockerfile stage 1); nothing is pre-built here.
+2. ``upload_folder`` to the Space repo (Hugging Face git+xet under the hood),
+   with ``delete_patterns="*"`` so the Space tree mirrors the staged tree.
+
+Because the staged tree is the whole tracked repo, the Space build context
+equals the ``context: .`` context that ``docker-publish.yml`` builds on every
+push — a green CI image build is a faithful guarantee the Space will compile.
 
 Auth: reads ``HF_TOKEN`` (or ``INSPECTOR_HF_TOKEN``) from ``$REPO/.env`` via
 ``scripts.lib._env.load_repo_env``.
@@ -66,82 +67,51 @@ hf_oauth_expiration_minutes: 480
 """
 
 
-def _run(cmd: list[str], cwd: Path | None = None) -> None:
-    print(f"  $ {' '.join(cmd)}")
-    subprocess.run(cmd, cwd=cwd, check=True)
-
-
-def _build_frontend(repo: Path) -> None:
-    fe = repo / "inspector" / "frontend"
-    if not (fe / "node_modules").is_dir():
-        _run(["npm", "ci"], cwd=fe)
-    _run(["npm", "run", "build"], cwd=fe)
+def _git_tracked_files(repo: Path) -> list[str]:
+    """Repo-relative paths of every git-tracked file (the Space build context)."""
+    out = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return [p for p in out.stdout.split("\0") if p]
 
 
 def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
+    """Stage the Space build context: every git-tracked file, verbatim.
+
+    The image's contents are defined solely by ``inspector/Dockerfile`` +
+    ``.dockerignore`` (both tracked, both consumed identically here and by
+    ``docker-publish.yml``'s ``context: .`` build), so there is no hand-curated
+    allowlist to drift from the Dockerfile's ``COPY`` set — ``.dockerignore``
+    prunes at build time. Two Space-specific overlays are written on top of the
+    tracked tree:
+
+    * ``Dockerfile`` at the root — the Hub docker SDK reads it there, but ours
+      lives under ``inspector/``.
+    * ``README.md`` — the Space frontmatter, written last so it wins over the
+      repo's tracked root ``README.md``.
+
+    The frontend ``dist/`` is built inside the image (Dockerfile stage 1), so
+    nothing is pre-built here.
+    """
+    for rel in _git_tracked_files(repo):
+        src = repo / rel
+        if not src.is_file():
+            continue  # tracked but absent in the worktree (e.g. deleted)
+        dst = stage_root / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+
+    shutil.copy2(repo / "inspector" / "Dockerfile", stage_root / "Dockerfile")
+
     suffix = " (dev)" if env == "dev" else ""
     (stage_root / "README.md").write_text(
         SPACE_README.format(suffix=suffix, branch=branch),
         encoding="utf-8",
     )
-
-    # Dockerfile sits at the Space root.
-    shutil.copy2(repo / "inspector" / "Dockerfile", stage_root / "Dockerfile")
-    shutil.copy2(repo / ".dockerignore", stage_root / ".dockerignore")
-
-    # LICENSE is COPYd by the Dockerfile (read by the cut_release job's asset
-    # upload). Must be in the staged build context or `COPY LICENSE` fails.
-    shutil.copy2(repo / "LICENSE", stage_root / "LICENSE")
-
-    # Code trees.
-    for src_rel in ("inspector",):
-        src = repo / src_rel
-        dst = stage_root / src_rel
-        shutil.copytree(
-            src,
-            dst,
-            ignore=shutil.ignore_patterns(
-                "__pycache__",
-                "*.pyc",
-                "tests",
-                ".pytest_cache",
-                ".mypy_cache",
-                "node_modules",
-                ".vite",
-                # Keep dist/ — that's the built frontend.
-            ),
-        )
-
-    # scripts/lib/ (shared runtime libs) + scripts/jobs/ (HF-Job entrypoints the
-    # Dockerfile COPYs so they're baked into the image before stage_job_code
-    # uploads them on launch). Top-level CLIs are not staged.
-    scripts_dst = stage_root / "scripts"
-    scripts_dst.mkdir()
-    shutil.copy2(repo / "scripts" / "__init__.py", scripts_dst / "__init__.py")
-    for sub in ("lib", "jobs"):
-        shutil.copytree(
-            repo / "scripts" / sub,
-            scripts_dst / sub,
-            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-        )
-
-    # .github/config/repo.yml is COPYd by the Dockerfile (read job-side by
-    # config_loader.repo_config). Stage just that subtree, not all of .github/.
-    gh_config_dst = stage_root / ".github" / "config"
-    gh_config_dst.parent.mkdir()
-    shutil.copytree(repo / ".github" / "config", gh_config_dst)
-
-    # Data — only the four linguistic JSON files. Everything else lives in the
-    # bucket mounted at /data/inspector-bucket inside the Space.
-    data_dst = stage_root / "data"
-    data_dst.mkdir()
-    for name in (
-        "surah_info.json",
-        "qpc_hafs.json",
-        "digital_khatt_v2_script.json",
-        "phoneme_sub_costs.json",
-    ):
-        shutil.copy2(repo / "data" / name, data_dst / name)
 
 
 def _upload(stage_root: Path, repo_id: str, token: str, commit_msg: str) -> str:
@@ -186,14 +156,18 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("env", choices=("dev", "prod"))
     p.add_argument(
-        "--skip-build",
-        action="store_true",
-        help="Skip `npm run build` (use the existing dist/).",
-    )
-    p.add_argument(
         "--dry-run",
         action="store_true",
         help="Stage but don't upload. Prints stage path and exits.",
+    )
+    p.add_argument(
+        "--verify-boot",
+        action="store_true",
+        help=(
+            "Before uploading, build the staged context and boot it offline "
+            "(filesystem fixtures), asserting /healthz is 200. Aborts the "
+            "deploy if the image won't build or boot. Needs Docker."
+        ),
     )
     args = p.parse_args(argv)
 
@@ -214,12 +188,7 @@ def main(argv: list[str] | None = None) -> int:
     repo_id = SPACE_REPOS[args.env]
     branch = "dev" if args.env == "dev" else "main"
 
-    print(f"==> Building Inspector for {args.env} ({repo_id})")
-    if not args.skip_build:
-        _build_frontend(repo)
-    else:
-        print("  (skip-build) using existing dist/")
-
+    print(f"==> Deploying Inspector to {args.env} ({repo_id})")
     sha = _commit_sha(repo)
     commit_msg = f"deploy: inspector {args.env} @ {sha}"
 
@@ -227,6 +196,14 @@ def main(argv: list[str] | None = None) -> int:
         stage_root = Path(tmp)
         print(f"==> Staging Space tree in {stage_root}")
         _stage(repo, stage_root, args.env, branch)
+
+        if args.verify_boot:
+            print("==> Verifying the staged image builds and boots...")
+            smoke = repo / "inspector" / "scripts" / "smoke_boot.py"
+            subprocess.run(
+                [sys.executable, str(smoke), "--context", str(stage_root)],
+                check=True,
+            )
 
         if args.dry_run:
             print(f"==> Dry run; stage at {stage_root} (not deleted on dry-run)")

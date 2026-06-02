@@ -21,6 +21,10 @@ on:
         type: choice
         options: [auto, dev, prod]
         default: auto
+      verify_boot:
+        description: "Build + boot the image and gate the deploy on /healthz (prod only; slow)."
+        type: boolean
+        default: false
 
 # contents: write is required because the reusable inspector-checks.yml
 # frontend-checks job pushes back lint autofixes; a reusable workflow can
@@ -38,18 +42,52 @@ jobs:
   checks:
     uses: ./.github/workflows/inspector-checks.yml
 
-  deploy:
+  # Opt-in, prod-only: build the image and assert it boots (/healthz) before
+  # deploying. Runs ONLY on a manual workflow_dispatch with verify_boot=true
+  # targeting prod — normal pushes skip it (a skipped `needs` doesn't block
+  # deploy), so automatic deploys stay fast. The image builds the same
+  # `context: .` the Space builds, then smoke_boot runs it offline (filesystem
+  # fixtures, no secrets) and polls /healthz.
+  boot-smoke:
     needs: [checks]
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.verify_boot == true &&
+      (inputs.env == 'prod' || (inputs.env == 'auto' && github.ref_name == 'main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install fixtures downloader
+        run: pip install "huggingface_hub>=1.10"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: inspector/Dockerfile
+          load: true
+          tags: inspector-smoke:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Boot smoke test (/healthz)
+        run: python inspector/scripts/smoke_boot.py --skip-build --tag inspector-smoke:latest
+
+  deploy:
+    needs: [checks, boot-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: inspector/frontend/package-lock.json
 
       - uses: actions/setup-python@v5
         with:
