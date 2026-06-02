@@ -553,8 +553,12 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict],
         data["source_url"].append(src_url)
         data["source_offset_ms"].append(_i(row["clip_start"]))
 
+    # decode=False stores the raw mp3 bytes verbatim — sidesteps the
+    # torchcodec/torch dependency that datasets pulls in for write-time
+    # audio decoding. Consumers who want waveforms can ``cast_column`` to
+    # ``Audio(decode=True)`` at load time and bring their own decoder.
     features = Features({
-        "audio": Audio(),
+        "audio": Audio(decode=False),
         "surah": Value("int32"),
         "ayah": Value("int32"),
         "duration_ms": Value("int32"),
