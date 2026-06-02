@@ -19,11 +19,11 @@ import threading
 from collections import OrderedDict
 from datetime import datetime, timezone
 
-from config import DK_SCRIPT_PATH, QPC_HAFS_PATH
+from config import DK_SCRIPT_PATH
 from scripts.lib.schemas import ReciterCatalog
 from scripts.lib.timestamps_shards import SCHEMA_VERSION, derive_url_template
 from scripts.lib.timestamps_dedup import is_v2, project_chapter_shard
-from services.storage import data_dir
+from services.storage import data_dir, static_refs
 from services.state import catalog as catalog_service
 from services.state import state as state_service
 from services.audio.audio_meta import chapter_numbers, chapter_urls, vbr_chapters_for_reciter
@@ -34,10 +34,6 @@ log = logging.getLogger("inspector")
 # Resource keys served at /api/ts/resource/<key>. The OTF font is bundled
 # with the SPA (frontend/public/fonts/) and intentionally absent here.
 _RESOURCE_KEYS = ("qpc_hafs", "digital_khatt")
-_RESOURCE_PATHS = {
-    "qpc_hafs": QPC_HAFS_PATH,
-    "digital_khatt": DK_SCRIPT_PATH,
-}
 
 # Lazy-built caches. Single lock guards the build path; reads are dict
 # lookups so we don't need to hold the lock past `_ensure_built()`.
@@ -77,20 +73,22 @@ def _build_manifest_dict(reciters_block: dict[str, dict]) -> dict:
 
 
 def _build_resource_bytes() -> dict[str, bytes]:
-    """Gzip every advertised resource file. Reads the ``.json`` source, or its
-    ``.json.gz`` sibling when only the gzipped variant ships (deployed Space —
-    qpc_hafs is >10 MB and ships pre-gzipped to dodge HF auto-LFS). Missing
-    files are skipped."""
+    """Gzip every advertised resource for ``/api/ts/resource/<key>``.
+
+    ``qpc_hafs`` resolves via ``static_refs.load_qpc_bytes`` (local image →
+    bucket — the deployed Space's image ``.gz`` is an LFS pointer, so real
+    bytes come from the bucket). ``digital_khatt`` ships uncompressed in the
+    image and reads directly (HF auto-LFS is keyed on extension, so the
+    ~10 MB ``*.json`` is exempt). A missing/unavailable resource is skipped,
+    never raised — the manifest must not 500 on a degraded resource."""
     out: dict[str, bytes] = {}
-    for key, path in _RESOURCE_PATHS.items():
-        gz = path.with_suffix(path.suffix + ".gz")
-        if path.exists():
-            raw = path.read_bytes()
-        elif gz.exists():
-            raw = gzip.decompress(gz.read_bytes())
-        else:
-            continue
-        out[key] = gzip.compress(raw, compresslevel=6, mtime=0)
+    qpc = static_refs.load_qpc_bytes()
+    if qpc:
+        out["qpc_hafs"] = gzip.compress(qpc, compresslevel=6, mtime=0)
+    if DK_SCRIPT_PATH.exists():
+        out["digital_khatt"] = gzip.compress(
+            DK_SCRIPT_PATH.read_bytes(), compresslevel=6, mtime=0
+        )
     return out
 
 

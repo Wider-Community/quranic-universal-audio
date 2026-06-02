@@ -12,14 +12,13 @@ filesystem access to ``RECITATION_SEGMENTS_PATH``. Static reference data
 
 from config import (
     DK_SCRIPT_PATH,
-    QPC_HAFS_PATH,
     SURAH_INFO_PATH,
 )
 from adapters.detailed_json import (
     load_entries_from_bytes as _load_detailed_entries_from_bytes,
 )
 from constants import STOP_SIGNS
-from services.storage import cache, data_dir
+from services.storage import cache, data_dir, static_refs
 import threading
 
 _detailed_locks: dict[str, threading.Lock] = {}
@@ -40,23 +39,18 @@ def _detailed_lock(reciter: str) -> threading.Lock:
 # ---------------------------------------------------------------------------
 
 def load_qpc() -> dict[str, dict]:
-    """Load and cache qpc_hafs.json. Prefers the gzipped variant
-    (``qpc_hafs.json.gz``, ~3 MB, ships in the deployed image to avoid HF's
-    auto-LFS-promote of >10 MB files); falls back to the uncompressed file
-    for local-dev checkouts.
+    """Load and cache qpc_hafs.json.
+
+    Byte resolution (local image → bucket) lives in
+    ``services.storage.static_refs.load_qpc_bytes`` — on the deployed Space the
+    image's ``.gz`` is an LFS pointer, so the real bytes come from the bucket.
     """
     cached = cache.get_qpc_cache()
     if cached is not None:
         return cached
     import orjson
-    gz_path = QPC_HAFS_PATH.with_suffix(QPC_HAFS_PATH.suffix + ".gz")
-    if gz_path.exists():
-        import gzip as _gzip
-        data = orjson.loads(_gzip.decompress(gz_path.read_bytes()))
-    elif QPC_HAFS_PATH.exists():
-        data = orjson.loads(QPC_HAFS_PATH.read_bytes())
-    else:
-        data = {}
+    raw = static_refs.load_qpc_bytes()
+    data = orjson.loads(raw) if raw else {}
     cache.set_qpc_cache(data)
     return data
 
