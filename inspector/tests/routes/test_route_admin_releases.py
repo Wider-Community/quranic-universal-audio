@@ -235,6 +235,49 @@ def test_status_in_flight_slug_is_bucketable(signed_in_client, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# /api/admin/release-preview
+# ---------------------------------------------------------------------------
+
+
+def test_release_preview_uses_display_names(signed_in_client, monkeypatch):
+    """The dry-run preview returns display names (NOT slugs), surah coverage,
+    change_kind, and a rendered body from the shared renderer with the title
+    line + display names and no slug leakage. Owner-only (release.cut_gh)."""
+    client, _user = signed_in_client(role="owner")
+    _stub_jobs_api(monkeypatch)
+    _seed_released("ar_preview", channel="mp3quran", reciter_id="r1")
+    _seed_ledger_ts("ar_preview", version="job-123")
+
+    resp = client.get("/api/admin/release-preview")
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    body = resp.get_json()
+
+    assert body["computed_version"] == "v0.1.0"
+    assert body["previous_version"] is None
+    assert body["change_counts"]["added"] == 1
+    assert len(body["added"]) == 1
+    row = body["added"][0]
+    # Display names from the vocab tables — never the FK slugs.
+    assert row["riwayah"] == "Hafs"
+    assert row["style"] == "Mur"
+    assert row["channel"] == "mp3quran"
+    assert row["name_ar"] == "AR-r1"
+    assert row["coverage_surahs"] == 114
+    assert row["change_kind"] == "added"
+
+    # Top-level additions for the modal.
+    assert body["license"] == "CC-BY-4.0"
+    assert "repo" in body["links"] and "hf_dataset" in body["links"]
+    assert body["release_date"]
+
+    md = body["changelog_preview_md"]
+    assert md.startswith("# v0.1.0 · ")
+    assert "Hafs" in md and "114 surahs" in md
+    # The delivery slug must not leak into the human-facing body.
+    assert "ar_preview" not in md
+
+
+# ---------------------------------------------------------------------------
 # /api/admin/publish-hf/<slug>
 # ---------------------------------------------------------------------------
 

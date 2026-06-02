@@ -5,10 +5,12 @@
      * Reads top-to-bottom like the output of `release cut --dry-run`:
      *   1. Version transition hero      v0.4.2  →  v0.4.3
      *   2. Diff strip                   +1 added · ~3 refreshed · ·14 carried
-     *   3. Member rollup                Added / Refreshed identity lists
-     *   4. Changelog inset              leading-rule mono document
-     *   5. Operator inputs              bottom-border-only fields
-     *   6. Action footer                Cancel · Cut vX.Y.Z →
+     *   3. Rendered release             collapsible Added / Refreshed tables,
+     *                                   Schemas accordion, inline license + links —
+     *                                   a faithful native render of what ships to
+     *                                   GitHub (display names, no slugs)
+     *   4. Operator inputs              bottom-border-only fields
+     *   5. Action footer                Cancel · Cut vX.Y.Z →
      *
      * Owner-only by capability gate at the route layer; ``isOwner`` here
      * controls the manual-version override field by convention.
@@ -20,6 +22,7 @@
     import Modal from '../../../../../lib/components/Modal.svelte';
     import {
         type ReleasePreviewResponse,
+        type ReleasePreviewRow,
         cutRelease,
         fetchReleasePreview,
     } from '../../../../../lib/api/admin-releases';
@@ -93,6 +96,31 @@
     }
 </script>
 
+{#snippet memberTable(rows: ReleasePreviewRow[])}
+    <table class="member-table">
+        <thead>
+            <tr><th>Reciter</th><th>Riwāyah</th><th>Style</th><th>Channel</th><th>Coverage</th></tr>
+        </thead>
+        <tbody>
+            {#each rows.slice(0, MEMBER_PREVIEW_CAP) as row (row.slug)}
+                <tr>
+                    <td class="mt-id">
+                        <span class="mt-en">{row.name_en ?? row.slug}</span>
+                        {#if row.name_ar}<span class="mt-ar" dir="rtl">{row.name_ar}</span>{/if}
+                    </td>
+                    <td>{row.riwayah}</td>
+                    <td>{row.style}</td>
+                    <td>{row.channel}</td>
+                    <td class="mt-cov">{row.coverage_surahs != null ? `${row.coverage_surahs} surahs` : '—'}</td>
+                </tr>
+            {/each}
+            {#if rows.length > MEMBER_PREVIEW_CAP}
+                <tr class="mt-more"><td colspan="5">… and {rows.length - MEMBER_PREVIEW_CAP} more</td></tr>
+            {/if}
+        </tbody>
+    </table>
+{/snippet}
+
 <Modal open={true} size="wide" title="Cut release" elevated on:close={onclose}>
     {#if loading}
         <div class="state-block faint">Computing release preview…</div>
@@ -139,66 +167,42 @@
                 </span>
             </div>
 
-            {#if preview.added.length > 0 || preview.refreshed.length > 0}
-                <section class="rollup">
-                    {#if preview.added.length > 0}
-                        <div class="group">
-                            <header class="group-head">
-                                <span class="group-title">Added</span>
-                                <span class="group-count d-add">+{preview.added.length}</span>
-                            </header>
-                            <ul class="group-list">
-                                {#each preview.added.slice(0, MEMBER_PREVIEW_CAP) as row (row.slug)}
-                                    <li class="rl">
-                                        <span class="rl-name">{row.name_en ?? row.slug}</span>
-                                        <span class="rl-sep">·</span>
-                                        <span class="rl-meta">{row.riwayah}</span>
-                                        <span class="rl-sep">·</span>
-                                        <span class="rl-meta">{row.style}</span>
-                                        <span class="rl-sep">·</span>
-                                        <span class="rl-meta">{row.channel}</span>
-                                    </li>
-                                {/each}
-                                {#if preview.added.length > MEMBER_PREVIEW_CAP}
-                                    <li class="rl-more">
-                                        … and {preview.added.length - MEMBER_PREVIEW_CAP} more
-                                    </li>
-                                {/if}
-                            </ul>
-                        </div>
-                    {/if}
-                    {#if preview.refreshed.length > 0}
-                        <div class="group">
-                            <header class="group-head">
-                                <span class="group-title">Refreshed</span>
-                                <span class="group-count d-ref">~{preview.refreshed.length}</span>
-                            </header>
-                            <ul class="group-list">
-                                {#each preview.refreshed.slice(0, MEMBER_PREVIEW_CAP) as row (row.slug)}
-                                    <li class="rl">
-                                        <span class="rl-name">{row.name_en ?? row.slug}</span>
-                                        <span class="rl-sep">·</span>
-                                        <span class="rl-meta">{row.riwayah}</span>
-                                        <span class="rl-sep">·</span>
-                                        <span class="rl-meta">{row.style}</span>
-                                        <span class="rl-sep">·</span>
-                                        <span class="rl-meta">{row.channel}</span>
-                                    </li>
-                                {/each}
-                                {#if preview.refreshed.length > MEMBER_PREVIEW_CAP}
-                                    <li class="rl-more">
-                                        … and {preview.refreshed.length - MEMBER_PREVIEW_CAP} more
-                                    </li>
-                                {/if}
-                            </ul>
-                        </div>
-                    {/if}
-                </section>
-            {/if}
+            <section class="release-doc">
+                {#if preview.added.length > 0}
+                    <details class="acc" open>
+                        <summary>➕ Added — {preview.added.length} recitation{preview.added.length === 1 ? '' : 's'}</summary>
+                        {@render memberTable(preview.added)}
+                    </details>
+                {/if}
+                {#if preview.refreshed.length > 0}
+                    <details class="acc">
+                        <summary>↻ Refreshed — {preview.refreshed.length} recitation{preview.refreshed.length === 1 ? '' : 's'}</summary>
+                        {@render memberTable(preview.refreshed)}
+                    </details>
+                {/if}
+                {#if preview.change_counts.unchanged > 0}
+                    <p class="carried">{preview.change_counts.unchanged} carried / unchanged.</p>
+                {/if}
 
-            <section class="changelog">
-                <h4 class="sec-head">Changelog</h4>
-                <pre class="changelog-body">{preview.changelog_preview_md}</pre>
+                <details class="acc">
+                    <summary>📐 Schemas</summary>
+                    <ul class="schema-list">
+                        <li><code>verse_timestamps.json.gz</code> — Tier 1. <code>"surah:ayah": [start, end]</code> (ms).</li>
+                        <li><code>word_timestamps.json.gz</code> — Tier 2. + per-word <code>[widx, start, end]</code>.</li>
+                        <li><code>letter_timestamps.json.gz</code> — Tier 3. + per-letter <code>[widx, char, start, end]</code>.</li>
+                    </ul>
+                    <p class="schema-refs">Static references: <code>surah_info.json</code>, <code>qpc_hafs.json</code>.</p>
+                </details>
+
+                <div class="release-foot">
+                    <span class="lic"><strong>License:</strong> {preview.license}</span>
+                    {#if preview.links.repo}
+                        <a href={preview.links.repo} target="_blank" rel="noopener">Repository</a>
+                    {/if}
+                    {#if preview.links.hf_dataset}
+                        <a href={preview.links.hf_dataset} target="_blank" rel="noopener">HF dataset</a>
+                    {/if}
+                </div>
             </section>
 
             <section class="inputs">
@@ -354,94 +358,110 @@
     }
     .d-label.faint { color: var(--text-faint); }
 
-    /* ---------- Zone 3 — member rollup ---------- */
-    .rollup {
+    /* ---------- Zone 3 — rendered release ---------- */
+    .release-doc {
         display: flex;
         flex-direction: column;
-        gap: var(--s-5);
-    }
-    .group { display: flex; flex-direction: column; gap: var(--s-2); }
-    .group-head {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
         gap: var(--s-3);
     }
-    .group-title {
+    .acc {
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-1);
+        background: var(--panel-2);
+    }
+    .acc > summary {
+        cursor: pointer;
+        padding: var(--s-2) var(--s-3);
         font-family: var(--font-mono);
         font-size: var(--fs-meta);
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--text-faint);
-    }
-    .group-count {
-        font-family: var(--font-mono);
-        font-size: var(--fs-meta);
-        font-variant-numeric: tabular-nums;
-        font-weight: 600;
-    }
-    .group-list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-    }
-    .rl {
-        display: inline-flex;
-        align-items: baseline;
-        gap: 8px;
-        font-size: var(--fs-body);
-        line-height: 1.4;
-        padding-left: var(--s-2);
-    }
-    .rl-name {
-        color: var(--text-primary);
-    }
-    .rl-meta {
         color: var(--text-secondary);
-        font-family: var(--font-mono);
+        user-select: none;
+        list-style: none;
+    }
+    .acc > summary::-webkit-details-marker { display: none; }
+    .acc > summary::before {
+        content: '▸';
+        display: inline-block;
+        margin-right: 8px;
+        color: var(--text-faint);
+        transition: transform var(--t-fast) var(--ease-out-quart);
+    }
+    .acc[open] > summary::before { transform: rotate(90deg); }
+    .acc[open] > summary { border-bottom: 1px solid var(--border-quiet); }
+
+    .member-table {
+        width: 100%;
+        border-collapse: collapse;
         font-size: var(--fs-meta);
     }
-    .rl-sep { color: var(--text-faint); }
-    .rl-more {
-        padding-left: var(--s-2);
-        font-size: var(--fs-meta);
+    .member-table th {
+        text-align: left;
+        font-family: var(--font-mono);
+        font-weight: 500;
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-faint);
+        padding: var(--s-2) var(--s-3);
+        border-bottom: 1px solid var(--border-quiet);
+    }
+    .member-table td {
+        padding: var(--s-2) var(--s-3);
+        border-bottom: 1px solid var(--border-quiet);
+        color: var(--text-secondary);
+        vertical-align: baseline;
+    }
+    .member-table tr:last-child td { border-bottom: 0; }
+    .mt-id { display: flex; flex-direction: column; gap: 1px; }
+    .mt-en { color: var(--text-primary); }
+    .mt-ar { color: var(--text-muted); unicode-bidi: isolate; }
+    .mt-cov { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .mt-more td {
         color: var(--text-faint);
         font-style: italic;
     }
 
-    /* ---------- Zone 4 — changelog inset ---------- */
-    .changelog {
+    .carried {
+        margin: 0;
+        padding-left: var(--s-1);
+        font-size: var(--fs-meta);
+        color: var(--text-muted);
+    }
+    .schema-list {
+        margin: 0;
+        padding: var(--s-3) var(--s-3) var(--s-2) var(--s-6);
         display: flex;
         flex-direction: column;
-        gap: var(--s-2);
-    }
-    .sec-head {
-        margin: 0;
-        font-family: var(--font-mono);
+        gap: 4px;
         font-size: var(--fs-meta);
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--text-faint);
-        font-weight: 500;
+        color: var(--text-secondary);
+        line-height: 1.5;
     }
-    .changelog-body {
-        margin: 0;
-        padding: 2px 0 2px var(--s-4);
-        max-height: 280px;
-        overflow: auto;
-        border-left: 2px solid var(--accent-tint);
+    .schema-list code, .schema-refs code {
         font-family: var(--font-mono);
-        font-size: var(--fs-meta);
-        line-height: 1.55;
+        font-size: 11px;
         color: var(--text-primary);
-        white-space: pre-wrap;
-        background: transparent;
     }
+    .schema-refs {
+        margin: 0;
+        padding: 0 var(--s-3) var(--s-3) var(--s-3);
+        font-size: var(--fs-meta);
+        color: var(--text-muted);
+    }
+    .release-foot {
+        display: flex;
+        align-items: baseline;
+        gap: var(--s-4);
+        flex-wrap: wrap;
+        padding-top: var(--s-1);
+        font-size: var(--fs-meta);
+        color: var(--text-muted);
+    }
+    .release-foot strong { color: var(--text-secondary); font-weight: 500; }
+    .release-foot a { color: var(--accent); text-decoration: none; }
+    .release-foot a:hover { color: var(--accent-strong); text-decoration: underline; }
 
-    /* ---------- Zone 5 — inputs ---------- */
+    /* ---------- Zone 4 — inputs ---------- */
     .inputs {
         display: flex;
         flex-direction: column;
@@ -502,7 +522,7 @@
         line-height: 1.5;
     }
 
-    /* ---------- Zone 6 — footer ---------- */
+    /* ---------- Zone 5 — footer ---------- */
     .footer-stack {
         width: 100%;
         display: flex;

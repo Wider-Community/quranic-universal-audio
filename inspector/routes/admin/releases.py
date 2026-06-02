@@ -29,6 +29,8 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
+from scripts.lib.config_loader import repo_config
+from scripts.lib.release_changelog import render_changelog
 from services.admin.jobs import cut_release as cut_release_jobs
 from services.admin.jobs import hf_publish as hf_publish_jobs
 from services.admin.jobs import base as jobs_base
@@ -108,16 +110,25 @@ def release_preview(user):
     confirm-step idempotency check.
     """
     conn = get_conn()
+    # Display names (riwayah/style/channel) come from the vocab tables — the
+    # human-facing changelog never shows slugs. ``coverage_surahs`` is cheap
+    # (chapter_count); exact ayah coverage is only known at cut time, so the
+    # preview shows surahs and the shipped release shows ayahs.
     candidates = conn.execute("""
         SELECT prr.slug AS slug,
                prr.version AS ts_version,
                r.name_en AS name_en,
-               d.riwayah AS riwayah,
-               d.style AS style,
-               d.channel AS channel
+               r.name_ar AS name_ar,
+               rw.name AS riwayah,
+               st.name AS style,
+               ch.name AS channel,
+               d.chapter_count AS coverage_surahs
         FROM per_recitation_releases prr
         JOIN deliveries d ON d.slug = prr.slug
         JOIN channels c   ON c.slug = d.channel
+        JOIN riwayahs rw  ON rw.slug = d.riwayah
+        JOIN styles st    ON st.slug = d.style
+        JOIN channels ch  ON ch.slug = d.channel
         JOIN reciters r   ON r.reciter_id = d.reciter_id
         WHERE prr.track = 'ts'
           AND prr.superseded_at IS NULL
@@ -141,16 +152,21 @@ def release_preview(user):
         row_payload = {
             "slug": slug,
             "name_en": r["name_en"],
+            "name_ar": r["name_ar"],
             "riwayah": r["riwayah"],
             "style": r["style"],
             "channel": r["channel"],
+            "coverage_surahs": r["coverage_surahs"],
             "ts_version": ts_version,
         }
         if prior_member is None:
+            row_payload["change_kind"] = "added"
             added.append(row_payload)
         elif str(prior_member["ts_version"]) != ts_version:
+            row_payload["change_kind"] = "refresh"
             refreshed.append(row_payload)
         else:
+            row_payload["change_kind"] = "unchanged"
             unchanged.append(row_payload)
 
     # Compute the auto-version (preview-only — actual cut recomputes inside
@@ -166,14 +182,23 @@ def release_preview(user):
         computed_version = None  # "nothing changed" — operator must override
     needs_override = computed_version is None
 
+    cfg = repo_config()
+    owner, repo, hf_dataset = (
+        cfg.get("repo_owner", ""), cfg.get("repo_name", ""), cfg.get("hf_dataset", ""),
+    )
+    release_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # change_kind is already stamped on each row; the renderer buckets by it.
+    # coverage_ayahs is unknown pre-cut → renderer falls back to surahs.
+    preview_members = [{**m, "coverage_ayahs": None}
+                       for m in (added + refreshed + unchanged)]
+
     payload = {
         "computed_version": computed_version,
         "needs_manual_version": needs_override,
         "previous_version": prior_version,
-        # Plan §change_kind: enum is {added, refresh, unchanged}. ``removed`` is
-        # NOT a change_kind — once a slug ships in a GH release it stays in
-        # subsequent releases (any drop is an operational decision outside the
-        # cut flow). Do not surface it here.
+        # change_kind enum is {added, refresh, unchanged}. ``removed`` is NOT a
+        # change_kind — once a slug ships in a GH release it stays in subsequent
+        # releases (any drop is an operational decision outside the cut flow).
         "change_counts": {
             "added": len(added),
             "refresh": len(refreshed),
@@ -181,9 +206,21 @@ def release_preview(user):
         },
         "added": added,
         "refreshed": refreshed,
-        "changelog_preview_md": _render_changelog_preview(
-            computed_version or "v?.?.?",
-            prior_version, added, refreshed,
+        "release_date": release_date,
+        "license": "CC-BY-4.0",
+        "links": {
+            "repo": f"https://github.com/{owner}/{repo}" if owner and repo else "",
+            "hf_dataset": (f"https://huggingface.co/datasets/{hf_dataset}"
+                           if hf_dataset else ""),
+        },
+        # Same shared renderer the cut job uses — preview == what ships (modulo
+        # coverage: preview shows surahs, the cut shows exact ayahs).
+        "changelog_preview_md": render_changelog(
+            version=computed_version or "v?.?.?",
+            previous_version=prior_version,
+            release_date=release_date,
+            members=preview_members,
+            owner=owner, repo=repo, hf_dataset=hf_dataset,
         ),
         # Echo back so the confirm step can validate the preview hasn't drifted.
         "expected_version_at_preview": computed_version,
@@ -205,41 +242,6 @@ def _bump_patch(prior: str | None) -> str:
     parts = prior.lstrip("v").split(".")
     major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
     return f"v{major}.{minor}.{patch + 1}"
-
-
-def _render_changelog_preview(version: str, prior_version: str | None,
-                              added: list[dict],
-                              refreshed: list[dict]) -> str:
-    """Lightweight CHANGELOG render for the modal preview. The actual cut
-    job renders the full CHANGELOG.md from richer per-recitation data; this
-    is the operator-facing snapshot of what's about to land.
-    """
-    lines: list[str] = []
-    lines.append(f"# Changelog — {version}\n")
-    if prior_version:
-        lines.append(f"Compared to {prior_version}.\n")
-    if added:
-        lines.append(f"## Added recitations ({len(added)})\n")
-        lines.append("| Slug | Name | Riwayah | Style | Channel |")
-        lines.append("|---|---|---|---|---|")
-        for m in added:
-            lines.append(
-                f"| `{m['slug']}` | {m['name_en']} | {m['riwayah']} "
-                f"| {m['style']} | {m['channel']} |"
-            )
-        lines.append("")
-    if refreshed:
-        lines.append(f"## Refreshed recitations ({len(refreshed)})\n")
-        lines.append("| Slug | Name |")
-        lines.append("|---|---|")
-        for m in refreshed:
-            lines.append(f"| `{m['slug']}` | {m['name_en']} |")
-        lines.append("")
-    if not added and not refreshed:
-        lines.append("## Notes\n")
-        lines.append("> Nothing changed since the last release — to force a "
-                     "cut, supply an explicit version in the modal.\n")
-    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
