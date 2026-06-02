@@ -85,7 +85,14 @@ def _rm_container() -> None:
 
 
 def _poll_healthz(port: int, timeout: int) -> dict:
-    """Poll /healthz until 200 with status:ok, or raise on timeout."""
+    """Poll /healthz until the app is up and hydrated, or raise on timeout.
+
+    Success = HTTP 200 with ``state_loaded`` and ``db.open`` true. We do NOT
+    require ``status == "ok"``: offline (filesystem backend, no bucket mount)
+    the app is healthy but reports ``status: degraded`` because
+    ``bucket_mounted`` is false. The boot smoke only proves the app builds,
+    boots, registers routes, and serves a hydrated /healthz.
+    """
     url = f"http://localhost:{port}/healthz"
     deadline = time.monotonic() + timeout
     last = ""
@@ -95,9 +102,9 @@ def _poll_healthz(port: int, timeout: int) -> dict:
                 body = resp.read().decode("utf-8")
                 if resp.status == 200:
                     payload = json.loads(body)
-                    if payload.get("status") == "ok":
+                    if payload.get("state_loaded") and payload.get("db", {}).get("open"):
                         return payload
-                    last = f"200 but status={payload.get('status')}: {body}"
+                    last = f"200 but not hydrated yet: {body}"
                 else:
                     last = f"HTTP {resp.status}: {body}"
         except (urllib.error.URLError, ConnectionError, OSError) as e:
