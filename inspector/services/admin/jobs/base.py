@@ -235,7 +235,7 @@ REQUIRED_ENTRYPOINTS = (
     "scripts/jobs/shard.py",
 )
 REQUIRED_STATIC_FILES = (
-    "data/qpc_hafs.json",
+    "data/qpc_hafs.json.gz",
     "data/surah_info.json",
     ".github/config/repo.yml",
     "LICENSE",
@@ -251,13 +251,33 @@ class JobStagingError(RuntimeError):
     """
 
 
+def _resolve_required_static(rel: str) -> tuple[Path | None, bytes | None]:
+    """Resolve a REQUIRED_STATIC_FILES entry to either a local path or in-memory bytes.
+
+    For ``data/qpc_hafs.json.gz``: in dev the ``.gz`` may not exist on disk —
+    the source-of-truth is the uncompressed ``data/qpc_hafs.json``; gzip it
+    on the fly so dev launches don't require a manual pre-build step. In the
+    deployed image the ``.gz`` is shipped via ``upload_inspector.py`` and
+    used as-is.
+    """
+    src = REPO_ROOT / rel
+    if src.exists():
+        return src, None
+    if rel == "data/qpc_hafs.json.gz":
+        uncompressed = REPO_ROOT / "data" / "qpc_hafs.json"
+        if uncompressed.exists():
+            import gzip as _gzip
+            return None, _gzip.compress(uncompressed.read_bytes(), compresslevel=6, mtime=0)
+    return None, None
+
+
 def stage_job_code() -> None:
     """Upload ``scripts/lib`` + ``scripts/jobs`` + static refs to
     ``aligner-bucket/code/`` so the HF Job container can import them.
 
     Walks ``scripts/lib`` and ``scripts/jobs`` for every ``.py`` then appends
     the curated static files. Raises ``JobStagingError`` BEFORE the upload if
-    any required entrypoint or static file is missing from the running image —
+    any required entrypoint or static file can't be resolved on disk —
     catches the "Dockerfile missing a COPY" class of regression at launch.
 
     Idempotent — Xet de-dupes unchanged content.
@@ -266,6 +286,7 @@ def stage_job_code() -> None:
 
     adds: list[tuple[str, str]] = []
     seen_targets: set[str] = set()
+    tmp_files: list[Path] = []
 
     for sub in ("scripts/lib", "scripts/jobs"):
         base = REPO_ROOT / sub
@@ -278,24 +299,38 @@ def stage_job_code() -> None:
             adds.append((str(path), f"code/{rel}"))
             seen_targets.add(f"code/{rel}")
 
+    import tempfile as _tempfile
     for rel in REQUIRED_STATIC_FILES:
-        src = REPO_ROOT / rel
-        if src.exists():
-            target = f"code/{rel}"
-            adds.append((str(src), target))
+        path, blob = _resolve_required_static(rel)
+        target = f"code/{rel}"
+        if path is not None:
+            adds.append((str(path), target))
+            seen_targets.add(target)
+        elif blob is not None:
+            fd, tmp_path = _tempfile.mkstemp(prefix="stagedref_", suffix=Path(rel).name)
+            os.write(fd, blob)
+            os.close(fd)
+            tmp_files.append(Path(tmp_path))
+            adds.append((tmp_path, target))
             seen_targets.add(target)
 
     expected = {f"code/{p}" for p in REQUIRED_ENTRYPOINTS + REQUIRED_STATIC_FILES}
     missing = sorted(expected - seen_targets)
     if missing:
+        for p in tmp_files:
+            p.unlink(missing_ok=True)
         raise JobStagingError(
             "stage_job_code: required files missing from the running image: "
             f"{missing}. Likely cause: inspector/Dockerfile doesn't COPY one "
             "of these paths. Fix the Dockerfile, redeploy the Space, then retry."
         )
 
-    batch_bucket_files(ALIGNER_BUCKET, add=adds)
-    log.info("staged %d job-code files to %s/code/", len(adds), ALIGNER_BUCKET)
+    try:
+        batch_bucket_files(ALIGNER_BUCKET, add=adds)
+        log.info("staged %d job-code files to %s/code/", len(adds), ALIGNER_BUCKET)
+    finally:
+        for p in tmp_files:
+            p.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------

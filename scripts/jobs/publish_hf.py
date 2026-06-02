@@ -673,9 +673,11 @@ def _preflight(slug: str) -> int:
     if not detailed_path.exists():
         log.error("detailed.json missing at %s", detailed_path); return 13
     refs_dir = Path("/aux/code/data")
-    for name in ("surah_info.json", "qpc_hafs.json"):
-        if not (refs_dir / name).exists():
-            log.error("static ref %s missing at %s", name, refs_dir); return 14
+    if not (refs_dir / "surah_info.json").exists():
+        log.error("static ref surah_info.json missing at %s", refs_dir); return 14
+    if not ((refs_dir / "qpc_hafs.json.gz").exists()
+            or (refs_dir / "qpc_hafs.json").exists()):
+        log.error("static ref qpc_hafs.json[.gz] missing at %s", refs_dir); return 14
     return 0
 
 
@@ -701,10 +703,15 @@ def main() -> int:
         return 3
     timestamps = _reshape_timestamps_for_rows(canonical)
 
-    # 2. Load static refs from staged code dir.
+    # 2. Load static refs from staged code dir. qpc_hafs ships gzipped to
+    # dodge HF's auto-LFS-promote on the Space repo.
     refs_dir = Path("/aux/code/data")
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
-    dk_words = json.loads((refs_dir / "qpc_hafs.json").read_bytes())
+    qpc_path = refs_dir / "qpc_hafs.json.gz"
+    if qpc_path.exists():
+        dk_words = json.loads(gzip.decompress(qpc_path.read_bytes()))
+    else:
+        dk_words = json.loads((refs_dir / "qpc_hafs.json").read_bytes())
 
     # 3. Build rows.
     detailed_by_ref = _detailed_by_ref(detailed)

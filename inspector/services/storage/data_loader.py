@@ -40,12 +40,20 @@ def _detailed_lock(reciter: str) -> threading.Lock:
 # ---------------------------------------------------------------------------
 
 def load_qpc() -> dict[str, dict]:
-    """Load and cache qpc_hafs.json."""
+    """Load and cache qpc_hafs.json. Prefers the gzipped variant
+    (``qpc_hafs.json.gz``, ~3 MB, ships in the deployed image to avoid HF's
+    auto-LFS-promote of >10 MB files); falls back to the uncompressed file
+    for local-dev checkouts.
+    """
     cached = cache.get_qpc_cache()
     if cached is not None:
         return cached
-    if QPC_HAFS_PATH.exists():
-        import orjson
+    import orjson
+    gz_path = QPC_HAFS_PATH.with_suffix(QPC_HAFS_PATH.suffix + ".gz")
+    if gz_path.exists():
+        import gzip as _gzip
+        data = orjson.loads(_gzip.decompress(gz_path.read_bytes()))
+    elif QPC_HAFS_PATH.exists():
         data = orjson.loads(QPC_HAFS_PATH.read_bytes())
     else:
         data = {}

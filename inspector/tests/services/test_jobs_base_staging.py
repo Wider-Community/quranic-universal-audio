@@ -19,7 +19,9 @@ from services.admin.jobs import base
 @pytest.fixture
 def stub_batch(monkeypatch):
     """Stub ``batch_bucket_files`` so we can assert on the upload arg without
-    touching HF infra."""
+    touching HF infra. Snapshots the bytes of every source file at call time
+    (auto-gzipped temp sources are deleted in stage_job_code's finally block,
+    so reading them post-call would race the cleanup)."""
     calls: list[dict] = []
     mod = sys.modules.get("huggingface_hub")
     if mod is None:
@@ -27,13 +29,24 @@ def stub_batch(monkeypatch):
         monkeypatch.setitem(sys.modules, "huggingface_hub", mod)
 
     def fake(bucket, *, add):
-        calls.append({"bucket": bucket, "add": list(add)})
+        snapshot = []
+        for src, target in add:
+            try:
+                blob = open(src, "rb").read()
+            except OSError:
+                blob = None
+            snapshot.append((src, target, blob))
+        calls.append({"bucket": bucket, "add": list(add), "snapshot": snapshot})
 
     monkeypatch.setattr(mod, "batch_bucket_files", fake, raising=False)
     return calls
 
 
 def test_stage_job_code_uploads_every_required_path(stub_batch):
+    """Happy path against the real repo tree — every required entrypoint AND
+    every required static file must be in the upload manifest. qpc_hafs.json.gz
+    is auto-resolved from the uncompressed source when only ``.json`` exists
+    locally (the dev-mode case), so this test passes on a fresh checkout."""
     base.stage_job_code()
     assert len(stub_batch) == 1
     targets = {target for _src, target in stub_batch[0]["add"]}
@@ -41,6 +54,31 @@ def test_stage_job_code_uploads_every_required_path(stub_batch):
         assert f"code/{rel}" in targets, f"missing entrypoint upload: {rel}"
     for rel in base.REQUIRED_STATIC_FILES:
         assert f"code/{rel}" in targets, f"missing static upload: {rel}"
+
+
+def test_stage_job_code_auto_gzips_qpc_when_only_uncompressed_present(stub_batch, monkeypatch, tmp_path):
+    """In a dev tree with ``data/qpc_hafs.json`` but no ``.gz``, the resolver
+    gzip-compresses on the fly and uploads under the ``.gz`` target path."""
+    (tmp_path / "scripts" / "lib").mkdir(parents=True)
+    (tmp_path / "scripts" / "jobs").mkdir(parents=True)
+    for ep in base.REQUIRED_ENTRYPOINTS:
+        (tmp_path / ep).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / ep).write_text("# stub")
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "surah_info.json").write_text("{}")
+    (tmp_path / "data" / "qpc_hafs.json").write_text('{"1:1:1": {"text": "x"}}')
+    (tmp_path / ".github" / "config").mkdir(parents=True)
+    (tmp_path / ".github" / "config" / "repo.yml").write_text("hf_dataset: foo/bar")
+    (tmp_path / "LICENSE").write_text("MIT")
+    monkeypatch.setattr(base, "REPO_ROOT", tmp_path)
+
+    base.stage_job_code()
+
+    assert len(stub_batch) == 1
+    by_target = {target: blob for _src, target, blob in stub_batch[0]["snapshot"]}
+    assert "code/data/qpc_hafs.json.gz" in by_target
+    import gzip as _gzip
+    assert _gzip.decompress(by_target["code/data/qpc_hafs.json.gz"]) == b'{"1:1:1": {"text": "x"}}'
 
 
 def test_stage_job_code_raises_when_entrypoint_missing(stub_batch, monkeypatch, tmp_path):

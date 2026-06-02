@@ -603,13 +603,24 @@ def _post_webhook(*, version: str, job_id: str, external_uri: str,
 # ---------------------------------------------------------------------------
 
 def _hash_static_refs(refs_dir: Path) -> dict[str, dict]:
+    """SHA-256 + byte size for each static ref. qpc_hafs lives gzipped on the
+    bucket (HF Space LFS workaround); we hash the *decompressed* JSON bytes
+    so the manifest hash is stable across the gzip-vs-plain transport choice
+    and matches what a consumer who downloads the .gz and decompresses sees.
+    """
     out: dict[str, dict] = {}
-    for name in ("surah_info.json", "qpc_hafs.json"):
-        path = refs_dir / name
-        if not path.exists():
-            continue
-        body = path.read_bytes()
-        out[name] = {"sha256": _sha256_hex(body), "bytes": len(body)}
+    plain = refs_dir / "surah_info.json"
+    if plain.exists():
+        body = plain.read_bytes()
+        out["surah_info.json"] = {"sha256": _sha256_hex(body), "bytes": len(body)}
+    qpc_gz = refs_dir / "qpc_hafs.json.gz"
+    qpc_plain = refs_dir / "qpc_hafs.json"
+    if qpc_gz.exists():
+        body = gzip.decompress(qpc_gz.read_bytes())
+        out["qpc_hafs.json"] = {"sha256": _sha256_hex(body), "bytes": len(body)}
+    elif qpc_plain.exists():
+        body = qpc_plain.read_bytes()
+        out["qpc_hafs.json"] = {"sha256": _sha256_hex(body), "bytes": len(body)}
     return out
 
 
@@ -638,11 +649,13 @@ def _preflight() -> int:
     if not db_path.exists():
         log.error("inspector.db missing at %s", db_path); return 13
     code_dir = Path("/aux/code")
-    for rel in ("data/surah_info.json", "data/qpc_hafs.json",
-                ".github/config/repo.yml", "LICENSE",
+    for rel in ("data/surah_info.json", ".github/config/repo.yml", "LICENSE",
                 "scripts/jobs/shard.py"):
         if not (code_dir / rel).exists():
             log.error("staged file missing: %s", code_dir / rel); return 14
+    if not ((code_dir / "data/qpc_hafs.json.gz").exists()
+            or (code_dir / "data/qpc_hafs.json").exists()):
+        log.error("staged file missing: %s/data/qpc_hafs.json[.gz]", code_dir); return 14
     return 0
 
 
@@ -842,14 +855,21 @@ def main() -> int:
         operator_note, owner, repo, created_at_date, hf_dataset,
     )
 
-    # 7. Read static refs + license + shard.py for upload.
+    # 7. Read static refs + license + shard.py for upload. qpc_hafs lives
+    # gzipped on the bucket (HF Space LFS workaround) but the GH release asset
+    # is the consumer-facing decompressed JSON.
     license_bytes = (_REPO_ROOT / "LICENSE").read_bytes() if (_REPO_ROOT / "LICENSE").exists() else b""
     shard_py = (Path("/aux/code/scripts/jobs/shard.py")).read_bytes()
-    static_files = {}
-    for name in ("surah_info.json", "qpc_hafs.json"):
-        path = refs_dir / name
-        if path.exists():
-            static_files[name] = path.read_bytes()
+    static_files: dict[str, bytes] = {}
+    si_path = refs_dir / "surah_info.json"
+    if si_path.exists():
+        static_files["surah_info.json"] = si_path.read_bytes()
+    qpc_gz = refs_dir / "qpc_hafs.json.gz"
+    qpc_plain = refs_dir / "qpc_hafs.json"
+    if qpc_gz.exists():
+        static_files["qpc_hafs.json"] = gzip.decompress(qpc_gz.read_bytes())
+    elif qpc_plain.exists():
+        static_files["qpc_hafs.json"] = qpc_plain.read_bytes()
 
     # 8. Create the GH release + upload all assets.
     log.info("creating GH release %s on %s/%s ...", version, owner, repo)

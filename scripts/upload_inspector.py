@@ -34,12 +34,20 @@ content hash). Safe to run from a fresh checkout.
 from __future__ import annotations
 
 import argparse
+import gzip
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+# Files HF Spaces would auto-LFS-promote at upload (default threshold 10 MB).
+# An LFS pointer in the build context defeats the Dockerfile COPY — the runtime
+# image ships the pointer text, not the bytes. We gzip-replace these during
+# staging so the Space repo sees a sub-threshold .gz and the Dockerfile COPYs
+# the real bytes; runtime readers decompress on first access.
+_GZIP_ON_STAGE = ("data/qpc_hafs.json",)
 
 from huggingface_hub import HfApi
 
@@ -97,10 +105,17 @@ def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
     The frontend ``dist/`` is built inside the image (Dockerfile stage 1), so
     nothing is pre-built here.
     """
+    gzip_set = set(_GZIP_ON_STAGE)
     for rel in _git_tracked_files(repo):
         src = repo / rel
         if not src.is_file():
             continue  # tracked but absent in the worktree (e.g. deleted)
+        if rel in gzip_set:
+            dst = stage_root / (rel + ".gz")
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            with src.open("rb") as fin, gzip.open(dst, "wb", compresslevel=6, mtime=0) as fout:
+                shutil.copyfileobj(fin, fout)
+            continue
         dst = stage_root / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
