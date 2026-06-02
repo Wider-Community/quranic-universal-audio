@@ -77,12 +77,20 @@ def _build_manifest_dict(reciters_block: dict[str, dict]) -> dict:
 
 
 def _build_resource_bytes() -> dict[str, bytes]:
-    """Gzip every advertised resource file. Missing files are skipped."""
+    """Gzip every advertised resource file. Reads the ``.json`` source, or its
+    ``.json.gz`` sibling when only the gzipped variant ships (deployed Space —
+    qpc_hafs is >10 MB and ships pre-gzipped to dodge HF auto-LFS). Missing
+    files are skipped."""
     out: dict[str, bytes] = {}
     for key, path in _RESOURCE_PATHS.items():
-        if not path.exists():
+        gz = path.with_suffix(path.suffix + ".gz")
+        if path.exists():
+            raw = path.read_bytes()
+        elif gz.exists():
+            raw = gzip.decompress(gz.read_bytes())
+        else:
             continue
-        out[key] = gzip.compress(path.read_bytes(), compresslevel=6, mtime=0)
+        out[key] = gzip.compress(raw, compresslevel=6, mtime=0)
     return out
 
 
