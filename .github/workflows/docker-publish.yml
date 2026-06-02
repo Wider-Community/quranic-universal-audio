@@ -10,10 +10,18 @@ on:
       - 'v*'
     paths:
       - 'inspector/**'
+      - 'scripts/lib/**'
+      - 'scripts/jobs/**'
+      - '.github/config/**'
+      - '.dockerignore'
       - '.github/workflows/docker-publish.yml'
   pull_request:
     paths:
       - 'inspector/**'
+      - 'scripts/lib/**'
+      - 'scripts/jobs/**'
+      - '.github/config/**'
+      - '.dockerignore'
       - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
     inputs:
