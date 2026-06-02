@@ -22,9 +22,9 @@
 
 - **Unified Qur'anic audio hub:** A single consistent schema with comprehensive metadata for reciters and recitations instead of scattered websites, CDN APIs, YouTube playlists, and raw files with different formats.
 
-- **Large-scale, multi-riwayah, multi-style:** Full Qur'an coverage for hundreds of recitations and thousands of hours spanning mujawwad, murattal, muallim, taraweeh and children repeat styles, and different riwayat.
+- **Large-scale, multi-riwayah, multi-style:** Full Qur'an coverage across many recitations and hours of audio, spanning mujawwad, murattal, muallim, taraweeh and children repeat styles.
 
-- **Phoneme-first alignment:** 20ms phoneme-level precision eliminates ambiguity at word boundaries and disambiguate tajweed effects where sounds merge across words.
+- **Phoneme-based alignment:** 20ms phoneme-level precision yields maximum accuracy, eliminates ambiguity at word boundaries and disambiguate tajweed effects where sounds merge across words.
 
 - **Repetition-safe, gap-free timestamps:** The pipeline transcribes each silence-based segment independently, so repeated words/verses are detected and timestamped correctly. See the [comparison with QUL timestamps](docs/qul_vs_mfa_timestamps.md).
 
@@ -57,6 +57,32 @@ Visit the [website](https://hetchyy-quranic-universal-audio.hf.space/) and read 
 Issues and pull requests are welcome. If you've found a bug or have a feature idea, open an [issue](https://github.com/Wider-Community/quranic-universal-audio/issues) or jump into the Discord.
 
 To contribute code to the webapp directly, fork the repo and see [inspector/README.md](inspector/README.md) for setup instructions.
+
+## Roadmap
+
+**Access**
+
+- [ ] **Unified API** — one consistent, comprehensive, well-documented API for audio + timestamps, optimised for latency and ease of use. Built for app developers and researchers, parallel to the GitHub releases and HF dataset.
+- [ ] **Global CDN** — mirror all recitations and audio across regions, prewarmed with demand-based routing for low-latency delivery everywhere.
+
+**Coverage**
+
+- [ ] **100+ recitations** — reach 100+ fully aligned recitations.
+
+**Quality**
+
+- [ ] **Letter-level precision** — word and letter timestamps are both high quality; close the few minor systematic and timing differences in letter timestamps that depend on context, tajweed, and reciter.
+
+**Generalisation**
+
+- [ ] **Orthography** — letter-level timestamps are currently tuned for Uthmani script (DigitalKhatt). Generalise to other scripts where symbols and letter conventions differ, e.g. IndoPak.
+- [ ] **Riwayah** — extend beyond Hafs. Each riwayah has its own pronunciation rules, tajweed, unique sounds, and verse orderings, with fewer and less reliable digital assets than Hafs.
+
+
+## Acknowledgements
+
+- **[Qur'anic Universal Library (QUL)](https://qul.tarteel.ai)** — Qur'an metadata, the Uthmani script, and the [DigitalKhatt](https://digitalkhatt.org) font.
+- **Audio sources** — recitations are sourced from [QuranicAudio](https://quranicaudio.com), [EveryAyah](https://everyayah.com), [MP3Quran](https://mp3quran.net), [QUL](https://qul.tarteel.ai), [TVQuran](https://tvquran.com), and [SurahQuran](https://surahquran.com).
 
 ## License
 
