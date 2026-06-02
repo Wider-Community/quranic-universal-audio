@@ -63,11 +63,13 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
         )
         secrets["INSPECTOR_WEBHOOK_SECRET"] = webhook_secret
 
-    # publish_hf needs ``datasets`` + ``orjson`` + ``pyyaml`` (the last for
-    # ``scripts.lib.config_loader.repo_config``) on top of the prebuilt /env.
-    # huggingface_hub is already baked in. Install on every launch — pip is a
-    # no-op when wheels are cached.
-    deps = "datasets orjson pyyaml"
+    # publish_hf needs ``datasets`` + ``orjson`` + ``pyyaml`` on top of the
+    # prebuilt /env. ``torch`` + ``torchcodec`` are required by datasets v3
+    # ``Audio()`` write path (encode_example imports torch unconditionally —
+    # ``decode=False`` only affects the read side). CPU-only torch is ~200 MB,
+    # adds ~60-90s to job startup but keeps consumer UX intact
+    # (``ds[i]["audio"]["array"]`` returns a waveform).
+    deps = "datasets orjson pyyaml torch torchcodec"
     entrypoint = "python /aux/code/scripts/jobs/publish_hf.py"
     if base.NEEDS_BOOTSTRAP:
         command = ["bash", "-lc",
