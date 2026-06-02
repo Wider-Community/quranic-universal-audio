@@ -544,7 +544,15 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict],
         data["text_uthmani"].append(row["text_uthmani"])
         data["segments"].append(row["segments"])
         data["word_timestamps"].append(row["word_timestamps"])
-        data["letter_timestamps"].append(row["letter_timestamps"])
+        # Transpose list-of-struct (build shape) to struct-of-lists
+        # (Sequence({...}) on-disk shape, matches prior hub splits).
+        lt = row["letter_timestamps"]
+        data["letter_timestamps"].append({
+            "word_idx": [x["word_idx"] for x in lt],
+            "char": [x["char"] for x in lt],
+            "start_ms": [x["start_ms"] for x in lt],
+            "end_ms": [x["end_ms"] for x in lt],
+        })
         src_url = row["source_url"]
         for prefix in ("https://", "http://"):
             if src_url.startswith(prefix):
@@ -553,27 +561,26 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict],
         data["source_url"].append(src_url)
         data["source_offset_ms"].append(_i(row["clip_start"]))
 
-    # decode=False stores the raw mp3 bytes verbatim — sidesteps the
-    # torchcodec/torch dependency that datasets pulls in for write-time
-    # audio decoding. Consumers who want waveforms can ``cast_column`` to
-    # ``Audio(decode=True)`` at load time and bring their own decoder.
+    # Audio(decode=True) matches the existing splits on the hub (consumers
+    # expect ``ds[i]["audio"]["array"]``). Torch + torchcodec are installed
+    # on the job at launch (see services/admin/jobs/hf_publish.py).
     features = Features({
-        "audio": Audio(decode=False),
+        "audio": Audio(),
         "surah": Value("int32"),
         "ayah": Value("int32"),
         "duration_ms": Value("int32"),
         "text_uthmani": Value("string"),
         "segments": Sequence(Sequence(Value("int32"))),
         "word_timestamps": Sequence(Sequence(Value("int32"))),
-        # ``[{...}]`` declares list-of-struct. ``Sequence({...})`` is the
-        # dict-of-lists form (legacy datasets gotcha) and would expect a
-        # transposed shape on encode.
-        "letter_timestamps": [{
+        # ``Sequence({...})`` encodes to struct-of-lists (legacy datasets
+        # behavior) — kept to stay byte-compatible with prior splits on the
+        # hub. Per-row value is fed in the transposed form below.
+        "letter_timestamps": Sequence({
             "word_idx": Value("int32"),
             "char": Value("string"),
             "start_ms": Value("int32"),
             "end_ms": Value("int32"),
-        }],
+        }),
         "source_url": Value("string"),
         "source_offset_ms": Value("int32"),
     })
