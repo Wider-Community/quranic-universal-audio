@@ -81,6 +81,10 @@ def _eligible_recitations(conn: sqlite3.Connection) -> list[dict]:
     """Return ``[{slug, ts_version, delivery_meta, channel_meta, reciter_meta}, ...]``
     for every recitation eligible for GH release: channel ``gh_release_eligible=1``
     AND a current ``per_recitation_releases(track='ts')`` row.
+
+    Selects both the FK slugs (``riwayah``/``style``/``channel`` — kept so
+    ``catalog.json`` keeps its stable consumer schema) AND the vocab display names
+    (``*_name``) used by the human-facing changelog.
     """
     rows = conn.execute("""
         SELECT
@@ -92,10 +96,14 @@ def _eligible_recitations(conn: sqlite3.Connection) -> list[dict]:
           d.riwayah AS riwayah,
           d.style AS style,
           d.channel AS channel,
+          rw.name AS riwayah_name,
+          st.name AS style_name,
+          ch.name AS channel_name,
           d.audio_category AS audio_category,
           d.recording_context AS recording_context,
           d.recording_year AS recording_year,
           d.variant_label AS variant_label,
+          d.chapter_count AS chapter_count,
           d.bitrate_mode AS bitrate_mode,
           d.bitrate_kbps_nominal AS bitrate_kbps_nominal,
           d.sample_rate_hz AS sample_rate_hz,
@@ -106,6 +114,9 @@ def _eligible_recitations(conn: sqlite3.Connection) -> list[dict]:
         FROM per_recitation_releases prr
         JOIN deliveries d ON d.slug = prr.slug
         JOIN channels c   ON c.slug = d.channel
+        JOIN riwayahs rw  ON rw.slug = d.riwayah
+        JOIN styles st    ON st.slug = d.style
+        JOIN channels ch  ON ch.slug = d.channel
         JOIN reciters r   ON r.reciter_id = d.reciter_id
         WHERE prr.track = 'ts'
           AND prr.superseded_at IS NULL
@@ -429,65 +440,30 @@ def _build_changelog(version: str, prior_version: str | None,
                      operator_note: str | None,
                      owner: str, repo: str, created_at_date: str,
                      hf_dataset: str) -> bytes:
-    """Auto-generated CHANGELOG.md — also the release description."""
-    out: list[str] = []
-    out.append(f"# Changelog — {version} ({created_at_date})\n")
-    if prior_version:
-        out.append(
-            f"Compared to [{prior_version}]"
-            f"(https://github.com/{owner}/{repo}/releases/tag/{prior_version}).\n"
-        )
-    if operator_note:
-        out.append("## Notes\n")
-        for line in operator_note.strip().splitlines():
-            out.append(f"> {line}")
-        out.append("")
+    """The release body — delegates to the shared renderer so the modal preview and
+    the shipped release stay byte-identical (modulo coverage, which the preview shows
+    in surahs and the cut shows in exact ayahs). Maps the cut-side rich member dict
+    onto the renderer's display-name contract."""
+    from scripts.lib.release_changelog import render_changelog
 
-    added = [m for m in members if m["change_kind"] == "added"]
-    if added:
-        out.append(f"## Added recitations ({len(added)})\n")
-        out.append("| Slug | Name | Riwayah | Style | Channel | Coverage |")
-        out.append("|---|---|---|---|---|---|")
-        for m in added:
-            out.append(
-                f"| `{m['slug']}` | {m.get('name_en', '')} "
-                f"| {m.get('riwayah', '')} | {m.get('style', '')} "
-                f"| {m.get('channel', '')} "
-                f"| {m['coverage_ayahs']:,} ayahs |"
-            )
-        out.append("")
+    render_members = [{
+        "name_en": m.get("name_en"),
+        "name_ar": m.get("name_ar"),
+        "riwayah": m.get("riwayah_name") or m.get("riwayah"),
+        "style": m.get("style_name") or m.get("style"),
+        "channel": m.get("channel_name") or m.get("channel"),
+        "change_kind": m.get("change_kind"),
+        "coverage_surahs": m.get("coverage_surahs"),
+        "coverage_ayahs": m.get("coverage_ayahs"),
+    } for m in members]
 
-    refreshed = [m for m in members if m["change_kind"] == "refresh"]
-    if refreshed:
-        out.append(f"## Refreshed recitations ({len(refreshed)})\n")
-        out.append("| Slug | Name |")
-        out.append("|---|---|")
-        for m in refreshed:
-            out.append(f"| `{m['slug']}` | {m.get('name_en', '')} |")
-        out.append("")
-
-    out.append("## Static references\n")
-    for key in ("surah_info.json", "qpc_hafs.json"):
-        marker = "refreshed" if key in static_refs_changed_keys else "unchanged"
-        out.append(f"- `{key}` — {marker}")
-    out.append("")
-
-    out.append("## Schemas\n")
-    out.append("<details><summary>verse_timestamps.json.gz</summary>\n")
-    out.append('Tier 1. Positional: `"surah:ayah": [start_ms, end_ms]`. '
-               'Times are source-relative milliseconds.\n</details>\n')
-    out.append("<details><summary>word_timestamps.json.gz</summary>\n")
-    out.append('Tier 2. Positional: `"surah:ayah": [[start, end], '
-               '[[widx, start, end], ...]]`. Source-relative ms.\n</details>\n')
-    out.append("<details><summary>letter_timestamps.json.gz</summary>\n")
-    out.append('Tier 3. Positional: `"surah:ayah": [[start, end], [words], '
-               '[[widx, char, start, end], ...]]`. Source-relative ms.\n</details>\n')
-
-    out.append("## Links\n")
-    out.append(f"- HF dataset: https://huggingface.co/datasets/{hf_dataset}")
-    out.append(f"- Repository: https://github.com/{owner}/{repo}\n")
-
-    return "\n".join(out).encode("utf-8")
+    md = render_changelog(
+        version=version, previous_version=prior_version,
+        release_date=created_at_date, members=render_members,
+        static_refs_changed_keys=tuple(static_refs_changed_keys),
+        operator_note=operator_note, owner=owner, repo=repo, hf_dataset=hf_dataset,
+    )
+    return md.encode("utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -767,11 +743,16 @@ def main() -> int:
         members.append({
             "slug": slug,
             "name_en": rec.get("name_en"),
+            "name_ar": rec.get("name_ar"),
             "riwayah": rec.get("riwayah"),
             "style": rec.get("style"),
             "channel": rec.get("channel"),
+            "riwayah_name": rec.get("riwayah_name"),
+            "style_name": rec.get("style_name"),
+            "channel_name": rec.get("channel_name"),
             "ts_version": str(rec["ts_version"]),
             "coverage_ayahs": coverage_ayahs,
+            "coverage_surahs": rec.get("chapter_count"),
             "content_hash": content_hash,
             "change_kind": change_kind,
             "catalog_snapshot": catalog_snapshot,

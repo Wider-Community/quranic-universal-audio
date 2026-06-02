@@ -84,9 +84,16 @@ export interface ReleasesStatusResponse {
 export interface ReleasePreviewRow {
     slug: string;
     name_en: string | null;
+    /** Arabic display name — shown trailing the Latin name in the member table. */
+    name_ar: string | null;
+    /** Display names from the vocab tables (NOT slugs). */
     riwayah: string;
     style: string;
     channel: string;
+    /** Surah coverage (chapter_count). Exact ayah coverage is only known at cut
+     *  time, so the preview shows surahs. */
+    coverage_surahs: number | null;
+    change_kind: 'added' | 'refresh' | 'unchanged';
     ts_version: string;
 }
 
@@ -103,6 +110,12 @@ export interface ReleasePreviewResponse {
     };
     added: ReleasePreviewRow[];
     refreshed: ReleasePreviewRow[];
+    /** Pre-formatted release date (YYYY-MM-DD) shown in the title line. */
+    release_date: string;
+    license: string;
+    links: { repo: string; hf_dataset: string };
+    /** The full release body from the shared renderer — kept for parity/debug;
+     *  the modal renders natively from the structured fields above. */
     changelog_preview_md: string;
     /** Echoed back on confirm so the route can 409 a stale preview. */
     expected_version_at_preview: string | null;
