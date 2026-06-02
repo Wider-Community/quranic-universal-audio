@@ -10,10 +10,14 @@ https://huggingface.co/hetchyy
 Build steps:
 
 1. Build the frontend (``inspector/frontend`` → ``dist/``).
-2. Stage the Space-shaped tree in a temp dir:
+2. Stage the Space-shaped tree in a temp dir. Whatever the Dockerfile COPYs
+   MUST be staged here — ``upload_folder`` runs with ``delete_patterns="*"``,
+   so the staged tree *is* the entire Space build context:
      - ``Dockerfile``               (copied from ``inspector/Dockerfile``)
      - ``inspector/...``            (code + frontend ``dist/``)
-     - ``scripts/__init__.py`` + ``scripts/lib/...``
+     - ``scripts/__init__.py`` + ``scripts/lib/...`` + ``scripts/jobs/...``
+     - ``.github/config/...``       (job-side ``config_loader`` reads repo.yml)
+     - ``LICENSE``                  (cut_release job asset upload)
      - ``data/{surah_info,qpc_hafs,digital_khatt_v2_script,phoneme_sub_costs}.json``
      - ``.dockerignore``
      - ``README.md`` (Space frontmatter)
@@ -85,6 +89,10 @@ def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
     shutil.copy2(repo / "inspector" / "Dockerfile", stage_root / "Dockerfile")
     shutil.copy2(repo / ".dockerignore", stage_root / ".dockerignore")
 
+    # LICENSE is COPYd by the Dockerfile (read by the cut_release job's asset
+    # upload). Must be in the staged build context or `COPY LICENSE` fails.
+    shutil.copy2(repo / "LICENSE", stage_root / "LICENSE")
+
     # Code trees.
     for src_rel in ("inspector",):
         src = repo / src_rel
@@ -104,15 +112,24 @@ def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
             ),
         )
 
-    # scripts/lib/ only (top-level CLIs not needed at runtime).
+    # scripts/lib/ (shared runtime libs) + scripts/jobs/ (HF-Job entrypoints the
+    # Dockerfile COPYs so they're baked into the image before stage_job_code
+    # uploads them on launch). Top-level CLIs are not staged.
     scripts_dst = stage_root / "scripts"
     scripts_dst.mkdir()
     shutil.copy2(repo / "scripts" / "__init__.py", scripts_dst / "__init__.py")
-    shutil.copytree(
-        repo / "scripts" / "lib",
-        scripts_dst / "lib",
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-    )
+    for sub in ("lib", "jobs"):
+        shutil.copytree(
+            repo / "scripts" / sub,
+            scripts_dst / sub,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
+
+    # .github/config/repo.yml is COPYd by the Dockerfile (read job-side by
+    # config_loader.repo_config). Stage just that subtree, not all of .github/.
+    gh_config_dst = stage_root / ".github" / "config"
+    gh_config_dst.parent.mkdir()
+    shutil.copytree(repo / ".github" / "config", gh_config_dst)
 
     # Data — only the four linguistic JSON files. Everything else lives in the
     # bucket mounted at /data/inspector-bucket inside the Space.
