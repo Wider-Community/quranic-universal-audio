@@ -736,24 +736,48 @@ def main() -> int:
                       validation_summary=summary)
         raise BoundaryValidationError(summary)
 
-    # 5. Stream-copy audio per row from bucket Xing master; rebase rows to snap.
+    # 5. Stream-copy audio per row from the bucket Xing master, rebasing each
+    # row to ffmpeg's frame-snapped start. Each row spawns two subprocesses
+    # (ffmpeg + ffprobe); a 6k-verse reciter is ~12k spawns, so we fan out
+    # over a thread pool — stream-copy is I/O-bound on the bucket mount and
+    # subprocess.run releases the GIL during wait().
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     audio_bytes: list[bytes | None] = [None] * len(rows)
     failed_slices: list[str] = []
+
+    def _slice_one(i: int, row: dict, td_path: Path):
+        src = _chapter_mp3_path(slug, row["chapter"])
+        if not src.exists():
+            return i, None, f"{row['surah']}:{row['ayah']} (no audio)"
+        dst = td_path / f"{i:06d}.mp3"
+        cut = _stream_copy_slice(src, row["clip_start"], row["clip_end"], dst)
+        if cut is None:
+            return i, None, f"{row['surah']}:{row['ayah']}"
+        actual_start, _ = cut
+        _rebase_row(row, actual_start)
+        return i, dst.read_bytes(), None
+
     with tempfile.TemporaryDirectory() as td:
         td_path = Path(td)
-        for i, row in enumerate(rows):
-            src = _chapter_mp3_path(slug, row["chapter"])
-            if not src.exists():
-                failed_slices.append(f"{row['surah']}:{row['ayah']} (no audio)")
-                continue
-            dst = td_path / f"{i:06d}.mp3"
-            cut = _stream_copy_slice(src, row["clip_start"], row["clip_end"], dst)
-            if cut is None:
-                failed_slices.append(f"{row['surah']}:{row['ayah']}")
-                continue
-            actual_start, _actual_end = cut
-            _rebase_row(row, actual_start)
-            audio_bytes[i] = dst.read_bytes()
+        workers = max(4, min(12, (os.cpu_count() or 2) * 3))
+        progress_every = max(50, len(rows) // 20)
+        log.info("slicing %d rows with %d workers (progress every %d)",
+                 len(rows), workers, progress_every)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(_slice_one, i, row, td_path)
+                       for i, row in enumerate(rows)]
+            done = 0
+            for fut in as_completed(futures):
+                idx, blob, fail = fut.result()
+                done += 1
+                if blob is not None:
+                    audio_bytes[idx] = blob
+                if fail is not None:
+                    failed_slices.append(fail)
+                if done % progress_every == 0 or done == len(rows):
+                    log.info("  sliced %d/%d (%d failed so far)",
+                             done, len(rows), len(failed_slices))
     sliced_count = sum(1 for b in audio_bytes if b is not None)
     log.info("audio: %d sliced, %d failed", sliced_count, len(failed_slices))
     if failed_slices:
