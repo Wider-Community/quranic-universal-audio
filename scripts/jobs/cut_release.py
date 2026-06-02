@@ -17,6 +17,8 @@ The HF Job NEVER writes the inspector DB. Reads only.
 
 Env:
   INSPECTOR_BUCKET_MOUNT    bucket mount root (default ``/data``)
+  INSPECTOR_CODE_DIR        staged-code root (default: the script's repo root,
+                            i.e. ``/aux/code`` in the Job); set for local sim
   RELEASE_VERSION           (optional) operator-supplied vX.Y.Z; bypasses auto-bump
   OPERATOR_NOTE             (optional) global note rendered into CHANGELOG.md
   LAUNCHED_BY               (optional) hf_user_id of the operator
@@ -62,6 +64,17 @@ GH_API = "https://api.github.com"
 
 def _bucket_root() -> Path:
     return Path(os.environ.get("INSPECTOR_BUCKET_MOUNT", "/data"))
+
+
+def _code_root() -> Path:
+    """Staged-code root. In the HF Job this is ``/aux/code`` (aligner-bucket
+    mounted RO), which equals ``_REPO_ROOT`` since the script lives at
+    ``<root>/scripts/jobs/cut_release.py``. ``INSPECTOR_CODE_DIR`` overrides it
+    for local runs / the cut-sim harness; unset → the script's own repo root,
+    so a plain local invocation reads ``data/``, ``LICENSE`` etc. from the
+    checkout."""
+    override = os.environ.get("INSPECTOR_CODE_DIR", "").strip()
+    return Path(override) if override else _REPO_ROOT
 
 
 def _open_inspector_db_readonly() -> sqlite3.Connection:
@@ -528,7 +541,13 @@ def _gh_request(method: str, path: str, token: str, *,
                 return {"_raw": body.decode("utf-8", "replace")}
     except urllib.error.HTTPError as e:
         msg = e.read().decode("utf-8", "replace")
-        raise RuntimeError(f"GH API {method} {url} → {e.code}: {msg[:500]}") from e
+        # On a 403, GitHub returns the permission the token lacks here — surface
+        # it so an under-scoped GH_RELEASE_TOKEN is self-diagnosing instead of an
+        # opaque "Resource not accessible by personal access token".
+        needed = e.headers.get("X-Accepted-GitHub-Permissions")
+        hint = f" [token needs GitHub permissions: {needed}]" if needed else ""
+        raise RuntimeError(
+            f"GH API {method} {url} → {e.code}: {msg[:500]}{hint}") from e
 
 
 def _gh_create_release(owner: str, repo: str, version: str, body: str,
@@ -685,7 +704,7 @@ def _preflight() -> int:
     db_path = bucket / "db" / "inspector.db"
     if not db_path.exists():
         log.error("inspector.db missing at %s", db_path); return 13
-    code_dir = Path("/aux/code")
+    code_dir = _code_root()
     for rel in ("data/surah_info.json", ".github/config/repo.yml", "LICENSE",
                 "scripts/jobs/shard.py"):
         if not (code_dir / rel).exists():
@@ -722,7 +741,7 @@ def main() -> int:
         return 3
 
     # 2. Build per-recitation artifacts and accumulate member rows.
-    refs_dir = Path("/aux/code/data")
+    refs_dir = _code_root() / "data"
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
 
     # qpc_hafs is a consumer-facing release asset. The staged image .gz is an
@@ -899,8 +918,9 @@ def main() -> int:
     # 7. Read static refs + license + shard.py for upload. qpc_hafs lives
     # gzipped on the bucket (HF Space LFS workaround) but the GH release asset
     # is the consumer-facing decompressed JSON.
-    license_bytes = (_REPO_ROOT / "LICENSE").read_bytes() if (_REPO_ROOT / "LICENSE").exists() else b""
-    shard_py = (Path("/aux/code/scripts/jobs/shard.py")).read_bytes()
+    license_path = _code_root() / "LICENSE"
+    license_bytes = license_path.read_bytes() if license_path.exists() else b""
+    shard_py = (_code_root() / "scripts" / "jobs" / "shard.py").read_bytes()
     static_files: dict[str, bytes] = {}
     si_path = refs_dir / "surah_info.json"
     if si_path.exists():
