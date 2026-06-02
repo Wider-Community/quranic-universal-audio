@@ -211,6 +211,14 @@
             // a merger within the window the rule didn't fire in this
             // recording (waqf without timing gap), and we suppress the bridge
             // so the tile never shows a stray haraka.
+            //
+            // A merger already claimed by the PREVIOUS boundary is skipped
+            // (``!excluded.has``): when the middle word dissolves to just its
+            // haraka (28:86 مِّن → only its kasra survives) MFA can place the
+            // first boundary's ``m̃`` at مِّن's head; without this guard the
+            // next boundary's prev-tail scan walks back over the kasra and
+            // re-grabs that same ``m̃`` (the "double-m̃" bug), leaving the real
+            // doubled-consonant bridge stranded in the next word's row.
             const SCAN_WINDOW = 3;
             const prevIdx = prev.phoneme_indices;
             const currIdx = curr.phoneme_indices;
@@ -219,35 +227,28 @@
             if (prevIdx && prevIdx.length > 0) {
                 for (let k = 0; k < Math.min(SCAN_WINDOW, prevIdx.length); k++) {
                     const idx = prevIdx[prevIdx.length - 1 - k]!;
-                    if (isMergerPhoneme(intervals[idx]?.phone)) { pi = idx; piInPrev = true; break; }
+                    if (!excluded.has(idx) && isMergerPhoneme(intervals[idx]?.phone)) { pi = idx; piInPrev = true; break; }
                 }
             }
             if (pi === undefined && currIdx && currIdx.length > 0) {
                 for (let k = 0; k < Math.min(SCAN_WINDOW, currIdx.length); k++) {
                     const idx = currIdx[k]!;
-                    if (isMergerPhoneme(intervals[idx]?.phone)) { pi = idx; break; }
+                    if (!excluded.has(idx) && isMergerPhoneme(intervals[idx]?.phone)) { pi = idx; break; }
                 }
             }
             if (pi === undefined || pi < 0) continue;
             bridgePhoneByBlock.set(i, pi);
             excluded.add(pi);
-            // When bridge is in prev word's tail, also exclude:
-            //  - tail overflow: prev word phonemes after the bridge (vowels MFA put in the prev segment)
-            //  - head underflow: curr word phonemes whose start ≤ bridge end (vowel of the merged
-            //    letter that MFA put at the head of the curr segment instead)
-            if (piInPrev) {
-                if (prevIdx) {
-                    const piPos = prevIdx.indexOf(pi);
-                    for (let j = piPos + 1; j < prevIdx.length; j++) excluded.add(prevIdx[j]!);
-                }
-                const bridgeEnd = intervals[pi]!.end;
-                if (currIdx) {
-                    for (const idx of currIdx) {
-                        const iv = intervals[idx];
-                        if (!iv || iv.start > bridgeEnd) break;
-                        excluded.add(idx);
-                    }
-                }
+            // When the bridge sits in the prev word's tail, MFA sometimes leaves
+            // trailing haraka *after* the merger phoneme in that same prev
+            // segment (28:60 أُوتِيتُمْ). Those are the merged letter's residue,
+            // not a following sound, so drop them. We do NOT touch the curr
+            // word's head: a fully-dissolving middle word (28:86 مِّن, whose م, ن
+            // both merge into bridges) keeps only its own haraka there, and that
+            // kasra must still render in its row.
+            if (piInPrev && prevIdx) {
+                const piPos = prevIdx.indexOf(pi);
+                for (let j = piPos + 1; j < prevIdx.length; j++) excluded.add(prevIdx[j]!);
             }
         }
 
