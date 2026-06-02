@@ -597,28 +597,67 @@ def _post_webhook(*, version: str, job_id: str, external_uri: str,
 
 
 # ---------------------------------------------------------------------------
-# Static refs hash.
+# qpc_hafs byte resolution + static refs hash.
 # ---------------------------------------------------------------------------
 
-def _hash_static_refs(refs_dir: Path) -> dict[str, dict]:
-    """SHA-256 + byte size for each static ref. qpc_hafs lives gzipped on the
-    bucket (HF Space LFS workaround); we hash the *decompressed* JSON bytes
-    so the manifest hash is stable across the gzip-vs-plain transport choice
-    and matches what a consumer who downloads the .gz and decompresses sees.
+# Bucket-relative location of the canonical gzipped qpc_hafs (Xet-backed — no
+# LFS pointer problem, unlike the image-staged ``data/qpc_hafs.json.gz``).
+QPC_BUCKET_REL = "reference/qpc_hafs.json.gz"
+
+
+def _gunzip_or_none(raw: bytes) -> bytes | None:
+    """Decompress gzip bytes, or ``None`` if ``raw`` isn't valid gzip (e.g. an
+    LFS pointer ``version https://...`` masquerading as the file)."""
+    try:
+        return gzip.decompress(raw)
+    except (OSError, gzip.BadGzipFile):
+        return None
+
+
+def _load_qpc_bytes(refs_dir: Path) -> bytes | None:
+    """Decompressed ``qpc_hafs.json`` bytes, resolved across runtimes.
+
+    HF auto-LFS-promotes ``*.gz`` **by extension**, so the job image's staged
+    ``data/qpc_hafs.json.gz`` is a git-lfs pointer (``version https://...``),
+    not gzip — ``gzip.decompress`` on it raises ``BadGzipFile``. Resolve the
+    real bytes: local uncompressed (dev checkout) → local valid gzip (CI
+    staging with real bytes) → bucket ``reference/qpc_hafs.json.gz`` (the job
+    case, where only the Xet-backed bucket carries real bytes). Returns
+    ``None`` if unavailable everywhere. Mirrors the Inspector's
+    ``services.storage.static_refs.load_qpc_bytes``.
+    """
+    plain = refs_dir / "qpc_hafs.json"
+    if plain.exists():
+        return plain.read_bytes()
+    gz = refs_dir / "qpc_hafs.json.gz"
+    if gz.exists():
+        dec = _gunzip_or_none(gz.read_bytes())
+        if dec is not None:
+            return dec
+        log.warning("staged %s is not gzip (LFS pointer?) — falling back to bucket", gz)
+    bucket_gz = _bucket_root() / QPC_BUCKET_REL
+    if bucket_gz.exists():
+        dec = _gunzip_or_none(bucket_gz.read_bytes())
+        if dec is not None:
+            return dec
+        log.error("bucket %s is not valid gzip", bucket_gz)
+    return None
+
+
+def _hash_static_refs(refs_dir: Path, qpc_bytes: bytes | None) -> dict[str, dict]:
+    """SHA-256 + byte size for each static ref. ``qpc_bytes`` is the already
+    resolved, *decompressed* qpc_hafs.json (see ``_load_qpc_bytes``); hashing
+    the decompressed bytes keeps the manifest hash stable across the
+    gzip-vs-plain transport choice and matches what a consumer who downloads
+    the .gz and decompresses sees.
     """
     out: dict[str, dict] = {}
     plain = refs_dir / "surah_info.json"
     if plain.exists():
         body = plain.read_bytes()
         out["surah_info.json"] = {"sha256": _sha256_hex(body), "bytes": len(body)}
-    qpc_gz = refs_dir / "qpc_hafs.json.gz"
-    qpc_plain = refs_dir / "qpc_hafs.json"
-    if qpc_gz.exists():
-        body = gzip.decompress(qpc_gz.read_bytes())
-        out["qpc_hafs.json"] = {"sha256": _sha256_hex(body), "bytes": len(body)}
-    elif qpc_plain.exists():
-        body = qpc_plain.read_bytes()
-        out["qpc_hafs.json"] = {"sha256": _sha256_hex(body), "bytes": len(body)}
+    if qpc_bytes is not None:
+        out["qpc_hafs.json"] = {"sha256": _sha256_hex(qpc_bytes), "bytes": len(qpc_bytes)}
     return out
 
 
@@ -685,6 +724,16 @@ def main() -> int:
     # 2. Build per-recitation artifacts and accumulate member rows.
     refs_dir = Path("/aux/code/data")
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
+
+    # qpc_hafs is a consumer-facing release asset. The staged image .gz is an
+    # LFS pointer (HF auto-LFS by extension), so resolve the real decompressed
+    # bytes via the bucket fallback and abort early if unavailable everywhere —
+    # never ship a release missing qpc_hafs.json / a stale manifest hash.
+    qpc_bytes = _load_qpc_bytes(refs_dir)
+    if qpc_bytes is None:
+        log.error("qpc_hafs.json unavailable (image .gz is an LFS pointer and "
+                  "bucket %s missing/corrupt) — cannot cut release", QPC_BUCKET_REL)
+        return 14
     from scripts.lib.dataset_validation import (
         fatal_violations, validate_dataset,
     )
@@ -794,7 +843,7 @@ def main() -> int:
     prior_static = {}
     # Pull prior static_refs from prior dataset manifest. Simpler approach:
     # compare hashes against the live HEAD on GH releases. Best-effort.
-    static_refs = _hash_static_refs(refs_dir)
+    static_refs = _hash_static_refs(refs_dir, qpc_bytes)
     static_refs_changed_keys: list[str] = []
     if prior_version:
         try:
@@ -856,12 +905,8 @@ def main() -> int:
     si_path = refs_dir / "surah_info.json"
     if si_path.exists():
         static_files["surah_info.json"] = si_path.read_bytes()
-    qpc_gz = refs_dir / "qpc_hafs.json.gz"
-    qpc_plain = refs_dir / "qpc_hafs.json"
-    if qpc_gz.exists():
-        static_files["qpc_hafs.json"] = gzip.decompress(qpc_gz.read_bytes())
-    elif qpc_plain.exists():
-        static_files["qpc_hafs.json"] = qpc_plain.read_bytes()
+    # qpc_bytes was resolved (and validated non-None) at the top of main().
+    static_files["qpc_hafs.json"] = qpc_bytes
 
     # 8. Create the GH release + upload all assets.
     log.info("creating GH release %s on %s/%s ...", version, owner, repo)
