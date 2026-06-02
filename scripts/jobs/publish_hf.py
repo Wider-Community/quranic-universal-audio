@@ -565,12 +565,15 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict],
         "text_uthmani": Value("string"),
         "segments": Sequence(Sequence(Value("int32"))),
         "word_timestamps": Sequence(Sequence(Value("int32"))),
-        "letter_timestamps": Sequence({
+        # ``[{...}]`` declares list-of-struct. ``Sequence({...})`` is the
+        # dict-of-lists form (legacy datasets gotcha) and would expect a
+        # transposed shape on encode.
+        "letter_timestamps": [{
             "word_idx": Value("int32"),
             "char": Value("string"),
             "start_ms": Value("int32"),
             "end_ms": Value("int32"),
-        }),
+        }],
         "source_url": Value("string"),
         "source_offset_ms": Value("int32"),
     })
