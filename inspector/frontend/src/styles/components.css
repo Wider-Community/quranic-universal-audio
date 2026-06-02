@@ -28,6 +28,20 @@
     max-width: 660px;
 }
 
+@media (max-width: 899px) {
+    .info-bar {
+        flex-wrap: wrap;
+        gap: 10px 16px;
+        padding: 10px 12px;
+    }
+    .info-bar label {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        font-size: 0.82rem;
+    }
+}
+
 /* ============ Buttons ============ */
 .btn {
     padding: 10px 20px;
@@ -137,6 +151,10 @@
     justify-content: center;
     gap: 10px;
     align-self: center;
+    width: 100%;
+    max-width: 600px;
+    box-sizing: border-box;
+    padding: 0 10px;
 }
 .audio-controls .btn {
     margin-left: 0;
@@ -175,9 +193,10 @@
 }
 
 #audio-player {
-    width: 500px;
-    flex-shrink: 1;
-    min-width: 200px;
+    flex-grow: 1;
+    width: 100%;
+    max-width: 500px;
+    min-width: 180px;
 }
 
 /* ============ Shortcuts & Guide ============ */
@@ -303,4 +322,11 @@
 
 .reciter-select .ss-input {
     width: 520px;
+    max-width: 100%;
+}
+
+@media (max-width: 899px) {
+    .reciter-select .ss-input {
+        width: 100%;
+    }
 }

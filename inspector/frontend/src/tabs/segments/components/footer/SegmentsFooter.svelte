@@ -110,6 +110,8 @@
     let footerEl: HTMLDivElement | null = null;
     let audioEl: HTMLAudioElement | null = null;
 
+    let isCollapsed = false;
+
     // Local mirror of `segPort.currentTimeMs()` so the progress bar can
     // be reactive without polling. Written by the onTimeUpdate
     // subscription mounted below.
@@ -119,6 +121,22 @@
     // the unified teardown in `onMount`'s return can reach them.
     let footerResizeObs: ResizeObserver | null = null;
     let playbackUnsubs: Array<() => void> = [];
+
+    $: {
+        isCollapsed;
+        if (footerEl && typeof document !== 'undefined') {
+            // Use a microtask so the DOM has updated after the collapse toggle
+            // before we read offsetHeight.
+            requestAnimationFrame(() => {
+                if (footerEl) {
+                    document.documentElement.style.setProperty(
+                        '--seg-footer-actual-h',
+                        `${footerEl.offsetHeight}px`,
+                    );
+                }
+            });
+        }
+    }
 
     onMount(() => {
         // -------------------------------------------------------------
@@ -430,15 +448,27 @@
     $: totalMs = progressVisible ? chapterDurationMs : 0;
 </script>
 
-<div class="segs-footer" class:is-empty={!hasReciter} bind:this={footerEl}>
+<div class="segs-footer" class:is-empty={!hasReciter} bind:this={footerEl} class:collapsed={isCollapsed}>
+    <button
+        type="button"
+        class="collapse-tab"
+        on:click={() => (isCollapsed = !isCollapsed)}
+        aria-label={isCollapsed ? 'Expand player' : 'Collapse player'}
+        title={isCollapsed ? 'Expand player' : 'Collapse player'}
+    >
+        {isCollapsed ? '▲' : '▼'}
+    </button>
+
     <div class="progress" class:active={progressVisible}>
-        <span class="time pos">{fmt(elapsedMs)}</span>
+        {#if !isCollapsed}
+            <span class="time pos">{fmt(elapsedMs)}</span>
+        {/if}
         <div
             class="bar"
-            on:click={onProgressClick}
-            on:keydown={onProgressKey}
+            on:click={!isCollapsed ? onProgressClick : undefined}
+            on:keydown={!isCollapsed ? onProgressKey : undefined}
             role="slider"
-            tabindex="0"
+            tabindex={isCollapsed ? -1 : 0}
             aria-label="Segment playback progress"
             aria-valuemin="0"
             aria-valuemax="100"
@@ -448,271 +478,380 @@
                 <div class="fill" style:width="{progressPct}%"></div>
             </div>
         </div>
-        <span class="time dur">{fmt(totalMs)}</span>
+        {#if !isCollapsed}
+            <span class="time dur">{fmt(totalMs)}</span>
+        {/if}
     </div>
 
-    <div class="row">
-        <div class="zone zone-identity">
-            <button
-                type="button"
-                class="identity"
-                class:placeholder={!hasReciter}
-                on:click={() => (pickerOpen = true)}
-                aria-haspopup="dialog"
-                title={hasReciter ? 'Switch reciter' : 'Pick a reciter'}
-            >
-                {#if hasReciter && contextName}
-                    <ReciterChip
-                        name={contextName}
-                        nameAr={contextNameAr}
-                        country={contextCountry}
-                        subline={chipMeta || null}
-                        bucket={contextBucket}
-                        switchable={true}
-                    />
-                {:else}
-                    <span class="identity-placeholder-label">Pick a reciter</span>
-                    <span class="identity-switch" aria-hidden="true">⇄</span>
-                {/if}
-            </button>
-
-            {#if hasReciter && !showSavePreview}
-                <div class="reciter-actions">
-                    {#if reciterTask?.row.marked_ready}
-                        <!-- After mark-ready submission the reviewer's affordances are
-                             fully locked. Only an admin can move forward (publish)
-                             or send back (force-release). The pill is a passive
-                             status indicator, not a button. -->
-                        <span class="status-pill marked-ready" title="Awaiting admin review">
-                            <span class="pill-main">Marked ready · awaiting admin</span>
-                            <span class="pill-hint">You can claim a different reciter</span>
-                        </span>
+    {#if !isCollapsed}
+        <div class="row">
+            <div class="zone zone-identity">
+                <button
+                    type="button"
+                    class="identity"
+                    class:placeholder={!hasReciter}
+                    on:click={() => (pickerOpen = true)}
+                    aria-haspopup="dialog"
+                    title={hasReciter ? 'Switch reciter' : 'Pick a reciter'}
+                >
+                    {#if hasReciter && contextName}
+                        <ReciterChip
+                            name={contextName}
+                            nameAr={contextNameAr}
+                            country={contextCountry}
+                            subline={chipMeta || null}
+                            bucket={contextBucket}
+                            switchable={true}
+                        />
                     {:else}
-                        <ClaimButton slug={$selectedReciter || ''} task={reciterTask} {onClaimed} />
-                        {#if reciterTask?.predicates.can_mark_ready}
-                            <button
-                                type="button"
-                                class="action ghost-accent"
-                                disabled={chipActionBusy !== ''}
-                                title={reciterTask?.predicates.can_skip_mark_ready_gates
-                                    ? 'Mark ready as owner — skips the checklist and validation gates'
-                                    : 'Submit the mark-ready form for an admin to review'}
-                                on:click={onMarkReady}>Mark ready</button
-                            >
-                        {/if}
-                        {#if reciterTask?.predicates.can_release}
-                            <button
-                                type="button"
-                                class="action ghost"
-                                disabled={chipActionBusy !== ''}
-                                on:click={onUnclaim}>Unclaim</button
-                            >
-                        {/if}
+                        <span class="identity-placeholder-label">Pick a reciter</span>
+                        <span class="identity-switch" aria-hidden="true">⇄</span>
                     {/if}
-                </div>
-            {/if}
-        </div>
+                </button>
 
-        {#if hasReciter}
-            <div
-                class="zone zone-location"
-                use:clickOutside={() => {
-                    surahOpen = false;
-                    ayahOpen = false;
-                }}
-            >
-                <div class="player-row">
-                    <button
-                        type="button"
-                        class="speed-cell"
-                        class:boosted={$playbackSpeed !== 1}
-                        on:click={cyclePlaybackSpeed}
-                        title="Playback speed (click to cycle)"
-                        aria-label="Playback speed {$playbackSpeed}×">{$playbackSpeed}×</button
-                    >
-
-                    <button
-                        type="button"
-                        class="pref-cell"
-                        class:on={$autoPlayEnabled}
-                        aria-pressed={$autoPlayEnabled}
-                        title="Autoplay — when ON, play continues through the whole chapter; when OFF, stops at the end of each segment (chapter mode only; accordions always stop)"
-                        on:click={handleAutoPlayToggle}
-                    >
-                        <Icon name="autoplay" size={16} />
-                    </button>
-
-                    <button
-                        type="button"
-                        class="pref-cell"
-                        class:on={$autoScrollEnabled}
-                        aria-pressed={$autoScrollEnabled}
-                        title="Auto-scroll the list to follow the playing segment"
-                        on:click={handleAutoScrollToggle}
-                    >
-                        <Icon name="autoscroll" size={16} />
-                    </button>
-
-                    <button
-                        type="button"
-                        class="play-cell"
-                        disabled={!$segPortReady || (!$segData?.audio_url && !$playingSegmentIndex)}
-                        on:click={handlePlayClick}
-                        aria-label={playGlyph === 'pause' ? 'Pause' : 'Play'}
-                    >
-                        <Icon name={playGlyph} size={14} />
-                    </button>
-
-                    <button
-                        type="button"
-                        class="loc-cell"
-                        class:has-value={!!displaySurahNum}
-                        class:live={surahLive}
-                        on:click={() => {
-                            surahOpen = !surahOpen;
-                            ayahOpen = false;
-                        }}
-                        aria-haspopup="dialog"
-                        aria-expanded={surahOpen}
-                    >
-                        <span class="loc-label">Surah</span>
-                        {#if displaySurahNum}
-                            <span class="loc-value">{displaySurahNum}</span>
+                {#if hasReciter && !showSavePreview}
+                    <div class="reciter-actions">
+                        {#if reciterTask?.row.marked_ready}
+                            <!-- After mark-ready submission the reviewer's affordances are
+                                 fully locked. Only an admin can move forward (publish)
+                                 or send back (force-release). The pill is a passive
+                                 status indicator, not a button. -->
+                            <span class="status-pill marked-ready" title="Awaiting admin review">
+                                <span class="pill-main">Marked ready · awaiting admin</span>
+                                <span class="pill-hint">You can claim a different reciter</span>
+                            </span>
                         {:else}
-                            <span class="loc-empty">—</span>
-                        {/if}
-                        <Icon name="caret-down" size={10} />
-                    </button>
-
-                    <button
-                        type="button"
-                        class="loc-cell"
-                        class:has-value={!!$selectedVerse}
-                        class:live={ayahLive}
-                        disabled={!$selectedChapter}
-                        on:click={openAyah}
-                        aria-haspopup="dialog"
-                        aria-expanded={ayahOpen}
-                    >
-                        <span class="loc-label">Ayah</span>
-                        {#if $selectedVerse}
-                            <span class="loc-value">{$selectedVerse}</span>
-                        {:else}
-                            <span class="loc-empty">all</span>
-                        {/if}
-                        <Icon name="caret-down" size={10} />
-                    </button>
-                </div>
-
-                {#if surahOpen}
-                    <div class="pop pop-surah">
-                        <SurahPopover
-                            surahNums={allSurahs}
-                            value={displaySurahNum}
-                            on:change={onSurahPick}
-                        />
-                    </div>
-                {/if}
-
-                {#if ayahOpen}
-                    <div class="pop pop-ayah" role="dialog" aria-label="Ayah picker">
-                        <input
-                            bind:this={ayahFilterInput}
-                            bind:value={ayahQuery}
-                            on:keydown={onAyahKey}
-                            class="ayah-search"
-                            type="text"
-                            inputmode="numeric"
-                            placeholder="Jump to ayah…"
-                            autocomplete="off"
-                        />
-                        <div class="ayah-grid" role="listbox">
-                            {#each filteredAyahs as v (v)}
+                            <ClaimButton slug={$selectedReciter || ''} task={reciterTask} {onClaimed} />
+                            {#if reciterTask?.predicates.can_mark_ready}
                                 <button
                                     type="button"
-                                    class="ayah-cell"
-                                    class:active={String(v) === $selectedVerse}
-                                    role="option"
-                                    aria-selected={String(v) === $selectedVerse}
-                                    on:click={() => onAyahPick(v)}>{v}</button
+                                    class="action ghost-accent"
+                                    disabled={chipActionBusy !== ''}
+                                    title={reciterTask?.predicates.can_skip_mark_ready_gates
+                                        ? 'Mark ready as owner — skips the checklist and validation gates'
+                                        : 'Submit the mark-ready form for an admin to review'}
+                                    on:click={onMarkReady}>Mark ready</button
                                 >
-                            {:else}
-                                <div class="empty">No matches</div>
-                            {/each}
-                        </div>
+                            {/if}
+                            {#if reciterTask?.predicates.can_release}
+                                <button
+                                    type="button"
+                                    class="action ghost"
+                                    disabled={chipActionBusy !== ''}
+                                    on:click={onUnclaim}>Unclaim</button
+                                >
+                            {/if}
+                        {/if}
                     </div>
                 {/if}
             </div>
-        {:else}
-            <div class="zone zone-location empty-spacer" aria-hidden="true"></div>
-        {/if}
 
-        <div class="zone zone-save">
             {#if hasReciter}
-                {#if showSavePreview}
-                    <button class="action ghost" on:click={() => hideSavePreview()}>Cancel</button>
-                    <button class="action primary" on:click={confirmSaveFromPreview}
-                        >Confirm save</button
-                    >
-                {:else}
-                    <button
-                        type="button"
-                        class="utility"
-                        class:on={$historyVisible}
-                        title={$historyVisible ? 'Back to segments' : 'History'}
-                        aria-label={historyButtonLabel}
-                        on:click={toggleHistory}
-                    >
-                        {#if $historyVisible}
-                            <Icon name="arrow-left" size={14} />
-                            <span class="util-label">Back</span>
-                        {:else}
-                            <Icon name="history" size={14} />
-                            <span class="util-label">History</span>
-                        {/if}
-                    </button>
+                <div
+                    class="zone zone-location"
+                    use:clickOutside={() => {
+                        surahOpen = false;
+                        ayahOpen = false;
+                    }}
+                >
+                    <div class="player-row">
+                        <button
+                            type="button"
+                            class="speed-cell"
+                            class:boosted={$playbackSpeed !== 1}
+                            on:click={cyclePlaybackSpeed}
+                            title="Playback speed (click to cycle)"
+                            aria-label="Playback speed {$playbackSpeed}×">{$playbackSpeed}×</button
+                        >
 
-                    {#if writeable}
-                        <div class="save-group">
-                            <button
-                                type="button"
-                                class="autosave-toggle"
-                                class:on={$autoSaveEnabled}
-                                aria-pressed={$autoSaveEnabled}
-                                title={$autoSaveEnabled
-                                    ? 'Auto-save on — click to disable'
-                                    : 'Auto-save off — click to enable'}
-                                on:click={() => toggleAutoSave(!$autoSaveEnabled)}
-                            >
-                                <Icon name="bolt" size={12} />
-                                <span>Auto</span>
-                            </button>
+                        <button
+                            type="button"
+                            class="pref-cell"
+                            class:on={$autoPlayEnabled}
+                            aria-pressed={$autoPlayEnabled}
+                            title="Autoplay — when ON, play continues through the whole chapter; when OFF, stops at the end of each segment (chapter mode only; accordions always stop)"
+                            on:click={handleAutoPlayToggle}
+                        >
+                            <Icon name="autoplay" size={16} />
+                        </button>
 
-                            <button
-                                type="button"
-                                class="action save"
-                                class:primary={$isDirtyStore && !$autoSaveEnabled}
-                                class:saved={!$isDirtyStore}
-                                class:auto-busy={$autoSaveEnabled && $isDirtyStore}
-                                disabled={saveDisabled}
-                                on:click={onSegSaveClick}
-                            >
-                                {#if !$isDirtyStore}
-                                    <span class="save-glyph" aria-hidden="true">✓</span>
-                                    <span>Saved</span>
-                                {:else if $autoSaveEnabled}
-                                    <span class="save-pulse" aria-hidden="true"></span>
-                                    <span>Auto-saving…</span>
-                                {:else}
-                                    <span>{saveLabel}</span>
-                                {/if}
-                            </button>
+                        <button
+                            type="button"
+                            class="pref-cell"
+                            class:on={$autoScrollEnabled}
+                            aria-pressed={$autoScrollEnabled}
+                            title="Auto-scroll the list to follow the playing segment"
+                            on:click={handleAutoScrollToggle}
+                        >
+                            <Icon name="autoscroll" size={16} />
+                        </button>
+
+                        <button
+                            type="button"
+                            class="play-cell"
+                            disabled={!$segPortReady || (!$segData?.audio_url && !$playingSegmentIndex)}
+                            on:click={handlePlayClick}
+                            aria-label={playGlyph === 'pause' ? 'Pause' : 'Play'}
+                        >
+                            <Icon name={playGlyph} size={14} />
+                        </button>
+
+                        <button
+                            type="button"
+                            class="loc-cell"
+                            class:has-value={!!displaySurahNum}
+                            class:live={surahLive}
+                            on:click={() => {
+                                surahOpen = !surahOpen;
+                                ayahOpen = false;
+                            }}
+                            aria-haspopup="dialog"
+                            aria-expanded={surahOpen}
+                        >
+                            <span class="loc-label">Surah</span>
+                            {#if displaySurahNum}
+                                <span class="loc-value">{displaySurahNum}</span>
+                            {:else}
+                                <span class="loc-empty">—</span>
+                            {/if}
+                            <Icon name="caret-down" size={10} />
+                        </button>
+
+                        <button
+                            type="button"
+                            class="loc-cell"
+                            class:has-value={!!$selectedVerse}
+                            class:live={ayahLive}
+                            disabled={!$selectedChapter}
+                            on:click={openAyah}
+                            aria-haspopup="dialog"
+                            aria-expanded={ayahOpen}
+                        >
+                            <span class="loc-label">Ayah</span>
+                            {#if $selectedVerse}
+                                <span class="loc-value">{$selectedVerse}</span>
+                            {:else}
+                                <span class="loc-empty">all</span>
+                            {/if}
+                            <Icon name="caret-down" size={10} />
+                        </button>
+                    </div>
+
+                    {#if surahOpen}
+                        <div class="pop pop-surah">
+                            <SurahPopover
+                                surahNums={allSurahs}
+                                value={displaySurahNum}
+                                on:change={onSurahPick}
+                            />
                         </div>
                     {/if}
-                {/if}
+
+                    {#if ayahOpen}
+                        <div class="pop pop-ayah" role="dialog" aria-label="Ayah picker">
+                            <input
+                                bind:this={ayahFilterInput}
+                                bind:value={ayahQuery}
+                                on:keydown={onAyahKey}
+                                class="ayah-search"
+                                type="text"
+                                inputmode="numeric"
+                                placeholder="Jump to ayah…"
+                                autocomplete="off" />
+                            <div class="ayah-grid" role="listbox">
+                                {#each filteredAyahs as v (v)}
+                                    <button
+                                        type="button"
+                                        class="ayah-cell"
+                                        class:active={String(v) === $selectedVerse}
+                                        role="option"
+                                        aria-selected={String(v) === $selectedVerse}
+                                        on:click={() => onAyahPick(v)}>{v}</button
+                                    >
+                                {:else}
+                                    <div class="empty">No matches</div>
+                                {/each}
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {:else}
+                <div class="zone zone-location empty-spacer" aria-hidden="true"></div>
             {/if}
+
+            <div class="zone zone-save">
+                {#if hasReciter}
+                    {#if showSavePreview}
+                        <button class="action ghost" on:click={() => hideSavePreview()}>Cancel</button>
+                        <button class="action primary" on:click={confirmSaveFromPreview}
+                            >Confirm save</button
+                        >
+                    {:else}
+                        <button
+                            type="button"
+                            class="utility"
+                            class:on={$historyVisible}
+                            title={$historyVisible ? 'Back to segments' : 'History'}
+                            aria-label={historyButtonLabel}
+                            on:click={toggleHistory}
+                        >
+                            {#if $historyVisible}
+                                <Icon name="arrow-left" size={14} />
+                                <span class="util-label">Back</span>
+                            {:else}
+                                <Icon name="history" size={14} />
+                                <span class="util-label">History</span>
+                            {/if}
+                        </button>
+
+                        {#if writeable}
+                            <div class="save-group">
+                                <button
+                                    type="button"
+                                    class="autosave-toggle"
+                                    class:on={$autoSaveEnabled}
+                                    aria-pressed={$autoSaveEnabled}
+                                    title={$autoSaveEnabled
+                                        ? 'Auto-save on — click to disable'
+                                        : 'Auto-save off — click to enable'}
+                                    on:click={() => toggleAutoSave(!$autoSaveEnabled)}
+                                >
+                                    <Icon name="bolt" size={12} />
+                                    <span>Auto</span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    class="action save"
+                                    class:primary={$isDirtyStore && !$autoSaveEnabled}
+                                    class:saved={!$isDirtyStore}
+                                    class:auto-busy={$autoSaveEnabled && $isDirtyStore}
+                                    disabled={saveDisabled}
+                                    on:click={onSegSaveClick}
+                                >
+                                    {#if !$isDirtyStore}
+                                        <span class="save-glyph" aria-hidden="true">✓</span>
+                                        <span>Saved</span>
+                                    {:else if $autoSaveEnabled}
+                                        <span class="save-pulse" aria-hidden="true"></span>
+                                        <span>Auto-saving…</span>
+                                    {:else}
+                                        <span>{saveLabel}</span>
+                                    {/if}
+                                </button>
+                            </div>
+                        {/if}
+                    {/if}
+                {/if}
+            </div>
         </div>
-    </div>
+    {:else}
+        <!-- Collapsed layout — keeps save controls visible -->
+        <div class="collapsed-row">
+            <div class="collapsed-meta"
+                role="button"
+                tabindex="0"
+                on:click={() => isCollapsed = false}
+                on:keydown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        isCollapsed = false;
+                    }
+                }}
+            >
+                <span class="collapsed-title">
+                    {#if contextName}
+                        {contextName}
+                    {:else}
+                        No reciter selected
+                    {/if}
+                </span>
+                <span class="collapsed-subtitle">
+                    {#if displaySurahNum}
+                        · Surah {displaySurahNum}
+                    {/if}
+                    {#if $selectedVerse}
+                        :{selectedVerse}
+                    {/if}
+                </span>
+            </div>
+            <div class="collapsed-controls">
+                <button
+                    type="button"
+                    class="collapsed-play-btn"
+                    disabled={!$segPortReady || (!$segData?.audio_url && !$playingSegmentIndex)}
+                    on:click|stopPropagation={handlePlayClick}
+                >
+                    <Icon name={playGlyph} size={11} />
+                </button>
+            </div>
+            <div class="zone zone-save">
+                {#if hasReciter}
+                    {#if showSavePreview}
+                        <button class="action ghost" on:click={() => hideSavePreview()}>Cancel</button>
+                        <button class="action primary" on:click={confirmSaveFromPreview}
+                            >Confirm save</button
+                        >
+                    {:else}
+                        <button
+                            type="button"
+                            class="utility"
+                            class:on={$historyVisible}
+                            title={$historyVisible ? 'Back to segments' : 'History'}
+                            aria-label={historyButtonLabel}
+                            on:click={toggleHistory}
+                        >
+                            {#if $historyVisible}
+                                <Icon name="arrow-left" size={14} />
+                                <span class="util-label">Back</span>
+                            {:else}
+                                <Icon name="history" size={14} />
+                                <span class="util-label">History</span>
+                            {/if}
+                        </button>
+
+                        {#if writeable}
+                            <div class="save-group">
+                                <button
+                                    type="button"
+                                    class="autosave-toggle"
+                                    class:on={$autoSaveEnabled}
+                                    aria-pressed={$autoSaveEnabled}
+                                    title={$autoSaveEnabled
+                                        ? 'Auto-save on — click to disable'
+                                        : 'Auto-save off — click to enable'}
+                                    on:click={() => toggleAutoSave(!$autoSaveEnabled)}
+                                >
+                                    <Icon name="bolt" size={12} />
+                                    <span>Auto</span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    class="action save"
+                                    class:primary={$isDirtyStore && !$autoSaveEnabled}
+                                    class:saved={!$isDirtyStore}
+                                    class:auto-busy={$autoSaveEnabled && $isDirtyStore}
+                                    disabled={saveDisabled}
+                                    on:click={onSegSaveClick}
+                                >
+                                    {#if !$isDirtyStore}
+                                        <span class="save-glyph" aria-hidden="true">✓</span>
+                                        <span>Saved</span>
+                                    {:else if $autoSaveEnabled}
+                                        <span class="save-pulse" aria-hidden="true"></span>
+                                        <span>Auto-saving…</span>
+                                    {:else}
+                                        <span>{saveLabel}</span>
+                                    {/if}
+                                </button>
+                            </div>
+                        {/if}
+                    {/if}
+                {/if}
+            </div>
+        </div>
+    {/if}
 
     <audio bind:this={audioEl} preload="none"></audio>
 </div>
@@ -746,6 +885,15 @@
         background: var(--panel);
         border-top: 1px solid var(--border-default);
         box-shadow: 0 -8px 24px oklch(0 0 0 / 0.28);
+        transition: min-height var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    padding var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    background var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    bottom var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    right var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    left var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    width var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    border-radius var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    box-shadow var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     /* The <audio> element is the source of all playback DOM events. It
@@ -753,6 +901,34 @@
        intrinsic 0×0 size from contributing to the footer height. */
     audio {
         display: none;
+    }
+
+    .collapse-tab {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        height: 18px;
+        padding: 0 12px;
+        border-radius: 100px;
+        background: var(--panel-2);
+        color: var(--text-faint);
+        border: 1px solid var(--border-quiet);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 8px;
+        line-height: 1;
+        z-index: 10;
+        transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+        box-shadow: var(--shadow-sm);
+        white-space: nowrap;
+    }
+    .collapse-tab:hover {
+        background: var(--accent-tint-soft);
+        border-color: var(--accent);
+        color: var(--accent);
     }
 
     /* Progress row: times flanking the scrub bar, matching the dashboard
@@ -811,7 +987,7 @@
         align-items: center;
         justify-content: space-between;
         gap: var(--s-3);
-        padding: var(--s-2) var(--s-4);
+        padding: var(--s-2) 36px var(--s-2) var(--s-4);
     }
 
     /* Location (player cluster) is pinned to the true viewport
@@ -1087,7 +1263,7 @@
     .pop-surah {
         left: 50%;
         transform: translateX(-50%);
-        width: min(700px, calc(100vw - var(--s-4) * 2));
+        width: 238px;
     }
     .pop-ayah {
         left: 50%;
@@ -1296,6 +1472,100 @@
         border-color: oklch(0.785 0.13 220 / 0.35);
     }
 
+    /* ---------- Collapsed state ---------- */
+    .segs-footer.collapsed {
+        min-height: 0 !important;
+    }
+    .segs-footer.collapsed:hover {
+        background: var(--panel-2);
+    }
+
+    /* Progress bar goes full-bleed in collapsed state */
+    .segs-footer.collapsed .progress {
+        gap: 0;
+        padding: 0;
+        margin: 0;
+        width: 100%;
+    }
+    .segs-footer.collapsed .progress .bar {
+        height: 4px;
+        padding: 0;
+        margin: 0;
+        border-radius: 0;
+    }
+    .segs-footer.collapsed .progress .track {
+        height: 4px;
+        border-radius: 0;
+    }
+
+    .collapsed-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 8px 14px;
+        min-height: 48px;
+    }
+    .collapsed-row:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+    }
+    .collapsed-meta {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        flex: 1;
+        gap: var(--s-1);
+        padding-right: var(--s-2);
+    }
+    .collapsed-title {
+        font-size: var(--fs-body);
+        font-weight: 500;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .collapsed-subtitle {
+        font-size: var(--fs-meta);
+        color: var(--text-secondary);
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    .collapsed-controls {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        flex-shrink: 0;
+    }
+    .collapsed-play-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: var(--accent-fg);
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 11px;
+        box-shadow: var(--shadow-sm);
+        position: relative;
+        transition: background var(--t-fast), transform var(--t-fast);
+    }
+    .collapsed-play-btn:hover:not(:disabled) {
+        background: var(--accent-strong);
+        transform: scale(1.05);
+    }
+    .collapsed-play-btn:active:not(:disabled) {
+        transform: scale(0.95);
+    }
+    .collapsed-play-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
     /* ---------- Responsive ---------- */
     @media (max-width: 960px) {
         .row {
@@ -1316,10 +1586,10 @@
         }
         .pop-surah,
         .pop-ayah {
-            left: 0;
-            right: 0;
-            transform: none;
-            width: auto;
+            left: 50%;
+            transform: translateX(-50%);
+            right: auto;
+            width: min(320px, calc(100vw - 32px));
         }
     }
     @media (max-width: 540px) {
@@ -1328,6 +1598,16 @@
         }
         .action.save {
             min-width: 92px;
+        }
+        .collapsed-subtitle {
+            display: none !important;
+        }
+        .collapsed-row {
+            padding: 6px 10px !important;
+            min-height: 40px !important;
+        }
+        .identity {
+            padding: 2px var(--s-2) !important;
         }
     }
 </style>

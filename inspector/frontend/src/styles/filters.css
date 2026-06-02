@@ -51,3 +51,29 @@
 .seg-back-btn:hover {
     background: #5a7bff;
 }
+
+/* ============ Mobile Responsiveness ============ */
+@media (max-width: 899px) {
+    .seg-filter-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 6px;
+        width: 100%;
+    }
+    .seg-filter-field {
+        grid-column: 1 / -1;
+        min-width: 0;
+        width: 100%;
+    }
+    .seg-filter-op {
+        grid-column: 1;
+        width: 100%;
+    }
+    .seg-filter-value {
+        grid-column: 2;
+        width: 100px;
+    }
+    .seg-filter-remove {
+        grid-column: 3;
+    }
+}

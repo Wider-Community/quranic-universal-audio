@@ -216,4 +216,23 @@
     @media (max-width: 720px) {
         .pill { font-size: 10.5px; padding: 1px 6px; }
     }
+
+    @media (max-width: 767px) {
+        .row {
+            grid-template-columns: 32px minmax(0, 1fr);
+            grid-template-areas:
+                "play info"
+                ".    pills";
+            padding: 10px 8px;
+            gap: 8px 10px;
+        }
+        .play, .play-spacer { grid-area: play; }
+        .left  { grid-area: info; }
+        .right {
+            grid-area: pills;
+            justify-content: flex-start;
+        }
+        .name  { font-size: 13.5px; }
+        .name-ar { font-size: 12.5px; }
+    }
 </style>

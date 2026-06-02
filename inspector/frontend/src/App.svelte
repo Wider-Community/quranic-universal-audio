@@ -20,6 +20,7 @@
     import { activeTab as activeTabStore, getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS, TAB_NAMES } from './lib/utils/constants';
     import DashboardTab from './tabs/dashboard/DashboardTab.svelte';
+    import { setActivityDrawer, setFilterDrawer } from './tabs/dashboard/stores/dashboard-state';
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
     import { segPort } from './tabs/segments/stores/playback';
     import TimestampsFooterAnalysis from './tabs/timestamps/components/TimestampsFooterAnalysis.svelte';
@@ -29,6 +30,7 @@
     // `activeTab` follows the shared store so external navigation (e.g. the
     // Bookmarks sidebar calling setActiveTab) switches tabs here too.
     let activeTab = getActiveTab();
+
     $: activeTab = $activeTabStore;
     // Lazy-mount tabs: defer Timestamps/Segments mount until the user actually
     // visits them. Once visited, the tab stays in the DOM (hidden) so its
@@ -54,6 +56,11 @@
         // own footer, so we silence + hide the shared player there.
         if (tab === TAB_NAMES.SEGMENTS) dashPort.pause();
         if (tab !== TAB_NAMES.SEGMENTS) segPort.pause();
+        // Close the mobile dashboard drawers when leaving Dashboard.
+        if (tab !== TAB_NAMES.DASHBOARD) {
+            setFilterDrawer(false);
+            setActivityDrawer(false);
+        }
     }
 
     function onCombinationSelect(ev: CustomEvent<PublicDelivery>): void {
@@ -108,53 +115,124 @@
         document.addEventListener('visibilitychange', onVisible);
         return () => document.removeEventListener('visibilitychange', onVisible);
     });
+
+    let showHeader = true;
+    let lastScrollY = 0;
+
+    function handleScroll(): void {
+        const scrollY = window.scrollY;
+        // Don't hide if near the top
+        if (scrollY < 60) {
+            showHeader = true;
+        } else {
+            // Scroll down -> hide, scroll up -> show
+            if (scrollY > lastScrollY) {
+                showHeader = false;
+            } else {
+                showHeader = true;
+            }
+        }
+        lastScrollY = scrollY;
+    }
 </script>
 
+<svelte:window on:scroll={handleScroll} />
+
 <div class="container">
-    <header>
-        <ExternalLinks />
-        <div class="tab-bar">
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => setActiveTab(TAB_NAMES.DASHBOARD)}>Dashboard</button>
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => setActiveTab(TAB_NAMES.TIMESTAMPS)}>Timestamps</button>
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => setActiveTab(TAB_NAMES.SEGMENTS)}>Segments</button>
-        </div>
-        <div class="auth-controls">
-            {#if $currentUser.dev_mode}
-                <!-- Local dev only — never rendered on the deployed Space. -->
-                <DevRoleSwitcher />
-            {:else if isSignedIn($currentUser)}
-                <span class="auth-login" title="Signed in as {$currentUser.login}">
-                    {$currentUser.login}
-                    {#if $currentUser.role && $currentUser.role !== 'contributor'}
-                        <span class="auth-role">·{$currentUser.role}</span>
-                    {/if}
-                </span>
-                <button type="button" class="auth-btn" on:click={_onSignOut}>Sign out</button>
-            {:else}
-                <button type="button" class="auth-btn auth-btn--cta" on:click={_onSignIn}>
-                    Sign in with HF
+    <header id="header" class="header" class:has-dash-controls={activeTab === TAB_NAMES.DASHBOARD} class:header--hidden={!showHeader}>
+        <div class="header-left">
+            <!-- Mobile-only filter toggle: shows left drawer -->
+            {#if activeTab === TAB_NAMES.DASHBOARD}
+                <button
+                    class="icon-btn filter-btn"
+                    id="openLeft"
+                    aria-label="Filters"
+                    on:click={() => setFilterDrawer(true)}
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                    </svg>
                 </button>
             {/if}
+            <ExternalLinks />
+        </div>
+
+        <div class="header-center">
+            <nav class="tab-bar" id="tabs">
+                <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => setActiveTab(TAB_NAMES.DASHBOARD)}>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="7" height="9" />
+                        <rect x="14" y="3" width="7" height="5" />
+                        <rect x="14" y="12" width="7" height="9" />
+                        <rect x="3" y="16" width="7" height="5" />
+                    </svg>
+                    <span class="tab-label">Dashboard</span>
+                </button>
+                <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => setActiveTab(TAB_NAMES.TIMESTAMPS)}>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    <span class="tab-label">Timestamps</span>
+                </button>
+                <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => setActiveTab(TAB_NAMES.SEGMENTS)}>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 10L3 14M7 6L7 18M11 3L11 21M15 8L15 16M19 11L19 13" />
+                    </svg>
+                    <span class="tab-label">Segments</span>
+                </button>
+            </nav>
+        </div>
+
+        <div class="header-right">
+            <div class="auth-controls">
+                <!-- Mobile-only activity drawer toggle -->
+                {#if activeTab === TAB_NAMES.DASHBOARD}
+                    <button class="icon-btn icon-only-mobile" aria-label="Activity" id="openRight" on:click={() => setActivityDrawer(true)}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+                        </svg>
+                    </button>
+                {/if}
+                <div class="header-user">
+                    {#if $currentUser.dev_mode}
+                        <!-- Local dev only — never rendered on the deployed Space. -->
+                        <DevRoleSwitcher />
+                    {:else if isSignedIn($currentUser)}
+                        <span class="auth-login" title="Signed in as {$currentUser.login}">
+                            {$currentUser.login}
+                            {#if $currentUser.role && $currentUser.role !== 'contributor'}
+                                <span class="auth-role">·{$currentUser.role}</span>
+                            {/if}
+                        </span>
+                        <button type="button" class="auth-btn" on:click={_onSignOut}>Sign out</button>
+                    {:else}
+                        <button type="button" class="auth-btn auth-btn--cta" on:click={_onSignIn}>
+                            Sign in with HF
+                        </button>
+                    {/if}
+                </div>
+            </div>
         </div>
     </header>
 
     <!-- ============ Dashboard Tab ============ -->
     {#if mountedTabs.has(TAB_NAMES.DASHBOARD)}
-        <div hidden={activeTab !== TAB_NAMES.DASHBOARD}>
+        <div class="tab-panel" hidden={activeTab !== TAB_NAMES.DASHBOARD}>
             <DashboardTab />
         </div>
     {/if}
 
     <!-- ============ Timestamps Tab ============ -->
     {#if mountedTabs.has(TAB_NAMES.TIMESTAMPS)}
-        <div hidden={activeTab !== TAB_NAMES.TIMESTAMPS}>
+        <div class="tab-panel" hidden={activeTab !== TAB_NAMES.TIMESTAMPS}>
             <TimestampsTab />
         </div>
     {/if}
 
     <!-- ============ Segments Tab ============ -->
     {#if mountedTabs.has(TAB_NAMES.SEGMENTS)}
-        <div hidden={activeTab !== TAB_NAMES.SEGMENTS}>
+        <div class="tab-panel" hidden={activeTab !== TAB_NAMES.SEGMENTS}>
             <SegmentsTab />
         </div>
     {/if}
@@ -207,25 +285,79 @@
 <BookmarksPanel />
 
 <style>
-    header {
+    /* ── Desktop header ── */
+    .header {
+        height: var(--header-h, 76px);
         display: grid;
         grid-template-columns: 1fr auto 1fr;
         align-items: center;
-        gap: 12px;
+        padding: 0 16px;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: rgba(10, 16, 32, 0.95);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--border-quiet);
+        margin-bottom: 0;
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
+    .header.header--hidden {
+        @media (max-width: 899px) {
+            transform: translateY(-100%);
+        }
+    }
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        justify-self: start;
+    }
+    .header-center {
+        justify-self: center;
+    }
+    .header-right {
+        justify-self: end;
+    }
+
+    /* Filter btn & activity icon: hidden on desktop, shown on mobile */
+    .icon-btn.filter-btn   { display: none; }
+    .icon-btn.icon-only-mobile { display: none; }
+
+    /* icon-btn base style */
+    .icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-md, 6px);
+        background: transparent;
+        border: 1px solid var(--border-quiet);
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .icon-btn:hover {
+        background: var(--panel-2);
+        border-color: var(--border-default);
+        color: var(--text-primary);
+    }
+    .icon-btn svg { width: 16px; height: 16px; display: block; }
+
     .tab-bar {
         display: flex;
         align-items: center;
         gap: 0;
-        grid-column: 2;
-        justify-self: center;
     }
     .auth-controls {
         display: flex;
         align-items: center;
-        gap: 10px;
-        grid-column: 3;
-        justify-self: end;
+        gap: 8px;
+    }
+    .header-user {
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
     .auth-login {
         font-size: 0.92rem;
@@ -262,5 +394,86 @@
         background: #ffba2c;
         border-color: transparent;
         color: #1a1a1a;
+    }
+    .tab-panel {
+        box-sizing: border-box;
+    }
+
+    @media (max-width: 1280px) {
+        .icon-btn.icon-only-mobile {
+            display: inline-flex;
+        }
+    }
+
+    /* ── Tablet/Mobile < 900px ── */
+    @media (max-width: 899px) {
+        .tab-panel {
+            padding: 0 12px;
+        }
+        :global(:root) { --header-h: 98px; }
+
+        .header {
+            grid-template-columns: auto 1fr;
+            grid-template-rows: auto auto auto;
+            align-items: center;
+            gap: 4px 10px;
+            height: auto;
+            min-height: var(--header-h, 98px);
+            padding: 6px 8px;
+        }
+        .header.has-dash-controls {
+            grid-template-columns: auto 1fr auto;
+        }
+
+        /* Dissolve wrappers so children become direct grid items */
+        .header-left,
+        .header-center,
+        .header-right,
+        .auth-controls {
+            display: contents;
+        }
+
+        /* Row 1 — external links centred across all columns */
+        .header-left :global(.link-rail) {
+            grid-row: 1;
+            grid-column: 1 / -1;
+            justify-content: center;
+        }
+
+        /* Row 2 — tabs full-width */
+        .tab-bar {
+            grid-row: 2;
+            grid-column: 1 / -1;
+            width: 100%;
+        }
+
+        /* Row 3 — filter | user | activity */
+        .filter-btn {
+            grid-row: 3;
+            grid-column: 1;
+            display: inline-flex !important;
+        }
+        .icon-only-mobile {
+            grid-row: 3;
+            grid-column: 1 / -1;
+            justify-self: end;
+            display: inline-flex !important;
+        }
+        .header.has-dash-controls .icon-only-mobile {
+            grid-column: 3;
+            justify-self: end;
+        }
+        .header-user {
+            grid-row: 3;
+            grid-column: 1 / -1;
+            justify-self: end;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .header.has-dash-controls .header-user {
+            grid-column: 2;
+            justify-self: center;
+        }
     }
 </style>

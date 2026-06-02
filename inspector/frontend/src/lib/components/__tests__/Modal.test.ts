@@ -25,6 +25,11 @@ describe('Modal — close paths + body scroll lock', () => {
         expect(container.querySelector('.modal-close')).not.toBeNull();
     });
 
+    it('renders a close button even when no title is provided', () => {
+        const { container } = render(Modal, { props: { open: true, title: null } });
+        expect(container.querySelector('.modal-close')).not.toBeNull();
+    });
+
     it('dispatches close on the close button click', async () => {
         const onClose = vi.fn();
         const { container } = render(Modal, {
