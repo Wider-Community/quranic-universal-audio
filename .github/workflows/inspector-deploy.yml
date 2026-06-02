@@ -84,6 +84,14 @@ jobs:
 
   deploy:
     needs: [checks, boot-smoke]
+    # boot-smoke is skipped on normal pushes; a skipped `needs` would make the
+    # default `if: success()` fail and skip deploy too. Run deploy whenever
+    # checks passed and boot-smoke did not FAIL (skipped or success both deploy).
+    if: >-
+      ${{ always() &&
+          needs.checks.result == 'success' &&
+          needs.boot-smoke.result != 'failure' &&
+          needs.boot-smoke.result != 'cancelled' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
