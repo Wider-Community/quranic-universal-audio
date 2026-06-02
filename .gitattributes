@@ -6,6 +6,8 @@
 *.ico binary
 *.woff binary
 *.woff2 binary
+*.otf binary
+*.ttf binary
 *.mp3 binary
 *.wav binary
 *.flac binary
