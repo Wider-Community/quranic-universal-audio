@@ -63,22 +63,20 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
         )
         secrets["INSPECTOR_WEBHOOK_SECRET"] = webhook_secret
 
-    # publish_hf needs the ``datasets`` package on top of what's baked into
-    # ``/env`` (the prebuilt ts-job image has huggingface_hub + numpy etc but
-    # not datasets — it's not part of the MFA stack). We install on every
-    # launch; pip is no-op when the wheel is already cached and the prebuilt
-    # image bakes nothing dataset-side, so a clean container needs the install.
+    # publish_hf needs ``datasets`` + ``orjson`` + ``pyyaml`` (the last for
+    # ``scripts.lib.config_loader.repo_config``) on top of the prebuilt /env.
+    # huggingface_hub is already baked in. Install on every launch — pip is a
+    # no-op when wheels are cached.
+    deps = "datasets orjson pyyaml"
     entrypoint = "python /aux/code/scripts/jobs/publish_hf.py"
     if base.NEEDS_BOOTSTRAP:
         command = ["bash", "-lc",
                    "mamba install -y -c conda-forge python=3.11 "
-                   "&& /opt/conda/bin/pip install -q datasets huggingface_hub orjson "
+                   f"&& /opt/conda/bin/pip install -q huggingface_hub {deps} "
                    f"&& {entrypoint}"]
     else:
-        # Prebuilt /env path — pip install into /env so the conda-run shell
-        # picks up datasets when it activates the env.
         command = ["bash", "-lc",
-                   "/env/bin/pip install -q datasets orjson "
+                   f"/env/bin/pip install -q {deps} "
                    f"&& conda run -p /env --no-capture-output {entrypoint}"]
 
     job = run_job(

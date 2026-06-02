@@ -225,19 +225,48 @@ def read_record_bytes(kind: str, slug: str | None, job_id: str) -> bytes | None:
 # ---------------------------------------------------------------------------
 
 
-def stage_job_code() -> None:
-    """Upload scripts/lib + scripts/jobs + static refs to
-    ``aligner-bucket/code/`` so the HF Job container can import them.
-    Idempotent (Xet skips unchanged content).
+# Files every launch MUST get into ``aligner-bucket/code/`` for the HF Job to
+# run. Loud preflight prevents silent skips when the deployed image is missing
+# something (e.g. a new entrypoint shipped but Dockerfile not updated).
+REQUIRED_ENTRYPOINTS = (
+    "scripts/jobs/generate_timestamps.py",
+    "scripts/jobs/publish_hf.py",
+    "scripts/jobs/cut_release.py",
+    "scripts/jobs/shard.py",
+)
+REQUIRED_STATIC_FILES = (
+    "data/qpc_hafs.json",
+    "data/surah_info.json",
+    ".github/config/repo.yml",
+    "LICENSE",
+)
 
-    Static refs (``data/qpc_hafs.json`` + ``data/surah_info.json``) are
-    required by ``publish_hf.py`` for text derivation and by ``cut_release.py``
-    for static-refs hashing + the release bundle. They're shipped under
-    ``code/data/`` so the job can read them at ``/aux/code/data/<file>``.
+
+class JobStagingError(RuntimeError):
+    """Raised when stage_job_code can't satisfy its file contract.
+
+    Surfaced before ``run_job`` so the operator gets a clear deploy-fix
+    message instead of an opaque ``No such file or directory`` from the
+    container.
+    """
+
+
+def stage_job_code() -> None:
+    """Upload ``scripts/lib`` + ``scripts/jobs`` + static refs to
+    ``aligner-bucket/code/`` so the HF Job container can import them.
+
+    Walks ``scripts/lib`` and ``scripts/jobs`` for every ``.py`` then appends
+    the curated static files. Raises ``JobStagingError`` BEFORE the upload if
+    any required entrypoint or static file is missing from the running image —
+    catches the "Dockerfile missing a COPY" class of regression at launch.
+
+    Idempotent — Xet de-dupes unchanged content.
     """
     from huggingface_hub import batch_bucket_files
 
     adds: list[tuple[str, str]] = []
+    seen_targets: set[str] = set()
+
     for sub in ("scripts/lib", "scripts/jobs"):
         base = REPO_ROOT / sub
         if not base.exists():
@@ -247,20 +276,26 @@ def stage_job_code() -> None:
                 continue
             rel = path.relative_to(REPO_ROOT).as_posix()
             adds.append((str(path), f"code/{rel}"))
-    # Static refs — small enough (qpc_hafs.json ~12 MB, surah_info.json ~400 KB)
-    # that re-uploading on every launch is fine when unchanged Xet de-dups them.
-    for ref_name in ("qpc_hafs.json", "surah_info.json"):
-        ref_path = REPO_ROOT / "data" / ref_name
-        if ref_path.exists():
-            adds.append((str(ref_path), f"code/data/{ref_name}"))
-    # LICENSE is shipped as a GH release asset by cut_release.py — needs to be
-    # reachable in the staged code dir at /aux/code/LICENSE.
-    license_path = REPO_ROOT / "LICENSE"
-    if license_path.exists():
-        adds.append((str(license_path), "code/LICENSE"))
-    if adds:
-        batch_bucket_files(ALIGNER_BUCKET, add=adds)
-        log.info("staged %d job-code files to %s/code/", len(adds), ALIGNER_BUCKET)
+            seen_targets.add(f"code/{rel}")
+
+    for rel in REQUIRED_STATIC_FILES:
+        src = REPO_ROOT / rel
+        if src.exists():
+            target = f"code/{rel}"
+            adds.append((str(src), target))
+            seen_targets.add(target)
+
+    expected = {f"code/{p}" for p in REQUIRED_ENTRYPOINTS + REQUIRED_STATIC_FILES}
+    missing = sorted(expected - seen_targets)
+    if missing:
+        raise JobStagingError(
+            "stage_job_code: required files missing from the running image: "
+            f"{missing}. Likely cause: inspector/Dockerfile doesn't COPY one "
+            "of these paths. Fix the Dockerfile, redeploy the Space, then retry."
+        )
+
+    batch_bucket_files(ALIGNER_BUCKET, add=adds)
+    log.info("staged %d job-code files to %s/code/", len(adds), ALIGNER_BUCKET)
 
 
 # ---------------------------------------------------------------------------

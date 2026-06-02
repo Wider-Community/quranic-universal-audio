@@ -647,17 +647,50 @@ def _post_webhook(*, slug: str, job_id: str, version: str,
 
 
 # ---------------------------------------------------------------------------
+# Preflight — bail with clear exit codes before any heavy work.
+# ---------------------------------------------------------------------------
+
+def _which(name: str) -> bool:
+    """True if ``name`` is on PATH."""
+    from shutil import which
+    return which(name) is not None
+
+
+def _preflight(slug: str) -> int:
+    """Verify env, binaries, bucket inputs, static refs. Returns 0 on go,
+    non-zero exit code on the first failure. Each return code maps to one
+    cause so the operator can fix without diving into logs."""
+    if not slug:
+        log.error("SLUG env var is required"); return 2
+    if not os.environ.get("HF_TOKEN", "").strip():
+        log.error("HF_TOKEN secret is required"); return 10
+    if not _which("ffmpeg") or not _which("ffprobe"):
+        log.error("ffmpeg/ffprobe missing from PATH"); return 11
+    bucket = _bucket_root()
+    if not bucket.exists():
+        log.error("bucket mount missing at %s", bucket); return 12
+    detailed_path = bucket / "reciters" / slug / "detailed.json"
+    if not detailed_path.exists():
+        log.error("detailed.json missing at %s", detailed_path); return 13
+    refs_dir = Path("/aux/code/data")
+    for name in ("surah_info.json", "qpc_hafs.json"):
+        if not (refs_dir / name).exists():
+            log.error("static ref %s missing at %s", name, refs_dir); return 14
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Main.
 # ---------------------------------------------------------------------------
 
 def main() -> int:
     slug = os.environ.get("SLUG", "").strip()
-    if not slug:
-        log.error("SLUG env var is required")
-        return 2
     job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
-
     log.info("publish_hf: slug=%s job=%s", slug, job_id)
+
+    rc = _preflight(slug)
+    if rc != 0:
+        return rc
 
     # 1. Load bucket artifacts.
     detailed = _load_detailed(slug)
@@ -677,6 +710,9 @@ def main() -> int:
     detailed_by_ref = _detailed_by_ref(detailed)
     rows = build_rows(timestamps, detailed_by_ref, surah_info, dk_words)
     log.info("built %d rows for %s", len(rows), slug)
+    if not rows:
+        log.error("no rows built — detailed.json + timestamps disagreement?")
+        return 15
 
     # 4. Validate boundaries before any audio work.
     from scripts.lib.dataset_validation import (
@@ -711,15 +747,20 @@ def main() -> int:
             actual_start, _actual_end = cut
             _rebase_row(row, actual_start)
             audio_bytes[i] = dst.read_bytes()
-    log.info("audio: %d sliced, %d failed",
-             sum(1 for b in audio_bytes if b is not None), len(failed_slices))
+    sliced_count = sum(1 for b in audio_bytes if b is not None)
+    log.info("audio: %d sliced, %d failed", sliced_count, len(failed_slices))
     if failed_slices:
-        log.warning("failed slices: %s", failed_slices[:20])
+        log.warning("failed slices (first 20): %s", failed_slices[:20])
+    if sliced_count == 0:
+        log.error("every audio slice failed — refusing to push empty dataset")
+        _post_webhook(slug=slug, job_id=job_id, version="",
+                      external_uri="", status="failed",
+                      validation_summary=summary)
+        return 16
 
     # 6. Push to HF — gets us a commit sha to record as ``version``.
     riwayah = _riwayah_for(audio_manifest, detailed)
-    version_sha = _push_to_hf(slug, riwayah, rows,
-                              [b for b in audio_bytes])
+    version_sha = _push_to_hf(slug, riwayah, rows, audio_bytes)
 
     # 7. Notify Inspector.
     repo_id = _resolve_dataset_repo_id()

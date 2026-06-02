@@ -129,10 +129,16 @@ COPY inspector/services/ ./inspector/services/
 COPY inspector/utils/ ./inspector/utils/
 # scripts/lib/ is shared with the CI build pipeline. Inspector imports
 # ``scripts.lib.timestamps_shards`` for ``SCHEMA_VERSION`` + ``derive_url_template``
-# when composing the bucket-mode manifest. Top-level scripts/ contains local
-# CLIs we don't need at runtime — only lib/ ships.
+# when composing the bucket-mode manifest. ``scripts/jobs/`` ships the HF-Job
+# entrypoints (generate_timestamps / publish_hf / cut_release / shard) that
+# ``services/admin/jobs/base.stage_job_code`` uploads to the aligner-bucket on
+# launch. ``.github/config/repo.yml`` + ``LICENSE`` are read by the job-side
+# scripts (config_loader + cut_release asset upload).
 COPY scripts/__init__.py ./scripts/__init__.py
 COPY scripts/lib/ ./scripts/lib/
+COPY scripts/jobs/ ./scripts/jobs/
+COPY .github/config/ ./.github/config/
+COPY LICENSE ./LICENSE
 # Linguistic data read by services/data_loader.py via config.py's _QUA_DATA,
 # plus surah_info.json read by services/data_loader.py at startup. These four
 # files are the entire on-disk data surface in deployed mode — everything else

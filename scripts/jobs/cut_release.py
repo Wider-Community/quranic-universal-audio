@@ -624,15 +624,38 @@ def _repo_owner_name() -> tuple[str, str, str]:
     return cfg["repo_owner"], cfg["repo_name"], cfg["hf_dataset"]
 
 
+def _preflight() -> int:
+    """Verify env + bucket + staged code dir. Returns 0 on go, non-zero exit
+    code on first failure (each code maps to one cause)."""
+    if not os.environ.get("HF_TOKEN", "").strip():
+        log.error("HF_TOKEN secret is required"); return 10
+    if not os.environ.get("GH_RELEASE_TOKEN", "").strip():
+        log.error("GH_RELEASE_TOKEN secret is required"); return 2
+    bucket = _bucket_root()
+    if not bucket.exists():
+        log.error("bucket mount missing at %s", bucket); return 12
+    db_path = bucket / "db" / "inspector.db"
+    if not db_path.exists():
+        log.error("inspector.db missing at %s", db_path); return 13
+    code_dir = Path("/aux/code")
+    for rel in ("data/surah_info.json", "data/qpc_hafs.json",
+                ".github/config/repo.yml", "LICENSE",
+                "scripts/jobs/shard.py"):
+        if not (code_dir / rel).exists():
+            log.error("staged file missing: %s", code_dir / rel); return 14
+    return 0
+
+
 def main() -> int:
     job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
     operator_note = os.environ.get("OPERATOR_NOTE") or None
     launched_by = os.environ.get("LAUNCHED_BY") or None
     version_override = os.environ.get("RELEASE_VERSION", "").strip() or None
+
+    rc = _preflight()
+    if rc != 0:
+        return rc
     gh_token = os.environ.get("GH_RELEASE_TOKEN", "").strip()
-    if not gh_token:
-        log.error("GH_RELEASE_TOKEN is required")
-        return 2
 
     owner, repo, hf_dataset = _repo_owner_name()
     log.info("cut_release: owner=%s repo=%s job=%s", owner, repo, job_id)

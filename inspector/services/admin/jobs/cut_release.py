@@ -82,17 +82,21 @@ def launch(*, version: str | None = None,
         )
         secrets["INSPECTOR_WEBHOOK_SECRET"] = webhook_secret
 
-    # cut_release.py is stdlib-only on the runtime side (urllib for GH API,
-    # sqlite3 for DB reads). The prebuilt /env already has scripts.lib deps;
-    # bootstrap mode just needs Python 3.11.
+    # cut_release.py is stdlib-only at runtime (urllib for GH API, sqlite3 for
+    # DB reads) but pulls pyyaml + huggingface_hub via
+    # ``scripts.lib.config_loader.repo_config``. Install on every launch — pip
+    # is a no-op when wheels are cached.
+    deps = "pyyaml huggingface_hub"
     entrypoint = "python /aux/code/scripts/jobs/cut_release.py"
     if base.NEEDS_BOOTSTRAP:
         command = ["bash", "-lc",
                    "mamba install -y -c conda-forge python=3.11 "
+                   f"&& /opt/conda/bin/pip install -q {deps} "
                    f"&& {entrypoint}"]
     else:
         command = ["bash", "-lc",
-                   f"conda run -p /env --no-capture-output {entrypoint}"]
+                   f"/env/bin/pip install -q {deps} "
+                   f"&& conda run -p /env --no-capture-output {entrypoint}"]
 
     job = run_job(
         image=base.JOB_IMAGE,
