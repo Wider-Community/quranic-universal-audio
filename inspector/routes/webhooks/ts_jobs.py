@@ -138,10 +138,15 @@ def release_cut_complete():
     job_id = (body.get("job_id") or "").strip()
     status = (body.get("status") or "").strip().lower()
     version = (body.get("version") or "").strip()
-    if not job_id or not version:
-        return jsonify({"error": "job_id and version are required"}), 400
+    if not job_id:
+        return jsonify({"error": "job_id is required"}), 400
     if status not in _SUCCESS:
+        # A failed/aborted cut posts here for observability only — there's
+        # nothing to record (only successful cuts insert rows) and the version
+        # may be absent (e.g. aborted before it was computed). Don't 400.
         return jsonify({"ok": True, "skipped": "non-success status"})
+    if not version:
+        return jsonify({"error": "version is required"}), 400
     try:
         result = cut_release.complete(
             None, job_id,

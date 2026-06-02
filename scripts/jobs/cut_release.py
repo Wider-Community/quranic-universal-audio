@@ -247,6 +247,28 @@ def _build_tier_files(slug: str, verses: dict[str, dict], *,
     }
 
 
+def _verse_for_validate(v: dict, segments: list) -> dict:
+    """Project one canonical verse to the boundary-validator's input shape.
+
+    ``verse_start_ms`` / ``verse_end_ms`` fall back to the word bounds when the
+    verse doesn't carry them (the common projection case). ``duration_ms`` is
+    derived from the SAME resolved bounds — so the duration-arithmetic check
+    (``duration == end - start``) can't fire spuriously on the fallback path.
+    """
+    words = v.get("words") or []
+    vs = v.get("verse_start_ms")
+    vs = int(vs if vs is not None else (words[0][1] if words else 0))
+    ve = v.get("verse_end_ms")
+    ve = int(ve if ve is not None else (max(w[2] for w in words) if words else 0))
+    return {
+        "verse_start_ms": vs,
+        "verse_end_ms": ve,
+        "duration_ms": ve - vs,
+        "words": [(int(w[0]), int(w[1]), int(w[2])) for w in words],
+        "segments": segments,
+    }
+
+
 def _verse_sort_key(key: str) -> tuple[int, int]:
     parts = key.split(":")
     try:
@@ -690,18 +712,7 @@ def main() -> int:
 
         # Boundary validate (source-relative ms — verses dict already in that frame).
         for_validate = {
-            k: {
-                "verse_start_ms": int(v.get("verse_start_ms")
-                                      or (v["words"][0][1] if v.get("words") else 0)),
-                "verse_end_ms": int(v.get("verse_end_ms")
-                                    or (max(w[2] for w in v["words"])
-                                        if v.get("words") else 0)),
-                "duration_ms": int(v.get("verse_end_ms", 0) - v.get("verse_start_ms", 0)
-                                   if isinstance(v, dict) else 0),
-                "words": [(int(w[0]), int(w[1]), int(w[2]))
-                          for w in (v.get("words") or [])],
-                "segments": detailed_segments.get(k, []),
-            }
+            k: _verse_for_validate(v, detailed_segments.get(k, []))
             for k, v in verses.items() if not k.startswith("_") and isinstance(v, dict)
         }
         rec_summary = validate_dataset(for_validate, surah_info=surah_info)
