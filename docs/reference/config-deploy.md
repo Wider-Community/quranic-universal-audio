@@ -1,0 +1,134 @@
+# Config & deploy
+
+Every runtime knob the Inspector reads, plus how the image is built and shipped to the HF Spaces. Deployment tunables that aren't env-driven live in `inspector/config.py` (one constant per line, each commented — read it directly when changing a threshold). This doc covers the **env surface** + **build/deploy/provisioning**.
+
+## Runtime profiles
+
+Same code, profile selected by env presence:
+
+| | **Local dev** (`python inspector/app.py`) | **Deployed** (HF Space, gunicorn) |
+|---|---|---|
+| Identity | `INSPECTOR_DEV_MODE=1` auto-set when OAuth unconfigured → synthetic per-role user, OAuth bypassed | HF OAuth → signed `inspector_session` cookie |
+| DB | `inspector.db` at `INSPECTOR_DB_PATH` (defaults to a tmp path) | same; canonical bucket artefact is `<mount>/db/inspector.db` |
+| Bucket | FUSE auto-mount via `hf-mount` (unless opted out) or `hffs` fall-back | NFS mount provided by the Space runtime at `INSPECTOR_BUCKET_MOUNT` |
+| Port | `:5000` (Flask dev server) | `:7860` (gunicorn, `EXPOSE 7860`) |
+| Workers | Flask dev server | gunicorn-gthread `-w 1 --threads 16` (single-worker invariant) |
+
+`INSPECTOR_BEHIND_PROXY=1` is the deployed-mode signal: it enables `ProxyFix` and skips the local auto-mount (the Space already provides the mount). Set in the image.
+
+## Spaces
+
+| Env | Space repo | Bucket (`INSPECTOR_BUCKET_REPO`) |
+|---|---|---|
+| dev | `hetchyy/quranic-inspector-dev` | `hetchyy/quranic-inspector-bucket-dev` |
+| prod | `hetchyy/quranic-universal-audio` | `hetchyy/quranic-inspector-bucket` |
+
+The image bakes the **dev** bucket as default (`INSPECTOR_BUCKET_REPO=hetchyy/quranic-inspector-bucket-dev`); the prod Space overrides it via a Space variable. Both ship the Docker SDK and bind 7860.
+
+## Env vars — what the code actually reads
+
+### Storage / bucket / DB
+
+| Var | Default | Read by | Purpose |
+|---|---|---|---|
+| `INSPECTOR_BACKEND` | `bucket` | `services/storage/hf_bucket.py`, `auto_mount.py` | `bucket` (HF storage) or `filesystem` (tests + the Tier-0 fixtures/offline path seeded by `inspector/scripts/seed_fixtures.py`). |
+| `INSPECTOR_BUCKET_REPO` | `…-bucket-dev` | `auto_mount.py`, `hf_bucket.py` | HF bucket repo id. Resolved by `resolve_bucket_repo()`: defaults to the **dev** bucket for every non-deployed process and **refuses prod** unless `INSPECTOR_ALLOW_PROD_BUCKET=1`. |
+| `INSPECTOR_ALLOW_PROD_BUCKET` | unset | `hf_bucket.py`, `auto_mount.py` | `1` lets a local/non-deployed process use the prod bucket (otherwise `ProdBucketRefused`). The deployed prod Space is exempt (it runs behind the proxy). |
+| `INSPECTOR_BUCKET_MOUNT` | unset local; `/data/inspector-bucket` (image) | `app.py`, `health.py`, `hf_bucket.py`, `auto_mount.py` | Mount path. Presence ⇒ "deployed mode" for `/healthz`. When unset locally the backend falls back to per-call `hffs` reads (~50–500× slower). |
+| `INSPECTOR_FILESYSTEM_ROOT` | unset | `hf_bucket.py` | Required when `INSPECTOR_BACKEND=filesystem`. `seed_fixtures.py` sets it to `inspector/.fixtures`. |
+| `INSPECTOR_AUTO_MOUNT` | `1` | `auto_mount.py` | `0` opts out of local FUSE auto-mount. |
+| `INSPECTOR_DB_PATH` | `<tmpdir>/inspector.db` | `services/db/connection.py` | On-disk SQLite path. |
+| `INSPECTOR_HF_TOKEN` / `HF_TOKEN` | unset | `hf_bucket.py`, `auto_mount.py` | Token for bucket read/write (needs write scope). `INSPECTOR_HF_TOKEN` wins; `HF_TOKEN` is the fall-back + what `hf-mount` reads. |
+
+### Data (bundled reference)
+
+| Var | Default | Purpose |
+|---|---|---|
+| `INSPECTOR_DATA_DIR` | `/app/data` (image) / `<repo>/data` (local) | Root for bundled static data (surah_info + linguistic JSONs). |
+| `INSPECTOR_QUA_DATA_PATH` | mirrors `INSPECTOR_DATA_DIR` | Base for `qpc_hafs.json`, `digital_khatt_v2_script.json`, `phoneme_sub_costs.json`. |
+
+### Server / proxy / process
+
+| Var | Default | Read by | Purpose |
+|---|---|---|---|
+| `INSPECTOR_HOST` | `0.0.0.0` | `config.py` | Bind host. |
+| `INSPECTOR_BEHIND_PROXY` | unset; `1` (image) | `app.py`, `auth.py`, `auto_mount.py` | Deployed signal — enables `ProxyFix`, skips auto-mount. |
+| `INSPECTOR_PUBLIC_URL` | unset | `routes/auth/auth.py` | Override the public https base used to build the OAuth callback. |
+| `INSPECTOR_COMMIT_SHA` | `unknown` | `health.py` | Reported by `/healthz` so deploys are identifiable. |
+| `GUNICORN_WORKERS` / `WEB_CONCURRENCY` / `GUNICORN_CMD_ARGS` | `1` | `app.py::_assert_single_worker` | Any multi-worker signal aborts boot. The single-worker invariant is load-bearing (single writer, in-process caches, per-slug locks). |
+| `FLASK_ENV` | unset | `config.py` / `app.py` | `development` → Flask debug + reloader (local only). |
+
+### Background loops
+
+| Var | Default | Purpose |
+|---|---|---|
+| `INSPECTOR_AUTO_DETECT` | off; `1` (image) | Background loop that scans the bucket for newly-aligned reciters and folds them into state. |
+| `INSPECTOR_AUTO_DETECT_INTERVAL_S` | (see `app.py`) | Tick interval for the auto-detect loop. |
+
+### Auth / identity / secrets
+
+| Var | Source | Purpose |
+|---|---|---|
+| `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` / `OPENID_PROVIDER_URL` | HF-injected (`hf_oauth: true`) | OAuth client + OIDC discovery. Auto-managed by HF; never persisted. |
+| `OAUTH_SCOPES` | `openid profile` | OAuth scopes requested. |
+| `INSPECTOR_SESSION_SECRET` | Space secret (≥32 hex) | Signs the `inspector_session` cookie. `services/auth/secrets_guard.py::get_session_secret` rejects unset/short values. Rotating logs everyone out. |
+| `INSPECTOR_DEV_MODE` | `1` auto-set locally when OAuth unconfigured | Bypasses OAuth; mints a synthetic per-role user. |
+| `INSPECTOR_DEV_<ROLE>_HF_ID` / `INSPECTOR_DEV_<ROLE>_LOGIN` | unset | Override the synthetic dev identity per role (`OWNER`/`MAINTAINER`/`CONTRIBUTOR`); default `dev-<role>`. Set to a real HF id+login when local dev points at the prod bucket so audit attribution is correct. |
+| `INSPECTOR_GITHUB_DISPATCH_TOKEN` | Space secret | Fine-grained PAT (`actions:write` on the project repo). Fires `repository_dispatch` after publish. `secrets_guard.get_dispatch_token` raises if unset or still a `PLACEHOLDER_` value. |
+| `INSPECTOR_WEBHOOK_SECRET` | Space secret (optional) | Shared secret for the timestamps-job completion webhook (`POST /api/webhooks/ts-job-complete`). When set, `launch()` threads it (+ the job's callback URL) to the HF job so it auto-publishes the reciter on success; the route validates it with `hmac.compare_digest`. **Unset → webhook disabled (503)** and release falls back to the drawer-poll path. Read by `routes/webhooks/ts_jobs.py` + `services/admin/timestamps_jobs.py::launch`. |
+| `INSPECTOR_WEBHOOK_URL` | set on the **job**, not the Space | The Inspector's public callback URL. The launch route derives it from `request.url_root` (deployed `ProxyFix` → `https://…hf.space/`) and passes it to the job as env — operators don't set it on the Space. |
+
+> The error strings in `secrets_guard.py` still reference a `scripts.inspector_v2_seed.setup_space` provisioning module that no longer exists — secrets are now set by hand in the Space secrets panel. Treat that hint as stale.
+
+### Quran Foundation (see `architecture.md` → QF integration)
+
+| Var | Read by | Purpose |
+|---|---|---|
+| `QF_PREPROD_CLIENT_ID` / `QF_PREPROD_CLIENT_SECRET` | `services/quran_foundation/config.py` | User-API (bookmarks/collections) pre-prod OAuth client. `client_secret_basic` only. |
+| `QF_OAUTH_REDIRECT_URI` | same | Registered callback; default `http://localhost:5001/api/qf/callback`. Must match the QF client exactly. |
+| `QF_CONTENT_CLIENT_ID` / `QF_CONTENT_CLIENT_SECRET` | same | Content-API server-to-server (`client_credentials`) client. Production endpoints. |
+
+Local QF creds live in `inspector/.env` (gitignored), loaded by `app.py`.
+
+### Misc tunables (env-overridable constants)
+
+| Var | Default | Purpose |
+|---|---|---|
+| `INSPECTOR_MFA_SPACE_URL` | `https://hetchyy-quran-phoneme-mfa-dev.hf.space` | MFA Space the cross-verse "Auto Split" calls. |
+| `MISSED_BASMALA_FLAG_MIN_DELETED` | `10` | Min pipeline-stripped basmalas before flagging non-stripped chapters as "missed Basmala". |
+
+## Image build — `inspector/Dockerfile`
+
+Three-stage build, context is the **repo root** (so `scripts/lib/` ships alongside `inspector/`):
+
+1. **frontend-build** (`node:20-alpine`) — `npm ci` + `npm run build` → `dist/`.
+2. **ffmpeg-build** (`alpine:3.23`) — compiles a minimal *static* ffmpeg/ffprobe (mp3 decode + `pcm_s16le`/wav for peaks + `libmp3lame`/mp3 muxer for the `segment-clip` route). `libmp3lame 3.100` is built from source `--enable-static` because Alpine ships no static lame archive — without it `clip.py` returns 200/0-bytes and playback hangs. http/https protocols enabled so ffmpeg can decode remote chapters via HTTP Range.
+3. **runtime** (`python:3.11-alpine`) — installs `inspector/requirements.txt`, purges pip/setuptools/wheel, **selective COPY** (`app.py/config.py/constants.py`, `adapters/ domain/ routes/ services/ utils/`, `scripts/__init__.py + scripts/lib/ + scripts/jobs/`, `.github/config/`, `LICENSE`, the 4 bundled data JSONs, and `frontend/dist` from stage 1). `scripts/jobs/` + `.github/config/` + `LICENSE` are read by the HF-Job entrypoints (`config_loader`, cut_release asset upload). Runs as non-root uid/gid 1000. `EXPOSE 7860`. **Adding a `COPY` here needs no staging edit** — the deploy stages the whole tracked tree (see Deploy).
+
+`CMD`: `gunicorn -k gthread -w 1 --threads 16 --max-requests 5000 --max-requests-jitter 500 --timeout 60 --graceful-timeout 30 --bind 0.0.0.0:7860 --chdir /app/inspector app:app`. `-w 1` is load-bearing (asserted at import). `--threads 16` sizes the I/O-bound pool. `--max-requests` recycles the worker to bound slow leaks.
+
+`docker-compose.yml` (repo `inspector/`) is the local reviewer entry (`docker compose up` → `:5000`, bind-mounts `data/`).
+
+## Deploy — `inspector-deploy.yml`
+
+Push to `dev` or `main` (paths under `inspector/**`, `scripts/lib/**`, `scripts/upload_inspector.py`, the bundled data JSONs, `.dockerignore`) → workflow runs `inspector-checks.yml` (reused), then `deploy` runs `scripts/upload_inspector.py <env>`. Branch→env: `dev`→dev Space, `main`→prod Space; `workflow_dispatch` can force `dev`/`prod`. The Space then rebuilds the Docker image from the uploaded files.
+
+**Staging = the whole git-tracked tree.** `upload_inspector._stage()` copies **every git-tracked file** verbatim (then overlays the root `Dockerfile` from `inspector/Dockerfile` + a frontmatter `README.md`), and `upload_folder(delete_patterns="*")` mirrors it to the Space. `.dockerignore` is the **single source of truth** that prunes the build context — there is no hand-curated allowlist to drift from the Dockerfile's `COPY` set (that drift took prod down once: a `COPY LICENSE` with no matching staging entry → `BUILD_ERROR "/LICENSE: not found"`). Consequence: the Space build context equals the `context: .` that `docker-publish.yml` builds on every push, so its green image build is a faithful "the Space will compile" signal. `dist/` is built inside the image (stage 1), so the deploy does **not** pre-build the frontend.
+
+**Caveat — async build, no CI feedback.** `upload_inspector.py` only uploads + `restart_space(factory_reboot=True)` and returns; the HF docker rebuild is asynchronous. A green `inspector-deploy` run does **not** mean the Space built. After a deploy, poll the runtime stage (`…/api/spaces/<id>/runtime` → `RUNNING_BUILDING → RUNNING_APP_STARTING → RUNNING`; build logs at `…/logs/build`).
+
+**Opt-in boot check (prod-only, default off).** `inspector/scripts/smoke_boot.py` builds the image and boots it offline (filesystem backend + public `seed_fixtures`, no secrets, no bucket), polling `/healthz` for `200 + state_loaded + db.open` (offline it's `200`/`status: degraded` since no bucket is mounted — so it does **not** assert `status == ok`). Two entry points: `scripts/upload_inspector.py --verify-boot` (gates a local/manual deploy on a passing boot), and a `boot-smoke` CI job that runs **only** on a manual `workflow_dispatch` with `verify_boot=true` targeting prod. The `deploy` job's `if` is `always() && needs.checks.result=='success' && needs.boot-smoke.result != 'failure' && != 'cancelled'` so a skipped `boot-smoke` (every normal push) still deploys, while a failing one blocks the deploy. Automatic deploys stay lean (no image build on the deploy path; `docker-publish.yml` builds the identical context in parallel as a non-blocking red signal).
+
+The canonical dev/prod Spaces have **no** auto-provisioning script — their secrets/variables (`INSPECTOR_SESSION_SECRET`, `INSPECTOR_GITHUB_DISPATCH_TOKEN`, QF creds, `INSPECTOR_BUCKET_REPO` override, bucket attachment) are configured by hand in the Space settings panels. OAuth vars are auto-injected by HF via `hf_oauth: true` in the Space README frontmatter.
+
+**Contributor (personal) Spaces** are fully scripted — no manual Space-settings clicks. `inspector/scripts/bootstrap_dev_env.py <name>` provisions a private bucket + Space under the contributor's own account, **attaches the bucket as a Space volume at `/data/inspector-bucket`** (`HfApi.set_space_volumes`), auto-generates `INSPECTOR_SESSION_SECRET`, sets `HF_TOKEN` + the `INSPECTOR_BUCKET_REPO` variable, and (with `--deploy`) pushes code via `inspector/scripts/deploy_space.py <space-id>` (the committed, parameterized cousin of `scripts/upload_inspector.py`). The only manual prerequisite is an HF token with write scope; OAuth vars are auto-injected via `hf_oauth: true`. See `inspector/README.md` for the three-tier dev workflow.
+
+## Secret rotation
+
+- `INSPECTOR_HF_TOKEN` — new token → update Space secret → restart. Revoke the old after verifying.
+- `INSPECTOR_SESSION_SECRET` — replace the Space secret → restart. **All in-flight cookies invalidate** (everyone logged out).
+- `INSPECTOR_GITHUB_DISPATCH_TOKEN` — mint new PAT → update secret → restart.
+
+## Health
+
+`GET /healthz` (`routes/auth/health.py`) returns the resolved config + substrate status: `status`, `mode` (deployed iff `INSPECTOR_BUCKET_MOUNT` set), `bucket_mounted` (checks `<mount>/db/inspector.db` exists), `state_loaded`, `reciters_count`, `oauth_configured`, `auto_detect_loop`, `commit`, and a `db` block (`open`, `schema_version`, `last_bucket_upload_ts`, `bucket_lag_seconds`, `last_error`). Returns **503** in deployed mode when degraded so probes fail loud; always 200 in local mode (no mount to check). `GET /livez` is the always-200 liveness probe.

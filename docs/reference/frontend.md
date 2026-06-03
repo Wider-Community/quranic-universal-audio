@@ -1,0 +1,234 @@
+# Frontend
+
+Three-tab SPA at `inspector/frontend/src/`. TypeScript (strict) + Vite + Svelte 5 runes. Built to `frontend/dist/`, served by Flask (`FRONTEND_DIST` in `app.py`).
+
+## Stack
+
+| Concern | Choice |
+|---|---|
+| Language | TypeScript strict (`strict`, `noUncheckedIndexedAccess`, `noImplicitAny`, `strictNullChecks`) |
+| Bundler | Vite 5, `target: es2022` |
+| UI | Svelte 5 (`@sveltejs/vite-plugin-svelte` ^4, mounted via `mount()` in `main.ts`) |
+| Charts | Chart.js 4 + chartjs-plugin-annotation; split into a `charts` chunk via `rollupOptions.output.manualChunks` |
+| CSS | Plain CSS in `src/styles/`, imported from `main.ts` (`tokens.css` first — defines `:root` vars) |
+| Audio | Web Audio API; per-tab `AudioPort` transport (`lib/playback/`) |
+| Unit tests | Vitest 3 + `@testing-library/svelte` 5 + `happy-dom` |
+| E2E | Playwright (`npm run test:e2e`) |
+| Typecheck/lint | `tsc --noEmit`, `svelte-check` (`npm run check`), eslint flat config |
+
+`vite.config.ts` proxies `/api` and `/audio` to Flask `:5000` during dev (`:5173`). Two-stack mode via `INSPECTOR_VITE_PORT` / `INSPECTOR_BACKEND_PORT`. Sourcemaps dev-only.
+
+## Svelte version convention
+
+New code is **Svelte 5 runes**: `$state` / `$derived` / `$effect` / `$props` / `$bindable`, callback props. Legacy Svelte 4 syntax (`export let`, `$:`, `createEventDispatcher`, `on:` directives, `<slot>`) still compiles via the compat shim and is migrated opportunistically (plan: `docs/planning/svelte-migration.md`). A file is fully one mode or the other — never mixed.
+
+**Currently still legacy** (notable): `App.svelte`, `AccordionGuideModal.svelte`, and the imperative canvas/audio components.
+
+**Deliberately exempt (stay legacy indefinitely):** `TimestampsWaveform.svelte` and the canvas/audio-imperative components (`WaveformCanvas.svelte`, `SegmentWaveformCanvas.svelte`, and the per-frame overlay drivers).
+
+## Layered diagram
+
+```
+main.ts (mount App, import global styles, installAudioWarmup)
+  └── App.svelte  (header/tab-bar, auth controls, lazy tab mount, global popover/modal/toast/bookmarks)
+        ├── tabs/dashboard/DashboardTab.svelte   → views/{CatalogList,ReciterDetail} + BottomPlayer
+        ├── tabs/timestamps/TimestampsTab.svelte → {components,stores,utils,services}/
+        └── tabs/segments/SegmentsTab.svelte     → {components,stores,utils,domain,types,guides}/
+```
+
+Tabs are lazy-mounted (`{#if mountedTabs.has(tab)}`); once visited they stay in the DOM `hidden`, preserving state across switches. `AudioPort`s are paused on tab-leave by `applyTabSideEffects` — `segPort` (Segments) and the shared `dashPort` (Dashboard **and** Timestamps, via `BottomPlayer`); `tsPort` is defined but vestigial. `lib/` is strictly cross-tab; `lib/` never imports `tabs/`, and no tab imports another tab's dir. Audio playback internals (AudioPort, kill-switch, peaks) live in the **`inspector-audio` skill**, not here.
+
+The **Dashboard tab** is the entry view: public reciter browse/search/filter/play for all visitors, plus admin (maintainer/owner) controls — activity rail, claim/state actions, request review. It is the default landing tab (legacy `insp_active_tab='audio'` redirects here; the old Audio tab is removed — `App.svelte::cleanupLegacyAudioKeys` sweeps `insp_aud_*` localStorage keys).
+
+## `lib/` — cross-tab only
+
+### `lib/actions/`
+
+| File | Role |
+|---|---|
+| `editGate.ts` | Svelte action gating any edit-trigger click on `editingMode`; passes through for `editor`/`maintainer`/`owner` (or admin-only with `{require:'admin'}`), else swallows click + surfaces `EditAffordancePopover` or sign-in modal. Capture-phase. |
+| `click-outside.ts` | Action: callback on pointerdown outside the node (popover/dropup dismissal). |
+
+### `lib/api/`
+
+| File | Role |
+|---|---|
+| `index.ts` | Single fetch boundary — `fetchJson` / `fetchJsonOrNull` / `fetchArrayBuffer` typed helpers |
+| `auth-client.ts` | `signIn` (→ `/api/auth/login`) / `signOut` (→ `/api/auth/logout` + reset `currentUser`) |
+| `claims-client.ts` | Claim POSTs; maps 200/401/403/409 → row resolve / sign-in modal / toast |
+| `dev-role.ts` | `POST /api/dev/role` (dev-mode only; 404s on Space) |
+| `reciter-task.ts` | `readable` store polling `/api/reciter-task/<slug>` @30 s while subscribed |
+| `public-reciters.ts` | Read-only `/api/public/*` reciter list fetchers (no auth, `max-age=30`) |
+| `public-reciter-detail.ts` | Single-reciter detail; `null` on 404 |
+| `public-activity.ts` | Public activity feed (`/api/public/activity`, six-event allowlist) |
+| `public-activity-admin.ts` | Owner-only `DELETE /api/public/activity/<audit_id>` — global tombstone for a public-feed card. (The admin notifications rail was retired; admin awareness lives in the Admin dashboard tabs now.) |
+| `requests.ts` | Request submit (contributor+) / admin review-reject / undiscard (owner) |
+
+### `lib/playback/`
+
+| File | Role |
+|---|---|
+| `audio-port.ts` | `AudioPort` — single transport chokepoint; owns `<audio>`, CBR-chapter-vs-VBR-clip src swap, file-absolute ms via `offsetMs` |
+| `audio-graph.ts` | Web Audio kill-switch — sample-accurate gain ramp (`cutAudio`/`uncutAudio`) to flush OS-queued tail |
+| `audio-range.ts` | `AudioRange` — one-rAF-loop `[startMs,endMs]` playback with pluggable boundary policy (stop/loop/advance) |
+| `dash-port.ts` | Dashboard-tab `AudioPort` instance (`dashPort`) |
+| `shadow-audio.ts` | Hidden `<audio>` for cross-chapter prewarm (validation accordion) without disturbing `segPort` |
+| `constants.ts` | Playback constants (coverage padding, etc.) shared across port/range consumers |
+
+### `lib/components/`
+
+| Path | Role |
+|---|---|
+| `WaveformCanvas.svelte` | Base canvas peaks renderer; exposes canvas for imperative overlays (legacy/exempt) |
+| `AudioElement.svelte` | Thin `<audio>` wrapper (safePlay, events) |
+| `AudioPlayer.svelte` | Full audio player UI |
+| `SearchableSelect.svelte` | Dropdown with fuzzy search + grouped options |
+| `SpeedControl.svelte` | Playback speed selector |
+| `Modal.svelte` | Generic modal shell |
+| `SignInModal.svelte` / `ToastHost.svelte` | Root-mounted sign-in modal + toast host |
+| `EditAffordancePopover.svelte` | Single global popover surfaced by `editGate` |
+| `DevRoleSwitcher.svelte` | Dev-mode role switcher (gated on `$currentUser.dev_mode`) |
+| `BookmarksPanel.svelte` | Quran.Foundation bookmarks sidebar |
+| `ClaimButton.svelte`, `StatePill.svelte`, `CoveragePill.svelte`, `FilterPill.svelte`, `ReciterChip.svelte`, `ReciterRow.svelte`, `SearchInput.svelte`, `ExternalLinks.svelte` | Catalog/dashboard chips, pills, rows |
+| `picker/` | `CombinationPicker` + `PickerFilterRail` / `PickerFooter` / `PickerStateTabs` / `PickerReviewStatus`. For callers holding `reviews.view`, the picker lazily fetches `/api/admin/reviews/list` on open and decorates `under_review` rows with the claimer + a marked-ready badge (`PickerReviewStatus`) — same data as the Admin → Reviews tab. Non-capable callers fire no admin fetch. |
+| `player/` | `BottomPlayer`, `PlayerControls`, `PlayerProgress`, `PlayerMetaChip`, `SpeedPopover`, `SurahPopover` |
+
+Shared player rule: deliberate navigation resumes playback even when the audio was paused. This includes ayah/surah steps, surah or delivery changes, progress/filmstrip/line seeks, Timestamps keyboard navigation, validation jumps, and manual shuffle/random-reciter triggers. Passive inspection (popovers, hover previews, zoom/pan, speed/download/bookmark/display toggles) must stay paused.
+
+### `lib/catalog/`, `lib/refs/`, `lib/icons/`
+
+| Path | Role |
+|---|---|
+| `catalog/schema-descriptor.ts` | Schema descriptor for the dashboard secondary facet rail (operates on combinations/`PublicDelivery`) |
+| `refs/quran-refs.ts` | `dk_words` + `verse_word_counts` behind one content-hashed endpoint; fetched once per browser, shared via store |
+| `icons/Icon.svelte` + `*.svg` | Inline SVG icons via `{@html}` (`currentColor` cascade) |
+
+### `lib/types/`
+
+| File | Role |
+|---|---|
+| `public-state.ts` | Mirror of `services/public_state.py` — `/api/public/*` wire shape, `PublicBucket` literals |
+| `ui.ts` | Shared UI types for components |
+| `domain.ts` (codegen sources under `scripts/lib/schemas/`) | `Segment`, `EditOp`, `PeakBucket`, `HistoryBatch`, `PhonemeInterval`, … (FE types autogenerated; never hand-edit `lib/types/generated/`) |
+
+### `lib/stores/` (cross-tab)
+
+| File | Role |
+|---|---|
+| `current-user.ts` | `currentUser` writable (loaded from `/api/me`); `isSignedIn()`; derived `isAdmin` (maintainer\|owner), `isOwner`; `loadCurrentUser()` / `resetCurrentUser()`. Dashboard-level gating. |
+| `editing-mode.ts` | `editingMode` writable (`view`/`editor`/`maintainer`/`owner` + `viewReason`); pure `syncEditingMode(user,task)`; derived `editingDisabled`, `isAdmin`. Reciter-scoped gating — see `editGate`. |
+| `edit-popover.ts` | State for the `editGate`-surfaced popover (`showEditPopover`) |
+| `sign-in-modal.ts` | `openSignInModal` state |
+| `toast.ts` | Toast queue |
+| `bookmarks.ts` | Bookmarks panel toggle |
+| `player-context.ts` | Cross-tab bottom-player context |
+
+### `lib/utils/`
+
+| File | Role |
+|---|---|
+| `active-tab.ts` | Active-tab store + get/set |
+| `constants.ts` | `LS_KEYS`, `TAB_NAMES` |
+| `animation.ts` | `createAnimationLoop()` — rAF loop with start/stop |
+| `chart.ts` | Chart.js bootstrap (registers plugins) |
+| `audio.ts` | `safePlay()` (swallows AbortError), `audioSrcMatches` |
+| `audio-warmup.ts` | First-gesture audio decoder/output warm-up |
+| `preconnect.ts` | DNS preconnect helper |
+| `peaks-fetch.ts` | Cross-tab `/api/seg/segment-peaks` fetch |
+| `peaks-view.ts` | Peaks-shape adapter (legacy nested `[min,max][]` vs int8) |
+| `waveform-cache.ts` | Normalized-URL → peaks Map (non-reactive) |
+| `waveform-draw.ts` | Peaks → canvas draw (`drawWaveformPeaks`) |
+| `arabic-text.ts` | `stripTashkeel`, combining-mark helpers |
+| `fuzzy-match.ts` | Arabic-normalizing substring matcher (SearchableSelect, picker) |
+| `surah-info.ts` | `surahInfo` data + ready promise + `surahOptionText` |
+| `grouped-reciters.ts` | Grouped reciter dropdown options |
+| `keyboard-guard.ts` | `shouldHandleKey(e, tab)` |
+| `derived-eq.ts` | Deep-equality derived store helper |
+| `svg-arrow-geometry.ts` | `computeArrowLayout()` for history diff arrows |
+| `word-boundary.ts` | Word-boundary helpers |
+| `speed-control.ts` | Speed option list |
+| `formatting.ts` | `_formatBytes` |
+| `facets.ts` | Faceted-count helper (history filters, dashboard rail, picker) |
+| `visible-poll.ts` | Page-Visibility-aware polling |
+| `relative-time.ts` | "3 hours ago" labels for activity/detail |
+| `axis-labels.ts` | Resolve schema axis/tag keys → human labels |
+| `delivery-label.ts` | Catalog vocab slug → display name |
+| `delivery-sort.ts` | Canonical combination sort order used by reciter detail, player switcher, and dashboard row play defaults |
+| `countries.ts` | ISO-3166-1 alpha-2 list (build-time embedded) |
+
+## Tabs
+
+### `tabs/dashboard/`
+
+Entry view: public catalog browse/search/filter/play + admin controls.
+
+| Path | Role |
+|---|---|
+| `DashboardTab.svelte` | Root — `CatalogList` + `ReciterDetail` modal + `BottomPlayer` |
+| `views/CatalogList.svelte` | List view; filters on combinations, grouped back by reciter |
+| `views/ReciterDetail.svelte` | Reciter detail modal (flat combination table, status-priority sort) |
+| `components/CatalogTable.svelte`, `DetailHeader.svelte`, `FactsList.svelte`, `StateTimeline.svelte` | Detail/table pieces |
+| `components/ActivityRail.svelte` | Public activity feed (owner-visible delete affordance on each card) |
+| `components/RequestForm.svelte`, `submit/{SubmitWizard,StepReciter,StepSource,StepDetails}.svelte` | Request/submit flow |
+| `stores/catalog-data.ts` | Public reciter list + stats, fetched once, cached in-memory |
+| `stores/dashboard-state.ts` | Filter/sort/search + detail-modal flag (mounted at root, survives modal) |
+| `stores/submit-wizard.ts` | Submit-recitation wizard FE state (3-step) |
+
+### `tabs/timestamps/`
+
+Waveform + phoneme display for published reciters (plus owner preview of generated-but-unreleased shards — the read-path honors the `timestamps.view_unreleased` capability; see [timestamps-job.md](timestamps-job.md)). Shards are v2 `.json.gz`, deduped to the single-take view on serve; `?full=1` returns every occurrence.
+
+| Path | Role |
+|---|---|
+| `TimestampsTab.svelte` | Shell — reciter/chapter/verse cascade, config→CSS vars, view toggle, keyboard, waveform animation (imperative) |
+| `components/` | `UnifiedDisplay`, `AnimationDisplay`, `TimestampsWaveform` (exempt), `TimestampsControls`, `TimestampsAudio`, `TimestampsKeyboard`, `TimestampsViewControls`, `TimestampsShortcutsGuide`, `TranslationLangSelect`, `WordTranslation` |
+| `services/ts_client.ts` | Shard-fetch data layer (manifest + per-chapter shards; local Flask + HF CDN same shape) |
+| `utils/` | `constants.ts`, `loop-target.ts`, `zoom.ts`, `range-spec.ts`, `audio-load.ts` |
+
+**Stores:** `verse.ts` (reciter/chapter/verse selection + `loadedVerse` + `validationData`), `display.ts` (view mode, granularity, show-tashkeel/phonemes; localStorage-persisted), `playback.ts` (auto-play, `currentTime`; defines `tsPort` but the tab plays through the shared `dashPort`), `zoom.ts` (slice-relative visible window).
+
+### `tabs/segments/`
+
+Full WIP editor — trim/split/merge/re-reference, auto-validation on save.
+
+| Path | Role |
+|---|---|
+| `SegmentsTab.svelte` + `ShortcutsGuide.svelte` | Shell — dropdowns, filter bar, nav banner, list, CSS-var config, keyboard |
+| `components/list/` | `SegmentsList`, `SegmentWaveformCanvas` (exempt), `Navigation`, `TimeEdit`, `TimeRange`, `virtualization.ts` |
+| `components/filters/` | `FiltersBar`, `FilterCondition` |
+| `components/edit/` | `EditOverlay`, `MergePanel`, `DeletePanel` |
+| `components/history/` | `HistoryBatch`, `HistoryOp`, `HistoryArrows`, `EditChainRow` |
+| `components/save/` | `SavePreview` |
+| `components/stats/` | `StatsPanel`, `StatsChart`, `ChartFullscreen` |
+| `components/validation/` | `ErrorCard`, `MissingWordsCard`, `MissingVersesCard`, `AccordionGuideModal` (legacy) |
+| `components/footer/` | tab footer |
+| `domain/` | `identity.ts`, `inverse-patch.ts` (paired with backend `domain/`) |
+| `types/` | `segments.ts`, `stats.ts` |
+| `guides/` | Accordion help-modal guide system — see `accordion-guides.md` |
+
+**Stores:** `segments.ts` (normalized state by uid, IS-7), `edit.ts` (bundled 8-field edit state), `history.ts` (edit-history view), `validation.ts` (`SegValidateResponse`), `save.ts` (save-preview), `autosave.ts` (localStorage pref), `chapter.ts`, `chapter-meta.ts`, `config.ts`, `dirty.ts`, `filters.ts`, `navigation.ts`, `playback.ts` (`segPort`), `stats.ts`, `accordion-pin.ts`, `merge-redirect.ts`, `undo-pending.ts`.
+
+**`utils/` (grouped):** `data/` (selection/filter/reciter/chapter actions, config loader, references, per-reciter state clear), `edit/` (trim/split/merge/delete/ignore/reference/setIsWasl/auto-fix/enter/common), `history/` (loader/actions/chains/items/render), `playback/` (`playback.ts` playhead overlay, `play-range.ts`, `range-spec.ts`, `preview.ts`, `resolvers.ts`, `source.ts`, `warmup.ts`, `row-registry.ts`), `save/` (payload/preview/execute/undo/actions), `validation/` (classified-issues, conf-class, card-lead-seg, missing-verse-context, refresh, resolve-issue, split-group, stale), `waveform/` (`draw-seg.ts`, `split-draw.ts`, `trim-draw.ts`, `op-peaks.ts`, `peaks-cache.ts`, `utils.ts`).
+
+## Hybrid imperative canvas pattern
+
+Canvas waveform components expose the raw `<canvas>` so overlay code draws directly each animation frame, avoiding reactive re-renders at 60 fps. Drivers:
+- `tabs/segments/utils/playback/playback.ts` (playhead overlay)
+- `tabs/segments/utils/waveform/{split-draw,trim-draw}.ts` (edit overlays)
+- `TimestampsTab.svelte` / `TimestampsWaveform.svelte` (waveform animation)
+
+These components stay Svelte-4 legacy by design (`docs/planning/svelte-migration.md` exempt list). `lib/utils/animation.ts::createAnimationLoop()` wraps the rAF lifecycle.
+
+## Client caching
+
+| Cache | Location | Invalidation |
+|---|---|---|
+| Segment peaks | `tabs/segments/utils/waveform/peaks-cache.ts` (lazy via IntersectionObserver) | reciter/chapter change |
+| Audio peaks (cross-tab) | `lib/utils/waveform-cache.ts` (Map keyed by normalized URL) | manual |
+| Quran refs bundle | `lib/refs/quran-refs.ts` (one content-hashed fetch/browser) | content hash (never per-session) |
+| Catalog list + stats | `tabs/dashboard/stores/catalog-data.ts` (in-memory snapshot) | first read only |
+| Audio transport/prewarm | per-tab `AudioPort` + `lib/playback/shadow-audio.ts` | tab-switch / chapter change |
+
+## Build outputs
+
+`frontend/dist/` is gitignored. `npm run build` = `tsc --noEmit && vite build` → hashed JS + CSS, Chart.js in a separate `charts` chunk. Run before launching Flask in production mode.
