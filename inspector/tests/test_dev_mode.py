@@ -67,7 +67,7 @@ def test_dev_mode_default_owner_when_cookie_missing(dev_mode_client):
         "guides_read": [],
     }
     # Owner is a superuser → holds every registered capability.
-    from scripts.lib.schemas import CAPABILITIES
+    from qua_shared.schemas import CAPABILITIES
 
     assert set(caps) == {c.id for c in CAPABILITIES}
 

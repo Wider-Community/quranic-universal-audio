@@ -14,7 +14,7 @@ def _state_row(slug: str, *, state: str = "awaiting_review",
                marked_ready: bool = False,
                assignee_hf_id: str | None = None,
                visibility: str = "public"):
-    from scripts.lib.schemas import ReciterRow, ReciterState, Visibility
+    from qua_shared.schemas import ReciterRow, ReciterState, Visibility
 
     return ReciterRow(
         slug=slug,
@@ -32,7 +32,7 @@ def _delivery(slug: str, *, reciter_id: str,
               riwayah: str = "hafs_an_asim", style: str = "murattal",
               source: str = "mp3quran", channel: str = "mp3quran",
               chapter_count: int = 114):
-    from scripts.lib.schemas import AudioCategory, Delivery
+    from qua_shared.schemas import AudioCategory, Delivery
 
     return Delivery(
         slug=slug,
@@ -49,14 +49,14 @@ def _delivery(slug: str, *, reciter_id: str,
 
 
 def _reciter(reciter_id: str, name_en: str):
-    from scripts.lib.schemas import ReciterEntry
+    from qua_shared.schemas import ReciterEntry
 
     return ReciterEntry(reciter_id=reciter_id, name_en=name_en)
 
 
 def _install(monkeypatch, reciters, deliveries, rows):
     """Seed the supplied catalog + state fixtures into the SQLite substrate."""
-    from scripts.lib.schemas import (
+    from qua_shared.schemas import (
         Channel,
         Riwayah,
         Source,

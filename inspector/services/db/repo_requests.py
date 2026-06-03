@@ -18,7 +18,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from scripts.lib.schemas import Actor, ArchivedRequest, PendingRequest, ProposedEdits
+from qua_shared.schemas import Actor, ArchivedRequest, PendingRequest, ProposedEdits
 
 from . import _serde
 from .connection import get_conn

@@ -1,7 +1,7 @@
 """Repository for ``permission_overrides`` — owner-set deviations from the
 capability registry defaults.
 
-Stores ONLY rows that differ from the baseline (``scripts/lib/schemas/
+Stores ONLY rows that differ from the baseline (``qua_shared/schemas/
 capabilities.py``). An absent ``(capability_id, tier)`` row means "use the
 default"; ``clear_override`` (a DELETE) resets a cell to default. The resolver
 (``services/auth/capabilities.py``) overlays these rows on the defaults.

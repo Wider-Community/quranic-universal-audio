@@ -1,6 +1,6 @@
 """HF dataset publish kind — per-recitation push.
 
-Launches an HF Job that runs ``scripts/jobs/publish_hf.py``. The job reads
+Launches an HF Job that runs ``qua_jobs/publish_hf.py``. The job reads
 the recitation's bucket artifacts (detailed.json, timestamps/*.json.gz,
 audio/*.mp3 via Xing-master stream-copy slicing) and pushes a parquet split
 to the public HF dataset.
@@ -21,7 +21,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from scripts.lib.schemas import Actor
+from qua_shared.schemas import Actor
 from services.db import repo_releases
 from services.db.sync import durable_transaction
 from services.state import audit
@@ -70,7 +70,7 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     # adds ~60-90s to job startup but keeps consumer UX intact
     # (``ds[i]["audio"]["array"]`` returns a waveform).
     deps = "datasets orjson pyyaml torch torchcodec"
-    entrypoint = "python /aux/code/scripts/jobs/publish_hf.py"
+    entrypoint = "python /aux/code/qua_jobs/publish_hf.py"
     if base.NEEDS_BOOTSTRAP:
         command = ["bash", "-lc",
                    "mamba install -y -c conda-forge python=3.11 "

@@ -11,7 +11,7 @@ import types
 
 import pytest
 
-from scripts.lib.schemas import CAPABILITIES, CAPABILITIES_BY_ID
+from qua_shared.schemas import CAPABILITIES, CAPABILITIES_BY_ID
 from services.auth import capabilities as caps
 from services.db import connection, repo_access, repo_permissions
 

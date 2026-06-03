@@ -8,7 +8,7 @@ not these raw states). Cold-path only — built when a transition is rejected.
 
 from __future__ import annotations
 
-from scripts.lib.schemas import ReciterState
+from qua_shared.schemas import ReciterState
 
 STATE_LABELS: dict[ReciterState, str] = {
     ReciterState.CATALOGUED: "catalogued",

@@ -168,7 +168,7 @@ def test_revoke_force_releases_active_claim(signed_in_client, monkeypatch):
     claim is auto-released as part of the revoke."""
     from datetime import datetime, timezone
 
-    from scripts.lib.schemas import Member, Role, RolesFile
+    from qua_shared.schemas import Member, Role, RolesFile
 
     from services import access as access_service
 
@@ -198,7 +198,7 @@ def test_revoke_force_releases_active_claim(signed_in_client, monkeypatch):
 def test_revoke_maintainer_cannot_revoke_owner(signed_in_client, monkeypatch):
     from datetime import datetime, timezone
 
-    from scripts.lib.schemas import Member, Role
+    from qua_shared.schemas import Member, Role
 
     from services import access as access_service
 
@@ -225,7 +225,7 @@ def test_revoke_maintainer_cannot_revoke_owner(signed_in_client, monkeypatch):
 def test_update_login_cache_refresh(signed_in_client, monkeypatch):
     from datetime import datetime, timezone
 
-    from scripts.lib.schemas import Member, Role
+    from qua_shared.schemas import Member, Role
 
     from services import access as access_service
 

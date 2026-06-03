@@ -59,8 +59,8 @@ def test_stage_job_code_uploads_every_required_path(stub_batch):
 def test_stage_job_code_auto_gzips_qpc_when_only_uncompressed_present(stub_batch, monkeypatch, tmp_path):
     """In a dev tree with ``data/qpc_hafs.json`` but no ``.gz``, the resolver
     gzip-compresses on the fly and uploads under the ``.gz`` target path."""
-    (tmp_path / "scripts" / "lib").mkdir(parents=True)
-    (tmp_path / "scripts" / "jobs").mkdir(parents=True)
+    (tmp_path / "qua_shared").mkdir(parents=True)
+    (tmp_path / "qua_jobs").mkdir(parents=True)
     for ep in base.REQUIRED_ENTRYPOINTS:
         (tmp_path / ep).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / ep).write_text("# stub")
@@ -82,18 +82,18 @@ def test_stage_job_code_auto_gzips_qpc_when_only_uncompressed_present(stub_batch
 
 
 def test_stage_job_code_raises_when_entrypoint_missing(stub_batch, monkeypatch, tmp_path):
-    """Point REPO_ROOT at a tree missing scripts/jobs/publish_hf.py; expect
+    """Point REPO_ROOT at a tree missing qua_jobs/publish_hf.py; expect
     ``JobStagingError`` with the missing path in the message."""
-    (tmp_path / "scripts" / "lib").mkdir(parents=True)
-    (tmp_path / "scripts" / "jobs").mkdir(parents=True)
+    (tmp_path / "qua_shared").mkdir(parents=True)
+    (tmp_path / "qua_jobs").mkdir(parents=True)
     # Only generate_timestamps.py exists — publish_hf/cut_release/shard absent.
-    (tmp_path / "scripts" / "jobs" / "generate_timestamps.py").write_text("# stub")
-    (tmp_path / "scripts" / "lib" / "__init__.py").write_text("")
+    (tmp_path / "qua_jobs" / "generate_timestamps.py").write_text("# stub")
+    (tmp_path / "qua_shared" / "__init__.py").write_text("")
     monkeypatch.setattr(base, "REPO_ROOT", tmp_path)
 
     with pytest.raises(base.JobStagingError) as exc:
         base.stage_job_code()
     msg = str(exc.value)
-    assert "scripts/jobs/publish_hf.py" in msg
+    assert "qua_jobs/publish_hf.py" in msg
     assert "Dockerfile" in msg
     assert stub_batch == [], "must not upload when contract is broken"

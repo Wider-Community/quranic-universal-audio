@@ -4,7 +4,7 @@
  * The bucket stores every recited segment raw, in recitation order (a verse may
  * recur across several entries — loopbacks, re-dos). Consumers reduce a verse's
  * segments to a single canonical take. This is the FE mirror of the backend's
- * `scripts/lib/timestamps_dedup.py::project_segment_shard` at the granularity the
+ * `qua_shared/timestamps_dedup.py::project_segment_shard` at the granularity the
  * Timestamps tab needs: it groups by verse, splits into occasions, picks the
  * canonical (completing) occasion, and exposes ALL occasions in recitation order
  * for the (deferred) loopback filmstrip.

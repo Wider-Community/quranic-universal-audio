@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     AudioCategory,
     Delivery,
     ReciterEntry,

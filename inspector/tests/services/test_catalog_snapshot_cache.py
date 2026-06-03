@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from scripts.lib.schemas import Actor, AudioCategory, Delivery, ReciterEntry, Role
+from qua_shared.schemas import Actor, AudioCategory, Delivery, ReciterEntry, Role
 from services import catalog as catalog_service
 from services.db import repo_catalog
 

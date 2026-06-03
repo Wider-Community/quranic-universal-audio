@@ -9,7 +9,7 @@ only — it does NOT build the patch), and append the transition inside the
 caller's transaction so the audit row is atomic with the edit.
 
 Authority for schema: docs/reference/catalog.md (the pydantic models
-in ``scripts/lib/schemas/catalog.py`` are the runtime authority).
+in ``qua_shared/schemas/catalog.py`` are the runtime authority).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Actor,
     AudioCategory,
     Channel,

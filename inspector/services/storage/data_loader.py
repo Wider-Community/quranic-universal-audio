@@ -167,7 +167,7 @@ def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:
     lookups don't re-stat the filesystem. The sidecar is the source of
     truth for the *Low Confidence v2* validation category and is never
     written from the Inspector — it's emitted by the segments-stage
-    MFA probe (``scripts/lib/probe_mfa.py``).
+    MFA probe (``qua_shared/probe_mfa.py``).
     """
     cached = cache.get_seg_probe_v2(reciter)
     if cached is not None:
@@ -195,7 +195,7 @@ def load_pipeline_meta(reciter: str) -> dict | None:
     hard-fail on ``None`` rather than silently substituting an empty set;
     missing sidecar means the backfill script hasn't run for this reciter.
     """
-    from scripts.lib.schemas import PipelineMeta
+    from qua_shared.schemas import PipelineMeta
 
     cached = cache.get_seg_pipeline_meta(reciter)
     if cached is not None:
@@ -216,7 +216,7 @@ def load_auto_split(reciter: str) -> tuple[dict[str, dict], dict | None]:
     "repetition"}``. Empty dict + None when the sidecar is absent — that
     signals to the FE that every Auto Split candidate should fall back to
     the plain Split button (manual single-cursor placement). The sidecar is
-    emitted offline by ``scripts/lib/auto_split_precompute.py``; the
+    emitted offline by ``qua_shared/auto_split_precompute.py``; the
     Inspector never writes it.
     """
     cached = cache.get_seg_auto_split(reciter)

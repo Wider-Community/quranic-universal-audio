@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from scripts.lib.schemas import Actor, Delivery, ReciterEntry, Role
-from scripts.lib.schemas.catalog import Riwayah, Style, Source, Channel, Vocab
+from qua_shared.schemas import Actor, Delivery, ReciterEntry, Role
+from qua_shared.schemas.catalog import Riwayah, Style, Source, Channel, Vocab
 
 from services import db
 from services.db import (

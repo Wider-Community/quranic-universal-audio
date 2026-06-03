@@ -100,7 +100,7 @@ Two fields stamped on every `detailed.json` segment, read at validate time to co
 Stamped by (all call the same source-of-truth helper → byte-equivalent across writers):
 - **Save flow** — `services/segments/save.py::_stamp_persisted_classifier_fields(seg, single_word_verses)` on every mutated seg. `is_boundary_adj` computed structural-only (`canonical=None`).
 - **Extraction pipeline** — `.local/extraction` outputs (passes `canonical` to capture the phonemic side, where applicable).
-- **Backfill** — `inspector/scripts/backfill_qalqala_letter.py`, `inspector/scripts/backfill_boundary_adj.py`.
+- **Backfill** — `scripts/backfills/backfill_qalqala_letter.py`, `scripts/backfills/backfill_boundary_adj.py`.
 
 Read path (`classifier.py`):
 - qalqala: `classify_flags` reads `seg["qalqala_letter"]` when the key is present; **legacy fall-through** computes `compute_qalqala_letter(seg)` (local import to avoid a load cycle). Same helper → identical value.
@@ -108,7 +108,7 @@ Read path (`classifier.py`):
 
 Text source: `compute_qalqala_letter` and `compute_is_boundary_adj` derive seg text from `dk_text_for_ref(matched_ref)` (Migration #5 dropped per-seg `matched_text`). The `seg.get("matched_text") or dk_text_for_ref(...)` fall-through is the back-compat path for any pre-Migration-5 seg still carrying `matched_text`.
 
-**Phonemizer is out of the validate runtime.** `compute_is_boundary_adj` accepts `canonical` for back-compat but ignores it (retired in Migration #5 with `phonemes_asr`); the rule is structural-only. `validate_reciter_segments` passes `canonical=None`. The only `quranic_phonemizer` consumer left is the offline `inspector/scripts/backfill_boundary_adj.py`; no `canonical_phonemes.pkl` loads during validate; eager-boot init removed from `app.py`.
+**Phonemizer is out of the validate runtime.** `compute_is_boundary_adj` accepts `canonical` for back-compat but ignores it (retired in Migration #5 with `phonemes_asr`); the rule is structural-only. `validate_reciter_segments` passes `canonical=None`. The only `quranic_phonemizer` consumer left is the offline `scripts/backfills/backfill_boundary_adj.py`; no `canonical_phonemes.pkl` loads during validate; eager-boot init removed from `app.py`.
 
 ## Snapshot lifecycle
 

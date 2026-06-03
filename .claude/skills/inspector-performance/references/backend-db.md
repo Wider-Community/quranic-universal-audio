@@ -59,7 +59,7 @@ All in `services/storage/cache.py` unless noted. `_KeyedCache` = LRU-20 (`_KEYED
 | `is_boundary_adj` | extraction (w/ canonical) / save (structural-only) / backfill | `detailed.json` seg | `classifier.py::compute_is_boundary_adj` — **asymmetric by design**: save passes `canonical=None` (no ASR at edit time); read path short-circuits on persisted value (`save.py:292-327`) |
 | `classified_issues` (per-op) | save (`_attach_classified_issues`) | `edit_history.jsonl` op snapshots | `snapshot_classifier.classify_snapshot` |
 | per-op history peaks | save (`op_peaks.build_op_records`) / backfill / lazy-on-play | `edit_history_peaks.jsonl` | `services/audio/op_peaks.py` — slices baked int8 chapter peaks, no ffmpeg |
-| `deleted_basmala_chapters` | extraction / backfill | `pipeline_meta.json` | `scripts/lib/pipeline_meta.py::collect_deleted_basmalas` (post-#5: reads sidecar, not re-derived per cold validate) |
+| `deleted_basmala_chapters` | extraction / backfill | `pipeline_meta.json` | `qua_shared/pipeline_meta.py::collect_deleted_basmalas` (post-#5: reads sidecar, not re-derived per cold validate) |
 | chapter peaks (10 bps int8) | offline extraction | `peaks/<ch>.json.gz` | extraction; served verbatim |
 | catalog snapshot / public reciters | read-time, db_seq cached | not persisted | `repo_catalog.snapshot()` |
 
@@ -92,10 +92,10 @@ The bench/drift harness (below) is the only guarantee that save/extraction/backf
 
 ## Profiling & measurement playbook (terminal/script)
 
-**Storage bench — the only committed bench in-tree** (`inspector/scripts/bench_storage.py`). Cold (fresh `hffs` cache, `invalidate_hffs()` each iter) vs warm bucket read/write latency on real hot-path files, p50/p95/max + payload sizes:
+**Storage bench — the only committed bench in-tree** (`scripts/diagnostics/bench_storage.py`). Cold (fresh `hffs` cache, `invalidate_hffs()` each iter) vs warm bucket read/write latency on real hot-path files, p50/p95/max + payload sizes:
 ```
 INSPECTOR_BUCKET_REPO=hetchyy/quranic-inspector-bucket-dev \
-  python3 inspector/scripts/bench_storage.py [--mount /path/to/mount] [--skip-writes] [--warm N]
+  python3 scripts/diagnostics/bench_storage.py [--mount /path/to/mount] [--skip-writes] [--warm N]
 ```
 Run with **and** without `--mount` to quantify the mount-vs-`hffs.cat_file` gap before trusting any bucket-I/O number. Benches `state/`, catalog, `detailed.json`, `segments.json`, `edit_history.jsonl`, a TS shard, plus `list_dir`/`exists`/write/append.
 

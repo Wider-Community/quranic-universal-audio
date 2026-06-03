@@ -26,7 +26,7 @@ from routes._admin_helpers import (
     row_to_dict as _row_to_dict,
 )
 
-from scripts.lib.schemas import MarkReadyRequest
+from qua_shared.schemas import MarkReadyRequest
 
 from services import auth as auth_service
 from services import catalog as catalog_service

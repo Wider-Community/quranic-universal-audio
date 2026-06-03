@@ -7,9 +7,9 @@
 # Stage 3 is a lean python:3.11-alpine runtime that ships the Flask app.
 # Reviewers run `docker compose up` and visit :5000.
 #
-# Build context is the REPO ROOT (one level above inspector/). `scripts/lib/`
+# Build context is the REPO ROOT (one level above inspector/). `qua_shared/`
 # ships alongside `inspector/` so the in-process imports of
-# `scripts.lib.boundary_check` (timestamps validator) and similar resolve.
+# `qua_shared.boundary_check` (timestamps validator) and similar resolve.
 #
 # Build:    docker build -t inspector:dev -f inspector/Dockerfile .   # from repo root
 # Run dev:  docker run --rm -p 5000:5000 -v "$PWD/data:/data" inspector:dev
@@ -120,23 +120,22 @@ RUN pip install --no-cache-dir -r ./inspector/requirements.txt && \
 # App code. Selective COPY — inspector/frontend/{src,public,node config} and
 # tests/ aren't needed at runtime (only the built dist/ from stage 1 is).
 # app.py inserts /app (repo root) onto sys.path[0] at startup so that
-# `from scripts.lib.X import Y` resolves.
+# `from qua_shared.X import Y` resolves.
 COPY inspector/app.py inspector/config.py inspector/constants.py ./inspector/
 COPY inspector/adapters/ ./inspector/adapters/
 COPY inspector/domain/ ./inspector/domain/
 COPY inspector/routes/ ./inspector/routes/
 COPY inspector/services/ ./inspector/services/
 COPY inspector/utils/ ./inspector/utils/
-# scripts/lib/ is shared with the CI build pipeline. Inspector imports
-# ``scripts.lib.timestamps_shards`` for ``SCHEMA_VERSION`` + ``derive_url_template``
-# when composing the bucket-mode manifest. ``scripts/jobs/`` ships the HF-Job
+# qua_shared/ is shared with the CI build pipeline. Inspector imports
+# ``qua_shared.timestamps_shards`` for ``SCHEMA_VERSION`` + ``derive_url_template``
+# when composing the bucket-mode manifest. ``qua_jobs/`` ships the HF-Job
 # entrypoints (generate_timestamps / publish_hf / cut_release / shard) that
 # ``services/admin/jobs/base.stage_job_code`` uploads to the aligner-bucket on
 # launch. ``.github/config/repo.yml`` + ``LICENSE`` are read by the job-side
 # scripts (config_loader + cut_release asset upload).
-COPY scripts/__init__.py ./scripts/__init__.py
-COPY scripts/lib/ ./scripts/lib/
-COPY scripts/jobs/ ./scripts/jobs/
+COPY qua_shared/ ./qua_shared/
+COPY qua_jobs/ ./qua_jobs/
 COPY .github/config/ ./.github/config/
 COPY LICENSE ./LICENSE
 # Linguistic data read by services/data_loader.py via config.py's _QUA_DATA,
@@ -149,7 +148,7 @@ COPY LICENSE ./LICENSE
 # files >10 MB at push time and the Space build doesn't smudge LFS — the
 # uncompressed source would land as a 133-byte pointer. upload_inspector.py
 # pre-gzips at stage time; runtime readers (services/storage/data_loader,
-# scripts/jobs/{publish_hf,cut_release}) gunzip on read.
+# qua_jobs/{publish_hf,cut_release}) gunzip on read.
 COPY data/surah_info.json \
      data/qpc_hafs.json.gz \
      data/digital_khatt_v2_script.json \

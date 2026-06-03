@@ -1,6 +1,6 @@
 # Data migrations & one-shot scripts
 
-Playbook for one-shot migrations / backfills against bucket data (`reciters/<slug>/` per-reciter artefacts, and the SQLite substrate). All scripts live in `inspector/scripts/`. Shared shape: **dry-run by default**, write to a parallel `archive/<migration>/<slug>/…` (or `.bak`) path before mutating, drift- or parity-check, then atomically promote. Per-reciter loops process independently — a mid-loop failure leaves earlier slugs done, later ones untouched.
+Playbook for one-shot migrations / backfills against bucket data (`reciters/<slug>/` per-reciter artefacts, and the SQLite substrate). Completed migrations live in `scripts/migrations/` (frozen); re-runnable backfills in `scripts/backfills/`. Shared shape: **dry-run by default**, write to a parallel `archive/<migration>/<slug>/…` (or `.bak`) path before mutating, drift- or parity-check, then atomically promote. Per-reciter loops process independently — a mid-loop failure leaves earlier slugs done, later ones untouched.
 
 > The historical per-reciter scan-count tables and bug-forensics that used to live here are dropped — they're frozen in commit history. This doc keeps the durable bits an agent needs to *re-run* a migration: detection predicate, apply CLI, archive/rollback path, idempotency, and what each does NOT touch.
 
@@ -23,7 +23,7 @@ Playbook for one-shot migrations / backfills against bucket data (`reciters/<slu
 | `backfill_deleted_basmala.py` is paired with extraction's native write | — | — | — | New reciters land pre-stamped; backfill is legacy catch-up only. |
 | `unignore_category.py` | edit_history.jsonl | bulk-revert `ignore_issue` ops for a category | yes (skips reverted) | Data fix, not a migration — drives `services.segments.undo.undo_ops`. |
 | `audit_bucket_reciter.py` | (read-only) | per-reciter integrity audit | n/a | Run before publishing a reciter. |
-| `scripts/jobs/reshape_timestamps_shards.py` | timestamps/ | v2 occurrence-list shard → temporal segment-array shard | yes (`target` shards skipped) | Migration #6. Lives in `scripts/jobs/`, not `inspector/scripts/`. |
+| `qua_jobs/reshape_timestamps_shards.py` | timestamps/ | v2 occurrence-list shard → temporal segment-array shard | yes (`target` shards skipped) | Migration #6. Lives in `qua_jobs/`. |
 
 Tooling (not migrations): `download_bucket_reciter.py`, `upload_bucket_reciter.py` (download → migrate → re-upload workflow), `bench_storage.py`, `regen_fe_types.py` (FE codegen — see CLAUDE.md schema convention).
 
@@ -40,7 +40,7 @@ One-shot unification of the two state-driven per-reciter prefixes into a single 
 ## Substrate migrations
 
 ### JSON → SQLite (`migrate_json_to_sqlite.py`)
-The cutover. Reads the legacy stores via the configured backend, decomposes into SQLite tables, runs a **semantic** parity readback (list order normalized, not byte), optionally uploads to `db/inspector.db`. Refuses to overwrite an existing bucket DB without `--force`. Decomposition + parity gate fully documented in [database.md](database.md). `python inspector/scripts/migrate_json_to_sqlite.py --bucket dev [--force] [--allow-orphans] [--dry-run]`.
+The cutover. Reads the legacy stores via the configured backend, decomposes into SQLite tables, runs a **semantic** parity readback (list order normalized, not byte), optionally uploads to `db/inspector.db`. Refuses to overwrite an existing bucket DB without `--force`. Decomposition + parity gate fully documented in [database.md](database.md). `python scripts/migrations/migrate_json_to_sqlite.py --bucket dev [--force] [--allow-orphans] [--dry-run]`.
 
 ### Pending orphans (`migrate_pending_orphans.py`)
 Legacy boot-time reconcile *deleted* pending-request orphans (losing proposed_edits + comments + auto_claim). New design archives at each terminal transition; this catches up legacy data by writing orphans into `requests/completed.json` with a synthetic system actor + `reason="migrated from orphan"`. Dry-run default; `--apply` to commit. Idempotent (second run archives zero).
@@ -77,10 +77,10 @@ A pipeline-era cluster of changes; the post-#5 invariants are: every history sna
 
 - **`convert_peaks_v2_to_v3.py`** — walks a dir of plain `peaks/<ch>.json` (v2: `schema_version:2`, nested float `peaks`) → emits slim `<ch>.json.gz` siblings (mirrors `services/audio/peaks_slim.py::pack_slim`). Deletes the plain files unless `--keep-legacy`. Runs in a download → migrate → re-upload flow; orphaned plain `.json` on the bucket need a separate delete pass. Peaks shape detail lives in the **inspector-audio skill**.
 - **`derive_pipeline_meta.py`** — derives `<dir>/pipeline_meta.json` for a local slug dir. New path: walk `strip_specials` snapshots, collect Basmala-class chapters from the `chapter` stamp. Legacy fallback: pair each Basmala-class op with the next `batch.chapters[]` entry (valid because strip ops emit in chapter+time order). Idempotent modulo `generated_at`.
-- **`backfill_deleted_basmala.py`** — same derivation via `scripts/lib/pipeline_meta.py::collect_deleted_basmalas` (the helper extraction calls — byte-identical), writing the `deleted_basmala_chapters` sidecar field for legacy reciters. The post-#5 inspector reads this sidecar instead of re-deriving from `edit_history.jsonl` on every cold validate. `--slug` / `--all --dry-run`. Deterministic — re-run as a drift check.
+- **`backfill_deleted_basmala.py`** — same derivation via `qua_shared/pipeline_meta.py::collect_deleted_basmalas` (the helper extraction calls — byte-identical), writing the `deleted_basmala_chapters` sidecar field for legacy reciters. The post-#5 inspector reads this sidecar instead of re-deriving from `edit_history.jsonl` on every cold validate. `--slug` / `--all --dry-run`. Deterministic — re-run as a drift check.
 - **`backfill_pipeline_peaks.py`** — catch-up when `edit_history_peaks.jsonl` drifts from `edit_history.jsonl` (partial migration / manual mutation / pre-#5 reciter). Assumes the #5 invariants — if unmet, fix source data (`.local/extraction/scripts/migrate_wip5_in_place.py`) or re-extract rather than adding fallbacks here.
 
-## Migration #6 — timestamps occurrence-list → segment-array reshape (`scripts/jobs/reshape_timestamps_shards.py`)
+## Migration #6 — timestamps occurrence-list → segment-array reshape (`qua_jobs/reshape_timestamps_shards.py`)
 
 Reshape each bucket per-chapter timestamps shard from the historical **v2 occurrence-list**
 (`{_meta, "<verse>": [occurrence,...]}`, verse-keyed) into the **temporal segment-array** shape
@@ -93,14 +93,14 @@ artifact. Full contract: [timestamps-job.md §1, §6](timestamps-job.md);
 **Safe-because.** A prod-bucket audit (`.local/ts_migration_audit/`) verified all 10 released
 reciters are reshape-safe (clean v2, 0 compound cross-verse, 0 skips/orphans, every verse coverable
 in one contiguous occasion). The transform delegates to the offline writer's `build_segment_shards`
-(`scripts/lib/timestamps_shards.py`), so a reshaped shard is **byte-shape identical** to a freshly
+(`qua_shared/timestamps_shards.py`), so a reshaped shard is **byte-shape identical** to a freshly
 generated one — the single segment-array builder.
 
-- **Pure transform** — `scripts/lib/timestamps_reshape.py`: `classify_shard` (`target`/`v2`/`v1`/
+- **Pure transform** — `qua_shared/timestamps_reshape.py`: `classify_shard` (`target`/`v2`/`v1`/
   `empty` — `target` already segment-array, detected by the top-level `segments` key) +
   `reshape_shard` (raises on compound cross-verse or non-single-chapter input). No Flask, no bucket
-  I/O. Tests: `scripts/lib/tests/test_timestamps_reshape.py`.
-- **CLI** — `scripts/jobs/reshape_timestamps_shards.py`. `--src-dir` of LOCAL `<chapter>.json.gz`
+  I/O. Tests: `qua_shared/tests/test_timestamps_reshape.py`.
+- **CLI** — `qua_jobs/reshape_timestamps_shards.py`. `--src-dir` of LOCAL `<chapter>.json.gz`
   shards (a synced mirror or the audit cache `.local/ts_migration_audit/raw/reciters/<slug>/
   timestamps`); dry-run reports per-shard shape + segment-count + byte delta; optional `--out-dir`
   writes reshaped `.gz` LOCALLY for inspection; `target` and `v1`/`empty` shards are skipped
@@ -112,4 +112,4 @@ generated one — the single segment-array builder.
 
 ## Source of truth for byte shapes
 
-All these scripts read/write through the shared pydantic schemas in `scripts/lib/schemas/` (and `scripts/lib/pipeline_meta.py` for the sidecar) — never dict literals. Extraction and the inspector save flow stamp the same fields natively, so new reciters land pre-migrated and only legacy / archive-restored data needs a backfill pass.
+All these scripts read/write through the shared pydantic schemas in `qua_shared/schemas/` (and `qua_shared/pipeline_meta.py` for the sidecar) — never dict literals. Extraction and the inspector save flow stamp the same fields natively, so new reciters land pre-migrated and only legacy / archive-restored data needs a backfill pass.

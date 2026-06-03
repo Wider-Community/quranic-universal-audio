@@ -30,7 +30,7 @@ _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 @pytest.fixture(autouse=True)
 def _isolated_backend(tmp_path, monkeypatch):
     """Per-test FilesystemBackend so route writes never reach the real bucket."""
-    from scripts.lib.schemas import (
+    from qua_shared.schemas import (
         AudioCategory,
         Channel,
         Delivery,
@@ -90,7 +90,7 @@ def _isolated_backend(tmp_path, monkeypatch):
 
     # Seed an in-flight pending entry for rec_pending so admin GET + reject
     # tests have something to inspect.
-    from scripts.lib.schemas import Actor, ProposedEdits, Role
+    from qua_shared.schemas import Actor, ProposedEdits, Role
     pending_requests_service.submit(
         "rec_pending",
         requester=Actor(
@@ -665,7 +665,7 @@ def test_intake_discard_resolves_request(signed_in_client):
 
 
 def test_intake_probe_caches_result(signed_in_client, monkeypatch):
-    from scripts.lib.schemas import ProbeResponse, ProbeResult
+    from qua_shared.schemas import ProbeResponse, ProbeResult
     from services.admin import intake as intake_service
 
     def _fake_probe(source):

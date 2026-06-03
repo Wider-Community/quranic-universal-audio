@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from flask import jsonify
 
-from scripts.lib.schemas import Actor, Role
+from qua_shared.schemas import Actor, Role
 
 from services import auth as auth_service
 from services import catalog as catalog_service

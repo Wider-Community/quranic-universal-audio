@@ -11,7 +11,7 @@ export default [
             'dist/**',
             'node_modules/**',
             '.vite/**',
-            // Codegen output owned by `inspector/scripts/regen_fe_types.py`.
+            // Codegen output owned by `scripts/codegen/regen_fe_types.py`.
             // `lint --fix` was stripping the file's `eslint-disable` header as
             // "unused", which then made `schema-codegen-check` fail on every
             // push that ran autofix. Treat the dir as off-limits to ESLint.

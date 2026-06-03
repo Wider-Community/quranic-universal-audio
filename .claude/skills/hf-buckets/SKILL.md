@@ -21,25 +21,25 @@ Buckets have **no PRs, no commits, no cards, no revision argument**. Deletions a
 
 ## Quick scripts (fast path)
 
-Local CLI wrappers in `scripts/`. Use these before reaching for inline `HfFileSystem` code — each is a self-contained `python <script>` invocation with `--help`. Default bucket is dev (`hetchyy/quranic-inspector-bucket-dev`); pass `--bucket prod` for prod, and add `--yes-prod` for mutating ops.
+Project bucket CLI wrappers live in the repo at `scripts/bucket/` — tuned for *our* buckets (default ids + the `reciters/<slug>/` schema), so they're versioned with the code, not carried by this skill. Use these before reaching for inline `HfFileSystem` code — each is a self-contained `python <script>` invocation with `--help`. Default bucket is dev (`hetchyy/quranic-inspector-bucket-dev`); pass `--bucket prod` for prod, and add `--yes-prod` for mutating ops.
 
 | Script | What it does |
 |---|---|
-| `scripts/bucket_ls.py PATH [--detail] [--recursive]` | List dirs/files; sizes when `--detail` |
-| `scripts/bucket_stat.py [PATH] [--top N]` | File count + total bytes + per-extension breakdown + top-N largest |
-| `scripts/bucket_cat.py PATH [--json] [--gz] [--head N]` | Print contents; auto-gunzip for `peaks/*.json.gz`, JSON pretty-print |
-| `scripts/bucket_put.py PATH (--text \| --file \| --json) [--yes-prod]` | Write a single file |
-| `scripts/bucket_rm.py PATH [--recursive] [--yes-prod]` | Delete file/dir |
-| `scripts/bucket_cp.py SRC DST [--src-bucket B] [--dst-bucket B] [--yes-prod]` | Server-side copy (Xet-dedup) |
-| `scripts/bucket_sync.py SRC DST [--dry-run] [--delete]` | Two-way local↔bucket sync, plan-and-apply |
-| `scripts/bucket_reciters.py [--sort {slug,size,audio,max}] [--slug FILTER]` | One-row-per-reciter summary table |
-| `scripts/bucket_diff.py SLUG [--bucket-a B --bucket-b B]` | What artifacts exist on A but not B for that slug |
+| `scripts/bucket/bucket_ls.py PATH [--detail] [--recursive]` | List dirs/files; sizes when `--detail` |
+| `scripts/bucket/bucket_stat.py [PATH] [--top N]` | File count + total bytes + per-extension breakdown + top-N largest |
+| `scripts/bucket/bucket_cat.py PATH [--json] [--gz] [--head N]` | Print contents; auto-gunzip for `peaks/*.json.gz`, JSON pretty-print |
+| `scripts/bucket/bucket_put.py PATH (--text \| --file \| --json) [--yes-prod]` | Write a single file |
+| `scripts/bucket/bucket_rm.py PATH [--recursive] [--yes-prod]` | Delete file/dir |
+| `scripts/bucket/bucket_cp.py SRC DST [--src-bucket B] [--dst-bucket B] [--yes-prod]` | Server-side copy (Xet-dedup) |
+| `scripts/bucket/bucket_sync.py SRC DST [--dry-run] [--delete]` | Two-way local↔bucket sync, plan-and-apply |
+| `scripts/bucket/bucket_reciters.py [--sort {slug,size,audio,max}] [--slug FILTER]` | One-row-per-reciter summary table |
+| `scripts/bucket/bucket_diff.py SLUG [--bucket-a B --bucket-b B]` | What artifacts exist on A but not B for that slug |
 
 Recipe:
 ```
-python .claude/skills/hf-buckets/scripts/bucket_stat.py reciters/mahmoud_khalil_al_husary_mp3quran --bucket prod
-python .claude/skills/hf-buckets/scripts/bucket_cat.py catalog/audio_manifest/<slug>.json --json --bucket prod
-python .claude/skills/hf-buckets/scripts/bucket_reciters.py --bucket prod --sort audio
+python scripts/bucket/bucket_stat.py reciters/mahmoud_khalil_al_husary_mp3quran --bucket prod
+python scripts/bucket/bucket_cat.py catalog/audio_manifest/<slug>.json --json --bucket prod
+python scripts/bucket/bucket_reciters.py --bucket prod --sort audio
 ```
 
 For **what's inside `reciters/<slug>/`** (which files exist, who writes them, how they're synced) — don't re-derive, open [`docs/reference/database.md`](../../../docs/reference/database.md) (the SQLite-on-bucket substrate + sync mechanics) and the *Bucket shape* section of the repo's root `CLAUDE.md`.

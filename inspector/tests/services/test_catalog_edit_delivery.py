@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Actor,
     AudioCategory,
     Channel,

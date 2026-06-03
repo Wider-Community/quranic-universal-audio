@@ -1,7 +1,7 @@
 """Roundtrip the segment-array shard through the inspector read path.
 
 Writes a segment-array shard gz (built by the offline writer
-``scripts.lib.timestamps_shards.build_segment_shards``) to
+``qua_shared.timestamps_shards.build_segment_shards``) to
 ``reciters/<slug>/timestamps/<ch>.json.gz`` via the FilesystemBackend, then
 reads it back through the real storage helpers and applies the consumer dedup:
 
@@ -21,12 +21,12 @@ import gzip
 
 import orjson
 
-from scripts.lib.timestamps_dedup import (
+from qua_shared.timestamps_dedup import (
     build_raw_v2,
     confidence_by_span,
     project_segment_shard,
 )
-from scripts.lib.timestamps_shards import build_segment_shards, gzip_shard
+from qua_shared.timestamps_shards import build_segment_shards, gzip_shard
 from services import storage_paths
 from services.storage import data_dir
 from services.storage.hf_bucket import get_backend

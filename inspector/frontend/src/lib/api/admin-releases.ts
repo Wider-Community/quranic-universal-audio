@@ -7,7 +7,7 @@
  * - cutRelease             launch the global GH release cut job
  *
  * Types are defined inline here until the response schemas are promoted to
- * ``scripts/lib/schemas/`` + codegen'd. The shapes mirror the Pydantic-free
+ * ``qua_shared/schemas/`` + codegen'd. The shapes mirror the Pydantic-free
  * jsonify payloads emitted by ``inspector/routes/admin/releases.py``.
  */
 

@@ -5,9 +5,9 @@ on:
     branches: [dev, main]
     paths:
       - "inspector/**"
-      - "scripts/lib/**"
-      - "scripts/upload_inspector.py"
-      - "scripts/inspector_v2_seed/**"
+      - "qua_shared/**"
+      - "qua_jobs/**"
+      - "scripts/deploy/upload_inspector.py"
       - "data/surah_info.json"
       - "data/qpc_hafs.json"
       - "data/digital_khatt_v2_script.json"
@@ -80,7 +80,7 @@ jobs:
           provenance: false
 
       - name: Boot smoke test (/healthz)
-        run: python inspector/scripts/smoke_boot.py --skip-build --tag inspector-smoke:latest
+        run: python scripts/deploy/smoke_boot.py --skip-build --tag inspector-smoke:latest
 
   deploy:
     needs: [checks, boot-smoke]
@@ -122,4 +122,4 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python scripts/upload_inspector.py "${{ steps.env.outputs.env }}"
+          python scripts/deploy/upload_inspector.py "${{ steps.env.outputs.env }}"

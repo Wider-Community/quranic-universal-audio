@@ -24,7 +24,7 @@ Where a reference doc here touches those domains (e.g. the route map in `archite
 | [frontend.md](frontend.md) | The Svelte 5 SPA — dashboard/timestamps/segments tabs, `lib/` cross-tab, stores, charts, peaks caching. |
 | [accordion-guides.md](accordion-guides.md) | Validation accordion help-modal guide templates (`tabs/segments/guides/`). |
 | [config-deploy.md](config-deploy.md) | Env vars, Space secrets, image build, deploy workflow, healthz, single-worker invariant. |
-| [data-migrations.md](data-migrations.md) | One-shot migration / backfill scripts (`inspector/scripts/`) — detection, apply CLI, rollback. |
+| [data-migrations.md](data-migrations.md) | One-shot migration / backfill scripts (`scripts/migrations/`, `scripts/backfills/`) — detection, apply CLI, rollback. |
 
 Audio: see `.claude/skills/inspector-audio/` (peaks, audio proxy/source, bucket audio/peaks read-only, VBR/Xing, probes).
 

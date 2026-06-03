@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Actor,
     PendingRequest,
     PendingRequestsFile,

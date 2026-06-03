@@ -15,7 +15,7 @@ Paired surfaces:
     cuts a standalone audio clip — then emits a draft ``GuideExample`` record.
 
 This is authoring infrastructure between the maintainer and the agent; it is
-deliberately schema-light (a flat dict, not a shared ``scripts/lib/schemas``
+deliberately schema-light (a flat dict, not a shared ``qua_shared/schemas``
 model) because nothing round-trips it through the pipeline.
 """
 

@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 # Ensure the repo root (parent of inspector/) is on sys.path so that
-# `from scripts.lib.X import Y` resolves to the sibling `scripts/lib/` package
+# `from qua_shared.X import Y` resolves to the sibling `qua_shared/` package
 # (e.g. `boundary_check`, used by the timestamps validator) when the app is
 # launched via `python3 inspector/app.py` from the repo root. Inside Docker
 # the WORKDIR is /app and both /app/inspector/ and /app/scripts/ are present
@@ -91,7 +91,7 @@ from services import state as state_service
 from services.admin import visitors as visitor_analytics
 from services.data_loader import load_surah_info_lite
 # Phonemizer was eagerly initialized here. It's now imported lazily inside
-# inspector/scripts/backfill_boundary_adj.py (the only remaining consumer).
+# scripts/backfills/backfill_boundary_adj.py (the only remaining consumer).
 from services.secrets_guard import MissingSecret, get_session_secret
 from services.errors import Codes, error_body
 from services.state.state import InvalidTransition, NotAuthorizedForTransition, UnknownReciter
@@ -515,7 +515,7 @@ if __name__ == "__main__":
     # Phonemizer is no longer used by the validate runtime path; the phonemic
     # side of boundary_adj is captured at backfill / extraction time and
     # persisted as ``is_boundary_adj`` on every segment. The remaining
-    # consumer is ``inspector/scripts/backfill_boundary_adj.py`` (offline)
+    # consumer is ``scripts/backfills/backfill_boundary_adj.py`` (offline)
     # which imports lazily on demand.
 
     # Timestamp data loads lazily on first request now (per-reciter cache in

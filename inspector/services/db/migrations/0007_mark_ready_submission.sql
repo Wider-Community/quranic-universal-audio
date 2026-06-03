@@ -18,6 +18,6 @@
 -- The runner wraps this file in BEGIN/…/PRAGMA user_version=7/COMMIT — do NOT
 -- add transaction control or a user_version pragma here.
 
-ALTER TABLE claims ADD COLUMN mark_ready_checklist      TEXT;   -- JSON: MarkReadyChecklist (scripts/lib/schemas/mark_ready.py)
+ALTER TABLE claims ADD COLUMN mark_ready_checklist      TEXT;   -- JSON: MarkReadyChecklist (qua_shared/schemas/mark_ready.py)
 ALTER TABLE claims ADD COLUMN mark_ready_comment_checks TEXT;   -- optional free text (additional checks performed)
 ALTER TABLE claims ADD COLUMN mark_ready_comment_issues TEXT;   -- optional free text (notes / suspected false positives)

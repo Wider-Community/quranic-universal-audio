@@ -98,7 +98,7 @@ The state machine, audit log, and per-reciter content are identical across kinds
 | `existing_reciter_new_combo` | `NULL` (slugless) | Reciter exists; the (riwayah, style) combo does not. Owner accepts (`accepted`, slug stays `NULL`); ingest mints the delivery. |
 | `new_reciter` | `NULL` (slugless) | Neither reciter nor delivery exists. Owner accepts, stamping a canonical `reciter_id` into the payload; ingest mints reciter + delivery. |
 
-Slugless intake submission shape (`scripts/lib/schemas/intake_requests.py`,
+Slugless intake submission shape (`qua_shared/schemas/intake_requests.py`,
 `routes/claims/requests.py::submit_intake` → `services/admin/intake.py::submit`):
 the row carries `kind`, `reciter_id` (combo only), `proposed_edits`
 (`ProposedEdits` — riwayah/style/identity/recording fields), `source`
@@ -266,11 +266,11 @@ write them.
 |---|---|
 | `services/segments/auto_detect.py` | reconciler loop, `SYSTEM_ACTOR`, catch-up firing |
 | `services/admin/intake.py` | slugless submit / owner-accept / probe / resolve |
-| `scripts/lib/schemas/intake_requests.py` | `IntakeSubmission`, `IntakeSource`, `IntakeAttestations` |
+| `qua_shared/schemas/intake_requests.py` | `IntakeSubmission`, `IntakeSource`, `IntakeAttestations` |
 | `services/db/repo_requests.py` | `requests` table — `submit`, `resolve_by_id` (slug back-fill), `set_payload` |
 | `services/state/catalog.py` | `add_reciter`, `add_delivery`, `add_source`, `add_channel` (the ingest mint calls) |
-| `scripts/lib/schemas/catalog.py` | `Delivery`, `ReciterEntry`, `Source`, `Channel`, `Vocab`, `AudioManifestSidecar` |
-| `scripts/lib/schemas/state.py` | `ReciterState` (catalogued → … → released) |
+| `qua_shared/schemas/catalog.py` | `Delivery`, `ReciterEntry`, `Source`, `Channel`, `Vocab`, `AudioManifestSidecar` |
+| `qua_shared/schemas/state.py` | `ReciterState` (catalogued → … → released) |
 | `routes/claims/requests.py` | submit / accept / probe / return / discard / **ingest** routes |
 | `services/auth/token_auth.py` | bearer-token OWNER auth (`resolve_owner_from_token`, id-only cache) |
 | `services/auth/access.py` | `resolve_role(hf_user_id)` for bearer + cookie auth |

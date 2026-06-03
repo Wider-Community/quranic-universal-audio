@@ -1,6 +1,6 @@
 # Segments editor
 
-The Segments tab is the full WIP editor: trim / split / merge / re-reference / delete / ignore, with auto-validation on save. Edits are `SegmentCommand`s applied by a pure reducer to a normalized client store, recorded as an op log, POSTed as a save payload, and replayed server-side against the same domain layer onto `detailed.json`. Save and undo round-trip through the Pydantic schemas in `scripts/lib/schemas/` — writers never construct dict literals.
+The Segments tab is the full WIP editor: trim / split / merge / re-reference / delete / ignore, with auto-validation on save. Edits are `SegmentCommand`s applied by a pure reducer to a normalized client store, recorded as an op log, POSTed as a save payload, and replayed server-side against the same domain layer onto `detailed.json`. Save and undo round-trip through the Pydantic schemas in `qua_shared/schemas/` — writers never construct dict literals.
 
 ## Module map
 
@@ -28,7 +28,7 @@ The Segments tab is the full WIP editor: trim / split / merge / re-reference / d
 | Adapters | `inspector/adapters/{save_payload,segments_json,detailed_json}.py` |
 | Routes (mutations) | `inspector/routes/segments/edit.py` |
 | Routes (read history) | `inspector/routes/segments/validation.py` |
-| On-disk schemas | `scripts/lib/schemas/{segment,edit_history}.py` |
+| On-disk schemas | `qua_shared/schemas/{segment,edit_history}.py` |
 
 ### Service-module import contract
 
@@ -164,13 +164,13 @@ Client → server, ordered. Mutating routes require `@require_same_origin` → `
 
 Cache invalidation (`services/storage/cache.py`): `pop_seg_caches_affected_by_segment_edit`, `append_history_batch` (extends cached parsed list in place — no re-parse), `_refresh_split_group_index_on_save` (pops split-group index only when batch has split ops), `pop_seg_auto_split` only when `batch_changes_segment_set`.
 
-### detailed.json segment shape — `scripts/lib/schemas/segment.py`
+### detailed.json segment shape — `qua_shared/schemas/segment.py`
 
 `DetailedSegment` (`extra="forbid"`): required `time_start`/`time_end`/`matched_ref`; `qalqala_letter`, `is_boundary_adj`, `confidence`, `wrap_word_ranges`, `segment_uid`, `ignored_categories`, `ignored` (legacy wildcard), `is_wasl`. Writers emit via `model_dump(exclude_none=True)`. Migration #5 dead fields stripped on read with INFO log: `matched_text`, `phonemes_asr`, `has_repeated_words`, plus snapshot-only `audio_url`/`chapter`/`entry_ref`/`index_at_save`/`display_text`. Unknown keys → WARNING + strip (writer-drift signal). `DetailedEntry` strips legacy `audio`. Both extraction (`.local/extraction/segments/outputs.py`) and Inspector save MUST round-trip through these models.
 
 ## edit_history.jsonl
 
-Append-only JSONL at the reciter's storage root (`<storage>/<slug>/edit_history.jsonl`, routed by `services/storage/data_dir.py`). Schema: `scripts/lib/schemas/edit_history.py`.
+Append-only JSONL at the reciter's storage root (`<storage>/<slug>/edit_history.jsonl`, routed by `services/storage/data_dir.py`). Schema: `qua_shared/schemas/edit_history.py`.
 
 | Record kind | Written by | Distinguishing field |
 |---|---|---|
@@ -212,6 +212,6 @@ Client store: `stores/history.ts` (`historyData`, `historyDataStale`, edit chain
 
 ## Auto-split / auto-detect
 
-**Auto-split** (`services/segments/auto_split.py`) is read-only lookup, not an edit op. MFA alignment that produces cursor positions runs **offline** (`scripts/lib/auto_split_precompute.py`), persisting `<reciter>/auto_split_v1.json` keyed by `segment_uid`. At runtime `POST /api/seg/auto-split/<reciter>` (`edit.py::seg_auto_split`) → `compute_auto_split` reads the sidecar via `load_auto_split` (O(1), in-memory) and returns `{cursors:int[]|None, refs:str[]|None, kind:"cross_verse"|"repetition"|null, source:"sidecar"|"miss"}`. On a miss the FE flips the button from *Auto Split* back to plain *Split* and falls back to manual single-cursor placement. The returned `cursors`/`refs` feed a `split` command (`cmd.splitMs` array + `cmd.refs`).
+**Auto-split** (`services/segments/auto_split.py`) is read-only lookup, not an edit op. MFA alignment that produces cursor positions runs **offline** (`qua_shared/auto_split_precompute.py`), persisting `<reciter>/auto_split_v1.json` keyed by `segment_uid`. At runtime `POST /api/seg/auto-split/<reciter>` (`edit.py::seg_auto_split`) → `compute_auto_split` reads the sidecar via `load_auto_split` (O(1), in-memory) and returns `{cursors:int[]|None, refs:str[]|None, kind:"cross_verse"|"repetition"|null, source:"sidecar"|"miss"}`. On a miss the FE flips the button from *Auto Split* back to plain *Split* and falls back to manual single-cursor placement. The returned `cursors`/`refs` feed a `split` command (`cmd.splitMs` array + `cmd.refs`).
 
 **Auto-detect** (`services/segments/auto_detect.py`) is unrelated to segment editing — it is the request-lifecycle reconciler that fires `reciter.alignment_completed` when new `reciters/<slug>/` folders appear (polling loop + `POST /api/admin/reconcile`). It does not touch `detailed.json` segments.

@@ -19,7 +19,7 @@ Migration #5 canonical shape (one record per line)::
 The pre-#5 verbose shape (``peaks: list[list[float]]`` + ``batch_id`` /
 ``duration_ms`` / ``saved_at_utc``) is rejected by ``_validate_record``;
 existing bucket files were re-encoded by ``migrate_wip5_in_place.py``. See
-``scripts/lib/schemas/peaks_history.py`` for the authoritative contract.
+``qua_shared/schemas/peaks_history.py`` for the authoritative contract.
 
 Writers: ``services/segments/save.py`` (runtime, slices baked chapter peaks
 via ``op_peaks.build_op_records``), the History on-play write-back POST, the
@@ -59,7 +59,7 @@ def _validate_record(rec: dict) -> str | None:
     peaks_b64}``. The pre-#5 ``peaks: list[list[float]]`` shape is no
     longer accepted; existing bucket records were re-encoded via
     ``migrate_wip5_in_place.py``. See
-    ``scripts/lib/schemas/peaks_history.py`` for the canonical contract.
+    ``qua_shared/schemas/peaks_history.py`` for the canonical contract.
     """
     op_id = rec.get("op_id")
     if not isinstance(op_id, str) or not op_id:

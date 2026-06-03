@@ -41,7 +41,7 @@ Exact tool names, `browser_evaluate` recipes (cold-load timing, heaviest-resourc
 |---|---|
 | FE bundle/transfer sizes, paint timings, Long Tasks, client decode cost, the *shape* of CPU cost, number/shape of `/api` requests a flow fires | Absolute `/api` response times, concurrent-user contention, single-worker serialization, bucket-read latency (mount vs `hffs` differs both ways) |
 
-The end goal is HF perf. Local is a flask dev server, your hardware, one user, a possibly-different mount. Concurrency effects are invisible with one local browser — reason about them via "× N" arithmetic. Calibrate the bucket-I/O gap with `inspector/scripts/bench_storage.py --mount` vs no-mount before trusting any save/append number.
+The end goal is HF perf. Local is a flask dev server, your hardware, one user, a possibly-different mount. Concurrency effects are invisible with one local browser — reason about them via "× N" arithmetic. Calibrate the bucket-I/O gap with `scripts/diagnostics/bench_storage.py --mount` vs no-mount before trusting any save/append number.
 
 ## Output format
 

@@ -13,7 +13,7 @@ def _state_row(slug: str, *, state: str = "awaiting_review",
                marked_ready: bool = False,
                assignee_hf_id: str | None = None,
                visibility: str = "public"):
-    from scripts.lib.schemas import ReciterRow, ReciterState, Visibility
+    from qua_shared.schemas import ReciterRow, ReciterState, Visibility
 
     return ReciterRow(
         slug=slug,
@@ -34,7 +34,7 @@ def _delivery(slug: str, *, reciter_id: str = "test_reciter",
               source: str = "mp3quran", channel: str = "mp3quran",
               audio_category: str = "by_surah",
               chapter_count: int = 114):
-    from scripts.lib.schemas import AudioCategory, Delivery
+    from qua_shared.schemas import AudioCategory, Delivery
 
     return Delivery(
         slug=slug,
@@ -54,7 +54,7 @@ def _delivery(slug: str, *, reciter_id: str = "test_reciter",
 
 def _reciter(reciter_id: str = "test_reciter", *, name_en: str = "Test Reciter",
              country: str | None = "Saudi Arabia"):
-    from scripts.lib.schemas import ReciterEntry
+    from qua_shared.schemas import ReciterEntry
 
     return ReciterEntry(
         reciter_id=reciter_id,
@@ -244,7 +244,7 @@ def test_to_public_reciter_skips_discarded_deliveries():
 
 def test_to_public_reciter_last_activity_is_max_state_since():
     from services.public_state import to_public_reciter
-    from scripts.lib.schemas import ReciterRow, ReciterState, Visibility
+    from qua_shared.schemas import ReciterRow, ReciterState, Visibility
 
     reciter = _reciter()
     dels = [_delivery("test_a"), _delivery("test_b")]

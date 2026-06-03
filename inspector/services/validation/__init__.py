@@ -31,7 +31,7 @@ from utils.references import is_by_ayah_source
 
 # Phonemizer is no longer loaded in the validate runtime path. The phonemic
 # side of boundary_adj is captured at backfill / extraction time via
-# ``inspector/scripts/backfill_boundary_adj.py`` (the sole quranic_phonemizer
+# ``scripts/backfills/backfill_boundary_adj.py`` (the sole quranic_phonemizer
 # consumer in the project) and persisted as ``is_boundary_adj`` on every
 # segment. The classifier reads the persisted value instead of recomputing —
 # canonical=None throughout the runtime path.
@@ -83,7 +83,7 @@ def _read_deleted_basmala_chapters(reciter: str) -> set[int]:
 
     Hard-fails on missing sidecar (clear deploy signal): silent skip would
     drop basmala_amin counts to 0 without anyone noticing. Run
-    ``inspector/scripts/backfill_deleted_basmala.py`` for any reciter that
+    ``scripts/backfills/backfill_deleted_basmala.py`` for any reciter that
     pre-dates the extraction-time write.
     """
     meta = load_pipeline_meta(reciter)

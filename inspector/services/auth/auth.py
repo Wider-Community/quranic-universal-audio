@@ -41,7 +41,7 @@ from authlib.integrations.flask_client import OAuth, FlaskIntegration
 from flask import request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from scripts.lib.schemas import Role
+from qua_shared.schemas import Role
 
 from . import access
 from .secrets_guard import MissingSecret, get_session_secret

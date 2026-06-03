@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from scripts.lib.schemas import Actor, Role
+from qua_shared.schemas import Actor, Role
 
 from services import db
 from services.db import repo_transitions

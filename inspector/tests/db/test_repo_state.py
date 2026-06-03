@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from scripts.lib.schemas import ReciterState, Visibility
+from qua_shared.schemas import ReciterState, Visibility
 
 from services import db
 from services.db import repo_state, repo_claims

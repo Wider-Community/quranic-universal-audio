@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from scripts.lib.schemas import Role
+from qua_shared.schemas import Role
 
 
 def _stub(role: Any = "contributor", hf_user_id: str = "u-1"):

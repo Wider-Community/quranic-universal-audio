@@ -63,7 +63,7 @@ Priority inside `resolve()` — **three tiers, no disk cache**:
 
 ## Manifest sidecar
 
-`catalog/audio_manifest/<slug>.json` — built offline by `scripts/audio/probe_audio_meta.py` (repo-root `scripts/`, not `inspector/scripts/`), single source of truth for chapter↔URL routing and VBR mode. On first access `audio_meta._load_sidecar` populates `cache._audio_manifest` (the entries) **and** derives `cache._audio_manifest_url_index` (a `{url: chapter_key}` reverse map) so `chapter_for_url` is O(1) instead of a per-request linear scan.
+`catalog/audio_manifest/<slug>.json` — built offline (the audio-probe pipeline lives in `.local/`), single source of truth for chapter↔URL routing and VBR mode. On first access `audio_meta._load_sidecar` populates `cache._audio_manifest` (the entries) **and** derives `cache._audio_manifest_url_index` (a `{url: chapter_key}` reverse map) so `chapter_for_url` is O(1) instead of a per-request linear scan.
 
 Entry shape (`<chapter_key> → entry`):
 
@@ -120,4 +120,4 @@ All bucket keys built by `services/storage/storage_paths.py` — never construct
 
 ## Why no Flask in `services/`
 
-Backend services are Flask-free by convention. `audio_source`, `audio_meta`, `audio_fetch`, `peaks` import from `services` / `scripts.lib` only. The route layer (`routes/audio/*.py`, `routes/segments/peaks.py`) is the thin parse → service → jsonify layer that holds Flask. New audio route → blueprint under `routes/audio/` (or `routes/segments/` for peaks), registered in `routes/__init__.py::register_blueprints`.
+Backend services are Flask-free by convention. `audio_source`, `audio_meta`, `audio_fetch`, `peaks` import from `services` / `qua_shared` only. The route layer (`routes/audio/*.py`, `routes/segments/peaks.py`) is the thin parse → service → jsonify layer that holds Flask. New audio route → blueprint under `routes/audio/` (or `routes/segments/` for peaks), registered in `routes/__init__.py::register_blueprints`.

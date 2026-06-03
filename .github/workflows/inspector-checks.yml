@@ -71,12 +71,22 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
           python -m pytest
 
+      - name: Run shared-package (qua_shared) tests
+        # qua_shared/ is a root-level package imported by the app; its tests
+        # assert byte-parity with inspector internals (e.g. peaks_slim), so they
+        # need both repo root and inspector/ on the path. The inspector run above
+        # never collects them (testpaths = inspector/tests).
+        working-directory: ${{ github.workspace }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/inspector
+        run: python -m pytest qua_shared/tests
+
   schema-codegen-check:
     # Verifies inspector/frontend/src/lib/types/generated/schemas.ts is in
-    # lockstep with scripts/lib/schemas/. If a backend pydantic schema
+    # lockstep with qua_shared/schemas/. If a backend pydantic schema
     # changes and the dev forgot to regen the FE types, this job fails
     # with `git diff --exit-code` on the generated file. See
-    # docs/reference/data-migrations.md §5 and inspector/scripts/regen_fe_types.py.
+    # docs/reference/data-migrations.md §5 and scripts/codegen/regen_fe_types.py.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -99,13 +109,33 @@ jobs:
           cd inspector/frontend && npm ci
 
       - name: Regenerate FE types
-        run: python inspector/scripts/regen_fe_types.py
+        run: python scripts/codegen/regen_fe_types.py
 
       - name: Verify no drift in generated/schemas.ts
         run: |
           if ! git diff --exit-code -- inspector/frontend/src/lib/types/generated/schemas.ts; then
             echo "::error::Generated FE types are out of sync. Run:"
-            echo "::error::  python inspector/scripts/regen_fe_types.py"
+            echo "::error::  python scripts/codegen/regen_fe_types.py"
             echo "::error::and commit the result."
             exit 1
           fi
+
+  scripts-layout-guard:
+    # Stops the old scattered-scripts layout from creeping back. Imported-at-runtime
+    # code is a package (qua_shared/ or qua_jobs/); operational CLIs live in
+    # scripts/<function>/. There is no scripts/lib, scripts/jobs, or inspector/scripts.
+    # See scripts/README.md for the placement rule.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No old scripts layout
+        run: |
+          bad_files=$(git ls-files 'scripts/lib/**' 'scripts/jobs/**' 'inspector/scripts/**')
+          bad_imports=$(git grep -nE '^[[:space:]]*(from|import)[[:space:]]+scripts\.(lib|jobs)' -- '*.py' || true)
+          if [ -n "$bad_files$bad_imports" ]; then
+            echo "::error::Old scripts layout reintroduced — imported code → qua_shared/ or qua_jobs/; CLIs → scripts/<function>/. See scripts/README.md"
+            [ -n "$bad_files" ] && { echo "Files in dead homes:"; echo "$bad_files"; }
+            [ -n "$bad_imports" ] && { echo "Old scripts.lib/scripts.jobs imports:"; echo "$bad_imports"; }
+            exit 1
+          fi
+          echo "scripts layout OK"

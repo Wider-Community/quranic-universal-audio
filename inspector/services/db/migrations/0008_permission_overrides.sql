@@ -2,7 +2,7 @@
 --
 -- Owner-configurable capability overrides. Backs the Admin dashboard →
 -- Permissions tab. Stores ONLY deviations from the registry default
--- (scripts/lib/schemas/capabilities.py): the absence of a row means "use the
+-- (qua_shared/schemas/capabilities.py): the absence of a row means "use the
 -- baseline default", and a reset is a DELETE. So an empty table reproduces
 -- the legacy hardcoded authorization bit-for-bit.
 --

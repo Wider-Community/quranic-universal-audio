@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Actor,
     PendingRequest,
     ProposedEdits,
@@ -51,7 +51,7 @@ def _seed_test_catalog_db():
     SQLite substrate so submit (FK) + apply_and_archive (edits) both work."""
     from datetime import datetime as _dt, timezone as _tz
 
-    from scripts.lib.schemas import (
+    from qua_shared.schemas import (
         AudioCategory, Channel, Delivery, ReciterEntry, RecordingContext,
         Riwayah, Source, Style, Vocab,
     )
@@ -298,7 +298,7 @@ def test_apply_and_archive_completed_warns_on_riwayah_style_conflict(seeded_cata
     svc, _ = seeded_catalog
     from datetime import datetime as _dt, timezone as _tz
 
-    from scripts.lib.schemas import AudioCategory, Delivery
+    from qua_shared.schemas import AudioCategory, Delivery
     from services import audit as audit_service
     from services import catalog as catalog_service
     from services import request_archive as request_archive_service

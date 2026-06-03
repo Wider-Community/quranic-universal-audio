@@ -150,7 +150,7 @@ def ts_tajweed_bridges(verse_ref):
     Response
     --------
     ``{"verse_ref", "stops", "bridges": [BridgeInfo, ...]}`` matching
-    :class:`scripts.lib.schemas.tajweed.TajweedBridgesResponse`.
+    :class:`qua_shared.schemas.tajweed.TajweedBridgesResponse`.
     """
     raw_stops = request.args.get("stops", "")
     stops = tuple(s for s in raw_stops.split(",") if s) if raw_stops else ()

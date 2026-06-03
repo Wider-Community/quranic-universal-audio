@@ -6,7 +6,7 @@ disagreement = low confidence). The widest beam is canonical.
 """
 from __future__ import annotations
 
-from scripts.lib.timestamps_pipeline import build_ts_validation
+from qua_shared.timestamps_pipeline import build_ts_validation
 
 OK = {"status": "ok"}
 FAIL = {"status": "error", "error": "boom"}
