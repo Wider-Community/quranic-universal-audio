@@ -71,6 +71,16 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
           python -m pytest
 
+      - name: Run shared-package (qua_shared) tests
+        # qua_shared/ is a root-level package imported by the app; its tests
+        # assert byte-parity with inspector internals (e.g. peaks_slim), so they
+        # need both repo root and inspector/ on the path. The inspector run above
+        # never collects them (testpaths = inspector/tests).
+        working-directory: ${{ github.workspace }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/inspector
+        run: python -m pytest qua_shared/tests
+
   schema-codegen-check:
     # Verifies inspector/frontend/src/lib/types/generated/schemas.ts is in
     # lockstep with qua_shared/schemas/. If a backend pydantic schema

@@ -6,8 +6,8 @@ on:
     paths:
       - "inspector/**"
       - "qua_shared/**"
+      - "qua_jobs/**"
       - "scripts/upload_inspector.py"
-      - "scripts/inspector_v2_seed/**"
       - "data/surah_info.json"
       - "data/qpc_hafs.json"
       - "data/digital_khatt_v2_script.json"
