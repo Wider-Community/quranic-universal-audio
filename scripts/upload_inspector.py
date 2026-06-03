@@ -39,6 +39,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 # Files NOT pushed to the Space repo: the uncompressed qpc_hafs.json is >10 MB
@@ -49,6 +50,13 @@ from pathlib import Path
 _SKIP_FROM_STAGE = ("data/qpc_hafs.json",)
 
 from huggingface_hub import HfApi
+from huggingface_hub.errors import HfHubHTTPError
+
+# HF rate limit is a fixed window (q=2500; w=300s) shared per-token across CI,
+# local dev, and bucket reads, so any concurrent burst can 429 the first call
+# of a deploy. These bound a polite Retry-After honoring backoff.
+_RATE_LIMIT_RETRIES = 5
+_RATE_LIMIT_DEFAULT_WAIT = 30  # seconds, when no Retry-After header is sent
 
 # Bring in the .env loader so HF_TOKEN is available.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -125,16 +133,48 @@ def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
     )
 
 
+def _retry_on_429(label: str, fn, *args, **kwargs):
+    """Call ``fn``, retrying on HTTP 429 with a Retry-After honoring backoff.
+
+    The Hub rate limit is a per-token fixed window shared across every process
+    using the token (CI, local dev, bucket reads), so a transient 429 here is
+    expected and retryable — not a fatal deploy error.
+    """
+    for attempt in range(1, _RATE_LIMIT_RETRIES + 1):
+        try:
+            return fn(*args, **kwargs)
+        except HfHubHTTPError as exc:
+            resp = exc.response
+            is_429 = resp is not None and resp.status_code == 429
+            if not is_429 or attempt == _RATE_LIMIT_RETRIES:
+                raise
+            wait = int(resp.headers.get("Retry-After", _RATE_LIMIT_DEFAULT_WAIT))
+            print(
+                f"==> 429 rate-limited on {label}; sleeping {wait}s "
+                f"(attempt {attempt}/{_RATE_LIMIT_RETRIES})",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+
+
 def _upload(stage_root: Path, repo_id: str, token: str, commit_msg: str) -> str:
     api = HfApi(token=token)
-    api.create_repo(
-        repo_id=repo_id,
-        repo_type="space",
-        space_sdk="docker",
-        private=True,
-        exist_ok=True,
-    )
-    api.upload_folder(
+    # The prod/dev Spaces are permanent — skip the create_repo call (it 409s on
+    # every deploy and still spends a request) unless the Space is actually
+    # missing, e.g. a first-time contributor bootstrap.
+    if not _retry_on_429("repo_exists", api.repo_exists, repo_id=repo_id, repo_type="space"):
+        _retry_on_429(
+            "create_repo",
+            api.create_repo,
+            repo_id=repo_id,
+            repo_type="space",
+            space_sdk="docker",
+            private=True,
+            exist_ok=True,
+        )
+    _retry_on_429(
+        "upload_folder",
+        api.upload_folder,
         folder_path=str(stage_root),
         repo_id=repo_id,
         repo_type="space",
@@ -145,7 +185,7 @@ def _upload(stage_root: Path, repo_id: str, token: str, commit_msg: str) -> str:
     # rebuild the container automatically — the new commit shows up in
     # the Space repo but the running container still serves the previous
     # bundle. Force a factory reboot so the new code actually runs.
-    api.restart_space(repo_id=repo_id, factory_reboot=True)
+    _retry_on_429("restart_space", api.restart_space, repo_id=repo_id, factory_reboot=True)
     return f"https://huggingface.co/spaces/{repo_id}"
 
 
