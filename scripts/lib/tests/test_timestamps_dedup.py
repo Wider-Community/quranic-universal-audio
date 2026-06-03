@@ -1,16 +1,30 @@
-"""Tests for v2 raw timestamps (build_raw_v2) + canonical dedup projection.
+"""End-to-end roundtrip for the segment-array timestamps pipeline.
 
-The load-bearing test is ``test_round_trip_matches_build_outputs``:
-``canonical_occurrence(build_raw_v2(x))`` must equal the pipeline's
-``build_outputs(x)`` byte-for-byte. Because both reuse the same
-``_normalize_from_results`` + ``_dedup_core``, equality is structural —
-this guards the v2 reshape (occurrence split + chapter regrouping +
-matched_refs reconstruction), not the dedup logic itself.
+Exercises the whole chain on synthetic MFA results, the way the offline writer
+and a release consumer compose:
+
+    build_raw_v2 -> build_segment_shards -> gzip_shard
+        -> gzip.decompress (== the inspector read-path pass-through body)
+        -> project_segment_shard (consumer dedup)
+
+The pass-through is byte-identity (``read_timestamps_chapter_gz`` returns the
+bucket gz verbatim and ``read_timestamps_chapter`` just inflates it), so
+decompressing the writer's gz here reproduces exactly what a consumer reads.
+An inspector-side test (``inspector/tests/services/test_ts_roundtrip.py``) goes
+through the real storage backend.
+
+Asserts the dedup-correctness invariants from
+``docs/planning/ts-segment-array-migration.md``:
+  (a) no schema mismatch (shard shape survives gzip → inflate → project);
+  (b) every verse reaches full word coverage in one contiguous occasion;
+  (c) audio-contiguous canonical clip bounds (one ``[start, end]`` span);
+  (d) within-pass loopbacks retained verbatim (never deduped);
+  (e) trailing post-completion redundancy trimmed.
 """
 
 from __future__ import annotations
 
-import copy
+import gzip
 import sys
 from pathlib import Path
 
@@ -18,10 +32,17 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+import orjson  # noqa: E402
+
 from scripts.lib.timestamps_dedup import (  # noqa: E402
-    build_raw_v2, canonical_occurrence, is_v2, project_chapter_shard,
+    build_raw_v2,
+    confidence_by_span,
+    project_segment_shard,
 )
-from scripts.lib.timestamps_pipeline import build_outputs  # noqa: E402
+from scripts.lib.timestamps_shards import (  # noqa: E402
+    build_segment_shards,
+    gzip_shard,
+)
 
 CAT = "by_surah_audio"
 
@@ -33,171 +54,183 @@ def _ok(locations, t0=0.0, step=0.5):
         s = t0 + i * step
         words.append({
             "location": loc, "start": s, "end": s + step,
-            "letters": [], "phones": [],
+            "letters": [{"char": "x", "start": s, "end": s + step}],
+            "phones": [{"phone": "P", "start": s, "end": s + step}],
         })
     return {"status": "ok", "words": words}
 
 
-def _chapter():
-    return {
+def _roundtrip(chapter, results, *, cat=CAT, conf_by_span=None):
+    """Full chain: raw v2 → segment shards → gz → inflate → consumer dedup.
+
+    Returns ``(shard_doc, projected)`` for the single chapter under test, where
+    ``shard_doc`` is the shape recovered after gzip → inflate (proving the
+    pass-through is byte-faithful) and ``projected`` is the canonical verse map.
+    """
+    v2 = build_raw_v2([chapter], results, cat)
+    shards = build_segment_shards(v2, audio_category=cat, src_meta=v2.get("_meta"))
+    assert len(shards) == 1, "fixtures use a single chapter"
+    (_ch, shard_doc), = shards.items()
+
+    # Writer gz == bucket gz == wire body (read path is a byte pass-through).
+    inflated = orjson.loads(gzip.decompress(gzip_shard(shard_doc)))
+    assert inflated == shard_doc, "(a) shard survives gzip → inflate unchanged"
+
+    projected = project_segment_shard(inflated, conf_by_span=conf_by_span)
+    return inflated, projected
+
+
+def _widxs(verse: dict) -> list[int]:
+    return [w[0] for w in verse["words"]]
+
+
+# --- the shard shape itself (schema-mismatch guard) ---
+
+def test_inflated_shard_is_segment_array():
+    chapter = {
         "ref": "1",
         "segments": [
-            {"matched_ref": "1:1:1-1:1:4", "time_start": 0, "time_end": 1000},
-            # re-recitation of 1:1 — the pipeline DROPS this run
-            {"matched_ref": "1:1:1-1:1:4", "time_start": 2000, "time_end": 3000},
-            # 1:2 — MFA failed
-            {"matched_ref": "1:2:1-1:2:3", "time_start": 3000, "time_end": 4000},
-            # cross-verse bleed seg
-            {"matched_ref": "1:2:1-1:3:2", "time_start": 4000, "time_end": 5000,
-             "segment_uid": "uid-xv"},
+            {"matched_ref": "1:1:1-1:1:3", "time_start": 0, "time_end": 1000},
         ],
     }
+    results = {0: [(0, _ok(["1:1:1", "1:1:2", "1:1:3"]))]}
+    shard, _proj = _roundtrip(chapter, results)
+    assert shard["_meta"]["schema_version"] == 2
+    assert isinstance(shard["segments"], list)
+    seg = shard["segments"][0]
+    assert set(seg) == {"ref", "t", "words"}
+    assert seg["ref"] == "1:1" and seg["t"] == [0, 1000]
+    assert all(len(w) == 5 for w in seg["words"])  # [widx, s, e, letters, phones]
 
 
-def _results():
-    return {0: [
-        (0, _ok(["1:1:1", "1:1:2"])),
-        (1, _ok(["1:1:1", "1:1:2"], t0=2.0)),
-        (2, {"status": "error", "error": "timeout"}),
-        (3, _ok(["1:2:1", "1:3:1"], t0=4.0)),
-    ]}
+# --- (b) full coverage in one contiguous occasion + (c) contiguous clip ---
 
-
-def _build_outputs(chapter, results):
-    return build_outputs(
-        results, None,
-        chapters=[chapter], completed_surahs=set(), completed_refs=set(),
-        refresh_surahs=None, audio_category=CAT,
-    )
-
-
-# --- build_raw_v2: occurrence preservation (the whole point of v2) ---
-
-def test_repeated_verse_preserves_both_occurrences():
-    raw = build_raw_v2([_chapter()], _results(), CAT)
-    occs = raw["1:1"]
-    assert len(occs) == 2, "both re-recitation runs must be preserved (not deduped)"
-    assert [o["seg_index"] for o in occs] == [0, 1]
-    assert all(set(o["words_by_verse"]) == {"1:1"} for o in occs)
-
-
-def test_cross_verse_kept_under_compound_key_with_split_words():
-    raw = build_raw_v2([_chapter()], _results(), CAT)
-    assert "1:2:1-1:3:2" in raw and len(raw["1:2:1-1:3:2"]) == 1
-    wbv = raw["1:2:1-1:3:2"][0]["words_by_verse"]
-    assert set(wbv) == {"1:2", "1:3"}, "cross-verse words routed per verse, occurrence intact"
-    assert "1:2" not in raw  # not collapsed to a single-verse top-level key
-
-
-def test_failed_seg_recorded_not_emitted():
-    raw = build_raw_v2([_chapter()], _results(), CAT)
-    fails = raw["_meta"]["mfa_failures"]
-    assert len(fails) == 1 and fails[0]["seg"] == 2 and fails[0]["ref"] == "1:2:1-1:2:3"
-
-
-def test_word_shape_offsets_and_uid_passthrough():
-    raw = build_raw_v2([_chapter()], _results(), CAT)
-    w0 = raw["1:1"][1]["words_by_verse"]["1:1"][0]  # 2nd run, seg offset 2000ms, word at 2.0s
-    assert len(w0) == 5 and w0[0] == 1 and w0[1] == 4000  # widx + (2.0s -> 2000ms) + 2000 offset
-    assert isinstance(w0[3], list) and isinstance(w0[4], list)
-    assert raw["1:2:1-1:3:2"][0]["segment_uid"] == "uid-xv"
-    assert raw["1:1"][0]["segment_uid"] is None
-
-
-# --- the structural guarantee ---
-
-def test_round_trip_matches_build_outputs():
-    chapter, results = _chapter(), _results()
-    expected, _words, _fails = _build_outputs(copy.deepcopy(chapter), copy.deepcopy(results))
-    v2 = build_raw_v2([copy.deepcopy(chapter)], copy.deepcopy(results), CAT)
-    got = canonical_occurrence(v2, CAT)
-    assert got == expected, "canonical_occurrence(build_raw_v2(x)) must equal build_outputs(x)"
-
-
-def test_adjacent_same_verse_is_within_verse_stutter():
-    # Two ADJACENT 1:1 segs are one run (contiguity) -> within-verse stutter,
-    # both kept (not a re-recitation skip). Documents the _repeat_pass rule.
-    got = canonical_occurrence(build_raw_v2([_chapter()], _results(), CAT), CAT)
-    assert sorted(w[0] for w in got["1:1"]["words"]) == [1, 1, 2, 2]
-    assert "verse_start_ms" in got["1:1"] and "verse_end_ms" in got["1:1"]
-
-
-def _chapter_rerecite():
-    # 1:1 take A, then 1:2 (breaks the run), then a fuller 1:1 take B.
-    return {
+def test_sequential_full_coverage_one_occasion():
+    # 1:1 recited in two adjacent segments: words 1-2 then 3-4. One occasion.
+    chapter = {
         "ref": "1",
         "segments": [
             {"matched_ref": "1:1:1-1:1:2", "time_start": 0, "time_end": 1000},
-            {"matched_ref": "1:2:1-1:2:3", "time_start": 1000, "time_end": 2000},
-            {"matched_ref": "1:1:1-1:1:4", "time_start": 2000, "time_end": 3000},
+            {"matched_ref": "1:1:3-1:1:4", "time_start": 1000, "time_end": 2000},
         ],
     }
-
-
-def _results_rerecite():
-    return {0: [
-        (0, _ok(["1:1:1", "1:1:2"])),                          # take A: widx 1-2
-        (1, _ok(["1:2:1", "1:2:2", "1:2:3"], t0=1.0)),
-        (2, _ok(["1:1:1", "1:1:2", "1:1:3", "1:1:4"], t0=2.0)),  # take B: widx 1-4 (wider, wins)
+    results = {0: [
+        (0, _ok(["1:1:1", "1:1:2"])),
+        (1, _ok(["1:1:3", "1:1:4"], t0=1.0)),
     ]}
+    _shard, proj = _roundtrip(chapter, results)
+    assert _widxs(proj["1:1"]) == [1, 2, 3, 4], "(b) full {1..4} coverage"
+    # (c) one contiguous [start, end] clip spanning both segments.
+    assert proj["1:1"]["verse_start_ms"] == 0
+    assert proj["1:1"]["verse_end_ms"] == 2000
 
 
-def test_round_trip_skips_losing_rerecitation():
-    chapter, results = _chapter_rerecite(), _results_rerecite()
-    expected, _w, _f = _build_outputs(copy.deepcopy(chapter), copy.deepcopy(results))
-    got = canonical_occurrence(
-        build_raw_v2([copy.deepcopy(chapter)], copy.deepcopy(results), CAT), CAT)
-    assert got == expected, "round-trip must hold through the repeat-pass skip"
-    # build_raw_v2 preserves BOTH takes; the projection keeps only the wider one
-    raw = build_raw_v2([chapter], results, CAT)
-    assert len(raw["1:1"]) == 2, "raw preserves both re-recitation takes"
-    assert sorted(w[0] for w in got["1:1"]["words"]) == [1, 2, 3, 4], "wider take B wins"
+# --- (d) within-pass loopback retained verbatim ---
+
+def test_within_pass_loopback_retained():
+    # w1-4, then loops back to 3-5, then 4-5: completes {1..5} at the 2nd seg;
+    # the 3rd is trailing. All within one occasion (no foreign verse).
+    chapter = {
+        "ref": "1",
+        "segments": [
+            {"matched_ref": "1:1:1-1:1:4", "time_start": 0, "time_end": 1000},
+            {"matched_ref": "1:1:3-1:1:5", "time_start": 1000, "time_end": 2000},
+            {"matched_ref": "1:1:4-1:1:5", "time_start": 2000, "time_end": 3000},
+        ],
+    }
+    results = {0: [
+        (0, _ok(["1:1:1", "1:1:2", "1:1:3", "1:1:4"])),
+        (1, _ok(["1:1:3", "1:1:4", "1:1:5"], t0=1.0)),
+        (2, _ok(["1:1:4", "1:1:5"], t0=2.0)),
+    ]}
+    _shard, proj = _roundtrip(chapter, results)
+    # (d) loopback words (the repeated 3,4) kept; (e) trailing [4,5] seg trimmed.
+    assert _widxs(proj["1:1"]) == [1, 2, 3, 4, 3, 4, 5]
+    assert proj["1:1"]["verse_end_ms"] == 2000  # trailing seg dropped
 
 
-def test_round_trip_by_ayah():
+# --- (e) trailing post-completion redundancy trimmed ---
+
+def test_trailing_redundant_redo_trimmed():
+    # 1:1 completes {1,2,3}, then a redundant full re-do in the same occasion.
+    chapter = {
+        "ref": "1",
+        "segments": [
+            {"matched_ref": "1:1:1-1:1:3", "time_start": 0, "time_end": 1000},
+            {"matched_ref": "1:1:1-1:1:3", "time_start": 1000, "time_end": 2000},
+        ],
+    }
+    results = {0: [
+        (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
+        (1, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.0)),
+    ]}
+    _shard, proj = _roundtrip(chapter, results)
+    assert _widxs(proj["1:1"]) == [1, 2, 3]
+    assert proj["1:1"]["verse_end_ms"] == 1000  # (e) trailing re-do trimmed
+
+
+# --- multi-occasion: interleaved re-do → one canonical take, highest conf ---
+
+def test_two_occasions_highest_confidence_wins():
+    # 1:1 take A, then 1:2 (breaks the run), then 1:1 take B (both complete).
+    chapter = {
+        "ref": "1",
+        "segments": [
+            {"matched_ref": "1:1:1-1:1:3", "time_start": 0, "time_end": 1000},
+            {"matched_ref": "1:2:1-1:2:2", "time_start": 1000, "time_end": 1500},
+            {"matched_ref": "1:1:1-1:1:3", "time_start": 1500, "time_end": 2500},
+        ],
+    }
+    results = {0: [
+        (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
+        (1, _ok(["1:2:1", "1:2:2"], t0=1.0)),
+        (2, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.5)),
+    ]}
+    # detailed.json confidence join: take B (1500-2500) beats take A (0-1000).
+    detailed = {"entries": [{"ref": 1, "segments": [
+        {"time_start": 0, "time_end": 1000, "confidence": 0.40},
+        {"time_start": 1000, "time_end": 1500, "confidence": 0.99},
+        {"time_start": 1500, "time_end": 2500, "confidence": 0.95},
+    ]}]}
+    _shard, proj = _roundtrip(
+        chapter, results, conf_by_span=confidence_by_span(detailed))
+    assert set(proj) == {"1:1", "1:2"}
+    # 1:1 canonical = take B (one contiguous occasion); 1:2 = its only take.
+    assert proj["1:1"]["verse_start_ms"] == 1500
+    assert proj["1:1"]["verse_end_ms"] == 2500
+    assert _widxs(proj["1:1"]) == [1, 2, 3]
+    assert _widxs(proj["1:2"]) == [1, 2]
+
+
+def test_two_occasions_no_confidence_falls_back_to_earliest():
+    chapter = {
+        "ref": "1",
+        "segments": [
+            {"matched_ref": "1:1:1-1:1:3", "time_start": 0, "time_end": 1000},
+            {"matched_ref": "1:2:1-1:2:2", "time_start": 1000, "time_end": 1500},
+            {"matched_ref": "1:1:1-1:1:3", "time_start": 1500, "time_end": 2500},
+        ],
+    }
+    results = {0: [
+        (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
+        (1, _ok(["1:2:1", "1:2:2"], t0=1.0)),
+        (2, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.5)),
+    ]}
+    _shard, proj = _roundtrip(chapter, results)  # no confidence
+    assert proj["1:1"]["verse_start_ms"] == 0  # earliest completing occasion
+
+
+# --- by_ayah chapter ref ("2:255") projects the same way ---
+
+def test_by_ayah_roundtrip():
     chapter = {
         "ref": "2:255",
         "segments": [
-            {"matched_ref": "2:255:1-2:255:10", "time_start": 0, "time_end": 4000},
+            {"matched_ref": "2:255:1-2:255:3", "time_start": 0, "time_end": 4000},
         ],
     }
-    results = {0: [(0, _ok(["2:255:1", "2:255:2"]))]}
-    cat = "by_ayah_audio"
-    expected, _w, _f = build_outputs(
-        results, None, chapters=[copy.deepcopy(chapter)],
-        completed_surahs=set(), completed_refs=set(),
-        refresh_surahs=None, audio_category=cat)
-    v2 = build_raw_v2([copy.deepcopy(chapter)], copy.deepcopy(results), cat)
-    got = canonical_occurrence(v2, cat)
-    assert got == expected
-
-
-# --- read-path shard projection (is_v2 / project_chapter_shard) ---
-
-def test_is_v2_detection():
-    v2 = build_raw_v2([_chapter()], _results(), CAT)
-    assert is_v2(v2) is True
-    v1 = canonical_occurrence(v2, CAT)  # verse-map (values are dicts)
-    assert is_v2(v1) is False
-
-
-def test_project_v1_passthrough_identity():
-    v1 = {"_meta": {"audio_category": "by_surah"},
-          **canonical_occurrence(build_raw_v2([_chapter()], _results(), CAT), CAT)}
-    assert project_chapter_shard(v1) is v1  # unchanged for existing v1 shards
-
-
-def test_project_v2_dedup_matches_canonical():
-    v2 = build_raw_v2([_chapter()], _results(), CAT)
-    v2["_meta"]["audio_category"] = "by_surah"  # shard-convention (no _audio suffix)
-    served = project_chapter_shard(v2, full=False)
-    assert isinstance(served["1:1"], dict), "deduped verse value is a dict, not occurrences"
-    expected = canonical_occurrence(v2, "by_surah")  # also exercises the startswith fix
-    assert {k: v for k, v in served.items() if k != "_meta"} == expected
-    assert served["_meta"] is v2["_meta"]
-
-
-def test_project_v2_full_passthrough():
-    v2 = build_raw_v2([_chapter()], _results(), CAT)
-    assert project_chapter_shard(v2, full=True) is v2  # raw, every occurrence
-    assert isinstance(v2["1:1"], list)
+    results = {0: [(0, _ok(["2:255:1", "2:255:2", "2:255:3"]))]}
+    shard, proj = _roundtrip(chapter, results, cat="by_ayah_audio")
+    assert shard["_meta"]["audio_category"] == "by_ayah"
+    assert shard["segments"][0]["ref"] == "2:255"
+    assert _widxs(proj["2:255"]) == [1, 2, 3]

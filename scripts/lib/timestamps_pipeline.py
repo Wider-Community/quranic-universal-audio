@@ -788,10 +788,9 @@ def mfa_wait_result(event_id, headers, base_url, timeout=DEFAULT_TIMEOUT):
 def _normalize_from_results(chapters, results_by_ch, audio_category):
     """Convert raw MFA results to per-chapter ordered occurrences + failures.
 
-    The conversion + per-verse word routing half of the former
-    ``_build_outputs`` closure, factored out so the deduped projection
-    (``_dedup_core``) is shared between the live pipeline and the
-    read-path ``canonical_occurrence`` (single implementation, no drift).
+    The conversion + per-verse word routing core; ``build_raw_v2`` (in
+    ``timestamps_dedup``) consumes its output to build the raw v2 document the
+    segment-array writer emits.
 
     Returns ``(norm, failures)`` where ``norm[ch_idx]`` is a list of
     occurrences in result order::
@@ -956,12 +955,10 @@ def _dedup_core(chapters_norm, seed_existing, *, completed_surahs,
 def build_outputs(results_by_ch, seed_existing, *, chapters,
                   completed_surahs, completed_refs, refresh_surahs,
                   audio_category):
-    """Module-level form of the former ``_build_outputs`` closure.
+    """Convert + dedup MFA results to ``(full_data, words_data, mfa_failures)``.
 
     ``_normalize_from_results`` (convert + verse-route) → ``_dedup_core``
-    (skip + merge + bounds). ``canonical_occurrence`` reuses the SAME
-    ``_dedup_core`` over stored v2, so the deduped projection cannot drift
-    from what the pipeline wrote. Returns ``(full_data, words_data, mfa_failures)``.
+    (skip + merge + bounds).
     """
     norm, failures = _normalize_from_results(chapters, results_by_ch, audio_category)
     chapters_norm = []
