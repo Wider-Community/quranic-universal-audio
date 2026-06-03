@@ -66,6 +66,7 @@ title: {title}
 emoji: 🎙️
 colorFrom: yellow
 colorTo: indigo
+short_description: Visualize, edit, and verify word- and letter-level Qur'anic recitation timestamps at scale.
 sdk: docker
 app_port: 7860
 pinned: false
