@@ -156,21 +156,22 @@ def _load_audio_manifest(slug: str) -> dict | None:
         return None
 
 
-def _load_timestamps_shards(slug: str) -> dict[str, dict]:
-    """Read every ``reciters/<slug>/timestamps/<ch>.json.gz`` shard, project
-    each to the canonical verse-map shape, and merge into one global dict.
+def _load_timestamps_shards(slug: str, detailed: dict | None = None) -> dict[str, dict]:
+    """Read every ``reciters/<slug>/timestamps/<ch>.json.gz`` segment-array shard,
+    project each to the canonical verse map (completion-based occasion dedup),
+    and merge into one global dict.
 
-    Returns ``{"surah:ayah": {"words": [...], "verse_start_ms", "verse_end_ms"},
-    "_meta": {...}}`` — same shape build_reciter.py's ``load_data`` produces
-    after reshaping.
+    Per-segment confidence is joined from ``detailed`` so the highest-confidence
+    completing occasion wins. Returns ``{"surah:ayah": {"words": [...],
+    "verse_start_ms", "verse_end_ms"}}``.
     """
-    from qua_shared.timestamps_dedup import project_chapter_shard
+    from qua_shared.timestamps_dedup import confidence_by_span, project_segment_shard
 
     ts_dir = _bucket_root() / "reciters" / slug / "timestamps"
     out: dict[str, dict] = {}
-    meta: dict = {}
     if not ts_dir.exists():
         return out
+    conf_by_span = confidence_by_span(detailed)
     for path in sorted(ts_dir.iterdir(),
                        key=lambda p: int(p.name.split(".", 1)[0])
                        if p.name.split(".", 1)[0].isdigit() else 0):
@@ -181,15 +182,7 @@ def _load_timestamps_shards(slug: str) -> dict[str, dict]:
         if name.endswith(".gz"):
             raw = gzip.decompress(raw)
         shard = json.loads(raw)
-        # Project v2 (occurrence list) → canonical verse map. v1 dicts pass through.
-        canonical = project_chapter_shard(shard, full=False)
-        for k, v in canonical.items():
-            if k == "_meta":
-                meta = v if not meta else meta
-                continue
-            out[k] = v
-    if meta:
-        out["_meta"] = meta
+        out.update(project_segment_shard(shard, conf_by_span=conf_by_span))
     return out
 
 
@@ -711,7 +704,7 @@ def main() -> int:
     # 1. Load bucket artifacts.
     detailed = _load_detailed(slug)
     audio_manifest = _load_audio_manifest(slug)
-    canonical = _load_timestamps_shards(slug)
+    canonical = _load_timestamps_shards(slug, detailed)
     if not canonical:
         log.error("no timestamps shards on bucket for %s", slug)
         return 3

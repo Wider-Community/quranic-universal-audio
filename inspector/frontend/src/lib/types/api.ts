@@ -67,8 +67,7 @@ export interface TsManifestReciter {
     /** "by_surah" or "by_ayah" — shard-internal short form, not "*_audio". */
     audio_category: 'by_surah' | 'by_ayah';
     /** Templated URL (`{surah:03d}` / `{ayah:03d}`). Empty string when audio
-     *  manifests don't fit a templatable pattern; clients then fall back to
-     *  per-verse URLs in the shard's `_meta.audio_urls`. */
+     *  manifests don't fit a templatable pattern. */
     url_template: string;
     /** Sorted list of chapter numbers the reciter has shards for. */
     ts_chapters: number[];
@@ -125,19 +124,18 @@ export interface TsManifestResponse {
     reciters: Record<string, TsManifestReciter>;
 }
 
-/** Per-shard `_meta` block. Aligner-side fields (padding, beam, …) pass through. */
+/** Slim per-shard `_meta` block. Aligner provenance (padding, beam, method,
+ *  aligner_model, shared_cmvn, audio_source, created_at) passes through when
+ *  present. Audio routing (reciter / url_template / audio_urls) is NOT carried
+ *  here — the audio-manifest sidecar is the source of truth. */
 export interface TsShardMeta {
     schema_version: number;
-    reciter: string;
     chapter: number;
     audio_category: 'by_surah' | 'by_ayah';
-    url_template: string;
-    /** Per-verse audio URL fallback when `url_template` is empty. */
-    audio_urls?: Record<string, string>;
     [k: string]: unknown;
 }
 
-/** Encoded verse row inside a shard. Flat tuples to keep gzipped payload small. */
+/** Encoded word inside a segment. Flat tuples to keep gzipped payload small. */
 export type TsShardWord = [
     /** word_idx (1-based) */ number,
     /** start_ms */ number,
@@ -146,13 +144,21 @@ export type TsShardWord = [
     /** phones: [phone, start_ms, end_ms, ...optional flags][] */ Array<(string | number | boolean)[]>,
 ];
 
-/** Verse value inside a shard — either ``{words: [...]}`` or a bare list. */
-export type TsShardVerse = { words: TsShardWord[]; [k: string]: unknown } | TsShardWord[];
+/** One recited segment in a chapter's temporal `segments[]` array. `ref` is
+ *  always a single verse `"surah:ayah"`; `t` is the segment's `[start_ms,
+ *  end_ms]` span. A verse may recur across several entries (loopbacks / re-dos)
+ *  — every accepted occurrence is one entry, in recitation order. */
+export interface SegmentEntry {
+    ref: string;
+    t: [number, number];
+    words: TsShardWord[];
+}
 
-/** Body of one chapter shard (decompressed). Verse keys may be compound (e.g. "37:151:3-37:152:2"). */
+/** Body of one chapter shard (decompressed): slim `_meta` + a flat
+ *  recitation-ordered `segments[]` array. */
 export interface TsShardResponse {
     _meta: TsShardMeta;
-    [verseRef: string]: TsShardMeta | TsShardVerse;
+    segments: SegmentEntry[];
 }
 
 /** Verse payload assembled by the frontend ts_client — same shape as the legacy

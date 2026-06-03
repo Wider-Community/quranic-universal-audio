@@ -2,10 +2,11 @@
 
 Bucket-only: manifest is composed from state (released reciters)
 + catalog (display + delivery metadata) + audio_manifest sidecars (URL
-template). Per-chapter shards read from
-``<bucket>/reciters/<slug>/timestamps/<chapter>.json`` on demand and gzip
-through a small per-process LRU so chapter scrubbing within one reciter
-doesn't pay the bucket fetch + gzip cost on every shard hit.
+template). Per-chapter shards are read as raw gzip from
+``<bucket>/reciters/<slug>/timestamps/<chapter>.json.gz`` on demand — the
+bucket gz body is the wire body (segment-array shape), so serving is a byte
+pass-through cached through a small per-process LRU so chapter scrubbing
+within one reciter doesn't re-pay the bucket fetch.
 
 ``invalidate()`` drops the cache for tests / future hot-reload.
 """
@@ -22,7 +23,6 @@ from datetime import datetime, timezone
 from config import DK_SCRIPT_PATH
 from qua_shared.schemas import ReciterCatalog
 from qua_shared.timestamps_shards import SCHEMA_VERSION, derive_url_template
-from qua_shared.timestamps_dedup import is_v2, project_chapter_shard
 from services.storage import data_dir, static_refs
 from services.state import catalog as catalog_service
 from services.state import state as state_service
@@ -248,41 +248,21 @@ def _ensure_built() -> None:
         )
 
 
-def _shard_payload(raw: bytes, full: bool) -> bytes:
-    """Return the gzipped shard body to serve.
+def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
+    """Return the raw gzipped per-chapter shard from the bucket, or ``None``.
 
-    v1 shards (verse-map) pass through byte-identical — the entire current
-    bucket is v1, so this is a no-op for existing data. v2 shards
-    (occurrence lists) are deduped to the historical verse-map shape at read
-    time via ``project_chapter_shard``; ``full=True`` serves every occurrence
-    (owner preview / aligner "show all").
+    The bucket gz body IS the wire body (segment-array shape, slim ``_meta``) —
+    the read path is a byte pass-through, no inflate/reshape/recompress. LRU
+    so chapter scrubbing within one reciter doesn't re-pay the bucket fetch.
     """
-    try:
-        doc = json.loads(raw)
-    except (ValueError, TypeError):
-        doc = None
-    if isinstance(doc, dict) and is_v2(doc):
-        served = project_chapter_shard(doc, full=full)
-        raw = json.dumps(served, ensure_ascii=False).encode("utf-8")
-    return gzip.compress(raw, compresslevel=6, mtime=0)
-
-
-def _load_bucket_shard(reciter: str, chapter: int, full: bool = False) -> bytes | None:
-    """Read + gzip a per-chapter timestamps file from the bucket.
-
-    LRU-cached (keyed on the ``full`` view too) so chapter scrubbing within
-    one reciter doesn't pay the bucket fetch + gzip cost on every hit. v2
-    shards are deduped at read time — see ``_shard_payload``.
-    """
-    key = (reciter, chapter, full)
+    key = (reciter, chapter)
     cached = _shard_lru.get(key)
     if cached is not None:
         _shard_lru.move_to_end(key)
         return cached
-    raw = data_dir.read_timestamps_chapter(reciter, chapter)
-    if raw is None:
+    body = data_dir.read_timestamps_chapter_gz(reciter, chapter)
+    if body is None:
         return None
-    body = _shard_payload(raw, full)
     _shard_lru[key] = body
     _shard_lru.move_to_end(key)
     while len(_shard_lru) > _SHARD_LRU_CAP:
@@ -299,7 +279,6 @@ def manifest_bytes() -> bytes:
 def shard_bytes(
     reciter: str,
     chapter: int,
-    full: bool = False,
     allow_unreleased: bool = False,
 ) -> bytes | None:
     _ensure_built()
@@ -312,7 +291,7 @@ def shard_bytes(
     # generated-but-unreleased reciter's shards.
     if reciter not in _served_slugs and not allow_unreleased:
         return None
-    return _load_bucket_shard(reciter, chapter, full)
+    return _load_bucket_shard(reciter, chapter)
 
 
 def ts_validation_doc(

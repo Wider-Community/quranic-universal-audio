@@ -152,6 +152,11 @@ class Delivery(BaseModel):
 
     source: str = Field(..., min_length=1)
     channel: str = Field(..., min_length=1)
+    #: Originating playlist/set/collection URL for download-only sources
+    #: (YouTube playlist, SoundCloud set, archive item). NULL for CDN deliveries
+    #: — their per-chapter URLs live in the audio_manifest sidecar. Surfaced on
+    #: PublicDelivery so the reciter-detail channel cell can hyperlink to it.
+    source_url: str | None = None
     audio_category: AudioCategory
     chapter_count: int = Field(..., ge=0)
 

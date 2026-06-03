@@ -391,7 +391,21 @@ def _build_delivery(
     delivery_in: dict, *, audio_category: AudioCategory, chapter_count: int, actor: Actor
 ) -> Delivery:
     """Construct the :class:`Delivery` model from the ingest body. ``chapter_count``
-    is derived from the manifest; ``added_*`` are stamped server-side."""
+    is derived from the manifest; ``added_*`` are stamped server-side.
+
+    The audio rollup (``bitrate_mode`` / ``bitrate_kbps_nominal`` /
+    ``sample_rate_hz`` / ``total_duration_sec``) is optional — the offline
+    pipeline sends it when it can probe the audio (e.g. the post-align reprobe of
+    a YouTube delivery's persisted mp3s); absent, the Delivery defaults stand
+    (``unknown`` / null)."""
+    # Only override the audio-rollup defaults the body actually carries — passing
+    # bitrate_mode=None would fail the enum, and None kbps/rate/duration are the
+    # model defaults anyway.
+    rollup = {
+        k: delivery_in[k]
+        for k in ("bitrate_mode", "bitrate_kbps_nominal", "sample_rate_hz", "total_duration_sec")
+        if delivery_in.get(k) is not None
+    }
     try:
         return Delivery(
             slug=delivery_in["slug"],
@@ -400,12 +414,14 @@ def _build_delivery(
             style=delivery_in["style"],
             source=delivery_in["source"],
             channel=delivery_in["channel"],
+            source_url=delivery_in.get("source_url"),
             audio_category=audio_category,
             chapter_count=chapter_count,
             recording_context=delivery_in.get("recording_context"),
             recording_year=delivery_in.get("recording_year"),
             added_at=datetime.now(timezone.utc),
             added_by_hf_id=actor.hf_user_id,
+            **rollup,
         )
     except (KeyError, ValidationError) as e:
         raise IngestBadRequest(f"invalid delivery: {e}") from e

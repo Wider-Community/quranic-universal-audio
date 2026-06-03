@@ -12,12 +12,16 @@
         "Bash(head:*)",
         "Bash(cat:*)",
         "Bash(echo:*)",
-        "Bash(tail:*)"
-      ],
-      "ask": [
+        "Bash(tail:*)",
         "Bash(sed:*)",
-        "Bash(awk:*)"
-      ]
+        "Bash(awk:*)",
+        "Bash(cd:*)",
+        "Bash(ls:*)",
+        "Bash(find:*)",
+        "Bash(wc:*)",
+        "Bash(rg:*)"
+      ],
+      "ask": []
     },
     "skillListingBudgetFraction": 0.8,
     "hooks": {

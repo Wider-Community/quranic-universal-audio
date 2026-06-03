@@ -77,6 +77,7 @@ export interface PublicDelivery {
     source: string;
     channel: string;
     channel_name: string;
+    source_url: string | null;          // originating playlist URL (download-only sources); channel hyperlink target
     audio_category: string;
     chapter_count: number;
     coverage_kind: 'full' | 'partial';

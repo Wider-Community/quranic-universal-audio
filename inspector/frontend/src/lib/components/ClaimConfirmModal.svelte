@@ -9,8 +9,6 @@
     hit a 409. Owners may hold multiple claims, so the warning is skipped for them.
 -->
 <script lang="ts">
-    import { get } from 'svelte/store';
-
     import { loadCatalog } from '../../tabs/dashboard/stores/catalog-data';
     import { claim } from '../api/claims-client';
     import { refreshReciterTask } from '../api/reciter-task';

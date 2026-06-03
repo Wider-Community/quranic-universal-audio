@@ -176,7 +176,7 @@ Entry view: public catalog browse/search/filter/play + admin controls.
 
 ### `tabs/timestamps/`
 
-Waveform + phoneme display for published reciters (plus owner preview of generated-but-unreleased shards — the read-path honors the `timestamps.view_unreleased` capability; see [timestamps-job.md](timestamps-job.md)). Shards are v2 `.json.gz`, deduped to the single-take view on serve; `?full=1` returns every occurrence.
+Waveform + phoneme display for published reciters (plus owner preview of generated-but-unreleased shards — the read-path honors the `timestamps.view_unreleased` capability; see [timestamps-job.md](timestamps-job.md)). Shards are temporal segment-array `.json.gz` (every recited segment raw, recitation order; served as a byte pass-through). `ts-source.ts` groups segments by verse and reduces each verse to its canonical (completing) occasion for the default per-verse clip.
 
 | Path | Role |
 |---|---|

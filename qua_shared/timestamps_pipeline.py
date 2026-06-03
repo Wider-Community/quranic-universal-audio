@@ -27,7 +27,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from qua_shared.timestamps_shards import gzip_shard, split_to_shards
+from qua_shared.timestamps_shards import build_segment_shards, gzip_shard
 
 if TYPE_CHECKING:
     import numpy as np
@@ -352,6 +352,20 @@ def _matched_ref_to_output_key(matched_ref: str) -> str | None:
         return f"{start_sura}:{start_ayah}"
     else:
         return matched_ref  # compound key for cross-verse
+
+
+def is_compound_cross_verse(matched_ref: str) -> bool:
+    """True if ``matched_ref`` spans two distinct verses (``s:a:w-s:b:w``, a≠b).
+
+    Single source for the cross-verse test shared by the Auto-Split precompute
+    and the timestamps job's segment-array guard. Within-verse word ranges
+    (``2:1:1-2:1:4``) and non-dash refs are not compound.
+    """
+    parts = matched_ref.split("-")
+    if len(parts) != 2:
+        return False
+    s, e = parts[0].split(":"), parts[1].split(":")
+    return len(s) >= 2 and len(e) >= 2 and s[1] != e[1]
 
 
 def build_ts_validation(chapters, results_by_beam, beams, *,
@@ -774,10 +788,9 @@ def mfa_wait_result(event_id, headers, base_url, timeout=DEFAULT_TIMEOUT):
 def _normalize_from_results(chapters, results_by_ch, audio_category):
     """Convert raw MFA results to per-chapter ordered occurrences + failures.
 
-    The conversion + per-verse word routing half of the former
-    ``_build_outputs`` closure, factored out so the deduped projection
-    (``_dedup_core``) is shared between the live pipeline and the
-    read-path ``canonical_occurrence`` (single implementation, no drift).
+    The conversion + per-verse word routing core; ``build_raw_v2`` (in
+    ``timestamps_dedup``) consumes its output to build the raw v2 document the
+    segment-array writer emits.
 
     Returns ``(norm, failures)`` where ``norm[ch_idx]`` is a list of
     occurrences in result order::
@@ -942,12 +955,10 @@ def _dedup_core(chapters_norm, seed_existing, *, completed_surahs,
 def build_outputs(results_by_ch, seed_existing, *, chapters,
                   completed_surahs, completed_refs, refresh_surahs,
                   audio_category):
-    """Module-level form of the former ``_build_outputs`` closure.
+    """Convert + dedup MFA results to ``(full_data, words_data, mfa_failures)``.
 
     ``_normalize_from_results`` (convert + verse-route) → ``_dedup_core``
-    (skip + merge + bounds). ``canonical_occurrence`` reuses the SAME
-    ``_dedup_core`` over stored v2, so the deduped projection cannot drift
-    from what the pipeline wrote. Returns ``(full_data, words_data, mfa_failures)``.
+    (skip + merge + bounds).
     """
     norm, failures = _normalize_from_results(chapters, results_by_ch, audio_category)
     chapters_norm = []
@@ -983,8 +994,8 @@ def process(input_dir: Path,
 
     Each value in ``beams`` runs as an independent alignment pass over
     the same audio. The widest beam (``max(beams)``) is the canonical
-    pass — it always drives the ``timestamps/<ch>.json`` v2 shards
-    regardless of the order ``beams`` was supplied in. The remaining
+    pass — it always drives the ``timestamps/<ch>.json.gz`` segment-array
+    shards regardless of the order ``beams`` was supplied in. The remaining
     (narrower) beams are folded into a single verse-level
     ``ts_validation.json`` sidecar — verses that align under the canonical
     beam but fail under a tighter beam are flagged as low-confidence.
@@ -1121,9 +1132,9 @@ def process(input_dir: Path,
         ]
 
     if not chapters_to_process:
-        # Nothing new to align — the v2 shards from the prior run already
-        # stand. No legacy timestamps_full.json / timestamps.json is written
-        # (single canonical v2 format).
+        # Nothing new to align — the segment-array shards from the prior run
+        # already stand. No legacy timestamps_full.json / timestamps.json is
+        # written (single canonical format).
         log.info("No segments to process (all complete or skipped)")
         return output_dir
 
@@ -1573,30 +1584,42 @@ def process(input_dir: Path,
 
         return full_data, words_data, mfa_failures
 
-    # v2 is the ONLY persisted timestamps format: per-chapter occurrence-
-    # preserving shards at ``<output_dir>/timestamps/<chapter>.json``.
-    # ``canonical_results`` carries every aligned segment (pre-dedup) so
-    # build_raw_v2 keeps all occurrences; the inspector read-path dedups on
-    # serve and downstream consumers derive whatever projection they need.
-    # The historical timestamps_full.json / timestamps.json (single-file +
-    # word-only) are intentionally NOT written (decision: one canonical v2).
+    # Per-chapter temporal segment-array shards at
+    # ``<output_dir>/timestamps/<chapter>.json.gz``. ``canonical_results``
+    # carries every aligned segment, so build_raw_v2 keeps all occurrences and
+    # build_segment_shards emits each one RAW as a recitation-ordered segment
+    # entry ({ref, t, words}) — no dedup at write. Consumers derive whatever
+    # projection they need; the inspector read-path is a byte pass-through.
     from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
     ts_dir = output_dir / "timestamps"
     ts_dir.mkdir(parents=True, exist_ok=True)
 
-    def _emit_v2(results_by_ch, suffix=""):
+    # Slim aligner provenance stamped into each shard's ``_meta`` (reciter,
+    # url_template and audio_urls are excluded — slug is the path, manifest is
+    # the audio ground truth).
+    shard_provenance = {
+        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "audio_source": audio_source,
+        "aligner_model": DEFAULT_ALIGNER_MODEL,
+        "method": method,
+        "beam": canonical_beam,
+        "shared_cmvn": shared_cmvn,
+        "padding": padding,
+    }
+
+    def _emit_segment_shards(results_by_ch, suffix=""):
         v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
-        shards = split_to_shards(
-            v2_doc, reciter=reciter, audio_category=audio_category, url_template="")
+        shards = build_segment_shards(
+            v2_doc, audio_category=audio_category, src_meta=shard_provenance)
         for ch_num, shard_doc in shards.items():
             (ts_dir / f"{ch_num}{suffix}.json.gz").write_bytes(gzip_shard(shard_doc))
         fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
         return len(shards), fails
 
-    n_shards, n_fail = _emit_v2(canonical_results)
+    n_shards, n_fail = _emit_segment_shards(canonical_results)
     if n_fail:
         log.warning("Canonical beam %d: %d MFA failures", canonical_beam, n_fail)
-    log.info("Wrote %d v2 timestamps shard(s) (beam=%d) -> %s",
+    log.info("Wrote %d segment-array timestamps shard(s) (beam=%d) -> %s",
              n_shards, canonical_beam, ts_dir)
 
     # Probe beams → ONE verse-level ``ts_validation.json`` sidecar (the
