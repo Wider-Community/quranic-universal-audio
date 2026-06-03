@@ -1,6 +1,6 @@
 # How the Timestamp Pipeline Handles Repetitions and Verse Boundaries
 
-This doc explains how the timestamp pipeline (`scripts/lib/timestamps_pipeline.py`, invoked by `.github/scripts/extract_timestamps.py`) decides which word timings to keep when multiple segments of a recording contribute to the same verse. It covers the normal case, within-verse repetitions, and verse-boundary handling. Examples use Minshawi's real data.
+This doc explains how the timestamp pipeline (`qua_shared/timestamps_pipeline.py`, invoked by `qua_jobs/generate_timestamps.py`) decides which word timings to keep when multiple segments of a recording contribute to the same verse. It covers the normal case, within-verse repetitions, and verse-boundary handling. Examples use Minshawi's real data.
 
 ## The setup
 
@@ -95,7 +95,7 @@ Within the winning run, multiple segs (e.g. δ + ε) and within-verse stutter st
 
 This rule assumes reciters don't jump forward and back-fill mid-pass — they read in order, occasionally re-reading something they just said. So we never need to merge widxs across runs.
 
-Implemented in `_repeat_pass_skip_indices` (`scripts/lib/timestamps_pipeline.py`); skipped seg indices are logged at INFO so the run log shows what was dropped and why.
+Implemented in `_repeat_pass_skip_indices` (`qua_shared/timestamps_pipeline.py`); skipped seg indices are logged at INFO so the run log shows what was dropped and why.
 
 ## Case 3 — Verse boundary: cross-verse segment beside home coverage
 

@@ -71,7 +71,7 @@ describe('mark-ready copy module', () => {
 
     it('blocking count keys exactly match the backend list', () => {
         // The backend enforces the same six keys via BLOCKING_COUNT_KEYS
-        // in scripts/lib/schemas/mark_ready.py — these must stay aligned.
+        // in qua_shared/schemas/mark_ready.py — these must stay aligned.
         expect([...BLOCKING_COUNT_KEYS].sort()).toEqual([
             'basmala_amin',
             'boundary_adj',

@@ -3,7 +3,7 @@ testpaths = ["tests"]
 # `inspector/app.py` uses flat imports (`from config import ...`,
 # `from services.data_loader import ...`). Put inspector/ on sys.path so
 # those resolve during tests without having to restructure as a package.
-# Repo root added too so cross-consumer modules under scripts/lib/schemas
+# Repo root added too so cross-consumer modules under qua_shared/schemas
 # (v2 pydantic models) resolve in tests + subprocesses spawned from tests.
 pythonpath = [".", ".."]
 addopts = [

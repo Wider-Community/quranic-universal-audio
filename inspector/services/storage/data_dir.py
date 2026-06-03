@@ -182,27 +182,27 @@ def iter_peaks_history(slug: str) -> Iterator[dict]:
 # ---- timestamps (released reciters only — others have no TS yet) ----
 
 
-def read_timestamps_chapter(slug: str, chapter: int) -> bytes | None:
-    """Return decompressed timestamps-shard JSON bytes for a chapter, or ``None``.
+def read_timestamps_chapter_gz(slug: str, chapter: int) -> bytes | None:
+    """Return the raw gzipped timestamps-shard bytes for a chapter, or ``None``.
 
-    Reads the gzipped v2 shard ``timestamps/<chapter>.json.gz`` (the job's
-    canonical output) and inflates it; the caller receives raw JSON bytes.
-    The pre-v2 uncompressed ``.json`` shards of the 6 already-published
-    reciters are migrated by re-running the job — there is no read-time
-    fallback for them.
+    Reads ``timestamps/<chapter>.json.gz`` (the segment-array shard the job
+    writes) and returns it **uninflated** — the bucket gz body is exactly the
+    wire body the shard route serves, so the read path is a byte pass-through.
     """
     backend = _ts_read_backend_or_default()
     try:
-        gz = backend.read_bytes(storage_paths.timestamps_path_gz(slug, chapter))
-        return gzip.decompress(gz)
-    except StorageNotFound:
-        pass
-    # Pre-v2 released reciters store the shard uncompressed as
-    # ``timestamps/<chapter>.json`` (the gz path's docstring promises this
-    # fallback). Return the raw JSON bytes directly.
-    try:
-        return backend.read_bytes(storage_paths.timestamps_path(slug, chapter))
+        return backend.read_bytes(storage_paths.timestamps_path_gz(slug, chapter))
     except StorageNotFound:
         return None
+
+
+def read_timestamps_chapter(slug: str, chapter: int) -> bytes | None:
+    """Return decompressed timestamps-shard JSON bytes for a chapter, or ``None``.
+
+    Reads the gzipped shard ``timestamps/<chapter>.json.gz`` and inflates it;
+    the caller receives raw JSON bytes.
+    """
+    gz = read_timestamps_chapter_gz(slug, chapter)
+    return gzip.decompress(gz) if gz is not None else None
 
 

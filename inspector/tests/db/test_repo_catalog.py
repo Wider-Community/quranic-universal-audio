@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Channel, Delivery, ReciterCatalog, ReciterEntry, Riwayah, RecordingContext,
     Source, Style, Vocab,
 )
-from scripts.lib.schemas.catalog import Alias, Derived, SourceChannelPair
+from qua_shared.schemas.catalog import Alias, Derived, SourceChannelPair
 
 from services import db
 from services.db import repo_catalog

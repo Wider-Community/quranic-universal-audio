@@ -1,6 +1,6 @@
 """GH release cut kind — global dataset snapshot.
 
-Launches an HF Job that runs ``scripts/jobs/cut_release.py``. The job:
+Launches an HF Job that runs ``qua_jobs/cut_release.py``. The job:
 
   1. Reads the bucket catalog to discover every recitation whose channel is
      ``gh_release_eligible`` AND has a current ``per_recitation_releases(track='ts')``.
@@ -28,7 +28,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from scripts.lib.schemas import Actor
+from qua_shared.schemas import Actor
 from services.db import repo_releases
 from services.db.sync import durable_transaction
 from services.state import audit
@@ -84,10 +84,10 @@ def launch(*, version: str | None = None,
 
     # cut_release.py is stdlib-only at runtime (urllib for GH API, sqlite3 for
     # DB reads) but pulls pyyaml + huggingface_hub via
-    # ``scripts.lib.config_loader.repo_config``. Install on every launch — pip
+    # ``qua_shared.config_loader.repo_config``. Install on every launch — pip
     # is a no-op when wheels are cached.
     deps = "pyyaml huggingface_hub"
-    entrypoint = "python /aux/code/scripts/jobs/cut_release.py"
+    entrypoint = "python /aux/code/qua_jobs/cut_release.py"
     if base.NEEDS_BOOTSTRAP:
         command = ["bash", "-lc",
                    "mamba install -y -c conda-forge python=3.11 "

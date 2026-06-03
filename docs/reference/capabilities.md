@@ -10,7 +10,7 @@ This doc is the **what-is** + the **convention for adding a gate so it surfaces 
 
 To add a new permission gate **so it automatically surfaces in the Permissions tab**, do exactly two things (three if it has a UI affordance):
 
-1. **Register it** — add one `Capability(...)` (via the `_c(...)` helper) to `CAPABILITIES` in `scripts/lib/schemas/capabilities.py`:
+1. **Register it** — add one `Capability(...)` (via the `_c(...)` helper) to `CAPABILITIES` in `qua_shared/schemas/capabilities.py`:
    - `id` — dot-namespaced, stable (e.g. `reciter.publish`, `claim.force_release`).
    - `group` — an existing `G_*` label (or a new one; groups render in first-appearance order).
    - `label` + `description` — human text, shown **verbatim** in the UI. Write them for an owner skimming the matrix.
@@ -53,7 +53,7 @@ The FE hardcodes **nothing** about which capabilities exist — it renders whate
 
 | Piece | Truth |
 |---|---|
-| Registry (data) | `scripts/lib/schemas/capabilities.py` — `Capability{id, group, label, description, anon_eligible, owner_only_fixed, default_grants}` + `CAPABILITIES`, `CAPABILITIES_BY_ID`, `GROUP_ORDER`, `TIERS`. Backend-only; NOT codegen'd to the FE (the matrix response models in `admin_permissions.py` are). |
+| Registry (data) | `qua_shared/schemas/capabilities.py` — `Capability{id, group, label, description, anon_eligible, owner_only_fixed, default_grants}` + `CAPABILITIES`, `CAPABILITIES_BY_ID`, `GROUP_ORDER`, `TIERS`. Backend-only; NOT codegen'd to the FE (the matrix response models in `admin_permissions.py` are). |
 | Resolver | `services/auth/capabilities.py` — `tier_of(user_or_actor)` (`None`→`anonymous`), `resolve_grants() -> {(cap,tier): bool}` (baseline ⊕ overrides, cached on `db_seq`), `can(user_or_actor, cap)`, `capabilities_for(user)`. |
 | Override store | `permission_overrides(capability_id, tier, allowed, set_by, set_at)` — migration `0008`, `services/db/repo_permissions.py`. **Deviations only**: absent row → default; reset = `DELETE`. |
 | Cache | `services/storage/cache.py::{get,set,invalidate}_capability_matrix_cache` — single `(db_seq, matrix)` tuple. Any committed override write bumps `db_seq` → transparent invalidation, no restart. (The autouse test fixture invalidates it too.) |

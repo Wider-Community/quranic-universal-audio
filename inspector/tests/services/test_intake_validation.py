@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from scripts.lib.schemas import IntakeSubmission
+from qua_shared.schemas import IntakeSubmission
 
 from services.admin import intake_validation as iv
 

@@ -23,7 +23,7 @@ from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
 from routes._admin_helpers import require_capability_or_403
-from scripts.lib.schemas import TsJobSettings
+from qua_shared.schemas import TsJobSettings
 from services.admin import reviews as reviews_service
 from services.admin import timestamps_jobs as ts_jobs
 from services.state import state as state_service

@@ -21,10 +21,12 @@ Audio (peaks, proxy, VBR/Xing) lives in the `inspector-audio` skill. Catalog mod
 | **GH release** | `gh:releases/v{X.Y.Z}` → `<slug>.zip` assets | Mobile apps, offline kiosks, archives | One version-pinned, fully-offline snapshot of all reciters |
 | **HF dataset** | `hetchyy/quranic-universal-ayahs` | ML researchers, training, analysis | Parquet-native, queryable, embedded audio |
 
-Every adapter starts from the same bucket inputs; dedup runs in exactly one place
-(`_dedup_core` in [timestamps_pipeline.py](../../scripts/lib/timestamps_pipeline.py), reached via
-[`canonical_occurrence`](../../scripts/lib/timestamps_dedup.py) or already-projected when reading
-bucket `.json.gz` shards). TS-tab and the release/dataset adapters cannot drift at the dedup layer.
+Every adapter starts from the same bucket inputs. The bucket per-chapter shard stores every
+recited segment **raw** (temporal segment-array shape — see [timestamps-job.md](timestamps-job.md));
+the single canonical take per verse is a pure projection
+([`project_segment_shard`](../../qua_shared/timestamps_dedup.py), completion-based occasion dedup).
+Both release adapters call that one projection, so the TS-tab read path and the release/dataset
+adapters cannot drift at the dedup layer.
 
 ## Release ledger (SQLite — migration `0014_releases.sql`)
 
@@ -64,12 +66,14 @@ The same predicate drives the Releases-tab buckets and the cut job's member disc
 ## Cut flow (the HF Job)
 
 `POST /api/admin/cut-release` launches an HF Job running
-[scripts/jobs/cut_release.py](../../scripts/jobs/cut_release.py). The job:
+[qua_jobs/cut_release.py](../../qua_jobs/cut_release.py). The job:
 
 1. Reads the bucket DB read-only → eligible reciters + the prior release's membership.
-2. Per reciter: projects canonical verses → builds the three tier files (verse/word/letter,
-   top-down), `catalog.json`, a per-recitation `manifest.json`; packs a deterministic `<slug>.zip`;
-   computes `content_hash = SHA-256(letter_tier.gz || catalog.json)`.
+2. Per reciter: reads every segment-array `timestamps/<ch>.json.gz` shard and projects the canonical
+   verse map (`_load_canonical_verses` → `project_segment_shard`, joining `detailed.json` confidence
+   via `confidence_by_span` for the highest-confidence completing-occasion pick) → builds the three
+   tier files (verse/word/letter, top-down), `catalog.json`, a per-recitation `manifest.json`; packs
+   a deterministic `<slug>.zip`; computes `content_hash = SHA-256(letter_tier.gz || catalog.json)`.
 3. Classifies each reciter `added` / `refresh` / `unchanged` (vs prior `content_hash`) and computes
    the version (below).
 4. Builds the dataset-level `manifest.json` + `CHANGELOG.md` (the release body — see
@@ -154,7 +158,7 @@ releases become a real requirement.
 ## Changelog (the release body)
 
 The release body is rendered by **one shared function**,
-[`render_changelog`](../../scripts/lib/release_changelog.py), called by BOTH the cut job (the body
+[`render_changelog`](../../qua_shared/release_changelog.py), called by BOTH the cut job (the body
 POSTed to GitHub) and the cut-modal preview endpoint — so the preview is faithful to what ships.
 It is stdlib-only and pure; callers resolve display names + coverage and pass them in.
 
@@ -214,26 +218,31 @@ word timestamps re-based). Consumers resample at load; filter by codec/SR/channe
 
 ## Dedup semantics — what projection loses / preserves
 
-Bucket stores every accepted occurrence (v2 raw, faithful). The projection
-(`canonical_occurrence` / `_repeat_pass_skip_indices`) feeds the TS tab and the release/dataset
-adapters.
+Bucket stores every recited segment raw (temporal segment array, faithful). `project_segment_shard`
+(completion-based occasion dedup — full detail in [timestamps-job.md §1a](timestamps-job.md)) reduces
+each verse to its single canonical take; the same projection feeds the TS-tab per-verse clip and the
+release/dataset adapters.
 
 | Lost in projection | Preserved |
 |---|---|
-| A losing take's word/letter timestamps when a verse has multiple runs split by a different home verse | Every widx present in the row — the winning run is a superset by the reciter invariant |
-| A losing take's audio slice (not in the row's embedded bytes) | All audio in the bucket chapter, addressable via `source_url` + offsets |
+| A non-canonical occasion's word/letter timestamps (an interleaved re-recitation of the same verse) | The whole verse `{1..N}` — the canonical occasion reaches full word coverage by construction |
+| Trailing post-completion redundancy + a redundant complete re-do (the lower-confidence occasion) | Every recited segment in the bucket shard, time-ordered, addressable via `source_url` + offsets |
 
-**Reciter invariant** (post-mark-ready): a re-pass for verse N covers `[j..m]` with `j ≤ k`,
-`m ≥ k` of the prior run's `[1..k]` — the wider-coverage run-picker is non-lossy at the widx level.
-Consumers wanting alternate takes use the bucket shards' `?full=true` surface.
+The projection picks a single **occasion** (maximal contiguous run, no foreign verse interleaved)
+that completes word coverage `{1..N}`; within-pass backward loops inside that occasion are kept
+verbatim, so the canonical row is never missing a widx. Among multiple completing occasions the
+highest mean alignment confidence wins; trailing post-completion segments are trimmed. Consumers
+wanting alternate takes read the raw bucket shards (every segment present).
 
 ### Failed-alignment & deletes at publish
 
 `failed_alignment` (recorded in `_meta.mfa_failures`) and `deleted` (filtered at intake) both
-collapse to "not in the valid coverage pool". Per-verse: walk occurrences in `seg_index` order,
-pick the widest-coverage run; if it covers every widx 1..N the verse is shippable, else it is
-dropped from both the dataset and the GH tier files (logged for transparency). Post-mark-ready,
-only in-verse segments are allowed (no cross-verse dedup cases).
+collapse to "never reached the bucket shard" — the segment-array shard carries only aligned,
+accepted segments. Per-verse, `project_segment_shard` keeps the canonical occasion; if no occasion
+reaches full coverage `{1..N}` it falls back to the widest-coverage occasion, and a verse with no
+shippable coverage is dropped from both the dataset and the GH tier files (logged for transparency).
+Post-mark-ready, only in-verse segments exist (the TS job blocks compound cross-verse refs), so there
+are no cross-verse dedup cases.
 
 ## Validation at publish
 
@@ -243,14 +252,15 @@ Block on: pydantic round-trip of all rows; every non-dropped verse has a contrib
 `duration_ms == last_word_end - first_word_start`; `word_timestamps` sorted by `start_ms`; dropped
 verses ≤ threshold (default 0 for full reciters). Warn on: audio-slice checksum drift; TS-tab vs
 dataset-slice parity probe. Boundary checks run at cut time via
-[dataset_validation.py](../../scripts/lib/dataset_validation.py); fatal violations abort the cut.
+[dataset_validation.py](../../qua_shared/dataset_validation.py); fatal violations abort the cut.
 
 ## TS-tab vs dataset-row parity
 
-Word timestamps and verse text are identical (both reach `canonical_occurrence` / `detailed.json`).
-Audio bytes are a byte-substring of the bucket chapter (after per-slice Xing if VBR); the dataset
-slice may start ≤26 ms before the first word (frame snap), with word timestamps re-based. **No
-intentional drift** — if they diverge where they should match, it's a bug.
+Word timestamps and verse text are identical — both the TS-tab clip and the dataset row reach the
+same `project_segment_shard` canonical take over the same raw bucket segments. Audio bytes are a
+byte-substring of the bucket chapter (after per-slice Xing if VBR); the dataset slice may start
+≤26 ms before the first word (frame snap), with word timestamps re-based. **No intentional drift** —
+if they diverge where they should match, it's a bug.
 
 ## Event classification
 

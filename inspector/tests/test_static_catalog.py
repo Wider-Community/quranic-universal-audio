@@ -1,7 +1,7 @@
 """Static-data route: GET /api/static/catalog.json (D20 Track B)."""
 from __future__ import annotations
 
-from scripts.lib.schemas import ReciterCatalog
+from qua_shared.schemas import ReciterCatalog
 
 
 def test_catalog_route_serves_valid_catalog_json(flask_client, tmp_reciter_dir):

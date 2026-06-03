@@ -46,7 +46,7 @@ def test_update_maintainer_owner_round_trip(signed_in_client, seed_role):
 
 
 def test_demote_preserves_open_claim(signed_in_client, seed_role, seed_state):
-    from scripts.lib.schemas import Role
+    from qua_shared.schemas import Role
     from services.db import repo_claims
 
     client, _ = signed_in_client(hf_user_id="o", login="o", role="owner")
@@ -76,7 +76,7 @@ def test_noop_same_role(signed_in_client, seed_role):
 
 
 def test_last_owner_self_demote_409(signed_in_client):
-    from scripts.lib.schemas import Role
+    from qua_shared.schemas import Role
 
     client, _ = signed_in_client(hf_user_id="o", login="o", role="owner")
 
@@ -131,7 +131,7 @@ def test_missing_same_origin_403(signed_in_client, seed_role):
 
 
 def _owner_actor():
-    from scripts.lib.schemas import Actor, Role
+    from qua_shared.schemas import Actor, Role
 
     return Actor(hf_user_id="o", login_at_time="o", role=Role.OWNER.value)
 

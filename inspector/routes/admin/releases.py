@@ -29,8 +29,8 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
-from scripts.lib.config_loader import repo_config
-from scripts.lib.release_changelog import render_changelog
+from qua_shared.config_loader import repo_config
+from qua_shared.release_changelog import render_changelog
 from services.admin.jobs import cut_release as cut_release_jobs
 from services.admin.jobs import hf_publish as hf_publish_jobs
 from services.admin.jobs import base as jobs_base

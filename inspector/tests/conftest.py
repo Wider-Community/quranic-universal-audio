@@ -193,7 +193,7 @@ def _seed_state(
 
     from services import db
     from services.db import repo_access, repo_claims, repo_state
-    from scripts.lib.schemas import ReciterState, Visibility
+    from qua_shared.schemas import ReciterState, Visibility
 
     now = datetime.now(timezone.utc)
     st = state if isinstance(state, ReciterState) else ReciterState(state)
@@ -239,7 +239,7 @@ def _seed_catalog(*, reciters=(), deliveries=(), vocab=None) -> None:
     slugs."""
     from services import db
     from services.db import repo_catalog
-    from scripts.lib.schemas import Channel, Riwayah, Source, Style, Vocab
+    from qua_shared.schemas import Channel, Riwayah, Source, Style, Vocab
 
     if vocab is None:
         vocab = Vocab(
@@ -262,7 +262,7 @@ def _seed_role(hf_user_id: str, *, login: str = "test_user", role: str = "contri
     for FK targets)."""
     from services import db
     from services.db import repo_access
-    from scripts.lib.schemas import Role
+    from qua_shared.schemas import Role
 
     with db.transaction():
         repo_access.ensure_user(hf_user_id, login=login)
@@ -486,7 +486,7 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         # services/validation/__init__.py::_read_deleted_basmala_chapters).
         # Fixtures don't ship a pipeline_meta; seed an empty one so tests
         # exercise the post-migration code path without hitting hard-fail.
-        from scripts.lib.schemas import PipelineMeta
+        from qua_shared.schemas import PipelineMeta
         pipeline_meta_doc = PipelineMeta(
             schema_version=1,
             generated_at=datetime.now(timezone.utc)

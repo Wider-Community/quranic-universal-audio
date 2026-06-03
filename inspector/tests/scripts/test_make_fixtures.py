@@ -1,4 +1,4 @@
-"""Tests for the PII-critical core of ``inspector/scripts/make_fixtures_dataset.py``.
+"""Tests for the PII-critical core of ``scripts/devenv/make_fixtures_dataset.py``.
 
 The fixtures dataset is PUBLIC, so the one property that must never regress is:
 the generated ``inspector.db`` contains the chosen reciters' catalog/state and
@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-_INSPECTOR = Path(__file__).resolve().parents[2]
-_SCRIPT = _INSPECTOR / "scripts" / "make_fixtures_dataset.py"
+_REPO = Path(__file__).resolve().parents[3]
+_SCRIPT = _REPO / "scripts" / "devenv" / "make_fixtures_dataset.py"
 
 
 def _load_script():

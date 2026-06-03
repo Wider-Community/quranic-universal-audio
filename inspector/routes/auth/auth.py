@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urljoin, urlparse
 
 from flask import Blueprint, jsonify, make_response, redirect, request
 
-from scripts.lib.schemas import ReciterState
+from qua_shared.schemas import ReciterState
 
 from services import auth as auth_service
 from services import state as state_service

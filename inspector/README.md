@@ -33,7 +33,7 @@ confirm something that only happens in a deployed Space.
 To preview a branch as a live deployment *before* merging, deploy it to your
 own Space (Tier 2):
 
-1. **Script (recommended):** `python inspector/scripts/deploy_space.py <your-space-id>`
+1. **Script (recommended):** `python scripts/deploy/deploy_space.py <your-space-id>`
 2. **HF CLI directly:** build the frontend (`cd inspector/frontend && npm run
    build`), then `hf upload <your-space-id> . --repo-type space` from a staged
    copy. The script does the staging for you, so option 1 is simpler.
@@ -44,7 +44,7 @@ Downloads a small public sample dataset and runs the app fully offline against
 it.
 
 ```bash
-python inspector/scripts/seed_fixtures.py        # download sample data + configure
+python scripts/devenv/seed_fixtures.py        # download sample data + configure
 cd inspector/frontend && npm install && npm run build
 python inspector/app.py                          # → http://localhost:5000
 ```
@@ -66,7 +66,7 @@ One command creates a private bucket under your account and seeds it from the
 same public sample:
 
 ```bash
-python inspector/scripts/bootstrap_dev_env.py <name>
+python scripts/devenv/bootstrap_dev_env.py <name>
 ```
 
 Then point your local app at it by adding two lines to `.env` at the repo root:
@@ -87,7 +87,7 @@ When you need to verify deployed behaviour, deploy the same code to a personal
 Space:
 
 ```bash
-python inspector/scripts/bootstrap_dev_env.py <name> --deploy
+python scripts/devenv/bootstrap_dev_env.py <name> --deploy
 ```
 
 This creates the Space, attaches your bucket as its storage volume, wires its
@@ -103,7 +103,7 @@ for what's set up for you.
 To push code changes after that:
 
 ```bash
-python inspector/scripts/deploy_space.py <your-hf-user>/quranic-inspector-<name>
+python scripts/deploy/deploy_space.py <your-hf-user>/quranic-inspector-<name>
 ```
 
 ## What's a bucket?

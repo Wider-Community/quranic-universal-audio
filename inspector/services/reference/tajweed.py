@@ -30,7 +30,7 @@ import time
 
 from quranic_phonemizer import Phonemizer, TajweedRule
 
-from scripts.lib.schemas.tajweed import BridgeInfo
+from qua_shared.schemas.tajweed import BridgeInfo
 
 log = logging.getLogger(__name__)
 

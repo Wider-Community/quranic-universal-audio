@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Literal
 
-from scripts.lib.schemas import Actor, AuditRecord
+from qua_shared.schemas import Actor, AuditRecord
 
 from services.db import repo_transitions
 

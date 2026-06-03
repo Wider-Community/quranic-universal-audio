@@ -10,7 +10,7 @@ Layers, slug convention, schema, audio-metadata split, naming guide, and add/pro
 |---|---|---|
 | vocab / reciters / deliveries / aliases / derived | SQLite tables (see §4 col map) | `repo_catalog.py` (via `services/state/catalog.py`) |
 | Read model (`ReciterCatalog`) | `repo_catalog.snapshot()` → cached on `db_seq` by `services/state/catalog.py::snapshot()` | — |
-| Pydantic shapes (runtime authority) | `scripts/lib/schemas/catalog.py` | — |
+| Pydantic shapes (runtime authority) | `qua_shared/schemas/catalog.py` | — |
 | Per-delivery audio sidecar | `catalog/audio_manifest/<slug>.json` (bucket JSON) | offline probe `scripts/audio/probe_audio_meta.py` |
 | Public read endpoint | `/api/static/catalog.json` (`routes/public/static.py`) — serializes `snapshot()` | — |
 
@@ -43,6 +43,16 @@ The `(source, channel)` pair on each delivery row is **authoritative** — vocab
 
 **CDN is the primary dedup axis.** Same `(reciter, riwayah, style, channel)` is kept as separate deliveries when bitrate, sample rate, channels, or duration differ — different masters. Within-tuple disambiguators on the slug: `_<bitrate>k` when bitrates differ, `_v2` otherwise (§3).
 
+### Download-only sources (YouTube / yt-dlp)
+
+Some audio isn't a CDN of direct `.mp3` URLs — it's a **playlist** on YouTube (or any yt-dlp-supported host: SoundCloud, archive.org, Spreaker). These map onto the same model:
+
+- **`channel`** = `youtube` (the host). Surfaces in the public dashboard filters like any channel. Added on first ingest via `vocab_additions` (idempotent) — not a migration, since channel vocab is data, not schema; the canonical definition lives in `BUILTIN_CHANNELS` (`.local/extraction/intake/channel_match.py`).
+- **`source`** = the *uploader* (per-uploader provenance, e.g. a specific YouTube channel). **Not** surfaced in public filters (there is no `source` filter axis — only `channel`); supplied per-request at ingest (`--source` + `--proposed`).
+- **`source_url`** = the originating playlist URL, stored on the delivery row (§4); the reciter-detail modal renders the channel cell as a hyperlink to it.
+
+Download-only deliveries are **bucket-served only**: their per-chapter `audio/<ch>.mp3` is created during extraction (YouTube serves opus/m4a, never mp3 — see §5). The watch-page URL in the sidecar is provenance, not a streamable fallback — the audio-proxy never streams it; playback always uses the persisted bucket mp3.
+
 ## 3. Slug convention
 
 ```
@@ -51,7 +61,7 @@ The `(source, channel)` pair on each delivery row is **authoritative** — vocab
 
 Fixed ordering (left to right): reciter, riwayah, style, year, channel, disambiguator.
 
-**Regex:** `SLUG_RE` = `^[a-z][a-z0-9_]{1,79}$` (`scripts/lib/schemas/state.py`). ASCII lowercase, single underscores. No code parses the slug — opaque human-readable ID. `reciter_id` and delivery `slug` both use this regex (`ReciterEntry`, `Delivery` validators). Source slug is the exception: `SOURCE_SLUG_RE` = `^[a-z][a-z0-9_-]{1,79}$` allows hyphens (`surah-quran`).
+**Regex:** `SLUG_RE` = `^[a-z][a-z0-9_]{1,79}$` (`qua_shared/schemas/state.py`). ASCII lowercase, single underscores. No code parses the slug — opaque human-readable ID. `reciter_id` and delivery `slug` both use this regex (`ReciterEntry`, `Delivery` validators). Source slug is the exception: `SOURCE_SLUG_RE` = `^[a-z][a-z0-9_-]{1,79}$` allows hyphens (`surah-quran`).
 
 **Suffix rules:**
 
@@ -84,7 +94,7 @@ Renames are free for a bare catalog row — URLs are preserved per-delivery in t
 
 ## 4. Schema
 
-> **Authority**: the pydantic models at `scripts/lib/schemas/catalog.py` are the runtime authority (cross-consumer: Inspector, training pipeline, dataset builder, GH Actions). FE types are codegen'd from them — never hand-edit `inspector/frontend/src/lib/types/generated/schemas.ts`. The tables below map pydantic field ↔ SQLite column.
+> **Authority**: the pydantic models at `qua_shared/schemas/catalog.py` are the runtime authority (cross-consumer: Inspector, training pipeline, dataset builder, GH Actions). FE types are codegen'd from them — never hand-edit `inspector/frontend/src/lib/types/generated/schemas.ts`. The tables below map pydantic field ↔ SQLite column.
 
 > **Null convention**: any `<type> | null` field accepts `null` = "missing / not yet identified". Never `""` or `"unknown"` sentinels. Applies to `name_ar`, `country`, `recording_context`, `recording_year`, `variant_label`, and all audio-metadata fields.
 
@@ -149,6 +159,7 @@ Editable columns: `_RECITER_WRITABLE = (name_en, name_ar, country, notes)` (`rep
 | `style` | TEXT FK→`styles.slug` | Pace/ornamentation only. |
 | `source` | TEXT FK→`sources.slug` | |
 | `channel` | TEXT FK→`channels.slug` | |
+| `source_url` | TEXT \| null | Originating playlist/set URL for download-only sources (YouTube playlist, SoundCloud set). `null` for CDN deliveries — their per-chapter URLs live in the sidecar. Surfaced on `PublicDelivery`; the reciter-detail channel cell hyperlinks to it. |
 | `recording_context` | TEXT \| null FK→`recording_contexts.slug` | `null` when unclassified. Orthogonal to style. |
 | `recording_year` | INTEGER \| null | 4-digit Hijri or CE; null when unknown. |
 | `variant_label` | TEXT \| null | Free token (`madinah`, `studio_2008`); rare. |
@@ -164,7 +175,7 @@ Editable columns: `_RECITER_WRITABLE = (name_en, name_ar, country, notes)` (`rep
 | `added_at` | TEXT (datetime) | ISO-8601 UTC. |
 | `added_by_hf_id` | TEXT | HF user id of the maintainer who added the row. |
 
-Editable columns: `_DELIVERY_WRITABLE` (`repo_catalog.py`) covers riwayah/style/recording_context/recording_year/variant_label/source/channel/audio_category/chapter_count/codec/container/sample_rate_hz/channels/bitrate_mode/bitrate_kbps_nominal/total_duration_sec. The **service** (`services/state/catalog.py::edit_delivery`) exposes a narrower public surface: only `riwayah/style/recording_context/recording_year`. `slug`/`reciter_id` immutable. Checksum does **not** live on the row (sidecar `_meta.checksum` only).
+Editable columns: `_DELIVERY_WRITABLE` (`repo_catalog.py`) covers riwayah/style/recording_context/recording_year/variant_label/source/channel/source_url/audio_category/chapter_count/codec/container/sample_rate_hz/channels/bitrate_mode/bitrate_kbps_nominal/total_duration_sec. The **service** (`services/state/catalog.py::edit_delivery`) exposes a narrower public surface: only `riwayah/style/recording_context/recording_year`. `slug`/`reciter_id` immutable. Checksum does **not** live on the row (sidecar `_meta.checksum` only).
 
 ### `audio_manifest/<slug>.json` (bucket sidecar — `AudioManifestSidecar`)
 
@@ -224,6 +235,8 @@ Row-level `bitrate_mode` (`BitrateMode` enum) derived from per-chapter probe dat
 
 Detection: `mutagen.mp3.MP3.info.bitrate_mode` (Xing/Info/VBRI/LAME header) authoritative; frame scan over first 256 KB as fallback. Both run; per-chapter results land in the sidecar, rolled up to the row at build.
 
+**Download-only sources create their own encode.** Unlike CDN audio (publisher mp3 bytes preserved verbatim, with only a Xing seek header injected via `-c:a copy`), a YouTube/yt-dlp source is opus/m4a — so extraction produces the canonical mp3 once: **128 kbps CBR, 44.1 kHz, mono**, cover-art stripped (`segments/audio_io.py::_download_via_ytdlp`). Because the watch URL can't be HTTP-frame-probed, the row + sidecar audio fields come from a **post-align reprobe** of the produced files (`ingest_intake.py::reprobe_persisted_audio`). Forced-CBR ⇒ these deliveries never hit the VBR playback path.
+
 ### Style vs recording_context
 
 - **`style`** = pace/ornamentation: `murattal` / `mujawwad` / `muallim` / `children_repeat` / `hadr`.
@@ -253,7 +266,7 @@ New `name_en` entries must follow these (applied at seed).
 
 ## 7. Seed origin (historical)
 
-The seed catalog (864 deliveries, 422 reciter clusters, 0 slug collisions) was built one-time by a dedup + probe pipeline whose scratch artifacts lived in `.local/dedup/` (gitignored): dual-agent name clustering, same-channel ffprobe duplicate detection, naming-consistency + canonical-spelling normalization passes, then a bulk 256 KB-range audio probe and a `build_catalog.py` assembly to `reciter_catalog.json` + sidecars. That JSON was later migrated into SQLite (`inspector/scripts/migrate_json_to_sqlite.py`). The `.local/dedup/` artifacts are historical scratch — not load-bearing. Seed rows carry `added_at = 2026-05-12T00:00:00Z`, `added_by_hf_id = system_seed`.
+The seed catalog (864 deliveries, 422 reciter clusters, 0 slug collisions) was built one-time by a dedup + probe pipeline whose scratch artifacts lived in `.local/dedup/` (gitignored): dual-agent name clustering, same-channel ffprobe duplicate detection, naming-consistency + canonical-spelling normalization passes, then a bulk 256 KB-range audio probe and a `build_catalog.py` assembly to `reciter_catalog.json` + sidecars. That JSON was later migrated into SQLite (`scripts/migrations/migrate_json_to_sqlite.py`). The `.local/dedup/` artifacts are historical scratch — not load-bearing. Seed rows carry `added_at = 2026-05-12T00:00:00Z`, `added_by_hf_id = system_seed`.
 
 ## 8. Mutation surface
 
@@ -292,6 +305,15 @@ There is no separate validate-then-rebuild step: the SQLite FKs + `Delivery`/`Re
 4. Verify the probe's host→channel mapping picks up the new pattern.
 
 **Channel host migration** (CDN relocates, e.g. `download.tvquran.com` → `cdn.tvquran.net`): add the new pattern to `channels.host_patterns` alongside the old (keep old for historical sidecars); re-scrape affected manifests (row identity stable, sidecar URLs change → `_meta.checksum` changes, invalidating downstream caches); re-probe; audit-log the date + host shift + delivery count.
+
+### Registering a download-only (yt-dlp) source
+
+YouTube, SoundCloud, archive.org, Spreaker, Bandcamp, … all flow through the offline intake's enumerate + download path (`ingest_intake.py` → `intake/playlist.py` + `segments/audio_io.py`). Registering one is **data, not code**:
+
+1. Add a `Channel` to `BUILTIN_CHANNELS` (`.local/extraction/intake/channel_match.py`) with its `host_patterns` and `gh_release_eligible=False` (not a public CDN — its source URLs can't go in a public GH release; the bucket mp3 is the distributed artifact). The driver detects it out of the box and auto-adds it to the catalog via `vocab_additions` on first ingest (idempotent).
+2. The per-uploader `source` is supplied per-request: `ingest_intake.py --source <uploader_slug> --proposed <vocab.json>` (a `Source` with `name`/`url`/`audio_categories`).
+
+No new download/encode/probe code is needed — yt-dlp handles enumeration + fetch, and the canonical encode (§5) + post-align reprobe are source-agnostic. Full workflow: the `segments-extraction` skill's `references/playlist_intake.md`.
 
 ## 11. Removing a delivery / reciter
 

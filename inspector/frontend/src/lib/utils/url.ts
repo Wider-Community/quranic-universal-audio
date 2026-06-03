@@ -3,7 +3,7 @@
  *
  * A scheme is NOT required — `cdn.example/001.mp3` is a fine URL and defaults
  * to `https://`. We only reject genuine non-URLs (whitespace, non-http schemes,
- * or a host without a dot). Mirrors `scripts/lib/schemas/intake_requests.py`
+ * or a host without a dot). Mirrors `qua_shared/schemas/intake_requests.py`
  * `normalize_url` + the backend `_is_plausible_url`. Not a reachability check.
  */
 

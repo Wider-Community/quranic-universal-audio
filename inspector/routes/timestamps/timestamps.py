@@ -79,21 +79,13 @@ def ts_manifest():
 
 @ts_bp.route("/shard/<reciter>/<int:chapter>")
 def ts_shard(reciter, chapter):
-    """Serve a per-chapter gzipped shard (local or bucket source).
-
-    ``?full=1`` serves every occurrence (un-deduped) for the owner preview /
-    aligner "show all"; default serves the deduped single-take view. v1
-    shards ignore the flag (no occurrences to expand).
-    """
-    full = request.args.get("full") in ("1", "true", "yes")
+    """Serve a per-chapter gzipped segment-array shard (byte pass-through)."""
     # Owner preview: holders of ``timestamps.view_unreleased`` may read shards
     # for generated-but-unreleased reciters; everyone else stays released-only.
     allow_unreleased = _capabilities.can(
         auth_service.current_user(), "timestamps.view_unreleased"
     )
-    body = ts_serve.shard_bytes(
-        reciter, chapter, full=full, allow_unreleased=allow_unreleased
-    )
+    body = ts_serve.shard_bytes(reciter, chapter, allow_unreleased=allow_unreleased)
     if body is None:
         return jsonify({"error": "Shard not found"}), 404
     return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)
@@ -158,7 +150,7 @@ def ts_tajweed_bridges(verse_ref):
     Response
     --------
     ``{"verse_ref", "stops", "bridges": [BridgeInfo, ...]}`` matching
-    :class:`scripts.lib.schemas.tajweed.TajweedBridgesResponse`.
+    :class:`qua_shared.schemas.tajweed.TajweedBridgesResponse`.
     """
     raw_stops = request.args.get("stops", "")
     stops = tuple(s for s in raw_stops.split(",") if s) if raw_stops else ()

@@ -11,13 +11,11 @@ mfa_aligner/
 quranic_universal_aligner/
 reciter_requests/
 
-# --- Top-level scripts: scripts/lib/ + scripts/jobs/ ship at runtime.
-# jobs/ holds the HF-Job entrypoints uploaded by stage_job_code on launch;
-# the Dockerfile COPYs them so they're in the deployed image first.
-scripts/*
-!scripts/__init__.py
-!scripts/lib
-!scripts/jobs
+# --- Runtime-shared packages ship at runtime. qua_shared/ + qua_jobs/ are
+# root-level (not excluded here), COPYed into the image by the Dockerfile;
+# qua_jobs/ also holds the HF-Job entrypoints stage_job_code uploads on launch.
+# scripts/ holds only local operational CLIs — not needed in the image.
+scripts/
 
 # --- Data: per-reciter data lives in the bucket (mounted at runtime),
 # not baked into the image. Only the four small linguistic JSON files are

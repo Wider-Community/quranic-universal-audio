@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Actor, AudioCategory, Delivery, ReciterEntry, Role,
 )
 from services import catalog as catalog_service

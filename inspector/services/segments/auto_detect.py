@@ -31,7 +31,7 @@ import logging
 import threading
 import time
 
-from scripts.lib.schemas import Actor, ReciterState, Role
+from qua_shared.schemas import Actor, ReciterState, Role
 
 from services.state import state as state_service
 from services.storage import storage_paths

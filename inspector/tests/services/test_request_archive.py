@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.lib.schemas import Actor, ProposedEdits, Role
+from qua_shared.schemas import Actor, ProposedEdits, Role
 
 
 @pytest.fixture

@@ -70,7 +70,7 @@ A local Playwright probe measures the **Flask dev server**, not deployed gunicor
 
 **Trustworthy locally** (FE-only, no server CPU/concurrency dependence): bundle/transfer sizes, paint timings, Long Tasks from FE rendering (waveform draw, list virtualization, `$effect` storms), client decode cost (`b64ToInt8`, quran-refs `JSON.parse`), the number/shape of `/api` requests a flow fires.
 
-**Misleading locally:** absolute `/api` response times, concurrent-user contention, single-worker serialization, bucket-read latency (mount vs `hffs` differs both ways). Always state which class a measurement falls in. Reason about concurrency via "× N", not local wall-clock. Calibrate the bucket-I/O gap with `inspector/scripts/bench_storage.py --mount` vs no-mount before trusting any save/append number.
+**Misleading locally:** absolute `/api` response times, concurrent-user contention, single-worker serialization, bucket-read latency (mount vs `hffs` differs both ways). Always state which class a measurement falls in. Reason about concurrency via "× N", not local wall-clock. Calibrate the bucket-I/O gap with `scripts/diagnostics/bench_storage.py --mount` vs no-mount before trusting any save/append number.
 
 ## Recipes (copy-pasteable)
 

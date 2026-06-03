@@ -13,8 +13,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from scripts.lib.schemas import ReciterRow, ReciterState, Visibility
-from scripts.lib.schemas.state import RevisionContext
+from qua_shared.schemas import ReciterRow, ReciterState, Visibility
+from qua_shared.schemas.state import RevisionContext
 
 from . import _serde
 from .connection import get_conn

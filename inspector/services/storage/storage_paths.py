@@ -117,10 +117,10 @@ def ts_validation_path(slug: str) -> str:
     """Verse-level timestamps-validation sidecar — ``ts_validation.json``.
 
     Written by the multi-beam generate-timestamps job
-    (``scripts/lib/timestamps_pipeline.py::build_ts_validation``); flags verses
+    (``qua_shared/timestamps_pipeline.py::build_ts_validation``); flags verses
     whose alignment disagrees under tighter probe beams. Served owner-gated to
     the Timestamps-tab "ts-validation" accordion (preview of unreleased
-    reciters). Schema: ``scripts/lib/schemas/ts_validation.py``.
+    reciters). Schema: ``qua_shared/schemas/ts_validation.py``.
     """
     return reciter_file(slug, "ts_validation.json")
 
@@ -128,7 +128,7 @@ def ts_validation_path(slug: str) -> str:
 def auto_split_path(slug: str) -> str:
     """Auto-split cursor sidecar — per-seg precomputed cursors + refs.
 
-    Written offline by ``scripts/lib/auto_split_precompute.py`` once segments
+    Written offline by ``qua_shared/auto_split_precompute.py`` once segments
     are finalised; read at boot by ``services/data_loader.load_auto_split``.
     Replaces the runtime MFA Space call the inspector used to make on every
     Auto Split button click.
@@ -139,7 +139,7 @@ def auto_split_path(slug: str) -> str:
 def pipeline_meta_path(slug: str) -> str:
     """Per-reciter immutable extraction-time facts.
 
-    Schema: ``scripts/lib/schemas/pipeline_meta.py::PipelineMeta``. Written
+    Schema: ``qua_shared/schemas/pipeline_meta.py::PipelineMeta``. Written
     once by extraction (or the backfill script for legacy reciters); read
     by ``services/storage/data_loader.load_pipeline_meta``. Immutable
     post-extraction — never invalidated by save.
@@ -148,16 +148,14 @@ def pipeline_meta_path(slug: str) -> str:
 
 
 def timestamps_path(slug: str, chapter: str | int) -> str:
-    """Per-chapter timestamps shard (legacy uncompressed). Only released
-    reciters have these — the Timestamps tab gates on DB state, not file
-    presence."""
+    """Uncompressed per-chapter timestamps shard path. Retained as a path
+    helper; the read path serves the gzipped shard (``timestamps_path_gz``)."""
     return reciter_file(slug, f"timestamps/{chapter}.json")
 
 
 def timestamps_path_gz(slug: str, chapter: str | int) -> str:
-    """Gzipped per-chapter v2 shard. The job writes these; the read-path
-    prefers them and inflates, falling back to ``timestamps/<chapter>.json``
-    for pre-v2 released reciters."""
+    """Gzipped per-chapter segment-array shard. The job writes these; the
+    read path serves the gz body verbatim as a byte pass-through."""
     return reciter_file(slug, f"timestamps/{chapter}.json.gz")
 
 

@@ -29,7 +29,7 @@ import logging
 import threading
 import time
 
-from scripts.lib.schemas import Actor, Role
+from qua_shared.schemas import Actor, Role
 
 from . import access
 

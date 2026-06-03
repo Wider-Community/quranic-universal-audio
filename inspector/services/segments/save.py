@@ -21,7 +21,7 @@ from adapters.save_payload import make_seg as _adapter_make_seg
 from adapters.segments_json import build_segments_doc as _adapter_build_segments_doc
 from constants import HISTORY_SCHEMA_VERSION
 from domain.command import validate_patch_dict
-from scripts.lib.schemas import Actor
+from qua_shared.schemas import Actor
 from services.storage import cache, data_dir
 from services.storage.data_loader import (
     get_single_word_verses,

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     AudioCategory,
     Delivery,
     ReciterEntry,
@@ -92,6 +92,7 @@ class PublicDelivery(TypedDict, total=False):
     source: str
     channel: str
     channel_name: str            # human display name from vocab; falls back to slug
+    source_url: str | None       # originating playlist URL (download-only sources); channel hyperlink target
     audio_category: str          # by_surah | by_ayah
     chapter_count: int
     coverage_kind: Literal["full", "partial"]
@@ -170,6 +171,7 @@ def _to_public_delivery(
         source=d.source,
         channel=d.channel,
         channel_name=channel_names.get(d.channel, d.channel),
+        source_url=d.source_url,
         audio_category=d.audio_category.value,
         chapter_count=d.chapter_count,
         coverage_kind=_delivery_coverage(d),

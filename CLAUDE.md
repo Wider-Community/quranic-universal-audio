@@ -21,7 +21,7 @@ Same code, two profiles selected by env:
 
 The prod Space is the only thing that uses `hetchyy/quranic-inspector-bucket` (prod) — it sets `INSPECTOR_BUCKET_REPO` explicitly. Every **non-deployed** process (local dev, scripts) defaults to the dev bucket `hetchyy/quranic-inspector-bucket-dev`.
 
-Contributors get their own isolated bucket/Space via `inspector/scripts/bootstrap_dev_env.py`, or run fully offline against fixtures via `inspector/scripts/seed_fixtures.py` (`INSPECTOR_BACKEND=filesystem`). See `inspector/README.md` for the three-tier dev workflow.
+Contributors get their own isolated bucket/Space via `scripts/devenv/bootstrap_dev_env.py`, or run fully offline against fixtures via `scripts/devenv/seed_fixtures.py` (`INSPECTOR_BACKEND=filesystem`). See `inspector/README.md` for the three-tier dev workflow.
 
 Localhost for quick development with Vite and access to bucket, dev space for verifying deployed works same as local on HuggingFace, and prod space for the real deal.
 
@@ -40,6 +40,16 @@ Can access from `HF_TOKEN` in `.env`
 | Deploy dev Space | push to `dev` → `inspector-deploy.yml` |
 
 ## Repo shape
+
+Top level — code that is neither the app nor the frontend:
+
+| Path | What |
+|---|---|
+| `qua_shared/` | Shared runtime **library** + Pydantic schemas — imported by the app at runtime AND by HF jobs, shipped in the image, the source of the codegen'd FE types + the authz capability registry. A package, not scripts. |
+| `qua_jobs/` | HF-Job **entrypoints** (cut_release, publish_hf, generate_timestamps, shard) — staged to the job bucket, run remotely as `/aux/code/qua_jobs/X.py`. |
+| `inspector/` | The Flask app (tree below). |
+| `scripts/` | All operational CLIs, grouped by function — `deploy/` `devenv/` `codegen/` `bucket/` `backfills/` `diagnostics/` `migrations/`. Invoked, never imported; pruned from the image. |
+| `.github/scripts/` | CI-only Python invoked by workflows. |
 
 ```
 inspector/
@@ -72,7 +82,7 @@ quranic-inspector-bucket/
 │       ├── detailed.json        # segments breakdown
 │       ├── audio/<ch>.mp3       # Chapter audio 
 │       ├── peaks/<ch>.json.gz   # Waveform peaks
-│       ├── timestamps/<ch>.json # Per-chapter shards
+│       ├── timestamps/<ch>.json.gz # Per-chapter segment-array shards (raw segments; byte pass-through read)
 │       └── ...       
 └──           
 ```
@@ -113,16 +123,17 @@ Cross-cutting rules to respect before touching anything. Depth is in the referen
 - **SQLite is the source of truth.** `state`/`catalog`/`access`/`audit`/`activity`/`claims`/`requests` live in one container-local `inspector.db`, synced full-file to the bucket after each commit. Per-reciter content (`detailed`/`segments`/`timestamps`) stays in bucket files. → [`database.md`](docs/reference/database.md)
 - **Single-worker.** The SQLite writer, per-slug locks, and role cache all assume one process; boot aborts on any multi-worker signal.
 - **All state changes go through `transition()`.** Lifecycle moves are validated + audited there, never mutated ad-hoc. → [`state-machine.md`](docs/reference/state-machine.md)
-- **One source for authz = the capability resolver.** Tier authorization is data-driven: every gate routes through `services/auth/capabilities.py::can()` against the registry in `scripts/lib/schemas/capabilities.py`; an owner toggles capabilities per tier from the **Admin → Permissions** tab. A new gate = register a `Capability` + gate via `can()` / `@require_capability` / `_require_capability`  → [`capabilities.md`](docs/reference/capabilities.md), [`auth-permissions.md`](docs/reference/auth-permissions.md)
+- **One source for authz = the capability resolver.** Tier authorization is data-driven: every gate routes through `services/auth/capabilities.py::can()` against the registry in `qua_shared/schemas/capabilities.py`; an owner toggles capabilities per tier from the **Admin → Permissions** tab. A new gate = register a `Capability` + gate via `can()` / `@require_capability` / `_require_capability`  → [`capabilities.md`](docs/reference/capabilities.md), [`auth-permissions.md`](docs/reference/auth-permissions.md)
 
 ## Conventions
 
 - **Clean imports** — services never import Flask; routes are thin (parse → service → jsonify).
 - **Cache via getter/setter** — `services/storage/cache.py` owns all cache variables; no `global` outside it.
 - **Registry-paired validation** — accordion order in `services/validation/registry.py` + `tabs/segments/domain/registry.ts` must stay in lockstep.
-- **Capability-gated permissions** — every permission gate routes through `can()` against the `CAPABILITIES` registry (`scripts/lib/schemas/capabilities.py`); register a `Capability` and it auto-surfaces in the owner Permissions tab (the matrix is fully data-driven — no FE edit). Never add a new gate with hardcoded `is_maintainer()`/`@require_role`. → [`capabilities.md`](docs/reference/capabilities.md)
+- **Capability-gated permissions** — every permission gate routes through `can()` against the `CAPABILITIES` registry (`qua_shared/schemas/capabilities.py`); register a `Capability` and it auto-surfaces in the owner Permissions tab (the matrix is fully data-driven — no FE edit). Never add a new gate with hardcoded `is_maintainer()`/`@require_role`. → [`capabilities.md`](docs/reference/capabilities.md)
 - **Actor on every edit** — save / undo / state-transition records carry `{hf_user_id, login_at_time, role}`; `login_at_time` is the cookie snapshot, never refetched.
 - **Bucket-first reads** — anything touching reciter content or store JSON goes through `services/storage/data_dir.py` / `services/storage/storage_paths.py`, not raw `Path.read_text()`.
-- **Svelte 5 for new code, Svelte 4 is legacy** — every new component, store, or `.svelte.ts` module is written with runes (`$state`, `$derived`, `$effect`, `$props`, `$bindable`) and callback-prop events. Pre-existing Svelte 4 files (`export let`, `$:`, `createEventDispatcher`, `on:`-directives, `<slot>`) keep working in legacy mode and are migrated either opportunistically when touched for a feature. Do not mix legacy syntax and runes in the same file — a file is fully one or the other. `TimestampsWaveform.svelte` and the canvas/audio-imperative components are deliberately exempt from migration.
-- **Shared schemas live in `scripts/lib/schemas/`** (Pydantic v2, `ConfigDict(extra="allow")` for forward-compat). Both the offline extraction pipeline and the Inspector save flow MUST round-trip the per-reciter artefact shapes (`detailed.json` segs, `edit_history.jsonl` batches/ops/snapshots, `edit_history_peaks.jsonl` records) through these models — never construct dict literals at the writer site. The slim FE-facing subset is re-exported at `scripts/lib/schemas/fe_types.py`.
-- **FE types are codegen'd, never hand-edited** — `inspector/frontend/src/lib/types/generated/schemas.ts` is autogenerated by `inspector/scripts/regen_fe_types.py` (Pydantic → JSON Schema → TypeScript via `pydantic-to-typescript`). After touching anything under `scripts/lib/schemas/`, run the script and commit the result. CI's `schema-codegen-check` job runs the same command and fails the build via `git diff --exit-code` if the committed file is out of sync. See `docs/reference/data-migrations.md` (Migration #5) for the rationale (writer/reader drift root cause).
+- **Svelte 5 for new code, Svelte 4 is legacy** — every new component, store, or `.svelte.ts` module is written with runes (`$state`, `$derived`, `$effect`, `$props`, `$bindable`) and callback-prop events. Pre-existing Svelte 4 files (`export let`, `$:`, `createEventDispatcher`, `on:`-directives, `<slot>`) keep working in legacy mode and are migrated either opportunistically when touched for a feature, or in dedicated batches per `docs/planning/svelte-migration.md`. Do not mix legacy syntax and runes in the same file — a file is fully one or the other. `TimestampsWaveform.svelte` and the canvas/audio-imperative components are deliberately exempt from migration; see the plan doc for the indefinitely-legacy list.
+- **Shared schemas live in `qua_shared/schemas/`** (Pydantic v2, `ConfigDict(extra="allow")` for forward-compat). Both the offline extraction pipeline and the Inspector save flow MUST round-trip the per-reciter artefact shapes (`detailed.json` segs, `edit_history.jsonl` batches/ops/snapshots, `edit_history_peaks.jsonl` records) through these models — never construct dict literals at the writer site. The slim FE-facing subset is re-exported at `qua_shared/schemas/fe_types.py`.
+- **FE types are codegen'd, never hand-edited** — `inspector/frontend/src/lib/types/generated/schemas.ts` is autogenerated by `scripts/codegen/regen_fe_types.py` (Pydantic → JSON Schema → TypeScript via `pydantic-to-typescript`). After touching anything under `qua_shared/schemas/`, run the script and commit the result. CI's `schema-codegen-check` job runs the same command and fails the build via `git diff --exit-code` if the committed file is out of sync. See `docs/reference/data-migrations.md` (Migration #5) for the rationale (writer/reader drift root cause).
+- **Scripts live in one `scripts/` home, grouped by function** — operational CLIs go under `scripts/<function>/` (`deploy/` `devenv/` `codegen/` `bucket/` `backfills/` `diagnostics/`); completed one-shot schema migrations are frozen under `scripts/migrations/`. CI-context-only glue (reads Actions env, emits release/badge artifacts) → `.github/scripts/`. Code *imported* at runtime is a package (`qua_shared`/`qua_jobs`), not a script. Full decision rule + catalogue: [`scripts/README.md`](scripts/README.md). There is no `scripts/lib`, `scripts/jobs`, or `inspector/scripts/` — the `scripts-layout-guard` CI job (`inspector-checks.yml`) fails any PR that re-adds those paths or imports `scripts.lib`/`scripts.jobs`.

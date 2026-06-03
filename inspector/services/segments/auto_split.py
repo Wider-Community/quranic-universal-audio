@@ -1,7 +1,7 @@
 """Auto-split: look up precomputed cursor positions for a segment.
 
 The actual MFA alignment that produces the cursor positions happens
-**offline**, via ``scripts/lib/auto_split_precompute.py``, after segment
+**offline**, via ``qua_shared/auto_split_precompute.py``, after segment
 extraction. The result is persisted to ``<reciter>/auto_split_v1.json``
 keyed by ``segment_uid``. At runtime the Inspector reads that sidecar via
 ``services.data_loader.load_auto_split`` and serves it in ~10 ms instead of

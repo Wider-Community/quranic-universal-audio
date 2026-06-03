@@ -13,6 +13,7 @@ function delivery(overrides: Partial<PublicDelivery> = {}): PublicDelivery {
         source: 'mp3quran',
         channel: 'mp3quran',
         channel_name: 'mp3quran',
+        source_url: null,
         audio_category: 'by_surah',
         chapter_count: 114,
         coverage_kind: 'full',

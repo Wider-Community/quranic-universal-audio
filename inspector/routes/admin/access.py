@@ -21,7 +21,7 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
-from scripts.lib.schemas import Role
+from qua_shared.schemas import Role
 
 from services import permissions
 

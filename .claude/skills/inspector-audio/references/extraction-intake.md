@@ -43,6 +43,20 @@ The inspector at runtime only **reads** `reciters/<slug>/` — it never fetches
 from a CDN to warm the bucket, and **nothing deletes it** (the hourly GC sweeper
 was removed; content persists indefinitely). See `prefetch.md`.
 
+### YouTube / yt-dlp sources *create* the encode (vs preserve it)
+
+Every other source preserves the publisher's mp3 bytes verbatim and only injects
+a Xing seek header (`-c:a copy`). A YouTube/playlist source is the exception:
+the source is opus/m4a, so `segments/audio_io.py::_download_via_ytdlp` fetches
+`bestaudio` and does ONE controlled encode → **128 kbps CBR / 44.1 kHz / mono**,
+`-vn` (cover-art stripped — an APIC stream 0-byte-muxes on the static ffmpeg).
+The watch URL can't be HTTP-frame-probed, so the audio-manifest sidecar + the
+delivery rollup are authored from a **post-align reprobe** of the produced files
+(`ingest_intake.py::reprobe_persisted_audio`), not from the source URL. These
+deliveries are bucket-served only — the watch URL is provenance, never streamed
+by the audio-proxy. See `catalog.md` §5 and the `segments-extraction` skill's
+`references/playlist_intake.md`.
+
 ## The reconciler — `services/segments/auto_detect.py`
 
 A single-worker background loop (`start_background_loop`, default 60 s; gated by
@@ -84,7 +98,7 @@ The state machine, audit log, and per-reciter content are identical across kinds
 | `existing_reciter_new_combo` | `NULL` (slugless) | Reciter exists; the (riwayah, style) combo does not. Owner accepts (`accepted`, slug stays `NULL`); ingest mints the delivery. |
 | `new_reciter` | `NULL` (slugless) | Neither reciter nor delivery exists. Owner accepts, stamping a canonical `reciter_id` into the payload; ingest mints reciter + delivery. |
 
-Slugless intake submission shape (`scripts/lib/schemas/intake_requests.py`,
+Slugless intake submission shape (`qua_shared/schemas/intake_requests.py`,
 `routes/claims/requests.py::submit_intake` → `services/admin/intake.py::submit`):
 the row carries `kind`, `reciter_id` (combo only), `proposed_edits`
 (`ProposedEdits` — riwayah/style/identity/recording fields), `source`
@@ -252,11 +266,11 @@ write them.
 |---|---|
 | `services/segments/auto_detect.py` | reconciler loop, `SYSTEM_ACTOR`, catch-up firing |
 | `services/admin/intake.py` | slugless submit / owner-accept / probe / resolve |
-| `scripts/lib/schemas/intake_requests.py` | `IntakeSubmission`, `IntakeSource`, `IntakeAttestations` |
+| `qua_shared/schemas/intake_requests.py` | `IntakeSubmission`, `IntakeSource`, `IntakeAttestations` |
 | `services/db/repo_requests.py` | `requests` table — `submit`, `resolve_by_id` (slug back-fill), `set_payload` |
 | `services/state/catalog.py` | `add_reciter`, `add_delivery`, `add_source`, `add_channel` (the ingest mint calls) |
-| `scripts/lib/schemas/catalog.py` | `Delivery`, `ReciterEntry`, `Source`, `Channel`, `Vocab`, `AudioManifestSidecar` |
-| `scripts/lib/schemas/state.py` | `ReciterState` (catalogued → … → released) |
+| `qua_shared/schemas/catalog.py` | `Delivery`, `ReciterEntry`, `Source`, `Channel`, `Vocab`, `AudioManifestSidecar` |
+| `qua_shared/schemas/state.py` | `ReciterState` (catalogued → … → released) |
 | `routes/claims/requests.py` | submit / accept / probe / return / discard / **ingest** routes |
 | `services/auth/token_auth.py` | bearer-token OWNER auth (`resolve_owner_from_token`, id-only cache) |
 | `services/auth/access.py` | `resolve_role(hf_user_id)` for bearer + cookie auth |

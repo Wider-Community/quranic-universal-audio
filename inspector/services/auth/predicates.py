@@ -15,12 +15,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from scripts.lib.schemas import ReciterState, Visibility
+from qua_shared.schemas import ReciterState, Visibility
 
 from . import permissions
 
 if TYPE_CHECKING:  # pragma: no cover
-    from scripts.lib.schemas import ReciterRow
+    from qua_shared.schemas import ReciterRow
 
     from .auth import User
 

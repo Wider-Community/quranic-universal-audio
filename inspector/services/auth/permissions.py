@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from scripts.lib.schemas import Role
+from qua_shared.schemas import Role
 
 
 MIN_REASON_CHARS = 10

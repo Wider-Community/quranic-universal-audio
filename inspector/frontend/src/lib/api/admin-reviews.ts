@@ -103,7 +103,7 @@ export async function sendBackToUnderReview(slug: string, reason: string): Promi
 // Both surfaces drive the owner-only "click the current reviewer → change or
 // remove" popover in the General drawer. ``UserCard`` mirrors the response
 // shape of ``/api/admin/users/lookup`` (and the ``to_user`` field of the
-// reassign route). Not yet formalised in ``scripts/lib/schemas/`` — promote
+// reassign route). Not yet formalised in ``qua_shared/schemas/`` — promote
 // when a second surface starts consuming it.
 
 export interface UserCard {

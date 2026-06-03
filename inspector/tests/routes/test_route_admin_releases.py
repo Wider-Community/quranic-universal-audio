@@ -100,7 +100,7 @@ def _seed_released(slug: str, *, channel: str = "mp3quran", reciter_id: str = "r
     """Seed a released-state delivery on an eligible channel."""
     from services import db
     from services.db import repo_state
-    from scripts.lib.schemas import ReciterState, Visibility
+    from qua_shared.schemas import ReciterState, Visibility
 
     _seed_eligible_channel(channel)
     _seed_delivery_on_channel(slug, channel=channel, reciter_id=reciter_id)

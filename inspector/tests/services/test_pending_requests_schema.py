@@ -1,4 +1,4 @@
-"""Schema tests for ``scripts.lib.schemas.pending_requests``.
+"""Schema tests for ``qua_shared.schemas.pending_requests``.
 
 These run with no Inspector services touched — pure pydantic validation.
 """
@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Actor,
     ArchivedRequest,
     ArchivedRequestsFile,

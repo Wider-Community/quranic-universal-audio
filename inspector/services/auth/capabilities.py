@@ -2,7 +2,7 @@
 
 ``can(user_or_actor, capability)`` is what every state handler, route, and
 predicate calls. It answers "is this *tier* allowed this capability right now",
-resolving the registry defaults (``scripts/lib/schemas/capabilities.py``)
+resolving the registry defaults (``qua_shared/schemas/capabilities.py``)
 overlaid with any owner-set ``permission_overrides``. Ownership questions
 ("is this *your* claimed row") stay in ``permissions.py`` — a capability only
 governs the tier / admin-override dimension layered on top of ownership.
@@ -24,8 +24,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from scripts.lib.schemas import CAPABILITIES, CAPABILITIES_BY_ID, TIERS
-from scripts.lib.schemas.capabilities import ANONYMOUS
+from qua_shared.schemas import CAPABILITIES, CAPABILITIES_BY_ID, TIERS
+from qua_shared.schemas.capabilities import ANONYMOUS
 
 from services.db import current_db_seq, repo_permissions
 from services.storage import cache

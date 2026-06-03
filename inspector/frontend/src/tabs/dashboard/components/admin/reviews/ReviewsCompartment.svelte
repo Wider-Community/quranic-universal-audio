@@ -9,7 +9,7 @@
      *
      * The state-vs-bucket mapping is computed FE-side from the canonical wire
      * shape; backend deliberately stays state-neutral. See
-     * scripts/lib/schemas/admin_reviews.py for the bucket→predicate contract.
+     * qua_shared/schemas/admin_reviews.py for the bucket→predicate contract.
      *
      * Row body click opens the General drawer (M2). Action button drawers
      * (Ops) land in M3.

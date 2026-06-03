@@ -8,7 +8,7 @@ that runtime cost we persist the result onto each segment's dict in
 - ``services/save.py`` on every saved segment (live edits)
 - ``services/validation/classifier.py`` fall-through (legacy segs lacking
   the persisted field — preserves identity for non-backfilled data)
-- ``inspector/scripts/backfill_qalqala_letter.py`` (one-off backfill)
+- ``scripts/backfills/backfill_qalqala_letter.py`` (one-off backfill)
 
 All three call ``compute_qalqala_letter`` here so the value is byte-
 equivalent across writers, which keeps drift checks honest.

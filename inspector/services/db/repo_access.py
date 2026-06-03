@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from scripts.lib.schemas import Member, Role, RolesFile
+from qua_shared.schemas import Member, Role, RolesFile
 
 from . import _serde
 from .connection import get_conn

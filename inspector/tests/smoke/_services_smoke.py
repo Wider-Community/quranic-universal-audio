@@ -23,7 +23,7 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Actor,
     AudioCategory,
     Channel,
@@ -58,7 +58,7 @@ def smoke() -> int:
     try:
         with tempfile.TemporaryDirectory() as root:
             access, audit, catalog, state = _setup(root)
-            from scripts.lib.schemas import ReciterState, Visibility
+            from qua_shared.schemas import ReciterState, Visibility
 
             # ---- access bootstrap ----
             owner = access.bootstrap(hf_user_id="100", login="owner_alice")
