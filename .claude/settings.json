@@ -1,0 +1,38 @@
+{
+    "enabledPlugins": {
+      "frontend-design@claude-plugins-official": true,
+      "claude-md-management@claude-plugins-official": true,
+      "context7@claude-plugins-official": true
+    },
+    "permissions": {
+      "allow": [
+        "Bash(qstat:*)",
+        "Bash(pip list:*)",
+        "Bash(grep:*)",
+        "Bash(head:*)",
+        "Bash(cat:*)",
+        "Bash(echo:*)",
+        "Bash(tail:*)"
+      ],
+      "ask": [
+        "Bash(sed:*)",
+        "Bash(awk:*)"
+      ]
+    },
+    "skillListingBudgetFraction": 0.8,
+    "hooks": {
+      "PostToolUse": [
+        {
+          "matcher": "Edit|Write|MultiEdit",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "powershell -NoProfile -NonInteractive -File \"$env:CLAUDE_PROJECT_DIR\\.claude\\hooks\\lint-frontend-edit.ps1\"",
+              "timeout": 15
+            }
+          ]
+        }
+      ]
+    }
+  }
+  

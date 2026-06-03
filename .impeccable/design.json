@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-03T00:00:00Z",
+  "title": "Design System: Quranic Universal Audio — Inspector",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Cyan Accent",
+        "canonical": "oklch(0.785 0.130 220)",
+        "tonalRamp": ["oklch(0.20 0.05 220)", "oklch(0.32 0.08 220)", "oklch(0.44 0.10 220)", "oklch(0.56 0.12 220)", "oklch(0.66 0.13 220)", "oklch(0.785 0.130 220)", "oklch(0.86 0.12 220)", "oklch(0.94 0.06 220)"]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Deep Blue-Violet Canvas",
+        "canonical": "oklch(0.186 0.042 285)",
+        "tonalRamp": ["oklch(0.130 0.034 285)", "oklch(0.186 0.042 285)", "oklch(0.236 0.055 270)", "oklch(0.275 0.055 270)", "oklch(0.315 0.055 270)", "oklch(0.40 0.045 272)", "oklch(0.55 0.030 270)", "oklch(0.94 0.010 268)"]
+      },
+      "state-published": { "role": "tertiary", "displayName": "Published Green", "canonical": "oklch(0.840 0.135 150)" },
+      "state-under-review": { "role": "tertiary", "displayName": "Under-Review Cyan", "canonical": "oklch(0.860 0.130 220)" },
+      "state-available": { "role": "tertiary", "displayName": "Available Violet", "canonical": "oklch(0.840 0.110 300)" },
+      "state-requested": { "role": "tertiary", "displayName": "Requested Grey", "canonical": "oklch(0.780 0.040 268)" },
+      "state-discarded": { "role": "tertiary", "displayName": "Discarded Muted Grey", "canonical": "oklch(0.550 0.010 268)" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page-level titles. The size ceiling for chrome (32px)." },
+      "body": { "displayName": "Body", "purpose": "Workhorse UI text: table rows, controls, descriptions (13.5–14px)." },
+      "label": { "displayName": "Label / Mono", "purpose": "Metadata, counts, timing readouts, technical chips. Tabular numerals." },
+      "arabic": { "displayName": "Quranic Arabic", "purpose": "Quranic text and reciter names in embedded DigitalKhatt, RTL, larger than chrome." }
+    },
+    "shadows": [
+      { "name": "focus-ring", "value": "0 0 0 1px oklch(0.785 0.130 220 / 0.14)", "purpose": "The ONLY shadow. Keyboard focus / active control. Never elevation." }
+    ],
+    "motion": [
+      { "name": "t-fast", "value": "120ms", "purpose": "Hover and small state changes." },
+      { "name": "t-base", "value": "200ms", "purpose": "Default control transitions." },
+      { "name": "t-slow", "value": "320ms", "purpose": "Panel / modal reveals." },
+      { "name": "ease-out-quart", "value": "cubic-bezier(0.25, 1, 0.5, 1)", "purpose": "Standard ease-out for state transitions." },
+      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Stronger settle for larger reveals." }
+    ],
+    "breakpoints": [
+      { "name": "page-max", "value": "1480px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single colored button — the one most-important action in a context.",
+      "html": "<button class=\"ds-btn-primary\">Claim</button>",
+      "css": ".ds-btn-primary { background: oklch(0.785 0.130 220); color: oklch(0.140 0.020 220); padding: 8px 16px; border: none; border-radius: 5px; font: 600 13.5px/1.2 -apple-system, 'Segoe UI', sans-serif; cursor: pointer; transition: background 120ms cubic-bezier(0.25,1,0.5,1); } .ds-btn-primary:hover { background: oklch(0.840 0.135 220); } .ds-btn-primary:focus-visible { outline: 2px solid oklch(0.785 0.130 220); outline-offset: 2px; }"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "Everyday button — panel surface, hairline border, lifts on hover.",
+      "html": "<button class=\"ds-btn-default\">Mark ready</button>",
+      "css": ".ds-btn-default { background: oklch(0.236 0.055 270); color: oklch(0.940 0.010 268); padding: 8px 16px; border: 1px solid oklch(0.375 0.035 275); border-radius: 5px; font: 400 13.5px/1.2 -apple-system, 'Segoe UI', sans-serif; cursor: pointer; transition: background 120ms ease; } .ds-btn-default:hover { background: oklch(0.275 0.055 270); } .ds-btn-default:focus-visible { outline: 2px solid oklch(0.785 0.130 220); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Low-emphasis inline action — transparent, text brightens on hover.",
+      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: oklch(0.760 0.010 268); padding: 8px 16px; border: none; border-radius: 5px; font: 400 13.5px/1.2 -apple-system, 'Segoe UI', sans-serif; cursor: pointer; transition: color 120ms ease; } .ds-btn-ghost:hover { color: oklch(0.940 0.010 268); }"
+    },
+    {
+      "name": "State Pill",
+      "kind": "chip",
+      "refersTo": "state-pill",
+      "description": "Lifecycle state — hue + label, never color alone. Shown here: Under review.",
+      "html": "<span class=\"ds-pill\">Under review</span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; background: oklch(0.860 0.130 220 / 0.14); color: oklch(0.860 0.130 220); padding: 2px 8px; border-radius: 3px; font: 400 11.5px/1.2 ui-monospace, 'SF Mono', monospace; letter-spacing: 0.02em; }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "filter-chip",
+      "description": "Faceted filter with live count; dulls to faint when its count is zero, stays selectable.",
+      "html": "<button class=\"ds-chip ds-chip--on\">Hafs <span class=\"ds-chip-count\">128</span></button>",
+      "css": ".ds-chip { background: transparent; color: oklch(0.760 0.010 268); padding: 4px 10px; border: 1px solid oklch(0.305 0.030 275); border-radius: 5px; font: 400 12px/1.2 -apple-system, 'Segoe UI', sans-serif; cursor: pointer; transition: background 120ms ease, color 120ms ease; } .ds-chip--on { background: oklch(0.785 0.130 220 / 0.14); color: oklch(0.785 0.130 220); border-color: oklch(0.785 0.130 220 / 0.4); } .ds-chip-count { margin-left: 6px; font-variant-numeric: tabular-nums; opacity: 0.7; } .ds-chip:focus-visible { outline: 2px solid oklch(0.785 0.130 220); outline-offset: 2px; }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Panel-surface field with accent focus ring; no glow beyond the ring.",
+      "html": "<input class=\"ds-input\" placeholder=\"Search reciters\" />",
+      "css": ".ds-input { background: oklch(0.236 0.055 270); color: oklch(0.940 0.010 268); padding: 6px 10px; border: 1px solid oklch(0.375 0.035 275); border-radius: 3px; font: 400 13.5px/1.5 -apple-system, 'Segoe UI', sans-serif; transition: border-color 120ms ease, box-shadow 120ms ease; } .ds-input::placeholder { color: oklch(0.560 0.010 268); } .ds-input:focus-visible { outline: none; border-color: oklch(0.785 0.130 220); box-shadow: 0 0 0 1px oklch(0.785 0.130 220 / 0.14); }"
+    },
+    {
+      "name": "Catalog Row",
+      "kind": "card",
+      "refersTo": "catalog-row",
+      "description": "A delivery row — reciter name in Arabic leads, transliteration paired, state pill trails. Active/playing row gains an accent border.",
+      "html": "<div class=\"ds-row\"><span class=\"ds-row-ar\" dir=\"rtl\">عبد الباسط عبد الصمد</span><span class=\"ds-row-lat\">Abdul Basit Abdul Samad</span><span class=\"ds-row-meta\">Hafs · Murattal · 128kbps</span><span class=\"ds-pill-pub\">Published</span></div>",
+      "css": ".ds-row { display: flex; align-items: center; gap: 16px; background: oklch(0.236 0.055 270); border: 2px solid transparent; border-radius: 8px; padding: 8px 12px; cursor: pointer; transition: background 120ms ease, border-color 120ms ease; } .ds-row:hover { background: oklch(0.275 0.055 270); } .ds-row-ar { font: 400 1.5rem/1.4 'DigitalKhatt', 'Traditional Arabic', 'Amiri', serif; color: oklch(0.940 0.010 268); } .ds-row-lat { font: 400 14px/1.5 -apple-system, 'Segoe UI', sans-serif; color: oklch(0.940 0.010 268); } .ds-row-meta { margin-left: auto; font: 400 11.5px/1.2 ui-monospace, 'SF Mono', monospace; color: oklch(0.560 0.010 268); } .ds-pill-pub { background: oklch(0.840 0.135 150 / 0.14); color: oklch(0.840 0.135 150); padding: 2px 8px; border-radius: 3px; font: 400 11.5px/1.2 ui-monospace, monospace; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Instrument",
+    "overview": "Inspector is a precision instrument that refuses to shout. Underneath runs an enormous engine — hundreds of reciters across many deliveries, a 60fps loop synchronizing thousands of word/letter/phoneme boundaries against a playhead, validation, audit, releases. The visual system's job is to make none of it feel heavy: the surface is dark, still, and legible; the data is alive. One language, three moods — Dashboard orients and invites, Timestamps calms and reveals, Segments equips and disappears. The vocabulary is identical across all three; only density and stillness shift.",
+    "keyCharacteristics": [
+      "Dark by conviction — built for multi-hour review and relaxed listening; no flash-of-light, no white modals.",
+      "Flat tonal layering, zero decorative shadow; depth is a five-step surface ramp.",
+      "One restrained cyan accent — rarity is the point.",
+      "OKLCH throughout; system fonts for chrome, one embedded Arabic face for Quranic text.",
+      "Calm scales with complexity: the busier the engine, the stiller the surface."
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Exactly one accent: cyan, marking what is interactive or current. A second saturated hue that isn't a defined state color is a bug. Buttons do not get their own colors.", "section": "colors" },
+      { "name": "The Hue-Plus-Label Rule", "body": "State is never communicated by color alone. Every state hue ships with a text label and survives grayscale and color-blindness.", "section": "colors" },
+      { "name": "The Fixed-Scale Rule", "body": "Type sizes are a fixed ladder (11.5 · 13.5 · 14 · 16 · 22 · 32), not fluid clamps. Consistent DPI in panels means a shrinking heading looks worse, not better.", "section": "typography" },
+      { "name": "The Arabic-Is-The-Subject Rule", "body": "Quranic text and reciter names render in the DigitalKhatt Arabic face, larger than surroundings, correct bidi — never a caption, never transliteration alone.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat at rest and on hover. The single allowed shadow is the accent focus ring. Drop-shadows are forbidden; step up the surface ramp instead.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do consume tokens via var(--token) for every new surface — colors, --s-* spacing, --r-1/2/3 radii, --fs-* sizes, --t-*/--ease-* motion.",
+      "Do keep exactly one accent (cyan); mark interactive and current state with it and nothing else.",
+      "Do convey depth with the surface ramp: canvas → panel → panel-2 → elevated, wells to canvas-inset.",
+      "Do pair every state hue with a text label and verify it survives grayscale.",
+      "Do render reciter names and Quranic text in the DigitalKhatt Arabic face, larger than chrome, with correct RTL/bidi.",
+      "Do hold transitions to 120–200ms and degrade to instant under prefers-reduced-motion: reduce.",
+      "Do let busier surfaces get quieter: on Timestamps every pixel of motion or color must serve comprehension or calm."
+    ],
+    "donts": [
+      "Don't introduce Material-Design button colors (#4361ee, #2e7d32, #6d1a1a, #6a1b9a) or any per-button palette. The live app's legacy Material buttons are drift, not the system.",
+      "Don't hardcode hex, off-scale radii (4px, 6px, 10px, 12px), or ad-hoc rem font sizes; snap to the token scales.",
+      "Don't add decorative shadows or glassmorphism; the only shadow is the accent focus ring.",
+      "Don't use a border-left/border-right colored stripe on cards, rows, or callouts.",
+      "Don't ship a hero-metric block or an identical icon-headline-text card grid; let the catalog carry the scale.",
+      "Don't decorate the religious content: no green-and-gold, no arabesque borders, no calligraphic flourish as ornament.",
+      "Don't let the Timestamps surface shout — no visualizer flash, neon EQ, or motion competing with the recitation.",
+      "Don't drop body text below text-muted, or use color as the only state signal."
+    ]
+  }
+}
