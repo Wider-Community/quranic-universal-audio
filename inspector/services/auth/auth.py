@@ -209,10 +209,34 @@ def is_dev_mode() -> bool:
     """True when the synthetic-user auth bypass is active.
 
     Gated by ``INSPECTOR_DEV_MODE=1`` (set automatically by ``app.py`` when
-    running locally outside pytest; explicit ``0`` forces it off). HF Space
-    deploys never see it on.
+    running locally outside pytest; explicit ``0`` forces it off).
+
+    Hard structural guard: the bypass is **never** active behind the deployed
+    reverse proxy (``INSPECTOR_BEHIND_PROXY=1``), regardless of
+    ``INSPECTOR_DEV_MODE`` — so a stray dev-mode env var copied onto an HF
+    Space can never turn anonymous visitors into a synthetic owner. ``app.py``
+    additionally aborts boot (``assert_dev_mode_safe``) if both are set.
     """
+    if os.environ.get("INSPECTOR_BEHIND_PROXY") == "1":
+        return False
     return os.environ.get("INSPECTOR_DEV_MODE") == "1"
+
+
+def assert_dev_mode_safe() -> None:
+    """Refuse to boot if the dev-mode OAuth bypass is set on a deployed Space.
+
+    The bypass serves every anonymous visitor as a synthetic owner, so it must
+    only ever run locally. ``is_dev_mode()`` already returns False behind the
+    proxy; this is the loud boot-time backstop ``app.py`` calls so an explicit
+    ``INSPECTOR_DEV_MODE=1`` mistakenly set on a Space fails fast and visibly
+    rather than silently elevating every visitor.
+    """
+    if (os.environ.get("INSPECTOR_DEV_MODE") == "1"
+            and os.environ.get("INSPECTOR_BEHIND_PROXY") == "1"):
+        raise RuntimeError(
+            "INSPECTOR_DEV_MODE=1 with INSPECTOR_BEHIND_PROXY=1 — the OAuth "
+            "bypass must never run on a deployed Space. Unset INSPECTOR_DEV_MODE."
+        )
 
 
 def is_oauth_configured() -> bool:

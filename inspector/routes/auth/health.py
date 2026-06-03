@@ -55,6 +55,9 @@ def healthz():
         "state_loaded": state_loaded,
         "reciters_count": len(rows),
         "oauth_configured": auth_service.is_oauth_configured(),
+        # Always False on a deployed Space (is_dev_mode() is forced off behind
+        # the proxy); a True here would signal the OAuth-bypass misconfig.
+        "dev_mode": auth_service.is_dev_mode(),
         "commit": os.environ.get("INSPECTOR_COMMIT_SHA", "unknown"),
         # Surface auto_detect status so a regression like "no background
         # loop running in prod" is visible from /healthz rather than only

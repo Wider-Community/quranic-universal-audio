@@ -199,3 +199,62 @@ def test_signed_in_client_fixture_unaffected_in_prod(signed_in_client):
     assert body["hf_user_id"] == "u-fix"
     assert body["role"] == "maintainer"
     assert body["dev_mode"] is False
+
+
+# ---- Behind-proxy hard guard (deployed-Space safety net) ----
+
+
+def test_is_dev_mode_false_behind_proxy(monkeypatch):
+    """Even with INSPECTOR_DEV_MODE=1, the bypass is structurally OFF behind the
+    deployed reverse proxy — a stray dev-mode env var on a Space can never
+    activate the synthetic-owner bypass."""
+    from services import auth as auth_service
+
+    monkeypatch.setenv("INSPECTOR_DEV_MODE", "1")
+    monkeypatch.setenv("INSPECTOR_BEHIND_PROXY", "1")
+    assert auth_service.is_dev_mode() is False
+
+
+def test_is_dev_mode_true_without_proxy(monkeypatch):
+    """The bypass stays available for local dev (no proxy)."""
+    from services import auth as auth_service
+
+    monkeypatch.setenv("INSPECTOR_DEV_MODE", "1")
+    monkeypatch.delenv("INSPECTOR_BEHIND_PROXY", raising=False)
+    assert auth_service.is_dev_mode() is True
+
+
+def test_dev_bypass_inactive_behind_proxy(dev_mode_client, monkeypatch):
+    """With both flags set, /api/me falls back to the real OAuth path: an
+    anonymous caller stays anonymous instead of becoming a synthetic owner."""
+    monkeypatch.setenv("INSPECTOR_BEHIND_PROXY", "1")
+    resp = dev_mode_client.get("/api/me")
+    body = json.loads(resp.data)
+    assert body["dev_mode"] is False
+    assert body["hf_user_id"] is None
+
+
+def test_assert_dev_mode_safe_aborts_on_proxy_plus_devmode(monkeypatch):
+    """Boot guard: dev-mode + behind-proxy together is a hard RuntimeError."""
+    from services import auth as auth_service
+
+    monkeypatch.setenv("INSPECTOR_DEV_MODE", "1")
+    monkeypatch.setenv("INSPECTOR_BEHIND_PROXY", "1")
+    with pytest.raises(RuntimeError, match="never run on a deployed Space"):
+        auth_service.assert_dev_mode_safe()
+
+
+@pytest.mark.parametrize("dev,proxy", [("1", None), ("0", "1"), (None, "1"), (None, None)])
+def test_assert_dev_mode_safe_allows_valid_combos(monkeypatch, dev, proxy):
+    """The boot guard does not fire for any legitimate combination."""
+    from services import auth as auth_service
+
+    if dev is None:
+        monkeypatch.delenv("INSPECTOR_DEV_MODE", raising=False)
+    else:
+        monkeypatch.setenv("INSPECTOR_DEV_MODE", dev)
+    if proxy is None:
+        monkeypatch.delenv("INSPECTOR_BEHIND_PROXY", raising=False)
+    else:
+        monkeypatch.setenv("INSPECTOR_BEHIND_PROXY", proxy)
+    auth_service.assert_dev_mode_safe()  # must not raise
