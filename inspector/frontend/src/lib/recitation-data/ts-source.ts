@@ -17,22 +17,28 @@
  *   - Shards: small LRU keyed `${reciter}:${chapter}` so back-and-forth
  *     between two reciters keeps both currents resident.
  *
- * Verse assembly is a port of the deleted server-side
- * `services/ts_query.py::get_verse_data` — same output shape as the
- * legacy `/api/ts/data/<reciter>/<verse>` payload.
+ * Each chapter shard is a temporal `segments[]` array (every recited segment
+ * raw, in recitation order). `assembleVerseFromShard` reduces a verse to its
+ * canonical (completing) occasion via `occasion-dedup`; `verseOccasionsFromShard`
+ * exposes all occasions for the (deferred) loopback filmstrip.
  */
 
 import { ApiError, fetchArrayBuffer, fetchJson } from '../api';
 import type {
     TsConfigResponse,
-    TsDataResponse,
     TsManifestResponse,
     TsShardResponse,
-    TsShardWord,
     TsVbrResponse,
 } from '../types/api';
 import type { Letter, PhonemeInterval, TsVerseData, TsWord } from '../types/domain';
 import type { BridgeInfo, TajweedBridgesResponse, TsValidationDoc } from '../types/generated/schemas';
+
+import {
+    type VerseOccasions,
+    canonicalClip,
+    groupVerseOccasions,
+    maxWordIndex,
+} from './occasion-dedup';
 
 // ---------------------------------------------------------------------------
 // Singleton caches
@@ -238,9 +244,9 @@ async function _fetchAyahTranslation(
 /**
  * Resolve word-by-word glosses for a loaded verse's words, keyed by
  * `location` ("surah:ayah:word"). Distinct ayahs are derived from the words'
- * locations (handles cross-verse compound segments — usually 1 ayah, sometimes
- * 2). Per-ayah results are merged and cached. A failed ayah fetch is skipped
- * (its words simply render no gloss) rather than failing the whole verse.
+ * locations (single verse). Per-ayah results are merged and cached. A failed
+ * ayah fetch is skipped (its words simply render no gloss) rather than failing
+ * the whole verse.
  */
 export async function loadVerseTranslations(
     words: TsWord[],
@@ -318,26 +324,21 @@ export async function loadVbrChapters(reciter: string): Promise<number[]> {
 
 /**
  * Authoritative per-reciter audio metadata, sourced from the manifest's reciter
- * block. The shard's `_meta.url_template` + `_meta.audio_category` are job-time
- * snapshots that can drift (empty template if the audio-manifest sidecar was
- * created after timestamps extraction, legacy long-form `by_surah_audio`
- * audio_category on pre-cutover shards) — the manifest is the live source the
- * backend just rebuilt against the current sidecar. Resolve from there.
+ * block — the live source the backend rebuilds against the current audio-manifest
+ * sidecar. The shard's slim `_meta` carries no audio routing fields.
  */
 export interface TsReciterAudio {
     /** Templated audio URL with `{surah:03d}` / `{ayah:03d}` placeholders. Empty
-     *  string when the audio manifest can't be expressed as a single template;
-     *  callers then fall back to the shard's per-verse `audio_urls` map. */
+     *  string when the audio manifest can't be expressed as a single template. */
     url_template: string;
     /** Short form (`'by_surah'` / `'by_ayah'`) — the contract the FE drives
-     *  audio routing + offset logic from. The legacy long form lives on stale
-     *  shards but never flows through this struct. */
+     *  audio routing + offset logic from. */
     audio_category: 'by_surah' | 'by_ayah';
 }
 
 /** Look up a reciter's authoritative audio metadata from a loaded manifest.
  *  Returns null when the manifest doesn't advertise the reciter (caller should
- *  treat as "audio unavailable" rather than fall back to stale shard `_meta`). */
+ *  treat as "audio unavailable"). */
 export function reciterAudioFromManifest(
     manifest: TsManifestResponse,
     reciter: string,
@@ -351,37 +352,26 @@ export function reciterAudioFromManifest(
 }
 
 /**
- * Resolve the audio URL for `(surah, ayah)` given the live `url_template`
- * (from the manifest) plus the shard's per-verse `audio_urls` map as a
- * fallback when no template applies.
+ * Resolve the audio URL for `(surah, ayah)` from the manifest's `url_template`.
  *
  * `url_template` carries `{surah:03d}` / `{ayah:03d}` placeholders for by_ayah
  * reciters and just `{surah:03d}` for by_surah; protocol-less templates get an
- * `https://` prefix. Empty template falls back to `audio_urls` keyed
- * `"<surah>:<ayah>"` (by_ayah) or `"<surah>"` (by_surah). Returns the empty
- * string when nothing is resolvable — caller must NOT push that into an
- * `<audio>` element (browser resolves "" to the page URL and errors).
+ * `https://` prefix. Returns the empty string when the template is empty — caller
+ * must NOT push that into an `<audio>` element (browser resolves "" to the page
+ * URL and errors).
  */
 export function resolveAudioUrl(
     urlTemplate: string,
-    audioUrlsFallback: Record<string, string> | undefined,
     surah: number,
     ayah: number,
 ): string {
-    if (urlTemplate) {
-        const httpsTmpl = /^https?:\/\//i.test(urlTemplate) ? urlTemplate : `https://${urlTemplate}`;
-        return httpsTmpl
-            .replace(/\{surah:03d\}/g, String(surah).padStart(3, '0'))
-            .replace(/\{ayah:03d\}/g, String(ayah).padStart(3, '0'))
-            .replace(/\{surah\}/g, String(surah))
-            .replace(/\{ayah\}/g, String(ayah));
-    }
-    if (!audioUrlsFallback) return '';
-    return (
-        audioUrlsFallback[`${surah}:${ayah}`]
-        ?? audioUrlsFallback[String(surah)]
-        ?? ''
-    );
+    if (!urlTemplate) return '';
+    const httpsTmpl = /^https?:\/\//i.test(urlTemplate) ? urlTemplate : `https://${urlTemplate}`;
+    return httpsTmpl
+        .replace(/\{surah:03d\}/g, String(surah).padStart(3, '0'))
+        .replace(/\{ayah:03d\}/g, String(ayah).padStart(3, '0'))
+        .replace(/\{surah\}/g, String(surah))
+        .replace(/\{ayah\}/g, String(ayah));
 }
 
 /**
@@ -460,28 +450,41 @@ export function loadTajweedBridges(
     return promise;
 }
 
+// ---------------------------------------------------------------------------
+// Segment-array assembly
+// ---------------------------------------------------------------------------
+
+/** Per-shard memo of `groupVerseOccasions` keyed by verse ref. The grouping
+ *  cost is O(segments) per chapter; callers iterate every verse of a chapter,
+ *  so memoizing on the (LRU-stable) shard object turns O(verses²) into O(1)
+ *  lookups after the first build. */
+const _occasionsByShard = new WeakMap<TsShardResponse, Map<string, VerseOccasions>>();
+
+function shardOccasions(shard: TsShardResponse): Map<string, VerseOccasions> {
+    let index = _occasionsByShard.get(shard);
+    if (!index) {
+        index = new Map();
+        for (const g of groupVerseOccasions(shard.segments ?? [])) index.set(g.ref, g);
+        _occasionsByShard.set(shard, index);
+    }
+    return index;
+}
+
 /**
- * Pure port of `inspector/services/ts_query.py:get_verse_data`.
+ * Build the `TsVerseData` payload for one verse from a chapter's segment array.
  *
- * Builds the full `TsVerseData` payload from a shard verse row plus
- * QPC / DK lookups. Handles compound refs (`"37:151:3-37:152:2"`) and
- * the `by_surah_audio` offset adjustment that subtracts the verse's
- * start time so the audio element starts at zero.
+ * The shard stores every recited segment raw, in recitation order; a verse may
+ * recur across several entries (loopbacks, re-dos). This selects the canonical
+ * (completing) occasion via {@link groupVerseOccasions} / {@link canonicalClip}
+ * — mirroring the backend `project_segment_shard` rule — then assembles its
+ * words with QPC / DK text and the `by_surah_audio` offset adjustment that
+ * subtracts the verse's start so the audio element starts at zero.
  *
- * Identity flows top-down. The caller already knows which slug it fetched
- * `shard` for (it's in the URL), so we take `reciter` as a param and return
- * it on the result. The shard's `_meta.reciter` is ignored for identity —
- * it can drift from the bucket folder slug (pre-cutover legacy slugs are
- * still embedded in some `timestamps_full.json` sources) and trusting it
- * silently breaks every manifest-lookup downstream.
+ * Identity flows top-down: the caller knows which slug it fetched `shard` for
+ * (it's in the URL), so `reciter` is a param and rides back on the result.
  *
- * Audio routing (`audio_url` + `audio_category`) is sourced from
- * ``reciterAudio`` — the manifest's reciter block — NOT from the shard's
- * `_meta`. Shards bake those fields at job time and drift afterwards
- * (sidecar regenerated → URL template changes; legacy long-form audio_category
- * outlives the short-form FE convention). The shard's `_meta.audio_urls`
- * still rides as the per-verse fallback when ``reciterAudio.url_template``
- * is empty (rare — only when the sidecar can't be expressed as a template).
+ * Audio routing (`audio_url` + `audio_category`) is sourced from `reciterAudio`
+ * — the manifest's reciter block, the live source — never from the shard.
  */
 export function assembleVerseFromShard(
     reciter: string,
@@ -491,32 +494,24 @@ export function assembleVerseFromShard(
     dk: Record<string, { text?: string }>,
     reciterAudio: TsReciterAudio,
 ): TsVerseData | null {
-    const verse = shard[verseRef];
-    if (!verse || verseRef === '_meta') return null;
+    if (verseRef === '_meta') return null;
 
-    const meta = shard._meta as TsShardResponse['_meta'];
-    const wordsRaw: TsShardWord[] = Array.isArray(verse)
-        ? verse as TsShardWord[]
-        : ((verse as { words: TsShardWord[] }).words ?? []);
+    const verseSegs = (shard.segments ?? []).filter((s) => s.ref === verseRef);
+    if (verseSegs.length === 0) return null;
+
     const chapter = parseInt(verseRef.split(':')[0] ?? '0', 10);
 
-    const isCompound = verseRef.includes('-');
-    let compoundSurah = 0;
-    let compoundStartAyah = 0;
-    let compoundEndAyah = 0;
-    if (isCompound) {
-        const [startPart, endPart] = verseRef.split('-', 2);
-        const sp = (startPart ?? '').split(':');
-        const ep = (endPart ?? '').split(':');
-        compoundSurah = parseInt(sp[0] ?? '0', 10);
-        compoundStartAyah = parseInt(sp[1] ?? '0', 10);
-        compoundEndAyah = parseInt(ep[1] ?? '0', 10);
-    }
+    // Pick the canonical occasion's words + clip span (completion-based dedup).
+    // Grouping runs against the FULL chapter (memoized per shard) so interleaving
+    // from other verses correctly splits a re-recited verse into occasions.
+    const nWords = maxWordIndex(verseSegs);
+    const grouped = shardOccasions(shard).get(verseRef);
+    const occasion = grouped?.canonical ?? verseSegs;
+    const clip = canonicalClip(occasion, nWords);
+    const wordsRaw = clip.words;
 
     const intervals: PhonemeInterval[] = [];
     const wordsOut: TsWord[] = [];
-    let curAyah = isCompound ? compoundStartAyah : 0;
-    let prevWordIdx = -1;
 
     for (const w of wordsRaw) {
         const wordIdx = w[0];
@@ -525,16 +520,7 @@ export function assembleVerseFromShard(
         const lettersRaw = (w[3] ?? []) as Array<[string, number | null, number | null]>;
         const phonesRaw = (w[4] ?? []) as Array<(string | number | boolean)[]>;
 
-        let location: string;
-        if (isCompound) {
-            if (prevWordIdx >= 0 && wordIdx <= prevWordIdx && curAyah < compoundEndAyah) {
-                curAyah += 1;
-            }
-            location = `${compoundSurah}:${curAyah}:${wordIdx}`;
-            prevWordIdx = wordIdx;
-        } else {
-            location = `${verseRef}:${wordIdx}`;
-        }
+        const location = `${verseRef}:${wordIdx}`;
         const text = qpc[location]?.text ?? '';
         const displayText = dk[location]?.text ?? text;
 
@@ -566,51 +552,30 @@ export function assembleVerseFromShard(
         });
     }
 
-    // Audio URL — template comes from the manifest's reciter block (live,
-    // authoritative), per-verse fallback comes from the shard's `_meta.audio_urls`
-    // (rare, only when the sidecar can't be expressed as a single template).
-    const surahNum = isCompound ? compoundSurah : chapter;
-    const ayahNum = isCompound
-        ? compoundStartAyah
-        : parseInt(verseRef.split(':')[1] ?? '0', 10);
-    const audioUrl = resolveAudioUrl(
-        reciterAudio.url_template, meta.audio_urls, surahNum, ayahNum,
-    );
+    // Audio URL — template comes from the manifest's reciter block (live).
+    const surahNum = chapter;
+    const ayahNum = parseInt(verseRef.split(':')[1] ?? '0', 10);
+    const audioUrl = resolveAudioUrl(reciterAudio.url_template, surahNum, ayahNum);
 
     // The TsVerseData type expects the long form ("by_*_audio") — the manifest
-    // carries the short form. Map here. (Stale shards stamp the long form into
-    // `_meta.audio_category`; ignoring it eliminates the legacy-form trap that
-    // used to flip a by_surah reciter to the by_ayah branch below.)
+    // carries the short form. Map here.
     const audioCategory: 'by_ayah_audio' | 'by_surah_audio' =
         reciterAudio.audio_category === 'by_surah' ? 'by_surah_audio' : 'by_ayah_audio';
 
     let timeStartMs = 0;
     let timeEndMs = 0;
 
-    // Prefer seg-based `verse_start_ms` / `verse_end_ms` from the shard so
-    // the inspector's clip matches what the dataset publishes (segmenter's
-    // natural lead-in / trailing silence included). Audio plays through the
-    // silence with no word/letter highlighted — that's expected. When the
-    // shard predates seg bounds, fall back to MFA word bounds.
-    const shardVerse = (verse && typeof verse === 'object' && !Array.isArray(verse))
-        ? (verse as Record<string, unknown>)
-        : null;
-    const seg_start_ms = typeof shardVerse?.verse_start_ms === 'number'
-        ? shardVerse.verse_start_ms : null;
-    const seg_end_ms = typeof shardVerse?.verse_end_ms === 'number'
-        ? shardVerse.verse_end_ms : null;
-
+    // Clip bounds come from the canonical occasion's segment span — the
+    // contiguous `[start, end]` the dataset publishes (segmenter's natural
+    // lead-in / trailing silence included). Audio plays through the silence with
+    // no word/letter highlighted — that's expected.
     if (audioCategory === 'by_surah_audio') {
         if (wordsRaw.length > 0) {
             const wordStart = wordsRaw[0]![1];
             const wordEnd = wordsRaw.reduce(
                 (m, w) => (w[2] > m ? w[2] : m), wordsRaw[0]![2]);
-            timeStartMs = seg_start_ms !== null
-                ? Math.min(seg_start_ms, wordStart)
-                : wordStart;
-            timeEndMs = seg_end_ms !== null
-                ? Math.max(seg_end_ms, wordEnd)
-                : wordEnd;
+            timeStartMs = Math.min(clip.startMs, wordStart);
+            timeEndMs = Math.max(clip.endMs, wordEnd);
             const offsetSec = timeStartMs / 1000;
             for (const wo of wordsOut) {
                 wo.start -= offsetSec;
@@ -625,13 +590,16 @@ export function assembleVerseFromShard(
                 iv.end -= offsetSec;
             }
         }
-    } else if (seg_end_ms !== null) {
-        timeEndMs = seg_end_ms;
-    } else if (intervals.length > 0) {
-        timeEndMs = Math.round(intervals[intervals.length - 1]!.end * 1000);
-    } else if (wordsRaw.length > 0) {
-        timeEndMs = wordsRaw.reduce(
-            (m, w) => (w[2] > m ? w[2] : m), wordsRaw[0]![2]);
+    } else {
+        // by_ayah: per-verse file, words already 0-anchored. Clip end is the
+        // segment span end (which can include trailing silence past the last word).
+        timeEndMs = clip.endMs > 0
+            ? clip.endMs
+            : (intervals.length > 0
+                ? Math.round(intervals[intervals.length - 1]!.end * 1000)
+                : (wordsRaw.length > 0
+                    ? wordsRaw.reduce((m, w) => (w[2] > m ? w[2] : m), wordsRaw[0]![2])
+                    : 0));
     }
 
     return {
@@ -647,9 +615,17 @@ export function assembleVerseFromShard(
     };
 }
 
-/** List the verse refs belonging to a chapter, in canonical sort order. */
+/** Distinct verse refs in a chapter, in recitation order (a verse appears once
+ *  even when it recurs across multiple segments). */
 export function chapterVerseRefs(shard: TsShardResponse): string[] {
-    return Object.keys(shard).filter((k) => k !== '_meta');
+    return [...shardOccasions(shard).keys()];
+}
+
+/** Recitation-ordered occasions per verse for the chapter — every take a verse
+ *  was recited (loopbacks / re-dos), in playback order. Feeds the (deferred)
+ *  loopback filmstrip; the default per-verse clip uses `g.canonical`. */
+export function verseOccasionsFromShard(shard: TsShardResponse): VerseOccasions[] {
+    return [...shardOccasions(shard).values()];
 }
 
 // ---------------------------------------------------------------------------
