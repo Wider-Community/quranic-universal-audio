@@ -253,7 +253,7 @@ New `name_en` entries must follow these (applied at seed).
 
 ## 7. Seed origin (historical)
 
-The seed catalog (864 deliveries, 422 reciter clusters, 0 slug collisions) was built one-time by a dedup + probe pipeline whose scratch artifacts lived in `.local/dedup/` (gitignored): dual-agent name clustering, same-channel ffprobe duplicate detection, naming-consistency + canonical-spelling normalization passes, then a bulk 256 KB-range audio probe and a `build_catalog.py` assembly to `reciter_catalog.json` + sidecars. That JSON was later migrated into SQLite (`inspector/scripts/migrate_json_to_sqlite.py`). The `.local/dedup/` artifacts are historical scratch — not load-bearing. Seed rows carry `added_at = 2026-05-12T00:00:00Z`, `added_by_hf_id = system_seed`.
+The seed catalog (864 deliveries, 422 reciter clusters, 0 slug collisions) was built one-time by a dedup + probe pipeline whose scratch artifacts lived in `.local/dedup/` (gitignored): dual-agent name clustering, same-channel ffprobe duplicate detection, naming-consistency + canonical-spelling normalization passes, then a bulk 256 KB-range audio probe and a `build_catalog.py` assembly to `reciter_catalog.json` + sidecars. That JSON was later migrated into SQLite (`inspector/scripts/migrations/migrate_json_to_sqlite.py`). The `.local/dedup/` artifacts are historical scratch — not load-bearing. Seed rows carry `added_at = 2026-05-12T00:00:00Z`, `added_by_hf_id = system_seed`.
 
 ## 8. Mutation surface
 

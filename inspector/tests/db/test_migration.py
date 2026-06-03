@@ -27,7 +27,7 @@ from services.db import repo_state, repo_access, repo_transitions, repo_activity
 # the repo-root scripts/ (qua_shared.schemas), so import via importlib.
 _spec = importlib.util.spec_from_file_location(
     "migrate_json_to_sqlite",
-    Path(__file__).resolve().parents[2] / "scripts" / "migrate_json_to_sqlite.py",
+    Path(__file__).resolve().parents[2] / "scripts" / "migrations" / "migrate_json_to_sqlite.py",
 )
 M = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(M)

@@ -39,7 +39,7 @@ One-shot unification of the two state-driven per-reciter prefixes into a single 
 ## Substrate migrations
 
 ### JSON → SQLite (`migrate_json_to_sqlite.py`)
-The cutover. Reads the legacy stores via the configured backend, decomposes into SQLite tables, runs a **semantic** parity readback (list order normalized, not byte), optionally uploads to `db/inspector.db`. Refuses to overwrite an existing bucket DB without `--force`. Decomposition + parity gate fully documented in [database.md](database.md). `python inspector/scripts/migrate_json_to_sqlite.py --bucket dev [--force] [--allow-orphans] [--dry-run]`.
+The cutover. Reads the legacy stores via the configured backend, decomposes into SQLite tables, runs a **semantic** parity readback (list order normalized, not byte), optionally uploads to `db/inspector.db`. Refuses to overwrite an existing bucket DB without `--force`. Decomposition + parity gate fully documented in [database.md](database.md). `python inspector/scripts/migrations/migrate_json_to_sqlite.py --bucket dev [--force] [--allow-orphans] [--dry-run]`.
 
 ### Pending orphans (`migrate_pending_orphans.py`)
 Legacy boot-time reconcile *deleted* pending-request orphans (losing proposed_edits + comments + auto_claim). New design archives at each terminal transition; this catches up legacy data by writing orphans into `requests/completed.json` with a synthetic system actor + `reason="migrated from orphan"`. Dry-run default; `--apply` to commit. Idempotent (second run archives zero).

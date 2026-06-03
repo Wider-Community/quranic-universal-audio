@@ -19,7 +19,7 @@ Decomposition:
 Parity is SEMANTIC (list order normalized — repos read slug-sorted), not byte.
 
 Usage:
-  python inspector/scripts/migrate_json_to_sqlite.py --bucket dev [--force]
+  python inspector/scripts/migrations/migrate_json_to_sqlite.py --bucket dev [--force]
                                                       [--allow-orphans] [--dry-run]
 """
 
@@ -38,7 +38,8 @@ logger = logging.getLogger("migrate_json_to_sqlite")
 # build() applies it after its inserts (schema migrations run before build()
 # populates, so a fresh build needs first_seen recomputed post-insert).
 _FIRST_SEEN_BACKFILL_SQL = (
-    Path(__file__).resolve().parent.parent
+    # migrations/ -> scripts/ -> inspector/
+    Path(__file__).resolve().parent.parent.parent
     / "services" / "db" / "migrations" / "0003_backfill_first_seen.sql"
 )
 
