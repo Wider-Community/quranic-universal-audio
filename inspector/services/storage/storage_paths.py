@@ -148,16 +148,14 @@ def pipeline_meta_path(slug: str) -> str:
 
 
 def timestamps_path(slug: str, chapter: str | int) -> str:
-    """Per-chapter timestamps shard (legacy uncompressed). Only released
-    reciters have these — the Timestamps tab gates on DB state, not file
-    presence."""
+    """Uncompressed per-chapter timestamps shard path. Retained as a path
+    helper; the read path serves the gzipped shard (``timestamps_path_gz``)."""
     return reciter_file(slug, f"timestamps/{chapter}.json")
 
 
 def timestamps_path_gz(slug: str, chapter: str | int) -> str:
-    """Gzipped per-chapter v2 shard. The job writes these; the read-path
-    prefers them and inflates, falling back to ``timestamps/<chapter>.json``
-    for pre-v2 released reciters."""
+    """Gzipped per-chapter segment-array shard. The job writes these; the
+    read path serves the gz body verbatim as a byte pass-through."""
     return reciter_file(slug, f"timestamps/{chapter}.json.gz")
 
 
