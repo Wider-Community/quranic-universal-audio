@@ -40,6 +40,7 @@ _DELIVERY_WRITABLE: dict[str, Any] = {
     "variant_label": lambda v: v,
     "source": lambda v: v,
     "channel": lambda v: v,
+    "source_url": lambda v: v,
     "audio_category": lambda v: v.value if hasattr(v, "value") else v,
     "chapter_count": lambda v: v,
     "codec": lambda v: v,
@@ -107,6 +108,7 @@ def _delivery_from_row(r) -> Delivery:
         variant_label=r["variant_label"],
         source=r["source"],
         channel=r["channel"],
+        source_url=r["source_url"],
         audio_category=r["audio_category"],
         chapter_count=r["chapter_count"],
         codec=r["codec"],
@@ -218,13 +220,13 @@ def insert_reciter(entry: ReciterEntry) -> None:
 def insert_delivery(d: Delivery) -> None:
     get_conn().execute(
         "INSERT INTO deliveries(slug, reciter_id, riwayah, style, source, channel, "
-        "recording_context, recording_year, variant_label, audio_category, chapter_count, "
-        "codec, container, sample_rate_hz, channels, bitrate_mode, bitrate_kbps_nominal, "
-        "total_duration_sec, added_at, added_by_hf_id) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "source_url, recording_context, recording_year, variant_label, audio_category, "
+        "chapter_count, codec, container, sample_rate_hz, channels, bitrate_mode, "
+        "bitrate_kbps_nominal, total_duration_sec, added_at, added_by_hf_id) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             d.slug, d.reciter_id, d.riwayah, d.style, d.source, d.channel,
-            d.recording_context, d.recording_year, d.variant_label,
+            d.source_url, d.recording_context, d.recording_year, d.variant_label,
             d.audio_category.value if hasattr(d.audio_category, "value") else d.audio_category,
             d.chapter_count, d.codec, d.container, d.sample_rate_hz, d.channels,
             d.bitrate_mode.value if hasattr(d.bitrate_mode, "value") else d.bitrate_mode,

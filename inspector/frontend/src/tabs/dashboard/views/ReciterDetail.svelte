@@ -357,7 +357,7 @@
                                             {/if}
                                         </td>
                                         {#each visibleCols as col (col.key)}
-                                            <td class={`cell cell-${col.key}`}>{col.value(d)}</td>
+                                            <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title="Open source" on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
                                         {/each}
                                         <td class="col-state">
                                             {#if d.bucket === 'available_for_request'}
@@ -412,7 +412,7 @@
                                                 {/if}
                                             </td>
                                             {#each visibleCols as col (col.key)}
-                                                <td class={`cell cell-${col.key}`}>{col.value(d)}</td>
+                                                <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title="Open source" on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
                                             {/each}
                                             <td class="col-state">
                                                 <StatePill state={d.bucket} size="sm" />
@@ -440,7 +440,7 @@
                                             {/if}
                                         </td>
                                         {#each visibleCols as col (col.key)}
-                                            <td class={`cell cell-${col.key}`}>{col.value(d)}</td>
+                                            <td class={`cell cell-${col.key}`}>{#if col.key === 'channel' && d.source_url}<a class="source-link" href={d.source_url} target="_blank" rel="noopener noreferrer" title="Open source" on:click|stopPropagation>{col.value(d)}</a>{:else}{col.value(d)}{/if}</td>
                                         {/each}
                                         <td class="col-state">
                                             {#if d.bucket === 'available_for_request'}
@@ -657,6 +657,16 @@
     .cell-bitrate,
     .cell-hours,
     .cell-year { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+    /* Channel cell hyperlinks to the originating source (e.g. a YouTube playlist)
+       when the delivery carries a source_url. */
+    .source-link {
+        color: inherit;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        text-decoration-thickness: 1px;
+        text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+    }
+    .source-link:hover { text-decoration-color: currentColor; }
 
     .play {
         width: 26px; height: 26px;

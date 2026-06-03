@@ -89,6 +89,7 @@ from .mark_ready import (
 )
 from .peaks_history import PeaksRecord, parse_peaks_record
 from .pipeline_meta import PipelineMeta
+from .playlist_map import MatchConfidence, PlaylistChapterEntry, PlaylistChapterMap
 from .pending_requests import (
     ArchivedRequest,
     ArchivedRequestsFile,
@@ -171,8 +172,11 @@ __all__ = [
     "MarkReadyChecklist",
     "MarkReadyRequest",
     "MarkReadySubmission",
+    "MatchConfidence",
     "Member",
     "PeaksRecord",
+    "PlaylistChapterEntry",
+    "PlaylistChapterMap",
     "PendingRequest",
     "PendingRequestsFile",
     "PipelineMeta",
