@@ -65,6 +65,7 @@ title: Quranic Universal Audio{suffix}
 emoji: 🎙️
 colorFrom: yellow
 colorTo: indigo
+short_description: Visualize, edit & verify Qur'anic recitation timestamps
 sdk: docker
 app_port: 7860
 pinned: false
