@@ -1,8 +1,4 @@
-# Docs
-docs/reciters-research/
-docs/planning/
-docs/proposals/
-docs/reference/
+docs/proposals
 
 # Cache
 __pycache__/
@@ -13,12 +9,11 @@ node_modules/
 
 # IDEs / Agents
 .vscode/
-.claude/
 .cursor/
-.agents/
-CLAUDE.md
-AGENTS.md
-PRODUCT.md
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/launch.json
+.claude/worktrees/
 
 # envs
 .env
@@ -26,9 +21,6 @@ PRODUCT.md
 
 # Local
 .local/
-# Standalone private repos (own git, siblings of .local) — see CLAUDE.md
-quranic-universal-aligner/
-quranic-universal-timestamps/
 .tmp/
 .playwright-mcp
 
