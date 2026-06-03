@@ -21,7 +21,7 @@ def _register_test_routes():
     """
     from flask import jsonify
 
-    from scripts.lib.schemas import Role
+    from qua_shared.schemas import Role
 
     from app import app
     from utils.decorators import require_role

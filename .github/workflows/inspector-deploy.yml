@@ -5,7 +5,7 @@ on:
     branches: [dev, main]
     paths:
       - "inspector/**"
-      - "scripts/lib/**"
+      - "qua_shared/**"
       - "scripts/upload_inspector.py"
       - "scripts/inspector_v2_seed/**"
       - "data/surah_info.json"

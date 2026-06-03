@@ -6,7 +6,7 @@ namespace, future-proof for other job kinds). Two writers, one schema:
 - ``inspector/services/admin/timestamps_jobs.py`` writes the initial
   ``running`` record at launch and backstops the terminal status on poll if
   the job was hard-killed before self-writing.
-- ``scripts/jobs/generate_timestamps.py`` (the job itself) overwrites the
+- ``qua_jobs/generate_timestamps.py`` (the job itself) overwrites the
   record with the final status + full logs on completion/failure.
 
 The Reviews-tab side panel reads these so a job's settings + logs stay

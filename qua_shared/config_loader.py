@@ -3,8 +3,8 @@ import yaml
 from pathlib import Path
 from functools import lru_cache
 
-# scripts/lib/config_loader.py -> scripts/lib/ -> scripts/ -> repo root
-_ROOT = Path(__file__).resolve().parent.parent.parent
+# qua_shared/config_loader.py -> qua_shared/ -> repo root
+_ROOT = Path(__file__).resolve().parent.parent
 _CONFIG_DIR = _ROOT / ".github" / "config"
 _TEMPLATE_DIR = _ROOT / ".github" / "templates"
 

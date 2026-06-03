@@ -46,11 +46,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.lib.timestamps_pipeline import (  # noqa: E402
+from qua_shared.timestamps_pipeline import (  # noqa: E402
     DEFAULT_BATCH_SIZE,
     DEFAULT_DOWNLOAD_WORKERS,
     DEFAULT_METHOD,
@@ -121,7 +121,7 @@ def _persist_chapter_audio(url: str, audio_dest: Path, peaks_dest: Path,
             shutil.copyfile(tmp, audio_dest)  # raw fallback (VBR mis-seek risk)
         if gen_peaks:
             try:
-                from scripts.lib.peaks_compute import compute_audio_peaks, pack_slim
+                from qua_shared.peaks_compute import compute_audio_peaks, pack_slim
                 hd = compute_audio_peaks(str(audio_dest))
                 if hd and hd.get("peaks"):
                     peaks_dest.parent.mkdir(parents=True, exist_ok=True)
@@ -150,7 +150,7 @@ def _bake_missing_peaks(reciter_dir: Path, entries: list) -> None:
     ffmpeg path per verse. Computes from ``entry["audio"]`` (local bucket file
     or CDN url), skips existing files + by_ayah refs, best-effort.
     """
-    from scripts.lib.peaks_compute import compute_audio_peaks, pack_slim  # noqa: E402
+    from qua_shared.peaks_compute import compute_audio_peaks, pack_slim  # noqa: E402
 
     peaks_dir = reciter_dir / "peaks"
     peaks_dir.mkdir(parents=True, exist_ok=True)
@@ -189,7 +189,7 @@ def _write_record(mount: Path, slug: str, settings: dict, *, status: str,
     if not job_id:
         return
     try:
-        from scripts.lib.schemas import TsJobRecord, TsJobSettings
+        from qua_shared.schemas import TsJobRecord, TsJobSettings
         rec = TsJobRecord(
             job_id=job_id, slug=slug, type="ts",
             settings=TsJobSettings.model_validate(settings),

@@ -3,7 +3,7 @@
 -- The ``awaiting_timestamps`` lifecycle state was removed: publishing now goes
 -- straight ``under_review → released`` when the timestamps job succeeds (the
 -- reciter stays under_review while the job runs). See
--- ``scripts/lib/schemas/state.py::ReciterState`` and
+-- ``qua_shared/schemas/state.py::ReciterState`` and
 -- ``services/state/state.py::_h_published``.
 --
 -- ``delivery_states.state`` is plain TEXT (no CHECK constraint on the value

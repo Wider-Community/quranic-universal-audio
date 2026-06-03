@@ -99,11 +99,11 @@ Local QF creds live in `inspector/.env` (gitignored), loaded by `app.py`.
 
 ## Image build — `inspector/Dockerfile`
 
-Three-stage build, context is the **repo root** (so `scripts/lib/` ships alongside `inspector/`):
+Three-stage build, context is the **repo root** (so `qua_shared/` ships alongside `inspector/`):
 
 1. **frontend-build** (`node:20-alpine`) — `npm ci` + `npm run build` → `dist/`.
 2. **ffmpeg-build** (`alpine:3.23`) — compiles a minimal *static* ffmpeg/ffprobe (mp3 decode + `pcm_s16le`/wav for peaks + `libmp3lame`/mp3 muxer for the `segment-clip` route). `libmp3lame 3.100` is built from source `--enable-static` because Alpine ships no static lame archive — without it `clip.py` returns 200/0-bytes and playback hangs. http/https protocols enabled so ffmpeg can decode remote chapters via HTTP Range.
-3. **runtime** (`python:3.11-alpine`) — installs `inspector/requirements.txt`, purges pip/setuptools/wheel, **selective COPY** (`app.py/config.py/constants.py`, `adapters/ domain/ routes/ services/ utils/`, `scripts/__init__.py + scripts/lib/ + scripts/jobs/`, `.github/config/`, `LICENSE`, the 4 bundled data JSONs, and `frontend/dist` from stage 1). `scripts/jobs/` + `.github/config/` + `LICENSE` are read by the HF-Job entrypoints (`config_loader`, cut_release asset upload). Runs as non-root uid/gid 1000. `EXPOSE 7860`. **Adding a `COPY` here needs no staging edit** — the deploy stages the whole tracked tree (see Deploy).
+3. **runtime** (`python:3.11-alpine`) — installs `inspector/requirements.txt`, purges pip/setuptools/wheel, **selective COPY** (`app.py/config.py/constants.py`, `adapters/ domain/ routes/ services/ utils/`, `scripts/__init__.py + qua_shared/ + qua_jobs/`, `.github/config/`, `LICENSE`, the 4 bundled data JSONs, and `frontend/dist` from stage 1). `qua_jobs/` + `.github/config/` + `LICENSE` are read by the HF-Job entrypoints (`config_loader`, cut_release asset upload). Runs as non-root uid/gid 1000. `EXPOSE 7860`. **Adding a `COPY` here needs no staging edit** — the deploy stages the whole tracked tree (see Deploy).
 
 `CMD`: `gunicorn -k gthread -w 1 --threads 16 --max-requests 5000 --max-requests-jitter 500 --timeout 60 --graceful-timeout 30 --bind 0.0.0.0:7860 --chdir /app/inspector app:app`. `-w 1` is load-bearing (asserted at import). `--threads 16` sizes the I/O-bound pool. `--max-requests` recycles the worker to bound slow leaks.
 
@@ -111,7 +111,7 @@ Three-stage build, context is the **repo root** (so `scripts/lib/` ships alongsi
 
 ## Deploy — `inspector-deploy.yml`
 
-Push to `dev` or `main` (paths under `inspector/**`, `scripts/lib/**`, `scripts/upload_inspector.py`, the bundled data JSONs, `.dockerignore`) → workflow runs `inspector-checks.yml` (reused), then `deploy` runs `scripts/upload_inspector.py <env>`. Branch→env: `dev`→dev Space, `main`→prod Space; `workflow_dispatch` can force `dev`/`prod`. The Space then rebuilds the Docker image from the uploaded files.
+Push to `dev` or `main` (paths under `inspector/**`, `qua_shared/**`, `scripts/upload_inspector.py`, the bundled data JSONs, `.dockerignore`) → workflow runs `inspector-checks.yml` (reused), then `deploy` runs `scripts/upload_inspector.py <env>`. Branch→env: `dev`→dev Space, `main`→prod Space; `workflow_dispatch` can force `dev`/`prod`. The Space then rebuilds the Docker image from the uploaded files.
 
 **Staging = the whole git-tracked tree.** `upload_inspector._stage()` copies **every git-tracked file** verbatim (then overlays the root `Dockerfile` from `inspector/Dockerfile` + a frontmatter `README.md`), and `upload_folder(delete_patterns="*")` mirrors it to the Space. `.dockerignore` is the **single source of truth** that prunes the build context — there is no hand-curated allowlist to drift from the Dockerfile's `COPY` set (that drift took prod down once: a `COPY LICENSE` with no matching staging entry → `BUILD_ERROR "/LICENSE: not found"`). Consequence: the Space build context equals the `context: .` that `docker-publish.yml` builds on every push, so its green image build is a faithful "the Space will compile" signal. `dist/` is built inside the image (stage 1), so the deploy does **not** pre-build the frontend.
 

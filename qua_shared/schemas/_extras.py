@@ -16,7 +16,7 @@ After the pre-validator strips both classes, the model itself can run with
 ``extra="forbid"`` so subsequent code paths see a clean shape (no surprise
 attributes from absorbed extras).
 
-Tests live alongside the schemas (``scripts/lib/schemas/smoke.py``).
+Tests live alongside the schemas (``qua_shared/schemas/smoke.py``).
 """
 from __future__ import annotations
 

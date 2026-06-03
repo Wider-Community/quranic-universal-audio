@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Channel,
     Delivery,
     ReciterCatalog,
@@ -22,7 +22,7 @@ from scripts.lib.schemas import (
     Style,
     Vocab,
 )
-from scripts.lib.schemas.catalog import Alias, Derived
+from qua_shared.schemas.catalog import Alias, Derived
 
 from . import _serde
 from .connection import get_conn

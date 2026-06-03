@@ -66,7 +66,7 @@ def test_save_non_assignee_returns_403(signed_in_client, tmp_reciter_dir):
 def test_save_wrong_state_returns_403_with_state_label(signed_in_client, tmp_reciter_dir):
     """A non-owner saving a row that isn't UNDER_REVIEW gets NOT_EDITABLE_STATE
     plus a humanized ``context.state_label`` for the FE to render."""
-    from scripts.lib.schemas import ReciterState
+    from qua_shared.schemas import ReciterState
 
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
@@ -117,7 +117,7 @@ def test_save_marked_ready_returns_403(signed_in_client, tmp_reciter_dir):
     for the active assignee. They must Unmark first."""
     from datetime import datetime, timezone
 
-    from scripts.lib.schemas import (
+    from qua_shared.schemas import (
         ReciterRow, ReciterState, ReciterStateFile, Visibility,
     )
     from services import state as state_service
@@ -145,7 +145,7 @@ def test_save_owner_bypasses_state_check(signed_in_client, tmp_reciter_dir):
     """Owner can save to a row that isn't UNDER_REVIEW (state bypass)."""
     from datetime import datetime, timezone
 
-    from scripts.lib.schemas import (
+    from qua_shared.schemas import (
         ReciterRow, ReciterState, ReciterStateFile, Visibility,
     )
     from services import state as state_service

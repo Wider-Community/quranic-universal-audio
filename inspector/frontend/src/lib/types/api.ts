@@ -79,7 +79,7 @@ export interface TsManifestReciter {
 }
 
 /** Reciter entry in the v2 catalog (`<bucket>/catalog/reciter_catalog.json`).
- *  Mirrors `scripts.lib.schemas.ReciterEntry` — fields the Timestamps tab
+ *  Mirrors `qua_shared.schemas.ReciterEntry` — fields the Timestamps tab
  *  dropdown uses; full schema carries optional `country`, `notes`. */
 export interface TsCatalogReciter {
     reciter_id: string;
@@ -91,7 +91,7 @@ export interface TsCatalogReciter {
 
 /** Delivery entry in the v2 catalog. Slug uniquely identifies a delivery
  *  (= what the legacy manifest called a "reciter slug"). Mirrors
- *  `scripts.lib.schemas.Delivery` — only the fields the Timestamps tab
+ *  `qua_shared.schemas.Delivery` — only the fields the Timestamps tab
  *  needs are typed here; pass-through fields ignored. */
 export interface TsCatalogDelivery {
     slug: string;

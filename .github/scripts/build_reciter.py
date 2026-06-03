@@ -140,7 +140,7 @@ def _cross_verse_text(matched_ref: str, full_text: str,
     return full_text
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+sys.path.insert(0, str(ROOT / "qua_shared"))
 from config_loader import repo_config  # noqa: E402
 from reciter_eligibility import (  # noqa: E402
     compute_coverage,
@@ -1183,9 +1183,9 @@ def delete_reciter(slug):
 # Timestamp shards (deployed Inspector read path)
 # ---------------------------------------------------------------------------
 
-# Lazy imports — keep this module importable even when scripts/lib isn't on
+# Lazy imports — keep this module importable even when qua_shared isn't on
 # sys.path (e.g. for the existing `--reciters-config` flow on a fresh CI runner).
-sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+sys.path.insert(0, str(ROOT / "qua_shared"))
 
 
 def _load_existing_shard_hashes(
@@ -1624,7 +1624,7 @@ def _local_reciter_state(slug: str) -> dict:
     poisoning the manifest.
     """
     sys.path.insert(0, str(ROOT))
-    from scripts.lib.boundary_check import compute_boundary_mismatches  # noqa: E402
+    from qua_shared.boundary_check import compute_boundary_mismatches  # noqa: E402
 
     from timestamps_shards import gzip_shard, sha256_hex, split_to_shards
     from segments_shards import (

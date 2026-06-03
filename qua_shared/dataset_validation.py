@@ -1,7 +1,7 @@
 """Publish-time boundary validators for v2 dataset/release artifacts.
 
 Four hard-fail checks per the v2 plan §Boundary enforcement. Called from both
-``scripts/jobs/publish_hf.py`` and ``scripts/jobs/cut_release.py`` *before* the
+``qua_jobs/publish_hf.py`` and ``qua_jobs/cut_release.py`` *before* the
 artifact is written. Failures block the publish and surface the offending
 verses in ``validation_summary``.
 

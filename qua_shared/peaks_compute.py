@@ -5,7 +5,7 @@ Mirror of ``inspector/services/audio/peaks.py::compute_audio_peaks`` and
 import, so it is stageable into the timestamps job (which ships only
 ``scripts/``, not ``inspector/services`` + its Flask config). Output blobs are
 byte-identical to ``peaks_slim.pack_slim`` — guarded by
-``scripts/lib/tests/test_peaks_compute.py::test_pack_parity`` so the two never
+``qua_shared/tests/test_peaks_compute.py::test_pack_parity`` so the two never
 drift.
 
 Constants inlined from ``inspector/config.py`` + ``peaks_slim.py`` — keep in

@@ -34,7 +34,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
-from scripts.lib.schemas import Actor, IntakeSubmission
+from qua_shared.schemas import Actor, IntakeSubmission
 
 from routes._admin_helpers import actor_for, validate_reason
 

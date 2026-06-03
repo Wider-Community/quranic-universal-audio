@@ -41,8 +41,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple
 
-from scripts.lib.mfa_runtime import MfaRuntime
-from scripts.lib.timestamps_pipeline import (
+from qua_shared.mfa_runtime import MfaRuntime
+from qua_shared.timestamps_pipeline import (
     DEFAULT_ALIGNER_MODEL,
     _init_worker,
     _worker_align,
@@ -130,7 +130,7 @@ def run_probe(
     Returns the sidecar path on success, or ``None`` when ``detailed.json``
     is missing.
     """
-    from scripts.lib.auto_split_precompute import load_chapter_urls  # local import
+    from qua_shared.auto_split_precompute import load_chapter_urls  # local import
 
     reciter_dir = Path(reciter_dir).resolve()
     detailed_path = reciter_dir / "detailed.json"

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Actor,
     AdminActiveClaim,
     AdminActivityEvent,

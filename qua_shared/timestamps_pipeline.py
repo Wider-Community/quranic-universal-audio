@@ -27,7 +27,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from scripts.lib.timestamps_shards import gzip_shard, split_to_shards
+from qua_shared.timestamps_shards import gzip_shard, split_to_shards
 
 if TYPE_CHECKING:
     import numpy as np
@@ -1580,7 +1580,7 @@ def process(input_dir: Path,
     # serve and downstream consumers derive whatever projection they need.
     # The historical timestamps_full.json / timestamps.json (single-file +
     # word-only) are intentionally NOT written (decision: one canonical v2).
-    from scripts.lib.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
+    from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
     ts_dir = output_dir / "timestamps"
     ts_dir.mkdir(parents=True, exist_ok=True)
 

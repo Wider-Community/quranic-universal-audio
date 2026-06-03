@@ -107,7 +107,7 @@ Blueprints register in `routes/__init__.py::register_blueprints`. Subpackage `__
 
 Runs at module import (so `python3 inspector/app.py` and `gunicorn inspector.app:app` follow the same path):
 
-1. Insert repo root on `sys.path` (resolves `scripts.lib.*`).
+1. Insert repo root on `sys.path` (resolves `qua_shared.*`).
 2. `_load_dotenv_for_local_dev()` — hydrate env from `<repo>/.env` then `inspector/.env` (process env wins).
 3. Auto-enable `INSPECTOR_DEV_MODE=1` when not behind proxy and not under pytest.
 4. `auto_mount()` — local hf-mount FUSE of the bucket (silent degrade to API path).

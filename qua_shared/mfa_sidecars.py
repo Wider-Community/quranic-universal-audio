@@ -12,14 +12,14 @@ Today there are two:
 
 Both passes import the local MFA Space app and warm the Kalpy dictionary
 inside every worker. Opening one ``ProcessPoolExecutor`` (via
-:class:`scripts.lib.mfa_runtime.MfaRuntime`) and reusing it across both
+:class:`qua_shared.mfa_runtime.MfaRuntime`) and reusing it across both
 passes amortises that startup. Audio decode is still per-pass — both
 passes read from the same on-disk per-chapter MP3s, so OS page cache
 makes the second pass effectively free for I/O.
 
 CLI::
 
-    python3 -m scripts.lib.mfa_sidecars \
+    python3 -m qua_shared.mfa_sidecars \
         --reciter-dir /srv/scratch/.../<slug> \
         --audio-dir   /srv/scratch/.../<slug>/audio \
         --mfa-app-path quranic-universal-timestamps/app.py
@@ -37,14 +37,14 @@ import logging
 import sys
 from pathlib import Path
 
-from scripts.lib.mfa_runtime import MfaRuntime
-from scripts.lib.probe_mfa import (
+from qua_shared.mfa_runtime import MfaRuntime
+from qua_shared.probe_mfa import (
     DEFAULT_BATCH_SIZE as PROBE_BATCH_SIZE,
     DEFAULT_DOWNLOAD_WORKERS as PROBE_DL_WORKERS,
     DEFAULT_PROBE_BEAM,
     run_probe,
 )
-from scripts.lib.auto_split_precompute import (
+from qua_shared.auto_split_precompute import (
     DEFAULT_BATCH_SIZE as SPLIT_BATCH_SIZE,
     DEFAULT_BEAM as SPLIT_BEAM,
     DEFAULT_DOWNLOAD_WORKERS as SPLIT_DL_WORKERS,

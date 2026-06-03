@@ -25,7 +25,7 @@ equals the ``context: .`` context that ``docker-publish.yml`` builds on every
 push — a green CI image build is a faithful guarantee the Space will compile.
 
 Auth: reads ``HF_TOKEN`` (or ``INSPECTOR_HF_TOKEN``) from ``$REPO/.env`` via
-``scripts.lib._env.load_repo_env``.
+``qua_shared._env.load_repo_env``.
 
 Idempotent: re-running uploads only the changed files (the Hub diffs by
 content hash). Safe to run from a fresh checkout.
@@ -59,8 +59,8 @@ _RATE_LIMIT_RETRIES = 5
 _RATE_LIMIT_DEFAULT_WAIT = 30  # seconds, when no Retry-After header is sent
 
 # Bring in the .env loader so HF_TOKEN is available.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib._env import load_repo_env, repo_root  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from qua_shared._env import load_repo_env, repo_root  # noqa: E402
 
 SPACE_REPOS = {
     "dev": "hetchyy/quranic-inspector-dev",

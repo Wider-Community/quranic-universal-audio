@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Iterator
 
-from scripts.lib.schemas import Actor, AuditRecord
+from qua_shared.schemas import Actor, AuditRecord
 
 from . import _serde, repo_access
 from .connection import get_conn, transaction

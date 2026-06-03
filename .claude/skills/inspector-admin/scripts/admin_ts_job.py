@@ -37,7 +37,7 @@ def _print(msg: str) -> None:
 
 
 def _do_launch(a, ctx) -> int:
-    from scripts.lib.schemas import TsJobSettings  # noqa: E402
+    from qua_shared.schemas import TsJobSettings  # noqa: E402
     from services.admin import timestamps_jobs  # noqa: E402
     from services.state import state as state_service  # noqa: E402
 

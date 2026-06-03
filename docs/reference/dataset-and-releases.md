@@ -22,8 +22,8 @@ Audio (peaks, proxy, VBR/Xing) lives in the `inspector-audio` skill. Catalog mod
 | **HF dataset** | `hetchyy/quranic-universal-ayahs` | ML researchers, training, analysis | Parquet-native, queryable, embedded audio |
 
 Every adapter starts from the same bucket inputs; dedup runs in exactly one place
-(`_dedup_core` in [timestamps_pipeline.py](../../scripts/lib/timestamps_pipeline.py), reached via
-[`canonical_occurrence`](../../scripts/lib/timestamps_dedup.py) or already-projected when reading
+(`_dedup_core` in [timestamps_pipeline.py](../../qua_shared/timestamps_pipeline.py), reached via
+[`canonical_occurrence`](../../qua_shared/timestamps_dedup.py) or already-projected when reading
 bucket `.json.gz` shards). TS-tab and the release/dataset adapters cannot drift at the dedup layer.
 
 ## Release ledger (SQLite — migration `0014_releases.sql`)
@@ -64,7 +64,7 @@ The same predicate drives the Releases-tab buckets and the cut job's member disc
 ## Cut flow (the HF Job)
 
 `POST /api/admin/cut-release` launches an HF Job running
-[scripts/jobs/cut_release.py](../../scripts/jobs/cut_release.py). The job:
+[qua_jobs/cut_release.py](../../qua_jobs/cut_release.py). The job:
 
 1. Reads the bucket DB read-only → eligible reciters + the prior release's membership.
 2. Per reciter: projects canonical verses → builds the three tier files (verse/word/letter,
@@ -154,7 +154,7 @@ releases become a real requirement.
 ## Changelog (the release body)
 
 The release body is rendered by **one shared function**,
-[`render_changelog`](../../scripts/lib/release_changelog.py), called by BOTH the cut job (the body
+[`render_changelog`](../../qua_shared/release_changelog.py), called by BOTH the cut job (the body
 POSTed to GitHub) and the cut-modal preview endpoint — so the preview is faithful to what ships.
 It is stdlib-only and pure; callers resolve display names + coverage and pass them in.
 
@@ -243,7 +243,7 @@ Block on: pydantic round-trip of all rows; every non-dropped verse has a contrib
 `duration_ms == last_word_end - first_word_start`; `word_timestamps` sorted by `start_ms`; dropped
 verses ≤ threshold (default 0 for full reciters). Warn on: audio-slice checksum drift; TS-tab vs
 dataset-slice parity probe. Boundary checks run at cut time via
-[dataset_validation.py](../../scripts/lib/dataset_validation.py); fatal violations abort the cut.
+[dataset_validation.py](../../qua_shared/dataset_validation.py); fatal violations abort the cut.
 
 ## TS-tab vs dataset-row parity
 

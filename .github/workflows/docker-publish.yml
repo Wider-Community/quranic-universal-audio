@@ -10,16 +10,16 @@ on:
       - 'v*'
     paths:
       - 'inspector/**'
-      - 'scripts/lib/**'
-      - 'scripts/jobs/**'
+      - 'qua_shared/**'
+      - 'qua_jobs/**'
       - '.github/config/**'
       - '.dockerignore'
       - '.github/workflows/docker-publish.yml'
   pull_request:
     paths:
       - 'inspector/**'
-      - 'scripts/lib/**'
-      - 'scripts/jobs/**'
+      - 'qua_shared/**'
+      - 'qua_jobs/**'
       - '.github/config/**'
       - '.dockerignore'
       - '.github/workflows/docker-publish.yml'

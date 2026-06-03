@@ -37,7 +37,7 @@ _QURAN_REFS_CACHE_CONTROL = "public, max-age=31536000, immutable"
 def catalog_json() -> Response:
     """Serve the in-memory ``ReciterCatalog`` snapshot as JSON.
 
-    Shape matches ``scripts.lib.schemas.ReciterCatalog`` — the frontend
+    Shape matches ``qua_shared.schemas.ReciterCatalog`` — the frontend
     reads ``reciters[]`` + ``deliveries[]`` to build the Timestamps tab
     reciter dropdown.
     """

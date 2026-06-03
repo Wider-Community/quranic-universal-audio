@@ -23,7 +23,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any, TypedDict
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Actor,
     ReciterRow,
     ReciterState,
@@ -654,7 +654,7 @@ def _h_requested(slug, before, actor, payload, reason):
             f"slug {slug!r} already has a pending request"
         )
 
-    from scripts.lib.schemas import ProposedEdits as _ProposedEdits
+    from qua_shared.schemas import ProposedEdits as _ProposedEdits
     edits_raw = payload.get("proposed_edits") or {}
     try:
         edits = _ProposedEdits.model_validate(edits_raw)
@@ -842,10 +842,10 @@ def _h_marked_ready(slug, before, actor, payload, reason):
         payload["bypass_used"] = True
 
     if not bypass:
-        # Lazy import: scripts.lib.schemas is a sibling import (already used
+        # Lazy import: qua_shared.schemas is a sibling import (already used
         # elsewhere in this module), but the validation module pulls heavy
         # bucket loaders — keep it off the top-level state.py import graph.
-        from scripts.lib.schemas import BLOCKING_COUNT_KEYS, MarkReadyRequest
+        from qua_shared.schemas import BLOCKING_COUNT_KEYS, MarkReadyRequest
         from pydantic import ValidationError
 
         try:

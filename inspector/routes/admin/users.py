@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
-from scripts.lib.schemas import Role
+from qua_shared.schemas import Role
 
 from routes._admin_helpers import actor_for as _actor_for
 

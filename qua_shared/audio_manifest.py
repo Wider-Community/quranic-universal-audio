@@ -18,8 +18,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-# Repo root: scripts/lib/audio_manifest.py → repo/
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+# Repo root: qua_shared/audio_manifest.py → repo/
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _rel_path(p: Path) -> str:

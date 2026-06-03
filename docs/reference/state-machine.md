@@ -11,7 +11,7 @@ Where it lives:
 | `transitions` append + read helpers | `inspector/services/db/repo_transitions.py` |
 | `claims` (assignee/marked_ready) read/write | `inspector/services/db/repo_claims.py` |
 | Audit facade (delegates to `repo_transitions.append`) | `inspector/services/state/audit.py` |
-| Canonical row + enums (Pydantic) | `scripts/lib/schemas/state.py` (`ReciterRow`, `ReciterState`, `Visibility`, `RevisionContext`) |
+| Canonical row + enums (Pydantic) | `qua_shared/schemas/state.py` (`ReciterRow`, `ReciterState`, `Visibility`, `RevisionContext`) |
 | Server-side predicates (`can_edit`, `can_claim`, …) | `inspector/services/auth/predicates.py` |
 | Role/reason gates | `inspector/services/auth/permissions.py` |
 
@@ -19,7 +19,7 @@ Where it lives:
 
 ## Lifecycle states (column: `delivery_states.state`)
 
-Enum `ReciterState` (`scripts/lib/schemas/state.py`):
+Enum `ReciterState` (`qua_shared/schemas/state.py`):
 
 ```
 catalogued → awaiting_alignment → awaiting_review → under_review → released
@@ -92,7 +92,7 @@ Force-claim columns (`force_assignee_*`, leases) do **not** exist — force-clai
 
 `reciter.marked_ready` is not a bare flag-flip — it carries a **submission payload** that the reviewer fills via a modal form before the POST. The payload + the live validation counts both gate the transition; once accepted, the submission is persisted on the open claim row so admins can audit it from the Reviews drawer.
 
-Wire shape (`scripts/lib/schemas/mark_ready.py::MarkReadyRequest`):
+Wire shape (`qua_shared/schemas/mark_ready.py::MarkReadyRequest`):
 
 ```json
 {

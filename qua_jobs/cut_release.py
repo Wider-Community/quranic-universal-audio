@@ -45,7 +45,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
@@ -69,7 +69,7 @@ def _bucket_root() -> Path:
 def _code_root() -> Path:
     """Staged-code root. In the HF Job this is ``/aux/code`` (aligner-bucket
     mounted RO), which equals ``_REPO_ROOT`` since the script lives at
-    ``<root>/scripts/jobs/cut_release.py``. ``INSPECTOR_CODE_DIR`` overrides it
+    ``<root>/qua_jobs/cut_release.py``. ``INSPECTOR_CODE_DIR`` overrides it
     for local runs / the cut-sim harness; unset → the script's own repo root,
     so a plain local invocation reads ``data/``, ``LICENSE`` etc. from the
     checkout."""
@@ -164,10 +164,10 @@ def _prior_release_members(conn: sqlite3.Connection) -> tuple[str | None, dict[s
 def _load_canonical_verses(slug: str) -> dict[str, dict]:
     """Read every ``reciters/<slug>/timestamps/<ch>.json.gz`` shard, project
     to canonical verse map, merge. Same as publish_hf — kept inline here to
-    avoid a cross-script import (HF Job container has /aux/code/scripts/lib
+    avoid a cross-script import (HF Job container has /aux/code/qua_shared
     on PYTHONPATH but a stable import is cheaper than a relative one).
     """
-    from scripts.lib.timestamps_dedup import project_chapter_shard
+    from qua_shared.timestamps_dedup import project_chapter_shard
 
     ts_dir = _bucket_root() / "reciters" / slug / "timestamps"
     if not ts_dir.exists():
@@ -479,7 +479,7 @@ def _build_changelog(version: str, prior_version: str | None,
     the shipped release stay byte-identical (modulo coverage, which the preview shows
     in surahs and the cut shows in exact ayahs). Maps the cut-side rich member dict
     onto the renderer's display-name contract."""
-    from scripts.lib.release_changelog import render_changelog
+    from qua_shared.release_changelog import render_changelog
 
     render_members = [{
         "name_en": m.get("name_en"),
@@ -686,7 +686,7 @@ def _hash_static_refs(refs_dir: Path, qpc_bytes: bytes | None) -> dict[str, dict
 
 def _repo_owner_name() -> tuple[str, str, str]:
     """Resolve (owner, repo, hf_dataset_id) from config_loader."""
-    from scripts.lib.config_loader import repo_config
+    from qua_shared.config_loader import repo_config
     cfg = repo_config()
     return cfg["repo_owner"], cfg["repo_name"], cfg["hf_dataset"]
 
@@ -706,7 +706,7 @@ def _preflight() -> int:
         log.error("inspector.db missing at %s", db_path); return 13
     code_dir = _code_root()
     for rel in ("data/surah_info.json", ".github/config/repo.yml", "LICENSE",
-                "scripts/jobs/shard.py"):
+                "qua_jobs/shard.py"):
         if not (code_dir / rel).exists():
             log.error("staged file missing: %s", code_dir / rel); return 14
     if not ((code_dir / "data/qpc_hafs.json.gz").exists()
@@ -753,7 +753,7 @@ def main() -> int:
         log.error("qpc_hafs.json unavailable (image .gz is an LFS pointer and "
                   "bucket %s missing/corrupt) — cannot cut release", QPC_BUCKET_REL)
         return 14
-    from scripts.lib.dataset_validation import (
+    from qua_shared.dataset_validation import (
         fatal_violations, validate_dataset,
     )
 
@@ -920,7 +920,7 @@ def main() -> int:
     # is the consumer-facing decompressed JSON.
     license_path = _code_root() / "LICENSE"
     license_bytes = license_path.read_bytes() if license_path.exists() else b""
-    shard_py = (_code_root() / "scripts" / "jobs" / "shard.py").read_bytes()
+    shard_py = (_code_root() / "qua_jobs" / "shard.py").read_bytes()
     static_files: dict[str, bytes] = {}
     si_path = refs_dir / "surah_info.json"
     if si_path.exists():

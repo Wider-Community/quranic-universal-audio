@@ -120,4 +120,4 @@ All bucket keys built by `services/storage/storage_paths.py` — never construct
 
 ## Why no Flask in `services/`
 
-Backend services are Flask-free by convention. `audio_source`, `audio_meta`, `audio_fetch`, `peaks` import from `services` / `scripts.lib` only. The route layer (`routes/audio/*.py`, `routes/segments/peaks.py`) is the thin parse → service → jsonify layer that holds Flask. New audio route → blueprint under `routes/audio/` (or `routes/segments/` for peaks), registered in `routes/__init__.py::register_blueprints`.
+Backend services are Flask-free by convention. `audio_source`, `audio_meta`, `audio_fetch`, `peaks` import from `services` / `qua_shared` only. The route layer (`routes/audio/*.py`, `routes/segments/peaks.py`) is the thin parse → service → jsonify layer that holds Flask. New audio route → blueprint under `routes/audio/` (or `routes/segments/` for peaks), registered in `routes/__init__.py::register_blueprints`.

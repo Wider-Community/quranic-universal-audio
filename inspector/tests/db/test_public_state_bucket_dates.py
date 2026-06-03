@@ -8,7 +8,7 @@ regression (a fresh timestamp each visit).
 
 from __future__ import annotations
 
-from scripts.lib.schemas import Actor, Role
+from qua_shared.schemas import Actor, Role
 
 from services.db import repo_transitions
 from services.public_state import _bucket_dates_for_slug

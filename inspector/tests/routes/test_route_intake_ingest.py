@@ -12,7 +12,7 @@ import os
 
 import pytest
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Actor,
     Channel,
     ReciterEntry,
@@ -191,7 +191,7 @@ def test_ingest_bad_bearer_token_401(flask_client, monkeypatch):
 def test_ingest_slug_collision_409(signed_in_client):
     from datetime import datetime, timezone
 
-    from scripts.lib.schemas import AudioCategory, Delivery
+    from qua_shared.schemas import AudioCategory, Delivery
     from services import db
     from services.db import repo_catalog
 

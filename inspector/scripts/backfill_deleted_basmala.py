@@ -5,7 +5,7 @@ instead of re-deriving it from ``edit_history.jsonl`` on every cold
 validate pass. This script derives the field for reciters that pre-date
 the extraction-time write of the sidecar.
 
-Derivation logic lives in ``scripts/lib/pipeline_meta.py::collect_deleted_basmalas``
+Derivation logic lives in ``qua_shared/pipeline_meta.py::collect_deleted_basmalas``
 — the same helper extraction calls, so the byte shape is identical.
 
 The script is **deterministic**: re-running on unchanged history produces
@@ -32,8 +32,8 @@ if str(_REPO_ROOT) not in sys.path:
 if str(_INSPECTOR) not in sys.path:
     sys.path.insert(0, str(_INSPECTOR))
 
-from scripts.lib.pipeline_meta import collect_deleted_basmalas  # noqa: E402
-from scripts.lib.schemas import PipelineMeta  # noqa: E402
+from qua_shared.pipeline_meta import collect_deleted_basmalas  # noqa: E402
+from qua_shared.schemas import PipelineMeta  # noqa: E402
 from services.storage import data_dir  # noqa: E402
 
 

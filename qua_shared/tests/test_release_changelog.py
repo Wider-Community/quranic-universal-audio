@@ -1,6 +1,6 @@
 """Tests for the shared release-changelog renderer.
 
-``scripts/lib/release_changelog.py`` is the single source of truth for the GH
+``qua_shared/release_changelog.py`` is the single source of truth for the GH
 release body, used by both the cut HF Job and the Inspector cut-modal preview.
 These guard the format contract: display names only (no slugs), accordions for
 Added/Refreshed, coverage fallback (ayahs→surahs), and that ``operator_note`` is
@@ -16,7 +16,7 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from scripts.lib.release_changelog import render_changelog  # noqa: E402
+from qua_shared.release_changelog import render_changelog  # noqa: E402
 
 
 def _member(name_en, *, change_kind="added", riwayah="Hafs A'n Assem",

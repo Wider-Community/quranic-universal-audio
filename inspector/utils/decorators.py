@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 
 from flask import abort, g, request
 
-from scripts.lib.schemas import ReciterState, Role, Visibility
+from qua_shared.schemas import ReciterState, Role, Visibility
 
 from services import auth as auth_service
 from services import permissions
@@ -124,7 +124,7 @@ def require_capability(capability: str):
     Pair with ``@require_same_origin`` on POST/PUT/DELETE for CSRF defense.
     Unknown capability id raises at decoration time (a programmer error).
     """
-    from scripts.lib.schemas import CAPABILITIES_BY_ID
+    from qua_shared.schemas import CAPABILITIES_BY_ID
 
     cap = CAPABILITIES_BY_ID.get(capability)
     if cap is None:

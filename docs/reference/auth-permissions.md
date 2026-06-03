@@ -50,7 +50,7 @@ Flat shims re-export it: `from services import auth`, `from services import perm
 
 ---
 
-## Roles (`scripts/lib/schemas/access.py::Role`)
+## Roles (`qua_shared/schemas/access.py::Role`)
 
 Tiers: `contributor < maintainer < owner`. (`Role.PIPELINE` exists but is never a user identity — only stamped on offline-extraction edit-history batches; never reaches the HTTP auth path.)
 
@@ -78,7 +78,7 @@ The static tier model is now a **default baseline** over a data-driven capabilit
 
 | Piece | Truth |
 |---|---|
-| Registry (data) | `scripts/lib/schemas/capabilities.py` — `Capability{id, group, label, description, anon_eligible, owner_only_fixed, default_grants}` + `CAPABILITIES` tuple. `default_grants` encodes **today's exact behavior** (empty override table == legacy authz, guarded by `tests/services/test_capabilities.py::test_baseline_parity`). Backend-only; NOT codegen'd to the FE. |
+| Registry (data) | `qua_shared/schemas/capabilities.py` — `Capability{id, group, label, description, anon_eligible, owner_only_fixed, default_grants}` + `CAPABILITIES` tuple. `default_grants` encodes **today's exact behavior** (empty override table == legacy authz, guarded by `tests/services/test_capabilities.py::test_baseline_parity`). Backend-only; NOT codegen'd to the FE. |
 | Resolver (logic) | `services/auth/capabilities.py` — `tier_of(user_or_actor)` (`None`→`anonymous`), `resolve_grants() -> {(cap,tier): bool}` (baseline ⊕ overrides, cached on `db_seq`), `can(user_or_actor, cap)`, `capabilities_for(user)`. |
 | Override store | `permission_overrides(capability_id, tier, allowed, set_by, set_at)` (migration `0007`, `services/db/repo_permissions.py`). Stores **only deviations**; absent row → default; reset = `DELETE`. |
 | Cache | `services/storage/cache.py::{get,set,invalidate}_capability_matrix_cache` — single `(db_seq, matrix)` tuple. Any committed override write bumps `db_seq` → transparent invalidation (no restart). |
@@ -239,7 +239,7 @@ Defense-in-depth on top of `SameSite` cookie. Stack `@require_same_origin` above
 
 ---
 
-## Audit actor (`scripts/lib/schemas/audit.py`)
+## Audit actor (`qua_shared/schemas/audit.py`)
 
 `AuditRecord{ts, event, slug?, from_state?, to_state?, actor, payload, request_id?, reason?, result}`.
 `Actor{hf_user_id, login_at_time, role}` (`use_enum_values=True`).

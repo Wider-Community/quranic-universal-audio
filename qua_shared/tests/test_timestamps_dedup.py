@@ -18,10 +18,10 @@ _ROOT = Path(__file__).resolve().parents[3]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from scripts.lib.timestamps_dedup import (  # noqa: E402
+from qua_shared.timestamps_dedup import (  # noqa: E402
     build_raw_v2, canonical_occurrence, is_v2, project_chapter_shard,
 )
-from scripts.lib.timestamps_pipeline import build_outputs  # noqa: E402
+from qua_shared.timestamps_pipeline import build_outputs  # noqa: E402
 
 CAT = "by_surah_audio"
 

@@ -10,9 +10,9 @@ Per-chapter shards live at `reciters/<slug>/timestamps/<chapter>.json.gz` (gzipp
 |---|---|
 | **v2 raw** | Verse-keyed map; each value is a **list of occurrences** (every accepted segment, incl. re-recitations + cross-verse bleed). Compound keys (`"37:151:3-37:152:2"`) for cross-verse segs. |
 | **v1 deduped** | The historical verse→single-object shape. Re-recitation runs collapsed (widest-widx-coverage run wins), within-verse stutter kept. **What the Timestamps tab renders.** |
-| `build_raw_v2()` | `scripts/lib/timestamps_dedup.py` — emits the unfiltered v2 from MFA results. No skip, no merge. |
+| `build_raw_v2()` | `qua_shared/timestamps_dedup.py` — emits the unfiltered v2 from MFA results. No skip, no merge. |
 | `canonical_occurrence()` | Same file — projects a v2 chapter → v1 deduped map. Chapter-level (run detection needs the full ordered seg sequence + `seg_index` + failed segs). |
-| `_dedup_core` / `_normalize_from_results` | `scripts/lib/timestamps_pipeline.py` — the shared conversion + dedup core both `build_outputs` (fresh) and `canonical_occurrence` (stored v2) call, so the deduped projection can't drift from what the pipeline wrote. Guarded by `canonical_occurrence(build_raw_v2(x)) == build_outputs(x)` in `scripts/lib/tests/test_timestamps_dedup.py`. |
+| `_dedup_core` / `_normalize_from_results` | `qua_shared/timestamps_pipeline.py` — the shared conversion + dedup core both `build_outputs` (fresh) and `canonical_occurrence` (stored v2) call, so the deduped projection can't drift from what the pipeline wrote. Guarded by `canonical_occurrence(build_raw_v2(x)) == build_outputs(x)` in `qua_shared/tests/test_timestamps_dedup.py`. |
 
 **Word shape** (per occurrence): `[widx, start_ms, end_ms, [[char,s,e]...], [[phone,s,e]...]]` — letters/phones nested per word.
 
@@ -27,7 +27,7 @@ Per-chapter shards live at `reciters/<slug>/timestamps/<chapter>.json.gz` (gzipp
 | `shard_bytes(slug, ch, full, allow_unreleased)` | LRU-cached on `(slug, ch, full)`. Released-gate via `_served_slugs`; `allow_unreleased` bypasses it for owner preview. |
 | Route `GET /api/ts/shard/<reciter>/<int:chapter>` | `?full=1` → raw occurrences. Sets `allow_unreleased = can(user, "timestamps.view_unreleased")` so an **owner** can preview generated-but-unreleased shards (released stays public, anonymous unchanged). |
 
-**Owner preview:** capability `timestamps.view_unreleased` (owner-only default, `scripts/lib/schemas/capabilities.py`) lets the Timestamps tab render an under-review reciter's generated shards before release. The shard route honors it by URL; the manifest is still released-only.
+**Owner preview:** capability `timestamps.view_unreleased` (owner-only default, `qua_shared/schemas/capabilities.py`) lets the Timestamps tab render an under-review reciter's generated shards before release. The shard route honors it by URL; the manifest is still released-only.
 
 ## 3. The generation job
 
@@ -48,7 +48,7 @@ Admin launches it from the Reviews tab's **Generate TS** drawer (§4). It runs M
 | Linkage | Appends the canonical id to `delivery_states.timestamps_job_ids` via `state.record_timestamps_job` — **no lifecycle transition** (reciter stays UNDER_REVIEW). |
 | Single-flight | `running_job_for(slug)` rejects a 2nd in-flight job (two would race the same `timestamps/` shards). |
 
-### Entrypoint (`scripts/jobs/generate_timestamps.py`)
+### Entrypoint (`qua_jobs/generate_timestamps.py`)
 
 Env-driven. Reads `detailed.json` from the mount; injects per-chapter audio source — **bucket `audio/<ch>.mp3` first, CDN manifest URL fallback** — then runs `process()` (in-container MFA, `WORKERS` default `min(cpu_count, 8)`; higher OOMs at simultaneous KalpyEngine model-extraction).
 
@@ -56,16 +56,16 @@ Env-driven. Reads `detailed.json` from the mount; injects per-chapter audio sour
 |---|---|
 | `SLUG`, `BEAMS`, `WORKERS`, `BATCH_SIZE`, `DOWNLOAD_WORKERS`, `PADDING`, `METHOD` | Pipeline tunables. `BEAMS` = `[alignment, *probe]`; canonical = max. The probe beams feed the verse-level `ts_validation.json` sidecar (§3b), not per-beam shards. |
 | `PERSIST_AUDIO=1` | For chapters missing from the bucket: download CDN → **Xing-remux** (`ffmpeg -c:a copy -f mp3`, mirrors `audio_persist.py::_ensure_xing`) → write `reciters/<slug>/audio/<ch>.mp3`, and align against the persisted copy. |
-| `GEN_PEAKS=1` | `_bake_missing_peaks` computes v3 slim peaks (`scripts/lib/peaks_compute.py::compute_audio_peaks` → `pack_slim`) → `reciters/<slug>/peaks/<ch>.json.gz` for any by_surah chapter lacking them (decoupled from `PERSIST_AUDIO` so already-on-bucket audio also gets peaks). |
+| `GEN_PEAKS=1` | `_bake_missing_peaks` computes v3 slim peaks (`qua_shared/peaks_compute.py::compute_audio_peaks` → `pack_slim`) → `reciters/<slug>/peaks/<ch>.json.gz` for any by_surah chapter lacking them (decoupled from `PERSIST_AUDIO` so already-on-bucket audio also gets peaks). |
 | `JOB_ID` (HF-injected) | Self-writes the durable record at completion/failure (§3a). |
 
-`scripts/lib/peaks_compute.py` is a **config-free** mirror of `inspector/services/audio/peaks.py::compute_audio_peaks` (the job stages only `scripts/`, not Flask `config`); `pack_slim` is re-exported from the pure `peaks_slim`.
+`qua_shared/peaks_compute.py` is a **config-free** mirror of `inspector/services/audio/peaks.py::compute_audio_peaks` (the job stages only `scripts/`, not Flask `config`); `pack_slim` is re-exported from the pure `peaks_slim`.
 
 **Durability note:** persisted `audio/`+`peaks/` are never GC'd (the wip-audio sweeper was removed) — they persist for the life of the reciter.
 
 ### 3a. Durable job record — `reciters/<slug>/jobs/ts/<job_id>.json`
 
-Per-reciter, colocated with the reciter's other content (consistent with the bucket convention — everything for a reciter under its folder). Schema `scripts/lib/schemas/ts_job_record.py` (`TsJobRecord` + `TsJobSettings`, codegen'd to FE types). Makes a run's settings + status + logs viewable any time after HF log retention expires.
+Per-reciter, colocated with the reciter's other content (consistent with the bucket convention — everything for a reciter under its folder). Schema `qua_shared/schemas/ts_job_record.py` (`TsJobRecord` + `TsJobSettings`, codegen'd to FE types). Makes a run's settings + status + logs viewable any time after HF log retention expires.
 
 | Writer | When |
 |---|---|
@@ -81,8 +81,8 @@ The probe (narrower) beams no longer write per-beam `<ch>.beam_<N>.json` sidecar
 
 | Piece | Detail |
 |---|---|
-| `build_ts_validation(chapters, results_by_beam, beams, …)` | `scripts/lib/timestamps_pipeline.py` — a verse passes under beam `b` when every segment mapping to it aligned (`status=="ok"`); a verse is flagged when it fails under ≥1 beam it was tested under. Output: `{"_meta": {beams, canonical_beam, …}, "verses": {key: {failed_beams, min_passing_beam}}}`. Single-beam run → empty `verses`. |
-| Schema | `scripts/lib/schemas/ts_validation.py` (`TsValidationDoc`/`Meta`/`Verse`, codegen'd to FE types). Written as a plain dict by the pipeline (runs in-job, no pydantic dep); the models are for readers + FE. |
+| `build_ts_validation(chapters, results_by_beam, beams, …)` | `qua_shared/timestamps_pipeline.py` — a verse passes under beam `b` when every segment mapping to it aligned (`status=="ok"`); a verse is flagged when it fails under ≥1 beam it was tested under. Output: `{"_meta": {beams, canonical_beam, …}, "verses": {key: {failed_beams, min_passing_beam}}}`. Single-beam run → empty `verses`. |
+| Schema | `qua_shared/schemas/ts_validation.py` (`TsValidationDoc`/`Meta`/`Verse`, codegen'd to FE types). Written as a plain dict by the pipeline (runs in-job, no pydantic dep); the models are for readers + FE. |
 | Serve | `ts_serve.ts_validation_doc(reciter, allow_unreleased)` reads it, same released/`view_unreleased` gate as shards. Route `GET /api/ts/validation/<reciter>` → `{_meta, verses}` (empty doc when viewable-but-absent; 404 when not viewable). |
 | Render | Timestamps-tab `TsValidationPanel.svelte` (owner preview) — a Low-Confidence-v2-style expandable accordion; clicking a flagged verse jumps the cascade to it. Fetched lazily on reciter change, **gated FE-side on `view_unreleased`** so public users never trigger the bucket read. Store `tabs/timestamps/stores/validation.ts`. |
 
@@ -109,11 +109,11 @@ API client `lib/api/admin-reviews.ts`: `generateTimestamps`, `fetchJobStatus`, `
 
 ## Key files
 
-- Format/dedup: `scripts/lib/timestamps_dedup.py`, `scripts/lib/timestamps_pipeline.py`, `scripts/lib/timestamps_shards.py`, tests `scripts/lib/tests/test_timestamps_dedup.py`
+- Format/dedup: `qua_shared/timestamps_dedup.py`, `qua_shared/timestamps_pipeline.py`, `qua_shared/timestamps_shards.py`, tests `qua_shared/tests/test_timestamps_dedup.py`
 - Read-path: `inspector/services/reference/timestamps.py`, `inspector/services/storage/{data_dir,storage_paths}.py`, `inspector/routes/timestamps/timestamps.py`
-- Job: `inspector/services/admin/timestamps_jobs.py`, `scripts/jobs/generate_timestamps.py`, `scripts/lib/peaks_compute.py`, `scripts/lib/schemas/ts_job_record.py`
-- ts-validation: `scripts/lib/timestamps_pipeline.py::build_ts_validation`, `scripts/lib/schemas/ts_validation.py`, `inspector/frontend/src/tabs/timestamps/{components/TsValidationPanel.svelte,stores/validation.ts}`
+- Job: `inspector/services/admin/timestamps_jobs.py`, `qua_jobs/generate_timestamps.py`, `qua_shared/peaks_compute.py`, `qua_shared/schemas/ts_job_record.py`
+- ts-validation: `qua_shared/timestamps_pipeline.py::build_ts_validation`, `qua_shared/schemas/ts_validation.py`, `inspector/frontend/src/tabs/timestamps/{components/TsValidationPanel.svelte,stores/validation.ts}`
 - Job image: `.local/quran_ts_job/Dockerfile` (public Docker Space `hetchyy/quran-ts-job`)
 - UI: `inspector/frontend/src/tabs/dashboard/components/admin/reviews/ReviewsTimestampsDrawer.svelte`, `lib/api/admin-reviews.ts`
-- Capability: `reviews.generate_timestamps` (maintainer+), `timestamps.view_unreleased` (owner) — `scripts/lib/schemas/capabilities.py`
+- Capability: `reviews.generate_timestamps` (maintainer+), `timestamps.view_unreleased` (owner) — `qua_shared/schemas/capabilities.py`
 - Planning (the *why*): `docs/planning/inspector-deploy/v2/phases/13-timestamps-job.md`

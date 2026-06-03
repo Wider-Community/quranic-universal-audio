@@ -29,7 +29,7 @@ from typing import Any
 # Conversion + dedup live in the pipeline today (alongside the helpers);
 # this module imports them so there is a single implementation. One-
 # directional: the pipeline does not import this module.
-from scripts.lib.timestamps_pipeline import (
+from qua_shared.timestamps_pipeline import (
     _normalize_from_results,
     _dedup_core,
     _matched_ref_to_output_key,

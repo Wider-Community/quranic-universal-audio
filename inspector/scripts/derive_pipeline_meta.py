@@ -5,7 +5,7 @@ Two derivation paths:
 1. **New pipeline (Migration #5+):** every ``strip_specials`` op snapshot
    carries a ``chapter`` stamp. Walk the snapshots, collect chapters
    where ``matched_ref`` is in the Basmala-class set. Same as
-   ``scripts.lib.pipeline_meta.collect_deleted_basmalas``.
+   ``qua_shared.pipeline_meta.collect_deleted_basmalas``.
 
 2. **Legacy fallback:** if every op snapshot is missing ``chapter`` (the
    pre-#5 writer didn't stamp it), walk ops in order pairing each
@@ -54,8 +54,8 @@ def _has_chapter_stamps(batch: dict) -> bool:
 
 def _collect_new_pipeline(batches: list[dict]) -> set[int]:
     """Snapshot-stamp path — same logic as
-    ``scripts.lib.pipeline_meta.collect_deleted_basmalas``."""
-    from scripts.lib.pipeline_meta import collect_deleted_basmalas
+    ``qua_shared.pipeline_meta.collect_deleted_basmalas``."""
+    from qua_shared.pipeline_meta import collect_deleted_basmalas
     return collect_deleted_basmalas(batches)
 
 
@@ -81,7 +81,7 @@ def _collect_legacy(batches: list[dict]) -> set[int]:
 
 
 def derive(slug_dir: Path) -> dict:
-    from scripts.lib.schemas import PipelineMeta, parse_edit_history_line
+    from qua_shared.schemas import PipelineMeta, parse_edit_history_line
 
     history_path = slug_dir / "edit_history.jsonl"
     if not history_path.is_file():

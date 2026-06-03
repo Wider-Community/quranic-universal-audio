@@ -1,7 +1,7 @@
 """Admin Permissions-tab service: build the capability matrix + apply toggles.
 
 Read side (``build_matrix``) projects the registry
-(``scripts/lib/schemas/capabilities.py``) overlaid with the live
+(``qua_shared/schemas/capabilities.py``) overlaid with the live
 ``permission_overrides`` into the grouped wire shape the FE renders. Write side
 (``set_grant`` / ``reset_grant``) persists one override cell inside a durable
 transaction paired with an ``access.permission_changed`` audit row, so the
@@ -15,7 +15,7 @@ defense in depth.
 
 from __future__ import annotations
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     CAPABILITIES,
     CAPABILITIES_BY_ID,
     GROUP_ORDER,
@@ -25,7 +25,7 @@ from scripts.lib.schemas import (
     AdminPermissionGroup,
     AdminPermissionsResponse,
 )
-from scripts.lib.schemas.capabilities import ANONYMOUS
+from qua_shared.schemas.capabilities import ANONYMOUS
 
 from services.auth import capabilities as _resolver
 from services.db import repo_access, repo_permissions

@@ -1,6 +1,6 @@
 """Round-trip tests for the shared ``PeaksRecord`` Pydantic schema.
 
-Schema lives at ``scripts/lib/schemas/peaks_history.py``. Both writers
+Schema lives at ``qua_shared/schemas/peaks_history.py``. Both writers
 (offline extraction's ``audio_persist.write_edit_history_peaks`` and
 the one-shot ``inspector/scripts/backfill_pipeline_peaks.py``) round-
 trip through it — these tests assert the canonical Migration #5 shape
@@ -14,7 +14,7 @@ import base64
 
 import pytest
 
-from scripts.lib.schemas import PeaksRecord, parse_peaks_record
+from qua_shared.schemas import PeaksRecord, parse_peaks_record
 
 
 # -- Sample record shapes -----------------------------------------------
@@ -131,7 +131,7 @@ def test_record_with_legacy_fields_strips_them_on_read(caplog):
     with a warning and ``model_extra`` stays empty so writers can't
     accidentally round-trip them back to disk."""
     import logging
-    caplog.set_level(logging.INFO, logger="scripts.lib.schemas._extras")
+    caplog.set_level(logging.INFO, logger="qua_shared.schemas._extras")
     rec = _slim_record()
     rec["batch_id"] = "legacy-batch"
     rec["duration_ms"] = 4090

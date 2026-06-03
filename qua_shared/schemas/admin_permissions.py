@@ -1,7 +1,7 @@
 """Admin-dashboard Permissions-tab wire schemas.
 
 Read model served by ``GET /api/admin/permissions`` (owner-only). The backend
-transforms the capability registry (``scripts/lib/schemas/capabilities.py``)
+transforms the capability registry (``qua_shared/schemas/capabilities.py``)
 overlaid with the live ``permission_overrides`` into this grouped matrix. Each
 tier cell carries:
 

@@ -13,7 +13,7 @@
  *   functions that already receive the user (e.g. `syncEditingMode`).
  *
  * Capability ids MUST match the backend registry
- * (`scripts/lib/schemas/capabilities.py`) — confirm against the live
+ * (`qua_shared/schemas/capabilities.py`) — confirm against the live
  * `GET /api/admin/permissions` response rather than inventing ids.
  */
 

@@ -317,7 +317,7 @@ def main(argv: list[str] | None = None) -> int:
     if not slugs:
         raise SystemExit("--reciters must list at least one slug")
 
-    from scripts.lib._env import load_repo_env
+    from qua_shared._env import load_repo_env
     load_repo_env()
     buckets = {"dev": "hetchyy/quranic-inspector-bucket-dev",
                "prod": "hetchyy/quranic-inspector-bucket"}

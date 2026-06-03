@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CI/HF-Space entrypoint for timestamp extraction.
 
-Shared logic lives in scripts.lib.timestamps_pipeline. Invoked from
+Shared logic lives in qua_shared.timestamps_pipeline. Invoked from
 `.github/workflows/timestamps-refresh.yml`. Single-process serial path
 (HF Space backend); for true CPU parallelism use
 ``.local/extraction/extract_timestamps_local.py``.
@@ -15,7 +15,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.lib.timestamps_pipeline import (
+from qua_shared.timestamps_pipeline import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_BEAMS,
     DEFAULT_DOWNLOAD_WORKERS,

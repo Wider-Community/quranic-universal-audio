@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     AudioCategory,
     Channel,
     Delivery,
@@ -187,7 +187,7 @@ def test_reconcile_applies_pending_edits(auto_detect_env):
     svc, state_service, backend = auto_detect_env
     from services import catalog as catalog_service
     from services import pending_requests as pending_requests_service
-    from scripts.lib.schemas import Actor, ProposedEdits, Role
+    from qua_shared.schemas import Actor, ProposedEdits, Role
 
     _seed_state(backend, slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
     pending_requests_service.submit(

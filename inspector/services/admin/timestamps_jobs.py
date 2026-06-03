@@ -41,7 +41,7 @@ import logging
 import os
 from pathlib import Path
 
-from scripts.lib.schemas import TsJobRecord, TsJobSettings
+from qua_shared.schemas import TsJobRecord, TsJobSettings
 from services.state import state as state_service
 from services.storage.hf_bucket import StorageNotFound, get_backend, resolve_bucket_repo
 
@@ -115,7 +115,7 @@ _INSTALL = (
     "'quranic-phonemizer>=2.0' 'huggingface_hub>=1.8.0' "
     "&& mkdir -p /scratch"
 )
-_ENTRYPOINT = "python /aux/code/scripts/jobs/generate_timestamps.py"
+_ENTRYPOINT = "python /aux/code/qua_jobs/generate_timestamps.py"
 
 
 def _job_command() -> list[str]:
@@ -132,13 +132,13 @@ def _job_id(job) -> str | None:
 
 
 def _stage_job_code() -> None:
-    """Upload scripts/lib + scripts/jobs to ``aligner-bucket/code/`` so the job
+    """Upload qua_shared + qua_jobs to ``aligner-bucket/code/`` so the job
     can import the pipeline. Idempotent (Xet skips unchanged content); cheap
     enough to run on every launch so the job always runs current code."""
     from huggingface_hub import batch_bucket_files
 
     adds: list[tuple[str, str]] = []
-    for sub in ("scripts/lib", "scripts/jobs"):
+    for sub in ("qua_shared", "qua_jobs"):
         base = _REPO_ROOT / sub
         for path in base.rglob("*.py"):
             if "__pycache__" in path.parts:

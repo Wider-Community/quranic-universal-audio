@@ -183,7 +183,7 @@ def test_tombstoned_audit_id_excluded(monkeypatch, tmp_path):
     from services import activity_classification as ac
     from services import activity_state as activity_state_service
     from services.public_activity import all_public_cards
-    from scripts.lib.schemas import Actor, Role
+    from qua_shared.schemas import Actor, Role
 
     rec = _record("reciter.claimed")
     _install_audit(monkeypatch, [rec])

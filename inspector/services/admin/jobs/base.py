@@ -229,10 +229,10 @@ def read_record_bytes(kind: str, slug: str | None, job_id: str) -> bytes | None:
 # run. Loud preflight prevents silent skips when the deployed image is missing
 # something (e.g. a new entrypoint shipped but Dockerfile not updated).
 REQUIRED_ENTRYPOINTS = (
-    "scripts/jobs/generate_timestamps.py",
-    "scripts/jobs/publish_hf.py",
-    "scripts/jobs/cut_release.py",
-    "scripts/jobs/shard.py",
+    "qua_jobs/generate_timestamps.py",
+    "qua_jobs/publish_hf.py",
+    "qua_jobs/cut_release.py",
+    "qua_jobs/shard.py",
 )
 REQUIRED_STATIC_FILES = (
     "data/qpc_hafs.json.gz",
@@ -272,10 +272,10 @@ def _resolve_required_static(rel: str) -> tuple[Path | None, bytes | None]:
 
 
 def stage_job_code() -> None:
-    """Upload ``scripts/lib`` + ``scripts/jobs`` + static refs to
+    """Upload ``qua_shared`` + ``qua_jobs`` + static refs to
     ``aligner-bucket/code/`` so the HF Job container can import them.
 
-    Walks ``scripts/lib`` and ``scripts/jobs`` for every ``.py`` then appends
+    Walks ``qua_shared`` and ``qua_jobs`` for every ``.py`` then appends
     the curated static files. Raises ``JobStagingError`` BEFORE the upload if
     any required entrypoint or static file can't be resolved on disk —
     catches the "Dockerfile missing a COPY" class of regression at launch.
@@ -288,7 +288,7 @@ def stage_job_code() -> None:
     seen_targets: set[str] = set()
     tmp_files: list[Path] = []
 
-    for sub in ("scripts/lib", "scripts/jobs"):
+    for sub in ("qua_shared", "qua_jobs"):
         base = REPO_ROOT / sub
         if not base.exists():
             continue

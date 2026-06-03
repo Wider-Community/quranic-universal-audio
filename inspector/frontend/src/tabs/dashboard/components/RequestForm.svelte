@@ -42,7 +42,7 @@
      * Recording-year plausibility bounds. Lower: 1885 (early phonograph era).
      * Upper: current year, computed at component load so the field tolerates
      * year rollovers without redeploy. Mirrors
-     * ``scripts/lib/schemas/pending_requests.py::_check_year``.
+     * ``qua_shared/schemas/pending_requests.py::_check_year``.
      */
     const MIN_RECORDING_YEAR = 1885;
     const MAX_RECORDING_YEAR = new Date().getFullYear();

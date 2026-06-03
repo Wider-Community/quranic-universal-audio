@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 
-from scripts.lib.schemas import ActivityState, Actor
+from qua_shared.schemas import ActivityState, Actor
 
 from services.state import audit
 from services.db import repo_activity

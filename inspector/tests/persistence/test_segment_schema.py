@@ -1,6 +1,6 @@
 """Round-trip tests for the shared ``DetailedSegment`` Pydantic schema.
 
-Schema lives at ``scripts/lib/schemas/segment.py``. Both the offline
+Schema lives at ``qua_shared/schemas/segment.py``. Both the offline
 extraction pipeline and the Inspector save flow round-trip through it —
 these tests assert the model parses every legitimate seg shape we
 encounter on disk + that ``model_dump(exclude_none=True)`` produces the
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     DetailedDocument,
     DetailedSegment,
     parse_detailed_segment,
@@ -102,7 +102,7 @@ def test_legacy_seg_strips_dead_fields_on_read(caplog):
     unknown field stripped by the pre-validator. ``model_extra`` should be
     empty (extras handling = warn-then-strip, not silent-allow)."""
     import logging
-    caplog.set_level(logging.INFO, logger="scripts.lib.schemas._extras")
+    caplog.set_level(logging.INFO, logger="qua_shared.schemas._extras")
     m = DetailedSegment.model_validate(_legacy_seg())
     # Dead fields are gone — neither typed attributes nor extras.
     assert not hasattr(m, "matched_text")
@@ -225,7 +225,7 @@ def test_entry_with_legacy_audio_field(caplog):
     """``entry.audio`` was dropped in Migration #5 — the pre-validator
     strips it on read with an INFO log; readers must not see it."""
     import logging
-    caplog.set_level(logging.INFO, logger="scripts.lib.schemas._extras")
+    caplog.set_level(logging.INFO, logger="qua_shared.schemas._extras")
     raw = {
         "_meta": {},
         "entries": [

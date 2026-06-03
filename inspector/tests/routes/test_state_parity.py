@@ -22,7 +22,7 @@ def _state_row(slug: str, *, state: str = "awaiting_review",
                marked_ready: bool = False,
                assignee_hf_id: str | None = None,
                visibility: str = "public"):
-    from scripts.lib.schemas import ReciterRow, ReciterState, Visibility
+    from qua_shared.schemas import ReciterRow, ReciterState, Visibility
 
     return ReciterRow(
         slug=slug,
@@ -59,7 +59,7 @@ def _seed_catalog(slug: str, *, reciter_id: str = "test_reciter",
     """Install a minimal valid catalog containing one reciter + one delivery
     keyed off `slug`. The vocab carries just enough rows to satisfy FK
     validation on the Delivery model."""
-    from scripts.lib.schemas import (
+    from qua_shared.schemas import (
         AudioCategory,
         Channel,
         Delivery,

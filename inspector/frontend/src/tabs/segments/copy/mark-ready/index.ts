@@ -8,7 +8,7 @@
  * inline in the Svelte components.
  *
  * The checklist key set MUST stay in lockstep with the backend Pydantic
- * `MarkReadyChecklist` model in scripts/lib/schemas/mark_ready.py. A
+ * `MarkReadyChecklist` model in qua_shared/schemas/mark_ready.py. A
  * parity test under __tests__ asserts both sides match.
  */
 import type { MarkReadyChecklist } from '../../../../lib/types/generated/schemas';

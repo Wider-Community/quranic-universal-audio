@@ -83,4 +83,4 @@ def repo_root() -> Path:
     for parent in here.parents:
         if (parent / ".git").exists():
             return parent
-    return here.parents[2]
+    return here.parents[1]

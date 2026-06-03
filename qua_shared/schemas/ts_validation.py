@@ -2,7 +2,7 @@
 
 The verse-level analogue of the segment-level ``low_confidence_v2.json`` probe.
 Produced by the multi-beam alignment pass in
-``scripts/lib/timestamps_pipeline.py::build_ts_validation`` (written there as a
+``qua_shared/timestamps_pipeline.py::build_ts_validation`` (written there as a
 plain dict — the pipeline runs inside the HF job with a minimal dependency set,
 so it never constructs this model). These models exist for the *readers*: the
 Inspector read-path that serves the sidecar owner-gated, and the

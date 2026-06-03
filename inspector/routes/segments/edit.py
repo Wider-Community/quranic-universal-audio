@@ -12,7 +12,7 @@ Decorator chain on every mutating route:
 """
 from flask import Blueprint, g, jsonify, request
 
-from scripts.lib.schemas import Actor
+from qua_shared.schemas import Actor
 
 from services.auto_split import compute_auto_split as _compute_auto_split
 from services.save import save_seg_data as _save_seg_data

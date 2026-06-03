@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     ActivityState, ArchivedRequest, ArchivedRequestsFile, Actor, Channel, Delivery,
     Member, PendingRequest, PendingRequestsFile, ProposedEdits, ReciterCatalog,
     ReciterEntry, ReciterRow, ReciterState, ReciterStateFile, Riwayah, Role, RolesFile,
@@ -24,7 +24,7 @@ from services import db
 from services.db import repo_state, repo_access, repo_transitions, repo_activity, repo_requests
 
 # Loaded by path: inspector/scripts/ is not a package and `scripts` resolves to
-# the repo-root scripts/ (scripts.lib.schemas), so import via importlib.
+# the repo-root scripts/ (qua_shared.schemas), so import via importlib.
 _spec = importlib.util.spec_from_file_location(
     "migrate_json_to_sqlite",
     Path(__file__).resolve().parents[2] / "scripts" / "migrate_json_to_sqlite.py",

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.lib.schemas import Actor, Role
+from qua_shared.schemas import Actor, Role
 from services import catalog as catalog_service
 from services import hf_bucket as _hf_bucket
 from services.db import sync

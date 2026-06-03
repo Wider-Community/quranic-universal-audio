@@ -132,7 +132,7 @@ Daily snapshot: `daily_snapshot()` writes `db/inspector-<day>.db` and prunes any
 | `content_hash(ts, event, slug, actor_hf, result)` | `sha1(ts\|event\|slug\|actor_hf\|result)[:16]` from the exact stored strings. MUST stay byte-identical to `services.activity.activity_classification.audit_id` so dismissals/tombstones keep matching transitions. |
 | `content_hash_for_record(record)` | same hash from a raw audit/transition dict (used by the JSON→SQLite migration on historical records). |
 
-Repos round-trip these pydantic models from `scripts/lib/schemas/` (enum values serialized via `.value`; the FE-facing subset re-exported at `scripts/lib/schemas/fe_types.py`):
+Repos round-trip these pydantic models from `qua_shared/schemas/` (enum values serialized via `.value`; the FE-facing subset re-exported at `qua_shared/schemas/fe_types.py`):
 
 | Schema module | Models | Repo |
 |---|---|---|

@@ -8,7 +8,7 @@ Single source of truth for the derivation logic shared by:
   the sidecar directly during extraction (exact set, no derivation).
 - Tests — exercise the same logic.
 
-Schema: ``scripts/lib/schemas/pipeline_meta.py::PipelineMeta``.
+Schema: ``qua_shared/schemas/pipeline_meta.py::PipelineMeta``.
 """
 
 from __future__ import annotations

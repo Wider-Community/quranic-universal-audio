@@ -3,7 +3,7 @@
 Everything every admin script needs in one place:
 
   setup(args, *, need_db=True, need_actor=True) → BootstrapCtx
-    - resolves repo root, sets sys.path so `services.*` + `scripts.lib.*` import
+    - resolves repo root, sets sys.path so `services.*` + `qua_shared.*` import
     - loads HF_TOKEN from .env if missing in env
     - picks bucket repo from --prod (refuses prod for --yes-prod-only ops without the flag)
     - sets a script-private INSPECTOR_DB_PATH so we don't collide with a
@@ -87,7 +87,7 @@ def add_common_args(parser: argparse.ArgumentParser, *, mutating: bool = True) -
 class BootstrapCtx:
     repo_root: Path
     bucket_id: str           # hetchyy/quranic-inspector-bucket{,-dev}
-    actor: Optional[object]  # scripts.lib.schemas.audit.Actor when need_actor=True
+    actor: Optional[object]  # qua_shared.schemas.audit.Actor when need_actor=True
     db_path: Path
     db_synced: bool
 
@@ -130,8 +130,8 @@ def setup(args: argparse.Namespace, *, need_db: bool = True,
 
     actor = None
     if need_actor:
-        from scripts.lib.schemas import Actor  # noqa: E402
-        from scripts.lib.schemas.access import Role  # noqa: E402
+        from qua_shared.schemas import Actor  # noqa: E402
+        from qua_shared.schemas.access import Role  # noqa: E402
         hf_id = os.environ.get("INSPECTOR_DEV_OWNER_HF_ID", "").strip()
         login = os.environ.get("INSPECTOR_DEV_OWNER_LOGIN", "").strip()
         if not hf_id or not login:

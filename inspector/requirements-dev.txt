@@ -12,6 +12,6 @@ pytest-cov>=5
 # Schema → TypeScript codegen for the FE.
 # Used by inspector/scripts/regen_fe_types.py to keep
 # inspector/frontend/src/lib/types/generated/schemas.ts in lockstep with
-# the Pydantic schemas at scripts/lib/schemas/. CI verifies the generated
+# the Pydantic schemas at qua_shared/schemas/. CI verifies the generated
 # file is in sync.
 pydantic-to-typescript>=2.0,<3

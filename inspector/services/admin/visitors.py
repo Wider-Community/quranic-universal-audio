@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 
 from config import ENTRY_DEBOUNCE_SECONDS, VISITOR_FLUSH_INTERVAL_SECONDS
 
-from scripts.lib.schemas import AdminVisitorStats, VisitorDayStat
+from qua_shared.schemas import AdminVisitorStats, VisitorDayStat
 
 from services.db import _serde, repo_access, repo_visitors
 from services.db import sync as _sync

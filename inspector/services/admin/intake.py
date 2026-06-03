@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 
 from pydantic import ValidationError
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Actor,
     AudioCategory,
     AudioManifestSidecar,
@@ -40,8 +40,8 @@ from scripts.lib.schemas import (
     ProbeResponse,
     Source,
 )
-from scripts.lib.schemas.intake_requests import IntakeSource
-from scripts.lib.schemas.state import SLUG_RE
+from qua_shared.schemas.intake_requests import IntakeSource
+from qua_shared.schemas.state import SLUG_RE
 
 from services.db import _serde, repo_requests
 from services.db import sync as _sync

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     Actor,
     Channel,
     ReciterEntry,
@@ -221,7 +221,7 @@ def test_ingest_slug_collision_raises(fs_backend):
     # Pre-create a delivery so the ingest slug collides.
     from services import db
 
-    from scripts.lib.schemas import AudioCategory, Delivery
+    from qua_shared.schemas import AudioCategory, Delivery
     from datetime import datetime, timezone
     with db.transaction():
         repo_catalog.insert_delivery(Delivery(

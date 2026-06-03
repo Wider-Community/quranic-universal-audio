@@ -200,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     from services.state import state as state_service
     from services.storage import cache
     from utils.references import chapter_from_ref
-    from scripts.lib.schemas import Actor
+    from qua_shared.schemas import Actor
 
     # Hydrate the state store so the save/undo path sees the reciter's
     # lifecycle state. Per-reciter content lives under a single

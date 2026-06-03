@@ -19,7 +19,7 @@ What it does:
 1. Builds the frontend (``inspector/frontend`` → ``dist/``) unless
    ``--skip-build``.
 2. Stages the Space-shaped tree (Dockerfile, ``inspector/`` code + built
-   ``dist/``, ``scripts/lib/``, the four linguistic ``data/*.json`` files,
+   ``dist/``, ``qua_shared/``, the four linguistic ``data/*.json`` files,
    a ``README.md`` with the HF Space frontmatter).
 3. ``create_repo`` (idempotent) → ``upload_folder`` → factory ``restart_space``.
 
@@ -51,13 +51,13 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-# Put the repo root on sys.path so ``scripts.lib._env`` resolves whether this
+# Put the repo root on sys.path so ``qua_shared._env`` resolves whether this
 # is launched as a module or a file.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.lib._env import load_repo_env, repo_root  # noqa: E402
+from qua_shared._env import load_repo_env, repo_root  # noqa: E402
 
 # README frontmatter shipped to the Space. ``hf_oauth: true`` is load-bearing:
 # it makes HF inject the OAuth client credentials the app reads at runtime.
@@ -110,16 +110,15 @@ def _stage(repo: Path, stage_root: Path, *, title: str) -> None:
         ),
     )
 
-    # scripts/lib/ only — the runtime imports ``scripts.lib.*``; top-level CLIs
-    # (including this one) are not needed inside the Space.
-    scripts_dst = stage_root / "scripts"
-    scripts_dst.mkdir()
-    shutil.copy2(repo / "scripts" / "__init__.py", scripts_dst / "__init__.py")
-    shutil.copytree(
-        repo / "scripts" / "lib",
-        scripts_dst / "lib",
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-    )
+    # qua_shared/ + qua_jobs/ ship — the runtime imports ``qua_shared.*`` and
+    # ``services/admin/jobs`` stages ``qua_jobs/`` to the job bucket on launch.
+    # Top-level CLIs under scripts/ are not needed inside the Space.
+    for pkg in ("qua_shared", "qua_jobs"):
+        shutil.copytree(
+            repo / pkg,
+            stage_root / pkg,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
 
     # The four linguistic JSON files — the entire on-disk data surface in a
     # deployed Space (everything else lives in the bucket).

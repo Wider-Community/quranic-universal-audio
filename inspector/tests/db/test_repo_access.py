@@ -6,7 +6,7 @@ import sqlite3
 
 import pytest
 
-from scripts.lib.schemas import Role
+from qua_shared.schemas import Role
 
 from services import db
 from services.db import repo_access

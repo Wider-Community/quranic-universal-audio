@@ -16,7 +16,7 @@ pattern from ``services.admin.users``.
 
 from __future__ import annotations
 
-from scripts.lib.schemas import (
+from qua_shared.schemas import (
     AdminReviewClaimHistoryEntry,
     AdminReviewDetail,
     AdminReviewOpenClaim,

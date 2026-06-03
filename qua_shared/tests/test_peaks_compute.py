@@ -1,7 +1,7 @@
 """Drift guard: the job's vendored peaks packing must stay byte-identical to
 the canonical inspector implementation.
 
-``scripts/lib/peaks_compute.py`` re-homes ``compute_audio_peaks`` + ``pack_slim``
+``qua_shared/peaks_compute.py`` re-homes ``compute_audio_peaks`` + ``pack_slim``
 without the ``config`` import so the HF Job (which ships only ``scripts/``) can
 generate v3 peaks. If the canonical ``inspector/services/audio/peaks_slim.py``
 shape ever changes, this test fails — keep them in lockstep.
@@ -18,7 +18,7 @@ for p in (_ROOT, _INSPECTOR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from scripts.lib import peaks_compute  # noqa: E402
+from qua_shared import peaks_compute  # noqa: E402
 from services.audio import peaks_slim  # noqa: E402
 
 

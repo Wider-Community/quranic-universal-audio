@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.lib.schemas import Role
+from qua_shared.schemas import Role
 from services.auth import token_auth
 from tests.conftest import _seed_role
 

@@ -1,6 +1,6 @@
 """Schema round-trip smoke test.
 
-Run with ``python -m scripts.lib.schemas.smoke``. Exits 0 on success, 1 on
+Run with ``python -m qua_shared.schemas.smoke``. Exits 0 on success, 1 on
 the first validation failure. Constructs one realistic instance of each
 top-level schema, round-trips through JSON, and re-validates.
 """

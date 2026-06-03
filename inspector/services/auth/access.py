@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 
-from scripts.lib.schemas import Actor, Member, Role, RolesFile
+from qua_shared.schemas import Actor, Member, Role, RolesFile
 
 from . import permissions
 from services.state import audit

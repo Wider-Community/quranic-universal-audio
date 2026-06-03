@@ -8,7 +8,7 @@ aligner Space's preload UI fetches on demand. Used by:
 
 The aligner Space talks to the same HF dataset as the Inspector's Timestamps
 tab, sharing one manifest. This module is the segments-side twin of
-`scripts/lib/timestamps_shards.py`.
+`qua_shared/timestamps_shards.py`.
 
 Shard schema is documented in `C:\\Users\\ahmed\\.claude\\plans\\wondrous-hopping-mochi.md`
 §1. Slim per-segment payload (`matched_ref`, `time_start`, `time_end`,

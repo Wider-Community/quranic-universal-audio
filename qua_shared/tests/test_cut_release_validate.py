@@ -22,9 +22,9 @@ if str(_ROOT) not in sys.path:
 
 import gzip  # noqa: E402
 
-from scripts.jobs import cut_release  # noqa: E402
-from scripts.jobs.cut_release import _verse_for_validate  # noqa: E402
-from scripts.lib.dataset_validation import (  # noqa: E402
+from qua_jobs import cut_release  # noqa: E402
+from qua_jobs.cut_release import _verse_for_validate  # noqa: E402
+from qua_shared.dataset_validation import (  # noqa: E402
     check_duration_arithmetic,
 )
 

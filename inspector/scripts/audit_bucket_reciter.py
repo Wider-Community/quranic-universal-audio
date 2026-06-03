@@ -1,5 +1,5 @@
 """Validate every artifact in a bucket reciter folder against the canonical
-``scripts/lib/schemas`` definitions.
+``qua_shared/schemas`` definitions.
 
 Walks ``reciters/<slug>/`` on the configured bucket and audits every file we
 expect to find there:
@@ -70,7 +70,7 @@ canonical workflow used to land cohorts 1, 2, and 4 (May 2026) is:
 
 4. **Derive pipeline_meta.json**. Two paths auto-selected:
     - **New** (Migration #5+): per-op snapshot ``chapter`` stamps drive
-      ``scripts.lib.pipeline_meta.collect_deleted_basmalas``.
+      ``qua_shared.pipeline_meta.collect_deleted_basmalas``.
     - **Legacy fallback**: walks strip_specials ops in chapter+time
       order, pairing each Basmala-class op with the next entry in
       ``batch.chapters[]`` — recovers ``deleted_basmala_chapters``
@@ -117,7 +117,7 @@ Common legacy edge cases handled by the migrator:
 To onboard a NEW schema field cleanly without resurrecting the silent-
 allow regression:
 
-  1. Add the field to the relevant model in ``scripts/lib/schemas/``.
+  1. Add the field to the relevant model in ``qua_shared/schemas/``.
   2. Run this audit on a representative slug. Any UNRECOGNIZED-field
      warning means a writer is still emitting bloat — fix the writer.
   3. If the field replaces a now-dead one, add the old name to that
@@ -153,7 +153,7 @@ def _capture_extras_warnings():
     can summarise it into the per-file FileResult detail / warnings counts.
     """
     captured: list[tuple[int, str]] = []
-    extras_log = logging.getLogger("scripts.lib.schemas._extras")
+    extras_log = logging.getLogger("qua_shared.schemas._extras")
     prev_level = extras_log.level
     extras_log.setLevel(logging.INFO)
 
@@ -239,7 +239,7 @@ class AuditResult:
 
 
 def _audit_detailed(backend, path: str) -> FileResult:
-    from scripts.lib.schemas import DetailedDocument
+    from qua_shared.schemas import DetailedDocument
 
     try:
         raw = backend.read_bytes(path)
@@ -324,7 +324,7 @@ def _audit_segments(backend, path: str) -> FileResult:
 
 
 def _audit_edit_history(backend, path: str) -> FileResult:
-    from scripts.lib.schemas import parse_edit_history_line
+    from qua_shared.schemas import parse_edit_history_line
 
     try:
         raw = backend.read_bytes(path)
@@ -367,7 +367,7 @@ def _audit_edit_history(backend, path: str) -> FileResult:
 
 
 def _audit_peaks_history(backend, path: str) -> FileResult:
-    from scripts.lib.schemas import parse_peaks_record
+    from qua_shared.schemas import parse_peaks_record
 
     try:
         raw = backend.read_bytes(path)
@@ -498,7 +498,7 @@ def _audit_auto_split_v1(backend, path: str) -> FileResult:
 def _audit_pipeline_meta(backend, path: str) -> FileResult:
     """``pipeline_meta.json`` — extraction-time facts (Inspector hard-fails
     on missing/invalid sidecar). Validated via the canonical Pydantic model."""
-    from scripts.lib.schemas import PipelineMeta
+    from qua_shared.schemas import PipelineMeta
 
     try:
         raw = backend.read_bytes(path)

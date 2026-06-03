@@ -26,7 +26,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefm
 log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+sys.path.insert(0, str(ROOT / "qua_shared"))
 from config_loader import repo_config  # noqa: E402
 from reciter_eligibility import compute_coverage, find_eligible_reciters  # noqa: E402
 

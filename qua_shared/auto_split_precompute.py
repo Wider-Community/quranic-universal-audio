@@ -59,8 +59,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple, Optional
 
-from scripts.lib.mfa_runtime import MfaRuntime
-from scripts.lib.timestamps_pipeline import (
+from qua_shared.mfa_runtime import MfaRuntime
+from qua_shared.timestamps_pipeline import (
     DEFAULT_ALIGNER_MODEL,
     _init_worker,
     _worker_align,
@@ -72,7 +72,7 @@ from scripts.lib.timestamps_pipeline import (
 # Reuse the inspector's pure parsing helpers — same code path so the offline
 # pre-compute and the (now sidecar-only) runtime fallback agree byte-for-byte
 # on sections/refs shape.
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 _INSPECTOR_DIR = _REPO_ROOT / "inspector"
 if str(_INSPECTOR_DIR) not in sys.path:
     sys.path.insert(0, str(_INSPECTOR_DIR))
@@ -430,7 +430,7 @@ def run_precompute(
     producer.start()
 
     # Pool ownership: reuse caller-provided runtime if given, else open
-    # a self-contained pool. See scripts/lib/mfa_runtime.py.
+    # a self-contained pool. See qua_shared/mfa_runtime.py.
     owned_runtime: MfaRuntime | None = None
     if runtime is None:
         owned_runtime = MfaRuntime(mfa_app_path, workers)

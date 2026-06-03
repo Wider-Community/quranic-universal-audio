@@ -3,7 +3,7 @@
 The Inspector no longer calls MFA at request time; ``compute_auto_split``
 now just resolves the precomputed entry from ``load_auto_split`` (which
 reads ``<reciter>/auto_split_v1.json`` emitted offline by
-``scripts/lib/auto_split_precompute.py``). These tests stub the loader,
+``qua_shared/auto_split_precompute.py``). These tests stub the loader,
 not MFA — there is no MFA Space client to mock anymore.
 """
 from __future__ import annotations

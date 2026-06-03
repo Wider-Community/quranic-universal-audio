@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 # Ensure the repo root (parent of inspector/) is on sys.path so that
-# `from scripts.lib.X import Y` resolves to the sibling `scripts/lib/` package
+# `from qua_shared.X import Y` resolves to the sibling `qua_shared/` package
 # (e.g. `boundary_check`, used by the timestamps validator) when the app is
 # launched via `python3 inspector/app.py` from the repo root. Inside Docker
 # the WORKDIR is /app and both /app/inspector/ and /app/scripts/ are present

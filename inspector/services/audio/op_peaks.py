@@ -13,7 +13,7 @@ Single source of truth for the op→record shape, reused by:
     here so the op→range/url resolution never drifts.
 
 Canonical record shape (Migration #5): ``{op_id, url, start_ms, end_ms, bps,
-peaks_b64}`` — see ``scripts/lib/schemas/peaks_history.py``.
+peaks_b64}`` — see ``qua_shared/schemas/peaks_history.py``.
 """
 from __future__ import annotations
 

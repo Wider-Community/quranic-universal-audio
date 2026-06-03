@@ -22,7 +22,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from scripts.lib.reciter_eligibility import eligible_set_via  # noqa: E402
+from qua_shared.reciter_eligibility import eligible_set_via  # noqa: E402
 
 
 def main() -> int:

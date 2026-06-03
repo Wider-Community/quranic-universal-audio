@@ -38,7 +38,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
@@ -164,7 +164,7 @@ def _load_timestamps_shards(slug: str) -> dict[str, dict]:
     "_meta": {...}}`` — same shape build_reciter.py's ``load_data`` produces
     after reshaping.
     """
-    from scripts.lib.timestamps_dedup import project_chapter_shard
+    from qua_shared.timestamps_dedup import project_chapter_shard
 
     ts_dir = _bucket_root() / "reciters" / slug / "timestamps"
     out: dict[str, dict] = {}
@@ -604,7 +604,7 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict],
 
 def _resolve_dataset_repo_id() -> str:
     """Resolve the HF dataset repo id from config_loader (single source of truth)."""
-    from scripts.lib.config_loader import repo_config
+    from qua_shared.config_loader import repo_config
     return repo_config()["hf_dataset"]
 
 
@@ -736,7 +736,7 @@ def main() -> int:
         return 15
 
     # 4. Validate boundaries before any audio work.
-    from scripts.lib.dataset_validation import (
+    from qua_shared.dataset_validation import (
         BoundaryValidationError, fatal_violations, validate_dataset,
     )
     summary = validate_dataset(_verses_for_validation(rows), surah_info=surah_info)

@@ -20,9 +20,9 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 
 from config import DK_SCRIPT_PATH
-from scripts.lib.schemas import ReciterCatalog
-from scripts.lib.timestamps_shards import SCHEMA_VERSION, derive_url_template
-from scripts.lib.timestamps_dedup import is_v2, project_chapter_shard
+from qua_shared.schemas import ReciterCatalog
+from qua_shared.timestamps_shards import SCHEMA_VERSION, derive_url_template
+from qua_shared.timestamps_dedup import is_v2, project_chapter_shard
 from services.storage import data_dir, static_refs
 from services.state import catalog as catalog_service
 from services.state import state as state_service

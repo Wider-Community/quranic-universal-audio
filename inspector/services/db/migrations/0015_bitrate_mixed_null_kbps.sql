@@ -6,7 +6,7 @@
 -- bitrate_kbps_nominal populated with the original number, so existing rows
 -- now read back as e.g. mixed/128 — which fails the Delivery pydantic
 -- invariant ("bitrate_kbps_nominal must be null when bitrate_mode == mixed",
--- scripts/lib/schemas/catalog.py:178) and 500s every snapshot()-driven read
+-- qua_shared/schemas/catalog.py:178) and 500s every snapshot()-driven read
 -- path (public stats / public reciters / dashboard).
 --
 -- Fix forward: null out kbps_nominal everywhere the mode is now mixed.

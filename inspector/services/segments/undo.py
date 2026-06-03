@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from constants import HISTORY_SCHEMA_VERSION
 from domain.command import apply_inverse_patch
-from scripts.lib.schemas import Actor
+from qua_shared.schemas import Actor
 from services.storage import cache, data_dir
 from services.storage.data_loader import load_detailed
 from services.segments.save import persist_detailed

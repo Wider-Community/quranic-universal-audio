@@ -57,7 +57,7 @@ _BUCKET_REPOS = {
 def read_sources() -> dict:
     from services.storage import storage_paths as sp
     from services.storage.hf_bucket import StorageNotFound, get_backend
-    from scripts.lib.schemas import (
+    from qua_shared.schemas import (
         ActivityState, ArchivedRequestsFile, PendingRequestsFile, ReciterCatalog,
         ReciterStateFile, RolesFile,
     )

@@ -1,7 +1,7 @@
 """Render the GitHub-release body (the "changelog") — single source of truth.
 
 Shared by the two callers that must agree on what a release looks like:
-  - ``scripts/jobs/cut_release.py`` — the body actually POSTed to GitHub by the cut HF Job.
+  - ``qua_jobs/cut_release.py`` — the body actually POSTed to GitHub by the cut HF Job.
   - ``inspector/routes/admin/releases.py`` — the dry-run preview the operator sees in the
     cut modal before launching.
 
