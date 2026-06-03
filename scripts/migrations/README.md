@@ -15,4 +15,4 @@ cross-references the schema state they produced.
 **A script belongs here only if** running it again on current state is a
 no-op-or-error *by design* (it assumes the pre-migration shape). Idempotent,
 re-runnable tools — `backfill_*`, `convert_*`, `purge_*`, `unignore_category` —
-stay flat in `inspector/scripts/`.
+stay flat in `scripts/backfills/`.

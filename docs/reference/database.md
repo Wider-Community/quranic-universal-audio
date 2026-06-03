@@ -147,7 +147,7 @@ Repos round-trip these pydantic models from `qua_shared/schemas/` (enum values s
 
 ## JSON→SQLite migration
 
-`inspector/scripts/migrations/migrate_json_to_sqlite.py` — one-shot, run once per bucket (`--bucket dev|prod`). Reads the 7 legacy stores + audit JSONL via the storage backend, decomposes into the SQLite tables, runs a parity readback, and (unless `--dry-run`) uploads `db/inspector.db`. Refuses to overwrite an existing bucket DB without `--force`. Refuses orphan slugs (state/request slug missing from catalog deliveries) without `--allow-orphans`.
+`scripts/migrations/migrate_json_to_sqlite.py` — one-shot, run once per bucket (`--bucket dev|prod`). Reads the 7 legacy stores + audit JSONL via the storage backend, decomposes into the SQLite tables, runs a parity readback, and (unless `--dry-run`) uploads `db/inspector.db`. Refuses to overwrite an existing bucket DB without `--force`. Refuses orphan slugs (state/request slug missing from catalog deliveries) without `--allow-orphans`.
 
 Decomposition (`build()`, all in one `transaction()`; guards that target tables are empty first):
 

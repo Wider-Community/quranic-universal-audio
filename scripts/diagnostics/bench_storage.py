@@ -5,7 +5,7 @@ inspector actually performs against a real reciter in the dev bucket.
 
 Run:
     INSPECTOR_BUCKET_REPO=hetchyy/quranic-inspector-bucket-dev \\
-    python3 inspector/scripts/bench_storage.py [--mount /path]
+    python3 scripts/diagnostics/bench_storage.py [--mount /path]
 
 A scratch dir ``reciters/__bench__/`` is created for writes and cleaned at exit.
 """
@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "inspector"))
 sys.path.insert(0, str(ROOT))
 
 from inspector.services.hf_bucket import BucketBackend  # noqa: E402

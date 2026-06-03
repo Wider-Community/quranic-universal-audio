@@ -29,10 +29,10 @@ secrets.
 
 Usage::
 
-    python inspector/scripts/bootstrap_dev_env.py myname            # provision
-    python inspector/scripts/bootstrap_dev_env.py myname --deploy    # + push code
-    python inspector/scripts/bootstrap_dev_env.py myname --dry-run   # show plan only
-    python inspector/scripts/bootstrap_dev_env.py myname --teardown  # delete both
+    python scripts/devenv/bootstrap_dev_env.py myname            # provision
+    python scripts/devenv/bootstrap_dev_env.py myname --deploy    # + push code
+    python scripts/devenv/bootstrap_dev_env.py myname --dry-run   # show plan only
+    python scripts/devenv/bootstrap_dev_env.py myname --teardown  # delete both
 
 Auth: reads ``HF_TOKEN`` (or ``INSPECTOR_HF_TOKEN``) from env or repo-root
 ``.env``. Tip: use a token scoped to your own repos.
@@ -135,11 +135,11 @@ def _provision(api, *, user: str, name: str, deploy: bool, public_bucket: bool) 
     if deploy:
         print("==> [6/6] Deploying current code to the Space")
         import subprocess
-        deploy_script = _REPO_ROOT / "inspector" / "scripts" / "deploy_space.py"
+        deploy_script = _REPO_ROOT / "scripts" / "deploy" / "deploy_space.py"
         subprocess.run([sys.executable, str(deploy_script), space_id], check=True)
     else:
         print("==> [6/6] Skipping deploy. Push code when ready with:")
-        print(f"        python inspector/scripts/deploy_space.py {space_id}")
+        print(f"        python scripts/deploy/deploy_space.py {space_id}")
 
     print("\n==> Done.")
     print(f"    Bucket : hf://buckets/{bucket_id}")

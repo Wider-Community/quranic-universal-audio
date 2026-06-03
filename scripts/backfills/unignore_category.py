@@ -22,9 +22,9 @@ Dry run by default. Pass ``--apply`` to mutate.
 
 Examples::
 
-    python3 inspector/scripts/unignore_category.py \
+    python3 scripts/backfills/unignore_category.py \
         --slug ahmed_saud_mp3quran --category cross_verse --bucket prod
-    python3 inspector/scripts/unignore_category.py \
+    python3 scripts/backfills/unignore_category.py \
         --slug ahmed_saud_mp3quran --category cross_verse --bucket prod --apply
 """
 from __future__ import annotations

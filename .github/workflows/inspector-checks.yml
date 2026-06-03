@@ -86,7 +86,7 @@ jobs:
     # lockstep with qua_shared/schemas/. If a backend pydantic schema
     # changes and the dev forgot to regen the FE types, this job fails
     # with `git diff --exit-code` on the generated file. See
-    # docs/reference/data-migrations.md §5 and inspector/scripts/regen_fe_types.py.
+    # docs/reference/data-migrations.md §5 and scripts/codegen/regen_fe_types.py.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -109,13 +109,13 @@ jobs:
           cd inspector/frontend && npm ci
 
       - name: Regenerate FE types
-        run: python inspector/scripts/regen_fe_types.py
+        run: python scripts/codegen/regen_fe_types.py
 
       - name: Verify no drift in generated/schemas.ts
         run: |
           if ! git diff --exit-code -- inspector/frontend/src/lib/types/generated/schemas.ts; then
             echo "::error::Generated FE types are out of sync. Run:"
-            echo "::error::  python inspector/scripts/regen_fe_types.py"
+            echo "::error::  python scripts/codegen/regen_fe_types.py"
             echo "::error::and commit the result."
             exit 1
           fi

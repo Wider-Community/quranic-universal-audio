@@ -16,7 +16,7 @@ Pre-flight:
 
 Usage::
 
-    python3 inspector/scripts/upload_bucket_reciter.py \\
+    python3 scripts/bucket/upload_bucket_reciter.py \\
         --slug mahmoud_khalil_al_husary_mp3quran \\
         --src /tmp/mahmoud_khalil_al_husary_mp3quran/ \\
         --bucket prod --apply

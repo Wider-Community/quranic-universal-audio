@@ -115,9 +115,9 @@ The old disk cache (`CACHE_DIR/<reciter>/peaks/<sha256>.json`) was removed (comm
 
 ## Backfill + audit (operate on the on-disk envelope — stable since v3)
 
-- `inspector/scripts/backfill_peaks_slim.py` — walks `reciters/*/peaks/` for legacy `.json`, packs via `pack_slim`, writes `.json.gz`, renames original to `.json.bak`. Idempotent (skips existing `.json.gz`).
-- `inspector/scripts/rollback_peaks_slim.py` — symmetric reverse (then revert `PEAKS_SCHEMA_VERSION` to 2 manually).
-- `inspector/scripts/audit_bucket_reciter.py::_audit_peaks_slim` — validates every `<ch>.json.gz` against the envelope (`schema_version==3`, `peaks_b64`/`bps`/`duration_ms` present, gzip + JSON parse clean). Part of the pre-release audit.
+- `scripts/backfills/backfill_peaks_slim.py` — walks `reciters/*/peaks/` for legacy `.json`, packs via `pack_slim`, writes `.json.gz`, renames original to `.json.bak`. Idempotent (skips existing `.json.gz`).
+- `scripts/backfills/rollback_peaks_slim.py` — symmetric reverse (then revert `PEAKS_SCHEMA_VERSION` to 2 manually).
+- `scripts/bucket/audit_bucket_reciter.py::_audit_peaks_slim` — validates every `<ch>.json.gz` against the envelope (`schema_version==3`, `peaks_b64`/`bps`/`duration_ms` present, gzip + JSON parse clean). Part of the pre-release audit.
 
 ## Performance
 

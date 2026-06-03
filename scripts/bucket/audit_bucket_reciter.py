@@ -44,7 +44,7 @@ canonical workflow used to land cohorts 1, 2, and 4 (May 2026) is:
    default — typically 10s-100s of MB and unchanged by a schema
    migration). Mirrors the bucket layout under the chosen ``--out`` dir::
 
-       python3 inspector/scripts/download_bucket_reciter.py \
+       python3 scripts/bucket/download_bucket_reciter.py \
            --slug <slug> --bucket prod --out /tmp/<slug>/
            [--include-audio]
 
@@ -65,7 +65,7 @@ canonical workflow used to land cohorts 1, 2, and 4 (May 2026) is:
    ``services.audio.peaks_slim.pack_slim`` to v3 slim gzip (98%+ saved)
    and delete the plain originals locally::
 
-       python3 inspector/scripts/convert_peaks_v2_to_v3.py \
+       python3 scripts/backfills/convert_peaks_v2_to_v3.py \
            --dir /tmp/<slug>/peaks/
 
 4. **Derive pipeline_meta.json**. Two paths auto-selected:
@@ -76,20 +76,20 @@ canonical workflow used to land cohorts 1, 2, and 4 (May 2026) is:
       ``batch.chapters[]`` — recovers ``deleted_basmala_chapters``
       without per-snapshot stamps::
 
-       python3 inspector/scripts/derive_pipeline_meta.py \
+       python3 scripts/backfills/derive_pipeline_meta.py \
            --dir /tmp/<slug>/
 
 5. **Audit locally** — same script, ``--local-path`` mode. Pre-flight
    gate before any bucket write::
 
-       python3 inspector/scripts/audit_bucket_reciter.py \
+       python3 scripts/bucket/audit_bucket_reciter.py \
            --slug <slug> --local-path /tmp/<slug>/
 
 6. **Upload** the migrated metadata + peaks back. Deletes orphan plain
    ``peaks/<ch>.json`` files left on the bucket from a pre-Migration #5
    layout (their ``.json.gz`` replacements were written in step 3)::
 
-       python3 inspector/scripts/upload_bucket_reciter.py \
+       python3 scripts/bucket/upload_bucket_reciter.py \
            --slug <slug> --src /tmp/<slug>/ --bucket prod --apply
            [--include-audio]
 
@@ -97,7 +97,7 @@ canonical workflow used to land cohorts 1, 2, and 4 (May 2026) is:
    Pass on ``15/15 ok, 0 errors, 0 warnings, 0 legacy strips``.
 
 Cohort 1 (pipeline_meta only — segs already slim) used just step 4:
-``inspector/scripts/backfill_deleted_basmala.py --slugs <comma_list>``
+``scripts/backfills/backfill_deleted_basmala.py --slugs <comma_list>``
 (reads ``edit_history.jsonl`` directly from the bucket via
 ``services/storage/data_dir.py``).
 
@@ -123,7 +123,7 @@ allow regression:
   3. If the field replaces a now-dead one, add the old name to that
      model's ``DEAD_FIELDS`` set so legacy on-disk data continues
      parsing (INFO log, not WARNING).
-  4. Run ``inspector/scripts/regen_fe_types.py`` so the frontend types
+  4. Run ``scripts/codegen/regen_fe_types.py`` so the frontend types
      stay in lockstep (CI's ``schema-codegen-check`` enforces this).
 """
 from __future__ import annotations

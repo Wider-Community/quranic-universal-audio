@@ -23,11 +23,11 @@ from services.activity import activity_classification
 from services import db
 from services.db import repo_state, repo_access, repo_transitions, repo_activity, repo_requests
 
-# Loaded by path: inspector/scripts/ is not a package and `scripts` resolves to
-# the repo-root scripts/ (qua_shared.schemas), so import via importlib.
+# Loaded by path — scripts/migrations/ files are run/loaded standalone, not
+# imported as a package, so use importlib.
 _spec = importlib.util.spec_from_file_location(
     "migrate_json_to_sqlite",
-    Path(__file__).resolve().parents[2] / "scripts" / "migrations" / "migrate_json_to_sqlite.py",
+    Path(__file__).resolve().parents[3] / "scripts" / "migrations" / "migrate_json_to_sqlite.py",
 )
 M = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(M)

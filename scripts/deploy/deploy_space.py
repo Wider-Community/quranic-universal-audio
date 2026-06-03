@@ -2,17 +2,17 @@
 """Deploy the Inspector to *any* Hugging Face Space — including your own.
 
 This is the committed, parameterized cousin of the maintainer-only
-``scripts/upload_inspector.py`` (which is hardcoded to the canonical dev/prod
+``scripts/deploy/upload_inspector.py`` (which is hardcoded to the canonical dev/prod
 Spaces). Contributors use this to push to a personal Space created by
 ``bootstrap_dev_env.py``.
 
 Usage::
 
     # Deploy to your personal Space (created by bootstrap_dev_env.py)
-    python inspector/scripts/deploy_space.py <your-hf-user>/quranic-inspector-<name>
+    python scripts/deploy/deploy_space.py <your-hf-user>/quranic-inspector-<name>
 
     # Stage only, don't upload (inspect the tree that would ship)
-    python inspector/scripts/deploy_space.py <id> --dry-run
+    python scripts/deploy/deploy_space.py <id> --dry-run
 
 What it does:
 

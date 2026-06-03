@@ -4,8 +4,8 @@
 Usage::
 https://huggingface.co/hetchyy
 
-    python -m scripts.upload_inspector dev   # → hetchyy/quranic-inspector-dev
-    python -m scripts.upload_inspector prod  # → hetchyy/quranic-universal-audio
+    python scripts/deploy/upload_inspector.py dev   # → hetchyy/quranic-inspector-dev
+    python scripts/deploy/upload_inspector.py prod  # → hetchyy/quranic-universal-audio
 
 Build steps:
 
@@ -59,7 +59,7 @@ _RATE_LIMIT_RETRIES = 5
 _RATE_LIMIT_DEFAULT_WAIT = 30  # seconds, when no Retry-After header is sent
 
 # Bring in the .env loader so HF_TOKEN is available.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from qua_shared._env import load_repo_env, repo_root  # noqa: E402
 
 SPACE_REPOS = {
@@ -250,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.verify_boot:
             print("==> Verifying the staged image builds and boots...")
-            smoke = repo / "inspector" / "scripts" / "smoke_boot.py"
+            smoke = repo / "scripts" / "deploy" / "smoke_boot.py"
             subprocess.run(
                 [sys.executable, str(smoke), "--context", str(stage_root)],
                 check=True,

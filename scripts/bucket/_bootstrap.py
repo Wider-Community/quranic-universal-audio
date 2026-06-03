@@ -36,8 +36,8 @@ BUCKETS = {
 
 
 def repo_root() -> Path:
-    # scripts/<file>.py → hf-buckets/ → skills/ → .claude/ → repo
-    return Path(__file__).resolve().parents[4]
+    # scripts/bucket/_bootstrap.py → bucket/ → scripts/ → repo
+    return Path(__file__).resolve().parents[2]
 
 
 def ensure_utf8_stdout() -> None:

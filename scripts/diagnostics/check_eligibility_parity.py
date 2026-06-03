@@ -19,8 +19,9 @@ from pathlib import Path
 
 # Ensure the inspector package + repo root are importable when invoked as a script.
 _ROOT = Path(__file__).resolve().parents[2]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+for _p in (_ROOT / "inspector", _ROOT):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 from qua_shared.reciter_eligibility import eligible_set_via  # noqa: E402
 

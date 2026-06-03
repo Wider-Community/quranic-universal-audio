@@ -14,7 +14,7 @@ misconfig, route-registration error) that a plain ``docker build`` can't see.
 Used by:
   * the opt-in CI ``boot-smoke`` job (manual prod dispatch), which builds with
     a layer cache and calls this with ``--skip-build --tag <built>``; and
-  * ``scripts/upload_inspector.py --verify-boot``, which builds the staged
+  * ``scripts/deploy/upload_inspector.py --verify-boot``, which builds the staged
     context here before deploying.
 
 No Hugging Face token or bucket access required — the fixtures dataset pulled by
@@ -34,8 +34,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-# seed_fixtures lives next to this script; reuse its public-fixtures downloader.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Reuse the public-fixtures downloader from the devenv sibling.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "devenv"))
 import seed_fixtures  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]

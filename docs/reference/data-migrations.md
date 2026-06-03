@@ -1,6 +1,6 @@
 # Data migrations & one-shot scripts
 
-Playbook for one-shot migrations / backfills against bucket data (`reciters/<slug>/` per-reciter artefacts, and the SQLite substrate). All scripts live in `inspector/scripts/`. Shared shape: **dry-run by default**, write to a parallel `archive/<migration>/<slug>/…` (or `.bak`) path before mutating, drift- or parity-check, then atomically promote. Per-reciter loops process independently — a mid-loop failure leaves earlier slugs done, later ones untouched.
+Playbook for one-shot migrations / backfills against bucket data (`reciters/<slug>/` per-reciter artefacts, and the SQLite substrate). Completed migrations live in `scripts/migrations/` (frozen); re-runnable backfills in `scripts/backfills/`. Shared shape: **dry-run by default**, write to a parallel `archive/<migration>/<slug>/…` (or `.bak`) path before mutating, drift- or parity-check, then atomically promote. Per-reciter loops process independently — a mid-loop failure leaves earlier slugs done, later ones untouched.
 
 > The historical per-reciter scan-count tables and bug-forensics that used to live here are dropped — they're frozen in commit history. This doc keeps the durable bits an agent needs to *re-run* a migration: detection predicate, apply CLI, archive/rollback path, idempotency, and what each does NOT touch.
 
@@ -39,7 +39,7 @@ One-shot unification of the two state-driven per-reciter prefixes into a single 
 ## Substrate migrations
 
 ### JSON → SQLite (`migrate_json_to_sqlite.py`)
-The cutover. Reads the legacy stores via the configured backend, decomposes into SQLite tables, runs a **semantic** parity readback (list order normalized, not byte), optionally uploads to `db/inspector.db`. Refuses to overwrite an existing bucket DB without `--force`. Decomposition + parity gate fully documented in [database.md](database.md). `python inspector/scripts/migrations/migrate_json_to_sqlite.py --bucket dev [--force] [--allow-orphans] [--dry-run]`.
+The cutover. Reads the legacy stores via the configured backend, decomposes into SQLite tables, runs a **semantic** parity readback (list order normalized, not byte), optionally uploads to `db/inspector.db`. Refuses to overwrite an existing bucket DB without `--force`. Decomposition + parity gate fully documented in [database.md](database.md). `python scripts/migrations/migrate_json_to_sqlite.py --bucket dev [--force] [--allow-orphans] [--dry-run]`.
 
 ### Pending orphans (`migrate_pending_orphans.py`)
 Legacy boot-time reconcile *deleted* pending-request orphans (losing proposed_edits + comments + auto_claim). New design archives at each terminal transition; this catches up legacy data by writing orphans into `requests/completed.json` with a synthetic system actor + `reason="migrated from orphan"`. Dry-run default; `--apply` to commit. Idempotent (second run archives zero).

@@ -21,17 +21,17 @@ as the rollback. After confirming the deploy reads from ``reciters/``, run
 Usage::
 
     # dev bucket (default)
-    python3 inspector/scripts/migrations/migrate_to_reciters_prefix.py --verify
+    python3 scripts/migrations/migrate_to_reciters_prefix.py --verify
 
     # prod (explicit two-key opt-in)
-    python3 inspector/scripts/migrations/migrate_to_reciters_prefix.py \\
+    python3 scripts/migrations/migrate_to_reciters_prefix.py \\
         --bucket prod --allow-prod --verify
 
     # cleanup (two-key) — ONLY after the deploy reads reciters/ AND, for prod,
     # the quranic-universal-aligner Space no longer reads published/ from this
     # bucket (it enumerates published/ for its public reciter set). Without
     # --confirm-delete this only previews.
-    python3 inspector/scripts/migrations/migrate_to_reciters_prefix.py \\
+    python3 scripts/migrations/migrate_to_reciters_prefix.py \\
         --bucket prod --allow-prod --delete-old --confirm-delete
 """
 from __future__ import annotations
@@ -54,7 +54,7 @@ _DEST_PREFIX = "reciters"
 
 def _setup_paths_and_env(bucket: str, *, allow_prod: bool) -> None:
     here = Path(__file__).resolve()
-    repo = here.parents[3]  # migrations/ -> scripts/ -> inspector/ -> repo root
+    repo = here.parents[2]  # migrations/ -> scripts/ -> repo root
     sys.path.insert(0, str(repo / "inspector"))
     sys.path.insert(0, str(repo))
     os.environ["INSPECTOR_BUCKET_REPO"] = _BUCKETS[bucket]

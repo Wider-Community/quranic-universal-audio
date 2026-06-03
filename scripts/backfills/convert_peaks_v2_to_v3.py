@@ -14,7 +14,7 @@ the dir contains only the canonical wire shape afterwards (pass
 
 Usage::
 
-    python3 inspector/scripts/convert_peaks_v2_to_v3.py --dir /tmp/<slug>/peaks/
+    python3 scripts/backfills/convert_peaks_v2_to_v3.py --dir /tmp/<slug>/peaks/
 
 Designed to run before re-upload in a download → migrate → re-upload
 workflow — the upload step ships the ``.json.gz`` files; orphaned plain

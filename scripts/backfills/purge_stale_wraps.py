@@ -34,7 +34,9 @@ from typing import Iterable
 
 import orjson
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_REPO / "inspector"))
+sys.path.insert(0, str(_REPO))
 
 from services.storage import data_dir, storage_paths
 from services.storage.hf_bucket import StorageNotFound, get_backend

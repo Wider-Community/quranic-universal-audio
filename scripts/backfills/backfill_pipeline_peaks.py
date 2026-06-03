@@ -22,7 +22,7 @@ If those invariants aren't met for a given slug, fix the source data
 dir, or by re-extracting). Don't keep adding fallbacks here.
 
 Usage:
-    python3 inspector/scripts/backfill_pipeline_peaks.py \\
+    python3 scripts/backfills/backfill_pipeline_peaks.py \\
         --slug <slug> [--slug <slug2> ...] [--bucket prod|dev] [--dry-run]
 """
 from __future__ import annotations

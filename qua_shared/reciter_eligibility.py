@@ -14,7 +14,7 @@ during the migration window), we fall back to the git-tracked check so the
 old release.yml keeps working until Phase 2 deletes it.
 
 Both backends produce the same set of slugs at the cutover boundary
-(Phase-1 acceptance test in ``inspector/scripts/check_eligibility_parity.py``).
+(Phase-1 acceptance test in ``scripts/diagnostics/check_eligibility_parity.py``).
 """
 
 from __future__ import annotations

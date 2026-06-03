@@ -2,7 +2,7 @@
 
 Schema lives at ``qua_shared/schemas/peaks_history.py``. Both writers
 (offline extraction's ``audio_persist.write_edit_history_peaks`` and
-the one-shot ``inspector/scripts/backfill_pipeline_peaks.py``) round-
+the one-shot ``scripts/backfills/backfill_pipeline_peaks.py``) round-
 trip through it — these tests assert the canonical Migration #5 shape
 (``peaks_b64`` + ``bps``) is the only one accepted, and that the
 pre-#5 ``peaks: list[list[float]]`` shape is rejected so a stale

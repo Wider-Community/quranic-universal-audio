@@ -16,7 +16,7 @@ Two derivation paths:
 
 Usage::
 
-    python3 inspector/scripts/derive_pipeline_meta.py --dir /tmp/<slug>/
+    python3 scripts/backfills/derive_pipeline_meta.py --dir /tmp/<slug>/
 
 Writes ``<dir>/pipeline_meta.json``. Idempotent — re-running on the same
 data emits a byte-equal sidecar modulo ``generated_at``.

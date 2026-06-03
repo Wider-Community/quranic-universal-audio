@@ -32,9 +32,9 @@ skipped). Use that for spot fixes; for real backfills, install the
 package.
 
 Usage:
-    python inspector/scripts/backfill_boundary_adj.py --slug bandar_baleela_mp3quran
-    python inspector/scripts/backfill_boundary_adj.py --all
-    python inspector/scripts/backfill_boundary_adj.py --slug X --dry-run
+    python scripts/backfills/backfill_boundary_adj.py --slug bandar_baleela_mp3quran
+    python scripts/backfills/backfill_boundary_adj.py --all
+    python scripts/backfills/backfill_boundary_adj.py --slug X --dry-run
 """
 
 from __future__ import annotations

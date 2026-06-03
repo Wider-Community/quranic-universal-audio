@@ -9,9 +9,9 @@ backend at it. After running, ``python inspector/app.py`` boots fully offline.
 
 Usage::
 
-    python inspector/scripts/seed_fixtures.py            # download + configure
-    python inspector/scripts/seed_fixtures.py --force    # re-download (reset)
-    python inspector/scripts/seed_fixtures.py --print-env # just show the env
+    python scripts/devenv/seed_fixtures.py            # download + configure
+    python scripts/devenv/seed_fixtures.py --force    # re-download (reset)
+    python scripts/devenv/seed_fixtures.py --print-env # just show the env
 
 What it does:
 
@@ -86,7 +86,7 @@ def _configure_env() -> None:
     env_path = _REPO_ROOT / ".env"
     if not env_path.exists():
         env_path.write_text(
-            "# Auto-written by inspector/scripts/seed_fixtures.py (Tier-0 offline mode).\n"
+            "# Auto-written by scripts/devenv/seed_fixtures.py (Tier-0 offline mode).\n"
             + "\n".join(_ENV_LINES) + "\n",
             encoding="utf-8",
         )
@@ -122,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: failed to download fixtures: {e}", file=sys.stderr)
         print(
             "If the dataset doesn't exist yet, a maintainer needs to publish it "
-            "with inspector/scripts/make_fixtures_dataset.py.",
+            "with scripts/devenv/make_fixtures_dataset.py.",
             file=sys.stderr,
         )
         return 1

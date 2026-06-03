@@ -16,7 +16,7 @@ per the schema convention.
 
 FE-facing: re-exported from ``fe_types.py`` and code-generated into
 ``inspector/frontend/src/lib/types/generated/schemas.ts`` via
-``inspector/scripts/regen_fe_types.py``.
+``scripts/codegen/regen_fe_types.py``.
 """
 
 from __future__ import annotations

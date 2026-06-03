@@ -13,4 +13,4 @@ them; excluded from the image via `.dockerignore`'s `.github/*`.
   the v1 HF parquet dataset still needs a manual rebuild; see the repo TODO.
 
 For where a new script belongs, see
-[`inspector/scripts/README.md`](../../inspector/scripts/README.md).
+[`scripts/README.md`](../../scripts/README.md).

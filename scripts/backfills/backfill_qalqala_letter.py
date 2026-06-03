@@ -18,9 +18,9 @@ Parallel-then-promote flow (safe rollback):
    ``reciters/<slug>/detailed.json`` via ``data_dir.write_detailed_doc``.
 
 Usage:
-    python inspector/scripts/backfill_qalqala_letter.py --slug bandar_baleela_mp3quran
-    python inspector/scripts/backfill_qalqala_letter.py --all
-    python inspector/scripts/backfill_qalqala_letter.py --slug X --dry-run
+    python scripts/backfills/backfill_qalqala_letter.py --slug bandar_baleela_mp3quran
+    python scripts/backfills/backfill_qalqala_letter.py --all
+    python scripts/backfills/backfill_qalqala_letter.py --slug X --dry-run
 """
 
 from __future__ import annotations

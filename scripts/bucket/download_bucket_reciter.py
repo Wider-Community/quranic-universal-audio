@@ -21,7 +21,7 @@ Output mirrors the bucket layout starting at the slug level:
 
 Usage::
 
-    python3 inspector/scripts/download_bucket_reciter.py \\
+    python3 scripts/bucket/download_bucket_reciter.py \\
         --slug mahmoud_khalil_al_husary_mp3quran --bucket prod \\
         --out /tmp/husary/
 """

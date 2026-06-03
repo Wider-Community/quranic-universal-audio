@@ -11,7 +11,7 @@ backend.
 
 Re-generate the FE types via::
 
-    python inspector/scripts/regen_fe_types.py
+    python scripts/codegen/regen_fe_types.py
 
 The generated output lands at
 ``inspector/frontend/src/lib/types/generated/schemas.ts`` and is

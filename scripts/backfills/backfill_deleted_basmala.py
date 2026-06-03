@@ -13,9 +13,9 @@ a byte-equal sidecar. Run as a drift check after the first pass.
 
 Usage::
 
-    python inspector/scripts/backfill_deleted_basmala.py --slug some_reciter
-    python inspector/scripts/backfill_deleted_basmala.py --all
-    python inspector/scripts/backfill_deleted_basmala.py --all --dry-run
+    python scripts/backfills/backfill_deleted_basmala.py --slug some_reciter
+    python scripts/backfills/backfill_deleted_basmala.py --all
+    python scripts/backfills/backfill_deleted_basmala.py --all --dry-run
 """
 
 from __future__ import annotations

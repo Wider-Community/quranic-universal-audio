@@ -25,10 +25,10 @@ explicit ``--publish`` step (outward-facing, hard to reverse).
 Usage::
 
     # Build locally, inspect what would ship (no network writes)
-    python inspector/scripts/make_fixtures_dataset.py --reciters slug_a,slug_b
+    python scripts/devenv/make_fixtures_dataset.py --reciters slug_a,slug_b
 
     # Build then publish to the public dataset
-    python inspector/scripts/make_fixtures_dataset.py --reciters slug_a,slug_b --publish
+    python scripts/devenv/make_fixtures_dataset.py --reciters slug_a,slug_b --publish
 
 Source bucket defaults to dev. Run from the repo root.
 """
