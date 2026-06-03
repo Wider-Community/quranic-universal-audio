@@ -119,3 +119,23 @@ jobs:
             echo "::error::and commit the result."
             exit 1
           fi
+
+  scripts-layout-guard:
+    # Stops the old scattered-scripts layout from creeping back. Imported-at-runtime
+    # code is a package (qua_shared/ or qua_jobs/); operational CLIs live in
+    # scripts/<function>/. There is no scripts/lib, scripts/jobs, or inspector/scripts.
+    # See scripts/README.md for the placement rule.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No old scripts layout
+        run: |
+          bad_files=$(git ls-files 'scripts/lib/**' 'scripts/jobs/**' 'inspector/scripts/**')
+          bad_imports=$(git grep -nE '^[[:space:]]*(from|import)[[:space:]]+scripts\.(lib|jobs)' -- '*.py' || true)
+          if [ -n "$bad_files$bad_imports" ]; then
+            echo "::error::Old scripts layout reintroduced — imported code → qua_shared/ or qua_jobs/; CLIs → scripts/<function>/. See scripts/README.md"
+            [ -n "$bad_files" ] && { echo "Files in dead homes:"; echo "$bad_files"; }
+            [ -n "$bad_imports" ] && { echo "Old scripts.lib/scripts.jobs imports:"; echo "$bad_imports"; }
+            exit 1
+          fi
+          echo "scripts layout OK"
