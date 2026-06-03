@@ -23,6 +23,7 @@ Playbook for one-shot migrations / backfills against bucket data (`reciters/<slu
 | `backfill_deleted_basmala.py` is paired with extraction's native write | — | — | — | New reciters land pre-stamped; backfill is legacy catch-up only. |
 | `unignore_category.py` | edit_history.jsonl | bulk-revert `ignore_issue` ops for a category | yes (skips reverted) | Data fix, not a migration — drives `services.segments.undo.undo_ops`. |
 | `audit_bucket_reciter.py` | (read-only) | per-reciter integrity audit | n/a | Run before publishing a reciter. |
+| `scripts/jobs/reshape_timestamps_shards.py` | timestamps/ | v2 occurrence-list shard → temporal segment-array shard | yes (`target` shards skipped) | Migration #6. Lives in `scripts/jobs/`, not `inspector/scripts/`. |
 
 Tooling (not migrations): `download_bucket_reciter.py`, `upload_bucket_reciter.py` (download → migrate → re-upload workflow), `bench_storage.py`, `regen_fe_types.py` (FE codegen — see CLAUDE.md schema convention).
 
@@ -78,6 +79,36 @@ A pipeline-era cluster of changes; the post-#5 invariants are: every history sna
 - **`derive_pipeline_meta.py`** — derives `<dir>/pipeline_meta.json` for a local slug dir. New path: walk `strip_specials` snapshots, collect Basmala-class chapters from the `chapter` stamp. Legacy fallback: pair each Basmala-class op with the next `batch.chapters[]` entry (valid because strip ops emit in chapter+time order). Idempotent modulo `generated_at`.
 - **`backfill_deleted_basmala.py`** — same derivation via `scripts/lib/pipeline_meta.py::collect_deleted_basmalas` (the helper extraction calls — byte-identical), writing the `deleted_basmala_chapters` sidecar field for legacy reciters. The post-#5 inspector reads this sidecar instead of re-deriving from `edit_history.jsonl` on every cold validate. `--slug` / `--all --dry-run`. Deterministic — re-run as a drift check.
 - **`backfill_pipeline_peaks.py`** — catch-up when `edit_history_peaks.jsonl` drifts from `edit_history.jsonl` (partial migration / manual mutation / pre-#5 reciter). Assumes the #5 invariants — if unmet, fix source data (`.local/extraction/scripts/migrate_wip5_in_place.py`) or re-extract rather than adding fallbacks here.
+
+## Migration #6 — timestamps occurrence-list → segment-array reshape (`scripts/jobs/reshape_timestamps_shards.py`)
+
+Reshape each bucket per-chapter timestamps shard from the historical **v2 occurrence-list**
+(`{_meta, "<verse>": [occurrence,...]}`, verse-keyed) into the **temporal segment-array** shape
+(`{_meta, segments: [{ref, t, words}, ...]}`, recitation order, single-verse refs). This is a
+**reshape, not a regeneration** — no MFA re-run; occurrences are flattened by `time_start`. It lets
+the read path serve the bucket gz as a byte pass-through and gives external consumers a clean
+artifact. Full contract: [timestamps-job.md §1, §6](timestamps-job.md);
+[`docs/planning/ts-segment-array-migration.md`](../planning/ts-segment-array-migration.md).
+
+**Safe-because.** A prod-bucket audit (`.local/ts_migration_audit/`) verified all 10 released
+reciters are reshape-safe (clean v2, 0 compound cross-verse, 0 skips/orphans, every verse coverable
+in one contiguous occasion). The transform delegates to the offline writer's `build_segment_shards`
+(`scripts/lib/timestamps_shards.py`), so a reshaped shard is **byte-shape identical** to a freshly
+generated one — the single segment-array builder.
+
+- **Pure transform** — `scripts/lib/timestamps_reshape.py`: `classify_shard` (`target`/`v2`/`v1`/
+  `empty` — `target` already segment-array, detected by the top-level `segments` key) +
+  `reshape_shard` (raises on compound cross-verse or non-single-chapter input). No Flask, no bucket
+  I/O. Tests: `scripts/lib/tests/test_timestamps_reshape.py`.
+- **CLI** — `scripts/jobs/reshape_timestamps_shards.py`. `--src-dir` of LOCAL `<chapter>.json.gz`
+  shards (a synced mirror or the audit cache `.local/ts_migration_audit/raw/reciters/<slug>/
+  timestamps`); dry-run reports per-shard shape + segment-count + byte delta; optional `--out-dir`
+  writes reshaped `.gz` LOCALLY for inspection; `target` and `v1`/`empty` shards are skipped
+  (idempotent). It also reports a **delete-list** of stale shadowed `<chapter>.json` (the
+  `mishary`/`minshawi`/`qatami` uncompressed shards next to a live `.gz`).
+- **Does NOT** — read or write the bucket. The actual bucket reshape/write + stale-`.json` delete is
+  a deferred, coordinated cutover (dev bucket → verify end-to-end → prod; Space restart to clear the
+  shard LRU), driven directly against the bucket (`/hf-buckets`), not by this CLI.
 
 ## Source of truth for byte shapes
 

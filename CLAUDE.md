@@ -72,7 +72,7 @@ quranic-inspector-bucket/
 │       ├── detailed.json        # segments breakdown
 │       ├── audio/<ch>.mp3       # Chapter audio 
 │       ├── peaks/<ch>.json.gz   # Waveform peaks
-│       ├── timestamps/<ch>.json # Per-chapter shards
+│       ├── timestamps/<ch>.json.gz # Per-chapter segment-array shards (raw segments; byte pass-through read)
 │       └── ...       
 └──           
 ```
