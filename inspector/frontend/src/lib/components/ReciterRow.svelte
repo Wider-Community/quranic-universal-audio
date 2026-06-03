@@ -17,7 +17,7 @@
         type PublicDelivery,
         type PublicReciter,
     } from '../types/public-state';
-    import { countryName, titleCaseSlug } from '../utils/delivery-label';
+    import { countryName } from '../utils/delivery-label';
     import StatePill from './StatePill.svelte';
 
     export let reciter: PublicReciter;

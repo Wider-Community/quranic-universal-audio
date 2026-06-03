@@ -13,7 +13,7 @@ import { get } from 'svelte/store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { editPopover } from '../../stores/edit-popover';
-import { editingMode, setEditingMode } from '../../stores/editing-mode';
+import { setEditingMode } from '../../stores/editing-mode';
 import { signInModal } from '../../stores/sign-in-modal';
 import { editGate } from '../editGate';
 
