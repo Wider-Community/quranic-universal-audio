@@ -1,15 +1,16 @@
 """Shared sharding logic for the deployed Timestamps tab read-path.
 
-Splits a `timestamps_full.json` document into per-chapter `.json.gz` shards
-the frontend fetches on demand. Used by:
+Two shard shapes share the deterministic gzip writer here:
 
-  - `.github/scripts/build_reciter.py --build-timestamps <slug>` — uploads
-    shards to the HF dataset for the deployed read path.
-  - `inspector/routes/timestamps.py` (local mode) — slices on demand and
-    serves at `/api/ts/shard/<reciter>/<chapter>` so the frontend uses the
-    same shard-fetch model in both modes.
+  - `split_to_shards` — verse-keyed occurrence-list shards (the historical
+    read-path shape produced from a `timestamps_full.json` document).
+  - `build_segment_shards` — the temporal segment-array shape: each chapter
+    is a flat `segments[]` array in recitation order with single-verse
+    `ref`s and a slim `_meta`. This is the consumer-shaped bucket artifact
+    (read path is a byte pass-through). See
+    `docs/planning/ts-segment-array-migration.md`.
 
-Shard schema is documented in `docs/timestamps-tab-deployment-plan.md` §2.
+Both are gzipped via `gzip_shard` (level 6, mtime 0 → byte-stable output).
 """
 
 from __future__ import annotations
@@ -33,6 +34,21 @@ _PRESERVED_META_FIELDS = (
 )
 
 SCHEMA_VERSION = 1
+
+# Aligner provenance carried into the slim segment-array `_meta`. Reciter,
+# url_template and audio_urls are deliberately excluded: the slug is the path
+# and the catalog / audio-manifest sidecar is the ground truth for audio.
+_SEGMENT_META_PROVENANCE = (
+    "padding",
+    "beam",
+    "method",
+    "aligner_model",
+    "shared_cmvn",
+    "audio_source",
+    "created_at",
+)
+
+SEGMENT_SCHEMA_VERSION = 2
 
 
 def _filter_mfa_failures(failures: list[dict] | None, chapter: int) -> list[dict]:
@@ -153,6 +169,107 @@ def split_to_shards(
         out[chapter] = shard
 
     return out
+
+
+def _normalize_audio_category(audio_category: str) -> str:
+    """Map the pipeline's internal category to the shard convention.
+
+    The pipeline carries ``by_surah_audio`` / ``by_ayah_audio`` internally;
+    shards expose the bare ``by_surah`` / ``by_ayah``.
+    """
+    cat = str(audio_category or "")
+    if cat.endswith("_audio"):
+        cat = cat[: -len("_audio")]
+    return cat
+
+
+def build_segment_shards(
+    v2_doc: dict,
+    *,
+    audio_category: str,
+    src_meta: dict | None = None,
+) -> dict[int, dict]:
+    """Build per-chapter temporal segment-array shards from a v2 raw document.
+
+    ``v2_doc`` is the ``build_raw_v2`` shape — ``{output_key: [occurrence, ...]}``
+    plus ``_meta``, where each occurrence is the normalized form
+    ``{"ch_ref", "seg_index", "matched_ref", "time_start", "time_end",
+    "words_by_verse": {verse_key: [word, ...]}, "segment_uid"}`` and each word
+    is ``[widx, start_ms, end_ms, [[char,s,e]...], [[phone,s,e]...]]``.
+
+    Every accepted occurrence becomes one segment entry verbatim (RAW — no
+    dedup at write). Segments within a chapter are emitted in recitation order
+    (sorted by ``time_start``). ``ref`` is always the occurrence's single home
+    verse; cross-verse occurrences (compound output keys / ``_transitions``)
+    are rejected — the TS job blocks compound cross-verse refs upstream so the
+    bucket never carries them.
+
+    Returns ``{chapter: shard_doc}`` where ``shard_doc`` is
+    ``{"_meta": {schema_version, chapter, audio_category, <provenance>},
+    "segments": [{"ref", "t": [start, end], "words": [...]}, ...]}``.
+    """
+    src_meta = src_meta or (v2_doc.get("_meta") or {})
+    cat = _normalize_audio_category(audio_category)
+
+    # Group occurrences by chapter (derived from each segment's single-verse ref).
+    by_chapter: dict[int, list[dict]] = {}
+    for key, occs in v2_doc.items():
+        if key == "_meta":
+            continue
+        if "-" in key:
+            raise ValueError(
+                f"compound cross-verse output key {key!r} cannot be emitted as a "
+                "single-verse segment shard"
+            )
+        if not isinstance(occs, list):
+            continue
+        for occ in occs:
+            ref, words = _occurrence_to_segment(occ)
+            # Chapter from the single-verse ref ("surah:ayah") so both by_surah
+            # (chapter ref "1") and by_ayah (chapter ref "2:255") land correctly.
+            try:
+                chapter = int(ref.split(":", 1)[0])
+            except (ValueError, TypeError):
+                continue
+            entry = {
+                "ref": ref,
+                "t": [occ["time_start"], occ["time_end"]],
+                "words": words,
+            }
+            by_chapter.setdefault(chapter, []).append((occ, entry))
+
+    out: dict[int, dict] = {}
+    for chapter, pairs in by_chapter.items():
+        # Recitation order: sort by segment start, tie-break on seg_index so
+        # output is deterministic for coincident starts.
+        pairs.sort(key=lambda p: (p[1]["t"][0], p[0].get("seg_index", 0)))
+        meta: dict[str, Any] = {
+            "schema_version": SEGMENT_SCHEMA_VERSION,
+            "chapter": chapter,
+            "audio_category": cat,
+        }
+        for field in _SEGMENT_META_PROVENANCE:
+            if field in src_meta:
+                meta[field] = src_meta[field]
+        out[chapter] = {"_meta": meta, "segments": [p[1] for p in pairs]}
+    return out
+
+
+def _occurrence_to_segment(occ: dict) -> tuple[str, list]:
+    """Return ``(ref, words)`` for a single-verse occurrence.
+
+    The occurrence's ``words_by_verse`` must carry exactly one verse (its home
+    verse) — guaranteed for single-verse refs. Raises on a cross-verse
+    occurrence (more than one verse routed), which must never reach the writer.
+    """
+    wbv = occ.get("words_by_verse") or {}
+    if len(wbv) != 1:
+        raise ValueError(
+            f"occurrence (matched_ref={occ.get('matched_ref')!r}) routes "
+            f"{len(wbv)} verses; a segment shard ref must be a single verse"
+        )
+    ref, words = next(iter(wbv.items()))
+    return ref, words
 
 
 def _verse_key_sort(key: str) -> tuple[int, int, int]:

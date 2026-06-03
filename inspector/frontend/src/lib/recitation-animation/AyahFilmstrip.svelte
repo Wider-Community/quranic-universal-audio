@@ -20,7 +20,7 @@
         getTimeMs: () => number;
         playing: boolean;
         config: RecitationAnimConfig;
-        onSeek: (ms: number) => void;
+        onSeek: (_ms: number) => void;
         /** Preview-highlight the ayah spanning this time (e.g. progress-bar
          *  hover). null = no preview. */
         hoverMs?: number | null;

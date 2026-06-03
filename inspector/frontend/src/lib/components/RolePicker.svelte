@@ -18,7 +18,7 @@
         role: string;
         editable: boolean;
         busy?: boolean;
-        onchange: (role: AssignableRole) => void;
+        onchange: (_role: AssignableRole) => void;
     }
     let { role, editable, busy = false, onchange }: Props = $props();
 

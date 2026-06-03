@@ -3,10 +3,11 @@
 
 Runs MFA forced-alignment inside the job (strategy A — stock conda base +
 MFA stack pulled from a mounted private bucket), reading the reciter's
-``detailed.json`` from the mounted inspector bucket and writing v2
-occurrence-preserving per-chapter shards to
-``<mount>/reciters/<slug>/timestamps/<chapter>.json`` (the read-path layout;
-``process()`` emits them alongside the historical ``timestamps_full.json``).
+``detailed.json`` from the mounted inspector bucket and writing temporal
+segment-array per-chapter shards to
+``<mount>/reciters/<slug>/timestamps/<chapter>.json.gz`` (the read-path
+layout). Blocks before alignment if any segment carries a compound
+cross-verse ``matched_ref`` (segment shards require single-verse refs).
 
 Launched by ``inspector/services/admin/timestamps_jobs.py`` via
 ``huggingface_hub.run_job``. Configured entirely through env vars.
@@ -57,6 +58,7 @@ from scripts.lib.timestamps_pipeline import (  # noqa: E402
     DEFAULT_PADDING,
     LocalMfaBackend,
     download_audio,
+    is_compound_cross_verse,
     process,
 )
 
@@ -74,6 +76,24 @@ def _bool_env(name: str) -> bool:
 
 def _now_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _find_cross_verse_segments(doc: dict) -> list[tuple[str, str]]:
+    """Return ``(chapter_ref, matched_ref)`` for every compound cross-verse seg.
+
+    The segment-array shard contract requires single-verse refs; cross-verse
+    segments cannot be reshaped losslessly. Editing strips cross-verse, so a
+    clean reciter yields none — but the job blocks rather than write a shard
+    the read path can't serve.
+    """
+    offenders: list[tuple[str, str]] = []
+    for entry in doc.get("entries", []):
+        ch_ref = str(entry.get("ref", ""))
+        for seg in entry.get("segments", []):
+            matched_ref = seg.get("matched_ref", "")
+            if matched_ref and is_compound_cross_verse(matched_ref):
+                offenders.append((ch_ref, matched_ref))
+    return offenders
 
 
 def _ensure_xing(src: Path, dest: Path) -> bool:
@@ -292,6 +312,25 @@ def main() -> int:
     # (kept named ``<slug>/`` so ``input_dir.name`` stays the slug); output
     # still goes to the real reciter dir in the bucket.
     doc = json.loads(detailed.read_text(encoding="utf-8"))
+
+    # Block before any alignment work: the segment-array shards require
+    # single-verse refs, so a compound cross-verse matched_ref can't be
+    # reshaped losslessly. Record the failure + notify so the offending segs
+    # surface in the Reviews tab.
+    offenders = _find_cross_verse_segments(doc)
+    if offenders:
+        preview = ", ".join(f"ch{ch}:{ref}" for ch, ref in offenders[:10])
+        more = f" (+{len(offenders) - 10} more)" if len(offenders) > 10 else ""
+        msg = (
+            f"{len(offenders)} compound cross-verse segment(s) found — split them "
+            f"before generating timestamps: {preview}{more}"
+        )
+        log.error(msg)
+        _write_record(mount, slug, settings, status="failed",
+                      started_at=started_at, error=msg)
+        _notify_complete(slug, "failed")
+        return 4
+
     manifest_path = mount / "catalog" / "audio_manifest" / f"{slug}.json"
     chapters_meta = {}
     if manifest_path.exists():
@@ -336,7 +375,7 @@ def main() -> int:
 
     # In-container MFA: pool path engages when workers>1 AND mfa_app_path is
     # set (process() gates on this). LocalMfaBackend covers the serial
-    # fallback. process() writes v2 shards into reciter_dir/timestamps/.
+    # fallback. process() writes segment-array shards into reciter_dir/timestamps/.
     try:
         process(
             input_dir=job_input,
