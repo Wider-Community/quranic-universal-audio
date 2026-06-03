@@ -63,7 +63,7 @@ Priority inside `resolve()` — **three tiers, no disk cache**:
 
 ## Manifest sidecar
 
-`catalog/audio_manifest/<slug>.json` — built offline by `scripts/audio/probe_audio_meta.py` (repo-root `scripts/`, not `inspector/scripts/`), single source of truth for chapter↔URL routing and VBR mode. On first access `audio_meta._load_sidecar` populates `cache._audio_manifest` (the entries) **and** derives `cache._audio_manifest_url_index` (a `{url: chapter_key}` reverse map) so `chapter_for_url` is O(1) instead of a per-request linear scan.
+`catalog/audio_manifest/<slug>.json` — built offline (the audio-probe pipeline lives in `.local/`), single source of truth for chapter↔URL routing and VBR mode. On first access `audio_meta._load_sidecar` populates `cache._audio_manifest` (the entries) **and** derives `cache._audio_manifest_url_index` (a `{url: chapter_key}` reverse map) so `chapter_for_url` is O(1) instead of a per-request linear scan.
 
 Entry shape (`<chapter_key> → entry`):
 

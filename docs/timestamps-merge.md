@@ -1,6 +1,6 @@
 # How the Timestamp Pipeline Handles Repetitions and Verse Boundaries
 
-This doc explains how the timestamp pipeline (`qua_shared/timestamps_pipeline.py`, invoked by `.github/scripts/extract_timestamps.py`) decides which word timings to keep when multiple segments of a recording contribute to the same verse. It covers the normal case, within-verse repetitions, and verse-boundary handling. Examples use Minshawi's real data.
+This doc explains how the timestamp pipeline (`qua_shared/timestamps_pipeline.py`, invoked by `qua_jobs/generate_timestamps.py`) decides which word timings to keep when multiple segments of a recording contribute to the same verse. It covers the normal case, within-verse repetitions, and verse-boundary handling. Examples use Minshawi's real data.
 
 ## The setup
 
