@@ -3,7 +3,7 @@
 Splits a `detailed.json` document into per-chapter `.json.gz` shards the
 aligner Space's preload UI fetches on demand. Used by:
 
-  - `.github/scripts/build_reciter.py --build-segments <slug>` — uploads
+  - `scripts/release/build_reciter.py --build-segments <slug>` — uploads
     shards to the HF dataset for the deployed read path.
 
 The aligner Space talks to the same HF dataset as the Inspector's Timestamps

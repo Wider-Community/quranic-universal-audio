@@ -3,10 +3,10 @@
 Package release zips for GitHub Releases.
 
 Usage:
-    python .github/scripts/package_release.py                      # Build all, auto-version
-    python .github/scripts/package_release.py --dry-run             # Preview only
-    python .github/scripts/package_release.py --version v0.2.0      # Override version
-    python .github/scripts/package_release.py --output-dir /tmp/r   # Custom output dir
+    python scripts/release/package_release.py                      # Build all, auto-version
+    python scripts/release/package_release.py --dry-run             # Preview only
+    python scripts/release/package_release.py --version v0.2.0      # Override version
+    python scripts/release/package_release.py --output-dir /tmp/r   # Custom output dir
 """
 
 import argparse
@@ -37,7 +37,7 @@ DEFAULT_OUTPUT_DIR = ROOT / "dist"
 
 
 # ---------------------------------------------------------------------------
-# Audio source detection (pattern from .github/scripts/build_reciter.py)
+# Audio source detection (pattern from scripts/release/build_reciter.py)
 # ---------------------------------------------------------------------------
 def detect_audio_source(slug):
     """Read _meta.audio_source from segments.json."""

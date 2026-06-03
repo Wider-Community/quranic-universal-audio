@@ -64,7 +64,7 @@ def _text_for_ref(matched_ref: str, dk_words: dict, surah_info: dict) -> str:
     """Derive Arabic text for a canonical ``surah:ayah:word-surah:ayah:word``
     matched_ref from the Digital Khatt word map.
 
-    Mirror of ``.github/scripts/build_reciter.py::_text_for_ref`` — the
+    Mirror of ``scripts/release/build_reciter.py::_text_for_ref`` — the
     extractor no longer writes ``matched_text`` (Migration #5), so the
     dataset re-derives it deterministically.
     """

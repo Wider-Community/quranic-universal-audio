@@ -8,8 +8,8 @@ from pathlib import Path
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[3]
-    / ".github"
     / "scripts"
+    / "codegen"
     / "update_readme_badges.py"
 )
 SPEC = importlib.util.spec_from_file_location("update_readme_badges", SCRIPT_PATH)

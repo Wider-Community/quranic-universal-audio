@@ -7,7 +7,7 @@ reciter shipped. v2 publish tracks (``per_recitation_releases``) keep state
 in the DB; the legacy data/ paths are dropped post-Phase-3.
 
 Public entry points keep their v1 signatures so the offline callers
-(``.github/scripts/*`` and the new ``qua_jobs/cut_release.py``) don't
+(``scripts/release/*`` and the new ``qua_jobs/cut_release.py``) don't
 churn. Internally, when an Inspector DB connection is available we use it;
 when running outside Inspector (e.g. legacy GitHub Actions still in flight
 during the migration window), we fall back to the git-tracked check so the
