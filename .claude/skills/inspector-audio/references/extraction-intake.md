@@ -43,6 +43,20 @@ The inspector at runtime only **reads** `reciters/<slug>/` — it never fetches
 from a CDN to warm the bucket, and **nothing deletes it** (the hourly GC sweeper
 was removed; content persists indefinitely). See `prefetch.md`.
 
+### YouTube / yt-dlp sources *create* the encode (vs preserve it)
+
+Every other source preserves the publisher's mp3 bytes verbatim and only injects
+a Xing seek header (`-c:a copy`). A YouTube/playlist source is the exception:
+the source is opus/m4a, so `segments/audio_io.py::_download_via_ytdlp` fetches
+`bestaudio` and does ONE controlled encode → **128 kbps CBR / 44.1 kHz / mono**,
+`-vn` (cover-art stripped — an APIC stream 0-byte-muxes on the static ffmpeg).
+The watch URL can't be HTTP-frame-probed, so the audio-manifest sidecar + the
+delivery rollup are authored from a **post-align reprobe** of the produced files
+(`ingest_intake.py::reprobe_persisted_audio`), not from the source URL. These
+deliveries are bucket-served only — the watch URL is provenance, never streamed
+by the audio-proxy. See `catalog.md` §5 and the `segments-extraction` skill's
+`references/playlist_intake.md`.
+
 ## The reconciler — `services/segments/auto_detect.py`
 
 A single-worker background loop (`start_background_loop`, default 60 s; gated by
