@@ -65,6 +65,7 @@ from scripts.lib.timestamps_pipeline import (
     _init_worker,
     _worker_align,
     download_audio,
+    is_compound_cross_verse as _is_compound_cross_verse,
     load_audio_int16,
     slice_audio,
 )
@@ -203,14 +204,9 @@ def _section_boundary_cuts(words: list[dict],
 
 # ---------------------------------------------------------------------------
 # Candidate detection — exactly mirrors inspector's compute_auto_split dispatch
+# (cross-verse test reused from timestamps_pipeline so the offline precompute
+#  and the timestamps-job guard agree).
 # ---------------------------------------------------------------------------
-
-def _is_compound_cross_verse(matched_ref: str) -> bool:
-    parts = matched_ref.split("-")
-    if len(parts) != 2:
-        return False
-    s, e = parts[0].split(":"), parts[1].split(":")
-    return len(s) >= 2 and len(e) >= 2 and s[1] != e[1]
 
 
 def _build_seg_candidate(seg: dict, chapter: int, idx: int,

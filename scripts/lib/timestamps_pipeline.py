@@ -27,7 +27,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from scripts.lib.timestamps_shards import gzip_shard, split_to_shards
+from scripts.lib.timestamps_shards import build_segment_shards, gzip_shard
 
 if TYPE_CHECKING:
     import numpy as np
@@ -352,6 +352,20 @@ def _matched_ref_to_output_key(matched_ref: str) -> str | None:
         return f"{start_sura}:{start_ayah}"
     else:
         return matched_ref  # compound key for cross-verse
+
+
+def is_compound_cross_verse(matched_ref: str) -> bool:
+    """True if ``matched_ref`` spans two distinct verses (``s:a:w-s:b:w``, a≠b).
+
+    Single source for the cross-verse test shared by the Auto-Split precompute
+    and the timestamps job's segment-array guard. Within-verse word ranges
+    (``2:1:1-2:1:4``) and non-dash refs are not compound.
+    """
+    parts = matched_ref.split("-")
+    if len(parts) != 2:
+        return False
+    s, e = parts[0].split(":"), parts[1].split(":")
+    return len(s) >= 2 and len(e) >= 2 and s[1] != e[1]
 
 
 def build_ts_validation(chapters, results_by_beam, beams, *,
@@ -1573,30 +1587,42 @@ def process(input_dir: Path,
 
         return full_data, words_data, mfa_failures
 
-    # v2 is the ONLY persisted timestamps format: per-chapter occurrence-
-    # preserving shards at ``<output_dir>/timestamps/<chapter>.json``.
-    # ``canonical_results`` carries every aligned segment (pre-dedup) so
-    # build_raw_v2 keeps all occurrences; the inspector read-path dedups on
-    # serve and downstream consumers derive whatever projection they need.
-    # The historical timestamps_full.json / timestamps.json (single-file +
-    # word-only) are intentionally NOT written (decision: one canonical v2).
+    # Per-chapter temporal segment-array shards at
+    # ``<output_dir>/timestamps/<chapter>.json.gz``. ``canonical_results``
+    # carries every aligned segment, so build_raw_v2 keeps all occurrences and
+    # build_segment_shards emits each one RAW as a recitation-ordered segment
+    # entry ({ref, t, words}) — no dedup at write. Consumers derive whatever
+    # projection they need; the inspector read-path is a byte pass-through.
     from scripts.lib.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
     ts_dir = output_dir / "timestamps"
     ts_dir.mkdir(parents=True, exist_ok=True)
 
-    def _emit_v2(results_by_ch, suffix=""):
+    # Slim aligner provenance stamped into each shard's ``_meta`` (reciter,
+    # url_template and audio_urls are excluded — slug is the path, manifest is
+    # the audio ground truth).
+    shard_provenance = {
+        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "audio_source": audio_source,
+        "aligner_model": DEFAULT_ALIGNER_MODEL,
+        "method": method,
+        "beam": canonical_beam,
+        "shared_cmvn": shared_cmvn,
+        "padding": padding,
+    }
+
+    def _emit_segment_shards(results_by_ch, suffix=""):
         v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
-        shards = split_to_shards(
-            v2_doc, reciter=reciter, audio_category=audio_category, url_template="")
+        shards = build_segment_shards(
+            v2_doc, audio_category=audio_category, src_meta=shard_provenance)
         for ch_num, shard_doc in shards.items():
             (ts_dir / f"{ch_num}{suffix}.json.gz").write_bytes(gzip_shard(shard_doc))
         fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
         return len(shards), fails
 
-    n_shards, n_fail = _emit_v2(canonical_results)
+    n_shards, n_fail = _emit_segment_shards(canonical_results)
     if n_fail:
         log.warning("Canonical beam %d: %d MFA failures", canonical_beam, n_fail)
-    log.info("Wrote %d v2 timestamps shard(s) (beam=%d) -> %s",
+    log.info("Wrote %d segment-array timestamps shard(s) (beam=%d) -> %s",
              n_shards, canonical_beam, ts_dir)
 
     # Probe beams → ONE verse-level ``ts_validation.json`` sidecar (the
