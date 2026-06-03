@@ -26,7 +26,7 @@ prefix(scope): imperative description
 
 ### Prefixes
 
-`feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `style`, `perf`, `ci`, `build`, `revert`, etc.
+`feat`, `fix`, `docs`, `agents`, `chore`, `refactor`, `test`, `style`, `perf`, `ci`, `build`, `revert`, etc.
 
 ### Scopes
 
