@@ -151,16 +151,17 @@ PEAKS_WORKER_COUNT = 8                   # ThreadPoolExecutor workers for parall
 # `duration_ms` larger than what it actually covered — a 0.25% multiplicative
 # time→peak drift visible as misregistered silences on long chapters
 # (~2 s offset 15 min in, ~17 s offset at end-of-file for a ~115 min surah).
-# v2 uses a float stride so every sample is bucketed; the read path treats
-# missing/old version as a cache miss so existing peaks lazily recompute.
+# v2 uses a float stride so every sample is bucketed; the read path treats a
+# missing/mismatched version as a cache miss (falls through to per-segment
+# ffmpeg — there is no runtime re-bake).
 #
 # v3 introduces the slim packed shape (int8-quantized, decimated, gzipped) at
 # ``reciters/<slug>/peaks/<chapter>.json.gz``. See ``services/audio/peaks_slim.py``
-# for the format. Pre-v3 ``.json`` files are migrated by
-# ``scripts/backfill_peaks_slim.py`` and preserved as ``.json.bak`` for
-# rollback. Reader (``audio_fetch.read_prefetched_peaks``) inflates v3 blobs
-# into a ``peaks: list[list[float]]`` dict so the existing slicers
-# (``_slice_chapter_peaks``) work unchanged.
+# for the format. Pre-v3 ``.json`` files are packed by
+# ``scripts/backfill_peaks_slim.py`` and preserved as ``.json.bak``. The
+# runtime reader (``audio_fetch.read_prefetched_peaks`` → ``unpack_slim_envelope``)
+# returns the int8 envelope verbatim; the FE decodes the b64 once into an
+# ``Int8Array`` (no server-side float inflation).
 PEAKS_SCHEMA_VERSION = 3
 
 # Server defaults (app.py)

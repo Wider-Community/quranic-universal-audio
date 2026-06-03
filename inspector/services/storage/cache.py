@@ -388,9 +388,10 @@ def set_peaks_for_url(reciter: str, url: str, data: dict) -> None:
 # many reciters a user browses in one session. ~50 entries × avg ~200 KiB
 # uncompressed bytes ≈ ~10 MiB ceiling.
 #
-# Invalidated by reciter via ``pop_reciter_peaks_response_cache``, which is
-# wired into ``invalidate_seg_caches`` -- save / undo flows drop every cached
-# response for the edited reciter so the next request re-reads the bucket.
+# Not evicted on segment save/undo: ``invalidate_seg_caches`` deliberately
+# leaves it (peaks track immutable audio bytes, not edits). It sheds only via
+# its own 50-entry LRU and an explicit ``pop_reciter_peaks_response_cache``
+# wherever a path actually rewrites bucket peaks.
 _PEAKS_RESPONSE_CACHE: "OrderedDict[tuple[str, tuple], bytes]" = OrderedDict()
 _PEAKS_RESPONSE_MAX = 50
 _PEAKS_RESPONSE_LOCK = threading.Lock()

@@ -1,12 +1,11 @@
 /**
  * Pure "next segment" list-traversal helpers — shared between `range-spec`
- * (autoplay's `resolveSegNextRange`) and `prefetch` (clip-URL warming).
+ * (autoplay's `resolveSegNextRange`) and `warmup` (look-ahead audio warming).
  *
  * Lives in its own module to break the import cycle: `range-spec` produces
- * AudioRange specs and consumes a "next" resolver; `prefetch` produces
- * speculative fetches keyed off the same resolvers and consumes the
- * VBR-clip-URL builder from `range-spec`. Splitting the resolvers out lets
- * both sides import from a leaf module.
+ * AudioRange specs and consumes a "next" resolver; `warmup` warms the next
+ * segment keyed off the same resolvers and consumes the VBR-clip-URL builder
+ * from `range-spec`. Splitting the resolvers out lets both import from a leaf.
  */
 
 import type { Segment } from '../../../../lib/types/domain';
@@ -15,7 +14,7 @@ import type { Segment } from '../../../../lib/types/domain';
  * Find the next displayed segment after the given index.
  *
  * Used by chapter-mode autoplay (`resolveSegNextRange`) and chapter-mode
- * prefetch — matches by `Segment.index` and steps to the slice's next
+ * warmup — matches by `Segment.index` and steps to the slice's next
  * element. Returns null if the index is not found or is the last segment.
  */
 export function nextDisplayedSeg(

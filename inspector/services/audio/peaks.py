@@ -35,8 +35,10 @@ def is_current_schema(peaks: dict | None) -> bool:
       ``unpack_slim`` before this check runs -- so what arrives here is still
       a dict with ``peaks: list[list[float]]`` plus ``schema_version=3``.
 
-    Older versions return False so the cache miss triggers a re-bake via the
-    prefetch fallback (``audio_fetch.fetch_and_persist_chapter``).
+    A mismatched ``schema_version`` returns False, so the reader treats the
+    blob as a cache miss and falls through to per-segment ffmpeg. Chapter
+    peaks themselves are written offline only (Katana); the runtime never
+    re-bakes them.
     """
     return isinstance(peaks, dict) and peaks.get("schema_version") == PEAKS_SCHEMA_VERSION
 
@@ -77,8 +79,7 @@ def compute_audio_peaks(audio_source: str) -> dict | None:
     Returns ``{schema_version, duration_ms, peaks}`` or ``None``. No caching
     here and no bucket write — chapter peaks are offline-computed on Katana
     (``.local/extraction/segments/audio_persist.py``) and the inspector
-    treats the bucket as read-only at runtime apart from the recompute
-    fallback in ``audio_fetch.fetch_and_persist_chapter``.
+    treats the bucket as read-only at runtime (no recompute/re-bake path).
     """
     # Decode to raw mono 16-bit PCM via ffmpeg at the configured peaks sample rate
     try:

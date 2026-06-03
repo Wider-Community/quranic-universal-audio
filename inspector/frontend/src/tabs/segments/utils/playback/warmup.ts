@@ -1,11 +1,10 @@
 /**
- * CBR audio warmup — NOT a revival of the deleted `prefetchNextSegAudio`.
+ * CBR audio warmup.
  *
- * Different semantics: a 64 KB Range fetch at the seg's byte offset (vs the
- * deleted util's full chapter `fetch().blob()`); priority hint; 30 s dedupe;
- * fires on user-intent signals (chapter load, accordion mount, hover,
- * play→next-seg). Same goal — hide cold-FUSE / cold-CDN play stalls — but
- * ~80% less bandwidth and actually targets the right bytes.
+ * A 64 KB Range fetch at the seg's byte offset (not a full-chapter blob),
+ * with a priority hint and 30 s dedupe; fires on user-intent signals
+ * (chapter load, accordion mount, hover, play→next-seg). Goal: hide
+ * cold-FUSE / cold-CDN play stalls while fetching only the bytes that play.
  *
  * VBR is deferred — segments tab routes VBR per-seg through the segment-clip
  * endpoint, which is its own pre-rendered, deterministically-cacheable URL.

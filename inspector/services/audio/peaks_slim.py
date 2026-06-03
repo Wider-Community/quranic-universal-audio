@@ -22,9 +22,10 @@ Why this shape:
 
 Writers (do NOT duplicate the pack logic anywhere else):
 
-- ``.local/extraction/segments/audio_persist.py`` -- primary, runs on Katana.
-- ``inspector/services/audio/audio_fetch.py`` -- fallback, runs on
-  ``state → AWAITING_REVIEW`` when extraction didn't ship peaks.
+- ``.local/extraction/segments/audio_persist.py`` -- runs on Katana, the only
+  runtime-relevant writer.
+- One-shot bucket CLIs: ``scripts/backfill_peaks_slim.py``,
+  ``scripts/convert_peaks_v2_to_v3.py``. The runtime never writes peaks.
 
 Reader: ``inspector/services/audio/audio_fetch.py::read_prefetched_peaks``.
 
@@ -45,10 +46,9 @@ import numpy as np
 # ``compute_audio_peaks`` and ``compute_segment_peaks`` -- those stay at 30.
 PEAKS_SLIM_BPS = 10
 
-# Schema bump for the migration. Pre-v3 files (v1 / v2 float-JSON) are
-# treated as cache misses by ``is_current_schema`` and rebuilt by the
-# prefetch fallback. Live alongside ``.bak`` originals during dev-bucket
-# migration; see scripts/backfill_peaks_slim.py.
+# Pre-v3 files (v1 / v2 float-JSON) are treated as cache misses by
+# ``is_current_schema`` and re-packed by ``scripts/backfill_peaks_slim.py``,
+# which leaves ``.bak`` originals alongside the new ``.json.gz``.
 SLIM_SCHEMA_VERSION = 3
 
 # int8 normalizer -- peaks coming out of ``compute_audio_peaks`` are floats in

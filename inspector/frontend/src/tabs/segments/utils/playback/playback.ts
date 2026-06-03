@@ -202,7 +202,7 @@ export const disposeSegRange = disposeSegPlayback;
 /** Active-chapter audio URL — independent of which segment's source the
  *  port is currently bound to. Used by `onSegTimeUpdate`'s cross-segment
  *  scan (filters `displayed` to active-chapter rows by URL match) and by
- *  prefetch's "skip if next seg shares chapter audio" gate. Reads from
+ *  warmup's "skip if next seg shares chapter audio" gate. Reads from
  *  `segData.audio_url` (the active chapter's canonical CDN URL set by
  *  `loadChapterData`) rather than `segPort.source.audioUrl` so per-row
  *  source rebinding doesn't break either consumer when an accordion row
@@ -307,7 +307,7 @@ export function playFromSegment(
     opts?: {
         isAccordionPlay?: boolean,
         /** Rendered sibling list of the accordion card that initiated this
-         *  play. When supplied (only by accordion rows), prefetch warms the
+         *  play. When supplied (only by accordion rows), warmup warms the
          *  next sibling's clip URL by *list position* rather than chapter
          *  mode's `displayedSegments` + `index + 1` resolver. May span
          *  chapters; the per-reciter VBR map decides clip-vs-chapter URL

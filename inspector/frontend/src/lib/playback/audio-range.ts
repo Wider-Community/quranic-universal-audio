@@ -14,8 +14,8 @@
  *     AudioRange just enforces the boundary against `port.currentTimeMs()`.
  *   - **Legacy mode**: pass `audioEl: HTMLAudioElement`. Spec may be
  *     clip-relative when `clipFileOffsetMs` is set; AudioRange does its
- *     own canplay-based src-swap. Retained transitionally so consumers
- *     can migrate one at a time; deleted in the final cleanup phase.
+ *     own canplay-based src-swap. For non-port callers; new surfaces
+ *     should use port mode.
  *
  * Composes existing infra:
  *   - `lib/utils/animation.ts::createAnimationLoop` — rAF wrapper.

@@ -3,17 +3,16 @@
  *
  * Peaks travel through the FE in two shapes today:
  *
- * 1. **Legacy nested**: ``Array<[min, max]>`` (a.k.a. ``PeakBucket[]``). Server
- *    emits this when the client doesn't request the int8 shape, and the
- *    per-segment ffmpeg fallback (``/segment-peaks``) always emits it because
- *    those peaks are HD floats (30 bps) not quantizable to int8 without losing
+ * 1. **Nested floats**: ``Array<[min, max]>`` (a.k.a. ``PeakBucket[]``). The
+ *    per-segment ffmpeg fallback (``/segment-peaks``) emits this because those
+ *    peaks are HD floats (30 bps) not quantizable to int8 without losing
  *    transient fidelity.
  *
  * 2. **Drawer-int8**: ``Int8Array`` of length ``n * 2``, with
  *    pairs interleaved ``[mn₀, mx₀, mn₁, mx₁, ...]``. Quantized to [-127, 127];
- *    dequant at read is ``v / 127``. The route now passes the slim-packed
- *    bytes verbatim under ``?shape=i8``, FE decodes once into ``Int8Array``,
- *    every downstream read goes through this view.
+ *    dequant at read is ``v / 127``. The ``/peaks`` route emits the slim-packed
+ *    int8 envelope verbatim; the FE decodes the b64 once into an ``Int8Array``
+ *    (via ``peaks-decode.ts``) and every downstream read goes through this view.
  *
  * The view abstracts the per-sample read so the drawer hot path doesn't
  * branch on shape at every pixel — caller hits ``view.min(i)`` / ``view.max(i)``
