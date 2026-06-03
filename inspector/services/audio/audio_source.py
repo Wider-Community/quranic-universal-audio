@@ -2,8 +2,8 @@
 
 Every consumer that needs audio bytes — the audio-proxy route, peaks decode,
 auto_split slicing — goes through here. The resolver answers: "where do this
-chapter's bytes live right now (bucket prefetch, disk cache, or only at the
-CDN)?" and "is this chapter VBR?", reading both signals from the per-slug
+chapter's bytes live right now (a local bucket file, in-memory bucket bytes,
+or only at the CDN)?" and "is this chapter VBR?", reading both signals from the per-slug
 audio_manifest sidecar in the bucket (single source of truth).
 
 No Flask. No I/O beyond what ``audio_fetch`` and ``cache`` already do.

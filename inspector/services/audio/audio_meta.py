@@ -9,7 +9,8 @@ Keys are ``"1"``…``"114"`` for by_surah deliveries and ``"<surah>:<ayah>"``
 for by_ayah. The sidecar is written by the offline probe
 (``scripts/probe_audio_meta.py``) and is the single source of truth for both
 VBR routing decisions and the chapter→URL reverse lookup that powers the
-audio-proxy short-circuit + prefetch queue enumeration.
+audio-proxy short-circuit, the segment-clip allowlist, and the peaks route's
+chapter→URL enumeration.
 
 No Flask imports — pure data access.
 """
@@ -171,8 +172,8 @@ def chapter_for_url(reciter: str, url: str) -> str | None:
 
 
 def chapter_urls(reciter: str) -> dict[str, str]:
-    """Full chapter-key → URL map. Used by the prefetch queue to enumerate
-    work. Empty dict when the sidecar is missing.
+    """Full chapter-key → URL map. Drives the ``/peaks`` route's chapter→URL
+    enumeration. Empty dict when the sidecar is missing.
     """
     out: dict[str, str] = {}
     for k, entry in _chapters(reciter).items():

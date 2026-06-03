@@ -6,8 +6,8 @@ Used by:
 
 No background worker. No CDN downloads. Bucket audio + slim peaks are written by
 the katana extraction pipeline (``.local/extraction/upload_to_bucket.py`` +
-``.local/extraction/segments/audio_persist.py``) and the timestamps job; the
-inspector only reads them — nothing is GC'd.
+``.local/extraction/segments/audio_persist.py``); the inspector only reads them,
+and they persist indefinitely.
 
 No Flask imports — callable from any thread.
 """
