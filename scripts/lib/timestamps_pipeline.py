@@ -994,8 +994,8 @@ def process(input_dir: Path,
 
     Each value in ``beams`` runs as an independent alignment pass over
     the same audio. The widest beam (``max(beams)``) is the canonical
-    pass — it always drives the ``timestamps/<ch>.json`` v2 shards
-    regardless of the order ``beams`` was supplied in. The remaining
+    pass — it always drives the ``timestamps/<ch>.json.gz`` segment-array
+    shards regardless of the order ``beams`` was supplied in. The remaining
     (narrower) beams are folded into a single verse-level
     ``ts_validation.json`` sidecar — verses that align under the canonical
     beam but fail under a tighter beam are flagged as low-confidence.
@@ -1132,9 +1132,9 @@ def process(input_dir: Path,
         ]
 
     if not chapters_to_process:
-        # Nothing new to align — the v2 shards from the prior run already
-        # stand. No legacy timestamps_full.json / timestamps.json is written
-        # (single canonical v2 format).
+        # Nothing new to align — the segment-array shards from the prior run
+        # already stand. No legacy timestamps_full.json / timestamps.json is
+        # written (single canonical format).
         log.info("No segments to process (all complete or skipped)")
         return output_dir
 

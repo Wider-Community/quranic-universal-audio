@@ -375,7 +375,7 @@ def main() -> int:
 
     # In-container MFA: pool path engages when workers>1 AND mfa_app_path is
     # set (process() gates on this). LocalMfaBackend covers the serial
-    # fallback. process() writes v2 shards into reciter_dir/timestamps/.
+    # fallback. process() writes segment-array shards into reciter_dir/timestamps/.
     try:
         process(
             input_dir=job_input,
