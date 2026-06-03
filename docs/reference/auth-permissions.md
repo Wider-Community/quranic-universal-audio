@@ -39,7 +39,7 @@ Flat shims re-export it: `from services import auth`, `from services import perm
 
 | Concept | Truth |
 |---|---|
-| Gate | `is_dev_mode()` = `INSPECTOR_DEV_MODE == "1"` (auto-set by `app.py` locally outside pytest; HF Space never sees it) |
+| Gate | `is_dev_mode()` = `INSPECTOR_DEV_MODE == "1"` **and** `INSPECTOR_BEHIND_PROXY != "1"` (auto-set by `app.py` locally outside pytest). Forced off behind the deployed proxy; `app.py` aborts boot (`assert_dev_mode_safe`) if both are set, so the bypass can never run on a Space |
 | Cookie | `inspector_dev_role` (unsigned, only honored in dev mode), default `"owner"` |
 | Valid values | `DEV_ROLE_VALUES = ("owner","maintainer","contributor","anonymous")` |
 | `"anonymous"` | → `current_user()` returns `None` (explicit opt-out) |
