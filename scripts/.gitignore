@@ -6,11 +6,3 @@ CLAUDE.md
 .env
 .venv
 captures/
-
-# Local-only scripts
-inspector_v2_seed/
-legacy/
-audio/
-upload_inspector.py
-
-docs/planning/

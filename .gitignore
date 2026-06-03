@@ -20,7 +20,6 @@ node_modules/
 .venv
 
 # Local
-.local/
 .tmp/
 .playwright-mcp
 
