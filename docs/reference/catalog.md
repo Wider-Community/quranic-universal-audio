@@ -235,7 +235,7 @@ Row-level `bitrate_mode` (`BitrateMode` enum) derived from per-chapter probe dat
 
 Detection: `mutagen.mp3.MP3.info.bitrate_mode` (Xing/Info/VBRI/LAME header) authoritative; frame scan over first 256 KB as fallback. Both run; per-chapter results land in the sidecar, rolled up to the row at build.
 
-**Download-only sources create their own encode.** Unlike CDN audio (publisher mp3 bytes preserved verbatim, with only a Xing seek header injected via `-c:a copy`), a YouTube/yt-dlp source is opus/m4a — so extraction produces the canonical mp3 once: **128 kbps CBR, 44.1 kHz, mono**, cover-art stripped (`segments/audio_io.py::_download_via_ytdlp`). Because the watch URL can't be HTTP-frame-probed, the row + sidecar audio fields come from a **post-align reprobe** of the produced files (`ingest_intake.py::reprobe_persisted_audio`). Forced-CBR ⇒ these deliveries never hit the VBR playback path.
+**Download-only sources create their own encode.** Unlike CDN audio (publisher mp3 bytes preserved verbatim, with only a Xing seek header injected via `-c:a copy`), a YouTube/yt-dlp source is opus/m4a — so extraction produces the canonical mp3 once: **192 kbps CBR, 44.1 kHz, mono**, cover-art stripped (`segments/audio_io.py::_download_via_ytdlp`). Because the watch URL can't be HTTP-frame-probed, the row + sidecar audio fields come from a **post-align reprobe** of the produced files (`ingest_intake.py::reprobe_persisted_audio`). Forced-CBR ⇒ these deliveries never hit the VBR playback path.
 
 ### Style vs recording_context
 

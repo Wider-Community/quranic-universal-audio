@@ -126,7 +126,7 @@ The HF dataset (`.github/scripts/build_reciter.py`) slices per-ayah audio out of
 
 VBR mitigations should live in either Xing-injection (extraction-time, on Katana) or segment-clip (request-time). Don't add a third path — adding a "fix in the AudioPort" is debt; adding a "let the frontend probe encoding mode" duplicates the sidecar.
 
-YouTube / yt-dlp sources sidestep this entirely: extraction re-encodes them to **forced CBR** (128k / 44.1k / mono — see `extraction-intake.md`), so they never carry the VBR-without-Xing drift the mitigations above exist for.
+YouTube / yt-dlp sources sidestep this entirely: extraction re-encodes them to **forced CBR** (192k / 44.1k / mono — see `extraction-intake.md`), so they never carry the VBR-without-Xing drift the mitigations above exist for.
 
 If a new bug class shows up, prefer:
 
