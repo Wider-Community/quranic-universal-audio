@@ -3,8 +3,7 @@
 Run once (or after a deliberate API change) to regenerate the frozen
 ``expected/<fixture>.routes.json`` files:
 
-    cd inspector
-    python -m tests.parity.snapshot_route_baselines
+    python scripts/codegen/regen_route_baselines.py
 
 Each output file records the top-level field keys returned by every
 relevant route for the fixture's reciter/chapter.  The MUST-1 invariant
@@ -23,7 +22,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "segments"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+INSPECTOR_DIR = REPO_ROOT / "inspector"
+FIXTURES_DIR = INSPECTOR_DIR / "tests" / "fixtures" / "segments"
 EXPECTED_DIR = FIXTURES_DIR / "expected"
 
 # Mapping: fixture name → chapter number used for the /data/<reciter>/<chapter> probe.
@@ -45,7 +46,7 @@ def _keys(value: object) -> list[str]:
 
 def _capture_fixture(name: str, chapter: int) -> dict:
     """Spin up a fresh Flask test client against a tmp fixture dir and hit all routes."""
-    inspector_dir = Path(__file__).resolve().parents[2]
+    inspector_dir = INSPECTOR_DIR
 
     tmp = tempfile.mkdtemp()
     try:
@@ -138,7 +139,7 @@ def _git_sha() -> str:
             ["git", "rev-parse", "--short", "HEAD"],
             capture_output=True,
             text=True,
-            cwd=str(Path(__file__).resolve().parents[3]),
+            cwd=str(REPO_ROOT),
         )
         return result.stdout.strip() if result.returncode == 0 else "unknown"
     except Exception:

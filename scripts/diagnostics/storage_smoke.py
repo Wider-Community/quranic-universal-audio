@@ -1,6 +1,6 @@
 """Smoke test for storage primitives (FilesystemBackend round-trip + paths).
 
-Run with ``python -m inspector.services._storage_smoke``. The bucket backend
+Run with ``python scripts/diagnostics/storage_smoke.py``. The bucket backend
 is exercised by integration tests against a real dev bucket separately —
 this smoke is local-only.
 """

@@ -7,7 +7,7 @@ this smoke loads it manually for direct module invocation).
 
 Run with:
 
-    python -m inspector.services._bucket_smoke
+    python scripts/diagnostics/bucket_smoke.py
 
 Cleans up after itself.
 """
