@@ -178,3 +178,70 @@ def test_route_falls_back_on_api_error(flask_client, monkeypatch):
     surahs = resp.get_json()["surahs"]
     assert surahs["1"]["via"] == "qf_fallback"
     assert surahs["1"]["url"].endswith("/quran/x/001.mp3")  # our link retained
+
+
+# ---- peaks duration fallback (null manifest duration) ----
+
+
+def _stub_null_duration_manifest(monkeypatch, *, peaks_durations):
+    """Stage a non-QF manifest where every chapter has a null ``duration_sec``,
+    and stub the slim-peaks duration reader with ``peaks_durations`` keyed by
+    URL. QF routing is disabled so the route returns the raw manifest shape.
+    """
+    from routes.audio import metadata
+    from services.storage import cache
+
+    cache._audio_url.clear()
+
+    backend = types.SimpleNamespace(
+        read_json=lambda path: {
+            "chapters": {
+                "1": {"url": "https://cdn/x/001.mp3"},  # no duration_sec
+                "2": {"url": "https://cdn/x/002.mp3", "duration_sec": None},
+            }
+        }
+    )
+    monkeypatch.setattr(metadata, "get_backend", lambda: backend)
+    monkeypatch.setattr(metadata.qf_config, "content_is_configured", lambda: False)
+    monkeypatch.setattr(
+        metadata.audio_fetch,
+        "read_prefetched_peaks_duration_ms",
+        lambda slug, url: peaks_durations.get(url),
+    )
+
+
+def test_route_fills_null_duration_from_peaks_header(flask_client, monkeypatch):
+    _stub_null_duration_manifest(
+        monkeypatch,
+        peaks_durations={"https://cdn/x/001.mp3": 47000},  # ch2 peaks absent
+    )
+    resp = flask_client.get("/api/audio/surahs/by_surah/mp3quran/some_slug")
+    assert resp.status_code == 200
+    surahs = resp.get_json()["surahs"]
+    # ch1 had no duration_sec → filled from peaks header.
+    assert surahs["1"]["duration_ms"] == 47000
+    # ch2 had null duration_sec AND no peaks → stays None.
+    assert surahs["2"]["duration_ms"] is None
+
+
+def test_route_keeps_manifest_duration_when_present(flask_client, monkeypatch):
+    from routes.audio import metadata
+    from services.storage import cache
+
+    cache._audio_url.clear()
+    backend = types.SimpleNamespace(
+        read_json=lambda path: {
+            "chapters": {"1": {"url": "https://cdn/x/001.mp3", "duration_sec": 90}}
+        }
+    )
+    monkeypatch.setattr(metadata, "get_backend", lambda: backend)
+    monkeypatch.setattr(metadata.qf_config, "content_is_configured", lambda: False)
+    # If the manifest duration is present the peaks reader must NOT be consulted.
+    monkeypatch.setattr(
+        metadata.audio_fetch,
+        "read_prefetched_peaks_duration_ms",
+        lambda slug, url: pytest.fail("peaks fallback should not run"),
+    )
+    resp = flask_client.get("/api/audio/surahs/by_surah/mp3quran/some_slug")
+    surahs = resp.get_json()["surahs"]
+    assert surahs["1"]["duration_ms"] == 90000

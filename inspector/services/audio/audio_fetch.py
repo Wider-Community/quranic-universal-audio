@@ -96,3 +96,20 @@ def read_prefetched_peaks(slug: str, url: str) -> dict | None:
     except Exception:  # noqa: BLE001
         return None
     return unpack_slim_envelope(blob)
+
+
+def read_prefetched_peaks_duration_ms(slug: str, url: str) -> int | None:
+    """Return just the chapter ``duration_ms`` from the slim peaks header.
+
+    Fallback length source for the dashboard player when the audio_manifest
+    sidecar has a null/missing ``duration_sec`` (e.g. a reciter probed before
+    the manifest carried durations). Reads the slim envelope header — the same
+    ``duration_ms`` baked alongside the peaks at extraction time — without
+    decoding the int8 payload. Returns ``None`` when peaks are also absent,
+    the URL is unknown, or the blob is corrupt.
+    """
+    env = read_prefetched_peaks(slug, url)
+    if env is None:
+        return None
+    dur = env.get("duration_ms")
+    return int(dur) if isinstance(dur, (int, float)) and dur > 0 else None

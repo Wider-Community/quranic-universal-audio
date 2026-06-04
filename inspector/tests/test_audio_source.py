@@ -86,3 +86,53 @@ def test_unknown_url_yields_blank_metadata(stub_env):
     assert src.vbr is False
     assert src.bitrate_kbps is None
     assert src.chapter_key is None
+
+
+# ---------------------------------------------------------------------------
+# read_prefetched_peaks_duration_ms — slim-header fallback length source
+# ---------------------------------------------------------------------------
+
+
+def _packed_envelope(duration_ms: int) -> bytes:
+    """A minimal valid slim peaks blob carrying ``duration_ms`` in its header."""
+    from services.audio.peaks_slim import pack_slim
+
+    return pack_slim({"schema_version": 2, "duration_ms": duration_ms,
+                      "peaks": [[-0.5, 0.5]] * 30})
+
+
+def test_peaks_duration_ms_reads_header(monkeypatch):
+    from services import audio_fetch, audio_meta
+    from services.audio import audio_fetch as af_mod
+
+    audio_meta._clear_for_test()
+    audio_meta._stage_for_test("rec", {
+        "chapters": {"1": {"url": "https://cdn/1.mp3"}},
+    })
+    backend = type("B", (), {"read_bytes": staticmethod(
+        lambda path: _packed_envelope(47000))})()
+    monkeypatch.setattr(af_mod, "get_backend", lambda: backend)
+
+    assert audio_fetch.read_prefetched_peaks_duration_ms("rec", "https://cdn/1.mp3") == 47000
+    audio_meta._clear_for_test()
+
+
+def test_peaks_duration_ms_none_when_peaks_absent(monkeypatch):
+    from services import audio_fetch, audio_meta
+    from services.audio import audio_fetch as af_mod
+
+    audio_meta._clear_for_test()
+    audio_meta._stage_for_test("rec", {
+        "chapters": {"1": {"url": "https://cdn/1.mp3"}},
+    })
+
+    def _missing(path):
+        raise FileNotFoundError(path)
+
+    backend = type("B", (), {"read_bytes": staticmethod(_missing)})()
+    monkeypatch.setattr(af_mod, "get_backend", lambda: backend)
+
+    assert audio_fetch.read_prefetched_peaks_duration_ms("rec", "https://cdn/1.mp3") is None
+    # Unknown URL → None without touching the backend.
+    assert audio_fetch.read_prefetched_peaks_duration_ms("rec", "https://cdn/zzz.mp3") is None
+    audio_meta._clear_for_test()
