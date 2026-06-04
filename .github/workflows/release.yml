@@ -37,7 +37,7 @@ jobs:
           if [ -n "${{ inputs.version }}" ]; then
             args="--version ${{ inputs.version }}"
           fi
-          python .github/scripts/package_release.py $args --output-dir dist
+          python scripts/release/package_release.py $args --output-dir dist
 
           # Read computed version from manifest (if it exists)
           if [ -f dist/manifest.json ]; then

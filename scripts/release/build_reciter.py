@@ -3,10 +3,10 @@
 Build and upload a reciter config to the HuggingFace dataset.
 
 Usage:
-    python .github/scripts/build_reciter.py <slug>              # Upload one reciter
-    python .github/scripts/build_reciter.py --all               # Upload all eligible
-    python .github/scripts/build_reciter.py --delete <slug>     # Delete a reciter's data
-    python .github/scripts/build_reciter.py --update-readme     # Update dataset card only
+    python scripts/release/build_reciter.py <slug>              # Upload one reciter
+    python scripts/release/build_reciter.py --all               # Upload all eligible
+    python scripts/release/build_reciter.py --delete <slug>     # Delete a reciter's data
+    python scripts/release/build_reciter.py --update-readme     # Update dataset card only
 
 Environment:
     HF_TOKEN       — HuggingFace API token

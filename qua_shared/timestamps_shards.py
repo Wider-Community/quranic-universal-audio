@@ -313,7 +313,7 @@ def derive_url_template(manifest_data: dict, audio_cat: str) -> str:
     validated against a second entry to guard against false positives.
 
     Used by:
-      - ``.github/scripts/build_reciter.py`` — inlined into shard ``_meta``
+      - ``scripts/release/build_reciter.py`` — inlined into shard ``_meta``
         and the manifest's per-reciter block.
       - ``inspector/services/timestamps.py`` — same template, served from
         the local-mode manifest endpoint.

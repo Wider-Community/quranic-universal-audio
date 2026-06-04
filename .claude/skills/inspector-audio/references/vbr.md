@@ -114,7 +114,7 @@ Non-integer keys (by_ayah `"<s>:<a>"`) are skipped — only by_surah deliveries 
 
 ## Dataset packaging — slicing chapter audio
 
-The HF dataset (`.github/scripts/build_reciter.py`) slices per-ayah audio out of chapter files. When it sources from the **bucket** chapter (provenance: same bytes MFA aligned against) instead of re-downloading from the CDN, two VBR-specific gotchas apply — both measured, not theoretical:
+The HF dataset (`scripts/release/build_reciter.py`) slices per-ayah audio out of chapter files. When it sources from the **bucket** chapter (provenance: same bytes MFA aligned against) instead of re-downloading from the CDN, two VBR-specific gotchas apply — both measured, not theoretical:
 
 **Per-slice Xing depends on the output being seekable, not on `-f mp3`.** A mid-chapter `-c copy` slice written to a `.mp3` **file** gets a fresh per-slice Xing TOC automatically (the `.mp3` extension already selects the mp3 muxer, and the muxer backfills the frame count because the file is seekable). The `-f mp3` flag only matters when the output path has no `.mp3` extension. The real failure case is **piping to stdout** (`-f mp3 -`): ffmpeg can't seek back to backfill the count, Xing offset comes out `-1`, and the slice reintroduces the canonical VBR seek-drift bug. **Rule for the packaging writer: slice VBR chapters to seekable files, never through a pipe.** (CBR slices need no Xing — linearly seekable.)
 
