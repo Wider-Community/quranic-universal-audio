@@ -145,7 +145,7 @@ def test_upload_failure_truncates_long_error_message(synced, monkeypatch):
     payload = f"{fake_token} request_url=https://api.test/secret {long_tail}"
 
     def boom(path, data):
-        raise IOError(payload)
+        raise OSError(payload)
 
     monkeypatch.setattr(sync, "_write_direct", boom)
     with pytest.raises(IOError):

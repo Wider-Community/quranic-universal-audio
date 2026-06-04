@@ -18,7 +18,8 @@ def _stub_launch(monkeypatch):
 
     monkeypatch.setattr(ts_jobs, "running_job_for", lambda slug: None)
     monkeypatch.setattr(
-        ts_jobs, "launch",
+        ts_jobs,
+        "launch",
         lambda slug, settings=None, webhook_base=None: {"job_id": "j_test", "url": None},
     )
 

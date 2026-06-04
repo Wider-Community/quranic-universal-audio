@@ -45,7 +45,14 @@ def _row(slug, *, state="awaiting_review", assignee_hf_id=None):
 def test_grant_anonymous_returns_401(flask_client):
     res = flask_client.post(
         "/api/admin/access/grant",
-        data=json.dumps({"hf_user_id": "u-2", "login": "bob", "role": "maintainer", "reason": "smoke test reason"}),
+        data=json.dumps(
+            {
+                "hf_user_id": "u-2",
+                "login": "bob",
+                "role": "maintainer",
+                "reason": "smoke test reason",
+            }
+        ),
         headers=_HEADERS,
     )
     assert res.status_code == 401
@@ -55,7 +62,14 @@ def test_grant_by_contributor_returns_403(signed_in_client):
     client, _ = signed_in_client(hf_user_id="u-1", login="alice", role="contributor")
     res = client.post(
         "/api/admin/access/grant",
-        data=json.dumps({"hf_user_id": "u-2", "login": "bob", "role": "maintainer", "reason": "smoke test reason"}),
+        data=json.dumps(
+            {
+                "hf_user_id": "u-2",
+                "login": "bob",
+                "role": "maintainer",
+                "reason": "smoke test reason",
+            }
+        ),
         headers=_HEADERS,
     )
     assert res.status_code == 403
@@ -65,7 +79,14 @@ def test_grant_maintainer_by_owner_happy_path(signed_in_client):
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner", role="owner")
     res = client.post(
         "/api/admin/access/grant",
-        data=json.dumps({"hf_user_id": "u-2", "login": "bob", "role": "maintainer", "reason": "smoke test reason"}),
+        data=json.dumps(
+            {
+                "hf_user_id": "u-2",
+                "login": "bob",
+                "role": "maintainer",
+                "reason": "smoke test reason",
+            }
+        ),
         headers=_HEADERS,
     )
     assert res.status_code == 200
@@ -78,7 +99,14 @@ def test_grant_maintainer_by_maintainer_happy_path(signed_in_client):
     client, _ = signed_in_client(hf_user_id="u-mod", login="mod", role="maintainer")
     res = client.post(
         "/api/admin/access/grant",
-        data=json.dumps({"hf_user_id": "u-2", "login": "bob", "role": "maintainer", "reason": "smoke test reason"}),
+        data=json.dumps(
+            {
+                "hf_user_id": "u-2",
+                "login": "bob",
+                "role": "maintainer",
+                "reason": "smoke test reason",
+            }
+        ),
         headers=_HEADERS,
     )
     assert res.status_code == 200
@@ -89,7 +117,9 @@ def test_grant_owner_role_by_maintainer_returns_403(signed_in_client):
     client, _ = signed_in_client(hf_user_id="u-mod", login="mod", role="maintainer")
     res = client.post(
         "/api/admin/access/grant",
-        data=json.dumps({"hf_user_id": "u-2", "login": "bob", "role": "owner", "reason": "smoke test reason"}),
+        data=json.dumps(
+            {"hf_user_id": "u-2", "login": "bob", "role": "owner", "reason": "smoke test reason"}
+        ),
         headers=_HEADERS,
     )
     assert res.status_code == 403
@@ -99,7 +129,9 @@ def test_grant_short_reason_returns_400(signed_in_client):
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner", role="owner")
     res = client.post(
         "/api/admin/access/grant",
-        data=json.dumps({"hf_user_id": "u-2", "login": "bob", "role": "maintainer", "reason": "too short"}),
+        data=json.dumps(
+            {"hf_user_id": "u-2", "login": "bob", "role": "maintainer", "reason": "too short"}
+        ),
         headers=_HEADERS,
     )
     assert res.status_code == 400
@@ -109,7 +141,14 @@ def test_grant_missing_origin_returns_403(signed_in_client):
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner", role="owner")
     res = client.post(
         "/api/admin/access/grant",
-        data=json.dumps({"hf_user_id": "u-2", "login": "bob", "role": "maintainer", "reason": "smoke test reason"}),
+        data=json.dumps(
+            {
+                "hf_user_id": "u-2",
+                "login": "bob",
+                "role": "maintainer",
+                "reason": "smoke test reason",
+            }
+        ),
         content_type="application/json",
     )
     assert res.status_code == 403
@@ -119,7 +158,14 @@ def test_grant_cross_origin_returns_403(signed_in_client):
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner", role="owner")
     res = client.post(
         "/api/admin/access/grant",
-        data=json.dumps({"hf_user_id": "u-2", "login": "bob", "role": "maintainer", "reason": "smoke test reason"}),
+        data=json.dumps(
+            {
+                "hf_user_id": "u-2",
+                "login": "bob",
+                "role": "maintainer",
+                "reason": "smoke test reason",
+            }
+        ),
         headers={"Content-Type": "application/json", "Origin": "https://evil.example"},
     )
     assert res.status_code == 403
@@ -152,15 +198,18 @@ def test_revoke_member_not_found_returns_404(signed_in_client):
 def test_revoke_force_releases_active_claim(signed_in_client):
     """When a maintainer revokes a contributor who holds a claim, the
     claim is auto-released as part of the revoke."""
-    _replace_state([
-        _row("test_slug", state="under_review", assignee_hf_id="u-target"),
-    ])
+    _replace_state(
+        [
+            _row("test_slug", state="under_review", assignee_hf_id="u-target"),
+        ]
+    )
 
     # Sign in as the owner *first*; the fixture replaces the access store
     # with one containing only the owner. Then add the revocation target as
     # a maintainer so it can be revoked.
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner", role="owner")
     from tests.conftest import _seed_role
+
     _seed_role("u-target", login="target", role="maintainer")
 
     res = client.post(
@@ -191,6 +240,7 @@ def test_revoke_maintainer_cannot_revoke_owner(signed_in_client):
     client, _ = signed_in_client(hf_user_id="u-mod", login="mod", role="maintainer")
     # Then add the OWNER target.
     from tests.conftest import _seed_role
+
     _seed_role("u-owner-target", login="founder", role="owner")
 
     res = client.post(
@@ -209,6 +259,7 @@ def test_revoke_maintainer_cannot_revoke_owner(signed_in_client):
 def test_update_login_cache_refresh(signed_in_client):
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner", role="owner")
     from tests.conftest import _seed_role
+
     _seed_role("u-target", login="old_login", role="maintainer")
 
     res = client.post(

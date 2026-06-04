@@ -11,6 +11,7 @@ save/undo route. These tests assert:
 - The save payload contract checks still apply (patch synthesizer,
   command-envelope validation).
 """
+
 from __future__ import annotations
 
 import json
@@ -70,6 +71,7 @@ def test_save_wrong_state_returns_403_with_state_label(signed_in_client, tmp_rec
     # Close the claim + flip the row to AWAITING_REVIEW (not editable).
     from services import db as _db
     from services.db import repo_claims, repo_state
+
     with _db.transaction():
         repo_claims.close_claim(slug=reciter, close_reason="test")
         repo_state.update_state(reciter, state=ReciterState.AWAITING_REVIEW)
@@ -99,16 +101,12 @@ def test_save_maintainer_can_override_assignee(signed_in_client, tmp_reciter_dir
     # Body shape may still 400 on the empty-segments payload, but a 403
     # here is a regression that the prior 200-or-400 tuple would have
     # silently passed through as a 400 anyway.
-    assert res.status_code != 403, (
-        f"unexpected 403; body={res.get_json()}"
-    )
+    assert res.status_code != 403, f"unexpected 403; body={res.get_json()}"
     assert res.status_code in (200, 400), (
         f"unexpected status {res.status_code}; body={res.get_json()}"
     )
     if res.status_code == 200:
-        history_path = (
-            tmp_reciter_dir.root / reciter / "edit_history.jsonl"
-        )
+        history_path = tmp_reciter_dir.root / reciter / "edit_history.jsonl"
         line = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])
         assert line["actor"]["hf_user_id"] == "mod-1"
         assert line["actor"]["role"] == "maintainer"
@@ -123,6 +121,7 @@ def test_save_marked_ready_returns_403(signed_in_client, tmp_reciter_dir):
     # Mark the existing open claim ready.
     from services import db as _db
     from services.db import repo_claims
+
     with _db.transaction():
         repo_claims.set_marked_ready(reciter, ready=True)
 
@@ -146,6 +145,7 @@ def test_save_owner_bypasses_state_check(signed_in_client, tmp_reciter_dir):
     # Flip state to catalogued (close the claim) so a non-owner would get 403.
     from services import db as _db
     from services.db import repo_claims, repo_state
+
     with _db.transaction():
         repo_claims.close_claim(slug=reciter, close_reason="test")
         repo_state.update_state(reciter, state=ReciterState.CATALOGUED)
@@ -157,9 +157,7 @@ def test_save_owner_bypasses_state_check(signed_in_client, tmp_reciter_dir):
         headers=_HEADERS,
     )
     # Lock-pass invariant: a 403 for state-mismatch is the actual regression.
-    assert res.status_code != 403, (
-        f"unexpected 403; body={res.get_json()}"
-    )
+    assert res.status_code != 403, f"unexpected 403; body={res.get_json()}"
     assert res.status_code in (200, 400), (
         f"unexpected status {res.status_code}; body={res.get_json()}"
     )
@@ -172,6 +170,7 @@ def test_save_owner_marked_ready_bypasses_freeze(signed_in_client, tmp_reciter_d
 
     from services import db as _db
     from services.db import repo_claims
+
     with _db.transaction():
         repo_claims.set_marked_ready(reciter, ready=True)
 
@@ -200,8 +199,10 @@ def test_save_owner_marked_ready_bypasses_freeze(signed_in_client, tmp_reciter_d
 def test_save_accepts_full_replace_payload(signed_in_client, tmp_reciter_dir):
     """A canonical full_replace payload is accepted with HTTP 200."""
     reciter = "fixture_reciter"
-    fixture_path = tmp_reciter_dir.install(
-        reciter, "112-ikhlas", under_review_for="test-user-1",
+    tmp_reciter_dir.install(
+        reciter,
+        "112-ikhlas",
+        under_review_for="test-user-1",
     )
     chapter = 112
 
@@ -225,9 +226,7 @@ def test_save_accepts_full_replace_payload(signed_in_client, tmp_reciter_dir):
         data=json.dumps(payload),
         headers=_HEADERS,
     )
-    assert res.status_code == 200, (
-        f"unexpected status {res.status_code}; body={res.get_json()}"
-    )
+    assert res.status_code == 200, f"unexpected status {res.status_code}; body={res.get_json()}"
 
 
 def test_save_accepts_patch_payload(signed_in_client, tmp_reciter_dir):
@@ -288,7 +287,8 @@ def test_save_includes_patch_field_in_history(signed_in_client, tmp_reciter_dir)
 
 
 def test_save_rejects_unknown_command_type(
-    signed_in_client, tmp_reciter_dir,
+    signed_in_client,
+    tmp_reciter_dir,
 ):
     """Save handler rejects an operation whose command.type is not a known reducer."""
     reciter = "fixture_reciter"

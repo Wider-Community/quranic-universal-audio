@@ -46,11 +46,15 @@ def _ok(locations, t0=0.0, step=0.2):
     words = []
     for i, loc in enumerate(locations):
         s = i * step
-        words.append({
-            "location": loc, "start": s, "end": s + step,
-            "letters": [{"char": "x", "start": s, "end": s + step}],
-            "phones": [{"phone": "P", "start": s, "end": s + step}],
-        })
+        words.append(
+            {
+                "location": loc,
+                "start": s,
+                "end": s + step,
+                "letters": [{"char": "x", "start": s, "end": s + step}],
+                "phones": [{"phone": "P", "start": s, "end": s + step}],
+            }
+        )
     return {"status": "ok", "words": words}
 
 
@@ -68,8 +72,10 @@ def _multi_verse_loopback():
 
 def _multi_verse_loopback_results():
     """Companion MFA results for `_multi_verse_loopback`."""
-    return {0: [
-        (0, _ok(["1:1:1", "1:1:2"])),
-        (1, _ok(["1:1:3", "1:1:4"], t0=1.5)),
-        (2, _ok(["1:2:1", "1:2:2", "1:2:3"], t0=2.5)),
-    ]}
+    return {
+        0: [
+            (0, _ok(["1:1:1", "1:1:2"])),
+            (1, _ok(["1:1:3", "1:1:4"], t0=1.5)),
+            (2, _ok(["1:2:1", "1:2:2", "1:2:3"], t0=2.5)),
+        ]
+    }

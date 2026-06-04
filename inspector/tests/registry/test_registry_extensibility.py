@@ -43,9 +43,7 @@ def test_synthetic_new_category_picked_up_by_parametrization(monkeypatch):
         )
 
     keys = list(IssueRegistry.keys())
-    assert new_category in keys, (
-        "monkeypatched new category should appear in registry.keys()"
-    )
+    assert new_category in keys, "monkeypatched new category should appear in registry.keys()"
 
     # Drive the consumer paths the parametrized tests rely on. Both dict-style
     # and attribute-style access must work, mirroring IssueDefinition's dual
@@ -59,8 +57,8 @@ def test_synthetic_new_category_picked_up_by_parametrization(monkeypatch):
     assert row["scope"] == "per_segment"
     # Derived category tuples must surface the new row.
     from services.validation.registry import (
-        CAN_IGNORE_CATEGORIES,
         AUTO_SUPPRESS_CATEGORIES,
+        CAN_IGNORE_CATEGORIES,
         PERSISTS_IGNORE_CATEGORIES,
     )
 

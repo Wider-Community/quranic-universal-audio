@@ -10,6 +10,7 @@ relevant route for the fixture's reciter/chapter.  The MUST-1 invariant
 is "no field removed", so tracking keys — not full response bodies — is
 sufficient and avoids noisy diffs from timestamps and dynamic data.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,9 +19,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INSPECTOR_DIR = REPO_ROOT / "inspector"
@@ -125,9 +125,7 @@ print(json.dumps(results))
             cwd=str(inspector_dir),
         )
         if proc.returncode != 0:
-            raise RuntimeError(
-                f"subprocess failed for fixture {name!r}:\n{proc.stderr}"
-            )
+            raise RuntimeError(f"subprocess failed for fixture {name!r}:\n{proc.stderr}")
         return json.loads(proc.stdout.strip())
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -150,7 +148,7 @@ def regenerate(name: str, chapter: int) -> Path:
     """Capture route shapes for *name* and write ``expected/<name>.routes.json``."""
     results = _capture_fixture(name, chapter)
     sha = _git_sha()
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     out = {
         "_meta": {

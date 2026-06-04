@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import gzip
 
+from services.reference import timestamps as ts_manifest
 from services.storage import hf_bucket as _hf_bucket
 from services.storage import static_refs
-from services.reference import timestamps as ts_manifest
 
 
 class _FakeBackend:

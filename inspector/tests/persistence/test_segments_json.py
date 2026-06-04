@@ -1,10 +1,11 @@
 """segments.json rebuild tests (MUST-3)."""
+
 from __future__ import annotations
 
 import json
 
-
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
 
 def test_segments_json_rebuild_parity(load_fixture, tmp_reciter_dir, signed_in_client):
     """Load detailed.json → save → segments.json key set + tuples match expected."""

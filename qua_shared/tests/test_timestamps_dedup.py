@@ -52,7 +52,7 @@ def _roundtrip(chapter, results, *, cat=CAT, conf_by_span=None):
     v2 = build_raw_v2([chapter], results, cat)
     shards = build_segment_shards(v2, audio_category=cat, src_meta=v2.get("_meta"))
     assert len(shards) == 1, "fixtures use a single chapter"
-    (_ch, shard_doc), = shards.items()
+    ((_ch, shard_doc),) = shards.items()
 
     # Writer gz == bucket gz == wire body (read path is a byte pass-through).
     inflated = orjson.loads(gzip.decompress(gzip_shard(shard_doc)))
@@ -67,6 +67,7 @@ def _widxs(verse: dict) -> list[int]:
 
 
 # --- the shard shape itself (schema-mismatch guard) ---
+
 
 def test_inflated_shard_is_segment_array():
     chapter = {
@@ -87,6 +88,7 @@ def test_inflated_shard_is_segment_array():
 
 # --- (b) full coverage in one contiguous occasion + (c) contiguous clip ---
 
+
 def test_sequential_full_coverage_one_occasion():
     # 1:1 recited in two adjacent segments: words 1-2 then 3-4. One occasion.
     chapter = {
@@ -96,10 +98,12 @@ def test_sequential_full_coverage_one_occasion():
             {"matched_ref": "1:1:3-1:1:4", "time_start": 1000, "time_end": 2000},
         ],
     }
-    results = {0: [
-        (0, _ok(["1:1:1", "1:1:2"])),
-        (1, _ok(["1:1:3", "1:1:4"], t0=1.0)),
-    ]}
+    results = {
+        0: [
+            (0, _ok(["1:1:1", "1:1:2"])),
+            (1, _ok(["1:1:3", "1:1:4"], t0=1.0)),
+        ]
+    }
     _shard, proj = _roundtrip(chapter, results)
     assert _widxs(proj["1:1"]) == [1, 2, 3, 4], "(b) full {1..4} coverage"
     # (c) one contiguous [start, end] clip spanning both segments.
@@ -108,6 +112,7 @@ def test_sequential_full_coverage_one_occasion():
 
 
 # --- (d) within-pass loopback retained verbatim ---
+
 
 def test_within_pass_loopback_retained():
     # w1-4, then loops back to 3-5, then 4-5: completes {1..5} at the 2nd seg;
@@ -120,11 +125,13 @@ def test_within_pass_loopback_retained():
             {"matched_ref": "1:1:4-1:1:5", "time_start": 2000, "time_end": 3000},
         ],
     }
-    results = {0: [
-        (0, _ok(["1:1:1", "1:1:2", "1:1:3", "1:1:4"])),
-        (1, _ok(["1:1:3", "1:1:4", "1:1:5"], t0=1.0)),
-        (2, _ok(["1:1:4", "1:1:5"], t0=2.0)),
-    ]}
+    results = {
+        0: [
+            (0, _ok(["1:1:1", "1:1:2", "1:1:3", "1:1:4"])),
+            (1, _ok(["1:1:3", "1:1:4", "1:1:5"], t0=1.0)),
+            (2, _ok(["1:1:4", "1:1:5"], t0=2.0)),
+        ]
+    }
     _shard, proj = _roundtrip(chapter, results)
     # (d) loopback words (the repeated 3,4) kept; (e) trailing [4,5] seg trimmed.
     assert _widxs(proj["1:1"]) == [1, 2, 3, 4, 3, 4, 5]
@@ -132,6 +139,7 @@ def test_within_pass_loopback_retained():
 
 
 # --- (e) trailing post-completion redundancy trimmed ---
+
 
 def test_trailing_redundant_redo_trimmed():
     # 1:1 completes {1,2,3}, then a redundant full re-do in the same occasion.
@@ -142,16 +150,19 @@ def test_trailing_redundant_redo_trimmed():
             {"matched_ref": "1:1:1-1:1:3", "time_start": 1000, "time_end": 2000},
         ],
     }
-    results = {0: [
-        (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
-        (1, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.0)),
-    ]}
+    results = {
+        0: [
+            (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
+            (1, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.0)),
+        ]
+    }
     _shard, proj = _roundtrip(chapter, results)
     assert _widxs(proj["1:1"]) == [1, 2, 3]
     assert proj["1:1"]["verse_end_ms"] == 1000  # (e) trailing re-do trimmed
 
 
 # --- multi-occasion: interleaved re-do → one canonical take, highest conf ---
+
 
 def test_two_occasions_highest_confidence_wins():
     # 1:1 take A, then 1:2 (breaks the run), then 1:1 take B (both complete).
@@ -163,19 +174,27 @@ def test_two_occasions_highest_confidence_wins():
             {"matched_ref": "1:1:1-1:1:3", "time_start": 1500, "time_end": 2500},
         ],
     }
-    results = {0: [
-        (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
-        (1, _ok(["1:2:1", "1:2:2"], t0=1.0)),
-        (2, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.5)),
-    ]}
+    results = {
+        0: [
+            (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
+            (1, _ok(["1:2:1", "1:2:2"], t0=1.0)),
+            (2, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.5)),
+        ]
+    }
     # detailed.json confidence join: take B (1500-2500) beats take A (0-1000).
-    detailed = {"entries": [{"ref": 1, "segments": [
-        {"time_start": 0, "time_end": 1000, "confidence": 0.40},
-        {"time_start": 1000, "time_end": 1500, "confidence": 0.99},
-        {"time_start": 1500, "time_end": 2500, "confidence": 0.95},
-    ]}]}
-    _shard, proj = _roundtrip(
-        chapter, results, conf_by_span=confidence_by_span(detailed))
+    detailed = {
+        "entries": [
+            {
+                "ref": 1,
+                "segments": [
+                    {"time_start": 0, "time_end": 1000, "confidence": 0.40},
+                    {"time_start": 1000, "time_end": 1500, "confidence": 0.99},
+                    {"time_start": 1500, "time_end": 2500, "confidence": 0.95},
+                ],
+            }
+        ]
+    }
+    _shard, proj = _roundtrip(chapter, results, conf_by_span=confidence_by_span(detailed))
     assert set(proj) == {"1:1", "1:2"}
     # 1:1 canonical = take B (one contiguous occasion); 1:2 = its only take.
     assert proj["1:1"]["verse_start_ms"] == 1500
@@ -193,16 +212,19 @@ def test_two_occasions_no_confidence_falls_back_to_earliest():
             {"matched_ref": "1:1:1-1:1:3", "time_start": 1500, "time_end": 2500},
         ],
     }
-    results = {0: [
-        (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
-        (1, _ok(["1:2:1", "1:2:2"], t0=1.0)),
-        (2, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.5)),
-    ]}
+    results = {
+        0: [
+            (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
+            (1, _ok(["1:2:1", "1:2:2"], t0=1.0)),
+            (2, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.5)),
+        ]
+    }
     _shard, proj = _roundtrip(chapter, results)  # no confidence
     assert proj["1:1"]["verse_start_ms"] == 0  # earliest completing occasion
 
 
 # --- by_ayah chapter ref ("2:255") projects the same way ---
+
 
 def test_by_ayah_roundtrip():
     chapter = {

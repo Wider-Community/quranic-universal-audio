@@ -27,7 +27,6 @@ from qua_shared.schemas import (
     Actor,
     AudioCategory,
     Channel,
-    ReciterEntry,
     Riwayah,
     Role,
     Source,

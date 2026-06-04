@@ -7,6 +7,8 @@ edits to the catalog at auto-acceptance time.
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
 
 from qua_shared.schemas import (
@@ -14,7 +16,6 @@ from qua_shared.schemas import (
     ProposedEdits,
     Role,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -38,38 +39,65 @@ def fresh_pending():
 def _seed_test_catalog_db():
     """Seed the test catalog (rich vocab + ``test_reciter`` delivery) into the
     SQLite substrate so submit (FK) + apply_and_archive (edits) both work."""
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
+    from datetime import timezone as _tz
 
     from qua_shared.schemas import (
-        AudioCategory, Channel, Delivery, ReciterEntry, RecordingContext,
-        Riwayah, Source, Style, Vocab,
+        AudioCategory,
+        Channel,
+        Delivery,
+        ReciterEntry,
+        RecordingContext,
+        Riwayah,
+        Source,
+        Style,
+        Vocab,
     )
     from services import db
     from services.db import repo_catalog
 
     vocab = Vocab(
-        riwayat=[Riwayah(slug="hafs", short="H", name="Hafs"),
-                 Riwayah(slug="warsh", short="W", name="Warsh")],
-        styles=[Style(slug="murattal", short="M", name="Murattal"),
-                Style(slug="mujawwad", short="J", name="Mujawwad")],
+        riwayat=[
+            Riwayah(slug="hafs", short="H", name="Hafs"),
+            Riwayah(slug="warsh", short="W", name="Warsh"),
+        ],
+        styles=[
+            Style(slug="murattal", short="M", name="Murattal"),
+            Style(slug="mujawwad", short="J", name="Mujawwad"),
+        ],
         sources=[Source(slug="src1", name="Source One")],
         channels=[Channel(slug="ch1", short="c1", name="Channel One")],
-        recording_contexts=[RecordingContext(slug="studio", name="Studio"),
-                            RecordingContext(slug="broadcast", name="Broadcast")],
+        recording_contexts=[
+            RecordingContext(slug="studio", name="Studio"),
+            RecordingContext(slug="broadcast", name="Broadcast"),
+        ],
     )
     with db.transaction():
         repo_catalog.load_vocab(vocab)
-        repo_catalog.insert_reciter(ReciterEntry(
-            reciter_id="test_reciter", name_en="Original Name",
-            name_ar=None, country=None,
-        ))
-        repo_catalog.insert_delivery(Delivery(
-            slug="test_reciter", reciter_id="test_reciter",
-            riwayah="hafs", style="murattal", recording_context="studio",
-            recording_year=2010, source="src1", channel="ch1",
-            audio_category=AudioCategory.BY_SURAH, chapter_count=114,
-            added_at=_dt.now(_tz.utc), added_by_hf_id="seed",
-        ))
+        repo_catalog.insert_reciter(
+            ReciterEntry(
+                reciter_id="test_reciter",
+                name_en="Original Name",
+                name_ar=None,
+                country=None,
+            )
+        )
+        repo_catalog.insert_delivery(
+            Delivery(
+                slug="test_reciter",
+                reciter_id="test_reciter",
+                riwayah="hafs",
+                style="murattal",
+                recording_context="studio",
+                recording_year=2010,
+                source="src1",
+                channel="ch1",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=_dt.now(UTC),
+                added_by_hf_id="seed",
+            )
+        )
 
 
 def _actor(hf_user_id: str = "u-1", login: str = "alice", role: str = "contributor") -> Actor:
@@ -164,19 +192,22 @@ def _system_actor() -> Actor:
 
 def _completed_for(svc_request_archive, slug: str):
     return svc_request_archive.get_for_slug(
-        slug, svc_request_archive.ArchiveKind.COMPLETED,
+        slug,
+        svc_request_archive.ArchiveKind.COMPLETED,
     )
 
 
 def _returned_for(svc_request_archive, slug: str):
     return svc_request_archive.get_for_slug(
-        slug, svc_request_archive.ArchiveKind.RETURNED,
+        slug,
+        svc_request_archive.ArchiveKind.RETURNED,
     )
 
 
 def _discarded_for(svc_request_archive, slug: str):
     return svc_request_archive.get_for_slug(
-        slug, svc_request_archive.ArchiveKind.DISCARDED,
+        slug,
+        svc_request_archive.ArchiveKind.DISCARDED,
     )
 
 
@@ -280,7 +311,8 @@ def test_apply_and_archive_completed_warns_on_riwayah_style_conflict(seeded_cata
     """Proposed (riwayah, style) matching another delivery of the same reciter
     emits a non-blocking audit warning. The edit still applies and archives."""
     svc = seeded_catalog
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
+    from datetime import timezone as _tz
 
     from qua_shared.schemas import AudioCategory, Delivery
     from services import audit as audit_service
@@ -302,7 +334,7 @@ def test_apply_and_archive_completed_warns_on_riwayah_style_conflict(seeded_cata
             channel="ch1",
             audio_category=AudioCategory.BY_SURAH,
             chapter_count=114,
-            added_at=_dt.now(_tz.utc),
+            added_at=_dt.now(UTC),
             added_by_hf_id="seed",
         ),
     )

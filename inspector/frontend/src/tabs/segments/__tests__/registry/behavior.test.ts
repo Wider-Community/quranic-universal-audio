@@ -11,14 +11,14 @@ import { makeSegment } from '../helpers/make-segment';
 describe('registry behavior — parametrized', () => {
   for (const cat of ALL_CATEGORIES) {
     it(`Ignore button visible iff registry.canIgnore (${cat})`, () => {
-      const row = IssueRegistry[cat];
+      const row = IssueRegistry[cat]!;
       const wantsButton = !!row.canIgnore;
       const isInCanIgnoreList = CAN_IGNORE_CATEGORIES.includes(cat as any);
       expect(wantsButton).toBe(isInCanIgnoreList);
     });
 
     it(`auto_suppress flag is read from registry (${cat})`, () => {
-      const row = IssueRegistry[cat];
+      const row = IssueRegistry[cat]!;
       const wants = !!row.autoSuppress;
       const expected = AUTO_SUPPRESS_CATEGORIES.includes(cat as any);
       expect(wants).toBe(expected);
@@ -48,13 +48,13 @@ describe('registry behavior — parametrized', () => {
     });
 
     it(`card type dispatched from registry (${cat})`, () => {
-      const row = IssueRegistry[cat];
+      const row = IssueRegistry[cat]!;
       expect(['generic', 'missingVerses', 'missingWords', 'error']).toContain(row.cardType);
     });
   }
 
   it('accordion order matches registry', () => {
-    const orders = ALL_CATEGORIES.map((c) => IssueRegistry[c].accordionOrder).sort((a, b) => a - b);
+    const orders = ALL_CATEGORIES.map((c) => IssueRegistry[c]!.accordionOrder).sort((a, b) => a - b);
     const expected = Array.from({ length: ALL_CATEGORIES.length }, (_, i) => i + 1);
     expect(orders).toEqual(expected);
   });

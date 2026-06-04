@@ -19,7 +19,7 @@ const baseCmd: IgnoreIssueCommand = {
 describe('command/ignore', () => {
   it('op produces expected segment mutations', () => {
     const r = applyCommand(baseState(), baseCmd);
-    const updated = r.nextState.byId?.['uid-ig'] ?? r.nextState['uid-ig'];
+    const updated = r.nextState.byId['uid-ig']!;
     expect(updated.ignored_categories).toContain('low_confidence');
     expect(updated.confidence).toBe(1.0);
   });
@@ -38,7 +38,7 @@ describe('command/ignore', () => {
 
   it('op honors auto-suppress per registry', () => {
     const r = applyCommand(baseState(), baseCmd);
-    const updated = r.nextState.byId?.['uid-ig'] ?? r.nextState['uid-ig'];
+    const updated = r.nextState.byId['uid-ig']!;
     expect(updated.ignored_categories).toContain('low_confidence');
   });
 

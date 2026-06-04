@@ -7,7 +7,7 @@ Covers per_recitation_releases insert + supersede + stale-stamp, gh_releases
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 
@@ -16,7 +16,7 @@ from services.db import get_conn, repo_releases
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _seed_minimal_delivery(slug: str = "minshawy_murattal") -> str:
@@ -26,18 +26,39 @@ def _seed_minimal_delivery(slug: str = "minshawy_murattal") -> str:
     writer connection.
     """
     conn = get_conn()
-    conn.execute("INSERT OR IGNORE INTO riwayahs(slug,short,name) VALUES ('hafs_an_asim','hafs','Hafs')")
+    conn.execute(
+        "INSERT OR IGNORE INTO riwayahs(slug,short,name) VALUES ('hafs_an_asim','hafs','Hafs')"
+    )
     conn.execute("INSERT OR IGNORE INTO styles(slug,short,name) VALUES ('murattal','m','Murattal')")
-    conn.execute("INSERT OR IGNORE INTO sources(slug,name,url,audio_categories) VALUES ('everyayah','Everyayah',NULL,'[]')")
-    conn.execute("INSERT OR IGNORE INTO channels(slug,short,name,host_patterns,gh_release_eligible) VALUES ('everyayah','ea','EveryAyah','[]',1)")
-    conn.execute("INSERT OR IGNORE INTO reciters(reciter_id,name_en) VALUES ('minshawy','Minshawy')")
+    conn.execute(
+        "INSERT OR IGNORE INTO sources(slug,name,url,audio_categories) VALUES ('everyayah','Everyayah',NULL,'[]')"
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO channels(slug,short,name,host_patterns,gh_release_eligible) VALUES ('everyayah','ea','EveryAyah','[]',1)"
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO reciters(reciter_id,name_en) VALUES ('minshawy','Minshawy')"
+    )
     conn.execute(
         "INSERT OR IGNORE INTO deliveries("
         "slug,reciter_id,riwayah,style,source,channel,audio_category,chapter_count,"
         "codec,container,bitrate_mode,added_at,added_by_hf_id"
         ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (slug, "minshawy", "hafs_an_asim", "murattal", "everyayah", "everyayah",
-         "by_surah", 114, "mp3", "mp3", "cbr", "2024-01-01T00:00:00Z", "system"),
+        (
+            slug,
+            "minshawy",
+            "hafs_an_asim",
+            "murattal",
+            "everyayah",
+            "everyayah",
+            "by_surah",
+            114,
+            "mp3",
+            "mp3",
+            "cbr",
+            "2024-01-01T00:00:00Z",
+            "system",
+        ),
     )
     return slug
 
@@ -47,7 +68,11 @@ def test_per_recitation_release_insert_and_current(fresh_db):
     with db.transaction():
         slug = _seed_minimal_delivery()
         rid = repo_releases.insert_per_recitation_release(
-            track="ts", slug=slug, version="1", produced_at=now, produced_by="alice",
+            track="ts",
+            slug=slug,
+            version="1",
+            produced_at=now,
+            produced_by="alice",
         )
     assert rid > 0
     current = repo_releases.current_release("ts", slug)
@@ -62,12 +87,20 @@ def test_supersede_current_marks_zero_prior_rows(fresh_db):
     now = _now()
     with db.transaction():
         slug = _seed_minimal_delivery()
-        id1 = repo_releases.insert_per_recitation_release(
-            track="ts", slug=slug, version="1", produced_at=now, produced_by="a",
+        repo_releases.insert_per_recitation_release(
+            track="ts",
+            slug=slug,
+            version="1",
+            produced_at=now,
+            produced_by="a",
         )
         repo_releases.supersede_current("ts", slug, except_id=-1, at=now)
         id2 = repo_releases.insert_per_recitation_release(
-            track="ts", slug=slug, version="2", produced_at=now, produced_by="a",
+            track="ts",
+            slug=slug,
+            version="2",
+            produced_at=now,
+            produced_by="a",
         )
         n = repo_releases.supersede_current("ts", slug, except_id=id2, at=now)
     # id1 was superseded in the pre-insert sweep; supersede(except=id2) sweeps
@@ -82,15 +115,24 @@ def test_partial_unique_blocks_two_current(fresh_db):
     current row per (track, slug). Inserting a second current row without
     superseding the first must fail."""
     import sqlite3
+
     now = _now()
     with pytest.raises(sqlite3.IntegrityError):
         with db.transaction():
             slug = _seed_minimal_delivery()
             repo_releases.insert_per_recitation_release(
-                track="ts", slug=slug, version="1", produced_at=now, produced_by="a",
+                track="ts",
+                slug=slug,
+                version="1",
+                produced_at=now,
+                produced_by="a",
             )
             repo_releases.insert_per_recitation_release(
-                track="ts", slug=slug, version="2", produced_at=now, produced_by="a",
+                track="ts",
+                slug=slug,
+                version="2",
+                produced_at=now,
+                produced_by="a",
             )
 
 
@@ -100,7 +142,11 @@ def test_stamp_stale_on_ts_regen(fresh_db):
     with db.transaction():
         slug = _seed_minimal_delivery()
         repo_releases.insert_per_recitation_release(
-            track="hf", slug=slug, version="abc123", produced_at=now, produced_by="a",
+            track="hf",
+            slug=slug,
+            version="abc123",
+            produced_at=now,
+            produced_by="a",
         )
         n = repo_releases.stamp_stale_on_ts_regen(slug, at=now)
     assert n == 1
@@ -113,12 +159,19 @@ def test_gh_release_insert_and_membership(fresh_db):
     with db.transaction():
         slug = _seed_minimal_delivery()
         rel_id = repo_releases.insert_gh_release(
-            version="v0.1.0", produced_at=now, produced_by="alice",
+            version="v0.1.0",
+            produced_at=now,
+            produced_by="alice",
         )
         repo_releases.insert_gh_release_recitation(
-            release_id=rel_id, slug=slug,
-            catalog_snapshot={"slug": slug}, zip_sha256="abc", zip_bytes=1000,
-            coverage_ayahs=6236, content_hash="def", ts_version="1",
+            release_id=rel_id,
+            slug=slug,
+            catalog_snapshot={"slug": slug},
+            zip_sha256="abc",
+            zip_bytes=1000,
+            coverage_ayahs=6236,
+            content_hash="def",
+            ts_version="1",
             change_kind="added",
         )
     assert rel_id > 0
@@ -135,7 +188,7 @@ def test_gh_release_insert_and_membership(fresh_db):
 def test_gh_release_supersede(fresh_db):
     now = _now()
     with db.transaction():
-        id1 = repo_releases.insert_gh_release(version="v0.1.0", produced_at=now, produced_by="a")
+        repo_releases.insert_gh_release(version="v0.1.0", produced_at=now, produced_by="a")
         id2 = repo_releases.insert_gh_release(version="v0.2.0", produced_at=now, produced_by="a")
         n = repo_releases.supersede_prior_gh_releases(except_id=id2, at=now)
     assert n == 1
@@ -151,11 +204,19 @@ def test_release_by_version_finds_superseded(fresh_db):
     with db.transaction():
         slug = _seed_minimal_delivery()
         id1 = repo_releases.insert_per_recitation_release(
-            track="hf", slug=slug, version="rev-A", produced_at=now, produced_by="a",
+            track="hf",
+            slug=slug,
+            version="rev-A",
+            produced_at=now,
+            produced_by="a",
         )
         repo_releases.supersede_current("hf", slug, except_id=-1, at=now)
         repo_releases.insert_per_recitation_release(
-            track="hf", slug=slug, version="rev-B", produced_at=now, produced_by="a",
+            track="hf",
+            slug=slug,
+            version="rev-B",
+            produced_at=now,
+            produced_by="a",
         )
     found = repo_releases.release_by_version("hf", slug, "rev-A")
     assert found is not None
@@ -169,11 +230,9 @@ def test_gh_release_by_version_finds_superseded(fresh_db):
     """Same idempotency guard for gh_releases."""
     now = _now()
     with db.transaction():
-        id1 = repo_releases.insert_gh_release(version="v0.1.0", produced_at=now,
-                                              produced_by="a")
+        id1 = repo_releases.insert_gh_release(version="v0.1.0", produced_at=now, produced_by="a")
         repo_releases.supersede_prior_gh_releases(except_id=-1, at=now)
-        repo_releases.insert_gh_release(version="v0.2.0", produced_at=now,
-                                        produced_by="a")
+        repo_releases.insert_gh_release(version="v0.2.0", produced_at=now, produced_by="a")
     found = repo_releases.gh_release_by_version("v0.1.0")
     assert found is not None
     assert found["id"] == id1
@@ -184,6 +243,7 @@ def test_gh_release_by_version_finds_superseded(fresh_db):
 def test_content_hash_constraints(fresh_db):
     """zip_bytes must be > 0 and coverage_ayahs must be in [0, 6236]."""
     import sqlite3
+
     now = _now()
     with db.transaction():
         slug = _seed_minimal_delivery()
@@ -191,16 +251,26 @@ def test_content_hash_constraints(fresh_db):
     with pytest.raises(sqlite3.IntegrityError):
         with db.transaction():
             repo_releases.insert_gh_release_recitation(
-                release_id=rel_id, slug=slug,
-                catalog_snapshot={"slug": slug}, zip_sha256="abc", zip_bytes=0,
-                coverage_ayahs=6236, content_hash="def", ts_version="1",
+                release_id=rel_id,
+                slug=slug,
+                catalog_snapshot={"slug": slug},
+                zip_sha256="abc",
+                zip_bytes=0,
+                coverage_ayahs=6236,
+                content_hash="def",
+                ts_version="1",
                 change_kind="added",
             )
     with pytest.raises(sqlite3.IntegrityError):
         with db.transaction():
             repo_releases.insert_gh_release_recitation(
-                release_id=rel_id, slug=slug,
-                catalog_snapshot={"slug": slug}, zip_sha256="abc", zip_bytes=1000,
+                release_id=rel_id,
+                slug=slug,
+                catalog_snapshot={"slug": slug},
+                zip_sha256="abc",
+                zip_bytes=1000,
                 coverage_ayahs=7000,
-                content_hash="def", ts_version="1", change_kind="added",
+                content_hash="def",
+                ts_version="1",
+                change_kind="added",
             )

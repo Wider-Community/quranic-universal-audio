@@ -8,6 +8,7 @@ trip through it — these tests assert the canonical Migration #5 shape
 pre-#5 ``peaks: list[list[float]]`` shape is rejected so a stale
 on-disk record can't ride into the live cache.
 """
+
 from __future__ import annotations
 
 import base64
@@ -15,7 +16,6 @@ import base64
 import pytest
 
 from qua_shared.schemas import PeaksRecord, parse_peaks_record
-
 
 # -- Sample record shapes -----------------------------------------------
 
@@ -117,7 +117,12 @@ def test_slim_record_emits_canonical_shape():
     m = PeaksRecord.model_validate(_slim_record())
     out = m.model_dump(exclude_none=True)
     assert set(out.keys()) == {
-        "op_id", "url", "start_ms", "end_ms", "bps", "peaks_b64",
+        "op_id",
+        "url",
+        "start_ms",
+        "end_ms",
+        "bps",
+        "peaks_b64",
     }
     # Pre-#5 legacy keys must not appear:
     for banned in ("peaks", "batch_id", "duration_ms", "saved_at_utc"):
@@ -131,6 +136,7 @@ def test_record_with_legacy_fields_strips_them_on_read(caplog):
     with a warning and ``model_extra`` stays empty so writers can't
     accidentally round-trip them back to disk."""
     import logging
+
     caplog.set_level(logging.INFO, logger="qua_shared.schemas._extras")
     rec = _slim_record()
     rec["batch_id"] = "legacy-batch"

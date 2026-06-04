@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from services import db
 from services.db import repo_activity
+
 from ._helpers import seed_user
 
 

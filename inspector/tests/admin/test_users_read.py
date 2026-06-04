@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 from services import db
 from services.admin import users as users_service
 from services.db import _serde, repo_admin_users
@@ -76,8 +78,9 @@ def test_zero_action_user_still_listed(seed_role):
 def test_detail_outcome_and_stats(seed_role, seed_state):
     from datetime import datetime, timezone
 
-    from services.db import repo_claims
     from tests.conftest import _seed_delivery_chain
+
+    from services.db import repo_claims
 
     seed_role("rev", login="rev", role="contributor")
     # open claim → "claimed, open now". Not marked-ready so it doesn't add a
@@ -90,9 +93,9 @@ def test_detail_outcome_and_stats(seed_role, seed_state):
         marked_ready=False,
     )
     # a closed-as-published claim row for history/turnaround
-    claimed_at = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-    marked_at = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-    released_at = datetime(2026, 1, 2, 0, 0, 0, tzinfo=timezone.utc)
+    claimed_at = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+    marked_at = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    released_at = datetime(2026, 1, 2, 0, 0, 0, tzinfo=UTC)
     with db.transaction() as conn:
         _seed_delivery_chain(conn, "pubS")
         repo_claims.open_claim(

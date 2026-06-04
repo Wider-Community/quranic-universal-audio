@@ -10,14 +10,13 @@ These tests pin both halves so neither can silently regress.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 
 from qua_shared.schemas import Actor, AudioCategory, Delivery, ReciterEntry, Role
 from services.reference import timestamps as ts_manifest
 from services.state import state as state_service
-
 
 _OWNER = Actor(hf_user_id="owner-1", login_at_time="owner", role=Role.OWNER)
 
@@ -42,15 +41,22 @@ def _seed_marked_ready(slug: str = "rec_a") -> None:
 
     _seed_catalog(
         reciters=[ReciterEntry(reciter_id=slug, name_en="Reciter A")],
-        deliveries=[Delivery(
-            slug=slug, reciter_id=slug, riwayah="hafs", style="mur",
-            source="src", channel="ch", audio_category=AudioCategory.BY_SURAH,
-            chapter_count=114, added_at=datetime.now(timezone.utc),
-            added_by_hf_id="seed",
-        )],
+        deliveries=[
+            Delivery(
+                slug=slug,
+                reciter_id=slug,
+                riwayah="hafs",
+                style="mur",
+                source="src",
+                channel="ch",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=datetime.now(UTC),
+                added_by_hf_id="seed",
+            )
+        ],
     )
-    _seed_state(slug, state="under_review", assignee_hf_id="u-rev",
-                marked_ready=True)
+    _seed_state(slug, state="under_review", assignee_hf_id="u-rev", marked_ready=True)
 
 
 def test_transition_drops_manifest_cache():
@@ -59,7 +65,8 @@ def test_transition_drops_manifest_cache():
     assert ts_manifest._built is True
 
     state_service.transition(
-        "rec_a", "reciter.published",
+        "rec_a",
+        "reciter.published",
         actor=_OWNER,
         payload={"job_id": "job-1"},
     )
@@ -74,12 +81,11 @@ def test_transition_invokes_invalidate_hook(monkeypatch):
     _seed_marked_ready("rec_a")
     calls: list[int] = []
     real = ts_manifest.invalidate
-    monkeypatch.setattr(
-        ts_manifest, "invalidate", lambda: (calls.append(1), real())[1]
-    )
+    monkeypatch.setattr(ts_manifest, "invalidate", lambda: (calls.append(1), real())[1])
 
     state_service.transition(
-        "rec_a", "reciter.published",
+        "rec_a",
+        "reciter.published",
         actor=_OWNER,
         payload={"job_id": "job-1"},
     )
@@ -101,7 +107,8 @@ def test_manifest_self_heals_on_db_seq_without_explicit_invalidate(monkeypatch):
     monkeypatch.setattr(ts_manifest, "invalidate", lambda: None)
 
     state_service.transition(
-        "rec_a", "reciter.published",
+        "rec_a",
+        "reciter.published",
         actor=_OWNER,
         payload={"job_id": "job-1"},
     )
@@ -119,7 +126,8 @@ def test_manifest_cache_hit_when_db_seq_unchanged(monkeypatch):
     calls: list[int] = []
     real_build = ts_manifest._build_manifest_dict
     monkeypatch.setattr(
-        ts_manifest, "_build_manifest_dict",
+        ts_manifest,
+        "_build_manifest_dict",
         lambda block: (calls.append(1), real_build(block))[1],
     )
     ts_manifest.manifest_bytes()  # same db_seq → no rebuild

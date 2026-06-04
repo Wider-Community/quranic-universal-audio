@@ -3,29 +3,120 @@
 The matrix is the source of truth listed in plan Appendix A. A flag flip
 shows up here as a one-line, deliberately reviewed diff.
 """
+
 from __future__ import annotations
 
 import pytest
 
 from services.validation.registry import IssueRegistry
 
-
 # Locked policy matrix from plan §Appendix A.
 # (canIgnore, autoSuppress, persistsIgnore, scope, card_type, severity)
 EXPECTED_MATRIX = {
-    "failed":            {"can_ignore": False, "auto_suppress": True,  "persists_ignore": False, "scope": "per_segment", "card_type": "generic",        "severity": "error"},
-    "missing_verses":    {"can_ignore": False, "auto_suppress": True,  "persists_ignore": False, "scope": "per_verse",   "card_type": "missingVerses",  "severity": "error"},
-    "missing_words":     {"can_ignore": False, "auto_suppress": False, "persists_ignore": False, "scope": "per_verse",   "card_type": "missingWords",   "severity": "error"},
-    "structural_errors": {"can_ignore": False, "auto_suppress": True,  "persists_ignore": False, "scope": "per_chapter", "card_type": "error",          "severity": "error"},
-    "low_confidence":    {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
-    "low_confidence_v2": {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
-    "repetitions":       {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
-    "audio_bleeding":    {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
-    "boundary_adj":      {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
-    "cross_verse":       {"can_ignore": False, "auto_suppress": False, "persists_ignore": False, "scope": "per_segment", "card_type": "generic",        "severity": "warning"},
-    "qalqala":           {"can_ignore": False, "auto_suppress": False, "persists_ignore": False, "scope": "per_segment", "card_type": "generic",        "severity": "info"},
-    "muqattaat":         {"can_ignore": False, "auto_suppress": False, "persists_ignore": False, "scope": "per_segment", "card_type": "generic",        "severity": "info"},
-    "basmala_amin":      {"can_ignore": True,  "auto_suppress": True,  "persists_ignore": True,  "scope": "per_segment", "card_type": "generic",        "severity": "info"},
+    "failed": {
+        "can_ignore": False,
+        "auto_suppress": True,
+        "persists_ignore": False,
+        "scope": "per_segment",
+        "card_type": "generic",
+        "severity": "error",
+    },
+    "missing_verses": {
+        "can_ignore": False,
+        "auto_suppress": True,
+        "persists_ignore": False,
+        "scope": "per_verse",
+        "card_type": "missingVerses",
+        "severity": "error",
+    },
+    "missing_words": {
+        "can_ignore": False,
+        "auto_suppress": False,
+        "persists_ignore": False,
+        "scope": "per_verse",
+        "card_type": "missingWords",
+        "severity": "error",
+    },
+    "structural_errors": {
+        "can_ignore": False,
+        "auto_suppress": True,
+        "persists_ignore": False,
+        "scope": "per_chapter",
+        "card_type": "error",
+        "severity": "error",
+    },
+    "low_confidence": {
+        "can_ignore": True,
+        "auto_suppress": True,
+        "persists_ignore": True,
+        "scope": "per_segment",
+        "card_type": "generic",
+        "severity": "warning",
+    },
+    "low_confidence_v2": {
+        "can_ignore": True,
+        "auto_suppress": True,
+        "persists_ignore": True,
+        "scope": "per_segment",
+        "card_type": "generic",
+        "severity": "warning",
+    },
+    "repetitions": {
+        "can_ignore": True,
+        "auto_suppress": True,
+        "persists_ignore": True,
+        "scope": "per_segment",
+        "card_type": "generic",
+        "severity": "warning",
+    },
+    "audio_bleeding": {
+        "can_ignore": True,
+        "auto_suppress": True,
+        "persists_ignore": True,
+        "scope": "per_segment",
+        "card_type": "generic",
+        "severity": "warning",
+    },
+    "boundary_adj": {
+        "can_ignore": True,
+        "auto_suppress": True,
+        "persists_ignore": True,
+        "scope": "per_segment",
+        "card_type": "generic",
+        "severity": "warning",
+    },
+    "cross_verse": {
+        "can_ignore": False,
+        "auto_suppress": False,
+        "persists_ignore": False,
+        "scope": "per_segment",
+        "card_type": "generic",
+        "severity": "warning",
+    },
+    "qalqala": {
+        "can_ignore": False,
+        "auto_suppress": False,
+        "persists_ignore": False,
+        "scope": "per_segment",
+        "card_type": "generic",
+        "severity": "info",
+    },
+    "muqattaat": {
+        "can_ignore": False,
+        "auto_suppress": False,
+        "persists_ignore": False,
+        "scope": "per_segment",
+        "card_type": "generic",
+        "severity": "info",
+    },
+    "basmala_amin": {
+        "can_ignore": True,
+        "auto_suppress": True,
+        "persists_ignore": True,
+        "scope": "per_segment",
+        "card_type": "generic",
+        "severity": "info",
+    },
 }
 
 EXPECTED_CATEGORIES = set(EXPECTED_MATRIX.keys())

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sys
 import tempfile
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from services.storage import storage_paths

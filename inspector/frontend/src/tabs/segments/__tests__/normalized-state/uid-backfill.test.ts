@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest';
 
 import { backfillSegmentUids, deriveUid } from '../../domain/identity';
 
-const legacySeg = (chapter: number, idx: number, startMs: number) => ({
+const legacySeg = (
+  chapter: number,
+  idx: number,
+  startMs: number,
+): { segment_uid?: string; time_start: number; time_end: number; matched_ref: string; matched_text: string; confidence: number } => ({
   time_start: startMs,
   time_end: startMs + 1000,
   matched_ref: `${chapter}:1:1-${chapter}:1:1`,

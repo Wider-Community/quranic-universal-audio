@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { applyCommand } from '../../domain/apply-command';
-import type { EditReferenceCommand, SegmentCommand, TrimCommand } from '../../domain/command';
+import type { EditReferenceCommand, TrimCommand } from '../../domain/command';
 import { CAN_IGNORE_CATEGORIES } from '../helpers/categories';
 import { makeApplyCommandState, makeSegment } from '../helpers/make-segment';
 
@@ -28,7 +28,7 @@ describe('command/auto-suppress (decoupled)', () => {
         sourceCategory: cat,
       };
       const r = applyCommand(baseState(), cmd);
-      const updated = r.nextState.byId?.['uid-as'] ?? r.nextState['uid-as'];
+      const updated = r.nextState.byId['uid-as']!;
       expect(updated.ignored_categories ?? []).not.toContain(cat);
     });
   }
@@ -53,7 +53,7 @@ describe('command/auto-suppress (decoupled)', () => {
       sourceCategory: 'audio_bleeding',
     };
     const r = applyCommand(baseState(), cmd);
-    const updated = r.nextState.byId?.['uid-as'] ?? r.nextState['uid-as'];
+    const updated = r.nextState.byId['uid-as']!;
     expect(updated.ignored_categories ?? []).not.toContain('audio_bleeding');
   });
 
@@ -64,7 +64,7 @@ describe('command/auto-suppress (decoupled)', () => {
       delta: { time_start: 100, time_end: 900 },
     };
     const r = applyCommand(baseState(), cmd);
-    const updated = r.nextState.byId?.['uid-as'] ?? r.nextState['uid-as'];
+    const updated = r.nextState.byId['uid-as']!;
     expect(updated.ignored_categories ?? []).toEqual([]);
   });
 
@@ -82,7 +82,7 @@ describe('command/auto-suppress (decoupled)', () => {
       sourceCategory: 'boundary_adj',
     };
     const r = applyCommand(state, cmd);
-    const updated = r.nextState.byId?.['uid-as'] ?? r.nextState['uid-as'];
+    const updated = r.nextState.byId['uid-as']!;
     expect(updated.ignored_categories).toEqual(['low_confidence']);
   });
 });

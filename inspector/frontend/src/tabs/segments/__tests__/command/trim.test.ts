@@ -19,7 +19,7 @@ const baseCmd: TrimCommand = {
 describe('command/trim', () => {
   it('op produces expected segment mutations', () => {
     const r = applyCommand(baseState(), baseCmd);
-    const updated = r.nextState.byId?.['uid-trim'] ?? r.nextState['uid-trim'];
+    const updated = r.nextState.byId['uid-trim']!;
     expect(updated.time_start).toBe(250);
   });
 
@@ -37,7 +37,7 @@ describe('command/trim', () => {
   it('op records sourceCategory as op_context_category but does not mutate ignored_categories', () => {
     const cmd: TrimCommand = { ...baseCmd, sourceCategory: 'low_confidence' };
     const r = applyCommand(baseState(), cmd);
-    const updated = r.nextState.byId?.['uid-trim'] ?? r.nextState['uid-trim'];
+    const updated = r.nextState.byId['uid-trim']!;
     expect(r.operation.op_context_category).toBe('low_confidence');
     expect(updated.ignored_categories ?? []).not.toContain('low_confidence');
   });

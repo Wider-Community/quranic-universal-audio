@@ -8,6 +8,8 @@ regression (a fresh timestamp each visit).
 
 from __future__ import annotations
 
+from datetime import UTC
+
 from qua_shared.schemas import Actor, Role
 from services.db import repo_transitions
 from services.public_state import _bucket_dates_for_slug
@@ -34,9 +36,10 @@ def test_bucket_dates_collapse_and_reentry(fresh_db, monkeypatch):
     make duplicated wall-clock ticks pass the ``sorted`` check trivially.
     """
     from datetime import datetime, timedelta, timezone
+
     from services.db import _serde as _t_serde
 
-    _clock = [datetime(2026, 6, 1, tzinfo=timezone.utc)]
+    _clock = [datetime(2026, 6, 1, tzinfo=UTC)]
 
     def _advancing_now() -> datetime:
         _clock[0] = _clock[0] + timedelta(seconds=1)

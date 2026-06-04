@@ -92,7 +92,6 @@ describe('buildSchemaDescriptor', () => {
             channel: 'tarteel',
             riwayah: 'hafs',
             style: 'murattal',
-            status: 'published',
             coverage_kind: 'full',
         });
         const d = buildSchemaDescriptor([row]);

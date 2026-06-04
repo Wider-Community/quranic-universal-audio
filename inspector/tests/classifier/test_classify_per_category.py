@@ -4,12 +4,12 @@ Each test loads a fixture, runs the unified backend classifier, and
 compares per-segment categories to the baseline in
 ``expected/<fixture>.classify.json``.
 """
+
 from __future__ import annotations
 
 import pytest
 
 from services.validation.classifier import classify_segment
-
 
 FIXTURES = ["112-ikhlas", "113-falaq", "synthetic-structural", "synthetic-classifier"]
 
@@ -19,9 +19,7 @@ def _classify(seg: dict, **ctx) -> list[str]:
 
 
 @pytest.mark.parametrize("fixture_name", FIXTURES, ids=FIXTURES)
-def test_each_category_classified_in_expected_segments(
-    fixture_name, load_fixture, load_expected
-):
+def test_each_category_classified_in_expected_segments(fixture_name, load_fixture, load_expected):
     fixture = load_fixture(fixture_name)
     expected = load_expected(fixture_name, "classify")
     by_uid = expected["by_segment_uid"]
@@ -63,9 +61,7 @@ def test_low_confidence_detail_threshold_is_1_00():
     just_below = _classify(
         {**base, "confidence": 0.999}, entry_ref="1", is_by_ayah=False, detail=True
     )
-    perfect = _classify(
-        {**base, "confidence": 1.00}, entry_ref="1", is_by_ayah=False, detail=True
-    )
+    perfect = _classify({**base, "confidence": 1.00}, entry_ref="1", is_by_ayah=False, detail=True)
 
     assert "low_confidence_detail" in just_below
     assert "low_confidence_detail" not in perfect
@@ -107,9 +103,7 @@ def test_boundary_adj_classify_structural_only():
         "confidence": 1.0,
     }
     plain = _classify(seg, entry_ref="1", is_by_ayah=False, canonical=None)
-    with_canonical = _classify(
-        seg, entry_ref="1", is_by_ayah=False, canonical=["dummy"]
-    )
+    with_canonical = _classify(seg, entry_ref="1", is_by_ayah=False, canonical=["dummy"])
     assert ("boundary_adj" in plain) == ("boundary_adj" in with_canonical)
 
 
@@ -163,32 +157,34 @@ def test_basmala_amin_detail_uses_last_segment_overlapping_1_7():
     """Basmala + Amin shows 1:1 plus only the latest card overlapping 1:7."""
     from services.validation.detail import _build_detail_lists  # type: ignore
 
-    entries = [{
-        "ref": "1",
-        "segments": [
-            {
-                "segment_uid": "one-one",
-                "matched_ref": "1:1:1-1:1:1",
-                "confidence": 1.0,
-                "time_start": 0,
-                "time_end": 1000,
-            },
-            {
-                "segment_uid": "one-seven-a",
-                "matched_ref": "1:7:1-1:7:2",
-                "confidence": 1.0,
-                "time_start": 1000,
-                "time_end": 2000,
-            },
-            {
-                "segment_uid": "one-seven-b",
-                "matched_ref": "1:7:3-1:7:4",
-                "confidence": 1.0,
-                "time_start": 2000,
-                "time_end": 3000,
-            },
-        ],
-    }]
+    entries = [
+        {
+            "ref": "1",
+            "segments": [
+                {
+                    "segment_uid": "one-one",
+                    "matched_ref": "1:1:1-1:1:1",
+                    "confidence": 1.0,
+                    "time_start": 0,
+                    "time_end": 1000,
+                },
+                {
+                    "segment_uid": "one-seven-a",
+                    "matched_ref": "1:7:1-1:7:2",
+                    "confidence": 1.0,
+                    "time_start": 1000,
+                    "time_end": 2000,
+                },
+                {
+                    "segment_uid": "one-seven-b",
+                    "matched_ref": "1:7:3-1:7:4",
+                    "confidence": 1.0,
+                    "time_start": 2000,
+                    "time_end": 3000,
+                },
+            ],
+        }
+    ]
 
     detail = _build_detail_lists(
         entries,
@@ -214,34 +210,36 @@ def test_basmala_amin_detail_does_not_promote_when_last_1_7_suppressed():
     """
     from services.validation.detail import _build_detail_lists  # type: ignore
 
-    entries = [{
-        "ref": "1",
-        "segments": [
-            {
-                "segment_uid": "one-one",
-                "matched_ref": "1:1:1-1:1:1",
-                "confidence": 1.0,
-                "time_start": 0,
-                "time_end": 1000,
-            },
-            {
-                "segment_uid": "one-seven-a",
-                "matched_ref": "1:7:1-1:7:2",
-                "confidence": 1.0,
-                "time_start": 1000,
-                "time_end": 2000,
-            },
-            {
-                # Canonical last-1:7 candidate, marked resolved-by-edit:
-                "segment_uid": "one-seven-b",
-                "matched_ref": "1:7:3-1:7:4",
-                "confidence": 1.0,
-                "time_start": 2000,
-                "time_end": 3000,
-                "_resolved_by_edit": {"basmala_amin"},
-            },
-        ],
-    }]
+    entries = [
+        {
+            "ref": "1",
+            "segments": [
+                {
+                    "segment_uid": "one-one",
+                    "matched_ref": "1:1:1-1:1:1",
+                    "confidence": 1.0,
+                    "time_start": 0,
+                    "time_end": 1000,
+                },
+                {
+                    "segment_uid": "one-seven-a",
+                    "matched_ref": "1:7:1-1:7:2",
+                    "confidence": 1.0,
+                    "time_start": 1000,
+                    "time_end": 2000,
+                },
+                {
+                    # Canonical last-1:7 candidate, marked resolved-by-edit:
+                    "segment_uid": "one-seven-b",
+                    "matched_ref": "1:7:3-1:7:4",
+                    "confidence": 1.0,
+                    "time_start": 2000,
+                    "time_end": 3000,
+                    "_resolved_by_edit": {"basmala_amin"},
+                },
+            ],
+        }
+    ]
 
     detail = _build_detail_lists(
         entries,
@@ -260,26 +258,28 @@ def test_basmala_amin_detail_drops_first_1_1_when_suppressed():
     """Suppressing the canonical first-1:1 seg leaves the slot empty too."""
     from services.validation.detail import _build_detail_lists  # type: ignore
 
-    entries = [{
-        "ref": "1",
-        "segments": [
-            {
-                "segment_uid": "one-one",
-                "matched_ref": "1:1:1-1:1:1",
-                "confidence": 1.0,
-                "time_start": 0,
-                "time_end": 1000,
-                "_resolved_by_edit": {"basmala_amin"},
-            },
-            {
-                "segment_uid": "one-seven",
-                "matched_ref": "1:7:1-1:7:4",
-                "confidence": 1.0,
-                "time_start": 1000,
-                "time_end": 2000,
-            },
-        ],
-    }]
+    entries = [
+        {
+            "ref": "1",
+            "segments": [
+                {
+                    "segment_uid": "one-one",
+                    "matched_ref": "1:1:1-1:1:1",
+                    "confidence": 1.0,
+                    "time_start": 0,
+                    "time_end": 1000,
+                    "_resolved_by_edit": {"basmala_amin"},
+                },
+                {
+                    "segment_uid": "one-seven",
+                    "matched_ref": "1:7:1-1:7:4",
+                    "confidence": 1.0,
+                    "time_start": 1000,
+                    "time_end": 2000,
+                },
+            ],
+        }
+    ]
 
     detail = _build_detail_lists(
         entries,
@@ -296,19 +296,21 @@ def test_basmala_amin_detail_omits_neighboring_fatiha_verses():
     """The accordion includes 1:1 and 1:7 but not 1:2 through 1:6."""
     from services.validation.detail import _build_detail_lists  # type: ignore
 
-    entries = [{
-        "ref": "1",
-        "segments": [
-            {
-                "segment_uid": f"one-{ayah}",
-                "matched_ref": f"1:{ayah}:1-1:{ayah}:1",
-                "confidence": 1.0,
-                "time_start": ayah * 1000,
-                "time_end": (ayah + 1) * 1000,
-            }
-            for ayah in range(1, 8)
-        ],
-    }]
+    entries = [
+        {
+            "ref": "1",
+            "segments": [
+                {
+                    "segment_uid": f"one-{ayah}",
+                    "matched_ref": f"1:{ayah}:1-1:{ayah}:1",
+                    "confidence": 1.0,
+                    "time_start": ayah * 1000,
+                    "time_end": (ayah + 1) * 1000,
+                }
+                for ayah in range(1, 8)
+            ],
+        }
+    ]
 
     detail = _build_detail_lists(
         entries,
@@ -321,9 +323,11 @@ def test_basmala_amin_detail_omits_neighboring_fatiha_verses():
     assert [item["segment_uid"] for item in detail["basmala_amin"]] == ["one-1", "one-7"]
 
 
-def _missing_words_for_entries(entries: list[dict], word_counts: dict[tuple[int, int], int]) -> list[dict]:
-    from services.validation.detail import _build_detail_lists  # type: ignore
+def _missing_words_for_entries(
+    entries: list[dict], word_counts: dict[tuple[int, int], int]
+) -> list[dict]:
     from services.validation._missing import _build_missing_words  # type: ignore
+    from services.validation.detail import _build_detail_lists  # type: ignore
 
     detail = _build_detail_lists(
         entries,
@@ -332,44 +336,48 @@ def _missing_words_for_entries(entries: list[dict], word_counts: dict[tuple[int,
         canonical=None,
         single_word_verses=set(),
     )
-    return _build_missing_words(
-        detail["verse_segments"], word_counts, detail["sequence_gaps"]
-    )
+    return _build_missing_words(detail["verse_segments"], word_counts, detail["sequence_gaps"])
 
 
 def test_missing_words_includes_forward_jump_even_when_words_are_covered_later():
     """A forward continuation after backtrack must not skip words."""
-    entries = [{
-        "ref": "1",
-        "segments": [
-            {"matched_ref": "1:1:1-1:1:10", "confidence": 1.0},
-            {"matched_ref": "1:1:5-1:1:7", "confidence": 1.0},
-            {"matched_ref": "1:1:11-1:1:15", "confidence": 1.0},
-        ],
-    }]
+    entries = [
+        {
+            "ref": "1",
+            "segments": [
+                {"matched_ref": "1:1:1-1:1:10", "confidence": 1.0},
+                {"matched_ref": "1:1:5-1:1:7", "confidence": 1.0},
+                {"matched_ref": "1:1:11-1:1:15", "confidence": 1.0},
+            ],
+        }
+    ]
 
     missing = _missing_words_for_entries(entries, {(1, 1): 15})
 
-    assert missing == [{
-        "verse_key": "1:1",
-        "chapter": 1,
-        "segment_uid": None,
-        "msg": "missing words in sequence: [8, 9, 10]",
-        "missing_words": [8, 9, 10],
-        "seg_indices": [1, 2],
-        "sequence_gap": True,
-    }]
+    assert missing == [
+        {
+            "verse_key": "1:1",
+            "chapter": 1,
+            "segment_uid": None,
+            "msg": "missing words in sequence: [8, 9, 10]",
+            "missing_words": [8, 9, 10],
+            "seg_indices": [1, 2],
+            "sequence_gap": True,
+        }
+    ]
 
 
 def test_missing_words_includes_whole_verse_forward_jump():
     """Whole-verse skips still surface in missing_words at the jump boundary."""
-    entries = [{
-        "ref": "1",
-        "segments": [
-            {"matched_ref": "1:1:1-1:1:4", "confidence": 1.0},
-            {"matched_ref": "1:3:1-1:3:4", "confidence": 1.0},
-        ],
-    }]
+    entries = [
+        {
+            "ref": "1",
+            "segments": [
+                {"matched_ref": "1:1:1-1:1:4", "confidence": 1.0},
+                {"matched_ref": "1:3:1-1:3:4", "confidence": 1.0},
+            ],
+        }
+    ]
 
     missing = _missing_words_for_entries(entries, {(1, 1): 4, (1, 2): 3, (1, 3): 4})
 
@@ -382,27 +390,31 @@ def test_missing_words_includes_whole_verse_forward_jump():
 
 def test_missing_words_allows_backward_repetition_without_forward_skip():
     """Backtracking is valid unless a later segment jumps over unseen words."""
-    entries = [{
-        "ref": "1",
-        "segments": [
-            {"matched_ref": "1:1:1-1:1:5", "confidence": 1.0},
-            {"matched_ref": "1:1:1-1:1:5", "confidence": 1.0},
-            {"matched_ref": "1:1:6-1:1:10", "confidence": 1.0},
-        ],
-    }]
+    entries = [
+        {
+            "ref": "1",
+            "segments": [
+                {"matched_ref": "1:1:1-1:1:5", "confidence": 1.0},
+                {"matched_ref": "1:1:1-1:1:5", "confidence": 1.0},
+                {"matched_ref": "1:1:6-1:1:10", "confidence": 1.0},
+            ],
+        }
+    ]
 
     assert _missing_words_for_entries(entries, {(1, 1): 10}) == []
 
 
 def test_missing_words_dedupes_coverage_and_sequence_gap_for_same_range():
     """Coverage missing words and order-gap missing words share one card when identical."""
-    entries = [{
-        "ref": "1",
-        "segments": [
-            {"matched_ref": "1:1:1-1:1:1", "confidence": 1.0},
-            {"matched_ref": "1:1:5-1:1:7", "confidence": 1.0},
-        ],
-    }]
+    entries = [
+        {
+            "ref": "1",
+            "segments": [
+                {"matched_ref": "1:1:1-1:1:1", "confidence": 1.0},
+                {"matched_ref": "1:1:5-1:1:7", "confidence": 1.0},
+            ],
+        }
+    ]
 
     missing = _missing_words_for_entries(entries, {(1, 1): 7})
 
@@ -414,16 +426,18 @@ def test_missing_words_dedupes_coverage_and_sequence_gap_for_same_range():
 
 def test_missing_words_splits_cross_verse_partial_forward_jump():
     """Cross-verse order gaps are split into per-verse missing-word cards."""
-    entries = [{
-        "ref": "1",
-        "segments": [
-            {"matched_ref": "1:1:1-1:1:2", "confidence": 1.0},
-            {"matched_ref": "1:3:3-1:3:4", "confidence": 1.0},
-            {"matched_ref": "1:1:3-1:1:4", "confidence": 1.0},
-            {"matched_ref": "1:2:1-1:2:3", "confidence": 1.0},
-            {"matched_ref": "1:3:1-1:3:2", "confidence": 1.0},
-        ],
-    }]
+    entries = [
+        {
+            "ref": "1",
+            "segments": [
+                {"matched_ref": "1:1:1-1:1:2", "confidence": 1.0},
+                {"matched_ref": "1:3:3-1:3:4", "confidence": 1.0},
+                {"matched_ref": "1:1:3-1:1:4", "confidence": 1.0},
+                {"matched_ref": "1:2:1-1:2:3", "confidence": 1.0},
+                {"matched_ref": "1:3:1-1:3:2", "confidence": 1.0},
+            ],
+        }
+    ]
 
     missing = _missing_words_for_entries(entries, {(1, 1): 4, (1, 2): 3, (1, 3): 4})
 
@@ -460,15 +474,17 @@ def test_missing_words_splits_cross_verse_partial_forward_jump():
 
 
 def test_missing_words_orders_sequence_gaps_by_quran_position():
-    entries = [{
-        "ref": "1",
-        "segments": [
-            {"matched_ref": "1:1:1-1:1:1", "confidence": 1.0},
-            {"matched_ref": "1:3:2-1:3:2", "confidence": 1.0},
-            {"matched_ref": "1:2:1-1:2:1", "confidence": 1.0},
-            {"matched_ref": "1:3:1-1:3:1", "confidence": 1.0},
-        ],
-    }]
+    entries = [
+        {
+            "ref": "1",
+            "segments": [
+                {"matched_ref": "1:1:1-1:1:1", "confidence": 1.0},
+                {"matched_ref": "1:3:2-1:3:2", "confidence": 1.0},
+                {"matched_ref": "1:2:1-1:2:1", "confidence": 1.0},
+                {"matched_ref": "1:3:1-1:3:1", "confidence": 1.0},
+            ],
+        }
+    ]
 
     missing = _missing_words_for_entries(entries, {(1, 1): 1, (1, 2): 1, (1, 3): 2})
 

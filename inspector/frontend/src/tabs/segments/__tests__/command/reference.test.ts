@@ -20,7 +20,7 @@ const baseCmd: EditReferenceCommand = {
 describe('command/reference', () => {
   it('op produces expected segment mutations', () => {
     const r = applyCommand(baseState(), baseCmd);
-    const updated = r.nextState.byId?.['uid-ref'] ?? r.nextState['uid-ref'];
+    const updated = r.nextState.byId['uid-ref']!;
     expect(updated.matched_ref).toBe('1:2:1-1:2:1');
   });
 
@@ -37,7 +37,7 @@ describe('command/reference', () => {
   it('op records sourceCategory but does not mutate ignored_categories', () => {
     const cmd: EditReferenceCommand = { ...baseCmd, sourceCategory: 'audio_bleeding' };
     const r = applyCommand(baseState(), cmd);
-    const updated = r.nextState.byId?.['uid-ref'] ?? r.nextState['uid-ref'];
+    const updated = r.nextState.byId['uid-ref']!;
     expect(r.operation.op_context_category).toBe('audio_bleeding');
     expect(updated.ignored_categories ?? []).not.toContain('audio_bleeding');
   });

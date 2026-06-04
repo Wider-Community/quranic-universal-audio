@@ -7,9 +7,9 @@ import sqlite3
 import pytest
 
 from qua_shared.schemas import Actor, ProposedEdits, Role
-
 from services import db
 from services.db import repo_requests
+
 from ._helpers import seed_delivery
 
 
@@ -30,7 +30,7 @@ def test_submit_get_pending_roundtrip(fresh_db):
     pr = repo_requests.get_pending("d1")
     assert pr is not None
     assert pr.requester.hf_user_id == "u1"
-    assert pr.requester.login_at_time == "alice"   # snapshot preserved
+    assert pr.requester.login_at_time == "alice"  # snapshot preserved
     assert pr.proposed_edits.riwayah == "warsh"
     assert pr.proposed_edits.recording_year == 1990
     assert pr.proposed_edits.has_any() is True
@@ -50,8 +50,12 @@ def test_one_pending_per_slug(fresh_db):
 
 def test_slugless_new_reciter_requests_allowed(fresh_db):
     with db.transaction():
-        repo_requests.submit(slug=None, requester=_actor(), kind="new_reciter",
-                             extra_payload={"new_reciter": {"name_en": "X"}})
+        repo_requests.submit(
+            slug=None,
+            requester=_actor(),
+            kind="new_reciter",
+            extra_payload={"new_reciter": {"name_en": "X"}},
+        )
         repo_requests.submit(slug=None, requester=_actor("u2", "bob"), kind="new_reciter")
     # both slugless requests exist...
     assert repo_requests.count_pending() == 2
@@ -64,14 +68,16 @@ def test_resolve_to_archive_and_get_for_slug(fresh_db):
     seed_delivery("d1")
     with db.transaction():
         repo_requests.submit(
-            slug="d1", requester=_actor(),
+            slug="d1",
+            requester=_actor(),
             proposed_edits=ProposedEdits(style="murattal"),
             auto_claim=True,
         )
     # accept (→ 'completed' archive)
     with db.transaction():
         ok = repo_requests.resolve(
-            slug="d1", status="accepted",
+            slug="d1",
+            status="accepted",
             transitioned_by=_actor("admin", "adm", Role.OWNER),
         )
     assert ok is True
@@ -88,7 +94,8 @@ def test_resolve_to_archive_and_get_for_slug(fresh_db):
         repo_requests.submit(slug="d1", requester=_actor())
     with db.transaction():
         repo_requests.resolve(
-            slug="d1", status="returned",
+            slug="d1",
+            status="returned",
             transitioned_by=_actor("admin", "adm", Role.OWNER),
             reason="needs better source",
         )

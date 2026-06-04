@@ -11,6 +11,7 @@ Covers:
 - LRU eviction on ``_KeyedCache.set`` evicts the oldest write and re-set
   promotes correctly.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -23,22 +24,24 @@ from services.storage.cache import (
     batch_changes_segment_set,
 )
 
-
 # ---------------------------------------------------------------------------
 # batch_changes_segment_set
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("op_type,expected", [
-    ("split_segment", True),
-    ("merge_segments", True),
-    ("auto_fix_missing_word", True),
-    ("delete_segment", True),
-    ("trim_segment", False),
-    ("edit_reference", False),
-    ("ignore_issue", False),
-    ("boundary_adjustment", False),
-])
+@pytest.mark.parametrize(
+    "op_type,expected",
+    [
+        ("split_segment", True),
+        ("merge_segments", True),
+        ("auto_fix_missing_word", True),
+        ("delete_segment", True),
+        ("trim_segment", False),
+        ("edit_reference", False),
+        ("ignore_issue", False),
+        ("boundary_adjustment", False),
+    ],
+)
 def test_batch_changes_segment_set_by_op_type(op_type, expected):
     assert batch_changes_segment_set({"operations": [{"op_type": op_type}]}) is expected
 
@@ -56,11 +59,13 @@ def test_batch_changes_segment_set_empty_batch():
 
 def test_batch_changes_segment_set_mixed_ops():
     """Any one mutating op flips True even when other ops are non-mutating."""
-    batch = {"operations": [
-        {"op_type": "trim_segment"},
-        {"op_type": "split_segment"},
-        {"op_type": "edit_reference"},
-    ]}
+    batch = {
+        "operations": [
+            {"op_type": "trim_segment"},
+            {"op_type": "split_segment"},
+            {"op_type": "edit_reference"},
+        ]
+    }
     assert batch_changes_segment_set(batch) is True
 
 
@@ -111,12 +116,14 @@ def test_append_history_batch_does_not_mutate_caller_list():
 def _split_batch(parent_uid: str, *children: str, batch_id: str) -> dict:
     return {
         "batch_id": batch_id,
-        "operations": [{
-            "op_id": f"op-{batch_id}",
-            "op_type": "split_segment",
-            "targets_before": [{"segment_uid": parent_uid}],
-            "targets_after": [{"segment_uid": c} for c in children],
-        }],
+        "operations": [
+            {
+                "op_id": f"op-{batch_id}",
+                "op_type": "split_segment",
+                "targets_before": [{"segment_uid": parent_uid}],
+                "targets_after": [{"segment_uid": c} for c in children],
+            }
+        ],
     }
 
 
@@ -143,11 +150,14 @@ def test_split_group_index_byte_equal_after_save_append():
     index_after_append = build_split_group_index(slug)
 
     # Clear and rebuild from scratch with the full batch list.
-    cache.set_seg_history_batches(slug, [
-        _split_batch("A", "A1", "A2", batch_id="b1"),
-        _split_batch("A1", "A1a", "A1b", batch_id="b2"),
-        _split_batch("A2", "A2a", "A2b", batch_id="b3"),
-    ])
+    cache.set_seg_history_batches(
+        slug,
+        [
+            _split_batch("A", "A1", "A2", batch_id="b1"),
+            _split_batch("A1", "A1a", "A1b", batch_id="b2"),
+            _split_batch("A2", "A2a", "A2b", batch_id="b3"),
+        ],
+    )
     cache.pop_seg_split_group_index(slug)
     index_fresh = build_split_group_index(slug)
 
@@ -194,7 +204,7 @@ def test_keyed_cache_re_set_promotes_existing_key():
     kc.set("b", 2)
     kc.set("c", 3)
     kc.set("a", 10)  # re-set a — promotes it.
-    kc.set("d", 4)   # b is now the oldest → evicted.
+    kc.set("d", 4)  # b is now the oldest → evicted.
     assert kc.get("a") == 10
     assert kc.get("b") is None
     assert kc.get("c") == 3

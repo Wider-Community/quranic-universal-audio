@@ -6,7 +6,7 @@ catalog-edit routes.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 
@@ -37,6 +37,7 @@ def fresh_catalog(tmp_path, monkeypatch):
     _hf_bucket.set_backend(backend)
 
     from tests.conftest import _seed_catalog
+
     _seed_catalog(
         vocab=Vocab(
             riwayat=[
@@ -67,7 +68,7 @@ def fresh_catalog(tmp_path, monkeypatch):
                 channel="ch1",
                 audio_category=AudioCategory.BY_SURAH,
                 chapter_count=114,
-                added_at=datetime.now(timezone.utc),
+                added_at=datetime.now(UTC),
                 added_by_hf_id="seed",
             ),
         ],
@@ -85,6 +86,7 @@ def _actor(role: str = "maintainer") -> Actor:
 def test_edit_delivery_updates_fields(fresh_catalog, monkeypatch):
     catalog_service, _ = fresh_catalog
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     catalog_service.edit_delivery(
@@ -106,6 +108,7 @@ def test_edit_delivery_no_op_when_values_unchanged(fresh_catalog, monkeypatch):
     catalog_service, _ = fresh_catalog
     from services import audit as audit_service
     from services import db as _db
+
     calls = []
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: calls.append(kw))
 
@@ -140,6 +143,7 @@ def test_edit_delivery_rejects_contributor(fresh_catalog):
 def test_edit_delivery_rejects_unknown_riwayah(fresh_catalog, monkeypatch):
     catalog_service, _ = fresh_catalog
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     with pytest.raises(catalog_service.InvalidCatalogChange):
@@ -153,6 +157,7 @@ def test_edit_delivery_rejects_unknown_riwayah(fresh_catalog, monkeypatch):
 def test_edit_delivery_audit_record_shape(fresh_catalog, monkeypatch):
     catalog_service, _ = fresh_catalog
     from services import audit as audit_service
+
     calls = []
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: calls.append(kw))
 

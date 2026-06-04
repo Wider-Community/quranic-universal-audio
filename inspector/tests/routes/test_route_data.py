@@ -68,7 +68,13 @@ def test_seg_config_validation_categories_match_registry(flask_client):
     # Pin concrete category names so a registry-shrink regression fails here
     # independently of the wiring assertion.
     pinned_subset = {
-        "failed", "low_confidence", "boundary_adj", "cross_verse",
-        "audio_bleeding", "repetitions", "muqattaat", "qalqala",
+        "failed",
+        "low_confidence",
+        "boundary_adj",
+        "cross_verse",
+        "audio_bleeding",
+        "repetitions",
+        "muqattaat",
+        "qalqala",
     }
     assert pinned_subset <= config_cats

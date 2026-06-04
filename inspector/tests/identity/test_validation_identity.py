@@ -1,4 +1,5 @@
 """Validation issue identity tests (IS-10, IS-11, MUST-9)."""
+
 from __future__ import annotations
 
 from pathlib import Path

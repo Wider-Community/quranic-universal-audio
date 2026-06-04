@@ -3,12 +3,13 @@
 Most of the command logic lives on the frontend; the backend ensures save
 acceptance + history record produces matching shapes.
 """
+
 from __future__ import annotations
 
 import json
 
-
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
 
 def test_save_payload_carries_op_log_in_canonical_shape(signed_in_client, tmp_reciter_dir):
     """Save payload includes a per-op `command` envelope describing the
@@ -78,6 +79,4 @@ def test_save_rejects_op_missing_command_envelope(signed_in_client, tmp_reciter_
         data=json.dumps(payload),
         headers=_HEADERS,
     )
-    assert res.status_code == 400, (
-        "save must reject payloads whose ops lack a `command` envelope"
-    )
+    assert res.status_code == 400, "save must reject payloads whose ops lack a `command` envelope"

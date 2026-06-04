@@ -98,7 +98,9 @@ def test_peaks_missing_file_returns_no_store(flask_client, tmp_reciter_dir):
     assert "no-store" in res.headers.get("Cache-Control", "")
 
 
-def test_peaks_response_cache_returns_same_body_on_repeat(flask_client, tmp_reciter_dir, monkeypatch):
+def test_peaks_response_cache_returns_same_body_on_repeat(
+    flask_client, tmp_reciter_dir, monkeypatch
+):
     """Second identical request hits the LRU cache — neither the per-URL peak
     reader nor the bucket is touched. Byte-equality alone would pass even if
     the cache were never hit (orjson is deterministic), so we positively

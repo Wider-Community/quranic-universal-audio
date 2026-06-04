@@ -12,8 +12,8 @@ describe('save patch field', () => {
       patch: { before: [{ segment_uid: 'a' }], after: [{ segment_uid: 'a' }], removedIds: [], insertedIds: [], affectedChapterIds: [1] },
     };
     const payload = buildPayloadFromCommandResult(result as any);
-    expect(payload.operations[0].patch).toBeTruthy();
-    expect((payload.operations[0].patch as any).before[0].segment_uid).toBe('a');
+    expect(payload.operations[0]!.patch).toBeTruthy();
+    expect((payload.operations[0]!.patch as any).before[0].segment_uid).toBe('a');
   });
 
   it('builder omits patch field when applyCommand produced none', () => {

@@ -8,14 +8,16 @@ let __uid_counter = 0;
 
 export interface FixtureSegment {
   segment_uid: string;
+  index: number;
+  entry_idx: number;
   time_start: number;
   time_end: number;
   matched_ref: string;
   matched_text: string;
   confidence: number;
+  audio_url: string;
   ignored_categories?: string[];
   wrap_word_ranges?: number[][];
-  audio_url?: string;
   ignored?: boolean;
   is_wasl?: boolean;
 }
@@ -29,11 +31,14 @@ export function makeSegment(
   const uid = overrides.segment_uid ?? `test-uid-${index}-${++__uid_counter}`;
   return {
     segment_uid: uid,
+    index,
+    entry_idx: 0,
     time_start: startMs,
     time_end: endMs,
     matched_ref: '1:1:1-1:1:1',
     matched_text: 'x',
     confidence: 1.0,
+    audio_url: '',
     ...overrides,
   };
 }

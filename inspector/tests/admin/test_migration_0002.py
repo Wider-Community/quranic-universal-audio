@@ -6,6 +6,7 @@ Without the simulate-and-upgrade test, inlining 0002 into 0001 would silently
 pass — only fresh DBs would get the additions; existing live DBs at
 user_version >= 1 would never replay 0001 and silently miss the new shape.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -31,9 +32,9 @@ def test_visitor_daily_table_exists():
 def test_new_indexes_exist():
     names = {
         r[0]
-        for r in db.get_conn().execute(
-            "SELECT name FROM sqlite_master WHERE type='index'"
-        ).fetchall()
+        for r in db.get_conn()
+        .execute("SELECT name FROM sqlite_master WHERE type='index'")
+        .fetchall()
     }
     assert {"ix_transitions_actor_ts", "ix_requests_requester", "ix_claims_assignee"} <= names
 
@@ -112,24 +113,28 @@ def test_existing_db_at_v1_gets_admin_users_additions():
     pre_users = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
     assert "last_login_at" not in pre_users
     assert "last_entry_at" not in pre_users
-    assert conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='visitor_daily'"
-    ).fetchone() is None
+    assert (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='visitor_daily'"
+        ).fetchone()
+        is None
+    )
 
     version = migrate.run_migrations(conn)
     assert version >= 2
 
     post_users = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
     assert {"last_login_at", "last_entry_at"} <= post_users
-    visitor_cols = {
-        r[1] for r in conn.execute("PRAGMA table_info(visitor_daily)").fetchall()
-    }
-    assert {"date", "signed_in_hits", "anon_hits", "unique_signed_in", "unique_anon"} <= visitor_cols
+    visitor_cols = {r[1] for r in conn.execute("PRAGMA table_info(visitor_daily)").fetchall()}
+    assert {
+        "date",
+        "signed_in_hits",
+        "anon_hits",
+        "unique_signed_in",
+        "unique_anon",
+    } <= visitor_cols
     index_names = {
-        r[0]
-        for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='index'"
-        ).fetchall()
+        r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'").fetchall()
     }
     assert {"ix_transitions_actor_ts", "ix_requests_requester", "ix_claims_assignee"} <= index_names
     conn.close()

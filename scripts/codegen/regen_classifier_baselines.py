@@ -8,12 +8,12 @@ Reads every fixture under ``inspector/tests/fixtures/segments/``, classifies
 via the backend's unified classifier, and writes the per-segment categories
 + category counts to ``expected/<fixture>.classify.json``. Idempotent.
 """
+
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES_DIR = REPO_ROOT / "inspector" / "tests" / "fixtures" / "segments"

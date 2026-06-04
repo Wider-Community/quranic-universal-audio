@@ -7,7 +7,6 @@ status is acked without publishing.
 
 from __future__ import annotations
 
-
 _URL = "/api/webhooks/ts-job-complete"
 _SECRET = "test-webhook-secret"
 
@@ -83,7 +82,8 @@ def test_webhook_notifies_on_failure_without_publishing(flask_client, monkeypatc
     published = _spy_complete(monkeypatch)
     noted: list[str] = []
     monkeypatch.setattr(
-        timestamps_jobs, "note_timestamps_job_failed",
+        timestamps_jobs,
+        "note_timestamps_job_failed",
         lambda slug: (noted.append(slug), {"slug": slug, "noted": True})[1],
     )
 
@@ -94,8 +94,8 @@ def test_webhook_notifies_on_failure_without_publishing(flask_client, monkeypatc
     )
 
     assert resp.status_code == 200
-    assert published == []        # a failed job is never published
-    assert noted == ["rec_a"]     # but it lights the Marked-ready dot
+    assert published == []  # a failed job is never published
+    assert noted == ["rec_a"]  # but it lights the Marked-ready dot
 
 
 def test_webhook_requires_slug_and_job_id(flask_client, monkeypatch):

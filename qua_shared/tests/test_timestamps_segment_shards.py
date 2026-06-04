@@ -17,9 +17,11 @@ import pytest
 
 from qua_shared.tests.conftest import (
     PROVENANCE as _BASE_PROVENANCE,
+)
+from qua_shared.tests.conftest import (
     _multi_verse_loopback,
-    _ok,
     _multi_verse_loopback_results,
+    _ok,
 )
 from qua_shared.timestamps_dedup import build_raw_v2
 from qua_shared.timestamps_shards import (
@@ -75,8 +77,15 @@ def test_meta_is_slim_v2():
     # category normalized: by_surah_audio -> by_surah
     assert meta["audio_category"] == "by_surah"
     # provenance retained when present
-    for k in ("padding", "beam", "method", "aligner_model", "shared_cmvn",
-              "audio_source", "created_at"):
+    for k in (
+        "padding",
+        "beam",
+        "method",
+        "aligner_model",
+        "shared_cmvn",
+        "audio_source",
+        "created_at",
+    ):
         assert k in meta
     assert meta["beam"] == 50 and meta["method"] == "kalpy"
     # excluded

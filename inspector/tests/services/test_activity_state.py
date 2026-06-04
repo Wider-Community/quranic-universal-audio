@@ -7,6 +7,8 @@ since the discovery surface is the Admin dashboard tabs.
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
 
 from qua_shared.schemas import Actor, Role
@@ -46,16 +48,13 @@ def test_delete_records_tombstone(fresh_state):
     from services.db import repo_transitions
 
     actor = _actor("u-O", role="owner", login="owen")
-    cutoff_iso = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
+    cutoff_iso = (datetime.now(UTC) - timedelta(seconds=5)).isoformat()
     fresh_state.delete("abc123", actor=actor, reason="content removed per request")
 
     snap = fresh_state.snapshot()
     assert snap.deleted == ["abc123"]
 
-    rows = [
-        r for r in repo_transitions.since(cutoff_iso)
-        if r["event"] == "admin.activity_deleted"
-    ]
+    rows = [r for r in repo_transitions.since(cutoff_iso) if r["event"] == "admin.activity_deleted"]
     assert len(rows) == 1
     assert rows[0]["reason"] == "content removed per request"
     assert rows[0]["payload"] == {"audit_id": "abc123"}
@@ -64,6 +63,7 @@ def test_delete_records_tombstone(fresh_state):
 
 def test_is_deleted_predicate(fresh_state, monkeypatch):
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda **kw: None)
 
     fresh_state.delete("abc123", actor=_actor("u-O", role="owner"), reason="ten chars+")
@@ -73,6 +73,7 @@ def test_is_deleted_predicate(fresh_state, monkeypatch):
 
 def test_delete_idempotent(fresh_state, monkeypatch):
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda **kw: None)
 
     actor = _actor("u-O", role="owner")
@@ -89,6 +90,7 @@ def test_delete_idempotent(fresh_state, monkeypatch):
 def test_writes_persist_to_substrate(fresh_state, monkeypatch):
     """Delete persists into the SQLite substrate (read back via snapshot)."""
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda **kw: None)
 
     fresh_state.delete("xyz789", actor=_actor("u-O", role="owner"), reason="ten chars+")

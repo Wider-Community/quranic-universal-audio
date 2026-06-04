@@ -3,12 +3,12 @@
 Every save-payload op must carry a typed ``command`` envelope whose
 ``type`` matches the enclosing ``op.type``; mismatches must 400.
 """
+
 from __future__ import annotations
 
 import json
 
 import pytest
-
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 

@@ -3,6 +3,7 @@
 Fresh-chain checks plus a simulated pre-0010 DB (user_version = 9) to regress
 inlining 0010 into 0001 (which would silently no-op on existing live DBs).
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -23,9 +24,9 @@ def test_guide_views_table_shape():
 def test_guide_views_user_index_exists():
     names = {
         r[0]
-        for r in db.get_conn().execute(
-            "SELECT name FROM sqlite_master WHERE type='index'"
-        ).fetchall()
+        for r in db.get_conn()
+        .execute("SELECT name FROM sqlite_master WHERE type='index'")
+        .fetchall()
     }
     assert "ix_guide_views_user" in names
 
@@ -60,9 +61,12 @@ def test_existing_db_at_v9_gets_guide_views():
         PRAGMA user_version = 9;
         """
     )
-    assert conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='guide_views'"
-    ).fetchone() is None
+    assert (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='guide_views'"
+        ).fetchone()
+        is None
+    )
 
     version = migrate.run_migrations(conn)
     assert version >= 10
@@ -70,10 +74,7 @@ def test_existing_db_at_v9_gets_guide_views():
     cols = {r[1] for r in conn.execute("PRAGMA table_info(guide_views)").fetchall()}
     assert {"view_key", "hf_user_id", "viewed_at"} <= cols
     index_names = {
-        r[0]
-        for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='index'"
-        ).fetchall()
+        r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'").fetchall()
     }
     assert "ix_guide_views_user" in index_names
     conn.close()
