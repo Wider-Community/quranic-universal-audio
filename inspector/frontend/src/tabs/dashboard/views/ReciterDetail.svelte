@@ -190,8 +190,8 @@
     interface ColSpec {
         key: 'riwayah' | 'style' | 'context' | 'year' | 'category' | 'coverage' | 'channel' | 'bitrate' | 'hours';
         label: string;
-        present: (d: PublicDelivery) => boolean;
-        value: (d: PublicDelivery) => string;
+        present: (_d: PublicDelivery) => boolean;
+        value: (_d: PublicDelivery) => string;
     }
 
     const ALL_COLS: ColSpec[] = [
@@ -211,7 +211,7 @@
         : [];
 
     // ---- filter-match partition (ignore status axis) ----
-    const AXIS_TAGS: Record<string, (d: PublicDelivery) => string[]> = {
+    const AXIS_TAGS: Record<string, (_d: PublicDelivery) => string[]> = {
         riwayah: (d) => [d.riwayah],
         style: (d) => [d.style],
         coverage: (d) => [d.coverage_kind],

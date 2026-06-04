@@ -6,9 +6,11 @@
 # Excluded paths come from inspector-data-storage.md §7.
 
 # --- Sibling Spaces / repos not needed in the inspector image ---
+# These are nested git repos that must never be baked into the image.
 .local/
 mfa_aligner/
-quranic_universal_aligner/
+quranic-universal-aligner/
+quranic-universal-timestamps/
 reciter_requests/
 
 # --- Runtime-shared packages ship at runtime. qua_shared/ + qua_jobs/ are

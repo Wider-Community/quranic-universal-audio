@@ -11,10 +11,10 @@ never has to reach a user); ``context`` carries display data (e.g. a humanized
 state label) and ``details`` carries structured payloads (e.g. mark-ready
 category counts). ``context``/``details`` are omitted when empty.
 
-This is intentionally tiny — a dict builder + a ``(jsonify, status)`` helper.
-No exception hierarchy, no Flask coupling beyond ``jsonify``. Routes/decorators
-that already ``return jsonify(...), status`` use ``api_error``; the app-level
-``StateError`` handlers (app.py) build the same shape via ``error_body``.
+This is intentionally tiny — a pure dict builder, no exception hierarchy and
+no Flask coupling. Routes/decorators wrap ``error_body`` into a response via
+``api_error`` (in ``utils/decorators.py``); the app-level ``StateError``
+handlers (app.py) build the same shape directly from ``error_body``.
 """
 
 from __future__ import annotations
@@ -67,17 +67,3 @@ def error_body(
     if details:
         body["details"] = details
     return body
-
-
-def api_error(
-    message: str,
-    *,
-    code: str,
-    status: int,
-    context: dict[str, Any] | None = None,
-    details: dict[str, Any] | None = None,
-):
-    """``(jsonify(error_body(...)), status)`` — the return value a Flask view/decorator emits."""
-    from flask import jsonify
-
-    return jsonify(error_body(message, code=code, context=context, details=details)), status

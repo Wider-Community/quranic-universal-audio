@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin dashboard — Requests compartment</title>
+    <link rel="stylesheet" href="../../../src/styles/tokens.css" />
+    <link rel="stylesheet" href="../admin-dashboard/shared.css" />
+    <link rel="stylesheet" href="./requests.css" />
+</head>
+<body>
+<div class="proto-page">
+    <div class="proto-header">
+        <div>
+            <h1>Admin dashboard — Requests compartment</h1>
+            <div class="sub">SHAPE / HIGH-FI · static mockup · data wiring later</div>
+        </div>
+        <div class="viewas">
+            View as:
+            <button id="as-owner" class="active" onclick="setView('owner')">Owner</button>
+            <button id="as-maint" onclick="setView('maintainer')">Maintainer</button>
+        </div>
+    </div>
+
+    <p class="intro">
+        Requests move out of the notifications rail into their own tab — a <strong>review queue</strong>,
+        not a feed. Every field comes from the <strong>requests</strong> table already in SQLite
+        (status · slug · requester · submitted_at · auto_claim · comments · proposed_edits in payload):
+        no schema change, only a batch list read. Click a row to review inline. Toggle
+        <strong>View as</strong> (top right) to see owner vs. maintainer requester redaction.
+    </p>
+
+    <!-- ============================================================
+         1 · OPEN REQUESTS — default, one row expanded for review
+         ============================================================ -->
+    <div class="section">1 · Open requests — review inline</div>
+    <p class="proto-caption">
+        Status facets with live counts (dulled when empty, same vocab as the Users role filters).
+        Each row triages on the four things that matter: <strong>whose recitation</strong> (Arabic name
+        leads, Latin paired), <strong>which combination</strong>, <strong>what they want changed</strong>,
+        and <strong>how long it has waited</strong>. The <strong>Maher al-Muaiqly</strong> row is expanded.
+    </p>
+    <div class="am">
+        <header class="am-header">
+            <h2 class="am-title">Admin dashboard</h2>
+            <nav class="am-tabs">
+                <button class="am-tab">Users <span class="tab-count">9</span></button>
+                <button class="am-tab active">Requests <span class="tab-count">4</span></button>
+                <button class="am-tab disabled">To publish</button>
+                <button class="am-tab disabled">Permissions</button>
+            </nav>
+            <button class="am-close" aria-label="Close">×</button>
+        </header>
+        <div class="am-body">
+            <div class="users-summary reqs-summary">
+                <div class="sum-group">
+                    <span class="sum-label">Requests</span>
+                    <span class="sum-item"><span class="n">4</span><span class="t">open</span></span>
+                    <span class="sum-item"><span class="n">31</span><span class="t">accepted</span></span>
+                    <span class="sum-item"><span class="n">7</span><span class="t">closed</span></span>
+                </div>
+                <span class="sum-sep"></span>
+                <div class="sum-group">
+                    <span class="sum-label">Oldest open</span>
+                    <span class="sum-item"><span class="n approx">9d</span><span class="t">abdulbasit · mujawwad</span></span>
+                </div>
+            </div>
+
+            <div class="users-toolbar">
+                <span class="search">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                        <circle cx="7" cy="7" r="5" /><line x1="11" y1="11" x2="14.5" y2="14.5" />
+                    </svg>
+                    <input type="text" placeholder="Search reciter or requester…" />
+                </span>
+                <div class="role-filters" id="hero-facets">
+                    <button class="chip active" onclick="setFacet(this,'open')">Open <span class="c-count">4</span></button>
+                    <button class="chip" onclick="setFacet(this,'accepted')">Accepted <span class="c-count">31</span></button>
+                    <button class="chip" onclick="setFacet(this,'returned')">Sent back <span class="c-count">5</span></button>
+                    <button class="chip" onclick="setFacet(this,'discarded')">Discarded <span class="c-count">2</span></button>
+                </div>
+                <span class="toolbar-spacer"></span>
+                <span class="toolbar-total">4 open</span>
+            </div>
+
+            <ol class="queue">
+                <!-- expanded: combo edit with proposed changes + conflict -->
+                <li class="req open">
+                    <button class="req-head" aria-expanded="true" onclick="toggleRow(this)">
+                        <span class="who">
+                            <span class="name-ar" dir="rtl">ماهر المعيقلي</span>
+                            <span class="name-en">Maher al-Muaiqly</span>
+                        </span>
+                        <span class="combo">Hafs <span class="sep">·</span> Murattal</span>
+                        <span class="changes"><span class="cnt">4</span> proposed changes</span>
+                        <span class="req-meta">
+                            <span class="req-tag self" title="Requester will be auto-assigned as reviewer when alignment completes">self-review</span>
+                            <span class="requester" data-owner="@yusuf_k" data-maint="a contributor">@yusuf_k</span>
+                            <span class="req-age">2d</span>
+                            <span class="chev">▸</span>
+                        </span>
+                    </button>
+                    <div class="review">
+                        <div class="review-grid">
+                            <div>
+                                <h4>Proposed changes</h4>
+                                <dl class="diff">
+                                    <div class="diff-row">
+                                        <dt>Riwayah</dt>
+                                        <dd><span class="from">Hafs</span><span class="arrow">→</span><span class="to">Warsh</span></dd>
+                                    </div>
+                                    <div class="diff-row">
+                                        <dt>Country</dt>
+                                        <dd><span class="from">—</span><span class="arrow">→</span><span class="to">Saudi Arabia<span class="iso">SA</span></span></dd>
+                                    </div>
+                                    <div class="diff-row rtl">
+                                        <dt>Arabic name</dt>
+                                        <dd><span class="to">ماهر بن حمد المعيقلي</span></dd>
+                                    </div>
+                                    <div class="diff-row">
+                                        <dt>Recording year</dt>
+                                        <dd><span class="from">—</span><span class="arrow">→</span><span class="to">2005</span></dd>
+                                    </div>
+                                </dl>
+                            </div>
+                            <div class="review-side">
+                                <p class="submitted-by" data-owner="Submitted by <strong>@yusuf_k</strong> · 2 days ago"
+                                   data-maint="Submitted by <strong>a contributor</strong> · 2 days ago">
+                                   Submitted by <strong>@yusuf_k</strong> · 2 days ago</p>
+                                <p class="note">
+                                    <span class="note-label">Requester note</span>
+                                    Pulled the Warsh set from the QuranicAudio mirror, higher bitrate
+                                    than the everyayah copy. Verified the first three surahs match.
+                                </p>
+                                <p class="notice">
+                                    Another delivery of Maher al-Muaiqly already uses (Warsh · Murattal).
+                                    The edit still applies on acceptance, you decide.
+                                </p>
+                                <div class="resolve">
+                                    <textarea placeholder="Reason (≥10 chars) — recorded in the audit log"></textarea>
+                                    <div class="resolve-foot">
+                                        <span class="resolve-hint">Required for both actions.</span>
+                                        <div class="resolve-actions">
+                                            <button class="btn">Send back</button>
+                                            <button class="btn danger">Discard</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </li>
+
+                <!-- metadata-only edit -->
+                <li class="req">
+                    <button class="req-head" aria-expanded="false" onclick="toggleRow(this)">
+                        <span class="who">
+                            <span class="name-ar" dir="rtl">سعد الغامدي</span>
+                            <span class="name-en">Saad al-Ghamdi</span>
+                        </span>
+                        <span class="combo">Hafs <span class="sep">·</span> Murattal</span>
+                        <span class="changes"><span class="cnt">1</span> proposed change</span>
+                        <span class="req-meta">
+                            <span class="requester" data-owner="@amina_t" data-maint="a contributor">@amina_t</span>
+                            <span class="req-age">5h</span>
+                            <span class="chev">▸</span>
+                        </span>
+                    </button>
+                </li>
+
+                <!-- no proposed edits — just a request to align -->
+                <li class="req">
+                    <button class="req-head" aria-expanded="false" onclick="toggleRow(this)">
+                        <span class="who">
+                            <span class="name-ar" dir="rtl">ياسر الدوسري</span>
+                            <span class="name-en">Yasser al-Dosari</span>
+                        </span>
+                        <span class="combo">Hafs <span class="sep">·</span> Murattal</span>
+                        <span class="changes"><span class="none">no metadata changes</span></span>
+                        <span class="req-meta">
+                            <span class="req-tag self" title="Requester will be auto-assigned as reviewer">self-review</span>
+                            <span class="requester" data-owner="@omar_dev" data-maint="a contributor">@omar_dev</span>
+                            <span class="req-age">1d</span>
+                            <span class="chev">▸</span>
+                        </span>
+                    </button>
+                </li>
+
+                <!-- stale -->
+                <li class="req">
+                    <button class="req-head" aria-expanded="false" onclick="toggleRow(this)">
+                        <span class="who">
+                            <span class="name-ar" dir="rtl">عبد الباسط عبد الصمد</span>
+                            <span class="name-en">Abdul Basit Abdus-Samad</span>
+                        </span>
+                        <span class="combo">Hafs <span class="sep">·</span> Mujawwad</span>
+                        <span class="changes"><span class="cnt">2</span> proposed changes</span>
+                        <span class="req-meta">
+                            <span class="requester" data-owner="@tariq99" data-maint="a contributor">@tariq99</span>
+                            <span class="req-age stale">9d</span>
+                            <span class="chev">▸</span>
+                        </span>
+                    </button>
+                </li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         2 · ARCHIVED FACET — read-only resolution
+         ============================================================ -->
+    <div class="section">2 · Closed requests — read-only history</div>
+    <p class="proto-caption">
+        Switching to <strong>Sent back</strong> / <strong>Discarded</strong> / <strong>Accepted</strong>
+        shows resolved rows with an outcome pill (hue + shape + label, colour-blind safe). Expanding a
+        closed row shows who resolved it, when, and why, no action controls. Accepted rows resolved by
+        the pipeline read <strong>by the alignment pipeline</strong>.
+    </p>
+    <div class="am short">
+        <header class="am-header">
+            <h2 class="am-title">Admin dashboard</h2>
+            <nav class="am-tabs">
+                <button class="am-tab">Users <span class="tab-count">9</span></button>
+                <button class="am-tab active">Requests <span class="tab-count">4</span></button>
+                <button class="am-tab disabled">To publish</button>
+                <button class="am-tab disabled">Permissions</button>
+            </nav>
+            <button class="am-close" aria-label="Close">×</button>
+        </header>
+        <div class="am-body">
+            <div class="users-toolbar">
+                <span class="search">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                        <circle cx="7" cy="7" r="5" /><line x1="11" y1="11" x2="14.5" y2="14.5" />
+                    </svg>
+                    <input type="text" placeholder="Search reciter or requester…" />
+                </span>
+                <div class="role-filters">
+                    <button class="chip">Open <span class="c-count">4</span></button>
+                    <button class="chip">Accepted <span class="c-count">31</span></button>
+                    <button class="chip active">Sent back <span class="c-count">5</span></button>
+                    <button class="chip">Discarded <span class="c-count">2</span></button>
+                </div>
+                <span class="toolbar-spacer"></span>
+                <span class="toolbar-total">5 sent back</span>
+            </div>
+            <ol class="queue">
+                <li class="req open">
+                    <button class="req-head" aria-expanded="true" onclick="toggleRow(this)">
+                        <span class="who">
+                            <span class="name-ar" dir="rtl">محمد صديق المنشاوي</span>
+                            <span class="name-en">Minshawi</span>
+                        </span>
+                        <span class="combo">Hafs <span class="sep">·</span> Murattal</span>
+                        <span class="changes"><span class="cnt">1</span> proposed change</span>
+                        <span class="req-meta">
+                            <span class="requester" data-owner="@layla_r" data-maint="a contributor">@layla_r</span>
+                            <span class="outcome returned">Sent back</span>
+                        </span>
+                    </button>
+                    <div class="review">
+                        <div class="resolution">
+                            <span class="res-by" data-owner="Sent back by <strong>@nuralign</strong> · 3 days ago —"
+                                  data-maint="Sent back by <strong>a maintainer</strong> · 3 days ago —">
+                                Sent back by <strong>@nuralign</strong> · 3 days ago —</span>
+                            <span class="res-reason">audio is the Mujawwad set, not Murattal as labeled. Re-request under the correct style.</span>
+                        </div>
+                    </div>
+                </li>
+                <li class="req">
+                    <button class="req-head" aria-expanded="false" onclick="toggleRow(this)">
+                        <span class="who">
+                            <span class="name-ar" dir="rtl">أحمد العجمي</span>
+                            <span class="name-en">Ahmad al-Ajmi</span>
+                        </span>
+                        <span class="combo">Hafs <span class="sep">·</span> Murattal</span>
+                        <span class="changes"><span class="none">no metadata changes</span></span>
+                        <span class="req-meta">
+                            <span class="requester" data-owner="@omar_dev" data-maint="a contributor">@omar_dev</span>
+                            <span class="outcome returned">Sent back</span>
+                        </span>
+                    </button>
+                </li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         3 · EMPTY STATE
+         ============================================================ -->
+    <div class="section">3 · Empty — the common case</div>
+    <p class="proto-caption">
+        Most of the time there are no open requests. The empty state teaches what the tab is for
+        rather than saying "nothing here".
+    </p>
+    <div class="am short">
+        <header class="am-header">
+            <h2 class="am-title">Admin dashboard</h2>
+            <nav class="am-tabs">
+                <button class="am-tab">Users <span class="tab-count">9</span></button>
+                <button class="am-tab active">Requests</button>
+                <button class="am-tab disabled">To publish</button>
+                <button class="am-tab disabled">Permissions</button>
+            </nav>
+            <button class="am-close" aria-label="Close">×</button>
+        </header>
+        <div class="am-body">
+            <div class="users-toolbar">
+                <span class="search">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                        <circle cx="7" cy="7" r="5" /><line x1="11" y1="11" x2="14.5" y2="14.5" />
+                    </svg>
+                    <input type="text" placeholder="Search reciter or requester…" disabled />
+                </span>
+                <div class="role-filters">
+                    <button class="chip active">Open <span class="c-count">0</span></button>
+                    <button class="chip">Accepted <span class="c-count">31</span></button>
+                    <button class="chip empty">Sent back <span class="c-count">5</span></button>
+                    <button class="chip empty">Discarded <span class="c-count">2</span></button>
+                </div>
+                <span class="toolbar-spacer"></span>
+                <span class="toolbar-total">0 open</span>
+            </div>
+            <div class="state-block">
+                <div class="glyph">⌖</div>
+                <h4>No open requests</h4>
+                <p>When a contributor requests a reciter combination, it lands here for review.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleRow(btn) {
+        const li = btn.closest('.req');
+        const open = li.classList.toggle('open');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    function setFacet(btn, facet) {
+        btn.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        /* prototype: facet switching is cosmetic; real data swaps the list */
+    }
+    function setView(role) {
+        document.getElementById('as-owner').classList.toggle('active', role === 'owner');
+        document.getElementById('as-maint').classList.toggle('active', role === 'maintainer');
+        const key = role === 'owner' ? 'owner' : 'maint';
+        document.querySelectorAll('[data-' + key + ']').forEach(el => {
+            el.innerHTML = el.getAttribute('data-' + key);
+            if (el.classList.contains('requester')) {
+                el.classList.toggle('redacted', role === 'maintainer');
+            }
+        });
+    }
+</script>
+</body>
+</html>

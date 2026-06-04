@@ -26,7 +26,7 @@
         context?: string;
         /** Header eyebrow label; '' hides it (slim chrome — just the caret). */
         eyebrow?: string;
-        onSeekToWord?: (ms: number) => void;
+        onSeekToWord?: (_ms: number) => void;
         /** Two-way collapse state. Defaults from `config.collapsedByDefault`. */
         open?: boolean;
         /** Render the header row (caret + eyebrow + actions). When false the

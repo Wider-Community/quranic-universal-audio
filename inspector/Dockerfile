@@ -15,7 +15,7 @@
 # Run dev:  docker run --rm -p 5000:5000 -v "$PWD/data:/data" inspector:dev
 
 # --- Stage 1: build frontend ---
-FROM node:20-alpine AS frontend-build
+FROM node:24-alpine AS frontend-build
 WORKDIR /app
 COPY inspector/frontend/package.json inspector/frontend/package-lock.json ./
 RUN npm ci

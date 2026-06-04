@@ -20,7 +20,7 @@
         /** Live role from the parent's list row — reflects optimistic updates
          * and reverts without the drawer keeping its own copy. */
         roleOverride?: string | null;
-        onrolechange?: (role: AssignableRole) => void;
+        onrolechange?: (_role: AssignableRole) => void;
     }
     let {
         hfUserId,
