@@ -5,21 +5,16 @@
 // before any chapter+index lookup. Stale uids (absent from current state)
 // return null even when seg_index would resolve.
 
-import { afterAll,beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { loadOptional } from '../helpers/optional';
-
-const resolve = await loadOptional<any>('../../utils/validation/resolve-issue');
+import { segAllData } from '../../stores/chapter';
+import { resolveByUidStrict, resolveIssueSeg } from '../../utils/validation/resolve-issue';
 
 // Set up a minimal in-memory segment store so uid-first lookups resolve.
-// Chapter 1 has one segment: { segment_uid: 'phase-6-uid', index: 0 }.
-async function setupStore(): Promise<(() => void) | null> {
-  const chapterMod = await loadOptional<any>('../../stores/chapter');
-  if (!chapterMod) return null;
-  const { segAllData } = chapterMod;
-  if (!segAllData) return null;
+// Chapter 1 has one segment: { segment_uid: 'fixture-uid', index: 0 }.
+function setupStore(): () => void {
   const seg = {
-    segment_uid: 'phase-6-uid',
+    segment_uid: 'fixture-uid',
     index: 0,
     chapter: 1,
     time_start: 0,
@@ -36,15 +31,15 @@ async function setupStore(): Promise<(() => void) | null> {
     pad_left_ms: 0,
     pad_right_ms: 0,
     min_silence_floor_ms: 0,
-  });
+  } as any);
   return () => segAllData.set(null);
 }
 
-describe.skipIf(!resolve)('resolveIssueSeg', () => {
+describe('resolveIssueSeg', () => {
   let teardown: (() => void) | null = null;
 
-  beforeAll(async () => {
-    teardown = await setupStore();
+  beforeAll(() => {
+    teardown = setupStore();
   });
 
   afterAll(() => {
@@ -52,42 +47,26 @@ describe.skipIf(!resolve)('resolveIssueSeg', () => {
   });
 
   it('uses segment_uid first when present', () => {
-    // The resolver must consult uid before seg_index.
-    // An item that carries segment_uid must resolve via uid, not via index.
-    const item = { segment_uid: 'phase-6-uid', seg_index: 0, chapter: 1 };
-    const seg = resolve.resolveIssueSeg(item as any, 'low_confidence', null);
-    if (!seg || (seg as any).segment_uid !== 'phase-6-uid') {
-      throw new Error('uid-first resolution not yet implemented');
-    }
+    const item = { segment_uid: 'fixture-uid', seg_index: 0, chapter: 1 };
+    const seg = resolveIssueSeg(item as any, 'low_confidence', null);
+    expect(seg).toBeTruthy();
+    expect((seg as any).segment_uid).toBe('fixture-uid');
   });
 
   it('falls back to seg_index for legacy issues', () => {
-    // Legacy: issue lacks segment_uid; resolver must still resolve via seg_index.
-    // The test verifies the fallback path works when no uid is present.
     const item = { seg_index: 0, chapter: 1 };
-    const seg = resolve.resolveIssueSeg(item as any, 'low_confidence', null);
-    if (!seg) {
-      throw new Error('legacy seg_index fallback path returned null unexpectedly');
-    }
+    const seg = resolveIssueSeg(item as any, 'low_confidence', null);
+    expect(seg).toBeTruthy();
   });
 
   it('returns null for stale uid', () => {
-    // A uid that is absent from current state must resolve to null,
-    // even when seg_index would otherwise point to a segment.
-    // The resolver must expose resolveByUidStrict to enable this check.
     const item = { segment_uid: 'no-such-uid', seg_index: 0, chapter: 1 };
-    const seg = resolve.resolveIssueSeg(item as any, 'low_confidence', null);
-    if (!resolve.resolveByUidStrict) {
-      throw new Error('resolveByUidStrict not yet exposed');
-    }
+    const seg = resolveIssueSeg(item as any, 'low_confidence', null);
+    expect(typeof resolveByUidStrict).toBe('function');
     expect(seg).toBeFalsy();
   });
 
-  it('matches errors-category by verse-key prefix (unchanged behavior)', () => {
-    expect(typeof resolve.resolveIssueSeg).toBe('function');
+  it('exposes resolveIssueSeg as a function', () => {
+    expect(typeof resolveIssueSeg).toBe('function');
   });
-});
-
-describe.skipIf(resolve)('resolveIssueSeg (deferred)', () => {
-  it.todo('phase-6: utils/validation/resolve-issue not yet present');
 });

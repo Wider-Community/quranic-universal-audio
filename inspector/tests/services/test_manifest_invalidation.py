@@ -19,6 +19,9 @@ from services.reference import timestamps as ts_manifest
 from services.state import state as state_service
 
 
+_OWNER = Actor(hf_user_id="owner-1", login_at_time="owner", role=Role.OWNER)
+
+
 @pytest.fixture(autouse=True)
 def _reset_ts_manifest_cache():
     """Clear the process-wide TS manifest cache around every test.
@@ -57,7 +60,7 @@ def test_transition_drops_manifest_cache():
 
     state_service.transition(
         "rec_a", "reciter.published",
-        actor=Actor(hf_user_id="u-O", login_at_time="o", role=Role.OWNER),
+        actor=_OWNER,
         payload={"job_id": "job-1"},
     )
 
@@ -77,7 +80,7 @@ def test_transition_invokes_invalidate_hook(monkeypatch):
 
     state_service.transition(
         "rec_a", "reciter.published",
-        actor=Actor(hf_user_id="u-O", login_at_time="o", role=Role.OWNER),
+        actor=_OWNER,
         payload={"job_id": "job-1"},
     )
 
@@ -99,7 +102,7 @@ def test_manifest_self_heals_on_db_seq_without_explicit_invalidate(monkeypatch):
 
     state_service.transition(
         "rec_a", "reciter.published",
-        actor=Actor(hf_user_id="u-O", login_at_time="o", role=Role.OWNER),
+        actor=_OWNER,
         payload={"job_id": "job-1"},
     )
     # _built is still True (invalidate was a no-op), but db_seq advanced →

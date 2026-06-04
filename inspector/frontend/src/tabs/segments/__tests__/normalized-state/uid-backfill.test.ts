@@ -1,10 +1,8 @@
-// Phase 4: frontend loader backfills segment_uid for legacy fixtures.
+// Frontend loader backfills segment_uid for legacy fixtures.
 
 import { describe, expect, it } from 'vitest';
 
-import { loadOptional } from '../helpers/optional';
-
-const identity = await loadOptional<any>('../../domain/identity');
+import { deriveUid } from '../../domain/identity';
 
 const legacySeg = (chapter: number, idx: number, startMs: number) => ({
   time_start: startMs,
@@ -15,26 +13,22 @@ const legacySeg = (chapter: number, idx: number, startMs: number) => ({
   // no segment_uid
 });
 
-describe.skipIf(!identity)('uid backfill (frontend)', () => {
+describe('uid backfill (frontend)', () => {
   it('frontend loader backfills uid for legacy fixture', () => {
     void legacySeg(1, 0, 0);
-    const uid = identity.deriveUid({ chapter: 1, originalIndex: 0, startMs: 0 });
+    const uid = deriveUid({ chapter: 1, originalIndex: 0, startMs: 0 });
     expect(typeof uid).toBe('string');
     expect(uid.length).toBeGreaterThan(8);
   });
 
   it('backfill is deterministic across two loads', () => {
-    const a = identity.deriveUid({ chapter: 1, originalIndex: 0, startMs: 0 });
-    const b = identity.deriveUid({ chapter: 1, originalIndex: 0, startMs: 0 });
+    const a = deriveUid({ chapter: 1, originalIndex: 0, startMs: 0 });
+    const b = deriveUid({ chapter: 1, originalIndex: 0, startMs: 0 });
     expect(a).toBe(b);
   });
 
   it('backfill matches Python loader for same input', () => {
-    const ts = identity.deriveUid({ chapter: 1, originalIndex: 0, startMs: 0 });
+    const ts = deriveUid({ chapter: 1, originalIndex: 0, startMs: 0 });
     expect(ts).toBe('418dc3a4-5e80-5d8e-9a3f-209a6403206e');
   });
-});
-
-describe.skipIf(identity)('uid backfill (deferred)', () => {
-  it.todo('phase-4: domain/identity not yet present');
 });

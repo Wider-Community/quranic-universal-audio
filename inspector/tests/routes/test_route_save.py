@@ -1,7 +1,7 @@
 """POST /api/seg/save tests (MUST-1, MUST-7).
 
-Phase 3 wired ``require_same_origin`` + ``require_edit_lock(admin_bypass=True)``
-on every save/undo route. These tests assert:
+``require_same_origin`` + ``require_edit_lock(admin_bypass=True)`` gate every
+save/undo route. These tests assert:
 
 - Anonymous requests are rejected (401 via the lock decorator).
 - Cross-origin POSTs are rejected (403 via the same-origin guard).
@@ -253,7 +253,7 @@ def test_save_accepts_patch_payload(signed_in_client, tmp_reciter_dir):
 
 
 def test_save_includes_patch_field_in_history(signed_in_client, tmp_reciter_dir):
-    """Phase 5 contract: save handler injects a patch field on every op without one."""
+    """The save handler injects a ``patch`` field on every op without one."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
     chapter = 112
@@ -284,13 +284,13 @@ def test_save_includes_patch_field_in_history(signed_in_client, tmp_reciter_dir)
     history_path = tmp_reciter_dir.root / reciter / "edit_history.jsonl"
     last = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])
     op = last["operations"][0]
-    assert "patch" in op, "Phase 5: every history op must carry a patch field"
+    assert "patch" in op, "every history op must carry a patch field"
 
 
-def test_save_payload_is_correctly_built_from_command_results(
+def test_save_rejects_unknown_command_type(
     signed_in_client, tmp_reciter_dir,
 ):
-    """Phase 3: save handler validates CommandResult-shaped payloads via schema."""
+    """Save handler rejects an operation whose command.type is not a known reducer."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
     chapter = 112
@@ -312,14 +312,11 @@ def test_save_payload_is_correctly_built_from_command_results(
         data=json.dumps(payload),
         headers=_HEADERS,
     )
-    assert res.status_code == 400, (
-        "Phase 3 must reject unknown `command.type` values"
-    )
+    assert res.status_code == 400, "save rejects unknown `command.type` values"
 
 
 def test_save_writes_actor_block_to_history(signed_in_client, tmp_reciter_dir):
-    """Phase 3 deliverable: every new batch carries ``actor: {hf_user_id,
-    login_at_time, role}``."""
+    """Every saved batch carries ``actor: {hf_user_id, login_at_time, role}``."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="u-1")
 
@@ -346,7 +343,7 @@ def test_save_writes_actor_block_to_history(signed_in_client, tmp_reciter_dir):
 
     history_path = tmp_reciter_dir.root / reciter / "edit_history.jsonl"
     line = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])
-    assert "file_hash_after" not in line, "Phase 3: file_hash_after must be gone"
+    assert "file_hash_after" not in line, "history must not carry file_hash_after"
     assert line["actor"] == {
         "hf_user_id": "u-1",
         "login_at_time": "alice",

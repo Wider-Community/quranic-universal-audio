@@ -171,11 +171,11 @@ def test_claim_one_claim_per_user_returns_409(signed_in_client, state_persistenc
     assert resp.status_code == 409
     body = json.loads(resp.data)
     assert body["existing_claim"] == "other"
-    # Slice 0 (Phase 6 pre-cleanup): 409 body must carry display names so the
-    # toast can render "Unclaim <name>..." rather than slug strings. When the
-    # test catalog is empty (typical for unit tests) display_name returns
-    # None — the field is present but None, which the frontend falls back
-    # to the raw slug. See `inspector/services/catalog.display_name`.
+    # The 409 body must carry display names so the toast can render
+    # "Unclaim <name>..." rather than slug strings. When the test catalog
+    # is empty (typical for unit tests) display_name returns None — the
+    # field is present but None, and the frontend falls back to the raw
+    # slug. See `inspector/services/catalog.display_name`.
     assert "existing_claim_name" in body
     assert "target_name" in body
 

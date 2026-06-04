@@ -8,17 +8,13 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip(
-    "services.validation.classifier",
-    reason="phase-2 — unified classifier not yet introduced",
-)
+from services.validation.classifier import classify_segment
 
 
 FIXTURES = ["112-ikhlas", "113-falaq", "synthetic-structural", "synthetic-classifier"]
 
 
 def _classify(seg: dict, **ctx) -> list[str]:
-    from services.validation.classifier import classify_segment  # type: ignore
     return classify_segment(seg, **ctx)
 
 

@@ -8,10 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip(
-    "services.validation.registry",
-    reason="phase-1 — IssueRegistry module not yet introduced",
-)
+from services.validation.registry import IssueRegistry
 
 from tests.conftest import (
     ALL_CATEGORIES,
@@ -22,7 +19,6 @@ from tests.conftest import (
 
 
 def _registry():
-    from services.validation.registry import IssueRegistry  # type: ignore
     return IssueRegistry
 
 

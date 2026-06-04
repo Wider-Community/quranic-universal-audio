@@ -1,36 +1,41 @@
 // Frontend reads classified_issues from backend DTOs; no live classification.
 
-import { describe, expect,it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { loadOptional } from '../helpers/optional';
+import { classifiedIssuesOf, deriveOpIssueDelta } from '../../utils/validation/classified-issues';
+import { usesStoredClassifiedIssues } from '../../utils/history/items';
 
-const historyItems = await loadOptional<any>('../../utils/history/items');
-const classifyMod = await loadOptional<any>('../../utils/validation/classify');
-const classifiedIssues = await loadOptional<any>('../../utils/validation/classified-issues');
+async function tryImport(path: string): Promise<unknown | null> {
+  try {
+    return await import(/* @vite-ignore */ path);
+  } catch {
+    return null;
+  }
+}
 
 describe('classifier output parity', () => {
-  it('frontend reads classified_issues field from backend DTO; no local classification', () => {
+  it('frontend reads classified_issues field from backend DTO; no local classification', async () => {
+    const classifyMod = await tryImport('../../utils/validation/classify');
     expect(classifyMod).toBeNull();
-    expect(classifiedIssues).not.toBeNull();
-    expect(typeof classifiedIssues!.classifiedIssuesOf).toBe('function');
+    expect(typeof classifiedIssuesOf).toBe('function');
   });
 
   it('history items use stored classified_issues, not local classifier', () => {
-    expect(historyItems).not.toBeNull();
-    expect(historyItems!.usesStoredClassifiedIssues).toBe(true);
+    expect(usesStoredClassifiedIssues).toBe(true);
   });
 
-  it('_classifySegCategories is no longer exported', () => {
+  it('utils/validation/classify is not present (classification is server-side)', async () => {
+    const classifyMod = await tryImport('../../utils/validation/classify');
     expect(classifyMod).toBeNull();
   });
 
   it('history issue deltas hide Basmala + Amin', () => {
-    const delta = classifiedIssues!.deriveOpIssueDelta([
+    const delta = deriveOpIssueDelta([
       {
         targets_before: [{ segment_uid: 'u1', classified_issues: ['basmala_amin'] }],
         targets_after: [{ segment_uid: 'u1', classified_issues: [] }],
       },
-    ]);
+    ] as any);
     expect(delta).toEqual({ resolved: [], introduced: [], involved: [] });
   });
 });

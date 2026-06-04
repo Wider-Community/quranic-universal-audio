@@ -88,8 +88,8 @@ def test_detailed_json_no_field_removed(load_fixture):
         )
 
 
-def test_detailed_json_additive_only_classified_issues_optional(load_fixture, tmp_reciter_dir, signed_in_client):
-    """Phase 2: validation responses carry classified_issues — but it must NOT be persisted to detailed.json (MAY-10)."""
+def test_detailed_json_excludes_classified_issues(load_fixture, tmp_reciter_dir, signed_in_client):
+    """Validation responses carry classified_issues — but it must NOT be persisted to detailed.json (MAY-10)."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
     client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")

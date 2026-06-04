@@ -1,26 +1,22 @@
-// Phase 5 save tests: payload includes patch field.
+// Save tests: payload includes patch field when applyCommand produces one.
 
-import { describe, expect,it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { loadOptional } from '../helpers/optional';
+import { buildPayloadFromCommandResult } from '../../utils/save/payload';
 
 describe('save patch field', () => {
-  it('payload includes patch field when applyCommand produces one', async () => {
-    const exec = await loadOptional<any>('../../utils/save/payload');
-    if (!exec || !exec.buildPayloadFromCommandResult) {
-      throw new Error('phase-5: builder not yet present');
-    }
+  it('payload includes patch field when applyCommand produces one', () => {
     const result = {
       operation: { op_id: 'x', type: 'trim' },
       affectedChapters: [1],
       patch: { before: [{ segment_uid: 'a' }], after: [{ segment_uid: 'a' }], removedIds: [], insertedIds: [], affectedChapterIds: [1] },
     };
-    const payload = exec.buildPayloadFromCommandResult(result);
+    const payload = buildPayloadFromCommandResult(result as any);
     expect(payload.operations[0].patch).toBeTruthy();
-    expect(payload.operations[0].patch.before[0].segment_uid).toBe('a');
+    expect((payload.operations[0].patch as any).before[0].segment_uid).toBe('a');
   });
 
-  it('legacy save without patch still works (backward compat)', () => {
+  it('save without patch still works for non-patch ops', () => {
     const payload = {
       full_replace: true,
       segments: [],

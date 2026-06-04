@@ -1,4 +1,4 @@
-"""repo_requests (payload adapters, pending→archive) + repo_activity sidecars."""
+"""repo_requests payload adapters and pending→archive lifecycle."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ import pytest
 from qua_shared.schemas import Actor, ProposedEdits, Role
 
 from services import db
-from services.db import repo_requests, repo_activity
-from ._helpers import seed_user, seed_delivery
+from services.db import repo_requests
+from ._helpers import seed_delivery
 
 
 def _actor(hf="u1", login="alice", role=Role.CONTRIBUTOR) -> Actor:
@@ -92,22 +92,3 @@ def test_resolve_to_archive_and_get_for_slug(fresh_db):
     returned = repo_requests.get_for_slug("returned", "d1")
     assert len(returned) == 1
     assert returned[0].reason == "needs better source"
-
-
-def test_activity_tombstone(fresh_db):
-    """Per-user dismissals were dropped with the admin notifications rail
-    (migration 0006). Only the global tombstone path remains."""
-    seed_user("u1", "alice")
-    ch = "abc123def4567890"
-
-    with db.transaction():
-        repo_activity.delete(ch, deleted_by="u1", reason="spam")
-    assert repo_activity.is_deleted(ch) is True
-    assert repo_activity.deleted_set() == {ch}
-    # idempotent re-delete (upsert)
-    with db.transaction():
-        repo_activity.delete(ch, deleted_by="u1", reason="still spam")
-    assert repo_activity.deleted_set() == {ch}
-    with db.transaction():
-        repo_activity.undelete(ch)
-    assert repo_activity.is_deleted(ch) is False

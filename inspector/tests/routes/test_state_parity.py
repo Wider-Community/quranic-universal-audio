@@ -18,7 +18,7 @@ import json
 from datetime import datetime, timezone
 
 
-def _state_row(slug: str, *, state: str = "awaiting_review",
+def _state_row_kwargs(slug: str, *, state: str = "awaiting_review",
                marked_ready: bool = False,
                assignee_hf_id: str | None = None,
                visibility: str = "public"):
@@ -114,7 +114,7 @@ def test_claim_visible_in_public_reciters_and_detail_and_reciter_task(
     """After claim, /api/public/reciters AND /api/public/reciter/<id> AND
     /api/reciter-task/<slug> all agree on the new state + assignee."""
     _seed_catalog("test_slug", reciter_id="test_reciter", name_en="Test Reciter")
-    _seed_state([_state_row("test_slug", state="awaiting_review")])
+    _seed_state([_state_row_kwargs("test_slug", state="awaiting_review")])
 
     # Claim as maintainer (admin shape on detail surfaces the assignee).
     client, _ = signed_in_client(hf_user_id="u-mod", login="mod", role="maintainer")
@@ -154,7 +154,7 @@ def test_claim_visible_in_public_reciters_and_detail_and_reciter_task(
 def test_release_propagates_to_all_endpoints(signed_in_client, state_persistence):
     """Release returns the row to awaiting_review across every surface."""
     _seed_catalog("test_slug")
-    _seed_state([_state_row("test_slug", state="under_review", assignee_hf_id="u-1")])
+    _seed_state([_state_row_kwargs("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(
@@ -185,7 +185,7 @@ def test_mark_ready_propagates_to_all_endpoints(
 ):
     """Mark-ready persists the marked_ready flag; bucket stays under_review."""
     _seed_catalog("test_slug")
-    _seed_state([_state_row("test_slug", state="under_review", assignee_hf_id="u-1")])
+    _seed_state([_state_row_kwargs("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     # The mark-ready state handler re-validates the live segments to gate
     # on five category_counts being zero. Tests don't ship segments — stub
@@ -239,7 +239,7 @@ def test_anonymous_sees_redacted_assignee_consistently(state_persistence, flask_
     leak in one breaks privacy.
     """
     _seed_catalog("test_slug")
-    _seed_state([_state_row("test_slug", state="under_review", assignee_hf_id="u-1")])
+    _seed_state([_state_row_kwargs("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     # Anonymous (no session cookie) — uses flask_client directly.
     list_body = json.loads(flask_client.get("/api/public/reciters").data)

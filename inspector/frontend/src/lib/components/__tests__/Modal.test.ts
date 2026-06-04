@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import Modal from '../Modal.svelte';
 
-describe('Modal', () => {
+describe('Modal — close paths + body scroll lock', () => {
     beforeEach(() => {
         // happy-dom defaults document.body.style.overflow to '' (empty);
         // re-assert just in case.

@@ -143,7 +143,7 @@ def test_append_peaks_records_dedups_by_op_id(tmp_reciter_dir):
 def test_append_pops_response_cache(tmp_reciter_dir):
     """A write invalidates the serialized GET response so the next reader
     re-serializes the updated record list."""
-    reciter = "resp_reciter"
+    reciter = "append_invalidates_cache"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
     cache.set_seg_history_peaks_response(reciter, b'{"records":[]}')
     rec = {
@@ -161,7 +161,7 @@ def test_append_pops_response_cache(tmp_reciter_dir):
 def test_append_dedup_skip_does_not_pop_response_cache(tmp_reciter_dir):
     """A fully-deduped write (nothing written) leaves the cached response
     intact — no spurious invalidation."""
-    reciter = "resp_reciter2"
+    reciter = "dedup_preserves_cache"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
     rec = {
         "op_id": "op-resp2",

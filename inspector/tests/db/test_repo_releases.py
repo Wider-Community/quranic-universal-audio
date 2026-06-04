@@ -56,7 +56,7 @@ def test_per_recitation_release_insert_and_current(fresh_db):
     assert current["version"] == "1"
 
 
-def test_supersede_current_marks_prior_rows(fresh_db):
+def test_supersede_current_marks_zero_prior_rows(fresh_db):
     """Real write order: insert v1, supersede v1, insert v2. The partial-unique
     requires the prior current row to be superseded before a new one inserts."""
     now = _now()

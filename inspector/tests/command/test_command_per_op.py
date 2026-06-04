@@ -27,7 +27,7 @@ def _payload_with_command(op_type: str, chapter: int) -> dict:
 
 
 @pytest.mark.parametrize("op_type", OP_TYPES, ids=OP_TYPES)
-def test_command_save_round_trip(op_type, signed_in_client, tmp_reciter_dir):
+def test_save_rejects_command_type_mismatch(op_type, signed_in_client, tmp_reciter_dir):
     """Save handler rejects ops whose ``command.type`` does not match ``op.type``.
 
     Every operation must carry a ``command`` envelope and its ``type``
@@ -49,5 +49,5 @@ def test_command_save_round_trip(op_type, signed_in_client, tmp_reciter_dir):
         headers=_HEADERS,
     )
     assert res.status_code == 400, (
-        "Phase 3 must reject ops whose `command.type` differs from `op.type`"
+        "save must reject ops whose `command.type` differs from `op.type`"
     )

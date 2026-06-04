@@ -2,7 +2,7 @@
 
 Coverage:
 - 401 anonymous, 403 contributor
-- 403 on cross-origin POST
+- 403 when Origin/Referer missing on POST and 403 on cross-origin POST
 - happy-path grant (maintainer & owner)
 - 409 on already-active member
 - revoke: maintainer can revoke maintainer; only owner can revoke owner
@@ -130,6 +130,17 @@ def test_grant_missing_origin_returns_403(signed_in_client, monkeypatch):
         "/api/admin/access/grant",
         data=json.dumps({"hf_user_id": "u-2", "login": "bob", "role": "maintainer", "reason": "smoke test reason"}),
         content_type="application/json",
+    )
+    assert res.status_code == 403
+
+
+def test_grant_cross_origin_returns_403(signed_in_client, monkeypatch):
+    _stub_access_persist(monkeypatch)
+    client, _ = signed_in_client(hf_user_id="u-owner", login="owner", role="owner")
+    res = client.post(
+        "/api/admin/access/grant",
+        data=json.dumps({"hf_user_id": "u-2", "login": "bob", "role": "maintainer", "reason": "smoke test reason"}),
+        headers={"Content-Type": "application/json", "Origin": "https://evil.example"},
     )
     assert res.status_code == 403
 

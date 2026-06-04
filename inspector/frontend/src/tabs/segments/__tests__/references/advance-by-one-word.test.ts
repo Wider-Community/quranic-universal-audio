@@ -3,7 +3,7 @@
  * second half's start point from the just-committed first half's end.
  */
 
-import { describe, expect,it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { _advanceRefByOneWord } from '../../utils/data/references';
 

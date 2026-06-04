@@ -19,9 +19,9 @@ import pytest
 
 from qua_shared.tests.conftest import (
     PROVENANCE,
-    _chapter_loopback,
+    _multi_verse_loopback,
     _ok,
-    _results_loopback,
+    _multi_verse_loopback_results,
 )
 from qua_shared.timestamps_dedup import build_raw_v2
 from qua_shared.timestamps_reshape import (
@@ -69,7 +69,7 @@ def _v2_chapter_shard(chapter, results, *, cat=CAT, meta_extra=None):
 
 
 def test_reshape_converges_with_writer_segment_shape():
-    chapter, results = _chapter_loopback(), _results_loopback()
+    chapter, results = _multi_verse_loopback(), _multi_verse_loopback_results()
 
     # Writer face: build the segment-array shard directly from the v2 doc.
     raw = build_raw_v2([chapter], results, CAT)
@@ -136,7 +136,7 @@ def test_reshape_by_ayah_category_normalized():
 
 
 def test_reshaped_meta_is_slim_and_drops_path_fields():
-    reshaped = reshape_shard(_v2_chapter_shard(_chapter_loopback(), _results_loopback()))
+    reshaped = reshape_shard(_v2_chapter_shard(_multi_verse_loopback(), _multi_verse_loopback_results()))
     meta = reshaped["_meta"]
     assert meta["schema_version"] == 2 and meta["chapter"] == 1
     assert meta["audio_category"] == "by_surah"
@@ -149,7 +149,7 @@ def test_reshaped_meta_is_slim_and_drops_path_fields():
 
 
 def test_words_letters_phones_preserved_verbatim():
-    v2_shard = _v2_chapter_shard(_chapter_loopback(), _results_loopback())
+    v2_shard = _v2_chapter_shard(_multi_verse_loopback(), _multi_verse_loopback_results())
     src_words = v2_shard["1:1"][0]["words_by_verse"]["1:1"]
     reshaped = reshape_shard(v2_shard)
     out_words = reshaped["segments"][0]["words"]
@@ -165,7 +165,7 @@ def test_words_letters_phones_preserved_verbatim():
 
 
 def test_classify_v2_target_v1_empty():
-    v2_shard = _v2_chapter_shard(_chapter_loopback(), _results_loopback())
+    v2_shard = _v2_chapter_shard(_multi_verse_loopback(), _multi_verse_loopback_results())
     assert classify_shard(v2_shard) == "v2"
 
     target = reshape_shard(v2_shard)
@@ -178,7 +178,7 @@ def test_classify_v2_target_v1_empty():
 
 
 def test_reshape_rejects_already_target():
-    target = reshape_shard(_v2_chapter_shard(_chapter_loopback(), _results_loopback()))
+    target = reshape_shard(_v2_chapter_shard(_multi_verse_loopback(), _multi_verse_loopback_results()))
     with pytest.raises(ValueError, match="already in the target"):
         reshape_shard(target)
 
@@ -204,7 +204,7 @@ def test_reshape_rejects_compound_cross_verse():
 
 def test_reshape_idempotent_via_gzip_roundtrip():
     # Reshape → gzip → inflate → still classifies as target, segments stable.
-    reshaped = reshape_shard(_v2_chapter_shard(_chapter_loopback(), _results_loopback()))
+    reshaped = reshape_shard(_v2_chapter_shard(_multi_verse_loopback(), _multi_verse_loopback_results()))
     roundtrip = orjson.loads(gzip.decompress(gzip_shard(reshaped)))
     assert roundtrip == reshaped
     assert classify_shard(roundtrip) == "target"

@@ -5,16 +5,10 @@ parametrized behavior tests then auto-cover it without test edits.
 """
 from __future__ import annotations
 
-import pytest
-
-pytest.importorskip(
-    "services.validation.registry",
-    reason="phase-1 — IssueRegistry module not yet introduced",
-)
+from services.validation.registry import IssueRegistry
 
 
 def test_synthetic_new_category_picked_up_by_parametrization(monkeypatch):
-    from services.validation.registry import IssueRegistry  # type: ignore
 
     new_category = "tashkeel_drift"
 

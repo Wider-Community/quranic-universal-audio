@@ -1,37 +1,38 @@
 // applyCommand reducer tests (IS-5).
 
-import { describe, expect,it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
+import { applyCommand } from '../../domain/apply-command';
+import type { SegmentCommand } from '../../domain/command';
 import { makeApplyCommandState, makeSegment } from '../helpers/make-segment';
-import { loadOptional } from '../helpers/optional';
 
-const mod = await loadOptional<{ applyCommand: any }>('../../domain/apply-command');
-const applyCommand = mod?.applyCommand ?? null;
-
-describe.skipIf(!applyCommand)('applyCommand', () => {
+describe('applyCommand', () => {
   const baseState = makeApplyCommandState([
     makeSegment(0, 0, 1000, { segment_uid: 'uid-1' }),
   ]);
 
+  const trim: SegmentCommand = { type: 'trim', segmentUid: 'uid-1', delta: { time_start: 100 } };
+
   it('returns CommandResult with nextState', () => {
-    const r = applyCommand(baseState, { type: 'trim', segmentUid: 'uid-1', delta: { time_start: 100 } } as any);
+    const r = applyCommand(baseState, trim);
     expect(r.nextState).toBeTruthy();
   });
 
   it('returns operation matching createOp shape', () => {
-    const r = applyCommand(baseState, { type: 'trim', segmentUid: 'uid-1', delta: { time_start: 100 } } as any);
+    const r = applyCommand(baseState, trim);
     expect(r.operation).toBeTruthy();
     expect(r.operation.type).toBe('trim');
   });
 
   it('returns affectedChapters list', () => {
-    const r = applyCommand(baseState, { type: 'trim', segmentUid: 'uid-1', delta: { time_start: 100 } } as any);
+    const r = applyCommand(baseState, trim);
     expect(Array.isArray(r.affectedChapters)).toBe(true);
     expect(r.affectedChapters).toContain(1);
   });
 
   it('returns validationDelta when applicable', () => {
-    const r = applyCommand(baseState, { type: 'editReference', segmentUid: 'uid-1', matched_ref: '1:1:1-1:1:1' } as any);
+    const editRef: SegmentCommand = { type: 'editReference', segmentUid: 'uid-1', matched_ref: '1:1:1-1:1:1' };
+    const r = applyCommand(baseState, editRef);
     expect('validationDelta' in r).toBe(true);
   });
 
@@ -39,35 +40,33 @@ describe.skipIf(!applyCommand)('applyCommand', () => {
     // basmala_amin behaves like the other resolve-by-edit categories:
     // edits from inside the accordion stamp op_context_category so the BE
     // resolved-by-edit index can suppress the flag on next revalidation.
-    const r = applyCommand(baseState, {
+    const cmd: SegmentCommand = {
       type: 'trim',
       segmentUid: 'uid-1',
       delta: { time_start: 100 },
       sourceCategory: 'basmala_amin',
-    } as any);
+    };
+    const r = applyCommand(baseState, cmd);
     expect(r.operation.op_context_category).toBe('basmala_amin');
     expect(r.validationDelta?.resolved ?? []).toContain('basmala_amin');
   });
 
-  it('still strips history context for muqattaat edits', () => {
-    const r = applyCommand(baseState, {
+  it('strips history context for muqattaat edits', () => {
+    const cmd: SegmentCommand = {
       type: 'trim',
       segmentUid: 'uid-1',
       delta: { time_start: 100 },
       sourceCategory: 'muqattaat',
-    } as any);
+    };
+    const r = applyCommand(baseState, cmd);
     expect(r.operation.op_context_category).toBeNull();
     expect(r.validationDelta?.resolved ?? []).toEqual([]);
   });
 
-  it('returns patch field (stub in Phase 3, populated in Phase 5)', () => {
-    const r = applyCommand(baseState, { type: 'trim', segmentUid: 'uid-1', delta: { time_start: 100 } } as any);
+  it('returns a populated patch field with before/after arrays', () => {
+    const r = applyCommand(baseState, trim);
     expect(r.patch).toBeTruthy();
     expect(Array.isArray(r.patch.before)).toBe(true);
     expect(Array.isArray(r.patch.after)).toBe(true);
   });
-});
-
-describe.skipIf(applyCommand)('applyCommand (deferred)', () => {
-  it.todo('phase-3: domain/apply-command not yet present');
 });

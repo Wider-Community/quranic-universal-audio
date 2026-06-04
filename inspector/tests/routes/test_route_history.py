@@ -29,7 +29,7 @@ def test_history_response_shape(flask_client, tmp_reciter_dir, load_expected):
 def test_history_record_includes_classified_issues_on_snapshots(
     signed_in_client, tmp_reciter_dir,
 ):
-    """Phase 2: history record snapshots persist classified_issues."""
+    """History record snapshots persist classified_issues."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
     client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
@@ -49,18 +49,13 @@ def test_history_record_includes_classified_issues_on_snapshots(
     for which in ("before", "after"):
         snap = snaps.get(which) or {}
         assert "classified_issues" in snap, (
-            f"snapshot {which} missing classified_issues field (Phase 2 IS-4)"
+            f"snapshot {which} missing classified_issues field"
         )
 
 
 def test_history_record_includes_patch_when_present(flask_client, tmp_reciter_dir):
-    """Phase 5: GET /edit-history endpoint surfaces the persisted patch in its response.
-
-    Pre-Phase-5 the route serializes whatever's in the JSONL log; Phase 5
-    introduces an explicit `patch` field on every returned op, even legacy
-    records (synthesized from the saved snapshot). Test verifies the
-    response shape post-Phase-5.
-    """
+    """GET /edit-history surfaces an explicit ``patch`` field on every op,
+    even on legacy records (synthesized from the saved snapshot)."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
 
@@ -69,11 +64,11 @@ def test_history_record_includes_patch_when_present(flask_client, tmp_reciter_di
     body = res.get_json()
     batches = body.get("batches") if isinstance(body, dict) else None
     if not batches:
-        # No history yet — Phase 5 must still surface the field shape on
-        # later batches; absence of batches keeps the test in xfail.
-        raise AssertionError("phase-5: no batches yet to inspect for patch field")
+        # No history yet — the fixture carries no batches, so there is
+        # nothing to inspect for the patch-field invariant.
+        raise AssertionError("no batches yet to inspect for patch field")
     for batch in batches:
         for op in batch.get("operations") or []:
             assert "patch" in op, (
-                "Phase 5: edit-history must include patch on every op"
+                "edit-history must include patch on every op"
             )

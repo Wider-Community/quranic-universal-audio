@@ -7,10 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip(
-    "services.validation.registry",
-    reason="phase-1 — IssueRegistry module not yet introduced",
-)
+from services.validation.registry import IssueRegistry
 
 
 # Locked policy matrix from plan §Appendix A.
@@ -35,7 +32,6 @@ EXPECTED_CATEGORIES = set(EXPECTED_MATRIX.keys())
 
 
 def _registry():
-    from services.validation.registry import IssueRegistry  # type: ignore
     return IssueRegistry
 
 

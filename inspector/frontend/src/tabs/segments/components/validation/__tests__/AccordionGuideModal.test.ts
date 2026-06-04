@@ -32,7 +32,7 @@ afterEach(() => {
   closeGuideModal();
 });
 
-describe('ValidationPanel accordion guide modal', () => {
+describe('AccordionGuideModal', () => {
   it('opens a code-stored text guide from the help button without fetching', async () => {
     vi.stubGlobal('fetch', vi.fn());
     const { getByLabelText, getByText } = render(GuideModalHarness);

@@ -1,9 +1,9 @@
 """POST /api/seg/undo-batch and /api/seg/undo-ops tests (MUST-8).
 
-Phase 3: undo routes are gated by ``require_edit_lock(admin_bypass=True)``
-so all tests now use ``signed_in_client`` with the user seeded as the
-active assignee on an ``under_review`` row, plus the same-origin Header.
-The revert record carries ``actor`` exactly like the forward batch.
+Undo routes are gated by ``require_edit_lock(admin_bypass=True)``; tests
+use ``signed_in_client`` with the user seeded as the active assignee on an
+``under_review`` row, plus the same-origin Header. The revert record
+carries ``actor`` exactly like the forward batch.
 """
 from __future__ import annotations
 

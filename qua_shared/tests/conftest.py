@@ -47,8 +47,8 @@ def _ok(locations, t0=0.0, step=0.5):
     return {"status": "ok", "words": words}
 
 
-def _chapter_loopback():
-    """Synthetic chapter doc: 1:1 across two takes (words 1-2, then 3-4), then 1:2."""
+def _multi_verse_loopback():
+    """Synthetic chapter doc carrying 1:1 across two takes (words 1-2, then 3-4), then 1:2."""
     return {
         "ref": "1",
         "segments": [
@@ -59,8 +59,8 @@ def _chapter_loopback():
     }
 
 
-def _results_loopback():
-    """Companion MFA results for `_chapter_loopback`."""
+def _multi_verse_loopback_results():
+    """Companion MFA results for `_multi_verse_loopback`."""
     return {0: [
         (0, _ok(["1:1:1", "1:1:2"])),
         (1, _ok(["1:1:3", "1:1:4"], t0=1.5)),

@@ -17,9 +17,9 @@ import pytest
 
 from qua_shared.tests.conftest import (
     PROVENANCE as _BASE_PROVENANCE,
-    _chapter_loopback,
+    _multi_verse_loopback,
     _ok,
-    _results_loopback,
+    _multi_verse_loopback_results,
 )
 from qua_shared.timestamps_dedup import build_raw_v2
 from qua_shared.timestamps_shards import (
@@ -45,7 +45,7 @@ def _build(chapter, results, *, src_meta=PROVENANCE, cat=CAT):
 
 
 def test_segments_are_single_verse_recitation_ordered():
-    shards = _build(_chapter_loopback(), _results_loopback())
+    shards = _build(_multi_verse_loopback(), _multi_verse_loopback_results())
     assert set(shards) == {1}
     segs = shards[1]["segments"]
     # 3 RAW segments (both loopback takes of 1:1 + the 1:2 seg), no dedup.
@@ -57,7 +57,7 @@ def test_segments_are_single_verse_recitation_ordered():
 
 
 def test_word_shape_widx_s_e_letters_phones():
-    segs = _build(_chapter_loopback(), _results_loopback())[1]["segments"]
+    segs = _build(_multi_verse_loopback(), _multi_verse_loopback_results())[1]["segments"]
     words = segs[0]["words"]
     assert words[0][0] == 1 and words[1][0] == 2  # widx
     for w in words:
@@ -69,7 +69,7 @@ def test_word_shape_widx_s_e_letters_phones():
 
 
 def test_meta_is_slim_v2():
-    meta = _build(_chapter_loopback(), _results_loopback())[1]["_meta"]
+    meta = _build(_multi_verse_loopback(), _multi_verse_loopback_results())[1]["_meta"]
     assert meta["schema_version"] == 2
     assert meta["chapter"] == 1
     # category normalized: by_surah_audio -> by_surah
@@ -98,7 +98,7 @@ def test_by_ayah_category_normalized():
 
 
 def test_gzip_is_deterministic():
-    shards = _build(_chapter_loopback(), _results_loopback())
+    shards = _build(_multi_verse_loopback(), _multi_verse_loopback_results())
     a = gzip_shard(shards[1])
     b = gzip_shard(shards[1])
     assert a == b
@@ -125,7 +125,7 @@ def test_src_meta_defaults_to_v2_doc_meta():
     # When src_meta is omitted, provenance comes from the v2 doc _meta (which
     # build_raw_v2 only fills with schema_version + mfa_failures) — slim meta
     # still emits the required core fields.
-    v2 = build_raw_v2([_chapter_loopback()], _results_loopback(), CAT)
+    v2 = build_raw_v2([_multi_verse_loopback()], _multi_verse_loopback_results(), CAT)
     shards = build_segment_shards(v2, audio_category=CAT)
     meta = shards[1]["_meta"]
     assert meta["schema_version"] == 2 and meta["chapter"] == 1

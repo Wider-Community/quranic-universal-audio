@@ -104,7 +104,7 @@ def _install(monkeypatch, reciters, deliveries, rows):
 # ---------------------------------------------------------------------------
 
 
-def test_stats_returns_six_bucket_counts(flask_client, monkeypatch):
+def test_stats_returns_five_bucket_counts(flask_client, monkeypatch):
     _install(
         monkeypatch,
         reciters=[

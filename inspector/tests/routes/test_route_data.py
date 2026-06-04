@@ -52,11 +52,7 @@ def test_seg_config_response_shape(flask_client, load_expected):
 
 def test_seg_config_validation_categories_match_registry(flask_client):
     """The /config response's validation_categories list is registry-derived."""
-    pytest.importorskip(
-        "services.validation.registry",
-        reason="phase-1 — IssueRegistry module not yet introduced",
-    )
-    from services.validation.registry import IssueRegistry  # type: ignore
+    from services.validation.registry import IssueRegistry
 
     res = flask_client.get("/api/seg/config")
     body = res.get_json()

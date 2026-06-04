@@ -1,20 +1,18 @@
-// Phase 4: compat selectors preserve $segData / $segAllData read shape.
+// Compat selectors preserve $segData / $segAllData read shape.
 
-import { describe, expect,it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { loadOptional } from '../helpers/optional';
+import * as chapterStore from '../../stores/chapter';
+import * as segmentsStore from '../../stores/segments';
 
-const chapterStore = await loadOptional<any>('../../stores/chapter');
-const segmentsStore = await loadOptional<any>('../../stores/segments');
+void segmentsStore;
 
-describe.skipIf(!chapterStore)('compat shape', () => {
-  it('$segData has same shape as before refactor', () => {
-    if (!segmentsStore) throw new Error('phase-4: stores/segments not yet present');
+describe('compat shape', () => {
+  it('segData exposes a subscribe function', () => {
     expect(typeof chapterStore.segData?.subscribe).toBe('function');
   });
 
-  it('$segAllData has same shape (no _byChapter / _byChapterIndex exposed)', () => {
-    if (!segmentsStore) throw new Error('phase-4: stores/segments not yet present');
+  it('segAllData snapshot does not expose internal _byChapter / _byChapterIndex maps', () => {
     let snapshot: any;
     chapterStore.segAllData.subscribe((v: any) => { snapshot = v; })();
     expect(snapshot).toBeDefined();
@@ -22,13 +20,8 @@ describe.skipIf(!chapterStore)('compat shape', () => {
     expect(snapshot?._byChapterIndex).toBeUndefined();
   });
 
-  it('existing components subscribe without modification', () => {
-    if (!segmentsStore) throw new Error('phase-4: stores/segments not yet present');
+  it('segData and segAllData expose subscribe functions', () => {
     expect(typeof chapterStore.segData.subscribe).toBe('function');
     expect(typeof chapterStore.segAllData.subscribe).toBe('function');
   });
-});
-
-describe.skipIf(chapterStore)('compat shape (deferred)', () => {
-  it.todo('phase-4: stores/chapter.ts not yet refactored to derive from segments.ts');
 });

@@ -142,7 +142,7 @@ def test_uid_stable_across_load_save_load(tmp_reciter_dir, signed_in_client, loa
             "time_end": s["time_end"],
             "matched_ref": s["matched_ref"],
             "confidence": s["confidence"],
-            # NOTE: no segment_uid — Phase 4 backend must backfill from existing
+            # NOTE: no segment_uid — backend must backfill from existing entry by (chapter, index, start_ms)
         }
         for s in fixture["entries"][0]["segments"]
     ]

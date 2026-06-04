@@ -1,4 +1,4 @@
-"""Admin override endpoint tests (Phase 4).
+"""Admin override endpoint tests.
 
 Covers /api/admin/{claim/force-release, claim/reassign, state/force-set,
 send-back, users/lookup}. Mirrors test_route_access_admin.py patterns:
@@ -117,8 +117,8 @@ def test_force_release_happy_path(signed_in_client, monkeypatch):
 
 
 def test_force_release_by_maintainer_returns_403(signed_in_client, monkeypatch):
-    """Force-release is owner-only post claim-mutation tightening — maintainers
-    must use Send-back-to-UR for marked-ready, or escalate to an owner."""
+    """Force-release is owner-only — maintainers must use Send-back-to-UR
+    for marked-ready, or escalate to an owner."""
     _stub_state_persist(monkeypatch)
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="maintainer")

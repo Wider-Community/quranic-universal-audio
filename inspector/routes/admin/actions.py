@@ -1,10 +1,9 @@
 """Admin override endpoints (/api/admin/*).
 
-Phase 4 backend surface. Each route is a thin wrapper around a single
-``state.transition`` call gated by maintainer+ role. State-machine
-handlers (`_h_force_released`, `_h_reassigned`,
-`_h_merge_rejected`) own all precondition + invariant checks; routes
-just authenticate, validate body shape, and dispatch.
+Each route is a thin wrapper around a single ``state.transition`` call gated
+by maintainer+ role. State-machine handlers (`_h_force_released`,
+`_h_reassigned`, `_h_merge_rejected`) own all precondition + invariant
+checks; routes just authenticate, validate body shape, and dispatch.
 
 The ``users/lookup`` endpoint is the only one that touches the network —
 a thin proxy over HF's public ``/api/users/<login>/overview`` so the

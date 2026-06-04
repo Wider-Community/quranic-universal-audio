@@ -1,14 +1,10 @@
 """Auto-suppress decoupling — saves MUST NOT mutate ignored_categories.
 
-The backend save handler used to derive auto-suppression from the
-registry whenever an op carried ``command.sourceCategory`` (or
-``op_context_category``). That defensive write has been removed.
-
-``ignored_categories`` is now mutated only by:
+``ignored_categories`` is mutated only by:
   - explicit Ignore actions (the payload's segment carries the category),
   - explicit clears (``ignored_categories: []``, MUST-7).
 
-These tests assert the new contract per per-segment category.
+These tests assert that contract per per-segment category.
 """
 from __future__ import annotations
 

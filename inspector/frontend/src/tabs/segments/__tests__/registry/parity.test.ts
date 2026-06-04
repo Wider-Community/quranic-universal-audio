@@ -1,15 +1,11 @@
 // TS-registry ↔ Python-registry parity test.
 //
-// The Python side is the source of truth; the TS twin must mirror it
-// row-for-row. The Phase 1 implementation either hand-writes the mirror
-// or generates it; either way, these assertions guarantee no drift.
+// The Python side is the source of truth; the TS twin mirrors it row-for-row.
+// These assertions guarantee no drift between the two registries.
 
-import { describe, expect,it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { loadOptional } from '../helpers/optional';
-
-const mod = await loadOptional<{ IssueRegistry: any }>('../../domain/registry');
-const IssueRegistry = mod?.IssueRegistry ?? null;
+import { IssueRegistry } from '../../domain/registry';
 
 const PY_SNAPSHOT = {
   failed:            { canIgnore: false, autoSuppress: true,  persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'error' },
@@ -27,18 +23,14 @@ const PY_SNAPSHOT = {
   basmala_amin:      { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'info' },
 };
 
-describe.skipIf(!IssueRegistry)('TS ↔ Python registry parity', () => {
+describe('TS ↔ Python registry parity', () => {
   it('TS registry matches Python registry snapshot', () => {
     for (const [cat, want] of Object.entries(PY_SNAPSHOT)) {
       const row = IssueRegistry[cat];
       expect(row).toBeTruthy();
       for (const [key, value] of Object.entries(want)) {
-        expect(row[key]).toBe(value);
+        expect((row as any)[key]).toBe(value);
       }
     }
   });
-});
-
-describe.skipIf(IssueRegistry)('TS ↔ Python registry parity (deferred)', () => {
-  it.todo('phase-1: domain/registry not yet present');
 });
