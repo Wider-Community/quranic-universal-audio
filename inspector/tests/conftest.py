@@ -27,7 +27,14 @@ import shutil
 import sys
 from pathlib import Path
 
-import pytest
+# Seed the session-signing secret BEFORE any test module or fixture imports
+# inspector code that touches ``flask.session`` or signs cookies. ``app.py``
+# tolerates a missing secret (warns + 503s OAuth routes) but anything that
+# signs a cookie inside a test needs a value. Centralising the setdefault here
+# means individual test files don't have to repeat the bootstrap.
+os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+
+import pytest  # noqa: E402
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "segments"
@@ -371,6 +378,7 @@ _SEG_CACHE_NAMES = (
     "_seg_split_group_index",
     "_seg_edit_history",
     "_seg_history_peaks",
+    "_seg_history_peaks_response",
     "_seg_validate_result",
     "_seg_stats_result",
 )

@@ -2,13 +2,13 @@ import { get } from 'svelte/store';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { selectedReciter } from '../../../tabs/segments/stores/chapter';
-import { activeTab } from '../active-tab';
+import { activeTab, setActiveTab } from '../active-tab';
 import { LS_KEYS, TAB_NAMES } from '../constants';
 import { gotoSegments } from '../goto-segments';
 
 afterEach(() => {
     selectedReciter.set('');
-    activeTab.set(TAB_NAMES.DASHBOARD);
+    setActiveTab(TAB_NAMES.DASHBOARD);
     try {
         localStorage.removeItem(LS_KEYS.SEG_RECITER);
     } catch {

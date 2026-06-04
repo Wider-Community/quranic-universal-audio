@@ -1,7 +1,7 @@
 // Phase 4: derived selectors return correct slices over SegmentState.
 
 import { get } from 'svelte/store';
-import { describe, expect,it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { makeSegment } from '../helpers/make-segment';
 import { loadOptional } from '../helpers/optional';
@@ -10,6 +10,16 @@ const segmentsStore = await loadOptional<any>('../../stores/segments');
 const chapterStore = await loadOptional<any>('../../stores/chapter');
 const filtersStore = await loadOptional<any>('../../stores/filters');
 const selectors = segmentsStore;
+
+// Reset the shared chapter store between test groups so a previous run's
+// segAllData / selectedChapter can't leak into the next describe block.
+function setupStore(): () => void {
+  if (!chapterStore?.segAllData) return () => {};
+  return () => {
+    chapterStore.segAllData.set(null);
+    if (chapterStore.selectedChapter) chapterStore.selectedChapter.set('');
+  };
+}
 
 const sampleState = () => ({
   byId: {
@@ -53,6 +63,16 @@ describe.skipIf(!segmentsStore)('normalized-state selectors', () => {
 });
 
 describe.skipIf(!segmentsStore || !chapterStore)('segmentsStore load-path wiring (IS-7)', () => {
+  let teardown: () => void = () => {};
+
+  beforeAll(() => {
+    teardown = setupStore();
+  });
+
+  afterAll(() => {
+    teardown();
+  });
+
   it('segmentsStore populates from segAllData when load-path fires', () => {
     const store = segmentsStore.segmentsStore;
     const segs = [
@@ -81,6 +101,16 @@ describe.skipIf(!segmentsStore || !chapterStore)('segmentsStore load-path wiring
 });
 
 describe.skipIf(!filtersStore || !chapterStore)('derivedTimings (silence_after derivation)', () => {
+  let teardown: () => void = () => {};
+
+  beforeAll(() => {
+    teardown = setupStore();
+  });
+
+  afterAll(() => {
+    teardown();
+  });
+
   it('derives silence_after_ms from segment adjacency within an entry', () => {
     const audio = 'https://example/a.mp3';
     const segs = [

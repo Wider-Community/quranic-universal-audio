@@ -16,11 +16,7 @@ What this exercises:
 """
 from __future__ import annotations
 
-import os
-
 from services.audio.peaks_slim import pack_slim
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 
 def _install_slim_peaks(backend, reciter: str, chapter: int, n_peaks: int = 60) -> None:

@@ -14,10 +14,7 @@ Coverage:
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
@@ -166,12 +163,6 @@ def test_revoke_member_not_found_returns_404(signed_in_client, monkeypatch):
 def test_revoke_force_releases_active_claim(signed_in_client, monkeypatch):
     """When a maintainer revokes a contributor who holds a claim, the
     claim is auto-released as part of the revoke."""
-    from datetime import datetime, timezone
-
-    from qua_shared.schemas import Member, Role, RolesFile
-
-    from services import access as access_service
-
     _stub_access_persist(monkeypatch)
     _stub_state_persist(monkeypatch)
     _replace_state([
@@ -196,12 +187,6 @@ def test_revoke_force_releases_active_claim(signed_in_client, monkeypatch):
 
 
 def test_revoke_maintainer_cannot_revoke_owner(signed_in_client, monkeypatch):
-    from datetime import datetime, timezone
-
-    from qua_shared.schemas import Member, Role
-
-    from services import access as access_service
-
     _stub_access_persist(monkeypatch)
     # Sign in first so the fixture seeds the maintainer revoker.
     client, _ = signed_in_client(hf_user_id="u-mod", login="mod", role="maintainer")
@@ -223,12 +208,6 @@ def test_revoke_maintainer_cannot_revoke_owner(signed_in_client, monkeypatch):
 
 
 def test_update_login_cache_refresh(signed_in_client, monkeypatch):
-    from datetime import datetime, timezone
-
-    from qua_shared.schemas import Member, Role
-
-    from services import access as access_service
-
     _stub_access_persist(monkeypatch)
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner", role="owner")
     from tests.conftest import _seed_role

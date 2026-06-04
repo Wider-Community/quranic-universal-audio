@@ -12,9 +12,24 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from qua_shared.schemas import Actor, AudioCategory, Delivery, ReciterEntry, Role
 from services.reference import timestamps as ts_manifest
 from services.state import state as state_service
+
+
+@pytest.fixture(autouse=True)
+def _reset_ts_manifest_cache():
+    """Clear the process-wide TS manifest cache around every test.
+
+    The autouse ``_substrate_db`` fixture resets the DB but not the manifest's
+    ``_built`` / ``_built_seq`` / ``_served_slugs`` module state. Without this
+    drop, a warmed cache from a previous test leaks into the next case.
+    """
+    ts_manifest.invalidate()
+    yield
+    ts_manifest.invalidate()
 
 
 def _seed_marked_ready(slug: str = "rec_a") -> None:

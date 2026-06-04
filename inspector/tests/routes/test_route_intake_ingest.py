@@ -8,7 +8,6 @@ Covers 200 (owner cookie + bearer owner), 401 (no creds, bad token), 403
 from __future__ import annotations
 
 import json
-import os
 
 import pytest
 
@@ -22,8 +21,6 @@ from qua_shared.schemas import (
     Style,
     Vocab,
 )
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 

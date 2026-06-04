@@ -12,12 +12,9 @@ unit coverage; these tests exercise the HTTP boundary:
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
 
 import pytest
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 
 # Helpers ---------------------------------------------------------------

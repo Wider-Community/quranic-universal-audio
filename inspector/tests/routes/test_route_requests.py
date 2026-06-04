@@ -12,12 +12,9 @@ Covers all four routes under ``inspector/routes/requests.py``:
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
 
 import pytest
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 

@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
-
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 
 def _state_row(slug: str, *, state: str = "awaiting_review",

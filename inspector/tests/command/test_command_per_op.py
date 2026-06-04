@@ -6,11 +6,6 @@ import json
 import pytest
 
 
-
-import os
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
-
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
 OP_TYPES = ["trim", "split", "merge", "edit_reference", "delete", "ignore_issue"]

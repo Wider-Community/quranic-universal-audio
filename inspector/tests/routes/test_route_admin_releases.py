@@ -22,10 +22,7 @@ HF Jobs API.
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 

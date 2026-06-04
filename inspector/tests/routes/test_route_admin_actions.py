@@ -8,10 +8,7 @@ in-memory state replacement + persistence stubs to avoid the bucket.
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 

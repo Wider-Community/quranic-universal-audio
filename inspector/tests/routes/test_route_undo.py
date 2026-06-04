@@ -8,9 +8,6 @@ The revert record carries ``actor`` exactly like the forward batch.
 from __future__ import annotations
 
 import json
-import os
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 

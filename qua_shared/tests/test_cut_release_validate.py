@@ -13,18 +13,11 @@ bounds once so the three fields always agree.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+import gzip
 
-_ROOT = Path(__file__).resolve().parents[3]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
-import gzip  # noqa: E402
-
-from qua_jobs import cut_release  # noqa: E402
-from qua_jobs.cut_release import _verse_for_validate  # noqa: E402
-from qua_shared.dataset_validation import (  # noqa: E402
+from qua_jobs import cut_release
+from qua_jobs.cut_release import _verse_for_validate
+from qua_shared.dataset_validation import (
     check_duration_arithmetic,
 )
 

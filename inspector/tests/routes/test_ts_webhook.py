@@ -7,10 +7,6 @@ status is acked without publishing.
 
 from __future__ import annotations
 
-import os
-
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _URL = "/api/webhooks/ts-job-complete"
 _SECRET = "test-webhook-secret"

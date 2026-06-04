@@ -68,23 +68,33 @@ def test_zero_action_user_still_listed(seed_role):
 
 
 def test_detail_outcome_and_stats(seed_role, seed_state):
+    from datetime import datetime, timezone
+
+    from services.db import repo_claims
+    from tests.conftest import _seed_delivery_chain
+
     seed_role("rev", login="rev", role="contributor")
     # open claim → "claimed, open now". Not marked-ready so it doesn't add a
     # ~0-turnaround pair and skew the avg (the only turnaround pair is pubS).
     seed_state("openS", state="under_review", assignee_hf_id="rev",
                assignee_login="rev", marked_ready=False)
     # a closed-as-published claim row for history/turnaround
+    claimed_at = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    marked_at = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    released_at = datetime(2026, 1, 2, 0, 0, 0, tzinfo=timezone.utc)
     with db.transaction() as conn:
-        conn.execute(
-            "INSERT INTO deliveries(slug,reciter_id,riwayah,style,source,channel,"
-            "audio_category,chapter_count,added_at,added_by_hf_id) VALUES "
-            "('pubS','rid','hafs','mur','src','ch','by_surah',114,'2026-01-01T00:00:00Z','sys')"
+        _seed_delivery_chain(conn, "pubS")
+        repo_claims.open_claim(
+            slug="pubS",
+            assignee_id="rev",
+            assignee_login="rev",
+            claimed_at=claimed_at,
         )
-        conn.execute(
-            "INSERT INTO claims(slug, assignee_id, assignee_login_snapshot, claimed_at, "
-            "released_at, marked_ready_at, close_reason) VALUES "
-            "('pubS','rev','rev','2026-01-01T00:00:00Z','2026-01-02T00:00:00Z',"
-            "'2026-01-01T12:00:00Z','reciter.published')"
+        repo_claims.set_marked_ready("pubS", ready=True, at=marked_at)
+        repo_claims.close_claim(
+            slug="pubS",
+            close_reason="reciter.published",
+            released_at=released_at,
         )
         _ins_request(conn, rid="rq1", requester="rev", status="accepted")
         _ins_request(conn, rid="rq2", requester="rev", status="returned")

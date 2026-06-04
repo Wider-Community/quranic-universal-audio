@@ -14,9 +14,6 @@ on every save/undo route. These tests assert:
 from __future__ import annotations
 
 import json
-import os
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _ORIGIN = "http://localhost"
 _HEADERS = {"Content-Type": "application/json", "Origin": _ORIGIN}

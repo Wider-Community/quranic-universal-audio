@@ -19,11 +19,6 @@ import pytest
 from tests.conftest import PER_SEGMENT_CATEGORIES
 
 
-
-import os
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
-
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
 @pytest.mark.parametrize("category", PER_SEGMENT_CATEGORIES, ids=PER_SEGMENT_CATEGORIES)

@@ -14,14 +14,10 @@ from qua_shared.schemas import Actor, Role
 
 
 @pytest.fixture
-def fresh_state(tmp_path, monkeypatch):
+def fresh_state(tmp_path):
     """Per-test FilesystemBackend so each test starts with a clean store."""
     from services import activity_state as activity_state_service
     from services import hf_bucket as _hf_bucket
-
-    monkeypatch.setenv("INSPECTOR_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("INSPECTOR_BACKEND", "filesystem")
-    monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))
 
     backend = _hf_bucket.FilesystemBackend(tmp_path)
     _hf_bucket.set_backend(backend)

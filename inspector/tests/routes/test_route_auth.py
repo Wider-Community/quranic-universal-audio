@@ -14,14 +14,9 @@ covered by manual smoke during deploy rather than a mocked unit test.
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
 
 import pytest
-
-# Ensure session secret is set before app import — auth.py reads it via the
-# secrets_guard module on first use.
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 
 def _seed_state_row(slug: str, *, assignee_hf_id: str | None = None,

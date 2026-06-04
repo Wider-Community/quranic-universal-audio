@@ -4,11 +4,6 @@ from __future__ import annotations
 import json
 
 
-
-import os
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
-
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
 def _segments_with_uid(detailed: dict, uid: str) -> list[dict]:

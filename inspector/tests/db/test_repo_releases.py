@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import pytest
 
 from services import db
-from services.db import repo_releases
+from services.db import get_conn, repo_releases
 
 
 def _now() -> datetime:
@@ -25,7 +25,6 @@ def _seed_minimal_delivery(slug: str = "minshawy_murattal") -> str:
     Must run inside a ``db.transaction()`` block — writes are gated by the
     writer connection.
     """
-    from services.db import get_conn
     conn = get_conn()
     conn.execute("INSERT OR IGNORE INTO riwayahs(slug,short,name) VALUES ('hafs_an_asim','hafs','Hafs')")
     conn.execute("INSERT OR IGNORE INTO styles(slug,short,name) VALUES ('murattal','m','Murattal')")

@@ -10,12 +10,6 @@ return-path helpers that replaced the session.
 
 from __future__ import annotations
 
-import os
-
-# auth.py reads the session secret lazily via secrets_guard; seed it so the
-# module imports cleanly under pytest.
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
-
 
 def test_state_round_trip_needs_no_session():
     """set/get/clear work with ``session=None`` — proving the session is never

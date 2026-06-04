@@ -2,17 +2,13 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import textwrap
 
 import pytest
 
-
-
-import os
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 

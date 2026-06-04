@@ -11,9 +11,6 @@ The GET route is public and serves the canonical b64 records.
 from __future__ import annotations
 
 import json
-import os
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 _XORIGIN = {"Content-Type": "application/json", "Origin": "http://evil.example"}
