@@ -43,11 +43,11 @@ jobs:
             fi
           fi
 
-      - name: Lint, typecheck, test, build
+      - name: Lint, typecheck, test (with coverage), build
         run: |
           npm run lint
           npm run check
-          npm run test
+          npm run test:coverage
           npm run build
 
   backend-checks:
@@ -79,7 +79,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/inspector
-        run: python -m pytest qua_shared/tests
+        run: python -m pytest qua_shared/tests --cov=qua_shared --cov-report=term-missing:skip-covered --no-cov-on-fail
 
   schema-codegen-check:
     # Verifies inspector/frontend/src/lib/types/generated/schemas.ts is in

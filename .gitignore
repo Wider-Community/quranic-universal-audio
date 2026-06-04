@@ -25,3 +25,9 @@ node_modules/
 
 # Release packaging output
 dist/
+
+# Coverage output
+.coverage
+.coverage.*
+coverage/
+htmlcov/
