@@ -160,3 +160,23 @@ def test_by_ayah_ref_projection():
     shard = _shard([_seg("2:255", 0, 4000, [1, 2, 3])])
     out = project_segment_shard(shard)
     assert _widxs(out["2:255"]) == [1, 2, 3]
+
+
+# --- verse bounds are a superset of every word/letter time (no clip truncation) ---
+
+def test_verse_bounds_cover_word_and_letter_bleed():
+    # A word (and its last letter) can end a few ms PAST the segment's t[1]; the
+    # clip bound must reach them, not stop at the segment edge, or the final word
+    # gets truncated and a word end falls outside [verse_start, verse_end].
+    seg = {"ref": "1:1", "t": [0, 1000], "words": [
+        [1, 0, 500, [["a", 0, 500]], []],
+        # word 2 ends 5 ms past seg.t[1]=1000; its last letter ends at 1007.
+        [2, 500, 1005, [["b", 500, 1007]], []],
+    ]}
+    v = project_segment_shard(_shard([seg]))["1:1"]
+    assert v["verse_end_ms"] == 1007 and v["verse_start_ms"] == 0, v
+    # Invariant: every word + letter time lies within [verse_start, verse_end].
+    for w in v["words"]:
+        assert v["verse_start_ms"] <= w[1] and w[2] <= v["verse_end_ms"]
+        for _ch, ls, le in w[3]:
+            assert v["verse_start_ms"] <= ls and le <= v["verse_end_ms"]

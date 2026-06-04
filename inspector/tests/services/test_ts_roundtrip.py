@@ -35,10 +35,14 @@ CAT = "by_surah_audio"
 SLUG = "roundtrip_reciter"
 
 
-def _ok(locations, t0=0.0, step=0.5):
+def _ok(locations, t0=0.0, step=0.2):
+    # Segment-RELATIVE word times (s): the pipeline's _convert_word adds the
+    # segment's time_start offset downstream, so words land inside the segment.
+    # t0 is accepted for call-site readability but unused (passing the segment
+    # start here would double-count the offset); step keeps words within span.
     words = []
     for i, loc in enumerate(locations):
-        s = t0 + i * step
+        s = i * step
         words.append({
             "location": loc, "start": s, "end": s + step,
             "letters": [{"char": "x", "start": s, "end": s + step}],
