@@ -174,7 +174,7 @@ def test_ingest_new_reciter_creates_reciter_and_vocab(fs_backend):
 def test_ingest_youtube_delivery_carries_source_url_and_rollup(fs_backend):
     """A YouTube intake: channel=youtube (auto-added via vocab_additions), a
     per-uploader source, the originating playlist URL persisted as
-    Delivery.source_url, and the post-align reprobe rollup (cbr / 128 / 44100 /
+    Delivery.source_url, and the post-align reprobe rollup (cbr / 192 / 44100 /
     total duration) landing on the delivery row."""
     rid = _seed_accepted_intake(kind="new_reciter", reciter_id="yt_reciter")
     body = {
@@ -185,7 +185,7 @@ def test_ingest_youtube_delivery_carries_source_url_and_rollup(fs_backend):
             "source_url": "https://www.youtube.com/playlist?list=PLxyz",
             "audio_category": "by_surah", "recording_year": None,
             "recording_context": None,
-            "bitrate_mode": "cbr", "bitrate_kbps_nominal": 128,
+            "bitrate_mode": "cbr", "bitrate_kbps_nominal": 192,
             "sample_rate_hz": 44100, "total_duration_sec": 3600,
         },
         "vocab_additions": {
@@ -205,7 +205,7 @@ def test_ingest_youtube_delivery_carries_source_url_and_rollup(fs_backend):
     assert d.channel == "youtube" and d.source == "some_uploader"
     assert d.source_url == "https://www.youtube.com/playlist?list=PLxyz"
     assert d.bitrate_mode.value == "cbr"
-    assert d.bitrate_kbps_nominal == 128
+    assert d.bitrate_kbps_nominal == 192
     assert d.sample_rate_hz == 44100
     assert d.total_duration_sec == 3600
 
