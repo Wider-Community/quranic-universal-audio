@@ -33,10 +33,12 @@ on:
         options: ['true', 'false']
 
 permissions:
-  # write (not read) so the reusable inspector-checks.yml frontend-checks
-  # job can push back lint autofixes — caller must grant >= called job.
-  contents: write
+  contents: read
   packages: write
+  # pull-requests: write so the reusable inspector-checks.yml frontend-checks
+  # job can post eslint --fix review suggestions on PRs (reviewdog). A reusable
+  # job's permissions are capped by the caller, so the caller must grant it.
+  pull-requests: write
 
 concurrency:
   group: docker-publish-${{ github.ref }}

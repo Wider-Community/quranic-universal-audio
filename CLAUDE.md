@@ -57,7 +57,7 @@ inspector/
 ├── config.py         Env-overridable tunables (paths, timeouts, thresholds)
 ├── constants.py      Domain literals (validation categories, muqattaat, qalqala)
 ├── routes/           Thin Flask blueprints (subpackages: admin/ audio/ auth/ claims/ public/ segments/ timestamps/)
-├── services/         Business logic, zero Flask imports — subpackages: db/ storage/ audio/ auth/ admin/ state/ segments/ validation/ activity/ reference/ quran_foundation/
+├── services/         Business logic, Flask-free (except auth/auth.py authlib glue) — subpackages: db/ storage/ audio/ auth/ admin/ state/ segments/ validation/ activity/ reference/ quran_foundation/
 ├── domain/           Pure model — Segment, SegmentCommand, identity
 ├── adapters/         JSON ↔ domain conversion
 ├── utils/            Pure utilities + cross-cutting decorators
@@ -127,7 +127,7 @@ Cross-cutting rules to respect before touching anything. Depth is in the referen
 
 ## Conventions
 
-- **Clean imports** — services never import Flask; routes are thin (parse → service → jsonify).
+- **Clean imports** — services are Flask-free except `services/auth/auth.py` (authlib's `flask_client` OAuth integration is irreducible); routes are thin (parse → service → jsonify). No NEW Flask/authlib import under `services/` without extending the allow-list in the `services-flask-free` CI guard + `docs/reference/architecture.md`.
 - **Cache via getter/setter** — `services/storage/cache.py` owns all cache variables; no `global` outside it.
 - **Registry-paired validation** — accordion order in `services/validation/registry.py` + `tabs/segments/domain/registry.ts` must stay in lockstep.
 - **Capability-gated permissions** — every permission gate routes through `can()` against the `CAPABILITIES` registry (`qua_shared/schemas/capabilities.py`); register a `Capability` and it auto-surfaces in the owner Permissions tab (the matrix is fully data-driven — no FE edit). Never add a new gate with hardcoded `is_maintainer()`/`@require_role`. → [`capabilities.md`](docs/reference/capabilities.md)

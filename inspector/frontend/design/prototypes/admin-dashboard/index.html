@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin dashboard — Users compartment</title>
+    <link rel="stylesheet" href="../../../src/styles/tokens.css" />
+    <link rel="stylesheet" href="./shared.css" />
+</head>
+<body>
+<div class="proto-page">
+    <div class="proto-header">
+        <div>
+            <h1>Admin dashboard — Users compartment</h1>
+            <div class="sub">SHAPE / HIGH-FI · static mockup · data wiring later</div>
+        </div>
+    </div>
+
+    <p class="intro">
+        A maintainer/owner-only modal opened from above the Admin notifications rail.
+        Top tabs frame future compartments (<strong>Requests</strong>, <strong>To publish</strong>,
+        <strong>Permissions</strong>); the <strong>Users</strong> tab is built here — a dense,
+        sortable directory with a per-user detail drawer. Every metric below comes from the
+        SQLite substrate already in the repo, except <strong>edits</strong>, which is shown as
+        a deferred placeholder. States are stacked so you can scan them in one pass.
+    </p>
+
+    <!-- ============================================================
+         1 · ENTRY POINT
+         ============================================================ -->
+    <div class="section">1 · Entry point — button above the Admin notifications rail</div>
+    <p class="proto-caption">
+        Reuses the existing <strong>$isAdmin</strong> gate (maintainers + owners). Primary
+        accent button so it reads as the one action above the passive notification feed.
+    </p>
+    <div class="rail-demo">
+        <button class="admin-open">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                <rect x="1.5" y="1.5" width="5" height="5" rx="1" />
+                <rect x="9.5" y="1.5" width="5" height="5" rx="1" />
+                <rect x="1.5" y="9.5" width="5" height="5" rx="1" />
+                <rect x="9.5" y="9.5" width="5" height="5" rx="1" />
+            </svg>
+            Admin dashboard
+        </button>
+        <div class="rail-head">
+            <h2>Admin notifications</h2>
+            <span class="sub">3 live</span>
+        </div>
+        <div class="rail-line">@yusuf_k marked ready saad_al_ghamdi</div>
+        <div class="rail-line">@nuralign reassigned husary_muallim</div>
+        <div class="rail-line">abdul_basit_warsh — sent back</div>
+    </div>
+
+    <!-- ============================================================
+         2 · USERS — POPULATED (hero)
+         ============================================================ -->
+    <div class="section">2 · Users — default</div>
+    <p class="proto-caption">
+        Sorted by <strong>reviews</strong> desc. Numeric columns are monospace, tabular, with
+        zero dulled to faint. A claim older than the stall threshold flags amber on last activity.
+        Click any row to open the detail drawer (state 3).
+    </p>
+    <div class="am">
+        <header class="am-header">
+            <h2 class="am-title">Admin dashboard</h2>
+            <nav class="am-tabs">
+                <button class="am-tab active">Users <span class="tab-count">9</span></button>
+                <button class="am-tab disabled">Requests</button>
+                <button class="am-tab disabled">To publish</button>
+                <button class="am-tab disabled">Permissions</button>
+            </nav>
+            <button class="am-close" aria-label="Close">×</button>
+        </header>
+        <div class="am-body">
+            <div class="users-summary">
+                <div class="sum-group">
+                    <span class="sum-label">People</span>
+                    <span class="sum-item"><span class="n">9</span><span class="t">registered</span></span>
+                    <span class="sum-item"><span class="n">5</span><span class="t">active this week</span></span>
+                </div>
+                <span class="sum-sep"></span>
+                <div class="sum-group">
+                    <span class="sum-label">Traffic · today</span>
+                    <span class="sum-item"><span class="n">22</span><span class="t">signed-in</span></span>
+                    <span class="sum-item"><span class="n">410</span><span class="t">anonymous</span></span>
+                    <span class="sum-item"><span class="n approx">~300</span><span class="t">unique visitors</span></span>
+                </div>
+            </div>
+            <div class="users-toolbar">
+                <span class="search">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                        <circle cx="7" cy="7" r="5" /><line x1="11" y1="11" x2="14.5" y2="14.5" />
+                    </svg>
+                    <input type="text" placeholder="Search login or HF id…" />
+                </span>
+                <div class="role-filters">
+                    <button class="chip active">All <span class="c-count">9</span></button>
+                    <button class="chip">Owners <span class="c-count">1</span></button>
+                    <button class="chip">Maintainers <span class="c-count">2</span></button>
+                    <button class="chip">Contributors <span class="c-count">6</span></button>
+                </div>
+                <span class="toolbar-spacer"></span>
+                <span class="toolbar-total">9 users</span>
+            </div>
+
+            <div class="users-scroll">
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Role</th>
+                            <th>Joined</th>
+                            <th>Last activity</th>
+                            <th class="num">Requests</th>
+                            <th class="num">Reviews <span class="sort">▼</span></th>
+                            <th>Active claim</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><div class="u-cell"><span class="avatar maintainer">N</span><span class="u-names"><span class="u-login">@nuralign</span><span class="u-id">hf_3f9c21a8</span></span></div></td>
+                            <td><span class="role maintainer">Maintainer</span></td>
+                            <td class="ago">Sep 3, 2025</td>
+                            <td><span class="ago">4h</span></td>
+                            <td class="num">2</td>
+                            <td class="num">18</td>
+                            <td><span class="claim-slug">husary_muallim</span> <span class="pill under-review">Under review</span></td>
+                        </tr>
+                        <tr>
+                            <td><div class="u-cell"><span class="avatar maintainer">Q</span><span class="u-names"><span class="u-login">@qaridata</span><span class="u-id">hf_d712be05</span></span></div></td>
+                            <td><span class="role maintainer">Maintainer</span></td>
+                            <td class="ago">Oct 21, 2025</td>
+                            <td><span class="ago">1d</span></td>
+                            <td class="num zero">0</td>
+                            <td class="num">11</td>
+                            <td><span class="dash">—</span></td>
+                        </tr>
+                        <tr>
+                            <td><div class="u-cell"><span class="avatar maintainer">Y</span><span class="u-names"><span class="u-login">@yusuf_k</span><span class="u-id">hf_a04e8c3d</span></span></div></td>
+                            <td><span class="role contributor">Contributor</span></td>
+                            <td class="ago">Jan 14, 2026</td>
+                            <td><span class="ago">3h</span></td>
+                            <td class="num">3</td>
+                            <td class="num">5</td>
+                            <td><span class="claim-slug">saad_al_ghamdi</span> <span class="pill ready">Marked ready</span></td>
+                        </tr>
+                        <tr>
+                            <td><div class="u-cell"><span class="avatar">H</span><span class="u-names"><span class="u-login">@hetchyy</span><span class="u-id">hf_0001cf2e</span></span></div></td>
+                            <td><span class="role owner">Owner</span></td>
+                            <td class="ago">Aug 12, 2025</td>
+                            <td><span class="ago">2h</span></td>
+                            <td class="num zero">0</td>
+                            <td class="num">3</td>
+                            <td><span class="dash">—</span></td>
+                        </tr>
+                        <tr>
+                            <td><div class="u-cell"><span class="avatar">O</span><span class="u-names"><span class="u-login">@omar_dev</span><span class="u-id">hf_77b1aa90</span></span></div></td>
+                            <td><span class="role contributor">Contributor</span></td>
+                            <td class="ago">Apr 1, 2026</td>
+                            <td><span class="ago">12d</span></td>
+                            <td class="num">2</td>
+                            <td class="num">3</td>
+                            <td><span class="dash">—</span></td>
+                        </tr>
+                        <tr>
+                            <td><div class="u-cell"><span class="avatar">A</span><span class="u-names"><span class="u-login">@amina_t</span><span class="u-id">hf_5e2d1b6f</span></span></div></td>
+                            <td><span class="role contributor">Contributor</span></td>
+                            <td class="ago">Feb 2, 2026</td>
+                            <td><span class="ago">32m</span></td>
+                            <td class="num">1</td>
+                            <td class="num">2</td>
+                            <td><span class="claim-slug">minshawi_mujawwad</span> <span class="pill under-review">Under review</span></td>
+                        </tr>
+                        <tr>
+                            <td><div class="u-cell"><span class="avatar">T</span><span class="u-names"><span class="u-login">@tariq99</span><span class="u-id">hf_9c44ed10</span></span></div></td>
+                            <td><span class="role contributor">Contributor</span></td>
+                            <td class="ago">Feb 18, 2026</td>
+                            <td><span class="ago stale">9d</span></td>
+                            <td class="num zero">0</td>
+                            <td class="num">1</td>
+                            <td><span class="claim-slug">abdul_basit_warsh</span> <span class="pill under-review">Under review</span></td>
+                        </tr>
+                        <tr>
+                            <td><div class="u-cell"><span class="avatar">L</span><span class="u-names"><span class="u-login">@layla_r</span><span class="u-id">hf_b8f0729c</span></span></div></td>
+                            <td><span class="role contributor">Contributor</span></td>
+                            <td class="ago">Mar 9, 2026</td>
+                            <td><span class="ago">5d</span></td>
+                            <td class="num">4</td>
+                            <td class="num zero">0</td>
+                            <td><span class="dash">—</span></td>
+                        </tr>
+                        <tr>
+                            <td><div class="u-cell"><span class="avatar">Z</span><span class="u-names"><span class="u-login">@zaytuna</span><span class="u-id">hf_2a6710d4</span></span></div></td>
+                            <td><span class="role contributor">Contributor</span></td>
+                            <td class="ago">May 10, 2026</td>
+                            <td><span class="ago">1d</span></td>
+                            <td class="num">1</td>
+                            <td class="num zero">0</td>
+                            <td><span class="dash">—</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         3 · USER DETAIL DRAWER
+         ============================================================ -->
+    <div class="section">3 · User detail — drawer over the table</div>
+    <p class="proto-caption">
+        Row click slides a drawer over the right ~62% (table dims behind a scrim). Stat strip up
+        top, then role / claim / request / activity history. HF login links out to the profile.
+    </p>
+    <div class="am">
+        <header class="am-header">
+            <h2 class="am-title">Admin dashboard</h2>
+            <nav class="am-tabs">
+                <button class="am-tab active">Users <span class="tab-count">9</span></button>
+                <button class="am-tab disabled">Requests</button>
+                <button class="am-tab disabled">To publish</button>
+                <button class="am-tab disabled">Permissions</button>
+            </nav>
+            <button class="am-close" aria-label="Close">×</button>
+        </header>
+        <div class="am-body">
+            <div class="users-summary">
+                <div class="sum-group">
+                    <span class="sum-label">People</span>
+                    <span class="sum-item"><span class="n">9</span><span class="t">registered</span></span>
+                    <span class="sum-item"><span class="n">5</span><span class="t">active this week</span></span>
+                </div>
+                <span class="sum-sep"></span>
+                <div class="sum-group">
+                    <span class="sum-label">Traffic · today</span>
+                    <span class="sum-item"><span class="n">22</span><span class="t">signed-in</span></span>
+                    <span class="sum-item"><span class="n">410</span><span class="t">anonymous</span></span>
+                    <span class="sum-item"><span class="n approx">~300</span><span class="t">unique visitors</span></span>
+                </div>
+            </div>
+            <div class="users-toolbar">
+                <span class="search">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                        <circle cx="7" cy="7" r="5" /><line x1="11" y1="11" x2="14.5" y2="14.5" />
+                    </svg>
+                    <input type="text" placeholder="Search login or HF id…" />
+                </span>
+                <div class="role-filters">
+                    <button class="chip active">All <span class="c-count">9</span></button>
+                    <button class="chip">Owners <span class="c-count">1</span></button>
+                    <button class="chip">Maintainers <span class="c-count">2</span></button>
+                    <button class="chip">Contributors <span class="c-count">6</span></button>
+                </div>
+                <span class="toolbar-spacer"></span>
+                <span class="toolbar-total">9 users</span>
+            </div>
+            <div class="users-scroll">
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>User</th><th>Role</th><th>Joined</th><th>Last activity</th>
+                            <th class="num">Requests</th><th class="num">Reviews <span class="sort">▼</span></th><th>Active claim</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="selected">
+                            <td><div class="u-cell"><span class="avatar maintainer">N</span><span class="u-names"><span class="u-login">@nuralign</span><span class="u-id">hf_3f9c21a8</span></span></div></td>
+                            <td><span class="role maintainer">Maintainer</span></td>
+                            <td class="ago">Sep 3, 2025</td><td><span class="ago">4h</span></td>
+                            <td class="num">2</td><td class="num">18</td>
+                            <td><span class="claim-slug">husary_muallim</span> <span class="pill under-review">Under review</span></td>
+                        </tr>
+                        <tr>
+                            <td><div class="u-cell"><span class="avatar maintainer">Q</span><span class="u-names"><span class="u-login">@qaridata</span><span class="u-id">hf_d712be05</span></span></div></td>
+                            <td><span class="role maintainer">Maintainer</span></td>
+                            <td class="ago">Oct 21, 2025</td><td><span class="ago">1d</span></td>
+                            <td class="num zero">0</td><td class="num">11</td><td><span class="dash">—</span></td>
+                        </tr>
+                        <tr>
+                            <td><div class="u-cell"><span class="avatar maintainer">Y</span><span class="u-names"><span class="u-login">@yusuf_k</span><span class="u-id">hf_a04e8c3d</span></span></div></td>
+                            <td><span class="role contributor">Contributor</span></td>
+                            <td class="ago">Jan 14, 2026</td><td><span class="ago">3h</span></td>
+                            <td class="num">3</td><td class="num">5</td>
+                            <td><span class="claim-slug">saad_al_ghamdi</span> <span class="pill ready">Marked ready</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="drawer-scrim"></div>
+            <aside class="drawer">
+                <header class="drawer-head">
+                    <button class="drawer-back" aria-label="Back to list">‹</button>
+                    <div class="drawer-id">
+                        <span class="avatar maintainer">N</span>
+                        <div class="who">
+                            <div class="top">
+                                <span class="login">@nuralign</span>
+                                <span class="role maintainer">Maintainer</span>
+                                <a class="hf-link" href="https://huggingface.co/nuralign" target="_blank" rel="noopener">
+                                    huggingface.co/nuralign
+                                    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3">
+                                        <path d="M4 2h6v6" /><path d="M10 2 3 9" /><path d="M9 7v3H2V3h3" />
+                                    </svg>
+                                </a>
+                            </div>
+                            <div class="meta"><span class="hid">hf_3f9c21a8</span> · joined Sep 3, 2025 · last active 4h ago</div>
+                        </div>
+                    </div>
+                </header>
+                <div class="drawer-scroll">
+                    <div class="stat-strip">
+                        <div class="stat"><div class="v">18</div><div class="k">Reviews</div><div class="sub">marked ready</div></div>
+                        <div class="stat"><div class="v">24</div><div class="k">Claims</div><div class="sub">lifetime</div></div>
+                        <div class="stat"><div class="v">2.4d</div><div class="k">Avg turnaround</div><div class="sub">claim → ready</div></div>
+                        <div class="stat"><div class="v">2</div><div class="k">Requests</div><div class="sub">1 accepted · 1 pending</div></div>
+                    </div>
+
+                    <section class="d-section">
+                        <h3>Role history</h3>
+                        <ul class="tl">
+                            <li>
+                                <span class="dot violet"></span>
+                                <span class="ev">Granted <strong>Maintainer</strong> <span class="by">by @hetchyy</span></span>
+                                <span class="when">Sep 3, 2025</span>
+                            </li>
+                        </ul>
+                    </section>
+
+                    <section class="d-section">
+                        <h3>Claims <span class="n">24 · showing 4</span></h3>
+                        <ul class="tl">
+                            <li>
+                                <span class="dot accent"></span>
+                                <span class="ev"><span class="slugref">husary_muallim</span> — claimed, open now</span>
+                                <span class="when">4h ago</span>
+                            </li>
+                            <li>
+                                <span class="dot green"></span>
+                                <span class="ev"><span class="slugref">mishary_alafasy_hafs</span> — published</span>
+                                <span class="when">1d ago</span>
+                            </li>
+                            <li>
+                                <span class="dot green"></span>
+                                <span class="ev"><span class="slugref">abdulbasit_mujawwad</span> — published</span>
+                                <span class="when">5d ago</span>
+                            </li>
+                            <li>
+                                <span class="dot amber"></span>
+                                <span class="ev"><span class="slugref">ghamadi_taraweeh</span> — released without publish</span>
+                                <span class="when">13d ago</span>
+                            </li>
+                        </ul>
+                    </section>
+
+                    <section class="d-section">
+                        <h3>Requests <span class="n">2</span></h3>
+                        <ul class="tl">
+                            <li>
+                                <span class="dot"></span>
+                                <span class="ev">New reciter — <span class="slugref">Maher al-Muaiqly · Warsh</span> &nbsp;<span class="tag pending">Pending</span></span>
+                                <span class="when">2d ago</span>
+                            </li>
+                            <li>
+                                <span class="dot"></span>
+                                <span class="ev">Combo edit — <span class="slugref">husary_muallim</span> &nbsp;<span class="tag accepted">Accepted</span></span>
+                                <span class="when">6d ago</span>
+                            </li>
+                        </ul>
+                    </section>
+
+                    <section class="d-section">
+                        <h3>Recent activity <span class="n">last 5</span></h3>
+                        <ul class="tl">
+                            <li><span class="dot accent"></span><span class="ev">Marked ready <span class="slugref">husary_muallim</span></span><span class="when">1h ago</span></li>
+                            <li><span class="dot accent"></span><span class="ev">Claimed <span class="slugref">husary_muallim</span></span><span class="when">4h ago</span></li>
+                            <li><span class="dot violet"></span><span class="ev">Reassigned <span class="slugref">abdul_basit_warsh</span> <span class="by">→ @tariq99</span></span><span class="when">2d ago</span></li>
+                            <li><span class="dot green"></span><span class="ev">Published <span class="slugref">mishary_alafasy_hafs</span></span><span class="when">1d ago</span></li>
+                            <li><span class="dot"></span><span class="ev">Submitted request <span class="by">new reciter</span></span><span class="when">2d ago</span></li>
+                        </ul>
+                    </section>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         4 · EDGE STATES
+         ============================================================ -->
+    <div class="section">4 · Empty · loading · error</div>
+    <p class="proto-caption">
+        Empty teaches the filter (it's a no-match, not a dead end). Loading is a skeleton, not a
+        spinner. Error keeps a retry affordance.
+    </p>
+
+    <p class="proto-caption" style="margin-top:var(--s-6)"><strong>Empty</strong> — search/filter matched nobody</p>
+    <div class="am short">
+        <header class="am-header">
+            <h2 class="am-title">Admin dashboard</h2>
+            <nav class="am-tabs">
+                <button class="am-tab active">Users <span class="tab-count">9</span></button>
+                <button class="am-tab disabled">Requests</button>
+                <button class="am-tab disabled">To publish</button>
+                <button class="am-tab disabled">Permissions</button>
+            </nav>
+            <button class="am-close" aria-label="Close">×</button>
+        </header>
+        <div class="am-body">
+            <div class="users-toolbar">
+                <span class="search">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="5" /><line x1="11" y1="11" x2="14.5" y2="14.5" /></svg>
+                    <input type="text" value="zzz" />
+                </span>
+                <div class="role-filters">
+                    <button class="chip">All <span class="c-count">9</span></button>
+                    <button class="chip active">Owners <span class="c-count">1</span></button>
+                    <button class="chip">Maintainers <span class="c-count">2</span></button>
+                    <button class="chip empty">Contributors <span class="c-count">0</span></button>
+                </div>
+                <span class="toolbar-spacer"></span>
+                <span class="toolbar-total">0 of 9</span>
+            </div>
+            <div class="state-block">
+                <div class="glyph">⌕</div>
+                <h4>No users match</h4>
+                <p>No owner matches “zzz”. Clear the search or pick a different role.</p>
+            </div>
+        </div>
+    </div>
+
+    <p class="proto-caption" style="margin-top:var(--s-8)"><strong>Loading</strong> — skeleton rows</p>
+    <div class="am short">
+        <header class="am-header">
+            <h2 class="am-title">Admin dashboard</h2>
+            <nav class="am-tabs">
+                <button class="am-tab active">Users</button>
+                <button class="am-tab disabled">Requests</button>
+                <button class="am-tab disabled">To publish</button>
+                <button class="am-tab disabled">Permissions</button>
+            </nav>
+            <button class="am-close" aria-label="Close">×</button>
+        </header>
+        <div class="am-body">
+            <div class="users-toolbar">
+                <span class="search" style="opacity:.6">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="5" /><line x1="11" y1="11" x2="14.5" y2="14.5" /></svg>
+                    <input type="text" placeholder="Search login or HF id…" disabled />
+                </span>
+                <span class="toolbar-spacer"></span>
+                <span class="toolbar-total">loading…</span>
+            </div>
+            <div class="sk-row"><span class="sk circle"></span><span class="sk w-60"></span><span class="sk w-80"></span><span class="sk w-60"></span><span class="sk w-40"></span><span class="sk w-40"></span><span class="sk w-40"></span><span class="sk w-80"></span></div>
+            <div class="sk-row"><span class="sk circle"></span><span class="sk w-80"></span><span class="sk w-60"></span><span class="sk w-80"></span><span class="sk w-40"></span><span class="sk w-40"></span><span class="sk w-40"></span><span class="sk w-60"></span></div>
+            <div class="sk-row"><span class="sk circle"></span><span class="sk w-40"></span><span class="sk w-80"></span><span class="sk w-60"></span><span class="sk w-40"></span><span class="sk w-40"></span><span class="sk w-40"></span><span class="sk w-80"></span></div>
+            <div class="sk-row"><span class="sk circle"></span><span class="sk w-60"></span><span class="sk w-60"></span><span class="sk w-80"></span><span class="sk w-40"></span><span class="sk w-40"></span><span class="sk w-40"></span><span class="sk w-40"></span></div>
+        </div>
+    </div>
+
+    <p class="proto-caption" style="margin-top:var(--s-8)"><strong>Error</strong> — load failed</p>
+    <div class="am short">
+        <header class="am-header">
+            <h2 class="am-title">Admin dashboard</h2>
+            <nav class="am-tabs">
+                <button class="am-tab active">Users</button>
+                <button class="am-tab disabled">Requests</button>
+                <button class="am-tab disabled">To publish</button>
+                <button class="am-tab disabled">Permissions</button>
+            </nav>
+            <button class="am-close" aria-label="Close">×</button>
+        </header>
+        <div class="am-body">
+            <div class="state-block error">
+                <div class="glyph">⚠</div>
+                <h4>Couldn’t load users</h4>
+                <p>The request to /api/admin/users failed. Check your connection and retry.</p>
+                <button class="retry">Retry</button>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

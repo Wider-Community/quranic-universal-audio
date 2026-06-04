@@ -12,13 +12,13 @@
         selectedId?: string | null;
         sortKey: SortKey;
         sortDir: 'asc' | 'desc';
-        onselect: (hfUserId: string) => void;
-        onsort: (key: SortKey) => void;
+        onselect: (_hfUserId: string) => void;
+        onsort: (_key: SortKey) => void;
         /** Owners may edit roles inline; others see a static pill. */
         canEditRoles?: boolean;
         /** hf_user_id whose role change is in flight (disables its picker). */
         roleBusyId?: string | null;
-        onrolechange?: (hfUserId: string, role: AssignableRole) => void;
+        onrolechange?: (_hfUserId: string, _role: AssignableRole) => void;
     }
     let {
         rows,

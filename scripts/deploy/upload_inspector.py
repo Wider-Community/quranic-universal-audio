@@ -49,6 +49,12 @@ from pathlib import Path
 # repo for local-dev tools that read it directly.
 _SKIP_FROM_STAGE = ("data/qpc_hafs.json",)
 
+# Git-LFS pointer files start with this magic line. If an asset got auto-LFS'd
+# (by extension or size) it ships as a ~133-byte pointer instead of real bytes,
+# silently breaking the image's Dockerfile COPY at runtime. The deploy guard
+# fails loudly when any staged file is a pointer rather than its content.
+_LFS_POINTER_MAGIC = b"version https://git-lfs.github.com/spec/"
+
 from huggingface_hub import HfApi
 from huggingface_hub.errors import HfHubHTTPError
 
@@ -95,6 +101,37 @@ def _git_tracked_files(repo: Path) -> list[str]:
     return [p for p in out.stdout.split("\0") if p]
 
 
+def _assert_no_lfs_pointers(stage_root: Path) -> None:
+    """Abort the deploy if any staged file is a Git-LFS pointer, not its bytes.
+
+    An asset that got auto-LFS-promoted (by extension or size) is staged as a
+    ~133-byte pointer text file. Shipping that to the Space leaves the Dockerfile
+    ``COPY`` pointing at a stub instead of real content — a silent runtime break
+    that CI's image build doesn't catch. Fail loudly here so the operator sees it
+    before the upload, not after the Space starts serving garbage.
+    """
+    pointers: list[str] = []
+    n = len(_LFS_POINTER_MAGIC)
+    for path in stage_root.rglob("*"):
+        if not path.is_file():
+            continue
+        with path.open("rb") as fh:
+            head = fh.read(n)
+        if head == _LFS_POINTER_MAGIC:
+            pointers.append(str(path.relative_to(stage_root)))
+    if pointers:
+        listing = "\n  ".join(sorted(pointers))
+        raise RuntimeError(
+            "Refusing to deploy: the following staged files are Git-LFS "
+            "pointers, not their real bytes (they were auto-LFS-promoted and "
+            "would ship to the Space as ~133-byte stubs, breaking the "
+            "Dockerfile COPY at runtime):\n  "
+            f"{listing}\n"
+            "Fix by un-LFS'ing the asset, shipping a non-LFS variant (e.g. a "
+            "compressed .gz), or inlining it — see _SKIP_FROM_STAGE above."
+        )
+
+
 def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
     """Stage the Space build context: every git-tracked file, verbatim.
 
@@ -131,6 +168,8 @@ def _stage(repo: Path, stage_root: Path, env: str, branch: str) -> None:
         SPACE_README.format(suffix=suffix, branch=branch),
         encoding="utf-8",
     )
+
+    _assert_no_lfs_pointers(stage_root)
 
 
 def _retry_on_429(label: str, fn, *args, **kwargs):
@@ -223,10 +262,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     load_repo_env()
-    token = (
-        os.environ.get("INSPECTOR_HF_TOKEN")
-        or os.environ.get("HF_TOKEN")
-    )
+    token = os.environ.get("INSPECTOR_HF_TOKEN") or os.environ.get("HF_TOKEN")
     if not token:
         print(
             "ERROR: HF_TOKEN / INSPECTOR_HF_TOKEN missing in env. "

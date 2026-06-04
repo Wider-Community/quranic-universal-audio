@@ -14,18 +14,30 @@
 from __future__ import annotations
 
 from functools import wraps
+from typing import Any
 from urllib.parse import urlparse
 
-from flask import abort, g, request
+from flask import abort, g, jsonify, request
 
 from qua_shared.schemas import ReciterState, Role, Visibility
-
 from services import auth as auth_service
 from services import permissions
 from services import state as state_service
 from services.auth import capabilities as _capabilities
-from services.errors import Codes, api_error
+from services.errors import Codes, error_body
 from services.state.labels import humanize_state
+
+
+def api_error(
+    message: str,
+    *,
+    code: str,
+    status: int,
+    context: dict[str, Any] | None = None,
+    details: dict[str, Any] | None = None,
+):
+    """``(jsonify(error_body(...)), status)`` — the response a Flask view/decorator returns."""
+    return jsonify(error_body(message, code=code, context=context, details=details)), status
 
 
 def require_same_origin(fn):
@@ -179,9 +191,7 @@ def require_edit_lock(reciter_param: str = "reciter", *, admin_bypass: bool = Fa
         def wrapper(*args, **kwargs):
             user = auth_service.current_user()
             if user is None:
-                return api_error(
-                    "Please sign in to edit.", code=Codes.AUTH_REQUIRED, status=401
-                )
+                return api_error("Please sign in to edit.", code=Codes.AUTH_REQUIRED, status=401)
             slug = kwargs.get(reciter_param)
             if not slug:
                 abort(400, description=f"missing {reciter_param!r} in route")

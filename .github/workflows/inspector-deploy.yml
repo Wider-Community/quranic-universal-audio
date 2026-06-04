@@ -26,11 +26,12 @@ on:
         type: boolean
         default: false
 
-# contents: write is required because the reusable inspector-checks.yml
-# frontend-checks job pushes back lint autofixes; a reusable workflow can
-# never exceed the caller's grant, so the caller must allow write too.
+# Deploy only checks out and uploads to the HF Space — it never writes back to
+# the repo. The reusable inspector-checks.yml frontend-checks job no longer
+# pushes autofixes (it surfaces them as PR suggestions instead), and this
+# workflow runs only on push/dispatch (never pull_request), so read is enough.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   # Avoid two pushes deploying simultaneously — the Hub upload is idempotent

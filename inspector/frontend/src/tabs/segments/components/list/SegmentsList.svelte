@@ -38,7 +38,6 @@
         segListElement,
         waveformContainer,
     } from '../../stores/playback';
-    import { segValidation } from '../../stores/validation';
     import { VIRT_BUFFER_ROWS } from '../../utils/constants';
     import Navigation from './Navigation.svelte';
     import SegmentRow from './SegmentRow.svelte';
