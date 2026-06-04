@@ -432,8 +432,11 @@
     // Ayah-end shuffle boundary: jump to a random target when the playhead reaches
     // the focus verse's end (once per verse). Called from both the rAF tick and the
     // onTimeUpdate/onEnded media-clock backstop; reads the focus verse fresh so the
-    // boundary and the dedupe key never disagree.
+    // boundary and the dedupe key never disagree. Gated to the active Timestamps tab
+    // so the shared dashPort backstop can't hijack Dashboard playback (its own
+    // gapless advance owns dashPort.onEnded when that tab is active).
     function maybeFireShuffle(ms: number): void {
+        if (getActiveTab() !== TAB_NAMES.TIMESTAMPS) return;
         if (get(loopTarget) || !get(shuffleAyah)) return;
         const fv = get(loadedVerse);
         if (!fv) return;

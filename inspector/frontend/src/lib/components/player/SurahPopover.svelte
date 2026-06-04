@@ -40,10 +40,14 @@
         ? items.filter((it) => it.label.toLowerCase().includes(query.trim().toLowerCase()))
         : items;
 
-    const dispatch = createEventDispatcher<{ change: number }>();
+    const dispatch = createEventDispatcher<{ change: number; hover: number }>();
 
     function pick(n: number): void {
         dispatch('change', n);
+    }
+
+    function hover(n: number): void {
+        dispatch('hover', n);
     }
 
     function onKeydown(ev: KeyboardEvent): void {
@@ -72,6 +76,8 @@
                 role="option"
                 aria-selected={value === it.n}
                 on:click={() => pick(it.n)}
+                on:pointerenter={() => hover(it.n)}
+                on:focus={() => hover(it.n)}
             >
                 <span class="num">{it.n}</span>
                 <span class="names">
