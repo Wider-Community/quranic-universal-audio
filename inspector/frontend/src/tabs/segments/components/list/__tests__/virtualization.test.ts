@@ -9,14 +9,13 @@ import {
     topSpacerValue,
 } from '../virtualization';
 
-type FakeSeg = { uid: string; chapter: number; index: number };
+type FakeSeg = { uid: string; index: number };
 const rowKey = (s: FakeSeg): string => s.uid;
 
 /** Build N segments; every 7th row is "tall" (to mimic validation-tagged rows). */
 function makeSegs(n: number): FakeSeg[] {
     return Array.from({ length: n }, (_, i) => ({
         uid: `u${i}`,
-        chapter: 1,
         index: i,
     }));
 }
@@ -124,7 +123,6 @@ describe('SegmentsList virtualization — spacer invariant', () => {
         const heights = makeHeights(segs);
         const cum = rebuildCumHeights(segs, rowKey, heights, 140);
         const startIdx = 40;
-        const _endIdx = 60;
         const editingPos = 10; // above window, pinned
         const pinnedH = heights.get(rowKey(segs[editingPos]!))!;
 
@@ -137,7 +135,6 @@ describe('SegmentsList virtualization — spacer invariant', () => {
         const segs = makeSegs(100);
         const heights = makeHeights(segs);
         const cum = rebuildCumHeights(segs, rowKey, heights, 140);
-        const _startIdx = 40;
         const endIdx = 60;
         const editingPos = 90; // below window, pinned
         const pinnedH = heights.get(rowKey(segs[editingPos]!))!;

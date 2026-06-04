@@ -1,17 +1,13 @@
-"""Admin override endpoint tests (Phase 4).
+"""Admin override endpoint tests.
 
-Covers /api/admin/{claim/force-release, claim/reassign, state/force-set,
-send-back, users/lookup}. Mirrors test_route_access_admin.py patterns:
-in-memory state replacement + persistence stubs to avoid the bucket.
+Covers /api/admin/{claim/force-release, claim/reassign, send-back,
+users/lookup}. Seeds the SQLite substrate via ``_seed_state`` and stubs
+``hf_users.lookup`` to drive the route paths.
 """
 
 from __future__ import annotations
 
 import json
-import os
-from datetime import datetime, timezone
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
@@ -22,8 +18,7 @@ _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
 
 def _replace_state(rows: list):
-    """Seed each ``_row`` spec into the SQLite substrate (post-cutover source
-    of truth; the in-memory ``_state_file`` is gone)."""
+    """Seed each ``_row`` spec into the SQLite substrate."""
     from tests.conftest import _seed_state
 
     for spec in rows:
@@ -38,7 +33,7 @@ def _row(
     assignee_login="target_user",
     marked_ready=False,
 ):
-    """Return a seed spec consumed by ``_replace_state`` → ``_seed_state``."""
+    """Return a seed spec consumed by ``_replace_state`` -> ``_seed_state``."""
     return dict(
         slug=slug,
         state=state,
@@ -47,12 +42,6 @@ def _row(
         marked_ready=marked_ready,
         visibility="public",
     )
-
-
-def _stub_state_persist(monkeypatch):
-    """No-op post-cutover: state persists in SQLite for free and audit rows are
-    real transition rows. Kept so call sites don't churn."""
-    return None
 
 
 def _stub_hf_users(monkeypatch, *, returns):
@@ -102,8 +91,7 @@ def test_force_release_by_contributor_returns_403(signed_in_client):
     assert res.status_code == 403
 
 
-def test_force_release_happy_path(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
+def test_force_release_happy_path(signed_in_client):
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="owner", hf_user_id="u-owner", login="owner1")
 
@@ -119,10 +107,9 @@ def test_force_release_happy_path(signed_in_client, monkeypatch):
     assert body["original_assignee_hf_id"] == "u-target"
 
 
-def test_force_release_by_maintainer_returns_403(signed_in_client, monkeypatch):
-    """Force-release is owner-only post claim-mutation tightening — maintainers
-    must use Send-back-to-UR for marked-ready, or escalate to an owner."""
-    _stub_state_persist(monkeypatch)
+def test_force_release_by_maintainer_returns_403(signed_in_client):
+    """Force-release is owner-only — maintainers must use Send-back-to-UR
+    for marked-ready, or escalate to an owner."""
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="maintainer")
     res = client.post(
@@ -133,11 +120,10 @@ def test_force_release_by_maintainer_returns_403(signed_in_client, monkeypatch):
     assert res.status_code == 403
 
 
-def test_force_release_short_reason_succeeds(signed_in_client, monkeypatch):
+def test_force_release_short_reason_succeeds(signed_in_client):
     """Reason is OPTIONAL on owner claim mutations — a short or empty string
     is normalized to '' and the action proceeds. Action is still auditable
     via actor + slug + transition row."""
-    _stub_state_persist(monkeypatch)
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="owner")
     res = client.post(
@@ -148,9 +134,8 @@ def test_force_release_short_reason_succeeds(signed_in_client, monkeypatch):
     assert res.status_code == 200, res.get_json()
 
 
-def test_force_release_no_reason_succeeds(signed_in_client, monkeypatch):
+def test_force_release_no_reason_succeeds(signed_in_client):
     """Reason field can be omitted entirely."""
-    _stub_state_persist(monkeypatch)
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="owner")
     res = client.post(
@@ -161,8 +146,7 @@ def test_force_release_no_reason_succeeds(signed_in_client, monkeypatch):
     assert res.status_code == 200, res.get_json()
 
 
-def test_force_release_wrong_state_returns_400(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
+def test_force_release_wrong_state_returns_400(signed_in_client):
     _replace_state([_row("test_slug", state="awaiting_review", assignee_hf_id=None)])
     client, _ = signed_in_client(role="owner")
     res = client.post(
@@ -173,8 +157,7 @@ def test_force_release_wrong_state_returns_400(signed_in_client, monkeypatch):
     assert res.status_code == 400
 
 
-def test_force_release_missing_origin_returns_403(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
+def test_force_release_missing_origin_returns_403(signed_in_client):
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="owner")
     res = client.post(
@@ -191,7 +174,6 @@ def test_force_release_missing_origin_returns_403(signed_in_client, monkeypatch)
 
 
 def test_reassign_happy_path(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
     _stub_hf_users(monkeypatch, returns=_hf_user(hf_user_id="u-new", login="NewUser"))
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="owner")
@@ -211,7 +193,6 @@ def test_reassign_happy_path(signed_in_client, monkeypatch):
 def test_reassign_by_maintainer_returns_403(signed_in_client, monkeypatch):
     """Reassign is owner-only — paired with force-release. A maintainer who
     can mark quality (send-back) cannot transfer who owns the work."""
-    _stub_state_persist(monkeypatch)
     _stub_hf_users(monkeypatch, returns=_hf_user())
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="maintainer")
@@ -225,7 +206,6 @@ def test_reassign_by_maintainer_returns_403(signed_in_client, monkeypatch):
 
 
 def test_reassign_unknown_login_returns_400(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
     _stub_hf_users(monkeypatch, returns=None)
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="owner")
@@ -243,7 +223,6 @@ def test_reassign_unknown_login_returns_400(signed_in_client, monkeypatch):
 def test_reassign_hf_outage_returns_502(signed_in_client, monkeypatch):
     from services import hf_users
 
-    _stub_state_persist(monkeypatch)
     _replace_state([_row("test_slug")])
 
     def _raise(login):
@@ -261,7 +240,6 @@ def test_reassign_hf_outage_returns_502(signed_in_client, monkeypatch):
 
 
 def test_reassign_to_same_assignee_returns_400(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
     _stub_hf_users(monkeypatch, returns=_hf_user(hf_user_id="u-target", login="target_user"))
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="owner")
@@ -279,8 +257,7 @@ def test_reassign_to_same_assignee_returns_400(signed_in_client, monkeypatch):
     assert res.status_code == 400
 
 
-def test_reassign_missing_to_login_returns_400(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
+def test_reassign_missing_to_login_returns_400(signed_in_client):
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="owner")
 
@@ -296,7 +273,6 @@ def test_reassign_short_reason_succeeds(signed_in_client, monkeypatch):
     """Reason is OPTIONAL on owner claim mutations (mirror of
     force-release test). Short / empty reasons normalize to '' and the
     action proceeds; audit row carries the actor + slug + event."""
-    _stub_state_persist(monkeypatch)
     _stub_hf_users(monkeypatch, returns=_hf_user())
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="owner")
@@ -311,7 +287,6 @@ def test_reassign_short_reason_succeeds(signed_in_client, monkeypatch):
 
 def test_reassign_no_reason_succeeds(signed_in_client, monkeypatch):
     """Reason field can be omitted entirely."""
-    _stub_state_persist(monkeypatch)
     _stub_hf_users(monkeypatch, returns=_hf_user())
     _replace_state([_row("test_slug")])
     client, _ = signed_in_client(role="owner")
@@ -339,8 +314,7 @@ def test_reassign_by_contributor_returns_403(signed_in_client):
 # ---------------------------------------------------------------------------
 
 
-def test_send_back_happy_path(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
+def test_send_back_happy_path(signed_in_client):
     _replace_state([_row("test_slug", marked_ready=True)])
     client, _ = signed_in_client(role="maintainer")
 
@@ -356,8 +330,7 @@ def test_send_back_happy_path(signed_in_client, monkeypatch):
     assert body["row"]["assignee_hf_id"] == "u-target"  # retained
 
 
-def test_send_back_not_marked_ready_returns_400(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
+def test_send_back_not_marked_ready_returns_400(signed_in_client):
     _replace_state([_row("test_slug", marked_ready=False)])
     client, _ = signed_in_client(role="maintainer")
 
@@ -379,8 +352,7 @@ def test_send_back_by_contributor_returns_403(signed_in_client):
     assert res.status_code == 403
 
 
-def test_send_back_short_reason_returns_400(signed_in_client, monkeypatch):
-    _stub_state_persist(monkeypatch)
+def test_send_back_short_reason_returns_400(signed_in_client):
     _replace_state([_row("test_slug", marked_ready=True)])
     client, _ = signed_in_client(role="maintainer")
 

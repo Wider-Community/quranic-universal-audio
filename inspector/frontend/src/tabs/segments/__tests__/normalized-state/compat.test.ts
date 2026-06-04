@@ -1,34 +1,37 @@
-// Phase 4: compat selectors preserve $segData / $segAllData read shape.
+// Compat selectors preserve $segData / $segAllData read shape.
 
-import { describe, expect,it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { loadOptional } from '../helpers/optional';
+import * as chapterStore from '../../stores/chapter';
+import * as segmentsStore from '../../stores/segments';
 
-const chapterStore = await loadOptional<any>('../../stores/chapter');
-const segmentsStore = await loadOptional<any>('../../stores/segments');
+void segmentsStore;
 
-describe.skipIf(!chapterStore)('compat shape', () => {
-  it('$segData has same shape as before refactor', () => {
-    if (!segmentsStore) throw new Error('phase-4: stores/segments not yet present');
-    expect(typeof chapterStore.segData?.subscribe).toBe('function');
-  });
-
-  it('$segAllData has same shape (no _byChapter / _byChapterIndex exposed)', () => {
-    if (!segmentsStore) throw new Error('phase-4: stores/segments not yet present');
+describe('compat shape', () => {
+  it('segAllData snapshot carries the documented SegAllResponse fields and no private byChapter map', () => {
+    const sample = {
+      segments: [],
+      audio_by_chapter: {},
+      pad_ms: 0,
+      pad_left_ms: 0,
+      pad_right_ms: 0,
+      min_silence_floor_ms: 0,
+    };
+    chapterStore.segAllData.set(sample as any);
     let snapshot: any;
-    chapterStore.segAllData.subscribe((v: any) => { snapshot = v; })();
-    expect(snapshot).toBeDefined();
-    expect(snapshot?._byChapter).toBeUndefined();
-    expect(snapshot?._byChapterIndex).toBeUndefined();
+    const unsub = chapterStore.segAllData.subscribe((v: any) => { snapshot = v; });
+    unsub();
+    expect(snapshot).not.toBeNull();
+    // Documented fields survive — proves consumers can keep reading them.
+    expect(Array.isArray(snapshot.segments)).toBe(true);
+    expect(snapshot.audio_by_chapter).toBeDefined();
+    expect(snapshot.pad_ms).toBe(0);
+    expect(snapshot.pad_left_ms).toBe(0);
+    expect(snapshot.pad_right_ms).toBe(0);
+    expect(snapshot.min_silence_floor_ms).toBe(0);
+    // Internal byChapter maps must not leak through the store (would
+    // otherwise tempt consumers into depending on private structure).
+    expect(snapshot._byChapter).toBeUndefined();
+    expect(snapshot._byChapterIndex).toBeUndefined();
   });
-
-  it('existing components subscribe without modification', () => {
-    if (!segmentsStore) throw new Error('phase-4: stores/segments not yet present');
-    expect(typeof chapterStore.segData.subscribe).toBe('function');
-    expect(typeof chapterStore.segAllData.subscribe).toBe('function');
-  });
-});
-
-describe.skipIf(chapterStore)('compat shape (deferred)', () => {
-  it.todo('phase-4: stores/chapter.ts not yet refactored to derive from segments.ts');
 });

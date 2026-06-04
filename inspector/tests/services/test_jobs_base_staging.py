@@ -43,11 +43,28 @@ def stub_batch(monkeypatch):
     return calls
 
 
-def test_stage_job_code_uploads_every_required_path(stub_batch):
-    """Happy path against the real repo tree — every required entrypoint AND
-    every required static file must be in the upload manifest. qpc_hafs.json.gz
-    is auto-resolved from the uncompressed source when only ``.json`` exists
-    locally (the dev-mode case), so this test passes on a fresh checkout."""
+def test_stage_job_code_uploads_every_required_path(stub_batch, monkeypatch, tmp_path):
+    """Happy path against a synthetic, hermetic repo tree — every required
+    entrypoint AND every required static file must be in the upload manifest.
+
+    Mirrors the other tests' tmp_path + REPO_ROOT monkeypatch isolation so
+    the assertion no longer depends on the real ``qua_shared`` / ``qua_jobs``
+    trees on disk or on whether ``qpc_hafs.json.gz`` exists in this checkout.
+    """
+    (tmp_path / "qua_shared").mkdir(parents=True)
+    (tmp_path / "qua_shared" / "__init__.py").write_text("")
+    (tmp_path / "qua_jobs").mkdir(parents=True)
+    for ep in base.REQUIRED_ENTRYPOINTS:
+        (tmp_path / ep).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / ep).write_text("# stub")
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "surah_info.json").write_text("{}")
+    (tmp_path / "data" / "qpc_hafs.json.gz").write_bytes(b"\x1f\x8bstub-gz")
+    (tmp_path / ".github" / "config").mkdir(parents=True)
+    (tmp_path / ".github" / "config" / "repo.yml").write_text("hf_dataset: foo/bar")
+    (tmp_path / "LICENSE").write_text("MIT")
+    monkeypatch.setattr(base, "REPO_ROOT", tmp_path)
+
     base.stage_job_code()
     assert len(stub_batch) == 1
     targets = {target for _src, target in stub_batch[0]["add"]}

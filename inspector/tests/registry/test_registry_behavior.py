@@ -4,27 +4,21 @@ For every category, assert that the runtime behavior (save serialization,
 auto-suppress on edit, no-op for chapter-scope, etc.) is driven by the
 registry, not by hard-coded category checks.
 """
-
 from __future__ import annotations
 
 import pytest
 
-pytest.importorskip(
-    "services.validation.registry",
-    reason="phase-1 — IssueRegistry module not yet introduced",
-)
+from services.validation.registry import IssueRegistry
 
 from tests.conftest import (
     ALL_CATEGORIES,
-    PER_CHAPTER_CATEGORIES,
     PER_SEGMENT_CATEGORIES,
     PER_VERSE_CATEGORIES,
+    PER_CHAPTER_CATEGORIES,
 )
 
 
 def _registry():
-    from services.validation.registry import IssueRegistry  # type: ignore
-
     return IssueRegistry
 
 

@@ -5,7 +5,7 @@
  * by a ResizeObserver on row-group wrappers). These helpers turn that cache
  * plus `$displayedSegments` into prefix sums, window math, and spacer sizes —
  * without touching the DOM or Svelte. Tested directly in
- * `__tests__/SegmentsList.test.ts`.
+ * `__tests__/virtualization.test.ts`.
  *
  * Why prefix sums instead of a rolling-average row height: any row's height
  * change only moves rows *after* it in the prefix sum, so a single card

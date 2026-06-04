@@ -12,12 +12,9 @@ Covers all four routes under ``inspector/routes/requests.py``:
 from __future__ import annotations
 
 import json
-import os
-from datetime import UTC, datetime, timezone
+from datetime import datetime, timezone
 
 import pytest
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
@@ -34,22 +31,14 @@ def _isolated_backend(tmp_path, monkeypatch):
         AudioCategory,
         Channel,
         Delivery,
-        ReciterCatalog,
         ReciterEntry,
-        ReciterRow,
-        ReciterState,
-        ReciterStateFile,
         Riwayah,
         Source,
         Style,
-        Visibility,
         Vocab,
     )
-    from services import catalog as catalog_service
     from services import hf_bucket as _hf_bucket
     from services import pending_requests as pending_requests_service
-    from services import state as state_service
-    from services import storage_paths
 
     monkeypatch.setenv("INSPECTOR_BACKEND", "filesystem")
     monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))
@@ -61,12 +50,10 @@ def _isolated_backend(tmp_path, monkeypatch):
     from services.db import repo_catalog
     from tests.conftest import _seed_state
 
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     vocab = Vocab(
-        riwayat=[
-            Riwayah(slug="hafs", short="H", name="Hafs"),
-            Riwayah(slug="warsh", short="W", name="Warsh"),
-        ],
+        riwayat=[Riwayah(slug="hafs", short="H", name="Hafs"),
+                 Riwayah(slug="warsh", short="W", name="Warsh")],
         styles=[Style(slug="murattal", short="M", name="Murattal")],
         sources=[Source(slug="src1", name="Source One")],
         channels=[Channel(slug="ch1", short="c1", name="Channel One")],
@@ -79,35 +66,20 @@ def _isolated_backend(tmp_path, monkeypatch):
             ("rec_discarded", "Discarded Reciter"),
         ):
             repo_catalog.insert_reciter(ReciterEntry(reciter_id=rid, name_en=name))
-            repo_catalog.insert_delivery(
-                Delivery(
-                    slug=rid,
-                    reciter_id=rid,
-                    riwayah="hafs",
-                    style="murattal",
-                    source="src1",
-                    channel="ch1",
-                    audio_category=AudioCategory.BY_SURAH,
-                    chapter_count=114,
-                    added_at=now,
-                    added_by_hf_id="seed",
-                )
-            )
+            repo_catalog.insert_delivery(Delivery(
+                slug=rid, reciter_id=rid, riwayah="hafs", style="murattal",
+                source="src1", channel="ch1", audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114, added_at=now, added_by_hf_id="seed",
+            ))
 
     _seed_state("rec_clean", state="catalogued", reciter_id="rec_clean")
     _seed_state("rec_pending", state="awaiting_alignment", reciter_id="rec_pending")
-    _seed_state(
-        "rec_discarded",
-        state="catalogued",
-        visibility="discarded",
-        visibility_reason="testing setup",
-        reciter_id="rec_discarded",
-    )
+    _seed_state("rec_discarded", state="catalogued", visibility="discarded",
+                visibility_reason="testing setup", reciter_id="rec_discarded")
 
     # Seed an in-flight pending entry for rec_pending so admin GET + reject
     # tests have something to inspect.
     from qua_shared.schemas import Actor, ProposedEdits, Role
-
     pending_requests_service.submit(
         "rec_pending",
         requester=Actor(
@@ -118,11 +90,6 @@ def _isolated_backend(tmp_path, monkeypatch):
         edits=ProposedEdits(name_en="Renamed", recording_year=2024),
         comments="Pre-seeded pending request for tests.",
     )
-
-    # Silence audit appends so tests don't write JSONL into tmp_path on every call.
-    from services import audit as audit_service
-
-    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     yield backend
 
@@ -148,23 +115,28 @@ def test_submit_contributor_happy_path(signed_in_client):
     res = client.post(
         "/api/reciter/rec_clean/request",
         headers=_HEADERS,
-        data=json.dumps(
-            {
-                "proposed_edits": {"name_en": "Cleaner Name", "recording_year": 2023},
-                "comments": "Found a better recording.",
-            }
-        ),
+        data=json.dumps({
+            "proposed_edits": {"name_en": "Cleaner Name", "recording_year": 2023},
+            "comments": "Found a better recording.",
+        }),
     )
     assert res.status_code == 200
     body = json.loads(res.data)
     assert body["state"] == "awaiting_alignment"
 
     from services import pending_requests as pending_requests_service
-
     pending = pending_requests_service.get("rec_clean")
     assert pending is not None
     assert pending.proposed_edits.name_en == "Cleaner Name"
     assert pending.requester.hf_user_id == "u-1"
+
+    # The submit handler drives state.transition("reciter.requested"); assert
+    # the canonical event-log row actually landed in the transitions table
+    # (regression guard: a future refactor that bypasses audit.append would
+    # have silently passed under the previous global-monkeypatch fixture).
+    from services.db import repo_transitions
+    events = [r["event"] for r in repo_transitions.for_slug("rec_clean")]
+    assert "reciter.requested" in events
 
 
 def test_submit_rejects_when_already_pending(signed_in_client):
@@ -202,12 +174,10 @@ def test_submit_rejects_bad_year(signed_in_client):
     res = client.post(
         "/api/reciter/rec_clean/request",
         headers=_HEADERS,
-        data=json.dumps(
-            {
-                "proposed_edits": {"recording_year": 1700},
-                "comments": None,
-            }
-        ),
+        data=json.dumps({
+            "proposed_edits": {"recording_year": 1700},
+            "comments": None,
+        }),
     )
     assert res.status_code == 400
 
@@ -304,7 +274,6 @@ def test_reject_soft_owner_happy_path(signed_in_client):
 
     from services import pending_requests as pending_requests_service
     from services import state as state_service
-
     assert pending_requests_service.get("rec_pending") is None
     row = state_service.get_row("rec_pending")
     assert row is not None
@@ -359,7 +328,6 @@ def test_reject_hard_owner_sets_discarded(signed_in_client):
     assert body["state"] == "catalogued"
 
     from services import state as state_service
-
     row = state_service.get_row("rec_pending")
     assert row is not None
     assert row.visibility.value == "discarded"
@@ -412,7 +380,6 @@ def test_undiscard_owner_happy_path(signed_in_client):
     assert body["visibility"] == "public"
 
     from services import state as state_service
-
     row = state_service.get_row("rec_discarded")
     assert row is not None
     assert row.visibility.value == "public"
@@ -470,6 +437,7 @@ def test_list_requests_maintainer_open_redacts_and_diffs(signed_in_client):
 def test_list_requests_owner_includes_requester_login(signed_in_client):
     client, _ = signed_in_client(role="owner", hf_user_id="u-O")
     res = client.get("/api/admin/requests?status=open")
+    assert res.status_code == 200, res.data
     body = json.loads(res.data)
     row = body["rows"][0]
     assert row["requester_login"] == "requester"
@@ -524,12 +492,8 @@ _ATTEST = {"distribution_rights": True, "links_verified": True, "storage_rights"
 def _new_reciter_body(**over):
     body = {
         "kind": "new_reciter",
-        "proposed_edits": {
-            "name_en": "Test Reciter",
-            "name_ar": "قارئ",
-            "riwayah": "hafs",
-            "style": "murattal",
-        },
+        "proposed_edits": {"name_en": "Test Reciter", "name_ar": "قارئ",
+                           "riwayah": "hafs", "style": "murattal"},
         "source": {"method": "links", "links": _links()},
         "comments": "From a clean studio master.",
         "attestations": dict(_ATTEST),
@@ -551,17 +515,15 @@ def _new_combo_body(**over):
 
 
 def test_intake_submit_anonymous_401(flask_client):
-    res = flask_client.post(
-        "/api/requests/intake", headers=_HEADERS, data=json.dumps(_new_reciter_body())
-    )
+    res = flask_client.post("/api/requests/intake", headers=_HEADERS,
+                            data=json.dumps(_new_reciter_body()))
     assert res.status_code == 401
 
 
 def test_intake_submit_new_reciter_happy(signed_in_client):
     client, _ = signed_in_client(role="contributor", hf_user_id="u-1", login="alice")
-    res = client.post(
-        "/api/requests/intake", headers=_HEADERS, data=json.dumps(_new_reciter_body())
-    )
+    res = client.post("/api/requests/intake", headers=_HEADERS,
+                      data=json.dumps(_new_reciter_body()))
     assert res.status_code == 200, res.data
     body = json.loads(res.data)
     assert body["ok"] and body["id"].startswith("rq_")
@@ -587,9 +549,8 @@ def test_intake_submit_missing_name_is_error(signed_in_client):
 
 def test_intake_submit_missing_attestation_is_error(signed_in_client):
     client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
-    body = _new_reciter_body(
-        attestations={"distribution_rights": True, "links_verified": False, "storage_rights": True}
-    )
+    body = _new_reciter_body(attestations={"distribution_rights": True,
+                                           "links_verified": False, "storage_rights": True})
     res = client.post("/api/requests/intake", headers=_HEADERS, data=json.dumps(body))
     assert res.status_code == 400
     assert any("confirm all three" in e for e in json.loads(res.data)["errors"])
@@ -605,14 +566,12 @@ def test_intake_submit_missing_chapters_warns(signed_in_client):
 
 def test_intake_accept_new_combo_queues_without_catalog_write(signed_in_client):
     c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1", login="alice")
-    rid = json.loads(
-        c_client.post(
-            "/api/requests/intake", headers=_HEADERS, data=json.dumps(_new_combo_body())
-        ).data
-    )["id"]
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_combo_body())).data)["id"]
 
     o_client, _ = signed_in_client(role="owner", hf_user_id="u-O", login="owner")
-    res = o_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS, data=json.dumps({}))
+    res = o_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
+                        data=json.dumps({}))
     assert res.status_code == 200, res.data
 
     # No catalog delivery and no state row are created at accept — those are
@@ -620,7 +579,6 @@ def test_intake_accept_new_combo_queues_without_catalog_write(signed_in_client):
     from services import catalog as catalog_service
     from services import state as state_service
     from services.db import repo_requests
-
     accepted = repo_requests.get_by_id(rid)
     assert accepted["status"] == "accepted" and accepted["slug"] is None
     # The reciter already existed; no new delivery was minted for the combo.
@@ -632,23 +590,16 @@ def test_intake_accept_new_combo_queues_without_catalog_write(signed_in_client):
 
 def test_intake_accept_new_reciter_stamps_reciter_id_no_catalog_write(signed_in_client):
     c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
-    rid = json.loads(
-        c_client.post(
-            "/api/requests/intake", headers=_HEADERS, data=json.dumps(_new_reciter_body())
-        ).data
-    )["id"]
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_reciter_body())).data)["id"]
 
     o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
-    res = o_client.post(
-        f"/api/admin/requests/{rid}/accept",
-        headers=_HEADERS,
-        data=json.dumps({"reciter_id": "test_reciter"}),
-    )
+    res = o_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
+                        data=json.dumps({"reciter_id": "test_reciter"}))
     assert res.status_code == 200, res.data
 
     from services import catalog as catalog_service
     from services.db import _serde, repo_requests
-
     # Reciter is NOT created at accept — deferred to ingest.
     assert catalog_service.find_reciter("test_reciter") is None
     row = repo_requests.get_by_id(rid)
@@ -659,69 +610,51 @@ def test_intake_accept_new_reciter_stamps_reciter_id_no_catalog_write(signed_in_
 
 def test_intake_accept_new_reciter_requires_reciter_id(signed_in_client):
     c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
-    rid = json.loads(
-        c_client.post(
-            "/api/requests/intake", headers=_HEADERS, data=json.dumps(_new_reciter_body())
-        ).data
-    )["id"]
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_reciter_body())).data)["id"]
     o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
-    res = o_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS, data=json.dumps({}))
+    res = o_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
+                        data=json.dumps({}))
     assert res.status_code == 400
     assert "reciter_id" in json.loads(res.data)["error"]
 
 
 def test_intake_accept_rejects_bad_reciter_id(signed_in_client):
     c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
-    rid = json.loads(
-        c_client.post(
-            "/api/requests/intake", headers=_HEADERS, data=json.dumps(_new_reciter_body())
-        ).data
-    )["id"]
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_reciter_body())).data)["id"]
     o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
-    res = o_client.post(
-        f"/api/admin/requests/{rid}/accept",
-        headers=_HEADERS,
-        data=json.dumps({"reciter_id": "Bad ID!"}),
-    )
+    res = o_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
+                        data=json.dumps({"reciter_id": "Bad ID!"}))
     assert res.status_code == 400
 
 
 def test_intake_accept_requires_owner(signed_in_client):
     c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
-    rid = json.loads(
-        c_client.post(
-            "/api/requests/intake", headers=_HEADERS, data=json.dumps(_new_combo_body())
-        ).data
-    )["id"]
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_combo_body())).data)["id"]
     m_client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
-    res = m_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS, data=json.dumps({}))
+    res = m_client.post(f"/api/admin/requests/{rid}/accept", headers=_HEADERS,
+                        data=json.dumps({}))
     assert res.status_code == 403
 
 
 def test_intake_accept_unknown_404(signed_in_client):
     o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
-    res = o_client.post(
-        "/api/admin/requests/rq_nope/accept", headers=_HEADERS, data=json.dumps({"reciter_id": "x"})
-    )
+    res = o_client.post("/api/admin/requests/rq_nope/accept", headers=_HEADERS,
+                        data=json.dumps({"reciter_id": "x"}))
     assert res.status_code == 404
 
 
 def test_intake_discard_resolves_request(signed_in_client):
     c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
-    rid = json.loads(
-        c_client.post(
-            "/api/requests/intake", headers=_HEADERS, data=json.dumps(_new_combo_body())
-        ).data
-    )["id"]
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_combo_body())).data)["id"]
     o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
-    res = o_client.post(
-        f"/api/admin/requests/{rid}/discard",
-        headers=_HEADERS,
-        data=json.dumps({"reason": "Duplicate of an existing combo."}),
-    )
+    res = o_client.post(f"/api/admin/requests/{rid}/discard", headers=_HEADERS,
+                        data=json.dumps({"reason": "Duplicate of an existing combo."}))
     assert res.status_code == 200
     from services.db import repo_requests
-
     assert repo_requests.get_by_id(rid)["status"] == "discarded"
 
 
@@ -730,25 +663,20 @@ def test_intake_probe_caches_result(signed_in_client, monkeypatch):
     from services.admin import intake as intake_service
 
     def _fake_probe(source):
-        return ProbeResponse(
-            at="2026-01-01T00:00:00+00:00",
-            results=[ProbeResult(chapter=1, url="https://x/1.mp3", status=200, reachable=True)],
-        )
-
+        return ProbeResponse(at="2026-01-01T00:00:00+00:00",
+                             results=[ProbeResult(chapter=1, url="https://x/1.mp3",
+                                                  status=200, reachable=True)])
     monkeypatch.setattr(intake_service, "probe_source", _fake_probe)
 
     c_client, _ = signed_in_client(role="contributor", hf_user_id="u-1")
-    rid = json.loads(
-        c_client.post(
-            "/api/requests/intake", headers=_HEADERS, data=json.dumps(_new_combo_body())
-        ).data
-    )["id"]
+    rid = json.loads(c_client.post("/api/requests/intake", headers=_HEADERS,
+                                   data=json.dumps(_new_combo_body())).data)["id"]
     o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
     res = o_client.post(f"/api/admin/requests/{rid}/probe", headers=_HEADERS)
     assert res.status_code == 200
     assert json.loads(res.data)["results"][0]["reachable"] is True
 
-    from services.db import _serde, repo_requests
-
+    from services.db import repo_requests
+    from services.db import _serde
     payload = _serde.json_loads(repo_requests.get_by_id(rid)["payload"])
     assert payload["probe"]["results"][0]["status"] == 200

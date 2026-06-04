@@ -12,21 +12,16 @@ unit coverage; these tests exercise the HTTP boundary:
 from __future__ import annotations
 
 import json
-import os
-from datetime import datetime, timezone
 
 import pytest
 
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
-
 
 # Helpers ---------------------------------------------------------------
-# Mark-ready now takes a JSON body. The route's pydantic gate rejects
-# anything other than a five-key checklist (all True) + two optional
-# comment strings; the state handler additionally re-computes the live
-# validation counts. Tests that exercise the HTTP boundary use this
-# canonical payload and the ``_clean_validation`` fixture below to mock
-# the count gate so they don't need on-disk segs to pass.
+# Mark-ready takes a JSON body. The route's pydantic gate accepts only the
+# canonical six-key checklist (all True) plus two optional comment strings;
+# the state handler additionally re-computes the live validation counts.
+# Tests use this canonical payload + the ``clean_validation`` fixture to
+# short-circuit the count gate so they don't need on-disk segs to pass.
 
 _FULL_CHECKLIST_BODY = {
     "checklist": {
@@ -43,7 +38,7 @@ _FULL_CHECKLIST_BODY = {
 
 
 @pytest.fixture
-def _clean_validation(monkeypatch):
+def clean_validation(monkeypatch):
     """Stub ``validate_reciter_segments`` to report all blocking counts at zero.
 
     Mark-ready re-validates segments live in the state handler; the test
@@ -64,15 +59,10 @@ def _clean_validation(monkeypatch):
             }
         }
 
-    # Patch both the module export and the late-imported binding the
-    # handler uses (``from services.validation import …`` happens inside
-    # _h_marked_ready to keep state.py's import graph light).
+    # The handler does ``from services.validation import …`` lazily inside
+    # _h_marked_ready; that lookup goes through _validation.__dict__ every
+    # call, so one ``setattr`` on the module covers it.
     monkeypatch.setattr(_validation, "validate_reciter_segments", _ok)
-    monkeypatch.setitem(
-        _validation.__dict__,
-        "validate_reciter_segments",
-        _ok,
-    )
     return _ok
 
 
@@ -85,14 +75,10 @@ def _replace_state(rows: list):
         _seed_state(**spec)
 
 
-def _row(
-    slug: str,
-    *,
-    state: str = "awaiting_review",
-    assignee_hf_id: str | None = None,
-    marked_ready: bool = False,
-    visibility: str = "public",
-):
+def _row(slug: str, *, state: str = "awaiting_review",
+         assignee_hf_id: str | None = None,
+         marked_ready: bool = False,
+         visibility: str = "public"):
     """Return a seed spec consumed by ``_replace_state`` → ``_seed_state``."""
     return dict(
         slug=slug,
@@ -104,12 +90,9 @@ def _row(
     )
 
 
-# NOTE: claim/release/mark-ready tests use the `state_persistence` fixture
+# Claim/release/mark-ready tests use the `state_persistence` fixture
 # (defined in tests/conftest.py) so state transitions persist through a real
-# FilesystemBackend. The legacy `_stub_persist` mock pattern stripped both the
-# bucket write AND the in-memory _state_file update, forcing each test to
-# manually re-seed state between requests; real persistence makes that hack
-# unnecessary and exercises the actual write/read seam that production hits.
+# FilesystemBackend and exercise the actual write/read seam.
 
 
 # ---------------------------------------------------------------------------
@@ -142,12 +125,10 @@ def test_claim_happy_path(signed_in_client, state_persistence):
 
 
 def test_claim_persists_across_requests(signed_in_client, state_persistence):
-    """Claim → second request sees the new state without manual re-seed.
+    """Claim then a second request sees the new state without manual re-seed.
 
-    Catches the class of regressions where _persist_row drops a write
-    silently — the legacy `_stub_persist` fixture masked this because it
-    skipped persistence entirely AND required tests to re-seed state
-    manually between requests.
+    Guards against regressions where _persist_row silently drops a write —
+    the test relies on real persistence rather than a stub of the write seam.
     """
     _replace_state([_row("test_slug", state="awaiting_review")])
 
@@ -170,12 +151,10 @@ def test_claim_persists_across_requests(signed_in_client, state_persistence):
 
 
 def test_claim_one_claim_per_user_returns_409(signed_in_client, state_persistence):
-    _replace_state(
-        [
-            _row("other", state="under_review", assignee_hf_id="u-1"),
-            _row("target", state="awaiting_review"),
-        ]
-    )
+    _replace_state([
+        _row("other", state="under_review", assignee_hf_id="u-1"),
+        _row("target", state="awaiting_review"),
+    ])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(
@@ -185,11 +164,11 @@ def test_claim_one_claim_per_user_returns_409(signed_in_client, state_persistenc
     assert resp.status_code == 409
     body = json.loads(resp.data)
     assert body["existing_claim"] == "other"
-    # Slice 0 (Phase 6 pre-cleanup): 409 body must carry display names so the
-    # toast can render "Unclaim <name>..." rather than slug strings. When the
-    # test catalog is empty (typical for unit tests) display_name returns
-    # None — the field is present but None, which the frontend falls back
-    # to the raw slug. See `inspector/services/catalog.display_name`.
+    # The 409 body must carry display names so the toast can render
+    # "Unclaim <name>..." rather than slug strings. When the test catalog
+    # is empty (typical for unit tests) display_name returns None — the
+    # field is present but None, and the frontend falls back to the raw
+    # slug. See `inspector/services/catalog.display_name`.
     assert "existing_claim_name" in body
     assert "target_name" in body
 
@@ -200,12 +179,10 @@ def test_claim_marked_ready_does_not_block_new_claim(signed_in_client, state_per
     The one-claim-per-user policy only blocks on UNMARKED open claims —
     marked-ready rows are admin-side until publish or send-back, so the
     reviewer is free to pick up something new while they wait."""
-    _replace_state(
-        [
-            _row("marked", state="under_review", assignee_hf_id="u-1", marked_ready=True),
-            _row("fresh", state="awaiting_review"),
-        ]
-    )
+    _replace_state([
+        _row("marked", state="under_review", assignee_hf_id="u-1", marked_ready=True),
+        _row("fresh", state="awaiting_review"),
+    ])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(
@@ -223,12 +200,10 @@ def test_can_claim_predicate_ignores_marked_ready_holdings(signed_in_client):
     only marked-ready rows should see ``can_claim=True`` on an awaiting
     target (otherwise the FE would hide the Claim button after mark-ready
     and the new policy would never be exercised from the UI)."""
-    _replace_state(
-        [
-            _row("marked", state="under_review", assignee_hf_id="u-1", marked_ready=True),
-            _row("fresh", state="awaiting_review"),
-        ]
-    )
+    _replace_state([
+        _row("marked", state="under_review", assignee_hf_id="u-1", marked_ready=True),
+        _row("fresh", state="awaiting_review"),
+    ])
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.get("/api/reciter-task/fresh")
     assert resp.status_code == 200
@@ -302,8 +277,9 @@ def test_release_non_assignee_returns_403(signed_in_client, state_persistence):
 
 def test_release_maintainer_can_force_release(signed_in_client, state_persistence):
     """Maintainers can release someone else's claim through the normal
-    release route (the dedicated force-release endpoint with reason
-    lands in Phase 4)."""
+    ``/api/release`` route via the ``_require_claim_holder_or_maintainer`` gate.
+    The dedicated owner-only ``/api/admin/claim/force-release`` endpoint with
+    reason is covered in ``test_route_admin_actions.py``."""
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="other")])
 
     client, _ = signed_in_client(hf_user_id="u-mod", login="mod", role="maintainer")
@@ -319,7 +295,7 @@ def test_release_maintainer_can_force_release(signed_in_client, state_persistenc
 # ---------------------------------------------------------------------------
 
 
-def test_mark_unmark_round_trip(signed_in_client, state_persistence, _clean_validation):
+def test_mark_unmark_round_trip(signed_in_client, state_persistence, clean_validation):
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
@@ -345,9 +321,7 @@ def test_mark_unmark_round_trip(signed_in_client, state_persistence, _clean_vali
 
 
 def test_mark_ready_non_assignee_returns_403(
-    signed_in_client,
-    state_persistence,
-    _clean_validation,
+    signed_in_client, state_persistence, clean_validation,
 ):
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="other")])
 
@@ -361,21 +335,16 @@ def test_mark_ready_non_assignee_returns_403(
 
 
 def test_mark_ready_rejects_unchecked_checklist(
-    signed_in_client,
-    state_persistence,
-    _clean_validation,
+    signed_in_client, state_persistence, clean_validation,
 ):
-    """Submit without all five attestations checked → 400 with details."""
+    """Submit without every checklist key checked -> 400 with details."""
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
-    body = {
-        **_FULL_CHECKLIST_BODY,
-        "checklist": {
-            **_FULL_CHECKLIST_BODY["checklist"],
-            "failed_alignments": False,
-        },
-    }
+    body = {**_FULL_CHECKLIST_BODY, "checklist": {
+        **_FULL_CHECKLIST_BODY["checklist"],
+        "failed_alignments": False,
+    }}
     resp = client.post(
         "/api/mark-ready/test_slug",
         headers={"Origin": "http://localhost"},
@@ -388,9 +357,7 @@ def test_mark_ready_rejects_unchecked_checklist(
 
 
 def test_mark_ready_rejects_nonzero_blocking_counts(
-    signed_in_client,
-    state_persistence,
-    monkeypatch,
+    signed_in_client, state_persistence, monkeypatch,
 ):
     """Submit when a blocking validation category is non-zero → 400 with details."""
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
@@ -416,9 +383,7 @@ def test_mark_ready_rejects_nonzero_blocking_counts(
         }
 
     from services import validation as _validation
-
     monkeypatch.setattr(_validation, "validate_reciter_segments", _has_lc)
-    monkeypatch.setitem(_validation.__dict__, "validate_reciter_segments", _has_lc)
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(
@@ -433,9 +398,7 @@ def test_mark_ready_rejects_nonzero_blocking_counts(
 
 
 def test_mark_ready_lc_count_uses_strict_threshold_not_detail(
-    signed_in_client,
-    state_persistence,
-    monkeypatch,
+    signed_in_client, state_persistence, monkeypatch,
 ):
     """Server gate must count low_confidence items at the strict 0.80
     cutoff (matching the FE accordion badge), NOT the detail-list size
@@ -458,18 +421,13 @@ def test_mark_ready_lc_count_uses_strict_threshold_not_detail(
             ],
             "category_counts": {
                 "low_confidence": 3,
-                "low_confidence_v2": 0,
-                "boundary_adj": 0,
-                "cross_verse": 0,
-                "basmala_amin": 0,
-                "repetitions": 0,
+                "low_confidence_v2": 0, "boundary_adj": 0, "cross_verse": 0,
+                "basmala_amin": 0, "repetitions": 0,
             },
         }
 
     from services import validation as _validation
-
     monkeypatch.setattr(_validation, "validate_reciter_segments", _lots_of_detail)
-    monkeypatch.setitem(_validation.__dict__, "validate_reciter_segments", _lots_of_detail)
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(
@@ -489,16 +447,11 @@ def test_mark_ready_lc_count_uses_strict_threshold_not_detail(
             ],
             "category_counts": {
                 "low_confidence": 2,
-                "low_confidence_v2": 0,
-                "boundary_adj": 0,
-                "cross_verse": 0,
-                "basmala_amin": 0,
-                "repetitions": 0,
+                "low_confidence_v2": 0, "boundary_adj": 0, "cross_verse": 0,
+                "basmala_amin": 0, "repetitions": 0,
             },
         }
-
     monkeypatch.setattr(_validation, "validate_reciter_segments", _one_strict_lc)
-    monkeypatch.setitem(_validation.__dict__, "validate_reciter_segments", _one_strict_lc)
 
     # Re-seed: previous request marked it ready, so flip back to under-review.
     _replace_state([_row("other_slug", state="under_review", assignee_hf_id="u-1")])
@@ -513,9 +466,7 @@ def test_mark_ready_lc_count_uses_strict_threshold_not_detail(
 
 
 def test_mark_ready_rejects_malformed_body(
-    signed_in_client,
-    state_persistence,
-    _clean_validation,
+    signed_in_client, state_persistence, clean_validation,
 ):
     """Missing checklist field → 400 from the route-level pydantic gate."""
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
@@ -533,17 +484,13 @@ def test_mark_ready_rejects_malformed_body(
 
 
 def test_release_blocked_after_marked_ready(
-    signed_in_client,
-    state_persistence,
-    _clean_validation,
+    signed_in_client, state_persistence, clean_validation,
 ):
     """Self-release on a marked-ready row must refuse — the reviewer
     has to unmark first (or an admin force-releases)."""
-    _replace_state(
-        [
-            _row("test_slug", state="under_review", assignee_hf_id="u-1", marked_ready=True),
-        ]
-    )
+    _replace_state([
+        _row("test_slug", state="under_review", assignee_hf_id="u-1", marked_ready=True),
+    ])
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(
         "/api/release/test_slug",
@@ -600,9 +547,7 @@ def test_mark_ready_owner_bypass_persists_bypass_used(signed_in_client, state_pe
 
 
 def test_mark_ready_non_owner_still_requires_form_body(
-    signed_in_client,
-    state_persistence,
-    _clean_validation,
+    signed_in_client, state_persistence, clean_validation,
 ):
     """A contributor without the override capability still hits the
     Pydantic gate — empty body → 400. Sanity check that the bypass path
@@ -691,17 +636,15 @@ def test_reciter_task_predicates_maintainer_can_edit_as_admin(signed_in_client):
     assert preds["can_edit"] is False  # not assignee
     assert preds["can_edit_as_admin"] is True
     assert preds["can_release"] is False  # not assignee on plain release
-    # Mark-ready/unmark-ready still gated to assignee in Phase 3.
+    # Mark-ready/unmark-ready remain gated to the assignee.
     assert preds["can_mark_ready"] is False
 
 
 def test_reciter_task_predicates_one_claim_per_user(signed_in_client):
-    _replace_state(
-        [
-            _row("other", state="under_review", assignee_hf_id="u-1"),
-            _row("target", state="awaiting_review"),
-        ]
-    )
+    _replace_state([
+        _row("other", state="under_review", assignee_hf_id="u-1"),
+        _row("target", state="awaiting_review"),
+    ])
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.get("/api/reciter-task/target")
     body = json.loads(resp.data)
@@ -709,16 +652,12 @@ def test_reciter_task_predicates_one_claim_per_user(signed_in_client):
 
 
 def test_reciter_task_predicates_marked_ready_frozen(signed_in_client):
-    _replace_state(
-        [
-            _row(
-                "test_slug",
-                state="under_review",
-                assignee_hf_id="u-1",
-                marked_ready=True,
-            )
-        ]
-    )
+    _replace_state([_row(
+        "test_slug",
+        state="under_review",
+        assignee_hf_id="u-1",
+        marked_ready=True,
+    )])
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.get("/api/reciter-task/test_slug")
     preds = json.loads(resp.data)["predicates"]
@@ -740,12 +679,10 @@ def test_reciter_task_predicates_marked_ready_frozen(signed_in_client):
 
 def test_owner_can_claim_multiple_reciters(signed_in_client, state_persistence):
     """Owner bypasses the one-claim-per-user policy."""
-    _replace_state(
-        [
-            _row("already_claimed", state="under_review", assignee_hf_id="u-owner"),
-            _row("second_target", state="awaiting_review"),
-        ]
-    )
+    _replace_state([
+        _row("already_claimed", state="under_review", assignee_hf_id="u-owner"),
+        _row("second_target", state="awaiting_review"),
+    ])
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
     resp = client.post(
         "/api/claim/second_target",
@@ -771,12 +708,10 @@ def test_reciter_task_predicates_owner_can_edit_as_owner(signed_in_client):
 
 def test_reciter_task_predicates_owner_can_claim_with_other_active(signed_in_client):
     """Owner's can_claim is True even when they already hold another claim."""
-    _replace_state(
-        [
-            _row("held", state="under_review", assignee_hf_id="u-owner"),
-            _row("target", state="awaiting_review"),
-        ]
-    )
+    _replace_state([
+        _row("held", state="under_review", assignee_hf_id="u-owner"),
+        _row("target", state="awaiting_review"),
+    ])
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
     resp = client.get("/api/reciter-task/target")
     preds = json.loads(resp.data)["predicates"]
@@ -785,16 +720,9 @@ def test_reciter_task_predicates_owner_can_claim_with_other_active(signed_in_cli
 
 def test_reciter_task_predicates_owner_marked_ready_overrides(signed_in_client):
     """Owner can still edit a marked_ready row — owner override is total."""
-    _replace_state(
-        [
-            _row(
-                "test_slug",
-                state="under_review",
-                assignee_hf_id="other",
-                marked_ready=True,
-            )
-        ]
-    )
+    _replace_state([_row(
+        "test_slug", state="under_review", assignee_hf_id="other", marked_ready=True,
+    )])
     client, _ = signed_in_client(hf_user_id="u-owner", login="owner_user", role="owner")
     resp = client.get("/api/reciter-task/test_slug")
     preds = json.loads(resp.data)["predicates"]

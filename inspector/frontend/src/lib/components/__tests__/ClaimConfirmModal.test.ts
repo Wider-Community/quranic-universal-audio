@@ -7,7 +7,7 @@ import {
     closeClaimConfirm,
     openClaimConfirm,
 } from '../../stores/claim-confirm-modal';
-import { currentUser } from '../../stores/current-user';
+import { currentUser, resetCurrentUser } from '../../stores/current-user';
 import ClaimConfirmModal from '../ClaimConfirmModal.svelte';
 
 const claimMock = vi.fn((_slug: string) => Promise.resolve({} as never));
@@ -21,9 +21,14 @@ vi.mock('../../api/reciter-task', () => ({
 vi.mock('../../../tabs/dashboard/stores/catalog-data', () => ({
     loadCatalog: vi.fn(() => Promise.resolve()),
 }));
-vi.mock('../../stores/current-user', async () => {
-    const { writable } = await import('svelte/store');
-    const store = writable({
+
+function setUser(overrides: Record<string, unknown>) {
+    currentUser.update((u) => ({ ...u, ...overrides }));
+}
+
+beforeEach(() => {
+    claimMock.mockClear();
+    currentUser.set({
         login: 'me',
         hf_user_id: 'u-1',
         role: 'contributor',
@@ -33,21 +38,12 @@ vi.mock('../../stores/current-user', async () => {
         capabilities: [],
         guides_read: [],
     });
-    return { currentUser: store, loadCurrentUser: vi.fn(() => Promise.resolve()) };
-});
-
-function setUser(overrides: Record<string, unknown>) {
-    currentUser.update((u) => ({ ...u, ...overrides }));
-}
-
-beforeEach(() => {
-    claimMock.mockClear();
-    setUser({ role: 'contributor', active_claim: null });
 });
 
 afterEach(() => {
     closeClaimConfirm();
     claimConfirmModal.set({ open: false, slug: null, onClaimed: null });
+    resetCurrentUser();
 });
 
 describe('ClaimConfirmModal', () => {

@@ -1,7 +1,7 @@
 """Smoke test for the stateful services (state, catalog, audit, access).
 
 Uses a ``FilesystemBackend`` against a tempdir — no HF deps. Run with
-``python -m inspector.services._services_smoke``.
+``python scripts/diagnostics/services_smoke.py``.
 
 Exercises the slug-bound state machine end-to-end (claim → mark-ready →
 unmark → release → claim → publish → timestamps → unlocked_for_revision

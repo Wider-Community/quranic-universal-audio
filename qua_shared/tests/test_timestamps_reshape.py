@@ -12,78 +12,28 @@ and rejection of compound cross-verse keys.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+import gzip
 
-_ROOT = Path(__file__).resolve().parents[3]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+import orjson
+import pytest
 
-import gzip  # noqa: E402
-
-import orjson  # noqa: E402
-import pytest  # noqa: E402
-
-from qua_shared.timestamps_dedup import build_raw_v2  # noqa: E402
-from qua_shared.timestamps_reshape import (  # noqa: E402
+from qua_shared.tests.conftest import (
+    PROVENANCE,
+    _multi_verse_loopback,
+    _ok,
+    _multi_verse_loopback_results,
+)
+from qua_shared.timestamps_dedup import build_raw_v2
+from qua_shared.timestamps_reshape import (
     classify_shard,
     reshape_shard,
 )
-from qua_shared.timestamps_shards import (  # noqa: E402
+from qua_shared.timestamps_shards import (
     build_segment_shards,
     gzip_shard,
 )
 
 CAT = "by_surah_audio"
-
-PROVENANCE = {
-    "created_at": "2026-06-04T00:00:00Z",
-    "audio_source": "by_surah",
-    "aligner_model": "quran_aligner_model",
-    "method": "kalpy",
-    "beam": 50,
-    "shared_cmvn": False,
-    "padding": "forward",
-}
-
-
-def _ok(locations, t0=0.0, step=0.5):
-    """Synthetic MFA 'ok' result: one word per location, sequential times (s)."""
-    words = []
-    for i, loc in enumerate(locations):
-        s = t0 + i * step
-        words.append(
-            {
-                "location": loc,
-                "start": s,
-                "end": s + step,
-                "letters": [{"char": "x", "start": s, "end": s + step}],
-                "phones": [{"phone": "P", "start": s, "end": s + step}],
-            }
-        )
-    return {"status": "ok", "words": words}
-
-
-def _chapter_loopback():
-    # 1:1 recited across two segments (loopback): words 1-2 then 3-4, then 1:2.
-    return {
-        "ref": "1",
-        "segments": [
-            {"matched_ref": "1:1:1-1:1:2", "time_start": 0, "time_end": 1000},
-            {"matched_ref": "1:1:3-1:1:4", "time_start": 1500, "time_end": 2500},
-            {"matched_ref": "1:2:1-1:2:3", "time_start": 2500, "time_end": 3500},
-        ],
-    }
-
-
-def _results_loopback():
-    return {
-        0: [
-            (0, _ok(["1:1:1", "1:1:2"])),
-            (1, _ok(["1:1:3", "1:1:4"], t0=1.5)),
-            (2, _ok(["1:2:1", "1:2:2", "1:2:3"], t0=2.5)),
-        ]
-    }
 
 
 def _v2_chapter_shard(chapter, results, *, cat=CAT, meta_extra=None):
@@ -119,11 +69,12 @@ def _v2_chapter_shard(chapter, results, *, cat=CAT, meta_extra=None):
 
 
 def test_reshape_converges_with_writer_segment_shape():
-    chapter, results = _chapter_loopback(), _results_loopback()
+    chapter, results = _multi_verse_loopback(), _multi_verse_loopback_results()
 
     # Writer face: build the segment-array shard directly from the v2 doc.
     raw = build_raw_v2([chapter], results, CAT)
-    writer_shard = build_segment_shards(raw, audio_category=CAT, src_meta=PROVENANCE)[1]
+    writer_shard = build_segment_shards(
+        raw, audio_category=CAT, src_meta=PROVENANCE)[1]
 
     # Reshape face: take the on-bucket per-chapter occurrence-list shard and
     # reshape it. Provenance lives on the shard's own _meta.
@@ -147,14 +98,12 @@ def test_reshape_converges_multi_verse_recitation_order():
             {"matched_ref": "2:3:1-2:3:2", "time_start": 2000, "time_end": 3000},
         ],
     }
-    results = {
-        0: [
-            (0, _ok(["2:1:1", "2:1:2"], t0=5.0)),
-            (1, _ok(["2:2:1"], t0=0.0)),
-            (2, _ok(["2:1:3", "2:1:4"], t0=6.5)),
-            (3, _ok(["2:3:1", "2:3:2"], t0=2.0)),
-        ]
-    }
+    results = {0: [
+        (0, _ok(["2:1:1", "2:1:2"], t0=5.0)),
+        (1, _ok(["2:2:1"], t0=0.0)),
+        (2, _ok(["2:1:3", "2:1:4"], t0=6.5)),
+        (3, _ok(["2:3:1", "2:3:2"], t0=2.0)),
+    ]}
     raw = build_raw_v2([chapter], results, CAT)
     writer_shard = build_segment_shards(raw, audio_category=CAT, src_meta=PROVENANCE)[2]
     reshaped = reshape_shard(_v2_chapter_shard(chapter, results))
@@ -187,19 +136,12 @@ def test_reshape_by_ayah_category_normalized():
 
 
 def test_reshaped_meta_is_slim_and_drops_path_fields():
-    reshaped = reshape_shard(_v2_chapter_shard(_chapter_loopback(), _results_loopback()))
+    reshaped = reshape_shard(_v2_chapter_shard(_multi_verse_loopback(), _multi_verse_loopback_results()))
     meta = reshaped["_meta"]
     assert meta["schema_version"] == 2 and meta["chapter"] == 1
     assert meta["audio_category"] == "by_surah"
-    for k in (
-        "padding",
-        "beam",
-        "method",
-        "aligner_model",
-        "shared_cmvn",
-        "audio_source",
-        "created_at",
-    ):
+    for k in ("padding", "beam", "method", "aligner_model", "shared_cmvn",
+              "audio_source", "created_at"):
         assert k in meta
     # path/audio fields dropped even though the v2 shard carried them
     for k in ("reciter", "url_template", "audio_urls"):
@@ -207,7 +149,7 @@ def test_reshaped_meta_is_slim_and_drops_path_fields():
 
 
 def test_words_letters_phones_preserved_verbatim():
-    v2_shard = _v2_chapter_shard(_chapter_loopback(), _results_loopback())
+    v2_shard = _v2_chapter_shard(_multi_verse_loopback(), _multi_verse_loopback_results())
     src_words = v2_shard["1:1"][0]["words_by_verse"]["1:1"]
     reshaped = reshape_shard(v2_shard)
     out_words = reshaped["segments"][0]["words"]
@@ -223,7 +165,7 @@ def test_words_letters_phones_preserved_verbatim():
 
 
 def test_classify_v2_target_v1_empty():
-    v2_shard = _v2_chapter_shard(_chapter_loopback(), _results_loopback())
+    v2_shard = _v2_chapter_shard(_multi_verse_loopback(), _multi_verse_loopback_results())
     assert classify_shard(v2_shard) == "v2"
 
     target = reshape_shard(v2_shard)
@@ -236,7 +178,7 @@ def test_classify_v2_target_v1_empty():
 
 
 def test_reshape_rejects_already_target():
-    target = reshape_shard(_v2_chapter_shard(_chapter_loopback(), _results_loopback()))
+    target = reshape_shard(_v2_chapter_shard(_multi_verse_loopback(), _multi_verse_loopback_results()))
     with pytest.raises(ValueError, match="already in the target"):
         reshape_shard(target)
 
@@ -262,7 +204,7 @@ def test_reshape_rejects_compound_cross_verse():
 
 def test_reshape_idempotent_via_gzip_roundtrip():
     # Reshape → gzip → inflate → still classifies as target, segments stable.
-    reshaped = reshape_shard(_v2_chapter_shard(_chapter_loopback(), _results_loopback()))
+    reshaped = reshape_shard(_v2_chapter_shard(_multi_verse_loopback(), _multi_verse_loopback_results()))
     roundtrip = orjson.loads(gzip.decompress(gzip_shard(reshaped)))
     assert roundtrip == reshaped
     assert classify_shard(roundtrip) == "target"

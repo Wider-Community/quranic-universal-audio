@@ -1,7 +1,7 @@
 """POST /api/seg/save tests (MUST-1, MUST-7).
 
-Phase 3 wired ``require_same_origin`` + ``require_edit_lock(admin_bypass=True)``
-on every save/undo route. These tests assert:
+``require_same_origin`` + ``require_edit_lock(admin_bypass=True)`` gate every
+save/undo route. These tests assert:
 
 - Anonymous requests are rejected (401 via the lock decorator).
 - Cross-origin POSTs are rejected (403 via the same-origin guard).
@@ -11,13 +11,9 @@ on every save/undo route. These tests assert:
 - The save payload contract checks still apply (patch synthesizer,
   command-envelope validation).
 """
-
 from __future__ import annotations
 
 import json
-import os
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _ORIGIN = "http://localhost"
 _HEADERS = {"Content-Type": "application/json", "Origin": _ORIGIN}
@@ -74,7 +70,6 @@ def test_save_wrong_state_returns_403_with_state_label(signed_in_client, tmp_rec
     # Close the claim + flip the row to AWAITING_REVIEW (not editable).
     from services import db as _db
     from services.db import repo_claims, repo_state
-
     with _db.transaction():
         repo_claims.close_claim(slug=reciter, close_reason="test")
         repo_state.update_state(reciter, state=ReciterState.AWAITING_REVIEW)
@@ -100,13 +95,20 @@ def test_save_maintainer_can_override_assignee(signed_in_client, tmp_reciter_dir
         data=json.dumps({"full_replace": True, "segments": [], "operations": []}),
         headers=_HEADERS,
     )
+    # The gate-passed assertion: the lock decorator chain did not 403 us.
+    # Body shape may still 400 on the empty-segments payload, but a 403
+    # here is a regression that the prior 200-or-400 tuple would have
+    # silently passed through as a 400 anyway.
+    assert res.status_code != 403, (
+        f"unexpected 403; body={res.get_json()}"
+    )
     assert res.status_code in (200, 400), (
         f"unexpected status {res.status_code}; body={res.get_json()}"
     )
-    # 400 is acceptable when the empty-segments payload trips a validation
-    # rule; the point is the decorator chain didn't block us.
     if res.status_code == 200:
-        history_path = tmp_reciter_dir.root / reciter / "edit_history.jsonl"
+        history_path = (
+            tmp_reciter_dir.root / reciter / "edit_history.jsonl"
+        )
         line = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])
         assert line["actor"]["hf_user_id"] == "mod-1"
         assert line["actor"]["role"] == "maintainer"
@@ -115,23 +117,12 @@ def test_save_maintainer_can_override_assignee(signed_in_client, tmp_reciter_dir
 def test_save_marked_ready_returns_403(signed_in_client, tmp_reciter_dir):
     """Marked-ready rows are frozen — the lock decorator refuses saves even
     for the active assignee. They must Unmark first."""
-    from datetime import datetime, timezone
-
-    from qua_shared.schemas import (
-        ReciterRow,
-        ReciterState,
-        ReciterStateFile,
-        Visibility,
-    )
-    from services import state as state_service
-
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
 
     # Mark the existing open claim ready.
     from services import db as _db
     from services.db import repo_claims
-
     with _db.transaction():
         repo_claims.set_marked_ready(reciter, ready=True)
 
@@ -147,15 +138,7 @@ def test_save_marked_ready_returns_403(signed_in_client, tmp_reciter_dir):
 
 def test_save_owner_bypasses_state_check(signed_in_client, tmp_reciter_dir):
     """Owner can save to a row that isn't UNDER_REVIEW (state bypass)."""
-    from datetime import datetime, timezone
-
-    from qua_shared.schemas import (
-        ReciterRow,
-        ReciterState,
-        ReciterStateFile,
-        Visibility,
-    )
-    from services import state as state_service
+    from qua_shared.schemas import ReciterState
 
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="other-user")
@@ -163,7 +146,6 @@ def test_save_owner_bypasses_state_check(signed_in_client, tmp_reciter_dir):
     # Flip state to catalogued (close the claim) so a non-owner would get 403.
     from services import db as _db
     from services.db import repo_claims, repo_state
-
     with _db.transaction():
         repo_claims.close_claim(slug=reciter, close_reason="test")
         repo_state.update_state(reciter, state=ReciterState.CATALOGUED)
@@ -174,7 +156,10 @@ def test_save_owner_bypasses_state_check(signed_in_client, tmp_reciter_dir):
         data=json.dumps({"full_replace": True, "segments": [], "operations": []}),
         headers=_HEADERS,
     )
-    # 200 or 400 are both acceptable — the lock passed (no 403 for state mismatch).
+    # Lock-pass invariant: a 403 for state-mismatch is the actual regression.
+    assert res.status_code != 403, (
+        f"unexpected 403; body={res.get_json()}"
+    )
     assert res.status_code in (200, 400), (
         f"unexpected status {res.status_code}; body={res.get_json()}"
     )
@@ -187,7 +172,6 @@ def test_save_owner_marked_ready_bypasses_freeze(signed_in_client, tmp_reciter_d
 
     from services import db as _db
     from services.db import repo_claims
-
     with _db.transaction():
         repo_claims.set_marked_ready(reciter, ready=True)
 
@@ -198,7 +182,11 @@ def test_save_owner_marked_ready_bypasses_freeze(signed_in_client, tmp_reciter_d
         headers=_HEADERS,
     )
     # Gate passed — 200 (save succeeded) or 400 (payload-shape complaint) both
-    # confirm the lock did not 403 on marked_ready.
+    # confirm the lock did not 403 on marked_ready. Assert the NOT-403
+    # invariant explicitly so a future tuple-creep doesn't hide a regression.
+    assert res.status_code != 403, (
+        f"owner override should bypass marked_ready freeze; got 403, body={res.get_json()}"
+    )
     assert res.status_code in (200, 400), (
         f"unexpected status {res.status_code}; body={res.get_json()}"
     )
@@ -212,10 +200,8 @@ def test_save_owner_marked_ready_bypasses_freeze(signed_in_client, tmp_reciter_d
 def test_save_accepts_full_replace_payload(signed_in_client, tmp_reciter_dir):
     """A canonical full_replace payload is accepted with HTTP 200."""
     reciter = "fixture_reciter"
-    tmp_reciter_dir.install(
-        reciter,
-        "112-ikhlas",
-        under_review_for="test-user-1",
+    fixture_path = tmp_reciter_dir.install(
+        reciter, "112-ikhlas", under_review_for="test-user-1",
     )
     chapter = 112
 
@@ -239,7 +225,7 @@ def test_save_accepts_full_replace_payload(signed_in_client, tmp_reciter_dir):
         data=json.dumps(payload),
         headers=_HEADERS,
     )
-    assert res.status_code in (200, 404), (
+    assert res.status_code == 200, (
         f"unexpected status {res.status_code}; body={res.get_json()}"
     )
 
@@ -263,11 +249,11 @@ def test_save_accepts_patch_payload(signed_in_client, tmp_reciter_dir):
         data=json.dumps(payload),
         headers=_HEADERS,
     )
-    assert res.status_code in (200, 404)
+    assert res.status_code == 200, res.get_data(as_text=True)
 
 
 def test_save_includes_patch_field_in_history(signed_in_client, tmp_reciter_dir):
-    """Phase 5 contract: save handler injects a patch field on every op without one."""
+    """The save handler injects a ``patch`` field on every op without one."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
     chapter = 112
@@ -298,14 +284,13 @@ def test_save_includes_patch_field_in_history(signed_in_client, tmp_reciter_dir)
     history_path = tmp_reciter_dir.root / reciter / "edit_history.jsonl"
     last = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])
     op = last["operations"][0]
-    assert "patch" in op, "Phase 5: every history op must carry a patch field"
+    assert "patch" in op, "every history op must carry a patch field"
 
 
-def test_save_payload_is_correctly_built_from_command_results(
-    signed_in_client,
-    tmp_reciter_dir,
+def test_save_rejects_unknown_command_type(
+    signed_in_client, tmp_reciter_dir,
 ):
-    """Phase 3: save handler validates CommandResult-shaped payloads via schema."""
+    """Save handler rejects an operation whose command.type is not a known reducer."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
     chapter = 112
@@ -327,12 +312,11 @@ def test_save_payload_is_correctly_built_from_command_results(
         data=json.dumps(payload),
         headers=_HEADERS,
     )
-    assert res.status_code == 400, "Phase 3 must reject unknown `command.type` values"
+    assert res.status_code == 400, "save rejects unknown `command.type` values"
 
 
 def test_save_writes_actor_block_to_history(signed_in_client, tmp_reciter_dir):
-    """Phase 3 deliverable: every new batch carries ``actor: {hf_user_id,
-    login_at_time, role}``."""
+    """Every saved batch carries ``actor: {hf_user_id, login_at_time, role}``."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="u-1")
 
@@ -359,7 +343,7 @@ def test_save_writes_actor_block_to_history(signed_in_client, tmp_reciter_dir):
 
     history_path = tmp_reciter_dir.root / reciter / "edit_history.jsonl"
     line = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])
-    assert "file_hash_after" not in line, "Phase 3: file_hash_after must be gone"
+    assert "file_hash_after" not in line, "history must not carry file_hash_after"
     assert line["actor"] == {
         "hf_user_id": "u-1",
         "login_at_time": "alice",

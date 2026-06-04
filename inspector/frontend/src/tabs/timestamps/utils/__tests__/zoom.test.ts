@@ -197,19 +197,23 @@ describe('animateZoomTo with fake rAF', () => {
         rafQueue = [];
         rafCounter = 0;
         perfNow = 1000;
+        // Track frames as { id, cb } so cancellation is id-precise, matching
+        // browser semantics. The prior coarse stub dropped every queued frame
+        // on any cancel — fine for the single-tween invariant the zoom code
+        // currently exercises, but it would silently mask a future bug that
+        // queued an unrelated rAF alongside a zoom tween.
+        type RafFrame = { id: number; cb: (t: number) => void };
+        let rafFrames: RafFrame[] = [];
+        rafQueue = [];
         vi.stubGlobal('requestAnimationFrame', (cb: (t: number) => void) => {
             rafCounter += 1;
-            rafQueue.push(cb);
+            rafFrames.push({ id: rafCounter, cb });
+            rafQueue = rafFrames.map((f) => f.cb);
             return rafCounter;
         });
         vi.stubGlobal('cancelAnimationFrame', (id: number) => {
-            // Simulate: drop callback at that id (track via index). Simpler: mark it
-            // cancelled by index — but our zoom code stores only the active id, so a
-            // cancel effectively means "don't keep running this chain." We emulate by
-            // clearing the queue when the active id is cancelled; the test pumps what
-            // remains, so a cancelled animation stops producing new frames.
-            void id;
-            rafQueue = [];
+            rafFrames = rafFrames.filter((f) => f.id !== id);
+            rafQueue = rafFrames.map((f) => f.cb);
         });
         vi.stubGlobal('performance', { now: () => perfNow });
     });
@@ -348,12 +352,20 @@ describe('setupZoomLifecycle', () => {
 
         rafQueue = [];
         perfNow = 1000;
+        // id-precise stubs so a cancel only drops the targeted frame, not
+        // every queued chain. The prior coarse stub cleared the whole queue.
+        type RafFrame2 = { id: number; cb: (t: number) => void };
+        let rafFrames2: RafFrame2[] = [];
+        let rafCounter2 = 0;
         vi.stubGlobal('requestAnimationFrame', (cb: (t: number) => void) => {
-            rafQueue.push(cb);
-            return rafQueue.length;
+            rafCounter2 += 1;
+            rafFrames2.push({ id: rafCounter2, cb });
+            rafQueue = rafFrames2.map((f) => f.cb);
+            return rafCounter2;
         });
-        vi.stubGlobal('cancelAnimationFrame', () => {
-            rafQueue = [];
+        vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+            rafFrames2 = rafFrames2.filter((f) => f.id !== id);
+            rafQueue = rafFrames2.map((f) => f.cb);
         });
         vi.stubGlobal('performance', { now: () => perfNow });
     });

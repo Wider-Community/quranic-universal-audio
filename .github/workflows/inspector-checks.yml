@@ -49,11 +49,11 @@ jobs:
         # so a clean checkout drives lint/check/test/build deterministically.
         run: git checkout -- src/ || true
 
-      - name: Lint, typecheck, test, build
+      - name: Lint, typecheck, test (with coverage), build
         run: |
           npm run lint
           npm run check
-          npm run test
+          npm run test:coverage
           npm run build
 
   backend-checks:
@@ -85,7 +85,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/inspector
-        run: python -m pytest qua_shared/tests
+        run: python -m pytest qua_shared/tests --cov=qua_shared --cov-report=term-missing:skip-covered --no-cov-on-fail
 
       - name: Install ruff
         # Pinned so CI matches the version landed alongside the ruleset.
@@ -124,7 +124,11 @@ jobs:
 
       - name: Install codegen deps
         run: |
-          pip install -r inspector/requirements-dev.txt
+          # Install runtime requirements alongside dev requirements so codegen
+          # runs against the same pinned pydantic the deployed image + the BE
+          # tests use (prevents silent JSON-schema drift if
+          # pydantic-to-typescript's loose dep resolves to an older pydantic).
+          pip install -r inspector/requirements.txt -r inspector/requirements-dev.txt
           cd inspector/frontend && npm ci
 
       - name: Regenerate FE types

@@ -1,25 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { dispatchVisibilityChange, flushMicrotasks, setVisibility } from '../../test-helpers/poll-helpers';
 import { visiblePoll } from '../visible-poll';
-
-function setVisibility(hidden: boolean): void {
-    Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });
-    Object.defineProperty(document, 'visibilityState', {
-        value: hidden ? 'hidden' : 'visible',
-        configurable: true,
-    });
-}
-
-function dispatchVisibilityChange(): void {
-    document.dispatchEvent(new Event('visibilitychange'));
-}
-
-/** Flush queued microtasks without advancing the fake-timer clock. */
-async function flushMicrotasks(): Promise<void> {
-    // A handful of awaits drains promise chains created by runOnce()
-    // (fetcher + onResult), without triggering the interval timer.
-    for (let i = 0; i < 5; i += 1) await Promise.resolve();
-}
 
 describe('visiblePoll', () => {
     beforeEach(() => {
@@ -87,22 +69,30 @@ describe('visiblePoll', () => {
         teardown();
     });
 
-    it('discards an in-flight response that resolves after hide', async () => {
+    it('discards an in-flight response that resolves after hide and aborts the controller', async () => {
         let resolveFetch: (v: string) => void = () => {};
+        let capturedSignal: AbortSignal | undefined;
         const fetcher = vi.fn(
-            () =>
-                new Promise<string>((resolve) => {
+            (signal?: AbortSignal) => {
+                capturedSignal = signal;
+                return new Promise<string>((resolve) => {
                     resolveFetch = resolve;
-                }),
+                });
+            },
         );
         const onResult = vi.fn();
         const teardown = visiblePoll({ intervalMs: 1000, fetcher, onResult });
+        await flushMicrotasks();
         // Hide before the in-flight fetch resolves.
         setVisibility(true);
         dispatchVisibilityChange();
         resolveFetch('late-payload');
         await flushMicrotasks();
         expect(onResult).not.toHaveBeenCalled();
+        // The advertised contract is that the in-flight AbortController is
+        // aborted on hide — pin the abort directly rather than relying
+        // solely on the resolve-time !isVisible() re-check.
+        expect(capturedSignal?.aborted).toBe(true);
         teardown();
     });
 

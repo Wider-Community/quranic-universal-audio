@@ -117,7 +117,15 @@ def test_nested_transaction_single_commit_seq(fresh_db):
 
 
 def test_foreign_keys_enforced(fresh_db):
-    # delivery referencing a missing reciter must fail (PRAGMA foreign_keys=ON)
+    """delivery.reciter_id REFERENCES reciters(reciter_id) is enforced under
+    PRAGMA foreign_keys=ON. Seed every other FK target so the rejection is
+    unambiguously attributed to the reciters FK (and not a stray vocab one)."""
+    with db.transaction() as conn:
+        conn.execute("INSERT INTO users(hf_user_id) VALUES ('u1')")
+        conn.execute("INSERT INTO riwayahs(slug,short,name) VALUES ('hafs','h','Hafs')")
+        conn.execute("INSERT INTO styles(slug,short,name) VALUES ('murattal','m','Mur')")
+        conn.execute("INSERT INTO sources(slug,name) VALUES ('src','Src')")
+        conn.execute("INSERT INTO channels(slug,short,name) VALUES ('ch','c','Ch')")
     with pytest.raises(sqlite3.IntegrityError):
         with db.transaction() as conn:
             conn.execute(

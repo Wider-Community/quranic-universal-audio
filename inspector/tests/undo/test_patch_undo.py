@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
 
 import pytest
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
@@ -155,4 +152,6 @@ def test_legacy_record_falls_back_to_field_restore(signed_in_client, tmp_reciter
         data=json.dumps({"batch_id": "no-such-batch"}),
         headers=_HEADERS,
     )
-    assert res.status_code in (200, 400, 404)
+    # Unknown batch_id reaches the service layer and 404s; pin it so a
+    # regression doesn't drift this to 200 silently.
+    assert res.status_code == 404, res.get_data(as_text=True)

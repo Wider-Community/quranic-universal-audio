@@ -2,13 +2,13 @@ import { get } from 'svelte/store';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { selectedReciter } from '../../../tabs/segments/stores/chapter';
-import { activeTab } from '../active-tab';
+import { activeTab, setActiveTab } from '../active-tab';
 import { LS_KEYS, TAB_NAMES } from '../constants';
 import { gotoSegments } from '../goto-segments';
 
 afterEach(() => {
     selectedReciter.set('');
-    activeTab.set(TAB_NAMES.DASHBOARD);
+    setActiveTab(TAB_NAMES.DASHBOARD);
     try {
         localStorage.removeItem(LS_KEYS.SEG_RECITER);
     } catch {
@@ -24,9 +24,18 @@ describe('gotoSegments', () => {
         expect(localStorage.getItem(LS_KEYS.SEG_RECITER)).toBe('reciter-x');
     });
 
-    it('is a no-op for an empty slug', () => {
+    it('is a no-op for an empty slug — does not overwrite existing state or localStorage', () => {
+        // Pre-seed all three observables to non-default values so the no-op
+        // assertion proves the function returned early (instead of trivially
+        // matching the initialisation defaults).
+        selectedReciter.set('existing');
+        setActiveTab(TAB_NAMES.TIMESTAMPS);
+        localStorage.setItem(LS_KEYS.SEG_RECITER, 'existing');
+
         gotoSegments('');
-        expect(get(selectedReciter)).toBe('');
-        expect(get(activeTab)).toBe(TAB_NAMES.DASHBOARD);
+
+        expect(get(selectedReciter)).toBe('existing');
+        expect(get(activeTab)).toBe(TAB_NAMES.TIMESTAMPS);
+        expect(localStorage.getItem(LS_KEYS.SEG_RECITER)).toBe('existing');
     });
 });

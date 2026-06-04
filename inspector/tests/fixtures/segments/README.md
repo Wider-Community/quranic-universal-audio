@@ -15,7 +15,7 @@ and pytest reads the same files via `load_fixture(name)` in `conftest.py`.
 | `113-falaq.detailed.json` | Real Minshawi slice (Surah 113) + injected synthetic segments | Coverage for `muqattaat` (one synthetic segment with `s_word=1` matched against a real `MUQATTAAT_VERSES` entry), `audio_bleeding`, `cross_verse` |
 | `synthetic-structural.detailed.json` | Hand-crafted | Coverage for `missing_verses`, `missing_words`, `structural_errors` |
 | `synthetic-classifier.detailed.json` | Hand-crafted | One segment per per-segment category for parametrized tests |
-| `expected/<fixture>.classify.json` | Generated | Post-Phase-2 unified classifier baseline. Regenerated via `python -m inspector.tests.parity.snapshot_expected_outputs` |
+| `expected/<fixture>.classify.json` | Generated | Unified classifier baseline. Regenerated via `python scripts/codegen/regen_classifier_baselines.py` |
 
 ## File format
 
@@ -67,12 +67,12 @@ ignores any unknown top-level keys.
 
 ## Regenerating expected outputs
 
-After Phase 2 lands the unified classifier, run:
+Run:
 
 ```
-python -m inspector.tests.parity.snapshot_expected_outputs
+python scripts/codegen/regen_classifier_baselines.py
 ```
 
 The script walks every fixture, classifies via the backend, and writes
 `expected/<fixture>.classify.json`. Idempotent. Commit the regenerated files
-together with the Phase 2 changeset.
+together with the change that motivated the regeneration.

@@ -1,24 +1,26 @@
 """POST /api/seg/undo-batch and /api/seg/undo-ops tests (MUST-8).
 
-Phase 3: undo routes are gated by ``require_edit_lock(admin_bypass=True)``
-so all tests now use ``signed_in_client`` with the user seeded as the
-active assignee on an ``under_review`` row, plus the same-origin Header.
-The revert record carries ``actor`` exactly like the forward batch.
+Undo routes are gated by ``require_edit_lock(admin_bypass=True)``; tests
+use ``signed_in_client`` with the user seeded as the active assignee on an
+``under_review`` row, plus the same-origin Header. The revert record
+carries ``actor`` exactly like the forward batch.
 """
 
 from __future__ import annotations
 
 import json
-import os
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
 
 def test_undo_batch_unknown_batch_id_returns_404(signed_in_client, tmp_reciter_dir):
     """Unknown batch_id flows through the lock decorator and reaches the
-    service layer, which 404s on missing history."""
+    service layer, which 404s on missing history.
+
+    Test name promises a 404 for an unknown batch — assert it exactly. The
+    prior loose tuple would mask a regression that changed the contract to
+    200/400 for the same input.
+    """
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
     client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
@@ -28,7 +30,7 @@ def test_undo_batch_unknown_batch_id_returns_404(signed_in_client, tmp_reciter_d
         data=json.dumps({"batch_id": "no-such-batch"}),
         headers=_HEADERS,
     )
-    assert res.status_code in (200, 400, 404)
+    assert res.status_code == 404, res.get_data(as_text=True)
 
 
 def test_undo_batch_round_trip_with_actor(signed_in_client, tmp_reciter_dir):
@@ -94,7 +96,11 @@ def test_undo_batch_round_trip_with_actor(signed_in_client, tmp_reciter_dir):
 
 
 def test_undo_ops_unknown_returns_400_or_404(signed_in_client, tmp_reciter_dir):
-    """undo-ops route accepts (batch_id, op_ids) and returns 4xx for unknown ids."""
+    """undo-ops route accepts (batch_id, op_ids) and returns 4xx for unknown
+    ids. Test name commits to a 4xx — the previous tuple including 200 would
+    have silently passed if the route ever started returning 200 on an
+    unknown batch_id.
+    """
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
     client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
@@ -104,7 +110,7 @@ def test_undo_ops_unknown_returns_400_or_404(signed_in_client, tmp_reciter_dir):
         data=json.dumps({"batch_id": "no-such-batch", "op_ids": ["op-1"]}),
         headers=_HEADERS,
     )
-    assert res.status_code in (200, 400, 404)
+    assert res.status_code in (400, 404), res.get_data(as_text=True)
 
 
 def test_undo_batch_anonymous_returns_401(flask_client, tmp_reciter_dir):

@@ -110,7 +110,9 @@ def test_playlist_unknown_host_warns():
 def test_playlist_missing_url_errors():
     sub = _new_reciter(source={"method": "playlist", "playlist_url": None})
     v = iv.validate_submission(sub)
-    assert any("playlist URL is required" in e.lower() or "required" in e for e in v.errors)
+    # Assert the exact validator-emitted error, case preserved, so a wording
+    # drift fails loudly instead of falling through to a generic "required".
+    assert any("A playlist URL is required." in e for e in v.errors)
 
 
 def test_compact_ranges():

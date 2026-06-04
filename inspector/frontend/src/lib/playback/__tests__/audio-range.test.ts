@@ -444,8 +444,7 @@ describe('AudioRange — attach', () => {
 // ---------------------------------------------------------------------------
 
 describe('AudioRange — dispose', () => {
-    it('detaches canplay listener and cancels pending advance timer', () => {
-        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    it('detaches canplay listener', () => {
         audio.src = 'http://x/old.mp3';
         const r = buildRange({
             range: { startMs: 0, endMs: 1000, src: 'http://x/new.mp3' },
@@ -460,10 +459,9 @@ describe('AudioRange — dispose', () => {
 
         expect(audio._listeners.get('canplay')?.size ?? 0).toBe(0);
         expect(r.isRunning()).toBe(false);
-
-        // Advancing fake timers past any plausible gap window must not start playback.
-        const playCalls = audio.play.mock.calls.length;
-        vi.advanceTimersByTime(10_000);
-        expect(audio.play.mock.calls.length).toBe(playCalls);
+        // Gap-timer cancellation on stop/dispose is asserted by the dedicated
+        // "cancels pending gap timer" test elsewhere in this file. Here the
+        // range never crosses its boundary before dispose, so no advance
+        // timer has been scheduled to cancel.
     });
 });

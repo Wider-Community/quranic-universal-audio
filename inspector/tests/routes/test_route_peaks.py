@@ -17,11 +17,7 @@ What this exercises:
 
 from __future__ import annotations
 
-import os
-
 from services.audio.peaks_slim import pack_slim
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 
 def _install_slim_peaks(backend, reciter: str, chapter: int, n_peaks: int = 60) -> None:
@@ -102,15 +98,34 @@ def test_peaks_missing_file_returns_no_store(flask_client, tmp_reciter_dir):
     assert "no-store" in res.headers.get("Cache-Control", "")
 
 
-def test_peaks_response_cache_returns_same_body_on_repeat(flask_client, tmp_reciter_dir):
-    """Second identical request hits the LRU cache — body byte-identical."""
+def test_peaks_response_cache_returns_same_body_on_repeat(flask_client, tmp_reciter_dir, monkeypatch):
+    """Second identical request hits the LRU cache — neither the per-URL peak
+    reader nor the bucket is touched. Byte-equality alone would pass even if
+    the cache were never hit (orjson is deterministic), so we positively
+    assert cache presence and break the underlying reader to prove the
+    second request did not re-enter it.
+    """
+    from services.storage.cache import get_peaks_response_cache
+
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
     _install_slim_peaks(tmp_reciter_dir.backend, reciter, chapter=112)
 
     res1 = flask_client.get(f"/api/seg/peaks/{reciter}?chapters=112&h=abc")
+    assert res1.status_code == 200
+    cached = get_peaks_response_cache(reciter, (112,))
+    assert cached is not None, "first request should populate the LRU"
+
+    # Sabotage the per-URL reader so any cache miss surfaces immediately.
+    from services.audio import audio_fetch
+
+    def _boom(*a, **kw):
+        raise AssertionError("read_prefetched_peaks must not be reached on cache hit")
+
+    monkeypatch.setattr(audio_fetch, "read_prefetched_peaks", _boom)
+
     res2 = flask_client.get(f"/api/seg/peaks/{reciter}?chapters=112&h=abc")
-    assert res1.status_code == 200 and res2.status_code == 200
+    assert res2.status_code == 200
     assert res1.get_data() == res2.get_data()
 
 
@@ -165,20 +180,24 @@ def test_peaks_no_lock_deadlock_on_misses(flask_client, tmp_reciter_dir):
 
     Caught live during E2E verification on a freshly-migrated husary bucket:
     every ``/api/seg/peaks/<reciter>`` request hung at 60s with 0 bytes
-    returned. Healthz + other routes worked fine. This test installs slim
-    peaks across two chapters so the route exercises the cache-set codepath
-    and asserts the response arrives within a reasonable wall-clock budget.
+    returned. Healthz + other routes worked fine.
     """
     import time
 
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
-    _install_slim_peaks(tmp_reciter_dir.backend, reciter, chapter=112)
 
+    # Install slim peaks across multiple chapters so the ThreadPoolExecutor
+    # fans out reads + cache-set calls concurrently. A single-chapter request
+    # exercises a single worker and would never have reproduced the original
+    # threading.Lock non-reentrant deadlock.
+    chapters = (1, 2, 3, 4, 112)
+    for ch in chapters:
+        _install_slim_peaks(tmp_reciter_dir.backend, reciter, chapter=ch)
+
+    chapters_csv = ",".join(str(c) for c in chapters)
     t0 = time.perf_counter()
-    res = flask_client.get(f"/api/seg/peaks/{reciter}?chapters=112")
+    res = flask_client.get(f"/api/seg/peaks/{reciter}?chapters={chapters_csv}")
     elapsed_ms = (time.perf_counter() - t0) * 1000
     assert res.status_code == 200, res.get_data()
-    # Generous bound — local FilesystemBackend reads are sub-ms; if this is
-    # over 1s we're back in the deadlock regime.
-    assert elapsed_ms < 1000, f"route took {elapsed_ms:.0f} ms — likely lock contention"
+    assert elapsed_ms < 2000, f"route took {elapsed_ms:.0f} ms — likely lock contention"

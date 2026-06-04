@@ -22,10 +22,7 @@ HF Jobs API.
 
 from __future__ import annotations
 
-import os
-from datetime import UTC, datetime, timezone
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
+from datetime import datetime, timezone
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
@@ -43,8 +40,10 @@ def _stub_jobs_api(monkeypatch, *, in_flight=()):
     """
     from services.admin.jobs import base as jobs_base
 
-    monkeypatch.setattr(jobs_base, "list_in_flight_jobs", lambda kinds: list(in_flight))
-    monkeypatch.setattr(jobs_base, "running_job_for", lambda **_: None)
+    monkeypatch.setattr(jobs_base, "list_in_flight_jobs",
+                        lambda kinds: list(in_flight))
+    monkeypatch.setattr(jobs_base, "running_job_for",
+                        lambda **_: None)
 
 
 def _seed_eligible_channel(slug: str = "mp3quran") -> None:
@@ -55,7 +54,8 @@ def _seed_eligible_channel(slug: str = "mp3quran") -> None:
 
     with db.transaction() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO channels(slug,short,name,gh_release_eligible) VALUES (?,?,?,1)",
+            "INSERT OR IGNORE INTO channels(slug,short,name,gh_release_eligible) "
+            "VALUES (?,?,?,1)",
             (slug, slug[:1], slug),
         )
 
@@ -65,7 +65,8 @@ def _seed_ineligible_channel(slug: str = "private_ch") -> None:
 
     with db.transaction() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO channels(slug,short,name,gh_release_eligible) VALUES (?,?,?,0)",
+            "INSERT OR IGNORE INTO channels(slug,short,name,gh_release_eligible) "
+            "VALUES (?,?,?,0)",
             (slug, slug[:1], slug),
         )
 
@@ -77,7 +78,8 @@ def _seed_delivery_on_channel(slug: str, *, channel: str, reciter_id: str = "r1"
 
     with db.transaction() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO reciters(reciter_id,name_en,name_ar) VALUES (?,?,?)",
+            "INSERT OR IGNORE INTO reciters(reciter_id,name_en,name_ar) "
+            "VALUES (?,?,?)",
             (reciter_id, reciter_id.upper(), f"AR-{reciter_id}"),
         )
         conn.execute("INSERT OR IGNORE INTO riwayahs(slug,short,name) VALUES ('hafs','h','Hafs')")
@@ -93,9 +95,9 @@ def _seed_delivery_on_channel(slug: str, *, channel: str, reciter_id: str = "r1"
 
 def _seed_released(slug: str, *, channel: str = "mp3quran", reciter_id: str = "r1") -> None:
     """Seed a released-state delivery on an eligible channel."""
-    from qua_shared.schemas import ReciterState, Visibility
     from services import db
     from services.db import repo_state
+    from qua_shared.schemas import ReciterState, Visibility
 
     _seed_eligible_channel(channel)
     _seed_delivery_on_channel(slug, channel=channel, reciter_id=reciter_id)
@@ -103,7 +105,7 @@ def _seed_released(slug: str, *, channel: str = "mp3quran", reciter_id: str = "r
         repo_state.upsert_state(
             slug,
             state=ReciterState.RELEASED,
-            state_since=datetime.now(UTC),
+            state_since=datetime.now(timezone.utc),
             visibility=Visibility.PUBLIC,
         )
 
@@ -118,7 +120,7 @@ def _seed_ledger_ts(slug: str, version: str = "real-job-id") -> None:
             track="ts",
             slug=slug,
             version=version,
-            produced_at=datetime.now(UTC),
+            produced_at=datetime.now(timezone.utc),
             produced_by="test",
         )
 
@@ -213,17 +215,12 @@ def test_status_in_flight_slug_is_bucketable(signed_in_client, monkeypatch):
     """A slug appearing in ``in_flight`` is bucketable even if it would
     otherwise be inert — the operator needs to see the running job."""
     client, _user = signed_in_client(role="maintainer")
-    _stub_jobs_api(
-        monkeypatch,
-        in_flight=[
-            {
-                "kind": "hf_publish",
-                "slug": "ar.in-flight",
-                "job_id": "j_abc",
-                "started_at": "2026-06-01T12:00:00",
-            }
-        ],
-    )
+    _stub_jobs_api(monkeypatch, in_flight=[{
+        "kind": "hf_publish",
+        "slug": "ar.in-flight",
+        "job_id": "j_abc",
+        "started_at": "2026-06-01T12:00:00",
+    }])
     _seed_eligible_channel("mp3quran")
     _seed_delivery_on_channel("ar.in-flight", channel="mp3quran", reciter_id="r5")
     # No state, no ledger — inert except for the live job.
@@ -292,8 +289,7 @@ def test_publish_hf_accepts_ledgered_slug(signed_in_client, monkeypatch):
     from services.admin.jobs import hf_publish as hf_publish_jobs
 
     monkeypatch.setattr(
-        hf_publish_jobs,
-        "launch",
+        hf_publish_jobs, "launch",
         lambda slug, webhook_base=None: {"job_id": "j_test", "url": None},
     )
 

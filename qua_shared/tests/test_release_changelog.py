@@ -9,14 +9,7 @@ emitted as inert escaped text.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-_ROOT = Path(__file__).resolve().parents[3]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
-from qua_shared.release_changelog import render_changelog  # noqa: E402
+from qua_shared.release_changelog import render_changelog
 
 
 def _member(

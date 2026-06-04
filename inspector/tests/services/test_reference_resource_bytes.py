@@ -12,11 +12,15 @@ from __future__ import annotations
 
 import gzip
 
-from services.reference import timestamps as ts_manifest
+from services.storage import hf_bucket as _hf_bucket
 from services.storage import static_refs
+from services.reference import timestamps as ts_manifest
 
 
 class _FakeBackend:
+    """Mirrors the FilesystemBackend / BucketBackend exception contract:
+    missing paths raise ``StorageNotFound``, not ``FileNotFoundError``."""
+
     def __init__(self, files: dict[str, bytes]):
         self._files = files
 
@@ -24,7 +28,7 @@ class _FakeBackend:
         try:
             return self._files[path]
         except KeyError as e:
-            raise FileNotFoundError(path) from e
+            raise _hf_bucket.StorageNotFound(path) from e
 
 
 def test_prefers_local_uncompressed(tmp_path, monkeypatch):

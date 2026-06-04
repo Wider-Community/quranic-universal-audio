@@ -21,9 +21,6 @@ import os
 
 import pytest
 
-# Ensure session secret is set before app import.
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
-
 
 @pytest.fixture
 def dev_mode_client(monkeypatch):

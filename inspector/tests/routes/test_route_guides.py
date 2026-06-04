@@ -9,10 +9,6 @@ collapsed, idempotent, and reflected back through ``/api/me``.
 from __future__ import annotations
 
 import json
-import os
-
-# Session secret must exist before app import (auth.py reads it on first use).
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _ORIGIN = {"Origin": "http://localhost"}
 

@@ -1,4 +1,4 @@
-import { describe, expect,it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
     charsMatch,
@@ -56,6 +56,16 @@ describe('charsMatch', () => {
     it('rejects unrelated characters', () => {
         expect(charsMatch('ب', 'م')).toBe(false);
     });
+
+    it('strips tatweel (U+0640) from the display char before comparing', () => {
+        expect(charsMatch('ب', 'بـ')).toBe(true);
+    });
+
+    it('matches via mfaChar containing stripped display (reverse direction)', () => {
+        // MFA letter is longer than display char and contains it — exercises
+        // the otherwise-untested ``mfaChar.includes(stripped)`` branch.
+        expect(charsMatch('بسم', 'ب')).toBe(true);
+    });
 });
 
 describe('splitIntoCharGroups', () => {
@@ -64,5 +74,24 @@ describe('splitIntoCharGroups', () => {
         const groups = splitIntoCharGroups('بِسْمِ');
         expect(groups).toHaveLength(3);
         expect(groups[0]).toBe('بِ');
+    });
+
+    it('U+0654 (hamza-above) starts a new group, not absorbed by previous base', () => {
+        // The splitter explicitly treats U+0654 as a new-group trigger.
+        const groups = splitIntoCharGroups('بٔ');
+        expect(groups).toHaveLength(2);
+    });
+
+    it('U+0670 (dagger alef) starts a new group, not absorbed by previous base', () => {
+        // The splitter explicitly excludes the dagger alef from combining-
+        // mark absorption — two groups, not one.
+        const groups = splitIntoCharGroups('بٰ');
+        expect(groups).toHaveLength(2);
+    });
+
+    it('U+2060 (word joiner) absorbs into the current group', () => {
+        // base + U+2060 collapses into a single group.
+        const groups = splitIntoCharGroups('ب⁠');
+        expect(groups).toHaveLength(1);
     });
 });

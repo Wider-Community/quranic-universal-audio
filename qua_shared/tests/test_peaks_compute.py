@@ -9,17 +9,8 @@ shape ever changes, this test fails — keep them in lockstep.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-_ROOT = Path(__file__).resolve().parents[3]
-_INSPECTOR = _ROOT / "inspector"
-for p in (_ROOT, _INSPECTOR):
-    if str(p) not in sys.path:
-        sys.path.insert(0, str(p))
-
-from qua_shared import peaks_compute  # noqa: E402
-from services.audio import peaks_slim  # noqa: E402
+from qua_shared import peaks_compute
+from services.audio import peaks_slim
 
 
 def _hd_doc():

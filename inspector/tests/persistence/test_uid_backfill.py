@@ -1,5 +1,4 @@
 """segment_uid stability and backfill tests (MUST-4, IS-8)."""
-
 from __future__ import annotations
 
 import json
@@ -8,12 +7,8 @@ import subprocess
 import sys
 import textwrap
 
-import pytest
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
-
 
 def _segments(detailed: dict) -> list[dict]:
     out: list[dict] = []
@@ -30,18 +25,13 @@ def test_uid_matches_typescript_implementation():
     asserts the same value for the same input. Both implementations must agree.
     """
     from domain.identity import derive_uid
-
     assert derive_uid(1, 0, 0) == "418dc3a4-5e80-5d8e-9a3f-209a6403206e"
 
 
 def test_save_round_trips_through_adapters(tmp_reciter_dir, signed_in_client, load_fixture):
-    """Adapter consolidation regression: save -> reload -> normalized result.
-
-    Exercises ``services.save.save_seg_data`` (which now delegates ``_make_seg``
-    and ``rebuild_segments_json`` to the ``adapters/`` module).  Verifies that
-    a normal save round-trip preserves matched_ref, matched_text, and
-    segment_uid through the adapter path, and that ``segments.json`` is
-    regenerated with the verse-aggregated tuple format.
+    """Adapter round-trip: a normal save preserves segment_uid + matched_ref
+    through the adapter path, and ``segments.json`` is regenerated with the
+    verse-aggregated tuple format.
     """
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
@@ -108,18 +98,8 @@ def test_uid_backfilled_for_legacy_fixture(tmp_reciter_dir):
             {
                 "ref": "112",
                 "segments": [
-                    {
-                        "time_start": 1000,
-                        "time_end": 2000,
-                        "matched_ref": "112:1:1-112:1:1",
-                        "confidence": 1.0,
-                    },
-                    {
-                        "time_start": 3000,
-                        "time_end": 4000,
-                        "matched_ref": "112:1:2-112:1:2",
-                        "confidence": 1.0,
-                    },
+                    {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "confidence": 1.0},
+                    {"time_start": 3000, "time_end": 4000, "matched_ref": "112:1:2-112:1:2", "confidence": 1.0},
                 ],
             }
         ],
@@ -127,7 +107,6 @@ def test_uid_backfilled_for_legacy_fixture(tmp_reciter_dir):
     legacy_path.write_text(json.dumps(legacy_doc), encoding="utf-8")
 
     from services.data_loader import load_detailed
-
     entries = load_detailed(reciter)
     for seg in entries[0]["segments"]:
         uid = seg.get("segment_uid")
@@ -157,7 +136,7 @@ def test_uid_stable_across_load_save_load(tmp_reciter_dir, signed_in_client, loa
             "time_end": s["time_end"],
             "matched_ref": s["matched_ref"],
             "confidence": s["confidence"],
-            # NOTE: no segment_uid — Phase 4 backend must backfill from existing
+            # NOTE: no segment_uid — backend must backfill from existing entry by (chapter, index, start_ms)
         }
         for s in fixture["entries"][0]["segments"]
     ]
@@ -169,9 +148,7 @@ def test_uid_stable_across_load_save_load(tmp_reciter_dir, signed_in_client, loa
     )
     assert res.status_code == 200
 
-    saved = json.loads(
-        (tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8")
-    )
+    saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
     post_uids = [s.get("segment_uid", "") for s in saved["entries"][0]["segments"]]
     assert pre_uids == post_uids, (
         f"UIDs drifted across save/reload (MUST-4) — pre={pre_uids!r} post={post_uids!r}"
@@ -189,12 +166,7 @@ def test_uid_persisted_on_next_save(tmp_reciter_dir, signed_in_client):
             {
                 "ref": "112",
                 "segments": [
-                    {
-                        "time_start": 1000,
-                        "time_end": 2000,
-                        "matched_ref": "112:1:1-112:1:1",
-                        "confidence": 1.0,
-                    },
+                    {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "confidence": 1.0},
                 ],
             }
         ],
@@ -205,20 +177,9 @@ def test_uid_persisted_on_next_save(tmp_reciter_dir, signed_in_client):
 
     res = client.post(
         f"/api/seg/save/{reciter}/112",
-        data=json.dumps(
-            {
-                "full_replace": True,
-                "segments": [
-                    {
-                        "time_start": 1000,
-                        "time_end": 2000,
-                        "matched_ref": "112:1:1-112:1:1",
-                        "confidence": 1.0,
-                    },
-                ],
-                "operations": [],
-            }
-        ),
+        data=json.dumps({"full_replace": True, "segments": [
+            {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "confidence": 1.0},
+        ], "operations": []}),
         headers=_HEADERS,
     )
     assert res.status_code == 200
@@ -239,12 +200,7 @@ def test_uid_deterministic_across_processes(tmp_path):
             {
                 "ref": "112",
                 "segments": [
-                    {
-                        "time_start": 1000,
-                        "time_end": 2000,
-                        "matched_ref": "112:1:1-112:1:1",
-                        "confidence": 1.0,
-                    },
+                    {"time_start": 1000, "time_end": 2000, "matched_ref": "112:1:1-112:1:1", "confidence": 1.0},
                 ],
             }
         ],
@@ -271,30 +227,17 @@ def test_uid_deterministic_across_processes(tmp_path):
 
     import os as _os
     from pathlib import Path as _Path
-
     repo_inspector = str(_Path(__file__).parent.parent.parent)
 
     proc1 = subprocess.run(
         [sys.executable, "-c", script],
-        capture_output=True,
-        text=True,
-        env={
-            **_os.environ,
-            "DATA_DIR": str(tmp_path),
-            "INSPECTOR_DIR": repo_inspector,
-            "REPO_ROOT": str(_Path(repo_inspector).parent),
-        },
+        capture_output=True, text=True,
+        env={**_os.environ, "DATA_DIR": str(tmp_path), "INSPECTOR_DIR": repo_inspector, "REPO_ROOT": str(_Path(repo_inspector).parent)},
     )
     proc2 = subprocess.run(
         [sys.executable, "-c", script],
-        capture_output=True,
-        text=True,
-        env={
-            **_os.environ,
-            "DATA_DIR": str(tmp_path),
-            "INSPECTOR_DIR": repo_inspector,
-            "REPO_ROOT": str(_Path(repo_inspector).parent),
-        },
+        capture_output=True, text=True,
+        env={**_os.environ, "DATA_DIR": str(tmp_path), "INSPECTOR_DIR": repo_inspector, "REPO_ROOT": str(_Path(repo_inspector).parent)},
     )
     assert proc1.returncode == 0, proc1.stderr
     assert proc2.returncode == 0, proc2.stderr

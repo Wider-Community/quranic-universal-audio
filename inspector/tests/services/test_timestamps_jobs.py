@@ -234,6 +234,10 @@ def test_complete_noop_when_not_marked_ready(monkeypatch):
     out = timestamps_jobs.complete_timestamps_job("rec_a", "job-1")
 
     assert out["released"] is False
+    # Pin the reason discriminator so a regression that takes a different
+    # noop branch (e.g. ``no shards``) doesn't silently masquerade as this
+    # one — the other noop tests assert their reason already.
+    assert out["reason"] == "not marked-ready / wrong state"
     assert state_service.get_row("rec_a").state.value == "under_review"
 
 
@@ -268,6 +272,9 @@ def test_complete_unknown_slug_is_noop():
     out = timestamps_jobs.complete_timestamps_job("nope", "job-1")
     assert out["released"] is False
     assert out["reason"] == "unknown slug"
+    # state must be None for unknown slugs — pin so a regression that
+    # synthesizes a phantom state can't slip through.
+    assert out["state"] is None
 
 
 # ---------------------------------------------------------------------------

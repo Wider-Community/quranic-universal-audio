@@ -11,81 +11,32 @@ audio_urls). RAW: every accepted occurrence is one segment entry.
 from __future__ import annotations
 
 import gzip
-import sys
-from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[3]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+import orjson
+import pytest
 
-import orjson  # noqa: E402
-import pytest  # noqa: E402
-
-from qua_shared.timestamps_dedup import build_raw_v2  # noqa: E402
-from qua_shared.timestamps_shards import (  # noqa: E402
+from qua_shared.tests.conftest import (
+    PROVENANCE as _BASE_PROVENANCE,
+    _multi_verse_loopback,
+    _ok,
+    _multi_verse_loopback_results,
+)
+from qua_shared.timestamps_dedup import build_raw_v2
+from qua_shared.timestamps_shards import (
     build_segment_shards,
     gzip_shard,
 )
 
 CAT = "by_surah_audio"
 
+# Extends the canonical provenance with path/audio fields the slim _meta must
+# exclude (reciter / url_template / audio_urls).
 PROVENANCE = {
-    "created_at": "2026-06-04T00:00:00Z",
-    "audio_source": "by_surah",
-    "aligner_model": "quran_aligner_model",
-    "method": "kalpy",
-    "beam": 50,
-    "shared_cmvn": False,
-    "padding": "forward",
-    # excluded by the slim _meta even when present in src_meta:
+    **_BASE_PROVENANCE,
     "reciter": "some_reciter",
     "url_template": "example.com/{surah:03d}.mp3",
     "audio_urls": {"1": "example.com/001.mp3"},
 }
-
-
-def _ok(locations, t0=0.0, step=0.5):
-    """Synthetic MFA 'ok' result: one word per location, sequential times (s).
-
-    Letters/phones use MFA's raw dict shape (``_convert_word`` compacts them
-    to ``[char, s, e]`` / ``[phone, s, e]`` arrays).
-    """
-    words = []
-    for i, loc in enumerate(locations):
-        s = t0 + i * step
-        words.append(
-            {
-                "location": loc,
-                "start": s,
-                "end": s + step,
-                "letters": [{"char": "x", "start": s, "end": s + step}],
-                "phones": [{"phone": "P", "start": s, "end": s + step}],
-            }
-        )
-    return {"status": "ok", "words": words}
-
-
-def _chapter_loopback():
-    # 1:1 recited in two segments (loopback): words 1-2 then 3-4. Recitation
-    # order is seg0 -> seg1; both segments are kept RAW.
-    return {
-        "ref": "1",
-        "segments": [
-            {"matched_ref": "1:1:1-1:1:2", "time_start": 0, "time_end": 1000},
-            {"matched_ref": "1:1:3-1:1:4", "time_start": 1500, "time_end": 2500},
-            {"matched_ref": "1:2:1-1:2:3", "time_start": 2500, "time_end": 3500},
-        ],
-    }
-
-
-def _results_loopback():
-    return {
-        0: [
-            (0, _ok(["1:1:1", "1:1:2"])),
-            (1, _ok(["1:1:3", "1:1:4"], t0=1.5)),
-            (2, _ok(["1:2:1", "1:2:2", "1:2:3"], t0=2.5)),
-        ]
-    }
 
 
 def _build(chapter, results, *, src_meta=PROVENANCE, cat=CAT):
@@ -94,7 +45,7 @@ def _build(chapter, results, *, src_meta=PROVENANCE, cat=CAT):
 
 
 def test_segments_are_single_verse_recitation_ordered():
-    shards = _build(_chapter_loopback(), _results_loopback())
+    shards = _build(_multi_verse_loopback(), _multi_verse_loopback_results())
     assert set(shards) == {1}
     segs = shards[1]["segments"]
     # 3 RAW segments (both loopback takes of 1:1 + the 1:2 seg), no dedup.
@@ -106,7 +57,7 @@ def test_segments_are_single_verse_recitation_ordered():
 
 
 def test_word_shape_widx_s_e_letters_phones():
-    segs = _build(_chapter_loopback(), _results_loopback())[1]["segments"]
+    segs = _build(_multi_verse_loopback(), _multi_verse_loopback_results())[1]["segments"]
     words = segs[0]["words"]
     assert words[0][0] == 1 and words[1][0] == 2  # widx
     for w in words:
@@ -118,21 +69,14 @@ def test_word_shape_widx_s_e_letters_phones():
 
 
 def test_meta_is_slim_v2():
-    meta = _build(_chapter_loopback(), _results_loopback())[1]["_meta"]
+    meta = _build(_multi_verse_loopback(), _multi_verse_loopback_results())[1]["_meta"]
     assert meta["schema_version"] == 2
     assert meta["chapter"] == 1
     # category normalized: by_surah_audio -> by_surah
     assert meta["audio_category"] == "by_surah"
     # provenance retained when present
-    for k in (
-        "padding",
-        "beam",
-        "method",
-        "aligner_model",
-        "shared_cmvn",
-        "audio_source",
-        "created_at",
-    ):
+    for k in ("padding", "beam", "method", "aligner_model", "shared_cmvn",
+              "audio_source", "created_at"):
         assert k in meta
     assert meta["beam"] == 50 and meta["method"] == "kalpy"
     # excluded
@@ -154,7 +98,7 @@ def test_by_ayah_category_normalized():
 
 
 def test_gzip_is_deterministic():
-    shards = _build(_chapter_loopback(), _results_loopback())
+    shards = _build(_multi_verse_loopback(), _multi_verse_loopback_results())
     a = gzip_shard(shards[1])
     b = gzip_shard(shards[1])
     assert a == b
@@ -181,7 +125,7 @@ def test_src_meta_defaults_to_v2_doc_meta():
     # When src_meta is omitted, provenance comes from the v2 doc _meta (which
     # build_raw_v2 only fills with schema_version + mfa_failures) — slim meta
     # still emits the required core fields.
-    v2 = build_raw_v2([_chapter_loopback()], _results_loopback(), CAT)
+    v2 = build_raw_v2([_multi_verse_loopback()], _multi_verse_loopback_results(), CAT)
     shards = build_segment_shards(v2, audio_category=CAT)
     meta = shards[1]["_meta"]
     assert meta["schema_version"] == 2 and meta["chapter"] == 1

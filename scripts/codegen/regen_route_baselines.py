@@ -3,15 +3,13 @@
 Run once (or after a deliberate API change) to regenerate the frozen
 ``expected/<fixture>.routes.json`` files:
 
-    cd inspector
-    python -m tests.parity.snapshot_route_baselines
+    python scripts/codegen/regen_route_baselines.py
 
 Each output file records the top-level field keys returned by every
 relevant route for the fixture's reciter/chapter.  The MUST-1 invariant
 is "no field removed", so tracking keys — not full response bodies — is
 sufficient and avoids noisy diffs from timestamps and dynamic data.
 """
-
 from __future__ import annotations
 
 import json
@@ -20,10 +18,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import UTC, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
-FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "segments"
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+INSPECTOR_DIR = REPO_ROOT / "inspector"
+FIXTURES_DIR = INSPECTOR_DIR / "tests" / "fixtures" / "segments"
 EXPECTED_DIR = FIXTURES_DIR / "expected"
 
 # Mapping: fixture name → chapter number used for the /data/<reciter>/<chapter> probe.
@@ -45,7 +46,7 @@ def _keys(value: object) -> list[str]:
 
 def _capture_fixture(name: str, chapter: int) -> dict:
     """Spin up a fresh Flask test client against a tmp fixture dir and hit all routes."""
-    inspector_dir = Path(__file__).resolve().parents[2]
+    inspector_dir = INSPECTOR_DIR
 
     tmp = tempfile.mkdtemp()
     try:
@@ -124,7 +125,9 @@ print(json.dumps(results))
             cwd=str(inspector_dir),
         )
         if proc.returncode != 0:
-            raise RuntimeError(f"subprocess failed for fixture {name!r}:\n{proc.stderr}")
+            raise RuntimeError(
+                f"subprocess failed for fixture {name!r}:\n{proc.stderr}"
+            )
         return json.loads(proc.stdout.strip())
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -136,7 +139,7 @@ def _git_sha() -> str:
             ["git", "rev-parse", "--short", "HEAD"],
             capture_output=True,
             text=True,
-            cwd=str(Path(__file__).resolve().parents[3]),
+            cwd=str(REPO_ROOT),
         )
         return result.stdout.strip() if result.returncode == 0 else "unknown"
     except Exception:
@@ -147,7 +150,7 @@ def regenerate(name: str, chapter: int) -> Path:
     """Capture route shapes for *name* and write ``expected/<name>.routes.json``."""
     results = _capture_fixture(name, chapter)
     sha = _git_sha()
-    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     out = {
         "_meta": {

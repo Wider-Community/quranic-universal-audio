@@ -15,26 +15,22 @@ under tmp_path) — no `_stub_persist` mock — so mutations roundtrip through
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timezone
+from datetime import datetime, timezone
 
 
-def _state_row(
-    slug: str,
-    *,
-    state: str = "awaiting_review",
-    marked_ready: bool = False,
-    assignee_hf_id: str | None = None,
-    visibility: str = "public",
-):
+def _state_row_kwargs(slug: str, *, state: str = "awaiting_review",
+               marked_ready: bool = False,
+               assignee_hf_id: str | None = None,
+               visibility: str = "public"):
     from qua_shared.schemas import ReciterRow, ReciterState, Visibility
 
     return ReciterRow(
         slug=slug,
         state=ReciterState(state),
-        state_since=datetime(2026, 5, 12, tzinfo=UTC),
+        state_since=datetime(2026, 5, 12, tzinfo=timezone.utc),
         assignee_hf_id=assignee_hf_id,
         assignee_login="prev_owner" if assignee_hf_id else None,
-        assignee_since=datetime(2026, 5, 12, tzinfo=UTC) if assignee_hf_id else None,
+        assignee_since=datetime(2026, 5, 12, tzinfo=timezone.utc) if assignee_hf_id else None,
         marked_ready=marked_ready,
         visibility=Visibility(visibility),
     )
@@ -58,9 +54,8 @@ def _seed_state(rows: list):
         )
 
 
-def _seed_catalog(
-    slug: str, *, reciter_id: str = "test_reciter", name_en: str = "Test Reciter"
-) -> None:
+def _seed_catalog(slug: str, *, reciter_id: str = "test_reciter",
+                  name_en: str = "Test Reciter") -> None:
     """Install a minimal valid catalog containing one reciter + one delivery
     keyed off `slug`. The vocab carries just enough rows to satisfy FK
     validation on the Delivery model."""
@@ -68,9 +63,9 @@ def _seed_catalog(
         AudioCategory,
         Channel,
         Delivery,
+        RecordingContext,
         ReciterCatalog,
         ReciterEntry,
-        RecordingContext,
         Riwayah,
         Source,
         Style,
@@ -81,9 +76,8 @@ def _seed_catalog(
     vocab = Vocab(
         riwayat=[Riwayah(slug="hafs", short="hafs", name="Hafs")],
         styles=[Style(slug="murattal", short="murattal", name="Murattal")],
-        sources=[
-            Source(slug="mp3quran", name="MP3Quran", audio_categories=[AudioCategory.BY_SURAH])
-        ],
+        sources=[Source(slug="mp3quran", name="MP3Quran",
+                        audio_categories=[AudioCategory.BY_SURAH])],
         channels=[Channel(slug="mp3quran", short="mp3q", name="MP3Quran")],
         recording_contexts=[RecordingContext(slug="studio", name="Studio")],
     )
@@ -102,11 +96,10 @@ def _seed_catalog(
         channel="mp3quran",
         audio_category=AudioCategory.BY_SURAH,
         chapter_count=114,
-        added_at=datetime(2026, 1, 1, tzinfo=UTC),
+        added_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         added_by_hf_id="system_seed",
     )
     from tests.conftest import _seed_catalog as _seedcat
-
     _seedcat(vocab=vocab, reciters=[reciter], deliveries=[delivery])
 
 
@@ -116,13 +109,12 @@ def _seed_catalog(
 
 
 def test_claim_visible_in_public_reciters_and_detail_and_reciter_task(
-    signed_in_client,
-    state_persistence,
+    signed_in_client, state_persistence,
 ):
     """After claim, /api/public/reciters AND /api/public/reciter/<id> AND
     /api/reciter-task/<slug> all agree on the new state + assignee."""
     _seed_catalog("test_slug", reciter_id="test_reciter", name_en="Test Reciter")
-    _seed_state([_state_row("test_slug", state="awaiting_review")])
+    _seed_state([_state_row_kwargs("test_slug", state="awaiting_review")])
 
     # Claim as maintainer (admin shape on detail surfaces the assignee).
     client, _ = signed_in_client(hf_user_id="u-mod", login="mod", role="maintainer")
@@ -162,7 +154,7 @@ def test_claim_visible_in_public_reciters_and_detail_and_reciter_task(
 def test_release_propagates_to_all_endpoints(signed_in_client, state_persistence):
     """Release returns the row to awaiting_review across every surface."""
     _seed_catalog("test_slug")
-    _seed_state([_state_row("test_slug", state="under_review", assignee_hf_id="u-1")])
+    _seed_state([_state_row_kwargs("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(
@@ -178,7 +170,10 @@ def test_release_propagates_to_all_endpoints(signed_in_client, state_persistence
 
     detail_body = json.loads(client.get("/api/public/reciter/test_reciter").data)
     assert detail_body["primary_bucket"] == "available_for_review"
-    assert all(d.get("assignee_hf_id") is None for d in detail_body["deliveries"])
+    assert all(
+        d.get("assignee_hf_id") is None
+        for d in detail_body["deliveries"]
+    )
 
     task_body = json.loads(client.get("/api/reciter-task/test_slug").data)
     assert task_body["row"]["state"] == "awaiting_review"
@@ -186,32 +181,22 @@ def test_release_propagates_to_all_endpoints(signed_in_client, state_persistence
 
 
 def test_mark_ready_propagates_to_all_endpoints(
-    signed_in_client,
-    state_persistence,
-    monkeypatch,
+    signed_in_client, state_persistence, monkeypatch,
 ):
     """Mark-ready persists the marked_ready flag; bucket stays under_review."""
     _seed_catalog("test_slug")
-    _seed_state([_state_row("test_slug", state="under_review", assignee_hf_id="u-1")])
+    _seed_state([_state_row_kwargs("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     # The mark-ready state handler re-validates the live segments to gate
     # on five category_counts being zero. Tests don't ship segments — stub
     # the validator to report a clean result so the gate passes.
     from services import validation as _validation
-
     def _ok(_reciter):
-        return {
-            "category_counts": {
-                "low_confidence": 0,
-                "low_confidence_v2": 0,
-                "boundary_adj": 0,
-                "cross_verse": 0,
-                "basmala_amin": 0,
-            }
-        }
-
+        return {"category_counts": {
+            "low_confidence": 0, "low_confidence_v2": 0, "boundary_adj": 0,
+            "cross_verse": 0, "basmala_amin": 0, "repetitions": 0,
+        }}
     monkeypatch.setattr(_validation, "validate_reciter_segments", _ok)
-    monkeypatch.setitem(_validation.__dict__, "validate_reciter_segments", _ok)
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(
@@ -245,24 +230,40 @@ def test_mark_ready_propagates_to_all_endpoints(
     assert task_body["predicates"]["can_mark_ready"] is False
 
 
-def test_anonymous_sees_redacted_assignee_consistently(state_persistence, flask_client):
+def test_anonymous_sees_redacted_assignee_consistently(
+    state_persistence, flask_client, signed_in_client,
+):
     """Anonymous callers must NOT see the assignee on either endpoint.
 
-    Both list and detail endpoints route through public_state.to_public_*
-    which redacts assignee fields for anonymous callers — but the
-    redaction has to be applied consistently across both, or an admin
-    leak in one breaks privacy.
+    Asserting "assignee_hf_id not in delivery" is vacuous because the public
+    mapper never adds the field under any condition (redaction-by-omission).
+    Instead drive the same routes anonymously AND signed in as a maintainer,
+    then assert the deliveries shape is structurally equivalent — a future
+    leak that flipped the public mapper to add the field for authenticated
+    callers would surface here.
     """
     _seed_catalog("test_slug")
-    _seed_state([_state_row("test_slug", state="under_review", assignee_hf_id="u-1")])
+    _seed_state([_state_row_kwargs("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     # Anonymous (no session cookie) — uses flask_client directly.
-    list_body = json.loads(flask_client.get("/api/public/reciters").data)
-    matched = [r for r in list_body["reciters"] if r["reciter_id"] == "test_reciter"]
-    assert matched
-    for d in matched[0]["deliveries"]:
-        assert "assignee_hf_id" not in d, "list endpoint leaked assignee to anonymous caller"
+    anon_list = json.loads(flask_client.get("/api/public/reciters").data)
+    anon_match = [r for r in anon_list["reciters"] if r["reciter_id"] == "test_reciter"]
+    assert anon_match
+    anon_delivery_keys = {tuple(sorted(d.keys())) for d in anon_match[0]["deliveries"]}
+
+    # Maintainer hits the same anonymous-equivalent public route.
+    client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
+    auth_list = json.loads(client.get("/api/public/reciters").data)
+    auth_match = [r for r in auth_list["reciters"] if r["reciter_id"] == "test_reciter"]
+    assert auth_match
+    auth_delivery_keys = {tuple(sorted(d.keys())) for d in auth_match[0]["deliveries"]}
+
+    assert anon_delivery_keys == auth_delivery_keys, (
+        "public route leaked extra fields to authenticated caller"
+    )
 
     detail_body = json.loads(flask_client.get("/api/public/reciter/test_reciter").data)
     for d in detail_body["deliveries"]:
-        assert "assignee_hf_id" not in d, "detail endpoint leaked assignee to anonymous caller"
+        assert "assignee_hf_id" not in d, (
+            "detail endpoint leaked assignee to anonymous caller"
+        )

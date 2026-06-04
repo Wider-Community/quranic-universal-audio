@@ -1,7 +1,6 @@
 """Access admin endpoints (/api/admin/access/*).
 
-Backend-only in Phase 3 — the admin dashboard UI lands in Phase 7. Three
-routes mirror the ``services/access.py`` mutation surface:
+Three routes mirror the ``services/access.py`` mutation surface:
 
 - ``POST /api/admin/access/grant``   — owner-only for OWNER role; maintainer+
                                        for MAINTAINER role
@@ -9,10 +8,9 @@ routes mirror the ``services/access.py`` mutation surface:
                                        be revoked by another OWNER
 - ``POST /api/admin/access/update``  — login-cache refresh / role tier change
 
-Revoke side effect (Phase 3 design): if the revoked user holds any
-UNDER_REVIEW claim, those claims are auto-released as part of the same
-request. Audit log captures both ``access.role_revoked`` and (one or
-more) ``reciter.released`` events.
+Revoke side effect: if the revoked user holds any UNDER_REVIEW claim, those
+claims are auto-released as part of the same request. The audit log captures
+both ``access.role_revoked`` and (one or more) ``reciter.released`` events.
 """
 
 from __future__ import annotations
