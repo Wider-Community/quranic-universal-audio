@@ -1,6 +1,5 @@
 ---
-description: FE vitest discipline — component vs unit, mocking, runes, fakes
-globs:
+paths:
   - "inspector/frontend/src/**/*.test.ts"
   - "inspector/frontend/src/**/*.spec.ts"
   - "inspector/frontend/vitest.setup.ts"

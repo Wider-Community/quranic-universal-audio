@@ -1,6 +1,5 @@
 ---
-description: Assertion anti-patterns — silently-passing tests, dict-vs-object, identity-on-interned
-globs:
+paths:
   - "inspector/tests/**/*.py"
   - "inspector/frontend/src/**/*.test.ts"
   - "inspector/frontend/src/**/*.spec.ts"

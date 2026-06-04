@@ -1,6 +1,5 @@
 ---
-description: Skip / xfail / phase-gate discipline
-globs:
+paths:
   - "inspector/tests/**/*.py"
   - "inspector/frontend/src/**/*.test.ts"
   - "inspector/frontend/src/**/*.spec.ts"

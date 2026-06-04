@@ -1,6 +1,5 @@
 ---
-description: Coverage tooling discipline — read-only, no thresholds, exclude generated
-globs:
+paths:
   - "inspector/pyproject.toml"
   - "inspector/frontend/vitest.config.ts"
   - "inspector/frontend/package.json"

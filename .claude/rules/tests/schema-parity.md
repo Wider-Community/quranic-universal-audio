@@ -1,6 +1,5 @@
 ---
-description: Schema round-trip + FE codegen lockstep
-globs:
+paths:
   - "qua_shared/schemas/**/*.py"
   - "qua_shared/tests/**/*.py"
   - "inspector/services/segments/save.py"

@@ -1,6 +1,5 @@
 ---
-description: BE pytest discipline — fixture use, imports, env handling
-globs:
+paths:
   - "inspector/tests/**/*.py"
   - "qua_shared/tests/**/*.py"
 ---
