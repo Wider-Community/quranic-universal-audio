@@ -5,6 +5,7 @@ bytes live right now". Confirms the priority chain (bucket bytes → CDN URL)
 and that ``vbr`` / ``bitrate_kbps`` / ``chapter_key`` flow through from the
 per-slug sidecar.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -22,11 +23,13 @@ def stub_env(monkeypatch):
     state: dict = {"bucket": None, "local_path": None}
 
     monkeypatch.setattr(
-        audio_fetch, "read_prefetched_audio_bytes",
+        audio_fetch,
+        "read_prefetched_audio_bytes",
         lambda *_a, **_k: state["bucket"],
     )
     monkeypatch.setattr(
-        audio_fetch, "read_prefetched_audio_local_path",
+        audio_fetch,
+        "read_prefetched_audio_local_path",
         lambda *_a, **_k: state["local_path"],
     )
 
@@ -35,9 +38,12 @@ def stub_env(monkeypatch):
 
 def test_bucket_local_path_wins(stub_env, tmp_path):
     state, audio_source, audio_meta = stub_env
-    audio_meta._stage_for_test("rec", {
-        "chapters": {"1": {"url": "https://cdn/1.mp3", "bitrate_mode": "cbr"}},
-    })
+    audio_meta._stage_for_test(
+        "rec",
+        {
+            "chapters": {"1": {"url": "https://cdn/1.mp3", "bitrate_mode": "cbr"}},
+        },
+    )
     p = tmp_path / "1.mp3"
     p.write_bytes(b"x")
     state["local_path"] = p
@@ -50,10 +56,14 @@ def test_bucket_local_path_wins(stub_env, tmp_path):
 
 def test_bucket_bytes_win(stub_env):
     state, audio_source, audio_meta = stub_env
-    audio_meta._stage_for_test("rec", {
-        "chapters": {"1": {"url": "https://cdn/1.mp3", "bitrate_mode": "vbr",
-                            "bitrate_kbps": 96}},
-    })
+    audio_meta._stage_for_test(
+        "rec",
+        {
+            "chapters": {
+                "1": {"url": "https://cdn/1.mp3", "bitrate_mode": "vbr", "bitrate_kbps": 96}
+            },
+        },
+    )
     state["bucket"] = b"PREFETCHED"
 
     src = audio_source.resolve("rec", "https://cdn/1.mp3")
@@ -67,9 +77,12 @@ def test_bucket_bytes_win(stub_env):
 
 def test_cdn_only_when_nothing_local(stub_env):
     state, audio_source, audio_meta = stub_env
-    audio_meta._stage_for_test("rec", {
-        "chapters": {"1": {"url": "https://cdn/1.mp3", "bitrate_mode": "cbr"}},
-    })
+    audio_meta._stage_for_test(
+        "rec",
+        {
+            "chapters": {"1": {"url": "https://cdn/1.mp3", "bitrate_mode": "cbr"}},
+        },
+    )
 
     src = audio_source.resolve("rec", "https://cdn/1.mp3")
     assert src.data is None

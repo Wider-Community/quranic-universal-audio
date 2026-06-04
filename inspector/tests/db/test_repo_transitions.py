@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from qua_shared.schemas import Actor, Role
-
 from services import db
-from services.db import repo_transitions
 from services.activity import activity_classification
+from services.db import repo_transitions
 
 
 def _actor(hf="u1", login="alice", role=Role.OWNER) -> Actor:
@@ -98,10 +97,20 @@ def test_for_slug_timeline(fresh_db):
             " audio_category, chapter_count, added_at, added_by_hf_id) VALUES "
             "('d1','r','hafs','mur','src','ch','by_surah',114,'2026-01-01T00:00:00Z','u1')"
         )
-    repo_transitions.append(event="reciter.requested", actor=_actor(), slug="d1",
-                            from_state="catalogued", to_state="awaiting_alignment")
-    repo_transitions.append(event="reciter.alignment_completed", actor=_actor(), slug="d1",
-                            from_state="awaiting_alignment", to_state="awaiting_review")
+    repo_transitions.append(
+        event="reciter.requested",
+        actor=_actor(),
+        slug="d1",
+        from_state="catalogued",
+        to_state="awaiting_alignment",
+    )
+    repo_transitions.append(
+        event="reciter.alignment_completed",
+        actor=_actor(),
+        slug="d1",
+        from_state="awaiting_alignment",
+        to_state="awaiting_review",
+    )
     timeline = repo_transitions.for_slug("d1")
     assert [t["event"] for t in timeline] == [
         "reciter.requested",

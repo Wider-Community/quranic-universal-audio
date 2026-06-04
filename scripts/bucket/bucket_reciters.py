@@ -27,11 +27,13 @@ def _summary(fs, bucket: str, slug: str) -> dict:
     base = bs.abs_path(bucket, f"reciters/{slug}")
     info = fs.find(base, detail=True)
     files = [(k, v) for k, v in info.items() if v.get("type") == "file"]
-    audio = [v.get("size", 0) for k, v in files
-             if "/audio/" in k and k.endswith(".mp3")]
+    audio = [v.get("size", 0) for k, v in files if "/audio/" in k and k.endswith(".mp3")]
     peaks = [k for k, _ in files if "/peaks/" in k and k.endswith(".json.gz")]
-    ts_shards = [k for k, _ in files
-                 if "/timestamps/" in k and (k.endswith(".json") or k.endswith(".json.gz"))]
+    ts_shards = [
+        k
+        for k, _ in files
+        if "/timestamps/" in k and (k.endswith(".json") or k.endswith(".json.gz"))
+    ]
     return {
         "slug": slug,
         "n_files": len(files),
@@ -46,14 +48,13 @@ def _summary(fs, bucket: str, slug: str) -> dict:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--slug", help="filter slugs by substring")
-    p.add_argument("--sort", choices=("slug", "size", "audio", "max"),
-                   default="slug")
+    p.add_argument("--sort", choices=("slug", "size", "audio", "max"), default="slug")
     p.add_argument("--json", action="store_true", help="emit JSON instead of table")
-    p.add_argument("--workers", type=int, default=8,
-                   help="parallel fan-out for per-slug listing")
+    p.add_argument("--workers", type=int, default=8, help="parallel fan-out for per-slug listing")
     bs.add_bucket_args(p)
     a = p.parse_args()
 
@@ -70,26 +71,32 @@ def main() -> int:
     with ThreadPoolExecutor(max_workers=a.workers) as ex:
         rows = list(ex.map(lambda s: _summary(fs, bucket, s), slugs))
 
-    key = {"slug": lambda r: r["slug"],
-           "size": lambda r: -r["total_b"],
-           "audio": lambda r: -r["audio_total_b"],
-           "max":  lambda r: -r["audio_max_b"]}[a.sort]
+    key = {
+        "slug": lambda r: r["slug"],
+        "size": lambda r: -r["total_b"],
+        "audio": lambda r: -r["audio_total_b"],
+        "max": lambda r: -r["audio_max_b"],
+    }[a.sort]
     rows.sort(key=key)
 
     if a.json:
         print(_json.dumps(rows, indent=2))
         return 0
 
-    print(f"{'slug':<55s} {'files':>6s} {'total':>10s} "
-          f"{'audio':>10s} {'maxCh':>9s} {'pk':>3s} {'ts':>3s} {'done':>5s}")
+    print(
+        f"{'slug':<55s} {'files':>6s} {'total':>10s} "
+        f"{'audio':>10s} {'maxCh':>9s} {'pk':>3s} {'ts':>3s} {'done':>5s}"
+    )
     print("-" * 110)
     for r in rows:
-        print(f"{r['slug']:<55s} {r['n_files']:>6d} "
-              f"{bs.fmt_size(r['total_b']):>10s} "
-              f"{bs.fmt_size(r['audio_total_b']):>10s} "
-              f"{bs.fmt_size(r['audio_max_b']):>9s} "
-              f"{r['peaks_n']:>3d} {r['ts_shards']:>3d} "
-              f"{'yes' if r['done'] else 'no':>5s}")
+        print(
+            f"{r['slug']:<55s} {r['n_files']:>6d} "
+            f"{bs.fmt_size(r['total_b']):>10s} "
+            f"{bs.fmt_size(r['audio_total_b']):>10s} "
+            f"{bs.fmt_size(r['audio_max_b']):>9s} "
+            f"{r['peaks_n']:>3d} {r['ts_shards']:>3d} "
+            f"{'yes' if r['done'] else 'no':>5s}"
+        )
 
     return 0
 

@@ -19,8 +19,8 @@ import datetime
 import logging
 import os
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from services.storage.hf_bucket import StorageNotFound, get_backend
 
@@ -32,10 +32,16 @@ log = logging.getLogger("inspector")
 # ---------------------------------------------------------------------------
 
 TERMINAL = (
-    "succeeded", "completed",
-    "failed", "error", "errored",
-    "timed-out", "timeout",
-    "stopped", "canceled", "cancelled",
+    "succeeded",
+    "completed",
+    "failed",
+    "error",
+    "errored",
+    "timed-out",
+    "timeout",
+    "stopped",
+    "canceled",
+    "cancelled",
     "deleted",
 )
 TERMINAL_SUCCESS = ("succeeded", "completed")
@@ -53,7 +59,8 @@ NEEDS_BOOTSTRAP = (
     os.environ.get(
         "INSPECTOR_JOB_IMAGE_BOOTSTRAP",
         "1" if "mambaforge" in JOB_IMAGE else "0",
-    ) == "1"
+    )
+    == "1"
 )
 
 
@@ -63,7 +70,7 @@ NEEDS_BOOTSTRAP = (
 
 
 def now_iso() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def env_int(name: str) -> int | None:
@@ -146,8 +153,9 @@ def list_in_flight_jobs(kinds: tuple[str, ...]) -> list[dict]:
     and their ``complete()`` handlers explicitly invalidate so a freshly
     launched job (or a just-terminated one) shows up immediately.
     """
-    from services.storage import cache as _cache
     from huggingface_hub import list_jobs
+
+    from services.storage import cache as _cache
 
     cached = _cache.get_in_flight_jobs_cache(kinds)
     if cached is not None:
@@ -168,21 +176,20 @@ def list_in_flight_jobs(kinds: tuple[str, ...]) -> list[dict]:
             # ``created_at`` on the HF Jobs SDK is a datetime; ISO-format it
             # for the wire. ``started_at`` is set when execution actually
             # begins (post-pending) — prefer it when present.
-            started = (
-                getattr(job, "started_at", None)
-                or getattr(job, "created_at", None)
-            )
+            started = getattr(job, "started_at", None) or getattr(job, "created_at", None)
             if started is not None and not isinstance(started, str):
                 try:
                     started = started.isoformat()
                 except Exception:
                     started = None
-            out.append({
-                "kind": j_kind,
-                "slug": slug,
-                "job_id": hf_job_id(job) or "",
-                "started_at": started,
-            })
+            out.append(
+                {
+                    "kind": j_kind,
+                    "slug": slug,
+                    "job_id": hf_job_id(job) or "",
+                    "started_at": started,
+                }
+            )
     except Exception as exc:
         log.warning("list_in_flight_jobs(%s) failed: %s", kinds, exc)
         # Don't cache failures — the next call should retry the HF API.
@@ -267,6 +274,7 @@ def _resolve_required_static(rel: str) -> tuple[Path | None, bytes | None]:
         uncompressed = REPO_ROOT / "data" / "qpc_hafs.json"
         if uncompressed.exists():
             import gzip as _gzip
+
             return None, _gzip.compress(uncompressed.read_bytes(), compresslevel=6, mtime=0)
     return None, None
 
@@ -300,6 +308,7 @@ def stage_job_code() -> None:
             seen_targets.add(f"code/{rel}")
 
     import tempfile as _tempfile
+
     for rel in REQUIRED_STATIC_FILES:
         path, blob = _resolve_required_static(rel)
         target = f"code/{rel}"

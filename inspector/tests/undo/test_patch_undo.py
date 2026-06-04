@@ -1,4 +1,5 @@
 """Patch-based undo tests (IS-9, MUST-8)."""
+
 from __future__ import annotations
 
 import json
@@ -55,9 +56,7 @@ def test_command_produces_complete_patch(op_type, signed_in_client, tmp_reciter_
         # missing removedIds, insertedIds, affectedChapterIds
     }
     res = _save_with_patch(client, reciter, chapter, op_type, bad_patch)
-    assert res.status_code == 400, (
-        "Phase 5 must reject patch envelopes missing required fields"
-    )
+    assert res.status_code == 400, "Phase 5 must reject patch envelopes missing required fields"
 
 
 # test_inverse_patch_restores_state_exactly was removed (Phase 6, Entry-3).
@@ -98,7 +97,9 @@ def test_inverse_patch_restores_ignored_categories(signed_in_client, tmp_reciter
         headers=_HEADERS,
     )
 
-    post = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
+    post = json.loads(
+        (tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8")
+    )
     restored = post["entries"][0]["segments"][0]
     assert restored.get("ignored_categories") == target["ignored_categories"]
 
@@ -134,7 +135,9 @@ def test_inverse_patch_handles_inserted_and_removed_ids(signed_in_client, tmp_re
         headers=_HEADERS,
     )
 
-    post = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
+    post = json.loads(
+        (tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8")
+    )
     uids = [s["segment_uid"] for s in post["entries"][0]["segments"]]
     assert seg0["segment_uid"] in uids
     assert new_uid_a not in uids

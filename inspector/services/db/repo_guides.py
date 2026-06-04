@@ -16,9 +16,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from . import _serde
+from . import _serde, repo_access
 from .connection import get_conn
-from . import repo_access
 
 
 def record_view(hf_user_id: str, view_key: str, *, at: datetime | None = None) -> None:
@@ -29,8 +28,7 @@ def record_view(hf_user_id: str, view_key: str, *, at: datetime | None = None) -
     """
     repo_access.ensure_user(hf_user_id)
     get_conn().execute(
-        "INSERT OR IGNORE INTO guide_views(view_key, hf_user_id, viewed_at) "
-        "VALUES (?,?,?)",
+        "INSERT OR IGNORE INTO guide_views(view_key, hf_user_id, viewed_at) VALUES (?,?,?)",
         (view_key, hf_user_id, _serde.to_iso(at or _serde.now())),
     )
 
@@ -41,8 +39,12 @@ def read_views(hf_user_id: str) -> list[str]:
     ``/api/me`` calls this once per request; the FE diffs it against the
     required-guide set to render unread borders + lift the edit gate.
     """
-    rows = get_conn().execute(
-        "SELECT view_key FROM guide_views WHERE hf_user_id = ? ORDER BY view_key",
-        (hf_user_id,),
-    ).fetchall()
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT view_key FROM guide_views WHERE hf_user_id = ? ORDER BY view_key",
+            (hf_user_id,),
+        )
+        .fetchall()
+    )
     return [r[0] for r in rows]

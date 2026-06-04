@@ -19,9 +19,9 @@ import re
 # character classes; one-to-one with the SearchableSelect implementation).
 _DIACRITIC_RE = re.compile(
     "["
-    "ؐ-ؚ"   # Quranic annotations
-    "ً-ٟ"   # Tanwin, sukun, shaddah, kasrah, etc.
-    "ٰ"          # Superscript alef
+    "ؐ-ؚ"  # Quranic annotations
+    "ً-ٟ"  # Tanwin, sukun, shaddah, kasrah, etc.
+    "ٰ"  # Superscript alef
     "ۖ-ۜ"
     "۟-ۤ"
     "ۧۨ"

@@ -18,15 +18,15 @@ import json
 import logging
 import threading
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from config import DK_SCRIPT_PATH
 from qua_shared.schemas import ReciterCatalog
 from qua_shared.timestamps_shards import SCHEMA_VERSION, derive_url_template
-from services.storage import data_dir, static_refs
+from services.audio.audio_meta import chapter_numbers, chapter_urls, vbr_chapters_for_reciter
 from services.state import catalog as catalog_service
 from services.state import state as state_service
-from services.audio.audio_meta import chapter_numbers, chapter_urls, vbr_chapters_for_reciter
+from services.storage import data_dir, static_refs
 from utils.formatting import slug_to_name
 
 log = logging.getLogger("inspector")
@@ -57,13 +57,13 @@ _resource_bytes: dict[str, bytes] = {}
 _served_slugs: set[str] = set()
 
 _SHARD_LRU_CAP = 256
-_shard_lru: "OrderedDict[tuple[str, int], bytes]" = OrderedDict()
+_shard_lru: OrderedDict[tuple[str, int], bytes] = OrderedDict()
 
 
 def _build_manifest_dict(reciters_block: dict[str, dict]) -> dict:
     return {
         "schema_version": SCHEMA_VERSION,
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "commit": "",
         "dataset_base_url": "",
         "shard_url_template": "/api/ts/shard/{reciter}/{chapter}",
@@ -86,9 +86,7 @@ def _build_resource_bytes() -> dict[str, bytes]:
     if qpc:
         out["qpc_hafs"] = gzip.compress(qpc, compresslevel=6, mtime=0)
     if DK_SCRIPT_PATH.exists():
-        out["digital_khatt"] = gzip.compress(
-            DK_SCRIPT_PATH.read_bytes(), compresslevel=6, mtime=0
-        )
+        out["digital_khatt"] = gzip.compress(DK_SCRIPT_PATH.read_bytes(), compresslevel=6, mtime=0)
     return out
 
 
@@ -100,11 +98,7 @@ def _published_reciter_slugs() -> list[str]:
     is what guarantees these slugs have timestamps published; we don't re-verify
     by walking the bucket dir.
     """
-    return [
-        row.slug
-        for row in state_service.all_rows()
-        if row.state.value == "released"
-    ]
+    return [row.slug for row in state_service.all_rows() if row.state.value == "released"]
 
 
 def _ts_chapters_for(slug: str, delivery) -> list[int]:
@@ -122,9 +116,11 @@ def _ts_chapters_for(slug: str, delivery) -> list[int]:
     avoid the per-slug sidecar read — moving those two fields into the catalog is
     the follow-up that would let the manifest build skip the bucket entirely.
     """
-    if (delivery is not None
-            and getattr(delivery.audio_category, "value", delivery.audio_category) == "by_surah"
-            and delivery.chapter_count == 114):
+    if (
+        delivery is not None
+        and getattr(delivery.audio_category, "value", delivery.audio_category) == "by_surah"
+        and delivery.chapter_count == 114
+    ):
         return list(range(1, 115))
     return chapter_numbers(slug)
 
@@ -145,7 +141,10 @@ def _url_template(slug: str, audio_category: str) -> str:
     if not template:
         log.warning(
             "timestamps: derive_url_template returned empty for %s (audio_cat=%s, "
-            "chapter_count=%d)", slug, audio_category, len(flat),
+            "chapter_count=%d)",
+            slug,
+            audio_category,
+            len(flat),
         )
     return template
 
@@ -168,18 +167,14 @@ def _bucket_reciter_block(
     """
     if delivery is None:
         delivery = catalog.find_delivery(slug)
-    reciter = (
-        catalog.find_reciter(delivery.reciter_id) if delivery is not None else None
-    )
+    reciter = catalog.find_reciter(delivery.reciter_id) if delivery is not None else None
 
     name_en = reciter.name_en if reciter is not None else slug_to_name(slug)
     name_ar = reciter.name_ar if reciter is not None else None
     riwayah = delivery.riwayah if delivery is not None else "hafs_an_asim"
     style = delivery.style if delivery is not None else "murattal"
     source = delivery.source if delivery is not None else ""
-    audio_category = (
-        delivery.audio_category.value if delivery is not None else "by_surah"
-    )
+    audio_category = delivery.audio_category.value if delivery is not None else "by_surah"
 
     return {
         "name_en": name_en,
@@ -222,7 +217,8 @@ def _ensure_built() -> None:
                 # list the FE can't render. Surfaces as "missing from dropdown".
                 log.warning(
                     "timestamps: skipping %s — no chapter numbers derivable "
-                    "from catalog or audio_manifest sidecar", slug,
+                    "from catalog or audio_manifest sidecar",
+                    slug,
                 )
                 continue
             block = _bucket_reciter_block(slug, chapters, catalog, delivery)
@@ -337,4 +333,5 @@ def invalidate() -> None:
         _resource_bytes.clear()
     # Outside the lock — different module's cache, no ordering dependency.
     from services.storage import cache as _cache
+
     _cache.invalidate_audio_manifest_cache()

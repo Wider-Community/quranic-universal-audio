@@ -37,7 +37,10 @@ from ._extras import strip_and_warn
 
 _PEAKS_DEAD_FIELDS: set[str] = {
     # Migration #5 — verbose peaks payload + redundant metadata
-    "peaks", "batch_id", "saved_at_utc", "duration_ms",
+    "peaks",
+    "batch_id",
+    "saved_at_utc",
+    "duration_ms",
 }
 
 
@@ -82,11 +85,9 @@ class PeaksRecord(BaseModel):
         )
 
     @model_validator(mode="after")
-    def _validate_shape(self) -> "PeaksRecord":
+    def _validate_shape(self) -> PeaksRecord:
         if self.end_ms <= self.start_ms:
-            raise ValueError(
-                f"end_ms ({self.end_ms}) must be > start_ms ({self.start_ms})"
-            )
+            raise ValueError(f"end_ms ({self.end_ms}) must be > start_ms ({self.start_ms})")
         return self
 
 

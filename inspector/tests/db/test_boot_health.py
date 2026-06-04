@@ -11,6 +11,7 @@ from services import db
 @pytest.fixture
 def client():
     from app import app
+
     app.config["TESTING"] = True
     return app.test_client()
 
@@ -22,6 +23,7 @@ def test_healthz_reports_db_section(client):
     assert body["db"]["open"] is True
     # Latest migration on disk (derived so a new migration doesn't break this).
     from services.db import migrate as _migrate
+
     assert body["db"]["schema_version"] == max(n for n, _ in _migrate._discover())
     # no upload yet → lag is None, no error
     assert body["db"]["bucket_lag_seconds"] is None

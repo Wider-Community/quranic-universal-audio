@@ -9,8 +9,8 @@ exercise the under-review and marked-ready shapes the drawer actually opens on.
 from __future__ import annotations
 
 from services import db
-from services.db import _serde, repo_claims
 from services.admin import reviews as reviews_service
+from services.db import _serde, repo_claims
 
 
 def test_detail_unknown_slug_returns_none():

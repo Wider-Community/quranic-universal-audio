@@ -10,14 +10,14 @@ Decorator chain on every mutating route:
   (403). On success it sets ``g.current_user`` and ``g.current_row`` so the
   handler can build an ``Actor`` from the live user identity.
 """
+
 from flask import Blueprint, g, jsonify, request
 
 from qua_shared.schemas import Actor
-
 from services.auto_split import compute_auto_split as _compute_auto_split
 from services.save import save_seg_data as _save_seg_data
-from services.undo import undo_batch as _undo_batch, undo_ops as _undo_ops
-
+from services.undo import undo_batch as _undo_batch
+from services.undo import undo_ops as _undo_ops
 from utils.decorators import require_edit_lock, require_same_origin
 
 seg_edit_bp = Blueprint("seg_edit", __name__, url_prefix="/api/seg")

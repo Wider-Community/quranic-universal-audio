@@ -268,10 +268,12 @@ def test_reassign_to_same_assignee_returns_400(signed_in_client, monkeypatch):
 
     res = client.post(
         "/api/admin/claim/reassign/test_slug",
-        data=json.dumps({
-            "to_login": "target_user",
-            "reason": "Trying to reassign to same user.",
-        }),
+        data=json.dumps(
+            {
+                "to_login": "target_user",
+                "reason": "Trying to reassign to same user.",
+            }
+        ),
         headers=_HEADERS,
     )
     assert res.status_code == 400

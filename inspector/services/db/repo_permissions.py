@@ -23,20 +23,25 @@ from .connection import get_conn
 def all_overrides() -> list[tuple[str, str, bool]]:
     """Every override row as ``(capability_id, tier, allowed)``. Drives the
     resolver's overlay on top of the registry defaults."""
-    rows = get_conn().execute(
-        "SELECT capability_id, tier, allowed FROM permission_overrides"
-    ).fetchall()
+    rows = (
+        get_conn()
+        .execute("SELECT capability_id, tier, allowed FROM permission_overrides")
+        .fetchall()
+    )
     return [(r[0], r[1], bool(r[2])) for r in rows]
 
 
 def get_override(capability_id: str, tier: str) -> bool | None:
     """The stored override for one cell, or None when at the default. Used to
     compute the before/after for the toggle audit."""
-    row = get_conn().execute(
-        "SELECT allowed FROM permission_overrides "
-        "WHERE capability_id = ? AND tier = ?",
-        (capability_id, tier),
-    ).fetchone()
+    row = (
+        get_conn()
+        .execute(
+            "SELECT allowed FROM permission_overrides WHERE capability_id = ? AND tier = ?",
+            (capability_id, tier),
+        )
+        .fetchone()
+    )
     return bool(row[0]) if row is not None else None
 
 

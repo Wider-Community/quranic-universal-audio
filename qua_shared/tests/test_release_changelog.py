@@ -19,22 +19,37 @@ if str(_ROOT) not in sys.path:
 from qua_shared.release_changelog import render_changelog  # noqa: E402
 
 
-def _member(name_en, *, change_kind="added", riwayah="Hafs A'n Assem",
-            style="Murattal", channel="Tarteel CDN",
-            coverage_surahs=114, coverage_ayahs=None, name_ar="فلان"):
+def _member(
+    name_en,
+    *,
+    change_kind="added",
+    riwayah="Hafs A'n Assem",
+    style="Murattal",
+    channel="Tarteel CDN",
+    coverage_surahs=114,
+    coverage_ayahs=None,
+    name_ar="فلان",
+):
     return {
-        "name_en": name_en, "name_ar": name_ar,
-        "riwayah": riwayah, "style": style, "channel": channel,
+        "name_en": name_en,
+        "name_ar": name_ar,
+        "riwayah": riwayah,
+        "style": style,
+        "channel": channel,
         "change_kind": change_kind,
-        "coverage_surahs": coverage_surahs, "coverage_ayahs": coverage_ayahs,
+        "coverage_surahs": coverage_surahs,
+        "coverage_ayahs": coverage_ayahs,
     }
 
 
 def test_first_release_added_only():
     md = render_changelog(
-        version="v0.1.0", previous_version=None, release_date="2026-06-03",
+        version="v0.1.0",
+        previous_version=None,
+        release_date="2026-06-03",
         members=[_member("Abdulbasit Abdulsamad"), _member("Saud Al-Shuraim")],
-        owner="Wider-Community", repo="quranic-universal-audio",
+        owner="Wider-Community",
+        repo="quranic-universal-audio",
         hf_dataset="hetchyy/quranic-universal-ayahs",
     )
     assert md.startswith("# v0.1.0 · 2026-06-03")
@@ -48,7 +63,9 @@ def test_first_release_added_only():
 
 def test_display_names_no_slugs():
     md = render_changelog(
-        version="v0.1.0", previous_version=None, release_date="2026-06-03",
+        version="v0.1.0",
+        previous_version=None,
+        release_date="2026-06-03",
         members=[_member("Abdulbasit Abdulsamad")],
     )
     assert "Hafs A'n Assem" in md and "Tarteel CDN" in md
@@ -65,7 +82,9 @@ def test_added_refreshed_and_carried():
         _member("Stable Two", change_kind="unchanged"),
     ]
     md = render_changelog(
-        version="v0.2.0", previous_version="v0.1.0", release_date="2026-07-01",
+        version="v0.2.0",
+        previous_version="v0.1.0",
+        release_date="2026-07-01",
         members=members,
     )
     assert "<details><summary>➕ Added — 1 recitation</summary>" in md
@@ -76,12 +95,16 @@ def test_added_refreshed_and_carried():
 
 def test_coverage_cell_ayahs_then_surahs():
     md_ayahs = render_changelog(
-        version="v1.0.0", previous_version=None, release_date="d",
+        version="v1.0.0",
+        previous_version=None,
+        release_date="d",
         members=[_member("R", coverage_ayahs=6236, coverage_surahs=114)],
     )
     assert "6,236 ayahs" in md_ayahs
     md_surahs = render_changelog(
-        version="v1.0.0", previous_version=None, release_date="d",
+        version="v1.0.0",
+        previous_version=None,
+        release_date="d",
         members=[_member("R", coverage_ayahs=None, coverage_surahs=114)],
     )
     assert "114 surahs" in md_surahs and "ayahs" not in md_surahs.split("Schemas")[0]
@@ -89,7 +112,9 @@ def test_coverage_cell_ayahs_then_surahs():
 
 def test_operator_note_is_inert():
     md = render_changelog(
-        version="v0.1.0", previous_version=None, release_date="d",
+        version="v0.1.0",
+        previous_version=None,
+        release_date="d",
         members=[_member("R")],
         operator_note="Upgrade v3.\n</summary><script>alert(1)</script>",
     )
@@ -100,10 +125,14 @@ def test_operator_note_is_inert():
 
 def test_license_inline_and_links():
     md = render_changelog(
-        version="v0.1.0", previous_version=None, release_date="d",
+        version="v0.1.0",
+        previous_version=None,
+        release_date="d",
         members=[_member("R")],
-        owner="Wider-Community", repo="quranic-universal-audio",
-        hf_dataset="hetchyy/quranic-universal-ayahs", license_id="CC-BY-4.0",
+        owner="Wider-Community",
+        repo="quranic-universal-audio",
+        hf_dataset="hetchyy/quranic-universal-ayahs",
+        license_id="CC-BY-4.0",
     )
     assert "**License:** CC-BY-4.0" in md
     assert "https://github.com/Wider-Community/quranic-universal-audio" in md
@@ -112,7 +141,9 @@ def test_license_inline_and_links():
 
 def test_table_cell_pipe_escaped():
     md = render_changelog(
-        version="v0.1.0", previous_version=None, release_date="d",
+        version="v0.1.0",
+        previous_version=None,
+        release_date="d",
         members=[_member("A | B")],
     )
     assert "A \\| B" in md

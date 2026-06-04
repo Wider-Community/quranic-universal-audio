@@ -24,7 +24,13 @@ def _dev_cookie() -> str:
     from services.quran_foundation import session
 
     return session.encode_session(
-        {"access_token": "", "refresh_token": "", "expires_at": 2**31, "login": "dev-qf-user", "dev": True}
+        {
+            "access_token": "",
+            "refresh_token": "",
+            "expires_at": 2**31,
+            "login": "dev-qf-user",
+            "dev": True,
+        }
     )
 
 

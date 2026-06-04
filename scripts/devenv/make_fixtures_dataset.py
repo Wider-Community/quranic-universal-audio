@@ -55,9 +55,7 @@ _INSPECTOR = _REPO_ROOT / "inspector"
 if str(_INSPECTOR) not in sys.path:
     sys.path.insert(0, str(_INSPECTOR))
 
-DEFAULT_DATASET = os.environ.get(
-    "INSPECTOR_FIXTURES_DATASET", "hetchyy/quranic-inspector-fixtures"
-)
+DEFAULT_DATASET = os.environ.get("INSPECTOR_FIXTURES_DATASET", "hetchyy/quranic-inspector-fixtures")
 
 # Vocabulary tables — copied wholesale (small, no PII, needed for catalog FKs).
 _VOCAB_TABLES = ("riwayahs", "styles", "sources", "channels", "recording_contexts")
@@ -93,9 +91,14 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
     return row is not None
 
 
-def _copy_rows(src: sqlite3.Connection, dst: sqlite3.Connection, table: str,
-               where: str = "", params: tuple = (),
-               scrub: dict | None = None) -> int:
+def _copy_rows(
+    src: sqlite3.Connection,
+    dst: sqlite3.Connection,
+    table: str,
+    where: str = "",
+    params: tuple = (),
+    scrub: dict | None = None,
+) -> int:
     """Schema-agnostic row copy with optional per-column scrubbing.
 
     Skips silently if the table is missing on either side (tolerant of schema
@@ -108,18 +111,13 @@ def _copy_rows(src: sqlite3.Connection, dst: sqlite3.Connection, table: str,
         print(f"   - skip {table} (absent on one side)")
         return 0
     cols = _table_columns(src, table)
-    rows = src.execute(
-        f"SELECT {','.join(cols)} FROM {table} {where}", params
-    ).fetchall()
+    rows = src.execute(f"SELECT {','.join(cols)} FROM {table} {where}", params).fetchall()
     if not rows:
         return 0
     if scrub:
         scrub_idx = {cols.index(c): v for c, v in scrub.items() if c in cols}
         if scrub_idx:
-            rows = [
-                tuple(scrub_idx.get(i, val) for i, val in enumerate(row))
-                for row in rows
-            ]
+            rows = [tuple(scrub_idx.get(i, val) for i, val in enumerate(row)) for row in rows]
     placeholders = ",".join("?" * len(cols))
     dst.executemany(
         f"INSERT OR REPLACE INTO {table} ({','.join(cols)}) VALUES ({placeholders})",
@@ -152,49 +150,61 @@ def build_fixtures_db(src_db_path: Path, out_db_path: Path, slugs: list[str]) ->
         # Resolve the reciters behind the chosen deliveries.
         qmarks = ",".join("?" * len(slugs))
         reciter_ids = [
-            r[0] for r in src.execute(
+            r[0]
+            for r in src.execute(
                 f"SELECT DISTINCT reciter_id FROM deliveries WHERE slug IN ({qmarks})",
                 tuple(slugs),
             ).fetchall()
         ]
         found_slugs = [
-            r[0] for r in src.execute(
+            r[0]
+            for r in src.execute(
                 f"SELECT slug FROM deliveries WHERE slug IN ({qmarks})", tuple(slugs)
             ).fetchall()
         ]
         missing = sorted(set(slugs) - set(found_slugs))
         if missing:
-            raise SystemExit(
-                f"slug(s) not found in source catalog: {', '.join(missing)}"
-            )
+            raise SystemExit(f"slug(s) not found in source catalog: {', '.join(missing)}")
 
         for t in _VOCAB_TABLES:
             counts[t] = _copy_rows(src, dst, t)
 
         rid_marks = ",".join("?" * len(reciter_ids))
         counts["reciters"] = _copy_rows(
-            src, dst, "reciters",
-            f"WHERE reciter_id IN ({rid_marks})", tuple(reciter_ids),
+            src,
+            dst,
+            "reciters",
+            f"WHERE reciter_id IN ({rid_marks})",
+            tuple(reciter_ids),
         )
         # Scrub the lone identity field on the otherwise-public catalog row.
         counts["deliveries"] = _copy_rows(
-            src, dst, "deliveries",
-            f"WHERE slug IN ({qmarks})", tuple(slugs),
+            src,
+            dst,
+            "deliveries",
+            f"WHERE slug IN ({qmarks})",
+            tuple(slugs),
             scrub={"added_by_hf_id": "seed"},
         )
         # NULL the reference to the (excluded) transitions table so FK
         # enforcement — which is ON — doesn't reject the row.
         counts["delivery_states"] = _copy_rows(
-            src, dst, "delivery_states",
-            f"WHERE slug IN ({qmarks})", tuple(slugs),
+            src,
+            dst,
+            "delivery_states",
+            f"WHERE slug IN ({qmarks})",
+            tuple(slugs),
             scrub={"created_by_transition_id": None},
         )
         # catalog_aliases.kind is 'slug' | 'reciter_id' with old/new values —
         # only carry aliases whose target is one of our reciters.
         if reciter_ids:
             counts["catalog_aliases"] = _copy_rows(
-                src, dst, "catalog_aliases",
-                f"WHERE new IN ({rid_marks})", tuple(reciter_ids),
+                src,
+                dst,
+                "catalog_aliases",
+                f"WHERE new IN ({rid_marks})",
+                tuple(reciter_ids),
             )
         # The source DB may lack a delivery_states row for some chosen
         # reciters (catalogued-but-never-projected gaps). Synthesize an
@@ -205,10 +215,8 @@ def build_fixtures_db(src_db_path: Path, out_db_path: Path, slugs: list[str]) ->
         for slug in found_slugs:
             if slug in have_state:
                 continue
-            row = dst.execute(
-                "SELECT added_at FROM deliveries WHERE slug=?", (slug,)
-            ).fetchone()
-            since = (row[0] if row and row[0] else "2024-01-01T00:00:00+00:00")
+            row = dst.execute("SELECT added_at FROM deliveries WHERE slug=?", (slug,)).fetchone()
+            since = row[0] if row and row[0] else "2024-01-01T00:00:00+00:00"
             dst.execute(
                 "INSERT INTO delivery_states (slug, state, state_since, visibility) "
                 "VALUES (?, ?, ?, 'public')",
@@ -290,27 +298,42 @@ def _publish(stage_root: Path, dataset_id: str, token: str) -> str:
     from huggingface_hub import HfApi
 
     api = HfApi(token=token)
-    api.create_repo(repo_id=dataset_id, repo_type="dataset", private=False,
-                    exist_ok=True)
+    api.create_repo(repo_id=dataset_id, repo_type="dataset", private=False, exist_ok=True)
     api.upload_folder(
-        folder_path=str(stage_root), repo_id=dataset_id, repo_type="dataset",
-        commit_message="update inspector fixtures", delete_patterns="*",
+        folder_path=str(stage_root),
+        repo_id=dataset_id,
+        repo_type="dataset",
+        commit_message="update inspector fixtures",
+        delete_patterns="*",
     )
     return f"https://huggingface.co/datasets/{dataset_id}"
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    p.add_argument("--reciters", required=True,
-                   help="Comma-separated delivery slug(s) to include.")
-    p.add_argument("--bucket", choices=("dev", "prod"), default="dev",
-                   help="Source bucket to read catalog + content from.")
-    p.add_argument("--dataset", default=DEFAULT_DATASET,
-                   help=f"Target public dataset (default {DEFAULT_DATASET}).")
-    p.add_argument("--out", type=Path, default=_REPO_ROOT / ".local" / "fixtures-stage",
-                   help="Local staging dir for the dataset tree.")
-    p.add_argument("--publish", action="store_true",
-                   help="Upload the staged tree to the public dataset (outward-facing).")
+    p.add_argument("--reciters", required=True, help="Comma-separated delivery slug(s) to include.")
+    p.add_argument(
+        "--bucket",
+        choices=("dev", "prod"),
+        default="dev",
+        help="Source bucket to read catalog + content from.",
+    )
+    p.add_argument(
+        "--dataset",
+        default=DEFAULT_DATASET,
+        help=f"Target public dataset (default {DEFAULT_DATASET}).",
+    )
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=_REPO_ROOT / ".local" / "fixtures-stage",
+        help="Local staging dir for the dataset tree.",
+    )
+    p.add_argument(
+        "--publish",
+        action="store_true",
+        help="Upload the staged tree to the public dataset (outward-facing).",
+    )
     args = p.parse_args(argv)
 
     slugs = [s.strip() for s in args.reciters.split(",") if s.strip()]
@@ -318,19 +341,24 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--reciters must list at least one slug")
 
     from qua_shared._env import load_repo_env
+
     load_repo_env()
-    buckets = {"dev": "hetchyy/quranic-inspector-bucket-dev",
-               "prod": "hetchyy/quranic-inspector-bucket"}
+    buckets = {
+        "dev": "hetchyy/quranic-inspector-bucket-dev",
+        "prod": "hetchyy/quranic-inspector-bucket",
+    }
     os.environ["INSPECTOR_BUCKET_REPO"] = buckets[args.bucket]
     if args.bucket == "prod":
         os.environ["INSPECTOR_ALLOW_PROD_BUCKET"] = "1"  # read-only source
 
     from services.storage.hf_bucket import get_backend
+
     backend = get_backend()
 
     stage_root = args.out.resolve()
     if stage_root.exists():
         import shutil
+
         shutil.rmtree(stage_root)
     stage_root.mkdir(parents=True, exist_ok=True)
 
@@ -354,8 +382,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"\n==> Staged fixtures tree at {stage_root}")
     if not args.publish:
-        print("    (build only) re-run with --publish to upload to "
-              f"{args.dataset}")
+        print(f"    (build only) re-run with --publish to upload to {args.dataset}")
         return 0
 
     token = os.environ.get("INSPECTOR_HF_TOKEN") or os.environ.get("HF_TOKEN")

@@ -6,6 +6,7 @@ files without leaning on HTML5 ``<audio>.currentTime`` (which mis-seeks them).
 
 The clip plays from byte 0 in the browser, so there's no seek and no drift.
 """
+
 from __future__ import annotations
 
 import logging
@@ -75,10 +76,16 @@ def seg_segment_clip(reciter):
     duration_sec = (end_ms - start_ms) / 1000.0
 
     cmd = [
-        "ffmpeg", "-hide_banner", "-loglevel", "error",
-        "-ss", f"{start_sec:.3f}",
-        "-i", source,
-        "-t", f"{duration_sec:.3f}",
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-ss",
+        f"{start_sec:.3f}",
+        "-i",
+        source,
+        "-t",
+        f"{duration_sec:.3f}",
         # Drop any non-audio streams. Most mp3quran/qdc MP3s embed an MJPEG
         # cover-art stream (ID3v2 APIC). Without -vn, ffmpeg tries to encode
         # that into the mp3 output via the muxer's default video codec
@@ -86,10 +93,14 @@ def seg_segment_clip(reciter):
         # — fails with "Default encoder for format mp3 (codec png) is
         # probably disabled" and the route returns 200 OK / 0 bytes.
         "-vn",
-        "-c:a", "libmp3lame",
-        "-b:a", CLIP_BITRATE,
-        "-ac", "1",
-        "-f", "mp3",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        CLIP_BITRATE,
+        "-ac",
+        "1",
+        "-f",
+        "mp3",
         "-",
     ]
 
@@ -132,7 +143,9 @@ def seg_segment_clip(reciter):
             if bytes_yielded == 0 or (rc is not None and rc != 0):
                 logger.warning(
                     "segment_clip ffmpeg produced %d bytes (rc=%s) cmd=%s stderr=%r",
-                    bytes_yielded, rc, shlex.join(cmd),
+                    bytes_yielded,
+                    rc,
+                    shlex.join(cmd),
                     stderr_tail.decode("utf-8", errors="replace")[-500:],
                 )
 

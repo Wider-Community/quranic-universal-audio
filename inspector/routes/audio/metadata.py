@@ -81,9 +81,7 @@ def audio_surahs(category, source, slug):
                 continue
             duration_sec = v.get("duration_sec")
             duration_ms = (
-                int(round(duration_sec * 1000))
-                if isinstance(duration_sec, (int, float))
-                else None
+                int(round(duration_sec * 1000)) if isinstance(duration_sec, (int, float)) else None
             )
             surahs[k] = {"url": url, "duration_ms": duration_ms}
         elif isinstance(v, str):

@@ -11,7 +11,7 @@ without polluting the public ``detail()`` payload.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 
@@ -49,22 +49,38 @@ def _seed_two_combos_one_discarded(backend):
         reciters=[ReciterEntry(reciter_id="rec_a", name_en="Reciter A")],
         deliveries=[
             Delivery(
-                slug="rec_a_hafs", reciter_id="rec_a", riwayah="hafs",
-                style="murattal", source="src1", channel="ch1",
-                audio_category=AudioCategory.BY_SURAH, chapter_count=114,
-                added_at=datetime.now(timezone.utc), added_by_hf_id="seed",
+                slug="rec_a_hafs",
+                reciter_id="rec_a",
+                riwayah="hafs",
+                style="murattal",
+                source="src1",
+                channel="ch1",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=datetime.now(UTC),
+                added_by_hf_id="seed",
             ),
             Delivery(
-                slug="rec_a_warsh", reciter_id="rec_a", riwayah="warsh",
-                style="murattal", source="src1", channel="ch1",
-                audio_category=AudioCategory.BY_SURAH, chapter_count=114,
-                added_at=datetime.now(timezone.utc), added_by_hf_id="seed",
+                slug="rec_a_warsh",
+                reciter_id="rec_a",
+                riwayah="warsh",
+                style="murattal",
+                source="src1",
+                channel="ch1",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=datetime.now(UTC),
+                added_by_hf_id="seed",
             ),
         ],
     )
     _seed_state("rec_a_hafs", state="catalogued")
-    _seed_state("rec_a_warsh", state="catalogued", visibility="discarded",
-                visibility_reason="duplicate of warsh-other")
+    _seed_state(
+        "rec_a_warsh",
+        state="catalogued",
+        visibility="discarded",
+        visibility_reason="duplicate of warsh-other",
+    )
 
 
 @pytest.fixture
@@ -131,7 +147,8 @@ def test_is_reciter_fully_discarded_partial(public_state_env):
 
 
 def test_is_reciter_fully_discarded_when_all_discarded(tmp_path, monkeypatch):
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
+    from datetime import timezone as _tz
 
     from services import catalog as catalog_service
     from services import hf_bucket as _hf_bucket
@@ -145,6 +162,7 @@ def test_is_reciter_fully_discarded_when_all_discarded(tmp_path, monkeypatch):
 
     # Single delivery, discarded.
     from tests.conftest import _seed_catalog, _seed_state
+
     _seed_catalog(
         vocab=Vocab(
             riwayat=[Riwayah(slug="hafs", short="H", name="Hafs")],
@@ -155,15 +173,20 @@ def test_is_reciter_fully_discarded_when_all_discarded(tmp_path, monkeypatch):
         reciters=[ReciterEntry(reciter_id="rec_b", name_en="Reciter B")],
         deliveries=[
             Delivery(
-                slug="rec_b", reciter_id="rec_b", riwayah="hafs",
-                style="murattal", source="src1", channel="ch1",
-                audio_category=AudioCategory.BY_SURAH, chapter_count=114,
-                added_at=_dt.now(_tz.utc), added_by_hf_id="seed",
+                slug="rec_b",
+                reciter_id="rec_b",
+                riwayah="hafs",
+                style="murattal",
+                source="src1",
+                channel="ch1",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=_dt.now(UTC),
+                added_by_hf_id="seed",
             ),
         ],
     )
-    _seed_state("rec_b", state="catalogued", visibility="discarded",
-                visibility_reason="testing")
+    _seed_state("rec_b", state="catalogued", visibility="discarded", visibility_reason="testing")
 
     assert public_state_service.is_reciter_fully_discarded("rec_b") is True
     payload = public_state_service.admin_view_reciter("rec_b")

@@ -16,14 +16,13 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from routes._admin_helpers import actor_for, validate_reason
-
 from services import activity_state as activity_state_service
-
 from utils.decorators import require_capability, require_same_origin
 
-
 public_activity_admin_bp = Blueprint(
-    "public_activity_admin", __name__, url_prefix="/api/public/activity",
+    "public_activity_admin",
+    __name__,
+    url_prefix="/api/public/activity",
 )
 
 

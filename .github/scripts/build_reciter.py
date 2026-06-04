@@ -32,10 +32,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefm
 log = logging.getLogger(__name__)
 
 # Non-recited Quranic markers to strip from text (stop signs, hizb, sajdah)
-_QURAN_MARKERS = set("\u06D6\u06D7\u06D8\u06D9\u06DA\u06DB\u06DE\u06E9")
+_QURAN_MARKERS = set("\u06d6\u06d7\u06d8\u06d9\u06da\u06db\u06de\u06e9")
 
 SURAH_DOWNLOAD_WORKERS = 4
 AYAH_DOWNLOAD_WORKERS = 64
+
 
 def _strip_quran_markers(text: str) -> str:
     """Strip non-recited markers (waqf signs, hizb, sajdah) from Uthmani text."""
@@ -93,11 +94,7 @@ def _text_for_ref(matched_ref: str, dk_words: dict, surah_info: dict) -> str:
         w += 1
         # Wrap to next ayah when we've exhausted this one's words.
         verse_idx = ay - 1
-        max_w = (
-            verses[verse_idx].get("num_words", 0)
-            if 0 <= verse_idx < len(verses)
-            else 0
-        )
+        max_w = verses[verse_idx].get("num_words", 0) if 0 <= verse_idx < len(verses) else 0
         if w > max_w:
             w = 1
             ay += 1
@@ -105,8 +102,9 @@ def _text_for_ref(matched_ref: str, dk_words: dict, surah_info: dict) -> str:
     return " ".join(words)
 
 
-def _cross_verse_text(matched_ref: str, full_text: str,
-                      target_ayah: int, surah_info: dict, surah_num: str) -> str:
+def _cross_verse_text(
+    matched_ref: str, full_text: str, target_ayah: int, surah_info: dict, surah_num: str
+) -> str:
     """Slice only the target verse's words from a cross-verse segment's text.
 
     For ref '37:151:3-37:152:2' with 5 words of text, target_ayah=152
@@ -139,8 +137,11 @@ def _cross_verse_text(matched_ref: str, full_text: str,
         return " ".join(words[-e_word:]) if e_word > 0 else ""
     return full_text
 
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "qua_shared"))
+from datetime import UTC
+
 from config_loader import repo_config  # noqa: E402
 from reciter_eligibility import (  # noqa: E402
     compute_coverage,
@@ -323,8 +324,7 @@ def load_data(slug, audio_type):
 # ---------------------------------------------------------------------------
 # Row building
 # ---------------------------------------------------------------------------
-def build_rows(timestamps, detailed_by_ref, segments, surah_info,
-               letter_data=None, dk_words=None):
+def build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data=None, dk_words=None):
     """Build row metadata (without audio bytes) in canonical verse order.
 
     Clip boundaries are defined by word timestamps (deduplicated, canonical).
@@ -370,11 +370,14 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info,
                 for seg in segments[ref]:
                     if seg[3] <= clip_start or seg[2] >= clip_end:
                         continue  # segment fully outside clip
-                    verse_segments.append([
-                        _i(seg[0]), _i(seg[1]),
-                        _i(max(0, seg[2] - clip_start)),
-                        _i(min(seg[3], clip_end) - clip_start),
-                    ])
+                    verse_segments.append(
+                        [
+                            _i(seg[0]),
+                            _i(seg[1]),
+                            _i(max(0, seg[2] - clip_start)),
+                            _i(min(seg[3], clip_end) - clip_start),
+                        ]
+                    )
 
             # Text from detailed.json segments that overlap the clip range.
             # For cross-verse segments, extract only this verse's words.
@@ -409,8 +412,8 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info,
                             if s_ayah != e_ayah:
                                 # Cross-verse: extract only this ayah's words
                                 seg_text = _cross_verse_text(
-                                    mref, seg_text, ayah, surah_info,
-                                    surah_num)
+                                    mref, seg_text, ayah, surah_info, surah_num
+                                )
                 filtered_text_parts.append(seg_text)
             text = " ".join(filtered_text_parts)
             text = _strip_quran_markers(text)
@@ -418,61 +421,80 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info,
             verse_words = []
             if ref in timestamps and ref != "_meta":
                 for word in timestamps[ref]["words"]:
-                    verse_words.append([
-                        _i(word[0]),
-                        _i(word[1] - clip_start),
-                        _i(word[2] - clip_start),
-                    ])
+                    verse_words.append(
+                        [
+                            _i(word[0]),
+                            _i(word[1] - clip_start),
+                            _i(word[2] - clip_start),
+                        ]
+                    )
 
             # Synthesize segments for cross-verse words not covered by
             # segments.json (they precede or follow the home segments,
             # or segments.json has no entry for this verse at all).
             if verse_words and not verse_segments:
                 # No segments.json entry — synthesize one from all words
-                verse_segments.append([
-                    verse_words[0][0], verse_words[-1][0],
-                    verse_words[0][1], verse_words[-1][2],
-                ])
+                verse_segments.append(
+                    [
+                        verse_words[0][0],
+                        verse_words[-1][0],
+                        verse_words[0][1],
+                        verse_words[-1][2],
+                    ]
+                )
             elif verse_words and verse_segments:
                 first_seg_start = verse_segments[0][2]  # clip-relative ms
                 xv_words = [w for w in verse_words if w[2] <= first_seg_start]
                 if xv_words:
-                    verse_segments.insert(0, [
-                        xv_words[0][0], xv_words[-1][0],
-                        xv_words[0][1], xv_words[-1][2],
-                    ])
+                    verse_segments.insert(
+                        0,
+                        [
+                            xv_words[0][0],
+                            xv_words[-1][0],
+                            xv_words[0][1],
+                            xv_words[-1][2],
+                        ],
+                    )
                 last_seg_end = verse_segments[-1][3]
                 xv_after = [w for w in verse_words if w[1] >= last_seg_end]
                 if xv_after:
-                    verse_segments.append([
-                        xv_after[0][0], xv_after[-1][0],
-                        xv_after[0][1], xv_after[-1][2],
-                    ])
+                    verse_segments.append(
+                        [
+                            xv_after[0][0],
+                            xv_after[-1][0],
+                            xv_after[0][1],
+                            xv_after[-1][2],
+                        ]
+                    )
 
             # Flat letter timestamps: one entry per letter (not per word)
             verse_letters = []
             if letter_data and ref in letter_data:
                 for word_idx, letters in letter_data[ref]:
                     for ch, s, e in letters:
-                        verse_letters.append({
-                            "word_idx": _i(word_idx),
-                            "char": ch,
-                            "start_ms": _i(s - clip_start),
-                            "end_ms": _i(e - clip_start),
-                        })
+                        verse_letters.append(
+                            {
+                                "word_idx": _i(word_idx),
+                                "char": ch,
+                                "start_ms": _i(s - clip_start),
+                                "end_ms": _i(e - clip_start),
+                            }
+                        )
 
-            rows.append({
-                "surah": int(surah_num),
-                "ayah": ayah,
-                "duration_ms": _i(clip_end - clip_start),
-                "text_uthmani": text,
-                "segments": verse_segments,
-                "word_timestamps": verse_words,
-                "letter_timestamps": verse_letters,
-                "audio_url": entry["audio"],
-                "clip_start": clip_start,
-                "clip_end": clip_end,
-            })
+            rows.append(
+                {
+                    "surah": int(surah_num),
+                    "ayah": ayah,
+                    "duration_ms": _i(clip_end - clip_start),
+                    "text_uthmani": text,
+                    "segments": verse_segments,
+                    "word_timestamps": verse_words,
+                    "letter_timestamps": verse_letters,
+                    "audio_url": entry["audio"],
+                    "clip_start": clip_start,
+                    "clip_end": clip_end,
+                }
+            )
 
     return rows
 
@@ -482,6 +504,7 @@ def build_rows(timestamps, detailed_by_ref, segments, surah_info,
 # ---------------------------------------------------------------------------
 def _lazy_import_pydub():
     from pydub import AudioSegment as AS
+
     return AS
 
 
@@ -525,7 +548,11 @@ def download_all_audio(rows, is_surah=False):
             url_to_indices[row["audio_url"]].append(i)
 
         unique_urls = list(url_to_indices.keys())
-        log.info("Downloading and slicing %d surah audio files (%d parallel)...", len(unique_urls), SURAH_DOWNLOAD_WORKERS)
+        log.info(
+            "Downloading and slicing %d surah audio files (%d parallel)...",
+            len(unique_urls),
+            SURAH_DOWNLOAD_WORKERS,
+        )
         completed_surahs = 0
 
         def _process_surah(url):
@@ -538,7 +565,7 @@ def download_all_audio(rows, is_surah=False):
                     raw_data = resp.read()
                 audio = AS.from_file(io.BytesIO(raw_data))
                 del raw_data
-            except Exception as e:
+            except Exception:
                 for idx in url_to_indices[url]:
                     ref = f"{rows[idx]['surah']}:{rows[idx]['ayah']}"
                     errors.append(ref)
@@ -547,11 +574,11 @@ def download_all_audio(rows, is_surah=False):
             for idx in url_to_indices[url]:
                 row = rows[idx]
                 try:
-                    clip = audio[row["clip_start"]:row["clip_end"]]
+                    clip = audio[row["clip_start"] : row["clip_end"]]
                     buf = io.BytesIO()
                     clip.export(buf, format="mp3", bitrate="128k")
                     results[idx] = buf.getvalue()
-                except Exception as e:
+                except Exception:
                     ref = f"{row['surah']}:{row['ayah']}"
                     errors.append(ref)
 
@@ -559,7 +586,7 @@ def download_all_audio(rows, is_surah=False):
             return url, results, errors
 
         with ThreadPoolExecutor(max_workers=SURAH_DOWNLOAD_WORKERS) as pool:
-            for url, results, errors in pool.map(_process_surah, unique_urls):
+            for _url, results, errors in pool.map(_process_surah, unique_urls):
                 for idx, mp3 in results.items():
                     audio_bytes_list[idx] = mp3
                 failed.extend(errors)
@@ -586,7 +613,7 @@ def download_all_audio(rows, is_surah=False):
                     log.error("Failed to download %s: %s", ref, e)
                     failed.append(ref)
                 completed += 1
-                if completed % 500 == 0:    
+                if completed % 500 == 0:
                     log.info("Progress: %d/%d downloaded", completed, len(rows))
 
     log.info("Downloads complete. %d succeeded, %d failed.", len(rows) - len(failed), len(failed))
@@ -610,10 +637,10 @@ def _try_load_existing(slug):
     riwayah = get_riwayah(slug)
     api = HfApi(token=HF_TOKEN)
     try:
-        tree = list(api.list_repo_tree(
-            REPO_ID, repo_type="dataset", path_in_repo=riwayah))
-        files = [f.rfilename for f in tree
-                 if f.rfilename.endswith(".parquet") and slug in f.rfilename]
+        tree = list(api.list_repo_tree(REPO_ID, repo_type="dataset", path_in_repo=riwayah))
+        files = [
+            f.rfilename for f in tree if f.rfilename.endswith(".parquet") and slug in f.rfilename
+        ]
     except Exception:
         files = []
 
@@ -678,16 +705,14 @@ def _reuse_audio(existing_table, rows, is_surah):
         else:
             need_download.append(i)
 
-    log.info("Audio reuse: %d/%d reused, %d need re-slice",
-             reused, len(rows), len(need_download))
+    log.info("Audio reuse: %d/%d reused, %d need re-slice", reused, len(rows), len(need_download))
 
     if not need_download:
         return audio_bytes_list, 0
 
     # >10% changed — full download is more efficient than partial
     if len(need_download) > len(rows) * 0.1:
-        log.info("Too many clips changed (%d/%d), full rebuild",
-                 len(need_download), len(rows))
+        log.info("Too many clips changed (%d/%d), full rebuild", len(need_download), len(rows))
         full_bytes, failed = download_all_audio(rows, is_surah=is_surah)
         return full_bytes, len(need_download)
 
@@ -698,8 +723,11 @@ def _reuse_audio(existing_table, rows, is_surah):
         for idx in need_download:
             url_to_indices[rows[idx]["audio_url"]].append(idx)
 
-        log.info("Partial download: %d surahs for %d changed verses",
-                 len(url_to_indices), len(need_download))
+        log.info(
+            "Partial download: %d surahs for %d changed verses",
+            len(url_to_indices),
+            len(need_download),
+        )
         for url, indices in url_to_indices.items():
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -709,7 +737,7 @@ def _reuse_audio(existing_table, rows, is_surah):
                 del raw_data
                 for idx in indices:
                     row = rows[idx]
-                    clip = audio[row["clip_start"]:row["clip_end"]]
+                    clip = audio[row["clip_start"] : row["clip_end"]]
                     buf = io.BytesIO()
                     clip.export(buf, format="mp3", bitrate="128k")
                     audio_bytes_list[idx] = buf.getvalue()
@@ -717,19 +745,18 @@ def _reuse_audio(existing_table, rows, is_surah):
             except Exception as e:
                 log.warning("Partial download failed for %s: %s", url, e)
     else:
+
         def _dl(idx):
             row = rows[idx]
             return idx, download_and_slice(row["audio_url"], row["clip_start"], row["clip_end"])
 
         with ThreadPoolExecutor(max_workers=64) as pool:
-            for future in as_completed(
-                    {pool.submit(_dl, i): i for i in need_download}):
+            for future in as_completed({pool.submit(_dl, i): i for i in need_download}):
                 try:
                     idx, mp3 = future.result()
                     audio_bytes_list[idx] = mp3
                 except Exception as e:
-                    log.warning("Partial download failed for index %d: %s",
-                                future, e)
+                    log.warning("Partial download failed for index %d: %s", future, e)
 
     return audio_bytes_list, len(need_download)
 
@@ -741,7 +768,9 @@ def push_reciter(slug, audio_type, full_rebuild=False):
     """Build and push a reciter to the HF dataset."""
     is_surah = "by_surah" in audio_type
 
-    timestamps, detailed_by_ref, segments, surah_info, letter_data, dk_words = load_data(slug, audio_type)
+    timestamps, detailed_by_ref, segments, surah_info, letter_data, dk_words = load_data(
+        slug, audio_type
+    )
     rows = build_rows(timestamps, detailed_by_ref, segments, surah_info, letter_data, dk_words)
     log.info("Built %d rows for %s", len(rows), slug)
 
@@ -758,12 +787,14 @@ def push_reciter(slug, audio_type, full_rebuild=False):
     if existing_table is not None and len(existing_table) == len(rows):
         audio_bytes_list, changed = _reuse_audio(existing_table, rows, is_surah)
         del existing_table
-        failed = [f"{rows[i]['surah']}:{rows[i]['ayah']}"
-                  for i, b in enumerate(audio_bytes_list) if b is None]
+        failed = [
+            f"{rows[i]['surah']}:{rows[i]['ayah']}"
+            for i, b in enumerate(audio_bytes_list)
+            if b is None
+        ]
     else:
         if existing_table is not None:
-            log.info("Row count changed (%d → %d), full rebuild",
-                     len(existing_table), len(rows))
+            log.info("Row count changed (%d → %d), full rebuild", len(existing_table), len(rows))
             del existing_table
         audio_bytes_list, failed = download_all_audio(rows, is_surah=is_surah)
 
@@ -785,10 +816,12 @@ def push_reciter(slug, audio_type, full_rebuild=False):
         if audio_bytes_list[i] is None:
             skipped += 1
             continue
-        data["audio"].append({
-            "bytes": audio_bytes_list[i],
-            "path": f"{row['surah']:03d}{row['ayah']:03d}.mp3",
-        })
+        data["audio"].append(
+            {
+                "bytes": audio_bytes_list[i],
+                "path": f"{row['surah']:03d}{row['ayah']:03d}.mp3",
+            }
+        )
         data["surah"].append(row["surah"])
         data["ayah"].append(row["ayah"])
         data["duration_ms"].append(row["duration_ms"])
@@ -800,7 +833,7 @@ def push_reciter(slug, audio_type, full_rebuild=False):
         src_url = row["audio_url"]
         for prefix in ("https://", "http://"):
             if src_url.startswith(prefix):
-                src_url = src_url[len(prefix):]
+                src_url = src_url[len(prefix) :]
                 break
         data["source_url"].append(src_url)
         cs = row["clip_start"]
@@ -810,23 +843,27 @@ def push_reciter(slug, audio_type, full_rebuild=False):
         log.warning("Skipped %d verses due to download failures", skipped)
 
     log.info("Creating dataset with %d rows...", len(data["audio"]))
-    features = Features({
-        "audio": Audio(),
-        "surah": Value("int32"),
-        "ayah": Value("int32"),
-        "duration_ms": Value("int32"),
-        "text_uthmani": Value("string"),
-        "segments": Sequence(Sequence(Value("int32"))),
-        "word_timestamps": Sequence(Sequence(Value("int32"))),
-        "letter_timestamps": Sequence({
-            "word_idx": Value("int32"),
-            "char": Value("string"),
-            "start_ms": Value("int32"),
-            "end_ms": Value("int32"),
-        }),
-        "source_url": Value("string"),
-        "source_offset_ms": Value("int32"),
-    })
+    features = Features(
+        {
+            "audio": Audio(),
+            "surah": Value("int32"),
+            "ayah": Value("int32"),
+            "duration_ms": Value("int32"),
+            "text_uthmani": Value("string"),
+            "segments": Sequence(Sequence(Value("int32"))),
+            "word_timestamps": Sequence(Sequence(Value("int32"))),
+            "letter_timestamps": Sequence(
+                {
+                    "word_idx": Value("int32"),
+                    "char": Value("string"),
+                    "start_ms": Value("int32"),
+                    "end_ms": Value("int32"),
+                }
+            ),
+            "source_url": Value("string"),
+            "source_offset_ms": Value("int32"),
+        }
+    )
 
     ds = Dataset.from_dict(data, features=features)
 
@@ -848,7 +885,9 @@ def push_reciter(slug, audio_type, full_rebuild=False):
     except ValueError as e:
         if "Features of the new split don't match" not in str(e):
             raise
-        log.warning("Feature mismatch on hub for config '%s' — updating README and retrying", riwayah)
+        log.warning(
+            "Feature mismatch on hub for config '%s' — updating README and retrying", riwayah
+        )
         # The mismatch lives in the README.md YAML frontmatter on the hub.
         # Re-upload the local dataset card to fix it, then retry.
         update_dataset_readme()
@@ -958,18 +997,21 @@ def _vbr_chapters_for_manifest(slug):
 def _build_reciter_info(eligible):
     """Build a list of info dicts for eligible reciters, grouped by riwayah."""
     from collections import defaultdict
+
     by_riwayah = defaultdict(list)
     for slug in sorted(eligible):
         riwayah = get_riwayah(slug)
         verses = get_coverage(slug)
-        by_riwayah[riwayah].append({
-            "slug": slug,
-            "name": get_display_name(slug),
-            "style": get_style(slug),
-            "source": get_audio_source_label(slug),
-            "verses": f"{verses:,}",
-            "num_examples": verses,
-        })
+        by_riwayah[riwayah].append(
+            {
+                "slug": slug,
+                "name": get_display_name(slug),
+                "style": get_style(slug),
+                "source": get_audio_source_label(slug),
+                "verses": f"{verses:,}",
+                "num_examples": verses,
+            }
+        )
     return by_riwayah
 
 
@@ -995,8 +1037,7 @@ def update_dataset_readme():
     for riwayah in sorted(by_riwayah):
         for info in by_riwayah[riwayah]:
             data_files_lines.append(
-                f"  - split: {info['slug']}\n"
-                f"    path: {riwayah}/{info['slug']}-*"
+                f"  - split: {info['slug']}\n    path: {riwayah}/{info['slug']}-*"
             )
             split_lines.append(
                 f"  - name: {info['slug']}\n"
@@ -1007,16 +1048,12 @@ def update_dataset_readme():
     # Replace configs block (riwayah configs + reciters catalog)
     configs_str = "configs:\n" + "".join(
         f"- config_name: {riwayah}\n  data_files:\n"
-        + "\n".join(df for df in data_files_lines
-                    if f"path: {riwayah}/" in df)
+        + "\n".join(df for df in data_files_lines if f"path: {riwayah}/" in df)
         + "\n"
         for riwayah in sorted(by_riwayah)
     )
     configs_str += (
-        "- config_name: reciters\n"
-        "  data_files:\n"
-        "  - split: all\n"
-        "    path: reciters/all-*\n"
+        "- config_name: reciters\n  data_files:\n  - split: all\n    path: reciters/all-*\n"
     )
     yaml_text = re.sub(
         r"configs:\n(?:- config_name:.*\n(?:  .*\n)*)*",
@@ -1089,10 +1126,11 @@ def update_dataset_readme():
 
     # Segmented = reciters with segments.json on disk
     seg_dir = ROOT / "data" / "recitation_segments"
-    segmented_slugs = {
-        d.name for d in seg_dir.iterdir()
-        if d.is_dir() and (d / "segments.json").exists()
-    } if seg_dir.is_dir() else set()
+    segmented_slugs = (
+        {d.name for d in seg_dir.iterdir() if d.is_dir() and (d / "segments.json").exists()}
+        if seg_dir.is_dir()
+        else set()
+    )
     segmented_count = len(segmented_slugs)
     unsegmented_slugs = all_slugs - segmented_slugs
     unsegmented_count = len(unsegmented_slugs)
@@ -1104,8 +1142,12 @@ def update_dataset_readme():
     if cache_path.exists():
         try:
             cache = json.loads(cache_path.read_text())
-            unseg_hours = round(sum(cache[s]["duration_s"] for s in unsegmented_slugs if s in cache) / 3600)
-            seg_hours = round(sum(cache[s]["duration_s"] for s in segmented_slugs if s in cache) / 3600)
+            unseg_hours = round(
+                sum(cache[s]["duration_s"] for s in unsegmented_slugs if s in cache) / 3600
+            )
+            seg_hours = round(
+                sum(cache[s]["duration_s"] for s in segmented_slugs if s in cache) / 3600
+            )
         except Exception as e:
             log.warning("Could not read audio durations cache: %s", e)
 
@@ -1119,7 +1161,9 @@ def update_dataset_readme():
 
     # Riwayat badge
     riwayat_total_path = ROOT / "data" / "riwayat.json"
-    riwayat_total = len(json.loads(riwayat_total_path.read_text())) if riwayat_total_path.exists() else 20
+    riwayat_total = (
+        len(json.loads(riwayat_total_path.read_text())) if riwayat_total_path.exists() else 20
+    )
     body = re.sub(
         r"Riwayat-\d+(%20%2F%20)\d+",
         rf"Riwayat-{len(riwayat_with_data)}\g<1>{riwayat_total}",
@@ -1152,13 +1196,18 @@ def update_dataset_readme():
 def delete_reciter(slug):
     """Delete a reciter's parquet data from HF dataset."""
     from huggingface_hub import CommitOperationDelete
+
     api = HfApi(token=HF_TOKEN)
     riwayah = get_riwayah(slug)
     prefix = f"{riwayah}/{slug}-"
     try:
-        all_files = list(api.list_repo_tree(
-            REPO_ID, path_in_repo=riwayah, repo_type="dataset",
-        ))
+        all_files = list(
+            api.list_repo_tree(
+                REPO_ID,
+                path_in_repo=riwayah,
+                repo_type="dataset",
+            )
+        )
         to_delete = [
             CommitOperationDelete(path_in_repo=f.rfilename)
             for f in all_files
@@ -1168,7 +1217,8 @@ def delete_reciter(slug):
             log.warning("No files found matching %s*", prefix)
         else:
             api.create_commit(
-                repo_id=REPO_ID, repo_type="dataset",
+                repo_id=REPO_ID,
+                repo_type="dataset",
                 operations=to_delete,
                 commit_message=f"Remove {riwayah}/{slug}",
             )
@@ -1189,7 +1239,9 @@ sys.path.insert(0, str(ROOT / "qua_shared"))
 
 
 def _load_existing_shard_hashes(
-    slug: str, *, hash_key: str = "shard_hashes",
+    slug: str,
+    *,
+    hash_key: str = "shard_hashes",
 ) -> dict[str, str]:
     """Read shard hashes for `slug` out of the dataset's manifest.json.gz.
 
@@ -1202,11 +1254,14 @@ def _load_existing_shard_hashes(
     requested key is missing (manifest predates the parallel hashes block).
     """
     import gzip
+
     from huggingface_hub import HfApi
+
     api = HfApi(token=HF_TOKEN)
     try:
         path = api.hf_hub_download(
-            repo_id=REPO_ID, repo_type="dataset",
+            repo_id=REPO_ID,
+            repo_type="dataset",
             filename="manifest.json.gz",
         )
     except Exception:
@@ -1246,20 +1301,17 @@ def build_timestamp_shards(slug: str, *, dry_run: bool = False) -> None:
     no commit is made. Useful for CI safety + local verification.
     """
     from huggingface_hub import (
-        CommitOperationDelete,
         CommitOperationAdd,
+        CommitOperationDelete,
         HfApi,
     )
-
     from timestamps_shards import gzip_shard, sha256_hex, split_to_shards
 
     audio_type = detect_audio_source(slug)
     if not audio_type:
         sys.exit(f"Could not detect audio source for {slug}")
 
-    ts_path = (
-        ROOT / "data" / "timestamps" / audio_type / slug / "timestamps_full.json"
-    )
+    ts_path = ROOT / "data" / "timestamps" / audio_type / slug / "timestamps_full.json"
     if not ts_path.exists():
         sys.exit(f"timestamps_full.json not found for {slug} at {ts_path}")
     log.info("Loading %s", ts_path)
@@ -1268,8 +1320,8 @@ def build_timestamp_shards(slug: str, *, dry_run: bool = False) -> None:
     template, audio_cat, audio_manifest = _resolve_audio_template(slug, audio_type)
     if not template:
         log.warning(
-            "%s: url_template empty — falling back to per-verse audio_urls "
-            "in shard _meta", slug,
+            "%s: url_template empty — falling back to per-verse audio_urls in shard _meta",
+            slug,
         )
 
     shards = split_to_shards(
@@ -1295,15 +1347,23 @@ def build_timestamp_shards(slug: str, *, dry_run: bool = False) -> None:
 
     log.info(
         "%s: %d total chapters, %d to upload, %d to delete (unchanged: %d)",
-        slug, len(shards), len(to_upload), len(to_delete),
+        slug,
+        len(shards),
+        len(to_upload),
+        len(to_delete),
         len(shards) - len(to_upload),
     )
 
     if dry_run:
         log.info("[dry-run] would upload:")
         for c in sorted(to_upload, key=int):
-            log.info("  + timestamps/%s/%s.json.gz  (%d bytes, sha %s...)",
-                     slug, c, len(payloads[c]), new_hashes[c][:12])
+            log.info(
+                "  + timestamps/%s/%s.json.gz  (%d bytes, sha %s...)",
+                slug,
+                c,
+                len(payloads[c]),
+                new_hashes[c][:12],
+            )
         log.info("[dry-run] would delete:")
         for c in sorted(to_delete, key=int):
             log.info("  - timestamps/%s/%s.json.gz", slug, c)
@@ -1315,22 +1375,25 @@ def build_timestamp_shards(slug: str, *, dry_run: bool = False) -> None:
 
     operations = []
     for c in to_upload:
-        operations.append(CommitOperationAdd(
-            path_in_repo=f"timestamps/{slug}/{c}.json.gz",
-            path_or_fileobj=payloads[c],
-        ))
+        operations.append(
+            CommitOperationAdd(
+                path_in_repo=f"timestamps/{slug}/{c}.json.gz",
+                path_or_fileobj=payloads[c],
+            )
+        )
     for c in to_delete:
-        operations.append(CommitOperationDelete(
-            path_in_repo=f"timestamps/{slug}/{c}.json.gz",
-        ))
+        operations.append(
+            CommitOperationDelete(
+                path_in_repo=f"timestamps/{slug}/{c}.json.gz",
+            )
+        )
 
     api = HfApi(token=HF_TOKEN)
     api.create_commit(
-        repo_id=REPO_ID, repo_type="dataset",
+        repo_id=REPO_ID,
+        repo_type="dataset",
         operations=operations,
-        commit_message=(
-            f"timestamps/{slug}: upload {len(to_upload)}, delete {len(to_delete)}"
-        ),
+        commit_message=(f"timestamps/{slug}: upload {len(to_upload)}, delete {len(to_delete)}"),
     )
     log.info("Pushed %d shard ops for %s", len(operations), slug)
 
@@ -1357,10 +1420,7 @@ def _resolve_segments_doc(slug: str) -> tuple[dict, str]:
         audio_cat = ts_audio_type.replace("_audio", "")
 
     if audio_cat not in ("by_surah", "by_ayah"):
-        sys.exit(
-            f"Could not determine audio category for {slug} "
-            f"(audio_source={audio_source!r})"
-        )
+        sys.exit(f"Could not determine audio category for {slug} (audio_source={audio_source!r})")
     return doc, audio_cat
 
 
@@ -1374,21 +1434,26 @@ def build_segment_shards(slug: str, *, dry_run: bool = False) -> None:
     ``manifest.reciters.<slug>._build.seg_shard_hashes`` for diff-skip.
     """
     from huggingface_hub import (
-        CommitOperationDelete,
         CommitOperationAdd,
+        CommitOperationDelete,
         HfApi,
     )
-
     from segments_shards import (
         gzip_shard as seg_gzip_shard,
+    )
+    from segments_shards import (
         sha256_hex as seg_sha256_hex,
+    )
+    from segments_shards import (
         split_to_shards as seg_split_to_shards,
     )
 
     detailed_doc, audio_cat = _resolve_segments_doc(slug)
 
     shards = seg_split_to_shards(
-        detailed_doc, reciter=slug, audio_category=audio_cat,
+        detailed_doc,
+        reciter=slug,
+        audio_category=audio_cat,
     )
 
     new_hashes: dict[str, str] = {}
@@ -1405,15 +1470,23 @@ def build_segment_shards(slug: str, *, dry_run: bool = False) -> None:
 
     log.info(
         "%s: %d total chapters, %d to upload, %d to delete (unchanged: %d)",
-        slug, len(shards), len(to_upload), len(to_delete),
+        slug,
+        len(shards),
+        len(to_upload),
+        len(to_delete),
         len(shards) - len(to_upload),
     )
 
     if dry_run:
         log.info("[dry-run] would upload:")
         for c in sorted(to_upload, key=int):
-            log.info("  + segments/%s/%s.json.gz  (%d bytes, sha %s...)",
-                     slug, c, len(payloads[c]), new_hashes[c][:12])
+            log.info(
+                "  + segments/%s/%s.json.gz  (%d bytes, sha %s...)",
+                slug,
+                c,
+                len(payloads[c]),
+                new_hashes[c][:12],
+            )
         log.info("[dry-run] would delete:")
         for c in sorted(to_delete, key=int):
             log.info("  - segments/%s/%s.json.gz", slug, c)
@@ -1425,22 +1498,25 @@ def build_segment_shards(slug: str, *, dry_run: bool = False) -> None:
 
     operations = []
     for c in to_upload:
-        operations.append(CommitOperationAdd(
-            path_in_repo=f"segments/{slug}/{c}.json.gz",
-            path_or_fileobj=payloads[c],
-        ))
+        operations.append(
+            CommitOperationAdd(
+                path_in_repo=f"segments/{slug}/{c}.json.gz",
+                path_or_fileobj=payloads[c],
+            )
+        )
     for c in to_delete:
-        operations.append(CommitOperationDelete(
-            path_in_repo=f"segments/{slug}/{c}.json.gz",
-        ))
+        operations.append(
+            CommitOperationDelete(
+                path_in_repo=f"segments/{slug}/{c}.json.gz",
+            )
+        )
 
     api = HfApi(token=HF_TOKEN)
     api.create_commit(
-        repo_id=REPO_ID, repo_type="dataset",
+        repo_id=REPO_ID,
+        repo_type="dataset",
         operations=operations,
-        commit_message=(
-            f"segments/{slug}: upload {len(to_upload)}, delete {len(to_delete)}"
-        ),
+        commit_message=(f"segments/{slug}: upload {len(to_upload)}, delete {len(to_delete)}"),
     )
     log.info("Pushed %d segment shard ops for %s", len(operations), slug)
 
@@ -1455,16 +1531,12 @@ def build_segment_shards(slug: str, *, dry_run: bool = False) -> None:
 # Local-only step (no CI caller); missing files are skipped with a warning below.
 # Tuple shape: (manifest_key, source_path, dataset_path, gzip).
 _RESOURCE_SPECS = [
-    ("qpc_hafs",
-     "qpc_hafs.json", "qpc_hafs.json.gz", True),
-    ("digital_khatt",
-     "digital_khatt_v2_script.json", "digital_khatt_v2_script.json.gz", True),
-    ("digital_khatt_otf",
-     "DigitalKhattV2.otf", "DigitalKhattV2.otf", False),
+    ("qpc_hafs", "qpc_hafs.json", "qpc_hafs.json.gz", True),
+    ("digital_khatt", "digital_khatt_v2_script.json", "digital_khatt_v2_script.json.gz", True),
+    ("digital_khatt_otf", "DigitalKhattV2.otf", "DigitalKhattV2.otf", False),
 ]
 _QUA_DATA_DIR = Path(
-    os.environ.get("QUA_ALIGNER_DATA_DIR")
-    or ROOT / "quranic-universal-aligner" / "data"
+    os.environ.get("QUA_ALIGNER_DATA_DIR") or ROOT / "quranic-universal-aligner" / "data"
 )
 
 
@@ -1483,11 +1555,14 @@ def _hash_file_payload(path: Path, *, gzip_it: bool) -> tuple[bytes, str]:
 def _load_existing_resource_hashes() -> dict[str, str]:
     """Return ``manifest._build.resource_hashes`` from the live manifest."""
     import gzip
+
     from huggingface_hub import HfApi
+
     api = HfApi(token=HF_TOKEN)
     try:
         path = api.hf_hub_download(
-            repo_id=REPO_ID, repo_type="dataset",
+            repo_id=REPO_ID,
+            repo_type="dataset",
             filename="manifest.json.gz",
         )
     except Exception:
@@ -1522,16 +1597,22 @@ def build_resources(*, dry_run: bool = False) -> None:
         if existing.get(key) == digest:
             log.info("resource %s: unchanged (sha %s...)", dst_name, digest[:12])
             continue
-        log.info("resource %s: %s (%d bytes, sha %s...)",
-                 dst_name, "would upload" if dry_run else "queued",
-                 len(body), digest[:12])
-        operations.append(CommitOperationAdd(
-            path_in_repo=dst_name, path_or_fileobj=body,
-        ))
+        log.info(
+            "resource %s: %s (%d bytes, sha %s...)",
+            dst_name,
+            "would upload" if dry_run else "queued",
+            len(body),
+            digest[:12],
+        )
+        operations.append(
+            CommitOperationAdd(
+                path_in_repo=dst_name,
+                path_or_fileobj=body,
+            )
+        )
 
     if dry_run:
-        log.info("[dry-run] resource hash plan: %s",
-                 {k: v[:12] for k, v in new_hashes.items()})
+        log.info("[dry-run] resource hash plan: %s", {k: v[:12] for k, v in new_hashes.items()})
         return
 
     if not operations:
@@ -1540,7 +1621,8 @@ def build_resources(*, dry_run: bool = False) -> None:
 
     api = HfApi(token=HF_TOKEN)
     api.create_commit(
-        repo_id=REPO_ID, repo_type="dataset",
+        repo_id=REPO_ID,
+        repo_type="dataset",
         operations=operations,
         commit_message=f"resources: upload {len(operations)} file(s)",
     )
@@ -1551,6 +1633,7 @@ def build_resources(*, dry_run: bool = False) -> None:
 # Deployment manifest (the catalog clients fetch on Inspector start)
 # ---------------------------------------------------------------------------
 
+
 def _list_dataset_chapters(slug: str, *, subdir: str = "timestamps") -> list[int]:
     """Return chapter numbers currently published under ``<subdir>/<slug>/``.
 
@@ -1558,13 +1641,18 @@ def _list_dataset_chapters(slug: str, *, subdir: str = "timestamps") -> list[int
     one that hasn't had a build run against it).
     """
     from huggingface_hub import HfApi
-    from huggingface_hub.errors import RepositoryNotFoundError, RemoteEntryNotFoundError
+    from huggingface_hub.errors import RemoteEntryNotFoundError, RepositoryNotFoundError
+
     api = HfApi(token=HF_TOKEN)
     try:
-        items = list(api.list_repo_tree(
-            REPO_ID, path_in_repo=f"{subdir}/{slug}",
-            repo_type="dataset", recursive=False,
-        ))
+        items = list(
+            api.list_repo_tree(
+                REPO_ID,
+                path_in_repo=f"{subdir}/{slug}",
+                repo_type="dataset",
+                recursive=False,
+            )
+        )
     except (RepositoryNotFoundError, RemoteEntryNotFoundError):
         return []
     except Exception as e:
@@ -1579,7 +1667,7 @@ def _list_dataset_chapters(slug: str, *, subdir: str = "timestamps") -> list[int
         if not base.endswith(".json.gz"):
             continue
         try:
-            chapters.append(int(base[:-len(".json.gz")]))
+            chapters.append(int(base[: -len(".json.gz")]))
         except ValueError:
             continue
     return sorted(chapters)
@@ -1588,13 +1676,18 @@ def _list_dataset_chapters(slug: str, *, subdir: str = "timestamps") -> list[int
 def _list_dataset_reciter_slugs(*, subdir: str = "timestamps") -> list[str]:
     """Return slugs that currently have a ``<subdir>/<slug>/`` directory on HF."""
     from huggingface_hub import HfApi
-    from huggingface_hub.errors import RepositoryNotFoundError, RemoteEntryNotFoundError
+    from huggingface_hub.errors import RemoteEntryNotFoundError, RepositoryNotFoundError
+
     api = HfApi(token=HF_TOKEN)
     try:
-        items = list(api.list_repo_tree(
-            REPO_ID, path_in_repo=subdir,
-            repo_type="dataset", recursive=False,
-        ))
+        items = list(
+            api.list_repo_tree(
+                REPO_ID,
+                path_in_repo=subdir,
+                repo_type="dataset",
+                recursive=False,
+            )
+        )
     except (RepositoryNotFoundError, RemoteEntryNotFoundError):
         return []
     except Exception as e:
@@ -1624,14 +1717,18 @@ def _local_reciter_state(slug: str) -> dict:
     poisoning the manifest.
     """
     sys.path.insert(0, str(ROOT))
-    from qua_shared.boundary_check import compute_boundary_mismatches  # noqa: E402
-
-    from timestamps_shards import gzip_shard, sha256_hex, split_to_shards
     from segments_shards import (
         gzip_shard as seg_gzip_shard,
+    )
+    from segments_shards import (
         sha256_hex as seg_sha256_hex,
+    )
+    from segments_shards import (
         split_to_shards as seg_split_to_shards,
     )
+    from timestamps_shards import gzip_shard, sha256_hex, split_to_shards
+
+    from qua_shared.boundary_check import compute_boundary_mismatches  # noqa: E402
 
     out: dict = {
         "validation": {"boundary_mismatches": []},
@@ -1672,16 +1769,15 @@ def _local_reciter_state(slug: str) -> dict:
     # the source file. The hashes match what --build-timestamps wrote.
     audio_cat = audio_type.replace("_audio", "")
     audio_manifest = _find_audio_manifest(slug) or {}
-    template = (
-        _derive_url_template(audio_manifest, audio_cat) if audio_manifest else ""
-    )
+    template = _derive_url_template(audio_manifest, audio_cat) if audio_manifest else ""
     shards = split_to_shards(
-        doc, reciter=slug, audio_category=audio_cat, url_template=template,
+        doc,
+        reciter=slug,
+        audio_category=audio_cat,
+        url_template=template,
         audio_urls_fallback=audio_manifest if not template else None,
     )
-    out["shard_hashes"] = {
-        str(ch): sha256_hex(gzip_shard(shard)) for ch, shard in shards.items()
-    }
+    out["shard_hashes"] = {str(ch): sha256_hex(gzip_shard(shard)) for ch, shard in shards.items()}
 
     # Segment shard hashes: same idea, computed from detailed.json. The
     # aligner preload UI consumes these via the manifest's
@@ -1695,11 +1791,12 @@ def _local_reciter_state(slug: str) -> dict:
             detailed_doc = None
         if detailed_doc is not None:
             seg_shards = seg_split_to_shards(
-                detailed_doc, reciter=slug, audio_category=audio_cat,
+                detailed_doc,
+                reciter=slug,
+                audio_category=audio_cat,
             )
             out["seg_shard_hashes"] = {
-                str(ch): seg_sha256_hex(seg_gzip_shard(shard))
-                for ch, shard in seg_shards.items()
+                str(ch): seg_sha256_hex(seg_gzip_shard(shard)) for ch, shard in seg_shards.items()
             }
     return out
 
@@ -1719,7 +1816,7 @@ def build_manifest(*, dry_run: bool = False) -> None:
     and their `timestamps/<slug>/` trees deleted in the same commit.
     """
     import gzip
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from huggingface_hub import (
         CommitOperationAdd,
@@ -1748,20 +1845,16 @@ def build_manifest(*, dry_run: bool = False) -> None:
     orphans_ts = sorted(on_hf_slugs_ts - eligible)
     orphans_seg = sorted(on_hf_slugs_seg - eligible)
     if orphans_ts:
-        log.warning("Orphans on HF timestamps/ (will delete): %s",
-                    ", ".join(orphans_ts))
+        log.warning("Orphans on HF timestamps/ (will delete): %s", ", ".join(orphans_ts))
     if orphans_seg:
-        log.warning("Orphans on HF segments/ (will delete): %s",
-                    ", ".join(orphans_seg))
+        log.warning("Orphans on HF segments/ (will delete): %s", ", ".join(orphans_seg))
 
     reciters_block: dict[str, dict] = {}
     for slug in sorted(eligible):
         rec = by_slug.get(slug, {})
         audio_cat = rec.get("audio_cat", "")
         manifest_data = _find_audio_manifest(slug) or {}
-        url_template = (
-            _derive_url_template(manifest_data, audio_cat) if manifest_data else ""
-        )
+        url_template = _derive_url_template(manifest_data, audio_cat) if manifest_data else ""
 
         chapters = _list_dataset_chapters(slug, subdir="timestamps")
         seg_chapters = _list_dataset_chapters(slug, subdir="segments")
@@ -1805,19 +1898,20 @@ def build_manifest(*, dry_run: bool = False) -> None:
     commit_sha = ""
     try:
         import subprocess
+
         commit_sha = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True,
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            text=True,
         ).strip()
     except Exception:
         pass
 
     manifest = {
         "schema_version": 1,
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "commit": commit_sha,
-        "dataset_base_url": (
-            f"https://huggingface.co/datasets/{REPO_ID}/resolve/main"
-        ),
+        "dataset_base_url": (f"https://huggingface.co/datasets/{REPO_ID}/resolve/main"),
         "shard_url_template": "timestamps/{reciter}/{chapter}.json.gz",
         # Aligner Space preload reads this; Inspector ignores unknown keys.
         "segments_shard_url_template": "segments/{reciter}/{chapter}.json.gz",
@@ -1832,39 +1926,50 @@ def build_manifest(*, dry_run: bool = False) -> None:
 
     body = gzip.compress(
         json.dumps(manifest, ensure_ascii=False).encode("utf-8"),
-        compresslevel=6, mtime=0,
+        compresslevel=6,
+        mtime=0,
     )
     log.info(
         "manifest.json.gz: %d bytes (%d reciters, %d ts orphans, %d seg orphans)",
-        len(body), len(reciters_block), len(orphans_ts), len(orphans_seg),
+        len(body),
+        len(reciters_block),
+        len(orphans_ts),
+        len(orphans_seg),
     )
 
-    operations: list = [CommitOperationAdd(
-        path_in_repo="manifest.json.gz", path_or_fileobj=body,
-    )]
+    operations: list = [
+        CommitOperationAdd(
+            path_in_repo="manifest.json.gz",
+            path_or_fileobj=body,
+        )
+    ]
     # Recursive delete of orphan reciter trees — separate per subdir since the
     # ts and segments rollouts can drift during transitions.
     for slug in orphans_ts:
         for ch in _list_dataset_chapters(slug, subdir="timestamps"):
-            operations.append(CommitOperationDelete(
-                path_in_repo=f"timestamps/{slug}/{ch}.json.gz",
-            ))
+            operations.append(
+                CommitOperationDelete(
+                    path_in_repo=f"timestamps/{slug}/{ch}.json.gz",
+                )
+            )
     for slug in orphans_seg:
         for ch in _list_dataset_chapters(slug, subdir="segments"):
-            operations.append(CommitOperationDelete(
-                path_in_repo=f"segments/{slug}/{ch}.json.gz",
-            ))
+            operations.append(
+                CommitOperationDelete(
+                    path_in_repo=f"segments/{slug}/{ch}.json.gz",
+                )
+            )
 
     if dry_run:
-        log.info("[dry-run] would push manifest + %d orphan deletion(s)",
-                 len(operations) - 1)
+        log.info("[dry-run] would push manifest + %d orphan deletion(s)", len(operations) - 1)
         log.info("[dry-run] sample reciter: %s", next(iter(reciters_block.values()), {}))
         return
 
     total_orphans = len(orphans_ts) + len(orphans_seg)
     api = HfApi(token=HF_TOKEN)
     api.create_commit(
-        repo_id=REPO_ID, repo_type="dataset",
+        repo_id=REPO_ID,
+        repo_type="dataset",
         operations=operations,
         commit_message=(
             f"manifest: {len(reciters_block)} reciters"
@@ -1897,11 +2002,18 @@ def build_reciters_config():
             seen[slug] = rec
 
     data = {
-        "reciter": [], "is_timestamped": [],
-        "name_en": [], "name_ar": [],
-        "riwayah": [], "style": [], "country": [], "source": [],
-        "audio_category": [], "url_template": [],
-        "coverage_surahs": [], "coverage_ayahs": [],
+        "reciter": [],
+        "is_timestamped": [],
+        "name_en": [],
+        "name_ar": [],
+        "riwayah": [],
+        "style": [],
+        "country": [],
+        "source": [],
+        "audio_category": [],
+        "url_template": [],
+        "coverage_surahs": [],
+        "coverage_ayahs": [],
     }
 
     # Timestamped reciters first; secondary sort by slug (alphabetical).
@@ -1922,8 +2034,7 @@ def build_reciters_config():
             if manifest:
                 entries = {k for k in manifest if k != "_meta"}
                 coverage_ayahs = sum(
-                    len(surah_info[s]["verses"])
-                    for s in entries if s in surah_info
+                    len(surah_info[s]["verses"]) for s in entries if s in surah_info
                 )
             else:
                 coverage_ayahs = 0
@@ -1950,20 +2061,22 @@ def build_reciters_config():
 
     log.info("Built %d reciters catalog rows", len(data["reciter"]))
 
-    features = Features({
-        "reciter": Value("string"),
-        "is_timestamped": Value("bool"),
-        "name_en": Value("string"),
-        "name_ar": Value("string"),
-        "riwayah": Value("string"),
-        "style": Value("string"),
-        "country": Value("string"),
-        "source": Value("string"),
-        "audio_category": Value("string"),
-        "url_template": Value("string"),
-        "coverage_surahs": Value("int32"),
-        "coverage_ayahs": Value("int32"),
-    })
+    features = Features(
+        {
+            "reciter": Value("string"),
+            "is_timestamped": Value("bool"),
+            "name_en": Value("string"),
+            "name_ar": Value("string"),
+            "riwayah": Value("string"),
+            "style": Value("string"),
+            "country": Value("string"),
+            "source": Value("string"),
+            "audio_category": Value("string"),
+            "url_template": Value("string"),
+            "coverage_surahs": Value("int32"),
+            "coverage_ayahs": Value("int32"),
+        }
+    )
 
     ds = Dataset.from_dict(data, features=features)
 
@@ -1989,28 +2102,44 @@ def main():
     parser.add_argument("--all", action="store_true", help="Upload all eligible reciters")
     parser.add_argument("--delete", metavar="SLUG", help="Delete a reciter from the dataset")
     parser.add_argument("--update-readme", action="store_true", help="Update dataset card only")
-    parser.add_argument("--reciters-config", action="store_true",
-                        help="Build and push reciters catalog config")
-    parser.add_argument("--build-timestamps", metavar="SLUG",
-                        help="Split timestamps_full.json into per-chapter "
-                             "gzipped shards and upload changed ones")
-    parser.add_argument("--build-segments", metavar="SLUG",
-                        help="Split detailed.json into per-chapter gzipped "
-                             "segments shards (consumed by aligner Space "
-                             "preload mode) and upload changed ones")
-    parser.add_argument("--build-resources", action="store_true",
-                        help="Upload qpc/dk/font global resources to "
-                             "dataset root (idempotent — hash-skip)")
-    parser.add_argument("--build-manifest", action="store_true",
-                        help="Build and push manifest.json.gz "
-                             "(catalog + per-reciter validation + hashes)")
-    parser.add_argument("--full-rebuild", action="store_true",
-                        help="Force full audio re-download (skip smart reuse)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print upload/delete plan without committing "
-                             "(applies to --build-timestamps, "
-                             "--build-segments, --build-resources, "
-                             "--build-manifest)")
+    parser.add_argument(
+        "--reciters-config", action="store_true", help="Build and push reciters catalog config"
+    )
+    parser.add_argument(
+        "--build-timestamps",
+        metavar="SLUG",
+        help="Split timestamps_full.json into per-chapter gzipped shards and upload changed ones",
+    )
+    parser.add_argument(
+        "--build-segments",
+        metavar="SLUG",
+        help="Split detailed.json into per-chapter gzipped "
+        "segments shards (consumed by aligner Space "
+        "preload mode) and upload changed ones",
+    )
+    parser.add_argument(
+        "--build-resources",
+        action="store_true",
+        help="Upload qpc/dk/font global resources to dataset root (idempotent — hash-skip)",
+    )
+    parser.add_argument(
+        "--build-manifest",
+        action="store_true",
+        help="Build and push manifest.json.gz (catalog + per-reciter validation + hashes)",
+    )
+    parser.add_argument(
+        "--full-rebuild",
+        action="store_true",
+        help="Force full audio re-download (skip smart reuse)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print upload/delete plan without committing "
+        "(applies to --build-timestamps, "
+        "--build-segments, --build-resources, "
+        "--build-manifest)",
+    )
     args = parser.parse_args()
 
     if not HF_TOKEN:

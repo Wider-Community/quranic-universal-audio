@@ -16,15 +16,21 @@ from __future__ import annotations
 
 # (asset name, human description). Folded into one collapsible "Schemas" accordion.
 _TIER_SCHEMAS: list[tuple[str, str]] = [
-    ("verse_timestamps.json.gz",
-     'Tier 1. Positional `"surah:ayah": [start_ms, end_ms]`. '
-     "Times are source-relative milliseconds."),
-    ("word_timestamps.json.gz",
-     'Tier 2. Positional `"surah:ayah": [[start, end], [[widx, start, end], ...]]`. '
-     "Source-relative ms."),
-    ("letter_timestamps.json.gz",
-     'Tier 3. Positional `"surah:ayah": [[start, end], [words], '
-     '[[widx, char, start, end], ...]]`. Source-relative ms.'),
+    (
+        "verse_timestamps.json.gz",
+        'Tier 1. Positional `"surah:ayah": [start_ms, end_ms]`. '
+        "Times are source-relative milliseconds.",
+    ),
+    (
+        "word_timestamps.json.gz",
+        'Tier 2. Positional `"surah:ayah": [[start, end], [[widx, start, end], ...]]`. '
+        "Source-relative ms.",
+    ),
+    (
+        "letter_timestamps.json.gz",
+        'Tier 3. Positional `"surah:ayah": [[start, end], [words], '
+        "[[widx, char, start, end], ...]]`. Source-relative ms.",
+    ),
 ]
 
 
@@ -81,8 +87,9 @@ def _plural(n: int) -> str:
     return "" if n == 1 else "s"
 
 
-def _summary_sentence(previous_version: str | None,
-                      n_added: int, n_refresh: int, n_carried: int) -> str:
+def _summary_sentence(
+    previous_version: str | None, n_added: int, n_refresh: int, n_carried: int
+) -> str:
     total = n_added + n_refresh + n_carried
     if previous_version is None:
         return f"First release — **{total}** recitation{_plural(total)}."
@@ -96,12 +103,19 @@ def _summary_sentence(previous_version: str | None,
     return f"{body[0].upper()}{body[1:]}{tail} over {previous_version}."
 
 
-def render_changelog(*, version: str, previous_version: str | None,
-                     release_date: str, members: list[dict],
-                     static_refs_changed_keys: tuple[str, ...] | list[str] = (),
-                     operator_note: str | None = None,
-                     owner: str = "", repo: str = "", hf_dataset: str = "",
-                     license_id: str = "CC-BY-4.0") -> str:
+def render_changelog(
+    *,
+    version: str,
+    previous_version: str | None,
+    release_date: str,
+    members: list[dict],
+    static_refs_changed_keys: tuple[str, ...] | list[str] = (),
+    operator_note: str | None = None,
+    owner: str = "",
+    repo: str = "",
+    hf_dataset: str = "",
+    license_id: str = "CC-BY-4.0",
+) -> str:
     """Return the full release body markdown.
 
     ``members`` entries carry display names + change_kind + coverage; see the module
@@ -120,13 +134,18 @@ def render_changelog(*, version: str, previous_version: str | None,
         out.append("")
 
     if added:
-        out.extend(_accordion(
-            f"➕ Added — {len(added)} recitation{_plural(len(added))}",
-            _member_table(added)))
+        out.extend(
+            _accordion(
+                f"➕ Added — {len(added)} recitation{_plural(len(added))}", _member_table(added)
+            )
+        )
     if refreshed:
-        out.extend(_accordion(
-            f"↻ Refreshed — {len(refreshed)} recitation{_plural(len(refreshed))}",
-            _member_table(refreshed)))
+        out.extend(
+            _accordion(
+                f"↻ Refreshed — {len(refreshed)} recitation{_plural(len(refreshed))}",
+                _member_table(refreshed),
+            )
+        )
     if carried:
         out.extend([f"{carried} carried / unchanged.", ""])
 

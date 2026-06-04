@@ -31,8 +31,9 @@ import os
 import shutil
 import tempfile
 import threading
+from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
-from typing import Iterator, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -301,11 +302,7 @@ class BucketBackend:
         mount: str | Path | None = None,
     ) -> None:
         self._bucket_id = bucket_id
-        self._token = (
-            token
-            or os.environ.get("INSPECTOR_HF_TOKEN")
-            or os.environ.get("HF_TOKEN")
-        )
+        self._token = token or os.environ.get("INSPECTOR_HF_TOKEN") or os.environ.get("HF_TOKEN")
         self._mount: Path | None = Path(mount).resolve() if mount else None
         self._write_lock = threading.Lock()
 
@@ -540,7 +537,7 @@ class BucketBackend:
             p = it.path
             if prefix and not p.startswith(prefix):
                 continue
-            tail = p[len(prefix):] if prefix else p
+            tail = p[len(prefix) :] if prefix else p
             if not tail:
                 continue
             names.add(tail.split("/", 1)[0])
@@ -653,6 +650,7 @@ def get_backend() -> StorageBackend:
             # straight to get_backend() get the speedup without explicit
             # plumbing.
             from services.storage.auto_mount import auto_mount
+
             auto_mount()
             mount = os.environ.get("INSPECTOR_BUCKET_MOUNT") or None
             backend = BucketBackend(
@@ -660,7 +658,9 @@ def get_backend() -> StorageBackend:
                 mount=mount,
             )
             logging.getLogger("inspector").info(
-                "storage backend: bucket=%s mount=%s", bucket_id, mount or "(api)",
+                "storage backend: bucket=%s mount=%s",
+                bucket_id,
+                mount or "(api)",
             )
         else:
             raise RuntimeError(f"unknown INSPECTOR_BACKEND={kind!r}")

@@ -52,11 +52,15 @@ def _ok(locations, t0=0.0, step=0.5):
     words = []
     for i, loc in enumerate(locations):
         s = t0 + i * step
-        words.append({
-            "location": loc, "start": s, "end": s + step,
-            "letters": [{"char": "x", "start": s, "end": s + step}],
-            "phones": [{"phone": "P", "start": s, "end": s + step}],
-        })
+        words.append(
+            {
+                "location": loc,
+                "start": s,
+                "end": s + step,
+                "letters": [{"char": "x", "start": s, "end": s + step}],
+                "phones": [{"phone": "P", "start": s, "end": s + step}],
+            }
+        )
     return {"status": "ok", "words": words}
 
 
@@ -73,11 +77,13 @@ def _chapter_loopback():
 
 
 def _results_loopback():
-    return {0: [
-        (0, _ok(["1:1:1", "1:1:2"])),
-        (1, _ok(["1:1:3", "1:1:4"], t0=1.5)),
-        (2, _ok(["1:2:1", "1:2:2", "1:2:3"], t0=2.5)),
-    ]}
+    return {
+        0: [
+            (0, _ok(["1:1:1", "1:1:2"])),
+            (1, _ok(["1:1:3", "1:1:4"], t0=1.5)),
+            (2, _ok(["1:2:1", "1:2:2", "1:2:3"], t0=2.5)),
+        ]
+    }
 
 
 def _v2_chapter_shard(chapter, results, *, cat=CAT, meta_extra=None):
@@ -117,8 +123,7 @@ def test_reshape_converges_with_writer_segment_shape():
 
     # Writer face: build the segment-array shard directly from the v2 doc.
     raw = build_raw_v2([chapter], results, CAT)
-    writer_shard = build_segment_shards(
-        raw, audio_category=CAT, src_meta=PROVENANCE)[1]
+    writer_shard = build_segment_shards(raw, audio_category=CAT, src_meta=PROVENANCE)[1]
 
     # Reshape face: take the on-bucket per-chapter occurrence-list shard and
     # reshape it. Provenance lives on the shard's own _meta.
@@ -142,12 +147,14 @@ def test_reshape_converges_multi_verse_recitation_order():
             {"matched_ref": "2:3:1-2:3:2", "time_start": 2000, "time_end": 3000},
         ],
     }
-    results = {0: [
-        (0, _ok(["2:1:1", "2:1:2"], t0=5.0)),
-        (1, _ok(["2:2:1"], t0=0.0)),
-        (2, _ok(["2:1:3", "2:1:4"], t0=6.5)),
-        (3, _ok(["2:3:1", "2:3:2"], t0=2.0)),
-    ]}
+    results = {
+        0: [
+            (0, _ok(["2:1:1", "2:1:2"], t0=5.0)),
+            (1, _ok(["2:2:1"], t0=0.0)),
+            (2, _ok(["2:1:3", "2:1:4"], t0=6.5)),
+            (3, _ok(["2:3:1", "2:3:2"], t0=2.0)),
+        ]
+    }
     raw = build_raw_v2([chapter], results, CAT)
     writer_shard = build_segment_shards(raw, audio_category=CAT, src_meta=PROVENANCE)[2]
     reshaped = reshape_shard(_v2_chapter_shard(chapter, results))
@@ -184,8 +191,15 @@ def test_reshaped_meta_is_slim_and_drops_path_fields():
     meta = reshaped["_meta"]
     assert meta["schema_version"] == 2 and meta["chapter"] == 1
     assert meta["audio_category"] == "by_surah"
-    for k in ("padding", "beam", "method", "aligner_model", "shared_cmvn",
-              "audio_source", "created_at"):
+    for k in (
+        "padding",
+        "beam",
+        "method",
+        "aligner_model",
+        "shared_cmvn",
+        "audio_source",
+        "created_at",
+    ):
         assert k in meta
     # path/audio fields dropped even though the v2 shard carried them
     for k in ("reciter", "url_template", "audio_urls"):

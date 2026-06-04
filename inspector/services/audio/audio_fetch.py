@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import logging
 
-from . import audio_meta
-from .peaks_slim import unpack_slim_envelope
 from services.storage import storage_paths
 from services.storage.hf_bucket import get_backend
+
+from . import audio_meta
+from .peaks_slim import unpack_slim_envelope
 
 logger = logging.getLogger(__name__)
 

@@ -38,7 +38,7 @@ class AdminRequestRow(BaseModel):
     slug: str | None = None
     # existing_combo_edit (slug-based) | existing_reciter_new_combo | new_reciter
     kind: str
-    status: str                              # pending | accepted | returned | discarded
+    status: str  # pending | accepted | returned | discarded
     submitted_at: str
     resolved_at: str | None = None
     resolution_reason: str | None = None
@@ -65,10 +65,10 @@ class AdminRequestRow(BaseModel):
     # per-caller overlay
     viewed: bool = False
     requester_role: str | None = None
-    requester_login: str | None = None       # owner-only
+    requester_login: str | None = None  # owner-only
     requester_hf_user_id: str | None = None  # owner-only
     resolved_by_role: str | None = None
-    resolved_by_login: str | None = None     # owner-only
+    resolved_by_login: str | None = None  # owner-only
 
 
 class AdminRequestCounts(BaseModel):

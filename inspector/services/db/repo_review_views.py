@@ -10,9 +10,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from . import _serde
+from . import _serde, repo_access
 from .connection import get_conn
-from . import repo_access
 
 
 def mark_viewed(slug: str, hf_user_id: str, *, at: datetime | None = None) -> None:
@@ -39,10 +38,14 @@ def viewed_at_for_user(hf_user_id: str) -> dict[str, str]:
     in-memory against the assembled rows — cheaper than per-row LEFT JOIN
     on a query already touching three tables.
     """
-    rows = get_conn().execute(
-        "SELECT slug, viewed_at FROM review_views WHERE hf_user_id = ?",
-        (hf_user_id,),
-    ).fetchall()
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT slug, viewed_at FROM review_views WHERE hf_user_id = ?",
+            (hf_user_id,),
+        )
+        .fetchall()
+    )
     return {r["slug"]: r["viewed_at"] for r in rows}
 
 
@@ -61,22 +64,26 @@ def count_unviewed_for_user(hf_user_id: str) -> int:
     COUNT over ``delivery_states`` LEFT JOIN the open claim — cheap enough for
     the polled dot.
     """
-    return int(get_conn().execute(
-        "SELECT COUNT(*) FROM delivery_states ds "
-        "LEFT JOIN claims c ON c.slug = ds.slug AND c.released_at IS NULL "
-        "WHERE ("
-        "    (ds.state = 'under_review' AND c.marked_ready_at IS NOT NULL) "
-        "    OR ds.last_job_finished_at IS NOT NULL"
-        "  ) "
-        "  AND NOT EXISTS ("
-        "    SELECT 1 FROM review_views v "
-        "    WHERE v.slug = ds.slug "
-        "      AND v.hf_user_id = ? "
-        "      AND v.viewed_at >= MAX("
-        "        IFNULL(CASE WHEN ds.state = 'under_review' "
-        "                    THEN c.marked_ready_at END, ''), "
-        "        IFNULL(ds.last_job_finished_at, '')"
-        "      )"
-        "  )",
-        (hf_user_id,),
-    ).fetchone()[0])
+    return int(
+        get_conn()
+        .execute(
+            "SELECT COUNT(*) FROM delivery_states ds "
+            "LEFT JOIN claims c ON c.slug = ds.slug AND c.released_at IS NULL "
+            "WHERE ("
+            "    (ds.state = 'under_review' AND c.marked_ready_at IS NOT NULL) "
+            "    OR ds.last_job_finished_at IS NOT NULL"
+            "  ) "
+            "  AND NOT EXISTS ("
+            "    SELECT 1 FROM review_views v "
+            "    WHERE v.slug = ds.slug "
+            "      AND v.hf_user_id = ? "
+            "      AND v.viewed_at >= MAX("
+            "        IFNULL(CASE WHEN ds.state = 'under_review' "
+            "                    THEN c.marked_ready_at END, ''), "
+            "        IFNULL(ds.last_job_finished_at, '')"
+            "      )"
+            "  )",
+            (hf_user_id,),
+        )
+        .fetchone()[0]
+    )

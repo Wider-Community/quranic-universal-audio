@@ -24,8 +24,9 @@ import pytest
 os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 
-def _seed_state_row(slug: str, *, assignee_hf_id: str | None = None,
-                    state: str = "awaiting_review"):
+def _seed_state_row(
+    slug: str, *, assignee_hf_id: str | None = None, state: str = "awaiting_review"
+):
     """Seed a single state row for ``slug`` into the SQLite substrate."""
     from tests.conftest import _seed_state
 

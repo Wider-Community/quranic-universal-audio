@@ -27,9 +27,7 @@ def test_matrix_renders_every_registered_capability():
     from services.admin import permissions as permissions_service
 
     matrix = permissions_service.build_matrix()
-    rendered = {
-        cap.id for group in matrix.groups for cap in group.capabilities
-    }
+    rendered = {cap.id for group in matrix.groups for cap in group.capabilities}
     assert rendered == set(CAPABILITIES_BY_ID), (
         "Permissions matrix is out of sync with the registry: "
         f"missing={set(CAPABILITIES_BY_ID) - rendered}, "

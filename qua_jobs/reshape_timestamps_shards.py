@@ -110,8 +110,7 @@ def plan_directory(src_dir: Path, *, out_dir: Path | None = None) -> RunReport:
 
     for path in gz_shards:
         chapter = _chapter_of(path)
-        outcome = ShardOutcome(path=path, chapter=chapter, kind="?",
-                               in_bytes=path.stat().st_size)
+        outcome = ShardOutcome(path=path, chapter=chapter, kind="?", in_bytes=path.stat().st_size)
         try:
             shard = _load_shard(path)
         except Exception as exc:  # noqa: BLE001 — report, don't crash the batch
@@ -168,8 +167,10 @@ def _natural(path: Path) -> tuple[int, str]:
 def _print_report(report: RunReport, src_dir: Path, *, wrote: bool) -> None:
     """Human-readable dry-run summary to stdout."""
     print(f"src: {src_dir}")
-    print(f"{'chapter':>8}  {'shape':<8}  {'in_seg':>7}  {'out_seg':>7}  "
-          f"{'in_kb':>8}  {'out_kb':>8}  {'Δ%':>6}  note")
+    print(
+        f"{'chapter':>8}  {'shape':<8}  {'in_seg':>7}  {'out_seg':>7}  "
+        f"{'in_kb':>8}  {'out_kb':>8}  {'Δ%':>6}  note"
+    )
     n_reshape = n_skip = n_err = 0
     for o in report.outcomes:
         if o.error and not o.skipped:
@@ -182,17 +183,22 @@ def _print_report(report: RunReport, src_dir: Path, *, wrote: bool) -> None:
         if o.in_bytes and o.out_bytes:
             delta = f"{(o.out_bytes - o.in_bytes) / o.in_bytes * 100:+.1f}"
         note = o.error or ("already target" if o.kind == "target" else "")
-        print(f"{o.chapter:>8}  {o.kind:<8}  {o.in_segs:>7}  {o.out_segs:>7}  "
-              f"{o.in_bytes / 1024:>8.1f}  {o.out_bytes / 1024:>8.1f}  "
-              f"{delta:>6}  {note}")
+        print(
+            f"{o.chapter:>8}  {o.kind:<8}  {o.in_segs:>7}  {o.out_segs:>7}  "
+            f"{o.in_bytes / 1024:>8.1f}  {o.out_bytes / 1024:>8.1f}  "
+            f"{delta:>6}  {note}"
+        )
 
     print()
-    print(f"shards: {len(report.outcomes)}  reshaped: {n_reshape}  "
-          f"skipped: {n_skip}  errors: {n_err}")
+    print(
+        f"shards: {len(report.outcomes)}  reshaped: {n_reshape}  skipped: {n_skip}  errors: {n_err}"
+    )
     if report.stale_json:
         print()
-        print(f"DELETE-LIST — {len(report.stale_json)} stale shadowed .json "
-              "(report only; bucket deletion is a deferred coordinated step):")
+        print(
+            f"DELETE-LIST — {len(report.stale_json)} stale shadowed .json "
+            "(report only; bucket deletion is a deferred coordinated step):"
+        )
         for p in report.stale_json:
             print(f"  rm  {p.name}")
     if wrote:
@@ -204,17 +210,21 @@ def _print_report(report: RunReport, src_dir: Path, *, wrote: bool) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Dry-run reshape v2 occurrence-list timestamps shards into "
-                    "the segment-array shape (LOCAL only; never writes the bucket)."
+        "the segment-array shape (LOCAL only; never writes the bucket)."
     )
     parser.add_argument(
-        "--src-dir", type=Path, required=True,
+        "--src-dir",
+        type=Path,
+        required=True,
         help="Local directory of <chapter>.json.gz shards (e.g. a synced mirror "
-             "or .local/ts_migration_audit/raw/reciters/<slug>/timestamps).",
+        "or .local/ts_migration_audit/raw/reciters/<slug>/timestamps).",
     )
     parser.add_argument(
-        "--out-dir", type=Path, default=None,
+        "--out-dir",
+        type=Path,
+        default=None,
         help="Optional LOCAL directory to write reshaped .gz shards for "
-             "inspection. Omit for a pure dry-run (no writes).",
+        "inspection. Omit for a pure dry-run (no writes).",
     )
     args = parser.parse_args(argv)
 
@@ -222,8 +232,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: --src-dir {args.src_dir} is not a directory", file=sys.stderr)
         return 2
     if args.out_dir is not None and args.out_dir.resolve() == args.src_dir.resolve():
-        print("error: --out-dir must differ from --src-dir (no in-place writes)",
-              file=sys.stderr)
+        print("error: --out-dir must differ from --src-dir (no in-place writes)", file=sys.stderr)
         return 2
 
     report = plan_directory(args.src_dir, out_dir=args.out_dir)

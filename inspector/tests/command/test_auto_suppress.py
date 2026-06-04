@@ -10,21 +10,20 @@ registry whenever an op carried ``command.sourceCategory`` (or
 
 These tests assert the new contract per per-segment category.
 """
+
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
 from tests.conftest import PER_SEGMENT_CATEGORIES
 
-
-
-import os
-
 os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
 
 @pytest.mark.parametrize("category", PER_SEGMENT_CATEGORIES, ids=PER_SEGMENT_CATEGORIES)
 def test_edit_from_card_does_not_write_ignored_categories(
@@ -46,13 +45,15 @@ def test_edit_from_card_does_not_write_ignored_categories(
 
     seg_payload = []
     for s in fixture["entries"][0]["segments"]:
-        seg_payload.append({
-            "time_start": s["time_start"],
-            "time_end": s["time_end"],
-            "matched_ref": s["matched_ref"],
-            "confidence": s["confidence"],
-            "segment_uid": s["segment_uid"],
-        })
+        seg_payload.append(
+            {
+                "time_start": s["time_start"],
+                "time_end": s["time_end"],
+                "matched_ref": s["matched_ref"],
+                "confidence": s["confidence"],
+                "segment_uid": s["segment_uid"],
+            }
+        )
 
     payload = {
         "full_replace": True,
@@ -78,7 +79,9 @@ def test_edit_from_card_does_not_write_ignored_categories(
         headers=_HEADERS,
     )
 
-    saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
+    saved = json.loads(
+        (tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8")
+    )
     target = next(s for s in saved["entries"][0]["segments"] if s["segment_uid"] == target_uid)
     persisted_ic = target.get("ignored_categories") or []
     assert category not in persisted_ic, (
@@ -87,9 +90,7 @@ def test_edit_from_card_does_not_write_ignored_categories(
     )
 
 
-def test_explicit_ignore_payload_still_persists(
-    signed_in_client, tmp_reciter_dir, load_fixture
-):
+def test_explicit_ignore_payload_still_persists(signed_in_client, tmp_reciter_dir, load_fixture):
     """When the payload explicitly carries ``ignored_categories``, it persists.
 
     The decoupling only removes the defensive registry-driven write. The
@@ -139,6 +140,8 @@ def test_explicit_ignore_payload_still_persists(
         headers=_HEADERS,
     )
 
-    saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
+    saved = json.loads(
+        (tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8")
+    )
     target = next(s for s in saved["entries"][0]["segments"] if s["segment_uid"] == target_uid)
     assert "low_confidence" in (target.get("ignored_categories") or [])

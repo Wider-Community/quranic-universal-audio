@@ -1,4 +1,5 @@
 """GET /api/seg/edit-history/<reciter> tests (MUST-1)."""
+
 from __future__ import annotations
 
 import json
@@ -26,11 +27,13 @@ def test_history_response_shape(flask_client, tmp_reciter_dir, load_expected):
         assert isinstance(body, (dict, list))
         if isinstance(body, dict) and expected_keys:
             from tests.conftest import assert_keys_superset
+
             assert_keys_superset(expected_keys, list(body.keys()), "GET /api/seg/edit-history")
 
 
 def test_history_record_includes_classified_issues_on_snapshots(
-    signed_in_client, tmp_reciter_dir,
+    signed_in_client,
+    tmp_reciter_dir,
 ):
     """Phase 2: history record snapshots persist classified_issues."""
     reciter = "fixture_reciter"
@@ -39,7 +42,20 @@ def test_history_record_includes_classified_issues_on_snapshots(
 
     save = client.post(
         f"/api/seg/save/{reciter}/112",
-        data=json.dumps({"full_replace": True, "segments": [], "operations": [{"op_id": "op-1", "type": "edit_reference", "command": {"type": "edit_reference", "segmentUid": "x"}, "snapshots": {"before": {}, "after": {}}}]}),
+        data=json.dumps(
+            {
+                "full_replace": True,
+                "segments": [],
+                "operations": [
+                    {
+                        "op_id": "op-1",
+                        "type": "edit_reference",
+                        "command": {"type": "edit_reference", "segmentUid": "x"},
+                        "snapshots": {"before": {}, "after": {}},
+                    }
+                ],
+            }
+        ),
         headers=_SAVE_HEADERS,
     )
     assert save.status_code == 200
@@ -77,6 +93,4 @@ def test_history_record_includes_patch_when_present(flask_client, tmp_reciter_di
         raise AssertionError("phase-5: no batches yet to inspect for patch field")
     for batch in batches:
         for op in batch.get("operations") or []:
-            assert "patch" in op, (
-                "Phase 5: edit-history must include patch on every op"
-            )
+            assert "patch" in op, "Phase 5: edit-history must include patch on every op"

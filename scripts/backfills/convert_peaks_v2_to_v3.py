@@ -20,6 +20,7 @@ Designed to run before re-upload in a download → migrate → re-upload
 workflow — the upload step ships the ``.json.gz`` files; orphaned plain
 ``.json`` files on the bucket need a separate ``delete`` pass.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,13 +40,13 @@ def _setup_paths() -> None:
     sys.path.insert(0, str(repo))
 
 
-def convert_dir(peaks_dir: Path, *, keep_legacy: bool,
-                apply: bool) -> dict:
+def convert_dir(peaks_dir: Path, *, keep_legacy: bool, apply: bool) -> dict:
     """Convert every plain ``.json`` (no ``.gz``) under *peaks_dir*."""
     from services.audio.peaks_slim import pack_slim
 
     plain = sorted(
-        p for p in peaks_dir.iterdir()
+        p
+        for p in peaks_dir.iterdir()
         if p.is_file() and p.suffix == ".json" and not p.name.endswith(".json.gz")
     )
     if not plain:
@@ -93,26 +94,37 @@ def convert_dir(peaks_dir: Path, *, keep_legacy: bool,
         "Converted %d files: %d KB → %d KB (%.1f%% saved); deleted %d legacy; "
         "skipped %d; %d errors",
         converted,
-        bytes_before // 1024, bytes_after // 1024,
+        bytes_before // 1024,
+        bytes_after // 1024,
         (1 - (bytes_after / max(bytes_before, 1))) * 100,
-        deleted, skipped, errors,
+        deleted,
+        skipped,
+        errors,
     )
 
     return {
-        "converted": converted, "deleted": deleted,
-        "skipped": skipped, "errors": errors,
-        "bytes_before": bytes_before, "bytes_after": bytes_after,
+        "converted": converted,
+        "deleted": deleted,
+        "skipped": skipped,
+        "errors": errors,
+        "bytes_before": bytes_before,
+        "bytes_after": bytes_after,
     }
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--dir", type=Path, required=True,
-                    help="Peaks directory (e.g. /tmp/<slug>/peaks/).")
-    ap.add_argument("--keep-legacy", action="store_true",
-                    help="Don't delete plain .json files after writing .json.gz.")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="Report what would change without writing.")
+    ap.add_argument(
+        "--dir", type=Path, required=True, help="Peaks directory (e.g. /tmp/<slug>/peaks/)."
+    )
+    ap.add_argument(
+        "--keep-legacy",
+        action="store_true",
+        help="Don't delete plain .json files after writing .json.gz.",
+    )
+    ap.add_argument(
+        "--dry-run", action="store_true", help="Report what would change without writing."
+    )
     args = ap.parse_args()
 
     logging.basicConfig(
@@ -124,8 +136,7 @@ def main() -> int:
     if not args.dir.is_dir():
         raise SystemExit(f"not a directory: {args.dir}")
 
-    result = convert_dir(args.dir, keep_legacy=args.keep_legacy,
-                          apply=not args.dry_run)
+    result = convert_dir(args.dir, keep_legacy=args.keep_legacy, apply=not args.dry_run)
     log.info("DONE: %s", result)
     return 0
 

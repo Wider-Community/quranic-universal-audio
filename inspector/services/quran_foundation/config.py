@@ -57,9 +57,7 @@ def preprod_client_secret() -> str:
 def redirect_uri() -> str:
     """Registered OAuth2 callback. Must match a redirect URI registered on
     the pre-prod client exactly. Override via ``QF_OAUTH_REDIRECT_URI``."""
-    return os.environ.get(
-        "QF_OAUTH_REDIRECT_URI", "http://localhost:5001/api/qf/callback"
-    ).strip()
+    return os.environ.get("QF_OAUTH_REDIRECT_URI", "http://localhost:5001/api/qf/callback").strip()
 
 
 def is_configured() -> bool:

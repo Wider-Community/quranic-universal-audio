@@ -3,6 +3,7 @@
 These assertions describe behavior that the existing classifier already
 implements; they pass at Phase 0 and continue to pass through every phase.
 """
+
 from __future__ import annotations
 
 import pytest

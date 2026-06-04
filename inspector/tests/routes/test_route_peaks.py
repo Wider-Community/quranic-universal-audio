@@ -14,6 +14,7 @@ What this exercises:
 - Per-URL cache + ``ThreadPoolExecutor`` fan-out — regression-tested against
   the lock-deadlock incident.
 """
+
 from __future__ import annotations
 
 import os
@@ -31,6 +32,7 @@ def _install_slim_peaks(backend, reciter: str, chapter: int, n_peaks: int = 60) 
     sitting next to it on the bucket.
     """
     from services.storage import storage_paths
+
     hd = {
         "schema_version": 2,
         "duration_ms": int(n_peaks * 1000 / 30),  # 30 bps source
@@ -49,6 +51,7 @@ def _install_slim_peaks(backend, reciter: str, chapter: int, n_peaks: int = 60) 
     # Reset audio_meta's process-level sidecar cache so the new manifest
     # is picked up by this test run.
     from services.audio import audio_meta
+
     audio_meta._clear_for_test()
 
 
@@ -64,7 +67,7 @@ def test_peaks_returns_slim_int8_envelope(flask_client, tmp_reciter_dir):
     body = res.get_json()
     assert body["complete"] is True
     assert body["peaks"], "expected non-empty peaks dict"
-    for url, doc in body["peaks"].items():
+    for _url, doc in body["peaks"].items():
         assert doc["q"] == "int8"
         assert isinstance(doc["peaks_b64"], str) and doc["peaks_b64"]
         assert isinstance(doc["n"], int) and doc["n"] > 0
@@ -143,6 +146,7 @@ def test_peaks_response_cache_survives_invalidate_seg_caches(flask_client, tmp_r
 
     # Manual cache pop is still available for explicit peaks rebuilds.
     from services.storage.cache import pop_reciter_peaks_response_cache
+
     pop_reciter_peaks_response_cache(reciter)
     assert get_peaks_response_cache(reciter, (112,)) is None
 
@@ -166,6 +170,7 @@ def test_peaks_no_lock_deadlock_on_misses(flask_client, tmp_reciter_dir):
     and asserts the response arrives within a reasonable wall-clock budget.
     """
     import time
+
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
     _install_slim_peaks(tmp_reciter_dir.backend, reciter, chapter=112)

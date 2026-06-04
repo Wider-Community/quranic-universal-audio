@@ -8,12 +8,16 @@ committed write transparently invalidates the entry.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 
 from qua_shared.schemas import (
-    Actor, AudioCategory, Delivery, ReciterEntry, Role,
+    Actor,
+    AudioCategory,
+    Delivery,
+    ReciterEntry,
+    Role,
 )
 from services import catalog as catalog_service
 from services import public_state as public_state_service
@@ -21,14 +25,23 @@ from services import public_state as public_state_service
 
 def _seed_one(slug="rec_a", reciter_id="rec_a", name="Reciter A"):
     from tests.conftest import _seed_catalog, _seed_state
+
     _seed_catalog(
         reciters=[ReciterEntry(reciter_id=reciter_id, name_en=name)],
-        deliveries=[Delivery(
-            slug=slug, reciter_id=reciter_id, riwayah="hafs", style="mur",
-            source="src", channel="ch", audio_category=AudioCategory.BY_SURAH,
-            chapter_count=114, added_at=datetime.now(timezone.utc),
-            added_by_hf_id="seed",
-        )],
+        deliveries=[
+            Delivery(
+                slug=slug,
+                reciter_id=reciter_id,
+                riwayah="hafs",
+                style="mur",
+                source="src",
+                channel="ch",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=datetime.now(UTC),
+                added_by_hf_id="seed",
+            )
+        ],
     )
     _seed_state(slug, state="catalogued", reciter_id=reciter_id)
 
@@ -38,7 +51,8 @@ def test_repeated_reads_hit_cache(monkeypatch):
     calls = []
     real_snapshot = catalog_service.snapshot
     monkeypatch.setattr(
-        catalog_service, "snapshot",
+        catalog_service,
+        "snapshot",
         lambda: (calls.append(1), real_snapshot())[1],
     )
 
@@ -57,7 +71,8 @@ def test_write_invalidates_cache(monkeypatch):
     calls = []
     real_snapshot = catalog_service.snapshot
     monkeypatch.setattr(
-        catalog_service, "snapshot",
+        catalog_service,
+        "snapshot",
         lambda: (calls.append(1), real_snapshot())[1],
     )
 
@@ -68,7 +83,8 @@ def test_write_invalidates_cache(monkeypatch):
     # A committed write bumps db_seq → next read must recompute.
     catalog_service.add_reciter(
         actor=Actor(hf_user_id="u-O", login_at_time="o", role=Role.OWNER),
-        reciter_id="rec_b", name_en="Reciter B",
+        reciter_id="rec_b",
+        name_en="Reciter B",
     )
     public_state_service.all_public_reciters()  # miss → 2 rebuilds
     assert len(calls) == 2

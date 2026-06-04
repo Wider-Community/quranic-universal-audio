@@ -32,7 +32,6 @@ import threading
 import time
 
 from qua_shared.schemas import Actor, ReciterState, Role
-
 from services.state import state as state_service
 from services.storage import storage_paths
 from services.storage.hf_bucket import get_backend
@@ -95,7 +94,9 @@ def hydrate_initial_seen() -> None:
             continue
         try:
             state_service.transition(
-                slug, "reciter.alignment_completed", actor=SYSTEM_ACTOR,
+                slug,
+                "reciter.alignment_completed",
+                actor=SYSTEM_ACTOR,
             )
             fired += 1
         except state_service.StateError:
@@ -104,8 +105,9 @@ def hydrate_initial_seen() -> None:
                 slug,
             )
     logger.info(
-        "auto_detect: hydrated initial seen set (%d slug(s), %d catch-up "
-        "transition(s) fired)", len(slugs), fired,
+        "auto_detect: hydrated initial seen set (%d slug(s), %d catch-up transition(s) fired)",
+        len(slugs),
+        fired,
     )
 
 
@@ -136,17 +138,21 @@ def reconcile_once() -> int:
             continue
         try:
             state_service.transition(
-                slug, "reciter.alignment_completed", actor=SYSTEM_ACTOR,
+                slug,
+                "reciter.alignment_completed",
+                actor=SYSTEM_ACTOR,
             )
             fired += 1
             transitioned.append(slug)
         except state_service.StateError:
             logger.exception(
-                "auto_detect: alignment_completed failed for slug=%s", slug,
+                "auto_detect: alignment_completed failed for slug=%s",
+                slug,
             )
     if fired:
         logger.info(
-            "auto_detect: fired alignment_completed for %d slug(s)", fired,
+            "auto_detect: fired alignment_completed for %d slug(s)",
+            fired,
         )
     return fired
 
@@ -165,7 +171,8 @@ def start_background_loop(interval_seconds: int = 60) -> threading.Thread:
 
     def _loop() -> None:
         logger.info(
-            "auto_detect: background loop started (interval=%ss)", interval_seconds,
+            "auto_detect: background loop started (interval=%ss)",
+            interval_seconds,
         )
         while True:
             try:

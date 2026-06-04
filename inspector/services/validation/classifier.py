@@ -42,18 +42,17 @@ Tie-breakers (B-1 / B-2 / B-3)
 - ``audio_bleeding``: ``seg_belongs_to_entry`` against the parsed entry-ref
   structure. Audio-URL comparisons are not part of the rule.
 """
+
 from __future__ import annotations
 
 from typing import Any
 
 from config import LOW_CONFIDENCE_DETAIL_THRESHOLD, LOW_CONFIDENCE_THRESHOLD
-from constants import MUQATTAAT_VERSES, QALQALA_LETTERS, STANDALONE_REFS, STANDALONE_WORDS
+from constants import MUQATTAAT_VERSES, STANDALONE_REFS, STANDALONE_WORDS
 from services.reference.quran_refs import dk_text_for_ref
-from utils.arabic_text import last_arabic_letter, strip_quran_deco
-from utils.references import seg_belongs_to_entry
-
 from services.validation.registry import PER_SEGMENT_CATEGORIES
-
+from utils.arabic_text import strip_quran_deco
+from utils.references import seg_belongs_to_entry
 
 # ---------------------------------------------------------------------------
 # Ignore filter
@@ -163,7 +162,13 @@ def _check_boundary_adj(
     if "is_boundary_adj" in seg:
         return bool(seg["is_boundary_adj"])
     return compute_is_boundary_adj(
-        seg, surah, s_ayah, s_word, e_word, single_word_verses, canonical,
+        seg,
+        surah,
+        s_ayah,
+        s_word,
+        e_word,
+        single_word_verses,
+        canonical,
     )
 
 
@@ -269,7 +274,11 @@ def classify_flags(
 
     if probe_failed_uids:
         seg_uid = seg.get("segment_uid", "")
-        if seg_uid and seg_uid in probe_failed_uids and not is_suppressed_for(seg, "low_confidence_v2"):
+        if (
+            seg_uid
+            and seg_uid in probe_failed_uids
+            and not is_suppressed_for(seg, "low_confidence_v2")
+        ):
             result["low_confidence_v2"] = True
 
     if s_ayah != e_ayah:
@@ -292,7 +301,10 @@ def classify_flags(
     if "qalqala_letter" in seg:
         qalqala_letter = seg["qalqala_letter"]
     else:
-        from services.qalqala import compute_qalqala_letter  # local import: avoid cycle at module load
+        from services.qalqala import (
+            compute_qalqala_letter,
+        )  # local import: avoid cycle at module load
+
         qalqala_letter = compute_qalqala_letter(seg)
     if qalqala_letter and not is_suppressed_for(seg, "qalqala"):
         result["qalqala"] = True
@@ -363,9 +375,16 @@ def classify_segment(
             e_word = d_e_word
 
     flags = classify_flags(
-        seg, entry_ref, is_by_ayah,
-        surah, s_ayah, e_ayah, s_word, e_word,
-        single_word_verses or set(), canonical,
+        seg,
+        entry_ref,
+        is_by_ayah,
+        surah,
+        s_ayah,
+        e_ayah,
+        s_word,
+        e_word,
+        single_word_verses or set(),
+        canonical,
         probe_failed_uids=probe_failed_uids,
     )
     return _flags_to_categories(flags, detail=detail)
@@ -423,9 +442,16 @@ def classify_segment_full(
             e_word = d_e_word
 
     flags = classify_flags(
-        seg, entry_ref, is_by_ayah,
-        surah, s_ayah, e_ayah, s_word, e_word,
-        single_word_verses or set(), canonical,
+        seg,
+        entry_ref,
+        is_by_ayah,
+        surah,
+        s_ayah,
+        e_ayah,
+        s_word,
+        e_word,
+        single_word_verses or set(),
+        canonical,
         probe_failed_uids=probe_failed_uids,
     )
     return {

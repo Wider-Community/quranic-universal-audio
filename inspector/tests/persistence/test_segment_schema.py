@@ -6,6 +6,7 @@ these tests assert the model parses every legitimate seg shape we
 encounter on disk + that ``model_dump(exclude_none=True)`` produces the
 slim emission shape Migration #5 specifies.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,6 @@ from qua_shared.schemas import (
     DetailedSegment,
     parse_detailed_segment,
 )
-
 
 # -- Sample seg shapes --------------------------------------------------
 
@@ -102,6 +102,7 @@ def test_legacy_seg_strips_dead_fields_on_read(caplog):
     unknown field stripped by the pre-validator. ``model_extra`` should be
     empty (extras handling = warn-then-strip, not silent-allow)."""
     import logging
+
     caplog.set_level(logging.INFO, logger="qua_shared.schemas._extras")
     m = DetailedSegment.model_validate(_legacy_seg())
     # Dead fields are gone — neither typed attributes nor extras.
@@ -132,22 +133,26 @@ def test_wrap_seg_validates():
 def test_time_end_before_time_start_fails():
     """time_end < time_start is corrupt data — must raise."""
     with pytest.raises(ValueError, match="time_end .* must be >= time_start"):
-        DetailedSegment.model_validate({
-            "time_start": 5000,
-            "time_end": 4000,
-            "matched_ref": "1:1:1",
-            "confidence": 1.0,
-        })
+        DetailedSegment.model_validate(
+            {
+                "time_start": 5000,
+                "time_end": 4000,
+                "matched_ref": "1:1:1",
+                "confidence": 1.0,
+            }
+        )
 
 
 def test_confidence_out_of_range_fails():
     with pytest.raises(ValueError):
-        DetailedSegment.model_validate({
-            "time_start": 0,
-            "time_end": 1000,
-            "matched_ref": "1:1:1",
-            "confidence": 1.5,  # out of [0, 1]
-        })
+        DetailedSegment.model_validate(
+            {
+                "time_start": 0,
+                "time_end": 1000,
+                "matched_ref": "1:1:1",
+                "confidence": 1.5,  # out of [0, 1]
+            }
+        )
 
 
 # -- Round-trip emission tests ----------------------------------------
@@ -171,8 +176,7 @@ def test_slim_seg_emits_slim_shape():
     assert out["is_boundary_adj"] is False
     # The four banned-or-deferred-drop fields are absent from input + None
     # default → must be absent from output.
-    for banned in ("matched_text", "phonemes_asr",
-                   "wrap_word_ranges", "segment_uid"):
+    for banned in ("matched_text", "phonemes_asr", "wrap_word_ranges", "segment_uid"):
         assert banned not in out, f"{banned} leaked into slim emission"
 
 
@@ -225,6 +229,7 @@ def test_entry_with_legacy_audio_field(caplog):
     """``entry.audio`` was dropped in Migration #5 — the pre-validator
     strips it on read with an INFO log; readers must not see it."""
     import logging
+
     caplog.set_level(logging.INFO, logger="qua_shared.schemas._extras")
     raw = {
         "_meta": {},
@@ -247,16 +252,17 @@ def test_entry_with_legacy_audio_field(caplog):
 # -- Real on-disk sample (optional; runs if a fixture is available) ----
 
 
-@pytest.mark.parametrize("fixture_name", [
-    "112-ikhlas.detailed.json",
-    "113-falaq.detailed.json",
-])
+@pytest.mark.parametrize(
+    "fixture_name",
+    [
+        "112-ikhlas.detailed.json",
+        "113-falaq.detailed.json",
+    ],
+)
 def test_on_disk_fixture_validates(fixture_name):
     """Validate the shipped fixtures parse via the schema — protects
     against schema regressions that would break tests using fixtures."""
-    fixture_path = (
-        Path(__file__).parents[2] / "tests" / "fixtures" / "segments" / fixture_name
-    )
+    fixture_path = Path(__file__).parents[2] / "tests" / "fixtures" / "segments" / fixture_name
     if not fixture_path.is_file():
         pytest.skip(f"fixture missing: {fixture_path}")
     raw = json.loads(fixture_path.read_text(encoding="utf-8"))

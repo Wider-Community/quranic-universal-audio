@@ -5,6 +5,7 @@ Flask entry point: creates app, registers blueprints, serves the Vite-built
 SPA shell (inspector/frontend/dist/) and cross-tab routes, and runs the
 startup sequence.
 """
+
 import argparse
 import logging
 import os
@@ -20,6 +21,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).parent.parent.resolve()
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
 
 # Local dev: hydrate process env from `<repo>/.env` if present. Production
 # (HF Space) gets its secrets from Space settings and the file is absent.
@@ -54,8 +56,7 @@ _load_dotenv_for_local_dev()
 # pytest (mirrors the audio-prefetch gate at module-load below). HF Space
 # deploys set INSPECTOR_BEHIND_PROXY=1, so they never auto-enable.
 if "INSPECTOR_DEV_MODE" not in os.environ:
-    if (os.environ.get("INSPECTOR_BEHIND_PROXY") != "1"
-            and "pytest" not in sys.modules):
+    if os.environ.get("INSPECTOR_BEHIND_PROXY") != "1" and "pytest" not in sys.modules:
         os.environ["INSPECTOR_DEV_MODE"] = "1"
 
 
@@ -73,37 +74,41 @@ import uuid
 
 from flask import Flask, g, jsonify, request, send_from_directory
 from flask_compress import Compress
+from routes import register_blueprints
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from config import (ANON_COOKIE_MAX_AGE, ANON_COOKIE_NAME, DEFAULT_PORT,
-                    FLASK_DEV_VALUE, FLASK_ENV_VAR, SERVER_HOST)
-from routes import register_blueprints
-from services import access as access_service
-from services import activity_state as activity_state_service
-from services import auto_detect as auto_detect_service
-from services import pending_requests as pending_requests_service
-from services import request_archive as request_archive_service
-from services import audit as audit_service
+from config import (
+    ANON_COOKIE_MAX_AGE,
+    ANON_COOKIE_NAME,
+    DEFAULT_PORT,
+    FLASK_DEV_VALUE,
+    FLASK_ENV_VAR,
+    SERVER_HOST,
+)
 from services import auth as auth_service
-from services import catalog as catalog_service
-from services import state as state_service
+from services import auto_detect as auto_detect_service
 from services.admin import visitors as visitor_analytics
 from services.data_loader import load_surah_info_lite
+from services.errors import Codes, error_body
+
 # Phonemizer was eagerly initialized here. It's now imported lazily inside
 # scripts/backfills/backfill_boundary_adj.py (the only remaining consumer).
 from services.secrets_guard import MissingSecret, get_session_secret
-from services.errors import Codes, error_body
 from services.state.state import InvalidTransition, NotAuthorizedForTransition, UnknownReciter
 from utils.json_response import orjson_response
-
 
 # ---------------------------------------------------------------------------
 # Structured logging
 # ---------------------------------------------------------------------------
 
-_LEVEL_SHORT = {"CRITICAL": "CRIT", "WARNING": "WARN", "INFO": "INFO",
-                "ERROR": "ERR ", "DEBUG": "DBG "}
+_LEVEL_SHORT = {
+    "CRITICAL": "CRIT",
+    "WARNING": "WARN",
+    "INFO": "INFO",
+    "ERROR": "ERR ",
+    "DEBUG": "DBG ",
+}
 
 
 class PlainFormatter(logging.Formatter):
@@ -133,8 +138,10 @@ def _configure_logging() -> None:
     """Install the plain formatter on the root logger (idempotent)."""
     root = logging.getLogger()
     # Avoid duplicate handlers on reload (Flask's reloader re-imports this module).
-    if any(isinstance(h, logging.StreamHandler) and isinstance(h.formatter, PlainFormatter)
-           for h in root.handlers):
+    if any(
+        isinstance(h, logging.StreamHandler) and isinstance(h.formatter, PlainFormatter)
+        for h in root.handlers
+    ):
         return
     # Replace any pre-existing stream handlers (e.g. Flask's default) so we
     # don't double-print every record under the reloader.
@@ -196,9 +203,7 @@ def _assert_single_worker() -> None:
             continue
         for token in raw.replace("=", " ").split():
             if token.isdigit() and int(token) > 1:
-                raise RuntimeError(
-                    f"Inspector requires a single worker (saw {token!r} via env)."
-                )
+                raise RuntimeError(f"Inspector requires a single worker (saw {token!r} via env).")
     argv = list(sys.argv)
     for i, a in enumerate(argv):
         if a in ("-w", "--workers") and i + 1 < len(argv):
@@ -207,18 +212,14 @@ def _assert_single_worker() -> None:
             except ValueError:
                 continue
             if n > 1:
-                raise RuntimeError(
-                    f"Inspector requires -w 1 (got -w {n})."
-                )
+                raise RuntimeError(f"Inspector requires -w 1 (got -w {n}).")
         elif a.startswith("--workers="):
             try:
                 n = int(a.split("=", 1)[1])
             except ValueError:
                 continue
             if n > 1:
-                raise RuntimeError(
-                    f"Inspector requires --workers=1 (got {a})."
-                )
+                raise RuntimeError(f"Inspector requires --workers=1 (got {a}).")
 
 
 _assert_single_worker()
@@ -318,6 +319,7 @@ def _set_anon_cookie(resp):
 # clear feedback rather than a hard crash.
 # ---------------------------------------------------------------------------
 
+
 def _boot_substrate() -> None:
     """Boot the SQLite substrate (the source of truth), then the idempotent
     boot-scan + opt-in daemons.
@@ -348,9 +350,7 @@ def _boot_substrate() -> None:
         ver = _db.init_db()  # open writer + run migrations (fail-fast)
         logger.info("db substrate: ready at schema v%s", ver)
     except Exception:  # noqa: BLE001
-        logger.exception(
-            "db substrate init failed; /healthz will report db_open:false"
-        )
+        logger.exception("db substrate init failed; /healthz will report db_open:false")
         if not deployed:
             raise
         return
@@ -390,6 +390,7 @@ def _boot_substrate() -> None:
     # route still works.
     try:
         from services import tajweed as _tj
+
         _tj.init_phonemizer()
     except Exception as e:  # noqa: BLE001
         logger.warning("tajweed phonemizer warm-init failed: %s", e)
@@ -403,6 +404,7 @@ def _boot_substrate() -> None:
         try:
             from services.admin.jobs import base as _jobs_base
             from services.admin.jobs import hf_publish as _hf_publish_jobs
+
             _hf_publish_jobs.register()
             _jobs_base.start_poll_worker()
             logger.info("release-job poll worker started")
@@ -416,6 +418,7 @@ _boot_substrate()
 # ---------------------------------------------------------------------------
 # Error handlers — preserve {error: str} envelope across all routes
 # ---------------------------------------------------------------------------
+
 
 @app.errorhandler(HTTPException)
 def _handle_http_exception(e: HTTPException):
@@ -468,10 +471,7 @@ def _handle_unexpected_exception(e: Exception):
 # Static / index routes
 # ---------------------------------------------------------------------------
 
-_BUILD_HINT = (
-    "Frontend not built. Run:\n"
-    "  cd inspector/frontend && npm ci && npm run build\n"
-)
+_BUILD_HINT = "Frontend not built. Run:\n  cd inspector/frontend && npm ci && npm run build\n"
 
 
 @app.route("/")
@@ -485,6 +485,7 @@ def index():
 # ---------------------------------------------------------------------------
 # Cross-tab routes (not under any single tab's namespace)
 # ---------------------------------------------------------------------------
+
 
 @app.route("/api/surah-info")
 def get_surah_info():

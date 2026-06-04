@@ -35,7 +35,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
 # ----------------------------------------------------------------------
 # Tiers (matrix columns). OWNER is intentionally absent — superuser.
 # ----------------------------------------------------------------------
@@ -69,21 +68,16 @@ class Capability(BaseModel):
     default_grants: dict[str, bool] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _validate_shape(self) -> "Capability":
+    def _validate_shape(self) -> Capability:
         keys = set(self.default_grants)
         if not keys <= set(TIERS):
             raise ValueError(
-                f"capability {self.id!r}: default_grants has unknown tiers "
-                f"{keys - set(TIERS)!r}"
+                f"capability {self.id!r}: default_grants has unknown tiers {keys - set(TIERS)!r}"
             )
         if self.anon_eligible and ANONYMOUS not in keys:
-            raise ValueError(
-                f"capability {self.id!r}: anon_eligible but no anonymous default"
-            )
+            raise ValueError(f"capability {self.id!r}: anon_eligible but no anonymous default")
         if not self.anon_eligible and ANONYMOUS in keys:
-            raise ValueError(
-                f"capability {self.id!r}: anonymous default on a non-anon cap"
-            )
+            raise ValueError(f"capability {self.id!r}: anonymous default on a non-anon cap")
         return self
 
     def applicable(self, tier: str) -> bool:
@@ -154,230 +148,336 @@ CAPABILITIES: tuple[Capability, ...] = (
     #        (timestamps / segments / peaks) are deliberately NOT gated to
     #        avoid touching tangled published-content hot paths. ---
     _c(
-        "view.catalog", G_VIEW, "Browse the catalog",
+        "view.catalog",
+        G_VIEW,
+        "Browse the catalog",
         "See the reciter catalog on the dashboard (the reciter list + "
         "per-reciter detail). Turn anonymous off to make the site private.",
-        anon=True, contributor=True, maintainer=True,
+        anon=True,
+        contributor=True,
+        maintainer=True,
     ),
     _c(
-        "view.public_activity", G_VIEW, "See the activity rail",
+        "view.public_activity",
+        G_VIEW,
+        "See the activity rail",
         "Read the public Recent Activity feed on the dashboard.",
-        anon=True, contributor=True, maintainer=True,
+        anon=True,
+        contributor=True,
+        maintainer=True,
     ),
-
     # --- B. Reciter lifecycle ---
     _c(
-        "catalog.add", G_LIFECYCLE, "Add a reciter",
+        "catalog.add",
+        G_LIFECYCLE,
+        "Add a reciter",
         "Create a new reciter/recitation entry in the catalog.",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "catalog.edit", G_LIFECYCLE, "Edit catalog metadata",
+        "catalog.edit",
+        G_LIFECYCLE,
+        "Edit catalog metadata",
         "Change a reciter's catalog fields (names, riwayah, style, country).",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "reciter.publish", G_LIFECYCLE, "Publish a recitation",
-        "Publish a marked-ready recitation so it goes for timestamp "
-        "generation and becomes public.",
-        contributor=False, maintainer=True,
+        "reciter.publish",
+        G_LIFECYCLE,
+        "Publish a recitation",
+        "Publish a marked-ready recitation so it goes for timestamp generation and becomes public.",
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "reciter.unpublish", G_LIFECYCLE, "Unpublish a recitation",
+        "reciter.unpublish",
+        G_LIFECYCLE,
+        "Unpublish a recitation",
         "Pull a published recitation back to review.",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "reciter.unlock_for_revision", G_LIFECYCLE, "Unlock for revision",
+        "reciter.unlock_for_revision",
+        G_LIFECYCLE,
+        "Unlock for revision",
         "Reopen a published recitation for further edits.",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "reciter.discard", G_LIFECYCLE, "Discard a recitation",
+        "reciter.discard",
+        G_LIFECYCLE,
+        "Discard a recitation",
         "Hide a recitation from the public dashboard (soft delete).",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "reciter.undiscard", G_LIFECYCLE, "Restore a discarded recitation",
+        "reciter.undiscard",
+        G_LIFECYCLE,
+        "Restore a discarded recitation",
         "Bring a discarded recitation back into public view.",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
-
     # --- C. Requests & intake ---
     _c(
-        "request.submit", G_REQUESTS, "Submit a request",
+        "request.submit",
+        G_REQUESTS,
+        "Submit a request",
         "Ask for a new recitation to be aligned, or submit an intake "
         "(new combination / new reciter) via the wizard.",
-        contributor=True, maintainer=True,
+        contributor=True,
+        maintainer=True,
     ),
     _c(
-        "request.review", G_REQUESTS, "Review the request queue",
+        "request.review",
+        G_REQUESTS,
+        "Review the request queue",
         "Open the Requests compartment and read submitted requests.",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "request.reject_soft", G_REQUESTS, "Send a request back",
+        "request.reject_soft",
+        G_REQUESTS,
+        "Send a request back",
         "Return a pending request to the requester for correction.",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
     _c(
-        "request.reject_hard", G_REQUESTS, "Discard a request",
+        "request.reject_hard",
+        G_REQUESTS,
+        "Discard a request",
         "Reject and discard a pending request (hides the combination).",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
     _c(
-        "intake.accept", G_REQUESTS, "Accept an intake",
+        "intake.accept",
+        G_REQUESTS,
+        "Accept an intake",
         "Approve a new-combination / new-reciter intake for offline ingest.",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
     _c(
-        "intake.probe", G_REQUESTS, "Probe an intake source",
+        "intake.probe",
+        G_REQUESTS,
+        "Probe an intake source",
         "Run a reachability check against an intake's audio source.",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
     _c(
-        "intake.resolve", G_REQUESTS, "Resolve an intake",
+        "intake.resolve",
+        G_REQUESTS,
+        "Resolve an intake",
         "Return or discard a slugless intake request.",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
-
     # --- D. Claims & review ---
     _c(
-        "claim.acquire", G_CLAIMS, "Claim a recitation",
+        "claim.acquire",
+        G_CLAIMS,
+        "Claim a recitation",
         "Take an available recitation for review (becomes its reviewer).",
-        contributor=True, maintainer=True,
+        contributor=True,
+        maintainer=True,
     ),
     _c(
-        "claim.mark_ready", G_CLAIMS, "Mark a claim ready",
+        "claim.mark_ready",
+        G_CLAIMS,
+        "Mark a claim ready",
         "Submit your reviewed recitation as ready for an admin to publish.",
-        contributor=True, maintainer=True,
+        contributor=True,
+        maintainer=True,
     ),
     _c(
-        "claim.mark_ready_skip_gates", G_CLAIMS, "Skip mark-ready validation gates",
+        "claim.mark_ready_skip_gates",
+        G_CLAIMS,
+        "Skip mark-ready validation gates",
         "Submit mark-ready without satisfying the form checklist or the "
         "zero-count blocking-validation gate. Owners always hold this; "
         "granting it to other tiers lets them bypass the safety rails — "
         "use sparingly.",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
     _c(
-        "claim.unmark_ready", G_CLAIMS, "Unmark a claim",
+        "claim.unmark_ready",
+        G_CLAIMS,
+        "Unmark a claim",
         "Reopen your own marked-ready recitation to keep editing.",
-        contributor=True, maintainer=True,
+        contributor=True,
+        maintainer=True,
     ),
     _c(
-        "segment.edit", G_CLAIMS, "Edit your claimed recitation",
-        "Trim, split, merge, and re-reference segments on a recitation you "
-        "hold the claim for.",
-        contributor=True, maintainer=True,
+        "segment.edit",
+        G_CLAIMS,
+        "Edit your claimed recitation",
+        "Trim, split, merge, and re-reference segments on a recitation you hold the claim for.",
+        contributor=True,
+        maintainer=True,
     ),
     _c(
-        "segment.edit_as_admin", G_CLAIMS, "Edit any recitation under review",
+        "segment.edit_as_admin",
+        G_CLAIMS,
+        "Edit any recitation under review",
         "Edit a recitation that is under review regardless of who claimed it.",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "review.send_back", G_CLAIMS, "Send a recitation back",
+        "review.send_back",
+        G_CLAIMS,
+        "Send a recitation back",
         "Reject a marked-ready recitation and return it for more review.",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "claim.force_release", G_CLAIMS, "Force-release a claim",
+        "claim.force_release",
+        G_CLAIMS,
+        "Force-release a claim",
         "Forcibly remove another user's claim on a recitation.",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
     _c(
-        "claim.reassign", G_CLAIMS, "Reassign a claim",
+        "claim.reassign",
+        G_CLAIMS,
+        "Reassign a claim",
         "Transfer a recitation's claim to a different reviewer.",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
     _c(
-        "user.lookup", G_CLAIMS, "Look up an HF user",
+        "user.lookup",
+        G_CLAIMS,
+        "Look up an HF user",
         "Resolve a Hugging Face login to a user (used by the reassign flow).",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
-
     # --- E. Roles & access ---
     _c(
-        "users.view", G_ROLES, "View the users list",
+        "users.view",
+        G_ROLES,
+        "View the users list",
         "Open the Users compartment, per-user detail, and visitor stats.",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "roles.assign_maintainer", G_ROLES, "Manage maintainers",
+        "roles.assign_maintainer",
+        G_ROLES,
+        "Manage maintainers",
         "Grant, revoke, or update the maintainer role on other users.",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "roles.assign_owner", G_ROLES, "Manage owners",
+        "roles.assign_owner",
+        G_ROLES,
+        "Manage owners",
         "Grant, revoke, or update the owner role on other users.",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
-
     # --- F. Activity & moderation ---
     _c(
-        "activity.delete", G_MODERATION, "Delete activity cards",
+        "activity.delete",
+        G_MODERATION,
+        "Delete activity cards",
         "Tombstone (hide for everyone) an entry on the public activity rail.",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
-
     # --- G. Admin surfaces ---
     _c(
-        "reviews.view", G_ADMIN, "View the reviews queue",
-        "Open the Reviews compartment — oversight of every recitation's "
-        "review state.",
-        contributor=False, maintainer=True,
+        "reviews.view",
+        G_ADMIN,
+        "View the reviews queue",
+        "Open the Reviews compartment — oversight of every recitation's review state.",
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "reviews.generate_timestamps", G_ADMIN, "Generate timestamps",
+        "reviews.generate_timestamps",
+        G_ADMIN,
+        "Generate timestamps",
         "Launch the MFA alignment job for a marked-ready recitation (first "
         "publish) or an already-released one (regenerate), writing per-chapter "
         "timestamps to the bucket. First publish auto-releases; regenerate keeps "
         "it released and flags its HF/GH releases stale for re-publish (also "
         "requires the Publish capability).",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "timestamps.view_unreleased", G_ADMIN, "Preview unreleased timestamps",
+        "timestamps.view_unreleased",
+        G_ADMIN,
+        "Preview unreleased timestamps",
         "View generated timestamps in the Timestamps tab for recitations "
         "not yet released (owner preview before publish).",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
     _c(
-        "timestamps.view_validation", G_ADMIN, "View validation flags",
+        "timestamps.view_validation",
+        G_ADMIN,
+        "View validation flags",
         "See the verse-level low-confidence accordion on the Timestamps tab "
         "(multi-beam alignment flags from the generate-timestamps job). "
         "Independent of unreleased preview — a holder without "
         "view_unreleased still sees flags for released recitations only.",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        MANAGE_PERMISSIONS, G_ADMIN, "Manage permissions",
+        MANAGE_PERMISSIONS,
+        G_ADMIN,
+        "Manage permissions",
         "See and change this Permissions tab. Owner-only and fixed — it is "
         "the recovery anchor, so it can never be delegated or turned off.",
-        contributor=False, maintainer=False, owner_only_fixed=True,
+        contributor=False,
+        maintainer=False,
+        owner_only_fixed=True,
     ),
-
     # --- H. Releases & distribution (v2) ---
     _c(
-        "release.publish_hf", G_RELEASES, "Publish to HF dataset",
+        "release.publish_hf",
+        G_RELEASES,
+        "Publish to HF dataset",
         "Push a recitation's data to the public HF dataset (per-recitation track).",
-        contributor=False, maintainer=True,
+        contributor=False,
+        maintainer=True,
     ),
     _c(
-        "release.cut_gh", G_RELEASES, "Cut a GH release",
+        "release.cut_gh",
+        G_RELEASES,
+        "Cut a GH release",
         "Cut a new global GitHub release snapshot containing every currently "
         "eligible recitation. Owner-only by default — it's the public-facing "
         "version bump.",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
-
     # --- I. Identity disclosure ---
     _c(
-        "identity.see_actor", G_IDENTITY, "See who did what",
+        "identity.see_actor",
+        G_IDENTITY,
+        "See who did what",
         "Reveal the actor's login and id on the activity rail and request "
         "queue (otherwise identity is redacted).",
-        contributor=False, maintainer=False,
+        contributor=False,
+        maintainer=False,
     ),
 )
 
@@ -385,9 +485,7 @@ CAPABILITIES: tuple[Capability, ...] = (
 CAPABILITIES_BY_ID: dict[str, Capability] = {c.id: c for c in CAPABILITIES}
 
 #: Group labels in display order (first appearance in CAPABILITIES).
-GROUP_ORDER: tuple[str, ...] = tuple(
-    dict.fromkeys(c.group for c in CAPABILITIES)
-)
+GROUP_ORDER: tuple[str, ...] = tuple(dict.fromkeys(c.group for c in CAPABILITIES))
 
 
 def get(capability_id: str) -> Capability | None:

@@ -10,16 +10,17 @@ filesystem access to ``RECITATION_SEGMENTS_PATH``. Static reference data
 ``INSPECTOR_DATA_DIR`` and is read directly.
 """
 
+import threading
+
+from adapters.detailed_json import (
+    load_entries_from_bytes as _load_detailed_entries_from_bytes,
+)
 from config import (
     DK_SCRIPT_PATH,
     SURAH_INFO_PATH,
 )
-from adapters.detailed_json import (
-    load_entries_from_bytes as _load_detailed_entries_from_bytes,
-)
 from constants import STOP_SIGNS
 from services.storage import cache, data_dir, static_refs
-import threading
 
 _detailed_locks: dict[str, threading.Lock] = {}
 _detailed_locks_guard = threading.Lock()
@@ -38,6 +39,7 @@ def _detailed_lock(reciter: str) -> threading.Lock:
 # QPC / Digital Khatt
 # ---------------------------------------------------------------------------
 
+
 def load_qpc() -> dict[str, dict]:
     """Load and cache qpc_hafs.json.
 
@@ -49,6 +51,7 @@ def load_qpc() -> dict[str, dict]:
     if cached is not None:
         return cached
     import orjson
+
     raw = static_refs.load_qpc_bytes()
     data = orjson.loads(raw) if raw else {}
     cache.set_qpc_cache(data)
@@ -62,6 +65,7 @@ def load_dk() -> dict[str, dict]:
         return cached
     if DK_SCRIPT_PATH.exists():
         import orjson
+
         data = orjson.loads(DK_SCRIPT_PATH.read_bytes())
     else:
         data = {}
@@ -98,6 +102,7 @@ def get_dk_words_flat() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # Segments
 # ---------------------------------------------------------------------------
+
 
 def resolve_pad(meta: dict) -> tuple[int, int, int]:
     """Resolve VAD pad fields from ``_meta`` with alias-on-read.
@@ -247,6 +252,7 @@ def load_auto_split(reciter: str) -> tuple[dict[str, dict], dict | None]:
 # Word counts and surah info
 # ---------------------------------------------------------------------------
 
+
 def get_word_counts() -> dict[tuple[int, int], int]:
     """Load and cache word counts from surah_info.json.
 
@@ -260,6 +266,7 @@ def get_word_counts() -> dict[tuple[int, int], int]:
     wc: dict[tuple[int, int], int] = {}
     if SURAH_INFO_PATH.exists():
         import orjson
+
         si = orjson.loads(SURAH_INFO_PATH.read_bytes())
         for surah_str, data in si.items():
             for v in data["verses"]:
@@ -289,6 +296,7 @@ def load_surah_info_lite() -> dict:
     if cached is not None:
         return cached
     import orjson
+
     raw = orjson.loads(SURAH_INFO_PATH.read_bytes())
     result = {}
     for num, info in raw.items():

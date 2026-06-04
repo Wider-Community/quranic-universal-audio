@@ -1,11 +1,11 @@
 """Display formatting utilities."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def utc_now_iso() -> str:
     """Return current UTC time as ISO string with 'Z' suffix."""
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def slug_to_name(slug: str) -> str:

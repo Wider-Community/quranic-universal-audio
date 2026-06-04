@@ -82,9 +82,9 @@ def seg_sort_key(k):
     return tuple(int(x) for x in start)
 
 
-def cross_verse_sections(matched_ref: str,
-                         verse_word_counts: dict[tuple[int, int], int]
-                         ) -> list[list[str]] | None:
+def cross_verse_sections(
+    matched_ref: str, verse_word_counts: dict[tuple[int, int], int]
+) -> list[list[str]] | None:
     """Split a compound cross-verse ref into per-verse reading-order sections.
 
     For ``"S:A1:W1-S:AN:WN"`` (same surah, A1 < AN) returns::

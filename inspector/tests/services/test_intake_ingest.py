@@ -9,6 +9,8 @@ existing_combo_edit uses).
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
 
 from qua_shared.schemas import (
@@ -16,8 +18,8 @@ from qua_shared.schemas import (
     Channel,
     ReciterEntry,
     ReciterState,
-    Role,
     Riwayah,
+    Role,
     Source,
     Style,
     Vocab,
@@ -28,7 +30,6 @@ from services import storage_paths
 from services.admin import intake as intake_service
 from services.db import repo_catalog, repo_requests
 from services.storage.hf_bucket import get_backend
-
 
 OWNER = Actor(hf_user_id="owner-1", login_at_time="owneruser", role=Role.OWNER)
 
@@ -67,19 +68,29 @@ def _seed_accepted_intake(*, kind: str, reciter_id: str | None) -> str:
     extra = {"reciter_id": reciter_id, "source": {"method": "links", "links": []}}
     with db.transaction():
         rid = repo_requests.submit(
-            slug=None, requester=requester, kind=kind, extra_payload=extra,
+            slug=None,
+            requester=requester,
+            kind=kind,
+            extra_payload=extra,
         )
         repo_requests.resolve_by_id(
-            request_id=rid, status="accepted", transitioned_by=OWNER,
+            request_id=rid,
+            status="accepted",
+            transitioned_by=OWNER,
         )
     return rid
 
 
 def _delivery_block(slug: str, reciter_id: str, source="src1", channel="ch1") -> dict:
     return {
-        "slug": slug, "reciter_id": reciter_id, "riwayah": "hafs",
-        "style": "murattal", "source": source, "channel": channel,
-        "audio_category": "by_surah", "recording_year": None,
+        "slug": slug,
+        "reciter_id": reciter_id,
+        "riwayah": "hafs",
+        "style": "murattal",
+        "source": source,
+        "channel": channel,
+        "audio_category": "by_surah",
+        "recording_year": None,
         "recording_context": None,
     }
 
@@ -89,8 +100,10 @@ def _manifest_block(n=3) -> dict:
         "chapters": {
             str(c): {
                 "url": f"https://cdn.example/{c:03d}.mp3",
-                "bitrate_kbps": 128, "bitrate_mode": "cbr",
-                "duration_sec": 60.4, "size_bytes": 1000 * c,
+                "bitrate_kbps": 128,
+                "bitrate_mode": "cbr",
+                "duration_sec": 60.4,
+                "size_bytes": 1000 * c,
             }
             for c in range(1, n + 1)
         }
@@ -145,14 +158,25 @@ def test_ingest_new_reciter_creates_reciter_and_vocab(fs_backend):
     rid = _seed_accepted_intake(kind="new_reciter", reciter_id="new_guy")
 
     body = {
-        "reciter": {"reciter_id": "new_guy", "name_en": "New Guy",
-                    "name_ar": "جديد", "country": "SA"},
-        "delivery": _delivery_block("new_guy_hafs_yt", "new_guy",
-                                    source="youtube", channel="ytchan"),
+        "reciter": {
+            "reciter_id": "new_guy",
+            "name_en": "New Guy",
+            "name_ar": "جديد",
+            "country": "SA",
+        },
+        "delivery": _delivery_block(
+            "new_guy_hafs_yt", "new_guy", source="youtube", channel="ytchan"
+        ),
         "vocab_additions": {
             "sources": [{"slug": "youtube", "name": "YouTube"}],
-            "channels": [{"slug": "ytchan", "name": "YT Channel",
-                          "short": "yt", "host_patterns": ["youtube.com"]}],
+            "channels": [
+                {
+                    "slug": "ytchan",
+                    "name": "YT Channel",
+                    "short": "yt",
+                    "host_patterns": ["youtube.com"],
+                }
+            ],
         },
         "audio_manifest": _manifest_block(2),
         "reason": None,
@@ -180,19 +204,37 @@ def test_ingest_youtube_delivery_carries_source_url_and_rollup(fs_backend):
     body = {
         "reciter": {"reciter_id": "yt_reciter", "name_en": "YT Reciter"},
         "delivery": {
-            "slug": "yt_reciter_yt", "reciter_id": "yt_reciter", "riwayah": "hafs",
-            "style": "murattal", "source": "some_uploader", "channel": "youtube",
+            "slug": "yt_reciter_yt",
+            "reciter_id": "yt_reciter",
+            "riwayah": "hafs",
+            "style": "murattal",
+            "source": "some_uploader",
+            "channel": "youtube",
             "source_url": "https://www.youtube.com/playlist?list=PLxyz",
-            "audio_category": "by_surah", "recording_year": None,
+            "audio_category": "by_surah",
+            "recording_year": None,
             "recording_context": None,
-            "bitrate_mode": "cbr", "bitrate_kbps_nominal": 128,
-            "sample_rate_hz": 44100, "total_duration_sec": 3600,
+            "bitrate_mode": "cbr",
+            "bitrate_kbps_nominal": 128,
+            "sample_rate_hz": 44100,
+            "total_duration_sec": 3600,
         },
         "vocab_additions": {
-            "sources": [{"slug": "some_uploader", "name": "Some Uploader",
-                         "url": "https://youtube.com/@some"}],
-            "channels": [{"slug": "youtube", "name": "YouTube", "short": "yt",
-                          "host_patterns": ["youtube.com", "youtu.be"]}],
+            "sources": [
+                {
+                    "slug": "some_uploader",
+                    "name": "Some Uploader",
+                    "url": "https://youtube.com/@some",
+                }
+            ],
+            "channels": [
+                {
+                    "slug": "youtube",
+                    "name": "YouTube",
+                    "short": "yt",
+                    "host_patterns": ["youtube.com", "youtu.be"],
+                }
+            ],
         },
         "audio_manifest": _manifest_block(3),
         "reason": None,
@@ -237,44 +279,68 @@ def test_ingest_rejects_non_accepted_request(fs_backend):
     requester = Actor(hf_user_id="u-1", login_at_time="alice", role=Role.CONTRIBUTOR)
     with db.transaction():
         rid = repo_requests.submit(
-            slug=None, requester=requester, kind="new_reciter",
+            slug=None,
+            requester=requester,
+            kind="new_reciter",
             extra_payload={"reciter_id": "x", "source": {"method": "links", "links": []}},
         )
     # Still pending → not an accepted intake.
     with pytest.raises(intake_service.IngestBadRequest):
-        intake_service.ingest(rid, {
-            "delivery": _delivery_block("x_hafs_ch1", "rec_x"),
-            "audio_manifest": _manifest_block(1),
-        }, actor=OWNER)
+        intake_service.ingest(
+            rid,
+            {
+                "delivery": _delivery_block("x_hafs_ch1", "rec_x"),
+                "audio_manifest": _manifest_block(1),
+            },
+            actor=OWNER,
+        )
 
 
 def test_ingest_unknown_request_raises_not_intake(fs_backend):
     with pytest.raises(intake_service.NotIntakeRequest):
-        intake_service.ingest("rq_doesnotexist", {
-            "delivery": _delivery_block("a_b_c", "rec_x"),
-            "audio_manifest": _manifest_block(1),
-        }, actor=OWNER)
+        intake_service.ingest(
+            "rq_doesnotexist",
+            {
+                "delivery": _delivery_block("a_b_c", "rec_x"),
+                "audio_manifest": _manifest_block(1),
+            },
+            actor=OWNER,
+        )
 
 
 def test_ingest_slug_collision_raises(fs_backend):
     # Pre-create a delivery so the ingest slug collides.
-    from services import db
+    from datetime import datetime, timezone
 
     from qua_shared.schemas import AudioCategory, Delivery
-    from datetime import datetime, timezone
+    from services import db
+
     with db.transaction():
-        repo_catalog.insert_delivery(Delivery(
-            slug="rec_x_hafs_ch1", reciter_id="rec_x", riwayah="hafs", style="murattal",
-            source="src1", channel="ch1", audio_category=AudioCategory.BY_SURAH,
-            chapter_count=114, added_at=datetime.now(timezone.utc), added_by_hf_id="seed",
-        ))
+        repo_catalog.insert_delivery(
+            Delivery(
+                slug="rec_x_hafs_ch1",
+                reciter_id="rec_x",
+                riwayah="hafs",
+                style="murattal",
+                source="src1",
+                channel="ch1",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=datetime.now(UTC),
+                added_by_hf_id="seed",
+            )
+        )
 
     rid = _seed_accepted_intake(kind="existing_reciter_new_combo", reciter_id="rec_x")
     with pytest.raises(intake_service.IngestSlugCollision):
-        intake_service.ingest(rid, {
-            "delivery": _delivery_block("rec_x_hafs_ch1", "rec_x"),
-            "audio_manifest": _manifest_block(1),
-        }, actor=OWNER)
+        intake_service.ingest(
+            rid,
+            {
+                "delivery": _delivery_block("rec_x_hafs_ch1", "rec_x"),
+                "audio_manifest": _manifest_block(1),
+            },
+            actor=OWNER,
+        )
 
 
 def test_ingest_missing_vocab_fk_raises_vocab_missing(fs_backend):
@@ -282,12 +348,17 @@ def test_ingest_missing_vocab_fk_raises_vocab_missing(fs_backend):
     vocab_additions → 422 IngestVocabMissing."""
     rid = _seed_accepted_intake(kind="existing_reciter_new_combo", reciter_id="rec_x")
     with pytest.raises(intake_service.IngestVocabMissing):
-        intake_service.ingest(rid, {
-            "delivery": _delivery_block("rec_x_hafs_zzz", "rec_x",
-                                        source="ghost", channel="ghost"),
-            "vocab_additions": None,
-            "audio_manifest": _manifest_block(1),
-        }, actor=OWNER)
+        intake_service.ingest(
+            rid,
+            {
+                "delivery": _delivery_block(
+                    "rec_x_hafs_zzz", "rec_x", source="ghost", channel="ghost"
+                ),
+                "vocab_additions": None,
+                "audio_manifest": _manifest_block(1),
+            },
+            actor=OWNER,
+        )
 
 
 def test_ingest_bad_body_raises_bad_request(fs_backend):
@@ -306,18 +377,23 @@ def test_ingest_then_autodetect_flips_to_awaiting_review(fs_backend):
 
     rid = _seed_accepted_intake(kind="existing_reciter_new_combo", reciter_id="rec_x")
     slug = "rec_x_hafs_ch1"
-    intake_service.ingest(rid, {
-        "reciter": None,
-        "delivery": _delivery_block(slug, "rec_x"),
-        "vocab_additions": None,
-        "audio_manifest": _manifest_block(2),
-    }, actor=OWNER)
+    intake_service.ingest(
+        rid,
+        {
+            "reciter": None,
+            "delivery": _delivery_block(slug, "rec_x"),
+            "vocab_additions": None,
+            "audio_manifest": _manifest_block(2),
+        },
+        actor=OWNER,
+    )
 
     assert state_service.get_row(slug).state == ReciterState.AWAITING_ALIGNMENT
 
     # The offline pipeline uploads content under reciters/<slug>/.
     fs_backend.write_json_atomic(
-        storage_paths.detailed_path(slug), {"_meta": {}, "entries": []},
+        storage_paths.detailed_path(slug),
+        {"_meta": {}, "entries": []},
     )
 
     # Reset the process-local seen set so the freshly-appeared folder is "new".

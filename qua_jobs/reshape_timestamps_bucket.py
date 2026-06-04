@@ -22,6 +22,7 @@ The coordinated cutover ordering (deploy new code, reshape, restart to clear the
 shard LRU) lives in ``docs/planning/ts-segment-array-migration.md`` — this script
 is just the reshape step.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -63,9 +64,10 @@ def _list_timestamps(bucket: str, slug: str, token: str | None) -> list[str]:
     try:
         items = list_bucket_tree(bucket, prefix=prefix, recursive=False, token=token)
     except Exception as e:  # noqa: BLE001 — missing dir → no shards
-        if isinstance(e, FileNotFoundError) or getattr(
-            getattr(e, "response", None), "status_code", None
-        ) == 404:
+        if (
+            isinstance(e, FileNotFoundError)
+            or getattr(getattr(e, "response", None), "status_code", None) == 404
+        ):
             return []
         raise
     return sorted(it.path.split("/")[-1] for it in items)
@@ -101,22 +103,30 @@ def _digit_stem(name: str) -> bool:
     return name.split(".", 1)[0].isdigit()
 
 
-def reshape_reciter(
-    bucket: str, slug: str, *, execute: bool, token: str | None
-) -> dict:
+def reshape_reciter(bucket: str, slug: str, *, execute: bool, token: str | None) -> dict:
     """Reshape every canonical ``<ch>.json.gz`` for ``slug``; delete shadowed ``.json``."""
     names = _list_timestamps(bucket, slug, token)
     gz = [n for n in names if n.endswith(".json.gz") and _digit_stem(n)]
-    plain = {n for n in names if n.endswith(".json") and not n.endswith(".json.gz")
-             and _digit_stem(n)}
+    plain = {
+        n for n in names if n.endswith(".json") and not n.endswith(".json.gz") and _digit_stem(n)
+    }
 
-    stats = {"slug": slug, "gz_total": len(gz), "reshaped": 0, "skipped": {},
-             "stale_json_deleted": 0, "bytes_before": 0, "bytes_after": 0, "errors": []}
+    stats = {
+        "slug": slug,
+        "gz_total": len(gz),
+        "reshaped": 0,
+        "skipped": {},
+        "stale_json_deleted": 0,
+        "bytes_before": 0,
+        "bytes_after": 0,
+        "errors": [],
+    }
     for name in sorted(gz, key=lambda n: int(n.split(".", 1)[0])):
         path = f"reciters/{slug}/timestamps/{name}"
         try:
             raw = _read(bucket, path)
             import json
+
             doc = json.loads(gzip.decompress(raw))
             kind = classify_shard(doc)
             if kind != "v2":
@@ -145,14 +155,19 @@ def reshape_reciter(
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--bucket", default=DEV_BUCKET, help=f"HF bucket repo id (default {DEV_BUCKET})")
+    ap.add_argument(
+        "--bucket", default=DEV_BUCKET, help=f"HF bucket repo id (default {DEV_BUCKET})"
+    )
     ap.add_argument("--reciter", action="append", default=[], help="slug to reshape (repeatable)")
     ap.add_argument("--execute", action="store_true", help="write/delete (default: dry-run)")
     args = ap.parse_args()
 
     if args.bucket == PROD_BUCKET and os.environ.get("INSPECTOR_ALLOW_PROD_BUCKET") != "1":
-        print(f"REFUSED: {PROD_BUCKET} is the PROD bucket. Set INSPECTOR_ALLOW_PROD_BUCKET=1 "
-              "to reshape prod (coordinated cutover only).", file=sys.stderr)
+        print(
+            f"REFUSED: {PROD_BUCKET} is the PROD bucket. Set INSPECTOR_ALLOW_PROD_BUCKET=1 "
+            "to reshape prod (coordinated cutover only).",
+            file=sys.stderr,
+        )
         return 2
     if not args.reciter:
         print("ERROR: pass at least one --reciter <slug>.", file=sys.stderr)
@@ -168,9 +183,11 @@ def main() -> int:
         s = reshape_reciter(args.bucket, slug, execute=args.execute, token=token)
         delta = s["bytes_after"] - s["bytes_before"]
         pct = (100.0 * delta / s["bytes_before"]) if s["bytes_before"] else 0.0
-        print(f"{slug}: {s['gz_total']} gz | reshaped={s['reshaped']} "
-              f"skipped={s['skipped'] or '{}'} stale_json={s['stale_json_deleted']} "
-              f"| bytes {s['bytes_before']}->{s['bytes_after']} ({pct:+.1f}%)")
+        print(
+            f"{slug}: {s['gz_total']} gz | reshaped={s['reshaped']} "
+            f"skipped={s['skipped'] or '{}'} stale_json={s['stale_json_deleted']} "
+            f"| bytes {s['bytes_before']}->{s['bytes_after']} ({pct:+.1f}%)"
+        )
         if s["stale_json_shadowed"]:
             print(f"   stale shadowed .json: {s['stale_json_shadowed']}")
         for err in s["errors"]:
@@ -179,8 +196,10 @@ def main() -> int:
         grand["stale_deleted"] += s["stale_json_deleted"]
         grand["errors"] += len(s["errors"])
 
-    print(f"\nTOTAL: reshaped={grand['reshaped']} stale_json_deleted={grand['stale_deleted']} "
-          f"errors={grand['errors']}  ({mode})")
+    print(
+        f"\nTOTAL: reshaped={grand['reshaped']} stale_json_deleted={grand['stale_deleted']} "
+        f"errors={grand['errors']}  ({mode})"
+    )
     if not args.execute:
         print("Re-run with --execute to write.")
     return 1 if grand["errors"] else 0

@@ -14,6 +14,10 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 
+from services.activity.history_query import (
+    build_resolved_by_edit_index,
+    build_split_group_index,
+)
 from services.storage import cache
 from services.storage.data_loader import (
     get_single_word_verses,
@@ -23,11 +27,8 @@ from services.storage.data_loader import (
     load_probe_v2,
     load_seg_verses,
 )
-from services.activity.history_query import (
-    build_resolved_by_edit_index,
-    build_split_group_index,
-)
-from utils.references import is_by_ayah_source
+from services.validation._missing import _build_missing_words
+from services.validation._structural import _check_structural_errors
 
 # Phonemizer is no longer loaded in the validate runtime path. The phonemic
 # side of boundary_adj is captured at backfill / extraction time via
@@ -35,33 +36,31 @@ from utils.references import is_by_ayah_source
 # consumer in the project) and persisted as ``is_boundary_adj`` on every
 # segment. The classifier reads the persisted value instead of recomputing —
 # canonical=None throughout the runtime path.
-
 from services.validation.classifier import (
-    is_ignored_for,
-    is_resolved_by_edit,
-    is_suppressed_for,
+    _check_boundary_adj,
+    classify_entry,
     classify_flags,
     classify_segment,
     classify_segment_full,
-    classify_entry,
-    _check_boundary_adj,
+    is_ignored_for,
+    is_resolved_by_edit,
+    is_suppressed_for,
 )
-from services.validation.snapshot_classifier import classify_snapshot
 from services.validation.detail import _build_detail_lists
-from services.validation._missing import _build_missing_words
-from services.validation._structural import _check_structural_errors
 from services.validation.registry import (
-    IssueDefinition,
-    IssueRegistry,
     ALL_CATEGORIES,
+    AUTO_SUPPRESS_CATEGORIES,
+    CAN_IGNORE_CATEGORIES,
+    PER_CHAPTER_CATEGORIES,
     PER_SEGMENT_CATEGORIES,
     PER_VERSE_CATEGORIES,
-    PER_CHAPTER_CATEGORIES,
-    CAN_IGNORE_CATEGORIES,
-    AUTO_SUPPRESS_CATEGORIES,
     PERSISTS_IGNORE_CATEGORIES,
+    IssueDefinition,
+    IssueRegistry,
     filter_persistent_ignores,
 )
+from services.validation.snapshot_classifier import classify_snapshot
+from utils.references import is_by_ayah_source
 
 ISSUE_REGISTRY = IssueRegistry
 
@@ -89,8 +88,7 @@ def _read_deleted_basmala_chapters(reciter: str) -> set[int]:
     meta = load_pipeline_meta(reciter)
     if meta is None:
         raise RuntimeError(
-            f"pipeline_meta.json missing for {reciter!r}; "
-            "run scripts/backfill_deleted_basmala.py"
+            f"pipeline_meta.json missing for {reciter!r}; run scripts/backfill_deleted_basmala.py"
         )
     return set(meta.get("deleted_basmala_chapters") or [])
 
@@ -154,7 +152,11 @@ def validate_reciter_segments(reciter: str) -> dict:
     split_group_index = build_split_group_index(reciter)
 
     detail = _build_detail_lists(
-        entries, is_by_ayah, word_counts, canonical, single_word_verses,
+        entries,
+        is_by_ayah,
+        word_counts,
+        canonical,
+        single_word_verses,
         probe_failed_uids=probe_failed_uids,
         deleted_basmala_chapters=deleted_basmala_chapters,
     )

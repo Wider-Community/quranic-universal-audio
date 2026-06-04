@@ -8,11 +8,11 @@ audio_manifest sidecar in the bucket (single source of truth).
 
 No Flask. No I/O beyond what ``audio_fetch`` and ``cache`` already do.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from . import audio_fetch, audio_meta
 
@@ -30,11 +30,11 @@ class AudioSource:
     """
 
     cdn_url: str
-    data: Optional[bytes]
-    path: Optional[Path]
+    data: bytes | None
+    path: Path | None
     vbr: bool
-    bitrate_kbps: Optional[int]
-    chapter_key: Optional[str]
+    bitrate_kbps: int | None
+    chapter_key: str | None
 
     @property
     def has_local_bytes(self) -> bool:
@@ -58,18 +58,30 @@ def resolve(reciter: str, url: str) -> AudioSource:
     local = audio_fetch.read_prefetched_audio_local_path(reciter, url)
     if local is not None:
         return AudioSource(
-            cdn_url=url, data=None, path=local,
-            vbr=vbr, bitrate_kbps=bitrate_kbps, chapter_key=chapter_key,
+            cdn_url=url,
+            data=None,
+            path=local,
+            vbr=vbr,
+            bitrate_kbps=bitrate_kbps,
+            chapter_key=chapter_key,
         )
 
     data = audio_fetch.read_prefetched_audio_bytes(reciter, url)
     if data is not None:
         return AudioSource(
-            cdn_url=url, data=data, path=None,
-            vbr=vbr, bitrate_kbps=bitrate_kbps, chapter_key=chapter_key,
+            cdn_url=url,
+            data=data,
+            path=None,
+            vbr=vbr,
+            bitrate_kbps=bitrate_kbps,
+            chapter_key=chapter_key,
         )
 
     return AudioSource(
-        cdn_url=url, data=None, path=None,
-        vbr=vbr, bitrate_kbps=bitrate_kbps, chapter_key=chapter_key,
+        cdn_url=url,
+        data=None,
+        path=None,
+        vbr=vbr,
+        bitrate_kbps=bitrate_kbps,
+        chapter_key=chapter_key,
     )

@@ -16,9 +16,11 @@ from .connection import get_conn
 
 
 def get_open_claim(slug: str):
-    return get_conn().execute(
-        "SELECT * FROM claims WHERE slug = ? AND released_at IS NULL", (slug,)
-    ).fetchone()
+    return (
+        get_conn()
+        .execute("SELECT * FROM claims WHERE slug = ? AND released_at IS NULL", (slug,))
+        .fetchone()
+    )
 
 
 def open_claim_for_user(assignee_id: str) -> str | None:
@@ -35,20 +37,28 @@ def open_claim_for_user(assignee_id: str) -> str | None:
     the role-revoke cascade target and must release every open claim
     (marked or not).
     """
-    row = get_conn().execute(
-        "SELECT slug FROM claims WHERE assignee_id = ? "
-        "AND released_at IS NULL AND marked_ready_at IS NULL LIMIT 1",
-        (assignee_id,),
-    ).fetchone()
+    row = (
+        get_conn()
+        .execute(
+            "SELECT slug FROM claims WHERE assignee_id = ? "
+            "AND released_at IS NULL AND marked_ready_at IS NULL LIMIT 1",
+            (assignee_id,),
+        )
+        .fetchone()
+    )
     return row[0] if row else None
 
 
 def open_claims_for_user(assignee_id: str) -> list[str]:
-    rows = get_conn().execute(
-        "SELECT slug FROM claims WHERE assignee_id = ? AND released_at IS NULL "
-        "ORDER BY claimed_at",
-        (assignee_id,),
-    ).fetchall()
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT slug FROM claims WHERE assignee_id = ? AND released_at IS NULL "
+            "ORDER BY claimed_at",
+            (assignee_id,),
+        )
+        .fetchall()
+    )
     return [r[0] for r in rows]
 
 
@@ -126,8 +136,7 @@ def set_marked_ready(
             "mark_ready_comment_checks = ?, mark_ready_comment_issues = ?, "
             "mark_ready_bypass_used = ? "
             "WHERE slug = ? AND released_at IS NULL",
-            (val, checklist_json, comment_checks, comment_issues,
-             1 if bypass_used else 0, slug),
+            (val, checklist_json, comment_checks, comment_issues, 1 if bypass_used else 0, slug),
         )
     else:
         get_conn().execute(

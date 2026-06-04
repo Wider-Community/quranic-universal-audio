@@ -1,4 +1,5 @@
 """``services.quran_refs.build_payload`` + ``payload_hash`` unit tests."""
+
 from __future__ import annotations
 
 import orjson
@@ -9,14 +10,23 @@ def test_build_payload_strips_verse_markers(monkeypatch):
 
     quran_refs.reset_cache()
     data_loader.cache.set_dk_words_flat_cache(None)
-    monkeypatch.setattr(data_loader, "load_dk", lambda: {
-        "1:1:1": {"text": "بِسْمِ"},
-        "1:1:5": {"text": "۝١"},
-        "7:1:1": {"text": "المص"},
-    })
-    monkeypatch.setattr(quran_refs, "get_word_counts", lambda: {
-        (1, 1): 4, (7, 1): 1,
-    })
+    monkeypatch.setattr(
+        data_loader,
+        "load_dk",
+        lambda: {
+            "1:1:1": {"text": "بِسْمِ"},
+            "1:1:5": {"text": "۝١"},
+            "7:1:1": {"text": "المص"},
+        },
+    )
+    monkeypatch.setattr(
+        quran_refs,
+        "get_word_counts",
+        lambda: {
+            (1, 1): 4,
+            (7, 1): 1,
+        },
+    )
 
     body = orjson.loads(quran_refs.build_payload())
     assert "1:1:1" in body["dk_words"]

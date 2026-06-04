@@ -108,8 +108,11 @@ def _provision(api, *, user: str, name: str, deploy: bool, public_bucket: bool) 
 
     print(f"==> [3/6] Creating Space {space_id} (private)")
     api.create_repo(
-        repo_id=space_id, repo_type="space", space_sdk="docker",
-        private=True, exist_ok=True,
+        repo_id=space_id,
+        repo_type="space",
+        space_sdk="docker",
+        private=True,
+        exist_ok=True,
     )
 
     # The Docker image expects the bucket NFS-mounted at /data/inspector-bucket
@@ -118,23 +121,29 @@ def _provision(api, *, user: str, name: str, deploy: bool, public_bucket: bool) 
     print("==> [4/6] Attaching bucket volume at /data/inspector-bucket")
     api.set_space_volumes(
         space_id,
-        volumes=[Volume(type="bucket", source=bucket_id,
-                        mount_path="/data/inspector-bucket")],
+        volumes=[Volume(type="bucket", source=bucket_id, mount_path="/data/inspector-bucket")],
     )
 
     print("==> [5/6] Setting Space secrets + variables")
     session_secret = secrets.token_hex(32)
     token = api.token
-    api.add_space_secret(space_id, "HF_TOKEN", token,
-                         description="Bucket access for this dev Space")
-    api.add_space_secret(space_id, "INSPECTOR_SESSION_SECRET", session_secret,
-                         description="Cookie-signing key (auto-generated)")
-    api.add_space_variable(space_id, "INSPECTOR_BUCKET_REPO", bucket_id,
-                           description="This dev's isolated bucket")
+    api.add_space_secret(
+        space_id, "HF_TOKEN", token, description="Bucket access for this dev Space"
+    )
+    api.add_space_secret(
+        space_id,
+        "INSPECTOR_SESSION_SECRET",
+        session_secret,
+        description="Cookie-signing key (auto-generated)",
+    )
+    api.add_space_variable(
+        space_id, "INSPECTOR_BUCKET_REPO", bucket_id, description="This dev's isolated bucket"
+    )
 
     if deploy:
         print("==> [6/6] Deploying current code to the Space")
         import subprocess
+
         deploy_script = _REPO_ROOT / "scripts" / "deploy" / "deploy_space.py"
         subprocess.run([sys.executable, str(deploy_script), space_id], check=True)
     else:
@@ -183,10 +192,13 @@ def _print_plan(*, user: str, name: str, deploy: bool, teardown: bool) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    p.add_argument("name", help="Short suffix for your env, e.g. 'alice' -> quranic-inspector-alice")
+    p.add_argument(
+        "name", help="Short suffix for your env, e.g. 'alice' -> quranic-inspector-alice"
+    )
     p.add_argument("--deploy", action="store_true", help="Also push code to the Space now.")
-    p.add_argument("--public-bucket", action="store_true",
-                   help="Make the bucket public (default: private).")
+    p.add_argument(
+        "--public-bucket", action="store_true", help="Make the bucket public (default: private)."
+    )
     p.add_argument("--teardown", action="store_true", help="Delete the bucket + Space.")
     p.add_argument("--dry-run", action="store_true", help="Print the plan; change nothing.")
     args = p.parse_args(argv)
@@ -196,6 +208,7 @@ def main(argv: list[str] | None = None) -> int:
 
     token = _resolve_token()
     from huggingface_hub import HfApi
+
     api = HfApi(token=token)
     user = _whoami(api)
 
@@ -207,8 +220,9 @@ def main(argv: list[str] | None = None) -> int:
         _teardown(api, user=user, name=args.name)
     else:
         try:
-            _provision(api, user=user, name=args.name,
-                       deploy=args.deploy, public_bucket=args.public_bucket)
+            _provision(
+                api, user=user, name=args.name, deploy=args.deploy, public_bucket=args.public_bucket
+            )
         except Exception:
             # Provisioning is multi-step; a mid-flight failure can leave a
             # partially-created bucket/Space. Don't auto-delete (the bucket may

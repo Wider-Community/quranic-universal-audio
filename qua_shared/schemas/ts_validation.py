@@ -53,6 +53,6 @@ class TsValidationDoc(BaseModel):
     verses: dict[str, TsValidationVerse] = Field(default_factory=dict)
 
     @classmethod
-    def from_doc(cls, raw: Any) -> "TsValidationDoc":
+    def from_doc(cls, raw: Any) -> TsValidationDoc:
         """Parse a stored doc, tolerating forward/extra fields."""
         return cls.model_validate(raw)

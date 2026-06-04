@@ -49,8 +49,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s",
-                    datefmt="%H:%M:%S")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("cut_release")
 
 
@@ -61,6 +60,7 @@ GH_API = "https://api.github.com"
 # ---------------------------------------------------------------------------
 # Bucket + DB I/O.
 # ---------------------------------------------------------------------------
+
 
 def _bucket_root() -> Path:
     return Path(os.environ.get("INSPECTOR_BUCKET_MOUNT", "/data"))
@@ -144,8 +144,7 @@ def _prior_release_members(conn: sqlite3.Connection) -> tuple[str | None, dict[s
     non-superseded ``gh_releases``. Empty dict if there's no prior release.
     """
     rel = conn.execute(
-        "SELECT id, version FROM gh_releases "
-        "WHERE superseded_at IS NULL ORDER BY id DESC LIMIT 1"
+        "SELECT id, version FROM gh_releases WHERE superseded_at IS NULL ORDER BY id DESC LIMIT 1"
     ).fetchone()
     if not rel:
         return None, {}
@@ -160,6 +159,7 @@ def _prior_release_members(conn: sqlite3.Connection) -> tuple[str | None, dict[s
 # Tier-file projection — top-down (letter → word → verse).
 # Shared per-verse positions are byte-equal across tiers (CI assertion).
 # ---------------------------------------------------------------------------
+
 
 def _load_canonical_verses(slug: str) -> dict[str, dict]:
     """Read every ``reciters/<slug>/timestamps/<ch>.json.gz`` segment-array shard,
@@ -181,9 +181,10 @@ def _load_canonical_verses(slug: str) -> dict[str, dict]:
             detailed = None
     conf_by_span = confidence_by_span(detailed)
     out: dict[str, dict] = {}
-    for path in sorted(ts_dir.iterdir(),
-                       key=lambda p: int(p.name.split(".", 1)[0])
-                       if p.name.split(".", 1)[0].isdigit() else 0):
+    for path in sorted(
+        ts_dir.iterdir(),
+        key=lambda p: int(p.name.split(".", 1)[0]) if p.name.split(".", 1)[0].isdigit() else 0,
+    ):
         name = path.name
         if not (name.endswith(".json") or name.endswith(".json.gz")):
             continue
@@ -195,8 +196,9 @@ def _load_canonical_verses(slug: str) -> dict[str, dict]:
     return out
 
 
-def _build_tier_files(slug: str, verses: dict[str, dict], *,
-                      delivery_meta: dict) -> dict[str, bytes]:
+def _build_tier_files(
+    slug: str, verses: dict[str, dict], *, delivery_meta: dict
+) -> dict[str, bytes]:
     """Build the three tier files (letter → word → verse, top-down projection).
 
     Returns ``{"verse_timestamps.json.gz": bytes,
@@ -244,23 +246,30 @@ def _build_tier_files(slug: str, verses: dict[str, dict], *,
         "audio_category": delivery_meta.get("audio_category"),
         "verse_count": len(verse_body),
     }
-    letter_doc = {"_meta": {**meta_common, "tier": "letter",
-                            "layout": "[[start,end], words, letters]; "
-                                      "words=[[widx,start,end],...]; "
-                                      "letters=[[widx,char,start,end],...]"},
-                  **letter_body}
-    word_doc = {"_meta": {**meta_common, "tier": "word",
-                          "layout": "[[start,end], words]; "
-                                    "words=[[widx,start,end],...]"},
-                **word_body}
-    verse_doc = {"_meta": {**meta_common, "tier": "verse",
-                           "layout": "[start,end]"},
-                 **verse_body}
+    letter_doc = {
+        "_meta": {
+            **meta_common,
+            "tier": "letter",
+            "layout": "[[start,end], words, letters]; "
+            "words=[[widx,start,end],...]; "
+            "letters=[[widx,char,start,end],...]",
+        },
+        **letter_body,
+    }
+    word_doc = {
+        "_meta": {
+            **meta_common,
+            "tier": "word",
+            "layout": "[[start,end], words]; words=[[widx,start,end],...]",
+        },
+        **word_body,
+    }
+    verse_doc = {"_meta": {**meta_common, "tier": "verse", "layout": "[start,end]"}, **verse_body}
 
     return {
         "letter_timestamps.json.gz": _gzip_deterministic(letter_doc),
-        "word_timestamps.json.gz":   _gzip_deterministic(word_doc),
-        "verse_timestamps.json.gz":  _gzip_deterministic(verse_doc),
+        "word_timestamps.json.gz": _gzip_deterministic(word_doc),
+        "verse_timestamps.json.gz": _gzip_deterministic(verse_doc),
     }
 
 
@@ -296,8 +305,9 @@ def _verse_sort_key(key: str) -> tuple[int, int]:
 
 def _gzip_deterministic(doc: dict) -> bytes:
     """Serialize JSON with sorted keys + gzip at level 6, mtime=0."""
-    payload = json.dumps(doc, sort_keys=True, ensure_ascii=False,
-                         separators=(",", ":")).encode("utf-8")
+    payload = json.dumps(doc, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
     return gzip.compress(payload, compresslevel=6, mtime=0)
 
 
@@ -305,8 +315,8 @@ def _gzip_deterministic(doc: dict) -> bytes:
 # Catalog + manifest + zip per recitation.
 # ---------------------------------------------------------------------------
 
-def _build_catalog_json(rec: dict, audio_manifest: dict | None,
-                        verses: dict) -> bytes:
+
+def _build_catalog_json(rec: dict, audio_manifest: dict | None, verses: dict) -> bytes:
     """Per-recitation catalog.json bytes (orjson-equivalent serialisation).
 
     ``chapter_urls`` is keyed by chapter string (``"1"``) for by_surah and by
@@ -347,13 +357,14 @@ def _build_catalog_json(rec: dict, audio_manifest: dict | None,
         },
         "coverage": {"surahs": len(surahs), "ayahs": coverage_ayahs},
     }
-    return json.dumps(catalog, sort_keys=True, ensure_ascii=False,
-                      separators=(",", ":")).encode("utf-8")
+    return json.dumps(catalog, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
 
 
-def _build_per_recitation_manifest(slug: str, version: str,
-                                   files: dict[str, bytes],
-                                   created_at: str) -> bytes:
+def _build_per_recitation_manifest(
+    slug: str, version: str, files: dict[str, bytes], created_at: str
+) -> bytes:
     """``manifest.json`` inside each ``<slug>.zip``."""
     manifest = {
         "schema_version": SCHEMA_VERSION,
@@ -365,8 +376,9 @@ def _build_per_recitation_manifest(slug: str, version: str,
             for name, body in sorted(files.items())
         },
     }
-    return json.dumps(manifest, sort_keys=True, ensure_ascii=False,
-                      separators=(",", ":")).encode("utf-8")
+    return json.dumps(manifest, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
 
 
 def _pack_recitation_zip(slug: str, files: dict[str, bytes]) -> bytes:
@@ -400,8 +412,8 @@ def _sha256_hex(data: bytes) -> str:
 # Dataset-level manifest + CHANGELOG.md + versioning.
 # ---------------------------------------------------------------------------
 
-def _classify_change_kind(rec: dict, prior_members: dict[str, dict],
-                          content_hash: str) -> str:
+
+def _classify_change_kind(rec: dict, prior_members: dict[str, dict], content_hash: str) -> str:
     """``added`` if no prior; ``unchanged`` if content_hash matches; else ``refresh``."""
     prior = prior_members.get(rec["slug"])
     if prior is None:
@@ -411,9 +423,9 @@ def _classify_change_kind(rec: dict, prior_members: dict[str, dict],
     return "refresh"
 
 
-def _compute_version(prior_version: str | None, members: list[dict],
-                     static_refs_changed: bool,
-                     override: str | None) -> str:
+def _compute_version(
+    prior_version: str | None, members: list[dict], static_refs_changed: bool, override: str | None
+) -> str:
     """Auto-bump per plan §Versioning. Override always wins (operator declares MAJOR).
     No-op (every member 'unchanged' AND static refs unchanged) raises.
     """
@@ -425,22 +437,26 @@ def _compute_version(prior_version: str | None, members: list[dict],
     parts = prior_version.lstrip("v").split(".")
     try:
         major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
-    except (ValueError, IndexError):
-        raise RuntimeError(f"unparseable prior version {prior_version!r}")
+    except (ValueError, IndexError) as e:
+        raise RuntimeError(f"unparseable prior version {prior_version!r}") from e
     has_added = any(m["change_kind"] == "added" for m in members)
     has_refresh = any(m["change_kind"] == "refresh" for m in members)
     if has_added:
         return f"v{major}.{minor + 1}.0"
     if has_refresh or static_refs_changed:
         return f"v{major}.{minor}.{patch + 1}"
-    raise RuntimeError(
-        "nothing changed since last release — set RELEASE_VERSION to force-cut"
-    )
+    raise RuntimeError("nothing changed since last release — set RELEASE_VERSION to force-cut")
 
 
-def _build_dataset_manifest(version: str, prior_version: str | None,
-                            members: list[dict], static_refs: dict,
-                            owner: str, repo: str, created_at: str) -> bytes:
+def _build_dataset_manifest(
+    version: str,
+    prior_version: str | None,
+    members: list[dict],
+    static_refs: dict,
+    owner: str,
+    repo: str,
+    created_at: str,
+) -> bytes:
     """Dataset-level ``manifest.json``."""
     recitations = {}
     for m in members:
@@ -465,42 +481,56 @@ def _build_dataset_manifest(version: str, prior_version: str | None,
         "recitations": recitations,
         "license": "CC-BY-4.0",
     }
-    return json.dumps(body, sort_keys=True, ensure_ascii=False,
-                      separators=(",", ":")).encode("utf-8")
+    return json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
 
 
 def _release_asset_url(owner: str, repo: str, version: str, name: str) -> str:
-    return (f"https://github.com/{owner}/{repo}"
-            f"/releases/download/{version}/{name}")
+    return f"https://github.com/{owner}/{repo}/releases/download/{version}/{name}"
 
 
-def _build_changelog(version: str, prior_version: str | None,
-                     members: list[dict], static_refs_changed_keys: list[str],
-                     operator_note: str | None,
-                     owner: str, repo: str, created_at_date: str,
-                     hf_dataset: str) -> bytes:
+def _build_changelog(
+    version: str,
+    prior_version: str | None,
+    members: list[dict],
+    static_refs_changed_keys: list[str],
+    operator_note: str | None,
+    owner: str,
+    repo: str,
+    created_at_date: str,
+    hf_dataset: str,
+) -> bytes:
     """The release body — delegates to the shared renderer so the modal preview and
     the shipped release stay byte-identical (modulo coverage, which the preview shows
     in surahs and the cut shows in exact ayahs). Maps the cut-side rich member dict
     onto the renderer's display-name contract."""
     from qua_shared.release_changelog import render_changelog
 
-    render_members = [{
-        "name_en": m.get("name_en"),
-        "name_ar": m.get("name_ar"),
-        "riwayah": m.get("riwayah_name") or m.get("riwayah"),
-        "style": m.get("style_name") or m.get("style"),
-        "channel": m.get("channel_name") or m.get("channel"),
-        "change_kind": m.get("change_kind"),
-        "coverage_surahs": m.get("coverage_surahs"),
-        "coverage_ayahs": m.get("coverage_ayahs"),
-    } for m in members]
+    render_members = [
+        {
+            "name_en": m.get("name_en"),
+            "name_ar": m.get("name_ar"),
+            "riwayah": m.get("riwayah_name") or m.get("riwayah"),
+            "style": m.get("style_name") or m.get("style"),
+            "channel": m.get("channel_name") or m.get("channel"),
+            "change_kind": m.get("change_kind"),
+            "coverage_surahs": m.get("coverage_surahs"),
+            "coverage_ayahs": m.get("coverage_ayahs"),
+        }
+        for m in members
+    ]
 
     md = render_changelog(
-        version=version, previous_version=prior_version,
-        release_date=created_at_date, members=render_members,
+        version=version,
+        previous_version=prior_version,
+        release_date=created_at_date,
+        members=render_members,
         static_refs_changed_keys=tuple(static_refs_changed_keys),
-        operator_note=operator_note, owner=owner, repo=repo, hf_dataset=hf_dataset,
+        operator_note=operator_note,
+        owner=owner,
+        repo=repo,
+        hf_dataset=hf_dataset,
     )
     return md.encode("utf-8")
 
@@ -509,11 +539,17 @@ def _build_changelog(version: str, prior_version: str | None,
 # GitHub REST API (stdlib only).
 # ---------------------------------------------------------------------------
 
-def _gh_request(method: str, path: str, token: str, *,
-                json_body: dict | None = None,
-                raw_body: bytes | None = None,
-                content_type: str | None = None,
-                accept: str = "application/vnd.github+json") -> dict:
+
+def _gh_request(
+    method: str,
+    path: str,
+    token: str,
+    *,
+    json_body: dict | None = None,
+    raw_body: bytes | None = None,
+    content_type: str | None = None,
+    accept: str = "application/vnd.github+json",
+) -> dict:
     """One GH REST call. Body is either JSON (json_body) or raw (raw_body).
     Returns the parsed JSON response on 2xx; raises with body text on failure.
     """
@@ -550,43 +586,59 @@ def _gh_request(method: str, path: str, token: str, *,
         # opaque "Resource not accessible by personal access token".
         needed = e.headers.get("X-Accepted-GitHub-Permissions")
         hint = f" [token needs GitHub permissions: {needed}]" if needed else ""
-        raise RuntimeError(
-            f"GH API {method} {url} → {e.code}: {msg[:500]}{hint}") from e
+        raise RuntimeError(f"GH API {method} {url} → {e.code}: {msg[:500]}{hint}") from e
 
 
-def _gh_create_release(owner: str, repo: str, version: str, body: str,
-                       token: str) -> dict:
+def _gh_create_release(owner: str, repo: str, version: str, body: str, token: str) -> dict:
     """Create a draft-less release tag. Returns the release dict (with upload_url)."""
-    return _gh_request("POST", f"/repos/{owner}/{repo}/releases", token,
-                       json_body={
-                           "tag_name": version,
-                           "name": version,
-                           "body": body,
-                           "draft": False,
-                           "prerelease": False,
-                       })
+    return _gh_request(
+        "POST",
+        f"/repos/{owner}/{repo}/releases",
+        token,
+        json_body={
+            "tag_name": version,
+            "name": version,
+            "body": body,
+            "draft": False,
+            "prerelease": False,
+        },
+    )
 
 
-def _gh_upload_asset(upload_url_template: str, name: str, data: bytes,
-                     token: str, content_type: str) -> dict:
+def _gh_upload_asset(
+    upload_url_template: str, name: str, data: bytes, token: str, content_type: str
+) -> dict:
     """Upload one asset. upload_url_template ends with ``{?name,label}``."""
     base = upload_url_template.split("{", 1)[0]
     from urllib.parse import quote
+
     url = f"{base}?name={quote(name)}"
-    return _gh_request("POST", url, token, raw_body=data,
-                       content_type=content_type,
-                       accept="application/vnd.github+json")
+    return _gh_request(
+        "POST",
+        url,
+        token,
+        raw_body=data,
+        content_type=content_type,
+        accept="application/vnd.github+json",
+    )
 
 
 # ---------------------------------------------------------------------------
 # Completion callback.
 # ---------------------------------------------------------------------------
 
-def _post_webhook(*, version: str, job_id: str, external_uri: str,
-                  members: list[dict], operator_note: str | None,
-                  launched_by: str | None,
-                  status: str = "succeeded",
-                  validation_summary: dict | None = None) -> bool:
+
+def _post_webhook(
+    *,
+    version: str,
+    job_id: str,
+    external_uri: str,
+    members: list[dict],
+    operator_note: str | None,
+    launched_by: str | None,
+    status: str = "succeeded",
+    validation_summary: dict | None = None,
+) -> bool:
     url = os.environ.get("INSPECTOR_WEBHOOK_URL", "").strip()
     secret = os.environ.get("INSPECTOR_WEBHOOK_SECRET", "").strip()
     if not url or not secret:
@@ -606,9 +658,10 @@ def _post_webhook(*, version: str, job_id: str, external_uri: str,
         body["validation_summary"] = validation_summary
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
-        url, data=data, method="POST",
-        headers={"Content-Type": "application/json",
-                 "X-Inspector-Job-Secret": secret},
+        url,
+        data=data,
+        method="POST",
+        headers={"Content-Type": "application/json", "X-Inspector-Job-Secret": secret},
     )
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -688,9 +741,11 @@ def _hash_static_refs(refs_dir: Path, qpc_bytes: bytes | None) -> dict[str, dict
 # Main.
 # ---------------------------------------------------------------------------
 
+
 def _repo_owner_name() -> tuple[str, str, str]:
     """Resolve (owner, repo, hf_dataset_id) from config_loader."""
     from qua_shared.config_loader import repo_config
+
     cfg = repo_config()
     return cfg["repo_owner"], cfg["repo_name"], cfg["hf_dataset"]
 
@@ -699,23 +754,29 @@ def _preflight() -> int:
     """Verify env + bucket + staged code dir. Returns 0 on go, non-zero exit
     code on first failure (each code maps to one cause)."""
     if not os.environ.get("HF_TOKEN", "").strip():
-        log.error("HF_TOKEN secret is required"); return 10
+        log.error("HF_TOKEN secret is required")
+        return 10
     if not os.environ.get("GH_RELEASE_TOKEN", "").strip():
-        log.error("GH_RELEASE_TOKEN secret is required"); return 2
+        log.error("GH_RELEASE_TOKEN secret is required")
+        return 2
     bucket = _bucket_root()
     if not bucket.exists():
-        log.error("bucket mount missing at %s", bucket); return 12
+        log.error("bucket mount missing at %s", bucket)
+        return 12
     db_path = bucket / "db" / "inspector.db"
     if not db_path.exists():
-        log.error("inspector.db missing at %s", db_path); return 13
+        log.error("inspector.db missing at %s", db_path)
+        return 13
     code_dir = _code_root()
-    for rel in ("data/surah_info.json", ".github/config/repo.yml", "LICENSE",
-                "qua_jobs/shard.py"):
+    for rel in ("data/surah_info.json", ".github/config/repo.yml", "LICENSE", "qua_jobs/shard.py"):
         if not (code_dir / rel).exists():
-            log.error("staged file missing: %s", code_dir / rel); return 14
-    if not ((code_dir / "data/qpc_hafs.json.gz").exists()
-            or (code_dir / "data/qpc_hafs.json").exists()):
-        log.error("staged file missing: %s/data/qpc_hafs.json[.gz]", code_dir); return 14
+            log.error("staged file missing: %s", code_dir / rel)
+            return 14
+    if not (
+        (code_dir / "data/qpc_hafs.json.gz").exists() or (code_dir / "data/qpc_hafs.json").exists()
+    ):
+        log.error("staged file missing: %s/data/qpc_hafs.json[.gz]", code_dir)
+        return 14
     return 0
 
 
@@ -737,8 +798,9 @@ def main() -> int:
     with _open_inspector_db_readonly() as conn:
         eligible = _eligible_recitations(conn)
         prior_version, prior_members = _prior_release_members(conn)
-    log.info("found %d eligible recitations; prior release: %s",
-             len(eligible), prior_version or "<none>")
+    log.info(
+        "found %d eligible recitations; prior release: %s", len(eligible), prior_version or "<none>"
+    )
 
     if not eligible:
         log.error("no eligible recitations — aborting")
@@ -754,14 +816,18 @@ def main() -> int:
     # never ship a release missing qpc_hafs.json / a stale manifest hash.
     qpc_bytes = _load_qpc_bytes(refs_dir)
     if qpc_bytes is None:
-        log.error("qpc_hafs.json unavailable (image .gz is an LFS pointer and "
-                  "bucket %s missing/corrupt) — cannot cut release", QPC_BUCKET_REL)
+        log.error(
+            "qpc_hafs.json unavailable (image .gz is an LFS pointer and "
+            "bucket %s missing/corrupt) — cannot cut release",
+            QPC_BUCKET_REL,
+        )
         return 14
     from qua_shared.dataset_validation import (
-        fatal_violations, validate_dataset,
+        fatal_violations,
+        validate_dataset,
     )
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     created_at_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     created_at_date = now.strftime("%Y-%m-%d")
 
@@ -785,20 +851,25 @@ def main() -> int:
         # Boundary validate (source-relative ms — verses dict already in that frame).
         for_validate = {
             k: _verse_for_validate(v, detailed_segments.get(k, []))
-            for k, v in verses.items() if not k.startswith("_") and isinstance(v, dict)
+            for k, v in verses.items()
+            if not k.startswith("_") and isinstance(v, dict)
         }
         rec_summary = validate_dataset(for_validate, surah_info=surah_info)
         fatal = fatal_violations(rec_summary["violations"])
         if fatal:
-            log.error("  %s: %d fatal boundary violations — aborting cut",
-                      slug, len(fatal))
+            log.error("  %s: %d fatal boundary violations — aborting cut", slug, len(fatal))
             for v in fatal[:5]:
                 log.error("    %s", v)
-            _post_webhook(version=version_override or "",
-                          job_id=job_id, external_uri="",
-                          members=[], operator_note=operator_note,
-                          launched_by=launched_by, status="failed",
-                          validation_summary={"slug": slug, "summary": rec_summary})
+            _post_webhook(
+                version=version_override or "",
+                job_id=job_id,
+                external_uri="",
+                members=[],
+                operator_note=operator_note,
+                launched_by=launched_by,
+                status="failed",
+                validation_summary={"slug": slug, "summary": rec_summary},
+            )
             return 4
         validation_summary_total["violation_count"] += rec_summary["violation_count"]
         for k, c in rec_summary.get("by_kind", {}).items():
@@ -820,8 +891,7 @@ def main() -> int:
         catalog_bytes = _build_catalog_json(rec, audio_manifest, verses)
 
         # content_hash — over letter tier + catalog bytes.
-        content_hash = _sha256_hex(tier_files["letter_timestamps.json.gz"]
-                                   + catalog_bytes)
+        content_hash = _sha256_hex(tier_files["letter_timestamps.json.gz"] + catalog_bytes)
 
         # Per-recitation manifest.json (carries the version it was packed for —
         # auto-version is computed below from the candidate members list, so we
@@ -836,27 +906,29 @@ def main() -> int:
         # Build the catalog_snapshot (frozen at cut time, what the row stores).
         catalog_snapshot = json.loads(catalog_bytes.decode("utf-8"))
 
-        members.append({
-            "slug": slug,
-            "name_en": rec.get("name_en"),
-            "name_ar": rec.get("name_ar"),
-            "riwayah": rec.get("riwayah"),
-            "style": rec.get("style"),
-            "channel": rec.get("channel"),
-            "riwayah_name": rec.get("riwayah_name"),
-            "style_name": rec.get("style_name"),
-            "channel_name": rec.get("channel_name"),
-            "ts_version": str(rec["ts_version"]),
-            "coverage_ayahs": coverage_ayahs,
-            "coverage_surahs": rec.get("chapter_count"),
-            "content_hash": content_hash,
-            "change_kind": change_kind,
-            "catalog_snapshot": catalog_snapshot,
-            "_files": files,
-            "_zip_bytes": None,  # filled after version is known
-            "zip_sha256": "",
-            "zip_bytes": 0,
-        })
+        members.append(
+            {
+                "slug": slug,
+                "name_en": rec.get("name_en"),
+                "name_ar": rec.get("name_ar"),
+                "riwayah": rec.get("riwayah"),
+                "style": rec.get("style"),
+                "channel": rec.get("channel"),
+                "riwayah_name": rec.get("riwayah_name"),
+                "style_name": rec.get("style_name"),
+                "channel_name": rec.get("channel_name"),
+                "ts_version": str(rec["ts_version"]),
+                "coverage_ayahs": coverage_ayahs,
+                "coverage_surahs": rec.get("chapter_count"),
+                "content_hash": content_hash,
+                "change_kind": change_kind,
+                "catalog_snapshot": catalog_snapshot,
+                "_files": files,
+                "_zip_bytes": None,  # filled after version is known
+                "zip_sha256": "",
+                "zip_bytes": 0,
+            }
+        )
 
     if not members:
         log.error("no members built — aborting")
@@ -870,8 +942,7 @@ def main() -> int:
     static_refs_changed_keys: list[str] = []
     if prior_version:
         try:
-            prior_manifest_url = _release_asset_url(
-                owner, repo, prior_version, "manifest.json")
+            prior_manifest_url = _release_asset_url(owner, repo, prior_version, "manifest.json")
             prior_manifest = _fetch_url_json(prior_manifest_url)
             prior_static = (prior_manifest or {}).get("static_refs", {}) or {}
         except Exception as exc:
@@ -883,14 +954,20 @@ def main() -> int:
 
     # 4. Compute version.
     try:
-        version = _compute_version(prior_version, members,
-                                   bool(static_refs_changed_keys),
-                                   version_override)
+        version = _compute_version(
+            prior_version, members, bool(static_refs_changed_keys), version_override
+        )
     except RuntimeError as exc:
         log.error("version compute: %s", exc)
-        _post_webhook(version="", job_id=job_id, external_uri="",
-                      members=[], operator_note=operator_note,
-                      launched_by=launched_by, status="failed")
+        _post_webhook(
+            version="",
+            job_id=job_id,
+            external_uri="",
+            members=[],
+            operator_note=operator_note,
+            launched_by=launched_by,
+            status="failed",
+        )
         return 6
     log.info("computed version: %s", version)
 
@@ -898,8 +975,9 @@ def main() -> int:
     for m in members:
         files = m["_files"]
         files["manifest.json"] = _build_per_recitation_manifest(
-            m["slug"], version, {k: v for k, v in files.items()
-                                 if k != "manifest.json"},
+            m["slug"],
+            version,
+            {k: v for k, v in files.items() if k != "manifest.json"},
             created_at_iso,
         )
         zip_data = _pack_recitation_zip(m["slug"], files)
@@ -910,13 +988,24 @@ def main() -> int:
 
     # 6. Dataset-level manifest + CHANGELOG.
     dataset_manifest = _build_dataset_manifest(
-        version, prior_version, members,
+        version,
+        prior_version,
+        members,
         {k: v for k, v in static_refs.items()},
-        owner, repo, created_at_iso,
+        owner,
+        repo,
+        created_at_iso,
     )
     changelog_md = _build_changelog(
-        version, prior_version, members, static_refs_changed_keys,
-        operator_note, owner, repo, created_at_date, hf_dataset,
+        version,
+        prior_version,
+        members,
+        static_refs_changed_keys,
+        operator_note,
+        owner,
+        repo,
+        created_at_date,
+        hf_dataset,
     )
 
     # 7. Read static refs + license + shard.py for upload. qpc_hafs lives
@@ -934,9 +1023,7 @@ def main() -> int:
 
     # 8. Create the GH release + upload all assets.
     log.info("creating GH release %s on %s/%s ...", version, owner, repo)
-    rel = _gh_create_release(owner, repo, version,
-                             changelog_md.decode("utf-8"),
-                             token=gh_token)
+    rel = _gh_create_release(owner, repo, version, changelog_md.decode("utf-8"), token=gh_token)
     upload_url = rel["upload_url"]
     release_html_url = rel.get("html_url", "")
 
@@ -974,9 +1061,11 @@ def main() -> int:
     ]
 
     _post_webhook(
-        version=version, job_id=job_id,
+        version=version,
+        job_id=job_id,
         external_uri=release_html_url,
-        members=webhook_members, operator_note=operator_note,
+        members=webhook_members,
+        operator_note=operator_note,
         launched_by=launched_by,
         validation_summary={
             "violation_count": validation_summary_total["violation_count"],
@@ -984,8 +1073,7 @@ def main() -> int:
         },
     )
 
-    log.info("cut_release: done version=%s recitations=%d",
-             version, len(members))
+    log.info("cut_release: done version=%s recitations=%d", version, len(members))
     return 0
 
 
@@ -995,8 +1083,9 @@ def _build_dataset_level_catalog(members: list[dict]) -> bytes:
         "schema_version": SCHEMA_VERSION,
         "recitations": [m["catalog_snapshot"] for m in members],
     }
-    return json.dumps(body, sort_keys=True, ensure_ascii=False,
-                      separators=(",", ":")).encode("utf-8")
+    return json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
 
 
 def _fetch_url_json(url: str) -> dict | None:
@@ -1043,7 +1132,9 @@ def _segments_per_verse_from_detailed(slug: str) -> dict[str, list]:
             sp = mref.split("-", 1)[0].split(":")
             ep = mref.split("-", 1)[1].split(":") if "-" in mref else sp
             try:
-                s_surah = int(sp[0]); s_ayah = int(sp[1]); e_ayah = int(ep[1])
+                s_surah = int(sp[0])
+                s_ayah = int(sp[1])
+                e_ayah = int(ep[1])
             except (ValueError, IndexError):
                 continue
             w_from = seg.get("word_from", seg.get("start_word", 1))
@@ -1052,8 +1143,7 @@ def _segments_per_verse_from_detailed(slug: str) -> dict[str, list]:
             t_end = int(seg.get("time_end", 0))
             for a in range(s_ayah, e_ayah + 1):
                 vref = f"{s_surah}:{a}"
-                out.setdefault(vref, []).append(
-                    (int(w_from), int(w_to), t_start, t_end))
+                out.setdefault(vref, []).append((int(w_from), int(w_to), t_start, t_end))
     return out
 
 

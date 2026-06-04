@@ -3,6 +3,7 @@
 Synthetic ``tashkeel_drift`` row is monkey-patched into the registry; the
 parametrized behavior tests then auto-cover it without test edits.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -38,7 +39,8 @@ def test_synthetic_new_category_picked_up_by_parametrization(monkeypatch):
         # Fallback: monkeypatch the keys() method to surface the new category.
         original_keys = list(IssueRegistry.keys())
         monkeypatch.setattr(
-            IssueRegistry, "keys",
+            IssueRegistry,
+            "keys",
             lambda: original_keys + [new_category],
             raising=False,
         )

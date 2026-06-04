@@ -37,7 +37,7 @@ import threading
 import time
 from dataclasses import dataclass
 
-from authlib.integrations.flask_client import OAuth, FlaskIntegration
+from authlib.integrations.flask_client import FlaskIntegration, OAuth
 from flask import request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -108,10 +108,7 @@ class _TTLCache:
             # accumulate unbounded.
             if len(self._store) > 256:
                 now = time.time()
-                self._store = {
-                    k: v for k, v in self._store.items()
-                    if not v[0] or v[0] >= now
-                }
+                self._store = {k: v for k, v in self._store.items() if not v[0] or v[0] >= now}
             self._store[key] = (expires_at, value)
 
     def delete(self, key: str) -> None:

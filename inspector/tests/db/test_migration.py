@@ -4,24 +4,41 @@ activity↔transition content_hash linkage that the global tombstone store depen
 from __future__ import annotations
 
 import importlib.util
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from qua_shared.schemas import (
-    ActivityState, ArchivedRequest, ArchivedRequestsFile, Actor, Channel, Delivery,
-    Member, PendingRequest, PendingRequestsFile, ProposedEdits, ReciterCatalog,
-    ReciterEntry, ReciterRow, ReciterState, ReciterStateFile, Riwayah, Role, RolesFile,
-    Source, Style, Vocab, Visibility,
+    ActivityState,
+    Actor,
+    ArchivedRequest,
+    ArchivedRequestsFile,
+    Channel,
+    Delivery,
+    Member,
+    PendingRequest,
+    PendingRequestsFile,
+    ProposedEdits,
+    ReciterCatalog,
+    ReciterEntry,
+    ReciterRow,
+    ReciterState,
+    ReciterStateFile,
+    Riwayah,
+    Role,
+    RolesFile,
+    Source,
+    Style,
+    Visibility,
+    Vocab,
 )
-from services.storage import storage_paths as sp
-from services.storage import hf_bucket
-from services.storage.hf_bucket import FilesystemBackend
-from services.activity import activity_classification
-
 from services import db
-from services.db import repo_state, repo_access, repo_transitions, repo_activity, repo_requests
+from services.activity import activity_classification
+from services.db import repo_access, repo_activity, repo_requests, repo_state, repo_transitions
+from services.storage import hf_bucket
+from services.storage import storage_paths as sp
+from services.storage.hf_bucket import FilesystemBackend
 
 # Loaded by path — scripts/migrations/ files are run/loaded standalone, not
 # imported as a package, so use importlib.
@@ -33,27 +50,47 @@ M = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(M)
 
 
-TS = datetime(2026, 5, 10, tzinfo=timezone.utc)
+TS = datetime(2026, 5, 10, tzinfo=UTC)
 
 
 def _catalog() -> ReciterCatalog:
     return ReciterCatalog(
         generated_at=TS,
         vocab=Vocab(
-            riwayat=[Riwayah(slug="hafs", short="h", name="Hafs"),
-                     Riwayah(slug="warsh", short="w", name="Warsh")],
+            riwayat=[
+                Riwayah(slug="hafs", short="h", name="Hafs"),
+                Riwayah(slug="warsh", short="w", name="Warsh"),
+            ],
             styles=[Style(slug="mur", short="m", name="Murattal")],
             sources=[Source(slug="src", name="Src")],
             channels=[Channel(slug="ch", short="c", name="Ch")],
         ),
         reciters=[ReciterEntry(reciter_id="rid", name_en="Reciter")],
         deliveries=[
-            Delivery(slug="rid_hafs_mur", reciter_id="rid", riwayah="hafs", style="mur",
-                     source="src", channel="ch", audio_category="by_surah",
-                     chapter_count=114, added_at=TS, added_by_hf_id="seed"),
-            Delivery(slug="rid_warsh_mur", reciter_id="rid", riwayah="warsh", style="mur",
-                     source="src", channel="ch", audio_category="by_surah",
-                     chapter_count=114, added_at=TS, added_by_hf_id="seed"),
+            Delivery(
+                slug="rid_hafs_mur",
+                reciter_id="rid",
+                riwayah="hafs",
+                style="mur",
+                source="src",
+                channel="ch",
+                audio_category="by_surah",
+                chapter_count=114,
+                added_at=TS,
+                added_by_hf_id="seed",
+            ),
+            Delivery(
+                slug="rid_warsh_mur",
+                reciter_id="rid",
+                riwayah="warsh",
+                style="mur",
+                source="src",
+                channel="ch",
+                audio_category="by_surah",
+                chapter_count=114,
+                added_at=TS,
+                added_by_hf_id="seed",
+            ),
         ],
     )
 
@@ -81,36 +118,84 @@ def seeded_bucket(tmp_path):
     db.init_db()
 
     backend.write_json_atomic(sp.catalog_path(), _catalog().model_dump(mode="json"))
-    backend.write_json_atomic(sp.roles_path(), RolesFile(members=[
-        Member(hf_user_id="owner1", login="owner", role=Role.OWNER, added_at=TS,
-               added_by_hf_id="bootstrap"),
-    ]).model_dump(mode="json"))
-    backend.write_json_atomic(sp.state_path(), ReciterStateFile(reciters=[
-        ReciterRow(slug="rid_hafs_mur", state=ReciterState.UNDER_REVIEW, state_since=TS,
-                   assignee_hf_id="owner1", assignee_login="owner", assignee_since=TS,
-                   marked_ready=True, visibility=Visibility.PUBLIC),
-    ]).model_dump(mode="json"))
-    backend.write_json_atomic(sp.pending_requests_path(), PendingRequestsFile(by_slug={
-        "rid_warsh_mur": PendingRequest(
-            slug="rid_warsh_mur", submitted_at=TS,
-            requester=Actor(hf_user_id="contrib1", login_at_time="con", role=Role.CONTRIBUTOR),
-            proposed_edits=ProposedEdits(recording_year=1985), comments="pls", auto_claim=True),
-    }).model_dump(mode="json"))
-    backend.write_json_atomic(sp.completed_requests_path(), ArchivedRequestsFile(by_slug={
-        "rid_hafs_mur": [ArchivedRequest(
-            slug="rid_hafs_mur", submitted_at=TS,
-            requester=Actor(hf_user_id="contrib1", login_at_time="con", role=Role.CONTRIBUTOR),
-            proposed_edits=ProposedEdits(style="mur"), archived_at=TS,
-            transitioned_by=Actor(hf_user_id="system", login_at_time="system", role=Role.OWNER))],
-    }).model_dump(mode="json"))
+    backend.write_json_atomic(
+        sp.roles_path(),
+        RolesFile(
+            members=[
+                Member(
+                    hf_user_id="owner1",
+                    login="owner",
+                    role=Role.OWNER,
+                    added_at=TS,
+                    added_by_hf_id="bootstrap",
+                ),
+            ]
+        ).model_dump(mode="json"),
+    )
+    backend.write_json_atomic(
+        sp.state_path(),
+        ReciterStateFile(
+            reciters=[
+                ReciterRow(
+                    slug="rid_hafs_mur",
+                    state=ReciterState.UNDER_REVIEW,
+                    state_since=TS,
+                    assignee_hf_id="owner1",
+                    assignee_login="owner",
+                    assignee_since=TS,
+                    marked_ready=True,
+                    visibility=Visibility.PUBLIC,
+                ),
+            ]
+        ).model_dump(mode="json"),
+    )
+    backend.write_json_atomic(
+        sp.pending_requests_path(),
+        PendingRequestsFile(
+            by_slug={
+                "rid_warsh_mur": PendingRequest(
+                    slug="rid_warsh_mur",
+                    submitted_at=TS,
+                    requester=Actor(
+                        hf_user_id="contrib1", login_at_time="con", role=Role.CONTRIBUTOR
+                    ),
+                    proposed_edits=ProposedEdits(recording_year=1985),
+                    comments="pls",
+                    auto_claim=True,
+                ),
+            }
+        ).model_dump(mode="json"),
+    )
+    backend.write_json_atomic(
+        sp.completed_requests_path(),
+        ArchivedRequestsFile(
+            by_slug={
+                "rid_hafs_mur": [
+                    ArchivedRequest(
+                        slug="rid_hafs_mur",
+                        submitted_at=TS,
+                        requester=Actor(
+                            hf_user_id="contrib1", login_at_time="con", role=Role.CONTRIBUTOR
+                        ),
+                        proposed_edits=ProposedEdits(style="mur"),
+                        archived_at=TS,
+                        transitioned_by=Actor(
+                            hf_user_id="system", login_at_time="system", role=Role.OWNER
+                        ),
+                    )
+                ],
+            }
+        ).model_dump(mode="json"),
+    )
 
     rec = _audit_record()
     aid = activity_classification.audit_id(rec)
     backend.append_jsonl(sp.audit_partition_path(TS), rec)
     # Legacy ``dismissals`` field was dropped with the admin notifications rail;
     # only the global tombstone list survives the migration.
-    backend.write_json_atomic(sp.activity_state_path(), ActivityState(
-        deleted=[aid]).model_dump(mode="json"))
+    backend.write_json_atomic(
+        sp.activity_state_path(), ActivityState(deleted=[aid]).model_dump(mode="json")
+    )
 
     yield {"backend": backend, "audit_id": aid}
     db.reset()
@@ -122,7 +207,7 @@ def test_migration_decomposes_and_parity_passes(seeded_bucket):
     assert stats["deliveries"] == 2
     assert stats["states"] == 1
     assert stats["claims"] == 1
-    assert stats["requests"] == 2          # 1 pending + 1 completed archive
+    assert stats["requests"] == 2  # 1 pending + 1 completed archive
     assert stats["transitions"] == 1
 
     # state row → delivery_states + synthesized open claim, assignee from claim
@@ -180,10 +265,16 @@ def test_audit_record_without_request_id_or_actor(tmp_path):
     try:
         backend.write_json_atomic(sp.catalog_path(), _catalog().model_dump(mode="json"))
         # one record with no request_id and no actor (older audit shape)
-        backend.append_jsonl(sp.audit_partition_path(TS), {
-            "ts": "2026-05-10T00:00:00+00:00", "event": "catalog.edited",
-            "slug": None, "payload": {"k": "v"}, "result": "ok",
-        })
+        backend.append_jsonl(
+            sp.audit_partition_path(TS),
+            {
+                "ts": "2026-05-10T00:00:00+00:00",
+                "event": "catalog.edited",
+                "slug": None,
+                "payload": {"k": "v"},
+                "result": "ok",
+            },
+        )
         stats = M.run(allow_orphans=False)
         assert stats["transitions"] == 1
         tx = list(repo_transitions.feed(limit=5))[0]
@@ -201,20 +292,41 @@ def test_pending_and_archive_for_same_slug(tmp_path):
     try:
         backend.write_json_atomic(sp.catalog_path(), _catalog().model_dump(mode="json"))
         # same slug: a returned archive (past) + a fresh pending (resubmitted)
-        backend.write_json_atomic(sp.pending_requests_path(), PendingRequestsFile(by_slug={
-            "rid_hafs_mur": PendingRequest(
-                slug="rid_hafs_mur", submitted_at=TS,
-                requester=Actor(hf_user_id="c", login_at_time="c", role=Role.CONTRIBUTOR),
-                proposed_edits=ProposedEdits()),
-        }).model_dump(mode="json"))
-        backend.write_json_atomic(sp.returned_requests_path(), ArchivedRequestsFile(by_slug={
-            "rid_hafs_mur": [ArchivedRequest(
-                slug="rid_hafs_mur", submitted_at=TS,
-                requester=Actor(hf_user_id="c", login_at_time="c", role=Role.CONTRIBUTOR),
-                proposed_edits=ProposedEdits(), archived_at=TS,
-                transitioned_by=Actor(hf_user_id="adm", login_at_time="adm", role=Role.OWNER),
-                reason="needs work")],
-        }).model_dump(mode="json"))
+        backend.write_json_atomic(
+            sp.pending_requests_path(),
+            PendingRequestsFile(
+                by_slug={
+                    "rid_hafs_mur": PendingRequest(
+                        slug="rid_hafs_mur",
+                        submitted_at=TS,
+                        requester=Actor(hf_user_id="c", login_at_time="c", role=Role.CONTRIBUTOR),
+                        proposed_edits=ProposedEdits(),
+                    ),
+                }
+            ).model_dump(mode="json"),
+        )
+        backend.write_json_atomic(
+            sp.returned_requests_path(),
+            ArchivedRequestsFile(
+                by_slug={
+                    "rid_hafs_mur": [
+                        ArchivedRequest(
+                            slug="rid_hafs_mur",
+                            submitted_at=TS,
+                            requester=Actor(
+                                hf_user_id="c", login_at_time="c", role=Role.CONTRIBUTOR
+                            ),
+                            proposed_edits=ProposedEdits(),
+                            archived_at=TS,
+                            transitioned_by=Actor(
+                                hf_user_id="adm", login_at_time="adm", role=Role.OWNER
+                            ),
+                            reason="needs work",
+                        )
+                    ],
+                }
+            ).model_dump(mode="json"),
+        )
         # the pending-unique index only constrains status='pending', so this is fine
         M.run(allow_orphans=False)
         assert repo_requests.has_pending("rid_hafs_mur") is True
@@ -231,9 +343,16 @@ def test_orphan_state_slug_aborts(tmp_path):
     db.init_db()
     try:
         backend.write_json_atomic(sp.catalog_path(), _catalog().model_dump(mode="json"))
-        backend.write_json_atomic(sp.state_path(), ReciterStateFile(reciters=[
-            ReciterRow(slug="ghost_hafs_mur", state=ReciterState.CATALOGUED, state_since=TS),
-        ]).model_dump(mode="json"))
+        backend.write_json_atomic(
+            sp.state_path(),
+            ReciterStateFile(
+                reciters=[
+                    ReciterRow(
+                        slug="ghost_hafs_mur", state=ReciterState.CATALOGUED, state_since=TS
+                    ),
+                ]
+            ).model_dump(mode="json"),
+        )
         with pytest.raises(SystemExit):
             M.run(allow_orphans=False)
     finally:

@@ -1,4 +1,5 @@
 """Migration 0002 applies: schema version, new columns, table, indexes."""
+
 from __future__ import annotations
 
 from services import db
@@ -21,8 +22,8 @@ def test_visitor_daily_table_exists():
 def test_new_indexes_exist():
     names = {
         r[0]
-        for r in db.get_conn().execute(
-            "SELECT name FROM sqlite_master WHERE type='index'"
-        ).fetchall()
+        for r in db.get_conn()
+        .execute("SELECT name FROM sqlite_master WHERE type='index'")
+        .fetchall()
     }
     assert {"ix_transitions_actor_ts", "ix_requests_requester", "ix_claims_assignee"} <= names

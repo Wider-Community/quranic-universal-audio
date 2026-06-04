@@ -20,14 +20,16 @@ import logging
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
+from qua_shared.schemas import MarkReadyRequest
 from routes._admin_helpers import (
     actor_for as _actor_for,
+)
+from routes._admin_helpers import (
     require_signed_in_or_401 as _require_user_or_401,
+)
+from routes._admin_helpers import (
     row_to_dict as _row_to_dict,
 )
-
-from qua_shared.schemas import MarkReadyRequest
-
 from services import auth as auth_service
 from services import catalog as catalog_service
 from services import permissions as permissions_service
@@ -35,7 +37,6 @@ from services import predicates as predicates_service
 from services import state as state_service
 from services.auth import capabilities as capabilities_service
 from services.errors import Codes, error_body
-
 from utils.decorators import require_same_origin
 
 logger = logging.getLogger(__name__)
@@ -59,16 +60,19 @@ def claim(slug: str):
     # path, and the auto-claim path all agree.
     if not permissions_service.is_owner(user):
         from services.db import repo_claims as _repo_claims
+
         other = _repo_claims.open_claim_for_user(user.hf_user_id)
         if other is not None and other != slug:
             other_name = catalog_service.display_name(other)
             target_name = catalog_service.display_name(slug)
-            return jsonify({
-                "error": f"already holding a claim on {other}",
-                "existing_claim": other,
-                "existing_claim_name": other_name,
-                "target_name": target_name,
-            }), 409
+            return jsonify(
+                {
+                    "error": f"already holding a claim on {other}",
+                    "existing_claim": other,
+                    "existing_claim_name": other_name,
+                    "target_name": target_name,
+                }
+            ), 409
 
     new_row = state_service.transition(
         slug,
@@ -128,11 +132,13 @@ def mark_ready(slug: str):
         try:
             submission = MarkReadyRequest.model_validate(raw)
         except ValidationError as e:
-            return jsonify(error_body(
-                "Your mark-ready submission was incomplete. Please review and resubmit.",
-                code=Codes.MARK_READY_PAYLOAD,
-                details={"validation_errors": e.errors()},
-            )), 400
+            return jsonify(
+                error_body(
+                    "Your mark-ready submission was incomplete. Please review and resubmit.",
+                    code=Codes.MARK_READY_PAYLOAD,
+                    details={"validation_errors": e.errors()},
+                )
+            ), 400
         payload = submission.model_dump()
 
     new_row = state_service.transition(
@@ -169,12 +175,17 @@ def reciter_task(slug: str):
     has_other = False
     if user is not None:
         has_other = state_service.has_other_active_claim(
-            user.hf_user_id, except_slug=slug,
+            user.hf_user_id,
+            except_slug=slug,
         )
 
-    return jsonify({
-        "row": _row_to_dict(row),
-        "predicates": predicates_service.build_predicates(
-            row, user, has_other_active_claim=has_other,
-        ),
-    })
+    return jsonify(
+        {
+            "row": _row_to_dict(row),
+            "predicates": predicates_service.build_predicates(
+                row,
+                user,
+                has_other_active_claim=has_other,
+            ),
+        }
+    )

@@ -12,12 +12,12 @@ Pre-Phase-2 the script raises ``ImportError`` because the unified classifier
 module does not yet exist; that is intentional — the snapshot is regenerated
 as part of the Phase 2 commit.
 """
+
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
-
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "segments"
 EXPECTED_DIR = FIXTURES_DIR / "expected"

@@ -11,8 +11,12 @@ from __future__ import annotations
 
 import pytest
 
-from services.storage.hf_bucket import (DEV_BUCKET_REPO, PROD_BUCKET_REPO,
-                                         ProdBucketRefused, resolve_bucket_repo)
+from services.storage.hf_bucket import (
+    DEV_BUCKET_REPO,
+    PROD_BUCKET_REPO,
+    ProdBucketRefused,
+    resolve_bucket_repo,
+)
 
 
 def _clear(monkeypatch):

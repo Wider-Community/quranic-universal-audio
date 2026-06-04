@@ -22,7 +22,7 @@ Times throughout are source-relative ms.
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 
 # A single failure record. ``violation`` is one of:
@@ -52,13 +52,21 @@ def check_word_bleed(ref: str, verse: dict) -> list[Violation]:
     first_start = int(words[0][1])
     last_end = int(words[-1][2])
     if first_start < v_start:
-        out.append(_violation(ref, "word_bleed_first",
-                              word_start=first_start, verse_start=v_start,
-                              delta=v_start - first_start))
+        out.append(
+            _violation(
+                ref,
+                "word_bleed_first",
+                word_start=first_start,
+                verse_start=v_start,
+                delta=v_start - first_start,
+            )
+        )
     if last_end > v_end:
-        out.append(_violation(ref, "word_bleed_last",
-                              word_end=last_end, verse_end=v_end,
-                              delta=last_end - v_end))
+        out.append(
+            _violation(
+                ref, "word_bleed_last", word_end=last_end, verse_end=v_end, delta=last_end - v_end
+            )
+        )
     return out
 
 
@@ -69,9 +77,16 @@ def check_duration_arithmetic(ref: str, verse: dict) -> list[Violation]:
     duration = int(verse.get("duration_ms", v_end - v_start))
     expected = v_end - v_start
     if duration != expected:
-        return [_violation(ref, "duration_arithmetic",
-                           duration_ms=duration, expected=expected,
-                           verse_start_ms=v_start, verse_end_ms=v_end)]
+        return [
+            _violation(
+                ref,
+                "duration_arithmetic",
+                duration_ms=duration,
+                expected=expected,
+                verse_start_ms=v_start,
+                verse_end_ms=v_end,
+            )
+        ]
     return []
 
 
@@ -103,10 +118,17 @@ def check_intra_segment_gapless(ref: str, verse: dict) -> list[Violation]:
             if cur is None or nxt is None:
                 continue
             if nxt[0] != cur[1]:
-                out.append(_violation(ref, "intra_segment_gap",
-                                      word_a=widx, word_b=widx + 1,
-                                      a_end=cur[1], b_start=nxt[0],
-                                      gap_ms=nxt[0] - cur[1]))
+                out.append(
+                    _violation(
+                        ref,
+                        "intra_segment_gap",
+                        word_a=widx,
+                        word_b=widx + 1,
+                        a_end=cur[1],
+                        b_start=nxt[0],
+                        gap_ms=nxt[0] - cur[1],
+                    )
+                )
     return out
 
 
@@ -123,15 +145,19 @@ def check_coverage(ref: str, verse: dict, expected_words: int | None) -> list[Vi
     if expected_words is not None and expected_words > 0:
         missing = [i for i in range(1, expected_words + 1) if i not in seen]
         if missing:
-            return [_violation(ref, "coverage_gap",
-                               expected=expected_words,
-                               present=sorted(seen),
-                               missing=missing)]
+            return [
+                _violation(
+                    ref,
+                    "coverage_gap",
+                    expected=expected_words,
+                    present=sorted(seen),
+                    missing=missing,
+                )
+            ]
     return []
 
 
-def validate_verse(ref: str, verse: dict, *,
-                   expected_words: int | None = None) -> list[Violation]:
+def validate_verse(ref: str, verse: dict, *, expected_words: int | None = None) -> list[Violation]:
     """Run every check on one verse. Returns the combined violation list."""
     out: list[Violation] = []
     out.extend(check_word_bleed(ref, verse))
@@ -141,8 +167,7 @@ def validate_verse(ref: str, verse: dict, *,
     return out
 
 
-def validate_dataset(verses: dict[str, dict], *,
-                     surah_info: dict | None = None) -> dict:
+def validate_dataset(verses: dict[str, dict], *, surah_info: dict | None = None) -> dict:
     """Run every check on every verse.
 
     Returns a ``validation_summary`` with the failure list + per-check counts:
@@ -161,8 +186,7 @@ def validate_dataset(verses: dict[str, dict], *,
     for ref, verse in verses.items():
         if ref.startswith("_"):
             continue
-        violations.extend(validate_verse(
-            ref, verse, expected_words=expected_by_ref.get(ref)))
+        violations.extend(validate_verse(ref, verse, expected_words=expected_by_ref.get(ref)))
     by_kind: dict[str, int] = {}
     for v in violations:
         by_kind[v["violation"]] = by_kind.get(v["violation"], 0) + 1
@@ -213,6 +237,5 @@ class BoundaryValidationError(RuntimeError):
     def __init__(self, summary: dict):
         self.summary = summary
         fatal = fatal_violations(summary.get("violations") or [])
-        msg = (f"{len(fatal)} fatal boundary violation(s); "
-               f"first: {fatal[0] if fatal else '<none>'}")
+        msg = f"{len(fatal)} fatal boundary violation(s); first: {fatal[0] if fatal else '<none>'}"
         super().__init__(msg)

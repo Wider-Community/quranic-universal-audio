@@ -1,4 +1,5 @@
 """Timestamps tab VBR metadata route."""
+
 from __future__ import annotations
 
 

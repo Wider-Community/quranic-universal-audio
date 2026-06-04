@@ -31,6 +31,7 @@ def histogram(values: list, bin_size: float, lo: float, hi: float, *, cap: bool 
         actual_max = max(values)
         if actual_max > hi:
             import math
+
             hi = math.ceil(actual_max / bin_size) * bin_size + bin_size
     n_bins = int((hi - lo) / bin_size)
     counts = [0] * (n_bins + 1)  # +1 for overflow bin
@@ -74,7 +75,7 @@ def compute_stats(reciter: str) -> dict | None:
         if not is_cross:
             segs_per_verse[verse_key] = len(segs)
 
-        for idx, seg in enumerate(segs):
+        for seg in segs:
             if len(seg) < 4:
                 continue
             w_from, w_to, t_from, t_to = seg[0], seg[1], seg[2], seg[3]
@@ -123,7 +124,9 @@ def compute_stats(reciter: str) -> dict | None:
 
     distributions = {
         "pause_duration_ms": histogram(pause_durations, PAUSE_HIST_BIN_MS, 0, PAUSE_HIST_MAX_MS),
-        "seg_duration_ms": histogram(seg_durations, SEG_DUR_HIST_BIN_MS, 0, SEG_DUR_HIST_MAX_MS, cap=False),
+        "seg_duration_ms": histogram(
+            seg_durations, SEG_DUR_HIST_BIN_MS, 0, SEG_DUR_HIST_MAX_MS, cap=False
+        ),
         "words_per_seg": histogram(words_per_seg, 1, 1, WORDS_PER_SEG_HIST_MAX, cap=False),
         "segs_per_verse": histogram(spv_values, 1, 1, SEGS_PER_VERSE_HIST_MAX),
         "confidence": histogram(confidences, CONF_HIST_BIN_SIZE, 0, 100),

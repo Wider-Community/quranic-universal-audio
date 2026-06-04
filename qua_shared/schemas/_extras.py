@@ -18,6 +18,7 @@ attributes from absorbed extras).
 
 Tests live alongside the schemas (``qua_shared/schemas/smoke.py``).
 """
+
 from __future__ import annotations
 
 import logging
@@ -58,13 +59,15 @@ def strip_and_warn(
     if extras_dead:
         _log.info(
             "%s: stripped legacy field(s) %s — writers must not emit these",
-            model_name, sorted(extras_dead),
+            model_name,
+            sorted(extras_dead),
         )
     if extras_unknown:
         _log.warning(
             "%s: stripped UNRECOGNIZED field(s) %s — schema is out of date "
             "or writer is emitting bloat",
-            model_name, sorted(extras_unknown),
+            model_name,
+            sorted(extras_unknown),
         )
 
     return cleaned

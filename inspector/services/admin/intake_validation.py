@@ -16,7 +16,6 @@ from pydantic import HttpUrl, TypeAdapter, ValidationError
 
 from qua_shared.schemas import IntakeSubmission, IntakeValidation
 from qua_shared.schemas.intake_requests import SourceLink, normalize_url
-
 from services.state import catalog as catalog_service
 
 TOTAL_CHAPTERS = 114
@@ -37,6 +36,7 @@ def _is_plausible_url(raw: str | None) -> bool:
         return True
     except ValidationError:
         return False
+
 
 # Hosts whose playlists/folders the offline ingest can enumerate (yt-dlp / API).
 _PLAYLIST_HOSTS = (

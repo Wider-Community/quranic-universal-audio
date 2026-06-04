@@ -25,6 +25,7 @@ Usage:
     python3 scripts/backfills/backfill_pipeline_peaks.py \\
         --slug <slug> [--slug <slug2> ...] [--bucket prod|dev] [--dry-run]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -32,8 +33,8 @@ import base64
 import logging
 import os
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 log = logging.getLogger("backfill_pipeline_peaks")
 
@@ -51,11 +52,10 @@ _PEAKS_SLIM_BPS = 10
 def _encode_peaks_b64(peaks: list[list[float]]) -> tuple[str, int]:
     """Encode a ``list[[mn, mx], ...]`` slice as int8-quantised b64."""
     import numpy as np  # noqa: PLC0415
+
     arr = np.asarray(peaks, dtype=np.float32)
     if arr.ndim != 2 or arr.shape[1] != 2:
-        raise ValueError(
-            f"_encode_peaks_b64: expected shape (N, 2), got {arr.shape}"
-        )
+        raise ValueError(f"_encode_peaks_b64: expected shape (N, 2), got {arr.shape}")
     i8 = np.clip(
         np.round(arr * _PEAKS_INT8_SCALE),
         -_PEAKS_INT8_SCALE,
@@ -91,7 +91,9 @@ def _resolve_op_chapter(op: dict, batch: dict) -> int | None:
 
 
 def _resolve_op_audio_url(
-    op: dict, batch: dict, by_chapter: dict[int, str],
+    op: dict,
+    batch: dict,
+    by_chapter: dict[int, str],
 ) -> str | None:
     """Snapshot's stamped ``audio_url`` first, then catalog lookup by
     resolved chapter."""
@@ -126,6 +128,7 @@ def _op_time_range(op: dict) -> tuple[int, int] | None:
 def _audio_url_by_chapter(reciter: str) -> dict[int, str]:
     """Map ``chapter -> URL`` from the bucket audio_manifest sidecar."""
     from services.audio.audio_meta import chapter_urls
+
     out: dict[int, str] = {}
     for key, url in chapter_urls(reciter).items():
         if ":" in str(key):
@@ -154,17 +157,17 @@ def backfill_one_slug(reciter: str, *, dry_run: bool) -> int:
         return 0
 
     already_persisted: set[str] = {
-        rec.get("op_id")
-        for rec in load_peaks_records(reciter)
-        if isinstance(rec.get("op_id"), str)
+        rec.get("op_id") for rec in load_peaks_records(reciter) if isinstance(rec.get("op_id"), str)
     }
     missing = [
-        (batch, op) for batch, op in pipeline_ops
-        if op.get("op_id") not in already_persisted
+        (batch, op) for batch, op in pipeline_ops if op.get("op_id") not in already_persisted
     ]
     log.info(
         "[%s] %d pipeline ops total, %d already persisted, %d missing",
-        reciter, len(pipeline_ops), len(already_persisted), len(missing),
+        reciter,
+        len(pipeline_ops),
+        len(already_persisted),
+        len(missing),
     )
     if not missing:
         return 0
@@ -178,32 +181,38 @@ def backfill_one_slug(reciter: str, *, dry_run: bool) -> int:
             continue
         rng = _op_time_range(op)
         if rng is None:
-            log.warning("[%s] op %s has no usable time range; skipping",
-                        reciter, op_id)
+            log.warning("[%s] op %s has no usable time range; skipping", reciter, op_id)
             continue
         url = _resolve_op_audio_url(op, batch, by_chapter)
         if not url:
-            log.warning("[%s] op %s has no resolvable audio_url; skipping",
-                        reciter, op_id)
+            log.warning("[%s] op %s has no resolvable audio_url; skipping", reciter, op_id)
             continue
         if dry_run:
-            log.info("[%s] dry-run: would compute peaks for op %s at %s "
-                     "[%d..%d]", reciter, op_id, url, rng[0], rng[1])
+            log.info(
+                "[%s] dry-run: would compute peaks for op %s at %s [%d..%d]",
+                reciter,
+                op_id,
+                url,
+                rng[0],
+                rng[1],
+            )
             continue
         try:
             data = compute_segment_peaks(url, rng[0], rng[1], reciter)
         except Exception:  # noqa: BLE001
-            log.exception("[%s] compute_segment_peaks failed for op %s",
-                          reciter, op_id)
+            log.exception("[%s] compute_segment_peaks failed for op %s", reciter, op_id)
             continue
         if not data or not data.get("peaks"):
             log.warning("[%s] empty peaks for op %s", reciter, op_id)
             continue
         peaks_b64, bps = _encode_peaks_b64(data["peaks"])
         record = {
-            "op_id": op_id, "url": url,
-            "start_ms": rng[0], "end_ms": rng[1],
-            "bps": bps, "peaks_b64": peaks_b64,
+            "op_id": op_id,
+            "url": url,
+            "start_ms": rng[0],
+            "end_ms": rng[1],
+            "bps": bps,
+            "peaks_b64": peaks_b64,
         }
         by_batch.setdefault(batch.get("batch_id"), []).append(record)
 
@@ -220,12 +229,18 @@ def backfill_one_slug(reciter: str, *, dry_run: bool) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--slug", action="append", required=True,
-                    help="Reciter slug. Repeat for multiple.")
-    ap.add_argument("--bucket", choices=sorted(_BUCKETS), default="prod",
-                    help="Bucket to operate on (default: prod).")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="Identify missing ops, log them, write nothing.")
+    ap.add_argument(
+        "--slug", action="append", required=True, help="Reciter slug. Repeat for multiple."
+    )
+    ap.add_argument(
+        "--bucket",
+        choices=sorted(_BUCKETS),
+        default="prod",
+        help="Bucket to operate on (default: prod).",
+    )
+    ap.add_argument(
+        "--dry-run", action="store_true", help="Identify missing ops, log them, write nothing."
+    )
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -245,8 +260,12 @@ def main() -> int:
     for slug in args.slug:
         total += backfill_one_slug(slug, dry_run=args.dry_run)
 
-    log.info("total: %d record(s) written across %d slug(s)%s",
-             total, len(args.slug), " (dry-run)" if args.dry_run else "")
+    log.info(
+        "total: %d record(s) written across %d slug(s)%s",
+        total,
+        len(args.slug),
+        " (dry-run)" if args.dry_run else "",
+    )
     return 0
 
 

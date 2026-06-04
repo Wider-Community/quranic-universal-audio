@@ -40,7 +40,11 @@ logger = logging.getLogger("migrate_json_to_sqlite")
 _FIRST_SEEN_BACKFILL_SQL = (
     # scripts/migrations/ -> scripts/ -> repo root, then into inspector/
     Path(__file__).resolve().parent.parent.parent
-    / "inspector" / "services" / "db" / "migrations" / "0003_backfill_first_seen.sql"
+    / "inspector"
+    / "services"
+    / "db"
+    / "migrations"
+    / "0003_backfill_first_seen.sql"
 )
 
 _STATUS_FOR_ARCHIVE = {"completed": "accepted", "returned": "returned", "discarded": "discarded"}
@@ -56,12 +60,16 @@ _BUCKET_REPOS = {
 
 
 def read_sources() -> dict:
+    from qua_shared.schemas import (
+        ActivityState,
+        ArchivedRequestsFile,
+        PendingRequestsFile,
+        ReciterCatalog,
+        ReciterStateFile,
+        RolesFile,
+    )
     from services.storage import storage_paths as sp
     from services.storage.hf_bucket import StorageNotFound, get_backend
-    from qua_shared.schemas import (
-        ActivityState, ArchivedRequestsFile, PendingRequestsFile, ReciterCatalog,
-        ReciterStateFile, RolesFile,
-    )
 
     backend = get_backend()
 
@@ -72,9 +80,15 @@ def read_sources() -> dict:
             return default
 
     archives = {
-        "completed": _json(sp.completed_requests_path(), ArchivedRequestsFile, ArchivedRequestsFile()),
-        "returned": _json(sp.returned_requests_path(), ArchivedRequestsFile, ArchivedRequestsFile()),
-        "discarded": _json(sp.discarded_requests_path(), ArchivedRequestsFile, ArchivedRequestsFile()),
+        "completed": _json(
+            sp.completed_requests_path(), ArchivedRequestsFile, ArchivedRequestsFile()
+        ),
+        "returned": _json(
+            sp.returned_requests_path(), ArchivedRequestsFile, ArchivedRequestsFile()
+        ),
+        "discarded": _json(
+            sp.discarded_requests_path(), ArchivedRequestsFile, ArchivedRequestsFile()
+        ),
     }
 
     audit: list[dict] = []
@@ -139,15 +153,33 @@ def build(src: dict, *, allow_orphans: bool = False) -> dict:
 
     catalog = src["catalog"]
     delivery_slugs = {d.slug for d in catalog.deliveries}
-    stats = {k: 0 for k in (
-        "users", "roles", "reciters", "deliveries", "states", "claims",
-        "requests", "transitions", "tombstones", "orphans_skipped",
-    )}
+    stats = {
+        k: 0
+        for k in (
+            "users",
+            "roles",
+            "reciters",
+            "deliveries",
+            "states",
+            "claims",
+            "requests",
+            "transitions",
+            "tombstones",
+            "orphans_skipped",
+        )
+    }
 
     # idempotency guard: build() only runs against a freshly-migrated empty DB.
     _conn0 = db.get_conn()
-    for _t in ("role_assignments", "reciters", "deliveries", "delivery_states",
-               "claims", "requests", "transitions"):
+    for _t in (
+        "role_assignments",
+        "reciters",
+        "deliveries",
+        "delivery_states",
+        "claims",
+        "requests",
+        "transitions",
+    ):
         if _conn0.execute(f"SELECT 1 FROM {_t} LIMIT 1").fetchone():  # fixed table list
             raise SystemExit(f"ABORT: target table {_t} is not empty — run against a fresh DB")
 
@@ -162,17 +194,25 @@ def build(src: dict, *, allow_orphans: bool = False) -> dict:
             conn.execute(
                 "INSERT INTO role_assignments(hf_user_id, role, granted_at, granted_by, "
                 "revoked_at, revoked_by) VALUES (?,?,?,?,?,?)",
-                (m.hf_user_id, role, _serde.to_iso(m.added_at), m.added_by_hf_id,
-                 _serde.to_iso(m.removed_at), m.removed_by_hf_id),
+                (
+                    m.hf_user_id,
+                    role,
+                    _serde.to_iso(m.added_at),
+                    m.added_by_hf_id,
+                    _serde.to_iso(m.removed_at),
+                    m.removed_by_hf_id,
+                ),
             )
             stats["roles"] += 1
 
         # --- catalog ---
         repo_catalog.load_vocab(catalog.vocab)
         for r in catalog.reciters:
-            repo_catalog.insert_reciter(r); stats["reciters"] += 1
+            repo_catalog.insert_reciter(r)
+            stats["reciters"] += 1
         for d in catalog.deliveries:
-            repo_catalog.insert_delivery(d); stats["deliveries"] += 1
+            repo_catalog.insert_delivery(d)
+            stats["deliveries"] += 1
         for a in catalog.aliases:
             repo_catalog.insert_alias(a)
         repo_catalog.set_meta(generated_at=catalog.generated_at, derived=catalog.derived)
@@ -185,26 +225,42 @@ def build(src: dict, *, allow_orphans: bool = False) -> dict:
                 stats["orphans_skipped"] += 1
                 continue
             repo_state.upsert_state(
-                row.slug, state=row.state, state_since=row.state_since,
-                visibility=row.visibility, visibility_reason=row.visibility_reason,
-                last_save_at=row.last_save_at, timestamps_job_ids=row.timestamps_job_ids,
+                row.slug,
+                state=row.state,
+                state_since=row.state_since,
+                visibility=row.visibility,
+                visibility_reason=row.visibility_reason,
+                last_save_at=row.last_save_at,
+                timestamps_job_ids=row.timestamps_job_ids,
                 revision_in_progress=row.revision_in_progress,
             )
             stats["states"] += 1
             if row.assignee_hf_id:
                 repo_access.ensure_user(row.assignee_hf_id, login=row.assignee_login)
                 repo_claims.open_claim(
-                    slug=row.slug, assignee_id=row.assignee_hf_id,
-                    assignee_login=row.assignee_login, claimed_at=row.assignee_since,
+                    slug=row.slug,
+                    assignee_id=row.assignee_hf_id,
+                    assignee_login=row.assignee_login,
+                    claimed_at=row.assignee_since,
                 )
                 if row.marked_ready:
                     repo_claims.set_marked_ready(row.slug, ready=True, at=row.assignee_since)
                 stats["claims"] += 1
 
         # --- requests: pending + archives ---
-        def _insert_request(*, slug, requester, submitted_at, status, proposed_edits,
-                            comments, auto_claim, resolved_at=None, transitioned_by=None,
-                            reason=None):
+        def _insert_request(
+            *,
+            slug,
+            requester,
+            submitted_at,
+            status,
+            proposed_edits,
+            comments,
+            auto_claim,
+            resolved_at=None,
+            transitioned_by=None,
+            reason=None,
+        ):
             if slug is not None and slug not in delivery_slugs:
                 if not allow_orphans:
                     raise RuntimeError(f"orphan request slug {slug!r} (use --allow-orphans)")
@@ -217,34 +273,58 @@ def build(src: dict, *, allow_orphans: bool = False) -> dict:
             }
             resolved_by = None
             if transitioned_by is not None:
-                repo_access.ensure_user(transitioned_by.hf_user_id,
-                                        login=transitioned_by.login_at_time)
+                repo_access.ensure_user(
+                    transitioned_by.hf_user_id, login=transitioned_by.login_at_time
+                )
                 payload["transitioned_by"] = _actor_dict(transitioned_by)
                 resolved_by = transitioned_by.hf_user_id
             conn.execute(
                 "INSERT INTO requests(id, kind, slug, requester_id, submitted_at, status, "
                 "resolved_at, resolved_by_id, resolution_reason, auto_claim, comments, payload) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (f"rq_{uuid.uuid4().hex[:12]}", "existing_combo_edit", slug,
-                 requester.hf_user_id, _serde.to_iso(submitted_at), status,
-                 _serde.to_iso(resolved_at), resolved_by, reason,
-                 1 if auto_claim else 0, comments, _serde.json_dumps(payload)),
+                (
+                    f"rq_{uuid.uuid4().hex[:12]}",
+                    "existing_combo_edit",
+                    slug,
+                    requester.hf_user_id,
+                    _serde.to_iso(submitted_at),
+                    status,
+                    _serde.to_iso(resolved_at),
+                    resolved_by,
+                    reason,
+                    1 if auto_claim else 0,
+                    comments,
+                    _serde.json_dumps(payload),
+                ),
             )
             stats["requests"] += 1
 
         for slug, pr in src["pending"].by_slug.items():
-            _insert_request(slug=slug, requester=pr.requester, submitted_at=pr.submitted_at,
-                            status="pending", proposed_edits=pr.proposed_edits,
-                            comments=pr.comments, auto_claim=pr.auto_claim)
+            _insert_request(
+                slug=slug,
+                requester=pr.requester,
+                submitted_at=pr.submitted_at,
+                status="pending",
+                proposed_edits=pr.proposed_edits,
+                comments=pr.comments,
+                auto_claim=pr.auto_claim,
+            )
         for kind, af in src["archives"].items():
             status = _STATUS_FOR_ARCHIVE[kind]
             for slug, lst in af.by_slug.items():
                 for ar in lst:
-                    _insert_request(slug=slug, requester=ar.requester,
-                                    submitted_at=ar.submitted_at, status=status,
-                                    proposed_edits=ar.proposed_edits, comments=ar.comments,
-                                    auto_claim=ar.auto_claim, resolved_at=ar.archived_at,
-                                    transitioned_by=ar.transitioned_by, reason=ar.reason)
+                    _insert_request(
+                        slug=slug,
+                        requester=ar.requester,
+                        submitted_at=ar.submitted_at,
+                        status=status,
+                        proposed_edits=ar.proposed_edits,
+                        comments=ar.comments,
+                        auto_claim=ar.auto_claim,
+                        resolved_at=ar.archived_at,
+                        transitioned_by=ar.transitioned_by,
+                        reason=ar.reason,
+                    )
 
         # --- transitions (audit) ---
         seen_ids: set[str] = set()
@@ -264,11 +344,21 @@ def build(src: dict, *, allow_orphans: bool = False) -> dict:
                 "INSERT INTO transitions(id, ts, slug, event, from_state, to_state, "
                 "actor_id, actor_login_snapshot, actor_role_snapshot, reason, result, "
                 "payload, content_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (tid, rec.get("ts"), slug, rec.get("event"), rec.get("from_state"),
-                 rec.get("to_state"), actor_hf, actor.get("login_at_time"),
-                 actor.get("role"), rec.get("reason"), rec.get("result") or "ok",
-                 _serde.json_dumps(rec.get("payload") or {}),
-                 _serde.content_hash_for_record(rec)),
+                (
+                    tid,
+                    rec.get("ts"),
+                    slug,
+                    rec.get("event"),
+                    rec.get("from_state"),
+                    rec.get("to_state"),
+                    actor_hf,
+                    actor.get("login_at_time"),
+                    actor.get("role"),
+                    rec.get("reason"),
+                    rec.get("result") or "ok",
+                    _serde.json_dumps(rec.get("payload") or {}),
+                    _serde.content_hash_for_record(rec),
+                ),
             )
             stats["transitions"] += 1
 
@@ -351,7 +441,8 @@ def parity_check(src: dict, *, allow_orphans: bool) -> list[str]:
 
     # open claims ↔ under_review state rows with an assignee
     want_claims = {
-        (r.slug, r.assignee_hf_id) for r in src["state"].reciters
+        (r.slug, r.assignee_hf_id)
+        for r in src["state"].reciters
         if r.slug in delivery_slugs and r.assignee_hf_id
     }
     got_claims = {

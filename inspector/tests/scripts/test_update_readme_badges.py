@@ -5,12 +5,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
-
 SCRIPT_PATH = (
-    Path(__file__).resolve().parents[3]
-    / ".github"
-    / "scripts"
-    / "update_readme_badges.py"
+    Path(__file__).resolve().parents[3] / ".github" / "scripts" / "update_readme_badges.py"
 )
 SPEC = importlib.util.spec_from_file_location("update_readme_badges", SCRIPT_PATH)
 badges = importlib.util.module_from_spec(SPEC)
@@ -50,16 +46,16 @@ def test_replace_badges_replaces_legacy_commented_block():
 
 
 def test_replace_badges_updates_existing_marked_block():
-    old = "\n".join([
-        "before",
-        badges.START_MARKER,
-        "  stale",
-        badges.END_MARKER,
-        "after",
-    ])
-    new_block = badges.render_badges(
-        badges.BadgeStats(recitations=1, riwayat=2, seconds=50 * 3600)
+    old = "\n".join(
+        [
+            "before",
+            badges.START_MARKER,
+            "  stale",
+            badges.END_MARKER,
+            "after",
+        ]
     )
+    new_block = badges.render_badges(badges.BadgeStats(recitations=1, riwayat=2, seconds=50 * 3600))
 
     updated = badges.replace_badges(old, new_block)
 

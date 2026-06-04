@@ -21,17 +21,15 @@ from qua_shared.schemas import (
     AdminReviewDetail,
     AdminReviewOpenClaim,
     AdminReviewRow,
+    AdminReviewsResponse,
     AdminReviewTransition,
     AdminReviewValidation,
-    AdminReviewsResponse,
     MarkReadySubmission,
     ReciterState,
 )
-
 from services.db import _serde, repo_review_views
 from services.db import sync as _sync
 from services.db.connection import get_conn
-
 
 # States the Reviews tab covers.
 _BUCKET_STATES: tuple[str, ...] = (
@@ -114,10 +112,7 @@ def list_reviews(*, caller_hf_id: str) -> dict:
         # repo_review_views.count_unviewed_for_user so the per-row dot and the
         # polled aggregate agree.
         events: list[str] = []
-        if (
-            r["state"] == ReciterState.UNDER_REVIEW.value
-            and r["marked_ready_at"] is not None
-        ):
+        if r["state"] == ReciterState.UNDER_REVIEW.value and r["marked_ready_at"] is not None:
             events.append(r["marked_ready_at"])
         if r["last_job_finished_at"] is not None:
             events.append(r["last_job_finished_at"])
@@ -126,19 +121,21 @@ def list_reviews(*, caller_hf_id: str) -> dict:
             seen_at = viewed.get(r["slug"])
             unread = seen_at is None or seen_at < max(events)
 
-        rows.append(AdminReviewRow(
-            slug=r["slug"],
-            state=r["state"],
-            state_since=r["state_since"],
-            reciter_id=r["reciter_id"],
-            name_ar=r["name_ar"],
-            name_en=r["name_en"],
-            riwayah=r["riwayah"],
-            style=r["style"],
-            channel=r["channel"],
-            open_claim=open_claim,
-            unread=unread,
-        ))
+        rows.append(
+            AdminReviewRow(
+                slug=r["slug"],
+                state=r["state"],
+                state_since=r["state_since"],
+                reciter_id=r["reciter_id"],
+                name_ar=r["name_ar"],
+                name_en=r["name_en"],
+                riwayah=r["riwayah"],
+                style=r["style"],
+                channel=r["channel"],
+                open_claim=open_claim,
+                unread=unread,
+            )
+        )
 
     unviewed_count = sum(1 for row in rows if row.unread)
     return AdminReviewsResponse(
@@ -159,9 +156,7 @@ def mark_viewed(slug: str, *, caller_hf_id: str) -> bool:
     """Advance the caller's ``viewed_at`` for ``slug``. Returns False if the
     slug isn't in ``delivery_states`` (caller maps to 404). Durable write —
     same sync envelope the request-view path uses."""
-    base = get_conn().execute(
-        "SELECT 1 FROM delivery_states WHERE slug = ?", (slug,)
-    ).fetchone()
+    base = get_conn().execute("SELECT 1 FROM delivery_states WHERE slug = ?", (slug,)).fetchone()
     if base is None:
         return False
     with _sync.durable_transaction():

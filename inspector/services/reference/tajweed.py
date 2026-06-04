@@ -94,9 +94,7 @@ def get_phonemizer() -> Phonemizer:
     if _phonemizer is None:
         t0 = time.perf_counter()
         _phonemizer = Phonemizer()
-        log.info(
-            "quranic_phonemizer initialised in %.0f ms", (time.perf_counter() - t0) * 1000
-        )
+        log.info("quranic_phonemizer initialised in %.0f ms", (time.perf_counter() - t0) * 1000)
     return _phonemizer
 
 
@@ -122,9 +120,7 @@ def _resolve_word_idx(location: str) -> int:
 
 
 @functools.lru_cache(maxsize=4096)
-def bridges_for_verse(
-    verse_ref: str, stop_refs: tuple[str, ...] = ()
-) -> tuple[BridgeInfo, ...]:
+def bridges_for_verse(verse_ref: str, stop_refs: tuple[str, ...] = ()) -> tuple[BridgeInfo, ...]:
     """Compute cross-word tajweed bridges for ``verse_ref`` under ``stop_refs``.
 
     Returns an immutable tuple so the lru_cache entry is safely shared between
@@ -190,19 +186,13 @@ def bridges_for_verse(
         # word-internal geminate (``قَرَارࣱ → aˤ, rˤrˤ, u``: the ``rˤrˤ`` is the
         # shaddah on the carrier, NOT the cross-word merger; the merger
         # actually sits on the next word's first letter).
-        side = (
-            "prev"
-            if trigger.phonemes and _is_merger_phoneme(trigger.phonemes[-1])
-            else "curr"
-        )
+        side = "prev" if trigger.phonemes and _is_merger_phoneme(trigger.phonemes[-1]) else "curr"
 
         before_word_idx = _resolve_word_idx(curr_w.location)
         if before_word_idx == 0:
             # Malformed location (muqattaat or unexpected form) — skip.
             continue
 
-        out.append(
-            BridgeInfo(before_word_idx=before_word_idx, rule=trigger_rule.value, side=side)
-        )
+        out.append(BridgeInfo(before_word_idx=before_word_idx, rule=trigger_rule.value, side=side))
 
     return tuple(out)

@@ -53,11 +53,15 @@ def _ok(locations, t0=0.0, step=0.5):
     words = []
     for i, loc in enumerate(locations):
         s = t0 + i * step
-        words.append({
-            "location": loc, "start": s, "end": s + step,
-            "letters": [{"char": "x", "start": s, "end": s + step}],
-            "phones": [{"phone": "P", "start": s, "end": s + step}],
-        })
+        words.append(
+            {
+                "location": loc,
+                "start": s,
+                "end": s + step,
+                "letters": [{"char": "x", "start": s, "end": s + step}],
+                "phones": [{"phone": "P", "start": s, "end": s + step}],
+            }
+        )
     return {"status": "ok", "words": words}
 
 
@@ -75,11 +79,13 @@ def _chapter_loopback():
 
 
 def _results_loopback():
-    return {0: [
-        (0, _ok(["1:1:1", "1:1:2"])),
-        (1, _ok(["1:1:3", "1:1:4"], t0=1.5)),
-        (2, _ok(["1:2:1", "1:2:2", "1:2:3"], t0=2.5)),
-    ]}
+    return {
+        0: [
+            (0, _ok(["1:1:1", "1:1:2"])),
+            (1, _ok(["1:1:3", "1:1:4"], t0=1.5)),
+            (2, _ok(["1:2:1", "1:2:2", "1:2:3"], t0=2.5)),
+        ]
+    }
 
 
 def _build(chapter, results, *, src_meta=PROVENANCE, cat=CAT):
@@ -118,8 +124,15 @@ def test_meta_is_slim_v2():
     # category normalized: by_surah_audio -> by_surah
     assert meta["audio_category"] == "by_surah"
     # provenance retained when present
-    for k in ("padding", "beam", "method", "aligner_model", "shared_cmvn",
-              "audio_source", "created_at"):
+    for k in (
+        "padding",
+        "beam",
+        "method",
+        "aligner_model",
+        "shared_cmvn",
+        "audio_source",
+        "created_at",
+    ):
         assert k in meta
     assert meta["beam"] == 50 and meta["method"] == "kalpy"
     # excluded

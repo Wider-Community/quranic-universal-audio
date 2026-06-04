@@ -24,8 +24,7 @@ from services.audio import peaks_slim  # noqa: E402
 
 def _hd_doc():
     # 600 HD min/max pairs (30 bps × 20s), deterministic.
-    peaks = [[round(-((i % 50) / 50.0), 4), round(((i % 37) / 37.0), 4)]
-             for i in range(600)]
+    peaks = [[round(-((i % 50) / 50.0), 4), round(((i % 37) / 37.0), 4)] for i in range(600)]
     return {"schema_version": 2, "duration_ms": 20000, "peaks": peaks}
 
 
@@ -45,8 +44,13 @@ def test_pack_unpacks_via_inspector():
 
 def test_constants_match_config():
     # Guard the inlined constants against config drift.
-    from config import (MIN_FULL_PEAK_BUCKETS, PEAKS_BUCKETS_PER_SEC,
-                        PEAKS_FFMPEG_SAMPLE_RATE, PEAKS_PCM_NORMALIZER)
+    from config import (
+        MIN_FULL_PEAK_BUCKETS,
+        PEAKS_BUCKETS_PER_SEC,
+        PEAKS_FFMPEG_SAMPLE_RATE,
+        PEAKS_PCM_NORMALIZER,
+    )
+
     assert peaks_compute.PEAKS_FFMPEG_SAMPLE_RATE == PEAKS_FFMPEG_SAMPLE_RATE
     assert peaks_compute.PEAKS_BUCKETS_PER_SEC == PEAKS_BUCKETS_PER_SEC
     assert peaks_compute.MIN_FULL_PEAK_BUCKETS == MIN_FULL_PEAK_BUCKETS

@@ -5,9 +5,9 @@ Undo logic for reverse-applying history entries lives in ``services/undo.py``;
 this module is read-only.
 """
 
-from collections import Counter
 import logging
 import threading
+from collections import Counter
 
 from config import RECITATION_SEGMENTS_PATH as _DEFAULT_RECITATION_SEGMENTS_PATH
 from services.storage import cache, data_dir
@@ -32,13 +32,15 @@ logger = logging.getLogger(__name__)
 # confidence bump to 1.0 clears v1 but has no effect on v2 — without
 # resolved-by-edit handling the v2 card would re-appear on every revalidate
 # after the user edited it.
-RESOLVES_BY_EDIT_CATEGORIES: frozenset[str] = frozenset({
-    "boundary_adj",
-    "audio_bleeding",
-    "repetitions",
-    "low_confidence_v2",
-    "basmala_amin",
-})
+RESOLVES_BY_EDIT_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "boundary_adj",
+        "audio_bleeding",
+        "repetitions",
+        "low_confidence_v2",
+        "basmala_amin",
+    }
+)
 
 # Legacy test seam: older unit tests monkeypatch this path directly. Production
 # reads through data_dir; parse_history_for_reciter only consults this when the
@@ -181,7 +183,9 @@ def load_edit_history(reciter: str) -> dict:
 
         raw_records = parse_history_for_reciter(reciter)
         return _load_edit_history_from_records(
-            reciter, raw_records, cache_result=use_cache,
+            reciter,
+            raw_records,
+            cache_result=use_cache,
         )
 
 
@@ -216,8 +220,8 @@ def _enrich_snapshot_audio_urls(reciter: str, batches: list[dict]) -> None:
                 continue
     except Exception:  # noqa: BLE001
         logger.exception(
-            "history_query: chapter_urls failed during audio_url enrichment "
-            "(reciter=%s)", reciter,
+            "history_query: chapter_urls failed during audio_url enrichment (reciter=%s)",
+            reciter,
         )
         return
 
@@ -328,13 +332,17 @@ def _load_edit_history_from_records(
             fix_kind_counts[op.get("fix_kind", "unknown")] += 1
 
     total_operations = sum(op_counts.values())
-    summary = {
-        "total_operations": total_operations,
-        "total_batches": total_batches,
-        "chapters_edited": len(chapters_edited),
-        "op_counts": dict(op_counts),
-        "fix_kind_counts": dict(fix_kind_counts),
-    } if total_operations > 0 else None
+    summary = (
+        {
+            "total_operations": total_operations,
+            "total_batches": total_batches,
+            "chapters_edited": len(chapters_edited),
+            "op_counts": dict(op_counts),
+            "fix_kind_counts": dict(fix_kind_counts),
+        }
+        if total_operations > 0
+        else None
+    )
 
     result = {"batches": batches, "summary": summary}
     if cache_result:

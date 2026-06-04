@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from qua_shared.schemas import Actor
 from services.db import repo_releases
@@ -44,10 +44,13 @@ JOB_FLAVOR = os.environ.get("INSPECTOR_CUT_JOB_FLAVOR", "cpu-upgrade")
 JOB_TIMEOUT = os.environ.get("INSPECTOR_CUT_JOB_TIMEOUT", "1h")
 
 
-def launch(*, version: str | None = None,
-           operator_note: str | None = None,
-           launched_by: str | None = None,
-           webhook_base: str | None = None) -> dict:
+def launch(
+    *,
+    version: str | None = None,
+    operator_note: str | None = None,
+    launched_by: str | None = None,
+    webhook_base: str | None = None,
+) -> dict:
     """Launch a cut-release job. Returns ``{job_id, url}``.
 
     Global single-flight — refuses if another cut is in flight.
@@ -56,8 +59,7 @@ def launch(*, version: str | None = None,
 
     busy = base.running_job_for(kind=KIND)
     if busy is not None:
-        raise RuntimeError(
-            f"cut_release already in flight: kind={busy[0]} id={busy[1]}")
+        raise RuntimeError(f"cut_release already in flight: kind={busy[0]} id={busy[1]}")
 
     base.stage_job_code()
     bucket = resolve_bucket_repo()
@@ -89,14 +91,19 @@ def launch(*, version: str | None = None,
     deps = "pyyaml huggingface_hub"
     entrypoint = "python /aux/code/qua_jobs/cut_release.py"
     if base.NEEDS_BOOTSTRAP:
-        command = ["bash", "-lc",
-                   "mamba install -y -c conda-forge python=3.11 "
-                   f"&& /opt/conda/bin/pip install -q {deps} "
-                   f"&& {entrypoint}"]
+        command = [
+            "bash",
+            "-lc",
+            "mamba install -y -c conda-forge python=3.11 "
+            f"&& /opt/conda/bin/pip install -q {deps} "
+            f"&& {entrypoint}",
+        ]
     else:
-        command = ["bash", "-lc",
-                   f"/env/bin/pip install -q {deps} "
-                   f"&& conda run -p /env --no-capture-output {entrypoint}"]
+        command = [
+            "bash",
+            "-lc",
+            f"/env/bin/pip install -q {deps} && conda run -p /env --no-capture-output {entrypoint}",
+        ]
 
     job = run_job(
         image=base.JOB_IMAGE,
@@ -107,8 +114,7 @@ def launch(*, version: str | None = None,
         secrets=secrets,
         volumes=[
             Volume(type="bucket", source=bucket, mount_path="/data"),
-            Volume(type="bucket", source=base.ALIGNER_BUCKET, mount_path="/aux",
-                   read_only=True),
+            Volume(type="bucket", source=base.ALIGNER_BUCKET, mount_path="/aux", read_only=True),
         ],
         labels={"task": KIND, "reciter": "_global"},
     )
@@ -118,17 +124,22 @@ def launch(*, version: str | None = None,
     # Same rationale as hf_publish.launch — drop the in-flight cache so the
     # next /releases/status reflects the new job without TTL latency.
     from services.storage import cache as _cache
+
     _cache.invalidate_in_flight_jobs_cache()
     return {"job_id": job_id, "url": url}
 
 
-def complete(slug: str | None, job_id: str, *,
-             version: str | None = None,
-             external_uri: str | None = None,
-             operator_note: str | None = None,
-             launched_by: str | None = None,
-             members: list[dict] | None = None,
-             validation_summary: dict | None = None) -> dict:
+def complete(
+    slug: str | None,
+    job_id: str,
+    *,
+    version: str | None = None,
+    external_uri: str | None = None,
+    operator_note: str | None = None,
+    launched_by: str | None = None,
+    members: list[dict] | None = None,
+    validation_summary: dict | None = None,
+) -> dict:
     """Record a GH release in the DB. Idempotent on (version).
 
     Inserts ``gh_releases`` + N ``gh_release_recitations`` rows, supersedes
@@ -142,7 +153,7 @@ def complete(slug: str | None, job_id: str, *,
         log.warning("cut_release.complete called without version")
         return {"ok": False, "reason": "no version"}
     members = members or []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     actor = Actor(
         hf_user_id="SYSTEM_ACTOR",
         login_at_time=launched_by or "system",
@@ -154,10 +165,12 @@ def complete(slug: str | None, job_id: str, *,
         # subsequent cut would miss its prior self.
         existing_any = repo_releases.gh_release_by_version(version)
         if existing_any is not None:
-            log.info("cut_release.complete(%s): already recorded (id=%s)",
-                     version, existing_any.get("id"))
-            return {"ok": True, "skipped": "duplicate",
-                    "release_id": existing_any["id"]}
+            log.info(
+                "cut_release.complete(%s): already recorded (id=%s)",
+                version,
+                existing_any.get("id"),
+            )
+            return {"ok": True, "skipped": "duplicate", "release_id": existing_any["id"]}
         # Supersede prior current gh_releases FIRST — the partial-unique on
         # ``version WHERE superseded_at IS NULL`` allows multiple rows only if
         # they're all superseded; the at-most-one-current invariant requires
@@ -197,14 +210,13 @@ def complete(slug: str | None, job_id: str, *,
             },
             reason="cut_release",
         )
-    log.info("cut_release.complete(%s): recorded %d recitations",
-             version, len(members))
+    log.info("cut_release.complete(%s): recorded %d recitations", version, len(members))
     # Terminal transition — drop the in-flight cache so the FE removes the
     # cut row from "In progress" on the next fetch.
     from services.storage import cache as _cache
+
     _cache.invalidate_in_flight_jobs_cache()
-    return {"ok": True, "release_id": release_id,
-            "recitation_count": len(members)}
+    return {"ok": True, "release_id": release_id, "recitation_count": len(members)}
 
 
 def register() -> None:

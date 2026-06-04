@@ -1,4 +1,5 @@
 """Visitor analytics (Tier 2/3): counters, hourly flush, classification, cookie."""
+
 from __future__ import annotations
 
 import pytest
@@ -19,7 +20,7 @@ def _reset_bucket():
 
 def test_record_hit_and_flush_upserts():
     visitors.record_hit({"hf_user_id": "u1"})
-    visitors.record_hit({"hf_user_id": "u1"})      # same id → 2 hits, 1 unique
+    visitors.record_hit({"hf_user_id": "u1"})  # same id → 2 hits, 1 unique
     visitors.record_hit(None, anon_id="a1")
     visitors.record_hit(None, anon_id="a2")
 
@@ -29,6 +30,7 @@ def test_record_hit_and_flush_upserts():
     assert after == before + 1  # exactly one committed write per flush
 
     from services.db import repo_visitors
+
     day = visitors._today()
     row = repo_visitors.get_day(day)
     assert row["signed_in_hits"] == 2
@@ -51,6 +53,7 @@ def test_flush_accumulates_same_day():
     visitors.record_hit(None, anon_id="a2")
     visitors.flush()
     from services.db import repo_visitors
+
     row = repo_visitors.get_day(visitors._today())
     assert row["anon_hits"] == 2
     assert row["unique_anon"] == 2
@@ -58,7 +61,7 @@ def test_flush_accumulates_same_day():
 
 def test_get_visitor_stats_includes_live():
     visitors.record_hit(None, anon_id="a1")
-    visitors.flush()                       # 1 persisted
+    visitors.flush()  # 1 persisted
     visitors.record_hit(None, anon_id="a2")  # 1 live, un-flushed
     stats = visitors.get_visitor_stats()
     assert stats["today"]["anon_hits"] == 2  # persisted + live

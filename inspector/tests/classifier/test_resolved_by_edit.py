@@ -15,22 +15,22 @@ because it self-resolves via the edit-time ``confidence = 1.0`` bump; v2 is
 included because it's keyed against a frozen extraction-time sidecar that
 ``confidence`` doesn't affect.
 """
+
 from __future__ import annotations
 
 import json
 
 import pytest
 
+from services.history_query import (
+    RESOLVES_BY_EDIT_CATEGORIES,
+    build_resolved_by_edit_index,
+)
 from services.validation.classifier import (
     classify_flags,
     is_resolved_by_edit,
     is_suppressed_for,
 )
-from services.history_query import (
-    RESOLVES_BY_EDIT_CATEGORIES,
-    build_resolved_by_edit_index,
-)
-
 
 # ---------------------------------------------------------------------------
 # Unit: classifier helpers
@@ -130,10 +130,15 @@ def test_resolves_by_edit_set_contains_only_soft_categories():
     affect. ``basmala_amin`` is included because any edit from the card signals
     "I dealt with it" — revalidation must not re-raise the flag for that uid.
     """
-    assert RESOLVES_BY_EDIT_CATEGORIES == frozenset({
-        "boundary_adj", "audio_bleeding", "repetitions", "low_confidence_v2",
-        "basmala_amin",
-    })
+    assert RESOLVES_BY_EDIT_CATEGORIES == frozenset(
+        {
+            "boundary_adj",
+            "audio_bleeding",
+            "repetitions",
+            "low_confidence_v2",
+            "basmala_amin",
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -154,50 +159,60 @@ def _write_history(tmp_path, reciter, records):
 
 def test_build_index_from_single_op(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        "services.history_query.RECITATION_SEGMENTS_PATH", tmp_path,
+        "services.history_query.RECITATION_SEGMENTS_PATH",
+        tmp_path,
     )
-    _write_history(tmp_path, "r1", [
-        {"record_type": "genesis", "batch_id": "g", "operations": []},
-        {
-            "batch_id": "b1",
-            "operations": [
-                {
-                    "op_id": "o1",
-                    "op_type": "trim_segment",
-                    "op_context_category": "boundary_adj",
-                    "targets_after": [{"segment_uid": "uid-A"}],
-                },
-            ],
-        },
-    ])
+    _write_history(
+        tmp_path,
+        "r1",
+        [
+            {"record_type": "genesis", "batch_id": "g", "operations": []},
+            {
+                "batch_id": "b1",
+                "operations": [
+                    {
+                        "op_id": "o1",
+                        "op_type": "trim_segment",
+                        "op_context_category": "boundary_adj",
+                        "targets_after": [{"segment_uid": "uid-A"}],
+                    },
+                ],
+            },
+        ],
+    )
     idx = build_resolved_by_edit_index("r1")
     assert idx == {"uid-A": {"boundary_adj"}}
 
 
 def test_build_index_skips_excluded_categories(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        "services.history_query.RECITATION_SEGMENTS_PATH", tmp_path,
+        "services.history_query.RECITATION_SEGMENTS_PATH",
+        tmp_path,
     )
-    _write_history(tmp_path, "r1", [
-        {"record_type": "genesis", "batch_id": "g", "operations": []},
-        {
-            "batch_id": "b1",
-            "operations": [
-                {
-                    "op_id": "o1",
-                    "op_type": "split_segment",
-                    "op_context_category": "cross_verse",
-                    "targets_after": [{"segment_uid": "uid-A"}],
-                },
-                {
-                    "op_id": "o2",
-                    "op_type": "trim_segment",
-                    "op_context_category": "low_confidence",
-                    "targets_after": [{"segment_uid": "uid-B"}],
-                },
-            ],
-        },
-    ])
+    _write_history(
+        tmp_path,
+        "r1",
+        [
+            {"record_type": "genesis", "batch_id": "g", "operations": []},
+            {
+                "batch_id": "b1",
+                "operations": [
+                    {
+                        "op_id": "o1",
+                        "op_type": "split_segment",
+                        "op_context_category": "cross_verse",
+                        "targets_after": [{"segment_uid": "uid-A"}],
+                    },
+                    {
+                        "op_id": "o2",
+                        "op_type": "trim_segment",
+                        "op_context_category": "low_confidence",
+                        "targets_after": [{"segment_uid": "uid-B"}],
+                    },
+                ],
+            },
+        ],
+    )
     idx = build_resolved_by_edit_index("r1")
     # cross_verse is hard; low_confidence self-resolves via confidence=1.0.
     assert idx == {}
@@ -205,75 +220,90 @@ def test_build_index_skips_excluded_categories(monkeypatch, tmp_path):
 
 def test_build_index_accumulates_categories_per_uid(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        "services.history_query.RECITATION_SEGMENTS_PATH", tmp_path,
+        "services.history_query.RECITATION_SEGMENTS_PATH",
+        tmp_path,
     )
-    _write_history(tmp_path, "r1", [
-        {"record_type": "genesis", "batch_id": "g", "operations": []},
-        {
-            "batch_id": "b1",
-            "operations": [
-                {
-                    "op_id": "o1",
-                    "op_type": "trim_segment",
-                    "op_context_category": "boundary_adj",
-                    "targets_after": [{"segment_uid": "uid-A"}],
-                },
-                {
-                    "op_id": "o2",
-                    "op_type": "edit_reference",
-                    "op_context_category": "audio_bleeding",
-                    "targets_after": [{"segment_uid": "uid-A"}],
-                },
-            ],
-        },
-    ])
+    _write_history(
+        tmp_path,
+        "r1",
+        [
+            {"record_type": "genesis", "batch_id": "g", "operations": []},
+            {
+                "batch_id": "b1",
+                "operations": [
+                    {
+                        "op_id": "o1",
+                        "op_type": "trim_segment",
+                        "op_context_category": "boundary_adj",
+                        "targets_after": [{"segment_uid": "uid-A"}],
+                    },
+                    {
+                        "op_id": "o2",
+                        "op_type": "edit_reference",
+                        "op_context_category": "audio_bleeding",
+                        "targets_after": [{"segment_uid": "uid-A"}],
+                    },
+                ],
+            },
+        ],
+    )
     idx = build_resolved_by_edit_index("r1")
     assert idx == {"uid-A": {"boundary_adj", "audio_bleeding"}}
 
 
 def test_build_index_includes_basmala_amin(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        "services.history_query.RECITATION_SEGMENTS_PATH", tmp_path,
+        "services.history_query.RECITATION_SEGMENTS_PATH",
+        tmp_path,
     )
-    _write_history(tmp_path, "r1", [
-        {"record_type": "genesis", "batch_id": "g", "operations": []},
-        {
-            "batch_id": "b1",
-            "operations": [
-                {
-                    "op_id": "o1",
-                    "op_type": "trim_segment",
-                    "op_context_category": "basmala_amin",
-                    "targets_after": [{"segment_uid": "uid-bsm"}],
-                },
-            ],
-        },
-    ])
+    _write_history(
+        tmp_path,
+        "r1",
+        [
+            {"record_type": "genesis", "batch_id": "g", "operations": []},
+            {
+                "batch_id": "b1",
+                "operations": [
+                    {
+                        "op_id": "o1",
+                        "op_type": "trim_segment",
+                        "op_context_category": "basmala_amin",
+                        "targets_after": [{"segment_uid": "uid-bsm"}],
+                    },
+                ],
+            },
+        ],
+    )
     idx = build_resolved_by_edit_index("r1")
     assert idx == {"uid-bsm": {"basmala_amin"}}
 
 
 def test_build_index_split_marks_both_halves(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        "services.history_query.RECITATION_SEGMENTS_PATH", tmp_path,
+        "services.history_query.RECITATION_SEGMENTS_PATH",
+        tmp_path,
     )
-    _write_history(tmp_path, "r1", [
-        {"record_type": "genesis", "batch_id": "g", "operations": []},
-        {
-            "batch_id": "b1",
-            "operations": [
-                {
-                    "op_id": "o1",
-                    "op_type": "split_segment",
-                    "op_context_category": "repetitions",
-                    "targets_after": [
-                        {"segment_uid": "uid-first"},
-                        {"segment_uid": "uid-second"},
-                    ],
-                },
-            ],
-        },
-    ])
+    _write_history(
+        tmp_path,
+        "r1",
+        [
+            {"record_type": "genesis", "batch_id": "g", "operations": []},
+            {
+                "batch_id": "b1",
+                "operations": [
+                    {
+                        "op_id": "o1",
+                        "op_type": "split_segment",
+                        "op_context_category": "repetitions",
+                        "targets_after": [
+                            {"segment_uid": "uid-first"},
+                            {"segment_uid": "uid-second"},
+                        ],
+                    },
+                ],
+            },
+        ],
+    )
     idx = build_resolved_by_edit_index("r1")
     assert idx == {
         "uid-first": {"repetitions"},
@@ -287,56 +317,67 @@ def test_build_index_picks_up_low_confidence_v2(monkeypatch, tmp_path):
     ``low_confidence_v2`` ops so the validator can suppress the flag.
     """
     monkeypatch.setattr(
-        "services.history_query.RECITATION_SEGMENTS_PATH", tmp_path,
+        "services.history_query.RECITATION_SEGMENTS_PATH",
+        tmp_path,
     )
-    _write_history(tmp_path, "r1", [
-        {"record_type": "genesis", "batch_id": "g", "operations": []},
-        {
-            "batch_id": "b1",
-            "operations": [
-                {
-                    "op_id": "o1",
-                    "op_type": "trim_segment",
-                    "op_context_category": "low_confidence_v2",
-                    "targets_after": [{"segment_uid": "uid-V"}],
-                },
-            ],
-        },
-    ])
+    _write_history(
+        tmp_path,
+        "r1",
+        [
+            {"record_type": "genesis", "batch_id": "g", "operations": []},
+            {
+                "batch_id": "b1",
+                "operations": [
+                    {
+                        "op_id": "o1",
+                        "op_type": "trim_segment",
+                        "op_context_category": "low_confidence_v2",
+                        "targets_after": [{"segment_uid": "uid-V"}],
+                    },
+                ],
+            },
+        ],
+    )
     idx = build_resolved_by_edit_index("r1")
     assert idx == {"uid-V": {"low_confidence_v2"}}
 
 
 def test_build_index_skips_reverted_batches(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        "services.history_query.RECITATION_SEGMENTS_PATH", tmp_path,
+        "services.history_query.RECITATION_SEGMENTS_PATH",
+        tmp_path,
     )
-    _write_history(tmp_path, "r1", [
-        {"record_type": "genesis", "batch_id": "g", "operations": []},
-        {
-            "batch_id": "b1",
-            "operations": [
-                {
-                    "op_id": "o1",
-                    "op_type": "trim_segment",
-                    "op_context_category": "audio_bleeding",
-                    "targets_after": [{"segment_uid": "uid-X"}],
-                },
-            ],
-        },
-        {
-            "batch_id": "b2",
-            "reverts_batch_id": "b1",
-            "operations": [],
-        },
-    ])
+    _write_history(
+        tmp_path,
+        "r1",
+        [
+            {"record_type": "genesis", "batch_id": "g", "operations": []},
+            {
+                "batch_id": "b1",
+                "operations": [
+                    {
+                        "op_id": "o1",
+                        "op_type": "trim_segment",
+                        "op_context_category": "audio_bleeding",
+                        "targets_after": [{"segment_uid": "uid-X"}],
+                    },
+                ],
+            },
+            {
+                "batch_id": "b2",
+                "reverts_batch_id": "b1",
+                "operations": [],
+            },
+        ],
+    )
     idx = build_resolved_by_edit_index("r1")
     assert idx == {}
 
 
 def test_build_index_no_history_file(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        "services.history_query.RECITATION_SEGMENTS_PATH", tmp_path,
+        "services.history_query.RECITATION_SEGMENTS_PATH",
+        tmp_path,
     )
     assert build_resolved_by_edit_index("nonexistent") == {}
 
@@ -375,6 +416,7 @@ def test_validate_drops_resolved_category(
 
     # Drop any cached resolved index so the new history is read.
     from services import cache as _cache
+
     _cache.invalidate_seg_caches(reciter)
 
     resp = flask_client.get(f"/api/seg/validate/{reciter}").get_json()

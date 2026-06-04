@@ -1,4 +1,5 @@
 """Tests for the slim packed peaks format (services/audio/peaks_slim.py)."""
+
 from __future__ import annotations
 
 import gzip

@@ -4,34 +4,43 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime, timezone
 
 os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 
-def _state_row(slug: str, *, state: str = "awaiting_review",
-               marked_ready: bool = False,
-               assignee_hf_id: str | None = None,
-               visibility: str = "public"):
+def _state_row(
+    slug: str,
+    *,
+    state: str = "awaiting_review",
+    marked_ready: bool = False,
+    assignee_hf_id: str | None = None,
+    visibility: str = "public",
+):
     from qua_shared.schemas import ReciterRow, ReciterState, Visibility
 
     return ReciterRow(
         slug=slug,
         state=ReciterState(state),
-        state_since=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        state_since=datetime(2026, 5, 12, tzinfo=UTC),
         assignee_hf_id=assignee_hf_id,
         assignee_login="alice" if assignee_hf_id else None,
-        assignee_since=datetime(2026, 5, 12, tzinfo=timezone.utc) if assignee_hf_id else None,
+        assignee_since=datetime(2026, 5, 12, tzinfo=UTC) if assignee_hf_id else None,
         marked_ready=marked_ready,
         visibility=Visibility(visibility),
     )
 
 
-def _delivery(slug: str, *, reciter_id: str,
-              riwayah: str = "hafs_an_asim", style: str = "murattal",
-              source: str = "mp3quran", channel: str = "mp3quran",
-              chapter_count: int = 114):
+def _delivery(
+    slug: str,
+    *,
+    reciter_id: str,
+    riwayah: str = "hafs_an_asim",
+    style: str = "murattal",
+    source: str = "mp3quran",
+    channel: str = "mp3quran",
+    chapter_count: int = 114,
+):
     from qua_shared.schemas import AudioCategory, Delivery
 
     return Delivery(
@@ -43,7 +52,7 @@ def _delivery(slug: str, *, reciter_id: str,
         channel=channel,
         audio_category=AudioCategory.BY_SURAH,
         chapter_count=chapter_count,
-        added_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        added_at=datetime(2026, 1, 1, tzinfo=UTC),
         added_by_hf_id="system_seed",
     )
 
@@ -70,13 +79,15 @@ def _install(monkeypatch, reciters, deliveries, rows):
         riwayat=[Riwayah(slug="hafs_an_asim", short="hafs", name="Hafs")],
         styles=[Style(slug="murattal", short="murattal", name="Murattal")],
         sources=[
-            Source(slug="mp3quran", name="mp3quran",
-                   url="https://mp3quran.net",
-                   audio_categories=["by_surah"]),
+            Source(
+                slug="mp3quran",
+                name="mp3quran",
+                url="https://mp3quran.net",
+                audio_categories=["by_surah"],
+            ),
         ],
         channels=[
-            Channel(slug="mp3quran", short="mp3q", name="mp3quran",
-                    host_patterns=["mp3quran.net"]),
+            Channel(slug="mp3quran", short="mp3q", name="mp3quran", host_patterns=["mp3quran.net"]),
         ],
         recording_contexts=[],
     )
@@ -132,8 +143,11 @@ def test_stats_returns_six_bucket_counts(flask_client, monkeypatch):
     assert body["available_for_request"] == 1
     # Every public bucket key is present, even if count is 0.
     for key in (
-        "available_for_request", "requested", "available_for_review",
-        "under_review", "published",
+        "available_for_request",
+        "requested",
+        "available_for_review",
+        "under_review",
+        "published",
     ):
         assert key in body
 

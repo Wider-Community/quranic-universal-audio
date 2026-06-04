@@ -19,11 +19,10 @@ def _register_test_routes():
     request, which is why this runs at module load rather than inside a
     fixture. Idempotent across pytest collection passes.
     """
+    from app import app
     from flask import jsonify
 
     from qua_shared.schemas import Role
-
-    from app import app
     from utils.decorators import require_role
 
     if app.view_functions.get("_test_role_maintainer_only") is not None:
@@ -31,11 +30,13 @@ def _register_test_routes():
 
     @require_role(Role.MAINTAINER, Role.OWNER)
     def maintainer_only(user):
-        return jsonify({
-            "ok": True,
-            "hf_user_id": user.hf_user_id,
-            "role": str(user.role),
-        })
+        return jsonify(
+            {
+                "ok": True,
+                "hf_user_id": user.hf_user_id,
+                "role": str(user.role),
+            }
+        )
 
     @require_role(Role.OWNER)
     def owner_only(user):

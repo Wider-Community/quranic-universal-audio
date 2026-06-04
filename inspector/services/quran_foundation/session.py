@@ -90,8 +90,6 @@ def decode_oauth_tmp(cookie_val: str) -> dict | None:
     if not cookie_val:
         return None
     try:
-        return _serializer(QF_OAUTH_TMP_SALT).loads(
-            cookie_val, max_age=QF_OAUTH_TMP_MAX_AGE
-        )
+        return _serializer(QF_OAUTH_TMP_SALT).loads(cookie_val, max_age=QF_OAUTH_TMP_MAX_AGE)
     except (SignatureExpired, BadSignature, MissingSecret):
         return None

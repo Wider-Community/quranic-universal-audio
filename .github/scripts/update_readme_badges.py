@@ -8,9 +8,9 @@ import json
 import os
 import sqlite3
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 from urllib.parse import quote
 
 PROD_BUCKET_ID = "hetchyy/quranic-inspector-bucket"
@@ -93,9 +93,7 @@ def collect_stats(
             ORDER BY d.slug
             """
         ).fetchall()
-        riwayat = conn.execute(
-            "SELECT COUNT(DISTINCT riwayah) FROM deliveries"
-        ).fetchone()[0]
+        riwayat = conn.execute("SELECT COUNT(DISTINCT riwayah) FROM deliveries").fetchone()[0]
     finally:
         conn.close()
 
@@ -113,8 +111,7 @@ def collect_stats(
 
     if missing_duration:
         raise RuntimeError(
-            "missing total_duration_sec for published recitation(s): "
-            + ", ".join(missing_duration)
+            "missing total_duration_sec for published recitation(s): " + ", ".join(missing_duration)
         )
 
     return BadgeStats(recitations=len(published), riwayat=int(riwayat or 0), seconds=seconds)
@@ -127,10 +124,7 @@ def format_hours(seconds: int) -> str:
 
 
 def badge_url(label: str, value: str, color: str) -> str:
-    return (
-        "https://img.shields.io/badge/"
-        f"{quote(label, safe='')}-{quote(value, safe='')}-{color}"
-    )
+    return f"https://img.shields.io/badge/{quote(label, safe='')}-{quote(value, safe='')}-{color}"
 
 
 def render_badges(stats: BadgeStats) -> str:
@@ -139,7 +133,7 @@ def render_badges(stats: BadgeStats) -> str:
     hours = format_hours(stats.seconds)
     lines = [
         START_MARKER,
-        '  <br>',
+        "  <br>",
         (
             '  <a href="data/RECITERS.md"><img src="'
             f'{badge_url("Recitations", recitations, "d4842a")}" '

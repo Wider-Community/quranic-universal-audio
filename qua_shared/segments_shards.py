@@ -78,7 +78,7 @@ def split_to_shards(
     # chapter, so audio_url is a single string. For by_ayah, multiple entries
     # share a chapter and each carries its own per-ayah URL.
     by_chapter_segments: dict[int, list[dict]] = {}
-    by_chapter_audio_url: dict[int, str] = {}                # by_surah
+    by_chapter_audio_url: dict[int, str] = {}  # by_surah
     by_chapter_audio_urls_map: dict[int, dict[str, str]] = {}  # by_ayah
 
     for entry in entries:

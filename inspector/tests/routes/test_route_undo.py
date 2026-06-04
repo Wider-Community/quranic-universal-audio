@@ -5,6 +5,7 @@ so all tests now use ``signed_in_client`` with the user seeded as the
 active assignee on an ``under_review`` row, plus the same-origin Header.
 The revert record carries ``actor`` exactly like the forward batch.
 """
+
 from __future__ import annotations
 
 import json

@@ -25,8 +25,8 @@ from collections import defaultdict
 from typing import Any
 
 from qua_shared.timestamps_pipeline import (
-    _normalize_from_results,
     _matched_ref_to_output_key,
+    _normalize_from_results,
 )
 
 V2_SCHEMA_VERSION = 2
@@ -244,9 +244,7 @@ def project_segment_shard(
         foreign_starts.sort()
 
         occasions = _split_occasions(verse_segs, foreign_starts)
-        n_words = max(
-            (wi for seg in verse_segs for wi in _seg_widx_set(seg)), default=0
-        )
+        n_words = max((wi for seg in verse_segs for wi in _seg_widx_set(seg)), default=0)
         target = set(range(1, n_words + 1))
 
         chosen = _choose_occasion(occasions, target, conf_by_span)
@@ -267,14 +265,11 @@ def _choose_occasion(
     completing = [occ for occ in occasions if _completes_at(occ, target) is not None]
     if completing:
         ranked = [
-            (i, _occasion_mean_confidence(occ, conf_by_span))
-            for i, occ in enumerate(completing)
+            (i, _occasion_mean_confidence(occ, conf_by_span)) for i, occ in enumerate(completing)
         ]
         if any(conf is not None for _, conf in ranked):
             # Highest mean confidence; tie-break on earliest (lower index).
-            best_i = max(
-                ranked, key=lambda ic: (ic[1] if ic[1] is not None else -1.0, -ic[0])
-            )[0]
+            best_i = max(ranked, key=lambda ic: (ic[1] if ic[1] is not None else -1.0, -ic[0]))[0]
             return completing[best_i]
         return completing[0]  # earliest completing — confidence unavailable
     # No occasion completes — keep the one with the widest word coverage.

@@ -126,20 +126,19 @@ allow regression:
   4. Run ``scripts/codegen/regen_fe_types.py`` so the frontend types
      stay in lockstep (CI's ``schema-codegen-check`` enforces this).
 """
+
 from __future__ import annotations
 
 import argparse
 import gzip
-import io
 import json
 import logging
 import os
 import sys
-from collections import Counter
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
 
 log = logging.getLogger("audit_bucket_reciter")
 
@@ -188,6 +187,7 @@ def _summarise_extras(captured: list[tuple[int, str]]) -> str:
     suffix = " + ".join(bits) + " extras"
     return f"; {suffix} (e.g. {sample[:160]})" if sample else f"; {suffix}"
 
+
 _BUCKETS = {
     "dev": "hetchyy/quranic-inspector-bucket-dev",
     "prod": "hetchyy/quranic-inspector-bucket",
@@ -197,20 +197,20 @@ _BUCKETS = {
 @dataclass
 class FileResult:
     path: str
-    status: str          # "ok" | "missing" | "error"
+    status: str  # "ok" | "missing" | "error"
     detail: str = ""
     size: int = 0
-    items_ok: int = 0    # for JSONL / collections
+    items_ok: int = 0  # for JSONL / collections
     items_total: int = 0
-    n_warn: int = 0      # # of "unknown field" warnings from extras pre-validator
-    n_info: int = 0      # # of "legacy field" infos from extras pre-validator
+    n_warn: int = 0  # # of "unknown field" warnings from extras pre-validator
+    n_info: int = 0  # # of "legacy field" infos from extras pre-validator
 
 
 @dataclass
 class AuditResult:
     slug: str
     bucket_id: str
-    found: bool          # whether reciters/<slug>/ exists
+    found: bool  # whether reciters/<slug>/ exists
     files: list[FileResult] = field(default_factory=list)
 
     def add(self, f: FileResult) -> None:
@@ -262,11 +262,14 @@ def _audit_detailed(backend, path: str) -> FileResult:
     n_info = sum(1 for lvl, _ in captured if lvl == logging.INFO)
     n_warn = sum(1 for lvl, _ in captured if lvl >= logging.WARNING)
     return FileResult(
-        path, "ok",
-        f"{len(validated.entries)} entries, {n_segs} segs"
-        + _summarise_extras(captured),
-        size=size, items_ok=n_segs, items_total=n_segs,
-        n_info=n_info, n_warn=n_warn,
+        path,
+        "ok",
+        f"{len(validated.entries)} entries, {n_segs} segs" + _summarise_extras(captured),
+        size=size,
+        items_ok=n_segs,
+        items_total=n_segs,
+        n_info=n_info,
+        n_warn=n_warn,
     )
 
 
@@ -299,7 +302,9 @@ def _audit_segments(backend, path: str) -> FileResult:
             continue
         for i, row in enumerate(rows):
             if not isinstance(row, list) or len(row) < 4:
-                issues.append(f"{key}[{i}]: row shape — need [w_start, w_end, ms_start, ms_end, ...]")
+                issues.append(
+                    f"{key}[{i}]: row shape — need [w_start, w_end, ms_start, ms_end, ...]"
+                )
                 break
             # Per row: ints + optional dict (e.g. {"repeated": [...]})
             w_start, w_end, ms_start, ms_end = row[:4]
@@ -315,12 +320,15 @@ def _audit_segments(backend, path: str) -> FileResult:
 
     if issues:
         return FileResult(
-            path, "error",
-            f"{len(issues)} issue(s): {issues[0]}" + (f" (+{len(issues)-1} more)" if len(issues) > 1 else ""),
+            path,
+            "error",
+            f"{len(issues)} issue(s): {issues[0]}"
+            + (f" (+{len(issues) - 1} more)" if len(issues) > 1 else ""),
             size=size,
         )
-    return FileResult(path, "ok", f"{n_verses} verse keys", size=size,
-                      items_ok=n_verses, items_total=n_verses)
+    return FileResult(
+        path, "ok", f"{n_verses} verse keys", size=size, items_ok=n_verses, items_total=n_verses
+    )
 
 
 def _audit_edit_history(backend, path: str) -> FileResult:
@@ -356,14 +364,26 @@ def _audit_edit_history(backend, path: str) -> FileResult:
     n_info = sum(1 for lvl, _ in captured if lvl == logging.INFO)
     n_warn = sum(1 for lvl, _ in captured if lvl >= logging.WARNING)
     if first_err:
-        return FileResult(path, "error",
-                          f"{n_ok}/{n_total} valid; first error: {first_err}",
-                          size=size, items_ok=n_ok, items_total=n_total,
-                          n_info=n_info, n_warn=n_warn)
-    return FileResult(path, "ok",
-                      f"{n_ok}/{n_total} batches" + _summarise_extras(captured),
-                      size=size, items_ok=n_ok, items_total=n_total,
-                      n_info=n_info, n_warn=n_warn)
+        return FileResult(
+            path,
+            "error",
+            f"{n_ok}/{n_total} valid; first error: {first_err}",
+            size=size,
+            items_ok=n_ok,
+            items_total=n_total,
+            n_info=n_info,
+            n_warn=n_warn,
+        )
+    return FileResult(
+        path,
+        "ok",
+        f"{n_ok}/{n_total} batches" + _summarise_extras(captured),
+        size=size,
+        items_ok=n_ok,
+        items_total=n_total,
+        n_info=n_info,
+        n_warn=n_warn,
+    )
 
 
 def _audit_peaks_history(backend, path: str) -> FileResult:
@@ -402,15 +422,26 @@ def _audit_peaks_history(backend, path: str) -> FileResult:
     n_info = sum(1 for lvl, _ in captured if lvl == logging.INFO)
     n_warn = sum(1 for lvl, _ in captured if lvl >= logging.WARNING)
     if first_err:
-        return FileResult(path, "error",
-                          f"{n_ok}/{n_total} valid; first error: {first_err}",
-                          size=size, items_ok=n_ok, items_total=n_total,
-                          n_info=n_info, n_warn=n_warn)
-    return FileResult(path, "ok",
-                      f"{n_ok}/{n_total} peaks records"
-                      + _summarise_extras(captured),
-                      size=size, items_ok=n_ok, items_total=n_total,
-                      n_info=n_info, n_warn=n_warn)
+        return FileResult(
+            path,
+            "error",
+            f"{n_ok}/{n_total} valid; first error: {first_err}",
+            size=size,
+            items_ok=n_ok,
+            items_total=n_total,
+            n_info=n_info,
+            n_warn=n_warn,
+        )
+    return FileResult(
+        path,
+        "ok",
+        f"{n_ok}/{n_total} peaks records" + _summarise_extras(captured),
+        size=size,
+        items_ok=n_ok,
+        items_total=n_total,
+        n_info=n_info,
+        n_warn=n_warn,
+    )
 
 
 def _audit_low_confidence_v2(backend, path: str) -> FileResult:
@@ -437,15 +468,20 @@ def _audit_low_confidence_v2(backend, path: str) -> FileResult:
         return FileResult(path, "error", "failures missing or not a list", size=size)
     n_bad = sum(1 for u in failures if not isinstance(u, str))
     if n_bad:
-        return FileResult(path, "error",
-                          f"{n_bad}/{len(failures)} failures are not strings",
-                          size=size)
+        return FileResult(
+            path, "error", f"{n_bad}/{len(failures)} failures are not strings", size=size
+        )
     meta = doc.get("_meta")
     if meta is not None and not isinstance(meta, dict):
         return FileResult(path, "error", "_meta is not a dict", size=size)
-    return FileResult(path, "ok",
-                      f"{len(failures)} probe failures @ beam={(meta or {}).get('beam')}",
-                      size=size, items_ok=len(failures), items_total=len(failures))
+    return FileResult(
+        path,
+        "ok",
+        f"{len(failures)} probe failures @ beam={(meta or {}).get('beam')}",
+        size=size,
+        items_ok=len(failures),
+        items_total=len(failures),
+    )
 
 
 def _audit_auto_split_v1(backend, path: str) -> FileResult:
@@ -485,14 +521,20 @@ def _audit_auto_split_v1(backend, path: str) -> FileResult:
                 break
         else:
             if entry["kind"] not in ("cross_verse", "repetition"):
-                issues.append(f"{uid[:8]}…: kind={entry['kind']!r} not in {{cross_verse, repetition}}")
+                issues.append(
+                    f"{uid[:8]}…: kind={entry['kind']!r} not in {{cross_verse, repetition}}"
+                )
 
     if issues:
-        return FileResult(path, "error",
-                          f"{len(issues)} issue(s); first: {issues[0]}", size=size)
-    return FileResult(path, "ok",
-                      f"{len(by_uid)} entries", size=size,
-                      items_ok=len(by_uid), items_total=len(by_uid))
+        return FileResult(path, "error", f"{len(issues)} issue(s); first: {issues[0]}", size=size)
+    return FileResult(
+        path,
+        "ok",
+        f"{len(by_uid)} entries",
+        size=size,
+        items_ok=len(by_uid),
+        items_total=len(by_uid),
+    )
 
 
 def _audit_pipeline_meta(backend, path: str) -> FileResult:
@@ -521,11 +563,14 @@ def _audit_pipeline_meta(backend, path: str) -> FileResult:
     n_info = sum(1 for lvl, _ in captured if lvl == logging.INFO)
     n_warn = sum(1 for lvl, _ in captured if lvl >= logging.WARNING)
     return FileResult(
-        path, "ok",
-        f"deleted_basmala_chapters={n_ch} @ {validated.generated_at}"
-        + _summarise_extras(captured),
-        size=size, items_ok=n_ch, items_total=n_ch,
-        n_info=n_info, n_warn=n_warn,
+        path,
+        "ok",
+        f"deleted_basmala_chapters={n_ch} @ {validated.generated_at}" + _summarise_extras(captured),
+        size=size,
+        items_ok=n_ch,
+        items_total=n_ch,
+        n_info=n_info,
+        n_warn=n_warn,
     )
 
 
@@ -572,15 +617,17 @@ def _audit_peaks_slim(backend, path: str) -> FileResult:
     except (OSError, json.JSONDecodeError, gzip.BadGzipFile) as e:
         return FileResult(path, "error", f"gunzip/JSON fail: {e}", size=size)
     if doc.get("schema_version") != 3:
-        return FileResult(path, "error",
-                          f"schema_version={doc.get('schema_version')!r}, expected 3",
-                          size=size)
+        return FileResult(
+            path, "error", f"schema_version={doc.get('schema_version')!r}, expected 3", size=size
+        )
     if not doc.get("peaks_b64") or not doc.get("bps") or not doc.get("duration_ms"):
         return FileResult(path, "error", "missing peaks_b64 / bps / duration_ms", size=size)
-    return FileResult(path, "ok",
-                      f"v3 slim, {doc.get('n')} pairs @ {doc.get('bps')}bps, "
-                      f"{doc.get('duration_ms')}ms",
-                      size=size)
+    return FileResult(
+        path,
+        "ok",
+        f"v3 slim, {doc.get('n')} pairs @ {doc.get('bps')}bps, {doc.get('duration_ms')}ms",
+        size=size,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -620,8 +667,7 @@ def audit(backend, bucket_id: str, slug: str) -> AuditResult:
         backend.read_bytes(f"{base}/detailed.json")
     except Exception:
         result = AuditResult(slug=slug, bucket_id=bucket_id, found=False)
-        result.add(FileResult(f"reciters/{slug}/", "missing",
-                              "no detailed.json under reciters/"))
+        result.add(FileResult(f"reciters/{slug}/", "missing", "no detailed.json under reciters/"))
         return result
     result = AuditResult(slug=slug, bucket_id=bucket_id, found=True)
 
@@ -638,12 +684,12 @@ def audit(backend, bucket_id: str, slug: str) -> AuditResult:
     peaks_children = _list_chapter_files(backend, f"{base}/peaks/")
 
     audio_chs = sorted(
-        int(Path(p).stem) for p in audio_children
+        int(Path(p).stem)
+        for p in audio_children
         if Path(p).suffix == ".mp3" and Path(p).stem.isdigit()
     )
     peaks_chs = sorted(
-        int(Path(p).stem.replace(".json", "")) for p in peaks_children
-        if p.endswith(".json.gz")
+        int(Path(p).stem.replace(".json", "")) for p in peaks_children if p.endswith(".json.gz")
     )
 
     # Spot-check 3 chapters (first, middle, last) per side — full validation
@@ -667,13 +713,15 @@ def audit(backend, bucket_id: str, slug: str) -> AuditResult:
     detail = f"audio={n_audio} mp3, peaks={n_peaks} json.gz"
     if not parity_ok:
         detail += "  <-- MISMATCH"
-    result.add(FileResult(
-        f"{base}/(audio|peaks)/",
-        "ok" if parity_ok else "error",
-        detail,
-        items_ok=min(n_audio, n_peaks),
-        items_total=max(n_audio, n_peaks),
-    ))
+    result.add(
+        FileResult(
+            f"{base}/(audio|peaks)/",
+            "ok" if parity_ok else "error",
+            detail,
+            items_ok=min(n_audio, n_peaks),
+            items_total=max(n_audio, n_peaks),
+        )
+    )
 
     return result
 
@@ -767,16 +815,24 @@ def _render(result: AuditResult) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--slug", required=True, help="Reciter slug.")
-    ap.add_argument("--bucket", choices=sorted(_BUCKETS), default=None,
-                    help="Bucket to audit. Mutually exclusive with --local-path.")
-    ap.add_argument("--local-path", type=Path, default=None,
-                    help="Audit a local copy of a reciter folder (pre-upload "
-                         "verification). Should point at the slug dir itself, "
-                         "e.g. /tmp/husary/. Mutually exclusive with --bucket.")
-    ap.add_argument("--json", action="store_true",
-                    help="Emit JSON instead of the human-readable table.")
-    ap.add_argument("-v", "--verbose", action="store_true",
-                    help="Enable debug logging.")
+    ap.add_argument(
+        "--bucket",
+        choices=sorted(_BUCKETS),
+        default=None,
+        help="Bucket to audit. Mutually exclusive with --local-path.",
+    )
+    ap.add_argument(
+        "--local-path",
+        type=Path,
+        default=None,
+        help="Audit a local copy of a reciter folder (pre-upload "
+        "verification). Should point at the slug dir itself, "
+        "e.g. /tmp/husary/. Mutually exclusive with --bucket.",
+    )
+    ap.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of the human-readable table."
+    )
+    ap.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging.")
     args = ap.parse_args()
 
     logging.basicConfig(
@@ -796,6 +852,7 @@ def main() -> int:
         bucket_id = f"local:{args.local_path}"
     else:
         from services.storage.hf_bucket import get_backend
+
         backend = get_backend()
         bucket_id = _BUCKETS[args.bucket]
     result = audit(backend, bucket_id, args.slug)
@@ -806,9 +863,14 @@ def main() -> int:
             "bucket": result.bucket_id,
             "found": result.found,
             "files": [
-                {"path": f.path, "status": f.status, "detail": f.detail,
-                 "size": f.size, "items_ok": f.items_ok,
-                 "items_total": f.items_total}
+                {
+                    "path": f.path,
+                    "status": f.status,
+                    "detail": f.detail,
+                    "size": f.size,
+                    "items_ok": f.items_ok,
+                    "items_total": f.items_total,
+                }
                 for f in result.files
             ],
             "n_ok": sum(1 for f in result.files if f.status == "ok"),

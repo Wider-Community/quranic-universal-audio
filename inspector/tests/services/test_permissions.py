@@ -20,10 +20,12 @@ from qua_shared.schemas import Role
 
 def _stub(role: Any = "contributor", hf_user_id: str = "u-1"):
     """A duck-typed Actor/User stand-in with .role + .hf_user_id."""
+
     @dataclass
     class _Stub:
         role: Any
         hf_user_id: str
+
     return _Stub(role=role, hf_user_id=hf_user_id)
 
 
@@ -31,6 +33,7 @@ def _row(assignee: str | None = None):
     @dataclass
     class _Row:
         assignee_hf_id: str | None
+
     return _Row(assignee_hf_id=assignee)
 
 
@@ -120,53 +123,71 @@ def test_has_role_membership():
 def test_is_claim_holder_matches_hf_user_id():
     from services import permissions
 
-    assert permissions.is_claim_holder(
-        _stub(role="contributor", hf_user_id="u-1"),
-        _row(assignee="u-1"),
-    ) is True
+    assert (
+        permissions.is_claim_holder(
+            _stub(role="contributor", hf_user_id="u-1"),
+            _row(assignee="u-1"),
+        )
+        is True
+    )
 
 
 def test_is_claim_holder_rejects_mismatch():
     from services import permissions
 
-    assert permissions.is_claim_holder(
-        _stub(role="contributor", hf_user_id="u-1"),
-        _row(assignee="u-2"),
-    ) is False
+    assert (
+        permissions.is_claim_holder(
+            _stub(role="contributor", hf_user_id="u-1"),
+            _row(assignee="u-2"),
+        )
+        is False
+    )
 
 
 def test_is_claim_holder_rejects_unassigned_row():
     from services import permissions
 
-    assert permissions.is_claim_holder(
-        _stub(role="contributor", hf_user_id="u-1"),
-        _row(assignee=None),
-    ) is False
+    assert (
+        permissions.is_claim_holder(
+            _stub(role="contributor", hf_user_id="u-1"),
+            _row(assignee=None),
+        )
+        is False
+    )
 
 
 def test_is_claim_holder_or_maintainer_maintainer_wins():
     from services import permissions
 
     # Maintainer who is NOT the assignee still passes.
-    assert permissions.is_claim_holder_or_maintainer(
-        _stub(role="maintainer", hf_user_id="u-mod"),
-        _row(assignee="u-target"),
-    ) is True
+    assert (
+        permissions.is_claim_holder_or_maintainer(
+            _stub(role="maintainer", hf_user_id="u-mod"),
+            _row(assignee="u-target"),
+        )
+        is True
+    )
 
 
 def test_is_claim_holder_or_maintainer_contributor_needs_match():
     from services import permissions
 
     # Contributor who IS the assignee passes.
-    assert permissions.is_claim_holder_or_maintainer(
-        _stub(role="contributor", hf_user_id="u-1"),
-        _row(assignee="u-1"),
-    ) is True
+    assert (
+        permissions.is_claim_holder_or_maintainer(
+            _stub(role="contributor", hf_user_id="u-1"),
+            _row(assignee="u-1"),
+        )
+        is True
+    )
     # Contributor who is NOT the assignee fails.
-    assert permissions.is_claim_holder_or_maintainer(
-        _stub(role="contributor", hf_user_id="u-1"),
-        _row(assignee="u-2"),
-    ) is False
+    assert (
+        permissions.is_claim_holder_or_maintainer(
+            _stub(role="contributor", hf_user_id="u-1"),
+            _row(assignee="u-2"),
+        )
+        is False
+    )
 
 
 # ---------------------------------------------------------------------------

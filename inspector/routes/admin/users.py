@@ -16,14 +16,11 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from qua_shared.schemas import Role
-
 from routes._admin_helpers import actor_for as _actor_for
-
 from services.admin import users as users_service
 from services.admin import visitors as visitor_service
 from services.auth import access as access_service
 from services.errors import Codes, error_body
-
 from utils.decorators import require_capability, require_same_origin
 
 admin_users_bp = Blueprint("admin_users", __name__, url_prefix="/api/admin")

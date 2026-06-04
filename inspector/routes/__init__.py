@@ -23,24 +23,24 @@ def register_blueprints(app):
     from routes.admin.releases import admin_releases_bp
     from routes.admin.reviews import admin_reviews_bp
     from routes.admin.users import admin_users_bp
+    from routes.audio.clip import segment_clip_bp
+    from routes.audio.metadata import audio_meta_bp
+    from routes.audio.proxy import audio_proxy_bp
     from routes.auth.auth import auth_bp
     from routes.auth.guides import guides_bp
     from routes.auth.health import health_bp
+    from routes.bookmarks import bookmarks_bp
     from routes.claims.claims import claims_bp
     from routes.claims.requests import requests_bp
     from routes.public.public import public_bp
     from routes.public.static import static_bp
-    from routes.timestamps.timestamps import ts_bp
-    from routes.segments.data import seg_data_bp
-    from routes.segments.edit import seg_edit_bp
-    from routes.segments.validation import seg_val_bp
-    from routes.segments.peaks import peaks_bp
-    from routes.audio.proxy import audio_proxy_bp
-    from routes.audio.metadata import audio_meta_bp
-    from routes.audio.clip import segment_clip_bp
     from routes.qf_auth import qf_auth_bp
     from routes.qf_content import qf_content_bp
-    from routes.bookmarks import bookmarks_bp
+    from routes.segments.data import seg_data_bp
+    from routes.segments.edit import seg_edit_bp
+    from routes.segments.peaks import peaks_bp
+    from routes.segments.validation import seg_val_bp
+    from routes.timestamps.timestamps import ts_bp
     from routes.webhooks.ts_jobs import webhooks_bp
 
     app.register_blueprint(health_bp)
@@ -75,4 +75,5 @@ def register_blueprints(app):
     # returns 404 when dev mode is off. Keeps Flask's setup-finished contract
     # intact without sacrificing prod surface (one no-op route).
     from routes.auth.dev import dev_bp
+
     app.register_blueprint(dev_bp)

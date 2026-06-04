@@ -3,12 +3,12 @@ CAS guard, daily snapshot + retention, health counters."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 
 from services import db
-from services.db import sync, _serde
+from services.db import _serde, sync
 from services.storage import hf_bucket
 from services.storage.hf_bucket import FilesystemBackend
 
@@ -48,9 +48,7 @@ def test_upload_then_pull_roundtrip(synced):
     assert sync.pull(dest_path=str(new_path)) is True
     db.set_db_path_for_test(new_path)
     db.init_db()  # migrations already applied in the pulled file → no-op
-    row = db.get_conn().execute(
-        "SELECT login_cache FROM users WHERE hf_user_id='u1'"
-    ).fetchone()
+    row = db.get_conn().execute("SELECT login_cache FROM users WHERE hf_user_id='u1'").fetchone()
     assert row[0] == "alice"
 
 
@@ -97,9 +95,7 @@ def test_deferred_sync_skips_upload_when_batch_is_noop(synced):
     _commit_user()  # local seq -> 1 (committed outside the batch; no upload)
     sync._write_direct(
         sync.SEQ_BUCKET_PATH,
-        _serde.json_dumps(
-            {"seq": 1, "nonce": "other-container", "ts": "x"}
-        ).encode(),
+        _serde.json_dumps({"seq": 1, "nonce": "other-container", "ts": "x"}).encode(),
     )
     with sync.deferred_sync():  # no commit inside → no-op
         pass
@@ -111,7 +107,7 @@ def test_deferred_sync_skips_upload_when_batch_is_noop(synced):
 
 def test_daily_snapshot_and_retention(synced):
     _commit_user()
-    today = datetime(2026, 5, 20, tzinfo=timezone.utc)
+    today = datetime(2026, 5, 20, tzinfo=UTC)
     path = sync.daily_snapshot(today=today)
     assert path == "db/inspector-2026-05-20.db"
     assert len(sync._read_direct(path)) > 0
@@ -119,7 +115,7 @@ def test_daily_snapshot_and_retention(synced):
     # plant an old snapshot, then prune as-of 2026-06-10:
     #   2026-01-01 is ~160d old (> 30) → pruned; 2026-05-20 is 21d old → kept.
     sync._write_direct("db/inspector-2026-01-01.db", b"old")
-    removed = sync._prune_snapshots(today=datetime(2026, 6, 10, tzinfo=timezone.utc))
+    removed = sync._prune_snapshots(today=datetime(2026, 6, 10, tzinfo=UTC))
     assert "inspector-2026-01-01.db" in removed
     assert "inspector-2026-05-20.db" not in removed
 
@@ -128,7 +124,7 @@ def test_upload_failure_sets_last_error_and_raises(synced, monkeypatch):
     _commit_user()
 
     def boom(path, data):
-        raise IOError("network down")
+        raise OSError("network down")
 
     monkeypatch.setattr(sync, "_write_direct", boom)
     with pytest.raises(IOError):

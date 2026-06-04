@@ -9,10 +9,16 @@ import struct
 import subprocess
 from typing import TYPE_CHECKING
 
-from config import (FFMPEG_FULL_TIMEOUT, FFMPEG_TIMEOUT,
-                    MIN_FULL_PEAK_BUCKETS, MIN_SEG_PEAK_BUCKETS,
-                    PEAKS_BUCKETS_PER_SEC, PEAKS_FFMPEG_SAMPLE_RATE,
-                    PEAKS_PCM_NORMALIZER, PEAKS_SCHEMA_VERSION)
+from config import (
+    FFMPEG_FULL_TIMEOUT,
+    FFMPEG_TIMEOUT,
+    MIN_FULL_PEAK_BUCKETS,
+    MIN_SEG_PEAK_BUCKETS,
+    PEAKS_BUCKETS_PER_SEC,
+    PEAKS_FFMPEG_SAMPLE_RATE,
+    PEAKS_PCM_NORMALIZER,
+    PEAKS_SCHEMA_VERSION,
+)
 
 if TYPE_CHECKING:
     from services.audio_source import AudioSource
@@ -84,10 +90,22 @@ def compute_audio_peaks(audio_source: str) -> dict | None:
     # Decode to raw mono 16-bit PCM via ffmpeg at the configured peaks sample rate
     try:
         result = subprocess.run(
-            ["ffmpeg", "-i", audio_source, "-f", "s16le", "-ac", "1",
-             "-ar", str(PEAKS_FFMPEG_SAMPLE_RATE),
-             "-v", "quiet", "-"],
-            capture_output=True, timeout=FFMPEG_FULL_TIMEOUT,
+            [
+                "ffmpeg",
+                "-i",
+                audio_source,
+                "-f",
+                "s16le",
+                "-ac",
+                "1",
+                "-ar",
+                str(PEAKS_FFMPEG_SAMPLE_RATE),
+                "-v",
+                "quiet",
+                "-",
+            ],
+            capture_output=True,
+            timeout=FFMPEG_FULL_TIMEOUT,
         )
         if result.returncode != 0 or len(result.stdout) < 4:
             return None
@@ -112,8 +130,10 @@ def compute_audio_peaks(audio_source: str) -> dict | None:
 # Segment-level peak extraction
 # ---------------------------------------------------------------------------
 
-def _ffmpeg_decode_segment(src: AudioSource | None, url: str,
-                           start_sec: float, duration_sec: float) -> bytes | None:
+
+def _ffmpeg_decode_segment(
+    src: AudioSource | None, url: str, start_sec: float, duration_sec: float
+) -> bytes | None:
     """VBR-safe segment decode. Picks the cheapest available input for the
     requested window:
 
@@ -136,12 +156,26 @@ def _ffmpeg_decode_segment(src: AudioSource | None, url: str,
         input_arg = url
     try:
         result = subprocess.run(
-            ["ffmpeg", "-ss", str(start_sec), "-i", input_arg,
-             "-t", str(duration_sec),
-             "-f", "s16le", "-ac", "1",
-             "-ar", str(PEAKS_FFMPEG_SAMPLE_RATE),
-             "-v", "quiet", "-"],
-            capture_output=True, timeout=FFMPEG_TIMEOUT,
+            [
+                "ffmpeg",
+                "-ss",
+                str(start_sec),
+                "-i",
+                input_arg,
+                "-t",
+                str(duration_sec),
+                "-f",
+                "s16le",
+                "-ac",
+                "1",
+                "-ar",
+                str(PEAKS_FFMPEG_SAMPLE_RATE),
+                "-v",
+                "quiet",
+                "-",
+            ],
+            capture_output=True,
+            timeout=FFMPEG_TIMEOUT,
             input=stdin_data,
         )
         if result.returncode != 0 or len(result.stdout) < 4:
@@ -151,10 +185,14 @@ def _ffmpeg_decode_segment(src: AudioSource | None, url: str,
         return None
 
 
-def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
-                          reciter: str | None = None,
-                          chapter: int | str | None = None,
-                          bps: int | None = None) -> dict | None:
+def compute_segment_peaks(
+    url: str,
+    start_ms: int,
+    end_ms: int,
+    reciter: str | None = None,
+    chapter: int | str | None = None,
+    bps: int | None = None,
+) -> dict | None:
     """Compute peaks for a specific segment time range via ffmpeg.
 
     Returns ``{schema_version, start_ms, end_ms, duration_ms, peaks}`` or
@@ -174,6 +212,7 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
     duration_sec = (end_ms - start_ms) / 1000
 
     from . import audio_source
+
     src = audio_source.resolve(reciter, url) if reciter else None
     raw = _ffmpeg_decode_segment(src, url, start_sec, duration_sec)
     if raw is None:
@@ -196,5 +235,3 @@ def compute_segment_peaks(url: str, start_ms: int, end_ms: int,
         "duration_ms": actual_duration_ms,
         "peaks": peaks,
     }
-
-

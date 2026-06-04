@@ -357,9 +357,7 @@ def derive_url_template(manifest_data: dict, audio_cat: str) -> str:
         if not base:
             return ""
         if "001001" in filename:
-            template = base + "/" + filename.replace(
-                "001001", "{surah:03d}{ayah:03d}", 1
-            )
+            template = base + "/" + filename.replace("001001", "{surah:03d}{ayah:03d}", 1)
         else:
             return ""
         val = entries.get("2:1")
@@ -373,6 +371,6 @@ def derive_url_template(manifest_data: dict, audio_cat: str) -> str:
     # Strip protocol so HF dataset viewer doesn't render as audio widget.
     for prefix in ("https://", "http://"):
         if template.startswith(prefix):
-            template = template[len(prefix):]
+            template = template[len(prefix) :]
             break
     return template

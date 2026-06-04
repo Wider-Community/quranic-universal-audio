@@ -28,17 +28,29 @@ def test_migration_creates_all_tables(fresh_db):
     assert db.current_version(db.get_writer()) == _LATEST_VERSION
     conn = db.get_conn()
     names = {
-        r[0]
-        for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     }
     expected = {
-        "db_meta", "users", "role_assignments", "riwayahs", "styles", "sources",
-        "channels", "recording_contexts", "catalog_meta", "catalog_aliases",
-        "reciters", "deliveries", "transitions", "delivery_states", "claims",
-        "requests", "activity_tombstones", "visitor_daily",
-        "request_views", "review_views",
+        "db_meta",
+        "users",
+        "role_assignments",
+        "riwayahs",
+        "styles",
+        "sources",
+        "channels",
+        "recording_contexts",
+        "catalog_meta",
+        "catalog_aliases",
+        "reciters",
+        "deliveries",
+        "transitions",
+        "delivery_states",
+        "claims",
+        "requests",
+        "activity_tombstones",
+        "visitor_daily",
+        "request_views",
+        "review_views",
     }
     assert expected <= names
     # ``activity_dismissals`` was dropped in migration 0006 (admin notifs rail).
@@ -59,9 +71,7 @@ def test_commit_bumps_db_seq(fresh_db):
         )
     assert db.current_db_seq() == start + 1
     # reader sees the committed row immediately (read-after-write)
-    row = db.get_conn().execute(
-        "SELECT login_cache FROM users WHERE hf_user_id = 'u1'"
-    ).fetchone()
+    row = db.get_conn().execute("SELECT login_cache FROM users WHERE hf_user_id = 'u1'").fetchone()
     assert row[0] == "alice"
 
 
@@ -75,9 +85,10 @@ def test_rollback_on_error_leaves_no_rows_and_no_seq_bump(fresh_db):
             )
             raise ValueError("boom")
     assert db.current_db_seq() == start
-    assert db.get_conn().execute(
-        "SELECT COUNT(*) FROM users WHERE hf_user_id = 'u2'"
-    ).fetchone()[0] == 0
+    assert (
+        db.get_conn().execute("SELECT COUNT(*) FROM users WHERE hf_user_id = 'u2'").fetchone()[0]
+        == 0
+    )
 
 
 def test_nested_transaction_savepoint_partial_rollback(fresh_db):
@@ -90,9 +101,7 @@ def test_nested_transaction_savepoint_partial_rollback(fresh_db):
                 raise RuntimeError("inner boom")
         except RuntimeError:
             pass
-    users = {
-        r[0] for r in db.get_conn().execute("SELECT hf_user_id FROM users").fetchall()
-    }
+    users = {r[0] for r in db.get_conn().execute("SELECT hf_user_id FROM users").fetchall()}
     assert "outer" in users
     assert "inner" not in users
 
@@ -146,9 +155,7 @@ def test_one_open_claim_per_slug(fresh_db):
             )
     # but once the first is released, a new open claim is allowed
     with db.transaction() as conn:
-        conn.execute(
-            "UPDATE claims SET released_at='2026-01-03T00:00:00Z' WHERE slug='d1'"
-        )
+        conn.execute("UPDATE claims SET released_at='2026-01-03T00:00:00Z' WHERE slug='d1'")
         conn.execute(
             "INSERT INTO claims(slug, assignee_id, claimed_at) VALUES "
             "('d1','u2','2026-01-03T00:00:00Z')"

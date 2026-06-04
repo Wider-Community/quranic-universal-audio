@@ -11,6 +11,7 @@ This module derives whatever positional inputs the classifier needs from
 the snapshot itself and routes through :func:`classify_segment`. No
 classification logic is reimplemented here.
 """
+
 from __future__ import annotations
 
 from services.validation.classifier import classify_segment

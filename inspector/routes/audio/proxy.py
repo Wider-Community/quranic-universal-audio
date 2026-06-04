@@ -88,7 +88,10 @@ def _stream_cdn(url: str, disposition: str | None = None) -> Response:
         req_headers["Range"] = rng
     try:
         upstream = requests.get(
-            url, headers=req_headers, stream=True, timeout=_UPSTREAM_TIMEOUT_SECS,
+            url,
+            headers=req_headers,
+            stream=True,
+            timeout=_UPSTREAM_TIMEOUT_SECS,
         )
     except requests.RequestException as exc:
         logger.warning("audio_proxy: upstream fetch failed url=%s err=%s", url, exc)

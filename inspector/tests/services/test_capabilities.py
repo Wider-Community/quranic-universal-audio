@@ -30,7 +30,10 @@ def _set_override(cap: str, tier: str, allowed: bool, by: str = "dev-owner") -> 
     with connection.transaction():
         repo_access.ensure_user(by, login=by)
         repo_permissions.set_override(
-            capability_id=cap, tier=tier, allowed=allowed, set_by=by,
+            capability_id=cap,
+            tier=tier,
+            allowed=allowed,
+            set_by=by,
         )
 
 

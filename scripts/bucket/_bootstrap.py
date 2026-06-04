@@ -67,10 +67,12 @@ def load_hf_token() -> str | None:
 
 
 def add_bucket_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--bucket", choices=list(BUCKETS), default="dev",
-                        help="which bucket (default: dev)")
-    parser.add_argument("--yes-prod", action="store_true",
-                        help="confirm a mutating op against --bucket prod")
+    parser.add_argument(
+        "--bucket", choices=list(BUCKETS), default="dev", help="which bucket (default: dev)"
+    )
+    parser.add_argument(
+        "--yes-prod", action="store_true", help="confirm a mutating op against --bucket prod"
+    )
 
 
 def resolve(args: argparse.Namespace):
@@ -78,9 +80,9 @@ def resolve(args: argparse.Namespace):
     --help is fast and tools without huggingface_hub installed still print."""
     ensure_utf8_stdout()
     if not load_hf_token():
-        print("warning: HF_TOKEN not in env or .env — anonymous calls may 401",
-              file=sys.stderr)
+        print("warning: HF_TOKEN not in env or .env — anonymous calls may 401", file=sys.stderr)
     from huggingface_hub import HfFileSystem
+
     return HfFileSystem(), BUCKETS[args.bucket]
 
 
@@ -109,6 +111,5 @@ def confirm_mutation(args: argparse.Namespace, action: str) -> None:
     if args.bucket != "prod":
         return
     if not args.yes_prod:
-        print(f"refusing to {action} on prod bucket without --yes-prod",
-              file=sys.stderr)
+        print(f"refusing to {action} on prod bucket without --yes-prod", file=sys.stderr)
         sys.exit(2)

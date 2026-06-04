@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from qua_shared.schemas import IntakeSubmission
-
 from services.admin import intake_validation as iv
 
 
@@ -16,8 +15,11 @@ def _new_reciter(**over):
         "kind": "new_reciter",
         "proposed_edits": {"name_en": "X", "riwayah": "hafs", "style": "murattal"},
         "source": {"method": "links", "links": _links()},
-        "attestations": {"distribution_rights": True, "links_verified": True,
-                         "storage_rights": True},
+        "attestations": {
+            "distribution_rights": True,
+            "links_verified": True,
+            "storage_rights": True,
+        },
     }
     body.update(over)
     return IntakeSubmission.model_validate(body)
@@ -51,9 +53,11 @@ def test_partial_links_warns_missing():
 def test_malformed_url_reports_indices():
     # ftp scheme (non-http) and a whitespace-bearing junk value are both rejected;
     # a bare host without a scheme is accepted (normalised to https).
-    bad = [{"chapter": 3, "url": "ftp://example.com/3.mp3"},
-           {"chapter": 7, "url": "not a url"},
-           {"chapter": 2, "url": "cdn.example.com/2.mp3"}]
+    bad = [
+        {"chapter": 3, "url": "ftp://example.com/3.mp3"},
+        {"chapter": 7, "url": "not a url"},
+        {"chapter": 2, "url": "cdn.example.com/2.mp3"},
+    ]
     v = iv.validate_submission(_new_reciter(source={"method": "links", "links": bad}))
     assert any("Malformed URL for chapter(s): 3, 7" in e for e in v.errors)
 
@@ -65,9 +69,15 @@ def test_scheme_less_url_accepted():
 
 
 def test_missing_attestation_errors():
-    v = iv.validate_submission(_new_reciter(
-        attestations={"distribution_rights": True, "links_verified": True,
-                      "storage_rights": False}))
+    v = iv.validate_submission(
+        _new_reciter(
+            attestations={
+                "distribution_rights": True,
+                "links_verified": True,
+                "storage_rights": False,
+            }
+        )
+    )
     assert any("all three" in e for e in v.errors)
 
 
@@ -83,8 +93,9 @@ def test_no_links_errors():
 
 
 def test_playlist_known_host_clean():
-    sub = _new_reciter(source={"method": "playlist",
-                               "playlist_url": "https://youtube.com/playlist?list=abc"})
+    sub = _new_reciter(
+        source={"method": "playlist", "playlist_url": "https://youtube.com/playlist?list=abc"}
+    )
     v = iv.validate_submission(sub)
     assert v.errors == []
     assert not any("Unrecognised" in w for w in v.warnings)

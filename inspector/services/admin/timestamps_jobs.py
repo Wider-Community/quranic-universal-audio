@@ -39,6 +39,7 @@ import datetime
 import json
 import logging
 import os
+from datetime import UTC
 from pathlib import Path
 
 from qua_shared.schemas import TsJobRecord, TsJobSettings
@@ -48,9 +49,19 @@ from services.storage.hf_bucket import StorageNotFound, get_backend, resolve_buc
 log = logging.getLogger("inspector")
 
 # Terminal HF stages (anything not in this set is treated as in-flight).
-_TERMINAL = ("succeeded", "completed", "failed", "error", "errored",
-             "timed-out", "timeout", "stopped", "canceled", "cancelled",
-             "deleted")
+_TERMINAL = (
+    "succeeded",
+    "completed",
+    "failed",
+    "error",
+    "errored",
+    "timed-out",
+    "timeout",
+    "stopped",
+    "canceled",
+    "cancelled",
+    "deleted",
+)
 # Terminal stages that mean the alignment finished cleanly. HF has reported
 # both "succeeded" and "completed" for clean exits across job types, so the
 # auto-release path treats either as success (the job's own self-POST always
@@ -73,7 +84,8 @@ def _legacy_job_record_path(job_id: str) -> str:
 
 
 def _now_iso() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 # Private bucket holding the MFA runtime (mfa-runtime/) + the staged job code
 # (code/). Mounted read-only at /aux in the job.
@@ -98,8 +110,8 @@ JOB_IMAGE = os.environ.get("INSPECTOR_JOB_IMAGE", "hf.co/spaces/hetchyy/quran-ts
 # Whether the image still needs the runtime conda/pip install. True only for the
 # stock mambaforge base; the prebuilt Space already has /env.
 _NEEDS_BOOTSTRAP = (
-    os.environ.get("INSPECTOR_JOB_IMAGE_BOOTSTRAP",
-                   "1" if "mambaforge" in JOB_IMAGE else "0") == "1"
+    os.environ.get("INSPECTOR_JOB_IMAGE_BOOTSTRAP", "1" if "mambaforge" in JOB_IMAGE else "0")
+    == "1"
 )
 JOB_FLAVOR = os.environ.get("INSPECTOR_TS_JOB_FLAVOR", "cpu-upgrade")
 JOB_TIMEOUT = os.environ.get("INSPECTOR_TS_JOB_TIMEOUT", "2h")
@@ -123,8 +135,11 @@ def _job_command() -> list[str]:
     activates the baked ``/env`` conda env and runs the entrypoint directly."""
     if _NEEDS_BOOTSTRAP:
         return ["bash", "-lc", f"{_INSTALL} && {_ENTRYPOINT}"]
-    return ["bash", "-lc",
-            f"mkdir -p /scratch && conda run -p /env --no-capture-output {_ENTRYPOINT}"]
+    return [
+        "bash",
+        "-lc",
+        f"mkdir -p /scratch && conda run -p /env --no-capture-output {_ENTRYPOINT}",
+    ]
 
 
 def _job_id(job) -> str | None:
@@ -265,9 +280,7 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
     # reciter publishes immediately (the poll fallback covers the rest).
     webhook_secret = os.environ.get("INSPECTOR_WEBHOOK_SECRET", "").strip()
     if webhook_secret and webhook_base:
-        env["INSPECTOR_WEBHOOK_URL"] = (
-            webhook_base.rstrip("/") + "/api/webhooks/ts-job-complete"
-        )
+        env["INSPECTOR_WEBHOOK_URL"] = webhook_base.rstrip("/") + "/api/webhooks/ts-job-complete"
         secrets["INSPECTOR_WEBHOOK_SECRET"] = webhook_secret
 
     job = run_job(
@@ -294,15 +307,21 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
         state_service.record_timestamps_job(slug, job_id)
         # Persist the launch record up front (status=running). The job
         # overwrites it on completion; job_status() backstops if it's killed.
-        _write_job_record(TsJobRecord(
-            job_id=job_id, slug=slug,
-            settings=settings.model_copy(update={"flavor": flavor, "timeout": timeout}),
-            status="running", started_at=_now_iso(), url=url,
-        ))
+        _write_job_record(
+            TsJobRecord(
+                job_id=job_id,
+                slug=slug,
+                settings=settings.model_copy(update={"flavor": flavor, "timeout": timeout}),
+                status="running",
+                started_at=_now_iso(),
+                url=url,
+            )
+        )
     # Bust the in-flight cache so the next /releases/status fetch shows the
     # running job immediately (the Releases tab watches the ``timestamps`` kind
     # so a regen lands in "In progress" without waiting for the 5 s TTL).
     from services.storage import cache as _cache
+
     _cache.invalidate_in_flight_jobs_cache()
     log.info("launched timestamps job %s for %s (flavor=%s)", job_id, slug, flavor)
     return {"job_id": job_id, "url": url}
@@ -320,7 +339,8 @@ def _write_job_record(rec: TsJobRecord) -> None:
     """Write the durable job record to the bucket (best-effort)."""
     try:
         get_backend().write_json_atomic(
-            _job_record_path(rec.slug, rec.job_id), rec.model_dump(exclude_none=True))
+            _job_record_path(rec.slug, rec.job_id), rec.model_dump(exclude_none=True)
+        )
     except Exception as exc:  # noqa: BLE001
         log.warning("write job record %s failed: %s", rec.job_id, exc)
 
@@ -365,8 +385,7 @@ def list_job_records(slug: str) -> list[dict]:
     out: list[dict] = []
     for jid in ids:
         rec = read_job_record(slug, jid)
-        out.append(rec or {"job_id": jid, "slug": slug, "type": "ts",
-                           "status": "unknown"})
+        out.append(rec or {"job_id": jid, "slug": slug, "type": "ts", "status": "unknown"})
     out.reverse()  # timestamps_job_ids is append-order → newest last
     return out
 
@@ -432,8 +451,13 @@ def job_status(slug: str, job_id: str, *, log_tail: int = 400) -> dict:
     elif status in _TERMINAL:
         note_timestamps_job_failed(slug)
 
-    return {"job_id": job_id, "status": status, "url": url, "logs": logs,
-            "log_truncated": truncated}
+    return {
+        "job_id": job_id,
+        "status": status,
+        "url": url,
+        "logs": logs,
+        "log_truncated": truncated,
+    }
 
 
 def complete_timestamps_job(slug: str, job_id: str) -> dict:
@@ -466,22 +490,31 @@ def complete_timestamps_job(slug: str, job_id: str) -> dict:
 
     row = state_service.get_row(slug)
     if row is None:
-        return {"slug": slug, "state": None, "released": False,
-                "reason": "unknown slug"}
+        return {"slug": slug, "state": None, "released": False, "reason": "unknown slug"}
     if row.state.value == "released":
         return _regenerate_timestamps_on_released(slug, job_id)
     if row.state.value != "under_review" or not row.marked_ready:
-        log.info("complete_timestamps_job(%s): not publishable (state=%s "
-                 "marked_ready=%s) — leaving as-is", slug, row.state.value,
-                 row.marked_ready)
-        return {"slug": slug, "state": row.state.value, "released": False,
-                "reason": "not marked-ready / wrong state"}
+        log.info(
+            "complete_timestamps_job(%s): not publishable (state=%s "
+            "marked_ready=%s) — leaving as-is",
+            slug,
+            row.state.value,
+            row.marked_ready,
+        )
+        return {
+            "slug": slug,
+            "state": row.state.value,
+            "released": False,
+            "reason": "not marked-ready / wrong state",
+        }
     if not _has_any_shard(slug):
-        log.warning("complete_timestamps_job(%s): job %s succeeded but no "
-                    "timestamps shards on the bucket — not publishing",
-                    slug, job_id)
-        return {"slug": slug, "state": row.state.value, "released": False,
-                "reason": "no shards"}
+        log.warning(
+            "complete_timestamps_job(%s): job %s succeeded but no "
+            "timestamps shards on the bucket — not publishing",
+            slug,
+            job_id,
+        )
+        return {"slug": slug, "state": row.state.value, "released": False, "reason": "no shards"}
 
     # v2: wrap transition + release-row write in one outer durable_transaction
     # so they commit atomically. ``durable_transaction()`` is nesting-safe —
@@ -490,22 +523,27 @@ def complete_timestamps_job(slug: str, job_id: str) -> dict:
     # the source-of-truth event for ``per_recitation_releases(track='ts')``:
     # it inserts the new ts row, supersedes the prior current ts row, and
     # stamps the slug's HF/GH releases as stale (TS regen invalidates them).
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from services.db import repo_releases
     from services.db.sync import durable_transaction
+
     try:
         with durable_transaction() as _:
             new_row = state_service.transition(
-                slug, "reciter.published", actor=SYSTEM_ACTOR,
+                slug,
+                "reciter.published",
+                actor=SYSTEM_ACTOR,
                 payload={"job_id": job_id},
             )
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             # Supersede prior current ts row FIRST — partial-unique on (track,
             # slug) WHERE superseded_at IS NULL blocks two current rows.
             repo_releases.supersede_current("ts", slug, except_id=-1, at=now)
             repo_releases.insert_per_recitation_release(
-                track="ts", slug=slug, version=job_id,
+                track="ts",
+                slug=slug,
+                version=job_id,
                 produced_at=now,
                 produced_by="SYSTEM_ACTOR",
                 produced_by_job_id=job_id,
@@ -517,12 +555,17 @@ def complete_timestamps_job(slug: str, job_id: str) -> dict:
         # Lost a double-fire race, or the row changed under us (e.g. reviewer
         # un-marked). Benign — the winning caller (or a re-run) handles it.
         log.info("complete_timestamps_job(%s): transition skipped: %s", slug, exc)
-        return {"slug": slug, "state": (state_service.get_row(slug) or row).state.value,
-                "released": False, "reason": "transition skipped"}
+        return {
+            "slug": slug,
+            "state": (state_service.get_row(slug) or row).state.value,
+            "released": False,
+            "reason": "transition skipped",
+        }
     # Light the Reviews-tab dot on the (now released) Published-bucket row.
     _note_job_finished(slug)
     # Drop the now-terminal job from the Releases-tab in-flight signal promptly.
     from services.storage import cache as _cache
+
     _cache.invalidate_in_flight_jobs_cache()
     log.info("complete_timestamps_job(%s): published (job=%s)", slug, job_id)
     return {"slug": slug, "state": new_row.state.value, "released": True}
@@ -545,7 +588,7 @@ def _regenerate_timestamps_on_released(slug: str, job_id: str) -> dict:
     re-fire of that same job a no-op here. Returns
     ``{slug, state: 'released', released: False, regenerated: bool, reason?}``.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from services.db import repo_releases
     from services.db.sync import durable_transaction
@@ -553,38 +596,51 @@ def _regenerate_timestamps_on_released(slug: str, job_id: str) -> dict:
     from services.state import audit
 
     if repo_releases.release_by_version("ts", slug, job_id) is not None:
-        log.info("complete_timestamps_job(%s): ts %s already recorded — no-op",
-                 slug, job_id)
-        return {"slug": slug, "state": "released", "released": False,
-                "reason": "ts already recorded"}
+        log.info("complete_timestamps_job(%s): ts %s already recorded — no-op", slug, job_id)
+        return {
+            "slug": slug,
+            "state": "released",
+            "released": False,
+            "reason": "ts already recorded",
+        }
     if not _has_any_shard(slug):
-        log.warning("complete_timestamps_job(%s): regen job %s succeeded but no "
-                    "timestamps shards on the bucket — not recording", slug, job_id)
-        return {"slug": slug, "state": "released", "released": False,
-                "reason": "no shards"}
+        log.warning(
+            "complete_timestamps_job(%s): regen job %s succeeded but no "
+            "timestamps shards on the bucket — not recording",
+            slug,
+            job_id,
+        )
+        return {"slug": slug, "state": "released", "released": False, "reason": "no shards"}
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with durable_transaction() as _:
         # Supersede prior current ts row FIRST — partial-unique on (track, slug)
         # WHERE superseded_at IS NULL blocks two current rows.
         repo_releases.supersede_current("ts", slug, except_id=-1, at=now)
         repo_releases.insert_per_recitation_release(
-            track="ts", slug=slug, version=job_id, produced_at=now,
-            produced_by="SYSTEM_ACTOR", produced_by_job_id=job_id,
+            track="ts",
+            slug=slug,
+            version=job_id,
+            produced_at=now,
+            produced_by="SYSTEM_ACTOR",
+            produced_by_job_id=job_id,
         )
         # Re-publishing clears stale; TS regen sets it on the HF/GH membership.
         repo_releases.stamp_stale_on_ts_regen(slug, at=now)
         audit.append(
-            "reciter.ts_regenerated", actor=SYSTEM_ACTOR, slug=slug,
-            from_state="released", to_state="released",
+            "reciter.ts_regenerated",
+            actor=SYSTEM_ACTOR,
+            slug=slug,
+            from_state="released",
+            to_state="released",
             payload={"job_id": job_id},
         )
     _note_job_finished(slug)
     from services.storage import cache as _cache
+
     _cache.invalidate_in_flight_jobs_cache()
     log.info("complete_timestamps_job(%s): ts regenerated (job=%s)", slug, job_id)
-    return {"slug": slug, "state": "released", "released": False,
-            "regenerated": True}
+    return {"slug": slug, "state": "released", "released": False, "regenerated": True}
 
 
 def cancel_job(slug: str, job_id: str) -> dict:
@@ -601,23 +657,27 @@ def cancel_job(slug: str, job_id: str) -> dict:
     from huggingface_hub import cancel_job as _hf_cancel_job
 
     if state_service.get_row(slug) is None:
-        return {"slug": slug, "job_id": job_id, "canceled": False,
-                "reason": "unknown slug"}
+        return {"slug": slug, "job_id": job_id, "canceled": False, "reason": "unknown slug"}
     try:
         _hf_cancel_job(job_id=job_id)
     except Exception as exc:  # noqa: BLE001 — surfaced to the caller
         log.warning("cancel_job(%s, %s) HF call failed: %s", slug, job_id, exc)
-        return {"slug": slug, "job_id": job_id, "canceled": False,
-                "reason": str(exc)}
+        return {"slug": slug, "job_id": job_id, "canceled": False, "reason": str(exc)}
 
     # Best-effort durable-record reconciliation. Mirrors ``job_status``'s
     # terminal backstop: only rewrite when something actually changes so
     # repeat cancels are idempotent.
     existing = read_job_record(slug, job_id)
     if existing is None or existing.get("status") in (None, "running", "unknown"):
-        base = dict(existing) if existing else {
-            "job_id": job_id, "slug": slug, "type": "ts",
-        }
+        base = (
+            dict(existing)
+            if existing
+            else {
+                "job_id": job_id,
+                "slug": slug,
+                "type": "ts",
+            }
+        )
         base["status"] = "canceled"
         base.setdefault("ended_at", _now_iso())
         try:

@@ -1,4 +1,5 @@
 """Static-data route: GET /api/static/catalog.json (D20 Track B)."""
+
 from __future__ import annotations
 
 from qua_shared.schemas import ReciterCatalog

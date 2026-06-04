@@ -12,13 +12,18 @@ These tests pin the v2 contract: the bucketer covers every sample, even
 on awkward sample/bucket ratios, and emits ``schema_version: 2`` on its
 public dicts so read sites can lazily invalidate v1 entries.
 """
+
 from __future__ import annotations
 
 import struct
 
 from config import PEAKS_FFMPEG_SAMPLE_RATE, PEAKS_SCHEMA_VERSION
-from services.peaks import (_bucket_pcm_minmax, compute_audio_peaks,
-                            compute_segment_peaks, is_current_schema)
+from services.peaks import (
+    _bucket_pcm_minmax,
+    compute_audio_peaks,
+    compute_segment_peaks,
+    is_current_schema,
+)
 
 
 def test_bucketer_covers_every_sample_when_not_divisible():
@@ -42,8 +47,8 @@ def test_bucketer_covers_every_sample_when_divisible():
     # exact equality.
     first_max = buckets[0][1] * 32768
     last_max = buckets[-1][1] * 32768
-    assert 8 <= first_max <= 11        # ~9
-    assert 998 <= last_max <= 1000     # ~999
+    assert 8 <= first_max <= 11  # ~9
+    assert 998 <= last_max <= 1000  # ~999
     # Bucket maxes must be monotonically non-decreasing on a monotonic input.
     for i in range(1, 100):
         assert buckets[i][1] >= buckets[i - 1][1]
@@ -91,6 +96,7 @@ def test_compute_audio_peaks_drift_was_zeroed_out():
         # `subprocess.run` was monkey-patched on the module; reload the
         # default by re-importing the subprocess attribute from stdlib.
         import subprocess as _sp
+
         peaks_mod.subprocess = _sp  # type: ignore[attr-defined]
 
     assert out is not None
@@ -117,12 +123,14 @@ def test_compute_segment_peaks_emits_v2_schema(monkeypatch):
     # Hermetic decode -- 8000 samples → 1 sec, peaks_per_sec=30 ⇒ 10 buckets.
     pcm = struct.pack("<8000h", *([5000] * 8000))
 
-    monkeypatch.setattr(audio_source, "resolve",
-                        lambda r, u: audio_source.AudioSource(
-                            cdn_url=u, data=b"\x00\x00", path=None,
-                            vbr=False, bitrate_kbps=None, chapter_key="1"))
-    monkeypatch.setattr(peaks_mod, "_ffmpeg_decode_segment",
-                        lambda src, url, s, d: pcm)
+    monkeypatch.setattr(
+        audio_source,
+        "resolve",
+        lambda r, u: audio_source.AudioSource(
+            cdn_url=u, data=b"\x00\x00", path=None, vbr=False, bitrate_kbps=None, chapter_key="1"
+        ),
+    )
+    monkeypatch.setattr(peaks_mod, "_ffmpeg_decode_segment", lambda src, url, s, d: pcm)
 
     out = compute_segment_peaks("https://cdn/x.mp3", 0, 1000, "r", chapter=1)
     assert out is not None
@@ -136,5 +144,7 @@ def test_is_current_schema_rejects_pre_v2():
     assert is_current_schema({}) is False
     assert is_current_schema({"duration_ms": 10, "peaks": []}) is False  # v1
     assert is_current_schema({"schema_version": 1, "peaks": []}) is False
-    assert is_current_schema({"schema_version": PEAKS_SCHEMA_VERSION,
-                              "duration_ms": 10, "peaks": []}) is True
+    assert (
+        is_current_schema({"schema_version": PEAKS_SCHEMA_VERSION, "duration_ms": 10, "peaks": []})
+        is True
+    )

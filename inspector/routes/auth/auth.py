@@ -18,13 +18,11 @@ from urllib.parse import parse_qs, urljoin, urlparse
 from flask import Blueprint, jsonify, make_response, redirect, request
 
 from qua_shared.schemas import ReciterState
-
 from services import auth as auth_service
 from services import state as state_service
 from services.admin import visitors as visitor_service
 from services.auth import capabilities as cap_service
-from services.db import repo_access
-from services.db import repo_guides
+from services.db import repo_access, repo_guides
 from services.db import sync as _sync
 
 logger = logging.getLogger(__name__)
@@ -100,7 +98,11 @@ def auth_login():
         auth_service.remember_return_path(state, return_to)
     logger.info(
         "auth.login url_root=%s host=%s scheme=%s redirect_uri=%s return=%s",
-        request.url_root, request.host, request.scheme, redirect_uri, return_to,
+        request.url_root,
+        request.host,
+        request.scheme,
+        redirect_uri,
+        return_to,
     )
     return resp
 
@@ -116,13 +118,16 @@ def auth_callback():
         hf_error_desc = request.args.get("error_description", "")
         logger.warning(
             "auth.callback HF returned error=%s description=%s",
-            hf_error, hf_error_desc,
+            hf_error,
+            hf_error_desc,
         )
-        return jsonify({
-            "error": "OAuth provider returned an error",
-            "hf_error": hf_error,
-            "hf_error_description": hf_error_desc,
-        }), 400
+        return jsonify(
+            {
+                "error": "OAuth provider returned an error",
+                "hf_error": hf_error,
+                "hf_error_description": hf_error_desc,
+            }
+        ), 400
 
     return_to = _safe_return_path(auth_service.pop_return_path(request.args.get("state")))
     oauth = auth_service.get_oauth()
@@ -131,10 +136,12 @@ def auth_callback():
     except Exception as e:  # noqa: BLE001 — Authlib raises various; treat all as failure
         # Log the full exception so the Space's stderr surfaces the cause.
         logger.exception("auth.callback authorize_access_token failed")
-        return jsonify({
-            "error": "OAuth callback failed",
-            "detail": f"{type(e).__name__}: {e}",
-        }), 400
+        return jsonify(
+            {
+                "error": "OAuth callback failed",
+                "detail": f"{type(e).__name__}: {e}",
+            }
+        ), 400
 
     userinfo = token.get("userinfo")
     if userinfo is None:
@@ -142,10 +149,12 @@ def auth_callback():
             userinfo = oauth.huggingface.userinfo(token=token)
         except Exception as e:  # noqa: BLE001
             logger.exception("auth.callback userinfo fetch failed")
-            return jsonify({
-                "error": "OAuth userinfo fetch failed",
-                "detail": f"{type(e).__name__}: {e}",
-            }), 400
+            return jsonify(
+                {
+                    "error": "OAuth userinfo fetch failed",
+                    "detail": f"{type(e).__name__}: {e}",
+                }
+            ), 400
 
     sub = userinfo.get("sub")
     login = userinfo.get("preferred_username") or userinfo.get("name")
@@ -213,20 +222,22 @@ def auth_me():
     user = auth_service.current_user()
     dev_mode = auth_service.is_dev_mode()
     if user is None:
-        return jsonify({
-            "login": None,
-            "hf_user_id": None,
-            "role": None,
-            "active_claim": None,
-            "active_claims": [],
-            "dev_mode": dev_mode,
-            # Anonymous still holds whatever anon-eligible capabilities the
-            # owner left on (e.g. view.catalog) — the FE gates on this list.
-            "capabilities": cap_service.capabilities_for(None),
-            # No identity → no per-user read marks. Stable empty list keeps the
-            # FE schema uniform (it gates the unread border / edit gate on this).
-            "guides_read": [],
-        })
+        return jsonify(
+            {
+                "login": None,
+                "hf_user_id": None,
+                "role": None,
+                "active_claim": None,
+                "active_claims": [],
+                "dev_mode": dev_mode,
+                # Anonymous still holds whatever anon-eligible capabilities the
+                # owner left on (e.g. view.catalog) — the FE gates on this list.
+                "capabilities": cap_service.capabilities_for(None),
+                # No identity → no per-user read marks. Stable empty list keeps the
+                # FE schema uniform (it gates the unread border / edit gate on this).
+                "guides_read": [],
+            }
+        )
     # Page-entry recency: /api/me runs on every SPA load / focus, so this is
     # debounced (at most one write per user per window) and best-effort — a
     # failure here must never break identity resolution.
@@ -236,27 +247,29 @@ def auth_me():
         logger.exception("auth.me: maybe_touch_entry failed (continuing)")
 
     active_claims = [
-        r.slug for r in state_service.all_rows()
-        if r.state == ReciterState.UNDER_REVIEW
-        and r.assignee_hf_id == user.hf_user_id
+        r.slug
+        for r in state_service.all_rows()
+        if r.state == ReciterState.UNDER_REVIEW and r.assignee_hf_id == user.hf_user_id
     ]
     role_val = user.role.value if hasattr(user.role, "value") else user.role
-    return jsonify({
-        "login": user.login,
-        "hf_user_id": user.hf_user_id,
-        "role": role_val,
-        "active_claim": active_claims[0] if active_claims else None,
-        "active_claims": active_claims,
-        "dev_mode": dev_mode,
-        # Resolved capability ids the caller currently holds — recomputed fresh
-        # per request (role + matrix are never cookied), so an owner's toggle
-        # reflects on this caller's next /api/me with no restart.
-        "capabilities": cap_service.capabilities_for(user),
-        # Guide view keys this user has opened — drives the unread border on
-        # each accordion ? and the first-edit onboarding gate. Best-effort: a
-        # read failure must never break identity resolution.
-        "guides_read": _guides_read_safe(user.hf_user_id),
-    })
+    return jsonify(
+        {
+            "login": user.login,
+            "hf_user_id": user.hf_user_id,
+            "role": role_val,
+            "active_claim": active_claims[0] if active_claims else None,
+            "active_claims": active_claims,
+            "dev_mode": dev_mode,
+            # Resolved capability ids the caller currently holds — recomputed fresh
+            # per request (role + matrix are never cookied), so an owner's toggle
+            # reflects on this caller's next /api/me with no restart.
+            "capabilities": cap_service.capabilities_for(user),
+            # Guide view keys this user has opened — drives the unread border on
+            # each accordion ? and the first-edit onboarding gate. Best-effort: a
+            # read failure must never break identity resolution.
+            "guides_read": _guides_read_safe(user.hf_user_id),
+        }
+    )
 
 
 def _guides_read_safe(hf_user_id: str) -> list[str]:

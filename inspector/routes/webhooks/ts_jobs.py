@@ -24,7 +24,7 @@ import os
 from flask import Blueprint, jsonify, request
 
 from services.admin import timestamps_jobs as ts_jobs
-from services.admin.jobs import hf_publish, cut_release
+from services.admin.jobs import cut_release, hf_publish
 
 log = logging.getLogger("inspector")
 
@@ -110,7 +110,8 @@ def hf_publish_complete():
         return jsonify({"ok": True, "skipped": "non-success status"})
     try:
         result = hf_publish.complete(
-            slug, job_id,
+            slug,
+            job_id,
             version=version,
             external_uri=body.get("external_uri"),
             launched_by=body.get("launched_by"),
@@ -149,7 +150,8 @@ def release_cut_complete():
         return jsonify({"error": "version is required"}), 400
     try:
         result = cut_release.complete(
-            None, job_id,
+            None,
+            job_id,
             version=version,
             external_uri=body.get("external_uri"),
             operator_note=body.get("operator_note"),
