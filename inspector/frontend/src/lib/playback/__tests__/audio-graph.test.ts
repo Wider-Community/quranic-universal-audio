@@ -126,7 +126,7 @@ describe('audio-graph', () => {
         expect(_createMediaElementSource).toHaveBeenCalledTimes(2);
     });
 
-    it('cutAudio/uncutAudio call ctx.resume() if the context is suspended', async () => {
+    it('getAudioGraph kicks ctx.resume() when context is suspended; cut/uncut no-op', async () => {
         // Override the FakeAudioContext to start suspended.
         class SuspendedCtx extends FakeAudioContext {
             override state: 'suspended' | 'running' = 'suspended';
@@ -134,8 +134,13 @@ describe('audio-graph', () => {
         (globalThis as { AudioContext: typeof AudioContext }).AudioContext =
             SuspendedCtx as unknown as typeof AudioContext;
 
-        const { cutAudio } = await import('../audio-graph');
-        cutAudio(fakeAudio());
+        const { cutAudio, getAudioGraph } = await import('../audio-graph');
+        const el = fakeAudio();
+        cutAudio(el);
+        // resume is invoked from getAudioGraph, which then returns null so
+        // cutAudio itself no-ops. Pin the no-op: getAudioGraph still returns
+        // null on a suspended context, so no MediaElementSource was created.
         expect(_ctxResume).toHaveBeenCalled();
+        expect(getAudioGraph(el)).toBeNull();
     });
 });

@@ -24,4 +24,6 @@ def test_healthz_reports_db_section(client):
     # no upload yet → lag is None, no error
     assert body["db"]["bucket_lag_seconds"] is None
     assert body["db"]["last_error"] is None
-    assert body["status"] in ("ok", "degraded")
+    # Test fixture does not set INSPECTOR_BUCKET_MOUNT, so bucket_ok is False
+    # and the route deterministically reports the degraded branch. Pin it.
+    assert body["status"] == "degraded"

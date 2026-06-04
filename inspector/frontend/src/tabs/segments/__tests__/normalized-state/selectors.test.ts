@@ -55,12 +55,20 @@ describe('normalized-state selectors', () => {
     expect((seg as any).segment_uid).toBe('uid-2');
   });
 
-  it('selectors return new array references on state change (subscribe-friendly)', () => {
+  it('getChapterSegments returns fresh arrays per call (no internal memoization)', () => {
+    // The previous wording ("new array references on state change") was
+    // misleading: getChapterSegments allocates via ids.map().filter() on
+    // every call, so it returns a fresh array regardless of whether the
+    // state object changed — the assertion holds either way. Asserting
+    // that property explicitly so a future memoization regression that
+    // returned the same array reference would be caught.
     const s1 = sampleState();
     const a = getChapterSegments(s1 as any, 1);
-    const s2 = { ...s1, byId: { ...s1.byId } };
-    const b = getChapterSegments(s2 as any, 1);
+    const b = getChapterSegments(s1 as any, 1);
     expect(a).not.toBe(b);
+    // Element identity within the array is preserved as long as byId entries
+    // are the same — proves the selector is pure over the input state.
+    expect(a[0]).toBe(b[0]);
   });
 });
 

@@ -135,8 +135,32 @@ def test_upload_failure_sets_last_error_and_raises(synced, monkeypatch):
         sync.upload()
     st = sync.status()
     assert st["last_error"] is not None and "OSError" in st["last_error"]
-    # no token/url leakage: only type + truncated message
+    # underlying message preserved verbatim for short payloads
     assert "network down" in st["last_error"]
+
+
+def test_upload_failure_truncates_long_error_message(synced, monkeypatch):
+    """``_safe_err`` clips ``str(exc)`` to 200 chars so an exception carrying a
+    bearer token / signed URL can't smuggle the full string into ``last_error``.
+    The bare error message is preserved up to the cap; the suffix is dropped."""
+    _commit_user()
+    fake_token = "Bearer hf_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    long_tail = "x" * 400
+    payload = f"{fake_token} request_url=https://api.test/secret {long_tail}"
+
+    def boom(path, data):
+        raise IOError(payload)
+
+    monkeypatch.setattr(sync, "_write_direct", boom)
+    with pytest.raises(IOError):
+        sync.upload()
+    st = sync.status()
+    assert st["last_error"] is not None
+    # message portion is clipped to the documented 200-char cap.
+    msg = st["last_error"].split(":", 1)[1].strip() if ":" in st["last_error"] else st["last_error"]
+    assert len(msg) <= 200
+    # the trailing 'xxxx...' is not preserved beyond the cap.
+    assert long_tail not in st["last_error"]
 
 
 def test_status_and_lag(synced):

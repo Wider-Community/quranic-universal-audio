@@ -116,7 +116,7 @@ def test_slim_record_emits_canonical_shape():
     canonical fields. Legacy fields never leak."""
     m = PeaksRecord.model_validate(_slim_record())
     out = m.model_dump(exclude_none=True)
-    assert set(out.keys()) >= {
+    assert set(out.keys()) == {
         "op_id", "url", "start_ms", "end_ms", "bps", "peaks_b64",
     }
     # Pre-#5 legacy keys must not appear:

@@ -66,6 +66,7 @@ def test_resolve_to_archive_and_get_for_slug(fresh_db):
         repo_requests.submit(
             slug="d1", requester=_actor(),
             proposed_edits=ProposedEdits(style="murattal"),
+            auto_claim=True,
         )
     # accept (→ 'completed' archive)
     with db.transaction():
@@ -79,6 +80,8 @@ def test_resolve_to_archive_and_get_for_slug(fresh_db):
     assert len(archived) == 1
     assert archived[0].proposed_edits.style == "murattal"
     assert archived[0].transitioned_by.hf_user_id == "admin"
+    # auto_claim must survive the pending→archived SQL round-trip
+    assert archived[0].auto_claim is True
 
     # a slug can cycle: re-request → return; both archives keep order
     with db.transaction():

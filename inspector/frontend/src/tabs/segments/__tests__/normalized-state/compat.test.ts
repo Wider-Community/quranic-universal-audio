@@ -8,20 +8,30 @@ import * as segmentsStore from '../../stores/segments';
 void segmentsStore;
 
 describe('compat shape', () => {
-  it('segData exposes a subscribe function', () => {
-    expect(typeof chapterStore.segData?.subscribe).toBe('function');
-  });
-
-  it('segAllData snapshot does not expose internal _byChapter / _byChapterIndex maps', () => {
+  it('segAllData snapshot carries the documented SegAllResponse fields and no private byChapter map', () => {
+    const sample = {
+      segments: [],
+      audio_by_chapter: {},
+      pad_ms: 0,
+      pad_left_ms: 0,
+      pad_right_ms: 0,
+      min_silence_floor_ms: 0,
+    };
+    chapterStore.segAllData.set(sample as any);
     let snapshot: any;
-    chapterStore.segAllData.subscribe((v: any) => { snapshot = v; })();
-    expect(snapshot).toBeDefined();
-    expect(snapshot?._byChapter).toBeUndefined();
-    expect(snapshot?._byChapterIndex).toBeUndefined();
-  });
-
-  it('segData and segAllData expose subscribe functions', () => {
-    expect(typeof chapterStore.segData.subscribe).toBe('function');
-    expect(typeof chapterStore.segAllData.subscribe).toBe('function');
+    const unsub = chapterStore.segAllData.subscribe((v: any) => { snapshot = v; });
+    unsub();
+    expect(snapshot).not.toBeNull();
+    // Documented fields survive — proves consumers can keep reading them.
+    expect(Array.isArray(snapshot.segments)).toBe(true);
+    expect(snapshot.audio_by_chapter).toBeDefined();
+    expect(snapshot.pad_ms).toBe(0);
+    expect(snapshot.pad_left_ms).toBe(0);
+    expect(snapshot.pad_right_ms).toBe(0);
+    expect(snapshot.min_silence_floor_ms).toBe(0);
+    // Internal byChapter maps must not leak through the store (would
+    // otherwise tempt consumers into depending on private structure).
+    expect(snapshot._byChapter).toBeUndefined();
+    expect(snapshot._byChapterIndex).toBeUndefined();
   });
 });

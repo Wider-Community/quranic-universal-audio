@@ -146,4 +146,6 @@ def test_list_users_no_n_plus_1(seed_role, monkeypatch):
     nine = calls["n"]
 
     assert three == nine
-    assert three <= 6
+    # Pin the exact aggregation count: base_rows, last_activity_by_actor,
+    # requests_count_by_user, reviews_count_by_actor, open_claims_by_user.
+    assert three == 5

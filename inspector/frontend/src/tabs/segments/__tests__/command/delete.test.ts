@@ -34,25 +34,16 @@ describe('command/delete', () => {
     expect(r.operation).toBeTruthy();
   });
 
-  it('op preserves _mountId routing through dispatcher', () => {
-    const cmd: DeleteCommand = { ...baseCmd, _mountId: 'main-list' };
-    const r = applyCommand(baseState(), cmd);
-    expect(r.operation).toBeTruthy();
-  });
-
   it('op result feeds save payload correctly', () => {
     const r = applyCommand(baseState(), baseCmd);
     expect(r.operation.type).toBe('delete');
   });
 
-  it('targetSegmentIndex routing for main-list mountId', () => {
+  it('records targetSegmentIndex with the segment chapter (mountId is dispatcher-only and ignored here)', () => {
+    // _mountId is consumed by the dispatcher to pick the rendered row, not
+    // by applyCommand. The prior "main-list vs accordion" pair asserted the
+    // same chapter=1 against both variants and could not fail differently.
     const cmd: DeleteCommand = { ...baseCmd, _mountId: 'main-list' };
-    const r = applyCommand(baseState(), cmd);
-    expect(r.operation.targetSegmentIndex?.chapter).toBe(1);
-  });
-
-  it('targetSegmentIndex routing for accordion mountId', () => {
-    const cmd: DeleteCommand = { ...baseCmd, _mountId: 'accordion' };
     const r = applyCommand(baseState(), cmd);
     expect(r.operation.targetSegmentIndex?.chapter).toBe(1);
   });

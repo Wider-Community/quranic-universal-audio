@@ -20,8 +20,14 @@ describe('classifier output parity', () => {
     expect(typeof classifiedIssuesOf).toBe('function');
   });
 
-  it('history items use stored classified_issues, not local classifier', () => {
+  it('history items do not import a live segment classifier', async () => {
+    // Asserting against the hardcoded ``usesStoredClassifiedIssues`` constant
+    // is tautological — only an intentional source edit could flip it. The
+    // real invariant is that no live-classifier module is reachable from
+    // history items. Probe the conventional location and assert absence.
     expect(usesStoredClassifiedIssues).toBe(true);
+    const liveClassifier = await tryImport('../../utils/validation/live-classifier');
+    expect(liveClassifier).toBeNull();
   });
 
   it('utils/validation/classify is not present (classification is server-side)', async () => {

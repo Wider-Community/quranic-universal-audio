@@ -18,6 +18,7 @@ KNOWN_SEGMENT_FIELDS = {
     "wrap_word_ranges",
     "qalqala_letter",     # persisted classifier optimisation (migrate_wip §2)
     "is_boundary_adj",    # persisted classifier optimisation (migrate_wip §2)
+    "is_wasl",            # declared DetailedSegment field; persisted when truthy
     "ignored_categories",
     "ignored",
     "audio_url",
@@ -75,8 +76,13 @@ def test_detailed_json_round_trip_preserves_known_fields(load_fixture, tmp_recit
             )
 
 
-def test_detailed_json_no_field_removed(load_fixture):
-    """Every field in the baseline fixture is recognized by KNOWN_SEGMENT_FIELDS."""
+def test_fixture_segments_use_only_known_keys(load_fixture):
+    """Every field in the baseline fixture is recognized by KNOWN_SEGMENT_FIELDS.
+
+    This validates fixture vocabulary alignment with the allow-set. It does
+    NOT certify "no schema field removed" — that would require asserting
+    every required ``DetailedSegment`` field is present in at least one seg.
+    """
     fixture = load_fixture("112-ikhlas")
     for seg in _segments(fixture):
         unknown = set(seg.keys()) - KNOWN_SEGMENT_FIELDS

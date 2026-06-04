@@ -101,17 +101,24 @@ def test_edit_delivery_updates_fields(fresh_catalog, monkeypatch):
 
 
 def test_edit_delivery_no_op_when_values_unchanged(fresh_catalog, monkeypatch):
+    """No-op edit must skip the txn entirely so it doesn't bump db_seq
+    (which would trigger a spurious bucket upload + cache invalidation)."""
     catalog_service, _ = fresh_catalog
     from services import audit as audit_service
+    from services import db as _db
     calls = []
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: calls.append(kw))
 
+    seq_before = _db.current_db_seq()
     catalog_service.edit_delivery(
         actor=_actor(),
         slug="rec_a",
         riwayah="hafs",  # same as current
     )
     assert calls == []  # nothing audited for a no-op
+    # The early-return guard must prevent the durable_transaction; the only
+    # way to assert that is to pin db_seq.
+    assert _db.current_db_seq() == seq_before
 
 
 def test_edit_delivery_rejects_unknown_slug(fresh_catalog):
@@ -165,6 +172,10 @@ def test_edit_delivery_audit_record_shape(fresh_catalog, monkeypatch):
         "from": "studio",
         "to": "broadcast",
     }
+    # The patch contract excludes unchanged fields; pinning the key set keeps
+    # a regression that accidentally leaked riwayah/style/recording_year
+    # from passing this assertion.
+    assert set(rec["payload"]["patch"].keys()) == {"recording_context"}
     assert rec["reason"] == "proposed update"
 
 

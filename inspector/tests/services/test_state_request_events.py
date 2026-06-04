@@ -40,6 +40,23 @@ def _actor(role: str = "contributor", hf_user_id: str = "u-1") -> Actor:
     return Actor(hf_user_id=hf_user_id, login_at_time="alice", role=Role(role))
 
 
+def _record_and_call_through(monkeypatch) -> list[dict]:
+    """Record audit.append calls + pass them through to the real implementation
+    so the durability boundary still writes to ``repo_transitions``. A pure
+    no-op stub would lose the regression-guard on emission entirely.
+    """
+    from services import audit as audit_service
+    calls: list[dict] = []
+    real = audit_service.append
+
+    def _capture(*a, **kw):
+        calls.append(kw if not a else {"args": a, "kwargs": kw})
+        return real(*a, **kw)
+
+    monkeypatch.setattr(audit_service, "append", _capture)
+    return calls
+
+
 def _seed_catalog_db():
     """Seed the small test catalog into the SQLite substrate."""
     from services import db
@@ -122,9 +139,14 @@ def state_env(tmp_path, monkeypatch):
 
 
 def test_requested_happy_path(state_env, monkeypatch):
+    """Drives the canonical happy path and asserts the audit transition row
+    actually landed — the no-op audit stub used elsewhere in this file masks
+    a regression that drops ``audit.append`` from the handler. Use the
+    record-and-call-through helper so we both pin the call kwargs and let
+    the SQLite substrate record the durability boundary.
+    """
     state_service, pending_service, _, _ = state_env
-    from services import audit as audit_service
-    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+    audit_calls = _record_and_call_through(monkeypatch)
 
     state_service.transition(
         "test_reciter",
@@ -146,6 +168,13 @@ def test_requested_happy_path(state_env, monkeypatch):
     assert pending.proposed_edits.recording_year == 2020
     assert pending.comments == "Found a higher-quality recording."
     assert pending.requester.hf_user_id == "u-1"
+
+    # Durability boundary: at least one transitions row must have been
+    # emitted for the ``reciter.requested`` event under this slug.
+    from services.db import repo_transitions
+    events = {t.event for t in repo_transitions.for_slug("test_reciter")}
+    assert "reciter.requested" in events
+    assert audit_calls, "audit.append was not invoked at all"
 
 
 def test_requested_creates_row_when_none_exists(state_env, monkeypatch):
@@ -218,6 +247,10 @@ def test_requested_rejects_discarded_visibility(state_env, monkeypatch):
 
 
 def test_requested_rejects_when_pending_exists(state_env, monkeypatch):
+    """Exercise the pending-check guard in ``_h_requested``: the row is back at
+    CATALOGUED but a pending entry already exists — the second request must
+    fail on the pending-check, not the state precondition.
+    """
     state_service, pending_service, _, _ = state_env
     from services import audit as audit_service
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
@@ -228,9 +261,20 @@ def test_requested_rejects_when_pending_exists(state_env, monkeypatch):
         actor=_actor(),
         payload={"proposed_edits": {}, "comments": None},
     )
-    # Second request for the same slug — row is no longer CATALOGUED,
-    # so it fails on the state check rather than the pending check.
-    with pytest.raises(state_service.InvalidTransition):
+
+    # Force the row back to CATALOGUED while leaving the pending entry alive,
+    # isolating the pending-check guard from the state precondition.
+    from services import db
+    from services.db import repo_state
+    with db.transaction():
+        repo_state.update_state(
+            "test_reciter",
+            state=ReciterState.CATALOGUED,
+            state_since=datetime.now(timezone.utc),
+        )
+    assert pending_service.get("test_reciter") is not None
+
+    with pytest.raises(state_service.InvalidTransition, match="pending request"):
         state_service.transition(
             "test_reciter",
             "reciter.requested",

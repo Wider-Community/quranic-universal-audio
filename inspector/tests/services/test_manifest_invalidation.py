@@ -1,11 +1,11 @@
 """A committed lifecycle transition drops the TS manifest's process cache.
 
-The manifest (services/reference/timestamps.py) is built once and cached behind
-a ``_built`` flag with no other invalidation hook. Without the post-commit drop
-in ``state.transition()`` it would serve the boot-time published-set until the
-next restart (the bug that left freshly-published reciters missing from the
-Timestamps tab). These tests pin the invalidation so that regression can't
-silently return.
+The manifest (services/reference/timestamps.py) is cached behind a ``_built``
+flag and a ``_built_seq`` db_seq snapshot. The db_seq check is the authoritative
+rebuild trigger — any committed write bumps db_seq and the next manifest read
+self-heals. The post-commit ``invalidate()`` call from ``state.transition()``
+is a belt-and-braces explicit drop that keeps the hot path off the seq check.
+These tests pin both halves so neither can silently regress.
 """
 
 from __future__ import annotations

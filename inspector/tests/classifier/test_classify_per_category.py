@@ -98,14 +98,19 @@ def test_repetitions_only_wrap_word_ranges():
     assert "repetitions" in result2
 
 
-def test_boundary_adj_phoneme_tail_optional():
-    """Segment qualifying for boundary_adj: with canonical phonemes provided, tail-mismatch may flip."""
+def test_boundary_adj_classify_structural_only():
+    """``boundary_adj`` is structural-only — classification result is identical
+    whether or not canonical phonemes are supplied. Regression guard against
+    re-introducing the retired phonemic tail-match branch."""
     seg = {
         "matched_ref": "1:6:1-1:6:1",
         "confidence": 1.0,
     }
     plain = _classify(seg, entry_ref="1", is_by_ayah=False, canonical=None)
-    assert "boundary_adj" in plain or "boundary_adj" not in plain
+    with_canonical = _classify(
+        seg, entry_ref="1", is_by_ayah=False, canonical=["dummy"]
+    )
+    assert ("boundary_adj" in plain) == ("boundary_adj" in with_canonical)
 
 
 def test_qalqala_letter_field_populated():

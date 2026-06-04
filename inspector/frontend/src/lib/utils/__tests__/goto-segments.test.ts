@@ -24,9 +24,18 @@ describe('gotoSegments', () => {
         expect(localStorage.getItem(LS_KEYS.SEG_RECITER)).toBe('reciter-x');
     });
 
-    it('is a no-op for an empty slug', () => {
+    it('is a no-op for an empty slug — does not overwrite existing state or localStorage', () => {
+        // Pre-seed all three observables to non-default values so the no-op
+        // assertion proves the function returned early (instead of trivially
+        // matching the initialisation defaults).
+        selectedReciter.set('existing');
+        setActiveTab(TAB_NAMES.TIMESTAMPS);
+        localStorage.setItem(LS_KEYS.SEG_RECITER, 'existing');
+
         gotoSegments('');
-        expect(get(selectedReciter)).toBe('');
-        expect(get(activeTab)).toBe(TAB_NAMES.DASHBOARD);
+
+        expect(get(selectedReciter)).toBe('existing');
+        expect(get(activeTab)).toBe(TAB_NAMES.TIMESTAMPS);
+        expect(localStorage.getItem(LS_KEYS.SEG_RECITER)).toBe('existing');
     });
 });

@@ -194,7 +194,7 @@ def test_mark_ready_propagates_to_all_endpoints(
     def _ok(_reciter):
         return {"category_counts": {
             "low_confidence": 0, "low_confidence_v2": 0, "boundary_adj": 0,
-            "cross_verse": 0, "basmala_amin": 0,
+            "cross_verse": 0, "basmala_amin": 0, "repetitions": 0,
         }}
     monkeypatch.setattr(_validation, "validate_reciter_segments", _ok)
 
@@ -230,25 +230,37 @@ def test_mark_ready_propagates_to_all_endpoints(
     assert task_body["predicates"]["can_mark_ready"] is False
 
 
-def test_anonymous_sees_redacted_assignee_consistently(state_persistence, flask_client):
+def test_anonymous_sees_redacted_assignee_consistently(
+    state_persistence, flask_client, signed_in_client,
+):
     """Anonymous callers must NOT see the assignee on either endpoint.
 
-    Both list and detail endpoints route through public_state.to_public_*
-    which redacts assignee fields for anonymous callers — but the
-    redaction has to be applied consistently across both, or an admin
-    leak in one breaks privacy.
+    Asserting "assignee_hf_id not in delivery" is vacuous because the public
+    mapper never adds the field under any condition (redaction-by-omission).
+    Instead drive the same routes anonymously AND signed in as a maintainer,
+    then assert the deliveries shape is structurally equivalent — a future
+    leak that flipped the public mapper to add the field for authenticated
+    callers would surface here.
     """
     _seed_catalog("test_slug")
     _seed_state([_state_row_kwargs("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     # Anonymous (no session cookie) — uses flask_client directly.
-    list_body = json.loads(flask_client.get("/api/public/reciters").data)
-    matched = [r for r in list_body["reciters"] if r["reciter_id"] == "test_reciter"]
-    assert matched
-    for d in matched[0]["deliveries"]:
-        assert "assignee_hf_id" not in d, (
-            "list endpoint leaked assignee to anonymous caller"
-        )
+    anon_list = json.loads(flask_client.get("/api/public/reciters").data)
+    anon_match = [r for r in anon_list["reciters"] if r["reciter_id"] == "test_reciter"]
+    assert anon_match
+    anon_delivery_keys = {tuple(sorted(d.keys())) for d in anon_match[0]["deliveries"]}
+
+    # Maintainer hits the same anonymous-equivalent public route.
+    client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
+    auth_list = json.loads(client.get("/api/public/reciters").data)
+    auth_match = [r for r in auth_list["reciters"] if r["reciter_id"] == "test_reciter"]
+    assert auth_match
+    auth_delivery_keys = {tuple(sorted(d.keys())) for d in auth_match[0]["deliveries"]}
+
+    assert anon_delivery_keys == auth_delivery_keys, (
+        "public route leaked extra fields to authenticated caller"
+    )
 
     detail_body = json.loads(flask_client.get("/api/public/reciter/test_reciter").data)
     for d in detail_body["deliveries"]:

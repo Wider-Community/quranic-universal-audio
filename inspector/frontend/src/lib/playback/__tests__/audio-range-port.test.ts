@@ -350,8 +350,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
     // -----------------------------------------------------------------------
 
     describe('dispose', () => {
-        it('stops rAF + cancels pending advance timer + uncut', () => {
-            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        it('stops rAF + uncuts the audio graph', () => {
             const r = buildRange({
                 policy: { kind: 'advance', gapMs: 500, nextRange: () => ({ startMs: 0, endMs: 100 }) },
             });
@@ -359,9 +358,9 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
             r.dispose();
             expect(r.isRunning()).toBe(false);
             expect(vi.mocked(uncutAudio)).toHaveBeenCalled();
-            const playBefore = audio.play.mock.calls.length;
-            vi.advanceTimersByTime(10_000);
-            expect(audio.play.mock.calls.length).toBe(playBefore);
+            // Gap-timer cancellation on stop/dispose is asserted by the
+            // dedicated stop-cancels-gap test; this test never crosses the
+            // boundary so no advance timer exists to cancel here.
         });
     });
 

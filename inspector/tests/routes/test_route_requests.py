@@ -437,6 +437,7 @@ def test_list_requests_maintainer_open_redacts_and_diffs(signed_in_client):
 def test_list_requests_owner_includes_requester_login(signed_in_client):
     client, _ = signed_in_client(role="owner", hf_user_id="u-O")
     res = client.get("/api/admin/requests?status=open")
+    assert res.status_code == 200, res.data
     body = json.loads(res.data)
     row = body["rows"][0]
     assert row["requester_login"] == "requester"

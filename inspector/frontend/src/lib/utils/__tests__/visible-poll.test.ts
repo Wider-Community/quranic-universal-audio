@@ -69,22 +69,30 @@ describe('visiblePoll', () => {
         teardown();
     });
 
-    it('discards an in-flight response that resolves after hide', async () => {
+    it('discards an in-flight response that resolves after hide and aborts the controller', async () => {
         let resolveFetch: (v: string) => void = () => {};
+        let capturedSignal: AbortSignal | undefined;
         const fetcher = vi.fn(
-            () =>
-                new Promise<string>((resolve) => {
+            (signal?: AbortSignal) => {
+                capturedSignal = signal;
+                return new Promise<string>((resolve) => {
                     resolveFetch = resolve;
-                }),
+                });
+            },
         );
         const onResult = vi.fn();
         const teardown = visiblePoll({ intervalMs: 1000, fetcher, onResult });
+        await flushMicrotasks();
         // Hide before the in-flight fetch resolves.
         setVisibility(true);
         dispatchVisibilityChange();
         resolveFetch('late-payload');
         await flushMicrotasks();
         expect(onResult).not.toHaveBeenCalled();
+        // The advertised contract is that the in-flight AbortController is
+        // aborted on hide — pin the abort directly rather than relying
+        // solely on the resolve-time !isVisible() re-check.
+        expect(capturedSignal?.aborted).toBe(true);
         teardown();
     });
 

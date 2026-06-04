@@ -197,8 +197,13 @@ describe('PreviewPlaybackContext — deregister active row', () => {
         ctx.toggle('row-1');
         expect(active).toEqual({ uid: 'row-1' });
 
+        const pauseCallsBefore = audio.pause.mock.calls.length;
         ctx.deregisterRow('row-1');
         expect(active).toBeNull();
+        // The store-clear alone isn't enough; if a regression reordered
+        // _stop() to clear state before disposing the range, the audio
+        // element would keep playing. Pin the audible side effect.
+        expect(audio.pause.mock.calls.length).toBeGreaterThan(pauseCallsBefore);
         unsub();
         ctx.dispose();
     });

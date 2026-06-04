@@ -65,6 +65,12 @@ def test_catalog_write_invalidates(monkeypatch):
     snap = catalog_service.snapshot()  # miss → 2 rebuilds
     assert len(calls) == 2
     assert {r.reciter_id for r in snap.reciters} == {"rec_a", "rec_b"}
+    # Lock in the rest of the full-ReciterCatalog rebuild contract — a
+    # regression in repo_catalog.snapshot()'s vocab / aliases / derived
+    # assembly would otherwise slip past with only reciter_ids checked.
+    assert {d.slug for d in snap.deliveries} == {"rec_a"}
+    assert snap.vocab.riwayat, "vocab.riwayat must survive a cache miss"
+    assert snap.derived is not None
 
 
 def test_state_write_also_invalidates(monkeypatch):

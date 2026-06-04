@@ -85,9 +85,12 @@ def test_hydrate_initial_seen_seeds_from_wip(auto_detect_env):
     # up the directory entry.
     backend.write_json_atomic("reciters/preexisting_slug/marker.json", {"x": 1})
     svc.hydrate_initial_seen()
+    # Verify the side effect directly: the slug landed in the seen set.
+    # Without this assertion the test passes for the wrong reason — reconcile
+    # would return 0 whether or not the seen set was populated, because the
+    # slug has no AWAITING_ALIGNMENT state row to advance.
+    assert "preexisting_slug" in svc._seen_slugs
     fired = svc.reconcile_once()
-    # preexisting_slug is in the seen set + no state row exists in
-    # AWAITING_ALIGNMENT anyway, so nothing fires.
     assert fired == 0
 
 
@@ -210,7 +213,12 @@ def test_reconcile_applies_pending_edits(auto_detect_env):
 def test_system_actor_is_owner_role(auto_detect_env):
     """The synthetic actor must carry owner role so it passes the catalog
     edit gates triggered by ``apply_and_archive_completed``."""
+    from qua_shared.schemas import Role
+
     svc, _, _ = auto_detect_env
     assert svc.SYSTEM_ACTOR.hf_user_id == "system"
-    # Role is stored as a string due to use_enum_values=True on Actor.
-    assert str(svc.SYSTEM_ACTOR.role) == "owner"
+    # Actor uses ``use_enum_values=True``, so the role is persisted as
+    # ``Role.OWNER.value``. Compare against ``.value`` directly so a config
+    # flip to use_enum_values=False fails the test instead of silently
+    # passing via ``str(Role.OWNER)`` returning a different shape.
+    assert svc.SYSTEM_ACTOR.role == Role.OWNER.value

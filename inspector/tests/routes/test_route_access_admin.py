@@ -172,6 +172,19 @@ def test_revoke_force_releases_active_claim(signed_in_client):
     body = json.loads(res.data)
     assert body["auto_released_slugs"] == ["test_slug"]
 
+    # The wire field alone tracks "what the route said it released"; pin the
+    # actual cascade side effects so a future refactor that breaks state /
+    # claim / audit emission can't drift past the response shape.
+    from services.db import repo_claims, repo_state, repo_transitions
+
+    assert repo_claims.open_claim_for_user("u-target") is None
+    row = repo_state.get_row("test_slug")
+    assert row is not None
+    assert row.state.value == "awaiting_review"
+    assert row.assignee_hf_id is None
+    events = {t.event for t in repo_transitions.for_slug("test_slug")}
+    assert "reciter.released" in events
+
 
 def test_revoke_maintainer_cannot_revoke_owner(signed_in_client):
     # Sign in first so the fixture seeds the maintainer revoker.

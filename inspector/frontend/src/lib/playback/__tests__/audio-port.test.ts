@@ -282,10 +282,20 @@ describe('AudioPort — setSource invalidation', () => {
         expect(audio.load).toHaveBeenCalled();
     });
 
-    it('same source (re-set) is a no-op', () => {
+    it('same source (re-set) is a no-op', async () => {
         const src = { audioUrl: 'http://cdn/a.mp3', reciter: 'r1' as const, vbr: false };
         port.setSource(src);
+        const r = port.loadCovering(0, 1000);
+        audio._fire('canplay');
+        await r.ready;
+        const windowBefore = port.window;
+        const loadCallsBefore = audio.load.mock.calls.length;
         port.setSource({ ...src });   // identical fields, fresh object
+        // No re-load was issued and the loaded window survived intact —
+        // proves the no-op path was actually taken (byte-equality alone
+        // does not, since port.source would equal src either way).
+        expect(audio.load.mock.calls.length).toBe(loadCallsBefore);
+        expect(port.window).toEqual(windowBefore);
         expect(port.source).toEqual(src);
     });
 });

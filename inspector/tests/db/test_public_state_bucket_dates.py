@@ -29,7 +29,22 @@ def _step(slug: str, from_state: str | None, to_state: str) -> None:
     )
 
 
-def test_bucket_dates_collapse_and_reentry(fresh_db):
+def test_bucket_dates_collapse_and_reentry(fresh_db, monkeypatch):
+    """Chronology is asserted against monotonically advancing timestamps so the
+    coarse Windows ``datetime.now()`` resolution (~15ms) can't accidentally
+    make duplicated wall-clock ticks pass the ``sorted`` check trivially.
+    """
+    from datetime import datetime, timedelta, timezone
+    from services.db import _serde as _t_serde
+
+    _clock = [datetime(2026, 6, 1, tzinfo=timezone.utc)]
+
+    def _advancing_now() -> datetime:
+        _clock[0] = _clock[0] + timedelta(seconds=1)
+        return _clock[0]
+
+    monkeypatch.setattr(_t_serde, "now", _advancing_now)
+
     seed_delivery("d1")
     # A non-linear lifecycle, including a now-removed legacy state in the
     # historical log:

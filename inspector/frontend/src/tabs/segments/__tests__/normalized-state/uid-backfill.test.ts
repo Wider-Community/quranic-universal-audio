@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { deriveUid } from '../../domain/identity';
+import { backfillSegmentUids, deriveUid } from '../../domain/identity';
 
 const legacySeg = (chapter: number, idx: number, startMs: number) => ({
   time_start: startMs,
@@ -14,11 +14,16 @@ const legacySeg = (chapter: number, idx: number, startMs: number) => ({
 });
 
 describe('uid backfill (frontend)', () => {
-  it('frontend loader backfills uid for legacy fixture', () => {
-    void legacySeg(1, 0, 0);
-    const uid = deriveUid({ chapter: 1, originalIndex: 0, startMs: 0 });
-    expect(typeof uid).toBe('string');
-    expect(uid.length).toBeGreaterThan(8);
+  it('backfillSegmentUids mutates legacy fixture in place with deterministic uids', () => {
+    const segs = [legacySeg(1, 0, 0)];
+    backfillSegmentUids(segs as Array<{ segment_uid?: string; time_start: number }>, 1);
+    const seg = segs[0]!;
+    expect(typeof seg.segment_uid).toBe('string');
+    expect(seg.segment_uid!.length).toBeGreaterThan(8);
+    // Backfilled uid must match a direct deriveUid call with the same inputs.
+    expect(seg.segment_uid).toBe(
+      deriveUid({ chapter: 1, originalIndex: 0, startMs: 0 }),
+    );
   });
 
   it('backfill is deterministic across two loads', () => {

@@ -83,10 +83,30 @@ describe('buildSchemaDescriptor', () => {
         expect(ax.options.map((o) => o.key)).toEqual(['mp3quran', 'quranicaudio']);
     });
 
-    it('tagsOf returns the right tag for facet computation', () => {
-        const d = buildSchemaDescriptor([delivery({ channel: 'tarteel' })]);
-        const channel = d.axes.find((a) => a.key === 'channel')!;
-        const row = delivery({ channel: 'tarteel' });
-        expect(Array.from(channel.tagsOf(row))).toEqual(['tarteel']);
+    it('tagsOf wires axes to the correct delivery fields per axis', () => {
+        // Walk every axis and assert tagsOf returns the slug for the field
+        // it claims to drive — catches an accidental swap (e.g. status reading
+        // from coverage_kind). The prior single-axis assertion exercised only
+        // the trivial channel identity, which is true for any input.
+        const row = delivery({
+            channel: 'tarteel',
+            riwayah: 'hafs',
+            style: 'murattal',
+            status: 'published',
+            coverage_kind: 'full',
+        });
+        const d = buildSchemaDescriptor([row]);
+        const expectations: Record<string, string> = {
+            channel: 'tarteel',
+            riwayah: 'hafs',
+            style: 'murattal',
+            status: 'published',
+            coverage: 'full',
+        };
+        for (const [axisKey, expected] of Object.entries(expectations)) {
+            const axis = d.axes.find((a) => a.key === axisKey);
+            if (!axis) continue; // tolerate axes that aren't in this descriptor
+            expect(Array.from(axis.tagsOf(row))).toContain(expected);
+        }
     });
 });

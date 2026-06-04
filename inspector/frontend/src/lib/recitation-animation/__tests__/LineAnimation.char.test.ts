@@ -39,6 +39,12 @@ function unit(
 }
 
 describe('LineAnimation char mode', () => {
+    // happy-dom returns zero-sized rects from getBoundingClientRect, so
+    // measureFits() treats every span as fitting on a single page. The test
+    // relies on that to keep both words co-rendered; a real-browser layout
+    // engine could pick a different page count for the same input. Do not
+    // re-enable clearOnOverflow here without restoring the bounding rect
+    // assumption explicitly (see LineAnimation.svelte:195).
     it('keeps cross-word co-timed letters visually active together', async () => {
         const units = [
             unit('1:1:1', 'ab', 0, 2, [

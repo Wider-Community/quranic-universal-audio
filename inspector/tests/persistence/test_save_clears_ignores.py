@@ -40,22 +40,24 @@ def test_empty_ignored_categories_clears_persisted_ignores(load_fixture, tmp_rec
         seg_payload.append(_seg_payload_from_fixture(fixture, s["segment_uid"]))
     seg_payload[0]["ignored_categories"] = ["low_confidence"]
 
-    client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
         headers=_HEADERS,
     )
+    assert res.status_code == 200, res.get_json()
 
     saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
     target = _segments_with_uid(saved, target_uid)[0]
     assert target.get("ignored_categories") == ["low_confidence"]
 
     seg_payload[0]["ignored_categories"] = []
-    client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
         headers=_HEADERS,
     )
+    assert res.status_code == 200, res.get_json()
 
     saved2 = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
     target2 = _segments_with_uid(saved2, target_uid)[0]
@@ -79,18 +81,20 @@ def test_omitted_ignored_categories_preserves_existing(load_fixture, tmp_reciter
         for s in fixture["entries"][0]["segments"]
     ]
     seg_payload[0]["ignored_categories"] = ["low_confidence"]
-    client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
         headers=_HEADERS,
     )
+    assert res.status_code == 200, res.get_json()
 
     patch_payload = {"segments": [{"index": 0, "matched_ref": fixture["entries"][0]["segments"][0]["matched_ref"]}], "operations": []}
-    client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps(patch_payload),
         headers=_HEADERS,
     )
+    assert res.status_code == 200, res.get_json()
 
     saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
     target = _segments_with_uid(saved, target_uid)[0]
@@ -113,11 +117,12 @@ def test_all_marker_preserved(load_fixture, tmp_reciter_dir, signed_in_client):
         for s in fixture["entries"][0]["segments"]
     ]
     seg_payload[0]["ignored_categories"] = ["_all"]
-    client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/{chapter}",
         data=json.dumps({"full_replace": True, "segments": seg_payload, "operations": []}),
         headers=_HEADERS,
     )
+    assert res.status_code == 200, res.get_json()
 
     saved = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
     target = _segments_with_uid(saved, target_uid)[0]
@@ -167,11 +172,12 @@ def test_save_drops_wrap_when_fe_omits_it(tmp_reciter_dir, signed_in_client):
         }],
         "operations": [],
     }
-    client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/112",
         data=json.dumps(payload),
         headers=_HEADERS,
     )
+    assert res.status_code == 200, res.get_json()
     saved = json.loads(legacy_path.read_text(encoding="utf-8"))
     seg = saved["entries"][0]["segments"][0]
     assert "wrap_word_ranges" not in seg, (
@@ -220,11 +226,12 @@ def test_save_drops_geometrically_invalid_wrap(tmp_reciter_dir, signed_in_client
         }],
         "operations": [],
     }
-    client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/112",
         data=json.dumps(payload),
         headers=_HEADERS,
     )
+    assert res.status_code == 200, res.get_json()
     saved = json.loads(legacy_path.read_text(encoding="utf-8"))
     seg = saved["entries"][0]["segments"][0]
     assert "wrap_word_ranges" not in seg, (
@@ -268,11 +275,12 @@ def test_save_preserves_wrap_when_fe_sends_it(tmp_reciter_dir, signed_in_client)
         }],
         "operations": [],
     }
-    client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/112",
         data=json.dumps(payload),
         headers=_HEADERS,
     )
+    assert res.status_code == 200, res.get_json()
     saved = json.loads(legacy_path.read_text(encoding="utf-8"))
     seg = saved["entries"][0]["segments"][0]
     assert seg.get("wrap_word_ranges") == [["112:1:2", "112:1:2", "112:1:4"]]
@@ -320,11 +328,12 @@ def test_legacy_ignored_boolean_migrates_to_all(tmp_reciter_dir, signed_in_clien
         ],
         "operations": [],
     }
-    client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/112",
         data=json.dumps(payload),
         headers=_HEADERS,
     )
+    assert res.status_code == 200, res.get_json()
 
     saved = json.loads(legacy_path.read_text(encoding="utf-8"))
     seg = saved["entries"][0]["segments"][0]
@@ -374,11 +383,12 @@ def test_save_drops_matched_text_from_disk(tmp_reciter_dir, signed_in_client):
         }],
         "operations": [],
     }
-    client.post(
+    res = client.post(
         f"/api/seg/save/{reciter}/112",
         data=json.dumps(payload),
         headers=_HEADERS,
     )
+    assert res.status_code == 200, res.get_json()
     saved = json.loads(legacy_path.read_text(encoding="utf-8"))
     seg = saved["entries"][0]["segments"][0]
     assert "matched_text" not in seg, (

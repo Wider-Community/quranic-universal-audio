@@ -30,10 +30,15 @@ describe('applyCommand', () => {
     expect(r.affectedChapters).toContain(1);
   });
 
-  it('returns validationDelta when applicable', () => {
+  it('returns validationDelta with arrays even when no category resolved', () => {
     const editRef: SegmentCommand = { type: 'editReference', segmentUid: 'uid-1', matched_ref: '1:1:1-1:1:1' };
     const r = applyCommand(baseState, editRef);
-    expect('validationDelta' in r).toBe(true);
+    // `'validationDelta' in r` is true even when value is undefined; pin
+    // the actual shape — both fields must be arrays so consumers can
+    // iterate them safely.
+    expect(r.validationDelta).toBeDefined();
+    expect(Array.isArray(r.validationDelta!.resolved)).toBe(true);
+    expect(Array.isArray(r.validationDelta!.introduced)).toBe(true);
   });
 
   it('records op_context_category and resolved delta for Basmala + Amin edits', () => {

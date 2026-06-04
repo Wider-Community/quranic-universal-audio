@@ -16,14 +16,16 @@ describe('save patch field', () => {
     expect((payload.operations[0].patch as any).before[0].segment_uid).toBe('a');
   });
 
-  it('save without patch still works for non-patch ops', () => {
-    const payload = {
-      full_replace: true,
-      segments: [],
-      operations: [
-        { op_id: 'x', type: 'trim' },
-      ],
+  it('builder omits patch field when applyCommand produced none', () => {
+    // Drive the actual builder so a regression that injects a placeholder
+    // patch surfaces here — the previous literal-only assertion proved
+    // nothing about the production codepath.
+    const result = {
+      operation: { op_id: 'x', type: 'trim' },
+      affectedChapters: [1],
+      patch: undefined,
     };
+    const payload = buildPayloadFromCommandResult(result as any);
     expect('patch' in payload.operations[0]!).toBe(false);
   });
 });

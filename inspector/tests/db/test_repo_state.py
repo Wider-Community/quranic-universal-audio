@@ -70,9 +70,13 @@ def test_release_clears_assignee(fresh_db):
         repo_state.update_state(
             "d1", state=ReciterState.RELEASED, state_since=_dt()
         )
+    # Directly assert the open claim was actually closed — the assembled
+    # ReciterRow only fills assignee_* when state == UNDER_REVIEW, so checking
+    # `row.assignee_hf_id is None` alone passes for the wrong reason.
+    assert repo_claims.get_open_claim("d1") is None
     row = repo_state.get_row("d1")
     assert row.state == ReciterState.RELEASED
-    assert row.assignee_hf_id is None  # ReciterRow invariant holds
+    assert row.assignee_hf_id is None
 
 
 def test_retained_columns_roundtrip(fresh_db):

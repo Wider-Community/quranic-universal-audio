@@ -95,11 +95,16 @@ def test_save_maintainer_can_override_assignee(signed_in_client, tmp_reciter_dir
         data=json.dumps({"full_replace": True, "segments": [], "operations": []}),
         headers=_HEADERS,
     )
+    # The gate-passed assertion: the lock decorator chain did not 403 us.
+    # Body shape may still 400 on the empty-segments payload, but a 403
+    # here is a regression that the prior 200-or-400 tuple would have
+    # silently passed through as a 400 anyway.
+    assert res.status_code != 403, (
+        f"unexpected 403; body={res.get_json()}"
+    )
     assert res.status_code in (200, 400), (
         f"unexpected status {res.status_code}; body={res.get_json()}"
     )
-    # 400 is acceptable when the empty-segments payload trips a validation
-    # rule; the point is the decorator chain didn't block us.
     if res.status_code == 200:
         history_path = (
             tmp_reciter_dir.root / reciter / "edit_history.jsonl"
@@ -151,7 +156,10 @@ def test_save_owner_bypasses_state_check(signed_in_client, tmp_reciter_dir):
         data=json.dumps({"full_replace": True, "segments": [], "operations": []}),
         headers=_HEADERS,
     )
-    # 200 or 400 are both acceptable — the lock passed (no 403 for state mismatch).
+    # Lock-pass invariant: a 403 for state-mismatch is the actual regression.
+    assert res.status_code != 403, (
+        f"unexpected 403; body={res.get_json()}"
+    )
     assert res.status_code in (200, 400), (
         f"unexpected status {res.status_code}; body={res.get_json()}"
     )
@@ -174,7 +182,11 @@ def test_save_owner_marked_ready_bypasses_freeze(signed_in_client, tmp_reciter_d
         headers=_HEADERS,
     )
     # Gate passed — 200 (save succeeded) or 400 (payload-shape complaint) both
-    # confirm the lock did not 403 on marked_ready.
+    # confirm the lock did not 403 on marked_ready. Assert the NOT-403
+    # invariant explicitly so a future tuple-creep doesn't hide a regression.
+    assert res.status_code != 403, (
+        f"owner override should bypass marked_ready freeze; got 403, body={res.get_json()}"
+    )
     assert res.status_code in (200, 400), (
         f"unexpected status {res.status_code}; body={res.get_json()}"
     )
@@ -213,7 +225,7 @@ def test_save_accepts_full_replace_payload(signed_in_client, tmp_reciter_dir):
         data=json.dumps(payload),
         headers=_HEADERS,
     )
-    assert res.status_code in (200, 404), (
+    assert res.status_code == 200, (
         f"unexpected status {res.status_code}; body={res.get_json()}"
     )
 
@@ -237,7 +249,7 @@ def test_save_accepts_patch_payload(signed_in_client, tmp_reciter_dir):
         data=json.dumps(payload),
         headers=_HEADERS,
     )
-    assert res.status_code in (200, 404)
+    assert res.status_code == 200, res.get_data(as_text=True)
 
 
 def test_save_includes_patch_field_in_history(signed_in_client, tmp_reciter_dir):

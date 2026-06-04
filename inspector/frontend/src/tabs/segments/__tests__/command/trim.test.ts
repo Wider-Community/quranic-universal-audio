@@ -29,9 +29,9 @@ describe('command/trim', () => {
     expect(r.operation.snapshots?.after).toBeTruthy();
   });
 
-  it('op marks dirty correctly (structural vs single-index)', () => {
+  it('op marks dirty as structural (trim belongs to STRUCTURAL_COMMANDS)', () => {
     const r = applyCommand(baseState(), baseCmd);
-    expect(r.operation.kind === 'single-index' || r.operation.kind === 'structural').toBe(true);
+    expect(r.operation.kind).toBe('structural');
   });
 
   it('op records sourceCategory as op_context_category but does not mutate ignored_categories', () => {
@@ -42,26 +42,15 @@ describe('command/trim', () => {
     expect(updated.ignored_categories ?? []).not.toContain('low_confidence');
   });
 
-  it('op preserves _mountId routing through dispatcher', () => {
-    const cmd: TrimCommand = { ...baseCmd, _mountId: 'main-list' };
-    const r = applyCommand(baseState(), cmd);
-    expect(r.operation.targetSegmentIndex).toBeTruthy();
-  });
-
-  it('op result feeds save payload correctly', () => {
-    const r = applyCommand(baseState(), baseCmd);
-    expect(r.operation).toMatchObject({ type: 'trim' });
-  });
-
-  it('targetSegmentIndex routing for main-list mountId', () => {
+  it('records targetSegmentIndex with the segment chapter (mountId is dispatcher-only and ignored here)', () => {
+    // _mountId is consumed by the dispatcher to pick the rendered row, not by
+    // applyCommand. Pin the targetSegmentIndex shape that the reducer DOES
+    // populate (chapter + index); the prior "main-list vs accordion" pair
+    // of tests asserted the same chapter=1 against both variants and could
+    // never fail differently.
     const cmd: TrimCommand = { ...baseCmd, _mountId: 'main-list' };
     const r = applyCommand(baseState(), cmd);
     expect(r.operation.targetSegmentIndex.chapter).toBe(1);
-  });
-
-  it('targetSegmentIndex routing for accordion mountId', () => {
-    const cmd: TrimCommand = { ...baseCmd, _mountId: 'accordion' };
-    const r = applyCommand(baseState(), cmd);
-    expect(r.operation.targetSegmentIndex.chapter).toBe(1);
+    expect(r.operation.type).toBe('trim');
   });
 });

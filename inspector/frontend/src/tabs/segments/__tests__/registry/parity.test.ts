@@ -7,20 +7,26 @@ import { describe, expect, it } from 'vitest';
 
 import { IssueRegistry } from '../../domain/registry';
 
+// Mirror the Python registry policy + presentation fields row-for-row. The
+// boolean policy keys were the only ones pinned here originally — accordionOrder
+// and displayTitle now ride along so a TS / Python drift on either surfaces
+// here instead of waiting for someone to notice an out-of-order accordion or a
+// mistitled card. ``description`` is intentionally NOT pinned: it carries
+// known drift between TS and Python and is tracked as a surfaced bug.
 const PY_SNAPSHOT = {
-  failed:            { canIgnore: false, autoSuppress: true,  persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'error' },
-  missing_verses:    { canIgnore: false, autoSuppress: true,  persistsIgnore: false, scope: 'per_verse',   cardType: 'missingVerses',  severity: 'error' },
-  missing_words:     { canIgnore: false, autoSuppress: false, persistsIgnore: false, scope: 'per_verse',   cardType: 'missingWords',   severity: 'error' },
-  structural_errors: { canIgnore: false, autoSuppress: true,  persistsIgnore: false, scope: 'per_chapter', cardType: 'error',          severity: 'error' },
-  low_confidence:    { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning' },
-  low_confidence_v2: { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning' },
-  repetitions:       { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning' },
-  audio_bleeding:    { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning' },
-  boundary_adj:      { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning' },
-  cross_verse:       { canIgnore: false, autoSuppress: false, persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'warning' },
-  qalqala:           { canIgnore: false, autoSuppress: false, persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'info' },
-  muqattaat:         { canIgnore: false, autoSuppress: false, persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'info' },
-  basmala_amin:      { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'info' },
+  failed:            { canIgnore: false, autoSuppress: true,  persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'error',   accordionOrder: 1, displayTitle: 'Failed Alignments' },
+  missing_verses:    { canIgnore: false, autoSuppress: true,  persistsIgnore: false, scope: 'per_verse',   cardType: 'missingVerses',  severity: 'error',   accordionOrder: 2, displayTitle: 'Missing Verses' },
+  missing_words:     { canIgnore: false, autoSuppress: false, persistsIgnore: false, scope: 'per_verse',   cardType: 'missingWords',   severity: 'error',   accordionOrder: 3, displayTitle: 'Missing Words' },
+  structural_errors: { canIgnore: false, autoSuppress: true,  persistsIgnore: false, scope: 'per_chapter', cardType: 'error',          severity: 'error',   accordionOrder: 4, displayTitle: 'Structural Errors' },
+  low_confidence:    { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning', accordionOrder: 5, displayTitle: 'Low Confidence' },
+  low_confidence_v2: { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning', accordionOrder: 6, displayTitle: 'Low Confidence v2' },
+  repetitions:       { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning', accordionOrder: 9, displayTitle: 'Detected Repetitions' },
+  audio_bleeding:    { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning', accordionOrder: 7, displayTitle: 'Audio Bleeding' },
+  boundary_adj:      { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'warning', accordionOrder: 8, displayTitle: 'May Require Boundary Adjustment' },
+  cross_verse:       { canIgnore: false, autoSuppress: false, persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'warning', accordionOrder: 10, displayTitle: 'Cross-verse' },
+  qalqala:           { canIgnore: false, autoSuppress: false, persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'info',    accordionOrder: 11, displayTitle: 'Qalqala' },
+  muqattaat:         { canIgnore: false, autoSuppress: false, persistsIgnore: false, scope: 'per_segment', cardType: 'generic',        severity: 'info',    accordionOrder: 12, displayTitle: 'Muqattaʼat' },
+  basmala_amin:      { canIgnore: true,  autoSuppress: true,  persistsIgnore: true,  scope: 'per_segment', cardType: 'generic',        severity: 'info',    accordionOrder: 13, displayTitle: 'Basmala + Amin' },
 };
 
 describe('TS ↔ Python registry parity', () => {

@@ -47,7 +47,13 @@ describe('friendlyError', () => {
         const msg = friendlyError({ error: leaky, code: 'STATE_PRECONDITION' }, 400);
         expect(msg).not.toContain(leaky);
         expect(msg).not.toContain('UNDER_REVIEW');
-        // Even with no code, the raw prose must not appear.
-        expect(friendlyError({ error: leaky }, 400)).not.toContain(leaky);
+        // Even with no code and a status mapped in STATUS_FALLBACK (500), the
+        // raw prose must not appear — pins the no-code branch under a status
+        // the fallback table actually maps. Using an unmapped status (400)
+        // would pass trivially because the function returns the generic
+        // catch-all without ever inspecting body.error.
+        const msg500 = friendlyError({ error: leaky }, 500);
+        expect(msg500).not.toContain(leaky);
+        expect(msg500).not.toContain('UNDER_REVIEW');
     });
 });
