@@ -96,6 +96,17 @@
     let peaks: PeakBucket[] | Int8Array | null = null;
     let fetchGen = 0;
 
+    // Bucket-snap metadata for the baked-peaks fast path. `_sliceVerseLocal`
+    // snaps the int8 slice to bucket boundaries, so the array covers a span
+    // slightly WIDER than the exact verse window. These describe that slice so
+    // the drawer's density matches the array (peaks line up with overlays):
+    //   _peaksSpanMs   — the slice's true covered duration (drawer totalDurationMs)
+    //   _peaksOriginMs — offset (≥0) from the slice's true start to the exact
+    //                    window start; added to window-relative sub-range ms.
+    // null for the ffmpeg fallback (PeakBucket[] is already verse-exact).
+    let _peaksSpanMs: number | null = null;
+    let _peaksOriginMs = 0;
+
     /** Per-tab LRU keyed by `${url}:${startMs}:${endMs}`. */
     const _peaksLRU = new Map<string, SegmentPeaks>();
 
@@ -154,15 +165,22 @@
     let _zoom: { viewStart: number; viewEnd: number } | null = null;
     $: _zoom = $tsZoom;
 
-    /** Sub-range props forwarded to WaveformCanvas. Both `undefined` → full
-     *  slice (default). When zoomed, `wcStartMs/wcEndMs` are SLICE-relative
-     *  ms (the WaveformCanvas already has full-slice peaks; we just tell it
-     *  which window to render). */
-    $: wcTotalDurationMs = $loadedVerse
-        ? Math.round(($loadedVerse.tsSegEnd - $loadedVerse.tsSegOffset) * 1000)
-        : undefined;
-    $: wcStartMs = _zoom ? Math.round(_zoom.viewStart * 1000) : undefined;
-    $: wcEndMs = _zoom ? Math.round(_zoom.viewEnd * 1000) : undefined;
+    // Sub-range props forwarded to WaveformCanvas, resolved via `_drawRange` so
+    // the bucket-snapped baked slice and the verse-exact ffmpeg slice both map
+    // to the exact-window-relative overlay coords. For the verse-exact path
+    // un-zoomed, all three are `undefined` (drawer renders the full array);
+    // for the baked slice they're always set (window shifted into the slice).
+    // `_peaksSpanMs`/`_peaksOriginMs` are referenced so the reactive re-resolves
+    // when the slice metadata flips (baked ↔ ffmpeg fallback).
+    $: _wcRange = _drawRange(
+        _zoom,
+        $loadedVerse ? ($loadedVerse.tsSegEnd - $loadedVerse.tsSegOffset) * 1000 : 0,
+        _peaksSpanMs,
+        _peaksOriginMs,
+    );
+    $: wcStartMs = _wcRange.startMs;
+    $: wcEndMs = _wcRange.endMs;
+    $: wcTotalDurationMs = _wcRange.totalDurationMs;
 
     // When `tsZoom` changes, the base peak canvas re-renders via WaveformCanvas's
     // reactive on (startMs, endMs, totalDurationMs). We drop the cached
@@ -220,6 +238,8 @@
 
     function _clearPeaks(): void {
         peaks = null;
+        _peaksSpanMs = null;
+        _peaksOriginMs = 0;
         _baseImageData = null;
         _baseCacheKey = null;
     }
@@ -227,23 +247,72 @@
     /** Slice a chapter int8 [min,max] envelope down to a VERSE-LOCAL Int8Array
      *  for the chapter-absolute window [startMs,endMs]. floor(start)/ceil(end)
      *  bucket convention (matches the drawer) so the verse fully covers its
-     *  peaks; the slice may run ≤1 bucket (≤100ms at 10bps) wide of the exact
-     *  window — acceptable per the 10bps decision. Keeping the result
-     *  verse-local means all zoom/overlay/playhead math (slice-relative) stays
-     *  untouched. */
+     *  peaks; the slice runs ≤1 bucket (≤100ms at 10bps) wide of the exact
+     *  window per side.
+     *
+     *  Because of that snap, the slice's TRUE covered span is wider than the
+     *  exact window. We return that span (`spanMs`) and the offset from the
+     *  slice's true start to the exact window start (`originMs` ≥ 0). Draw
+     *  sites feed `spanMs` as the drawer's `totalDurationMs` and add `originMs`
+     *  to the (window-relative) sub-range so the drawer's density matches the
+     *  array — the painted peaks then line up with the boundary/playhead
+     *  overlays instead of drifting by up to one bucket. */
     function _sliceVerseLocal(
         chapterPeaks: Int8Array,
         durationMs: number,
         startMs: number,
         endMs: number,
-    ): Int8Array | null {
+    ): { peaks: Int8Array; spanMs: number; originMs: number } | null {
         const pairs = chapterPeaks.length >> 1;
         if (pairs <= 0 || durationMs <= 0) return null;
         const pairsPerMs = pairs / durationMs;
         const startPair = Math.max(0, Math.floor(startMs * pairsPerMs));
         const endPair = Math.min(pairs, Math.ceil(endMs * pairsPerMs));
         if (endPair <= startPair) return null;
-        return chapterPeaks.slice(startPair * 2, endPair * 2);
+        const trueStartMs = startPair / pairsPerMs;
+        const trueEndMs = endPair / pairsPerMs;
+        return {
+            peaks: chapterPeaks.slice(startPair * 2, endPair * 2),
+            spanMs: trueEndMs - trueStartMs,
+            originMs: startMs - trueStartMs,
+        };
+    }
+
+    /** Resolve the drawer sub-range for the current peaks + zoom. Returns the
+     *  `{ startMs, endMs, totalDurationMs }` to feed `drawWaveformPeaks` so the
+     *  painted peaks align with the (exact-window-relative) overlays.
+     *
+     *  `exactDurationMs` is the exact verse window; the visible window in OVERLAY
+     *  coords (ms from the window start) is `[0, exactDurationMs]` un-zoomed or
+     *  `[viewStart, viewEnd]` zoomed.
+     *
+     *  For the bucket-snapped baked slice (`spanMs` set) the array covers a span
+     *  WIDER than the exact window, so we declare that true span as
+     *  `totalDurationMs` and shift the window by `originMs` into the array. For
+     *  the verse-exact ffmpeg path (`spanMs == null`) the window maps 1:1, with
+     *  an un-zoomed full slice signalled by `undefined` sub-range (drawer renders
+     *  the whole array linearly). */
+    function _drawRange(
+        zoom: { viewStart: number; viewEnd: number } | null,
+        exactDurationMs: number,
+        spanMs: number | null,
+        originMs: number,
+    ): { startMs: number | undefined; endMs: number | undefined; totalDurationMs: number | undefined } {
+        if (spanMs != null) {
+            const winStartMs = zoom ? zoom.viewStart * 1000 : 0;
+            const winEndMs = zoom ? zoom.viewEnd * 1000 : exactDurationMs;
+            return {
+                startMs: Math.round(winStartMs + originMs),
+                endMs: Math.round(winEndMs + originMs),
+                totalDurationMs: Math.round(spanMs),
+            };
+        }
+        // Verse-exact peaks: existing behaviour (undefined sub-range when unzoomed).
+        return {
+            startMs: zoom ? Math.round(zoom.viewStart * 1000) : undefined,
+            endMs: zoom ? Math.round(zoom.viewEnd * 1000) : undefined,
+            totalDurationMs: zoom ? Math.round(exactDurationMs) : undefined,
+        };
     }
 
     async function reactToVerse(
@@ -278,8 +347,10 @@
             const chEntry = chMap ? pickChapterPeaks(chMap, url) : null;
             if (chEntry && chEntry.peaks instanceof Int8Array && chEntry.duration_ms > 0) {
                 const sliced = _sliceVerseLocal(chEntry.peaks, chEntry.duration_ms, startMs, endMs);
-                if (sliced && sliced.length) {
-                    peaks = sliced;
+                if (sliced && sliced.peaks.length) {
+                    peaks = sliced.peaks;
+                    _peaksSpanMs = sliced.spanMs;
+                    _peaksOriginMs = sliced.originMs;
                     _baseImageData = null;
                     _baseCacheKey = null;
                     await tick();
@@ -307,6 +378,9 @@
         }
 
         peaks = entry.peaks;
+        // ffmpeg peaks are verse-exact (no bucket-snap) — use the exact window.
+        _peaksSpanMs = null;
+        _peaksOriginMs = 0;
 
         _baseImageData = null;
         _baseCacheKey = null;
@@ -333,14 +407,14 @@
         // (user-visible as a fixed ghost cursor inside the loop word).
         if (peaks) {
             const lv = get(loadedVerse);
-            const zoom = _zoom;
-            const totalMs = lv ? Math.round((lv.tsSegEnd - lv.tsSegOffset) * 1000) : undefined;
+            const exactMs = lv ? (lv.tsSegEnd - lv.tsSegOffset) * 1000 : 0;
+            const range = _drawRange(_zoom, exactMs, _peaksSpanMs, _peaksOriginMs);
             drawWaveformPeaks(ctx, peaks, {
                 width: canvas.width,
                 height: canvas.height,
-                startMs: zoom ? Math.round(zoom.viewStart * 1000) : undefined,
-                endMs: zoom ? Math.round(zoom.viewEnd * 1000) : undefined,
-                totalDurationMs: totalMs,
+                startMs: range.startMs,
+                endMs: range.endMs,
+                totalDurationMs: range.totalDurationMs,
             });
         }
         _baseImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -390,15 +464,13 @@
         if (!animating && _baseImageData && _baseImageData.width === width && _baseImageData.height === height) {
             ctx.putImageData(_baseImageData, 0, 0);
         } else if (peaks) {
-            const zoomMs = _zoom
-                ? { startMs: Math.round(_zoom.viewStart * 1000), endMs: Math.round(_zoom.viewEnd * 1000) }
-                : { startMs: undefined, endMs: undefined };
+            const range = _drawRange(_zoom, duration * 1000, _peaksSpanMs, _peaksOriginMs);
             drawWaveformPeaks(ctx, peaks, {
                 width,
                 height: height,
-                startMs: zoomMs.startMs,
-                endMs: zoomMs.endMs,
-                totalDurationMs: Math.round(duration * 1000),
+                startMs: range.startMs,
+                endMs: range.endMs,
+                totalDurationMs: range.totalDurationMs,
             });
         } else {
             ctx.fillStyle = '#0f0f23';

@@ -15,11 +15,19 @@
 
     import { clickOutside } from '../../actions/click-outside';
     import { fetchSurahsForDelivery, type SurahEntry } from '../../api/audio-surahs';
-    import { takeAdoptedSource } from '../../playback/adopt-signal';
+    import { setAdoptedSource, takeAdoptedSource } from '../../playback/adopt-signal';
     import { ensureAudioContextRunning } from '../../playback/audio-graph';
     import { adjacentAyahStartMs, nearestAyahStartMs } from '../../playback/ayah-seek';
+    import {
+        clearDashPrewarm,
+        consumeDashCommitted,
+        dashProxyUrl,
+        primeDashCommitted,
+        primeDashSpeculative,
+    } from '../../playback/dash-prewarm';
     import { dashPort } from '../../playback/dash-port';
-    import { exitLoop } from '../../playback/loop';
+    import { exitLoop, loopTarget } from '../../playback/loop';
+    import { recycleAsShadow } from '../../playback/shadow-audio';
     import { recitationAyahStarts } from '../../recitation-animation/recitation-settings';
     import {
         loadPersistedSlice,
@@ -31,7 +39,10 @@
         setPosition,
         setSpeed,
     } from '../../stores/player-context';
+    import { progressHoverMs, progressScrubMs } from '../../stores/progress-hover';
     import type { PublicDelivery } from '../../types/public-state';
+    import { getActiveTab } from '../../utils/active-tab';
+    import { TAB_NAMES } from '../../utils/constants';
     import { DASHBOARD_SPEEDS } from '../../utils/speed-control';
     import PlayerControls from './PlayerControls.svelte';
     import PlayerMetaChip from './PlayerMetaChip.svelte';
@@ -43,6 +54,9 @@
     let lastDeliverySlug: string | null = null;
     let lastSurahNum: number | null = null;
     let surahPopoverOpen = false;
+    // WS6 intent-prewarm state (helpers + constants below reactToContext).
+    let _warmDebounce: ReturnType<typeof setTimeout> | null = null;
+    let _nearEndWarmedSurah: number | null = null;
 
     onMount(() => {
         dashPort.attachElement(audioEl);
@@ -58,18 +72,29 @@
             // leaving the template-bound `audioEl` stale.
             const dur = dashPort.element?.duration ?? 0;
             setPosition(0, Number.isFinite(dur) ? dur * 1000 : 0);
-            // Swap-complete (canplay): if the user wasn't already in a
-            // mid-play buffering stall, this is the moment audio is ready
-            // to start. Clear the ring; `playing` will also clear it on
-            // the actual audible start as a safety net.
-            setIsLoading(false);
+            // NOTE: canplay (readyState 3) is NOT audible — clearing the ring
+            // here stops it 1-3s before sound. `onPlaying` is the single
+            // steady-state clear (actual audible resume); see it below.
         });
         const unsubTime = dashPort.onTimeUpdate((fileMs) => {
             const dur = dashPort.element?.duration;
             setPosition(fileMs, dur ? dur * 1000 : undefined);
+            maybeWarmNext(fileMs, dur ? dur * 1000 : 0);
         });
         const unsubWaiting = dashPort.onWaiting(() => setIsLoading(true));
+        // Single steady-state clear: the ring stays up from the play request
+        // until audio is actually audible (`playing`), not merely buffered
+        // (`canplay`). `onWaiting` re-raises it on a mid-play decoder stall.
         const unsubPlaying = dashPort.onPlaying(() => setIsLoading(false));
+        // Chapter-end gapless auto-advance (Dashboard tab only — on Timestamps,
+        // the shuffle handler owns end-of-chapter; see TimestampsTab onEnded).
+        const unsubEnded = dashPort.onEnded(() => advanceGaplessOnEnd());
+
+        // Speculative warm around the hovered / scrubbed position of the current
+        // chapter (warms canplay so a cold first seek isn't a 1-3s stall). Both
+        // share the same debounce; null (hover-leave / scrub-release) no-ops.
+        const unsubHover = progressHoverMs.subscribe((ms) => warmAtPositionDebounced(ms));
+        const unsubScrub = progressScrubMs.subscribe((ms) => warmAtPositionDebounced(ms));
 
         return () => {
             unsubPlay();
@@ -78,6 +103,11 @@
             unsubTime();
             unsubWaiting();
             unsubPlaying();
+            unsubEnded();
+            unsubHover();
+            unsubScrub();
+            if (_warmDebounce) clearTimeout(_warmDebounce);
+            clearDashPrewarm();
             dashPort.attachElement(null);
         };
     });
@@ -154,6 +184,11 @@
                 setIsPlaying(true);
                 return;
             }
+            // Real source switch (not the adopt fast-path above): cancel any
+            // in-flight speculative/committed warm so a stale warm element can
+            // never adopt onto the new source. Mirrors shuffle's clearShuffle.
+            clearDashPrewarm();
+            _nearEndWarmedSurah = null;
             // Stop the previous chapter immediately. Without this, the
             // old MP3 keeps playing until _swapTo writes el.src for the
             // new source — audible as a chunk of the wrong reciter when
@@ -193,6 +228,12 @@
                     await ensureAudioContextRunning();
                     dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
                     dashPort.play();
+                } else {
+                    // Paused chapter-select: warm the decoder + canplay off the
+                    // play-click critical path so first-play isn't a 1-3s cold
+                    // start (fetch + header parse + decode). No-op for VBR;
+                    // dashboard sources are always CBR. Fire-and-forget.
+                    void dashPort.prewarm();
                 }
             }
             lastSurahNum = surahNum;
@@ -202,6 +243,126 @@
             // write captures the surah actually loaded (and surah-only changes).
             persistSlice({ deliverySlug: delivery.slug, surahNum, speed: ctx.speed });
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Intent-driven prewarm (WS6). Depth 1, single 'dash' shadow slot.
+    // Speculative (hover) = range-windowed warm; committed (near-end) = the
+    // imminent gapless-next chapter, adopted on `ended`. Cancel-on-switch
+    // lives in reactToContext. See lib/playback/dash-prewarm.ts.
+    // ---------------------------------------------------------------------
+    /** Warm the committed next chapter once the current one is within this much
+     *  of its end, so the chapter-end handoff can adopt it gaplessly. */
+    const NEAR_END_WARM_MS = 12_000;
+    /** Debounce window for the speculative position-warm (progress hover / scrub
+     *  settle) so a fast scrub doesn't stack proxy fetches. */
+    const POSITION_WARM_DEBOUNCE_MS = 150;
+
+    /** Proxy URL for a given surah's chapter MP3 (current delivery), or null
+     *  when the surah isn't in the loaded set. */
+    function surahProxyUrl(n: number): string | null {
+        const delivery = $playerContext.delivery;
+        const entry = urls[String(n)];
+        if (!delivery || !entry) return null;
+        return dashProxyUrl(delivery.slug, entry.url);
+    }
+
+    function nextSurahNum(): number | null {
+        const cur = $playerContext.surahNum;
+        if (cur === null) return null;
+        const idx = surahNums.indexOf(cur);
+        return idx >= 0 && idx < surahNums.length - 1 ? surahNums[idx + 1]! : null;
+    }
+
+    function prevSurahNum(): number | null {
+        const cur = $playerContext.surahNum;
+        if (cur === null) return null;
+        const idx = surahNums.indexOf(cur);
+        return idx > 0 ? surahNums[idx - 1]! : null;
+    }
+
+    /** Speculative: warm a whole surah's start (next/prev button + popover hover). */
+    function warmSurah(n: number | null): void {
+        if (n === null) return;
+        const proxy = surahProxyUrl(n);
+        if (proxy) primeDashSpeculative(proxy, 0);
+    }
+
+    /** Speculative: warm the CURRENT chapter at a hovered/scrubbed file-ms
+     *  position (debounced). No-op once the chapter is already loaded — the
+     *  shadow dedupe + warm only helps the cold first seek. */
+    function warmAtPositionDebounced(fileMs: number | null): void {
+        if (fileMs === null || !Number.isFinite(fileMs)) return;
+        const cur = $playerContext.surahNum;
+        if (cur === null) return;
+        const proxy = surahProxyUrl(cur);
+        if (!proxy) return;
+        if (_warmDebounce) clearTimeout(_warmDebounce);
+        _warmDebounce = setTimeout(() => {
+            primeDashSpeculative(proxy, Math.max(0, fileMs / 1000));
+        }, POSITION_WARM_DEBOUNCE_MS);
+    }
+
+    /** Near-end: commit-warm the next chapter so `ended` can adopt it gaplessly.
+     *  Dashboard tab only (Timestamps' shuffle owns end-of-chapter). Skips while
+     *  looping (the chapter repeats) and after the next chapter is already warm. */
+    function maybeWarmNext(fileMs: number, durationMs: number): void {
+        if (getActiveTab() !== TAB_NAMES.DASHBOARD) return;
+        if ($loopTarget || durationMs <= 0) return;
+        const cur = $playerContext.surahNum;
+        if (cur === null || _nearEndWarmedSurah === cur) return;
+        if (fileMs < durationMs - NEAR_END_WARM_MS) return;
+        const nextN = nextSurahNum();
+        const delivery = $playerContext.delivery;
+        if (nextN === null || !delivery) return;
+        const entry = urls[String(nextN)];
+        if (!entry) return;
+        _nearEndWarmedSurah = cur;
+        primeDashCommitted({
+            deliverySlug: delivery.slug,
+            surahNum: nextN,
+            rawUrl: entry.url,
+            proxyUrl: dashProxyUrl(delivery.slug, entry.url),
+        });
+    }
+
+    /** Chapter-end handoff (Dashboard tab only). If the next chapter is warm,
+     *  adopt its element onto dashPort and start it gaplessly, then advance
+     *  playerContext (guarded by the adopt signal so reactToContext does
+     *  bookkeeping only). Else fall back to a plain (gapped) auto-advance. */
+    function advanceGaplessOnEnd(): void {
+        if (getActiveTab() !== TAB_NAMES.DASHBOARD) return;
+        if ($loopTarget) return;
+        const delivery = $playerContext.delivery;
+        const nextN = nextSurahNum();
+        _nearEndWarmedSurah = null;
+        if (!delivery || nextN === null) return;
+        const entry = urls[String(nextN)];
+        if (!entry) return;
+        const proxyUrl = dashProxyUrl(delivery.slug, entry.url);
+
+        const consumed = consumeDashCommitted(proxyUrl);
+        if (consumed && consumed.surahNum === nextN) {
+            // Match the triple reactToContext would build so its eventual
+            // setSource is a guaranteed no-op alongside the adopt signal.
+            dashPort.setSource({
+                audioUrl: consumed.rawUrl, cbrSrc: consumed.proxyUrl,
+                reciter: delivery.slug, vbr: false,
+            });
+            setAdoptedSource({ deliverySlug: delivery.slug, surahNum: nextN, srcUrl: proxyUrl });
+            const oldEl = dashPort.element;
+            dashPort.adoptElement(consumed.el, proxyUrl);
+            if (oldEl && oldEl !== consumed.el) recycleAsShadow(oldEl, 'any');
+            dashPort.seekAndPlay(0);
+            setIsLoading(false);
+            setIsPlaying(true);
+            playerContext.update((s) => ({
+                ...s, surahNum: nextN, positionMs: 0, isPlaying: true,
+            }));
+            return;
+        }
+        // Look-ahead miss → plain (gapped) advance.
+        setSurahAndResume(nextN);
     }
 
     async function togglePlay(): Promise<void> {
@@ -411,6 +572,7 @@
                             surahNums={surahNums}
                             value={$playerContext.surahNum}
                             on:change={onSurahChange}
+                            on:hover={(ev) => warmSurah(ev.detail)}
                         />
                     </div>
                 {/if}
@@ -432,6 +594,8 @@
                 on:seekForward={seekForward}
                 on:prev={prevSurah}
                 on:next={nextSurah}
+                on:prevHover={() => warmSurah(prevSurahNum())}
+                on:nextHover={() => warmSurah(nextSurahNum())}
             />
         </div>
 

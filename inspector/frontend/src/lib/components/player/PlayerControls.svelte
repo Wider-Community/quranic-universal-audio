@@ -11,6 +11,8 @@
     const dispatch = createEventDispatcher<{
         prev: void;
         next: void;
+        prevHover: void;
+        nextHover: void;
         seekBack: void;
         seekForward: void;
         toggle: void;
@@ -24,6 +26,8 @@
         aria-label="Previous surah"
         disabled={!canStepBack}
         on:click={() => dispatch('prev')}
+        on:pointerenter={() => dispatch('prevHover')}
+        on:focus={() => dispatch('prevHover')}
     >⏮</button>
     <button type="button" class="btn" aria-label="Back 15 seconds" on:click={() => dispatch('seekBack')}>«</button>
     <button
@@ -42,6 +46,8 @@
         aria-label="Next surah"
         disabled={!canStepForward}
         on:click={() => dispatch('next')}
+        on:pointerenter={() => dispatch('nextHover')}
+        on:focus={() => dispatch('nextHover')}
     >⏭</button>
 </div>
 

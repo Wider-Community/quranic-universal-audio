@@ -397,7 +397,6 @@
 
     function tick(): void {
         const ms = dashPort.currentTimeMs();
-        const lv = get(loadedVerse);
 
         // rAF seek-back loop (no kill-switch on the shared port; ≤1 frame
         // overshoot). The loop window is computed against the CAPTURED loop
@@ -421,18 +420,31 @@
         }
 
         focusAt(ms);
-
-        // Ayah-end shuffle: when shuffle is on and the playhead reaches the end
-        // of the focus verse, jump to a random target (once per verse).
-        if (!loop && get(shuffleAyah) && lv) {
-            const endMs = lv.tsSegEnd * 1000;
-            if (ms >= endMs - SHUFFLE_END_GUARD_MS && shuffleFiredForRef !== focusRef) {
-                shuffleFiredForRef = focusRef;
-                void shuffleJump();
-                return;
-            }
-        }
+        // rAF gives tight (~16 ms) boundary timing while the tab is active; the
+        // onTimeUpdate/onEnded media-clock backstop (onMount) catches the boundary
+        // when rAF is throttled (backgrounded tab / GC / heavy repaint), where it
+        // would otherwise overshoot by 1-3 words. The once-per-verse guard dedupes
+        // whichever fires first.
+        maybeFireShuffle(ms);
         refreshDisplays();
+    }
+
+    // Ayah-end shuffle boundary: jump to a random target when the playhead reaches
+    // the focus verse's end (once per verse). Called from both the rAF tick and the
+    // onTimeUpdate/onEnded media-clock backstop; reads the focus verse fresh so the
+    // boundary and the dedupe key never disagree. Gated to the active Timestamps tab
+    // so the shared dashPort backstop can't hijack Dashboard playback (its own
+    // gapless advance owns dashPort.onEnded when that tab is active).
+    function maybeFireShuffle(ms: number): void {
+        if (getActiveTab() !== TAB_NAMES.TIMESTAMPS) return;
+        if (get(loopTarget) || !get(shuffleAyah)) return;
+        const fv = get(loadedVerse);
+        if (!fv) return;
+        const endMs = fv.tsSegEnd * 1000;
+        if (ms >= endMs - SHUFFLE_END_GUARD_MS && shuffleFiredForRef !== focusRef) {
+            shuffleFiredForRef = focusRef;
+            void shuffleJump();
+        }
     }
 
     function refreshDisplays(): void {
@@ -816,8 +828,17 @@
                 loopAnchor = null;
             }
         });
+        // Media-clock backstop for the ayah-end shuffle: timeupdate/ended fire off
+        // the audio clock (even when the tab is backgrounded and rAF is throttled),
+        // so the boundary can't overshoot by seconds. Deduped against the rAF tick
+        // by the once-per-verse guard.
+        const offTimeUpdate = dashPort.onTimeUpdate((fileMs) => maybeFireShuffle(fileMs));
+        const offEnded = dashPort.onEnded(() => maybeFireShuffle(Number.POSITIVE_INFINITY));
         _primedOnce = true;
-        return () => { unsubTab(); unsubShuf(); unsubManualShuffle(); unsubLoop(); };
+        return () => {
+            unsubTab(); unsubShuf(); unsubManualShuffle(); unsubLoop();
+            offTimeUpdate(); offEnded();
+        };
     });
 
     onDestroy(() => {

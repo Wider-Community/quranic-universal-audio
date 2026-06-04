@@ -28,10 +28,16 @@
          *  motion modes) while non-null, suspending the playback driver. null =
          *  not scrubbing. */
         scrubMs?: number | null;
+        /** Speculative-prewarm hook: fired with a cell's start (ms) when the
+         *  pointer enters it, so the surface can warm that position. Optional —
+         *  surfaces that don't prewarm omit it. */
+        onHoverPrewarm?: (_ms: number) => void;
     }
 
-    let { ayahs, getTimeMs, playing, config, onSeek, hoverMs = null, scrubMs = null }: Props =
-        $props();
+    let {
+        ayahs, getTimeMs, playing, config, onSeek,
+        hoverMs = null, scrubMs = null, onHoverPrewarm,
+    }: Props = $props();
 
     const clamp = (lo: number, hi: number, v: number): number => Math.min(hi, Math.max(lo, v));
     const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
@@ -240,15 +246,29 @@
     }
     function clickToSeek(clientX: number): void {
         if (!containerEl) return;
-        const rect = containerEl.getBoundingClientRect();
-        // viewport-x → offset into cells region (needle is at cw/2; track is
-        // translated by -offset; leading pad = cw/2).
-        const off = clientX - rect.left + offset - cw / 2;
-        const i = nearestCell(clamp(0, lastRight, off));
+        const i = cellAtClientX(clientX);
         if (i < 0) return;
         animate = true;
         offset = offsetForCellCenter(i);
         onSeek(cells[i]!.startMs);
+    }
+
+    /** Map a viewport x to the cell index under it (needle at cw/2; track
+     *  translated by -offset; leading pad = cw/2). -1 when out of range. */
+    function cellAtClientX(clientX: number): number {
+        if (!containerEl) return -1;
+        const rect = containerEl.getBoundingClientRect();
+        const off = clientX - rect.left + offset - cw / 2;
+        return nearestCell(clamp(0, lastRight, off));
+    }
+
+    /** Speculative-prewarm hook on pointer hover (no button): warm the position
+     *  of the cell under the pointer. Suppressed while dragging (the strip owns
+     *  the pointer then). */
+    function onHoverMove(e: PointerEvent): void {
+        if (!onHoverPrewarm || dragging) return;
+        const i = cellAtClientX(e.clientX);
+        if (i >= 0) onHoverPrewarm(cells[i]!.startMs);
     }
 
     /** Re-sync after a seek while paused (parent calls this). */
@@ -284,6 +304,7 @@
         aria-valuemax={cells[cells.length - 1]!.ayah}
         aria-valuenow={activeIdx >= 0 ? cells[activeIdx]!.ayah : cells[0]!.ayah}
         onpointerdown={onPointerDown}
+        onpointermove={onHoverMove}
         onkeydown={(e) => {
             if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
                 e.preventDefault();
