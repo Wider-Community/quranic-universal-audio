@@ -286,7 +286,7 @@ describe('AudioPort — setSource invalidation', () => {
         const src = { audioUrl: 'http://cdn/a.mp3', reciter: 'r1' as const, vbr: false };
         port.setSource(src);
         const r = port.loadCovering(0, 1000);
-        audio._fire('canplay');
+        audio._fireEvent('canplay');
         await r.ready;
         const windowBefore = port.window;
         const loadCallsBefore = audio.load.mock.calls.length;
