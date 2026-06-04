@@ -47,11 +47,19 @@ from qua_shared.timestamps_shards import (  # noqa: E402
 CAT = "by_surah_audio"
 
 
-def _ok(locations, t0=0.0, step=0.5):
-    """Synthetic MFA 'ok' result: one word per location, sequential times (s)."""
+def _ok(locations, t0=0.0, step=0.2):
+    """Synthetic MFA 'ok' result: one word per location, SEGMENT-RELATIVE times (s).
+
+    Word times start at 0 within the segment; the pipeline's ``_convert_word``
+    adds the segment's ``time_start`` offset downstream, so the words land inside
+    ``[seg.time_start, seg.time_end]`` (as in real extraction). ``t0`` is accepted
+    for call-site readability but unused — passing the segment's start here would
+    double-count the offset. ``step`` is small enough that every fixture's words
+    fit within its segment span.
+    """
     words = []
     for i, loc in enumerate(locations):
-        s = t0 + i * step
+        s = i * step
         words.append({
             "location": loc, "start": s, "end": s + step,
             "letters": [{"char": "x", "start": s, "end": s + step}],

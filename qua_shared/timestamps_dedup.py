@@ -185,15 +185,26 @@ def _canonical_verse(words: list, segs: list[dict]) -> dict:
     """Assemble the canonical verse-map value from the chosen occasion's words.
 
     Concatenates the accumulated word lists (recitation order, loops retained)
-    and stamps ``verse_start_ms`` / ``verse_end_ms`` from the segment span so
-    downstream tier/dataset builders get the clip boundary for free.
+    and stamps ``verse_start_ms`` / ``verse_end_ms`` as the span covering every
+    kept segment AND every word/letter time. A word or letter can bleed a few ms
+    past its segment's ``t`` bound, so the clip must reach the furthest word/letter
+    end or it would truncate the final word's tail (and verse_end < a word's end
+    violates the "all times within [verse_start, verse_end]" invariant).
     """
-    verse_start = segs[0]["t"][0]
-    verse_end = max(int(s["t"][1]) for s in segs)
+    starts = [int(s["t"][0]) for s in segs]
+    ends = [int(s["t"][1]) for s in segs]
+    for w in words:
+        starts.append(int(w[1]))
+        ends.append(int(w[2]))
+        for lt in (w[3] if len(w) > 3 else []):
+            if lt[1] is not None:
+                starts.append(int(lt[1]))
+            if lt[2] is not None:
+                ends.append(int(lt[2]))
     return {
         "words": words,
-        "verse_start_ms": int(verse_start),
-        "verse_end_ms": int(verse_end),
+        "verse_start_ms": min(starts),
+        "verse_end_ms": max(ends),
     }
 
 
