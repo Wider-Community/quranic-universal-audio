@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { PeakBucket } from '../../types/domain';
 import { packPeaksB64, viewPeaks } from '../peaks-view';
 
-/** Decode a base64 string to an Int8Array (mirror of utils.ts::_b64ToInt8). */
+/** Decode a base64 string to an Int8Array (mirror of peaks-decode.ts::b64ToInt8). */
 function b64ToInt8(b64: string): Int8Array {
     const bin = atob(b64);
     const out = new Int8Array(bin.length);

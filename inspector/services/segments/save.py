@@ -425,10 +425,8 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     operations = _attach_classified_issues(
         _ensure_patch_on_ops(raw_ops), probe_failed_uids=probe_failed_uids,
     )
-    # v2: no ``file_hash_after`` (chain removed in Phase 1). ``actor`` block
-    # carries the per-edit attribution that replaces the v1 per-edit GitHub
-    # commit Co-authored-by surface; surfaced in the History panel and feeds
-    # the future contributor-recognition page.
+    # ``actor`` block carries the per-edit attribution surfaced in the
+    # History panel and feeding the contributor-recognition page.
     batch = {
         "schema_version": HISTORY_SCHEMA_VERSION,
         "batch_id": uuid7(),

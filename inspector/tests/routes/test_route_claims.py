@@ -12,18 +12,16 @@ unit coverage; these tests exercise the HTTP boundary:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 
 import pytest
 
 
 # Helpers ---------------------------------------------------------------
-# Mark-ready now takes a JSON body. The route's pydantic gate rejects
-# anything other than a five-key checklist (all True) + two optional
-# comment strings; the state handler additionally re-computes the live
-# validation counts. Tests that exercise the HTTP boundary use this
-# canonical payload and the ``clean_validation`` fixture below to mock
-# the count gate so they don't need on-disk segs to pass.
+# Mark-ready takes a JSON body. The route's pydantic gate accepts only the
+# canonical six-key checklist (all True) plus two optional comment strings;
+# the state handler additionally re-computes the live validation counts.
+# Tests use this canonical payload + the ``clean_validation`` fixture to
+# short-circuit the count gate so they don't need on-disk segs to pass.
 
 _FULL_CHECKLIST_BODY = {
     "checklist": {
@@ -92,12 +90,9 @@ def _row(slug: str, *, state: str = "awaiting_review",
     )
 
 
-# NOTE: claim/release/mark-ready tests use the `state_persistence` fixture
+# Claim/release/mark-ready tests use the `state_persistence` fixture
 # (defined in tests/conftest.py) so state transitions persist through a real
-# FilesystemBackend. The legacy `_stub_persist` mock pattern stripped both the
-# bucket write AND the in-memory _state_file update, forcing each test to
-# manually re-seed state between requests; real persistence makes that hack
-# unnecessary and exercises the actual write/read seam that production hits.
+# FilesystemBackend and exercise the actual write/read seam.
 
 
 # ---------------------------------------------------------------------------
@@ -130,12 +125,10 @@ def test_claim_happy_path(signed_in_client, state_persistence):
 
 
 def test_claim_persists_across_requests(signed_in_client, state_persistence):
-    """Claim → second request sees the new state without manual re-seed.
+    """Claim then a second request sees the new state without manual re-seed.
 
-    Catches the class of regressions where _persist_row drops a write
-    silently — the legacy `_stub_persist` fixture masked this because it
-    skipped persistence entirely AND required tests to re-seed state
-    manually between requests.
+    Guards against regressions where _persist_row silently drops a write —
+    the test relies on real persistence rather than a stub of the write seam.
     """
     _replace_state([_row("test_slug", state="awaiting_review")])
 
@@ -284,8 +277,9 @@ def test_release_non_assignee_returns_403(signed_in_client, state_persistence):
 
 def test_release_maintainer_can_force_release(signed_in_client, state_persistence):
     """Maintainers can release someone else's claim through the normal
-    release route (the dedicated force-release endpoint with reason
-    lands in Phase 4)."""
+    ``/api/release`` route via the ``_require_claim_holder_or_maintainer`` gate.
+    The dedicated owner-only ``/api/admin/claim/force-release`` endpoint with
+    reason is covered in ``test_route_admin_actions.py``."""
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="other")])
 
     client, _ = signed_in_client(hf_user_id="u-mod", login="mod", role="maintainer")
@@ -343,7 +337,7 @@ def test_mark_ready_non_assignee_returns_403(
 def test_mark_ready_rejects_unchecked_checklist(
     signed_in_client, state_persistence, clean_validation,
 ):
-    """Submit without all five attestations checked → 400 with details."""
+    """Submit without every checklist key checked -> 400 with details."""
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
@@ -642,7 +636,7 @@ def test_reciter_task_predicates_maintainer_can_edit_as_admin(signed_in_client):
     assert preds["can_edit"] is False  # not assignee
     assert preds["can_edit_as_admin"] is True
     assert preds["can_release"] is False  # not assignee on plain release
-    # Mark-ready/unmark-ready still gated to assignee in Phase 3.
+    # Mark-ready/unmark-ready remain gated to the assignee.
     assert preds["can_mark_ready"] is False
 
 

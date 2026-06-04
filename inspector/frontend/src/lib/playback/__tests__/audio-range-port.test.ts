@@ -98,14 +98,10 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
         });
     }
 
-    /** Set the audio element's currentTime so that `port.currentTimeMs()`
-     *  returns `fileMs + offset`. Under CBR this is identity; under VBR this
-     *  subtracts the offset. */
-    function setFileTime(fileMs: number) {
-        audio.currentTime = (offset + fileMs - offset) / 1000;
-        // Keep simple: file-absolute = fileMs + offset; clip-relative = fileMs.
-        // (Variants pass file-absolute logical positions; the element holds
-        // clip-relative.)
+    /** Set the audio element's clip-relative currentTime to `clipMs` so
+     *  `port.currentTimeMs()` returns `clipMs + offset`. */
+    function setClipTimeMs(clipMs: number) {
+        audio.currentTime = clipMs / 1000;
     }
 
     // -----------------------------------------------------------------------
@@ -117,7 +113,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
             const onBoundary = vi.fn();
             const r = buildRange({ onBoundary });
             r.start();
-            setFileTime(999);
+            setClipTimeMs(999);
             raf.flushFrames(1);
             expect(onBoundary).not.toHaveBeenCalled();
         });
@@ -126,9 +122,9 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
             const onBoundary = vi.fn();
             const r = buildRange({ onBoundary });
             r.start();
-            setFileTime(999);
+            setClipTimeMs(999);
             raf.flushFrames(1);
-            setFileTime(1001);
+            setClipTimeMs(1001);
             raf.flushFrames(1);
             expect(onBoundary).toHaveBeenCalledTimes(1);
             expect(onBoundary.mock.calls[0]?.[0]).toMatchObject({ reason: 'stop' });
@@ -143,7 +139,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
         it('pauses + cuts + clips currentTime to endMs (file-absolute)', () => {
             const r = buildRange({ policy: { kind: 'stop' } });
             r.start();
-            setFileTime(1050);
+            setClipTimeMs(1050);
             raf.flushFrames(1);
             expect(audio.pause).toHaveBeenCalled();
             // Port-mode pin: port.seek(range.endMs) writes clip-relative time.
@@ -166,7 +162,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
                 onBoundary,
             });
             r.start();
-            setFileTime(1001);
+            setClipTimeMs(1001);
             raf.flushFrames(1);
 
             expect(audio.pause).not.toHaveBeenCalled();
@@ -181,18 +177,18 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
             const onBoundary = vi.fn();
             const r = buildRange({ policy: { kind: 'loop' }, onBoundary });
             r.start();
-            setFileTime(1001);
+            setClipTimeMs(1001);
             raf.flushFrames(1);
             expect(onBoundary).toHaveBeenCalledTimes(1);
 
             // Decoder lag — currentTime hasn't dropped yet.
-            setFileTime(1001);
+            setClipTimeMs(1001);
             raf.flushFrames(1);
             expect(onBoundary).toHaveBeenCalledTimes(1);
 
-            setFileTime(500);
+            setClipTimeMs(500);
             raf.flushFrames(1);
-            setFileTime(1001);
+            setClipTimeMs(1001);
             raf.flushFrames(1);
             expect(onBoundary).toHaveBeenCalledTimes(2);
         });
@@ -212,7 +208,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
                 onBoundary,
             });
             r.start();
-            setFileTime(1001);
+            setClipTimeMs(1001);
             raf.flushFrames(1);
 
             expect(audio.pause).toHaveBeenCalledTimes(1);
@@ -243,7 +239,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
                 policy: { kind: 'advance', gapMs: 100, nextRange: () => null },
             });
             r.start();
-            setFileTime(1001);
+            setClipTimeMs(1001);
             raf.flushFrames(1);
             vi.advanceTimersByTime(100);
             expect(audio.paused).toBe(true);
@@ -257,7 +253,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
                 policy: { kind: 'advance', gapMs: 200, nextRange: () => next },
             });
             r.start();
-            setFileTime(1001);
+            setClipTimeMs(1001);
             raf.flushFrames(1);
             r.stop();
             const playBefore = audio.play.mock.calls.length;
@@ -276,7 +272,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
             const onBoundary = vi.fn();
             const r = buildRange({ onBoundary });
             r.start();
-            setFileTime(600);
+            setClipTimeMs(600);
             raf.flushFrames(1);
             expect(onBoundary).not.toHaveBeenCalled();
 
@@ -288,7 +284,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
         it('lifts a pending kill-switch ramp from a prior pauseAndFlush', () => {
             const r = buildRange({ policy: { kind: 'stop' } });
             r.start();
-            setFileTime(1001);
+            setClipTimeMs(1001);
             raf.flushFrames(1);
             expect(vi.mocked(cutAudio)).toHaveBeenCalledTimes(1);
 
@@ -309,7 +305,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
             const r = buildRange({ onTick });
             r.start();
 
-            setFileTime(100);
+            setClipTimeMs(100);
             raf.flushFrames(1);
             const before = onTick.mock.calls.length;
             expect(before).toBeGreaterThan(0);
@@ -321,7 +317,7 @@ describe.each(VARIANTS)('AudioRange port mode — $name', ({ offset, reusesSubra
             expect(raf.queueLength()).toBeGreaterThan(0);
 
             audio.paused = false;
-            setFileTime(200);
+            setClipTimeMs(200);
             raf.flushFrames(1);
             expect(onTick.mock.calls.length).toBe(before + 1);
         });

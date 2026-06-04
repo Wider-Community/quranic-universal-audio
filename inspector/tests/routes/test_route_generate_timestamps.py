@@ -46,10 +46,9 @@ def test_generate_ts_on_marked_ready_launches(signed_in_client, monkeypatch, see
     assert resp.status_code == 202, resp.get_data(as_text=True)
 
 
-def test_generate_ts_rejects_under_review_not_marked_ready(signed_in_client, monkeypatch, seed_state):
+def test_generate_ts_rejects_under_review_not_marked_ready(signed_in_client, seed_state):
     """An under_review row that isn't marked ready has nothing to publish → 409."""
     client, _user = signed_in_client(role="maintainer")
-    _stub_launch(monkeypatch)
     seed_state("rec_a", state="under_review", assignee_hf_id="u-rev")
 
     resp = client.post(f"{_URL}/rec_a", headers=_HEADERS)
@@ -58,10 +57,9 @@ def test_generate_ts_rejects_under_review_not_marked_ready(signed_in_client, mon
     assert resp.get_json()["state"] == "under_review"
 
 
-def test_generate_ts_rejects_awaiting_review(signed_in_client, monkeypatch, seed_state):
+def test_generate_ts_rejects_awaiting_review(signed_in_client, seed_state):
     """A pre-claim state can't launch — the gate keeps the API honest."""
     client, _user = signed_in_client(role="maintainer")
-    _stub_launch(monkeypatch)
     seed_state("rec_a", state="awaiting_review")
 
     resp = client.post(f"{_URL}/rec_a", headers=_HEADERS)
@@ -69,9 +67,8 @@ def test_generate_ts_rejects_awaiting_review(signed_in_client, monkeypatch, seed
     assert resp.status_code == 409
 
 
-def test_generate_ts_unknown_slug_404(signed_in_client, monkeypatch):
+def test_generate_ts_unknown_slug_404(signed_in_client):
     client, _user = signed_in_client(role="maintainer")
-    _stub_launch(monkeypatch)
 
     resp = client.post(f"{_URL}/nope", headers=_HEADERS)
 

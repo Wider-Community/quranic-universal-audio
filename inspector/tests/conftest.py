@@ -42,47 +42,25 @@ EXPECTED_DIR = FIXTURES_DIR / "expected"
 
 
 # Category lists derive from ``services.validation.registry.IssueRegistry``
-# in registry-declared accordion order (Appendix A). The fallback literals
-# match the registry verbatim so the module remains importable even before
-# the validation package is available on ``sys.path``.
-try:
-    from services.validation.registry import (  # type: ignore
-        ALL_CATEGORIES as _REG_ALL,
-        PER_SEGMENT_CATEGORIES as _REG_SEG,
-        PER_VERSE_CATEGORIES as _REG_VERSE,
-        PER_CHAPTER_CATEGORIES as _REG_CHAPTER,
-        CAN_IGNORE_CATEGORIES as _REG_CAN,
-        PERSISTS_IGNORE_CATEGORIES as _REG_PERSIST,
-        AUTO_SUPPRESS_CATEGORIES as _REG_AUTO,
-    )
-    ALL_CATEGORIES = list(_REG_ALL)
-    PER_SEGMENT_CATEGORIES = list(_REG_SEG)
-    PER_VERSE_CATEGORIES = list(_REG_VERSE)
-    PER_CHAPTER_CATEGORIES = list(_REG_CHAPTER)
-    CAN_IGNORE_CATEGORIES = list(_REG_CAN)
-    PERSISTS_IGNORE_CATEGORIES = list(_REG_PERSIST)
-    AUTO_SUPPRESS_CATEGORIES = list(_REG_AUTO)
-except Exception:
-    ALL_CATEGORIES = [
-        "failed", "missing_verses", "missing_words", "structural_errors",
-        "low_confidence", "repetitions", "audio_bleeding", "boundary_adj",
-        "cross_verse", "qalqala", "muqattaat",
-    ]
-    PER_SEGMENT_CATEGORIES = [
-        "failed", "low_confidence", "repetitions", "audio_bleeding",
-        "boundary_adj", "cross_verse", "qalqala", "muqattaat",
-    ]
-    PER_VERSE_CATEGORIES = ["missing_verses", "missing_words"]
-    PER_CHAPTER_CATEGORIES = ["structural_errors"]
-    CAN_IGNORE_CATEGORIES = [
-        "low_confidence", "repetitions", "audio_bleeding", "boundary_adj",
-        "cross_verse",
-    ]
-    PERSISTS_IGNORE_CATEGORIES = list(CAN_IGNORE_CATEGORIES)
-    AUTO_SUPPRESS_CATEGORIES = [
-        "failed", "missing_verses", "structural_errors", "low_confidence",
-        "repetitions", "audio_bleeding", "boundary_adj", "cross_verse",
-    ]
+# in registry-declared accordion order (Appendix A). Imported directly so
+# the suite fails loudly if the registry module can't be imported.
+from services.validation.registry import (  # noqa: E402
+    ALL_CATEGORIES as _REG_ALL,
+    PER_SEGMENT_CATEGORIES as _REG_SEG,
+    PER_VERSE_CATEGORIES as _REG_VERSE,
+    PER_CHAPTER_CATEGORIES as _REG_CHAPTER,
+    CAN_IGNORE_CATEGORIES as _REG_CAN,
+    PERSISTS_IGNORE_CATEGORIES as _REG_PERSIST,
+    AUTO_SUPPRESS_CATEGORIES as _REG_AUTO,
+)
+
+ALL_CATEGORIES = list(_REG_ALL)
+PER_SEGMENT_CATEGORIES = list(_REG_SEG)
+PER_VERSE_CATEGORIES = list(_REG_VERSE)
+PER_CHAPTER_CATEGORIES = list(_REG_CHAPTER)
+CAN_IGNORE_CATEGORIES = list(_REG_CAN)
+PERSISTS_IGNORE_CATEGORIES = list(_REG_PERSIST)
+AUTO_SUPPRESS_CATEGORIES = list(_REG_AUTO)
 
 
 def _read_json(path: Path) -> dict:
@@ -575,15 +553,3 @@ def assert_keys_superset(
     )
 
 
-@pytest.fixture
-def fresh_registry():
-    """Yield a snapshot of the issue registry, or ``None`` pre-Phase-1.
-
-    Tests that parametrize over the registry use ``ALL_CATEGORIES`` until
-    Phase 1 lands ``inspector.services.validation.registry``.
-    """
-    try:
-        from services.validation.registry import IssueRegistry  # type: ignore
-        return IssueRegistry
-    except Exception:
-        return None

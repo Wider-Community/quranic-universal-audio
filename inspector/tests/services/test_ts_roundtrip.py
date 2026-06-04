@@ -105,7 +105,6 @@ def test_roundtrip_consumer_dedup(tmp_reciter_dir):
     widxs = [w[0] for w in verse["words"]]
     # within-pass loopback retained (the repeated 3,4); trailing seg trimmed.
     assert widxs == [1, 2, 3, 4, 3, 4, 5]
-    assert set(widxs) >= {1, 2, 3, 4, 5}  # full coverage
     # audio-contiguous clip up to the completing segment (trailing 2000-3000 cut).
     assert verse["verse_start_ms"] == 0
     assert verse["verse_end_ms"] == 2000

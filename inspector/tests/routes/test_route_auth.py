@@ -14,9 +14,6 @@ covered by manual smoke during deploy rather than a mocked unit test.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-
-import pytest
 
 
 def _seed_state_row(slug: str, *, assignee_hf_id: str | None = None,
@@ -33,16 +30,9 @@ def _seed_state_row(slug: str, *, assignee_hf_id: str | None = None,
     )
 
 
-def _clear_state():
-    """No-op post-cutover: the autouse _substrate_db fixture gives each test a
-    fresh empty DB."""
-    return None
-
-
 def test_me_anonymous_returns_null_shape(flask_client):
     """Anonymous /api/me returns a uniform null-filled shape so the SPA can
     consume the same schema regardless of auth state."""
-    _clear_state()
     resp = flask_client.get("/api/me")
     assert resp.status_code == 200
     body = json.loads(resp.data)
@@ -62,7 +52,6 @@ def test_me_anonymous_returns_null_shape(flask_client):
 
 def test_me_signed_in_returns_identity(signed_in_client):
     """Signed-in /api/me returns the identity + active_claim (null when no claim)."""
-    _clear_state()
     client, user = signed_in_client(hf_user_id="u-1", login="alice", role="contributor")
     resp = client.get("/api/me")
     assert resp.status_code == 200
@@ -90,7 +79,6 @@ def test_me_role_reflects_live_access_revoke(signed_in_client):
     from services import db
     from services.db import repo_access
 
-    _clear_state()
     # Sign in as maintainer.
     client, user = signed_in_client(hf_user_id="u-3", login="carol", role="maintainer")
 

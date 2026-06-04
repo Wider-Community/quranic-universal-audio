@@ -1,7 +1,6 @@
-// Placeholder list of validation category names. Mirrors what the issue
-// registry will export once ``../../domain/registry.ts`` is introduced.
-//
-// Order matches the accordion declaration in plan §Appendix A.
+// Hand-pinned list of validation category names used by tests as an
+// independent witness against ``../../domain/registry.ts``. Order matches
+// the accordion declaration in plan §Appendix A.
 
 export const ALL_CATEGORIES = [
   'failed',

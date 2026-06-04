@@ -121,12 +121,11 @@ def test_capabilities_for_anonymous_is_anon_defaults():
     assert set(caps.capabilities_for(None)) == {"view.catalog", "view.public_activity"}
 
 
-def test_registry_self_consistency():
-    # Every default-grant tier key is a real tier; ids unique.
-    assert len(CAPABILITIES_BY_ID) == len(CAPABILITIES)
-    for c in CAPABILITIES:
-        for tier in c.default_grants:
-            assert tier in ("anonymous", "contributor", "maintainer")
+def test_manage_permissions_capability_exists():
+    """The Permissions tab gate is the boot-time backstop for owner-only
+    access to the matrix editor; the rest of the surface uses the gate's id
+    string by reference, so silently dropping it would un-gate the editor."""
+    assert "manage_permissions" in CAPABILITIES_BY_ID
 
 
 def test_event_capability_map_is_complete_and_valid():

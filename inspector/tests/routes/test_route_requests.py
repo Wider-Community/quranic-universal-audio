@@ -31,22 +31,14 @@ def _isolated_backend(tmp_path, monkeypatch):
         AudioCategory,
         Channel,
         Delivery,
-        ReciterCatalog,
         ReciterEntry,
-        ReciterRow,
-        ReciterState,
-        ReciterStateFile,
         Riwayah,
         Source,
         Style,
-        Visibility,
         Vocab,
     )
-    from services import catalog as catalog_service
     from services import hf_bucket as _hf_bucket
     from services import pending_requests as pending_requests_service
-    from services import state as state_service
-    from services import storage_paths
 
     monkeypatch.setenv("INSPECTOR_BACKEND", "filesystem")
     monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))

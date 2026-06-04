@@ -1,8 +1,6 @@
 """GET /api/seg/validate/<reciter> response-shape tests (MUST-1)."""
 from __future__ import annotations
 
-import pytest
-
 from tests.conftest import assert_keys_superset
 
 

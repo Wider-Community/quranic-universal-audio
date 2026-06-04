@@ -7,13 +7,10 @@ edits to the catalog at auto-acceptance time.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import pytest
 
 from qua_shared.schemas import (
     Actor,
-    PendingRequest,
     ProposedEdits,
     Role,
 )
@@ -92,10 +89,6 @@ def test_hydrate_empty_when_no_file(fresh_pending):
     svc = fresh_pending
     snap = svc.snapshot()
     assert snap.by_slug == {}
-
-
-# (Removed test_hydrate_loads_existing_file: pending.json bucket hydrate no
-# longer exists — the substrate DB is the source of truth.)
 
 
 # ---------------------------------------------------------------------------

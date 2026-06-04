@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 

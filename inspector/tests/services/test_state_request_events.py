@@ -21,9 +21,7 @@ from qua_shared.schemas import (
     ReciterCatalog,
     ReciterEntry,
     RecordingContext,
-    ReciterRow,
     ReciterState,
-    ReciterStateFile,
     Riwayah,
     Role,
     Source,
@@ -102,9 +100,7 @@ def state_env(tmp_path, monkeypatch):
     from services import catalog as catalog_service
     from services import hf_bucket as _hf_bucket
     from services import pending_requests as pending_requests_service
-    from services import request_archive as request_archive_service
     from services import state as state_service
-    from services import storage_paths
 
     monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))
     backend = _hf_bucket.FilesystemBackend(tmp_path)
@@ -157,7 +153,6 @@ def test_requested_creates_row_when_none_exists(state_env, monkeypatch):
     creates a fresh row in AWAITING_ALIGNMENT in one step."""
     state_service, pending_service, _, backend = state_env
     from services import audit as audit_service
-    from services import storage_paths
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     # Drop the seeded row so test_reciter has no delivery_state.
@@ -187,7 +182,6 @@ def test_requested_creates_row_when_none_exists(state_env, monkeypatch):
 def test_requested_rejects_non_catalogued(state_env, monkeypatch):
     state_service, _, _, backend = state_env
     from services import audit as audit_service
-    from services import storage_paths
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     # Flip the row to AWAITING_REVIEW.
@@ -206,7 +200,6 @@ def test_requested_rejects_non_catalogued(state_env, monkeypatch):
 def test_requested_rejects_discarded_visibility(state_env, monkeypatch):
     state_service, _, _, backend = state_env
     from services import audit as audit_service
-    from services import storage_paths
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     from tests.conftest import _seed_state
@@ -529,9 +522,7 @@ def test_alignment_completed_skips_auto_claim_when_flag_unset(state_env, monkeyp
     assert row.assignee_hf_id is None
 
 
-def test_alignment_completed_skips_auto_claim_when_other_claim_held(
-    state_env, monkeypatch, tmp_path,
-):
+def test_alignment_completed_skips_auto_claim_when_other_claim_held(state_env):
     """auto_claim=True but requester already holds another active claim:
     skip silently, row stays in AWAITING_REVIEW for someone else to grab.
     A ``reciter.auto_claim_skipped`` audit record is written so the skip
@@ -575,9 +566,7 @@ def test_alignment_completed_skips_auto_claim_when_other_claim_held(
     assert skip["payload"]["existing_claim_slug"] == "other_reciter"
 
 
-def test_owner_auto_claim_bypasses_one_claim_limit(
-    state_env, monkeypatch, tmp_path,
-):
+def test_owner_auto_claim_bypasses_one_claim_limit(state_env):
     """Owners are exempt from the one-claim-per-user rule (matches
     can_claim + the /api/claim route): an owner who already holds a claim
     should still get auto-claimed on a second request, and NO skip audit
@@ -617,7 +606,6 @@ def test_owner_auto_claim_bypasses_one_claim_limit(
 def test_alignment_completed_noop_when_no_pending(state_env, monkeypatch):
     state_service, _, _, backend = state_env
     from services import audit as audit_service
-    from services import storage_paths
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     # Move the row to AWAITING_ALIGNMENT without a pending entry (e.g. admin

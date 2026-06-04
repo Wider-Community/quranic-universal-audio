@@ -1,4 +1,8 @@
-"""Per-op save-acceptance round-trip tests (IS-6)."""
+"""Per-op save-acceptance round-trip tests.
+
+Every save-payload op must carry a typed ``command`` envelope whose
+``type`` matches the enclosing ``op.type``; mismatches must 400.
+"""
 from __future__ import annotations
 
 import json

@@ -120,7 +120,7 @@ def _split_batch(parent_uid: str, *children: str, batch_id: str) -> dict:
     }
 
 
-def test_split_group_index_byte_equal_after_save_append(monkeypatch):
+def test_split_group_index_byte_equal_after_save_append():
     """Building the index from (cached batches + appended new batch) must
     equal building it from a fresh parse of the same total batch sequence."""
     slug = "test-split-group-append"
@@ -128,7 +128,7 @@ def test_split_group_index_byte_equal_after_save_append(monkeypatch):
     cache.pop_seg_history_batches(slug)
     cache.pop_seg_split_group_index(slug)
 
-    # Phase 1: warm cache with two committed splits.
+    # Warm cache with two committed splits.
     initial = [
         _split_batch("A", "A1", "A2", batch_id="b1"),
         _split_batch("A1", "A1a", "A1b", batch_id="b2"),
@@ -136,14 +136,13 @@ def test_split_group_index_byte_equal_after_save_append(monkeypatch):
     cache.set_seg_history_batches(slug, initial)
     index_warm = build_split_group_index(slug)
 
-    # Phase 2: simulate save — append a third split, pop the derived index,
-    # rebuild from the (now-extended) cached batches.
+    # Simulate save: append a third split, pop the derived index, rebuild
+    # from the (now-extended) cached batches.
     append_history_batch(slug, _split_batch("A2", "A2a", "A2b", batch_id="b3"))
     cache.pop_seg_split_group_index(slug)
     index_after_append = build_split_group_index(slug)
 
-    # Phase 3: clear and rebuild from scratch with the FULL batch list.
-    cache.pop_seg_split_group_index(slug)
+    # Clear and rebuild from scratch with the full batch list.
     cache.set_seg_history_batches(slug, [
         _split_batch("A", "A1", "A2", batch_id="b1"),
         _split_batch("A1", "A1a", "A1b", batch_id="b2"),

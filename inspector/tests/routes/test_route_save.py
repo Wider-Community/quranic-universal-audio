@@ -112,13 +112,6 @@ def test_save_maintainer_can_override_assignee(signed_in_client, tmp_reciter_dir
 def test_save_marked_ready_returns_403(signed_in_client, tmp_reciter_dir):
     """Marked-ready rows are frozen — the lock decorator refuses saves even
     for the active assignee. They must Unmark first."""
-    from datetime import datetime, timezone
-
-    from qua_shared.schemas import (
-        ReciterRow, ReciterState, ReciterStateFile, Visibility,
-    )
-    from services import state as state_service
-
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
 
@@ -140,12 +133,7 @@ def test_save_marked_ready_returns_403(signed_in_client, tmp_reciter_dir):
 
 def test_save_owner_bypasses_state_check(signed_in_client, tmp_reciter_dir):
     """Owner can save to a row that isn't UNDER_REVIEW (state bypass)."""
-    from datetime import datetime, timezone
-
-    from qua_shared.schemas import (
-        ReciterRow, ReciterState, ReciterStateFile, Visibility,
-    )
-    from services import state as state_service
+    from qua_shared.schemas import ReciterState
 
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="other-user")

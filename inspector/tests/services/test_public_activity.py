@@ -8,15 +8,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
-
-
-@pytest.fixture(autouse=True)
-def _isolate_activity_state():
-    """No-op post-cutover: the autouse ``_substrate_db`` fixture gives each test
-    a fresh DB, so dismissals/tombstones can't leak across tests."""
-    yield
-
 
 def _install_audit(monkeypatch, records):
     """Patch ``_iter_partitions`` to yield the supplied test records."""
@@ -178,7 +169,7 @@ def test_maintainer_caller_does_not_see_actor(monkeypatch):
     assert "actor_login" not in cards[0]
 
 
-def test_tombstoned_audit_id_excluded(monkeypatch, tmp_path):
+def test_tombstoned_audit_id_excluded(monkeypatch):
     """Records whose audit_id is in the global tombstone list disappear."""
     from services import activity_classification as ac
     from services import activity_state as activity_state_service

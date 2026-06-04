@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 _SAVE_HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
 

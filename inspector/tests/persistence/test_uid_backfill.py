@@ -7,8 +7,6 @@ import subprocess
 import sys
 import textwrap
 
-import pytest
-
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
@@ -31,13 +29,9 @@ def test_uid_matches_typescript_implementation():
 
 
 def test_save_round_trips_through_adapters(tmp_reciter_dir, signed_in_client, load_fixture):
-    """Adapter consolidation regression: save -> reload -> normalized result.
-
-    Exercises ``services.save.save_seg_data`` (which now delegates ``_make_seg``
-    and ``rebuild_segments_json`` to the ``adapters/`` module).  Verifies that
-    a normal save round-trip preserves matched_ref, matched_text, and
-    segment_uid through the adapter path, and that ``segments.json`` is
-    regenerated with the verse-aggregated tuple format.
+    """Adapter round-trip: a normal save preserves segment_uid + matched_ref
+    through the adapter path, and ``segments.json`` is regenerated with the
+    verse-aggregated tuple format.
     """
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")

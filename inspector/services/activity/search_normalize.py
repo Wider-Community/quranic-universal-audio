@@ -1,14 +1,12 @@
 """Arabic-aware search normalization.
 
-Mirrors the frontend ``normalizeArabic`` in
-``inspector/frontend/src/lib/components/SearchableSelect.svelte`` so the
+Mirrors the frontend helper in
+``inspector/frontend/src/lib/utils/fuzzy-match.ts`` so the
 ``/api/public/reciters?search=`` query and any future server-side fuzzy
 match produce the same results as the in-browser dropdown filter.
 
 Keep this in lockstep with the frontend implementation — the symmetry is
 load-bearing for the picker's "search same string everywhere" promise.
-
-Slice B of phase 6.
 """
 
 from __future__ import annotations
