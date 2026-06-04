@@ -48,9 +48,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def smoke() -> int:
-    bucket_id = os.environ.get(
-        "INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket-dev"
-    )
+    bucket_id = os.environ.get("INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket-dev")
 
     from .hf_bucket import BucketBackend, StorageNotFound
 

@@ -34,6 +34,7 @@ Usage::
     python3 scripts/migrations/migrate_to_reciters_prefix.py \\
         --bucket prod --allow-prod --delete-old --confirm-delete
 """
+
 from __future__ import annotations
 
 import argparse
@@ -68,9 +69,7 @@ def _list_files(bucket_id: str, token: str | None, prefix: str) -> list[str]:
     from huggingface_hub import list_bucket_tree  # type: ignore[import-not-found]
 
     try:
-        items = list_bucket_tree(
-            bucket_id, prefix=prefix, recursive=True, token=token
-        )
+        items = list_bucket_tree(bucket_id, prefix=prefix, recursive=True, token=token)
     except Exception as e:  # noqa: BLE001
         log.warning("list_bucket_tree(%s) failed: %s", prefix, e)
         return []
@@ -87,7 +86,7 @@ def _list_files(bucket_id: str, token: str | None, prefix: str) -> list[str]:
 
 def _dest_for(src: str, prefix: str) -> str:
     """``<prefix>/<slug>/<rest>`` -> ``reciters/<slug>/<rest>``."""
-    rest = src[len(prefix) + 1:]  # strip "<prefix>/"
+    rest = src[len(prefix) + 1 :]  # strip "<prefix>/"
     return f"{_DEST_PREFIX}/{rest}"
 
 
@@ -141,13 +140,13 @@ def verify(backend, bucket_id: str, token: str | None) -> bool:
     for prefix in _LEGACY_PREFIXES:
         files = _list_files(bucket_id, token, prefix)
         missing = [
-            _dest_for(src, prefix)
-            for src in files
-            if _dest_for(src, prefix) not in existing
+            _dest_for(src, prefix) for src in files if _dest_for(src, prefix) not in existing
         ]
         log.info(
             "verify %s/: %d source files, %d missing under reciters/",
-            prefix, len(files), len(missing),
+            prefix,
+            len(files),
+            len(missing),
         )
         for m in missing[:20]:
             log.warning("  MISSING: %s", m)
@@ -173,7 +172,7 @@ def delete_old(backend, bucket_id: str, token: str | None, *, dry_run: bool) -> 
             deleted += len(files)
             continue
         for i in range(0, len(files), _CHUNK):
-            batch = files[i:i + _CHUNK]
+            batch = files[i : i + _CHUNK]
             try:
                 batch_bucket_files(bucket_id, delete=batch, token=token)
                 deleted += len(batch)
@@ -186,16 +185,29 @@ def delete_old(backend, bucket_id: str, token: str | None, *, dry_run: bool) -> 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--bucket", choices=sorted(_BUCKETS), default="dev")
-    ap.add_argument("--allow-prod", action="store_true",
-                    help="Required acknowledgement to touch the prod bucket.")
-    ap.add_argument("--verify", action="store_true",
-                    help="After copy, assert every source file exists under reciters/.")
-    ap.add_argument("--delete-old", action="store_true",
-                    help="Delete wip/ + published/ (run only after the deploy reads reciters/).")
-    ap.add_argument("--confirm-delete", action="store_true",
-                    help="Second key for --delete-old; without it, --delete-old only previews.")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="Print actions without copying/deleting.")
+    ap.add_argument(
+        "--allow-prod",
+        action="store_true",
+        help="Required acknowledgement to touch the prod bucket.",
+    )
+    ap.add_argument(
+        "--verify",
+        action="store_true",
+        help="After copy, assert every source file exists under reciters/.",
+    )
+    ap.add_argument(
+        "--delete-old",
+        action="store_true",
+        help="Delete wip/ + published/ (run only after the deploy reads reciters/).",
+    )
+    ap.add_argument(
+        "--confirm-delete",
+        action="store_true",
+        help="Second key for --delete-old; without it, --delete-old only previews.",
+    )
+    ap.add_argument(
+        "--dry-run", action="store_true", help="Print actions without copying/deleting."
+    )
     args = ap.parse_args()
 
     logging.basicConfig(
@@ -209,6 +221,7 @@ def main() -> int:
     _setup_paths_and_env(args.bucket, allow_prod=args.allow_prod)
 
     from services.storage.hf_bucket import get_backend, resolve_bucket_repo
+
     backend = get_backend()
     bucket_id = resolve_bucket_repo()
     token = os.environ.get("INSPECTOR_HF_TOKEN") or os.environ.get("HF_TOKEN")

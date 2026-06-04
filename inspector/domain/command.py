@@ -7,7 +7,7 @@ current in-memory entries.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -143,9 +143,7 @@ def apply_inverse_patch(entries: list[dict], patch: dict) -> list[dict]:
 
     for uid, snap in before_by_uid.items():
         if uid not in present_after_steps_1_3:
-            target_entry = _find_entry_for_restore(
-                entries, snap, patch_obj.affectedChapterIds
-            )
+            target_entry = _find_entry_for_restore(entries, snap, patch_obj.affectedChapterIds)
             if target_entry is not None:
                 target_entry["segments"].append(_hydrate(snap))
 
@@ -163,6 +161,7 @@ def apply_inverse_patch(entries: list[dict], patch: dict) -> list[dict]:
 # Private helpers for apply_inverse_patch
 # ---------------------------------------------------------------------------
 
+
 def _refs_for_chapters(entries: list[dict], chapter_ids: tuple[int, ...]) -> set[str]:
     """Return the set of entry refs that match any of *chapter_ids*."""
     if not chapter_ids:
@@ -172,6 +171,7 @@ def _refs_for_chapters(entries: list[dict], chapter_ids: tuple[int, ...]) -> set
         ref = entry.get("ref", "")
         try:
             from utils.references import chapter_from_ref  # type: ignore
+
             ch = chapter_from_ref(ref)
         except Exception:
             try:
@@ -207,6 +207,7 @@ def _find_entry_for_restore(
         ref = entry.get("ref", "")
         try:
             from utils.references import chapter_from_ref  # type: ignore
+
             ch = chapter_from_ref(ref)
         except Exception:
             try:

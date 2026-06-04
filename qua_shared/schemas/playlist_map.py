@@ -38,8 +38,8 @@ class PlaylistChapterEntry(BaseModel):
 
     chapter: int = Field(ge=1, le=114)
     url: str
-    title: str = ""              # the playlist entry title (provenance)
-    matched_name: str = ""       # the surah name_en it was matched to (audit)
+    title: str = ""  # the playlist entry title (provenance)
+    matched_name: str = ""  # the surah name_en it was matched to (audit)
     confidence: MatchConfidence = "manual"
 
     @field_validator("url")

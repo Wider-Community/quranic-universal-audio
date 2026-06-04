@@ -94,6 +94,7 @@ def test_build_fixtures_db_excludes_pii(tmp_path):
     # Read the generated DB independently.
     conn = sqlite3.connect(out)
     try:
+
         def count(table, where=""):
             return conn.execute(f"SELECT COUNT(*) FROM {table} {where}").fetchone()[0]
 
@@ -106,19 +107,25 @@ def test_build_fixtures_db_excludes_pii(tmp_path):
 
         # The lone identity field is scrubbed; the audit ref is nulled.
         assert conn.execute("SELECT added_by_hf_id FROM deliveries").fetchone()[0] == "seed"
-        assert conn.execute(
-            "SELECT created_by_transition_id FROM delivery_states"
-        ).fetchone()[0] is None
+        assert (
+            conn.execute("SELECT created_by_transition_id FROM delivery_states").fetchone()[0]
+            is None
+        )
 
         # Every identity/audit table present in the current schema is empty —
         # the PII never leaves. (activity_dismissals was dropped in 0006.)
         existing = {
-            r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
-        for pii in ("users", "transitions", "claims", "requests",
-                    "role_assignments", "activity_tombstones"):
+        for pii in (
+            "users",
+            "transitions",
+            "claims",
+            "requests",
+            "role_assignments",
+            "activity_tombstones",
+        ):
             if pii in existing:
                 assert count(pii) == 0, f"PII leaked into {pii}"
     finally:
@@ -143,9 +150,7 @@ def test_build_fixtures_db_synthesizes_missing_state(tmp_path):
     mod.build_fixtures_db(src, out, ["rec1_c"])
     conn = sqlite3.connect(out)
     try:
-        state = conn.execute(
-            "SELECT state FROM delivery_states WHERE slug='rec1_c'"
-        ).fetchone()
+        state = conn.execute("SELECT state FROM delivery_states WHERE slug='rec1_c'").fetchone()
         assert state is not None, "missing state row was not synthesized"
         assert state[0] == mod._DEFAULT_FIXTURE_STATE
     finally:

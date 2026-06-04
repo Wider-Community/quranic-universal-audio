@@ -12,7 +12,6 @@ from typing import Final
 
 import requests
 
-
 _BASE_URL: Final[str] = "https://huggingface.co/api/users"
 _TIMEOUT_SECONDS: Final[float] = 5.0
 
@@ -46,9 +45,7 @@ def lookup(login: str) -> HfUser | None:
     if resp.status_code >= 500:
         raise HfUserLookupError(f"HF user lookup 5xx: {resp.status_code}")
     if not resp.ok:
-        raise HfUserLookupError(
-            f"HF user lookup unexpected status {resp.status_code}"
-        )
+        raise HfUserLookupError(f"HF user lookup unexpected status {resp.status_code}")
     body = resp.json()
     hf_user_id = body.get("id") or body.get("_id")
     canonical_login = body.get("user") or body.get("name") or login

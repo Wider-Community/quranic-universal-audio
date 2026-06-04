@@ -33,7 +33,6 @@ identical) — making dedup-by-op_id safe.
 """
 
 import re
-from datetime import datetime, timezone
 from urllib.parse import unquote
 
 from services.storage import cache, data_dir
@@ -107,9 +106,7 @@ def append_peaks_records(
     # Build the seen-op_id set once (warms the in-memory list cache). Dedup
     # against both already-persisted ops and earlier records in this same call.
     seen: set[str] = {
-        rec.get("op_id")
-        for rec in load_peaks_records(reciter)
-        if isinstance(rec.get("op_id"), str)
+        rec.get("op_id") for rec in load_peaks_records(reciter) if isinstance(rec.get("op_id"), str)
     }
 
     written = 0
@@ -159,8 +156,10 @@ def _inflate_peaks_b64(rec: dict) -> dict:
         return rec
     try:
         import base64
+
         raw = base64.b64decode(b64)
         import numpy as np  # noqa: PLC0415
+
         i8 = np.frombuffer(raw, dtype=np.int8)
         if i8.size == 0 or i8.size % 2 != 0:
             return rec
@@ -192,10 +191,7 @@ def load_peaks_records(
     excluded = exclude_op_ids or set()
     cached = cache.get_seg_history_peaks(reciter)
     if cached is None:
-        cached = [
-            rec for rec in data_dir.iter_peaks_history(reciter)
-            if isinstance(rec, dict)
-        ]
+        cached = [rec for rec in data_dir.iter_peaks_history(reciter) if isinstance(rec, dict)]
         cache.set_seg_history_peaks(reciter, cached)
 
     out = [rec for rec in cached if rec.get("op_id") not in excluded]

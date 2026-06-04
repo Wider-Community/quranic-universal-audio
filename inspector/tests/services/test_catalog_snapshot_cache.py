@@ -6,7 +6,7 @@ public detail pages, activity descriptors). It must not rebuild per request.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 from qua_shared.schemas import Actor, AudioCategory, Delivery, ReciterEntry, Role
 from services import catalog as catalog_service
@@ -15,23 +15,30 @@ from services.db import repo_catalog
 
 def _seed():
     from tests.conftest import _seed_catalog
+
     _seed_catalog(
         reciters=[ReciterEntry(reciter_id="rec_a", name_en="Reciter A")],
-        deliveries=[Delivery(
-            slug="rec_a", reciter_id="rec_a", riwayah="hafs", style="mur",
-            source="src", channel="ch", audio_category=AudioCategory.BY_SURAH,
-            chapter_count=114, added_at=datetime.now(timezone.utc),
-            added_by_hf_id="seed",
-        )],
+        deliveries=[
+            Delivery(
+                slug="rec_a",
+                reciter_id="rec_a",
+                riwayah="hafs",
+                style="mur",
+                source="src",
+                channel="ch",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=datetime.now(UTC),
+                added_by_hf_id="seed",
+            )
+        ],
     )
 
 
 def _count_rebuilds(monkeypatch):
     calls = []
     real = repo_catalog.snapshot
-    monkeypatch.setattr(
-        repo_catalog, "snapshot", lambda: (calls.append(1), real())[1]
-    )
+    monkeypatch.setattr(repo_catalog, "snapshot", lambda: (calls.append(1), real())[1])
     return calls
 
 
@@ -60,7 +67,8 @@ def test_catalog_write_invalidates(monkeypatch):
     # A catalog write bumps db_seq → next snapshot must recompute and reflect it.
     catalog_service.add_reciter(
         actor=Actor(hf_user_id="u-O", login_at_time="o", role=Role.OWNER),
-        reciter_id="rec_b", name_en="Reciter B",
+        reciter_id="rec_b",
+        name_en="Reciter B",
     )
     snap = catalog_service.snapshot()  # miss → 2 rebuilds
     assert len(calls) == 2
@@ -72,6 +80,7 @@ def test_state_write_also_invalidates(monkeypatch):
     invalidation — the catalog can never be served stale)."""
     _seed()
     from tests.conftest import _seed_state
+
     calls = _count_rebuilds(monkeypatch)
 
     catalog_service.snapshot()  # miss → 1

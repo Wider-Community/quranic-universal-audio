@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 from services.storage import storage_paths
@@ -23,14 +23,11 @@ def smoke() -> int:
         assert storage_paths.catalog_path() == "catalog/reciter_catalog.json"
         assert storage_paths.roles_path() == "access/inspector_roles.json"
         assert (
-            storage_paths.audit_partition_path(
-                datetime(2026, 5, 12, tzinfo=timezone.utc)
-            )
+            storage_paths.audit_partition_path(datetime(2026, 5, 12, tzinfo=UTC))
             == "audit/2026-05.jsonl"
         )
         assert (
-            storage_paths.segments_path("saad_al_ghamdi")
-            == "reciters/saad_al_ghamdi/segments.json"
+            storage_paths.segments_path("saad_al_ghamdi") == "reciters/saad_al_ghamdi/segments.json"
         )
         assert (
             storage_paths.timestamps_path("saad_al_ghamdi", 1)

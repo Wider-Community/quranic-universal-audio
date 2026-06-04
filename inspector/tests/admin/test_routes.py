@@ -1,4 +1,5 @@
 """Admin Users routes: role gate (401/403/200) + detail 404 + visitor-stats."""
+
 from __future__ import annotations
 
 

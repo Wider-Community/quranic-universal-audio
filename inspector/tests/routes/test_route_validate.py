@@ -1,4 +1,5 @@
 """GET /api/seg/validate/<reciter> response-shape tests (MUST-1)."""
+
 from __future__ import annotations
 
 import pytest
@@ -40,8 +41,14 @@ def test_validate_includes_classified_issues_field_per_snapshot(flask_client, tm
     body = res.get_json()
 
     per_segment_array_keys = {
-        "failed", "low_confidence", "boundary_adj", "cross_verse",
-        "audio_bleeding", "repetitions", "muqattaat", "qalqala",
+        "failed",
+        "low_confidence",
+        "boundary_adj",
+        "cross_verse",
+        "audio_bleeding",
+        "repetitions",
+        "muqattaat",
+        "qalqala",
     }
 
     issues_lists: list[list] = []

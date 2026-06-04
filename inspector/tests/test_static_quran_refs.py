@@ -1,4 +1,5 @@
 """Static-data routes: GET /api/static/quran-refs.json + /version."""
+
 from __future__ import annotations
 
 

@@ -14,7 +14,7 @@ the same OAuth + claim check on the route layer.
 """
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from adapters.save_payload import build_seg_lookups as _adapter_build_seg_lookups
 from adapters.save_payload import make_seg as _adapter_make_seg
@@ -22,6 +22,9 @@ from adapters.segments_json import build_segments_doc as _adapter_build_segments
 from constants import HISTORY_SCHEMA_VERSION
 from domain.command import validate_patch_dict
 from qua_shared.schemas import Actor
+from services.audio import op_peaks as op_peaks_svc
+from services.audio.peaks_history import append_peaks_records
+from services.segments.qalqala import compute_qalqala_letter
 from services.storage import cache, data_dir
 from services.storage.data_loader import (
     get_single_word_verses,
@@ -29,9 +32,6 @@ from services.storage.data_loader import (
     load_detailed,
     load_probe_v2,
 )
-from services.audio import op_peaks as op_peaks_svc
-from services.audio.peaks_history import append_peaks_records
-from services.segments.qalqala import compute_qalqala_letter
 from services.validation.registry import filter_persistent_ignores
 from services.validation.snapshot_classifier import classify_snapshot
 from utils.references import chapter_from_ref, normalize_ref
@@ -57,22 +57,24 @@ def _history_visible_categories(categories: list[str]) -> list[str]:
 # ``autoFixMissingWord``) shapes are accepted; the dispatchers and history
 # round-trips emit the camelCase form, while round-trip and CLI fixtures use
 # the snake_case form.
-_ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset({
-    "trim",
-    "split",
-    "merge",
-    "delete",
-    "edit_reference",
-    "editReference",
-    "ignore_issue",
-    "ignoreIssue",
-    "auto_fix_missing_word",
-    "autoFixMissingWord",
-    "set_is_wasl",
-    "setIsWasl",
-    # ``confirm_reference`` is a reducer-edge variant of editReference recorded
-    # on ``op_type`` only; the ``command.type`` itself remains ``editReference``.
-})
+_ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset(
+    {
+        "trim",
+        "split",
+        "merge",
+        "delete",
+        "edit_reference",
+        "editReference",
+        "ignore_issue",
+        "ignoreIssue",
+        "auto_fix_missing_word",
+        "autoFixMissingWord",
+        "set_is_wasl",
+        "setIsWasl",
+        # ``confirm_reference`` is a reducer-edge variant of editReference recorded
+        # on ``op_type`` only; the ``command.type`` itself remains ``editReference``.
+    }
+)
 
 
 def _validate_command_envelopes(operations: list) -> str | None:
@@ -101,9 +103,7 @@ def _validate_command_envelopes(operations: list) -> str | None:
         if cmd_type not in _ALLOWED_COMMAND_TYPES:
             return f"unknown command.type: {cmd_type!r}"
         if cmd_type != op_type:
-            return (
-                f"command.type {cmd_type!r} does not match op.type {op_type!r}"
-            )
+            return f"command.type {cmd_type!r} does not match op.type {op_type!r}"
     return None
 
 
@@ -156,8 +156,7 @@ def _ensure_patch_on_ops(operations: list) -> list:
     return out
 
 
-def _attach_classified_issues(operations: list,
-                               probe_failed_uids: set | None = None) -> list:
+def _attach_classified_issues(operations: list, probe_failed_uids: set | None = None) -> list:
     """Return a deep-enough copy of ``operations`` with ``classified_issues``
     populated on every snapshot.
 
@@ -302,6 +301,7 @@ def _stamp_persisted_classifier_fields(seg: dict, single_word_verses: set | None
     the phonemic side.
     """
     from services.validation.classifier import compute_is_boundary_adj
+
     seg["qalqala_letter"] = compute_qalqala_letter(seg)
 
     if single_word_verses is None:
@@ -319,7 +319,13 @@ def _stamp_persisted_classifier_fields(seg: dict, single_word_verses: set | None
                 s_word = int(sp[2])
                 e_word = int(ep[2])
                 seg["is_boundary_adj"] = compute_is_boundary_adj(
-                    seg, surah, s_ayah, s_word, e_word, single_word_verses, None,
+                    seg,
+                    surah,
+                    s_ayah,
+                    s_word,
+                    e_word,
+                    single_word_verses,
+                    None,
                 )
                 return
             except ValueError:
@@ -327,8 +333,9 @@ def _stamp_persisted_classifier_fields(seg: dict, single_word_verses: set | None
     seg["is_boundary_adj"] = False
 
 
-def _apply_full_replace(matching: list[dict], updates: dict,
-                       existing_by_time: dict, existing_by_uid: dict):
+def _apply_full_replace(
+    matching: list[dict], updates: dict, existing_by_time: dict, existing_by_uid: dict
+):
     """Mutate ``matching`` in place for a full_replace save.
 
     Returns ``None`` on success or an ``(error_dict, http_status)`` tuple on
@@ -356,22 +363,28 @@ def _apply_full_replace(matching: list[dict], updates: dict,
     for s in updates["segments"]:
         seg_audio = s.get("audio_url", "")
         if not seg_audio:
-            return {"error": (
-                "Rejected structural save for by_ayah: segment payload is "
-                "missing audio_url. Reload Inspector and try again."
-            )}, 400
+            return {
+                "error": (
+                    "Rejected structural save for by_ayah: segment payload is "
+                    "missing audio_url. Reload Inspector and try again."
+                )
+            }, 400
 
         candidates = entry_by_audio.get(seg_audio, [])
         if len(candidates) != 1:
             if len(candidates) == 0:
-                return {"error": (
-                    "Rejected structural save for by_ayah: segment audio_url "
-                    "does not belong to this chapter."
-                )}, 400
-            return {"error": (
-                "Rejected structural save for by_ayah: ambiguous audio_url "
-                "matched multiple chapter entries."
-            )}, 400
+                return {
+                    "error": (
+                        "Rejected structural save for by_ayah: segment audio_url "
+                        "does not belong to this chapter."
+                    )
+                }, 400
+            return {
+                "error": (
+                    "Rejected structural save for by_ayah: ambiguous audio_url "
+                    "matched multiple chapter entries."
+                )
+            }, 400
 
         new_seg = _make_seg(s, existing_by_time, existing_by_uid, word_counts)
         _stamp_persisted_classifier_fields(new_seg, single_word_verses)
@@ -405,8 +418,9 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
             _stamp_persisted_classifier_fields(flat_segments[idx], single_word_verses)
 
 
-def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: dict,
-                        updates: dict, *, actor: Actor) -> dict:
+def _persist_and_record(
+    reciter: str, chapter: int, entries: list[dict], meta: dict, updates: dict, *, actor: Actor
+) -> dict:
     """Persist mutated entries to disk, append edit_history, invalidate caches."""
     # Validate patch envelopes before writing anything.
     raw_ops = updates.get("operations", [])
@@ -423,7 +437,8 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     # Ops also receive a ``patch`` envelope when absent.
     probe_failed_uids, _ = load_probe_v2(reciter)
     operations = _attach_classified_issues(
-        _ensure_patch_on_ops(raw_ops), probe_failed_uids=probe_failed_uids,
+        _ensure_patch_on_ops(raw_ops),
+        probe_failed_uids=probe_failed_uids,
     )
     # v2: no ``file_hash_after`` (chain removed in Phase 1). ``actor`` block
     # carries the per-edit attribution that replaces the v1 per-edit GitHub
@@ -433,7 +448,7 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
         "schema_version": HISTORY_SCHEMA_VERSION,
         "batch_id": uuid7(),
         "chapter": chapter,
-        "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "saved_at_utc": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         "save_mode": "full_replace" if updates.get("full_replace") else "patch",
         "operations": operations,
         "actor": actor.model_dump(mode="json"),
@@ -449,15 +464,20 @@ def _persist_and_record(reciter: str, chapter: int, entries: list[dict], meta: d
     try:
         by_chapter = op_peaks_svc.audio_url_by_chapter(reciter)
         recs = op_peaks_svc.build_op_records(
-            reciter, operations, by_chapter, default_chapter=chapter,
+            reciter,
+            operations,
+            by_chapter,
+            default_chapter=chapter,
         )
         if recs:
             append_peaks_records(reciter, recs, batch_id=batch["batch_id"])
     except Exception:  # noqa: BLE001 — peaks are best-effort, never block a save
         import logging
+
         logging.getLogger(__name__).exception(
             "[%s] history-peaks generation failed during save (ch %s)",
-            reciter, chapter,
+            reciter,
+            chapter,
         )
 
     # Surgical cache invalidation. Edit-history-derived caches survive
@@ -538,5 +558,10 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
     # Card dismissal for soft-rule categories is purely a frontend
     # session-state concern.
     return _persist_and_record(
-        reciter, chapter, entries, meta, updates, actor=actor,
+        reciter,
+        chapter,
+        entries,
+        meta,
+        updates,
+        actor=actor,
     )

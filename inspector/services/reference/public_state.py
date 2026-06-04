@@ -30,10 +30,8 @@ from qua_shared.schemas import (
     ReciterState,
     Visibility,
 )
-
 from services.state import catalog as catalog_service
 from services.state import state as state_service
-
 
 PublicBucket = Literal[
     "available_for_request",
@@ -78,9 +76,9 @@ _FULL_CHAPTERS: dict[AudioCategory, int] = {
 
 
 class PublicDelivery(TypedDict, total=False):
-    slug: str                    # ID only — never rendered to users.
+    slug: str  # ID only — never rendered to users.
     bucket: PublicBucket
-    state_since: str | None      # ISO datetime; None when no state row exists.
+    state_since: str | None  # ISO datetime; None when no state row exists.
     # Per-bucket entry timestamps: {bucket: [iso, ...]} chronological, one entry
     # per *distinct* visit to that bucket. Modal-only — attached by the detail /
     # admin-view paths (NOT the cached list), so it's absent on list payloads.
@@ -91,9 +89,11 @@ class PublicDelivery(TypedDict, total=False):
     recording_year: int | None
     source: str
     channel: str
-    channel_name: str            # human display name from vocab; falls back to slug
-    source_url: str | None       # originating playlist URL (download-only sources); channel hyperlink target
-    audio_category: str          # by_surah | by_ayah
+    channel_name: str  # human display name from vocab; falls back to slug
+    source_url: (
+        str | None
+    )  # originating playlist URL (download-only sources); channel hyperlink target
+    audio_category: str  # by_surah | by_ayah
     chapter_count: int
     coverage_kind: Literal["full", "partial"]
     bitrate_kbps_nominal: int | None
@@ -102,8 +102,8 @@ class PublicDelivery(TypedDict, total=False):
 
 
 class PublicReciter(TypedDict, total=False):
-    reciter_id: str              # ID only.
-    name: str                    # display (en)
+    reciter_id: str  # ID only.
+    name: str  # display (en)
     name_ar: str | None
     country: str | None
     primary_bucket: PublicBucket
@@ -117,7 +117,7 @@ class PublicReciter(TypedDict, total=False):
     chapter_count_total: int
     deliveries_count: int
     coverage_kind: Literal["full", "partial", "mixed"]
-    last_activity: str | None    # max state_since across deliveries
+    last_activity: str | None  # max state_since across deliveries
 
 
 # ---------- core mappers ----------
@@ -145,7 +145,7 @@ def bucket_for(row: ReciterRow | None) -> PublicBucket:
     except KeyError:
         # Defensive — new ReciterState members must be added to _STATE_TO_BUCKET
         # (callers depend on the closed set).
-        raise ValueError(f"unmapped reciter state: {row.state!r}")
+        raise ValueError(f"unmapped reciter state: {row.state!r}") from None
 
 
 def _delivery_coverage(d: Delivery) -> Literal["full", "partial"]:
@@ -176,7 +176,9 @@ def _to_public_delivery(
         chapter_count=d.chapter_count,
         coverage_kind=_delivery_coverage(d),
         bitrate_kbps_nominal=d.bitrate_kbps_nominal,
-        bitrate_mode=d.bitrate_mode.value if hasattr(d.bitrate_mode, "value") else str(d.bitrate_mode),
+        bitrate_mode=d.bitrate_mode.value
+        if hasattr(d.bitrate_mode, "value")
+        else str(d.bitrate_mode),
         total_duration_sec=d.total_duration_sec,
     )
 
@@ -369,7 +371,8 @@ def detail(reciter_id: str) -> PublicReciter | None:
     """
     catalog = catalog_service.snapshot()
     reciter = next(
-        (r for r in catalog.reciters if r.reciter_id == reciter_id), None,
+        (r for r in catalog.reciters if r.reciter_id == reciter_id),
+        None,
     )
     if reciter is None:
         return None
@@ -392,7 +395,7 @@ class AdminViewDelivery(PublicDelivery, total=False):
     so the reciter modal can render a separate ``Discarded`` section.
     """
 
-    visibility: str             # "public" | "discarded"
+    visibility: str  # "public" | "discarded"
     visibility_reason: str | None
 
 
@@ -449,7 +452,8 @@ def admin_view_reciter(reciter_id: str) -> AdminViewReciter | None:
     """
     catalog = catalog_service.snapshot()
     reciter = next(
-        (r for r in catalog.reciters if r.reciter_id == reciter_id), None,
+        (r for r in catalog.reciters if r.reciter_id == reciter_id),
+        None,
     )
     if reciter is None:
         return None
@@ -469,19 +473,14 @@ def admin_view_reciter(reciter_id: str) -> AdminViewReciter | None:
         else:
             public_dels.append(_to_public_delivery(d, row, channel_names))
 
-    fully_discarded = (
-        len(public_dels) == 0
-        and len(discarded_dels) > 0
-    )
+    fully_discarded = len(public_dels) == 0 and len(discarded_dels) > 0
 
     # Modal renders a per-delivery lifecycle timeline (incl. discarded combos).
     _attach_bucket_dates(public_dels)
     _attach_bucket_dates(discarded_dels)
 
     buckets = _unique_ordered([d["bucket"] for d in public_dels])
-    last_activity_values = [
-        d["state_since"] for d in public_dels if d["state_since"]
-    ]
+    last_activity_values = [d["state_since"] for d in public_dels if d["state_since"]]
     last_activity = max(last_activity_values) if last_activity_values else None
 
     return AdminViewReciter(

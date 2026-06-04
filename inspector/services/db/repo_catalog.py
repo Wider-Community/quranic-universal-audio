@@ -16,8 +16,8 @@ from qua_shared.schemas import (
     Delivery,
     ReciterCatalog,
     ReciterEntry,
-    Riwayah,
     RecordingContext,
+    Riwayah,
     Source,
     Style,
     Vocab,
@@ -67,16 +67,18 @@ def _vocab(conn) -> Vocab:
     ]
     sources = [
         Source(
-            slug=r["slug"], name=r["name"], url=r["url"],
+            slug=r["slug"],
+            name=r["name"],
+            url=r["url"],
             audio_categories=_serde.json_loads(r["audio_categories"]) or [],
         )
-        for r in conn.execute(
-            "SELECT slug, name, url, audio_categories FROM sources ORDER BY slug"
-        )
+        for r in conn.execute("SELECT slug, name, url, audio_categories FROM sources ORDER BY slug")
     ]
     channels = [
         Channel(
-            slug=r["slug"], short=r["short"], name=r["name"],
+            slug=r["slug"],
+            short=r["short"],
+            name=r["name"],
             host_patterns=_serde.json_loads(r["host_patterns"]) or [],
             gh_release_eligible=bool(r["gh_release_eligible"]),
         )
@@ -87,12 +89,13 @@ def _vocab(conn) -> Vocab:
     ]
     contexts = [
         RecordingContext(slug=r["slug"], name=r["name"])
-        for r in conn.execute(
-            "SELECT slug, name FROM recording_contexts ORDER BY slug"
-        )
+        for r in conn.execute("SELECT slug, name FROM recording_contexts ORDER BY slug")
     ]
     return Vocab(
-        riwayat=riwayat, styles=styles, sources=sources, channels=channels,
+        riwayat=riwayat,
+        styles=styles,
+        sources=sources,
+        channels=channels,
         recording_contexts=contexts,
     )
 
@@ -130,22 +133,22 @@ def snapshot() -> ReciterCatalog:
     ).fetchone()
     reciters = [
         ReciterEntry(
-            reciter_id=r["reciter_id"], name_en=r["name_en"], name_ar=r["name_ar"],
-            country=r["country"], notes=r["notes"],
+            reciter_id=r["reciter_id"],
+            name_en=r["name_en"],
+            name_ar=r["name_ar"],
+            country=r["country"],
+            notes=r["notes"],
         )
         for r in conn.execute(
             "SELECT reciter_id, name_en, name_ar, country, notes FROM reciters ORDER BY reciter_id"
         )
     ]
     deliveries = [
-        _delivery_from_row(r)
-        for r in conn.execute("SELECT * FROM deliveries ORDER BY slug")
+        _delivery_from_row(r) for r in conn.execute("SELECT * FROM deliveries ORDER BY slug")
     ]
     aliases = [
         Alias(kind=r["kind"], old=r["old"], new=r["new"], ts=_serde.from_iso(r["ts"]))
-        for r in conn.execute(
-            "SELECT kind, old, new, ts FROM catalog_aliases ORDER BY id"
-        )
+        for r in conn.execute("SELECT kind, old, new, ts FROM catalog_aliases ORDER BY id")
     ]
     derived = Derived.model_validate(_serde.json_loads(meta["derived"]) or {"source_channels": []})
     return ReciterCatalog(
@@ -163,15 +166,22 @@ def snapshot() -> ReciterCatalog:
 
 
 def find_reciter(reciter_id: str) -> ReciterEntry | None:
-    r = get_conn().execute(
-        "SELECT reciter_id, name_en, name_ar, country, notes FROM reciters WHERE reciter_id = ?",
-        (reciter_id,),
-    ).fetchone()
+    r = (
+        get_conn()
+        .execute(
+            "SELECT reciter_id, name_en, name_ar, country, notes FROM reciters WHERE reciter_id = ?",
+            (reciter_id,),
+        )
+        .fetchone()
+    )
     if r is None:
         return None
     return ReciterEntry(
-        reciter_id=r["reciter_id"], name_en=r["name_en"], name_ar=r["name_ar"],
-        country=r["country"], notes=r["notes"],
+        reciter_id=r["reciter_id"],
+        name_en=r["name_en"],
+        name_ar=r["name_ar"],
+        country=r["country"],
+        notes=r["notes"],
     )
 
 
@@ -201,9 +211,7 @@ def edit_delivery(slug: str, **fields) -> Delivery | None:
             cols[k] = _DELIVERY_WRITABLE[k](v)
     if cols:
         sets = ", ".join(f"{k} = ?" for k in cols)
-        get_conn().execute(
-            f"UPDATE deliveries SET {sets} WHERE slug = ?", [*cols.values(), slug]
-        )
+        get_conn().execute(f"UPDATE deliveries SET {sets} WHERE slug = ?", [*cols.values(), slug])
     return find_delivery(slug)
 
 
@@ -225,13 +233,27 @@ def insert_delivery(d: Delivery) -> None:
         "bitrate_kbps_nominal, total_duration_sec, added_at, added_by_hf_id) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
-            d.slug, d.reciter_id, d.riwayah, d.style, d.source, d.channel,
-            d.source_url, d.recording_context, d.recording_year, d.variant_label,
+            d.slug,
+            d.reciter_id,
+            d.riwayah,
+            d.style,
+            d.source,
+            d.channel,
+            d.source_url,
+            d.recording_context,
+            d.recording_year,
+            d.variant_label,
             d.audio_category.value if hasattr(d.audio_category, "value") else d.audio_category,
-            d.chapter_count, d.codec, d.container, d.sample_rate_hz, d.channels,
+            d.chapter_count,
+            d.codec,
+            d.container,
+            d.sample_rate_hz,
+            d.channels,
             d.bitrate_mode.value if hasattr(d.bitrate_mode, "value") else d.bitrate_mode,
-            d.bitrate_kbps_nominal, d.total_duration_sec,
-            _serde.to_iso(d.added_at), d.added_by_hf_id,
+            d.bitrate_kbps_nominal,
+            d.total_duration_sec,
+            _serde.to_iso(d.added_at),
+            d.added_by_hf_id,
         ),
     )
 
@@ -239,30 +261,43 @@ def insert_delivery(d: Delivery) -> None:
 def load_vocab(vocab: Vocab) -> None:
     conn = get_conn()
     for r in vocab.riwayat:
-        conn.execute("INSERT OR IGNORE INTO riwayahs(slug,short,name) VALUES (?,?,?)",
-                     (r.slug, r.short, r.name))
+        conn.execute(
+            "INSERT OR IGNORE INTO riwayahs(slug,short,name) VALUES (?,?,?)",
+            (r.slug, r.short, r.name),
+        )
     for s in vocab.styles:
-        conn.execute("INSERT OR IGNORE INTO styles(slug,short,name) VALUES (?,?,?)",
-                     (s.slug, s.short, s.name))
+        conn.execute(
+            "INSERT OR IGNORE INTO styles(slug,short,name) VALUES (?,?,?)",
+            (s.slug, s.short, s.name),
+        )
     for s in vocab.sources:
         conn.execute(
             "INSERT OR IGNORE INTO sources(slug,name,url,audio_categories) VALUES (?,?,?,?)",
-            (s.slug, s.name, s.url,
-             _serde.json_dumps([c.value if hasattr(c, "value") else c for c in s.audio_categories])),
+            (
+                s.slug,
+                s.name,
+                s.url,
+                _serde.json_dumps(
+                    [c.value if hasattr(c, "value") else c for c in s.audio_categories]
+                ),
+            ),
         )
     for c in vocab.channels:
         conn.execute(
             "INSERT OR IGNORE INTO channels(slug,short,name,host_patterns,gh_release_eligible) "
             "VALUES (?,?,?,?,?)",
             (
-                c.slug, c.short, c.name,
+                c.slug,
+                c.short,
+                c.name,
                 _serde.json_dumps(list(c.host_patterns)),
                 int(c.gh_release_eligible),
             ),
         )
     for rc in vocab.recording_contexts:
-        conn.execute("INSERT OR IGNORE INTO recording_contexts(slug,name) VALUES (?,?)",
-                     (rc.slug, rc.name))
+        conn.execute(
+            "INSERT OR IGNORE INTO recording_contexts(slug,name) VALUES (?,?)", (rc.slug, rc.name)
+        )
 
 
 def add_reciter(entry: ReciterEntry) -> ReciterEntry:
@@ -285,13 +320,17 @@ def add_delivery(d: Delivery) -> Delivery:
 
 
 def find_source(slug: str) -> Source | None:
-    r = get_conn().execute(
-        "SELECT slug, name, url, audio_categories FROM sources WHERE slug = ?", (slug,)
-    ).fetchone()
+    r = (
+        get_conn()
+        .execute("SELECT slug, name, url, audio_categories FROM sources WHERE slug = ?", (slug,))
+        .fetchone()
+    )
     if r is None:
         return None
     return Source(
-        slug=r["slug"], name=r["name"], url=r["url"],
+        slug=r["slug"],
+        name=r["name"],
+        url=r["url"],
         audio_categories=_serde.json_loads(r["audio_categories"]) or [],
     )
 
@@ -303,7 +342,9 @@ def add_source(source: Source) -> Source:
     get_conn().execute(
         "INSERT INTO sources(slug, name, url, audio_categories) VALUES (?,?,?,?)",
         (
-            source.slug, source.name, source.url,
+            source.slug,
+            source.name,
+            source.url,
             _serde.json_dumps(
                 [c.value if hasattr(c, "value") else c for c in source.audio_categories]
             ),
@@ -313,14 +354,21 @@ def add_source(source: Source) -> Source:
 
 
 def find_channel(slug: str) -> Channel | None:
-    r = get_conn().execute(
-        "SELECT slug, short, name, host_patterns, gh_release_eligible "
-        "FROM channels WHERE slug = ?", (slug,)
-    ).fetchone()
+    r = (
+        get_conn()
+        .execute(
+            "SELECT slug, short, name, host_patterns, gh_release_eligible "
+            "FROM channels WHERE slug = ?",
+            (slug,),
+        )
+        .fetchone()
+    )
     if r is None:
         return None
     return Channel(
-        slug=r["slug"], short=r["short"], name=r["name"],
+        slug=r["slug"],
+        short=r["short"],
+        name=r["name"],
         host_patterns=_serde.json_loads(r["host_patterns"]) or [],
         gh_release_eligible=bool(r["gh_release_eligible"]),
     )
@@ -334,7 +382,9 @@ def add_channel(channel: Channel) -> Channel:
         "INSERT INTO channels(slug, short, name, host_patterns, gh_release_eligible) "
         "VALUES (?,?,?,?,?)",
         (
-            channel.slug, channel.short, channel.name,
+            channel.slug,
+            channel.short,
+            channel.name,
             _serde.json_dumps(list(channel.host_patterns)),
             int(channel.gh_release_eligible),
         ),
@@ -355,13 +405,10 @@ def refresh_derived() -> None:
     ).fetchall()
     derived = {
         "source_channels": [
-            {"source": r["source"], "channel": r["channel"], "delivery_count": r["c"]}
-            for r in rows
+            {"source": r["source"], "channel": r["channel"], "delivery_count": r["c"]} for r in rows
         ]
     }
-    conn.execute(
-        "UPDATE catalog_meta SET derived = ? WHERE id = 1", (_serde.json_dumps(derived),)
-    )
+    conn.execute("UPDATE catalog_meta SET derived = ? WHERE id = 1", (_serde.json_dumps(derived),))
 
 
 def insert_alias(alias: Alias) -> None:

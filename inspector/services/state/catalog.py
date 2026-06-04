@@ -26,10 +26,11 @@ from qua_shared.schemas import (
     ReciterEntry,
     Source,
 )
+from services.db import errors as db_errors
+from services.db import repo_catalog
+from services.db import sync as _sync
 
 from . import audit
-from services.db import errors as db_errors, repo_catalog
-from services.db import sync as _sync
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +113,7 @@ def _require_capability(actor: Actor, capability: str) -> None:
     from services.auth import capabilities as _capabilities
 
     if not _capabilities.can(actor, capability):
-        raise NotAuthorizedForCatalog(
-            f"actor role {actor.role!r} lacks capability {capability!r}"
-        )
+        raise NotAuthorizedForCatalog(f"actor role {actor.role!r} lacks capability {capability!r}")
 
 
 # ---- Mutations (each wraps its own durable txn; nesting-safe when called
@@ -133,8 +132,11 @@ def add_reciter(
 ) -> ReciterEntry:
     _require_capability(actor, "catalog.add")
     entry = ReciterEntry(
-        reciter_id=reciter_id, name_en=name_en, name_ar=name_ar,
-        country=country, notes=notes,
+        reciter_id=reciter_id,
+        name_en=name_en,
+        name_ar=name_ar,
+        country=country,
+        notes=notes,
     )
     with _sync.durable_transaction():
         try:
@@ -168,8 +170,10 @@ def edit_reciter(
     if existing is None:
         raise InvalidCatalogChange(f"reciter_id {reciter_id!r} not found")
     proposed = {
-        "name_en": name_en, "name_ar": name_ar,
-        "country": country, "notes": notes,
+        "name_en": name_en,
+        "name_ar": name_ar,
+        "country": country,
+        "notes": notes,
     }
     patch: dict = {}
     for field, new in proposed.items():
@@ -178,9 +182,7 @@ def edit_reciter(
     if not patch:
         return existing
     with _sync.durable_transaction():
-        updated = repo_catalog.edit_reciter(
-            reciter_id, **{k: v["to"] for k, v in patch.items()}
-        )
+        updated = repo_catalog.edit_reciter(reciter_id, **{k: v["to"] for k, v in patch.items()})
         audit.append(
             event="catalog.edited",
             actor=actor,
@@ -235,8 +237,10 @@ def edit_delivery(
     if existing is None:
         raise InvalidCatalogChange(f"delivery slug {slug!r} not found")
     proposed = {
-        "riwayah": riwayah, "style": style,
-        "recording_context": recording_context, "recording_year": recording_year,
+        "riwayah": riwayah,
+        "style": style,
+        "recording_context": recording_context,
+        "recording_year": recording_year,
     }
     patch: dict = {}
     for field, new in proposed.items():
@@ -246,9 +250,7 @@ def edit_delivery(
         return existing
     with _sync.durable_transaction():
         try:
-            updated = repo_catalog.edit_delivery(
-                slug, **{k: v["to"] for k, v in patch.items()}
-            )
+            updated = repo_catalog.edit_delivery(slug, **{k: v["to"] for k, v in patch.items()})
         except sqlite3.IntegrityError as e:
             raise InvalidCatalogChange(str(e)) from e
         audit.append(

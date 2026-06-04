@@ -46,7 +46,7 @@ class _KeyedCache(Generic[_T]):
     """
 
     def __init__(self, max_size: int = _KEYED_CACHE_LRU_MAX) -> None:
-        self._data: "OrderedDict[str, _T]" = OrderedDict()
+        self._data: OrderedDict[str, _T] = OrderedDict()
         self._max_size = max_size
 
     def get(self, key: str) -> _T | None:
@@ -221,7 +221,8 @@ def get_seg_split_group_index(reciter: str) -> dict[str, list[str]] | None:
 
 
 def set_seg_split_group_index(
-    reciter: str, index: dict[str, list[str]],
+    reciter: str,
+    index: dict[str, list[str]],
 ) -> None:
     _seg_split_group_index.set(reciter, index)
 
@@ -358,6 +359,8 @@ def batch_changes_segment_set(batch: dict) -> bool:
 # Peaks (thread-safe — manually coded)
 _PEAKS_CACHE: dict[str, dict[str, dict]] = {}
 _PEAKS_LOCK = threading.Lock()
+
+
 def get_peaks_lock() -> threading.Lock:
     return _PEAKS_LOCK
 
@@ -499,7 +502,6 @@ def get_qf_token_cooldown() -> float | None:
 
 def set_qf_token_cooldown(until: float) -> None:
     _qf_token_cooldown.set(until)
-
 
 
 # Audio manifest sidecar (catalog/audio_manifest/<slug>.json) + derived

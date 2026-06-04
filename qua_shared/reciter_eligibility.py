@@ -23,7 +23,6 @@ import functools
 import os
 import subprocess
 from pathlib import Path
-from typing import Iterable
 
 _TRACKED_CACHE: dict[Path, set[str]] = {}
 _DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -77,7 +76,9 @@ def git_tracked_data_files(repo_root: Path | None = None) -> set[str]:
     if repo_root not in _TRACKED_CACHE:
         result = subprocess.run(
             ["git", "ls-files", "data/timestamps/", "data/recitation_segments/"],
-            capture_output=True, text=True, cwd=repo_root,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
         )
         _TRACKED_CACHE[repo_root] = set(result.stdout.strip().splitlines())
     return _TRACKED_CACHE[repo_root]
@@ -117,11 +118,16 @@ def _db_eligible_set() -> set[str]:
     discarded released row isn't shipped, so it doesn't appear here either.
     """
     from inspector.services.db import connection as _conn
-    rows = _conn.get_conn().execute(
-        "SELECT slug FROM delivery_states "
-        "WHERE state = 'released' AND visibility = 'public' "
-        "ORDER BY slug"
-    ).fetchall()
+
+    rows = (
+        _conn.get_conn()
+        .execute(
+            "SELECT slug FROM delivery_states "
+            "WHERE state = 'released' AND visibility = 'public' "
+            "ORDER BY slug"
+        )
+        .fetchall()
+    )
     return {r["slug"] for r in rows}
 
 

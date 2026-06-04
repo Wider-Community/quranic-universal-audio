@@ -33,18 +33,26 @@ def upsert_day(
 
 
 def get_day(date: str) -> dict | None:
-    row = get_conn().execute(
-        "SELECT date, signed_in_hits, anon_hits, unique_signed_in, unique_anon "
-        "FROM visitor_daily WHERE date = ?",
-        (date,),
-    ).fetchone()
+    row = (
+        get_conn()
+        .execute(
+            "SELECT date, signed_in_hits, anon_hits, unique_signed_in, unique_anon "
+            "FROM visitor_daily WHERE date = ?",
+            (date,),
+        )
+        .fetchone()
+    )
     return dict(row) if row else None
 
 
 def recent_days(limit: int) -> list[dict]:
-    rows = get_conn().execute(
-        "SELECT date, signed_in_hits, anon_hits, unique_signed_in, unique_anon "
-        "FROM visitor_daily ORDER BY date DESC LIMIT ?",
-        (limit,),
-    ).fetchall()
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT date, signed_in_hits, anon_hits, unique_signed_in, unique_anon "
+            "FROM visitor_daily ORDER BY date DESC LIMIT ?",
+            (limit,),
+        )
+        .fetchall()
+    )
     return [dict(r) for r in rows]

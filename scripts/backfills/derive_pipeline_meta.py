@@ -21,13 +21,14 @@ Usage::
 Writes ``<dir>/pipeline_meta.json``. Idempotent — re-running on the same
 data emits a byte-equal sidecar modulo ``generated_at``.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 log = logging.getLogger("derive_pipeline_meta")
@@ -56,6 +57,7 @@ def _collect_new_pipeline(batches: list[dict]) -> set[int]:
     """Snapshot-stamp path — same logic as
     ``qua_shared.pipeline_meta.collect_deleted_basmalas``."""
     from qua_shared.pipeline_meta import collect_deleted_basmalas
+
     return collect_deleted_basmalas(batches)
 
 
@@ -109,23 +111,23 @@ def derive(slug_dir: Path) -> dict:
 
     payload = PipelineMeta(
         schema_version=1,
-        generated_at=datetime.now(timezone.utc)
-            .isoformat(timespec="seconds").replace("+00:00", "Z"),
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
         deleted_basmala_chapters=sorted(deleted),
     ).model_dump(mode="json")
     out_path = slug_dir / "pipeline_meta.json"
     out_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8",
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
     )
     log.info("Wrote %s (%d chapters)", out_path, len(deleted))
-    return {"path": "new" if use_new else "legacy",
-            "deleted_basmala_chapters": sorted(deleted)}
+    return {"path": "new" if use_new else "legacy", "deleted_basmala_chapters": sorted(deleted)}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--dir", type=Path, required=True,
-                    help="Slug folder (must contain edit_history.jsonl).")
+    ap.add_argument(
+        "--dir", type=Path, required=True, help="Slug folder (must contain edit_history.jsonl)."
+    )
     args = ap.parse_args()
 
     logging.basicConfig(
@@ -136,8 +138,10 @@ def main() -> int:
     if not args.dir.is_dir():
         raise SystemExit(f"not a directory: {args.dir}")
     result = derive(args.dir)
-    log.info("DONE: %s", {k: (v[:8] if isinstance(v, list) and len(v) > 8 else v)
-                          for k, v in result.items()})
+    log.info(
+        "DONE: %s",
+        {k: (v[:8] if isinstance(v, list) and len(v) > 8 else v) for k, v in result.items()},
+    )
     return 0
 
 

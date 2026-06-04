@@ -18,11 +18,11 @@ from __future__ import annotations
 import logging
 
 from qua_shared.schemas import Actor, Member, Role, RolesFile
-
-from . import permissions
-from services.state import audit
 from services.db import repo_access, repo_claims
 from services.db import sync as _sync
+from services.state import audit
+
+from . import permissions
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +89,7 @@ def _require_capability(actor: Actor, capability: str) -> None:
     from . import capabilities as _capabilities
 
     if not _capabilities.can(actor, capability):
-        raise NotAuthorized(
-            f"actor role {actor.role!r} lacks capability {capability!r}"
-        )
+        raise NotAuthorized(f"actor role {actor.role!r} lacks capability {capability!r}")
 
 
 # ---- Mutations ----
@@ -121,7 +119,10 @@ def grant(
                 f"member {hf_user_id} already active with role {existing.role}"
             )
         member = repo_access.grant_role(
-            hf_user_id=hf_user_id, login=login, role=role, granted_by=actor.hf_user_id,
+            hf_user_id=hf_user_id,
+            login=login,
+            role=role,
+            granted_by=actor.hf_user_id,
         )
         audit.append(
             event="access.role_granted",
@@ -177,12 +178,16 @@ def revoke(
                     "reciter.released",
                     actor=actor,
                     payload={},
-                    reason=f"Auto-release: role revoked. {reason}" if reason else "Auto-release: role revoked.",
+                    reason=f"Auto-release: role revoked. {reason}"
+                    if reason
+                    else "Auto-release: role revoked.",
                 )
                 released_slugs.append(slug)
 
         member = repo_access.revoke_role(
-            hf_user_id=hf_user_id, revoked_by=actor.hf_user_id, reason=reason,
+            hf_user_id=hf_user_id,
+            revoked_by=actor.hf_user_id,
+            reason=reason,
         )
         audit.append(
             event="access.role_revoked",
@@ -246,7 +251,10 @@ def bootstrap(hf_user_id: str, login: str) -> Member:
                 "Use grant() with an authenticated owner instead."
             )
         member = repo_access.grant_role(
-            hf_user_id=hf_user_id, login=login, role=Role.OWNER, granted_by="bootstrap",
+            hf_user_id=hf_user_id,
+            login=login,
+            role=Role.OWNER,
+            granted_by="bootstrap",
         )
         audit.append(
             event="access.role_granted",

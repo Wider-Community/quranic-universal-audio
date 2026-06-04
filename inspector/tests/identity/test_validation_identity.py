@@ -1,4 +1,5 @@
 """Validation issue identity tests (IS-10, IS-11, MUST-9)."""
+
 from __future__ import annotations
 
 import json
@@ -40,6 +41,7 @@ def test_resolve_issue_uses_uid_first(flask_client, tmp_reciter_dir):
         reason="phase-6 — Phase 6 introduces uid resolution surface",
     )
     from services.validation.detail import resolve_segment_by_uid  # type: ignore
+
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
     fixture_uid = "019d5c88-f55f-7ee0-81d1-d99f423e8dd5"
@@ -55,6 +57,7 @@ def test_resolve_issue_falls_back_to_seg_index_for_legacy_issues(flask_client, t
         reason="phase-6 — uid resolution surface not yet present",
     )
     from services.validation.detail import resolve_segment_for_issue  # type: ignore
+
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas")
 
@@ -98,6 +101,7 @@ def test_no_index_fixups_after_phase_6():
     """Phase 6 deletes _fixupValIndicesFor* helpers; they must not be referenced."""
     repo_root = __file__
     import os
+
     while os.path.basename(repo_root) != "inspiring-ramanujan-2d4e7e" and len(repo_root) > 3:
         repo_root = os.path.dirname(repo_root)
     edit_dir = os.path.join(

@@ -14,7 +14,6 @@ import json
 import logging
 import os
 import queue
-from datetime import datetime, timezone
 import subprocess
 import sys
 import tempfile
@@ -24,6 +23,7 @@ import urllib.request
 import wave
 from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -155,8 +155,8 @@ class LocalMfaBackend:
     @staticmethod
     def _load_app_module(app_path: Path):
         import importlib.util
-        spec = importlib.util.spec_from_file_location("local_mfa_aligner",
-                                                       app_path)
+
+        spec = importlib.util.spec_from_file_location("local_mfa_aligner", app_path)
         if spec is None or spec.loader is None:
             raise RuntimeError(f"Cannot import local MFA app: {app_path}")
         module = importlib.util.module_from_spec(spec)
@@ -175,14 +175,22 @@ class LocalMfaBackend:
         word_boundary_allocation: dict | None = None,
     ) -> list[dict] | None:
         class _FileObj:
-            def __init__(self, name): self.name = name
+            def __init__(self, name):
+                self.name = name
+
         files = [_FileObj(str(p)) for p in audio_paths]
-        wb_json = (json.dumps(word_boundary_allocation)
-                   if word_boundary_allocation else "")
+        wb_json = json.dumps(word_boundary_allocation) if word_boundary_allocation else ""
         result = self.module._api_align_batch_impl(
-            "local_batch", list(refs), files, method,
-            str(beam), str(beam),  # retry_beam=beam (no implicit retry)
-            str(shared_cmvn).lower(), padding, wb_json)
+            "local_batch",
+            list(refs),
+            files,
+            method,
+            str(beam),
+            str(beam),  # retry_beam=beam (no implicit retry)
+            str(shared_cmvn).lower(),
+            padding,
+            wb_json,
+        )
         if result.get("status") != "ok":
             raise RuntimeError(f"Local MFA batch failed: {result}")
         return result["results"]
@@ -205,44 +213,55 @@ def _init_worker(mfa_app_path: str, mfa_threads: int = 1):
     same ``~/Documents/MFA/extracted_models`` path.
     """
     import importlib.util
+
     pid = os.getpid()
     # Worker HOMEs go under MFA_WORKER_BASE if set, else $TMPDIR (PBS
     # job-scratch — node-local SSD, plenty of space), else /tmp (last resort:
     # often a small tmpfs that fills up with N parallel model extractions).
-    base = (os.environ.get("MFA_WORKER_BASE")
-            or os.environ.get("TMPDIR")
-            or "/tmp")
+    base = os.environ.get("MFA_WORKER_BASE") or os.environ.get("TMPDIR") or "/tmp"
     home = f"{base}/mfa_w{pid}"
     os.makedirs(home + "/Documents/MFA", exist_ok=True)
     os.environ["HOME"] = home
     os.environ["MFA_NUM_THREADS"] = str(mfa_threads)
     # Single-thread the BLAS stack — workers themselves provide parallelism.
-    for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS",
-                "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    for var in (
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ):
         os.environ.setdefault(var, "1")
-    spec = importlib.util.spec_from_file_location("local_mfa_aligner",
-                                                   mfa_app_path)
+    spec = importlib.util.spec_from_file_location("local_mfa_aligner", mfa_app_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     _WORKER["module"] = module
 
 
-def _worker_align(refs, audio_paths, method, beam, shared_cmvn, padding,
-                  word_boundary_allocation=None):
+def _worker_align(
+    refs, audio_paths, method, beam, shared_cmvn, padding, word_boundary_allocation=None
+):
     """ProcessPoolExecutor task: align one batch slice for one beam."""
     module = _WORKER["module"]
     if module is None:
         raise RuntimeError("Worker not initialized; missing MFA module.")
 
     class _FileObj:
-        def __init__(self, name): self.name = name
+        def __init__(self, name):
+            self.name = name
+
     files = [_FileObj(p) for p in audio_paths]
-    wb_json = (json.dumps(word_boundary_allocation)
-               if word_boundary_allocation else "")
+    wb_json = json.dumps(word_boundary_allocation) if word_boundary_allocation else ""
     result = module._api_align_batch_impl(
-        f"w{os.getpid()}", list(refs), files, method,
-        str(beam), str(beam),
-        str(shared_cmvn).lower(), padding, wb_json)
+        f"w{os.getpid()}",
+        list(refs),
+        files,
+        method,
+        str(beam),
+        str(beam),
+        str(shared_cmvn).lower(),
+        padding,
+        wb_json,
+    )
     if result.get("status") != "ok":
         raise RuntimeError(f"Worker MFA batch failed: {result}")
     return result["results"]
@@ -251,6 +270,7 @@ def _worker_align(refs, audio_paths, method, beam, shared_cmvn, padding,
 # ---------------------------------------------------------------------------
 # Audio helpers
 # ---------------------------------------------------------------------------
+
 
 def _is_url(source: str) -> bool:
     return source.startswith("http://") or source.startswith("https://")
@@ -276,20 +296,30 @@ def load_audio_int16(path: Path) -> np.ndarray:
     stream) pins the calling producer thread indefinitely.
     """
     import numpy as np
+
     cmd = [
-        "ffmpeg", "-i", str(path),
-        "-f", "s16le", "-acodec", "pcm_s16le",
-        "-ar", "16000", "-ac", "1",
-        "-v", "quiet",
+        "ffmpeg",
+        "-i",
+        str(path),
+        "-f",
+        "s16le",
+        "-acodec",
+        "pcm_s16le",
+        "-ar",
+        "16000",
+        "-ac",
+        "1",
+        "-v",
+        "quiet",
         "pipe:1",
     ]
-    result = subprocess.run(
-        cmd, capture_output=True, check=True, timeout=LOAD_AUDIO_TIMEOUT_SEC)
+    result = subprocess.run(cmd, capture_output=True, check=True, timeout=LOAD_AUDIO_TIMEOUT_SEC)
     return np.frombuffer(result.stdout, dtype=np.int16)
 
 
-def slice_audio(audio_int16: np.ndarray, start_ms: int, end_ms: int,
-                out_path: Path, sample_rate: int = 16000):
+def slice_audio(
+    audio_int16: np.ndarray, start_ms: int, end_ms: int, out_path: Path, sample_rate: int = 16000
+):
     """Slice int16 audio array and write to WAV file."""
     start_sample = int(start_ms * sample_rate / 1000)
     end_sample = int(end_ms * sample_rate / 1000)
@@ -304,6 +334,7 @@ def slice_audio(audio_int16: np.ndarray, start_ms: int, end_ms: int,
 # ---------------------------------------------------------------------------
 # MFA ref building (adapted from quranic_universal_aligner/src/mfa.py)
 # ---------------------------------------------------------------------------
+
 
 def build_mfa_ref(seg: dict) -> str | None:
     """Build the MFA ref string for a segment from detailed.json.
@@ -335,7 +366,7 @@ def _matched_ref_to_output_key(matched_ref: str) -> str | None:
     # matched_ref, but guard against it)
     for prefix in ("Basmala+", "Isti'adha+"):
         if matched_ref.startswith(prefix):
-            matched_ref = matched_ref[len(prefix):]
+            matched_ref = matched_ref[len(prefix) :]
 
     parts = matched_ref.split("-")
     if len(parts) != 2:
@@ -368,9 +399,15 @@ def is_compound_cross_verse(matched_ref: str) -> bool:
     return len(s) >= 2 and len(e) >= 2 and s[1] != e[1]
 
 
-def build_ts_validation(chapters, results_by_beam, beams, *,
-                        reciter: str, method: str,
-                        aligner_model: str = DEFAULT_ALIGNER_MODEL) -> dict:
+def build_ts_validation(
+    chapters,
+    results_by_beam,
+    beams,
+    *,
+    reciter: str,
+    method: str,
+    aligner_model: str = DEFAULT_ALIGNER_MODEL,
+) -> dict:
     """Verse-level beam-agreement summary across every aligned beam.
 
     Each beam in ``beams`` is an independent alignment pass; the widest
@@ -392,13 +429,11 @@ def build_ts_validation(chapters, results_by_beam, beams, *,
     pass_by_beam: dict[str, dict[int, bool]] = {}
     for b in beams:
         for ch_idx, seg_list in (results_by_beam.get(b) or {}).items():
-            segments = (chapters[ch_idx].get("segments", [])
-                        if 0 <= ch_idx < len(chapters) else [])
+            segments = chapters[ch_idx].get("segments", []) if 0 <= ch_idx < len(chapters) else []
             for seg_idx, rec in seg_list:
                 if not (0 <= seg_idx < len(segments)):
                     continue
-                vkey = _matched_ref_to_output_key(
-                    segments[seg_idx].get("matched_ref", "") or "")
+                vkey = _matched_ref_to_output_key(segments[seg_idx].get("matched_ref", "") or "")
                 if not vkey:
                     continue
                 ok = (rec or {}).get("status") == "ok"
@@ -419,7 +454,7 @@ def build_ts_validation(chapters, results_by_beam, beams, *,
 
     return {
         "_meta": {
-            "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "reciter": reciter,
             "aligner_model": aligner_model,
             "method": method,
@@ -438,7 +473,7 @@ def _seg_covered_ayahs(matched_ref: str) -> set[tuple[int, int]]:
     """
     for prefix in ("Basmala+", "Isti'adha+"):
         if matched_ref.startswith(prefix):
-            matched_ref = matched_ref[len(prefix):]
+            matched_ref = matched_ref[len(prefix) :]
     parts = matched_ref.split("-")
     if len(parts) != 2:
         return set()
@@ -461,6 +496,7 @@ def _seg_covered_ayahs(matched_ref: str) -> set[tuple[int, int]]:
 # Result conversion (MFA seconds → ms, compact format)
 # ---------------------------------------------------------------------------
 
+
 def _s_to_ms(val, offset_ms: int = 0):
     """Convert seconds (float or None) to integer milliseconds + offset."""
     if val is None:
@@ -475,32 +511,43 @@ def _convert_word(w: dict, seg_offset_ms: int) -> list:
     """
     word_idx = int(w["location"].rsplit(":", 1)[-1])
     letters = [
-        [lt["char"],
-         _s_to_ms(lt.get("start"), seg_offset_ms),
-         _s_to_ms(lt.get("end"), seg_offset_ms)]
+        [
+            lt["char"],
+            _s_to_ms(lt.get("start"), seg_offset_ms),
+            _s_to_ms(lt.get("end"), seg_offset_ms),
+        ]
         for lt in w.get("letters", [])
     ]
     phones = [
-        [p["phone"],
-         _s_to_ms(p["start"], seg_offset_ms),
-         _s_to_ms(p["end"], seg_offset_ms)]
+        [p["phone"], _s_to_ms(p["start"], seg_offset_ms), _s_to_ms(p["end"], seg_offset_ms)]
         for p in w.get("phones", [])
     ]
-    return [word_idx,
-            _s_to_ms(w["start"], seg_offset_ms),
-            _s_to_ms(w["end"], seg_offset_ms),
-            letters, phones]
+    return [
+        word_idx,
+        _s_to_ms(w["start"], seg_offset_ms),
+        _s_to_ms(w["end"], seg_offset_ms),
+        letters,
+        phones,
+    ]
 
 
 # ---------------------------------------------------------------------------
 # MFA Space HTTP client (inline — no imports from quranic_universal_aligner)
 # ---------------------------------------------------------------------------
 
-def mfa_upload_and_submit(refs, audio_paths, base_url, *,
-                          method=DEFAULT_METHOD, beam=DEFAULT_BEAMS[0],
-                          shared_cmvn=False, padding=DEFAULT_PADDING,
-                          word_boundary_allocation=None,
-                          timeout=DEFAULT_TIMEOUT):
+
+def mfa_upload_and_submit(
+    refs,
+    audio_paths,
+    base_url,
+    *,
+    method=DEFAULT_METHOD,
+    beam=DEFAULT_BEAMS[0],
+    shared_cmvn=False,
+    padding=DEFAULT_PADDING,
+    word_boundary_allocation=None,
+    timeout=DEFAULT_TIMEOUT,
+):
     """Upload audio files and submit alignment batch to the MFA Space.
 
     Returns (event_id, headers, base_url).
@@ -529,19 +576,25 @@ def mfa_upload_and_submit(refs, audio_paths, base_url, *,
     uploaded_paths = resp.json()
 
     # Build FileData objects
-    file_data_list = [
-        {"path": p, "meta": {"_type": "gradio.FileData"}}
-        for p in uploaded_paths
-    ]
+    file_data_list = [{"path": p, "meta": {"_type": "gradio.FileData"}} for p in uploaded_paths]
 
     # Submit batch alignment
-    wb_json = (json.dumps(word_boundary_allocation)
-               if word_boundary_allocation else "")
+    wb_json = json.dumps(word_boundary_allocation) if word_boundary_allocation else ""
     submit_resp = requests.post(
         f"{base_url}/gradio_api/call/align_batch",
         headers={**headers, "Content-Type": "application/json"},
-        json={"data": [refs, file_data_list, method, str(beam), str(beam),
-                        str(shared_cmvn).lower(), padding, wb_json]},
+        json={
+            "data": [
+                refs,
+                file_data_list,
+                method,
+                str(beam),
+                str(beam),
+                str(shared_cmvn).lower(),
+                padding,
+                wb_json,
+            ]
+        },
         timeout=timeout,
     )
     submit_resp.raise_for_status()
@@ -598,6 +651,7 @@ def mfa_wait_result(event_id, headers, base_url, timeout=DEFAULT_TIMEOUT):
 # Main processing
 # ---------------------------------------------------------------------------
 
+
 def _normalize_from_results(chapters, results_by_ch, audio_category):
     """Convert raw MFA results to per-chapter ordered occurrences + failures.
 
@@ -621,7 +675,7 @@ def _normalize_from_results(chapters, results_by_ch, audio_category):
     for ch_idx, chapter in enumerate(chapters):
         ch_ref = str(chapter.get("ref", ""))
         segs = chapter.get("segments", [])
-        verse_prefix = (f"{ch_ref}:" if (not by_surah and ":" in ch_ref) else None)
+        verse_prefix = f"{ch_ref}:" if (not by_surah and ":" in ch_ref) else None
         ch_occ = []
         for seg_idx, result in results_by_ch.get(ch_idx, []):
             if seg_idx >= len(segs):
@@ -629,51 +683,56 @@ def _normalize_from_results(chapters, results_by_ch, audio_category):
             seg = segs[seg_idx]
             matched_ref = seg.get("matched_ref", "")
             if result.get("status") != "ok":
-                failures.append({
-                    "verse": ch_ref, "seg": seg_idx,
-                    "ref": matched_ref,
-                    "error": result.get("error", "unknown"),
-                })
+                failures.append(
+                    {
+                        "verse": ch_ref,
+                        "seg": seg_idx,
+                        "ref": matched_ref,
+                        "error": result.get("error", "unknown"),
+                    }
+                )
                 continue
             seg_offset_ms = seg.get("time_start", 0)
             seg_end_ms = seg.get("time_end", seg_offset_ms)
             raw_words = result.get("words", [])
             if verse_prefix is not None:
-                raw_words = [w for w in raw_words
-                             if w.get("location", "").startswith(verse_prefix)]
+                raw_words = [w for w in raw_words if w.get("location", "").startswith(verse_prefix)]
             words_by_verse: dict[str, list] = {}
             for w in raw_words:
                 verse_key = w["location"].rsplit(":", 1)[0]
-                words_by_verse.setdefault(verse_key, []).append(
-                    _convert_word(w, seg_offset_ms))
-            ch_occ.append({
-                "ch_ref": ch_ref,
-                "seg_index": seg_idx,
-                "matched_ref": matched_ref,
-                "time_start": seg_offset_ms,
-                "time_end": seg_end_ms,
-                "words_by_verse": words_by_verse,
-                "segment_uid": seg.get("segment_uid"),
-            })
+                words_by_verse.setdefault(verse_key, []).append(_convert_word(w, seg_offset_ms))
+            ch_occ.append(
+                {
+                    "ch_ref": ch_ref,
+                    "seg_index": seg_idx,
+                    "matched_ref": matched_ref,
+                    "time_start": seg_offset_ms,
+                    "time_end": seg_end_ms,
+                    "words_by_verse": words_by_verse,
+                    "segment_uid": seg.get("segment_uid"),
+                }
+            )
         if ch_occ:
             norm[ch_idx] = ch_occ
     return norm, failures
 
 
-def process(input_dir: Path,
-            backend: MfaBackend | None,
-            method: str,
-            beams: list[int],
-            shared_cmvn: bool,
-            resume: bool,
-            batch_size: int = DEFAULT_BATCH_SIZE,
-            output_dir: Path | None = None,
-            padding: str = "forward",
-            refresh_verses: set[str] | None = None,
-            download_workers: int = DEFAULT_DOWNLOAD_WORKERS,
-            workers: int = DEFAULT_WORKERS,
-            mfa_app_path: str | Path | None = None,
-            word_boundary_allocation: dict | None = None) -> Path | None:
+def process(
+    input_dir: Path,
+    backend: MfaBackend | None,
+    method: str,
+    beams: list[int],
+    shared_cmvn: bool,
+    resume: bool,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    output_dir: Path | None = None,
+    padding: str = "forward",
+    refresh_verses: set[str] | None = None,
+    download_workers: int = DEFAULT_DOWNLOAD_WORKERS,
+    workers: int = DEFAULT_WORKERS,
+    mfa_app_path: str | Path | None = None,
+    word_boundary_allocation: dict | None = None,
+) -> Path | None:
     """Process all chapters from detailed.json through MFA alignment.
 
     Each value in ``beams`` runs as an independent alignment pass over
@@ -710,7 +769,7 @@ def process(input_dir: Path,
     reciter = input_dir.name
 
     # Read detailed.json
-    with open(detailed_path, "r", encoding="utf-8") as f:
+    with open(detailed_path, encoding="utf-8") as f:
         detailed_doc = json.load(f)
     meta = detailed_doc.get("_meta")
     chapters = detailed_doc.get("entries", [])
@@ -719,7 +778,7 @@ def process(input_dir: Path,
     if meta is None:
         segments_path = input_dir / "segments.json"
         if segments_path.exists():
-            with open(segments_path, "r", encoding="utf-8") as f:
+            with open(segments_path, encoding="utf-8") as f:
                 seg_doc = json.load(f)
                 meta = seg_doc.get("_meta")
 
@@ -745,7 +804,7 @@ def process(input_dir: Path,
     existing_data = {}
     load_existing = resume or refresh_verses
     if load_existing and resume_path.exists():
-        with open(resume_path, "r", encoding="utf-8") as f:
+        with open(resume_path, encoding="utf-8") as f:
             resume_doc = json.load(f)
         for ref, val in resume_doc.items():
             if ref == "_meta":
@@ -781,8 +840,7 @@ def process(input_dir: Path,
                         cleared += 1
                 except ValueError:
                     pass
-        log.info("Refresh: cleared %d verses, keeping %d",
-                 cleared, len(existing_data))
+        log.info("Refresh: cleared %d verses, keeping %d", cleared, len(existing_data))
 
     # For by-surah resume: derive completed surah numbers from verse keys
     completed_surahs = set()
@@ -800,18 +858,21 @@ def process(input_dir: Path,
     if refresh_verses:
         # Refresh: process only surahs containing target verses
         chapters_to_process = [
-            (ch_idx, chapter) for ch_idx, chapter in enumerate(chapters)
+            (ch_idx, chapter)
+            for ch_idx, chapter in enumerate(chapters)
             if str(chapter.get("ref", "")).split(":")[0] in refresh_surahs
         ]
     elif audio_category == "by_surah_audio":
         # For by-surah: skip entire surahs that have any output
         chapters_to_process = [
-            (ch_idx, chapter) for ch_idx, chapter in enumerate(chapters)
+            (ch_idx, chapter)
+            for ch_idx, chapter in enumerate(chapters)
             if str(chapter.get("ref", "")) not in completed_surahs
         ]
     else:
         chapters_to_process = [
-            (ch_idx, chapter) for ch_idx, chapter in enumerate(chapters)
+            (ch_idx, chapter)
+            for ch_idx, chapter in enumerate(chapters)
             if str(chapter.get("ref", "")) not in completed_refs
         ]
 
@@ -845,9 +906,11 @@ def process(input_dir: Path,
         # chapters is fine.
         try:
             src_label = audio_src if _is_url(audio_src) else f"bucket:{ch_ref}.mp3"
-            src_size_mb = (Path(audio_src).stat().st_size / 1e6
-                           if not _is_url(audio_src) and Path(audio_src).exists()
-                           else None)
+            src_size_mb = (
+                Path(audio_src).stat().st_size / 1e6
+                if not _is_url(audio_src) and Path(audio_src).exists()
+                else None
+            )
         except OSError:
             src_label, src_size_mb = audio_src, None
         if src_size_mb is not None:
@@ -867,8 +930,11 @@ def process(input_dir: Path,
             if _is_url(audio_src):
                 audio_file.unlink()
         except subprocess.TimeoutExpired:
-            log.warning("ch%s: ffmpeg decode TIMED OUT after %ds — skipping chapter",
-                        ch_ref, LOAD_AUDIO_TIMEOUT_SEC)
+            log.warning(
+                "ch%s: ffmpeg decode TIMED OUT after %ds — skipping chapter",
+                ch_ref,
+                LOAD_AUDIO_TIMEOUT_SEC,
+            )
             return ch_idx, ch_ref, 0
         except Exception as e:
             log.warning("ch%s: audio download/convert failed: %s", ch_ref, e)
@@ -889,11 +955,9 @@ def process(input_dir: Path,
 
             wav_path = tmp_dir / f"ch{ch_ref}_seg{seg_idx:04d}.wav"
             try:
-                slice_audio(audio_int16, seg["time_start"], seg["time_end"],
-                            wav_path)
+                slice_audio(audio_int16, seg["time_start"], seg["time_end"], wav_path)
             except Exception as e:
-                log.warning("Surah %s seg %d: slice failed: %s",
-                            ch_ref, seg_idx, e)
+                log.warning("Surah %s seg %d: slice failed: %s", ch_ref, seg_idx, e)
                 continue
 
             # Bounded put — blocks if queue is full (backpressure)
@@ -904,16 +968,26 @@ def process(input_dir: Path,
         # slow chapter can be isolated (FUSE-bound dl vs CPU-bound decode vs
         # MFA-bound queue back-pressure on the put loop).
         t_end = time.time()
-        log.info("ch%s: done in %.1fs (dl=%.1fs decode=%.1fs slice+queue=%.1fs, segs=%d)",
-                 ch_ref, t_end - t_start,
-                 t_dl - t_start, t_decode - t_dl, t_end - t_decode, count)
+        log.info(
+            "ch%s: done in %.1fs (dl=%.1fs decode=%.1fs slice+queue=%.1fs, segs=%d)",
+            ch_ref,
+            t_end - t_start,
+            t_dl - t_start,
+            t_decode - t_dl,
+            t_end - t_decode,
+            count,
+        )
         return ch_idx, ch_ref, count
 
     n_to_process = len(chapters_to_process)
-    log.info("Pipeline: %d chapters, %d download workers, batch_size=%d, "
-             "beams=%s, %s",
-             n_to_process, download_workers, batch_size, beams,
-             f"pool workers={workers}" if use_pool else "single backend (serial)")
+    log.info(
+        "Pipeline: %d chapters, %d download workers, batch_size=%d, beams=%s, %s",
+        n_to_process,
+        download_workers,
+        batch_size,
+        beams,
+        f"pool workers={workers}" if use_pool else "single backend (serial)",
+    )
 
     def _store_results(beam: int, batch_map, results, error_msg=None):
         """Push a batch's per-seg results into results_by_beam[beam]."""
@@ -924,15 +998,15 @@ def process(input_dir: Path,
                 rec = results[i]
             else:
                 rec = {"status": "error", "error": "missing result"}
-            results_by_beam[beam].setdefault(ch_idx, []).append(
-                (seg_idx, rec))
+            results_by_beam[beam].setdefault(ch_idx, []).append((seg_idx, rec))
 
     # Producer thread: drain download/slice futures, push WAVs onto seg_queue.
     def _producer_loop():
         try:
             with ThreadPoolExecutor(max_workers=download_workers) as ex:
-                futures = {ex.submit(_process_chapter, ci, ch): ci
-                           for ci, ch in chapters_to_process}
+                futures = {
+                    ex.submit(_process_chapter, ci, ch): ci for ci, ch in chapters_to_process
+                }
                 total = 0
                 done = 0
                 last = 0
@@ -943,10 +1017,13 @@ def process(input_dir: Path,
                         skipped_chapters.append(ch_ref)
                     else:
                         total += count
-                    if (total - last >= DOWNLOAD_LOG_INTERVAL
-                            or done == n_to_process):
-                        log.info("Downloads: %d/%d verses (%d segments queued)",
-                                 done, n_to_process, total)
+                    if total - last >= DOWNLOAD_LOG_INTERVAL or done == n_to_process:
+                        log.info(
+                            "Downloads: %d/%d verses (%d segments queued)",
+                            done,
+                            n_to_process,
+                            total,
+                        )
                         last = total
         finally:
             seg_queue.put(None)  # sentinel for the dispatcher
@@ -968,22 +1045,26 @@ def process(input_dir: Path,
                 "paths": list(paths),
                 "map": list(mp),
             }
-            log.info("Batch %d: submit %d segs × %d beams",
-                     bid, len(refs), len(beams))
+            log.info("Batch %d: submit %d segs × %d beams", bid, len(refs), len(beams))
             for b in beams:
-                fut = pool.submit(_worker_align,
-                                  list(refs), list(paths),
-                                  method, b, shared_cmvn, padding,
-                                  word_boundary_allocation)
+                fut = pool.submit(
+                    _worker_align,
+                    list(refs),
+                    list(paths),
+                    method,
+                    b,
+                    shared_cmvn,
+                    padding,
+                    word_boundary_allocation,
+                )
                 future_meta[fut] = (bid, b)
 
         producer = threading.Thread(target=_producer_loop, daemon=True)
         producer.start()
 
         with ProcessPoolExecutor(
-                max_workers=workers,
-                initializer=_init_worker,
-                initargs=(str(mfa_app_path), 1)) as pool:
+            max_workers=workers, initializer=_init_worker, initargs=(str(mfa_app_path), 1)
+        ) as pool:
             buf_refs, buf_paths, buf_map = [], [], []
             while True:
                 try:
@@ -1041,16 +1122,19 @@ def process(input_dir: Path,
                 return True
             submitted_batch_count[0] += 1
             bid = submitted_batch_count[0]
-            log.info("Batch %d: %d segs × %d beams (serial)",
-                     bid, len(refs), len(beams))
+            log.info("Batch %d: %d segs × %d beams (serial)", bid, len(refs), len(beams))
             ok = True
             for b in beams:
                 try:
                     results = backend.align_batch(
-                        refs, paths,
-                        method=method, beam=b,
-                        shared_cmvn=shared_cmvn, padding=padding,
-                        word_boundary_allocation=word_boundary_allocation)
+                        refs,
+                        paths,
+                        method=method,
+                        beam=b,
+                        shared_cmvn=shared_cmvn,
+                        padding=padding,
+                        word_boundary_allocation=word_boundary_allocation,
+                    )
                 except Exception as e:
                     log.error("Batch %d beam=%d raised %s", bid, b, e)
                     _store_results(b, mp, [], error_msg=str(e))
@@ -1118,6 +1202,7 @@ def process(input_dir: Path,
     # entry ({ref, t, words}) — no dedup at write. Consumers derive whatever
     # projection they need; the inspector read-path is a byte pass-through.
     from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
+
     ts_dir = output_dir / "timestamps"
     ts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1125,7 +1210,7 @@ def process(input_dir: Path,
     # url_template and audio_urls are excluded — slug is the path, manifest is
     # the audio ground truth).
     shard_provenance = {
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "audio_source": audio_source,
         "aligner_model": DEFAULT_ALIGNER_MODEL,
         "method": method,
@@ -1137,7 +1222,8 @@ def process(input_dir: Path,
     def _emit_segment_shards(results_by_ch, suffix=""):
         v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
         shards = build_segment_shards(
-            v2_doc, audio_category=audio_category, src_meta=shard_provenance)
+            v2_doc, audio_category=audio_category, src_meta=shard_provenance
+        )
         for ch_num, shard_doc in shards.items():
             (ts_dir / f"{ch_num}{suffix}.json.gz").write_bytes(gzip_shard(shard_doc))
         fails = len((v2_doc.get("_meta") or {}).get("mfa_failures", []))
@@ -1146,37 +1232,60 @@ def process(input_dir: Path,
     n_shards, n_fail = _emit_segment_shards(canonical_results)
     if n_fail:
         log.warning("Canonical beam %d: %d MFA failures", canonical_beam, n_fail)
-    log.info("Wrote %d segment-array timestamps shard(s) (beam=%d) -> %s",
-             n_shards, canonical_beam, ts_dir)
+    log.info(
+        "Wrote %d segment-array timestamps shard(s) (beam=%d) -> %s",
+        n_shards,
+        canonical_beam,
+        ts_dir,
+    )
 
     # Probe beams → ONE verse-level ``ts_validation.json`` sidecar (the
     # verse-level analogue of low_confidence_v2.json) instead of per-beam
     # shard files. Flags verses whose alignment disagrees under tighter beams;
     # served owner-gated to the Timestamps-tab "ts-validation" accordion.
     ts_validation = build_ts_validation(
-        chapters, results_by_beam, beams, reciter=reciter, method=method)
+        chapters, results_by_beam, beams, reciter=reciter, method=method
+    )
     (output_dir / "ts_validation.json").write_text(
-        json.dumps(ts_validation, ensure_ascii=False), encoding="utf-8")
-    log.info("Wrote ts_validation.json: %d flagged verse(s) across beams %s",
-             len(ts_validation["verses"]), ts_validation["_meta"]["beams"])
+        json.dumps(ts_validation, ensure_ascii=False), encoding="utf-8"
+    )
+    log.info(
+        "Wrote ts_validation.json: %d flagged verse(s) across beams %s",
+        len(ts_validation["verses"]),
+        ts_validation["_meta"]["beams"],
+    )
 
     _cleanup([], tmp_dir)
     return output_dir
 
 
-def _submit_with_retry(refs, audio_paths, space_url, *, method, beam,
-                       shared_cmvn, padding=DEFAULT_PADDING,
-                       word_boundary_allocation=None,
-                       timeout=DEFAULT_TIMEOUT, max_retries=1):
+def _submit_with_retry(
+    refs,
+    audio_paths,
+    space_url,
+    *,
+    method,
+    beam,
+    shared_cmvn,
+    padding=DEFAULT_PADDING,
+    word_boundary_allocation=None,
+    timeout=DEFAULT_TIMEOUT,
+    max_retries=1,
+):
     """Submit batch to MFA Space with one retry on failure."""
     for attempt in range(max_retries + 1):
         try:
             event_id, headers, base = mfa_upload_and_submit(
-                refs, audio_paths, space_url,
-                method=method, beam=beam,
-                shared_cmvn=shared_cmvn, padding=padding,
+                refs,
+                audio_paths,
+                space_url,
+                method=method,
+                beam=beam,
+                shared_cmvn=shared_cmvn,
+                padding=padding,
                 word_boundary_allocation=word_boundary_allocation,
-                timeout=timeout)
+                timeout=timeout,
+            )
             log.info("Submitted batch (event_id=%s), waiting for results...", event_id)
             return mfa_wait_result(event_id, headers, base, timeout=timeout)
         except Exception as e:
@@ -1205,39 +1314,59 @@ def _cleanup(audio_paths, tmp_dir):
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Extract word/letter/phoneme timestamps via MFA forced alignment."
     )
     parser.add_argument(
-        "--input", required=True,
+        "--input",
+        required=True,
         help="Path to reciter directory containing detailed.json",
     )
     parser.add_argument(
-        "--space-url", default=DEFAULT_SPACE_URL,
+        "--space-url",
+        default=DEFAULT_SPACE_URL,
         help=f"MFA HF Space URL (default: {DEFAULT_SPACE_URL})",
     )
-    parser.add_argument("--method", default=DEFAULT_METHOD,
-                        help="Alignment method (default: kalpy)")
-    parser.add_argument("--beam", type=int, default=DEFAULT_BEAM,
-                        help="Beam width (default: 10)")
-    parser.add_argument("--retry-beam", type=int, default=DEFAULT_RETRY_BEAM,
-                        help="Retry beam width (default: 40)")
-    parser.add_argument("--shared-cmvn", action="store_true",
-                        help="Compute shared CMVN across batch (kalpy only)")
-    parser.add_argument("--padding", choices=["forward", "symmetric", "none"],
-                        default="forward",
-                        help="Phoneme gap-padding strategy (default: forward)")
-    parser.add_argument("--resume", action="store_true",
-                        help="Skip already-completed chapters")
-    parser.add_argument("--refresh-verses",
-                        help="Comma-separated verse keys to re-extract (e.g. 1:1,37:151,37:152)")
-    parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE,
-                        help=f"Segments per MFA upload batch (default: {DEFAULT_BATCH_SIZE})")
-    parser.add_argument("--download-workers", type=int, default=DEFAULT_DOWNLOAD_WORKERS,
-                        help=f"Parallel audio download/decode workers (default: {DEFAULT_DOWNLOAD_WORKERS})")
-    parser.add_argument("-o", "--output", default=None,
-                        help="Output directory (default: auto-derived from input path)")
+    parser.add_argument(
+        "--method", default=DEFAULT_METHOD, help="Alignment method (default: kalpy)"
+    )
+    parser.add_argument("--beam", type=int, default=DEFAULT_BEAM, help="Beam width (default: 10)")
+    parser.add_argument(
+        "--retry-beam", type=int, default=DEFAULT_RETRY_BEAM, help="Retry beam width (default: 40)"
+    )
+    parser.add_argument(
+        "--shared-cmvn", action="store_true", help="Compute shared CMVN across batch (kalpy only)"
+    )
+    parser.add_argument(
+        "--padding",
+        choices=["forward", "symmetric", "none"],
+        default="forward",
+        help="Phoneme gap-padding strategy (default: forward)",
+    )
+    parser.add_argument("--resume", action="store_true", help="Skip already-completed chapters")
+    parser.add_argument(
+        "--refresh-verses", help="Comma-separated verse keys to re-extract (e.g. 1:1,37:151,37:152)"
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=DEFAULT_BATCH_SIZE,
+        help=f"Segments per MFA upload batch (default: {DEFAULT_BATCH_SIZE})",
+    )
+    parser.add_argument(
+        "--download-workers",
+        type=int,
+        default=DEFAULT_DOWNLOAD_WORKERS,
+        help=f"Parallel audio download/decode workers (default: {DEFAULT_DOWNLOAD_WORKERS})",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Output directory (default: auto-derived from input path)",
+    )
 
     args = parser.parse_args()
     input_dir = Path(args.input).resolve()

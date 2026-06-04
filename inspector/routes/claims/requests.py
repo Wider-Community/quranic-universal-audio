@@ -35,9 +35,7 @@ from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
 from qua_shared.schemas import Actor, IntakeSubmission
-
 from routes._admin_helpers import actor_for, validate_reason
-
 from services import auth as auth_service
 from services import pending_requests as pending_requests_service
 from services import permissions
@@ -47,9 +45,7 @@ from services.admin import requests as admin_requests_service
 from services.auth import capabilities as cap_service
 from services.auth import token_auth
 from services.auth.access import NotAuthorized
-
 from utils.decorators import require_capability, require_same_origin
-
 
 requests_bp = Blueprint("requests", __name__, url_prefix="/api")
 
@@ -84,6 +80,7 @@ def submit_request(user, slug: str):
     # never-seen slug apart from a not-yet-progressed one. Route-layer check
     # keeps random slugs out of the state file.
     from services import catalog as catalog_service
+
     if catalog_service.find_delivery(slug) is None:
         return jsonify({"error": "unknown reciter"}), 404
 
@@ -134,11 +131,13 @@ def submit_intake(user):
     try:
         rid, validation = intake_service.submit(sub, requester=actor_for(user))
     except intake_service.IntakeValidationError as e:
-        return jsonify({
-            "error": "validation failed",
-            "errors": e.validation.errors,
-            "warnings": e.validation.warnings,
-        }), 400
+        return jsonify(
+            {
+                "error": "validation failed",
+                "errors": e.validation.errors,
+                "warnings": e.validation.warnings,
+            }
+        ), 400
     return jsonify({"ok": True, "id": rid, "warnings": validation.warnings})
 
 
@@ -196,7 +195,10 @@ def _reject(user, slug: str, event: str):
         return err
     try:
         new_row = state_service.transition(
-            slug, event, actor=actor_for(user), reason=reason,
+            slug,
+            event,
+            actor=actor_for(user),
+            reason=reason,
         )
     except state_service.UnknownReciter:
         return jsonify({"error": "unknown reciter"}), 404
@@ -252,9 +254,7 @@ def list_requests(user):
 def requests_unviewed_count(user):
     """Open requests the caller hasn't viewed — drives the tab pill + the
     entry-button dot. Polled, so never cached."""
-    resp = jsonify(
-        {"count": admin_requests_service.unviewed_count(caller_hf_id=user.hf_user_id)}
-    )
+    resp = jsonify({"count": admin_requests_service.unviewed_count(caller_hf_id=user.hf_user_id)})
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
@@ -336,11 +336,12 @@ def ingest_intake(rid: str):
 
     # CSRF defense for the cookie path only (a bearer token can't be CSRF'd —
     # the browser never auto-attaches an Authorization header cross-site).
-    used_bearer = token_auth.bearer_token_from_header(
-        request.headers.get("Authorization")
-    ) is not None
+    used_bearer = (
+        token_auth.bearer_token_from_header(request.headers.get("Authorization")) is not None
+    )
     if not used_bearer:
         from urllib.parse import urlparse
+
         origin = request.headers.get("Origin") or request.headers.get("Referer") or ""
         p = urlparse(origin)
         if not (origin and p.scheme == request.scheme and p.netloc == request.host):
@@ -421,7 +422,10 @@ def undiscard(user, slug: str):
         return err
     try:
         new_row = state_service.transition(
-            slug, "reciter.undiscarded", actor=actor_for(user), reason=reason,
+            slug,
+            "reciter.undiscarded",
+            actor=actor_for(user),
+            reason=reason,
         )
     except state_service.UnknownReciter:
         return jsonify({"error": "unknown reciter"}), 404
@@ -429,9 +433,11 @@ def undiscard(user, slug: str):
         return jsonify({"error": str(e)}), 403
     except state_service.InvalidTransition as e:
         return jsonify({"error": str(e)}), 400
-    return jsonify({
-        "ok": True,
-        "slug": slug,
-        "state": new_row.state.value,
-        "visibility": new_row.visibility.value,
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "slug": slug,
+            "state": new_row.state.value,
+            "visibility": new_row.visibility.value,
+        }
+    )

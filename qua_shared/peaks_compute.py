@@ -73,9 +73,22 @@ def compute_audio_peaks(audio_source: str) -> dict | None:
     """
     try:
         result = subprocess.run(
-            ["ffmpeg", "-i", audio_source, "-f", "s16le", "-ac", "1",
-             "-ar", str(PEAKS_FFMPEG_SAMPLE_RATE), "-v", "quiet", "-"],
-            capture_output=True, timeout=_FFMPEG_TIMEOUT,
+            [
+                "ffmpeg",
+                "-i",
+                audio_source,
+                "-f",
+                "s16le",
+                "-ac",
+                "1",
+                "-ar",
+                str(PEAKS_FFMPEG_SAMPLE_RATE),
+                "-v",
+                "quiet",
+                "-",
+            ],
+            capture_output=True,
+            timeout=_FFMPEG_TIMEOUT,
         )
         if result.returncode != 0 or len(result.stdout) < 4:
             return None
@@ -93,8 +106,7 @@ def compute_audio_peaks(audio_source: str) -> dict | None:
     num_buckets = max(MIN_FULL_PEAK_BUCKETS, int(duration_sec * PEAKS_BUCKETS_PER_SEC))
     peaks = _bucket_pcm_minmax(samples, num_samples, num_buckets)
 
-    return {"schema_version": PEAKS_HD_SCHEMA_VERSION,
-            "duration_ms": duration_ms, "peaks": peaks}
+    return {"schema_version": PEAKS_HD_SCHEMA_VERSION, "duration_ms": duration_ms, "peaks": peaks}
 
 
 def _decimate(peaks: np.ndarray, src_bps: int, dst_bps: int) -> np.ndarray:
@@ -138,5 +150,6 @@ def pack_slim(hd_doc: dict, target_bps: int = PEAKS_SLIM_BPS) -> bytes:
     }
     return gzip.compress(
         json.dumps(doc, separators=(",", ":")).encode("utf-8"),
-        compresslevel=6, mtime=0,
+        compresslevel=6,
+        mtime=0,
     )

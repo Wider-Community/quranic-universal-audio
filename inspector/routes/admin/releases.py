@@ -25,15 +25,15 @@ capability gate via ``@require_capability``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from flask import Blueprint, jsonify, request
 
 from qua_shared.config_loader import repo_config
 from qua_shared.release_changelog import render_changelog
+from services.admin.jobs import base as jobs_base
 from services.admin.jobs import cut_release as cut_release_jobs
 from services.admin.jobs import hf_publish as hf_publish_jobs
-from services.admin.jobs import base as jobs_base
 from services.db import get_conn, repo_releases
 from services.state import state as state_service
 from utils.decorators import require_capability, require_same_origin
@@ -46,6 +46,7 @@ admin_releases_bp = Blueprint("admin_releases", __name__, url_prefix="/api/admin
 # ---------------------------------------------------------------------------
 # POST /api/admin/publish-hf/<slug>
 # ---------------------------------------------------------------------------
+
 
 @admin_releases_bp.route("/publish-hf/<slug>", methods=["POST"])
 @require_same_origin
@@ -67,23 +68,31 @@ def publish_hf(user, slug: str):
         return jsonify({"error": "unknown slug"}), 404
     ts_row = repo_releases.current_release("ts", slug)
     if ts_row is None:
-        return jsonify({
-            "error": "this recitation has no current TS release — "
-                     "generate timestamps before publishing to HF",
-        }), 409
+        return jsonify(
+            {
+                "error": "this recitation has no current TS release — "
+                "generate timestamps before publishing to HF",
+            }
+        ), 409
     # Cross-kind single-flight on the slug.
     busy = jobs_base.running_job_for(slug=slug)
     if busy is not None:
-        return jsonify({"error": "a job is already running for this slug",
-                        "kind": busy[0], "job_id": busy[1]}), 409
+        return jsonify(
+            {"error": "a job is already running for this slug", "kind": busy[0], "job_id": busy[1]}
+        ), 409
     # Global single-flight against an in-flight cut_release: a publish landing
     # mid-cut would risk a per_recitation_releases(track='hf') row whose
     # timestamps are about to be frozen into a new gh_release — wait for the
     # cut to complete before publishing.
     cut_busy = jobs_base.running_job_for(kind="cut_release")
     if cut_busy is not None:
-        return jsonify({"error": "a cut_release is in flight — wait for it to finish",
-                        "kind": cut_busy[0], "job_id": cut_busy[1]}), 409
+        return jsonify(
+            {
+                "error": "a cut_release is in flight — wait for it to finish",
+                "kind": cut_busy[0],
+                "job_id": cut_busy[1],
+            }
+        ), 409
     webhook_base = request.url_root
     try:
         result = hf_publish_jobs.launch(slug, webhook_base=webhook_base)
@@ -96,6 +105,7 @@ def publish_hf(user, slug: str):
 # ---------------------------------------------------------------------------
 # GET /api/admin/release-preview
 # ---------------------------------------------------------------------------
+
 
 @admin_releases_bp.route("/release-preview", methods=["GET"])
 @require_capability("release.cut_gh")
@@ -138,8 +148,7 @@ def release_preview(user):
 
     prior = repo_releases.latest_gh_release()
     prior_members = (
-        {m["slug"]: m for m in repo_releases.gh_release_recitations(prior["id"])}
-        if prior else {}
+        {m["slug"]: m for m in repo_releases.gh_release_recitations(prior["id"])} if prior else {}
     )
 
     added: list[dict] = []
@@ -184,13 +193,14 @@ def release_preview(user):
 
     cfg = repo_config()
     owner, repo, hf_dataset = (
-        cfg.get("repo_owner", ""), cfg.get("repo_name", ""), cfg.get("hf_dataset", ""),
+        cfg.get("repo_owner", ""),
+        cfg.get("repo_name", ""),
+        cfg.get("hf_dataset", ""),
     )
-    release_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    release_date = datetime.now(UTC).strftime("%Y-%m-%d")
     # change_kind is already stamped on each row; the renderer buckets by it.
     # coverage_ayahs is unknown pre-cut → renderer falls back to surahs.
-    preview_members = [{**m, "coverage_ayahs": None}
-                       for m in (added + refreshed + unchanged)]
+    preview_members = [{**m, "coverage_ayahs": None} for m in (added + refreshed + unchanged)]
 
     payload = {
         "computed_version": computed_version,
@@ -210,8 +220,7 @@ def release_preview(user):
         "license": "CC-BY-4.0",
         "links": {
             "repo": f"https://github.com/{owner}/{repo}" if owner and repo else "",
-            "hf_dataset": (f"https://huggingface.co/datasets/{hf_dataset}"
-                           if hf_dataset else ""),
+            "hf_dataset": (f"https://huggingface.co/datasets/{hf_dataset}" if hf_dataset else ""),
         },
         # Same shared renderer the cut job uses — preview == what ships (modulo
         # coverage: preview shows surahs, the cut shows exact ayahs).
@@ -220,7 +229,9 @@ def release_preview(user):
             previous_version=prior_version,
             release_date=release_date,
             members=preview_members,
-            owner=owner, repo=repo, hf_dataset=hf_dataset,
+            owner=owner,
+            repo=repo,
+            hf_dataset=hf_dataset,
         ),
         # Echo back so the confirm step can validate the preview hasn't drifted.
         "expected_version_at_preview": computed_version,
@@ -247,6 +258,7 @@ def _bump_patch(prior: str | None) -> str:
 # ---------------------------------------------------------------------------
 # POST /api/admin/cut-release
 # ---------------------------------------------------------------------------
+
 
 @admin_releases_bp.route("/cut-release", methods=["POST"])
 @require_same_origin
@@ -275,13 +287,17 @@ def cut_release(user):
     # client didn't echo (older FE).
     if expected is not None:
         # Re-run the candidate diff so a midstream TS regen doesn't slip through.
-        candidates_count = get_conn().execute(
-            "SELECT COUNT(*) AS n FROM per_recitation_releases prr "
-            "JOIN deliveries d ON d.slug = prr.slug "
-            "JOIN channels c ON c.slug = d.channel "
-            "WHERE prr.track='ts' AND prr.superseded_at IS NULL "
-            "AND c.gh_release_eligible = 1"
-        ).fetchone()["n"]
+        candidates_count = (
+            get_conn()
+            .execute(
+                "SELECT COUNT(*) AS n FROM per_recitation_releases prr "
+                "JOIN deliveries d ON d.slug = prr.slug "
+                "JOIN channels c ON c.slug = d.channel "
+                "WHERE prr.track='ts' AND prr.superseded_at IS NULL "
+                "AND c.gh_release_eligible = 1"
+            )
+            .fetchone()["n"]
+        )
         if not candidates_count:
             return jsonify({"error": "no eligible recitations"}), 409
 
@@ -302,6 +318,7 @@ def cut_release(user):
 # ---------------------------------------------------------------------------
 # GET /api/admin/releases/status
 # ---------------------------------------------------------------------------
+
 
 @admin_releases_bp.route("/releases/status", methods=["GET"])
 @require_capability("reviews.view")
@@ -352,7 +369,7 @@ def releases_status(user):
                 # produced_at is ISO-8601 UTC ("YYYY-MM-DDTHH:MM:SSZ"); replace
                 # Z so fromisoformat handles it on Python < 3.11.
                 dt = datetime.fromisoformat(produced_at.replace("Z", "+00:00"))
-                days_since_cut = max(0, (datetime.now(timezone.utc) - dt).days)
+                days_since_cut = max(0, (datetime.now(UTC) - dt).days)
             except Exception:
                 days_since_cut = None
         summary = {
@@ -368,8 +385,7 @@ def releases_status(user):
     # surfaces in the "In progress" bucket (a regen on a released row has no
     # other in-flight signal — there's no state change). hf_publish + cut_release
     # are the dataset/GH tracks.
-    in_flight = jobs_base.list_in_flight_jobs(
-        ("hf_publish", "cut_release", "timestamps"))
+    in_flight = jobs_base.list_in_flight_jobs(("hf_publish", "cut_release", "timestamps"))
 
     deliveries = conn.execute("""
         SELECT d.slug, d.riwayah, d.style, d.channel,
@@ -402,19 +418,23 @@ def releases_status(user):
             "gh_release_eligible": bool(d["gh_release_eligible"]),
             "ts": _slim_release_row(ts, fields=("version", "produced_at")),
             "hf": _slim_release_row(hf, fields=("version", "produced_at", "stale_since")),
-            "gh": _slim_release_row(gh, fields=("change_kind", "stale_since",
-                                                "release_id", "ts_version")),
+            "gh": _slim_release_row(
+                gh, fields=("change_kind", "stale_since", "release_id", "ts_version")
+            ),
         }
         if _is_bucketable(row, in_flight_slugs):
             out.append(row)
-    return jsonify({
-        "latest_gh_release": _slim_release_row(
-            latest_gh, fields=("version", "produced_at", "external_uri"),
-        ),
-        "summary": summary,
-        "in_flight": in_flight,
-        "recitations": out,
-    })
+    return jsonify(
+        {
+            "latest_gh_release": _slim_release_row(
+                latest_gh,
+                fields=("version", "produced_at", "external_uri"),
+            ),
+            "summary": summary,
+            "in_flight": in_flight,
+            "recitations": out,
+        }
+    )
 
 
 def _is_bucketable(row: dict, in_flight_slugs: set[str]) -> bool:
@@ -436,9 +456,7 @@ def _is_bucketable(row: dict, in_flight_slugs: set[str]) -> bool:
     # Excluded: only surface ineligible rows that would otherwise be
     # release candidates — keeps the section from becoming a giant
     # "every reciter from an ineligible channel" dump.
-    if not row["gh_release_eligible"] and (
-        row["ts"] is not None or row["state"] == "released"
-    ):
+    if not row["gh_release_eligible"] and (row["ts"] is not None or row["state"] == "released"):
         return True
     return False
 

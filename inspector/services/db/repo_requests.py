@@ -20,9 +20,8 @@ from datetime import datetime
 
 from qua_shared.schemas import Actor, ArchivedRequest, PendingRequest, ProposedEdits
 
-from . import _serde
+from . import _serde, repo_access
 from .connection import get_conn
-from . import repo_access
 
 _STATUS_FOR_ARCHIVE = {"completed": "accepted", "returned": "returned", "discarded": "discarded"}
 
@@ -156,7 +155,7 @@ def _resolve_row(
 def resolve(
     *,
     slug: str,
-    status: str,                       # accepted | returned | discarded
+    status: str,  # accepted | returned | discarded
     transitioned_by: Actor,
     reason: str | None = None,
     closed_by_transition_id: str | None = None,
@@ -169,15 +168,20 @@ def resolve(
     if row is None:
         return False
     return _resolve_row(
-        row, status=status, transitioned_by=transitioned_by, reason=reason,
-        slug=None, closed_by_transition_id=closed_by_transition_id, at=at,
+        row,
+        status=status,
+        transitioned_by=transitioned_by,
+        reason=reason,
+        slug=None,
+        closed_by_transition_id=closed_by_transition_id,
+        at=at,
     )
 
 
 def resolve_by_id(
     *,
     request_id: str,
-    status: str,                       # accepted | returned | discarded
+    status: str,  # accepted | returned | discarded
     transitioned_by: Actor,
     reason: str | None = None,
     slug: str | None = None,
@@ -207,8 +211,13 @@ def resolve_by_id(
         if not is_slug_backfill:
             return False
     return _resolve_row(
-        row, status=status, transitioned_by=transitioned_by, reason=reason,
-        slug=slug, closed_by_transition_id=closed_by_transition_id, at=at,
+        row,
+        status=status,
+        transitioned_by=transitioned_by,
+        reason=reason,
+        slug=slug,
+        closed_by_transition_id=closed_by_transition_id,
+        at=at,
     )
 
 
@@ -226,9 +235,7 @@ def set_payload(request_id: str, payload: dict) -> bool:
 def delete_pending(slug: str) -> bool:
     """Hard-delete the open pending request for ``slug`` (no archive). Returns
     True if one was removed. Backs the legacy ``pending_requests.clear``."""
-    cur = get_conn().execute(
-        "DELETE FROM requests WHERE slug = ? AND status = 'pending'", (slug,)
-    )
+    cur = get_conn().execute("DELETE FROM requests WHERE slug = ? AND status = 'pending'", (slug,))
     return cur.rowcount > 0
 
 
@@ -236,9 +243,11 @@ def delete_pending(slug: str) -> bool:
 
 
 def get_pending_row(slug: str):
-    return get_conn().execute(
-        "SELECT * FROM requests WHERE slug = ? AND status = 'pending'", (slug,)
-    ).fetchone()
+    return (
+        get_conn()
+        .execute("SELECT * FROM requests WHERE slug = ? AND status = 'pending'", (slug,))
+        .fetchone()
+    )
 
 
 def get_pending(slug: str) -> PendingRequest | None:
@@ -255,10 +264,14 @@ def all_pending() -> list[PendingRequest]:
     (parity with the old slug-keyed ``pending.json``). Slugless ``new_reciter``
     requests are a newer kind not representable here — surface them via the
     wizard-specific path when that feature lands."""
-    rows = get_conn().execute(
-        "SELECT * FROM requests WHERE status = 'pending' AND slug IS NOT NULL "
-        "ORDER BY submitted_at"
-    ).fetchall()
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT * FROM requests WHERE status = 'pending' AND slug IS NOT NULL "
+            "ORDER BY submitted_at"
+        )
+        .fetchall()
+    )
     return [_to_pending(r) for r in rows]
 
 
@@ -273,11 +286,15 @@ def all_archived(archive_kind: str) -> list[ArchivedRequest]:
     """All archived requests for a terminal status (oldest→newest). Backs the
     legacy ``request_archive.snapshot(kind)`` reassembly."""
     status = _STATUS_FOR_ARCHIVE[archive_kind]
-    rows = get_conn().execute(
-        "SELECT * FROM requests WHERE status = ? AND slug IS NOT NULL "
-        "ORDER BY resolved_at, submitted_at, id",
-        (status,),
-    ).fetchall()
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT * FROM requests WHERE status = ? AND slug IS NOT NULL "
+            "ORDER BY resolved_at, submitted_at, id",
+            (status,),
+        )
+        .fetchall()
+    )
     return [_to_archived(r) for r in rows]
 
 
@@ -285,18 +302,20 @@ def get_for_slug(archive_kind: str, slug: str) -> list[ArchivedRequest]:
     """Archived requests for a slug, oldest→newest (parity with the old
     request_archive.get_for_slug(kind) list-per-slug order)."""
     status = _STATUS_FOR_ARCHIVE[archive_kind]
-    rows = get_conn().execute(
-        "SELECT * FROM requests WHERE slug = ? AND status = ? "
-        "ORDER BY resolved_at, submitted_at, id",
-        (slug, status),
-    ).fetchall()
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT * FROM requests WHERE slug = ? AND status = ? "
+            "ORDER BY resolved_at, submitted_at, id",
+            (slug, status),
+        )
+        .fetchall()
+    )
     return [_to_archived(r) for r in rows]
 
 
 def get_by_id(request_id: str):
-    return get_conn().execute(
-        "SELECT * FROM requests WHERE id = ?", (request_id,)
-    ).fetchone()
+    return get_conn().execute("SELECT * FROM requests WHERE id = ?", (request_id,)).fetchone()
 
 
 def admin_list_rows(*, status: str) -> list:
@@ -309,18 +328,20 @@ def admin_list_rows(*, status: str) -> list:
         order = "submitted_at ASC"
     else:
         order = "resolved_at DESC, submitted_at DESC, id DESC"
-    return get_conn().execute(
-        f"SELECT * FROM requests WHERE status = ? ORDER BY {order}",
-        (status,),
-    ).fetchall()
+    return (
+        get_conn()
+        .execute(
+            f"SELECT * FROM requests WHERE status = ? ORDER BY {order}",
+            (status,),
+        )
+        .fetchall()
+    )
 
 
 def counts_by_status() -> dict[str, int]:
     """``{status: count}`` over all requests — edit + intake (drives the facet
     chips)."""
-    rows = get_conn().execute(
-        "SELECT status, COUNT(*) FROM requests GROUP BY status"
-    ).fetchall()
+    rows = get_conn().execute("SELECT status, COUNT(*) FROM requests GROUP BY status").fetchall()
     return {r[0]: int(r[1]) for r in rows}
 
 
@@ -331,31 +352,41 @@ def mark_viewed(request_id: str, hf_user_id: str, *, at: datetime | None = None)
     """Idempotent: only the first expand of a request by a given admin writes."""
     repo_access.ensure_user(hf_user_id)
     get_conn().execute(
-        "INSERT OR IGNORE INTO request_views(request_id, hf_user_id, viewed_at) "
-        "VALUES (?,?,?)",
+        "INSERT OR IGNORE INTO request_views(request_id, hf_user_id, viewed_at) VALUES (?,?,?)",
         (request_id, hf_user_id, _serde.to_iso(at or _serde.now())),
     )
 
 
 def is_viewed(request_id: str, hf_user_id: str) -> bool:
-    return get_conn().execute(
-        "SELECT 1 FROM request_views WHERE request_id = ? AND hf_user_id = ?",
-        (request_id, hf_user_id),
-    ).fetchone() is not None
+    return (
+        get_conn()
+        .execute(
+            "SELECT 1 FROM request_views WHERE request_id = ? AND hf_user_id = ?",
+            (request_id, hf_user_id),
+        )
+        .fetchone()
+        is not None
+    )
 
 
 def viewed_ids_for_user(hf_user_id: str) -> set[str]:
-    rows = get_conn().execute(
-        "SELECT request_id FROM request_views WHERE hf_user_id = ?", (hf_user_id,)
-    ).fetchall()
+    rows = (
+        get_conn()
+        .execute("SELECT request_id FROM request_views WHERE hf_user_id = ?", (hf_user_id,))
+        .fetchall()
+    )
     return {r[0] for r in rows}
 
 
 def count_unviewed_open_for_user(hf_user_id: str) -> int:
     """Open (pending) requests this admin has not yet viewed — edit + intake."""
-    return int(get_conn().execute(
-        "SELECT COUNT(*) FROM requests r WHERE r.status = 'pending' "
-        "AND NOT EXISTS (SELECT 1 FROM request_views v "
-        "WHERE v.request_id = r.id AND v.hf_user_id = ?)",
-        (hf_user_id,),
-    ).fetchone()[0])
+    return int(
+        get_conn()
+        .execute(
+            "SELECT COUNT(*) FROM requests r WHERE r.status = 'pending' "
+            "AND NOT EXISTS (SELECT 1 FROM request_views v "
+            "WHERE v.request_id = r.id AND v.hf_user_id = ?)",
+            (hf_user_id,),
+        )
+        .fetchone()[0]
+    )

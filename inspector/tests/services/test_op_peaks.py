@@ -2,6 +2,7 @@
 record builder (slices baked chapter peaks) — plus the dedup-by-op_id
 behaviour of ``append_peaks_records``.
 """
+
 from __future__ import annotations
 
 import base64
@@ -69,7 +70,10 @@ def test_resolve_op_url_falls_back_to_catalog():
 
 def test_resolve_op_url_uses_default_chapter():
     op = {"targets_before": [{"time_start": 0, "time_end": 1}]}
-    assert op_peaks.resolve_op_url(op, {7: "https://cat/7.mp3"}, default_chapter=7) == "https://cat/7.mp3"
+    assert (
+        op_peaks.resolve_op_url(op, {7: "https://cat/7.mp3"}, default_chapter=7)
+        == "https://cat/7.mp3"
+    )
 
 
 # -- slice_chapter_peaks_b64 --------------------------------------------
@@ -106,10 +110,16 @@ def test_build_op_records_skips_unsliceable(monkeypatch):
     ops = [
         {  # good
             "op_id": "op-good",
-            "targets_before": [{"audio_url": "https://cdn/1.mp3", "time_start": 1000, "time_end": 2000}],
+            "targets_before": [
+                {"audio_url": "https://cdn/1.mp3", "time_start": 1000, "time_end": 2000}
+            ],
         },
         {"op_id": "op-no-range", "targets_before": [{"audio_url": "https://cdn/1.mp3"}]},  # skip
-        {"targets_before": [{"audio_url": "https://cdn/1.mp3", "time_start": 0, "time_end": 1000}]},  # no op_id → skip
+        {
+            "targets_before": [
+                {"audio_url": "https://cdn/1.mp3", "time_start": 0, "time_end": 1000}
+            ]
+        },  # no op_id → skip
     ]
     recs = op_peaks.build_op_records("recit", ops, {})
     assert [r["op_id"] for r in recs] == ["op-good"]

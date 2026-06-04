@@ -7,7 +7,7 @@ alignment pipeline writes files to ``reciters/<slug>/``, it fires
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 
@@ -41,6 +41,7 @@ def auto_detect_env(tmp_path, monkeypatch):
     _hf_bucket.set_backend(backend)
 
     from tests.conftest import _seed_catalog
+
     _seed_catalog(
         vocab=Vocab(
             riwayat=[Riwayah(slug="hafs", short="H", name="Hafs")],
@@ -59,7 +60,7 @@ def auto_detect_env(tmp_path, monkeypatch):
                 channel="ch1",
                 audio_category=AudioCategory.BY_SURAH,
                 chapter_count=114,
-                added_at=datetime.now(timezone.utc),
+                added_at=datetime.now(UTC),
                 added_by_hf_id="seed",
             ),
         ],
@@ -74,6 +75,7 @@ def auto_detect_env(tmp_path, monkeypatch):
 
 def _seed_state(backend, *, slug: str, state: ReciterState):
     from tests.conftest import _seed_state as _seed
+
     _seed(slug, state=state.value, reciter_id="rec_a")
 
 
@@ -185,9 +187,9 @@ def test_reconcile_applies_pending_edits(auto_detect_env):
     """End-to-end: a pending request gets applied to the catalog when the
     pipeline drops files for the slug."""
     svc, state_service, backend = auto_detect_env
+    from qua_shared.schemas import Actor, ProposedEdits, Role
     from services import catalog as catalog_service
     from services import pending_requests as pending_requests_service
-    from qua_shared.schemas import Actor, ProposedEdits, Role
 
     _seed_state(backend, slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
     pending_requests_service.submit(

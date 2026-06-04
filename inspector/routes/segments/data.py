@@ -3,28 +3,37 @@
 from flask import Blueprint, jsonify, request
 
 from config import (
-    SEG_FONT_SIZE, SEG_WORD_SPACING,
-    SEG_SCROLL_ANIM_MODE,
-    TRIM_PAD_LEFT, TRIM_PAD_RIGHT, TRIM_DIM_ALPHA,
-    LOW_CONF_DEFAULT_THRESHOLD,
     ACCORDION_CONTEXT,
+    LOW_CONF_DEFAULT_THRESHOLD,
+    SEG_FONT_SIZE,
+    SEG_SCROLL_ANIM_MODE,
+    SEG_WORD_SPACING,
+    TRIM_DIM_ALPHA,
+    TRIM_PAD_LEFT,
+    TRIM_PAD_RIGHT,
 )
 from constants import (
     MUQATTAAT_VERSES as _MUQATTAAT_VERSES,
+)
+from constants import (
     QALQALA_LETTERS as _QALQALA_LETTERS,
+)
+from constants import (
     STANDALONE_REFS as _STANDALONE_REFS,
+)
+from constants import (
     STANDALONE_WORDS as _STANDALONE_WORDS,
 )
-from services.validation.registry import ALL_CATEGORIES
 from services import cache
-from services.state import catalog as catalog_service
 from services import state as state_service
+from services.audio_meta import chapter_meta, vbr_chapters_for_reciter
 from services.data_loader import (
     load_detailed,
     resolve_pad,
 )
-from services.audio_meta import chapter_meta, chapter_urls, vbr_chapters_for_reciter
 from services.segments_query import get_chapter_data
+from services.state import catalog as catalog_service
+from services.validation.registry import ALL_CATEGORIES
 from utils.formatting import slug_to_name
 from utils.json_response import orjson_cached_response, orjson_response
 from utils.references import chapter_from_ref
@@ -70,8 +79,7 @@ def seg_reciters():
     so this endpoint does zero bucket I/O per request.
     """
     by_slug = {
-        d.slug: (d.source, d.audio_category.value)
-        for d in catalog_service.snapshot().deliveries
+        d.slug: (d.source, d.audio_category.value) for d in catalog_service.snapshot().deliveries
     }
     result = [
         {
@@ -130,6 +138,7 @@ def seg_auto_split_map(reciter):
     legitimate misses), so ETag revalidation returns 304 on repeat.
     """
     from services.auto_split import load_auto_split_map
+
     return orjson_cached_response({"by_uid": load_auto_split_map(reciter)})
 
 
@@ -164,15 +173,15 @@ def seg_all(reciter):
             # top-level ``audio_by_chapter[chapter]`` map; every FE
             # consumer already falls back to it.
             seg_dict = {
-                "chapter":      ch,
-                "entry_idx":    entry_idx,
-                "index":        idx,
-                "segment_uid":  seg_uid,
-                "time_start":   seg.get("time_start", 0),
-                "time_end":     seg.get("time_end", 0),
-                "matched_ref":  mref,
-                "confidence":   round(seg.get("confidence", 0.0), 4),
-                "entry_ref":    entry.get("ref", ""),
+                "chapter": ch,
+                "entry_idx": entry_idx,
+                "index": idx,
+                "segment_uid": seg_uid,
+                "time_start": seg.get("time_start", 0),
+                "time_end": seg.get("time_end", 0),
+                "matched_ref": mref,
+                "confidence": round(seg.get("confidence", 0.0), 4),
+                "entry_ref": entry.get("ref", ""),
             }
             if seg.get("wrap_word_ranges"):
                 seg_dict["wrap_word_ranges"] = seg["wrap_word_ranges"]
@@ -184,9 +193,7 @@ def seg_all(reciter):
                 seg_dict["is_wasl"] = True
             segments.append(seg_dict)
 
-    pad_left_ms, pad_right_ms, min_silence_floor_ms = resolve_pad(
-        cache.get_seg_meta(reciter)
-    )
+    pad_left_ms, pad_right_ms, min_silence_floor_ms = resolve_pad(cache.get_seg_meta(reciter))
     # dk_words + verse_word_counts moved off this payload to the immutable
     # ``/api/static/quran-refs.json`` asset (fetched once per browser).
     # Per-audio-URL duration in ms, sourced from the audio_manifest sidecar.
@@ -202,7 +209,12 @@ def seg_all(reciter):
         if not isinstance(meta, dict):
             continue
         duration_sec = meta.get("duration_sec")
-        if isinstance(url, str) and url and isinstance(duration_sec, (int, float)) and duration_sec > 0:
+        if (
+            isinstance(url, str)
+            and url
+            and isinstance(duration_sec, (int, float))
+            and duration_sec > 0
+        ):
             duration_ms_by_url[url] = int(duration_sec * 1000)
     # Per-chapter map for FE convenience (when seg.audio_url isn't set the
     # FE falls back to audio_by_chapter[chapter]; mirror the same shape here).
@@ -210,15 +222,17 @@ def seg_all(reciter):
     for ch_str, url in audio_by_chapter.items():
         if url in duration_ms_by_url:
             chapter_duration_ms_by_chapter[ch_str] = duration_ms_by_url[url]
-    return orjson_response({
-        "segments": segments,
-        "audio_by_chapter": audio_by_chapter,
-        "chapter_duration_ms_by_chapter": chapter_duration_ms_by_chapter,
-        "duration_ms_by_url": duration_ms_by_url,
-        "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
-        # Legacy symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.
-        "pad_ms": (pad_left_ms + pad_right_ms) // 2,
-        "pad_left_ms": pad_left_ms,
-        "pad_right_ms": pad_right_ms,
-        "min_silence_floor_ms": min_silence_floor_ms,
-    })
+    return orjson_response(
+        {
+            "segments": segments,
+            "audio_by_chapter": audio_by_chapter,
+            "chapter_duration_ms_by_chapter": chapter_duration_ms_by_chapter,
+            "duration_ms_by_url": duration_ms_by_url,
+            "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
+            # Legacy symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.
+            "pad_ms": (pad_left_ms + pad_right_ms) // 2,
+            "pad_left_ms": pad_left_ms,
+            "pad_right_ms": pad_right_ms,
+            "min_silence_floor_ms": min_silence_floor_ms,
+        }
+    )

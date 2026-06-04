@@ -1,4 +1,5 @@
 """GET /api/seg/data/<reciter>/<chapter>, /all/<reciter>, /config tests (MUST-1)."""
+
 from __future__ import annotations
 
 import pytest

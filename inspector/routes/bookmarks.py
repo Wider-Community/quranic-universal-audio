@@ -54,8 +54,10 @@ def add_bookmark():
     except (TypeError, ValueError):
         return jsonify({"error": "surah and ayah required"}), 400
     try:
-        item = bm.dev_add(surah, ayah) if sess.get("dev") else bm.add_bookmark(
-            sess.get("access_token", ""), surah, ayah
+        item = (
+            bm.dev_add(surah, ayah)
+            if sess.get("dev")
+            else bm.add_bookmark(sess.get("access_token", ""), surah, ayah)
         )
     except bm.QfBookmarkError as e:
         logger.warning("QF bookmark add failed: %s", e)

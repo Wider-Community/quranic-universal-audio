@@ -3,19 +3,18 @@
 Most of the command logic lives on the frontend; the backend ensures save
 acceptance + history record produces matching shapes.
 """
+
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
-
-
-
-import os
 
 os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
+
 
 def test_save_payload_carries_op_log_in_canonical_shape(signed_in_client, tmp_reciter_dir):
     """Save payload includes a per-op `command` envelope describing the discriminated union.

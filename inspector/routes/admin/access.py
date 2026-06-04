@@ -22,19 +22,23 @@ import logging
 from flask import Blueprint, jsonify, request
 
 from qua_shared.schemas import Role
-
-from services import permissions
-
 from routes._admin_helpers import (
     MIN_REASON_CHARS as _MIN_REASON_CHARS,
+)
+from routes._admin_helpers import (
     actor_for as _actor_for,
+)
+from routes._admin_helpers import (
     require_capability_or_403 as _require_capability_or_403,
+)
+from routes._admin_helpers import (
     require_signed_in_or_401 as _require_signed_in_or_401,
+)
+from routes._admin_helpers import (
     validate_reason as _validate_reason,
 )
-
 from services import access as access_service
-
+from services import permissions
 from utils.decorators import require_same_origin
 
 logger = logging.getLogger(__name__)
@@ -113,18 +117,22 @@ def access_revoke():
         # Atomic: role-revoke + cascade-release every open claim this user
         # holds, in one transaction (no "role revoked but claim left open").
         member, released_slugs = access_service.revoke(
-            hf_user_id=hf_user_id, actor=actor, reason=reason,
+            hf_user_id=hf_user_id,
+            actor=actor,
+            reason=reason,
         )
     except access_service.NotAuthorized as e:
         return jsonify({"error": str(e)}), 403
     except access_service.MemberNotFound:
         return jsonify({"error": f"member {hf_user_id} not found"}), 404
 
-    return jsonify({
-        "ok": True,
-        "member": member.model_dump(mode="json"),
-        "auto_released_slugs": released_slugs,
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "member": member.model_dump(mode="json"),
+            "auto_released_slugs": released_slugs,
+        }
+    )
 
 
 @access_admin_bp.route("/update", methods=["POST"])
@@ -157,9 +165,11 @@ def access_update():
     if raw_reason is not None and (raw_reason or "").strip():
         reason = permissions.normalize_reason(raw_reason)
         if reason is None:
-            return jsonify({
-                "error": f"reason must be at least {_MIN_REASON_CHARS} characters",
-            }), 400
+            return jsonify(
+                {
+                    "error": f"reason must be at least {_MIN_REASON_CHARS} characters",
+                }
+            ), 400
     else:
         reason = None
 

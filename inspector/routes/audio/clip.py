@@ -6,6 +6,7 @@ files without leaning on HTML5 ``<audio>.currentTime`` (which mis-seeks them).
 
 The clip plays from byte 0 in the browser, so there's no seek and no drift.
 """
+
 from __future__ import annotations
 
 import logging
@@ -80,10 +81,16 @@ def seg_segment_clip(reciter):
     duration_sec = (end_ms - start_ms) / 1000.0
 
     cmd = [
-        "ffmpeg", "-hide_banner", "-loglevel", "error",
-        "-ss", f"{start_sec:.3f}",
-        "-i", source,
-        "-t", f"{duration_sec:.3f}",
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-ss",
+        f"{start_sec:.3f}",
+        "-i",
+        source,
+        "-t",
+        f"{duration_sec:.3f}",
         # Drop any non-audio streams. Most mp3quran/qdc MP3s embed an MJPEG
         # cover-art stream (ID3v2 APIC). Without -vn, ffmpeg tries to encode
         # that into the mp3 output via the muxer's default video codec
@@ -91,10 +98,14 @@ def seg_segment_clip(reciter):
         # — fails with "Default encoder for format mp3 (codec png) is
         # probably disabled" and the route returns 200 OK / 0 bytes.
         "-vn",
-        "-c:a", "libmp3lame",
-        "-b:a", CLIP_BITRATE,
-        "-ac", "1",
-        "-f", "mp3",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        CLIP_BITRATE,
+        "-ac",
+        "1",
+        "-f",
+        "mp3",
         "-",
     ]
 
@@ -130,7 +141,9 @@ def seg_segment_clip(reciter):
         except subprocess.TimeoutExpired:
             proc.kill()
     exited = proc.poll() is not None
-    if (not first) or (exited and (len(first) < MIN_VALID_CLIP_BYTES or proc.returncode not in (0, None))):
+    if (not first) or (
+        exited and (len(first) < MIN_VALID_CLIP_BYTES or proc.returncode not in (0, None))
+    ):
         stderr_tail = _stderr_tail()
         if proc.poll() is None:
             proc.kill()
@@ -139,12 +152,17 @@ def seg_segment_clip(reciter):
                 stream.close()
         logger.warning(
             "segment_clip produced no usable audio: %d bytes (rc=%s) cmd=%s stderr=%r",
-            len(first), proc.returncode, shlex.join(cmd), stderr_tail,
+            len(first),
+            proc.returncode,
+            shlex.join(cmd),
+            stderr_tail,
         )
-        return jsonify({
-            "error": "segment audio unavailable",
-            "detail": "no decodable audio for this window (source likely truncated or corrupt)",
-        }), 502
+        return jsonify(
+            {
+                "error": "segment audio unavailable",
+                "detail": "no decodable audio for this window (source likely truncated or corrupt)",
+            }
+        ), 502
 
     def _generate():
         bytes_yielded = len(first)
@@ -172,7 +190,9 @@ def seg_segment_clip(reciter):
             if proc.returncode not in (0, None):
                 logger.warning(
                     "segment_clip ffmpeg exited mid-stream: %d bytes (rc=%s) stderr=%r",
-                    bytes_yielded, proc.returncode, stderr_tail,
+                    bytes_yielded,
+                    proc.returncode,
+                    stderr_tail,
                 )
 
     headers = {

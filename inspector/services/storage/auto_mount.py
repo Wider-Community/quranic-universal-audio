@@ -13,6 +13,7 @@ Failures degrade silently: if ``hf-mount`` isn't installed, the mount
 already exists, the bucket is provided via ``INSPECTOR_BUCKET_MOUNT``, or
 the subprocess fails, the caller still works through the API path.
 """
+
 from __future__ import annotations
 
 import os
@@ -28,11 +29,9 @@ _BUCKET_ROOT = _INSPECTOR_DIR / ".bucket"
 
 # Where to look for the hf-mount binary when ``shutil.which`` misses it
 # (common when CWD's PATH is minimal — e.g. systemd, cron, IDE terminals).
-_HF_MOUNT_FALLBACKS = ("~/bin/hf-mount", "/usr/local/bin/hf-mount",
-                       "/opt/homebrew/bin/hf-mount")
+_HF_MOUNT_FALLBACKS = ("~/bin/hf-mount", "/usr/local/bin/hf-mount", "/opt/homebrew/bin/hf-mount")
 
-from services.storage.hf_bucket import (DEV_BUCKET_REPO, PROD_BUCKET_REPO,
-                                         is_deployed)
+from services.storage.hf_bucket import DEV_BUCKET_REPO, PROD_BUCKET_REPO, is_deployed
 
 # Local default mirrors the storage backend: dev, never prod.
 _DEFAULT_BUCKET = DEV_BUCKET_REPO
@@ -60,8 +59,7 @@ def _resolve_hf_mount() -> str | None:
     return None
 
 
-def auto_mount(*, behind_proxy: bool | None = None,
-               in_pytest: bool | None = None) -> Path | None:
+def auto_mount(*, behind_proxy: bool | None = None, in_pytest: bool | None = None) -> Path | None:
     """Auto-mount the HF bucket and set ``INSPECTOR_BUCKET_MOUNT``.
 
     Returns the mount path on success, ``None`` if skipped or failed.
@@ -107,9 +105,11 @@ def auto_mount(*, behind_proxy: bool | None = None,
     bucket = os.environ.get("INSPECTOR_BUCKET_REPO") or _DEFAULT_BUCKET
     # Never read-mount prod from a local process unless explicitly allowed —
     # ``get_backend`` raises a clear ProdBucketRefused for the same condition.
-    if (bucket == PROD_BUCKET_REPO
-            and not is_deployed()
-            and os.environ.get("INSPECTOR_ALLOW_PROD_BUCKET") != "1"):
+    if (
+        bucket == PROD_BUCKET_REPO
+        and not is_deployed()
+        and os.environ.get("INSPECTOR_ALLOW_PROD_BUCKET") != "1"
+    ):
         return None
     mount_dir = mount_dir_for(bucket)
     mount_dir.mkdir(parents=True, exist_ok=True)
@@ -123,9 +123,19 @@ def auto_mount(*, behind_proxy: bool | None = None,
 
     try:
         result = subprocess.run(
-            [hf_mount, "start", "--fuse", "--", "--advanced-writes",
-             "bucket", bucket, str(mount_dir)],
-            timeout=30, capture_output=True, text=True,
+            [
+                hf_mount,
+                "start",
+                "--fuse",
+                "--",
+                "--advanced-writes",
+                "bucket",
+                bucket,
+                str(mount_dir),
+            ],
+            timeout=30,
+            capture_output=True,
+            text=True,
         )
     except Exception:  # noqa: BLE001
         return None

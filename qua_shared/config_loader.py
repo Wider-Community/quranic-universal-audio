@@ -1,7 +1,9 @@
 """Shared config and template loader for .github/config/*.yml and .github/templates/**."""
-import yaml
-from pathlib import Path
+
 from functools import lru_cache
+from pathlib import Path
+
+import yaml
 
 # qua_shared/config_loader.py -> qua_shared/ -> repo root
 _ROOT = Path(__file__).resolve().parent.parent

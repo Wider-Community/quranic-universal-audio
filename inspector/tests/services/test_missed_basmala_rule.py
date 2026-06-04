@@ -8,6 +8,7 @@ basmalas. Reciters who don't recite an inter-chapter basmala produce a
 deletion set near zero, and below the threshold the augmentation is suppressed
 so the accordion isn't flooded with false positives.
 """
+
 from __future__ import annotations
 
 from config import MISSED_BASMALA_FLAG_MIN_DELETED
@@ -44,11 +45,7 @@ def _call(entries, deleted: set[int] | None):
     """Tiny adapter that fills in the boilerplate args for _build_detail_lists."""
     from services.validation.detail import _build_detail_lists
 
-    word_counts = {
-        (s, a): 5
-        for s in (1, 2, 3, 5, 9, 17)
-        for a in range(1, 8)
-    }
+    word_counts = {(s, a): 5 for s in (1, 2, 3, 5, 9, 17) for a in range(1, 8)}
     return _build_detail_lists(
         entries,
         is_by_ayah=False,
@@ -125,10 +122,13 @@ def test_missed_basmala_inert_when_param_is_none():
 def test_missed_basmala_captures_first_seg_even_when_alignment_failed():
     """First seg with empty matched_ref still flags the chapter."""
     entries = [
-        _entry("5", [
-            _seg("", uid="seg-5-0", t0=0, t1=2000),
-            _seg("5:1:1-5:1:5", uid="seg-5-1", t0=2000, t1=4000),
-        ]),
+        _entry(
+            "5",
+            [
+                _seg("", uid="seg-5-0", t0=0, t1=2000),
+                _seg("5:1:1-5:1:5", uid="seg-5-1", t0=2000, t1=4000),
+            ],
+        ),
     ]
     out = _call(entries, deleted=_busy_deleted())
     by_ch = _items_by_chapter(out["basmala_amin"])
@@ -140,14 +140,17 @@ def test_missed_basmala_captures_first_seg_even_when_alignment_failed():
 def test_basmala_amin_order_is_first11_last17_rest11_then_missed():
     """Order: first 1:1 seg → last 1:7 seg → remaining 1:1 segs → missed basmalas."""
     entries = [
-        _entry("1", [
-            # Two distinct 1:1 segs (first half / second half of the Basmala).
-            _seg("1:1:1-1:1:2", uid="seg-1-11a", t0=0, t1=1000),
-            _seg("1:1:3-1:1:4", uid="seg-1-11b", t0=1000, t1=2000),
-            # Two distinct 1:7 segs — only the LAST one should appear up front.
-            _seg("1:7:1-1:7:3", uid="seg-1-17a", t0=10_000, t1=11_000),
-            _seg("1:7:4-1:7:5", uid="seg-1-17b", t0=11_000, t1=12_000),
-        ]),
+        _entry(
+            "1",
+            [
+                # Two distinct 1:1 segs (first half / second half of the Basmala).
+                _seg("1:1:1-1:1:2", uid="seg-1-11a", t0=0, t1=1000),
+                _seg("1:1:3-1:1:4", uid="seg-1-11b", t0=1000, t1=2000),
+                # Two distinct 1:7 segs — only the LAST one should appear up front.
+                _seg("1:7:1-1:7:3", uid="seg-1-17a", t0=10_000, t1=11_000),
+                _seg("1:7:4-1:7:5", uid="seg-1-17b", t0=11_000, t1=12_000),
+            ],
+        ),
         _entry("2", [_seg("2:1:1-2:1:5", uid="seg-2-0")]),
         _entry("3", [_seg("3:1:1-3:1:5", uid="seg-3-0")]),
     ]
@@ -157,7 +160,7 @@ def test_basmala_amin_order_is_first11_last17_rest11_then_missed():
         "seg-1-11a",  # first 1:1 seg
         "seg-1-17b",  # last 1:7 seg
         "seg-1-11b",  # remaining 1:1 segs
-        "seg-2-0",    # missed basmalas
+        "seg-2-0",  # missed basmalas
         "seg-3-0",
     ]
 
@@ -165,20 +168,25 @@ def test_basmala_amin_order_is_first11_last17_rest11_then_missed():
 def test_basmala_amin_respects_ignored_category_on_11_and_17_segs():
     """Segs carrying ``ignored_categories=["basmala_amin"]`` drop out of the list."""
     entries = [
-        _entry("1", [
-            _seg(
-                "1:1:1-1:1:4",
-                uid="seg-1-11",
-                t0=0, t1=1000,
-                ignored_categories=["basmala_amin"],
-            ),
-            _seg(
-                "1:7:1-1:7:5",
-                uid="seg-1-17",
-                t0=2000, t1=3000,
-                ignored_categories=["basmala_amin"],
-            ),
-        ]),
+        _entry(
+            "1",
+            [
+                _seg(
+                    "1:1:1-1:1:4",
+                    uid="seg-1-11",
+                    t0=0,
+                    t1=1000,
+                    ignored_categories=["basmala_amin"],
+                ),
+                _seg(
+                    "1:7:1-1:7:5",
+                    uid="seg-1-17",
+                    t0=2000,
+                    t1=3000,
+                    ignored_categories=["basmala_amin"],
+                ),
+            ],
+        ),
     ]
     out = _call(entries, deleted=None)
     assert out["basmala_amin"] == []

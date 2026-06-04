@@ -12,30 +12,30 @@ the SHA-256 hash of the serialised bytes powers ETag + cache-busting query
 param. The hash changes only when the underlying Digital Khatt script or
 surah metadata is rebuilt.
 """
+
 from __future__ import annotations
 
 import hashlib
 import threading
-from typing import Optional
 
 import orjson
 
 from services.storage.data_loader import get_dk_words_flat, get_word_counts
 
 _lock = threading.Lock()
-_payload: Optional[bytes] = None
-_hash: Optional[str] = None
+_payload: bytes | None = None
+_hash: str | None = None
 
 
 def _build() -> tuple[bytes, str]:
     """Serialise the dk_words + verse_word_counts bundle and hash it."""
-    verse_word_counts = {
-        f"{surah}:{ayah}": n for (surah, ayah), n in get_word_counts().items()
-    }
-    body = orjson.dumps({
-        "dk_words": get_dk_words_flat(),
-        "verse_word_counts": verse_word_counts,
-    })
+    verse_word_counts = {f"{surah}:{ayah}": n for (surah, ayah), n in get_word_counts().items()}
+    body = orjson.dumps(
+        {
+            "dk_words": get_dk_words_flat(),
+            "verse_word_counts": verse_word_counts,
+        }
+    )
     digest = hashlib.sha256(body).hexdigest()[:12]
     return body, digest
 

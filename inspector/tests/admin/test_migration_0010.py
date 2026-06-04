@@ -1,4 +1,5 @@
 """Migration 0010 applies: guide_views table + per-user index."""
+
 from __future__ import annotations
 
 from services import db
@@ -16,8 +17,8 @@ def test_guide_views_table_shape():
 def test_guide_views_user_index_exists():
     names = {
         r[0]
-        for r in db.get_conn().execute(
-            "SELECT name FROM sqlite_master WHERE type='index'"
-        ).fetchall()
+        for r in db.get_conn()
+        .execute("SELECT name FROM sqlite_master WHERE type='index'")
+        .fetchall()
     }
     assert "ix_guide_views_user" in names

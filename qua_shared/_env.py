@@ -62,9 +62,7 @@ def load_repo_env() -> None:
             if not line or line.startswith("#") or "=" not in line:
                 continue
             k, v = line.split("=", 1)
-            os.environ.setdefault(
-                k.strip(), v.strip().strip('"').strip("'")
-            )
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
     os.environ.setdefault("INSPECTOR_BACKEND", "bucket")
 

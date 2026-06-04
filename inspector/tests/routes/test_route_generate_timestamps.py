@@ -22,7 +22,8 @@ def _stub_launch(monkeypatch):
 
     monkeypatch.setattr(ts_jobs, "running_job_for", lambda slug: None)
     monkeypatch.setattr(
-        ts_jobs, "launch",
+        ts_jobs,
+        "launch",
         lambda slug, settings=None, webhook_base=None: {"job_id": "j_test", "url": None},
     )
 
@@ -50,7 +51,9 @@ def test_generate_ts_on_marked_ready_launches(signed_in_client, monkeypatch, see
     assert resp.status_code == 202, resp.get_data(as_text=True)
 
 
-def test_generate_ts_rejects_under_review_not_marked_ready(signed_in_client, monkeypatch, seed_state):
+def test_generate_ts_rejects_under_review_not_marked_ready(
+    signed_in_client, monkeypatch, seed_state
+):
     """An under_review row that isn't marked ready has nothing to publish → 409."""
     client, _user = signed_in_client(role="maintainer")
     _stub_launch(monkeypatch)

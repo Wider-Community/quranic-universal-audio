@@ -26,7 +26,6 @@ from qua_shared.schemas import (
     AdminPermissionsResponse,
 )
 from qua_shared.schemas.capabilities import ANONYMOUS
-
 from services.auth import capabilities as _resolver
 from services.db import repo_access, repo_permissions
 from services.db import sync as _sync
@@ -62,7 +61,9 @@ def build_matrix() -> AdminPermissionsResponse:
                     )
                 else:
                     cells[tier] = AdminCapabilityTierState(
-                        allowed=None, applicable=False, is_default=True,
+                        allowed=None,
+                        applicable=False,
+                        is_default=True,
                     )
             rows.append(
                 AdminCapabilityRow(
@@ -88,15 +89,11 @@ def _validate(capability_id: str, tier: str):
     if cap is None:
         raise PermissionChangeError(f"unknown capability {capability_id!r}")
     if cap.owner_only_fixed:
-        raise PermissionChangeError(
-            f"{capability_id!r} is owner-only and cannot be changed"
-        )
+        raise PermissionChangeError(f"{capability_id!r} is owner-only and cannot be changed")
     if tier not in TIERS:
         raise PermissionChangeError(f"unknown tier {tier!r}")
     if tier == ANONYMOUS and not cap.anon_eligible:
-        raise PermissionChangeError(
-            f"{capability_id!r} is not applicable to anonymous users"
-        )
+        raise PermissionChangeError(f"{capability_id!r} is not applicable to anonymous users")
     return cap
 
 

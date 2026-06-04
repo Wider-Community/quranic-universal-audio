@@ -34,6 +34,7 @@ def _isolated_backend(tmp_path, monkeypatch):
 
 def _silence_audit(monkeypatch):
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda **kw: None)
 
 
@@ -71,6 +72,7 @@ def test_delete_public_maintainer_returns_403(signed_in_client, monkeypatch):
 
 def test_delete_public_owner_happy_path(signed_in_client, monkeypatch):
     from services import activity_state as activity_state_service
+
     _silence_audit(monkeypatch)
     client, _ = signed_in_client(role="owner", hf_user_id="u-O", login="owen")
     res = client.delete(

@@ -64,9 +64,7 @@ _WBW_LANG_CODES: Final[frozenset[str]] = frozenset(c for c, _ in CONTENT_WBW_LAN
 # real gaps — Indonesian 19% of verses, Hindi/Turkish ~60%, Tamil 83%, Divehi
 # 99% — and are flagged "partial" in the picker so users aren't surprised by
 # English mixed into a non-English gloss. See the picker in the Timestamps tab.
-COMPLETE_WBW_CODES: Final[frozenset[str]] = frozenset(
-    {"en", "ur", "bn", "fa", "fr", "zh", "sq"}
-)
+COMPLETE_WBW_CODES: Final[frozenset[str]] = frozenset({"en", "ur", "bn", "fa", "fr", "zh", "sq"})
 _VERSE_KEY_RE: Final[re.Pattern[str]] = re.compile(r"^\d+:\d+$")
 
 
@@ -135,9 +133,7 @@ def get_content_token() -> str:
             raise QfContentError(f"QF content token request failed: {e}") from e
         if not resp.ok:
             cache.set_qf_token_cooldown(time.time() + _TOKEN_FAIL_COOLDOWN_SECS)
-            raise QfContentError(
-                f"QF content token {resp.status_code}: {resp.text[:200]}"
-            )
+            raise QfContentError(f"QF content token {resp.status_code}: {resp.text[:200]}")
         body = resp.json()
         access = body.get("access_token")
         if not access:
@@ -164,17 +160,13 @@ def chapter_audio_urls(qf_reciter_id: int) -> dict[str, str]:
     try:
         resp = requests.get(
             url,
-            headers=_ua_headers(
-                {"x-auth-token": token, "x-client-id": config.content_client_id()}
-            ),
+            headers=_ua_headers({"x-auth-token": token, "x-client-id": config.content_client_id()}),
             timeout=_TIMEOUT_SECONDS,
         )
     except requests.RequestException as e:
         raise QfContentError(f"QF chapter_recitations failed: {e}") from e
     if not resp.ok:
-        raise QfContentError(
-            f"QF chapter_recitations {resp.status_code}: {resp.text[:200]}"
-        )
+        raise QfContentError(f"QF chapter_recitations {resp.status_code}: {resp.text[:200]}")
     body = resp.json()
     files = body.get("audio_files") if isinstance(body, dict) else None
     if not isinstance(files, list):
@@ -219,9 +211,7 @@ def word_by_word(verse_key: str, language: str = "en") -> dict[str, str]:
                 "language": lang,
                 "word_fields": "location,translation",
             },
-            headers=_ua_headers(
-                {"x-auth-token": token, "x-client-id": config.content_client_id()}
-            ),
+            headers=_ua_headers({"x-auth-token": token, "x-client-id": config.content_client_id()}),
             timeout=_TIMEOUT_SECONDS,
         )
     except requests.RequestException as e:

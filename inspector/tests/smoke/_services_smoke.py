@@ -67,9 +67,7 @@ def smoke() -> int:
             assert access.resolve_role("999") == Role.CONTRIBUTOR
             print("ok  access.bootstrap + resolve_role")
 
-            owner_actor = Actor(
-                hf_user_id="100", login_at_time="owner_alice", role=Role.OWNER
-            )
+            owner_actor = Actor(hf_user_id="100", login_at_time="owner_alice", role=Role.OWNER)
 
             # grant a maintainer + a contributor self (via grant maintainer)
             maintainer = access.grant(
@@ -135,7 +133,6 @@ def smoke() -> int:
             # Persist vocab directly (bypasses the mutation API which is for
             # the runtime; tests need to seed the vocab first.)
             from . import storage_paths
-
             from .hf_bucket import get_backend
 
             get_backend().write_json_atomic(
@@ -218,9 +215,7 @@ def smoke() -> int:
 
             # one-claim-per-user predicate
             assert state.has_other_active_claim("300")
-            assert not state.has_other_active_claim(
-                "300", except_slug="saad_al_ghamdi"
-            )
+            assert not state.has_other_active_claim("300", except_slug="saad_al_ghamdi")
             print("ok  state.has_other_active_claim")
 
             # mark_ready → unmark_ready
@@ -379,9 +374,7 @@ def smoke() -> int:
             from . import storage_paths
 
             partition = storage_paths.audit_partition_path(
-                __import__("datetime").datetime.now(
-                    __import__("datetime").timezone.utc
-                )
+                __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
             )
             records = list(get_backend().iter_jsonl(partition))
             assert len(records) >= 15, f"expected >=15 audit entries, got {len(records)}"

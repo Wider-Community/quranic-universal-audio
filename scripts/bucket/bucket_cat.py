@@ -1,15 +1,14 @@
 """Print a bucket file's contents.
 
-  bucket_cat.py catalog/audio_manifest/husary_mp3quran.json --json --bucket prod
-  bucket_cat.py reciters/<slug>/peaks/2.json.gz --gz --json --head 50
-  bucket_cat.py reciters/<slug>/audio/2.mp3 --bytes 4   # first 4 bytes (sanity peek)
+bucket_cat.py catalog/audio_manifest/husary_mp3quran.json --json --bucket prod
+bucket_cat.py reciters/<slug>/peaks/2.json.gz --gz --json --head 50
+bucket_cat.py reciters/<slug>/audio/2.mp3 --bytes 4   # first 4 bytes (sanity peek)
 """
 
 from __future__ import annotations
 
 import argparse
 import gzip
-import io
 import json
 import sys
 from pathlib import Path
@@ -19,12 +18,18 @@ import _bootstrap as bs  # noqa: E402
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("path", help="path within the bucket")
     p.add_argument("--head", type=int, default=0, help="first N lines (after decode)")
-    p.add_argument("--bytes", dest="byte_limit", type=int, default=0,
-                   help="dump first N bytes (binary-safe, hex)")
+    p.add_argument(
+        "--bytes",
+        dest="byte_limit",
+        type=int,
+        default=0,
+        help="dump first N bytes (binary-safe, hex)",
+    )
     p.add_argument("--json", action="store_true", help="parse + pretty-print as JSON")
     p.add_argument("--gz", action="store_true", help="gunzip before processing")
     bs.add_bucket_args(p)

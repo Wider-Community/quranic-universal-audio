@@ -13,7 +13,6 @@ import types
 
 import pytest
 
-
 # ---- reciter_map ----
 
 
@@ -81,9 +80,7 @@ def test_chapter_audio_urls_parses_and_sets_ua(monkeypatch, _clear_qf_cache):
     assert captured["headers"]["User-Agent"].startswith("Mozilla/")
     assert captured["headers"]["x-auth-token"] == "tok"
     # Second call is served from cache (no second request).
-    monkeypatch.setattr(
-        content.requests, "get", lambda *a, **k: pytest.fail("should be cached")
-    )
+    monkeypatch.setattr(content.requests, "get", lambda *a, **k: pytest.fail("should be cached"))
     assert content.chapter_audio_urls(7) == out
 
 
@@ -106,6 +103,7 @@ def _stub_route(monkeypatch, *, reciter_id, style, api_urls=None, raise_err=Fals
     """Wire the route's collaborators: bucket manifest read, config, catalog,
     and the content fetch."""
     from routes.audio import metadata
+
     from services.quran_foundation import content as qf_content
     from services.storage import cache
 
@@ -115,10 +113,14 @@ def _stub_route(monkeypatch, *, reciter_id, style, api_urls=None, raise_err=Fals
     backend = types.SimpleNamespace(
         read_json=lambda path: {
             "chapters": {
-                "1": {"url": "https://download.quranicaudio.com/quran/x/001.mp3",
-                      "duration_sec": 47},
-                "2": {"url": "https://download.quranicaudio.com/quran/x/002.mp3",
-                      "duration_sec": 90},
+                "1": {
+                    "url": "https://download.quranicaudio.com/quran/x/001.mp3",
+                    "duration_sec": 47,
+                },
+                "2": {
+                    "url": "https://download.quranicaudio.com/quran/x/002.mp3",
+                    "duration_sec": 90,
+                },
             }
         }
     )
@@ -171,9 +173,7 @@ def test_route_leaves_non_quranicaudio_source_untouched(flask_client, monkeypatc
 
 
 def test_route_falls_back_on_api_error(flask_client, monkeypatch):
-    _stub_route(
-        monkeypatch, reciter_id="saad_al_ghamdi", style="murattal", raise_err=True
-    )
+    _stub_route(monkeypatch, reciter_id="saad_al_ghamdi", style="murattal", raise_err=True)
     resp = flask_client.get("/api/audio/surahs/by_surah/quranicaudio/saad_al_ghamdi_qdc")
     surahs = resp.get_json()["surahs"]
     assert surahs["1"]["via"] == "qf_fallback"
@@ -189,6 +189,7 @@ def _stub_null_duration_manifest(monkeypatch, *, peaks_durations):
     URL. QF routing is disabled so the route returns the raw manifest shape.
     """
     from routes.audio import metadata
+
     from services.storage import cache
 
     cache._audio_url.clear()
@@ -226,6 +227,7 @@ def test_route_fills_null_duration_from_peaks_header(flask_client, monkeypatch):
 
 def test_route_keeps_manifest_duration_when_present(flask_client, monkeypatch):
     from routes.audio import metadata
+
     from services.storage import cache
 
     cache._audio_url.clear()

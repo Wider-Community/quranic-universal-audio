@@ -1,4 +1,5 @@
 """Admin Users read path: list aggregations + detail + no-N+1 guard."""
+
 from __future__ import annotations
 
 from services import db
@@ -25,8 +26,13 @@ def test_list_users_aggregates(seed_role, seed_state):
     seed_role("m1", login="maint", role="maintainer")
     seed_role("c1", login="contrib", role="contributor")
     # c1 holds an open, marked-ready claim on slugA.
-    seed_state("slugA", state="under_review", assignee_hf_id="c1",
-               assignee_login="contrib", marked_ready=True)
+    seed_state(
+        "slugA",
+        state="under_review",
+        assignee_hf_id="c1",
+        assignee_login="contrib",
+        marked_ready=True,
+    )
 
     with db.transaction() as conn:
         _ins_transition(conn, tid="t1", actor="m1", event="reciter.marked_ready")
@@ -71,8 +77,13 @@ def test_detail_outcome_and_stats(seed_role, seed_state):
     seed_role("rev", login="rev", role="contributor")
     # open claim → "claimed, open now". Not marked-ready so it doesn't add a
     # ~0-turnaround pair and skew the avg (the only turnaround pair is pubS).
-    seed_state("openS", state="under_review", assignee_hf_id="rev",
-               assignee_login="rev", marked_ready=False)
+    seed_state(
+        "openS",
+        state="under_review",
+        assignee_hf_id="rev",
+        assignee_login="rev",
+        marked_ready=False,
+    )
     # a closed-as-published claim row for history/turnaround
     with db.transaction() as conn:
         conn.execute(
@@ -119,9 +130,7 @@ def test_list_users_no_n_plus_1(seed_role, monkeypatch):
             calls["n"] += 1
             return self._conn.execute(*a, **k)
 
-    monkeypatch.setattr(
-        repo_admin_users, "get_conn", lambda: _CountingConn(real_get_conn())
-    )
+    monkeypatch.setattr(repo_admin_users, "get_conn", lambda: _CountingConn(real_get_conn()))
 
     for i in range(3):
         seed_role(f"u{i}", login=f"u{i}", role="contributor")

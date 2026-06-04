@@ -12,8 +12,8 @@ the FE↔backend wiring is demonstrable today.
 
 from __future__ import annotations
 
-import re
 import logging
+import re
 from typing import Final
 
 import requests
@@ -125,9 +125,7 @@ def _fetch_page(token: str, after: str | None = None) -> tuple[list, str | None,
     if after:
         params["after"] = after
     try:
-        resp = requests.get(
-            url, headers=_headers(token), params=params, timeout=_TIMEOUT_SECONDS
-        )
+        resp = requests.get(url, headers=_headers(token), params=params, timeout=_TIMEOUT_SECONDS)
     except requests.RequestException as e:
         raise QfBookmarkError(f"QF bookmarks list failed: {e}") from e
     if not resp.ok:
@@ -174,14 +172,10 @@ def add_bookmark(token: str, surah: int, ayah: int) -> dict:
         "verseNumber": int(ayah),
     }
     try:
-        resp = requests.post(
-            url, headers=_headers(token), json=payload, timeout=_TIMEOUT_SECONDS
-        )
+        resp = requests.post(url, headers=_headers(token), json=payload, timeout=_TIMEOUT_SECONDS)
     except requests.RequestException as e:
         raise QfBookmarkError(f"QF bookmark add failed: {e}") from e
-    logger.info(
-        "QF add_bookmark sent=%s -> %s body=%s", payload, resp.status_code, resp.text[:300]
-    )
+    logger.info("QF add_bookmark sent=%s -> %s body=%s", payload, resp.status_code, resp.text[:300])
     if not resp.ok:
         raise QfBookmarkError(f"QF bookmark add {resp.status_code}: {resp.text[:200]}")
     return {"surah": int(surah), "ayah": int(ayah), "key": normalize_key(surah, ayah)}
@@ -210,6 +204,8 @@ def remove_bookmark(token: str, key: str) -> None:
         resp = requests.delete(url, headers=_headers(token), timeout=_TIMEOUT_SECONDS)
     except requests.RequestException as e:
         raise QfBookmarkError(f"QF bookmark remove failed: {e}") from e
-    logger.info("QF remove_bookmark DELETE %s -> %s body=%s", bid, resp.status_code, resp.text[:200])
+    logger.info(
+        "QF remove_bookmark DELETE %s -> %s body=%s", bid, resp.status_code, resp.text[:200]
+    )
     if not resp.ok and resp.status_code != 404:
         raise QfBookmarkError(f"QF bookmark remove {resp.status_code}: {resp.text[:200]}")

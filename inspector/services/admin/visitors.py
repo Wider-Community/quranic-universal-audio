@@ -21,12 +21,10 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from config import ENTRY_DEBOUNCE_SECONDS, VISITOR_FLUSH_INTERVAL_SECONDS
-
 from qua_shared.schemas import AdminVisitorStats, VisitorDayStat
-
 from services.db import _serde, repo_access, repo_visitors
 from services.db import sync as _sync
 
@@ -36,7 +34,7 @@ _VISITOR_STATS_RECENT_DAYS = 30
 
 
 def _today() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
+    return datetime.now(UTC).date().isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +71,7 @@ _bucket: dict = {
     "signed_in_hits": 0,
     "anon_hits": 0,
     "signed_in_ids": set(),  # hf_user_id seen this period
-    "anon_ids": set(),       # anon_id cookie values seen this period
+    "anon_ids": set(),  # anon_id cookie values seen this period
 }
 
 
@@ -126,7 +124,7 @@ def flush(*, now: datetime | None = None) -> bool:
     snap = _drain()
     if not any(snap.values()):
         return False
-    day = (now or datetime.now(timezone.utc)).date().isoformat()
+    day = (now or datetime.now(UTC)).date().isoformat()
     with _sync.durable_transaction():
         repo_visitors.upsert_day(day, **snap)
     return True
@@ -144,9 +142,7 @@ def start_flush_daemon() -> None:
     global _FLUSH_THREAD, _FLUSH_STARTED
     if _FLUSH_STARTED:
         return
-    _FLUSH_THREAD = threading.Thread(
-        target=_flush_loop, name="visitor-flush", daemon=True
-    )
+    _FLUSH_THREAD = threading.Thread(target=_flush_loop, name="visitor-flush", daemon=True)
     _FLUSH_THREAD.start()
     _FLUSH_STARTED = True
 
@@ -170,7 +166,10 @@ def get_visitor_stats() -> dict:
     recent days. Not cached — must reflect the un-flushed bucket."""
     today = _today()
     persisted = repo_visitors.get_day(today) or {
-        "signed_in_hits": 0, "anon_hits": 0, "unique_signed_in": 0, "unique_anon": 0,
+        "signed_in_hits": 0,
+        "anon_hits": 0,
+        "unique_signed_in": 0,
+        "unique_anon": 0,
     }
     live = live_counts()
     today_stat = VisitorDayStat(

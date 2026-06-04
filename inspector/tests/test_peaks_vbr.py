@@ -4,6 +4,7 @@
 then ``src.data``, then falls back to the URL (ffmpeg fetches HTTPS via the
 network-enabled image build).
 """
+
 from __future__ import annotations
 
 import struct
@@ -32,8 +33,11 @@ def test_local_bytes_route_through_ffmpeg_decode(monkeypatch):
     decode_calls: list = []
 
     monkeypatch.setattr(audio_source, "resolve", lambda r, u: _fake_source(has_local=True))
-    monkeypatch.setattr(peaks, "_ffmpeg_decode_segment",
-                        lambda src, url, s, d: decode_calls.append((src, url, s, d)) or _pcm())
+    monkeypatch.setattr(
+        peaks,
+        "_ffmpeg_decode_segment",
+        lambda src, url, s, d: decode_calls.append((src, url, s, d)) or _pcm(),
+    )
 
     data = peaks.compute_segment_peaks("https://cdn.example/audio.mp3", 1000, 2000, "r", chapter=7)
     assert data is not None
@@ -51,8 +55,11 @@ def test_no_local_bytes_falls_back_to_url(monkeypatch):
     decode_calls: list = []
 
     monkeypatch.setattr(audio_source, "resolve", lambda r, u: _fake_source(has_local=False))
-    monkeypatch.setattr(peaks, "_ffmpeg_decode_segment",
-                        lambda src, url, s, d: decode_calls.append((src, url, s, d)) or _pcm())
+    monkeypatch.setattr(
+        peaks,
+        "_ffmpeg_decode_segment",
+        lambda src, url, s, d: decode_calls.append((src, url, s, d)) or _pcm(),
+    )
 
     data = peaks.compute_segment_peaks("https://cdn.example/audio.mp3", 1000, 2000, "r", chapter=7)
     assert data is not None

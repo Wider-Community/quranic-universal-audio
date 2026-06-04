@@ -16,9 +16,17 @@ from __future__ import annotations
 import pytest
 
 
-def _record(event, *, slug="husary_qdc", to_state=None,
-            ts="2026-05-13T12:00:00+00:00", result="ok",
-            actor_hf_id="u-1", actor_login="alice", actor_role="maintainer"):
+def _record(
+    event,
+    *,
+    slug="husary_qdc",
+    to_state=None,
+    ts="2026-05-13T12:00:00+00:00",
+    result="ok",
+    actor_hf_id="u-1",
+    actor_login="alice",
+    actor_role="maintainer",
+):
     return {
         "event": event,
         "slug": slug,
@@ -38,15 +46,18 @@ def _record(event, *, slug="husary_qdc", to_state=None,
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("event,expected_kind", [
-    ("catalog.added", "added"),
-    ("reciter.alignment_completed", "available_review"),
-    ("reciter.claimed", "under_review"),
-    # `released` covers BOTH HF dataset push + GH release cut in v2.
-    # `reciter.published` (TS gen completion) is HIDDEN in v2 — it's admin
-    # infrastructure, not a public-release milestone.
-    ("released", "released"),
-])
+@pytest.mark.parametrize(
+    "event,expected_kind",
+    [
+        ("catalog.added", "added"),
+        ("reciter.alignment_completed", "available_review"),
+        ("reciter.claimed", "under_review"),
+        # `released` covers BOTH HF dataset push + GH release cut in v2.
+        # `reciter.published` (TS gen completion) is HIDDEN in v2 — it's admin
+        # infrastructure, not a public-release milestone.
+        ("released", "released"),
+    ],
+)
 def test_public_events_classified_with_kind(event, expected_kind):
     from services import activity_classification as ac
 
@@ -64,28 +75,31 @@ def test_awaiting_alignment_state_transition_classified_public_requested():
     assert ac.public_kind_for(record) == "requested"
 
 
-@pytest.mark.parametrize("event", [
-    # Former ADMIN_ONLY_EVENTS — admin notifications rail retired; these
-    # are now hidden (the Admin dashboard tabs cover them).
-    "reciter.released",
-    "reciter.marked_ready",
-    "reciter.unmarked_ready",
-    "reciter.merge_rejected",
-    # v2: TS-gen completion is admin infrastructure (was wrongly PUBLIC in v1).
-    "reciter.published",
-    "reciter.unpublished",
-    "reciter.discarded",
-    "reciter.undiscarded",
-    "claim.force_released",
-    "claim.reassigned",
-    "admin.unlocked_for_revision",
-    # Always hidden.
-    "catalog.edited",
-    "access.role_granted",
-    "access.role_revoked",
-    "access.role_updated",
-    "admin.activity_deleted",
-])
+@pytest.mark.parametrize(
+    "event",
+    [
+        # Former ADMIN_ONLY_EVENTS — admin notifications rail retired; these
+        # are now hidden (the Admin dashboard tabs cover them).
+        "reciter.released",
+        "reciter.marked_ready",
+        "reciter.unmarked_ready",
+        "reciter.merge_rejected",
+        # v2: TS-gen completion is admin infrastructure (was wrongly PUBLIC in v1).
+        "reciter.published",
+        "reciter.unpublished",
+        "reciter.discarded",
+        "reciter.undiscarded",
+        "claim.force_released",
+        "claim.reassigned",
+        "admin.unlocked_for_revision",
+        # Always hidden.
+        "catalog.edited",
+        "access.role_granted",
+        "access.role_revoked",
+        "access.role_updated",
+        "admin.activity_deleted",
+    ],
+)
 def test_hidden_events_classified(event):
     from services import activity_classification as ac
 
@@ -110,10 +124,13 @@ def test_reciter_requested_is_public_only():
     assert ac.public_kind_for(record) == "requested"
 
 
-@pytest.mark.parametrize("event", [
-    "reciter.request_rejected_soft",
-    "reciter.request_rejected_hard",
-])
+@pytest.mark.parametrize(
+    "event",
+    [
+        "reciter.request_rejected_soft",
+        "reciter.request_rejected_hard",
+    ],
+)
 def test_request_reject_events_hidden(event):
     """Reject outcomes are off the rail (still audited) — they live in the
     Requests tab now."""

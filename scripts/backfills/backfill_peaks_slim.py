@@ -18,13 +18,13 @@ Wall-clock budget: ~5-10 s per reciter on local FUSE mount; ~30-60 s on
 HF Space NFS for the heavier chapters. Single-threaded by design — we don't
 need parallelism for a one-shot run and serial keeps the bucket happier.
 """
+
 from __future__ import annotations
 
 import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Iterable
 
 # Make this script runnable as `python scripts/backfill_peaks_slim.py`
 # from the inspector/ directory (matches the sibling scripts in this dir).
@@ -75,7 +75,7 @@ def _iter_chapters(backend, slug: str) -> list[str]:
 
 def _migrate_chapter(backend, slug: str, chapter: str, *, dry_run: bool) -> str:
     """Migrate one chapter. Returns a status tag for the summary counters."""
-    new_path = storage_paths.prefetched_peaks_path(slug, chapter)         # .json.gz
+    new_path = storage_paths.prefetched_peaks_path(slug, chapter)  # .json.gz
     legacy_path = storage_paths.prefetched_peaks_legacy_path(slug, chapter)  # .json
     backup_path = storage_paths.prefetched_peaks_backup_path(slug, chapter)  # .json.bak
 
@@ -120,8 +120,7 @@ def _migrate_chapter(backend, slug: str, chapter: str, *, dry_run: bool) -> str:
         # .json.gz is written but the original wasn't renamed. The reader
         # uses the .gz path, so the bucket is functionally migrated — but
         # rollback won't have a .bak to restore. Operator should re-run.
-        logger.warning("%s/%s: wrote .json.gz but backup rename failed: %s",
-                       slug, chapter, e)
+        logger.warning("%s/%s: wrote .json.gz but backup rename failed: %s", slug, chapter, e)
         return "backup-error"
 
     return "migrated"
@@ -152,8 +151,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     backend = get_backend()
     if args.slug:

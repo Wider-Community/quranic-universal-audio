@@ -21,6 +21,7 @@ cache directive from ``public, max-age=86400`` (1 day) to
 ``public, max-age=31536000, immutable`` (1 year) since the hash changes
 whenever the underlying audio source flips.
 """
+
 from concurrent.futures import ThreadPoolExecutor
 
 import orjson
@@ -117,6 +118,7 @@ def seg_peaks(reciter):
 
     misses = [u for u in target_urls if u not in result]
     if misses:
+
         def _read(url: str) -> tuple[str, dict | None]:
             return url, audio_fetch.read_prefetched_peaks(reciter, url)
 

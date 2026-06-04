@@ -55,6 +55,7 @@ def test_hydrate_empty_when_no_file(fresh_state):
 def test_delete_records_tombstone(fresh_state, monkeypatch):
     svc, _ = fresh_state
     from services import audit as audit_service
+
     calls = []
     monkeypatch.setattr(audit_service, "append", lambda **kw: calls.append(kw))
 
@@ -71,6 +72,7 @@ def test_delete_records_tombstone(fresh_state, monkeypatch):
 def test_is_deleted_predicate(fresh_state, monkeypatch):
     svc, _ = fresh_state
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda **kw: None)
 
     svc.delete("abc123", actor=_actor("u-O", role="owner"), reason="ten chars+")
@@ -81,6 +83,7 @@ def test_is_deleted_predicate(fresh_state, monkeypatch):
 def test_delete_idempotent(fresh_state, monkeypatch):
     svc, _ = fresh_state
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda **kw: None)
 
     actor = _actor("u-O", role="owner")
@@ -98,6 +101,7 @@ def test_writes_persist_to_substrate(fresh_state, monkeypatch):
     """Delete persists into the SQLite substrate (read back via snapshot)."""
     svc, _ = fresh_state
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda **kw: None)
 
     svc.delete("xyz789", actor=_actor("u-O", role="owner"), reason="ten chars+")

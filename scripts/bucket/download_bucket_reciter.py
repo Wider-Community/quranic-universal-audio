@@ -25,6 +25,7 @@ Usage::
         --slug mahmoud_khalil_al_husary_mp3quran --bucket prod \\
         --out /tmp/husary/
 """
+
 from __future__ import annotations
 
 import argparse
@@ -76,8 +77,7 @@ def _download_file(backend, src: str, dst: Path) -> bool:
     return True
 
 
-def download(backend, slug: str, out_dir: Path, *,
-             include_audio: bool) -> dict:
+def download(backend, slug: str, out_dir: Path, *, include_audio: bool) -> dict:
     if not _reciter_exists(backend, slug):
         raise SystemExit(f"slug {slug!r}: no detailed.json under reciters/")
     base = f"reciters/{slug}"
@@ -87,9 +87,13 @@ def download(backend, slug: str, out_dir: Path, *,
 
     # 1. Top-level JSON/JSONL files (best-effort — optional ones may be missing).
     top_level = [
-        "detailed.json", "segments.json", "edit_history.jsonl",
-        "edit_history_peaks.jsonl", "low_confidence_v2.json",
-        "auto_split_v1.json", "pipeline_meta.json",
+        "detailed.json",
+        "segments.json",
+        "edit_history.jsonl",
+        "edit_history_peaks.jsonl",
+        "low_confidence_v2.json",
+        "auto_split_v1.json",
+        "pipeline_meta.json",
     ]
     n_top = 0
     for fname in top_level:
@@ -110,8 +114,7 @@ def download(backend, slug: str, out_dir: Path, *,
     log.info("Pulled %d peaks files", n_peaks)
 
     # 3. Audio sentinel always; audio mp3s only when requested.
-    _download_file(backend, f"{base}/audio/_done.json",
-                   out_dir / "audio" / "_done.json")
+    _download_file(backend, f"{base}/audio/_done.json", out_dir / "audio" / "_done.json")
 
     n_audio = 0
     if include_audio:
@@ -138,10 +141,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--slug", required=True)
     ap.add_argument("--bucket", choices=sorted(_BUCKETS), default="prod")
-    ap.add_argument("--out", type=Path, required=True,
-                    help="Local output directory (slug folder).")
-    ap.add_argument("--include-audio", action="store_true",
-                    help="Also download audio/*.mp3 files (default: skip).")
+    ap.add_argument("--out", type=Path, required=True, help="Local output directory (slug folder).")
+    ap.add_argument(
+        "--include-audio",
+        action="store_true",
+        help="Also download audio/*.mp3 files (default: skip).",
+    )
     args = ap.parse_args()
 
     logging.basicConfig(
@@ -151,9 +156,9 @@ def main() -> int:
     _setup_paths_and_env(args.bucket)
 
     from services.storage.hf_bucket import get_backend
+
     backend = get_backend()
-    result = download(backend, args.slug, args.out,
-                      include_audio=args.include_audio)
+    result = download(backend, args.slug, args.out, include_audio=args.include_audio)
     log.info("DONE: %s", result)
     return 0
 

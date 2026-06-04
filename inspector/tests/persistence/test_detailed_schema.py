@@ -1,13 +1,11 @@
 """detailed.json on-disk schema tests (MUST-2 — additive only)."""
+
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
-
-
-
-import os
 
 os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
@@ -23,8 +21,8 @@ KNOWN_SEGMENT_FIELDS = {
     # listed in the allow-list so legacy fixtures that still carry it parse cleanly.
     "phonemes_asr",
     "wrap_word_ranges",
-    "qalqala_letter",     # persisted classifier optimisation (migrate_wip §2)
-    "is_boundary_adj",    # persisted classifier optimisation (migrate_wip §2)
+    "qalqala_letter",  # persisted classifier optimisation (migrate_wip §2)
+    "is_boundary_adj",  # persisted classifier optimisation (migrate_wip §2)
     "ignored_categories",
     "ignored",
     "audio_url",
@@ -43,7 +41,9 @@ def _segments(detailed: dict) -> list[dict]:
     return out
 
 
-def test_detailed_json_round_trip_preserves_known_fields(load_fixture, tmp_reciter_dir, signed_in_client):
+def test_detailed_json_round_trip_preserves_known_fields(
+    load_fixture, tmp_reciter_dir, signed_in_client
+):
     """Load fixture → save back → load → known fields equal."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
@@ -54,13 +54,15 @@ def test_detailed_json_round_trip_preserves_known_fields(load_fixture, tmp_recit
 
     seg_payload = []
     for s in fixture["entries"][0]["segments"]:
-        seg_payload.append({
-            "time_start": s["time_start"],
-            "time_end": s["time_end"],
-            "matched_ref": s["matched_ref"],
-            "confidence": s["confidence"],
-            "segment_uid": s["segment_uid"],
-        })
+        seg_payload.append(
+            {
+                "time_start": s["time_start"],
+                "time_end": s["time_end"],
+                "matched_ref": s["matched_ref"],
+                "confidence": s["confidence"],
+                "segment_uid": s["segment_uid"],
+            }
+        )
     payload = {"full_replace": True, "segments": seg_payload, "operations": []}
 
     res = client.post(
@@ -75,7 +77,7 @@ def test_detailed_json_round_trip_preserves_known_fields(load_fixture, tmp_recit
 
     saved_segs = saved["entries"][0]["segments"]
     assert len(saved_segs) == len(seg_payload)
-    for orig, saved_seg in zip(fixture["entries"][0]["segments"], saved_segs):
+    for orig, saved_seg in zip(fixture["entries"][0]["segments"], saved_segs, strict=True):
         for key in ("segment_uid", "time_start", "time_end", "matched_ref"):
             assert saved_seg.get(key) == orig.get(key), (
                 f"field {key} drifted across save: orig={orig.get(key)!r} saved={saved_seg.get(key)!r}"
@@ -93,7 +95,9 @@ def test_detailed_json_no_field_removed(load_fixture):
         )
 
 
-def test_detailed_json_additive_only_classified_issues_optional(load_fixture, tmp_reciter_dir, signed_in_client):
+def test_detailed_json_additive_only_classified_issues_optional(
+    load_fixture, tmp_reciter_dir, signed_in_client
+):
     """Phase 2: validation responses carry classified_issues — but it must NOT be persisted to detailed.json (MAY-10)."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
@@ -102,7 +106,9 @@ def test_detailed_json_additive_only_classified_issues_optional(load_fixture, tm
     res = client.get(f"/api/seg/validate/{reciter}")
     assert res.status_code == 200
 
-    on_disk = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
+    on_disk = json.loads(
+        (tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8")
+    )
     for seg in _segments(on_disk):
         assert "classified_issues" not in seg, (
             "MUST-2 violation: classified_issues should never be persisted into detailed.json — "

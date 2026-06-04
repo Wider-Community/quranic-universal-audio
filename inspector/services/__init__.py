@@ -14,17 +14,7 @@ from __future__ import annotations
 
 import sys as _sys
 
-from .auth import access, auth, hf_users, permissions, predicates, secrets_guard, token_auth
-from .state import audit, catalog, pending_requests, request_archive, state
-from .storage import cache, data_dir, data_loader, hf_bucket, storage_paths
-from .audio import (
-    audio_fetch,
-    audio_meta,
-    audio_source,
-    peaks,
-    peaks_history,
-    peaks_slim,
-)
+from . import validation
 from .activity import (
     activity_classification,
     activity_state,
@@ -33,6 +23,16 @@ from .activity import (
     search_normalize,
     stats,
 )
+from .audio import (
+    audio_fetch,
+    audio_meta,
+    audio_source,
+    peaks,
+    peaks_history,
+    peaks_slim,
+)
+from .auth import access, auth, hf_users, permissions, predicates, secrets_guard, token_auth
+from .reference import public_state, quran_refs, tajweed, timestamps
 from .segments import (
     auto_detect,
     auto_split,
@@ -42,8 +42,8 @@ from .segments import (
     segments_query,
     undo,
 )
-from .reference import public_state, quran_refs, tajweed, timestamps
-from . import validation
+from .state import audit, catalog, pending_requests, request_archive, state
+from .storage import cache, data_dir, data_loader, hf_bucket, storage_paths
 
 # Alias each submodule into sys.modules under its legacy ``services.X`` name so
 # existing ``from services.X import Y`` imports and ``monkeypatch.setattr(

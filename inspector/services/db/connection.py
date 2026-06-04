@@ -27,10 +27,10 @@ import os
 import sqlite3
 import tempfile
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +40,12 @@ _MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 # module state
 # ----------------------------------------------------------------------
 
-_lock = threading.Lock()                 # guards writer/path (re)initialisation
-_WRITE_LOCK = threading.RLock()          # serializes writers; re-entrant for nesting
+_lock = threading.Lock()  # guards writer/path (re)initialisation
+_WRITE_LOCK = threading.RLock()  # serializes writers; re-entrant for nesting
 _writer: sqlite3.Connection | None = None
 _readers = threading.local()
 _db_path: str | None = None
-_generation = 0                          # bumped on reset so stale readers reopen
+_generation = 0  # bumped on reset so stale readers reopen
 
 # The connection bound to the currently-active write transaction (if any).
 _active: ContextVar[sqlite3.Connection | None] = ContextVar("db_active_conn", default=None)
@@ -91,9 +91,7 @@ def _open(*, writer: bool) -> sqlite3.Connection:
     if str(parent) and path != ":memory:":
         parent.mkdir(parents=True, exist_ok=True)
     # isolation_level=None → autocommit; we manage BEGIN/COMMIT explicitly.
-    conn = sqlite3.connect(
-        path, isolation_level=None, check_same_thread=False, timeout=5.0
-    )
+    conn = sqlite3.connect(path, isolation_level=None, check_same_thread=False, timeout=5.0)
     conn.row_factory = sqlite3.Row
     _apply_pragmas(conn, writer=writer)
     if writer and path != ":memory:":
@@ -214,8 +212,7 @@ def transaction() -> Iterator[sqlite3.Connection]:
 
 def _bump_db_seq(conn: sqlite3.Connection) -> None:
     conn.execute(
-        "UPDATE db_meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) "
-        "WHERE key = 'db_seq'"
+        "UPDATE db_meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'db_seq'"
     )
 
 

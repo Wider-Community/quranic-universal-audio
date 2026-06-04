@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import orjson
 
 
 def now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def to_iso(dt: datetime | None) -> str | None:
@@ -31,9 +31,9 @@ def to_iso(dt: datetime | None) -> str | None:
     if dt is None:
         return None
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     else:
-        dt = dt.astimezone(timezone.utc)
+        dt = dt.astimezone(UTC)
     s = dt.isoformat()
     # isoformat() renders UTC as "+00:00"; pydantic renders it as "Z".
     if s.endswith("+00:00"):
@@ -51,7 +51,7 @@ def from_iso(s: str | None) -> datetime | None:
     # Stored values are always UTC; force tz-awareness for inputs that lack a
     # suffix (e.g. legacy strings) so round-trips stay deterministic.
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -84,9 +84,7 @@ def content_hash(
     Components are the *string* forms exactly as stored, so a record written
     here and a record read back hash identically.
     """
-    raw = f"{ts or ''}|{event or ''}|{slug or ''}|{actor_hf or ''}|{result or 'ok'}".encode(
-        "utf-8"
-    )
+    raw = f"{ts or ''}|{event or ''}|{slug or ''}|{actor_hf or ''}|{result or 'ok'}".encode()
     return hashlib.sha1(raw, usedforsecurity=False).hexdigest()[:16]
 
 

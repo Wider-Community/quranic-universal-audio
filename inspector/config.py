@@ -51,20 +51,20 @@ UNIFIED_DISPLAY_MAX_HEIGHT = 800  # px
 #   ease-in-out  — slow both ends
 #   none         — instant snap, no animation
 ANIM_TRANSITION_EASING = "ease"
-ANIM_HIGHLIGHT_COLOR = "#f0a500"       # gold — active word/char color (both views)
-ANIM_WORD_TRANSITION_DURATION = 0.15   # seconds — word opacity transition
-ANIM_CHAR_TRANSITION_DURATION = 0.02   # seconds — char opacity transition
-ANIM_WORD_SPACING = "0.2em"            # gap between words in animation view
-ANIM_LINE_HEIGHT = 2.0                 # line-height for animation text
-ANIM_FONT_SIZE = "44px"                # Arabic text size in animation view
+ANIM_HIGHLIGHT_COLOR = "#f0a500"  # gold — active word/char color (both views)
+ANIM_WORD_TRANSITION_DURATION = 0.15  # seconds — word opacity transition
+ANIM_CHAR_TRANSITION_DURATION = 0.02  # seconds — char opacity transition
+ANIM_WORD_SPACING = "0.2em"  # gap between words in animation view
+ANIM_LINE_HEIGHT = 2.0  # line-height for animation text
+ANIM_FONT_SIZE = "44px"  # Arabic text size in animation view
 
 # Analysis view settings
-ANALYSIS_WORD_FONT_SIZE = "1.5rem"     # word row text size in analysis view
+ANALYSIS_WORD_FONT_SIZE = "1.5rem"  # word row text size in analysis view
 ANALYSIS_LETTER_FONT_SIZE = "1.75rem"  # letter sub-row text size in analysis view
 
 # Segments tab settings
-SEG_FONT_SIZE = "1.8rem"           # Arabic text size in segment cards
-SEG_WORD_SPACING = "0.2em"         # gap between words in segment cards
+SEG_FONT_SIZE = "1.8rem"  # Arabic text size in segment cards
+SEG_WORD_SPACING = "0.2em"  # gap between words in segment cards
 
 # Auto-scroll animation mode for the segments list.
 # Values: "none"   — instant (no animation)
@@ -74,9 +74,9 @@ SEG_WORD_SPACING = "0.2em"         # gap between words in segment cards
 SEG_SCROLL_ANIM_MODE = "hybrid"
 
 # Adjust (trim) mode settings
-TRIM_PAD_LEFT = 15000                     # ms padding before segment
-TRIM_PAD_RIGHT = 15000                    # ms padding after segment
-TRIM_DIM_ALPHA = 0.4                      # dimming opacity for padded regions
+TRIM_PAD_LEFT = 15000  # ms padding before segment
+TRIM_PAD_RIGHT = 15000  # ms padding after segment
+TRIM_DIM_ALPHA = 0.4  # dimming opacity for padded regions
 
 # Accordion context: which validation categories auto-expand context cards
 # Values: "shown" (default open), "hidden" (default closed), "next_only" (open on nav)
@@ -99,7 +99,7 @@ FFMPEG_FULL_TIMEOUT = 300
 # Audio processing
 MIN_SEG_PEAK_BUCKETS = 10
 MIN_FULL_PEAK_BUCKETS = 100
-PEAKS_BUCKETS_PER_SEC = 30                # target peak density for segment-level peaks
+PEAKS_BUCKETS_PER_SEC = 30  # target peak density for segment-level peaks
 
 # Validation thresholds
 #
@@ -140,12 +140,12 @@ SEG_DUR_HIST_MAX_MS = 15000
 AUDIO_CACHE_MAX_AGE = 31_536_000
 
 # Confidence thresholds
-LOW_CONFIDENCE_RED = 0.60           # below this = red highlight ("below_60" stat)
+LOW_CONFIDENCE_RED = 0.60  # below this = red highlight ("below_60" stat)
 
 # Peaks (ffmpeg) — waveform peak extraction defaults (services/peaks.py)
-PEAKS_FFMPEG_SAMPLE_RATE = 8000          # Hz — ffmpeg resample target for peak computation
-PEAKS_PCM_NORMALIZER = 32768.0           # divisor that maps int16 PCM → [-1, 1] float
-PEAKS_WORKER_COUNT = 8                   # ThreadPoolExecutor workers for parallel peak compute
+PEAKS_FFMPEG_SAMPLE_RATE = 8000  # Hz — ffmpeg resample target for peak computation
+PEAKS_PCM_NORMALIZER = 32768.0  # divisor that maps int16 PCM → [-1, 1] float
+PEAKS_WORKER_COUNT = 8  # ThreadPoolExecutor workers for parallel peak compute
 # v1 used integer block size (`num_samples // num_buckets`) and dropped the
 # trailing samples that didn't fit, leaving the peaks array advertising
 # `duration_ms` larger than what it actually covered — a 0.25% multiplicative
@@ -165,23 +165,23 @@ PEAKS_WORKER_COUNT = 8                   # ThreadPoolExecutor workers for parall
 PEAKS_SCHEMA_VERSION = 3
 
 # Server defaults (app.py)
-DEFAULT_PORT = 5000                      # Flask --port default
-FLASK_ENV_VAR = "FLASK_ENV"              # environment variable name for Flask env
-FLASK_DEV_VALUE = "development"          # value that triggers debug/reloader mode
+DEFAULT_PORT = 5000  # Flask --port default
+FLASK_ENV_VAR = "FLASK_ENV"  # environment variable name for Flask env
+FLASK_DEV_VALUE = "development"  # value that triggers debug/reloader mode
 # Bind host — override with INSPECTOR_HOST for non-local deployments.
 SERVER_HOST = os.environ.get("INSPECTOR_HOST", "0.0.0.0")
 
 # Timestamps validation (routes/timestamps.py)
-TS_RANDOM_MAX_RETRIES = 10             # max attempts to find a non-empty verse in /ts/random
-TS_BOUNDARY_TOLERANCE_MS = 500         # default boundary tolerance when not in result metadata
+TS_RANDOM_MAX_RETRIES = 10  # max attempts to find a non-empty verse in /ts/random
+TS_BOUNDARY_TOLERANCE_MS = 500  # default boundary tolerance when not in result metadata
 # Sort-order weight for missing-word issues: one missing word adds this many ms to diff_ms.
 # This is NOT a unit conversion — it is purely a sort-order heuristic.
 MISSING_WORD_DIFF_MS_WEIGHT = 1000
 
 # Statistics histogram shape constants (services/stats.py)
-WORDS_PER_SEG_HIST_MAX = 15            # upper bound for words-per-segment histogram
-SEGS_PER_VERSE_HIST_MAX = 8            # upper bound for segs-per-verse histogram
-CONF_HIST_BIN_SIZE = 5                 # bin width (percentage points) for confidence histogram
+WORDS_PER_SEG_HIST_MAX = 15  # upper bound for words-per-segment histogram
+SEGS_PER_VERSE_HIST_MAX = 8  # upper bound for segs-per-verse histogram
+CONF_HIST_BIN_SIZE = 5  # bin width (percentage points) for confidence histogram
 
 # Auto-split (services/auto_split.py): MFA Space + timeout. Cross-verse
 # accordion's "Auto Split" routes here to compute the verse-boundary split
@@ -199,9 +199,7 @@ AUTO_SPLIT_MFA_TIMEOUT = 15
 ENTRY_DEBOUNCE_SECONDS = int(os.getenv("INSPECTOR_ENTRY_DEBOUNCE_SECONDS", "900"))
 # Visitor-counter flush cadence (in-memory → visitor_daily). One DB txn per
 # flush = one bucket upload per flush; never per request.
-VISITOR_FLUSH_INTERVAL_SECONDS = int(
-    os.getenv("INSPECTOR_VISITOR_FLUSH_INTERVAL_SECONDS", "3600")
-)
+VISITOR_FLUSH_INTERVAL_SECONDS = int(os.getenv("INSPECTOR_VISITOR_FLUSH_INTERVAL_SECONDS", "3600"))
 # Opaque first-party cookie for approximate unique-anonymous counting (random
 # uuid4; NO fingerprinting, NO PII). Set only for anonymous callers.
 ANON_COOKIE_NAME = "inspector_anon"

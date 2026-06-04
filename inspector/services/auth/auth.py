@@ -37,7 +37,7 @@ import threading
 import time
 from dataclasses import dataclass
 
-from authlib.integrations.flask_client import OAuth, FlaskIntegration
+from authlib.integrations.flask_client import FlaskIntegration, OAuth
 from flask import request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -108,10 +108,7 @@ class _TTLCache:
             # accumulate unbounded.
             if len(self._store) > 256:
                 now = time.time()
-                self._store = {
-                    k: v for k, v in self._store.items()
-                    if not v[0] or v[0] >= now
-                }
+                self._store = {k: v for k, v in self._store.items() if not v[0] or v[0] >= now}
             self._store[key] = (expires_at, value)
 
     def delete(self, key: str) -> None:
@@ -231,8 +228,10 @@ def assert_dev_mode_safe() -> None:
     ``INSPECTOR_DEV_MODE=1`` mistakenly set on a Space fails fast and visibly
     rather than silently elevating every visitor.
     """
-    if (os.environ.get("INSPECTOR_DEV_MODE") == "1"
-            and os.environ.get("INSPECTOR_BEHIND_PROXY") == "1"):
+    if (
+        os.environ.get("INSPECTOR_DEV_MODE") == "1"
+        and os.environ.get("INSPECTOR_BEHIND_PROXY") == "1"
+    ):
         raise RuntimeError(
             "INSPECTOR_DEV_MODE=1 with INSPECTOR_BEHIND_PROXY=1 — the OAuth "
             "bypass must never run on a deployed Space. Unset INSPECTOR_DEV_MODE."

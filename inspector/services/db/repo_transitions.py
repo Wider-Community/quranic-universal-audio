@@ -13,7 +13,8 @@ existing ``activity_classification`` code keeps working unchanged.
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Iterator
+from collections.abc import Iterable, Iterator
+from typing import Any
 
 from qua_shared.schemas import Actor, AuditRecord
 
@@ -122,25 +123,29 @@ _COLS = (
 
 
 def get(tid: str) -> dict | None:
-    row = get_conn().execute(
-        f"SELECT {_COLS} FROM transitions WHERE id = ?", (tid,)
-    ).fetchone()
+    row = get_conn().execute(f"SELECT {_COLS} FROM transitions WHERE id = ?", (tid,)).fetchone()
     return _row_to_record(row) if row else None
 
 
 def get_by_content_hash(ch: str) -> dict | None:
-    row = get_conn().execute(
-        f"SELECT {_COLS} FROM transitions WHERE content_hash = ? ORDER BY seq DESC LIMIT 1",
-        (ch,),
-    ).fetchone()
+    row = (
+        get_conn()
+        .execute(
+            f"SELECT {_COLS} FROM transitions WHERE content_hash = ? ORDER BY seq DESC LIMIT 1",
+            (ch,),
+        )
+        .fetchone()
+    )
     return _row_to_record(row) if row else None
 
 
 def for_slug(slug: str) -> list[dict]:
     """Chronological timeline for one delivery."""
-    rows = get_conn().execute(
-        f"SELECT {_COLS} FROM transitions WHERE slug = ? ORDER BY seq", (slug,)
-    ).fetchall()
+    rows = (
+        get_conn()
+        .execute(f"SELECT {_COLS} FROM transitions WHERE slug = ? ORDER BY seq", (slug,))
+        .fetchall()
+    )
     return [_row_to_record(r) for r in rows]
 
 

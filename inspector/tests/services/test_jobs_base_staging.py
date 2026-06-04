@@ -6,6 +6,7 @@ image" contract: when a path is missing on disk, ``stage_job_code`` must raise
 HF-Job-side ``No such file or directory`` failure surfaced from a Dockerfile
 COPY drop is exactly what this guards against.
 """
+
 from __future__ import annotations
 
 import sys
@@ -56,7 +57,9 @@ def test_stage_job_code_uploads_every_required_path(stub_batch):
         assert f"code/{rel}" in targets, f"missing static upload: {rel}"
 
 
-def test_stage_job_code_auto_gzips_qpc_when_only_uncompressed_present(stub_batch, monkeypatch, tmp_path):
+def test_stage_job_code_auto_gzips_qpc_when_only_uncompressed_present(
+    stub_batch, monkeypatch, tmp_path
+):
     """In a dev tree with ``data/qpc_hafs.json`` but no ``.gz``, the resolver
     gzip-compresses on the fly and uploads under the ``.gz`` target path."""
     (tmp_path / "qua_shared").mkdir(parents=True)
@@ -78,6 +81,7 @@ def test_stage_job_code_auto_gzips_qpc_when_only_uncompressed_present(stub_batch
     by_target = {target: blob for _src, target, blob in stub_batch[0]["snapshot"]}
     assert "code/data/qpc_hafs.json.gz" in by_target
     import gzip as _gzip
+
     assert _gzip.decompress(by_target["code/data/qpc_hafs.json.gz"]) == b'{"1:1:1": {"text": "x"}}'
 
 

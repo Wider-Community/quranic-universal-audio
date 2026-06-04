@@ -31,6 +31,7 @@ Reader: ``inspector/services/audio/audio_fetch.py::read_prefetched_peaks``.
 
 See also: ``inspector/.claude/skills/inspector-audio/references/peaks.md``.
 """
+
 from __future__ import annotations
 
 import base64
@@ -62,10 +63,10 @@ class SlimPeaksDoc(TypedDict):
 
     schema_version: int
     duration_ms: int
-    q: str           # quantization tag -- "int8" today, reserved for future ("int16" etc.)
-    bps: int         # buckets per second after decimation
-    n: int           # number of [min, max] pairs encoded in peaks_b64
-    peaks_b64: str   # base64 of n*2 int8s, alternating (min, max)
+    q: str  # quantization tag -- "int8" today, reserved for future ("int16" etc.)
+    bps: int  # buckets per second after decimation
+    n: int  # number of [min, max] pairs encoded in peaks_b64
+    peaks_b64: str  # base64 of n*2 int8s, alternating (min, max)
 
 
 def _decimate(peaks: np.ndarray, src_bps: int, dst_bps: int) -> np.ndarray:

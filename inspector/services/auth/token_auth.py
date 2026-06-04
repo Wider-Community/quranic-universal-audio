@@ -122,9 +122,7 @@ def resolve_owner_from_token(token: str | None) -> Actor:
     # ``Role(...)`` wrap is defensive normalization, idempotent on a Role.
     role = Role(access.resolve_role(hf_user_id))
     if role != Role.OWNER:
-        raise NotOwner(
-            f"hf_user_id {hf_user_id!r} resolved role {role.value!r}; OWNER required"
-        )
+        raise NotOwner(f"hf_user_id {hf_user_id!r} resolved role {role.value!r}; OWNER required")
     return Actor(hf_user_id=hf_user_id, login_at_time=login, role=Role.OWNER)
 
 

@@ -43,6 +43,6 @@ def last_arabic_letter(text: str) -> str | None:
     """
     stripped = strip_quran_deco(text)
     for ch in reversed(stripped):
-        if _ud.category(ch).startswith('L'):
+        if _ud.category(ch).startswith("L"):
             return ch
     return None

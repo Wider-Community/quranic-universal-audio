@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import gzip
 
-from services.storage import static_refs
 from services.reference import timestamps as ts_manifest
+from services.storage import static_refs
 
 
 class _FakeBackend:

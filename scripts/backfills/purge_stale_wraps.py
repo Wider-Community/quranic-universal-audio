@@ -28,9 +28,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable
 
 import orjson
 
@@ -42,11 +41,11 @@ from services.storage import data_dir, storage_paths
 from services.storage.hf_bucket import StorageNotFound, get_backend
 from utils.repetitions import _word_position, is_wrap_consistent
 
-
 # ---------------------------------------------------------------------------
 # Wrap classification — split the consistency check into stale vs corrupted
 # so the report can distinguish split-inheritance leaks from pipeline bugs.
 # ---------------------------------------------------------------------------
+
 
 def _parse_word_ref(r: str) -> tuple[int, int, int] | None:
     p = r.split(":")
@@ -103,15 +102,21 @@ def classify_wrap(matched_ref: str, wrap: list, vwc: dict) -> str | None:
 # Per-reciter pass
 # ---------------------------------------------------------------------------
 
-def process_slug(backend, slug: str, *, vwc: dict, apply: bool,
-                 stamp: str) -> dict:
+
+def process_slug(backend, slug: str, *, vwc: dict, apply: bool, stamp: str) -> dict:
     path = storage_paths.detailed_path(slug)
     try:
         raw = backend.read_bytes(path)
     except StorageNotFound:
-        return {"slug": slug, "status": "missing",
-                "wraps_total": 0, "wraps_stale": 0, "wraps_corrupted": 0,
-                "segs_modified": 0, "details": []}
+        return {
+            "slug": slug,
+            "status": "missing",
+            "wraps_total": 0,
+            "wraps_stale": 0,
+            "wraps_corrupted": 0,
+            "segs_modified": 0,
+            "details": [],
+        }
 
     doc = orjson.loads(raw)
     n_total = n_stale = n_corrupt = n_mod = 0
@@ -130,14 +135,16 @@ def process_slug(backend, slug: str, *, vwc: dict, apply: bool,
             else:
                 n_corrupt += 1
             n_mod += 1
-            details.append({
-                "ref": seg.get("matched_ref", ""),
-                "uid": seg.get("segment_uid", ""),
-                "time_start": seg.get("time_start"),
-                "time_end": seg.get("time_end"),
-                "wrap": wrap,
-                "verdict": verdict,
-            })
+            details.append(
+                {
+                    "ref": seg.get("matched_ref", ""),
+                    "uid": seg.get("segment_uid", ""),
+                    "time_start": seg.get("time_start"),
+                    "time_end": seg.get("time_end"),
+                    "wrap": wrap,
+                    "verdict": verdict,
+                }
+            )
             if apply:
                 seg.pop("wrap_word_ranges", None)
                 # Migration #5: has_repeated_words is no longer written by any
@@ -145,9 +152,12 @@ def process_slug(backend, slug: str, *, vwc: dict, apply: bool,
                 seg.pop("has_repeated_words", None)
 
     result = {
-        "slug": slug, "status": "ok",
-        "wraps_total": n_total, "wraps_stale": n_stale,
-        "wraps_corrupted": n_corrupt, "segs_modified": n_mod,
+        "slug": slug,
+        "status": "ok",
+        "wraps_total": n_total,
+        "wraps_stale": n_stale,
+        "wraps_corrupted": n_corrupt,
+        "segs_modified": n_mod,
         "details": details,
     }
 
@@ -167,24 +177,30 @@ def process_slug(backend, slug: str, *, vwc: dict, apply: bool,
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def _load_word_counts() -> dict:
     """Eager numpy-free import of get_word_counts."""
     from services.data_loader import get_word_counts
+
     return get_word_counts()
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--apply", action="store_true",
-                    help="Mutate the bucket (default: dry-run, only report)")
+    ap.add_argument(
+        "--apply", action="store_true", help="Mutate the bucket (default: dry-run, only report)"
+    )
     ap.add_argument("--slug", help="Process only this slug (debugging)")
-    ap.add_argument("--show-details", action="store_true",
-                    help="Print per-seg details (always shown when --slug)")
+    ap.add_argument(
+        "--show-details",
+        action="store_true",
+        help="Print per-seg details (always shown when --slug)",
+    )
     args = ap.parse_args()
 
     backend = get_backend()
     vwc = _load_word_counts()
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
     targets: list[str] = []
     if args.slug:
@@ -204,8 +220,7 @@ def main() -> int:
 
     rows: list[dict] = []
     for slug in targets:
-        rows.append(process_slug(backend, slug, vwc=vwc, apply=args.apply,
-                                 stamp=stamp))
+        rows.append(process_slug(backend, slug, vwc=vwc, apply=args.apply, stamp=stamp))
 
     fmt = "{:<42} {:<8} {:>6} {:>6} {:>9} {:>6}"
     print(fmt.format("slug", "status", "wraps", "stale", "corrupted", "modif"))
@@ -214,16 +229,22 @@ def main() -> int:
     for r in rows:
         if r["wraps_total"] == 0 and not args.show_details:
             continue
-        print(fmt.format(r["slug"][:42], r["status"],
-                         r["wraps_total"], r["wraps_stale"],
-                         r["wraps_corrupted"], r["segs_modified"]))
+        print(
+            fmt.format(
+                r["slug"][:42],
+                r["status"],
+                r["wraps_total"],
+                r["wraps_stale"],
+                r["wraps_corrupted"],
+                r["segs_modified"],
+            )
+        )
         tot_wraps += r["wraps_total"]
         tot_stale += r["wraps_stale"]
         tot_corrupt += r["wraps_corrupted"]
         tot_mod += r["segs_modified"]
     print("-" * 96)
-    print(fmt.format("TOTAL", "",
-                     tot_wraps, tot_stale, tot_corrupt, tot_mod))
+    print(fmt.format("TOTAL", "", tot_wraps, tot_stale, tot_corrupt, tot_mod))
     print()
 
     if args.show_details or args.slug:
@@ -232,12 +253,16 @@ def main() -> int:
                 continue
             print(f"=== {r['slug']} — {len(r['details'])} segs to clean")
             for d in r["details"]:
-                print(f"  [{d['verdict']:<9}] ref={d['ref']:<22} "
-                      f"ts=[{d['time_start']},{d['time_end']}]  wrap={d['wrap']}")
+                print(
+                    f"  [{d['verdict']:<9}] ref={d['ref']:<22} "
+                    f"ts=[{d['time_start']},{d['time_end']}]  wrap={d['wrap']}"
+                )
             print()
 
     if not args.apply and tot_mod:
-        print(f"Dry-run: would strip wrap from {tot_mod} segs across {sum(1 for r in rows if r['segs_modified'])} reciters.")
+        print(
+            f"Dry-run: would strip wrap from {tot_mod} segs across {sum(1 for r in rows if r['segs_modified'])} reciters."
+        )
         print("Re-run with --apply to mutate the bucket (backups go to archive/stale_wraps/).")
     return 0
 

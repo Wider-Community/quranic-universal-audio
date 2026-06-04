@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import config
@@ -44,8 +44,10 @@ def _validate(payload: dict[str, Any]) -> None:
     if missing:
         raise GuideFlagError(f"missing required field(s): {', '.join(missing)}")
     op_ids = payload.get("op_ids")
-    if not isinstance(op_ids, list) or not op_ids or not all(
-        isinstance(x, str) and x for x in op_ids
+    if (
+        not isinstance(op_ids, list)
+        or not op_ids
+        or not all(isinstance(x, str) and x for x in op_ids)
     ):
         raise GuideFlagError("op_ids must be a non-empty list of strings")
 
@@ -99,7 +101,7 @@ def append_flag(payload: dict[str, Any]) -> dict[str, Any]:
     _validate(payload)
     record = _normalize(payload)
     record["flag_id"] = uuid.uuid4().hex
-    record["flagged_at_utc"] = datetime.now(timezone.utc).isoformat()
+    record["flagged_at_utc"] = datetime.now(UTC).isoformat()
 
     path = config.GUIDE_FLAGS_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -107,8 +109,11 @@ def append_flag(payload: dict[str, Any]) -> dict[str, Any]:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
     logger.info(
         "guide_flags: flagged %s ch%s batch=%s ops=%d category=%s",
-        record["reciter"], record["chapter"], record["batch_id"],
-        len(record["op_ids"]), record["category"],
+        record["reciter"],
+        record["chapter"],
+        record["batch_id"],
+        len(record["op_ids"]),
+        record["category"],
     )
     return record
 

@@ -1,4 +1,5 @@
 """Unit tests for inspector/utils/references.py."""
+
 from utils.references import (
     chapter_from_ref,
     is_by_ayah_source,

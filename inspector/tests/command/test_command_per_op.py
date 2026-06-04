@@ -1,13 +1,11 @@
 """Per-op save-acceptance round-trip tests (IS-6)."""
+
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
-
-
-
-import os
 
 os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 

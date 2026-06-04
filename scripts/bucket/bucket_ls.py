@@ -1,8 +1,8 @@
 """List files/dirs at a bucket path.
 
-  bucket_ls.py reciters                          # top-level dirs under reciters/
-  bucket_ls.py reciters/husary --detail          # with sizes
-  bucket_ls.py reciters --bucket prod --recursive
+bucket_ls.py reciters                          # top-level dirs under reciters/
+bucket_ls.py reciters/husary --detail          # with sizes
+bucket_ls.py reciters --bucket prod --recursive
 """
 
 from __future__ import annotations
@@ -16,14 +16,12 @@ import _bootstrap as bs  # noqa: E402
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("path", nargs="?", default="",
-                   help="path within the bucket (default: root)")
-    p.add_argument("--detail", action="store_true",
-                   help="show size + type per entry")
-    p.add_argument("--recursive", action="store_true",
-                   help="walk into subdirectories")
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    p.add_argument("path", nargs="?", default="", help="path within the bucket (default: root)")
+    p.add_argument("--detail", action="store_true", help="show size + type per entry")
+    p.add_argument("--recursive", action="store_true", help="walk into subdirectories")
     bs.add_bucket_args(p)
     a = p.parse_args()
 

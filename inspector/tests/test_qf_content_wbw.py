@@ -29,14 +29,26 @@ def _verse_payload():
         "verse": {
             "verse_key": "2:255",
             "words": [
-                {"location": "2:255:1", "char_type_name": "word",
-                 "translation": {"text": "Allah", "language_name": "english"}},
-                {"location": "2:255:2", "char_type_name": "word",
-                 "translation": {"text": "(there is) no", "language_name": "english"}},
-                {"location": "2:255:3", "char_type_name": "word",
-                 "translation": {"text": None, "language_name": "english"}},
-                {"location": "2:255:4", "char_type_name": "end",
-                 "translation": {"text": "(255)", "language_name": "english"}},
+                {
+                    "location": "2:255:1",
+                    "char_type_name": "word",
+                    "translation": {"text": "Allah", "language_name": "english"},
+                },
+                {
+                    "location": "2:255:2",
+                    "char_type_name": "word",
+                    "translation": {"text": "(there is) no", "language_name": "english"},
+                },
+                {
+                    "location": "2:255:3",
+                    "char_type_name": "word",
+                    "translation": {"text": None, "language_name": "english"},
+                },
+                {
+                    "location": "2:255:4",
+                    "char_type_name": "end",
+                    "translation": {"text": "(255)", "language_name": "english"},
+                },
             ],
         }
     }
@@ -82,9 +94,7 @@ def test_word_by_word_parses_filters_and_caches(monkeypatch, _clear_qf_cache):
     assert captured["url"].endswith("/verses/by_key/2:255")
 
     # Second call served from cache (no request).
-    monkeypatch.setattr(
-        content.requests, "get", lambda *a, **k: pytest.fail("should be cached")
-    )
+    monkeypatch.setattr(content.requests, "get", lambda *a, **k: pytest.fail("should be cached"))
     assert content.word_by_word("2:255", "en") == out
 
 
@@ -170,12 +180,11 @@ def test_route_wbw_languages(flask_client):
 
 def test_route_wbw_returns_words(flask_client, monkeypatch, _clear_qf_cache):
     from routes import qf_content as route
+
     from services.quran_foundation import content
 
     monkeypatch.setattr(route.qf_config, "content_is_configured", lambda: True)
-    monkeypatch.setattr(
-        content, "word_by_word", lambda vk, lang: {"2:255:1": "Allah"}
-    )
+    monkeypatch.setattr(content, "word_by_word", lambda vk, lang: {"2:255:1": "Allah"})
     resp = flask_client.get("/api/qf/content/wbw/2/255?language=en")
     assert resp.status_code == 200
     body = resp.get_json()

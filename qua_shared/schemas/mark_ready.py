@@ -22,7 +22,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # The six checklist keys — string-literal union for type safety in both
 # layers. New keys here MUST be mirrored in the FE copy module (single
 # source of truth at the wire shape level).

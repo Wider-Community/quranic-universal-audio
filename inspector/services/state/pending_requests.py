@@ -17,10 +17,11 @@ from qua_shared.schemas import (
     PendingRequestsFile,
     ProposedEdits,
 )
-
-from . import audit, catalog as catalog_service
 from services.db import repo_requests
 from services.db import sync as _sync
+
+from . import audit
+from . import catalog as catalog_service
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +73,7 @@ def submit(
     if one already exists (also enforced by the partial-unique index)."""
     with _sync.durable_transaction():
         if repo_requests.has_pending(slug):
-            raise RequestAlreadyPending(
-                f"slug {slug!r} already has a pending request"
-            )
+            raise RequestAlreadyPending(f"slug {slug!r} already has a pending request")
         repo_requests.submit(
             slug=slug,
             requester=requester,
@@ -112,7 +111,10 @@ def apply_and_archive_completed(slug: str, *, actor: Actor) -> None:
                 _apply_edits(slug, delivery, edits, actor)
 
         repo_requests.resolve(
-            slug=slug, status="accepted", transitioned_by=actor, reason=None,
+            slug=slug,
+            status="accepted",
+            transitioned_by=actor,
+            reason=None,
         )
 
 
@@ -134,9 +136,7 @@ def _apply_edits(slug, delivery, edits, actor) -> None:
                 **reciter_kwargs,  # type: ignore[arg-type]
             )
         except catalog_service.CatalogError:
-            logger.exception(
-                "pending_requests: failed applying reciter edits for %s", slug
-            )
+            logger.exception("pending_requests: failed applying reciter edits for %s", slug)
 
     # Delivery-level edits + conflict warning.
     delivery_kwargs: dict[str, object] = {}
@@ -154,7 +154,8 @@ def _apply_edits(slug, delivery, edits, actor) -> None:
     catalog = catalog_service.snapshot()
     collision = next(
         (
-            d for d in catalog.deliveries
+            d
+            for d in catalog.deliveries
             if d.slug != slug
             and d.reciter_id == delivery.reciter_id
             and d.riwayah == proposed_riwayah
@@ -183,9 +184,7 @@ def _apply_edits(slug, delivery, edits, actor) -> None:
                 **delivery_kwargs,  # type: ignore[arg-type]
             )
         except catalog_service.CatalogError:
-            logger.exception(
-                "pending_requests: failed applying delivery edits for %s", slug
-            )
+            logger.exception("pending_requests: failed applying delivery edits for %s", slug)
 
 
 def archive_returned(slug: str, *, reason: str, by_actor: Actor) -> None:
@@ -193,7 +192,10 @@ def archive_returned(slug: str, *, reason: str, by_actor: Actor) -> None:
     payload for the requester). No-op if absent."""
     with _sync.durable_transaction():
         repo_requests.resolve(
-            slug=slug, status="returned", transitioned_by=by_actor, reason=reason,
+            slug=slug,
+            status="returned",
+            transitioned_by=by_actor,
+            reason=reason,
         )
 
 
@@ -201,7 +203,10 @@ def archive_discarded(slug: str, *, reason: str, by_actor: Actor) -> None:
     """Resolve the pending entry for ``slug`` to ``discarded``. No-op if absent."""
     with _sync.durable_transaction():
         repo_requests.resolve(
-            slug=slug, status="discarded", transitioned_by=by_actor, reason=reason,
+            slug=slug,
+            status="discarded",
+            transitioned_by=by_actor,
+            reason=reason,
         )
 
 

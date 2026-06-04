@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -38,7 +38,7 @@ from services.storage import data_dir  # noqa: E402
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def process_slug(slug: str, *, dry_run: bool) -> dict:
@@ -90,10 +90,10 @@ def main() -> int:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--slug")
     g.add_argument("--slugs", help="comma-separated")
-    g.add_argument("--all", action="store_true",
-                   help="every reciter under reciters/")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="compute and report but do not write the sidecar")
+    g.add_argument("--all", action="store_true", help="every reciter under reciters/")
+    ap.add_argument(
+        "--dry-run", action="store_true", help="compute and report but do not write the sidecar"
+    )
     args = ap.parse_args()
 
     if args.all:

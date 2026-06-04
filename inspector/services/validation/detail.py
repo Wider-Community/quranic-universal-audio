@@ -13,11 +13,8 @@ from __future__ import annotations
 from collections import defaultdict
 
 from config import LOW_CONFIDENCE_DETAIL_THRESHOLD, MISSED_BASMALA_FLAG_MIN_DELETED
-from services.storage.data_loader import load_detailed
 from services.reference.quran_refs import dk_text_for_ref
-from utils.formatting import format_ms
-from utils.references import chapter_from_ref, seg_belongs_to_entry
-
+from services.storage.data_loader import load_detailed
 from services.validation.classifier import (
     classify_flags,
     classify_segment,
@@ -25,6 +22,8 @@ from services.validation.classifier import (
     is_suppressed_for,
 )
 from services.validation.registry import PER_SEGMENT_CATEGORIES
+from utils.formatting import format_ms
+from utils.references import chapter_from_ref, seg_belongs_to_entry
 
 
 def _compute_surah_offsets(
@@ -200,12 +199,15 @@ def _build_detail_lists(
                 # failed entry from detail lists and category_counts alike —
                 # mirrors the classify_flags gate added for MUST-6 consistency.
                 if not is_ignored_for(seg, "failed"):
-                    failed.append({
-                        "chapter": chapter, "seg_index": i,
-                        "segment_uid": seg_uid,
-                        "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                        "classified_issues": classify_segment(seg),
-                    })
+                    failed.append(
+                        {
+                            "chapter": chapter,
+                            "seg_index": i,
+                            "segment_uid": seg_uid,
+                            "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
+                            "classified_issues": classify_segment(seg),
+                        }
+                    )
                 continue
 
             parts = matched_ref.split("-")
@@ -214,40 +216,57 @@ def _build_detail_lists(
                 # so audio_bleeding / repetitions / low_confidence still surface.
                 fallback_issues: list[str] = []
                 if (
-                    is_by_ayah and ":" in entry_ref
+                    is_by_ayah
+                    and ":" in entry_ref
                     and not seg_belongs_to_entry(matched_ref, entry_ref)
                     and not is_suppressed_for(seg, "audio_bleeding")
                 ):
                     seg_start = matched_ref.split("-")[0]
                     seg_parts = seg_start.split(":")
-                    matched_verse = f"{seg_parts[0]}:{seg_parts[1]}" if len(seg_parts) >= 2 else matched_ref
-                    audio_bleeding.append({
-                        "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
-                        "entry_ref": entry_ref,
-                        "matched_verse": matched_verse, "ref": matched_ref,
-                        "confidence": round(confidence, 4),
-                        "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                        "msg": f"audio {entry_ref} contains segment matching verse {matched_verse}",
-                        "classified_issues": ["audio_bleeding"],
-                    })
+                    matched_verse = (
+                        f"{seg_parts[0]}:{seg_parts[1]}" if len(seg_parts) >= 2 else matched_ref
+                    )
+                    audio_bleeding.append(
+                        {
+                            "chapter": chapter,
+                            "seg_index": i,
+                            "segment_uid": seg_uid,
+                            "entry_ref": entry_ref,
+                            "matched_verse": matched_verse,
+                            "ref": matched_ref,
+                            "confidence": round(confidence, 4),
+                            "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
+                            "msg": f"audio {entry_ref} contains segment matching verse {matched_verse}",
+                            "classified_issues": ["audio_bleeding"],
+                        }
+                    )
                     fallback_issues.append("audio_bleeding")
                 if seg.get("wrap_word_ranges") and not is_suppressed_for(seg, "repetitions"):
-                    repetitions.append({
-                        "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
-                        "ref": matched_ref,
-                        "display_ref": matched_ref, "confidence": round(confidence, 4),
-                        "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                        "text": dk_text_for_ref(matched_ref),
-                        "classified_issues": ["repetitions"],
-                    })
+                    repetitions.append(
+                        {
+                            "chapter": chapter,
+                            "seg_index": i,
+                            "segment_uid": seg_uid,
+                            "ref": matched_ref,
+                            "display_ref": matched_ref,
+                            "confidence": round(confidence, 4),
+                            "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
+                            "text": dk_text_for_ref(matched_ref),
+                            "classified_issues": ["repetitions"],
+                        }
+                    )
                     fallback_issues.append("repetitions")
                 if confidence < LOW_CONFIDENCE_DETAIL_THRESHOLD:
-                    low_confidence.append({
-                        "ref": matched_ref, "chapter": chapter, "seg_index": i,
-                        "segment_uid": seg_uid,
-                        "confidence": round(confidence, 4),
-                        "classified_issues": ["low_confidence"] + fallback_issues,
-                    })
+                    low_confidence.append(
+                        {
+                            "ref": matched_ref,
+                            "chapter": chapter,
+                            "seg_index": i,
+                            "segment_uid": seg_uid,
+                            "confidence": round(confidence, 4),
+                            "classified_issues": ["low_confidence"] + fallback_issues,
+                        }
+                    )
                 continue
 
             start_parts = parts[0].split(":")
@@ -273,19 +292,28 @@ def _build_detail_lists(
                     for ayah, missing in _words_by_verse_for_ord_gap(
                         surah, prev_end + 1, start_ord - 1, word_counts
                     ):
-                        sequence_gaps.append({
-                            "verse_key": f"{surah}:{ayah}",
-                            "chapter": surah,
-                            "missing_words": missing,
-                            "seg_indices": indices,
-                        })
+                        sequence_gaps.append(
+                            {
+                                "verse_key": f"{surah}:{ayah}",
+                                "chapter": surah,
+                                "missing_words": missing,
+                                "seg_indices": indices,
+                            }
+                        )
                 prev_end_by_surah[surah] = end_ord
                 prev_seg_idx_by_surah[surah] = i
 
             flags = classify_flags(
-                seg, entry_ref, is_by_ayah,
-                surah, s_ayah, e_ayah, s_word, e_word,
-                single_word_verses, canonical,
+                seg,
+                entry_ref,
+                is_by_ayah,
+                surah,
+                s_ayah,
+                e_ayah,
+                s_word,
+                e_word,
+                single_word_verses,
+                canonical,
                 probe_failed_uids=probe_failed_uids,
             )
             classified = _classified_issues_from_flags(flags, detail=True)
@@ -294,15 +322,20 @@ def _build_detail_lists(
                 seg_start = matched_ref.split("-")[0]
                 sp = seg_start.split(":")
                 matched_verse = f"{sp[0]}:{sp[1]}" if len(sp) >= 2 else matched_ref
-                audio_bleeding.append({
-                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
-                    "entry_ref": entry_ref,
-                    "matched_verse": matched_verse, "ref": matched_ref,
-                    "confidence": round(confidence, 4),
-                    "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                    "msg": f"audio {entry_ref} contains segment matching verse {matched_verse}",
-                    "classified_issues": classified,
-                })
+                audio_bleeding.append(
+                    {
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "segment_uid": seg_uid,
+                        "entry_ref": entry_ref,
+                        "matched_verse": matched_verse,
+                        "ref": matched_ref,
+                        "confidence": round(confidence, 4),
+                        "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
+                        "msg": f"audio {entry_ref} contains segment matching verse {matched_verse}",
+                        "classified_issues": classified,
+                    }
+                )
 
             if flags["repetitions"]:
                 display_ref = matched_ref
@@ -312,14 +345,19 @@ def _build_detail_lists(
                     e_rp = rp[1].split(":")
                     if len(s_rp) >= 2 and len(e_rp) >= 2 and s_rp[1] == e_rp[1]:
                         display_ref = f"{s_rp[0]}:{s_rp[1]}"
-                repetitions.append({
-                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
-                    "ref": matched_ref,
-                    "display_ref": display_ref, "confidence": round(confidence, 4),
-                    "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
-                    "text": dk_text_for_ref(matched_ref),
-                    "classified_issues": classified,
-                })
+                repetitions.append(
+                    {
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "segment_uid": seg_uid,
+                        "ref": matched_ref,
+                        "display_ref": display_ref,
+                        "confidence": round(confidence, 4),
+                        "time": f"{format_ms(t_start)}-{format_ms(t_end)}",
+                        "text": dk_text_for_ref(matched_ref),
+                        "classified_issues": classified,
+                    }
+                )
 
             if flags["low_confidence_detail"]:
                 lp = matched_ref.split("-")
@@ -329,62 +367,85 @@ def _build_detail_lists(
                     e = lp[1].split(":")
                     if len(s) >= 2 and len(e) >= 2:
                         display_ref = f"{s[0]}:{s[1]}" if s[1] == e[1] else f"{s[0]}:{s[1]}-{e[1]}"
-                low_confidence.append({
-                    "ref": display_ref, "chapter": chapter, "seg_index": i,
-                    "segment_uid": seg_uid,
-                    "confidence": round(confidence, 4),
-                    "classified_issues": classified,
-                })
+                low_confidence.append(
+                    {
+                        "ref": display_ref,
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "segment_uid": seg_uid,
+                        "confidence": round(confidence, 4),
+                        "classified_issues": classified,
+                    }
+                )
 
             if flags["low_confidence_v2"]:
-                low_confidence_v2.append({
-                    "ref": matched_ref, "chapter": chapter, "seg_index": i,
-                    "segment_uid": seg_uid,
-                    "classified_issues": classified,
-                })
+                low_confidence_v2.append(
+                    {
+                        "ref": matched_ref,
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "segment_uid": seg_uid,
+                        "classified_issues": classified,
+                    }
+                )
 
             if flags["cross_verse"]:
-                cross_verse.append({
-                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
-                    "ref": matched_ref,
-                    "classified_issues": classified,
-                })
+                cross_verse.append(
+                    {
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "segment_uid": seg_uid,
+                        "ref": matched_ref,
+                        "classified_issues": classified,
+                    }
+                )
 
             if flags["boundary_adj"]:
-                boundary_adj.append({
-                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
-                    "ref": matched_ref,
-                    "verse_key": f"{surah}:{s_ayah}",
-                    "classified_issues": classified,
-                })
+                boundary_adj.append(
+                    {
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "segment_uid": seg_uid,
+                        "ref": matched_ref,
+                        "verse_key": f"{surah}:{s_ayah}",
+                        "classified_issues": classified,
+                    }
+                )
 
             if flags["muqattaat"]:
-                muqattaat.append({
-                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
-                    "ref": matched_ref,
-                    "classified_issues": classified,
-                })
+                muqattaat.append(
+                    {
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "segment_uid": seg_uid,
+                        "ref": matched_ref,
+                        "classified_issues": classified,
+                    }
+                )
 
             if flags["qalqala"]:
-                qalqala.append({
-                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
-                    "ref": matched_ref,
-                    "qalqala_letter": flags["qalqala_letter"],
-                    "end_of_verse": (e_word == word_counts.get((surah, e_ayah), 0)),
-                    "classified_issues": classified,
-                })
+                qalqala.append(
+                    {
+                        "chapter": chapter,
+                        "seg_index": i,
+                        "segment_uid": seg_uid,
+                        "ref": matched_ref,
+                        "qalqala_letter": flags["qalqala_letter"],
+                        "end_of_verse": (e_word == word_counts.get((surah, e_ayah), 0)),
+                        "classified_issues": classified,
+                    }
+                )
 
-            if (
-                surah == 1
-                and (s_ayah <= 1 <= e_ayah or s_ayah <= 7 <= e_ayah)
-            ):
+            if surah == 1 and (s_ayah <= 1 <= e_ayah or s_ayah <= 7 <= e_ayah):
                 # Suppression is applied at the output gate (below), not at
                 # candidate collection. If a user resolves the canonical
                 # candidate (first 1:1 or last 1:7), the card should
                 # disappear -- NOT promote a neighbouring seg, which would
                 # be whack-a-mole.
                 item = {
-                    "chapter": chapter, "seg_index": i, "segment_uid": seg_uid,
+                    "chapter": chapter,
+                    "seg_index": i,
+                    "segment_uid": seg_uid,
                     "ref": matched_ref,
                     "classified_issues": classified,
                 }
@@ -432,11 +493,13 @@ def _build_detail_lists(
             seg_obj = first_seg_obj_by_chapter.get(chapter)
             if seg_obj is not None and is_suppressed_for(seg_obj, "basmala_amin"):
                 continue
-            missed_basmalas.append({
-                **first_seg,
-                "missed_basmala": True,
-                "classified_issues": ["basmala_amin"],
-            })
+            missed_basmalas.append(
+                {
+                    **first_seg,
+                    "missed_basmala": True,
+                    "classified_issues": ["basmala_amin"],
+                }
+            )
 
     # Order: first 1:1 seg → last 1:7 seg → remaining 1:1 segs → missed basmalas
     # (from other chapters). Dedup by (chapter, seg_index, segment_uid) preserves
@@ -486,6 +549,7 @@ def _build_detail_lists(
 # ---------------------------------------------------------------------------
 # Identity helpers (IS-10, MUST-9)
 # ---------------------------------------------------------------------------
+
 
 def resolve_segment_by_uid(reciter: str, uid: str) -> dict | None:
     """Return the live segment dict matching *uid*, or ``None`` if absent."""

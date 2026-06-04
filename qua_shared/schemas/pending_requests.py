@@ -23,13 +23,12 @@ Spec: docs/planning/inspector-deploy/v2/inspector-state-management.md
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .audit import Actor
 from .state import SLUG_RE
-
 
 # Recording-year plausibility window. Lower bound: 1885 — recorded audio
 # predates the cylinder phonograph era by only a few years, and we want to
@@ -40,7 +39,7 @@ MIN_RECORDING_YEAR = 1885
 
 
 def _max_recording_year() -> int:
-    return datetime.now(timezone.utc).year
+    return datetime.now(UTC).year
 
 
 class ProposedEdits(BaseModel):
@@ -75,9 +74,7 @@ class ProposedEdits(BaseModel):
             return v
         max_year = _max_recording_year()
         if v < MIN_RECORDING_YEAR or v > max_year:
-            raise ValueError(
-                f"recording_year must be between {MIN_RECORDING_YEAR} and {max_year}"
-            )
+            raise ValueError(f"recording_year must be between {MIN_RECORDING_YEAR} and {max_year}")
         return v
 
     def has_any(self) -> bool:

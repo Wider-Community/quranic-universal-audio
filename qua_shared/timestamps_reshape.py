@@ -99,13 +99,11 @@ def reshape_shard(shard: dict) -> dict[str, Any]:
     # build_segment_shards normalizes the "_audio" suffix away.
     audio_category = src_meta.get("audio_category") or "by_surah"
 
-    chapter_shards = build_segment_shards(
-        shard, audio_category=audio_category, src_meta=src_meta
-    )
+    chapter_shards = build_segment_shards(shard, audio_category=audio_category, src_meta=src_meta)
     if len(chapter_shards) != 1:
         raise ValueError(
             f"expected a single chapter, got {sorted(chapter_shards)} — a "
             "per-chapter shard must contain occurrences for exactly one surah"
         )
-    (_chapter, out), = chapter_shards.items()
+    ((_chapter, out),) = chapter_shards.items()
     return out

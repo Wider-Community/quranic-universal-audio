@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .access import Member, Role, RolesFile
 from .audit import Actor, AuditRecord
@@ -33,12 +33,11 @@ from .state import (
     ReciterRow,
     ReciterState,
     ReciterStateFile,
-    Visibility,
 )
 
 
 def _now() -> datetime:
-    return datetime(2026, 5, 12, 14, 23, 11, tzinfo=timezone.utc)
+    return datetime(2026, 5, 12, 14, 23, 11, tzinfo=UTC)
 
 
 def _round_trip(label: str, model) -> None:
@@ -94,9 +93,7 @@ def smoke() -> int:
             assignee_since=_now(),
             marked_ready=True,
         )
-        state_file = ReciterStateFile(
-            reciters=[catalogued, awaiting, under, ready]
-        )
+        state_file = ReciterStateFile(reciters=[catalogued, awaiting, under, ready])
         assert state_file.find("mishary_alafasi") is under
         _round_trip("ReciterStateFile", state_file)
 
@@ -234,9 +231,7 @@ def smoke() -> int:
         batch = EditHistoryBatch(
             batch_id="batch_001",
             ts=_now(),
-            actor=Actor(
-                hf_user_id="12345", login_at_time="alice", role=Role.CONTRIBUTOR
-            ),
+            actor=Actor(hf_user_id="12345", login_at_time="alice", role=Role.CONTRIBUTOR),
             operations=[EditOperation(op_id="op_001", kind="trim", new_end=1.234)],
         )
         _round_trip("EditHistoryBatch", batch)
