@@ -55,6 +55,12 @@ Anyone is welcome to contribute — you just need to login with an account. The 
 
 - **Sharing the data and supporting the project.**
 
+By contributing, you agree your contributions may be published under the project's CC BY 4.0 license.
+
 ## Accessing the data
 
 Coming soon
+
+## Privacy
+
+When you sign in with Hugging Face, we store your Hugging Face user ID and username, and we record the edits, reviews, and actions you make (with your username and a timestamp) to show contribution history and keep an accurate record. A sign-in cookie keeps you logged in for about a week. We don't collect your email, and we use no third-party tracking or ads. Data is hosted on Hugging Face, whose terms also apply, and your contributions are visible to maintainers and may appear in public activity. For questions or to request deletion of your data, reach out on [GitHub](https://github.com/Wider-Community/quranic-universal-audio/issues) or [Discord](https://discord.gg/cZ3V2FynXz).

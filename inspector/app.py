@@ -223,6 +223,10 @@ def _assert_single_worker() -> None:
 
 _assert_single_worker()
 
+# The dev-mode OAuth bypass serves every visitor as a synthetic owner; abort
+# loudly if it is configured on a deployed (behind-proxy) Space.
+auth_service.assert_dev_mode_safe()
+
 # Flask's built-in static handler serves everything under FRONTEND_DIST at
 # the site root (`/assets/<hash>.js`, `/fonts/DigitalKhattV2.otf`, …). The
 # `/` route below handles index.html explicitly.

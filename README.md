@@ -58,6 +58,8 @@ Issues and pull requests are welcome. If you've found a bug or have a feature id
 
 To contribute code to the webapp directly, fork the repo and see [inspector/README.md](inspector/README.md) for setup instructions.
 
+By contributing, you agree that your contributions (segment/timestamp corrections, reviews, metadata, and submissions) may be published under the project's [CC BY 4.0](LICENSE) license.
+
 ## Roadmap
 
 **Access**
@@ -86,4 +88,4 @@ To contribute code to the webapp directly, fork the repo and see [inspector/READ
 
 ## License
 
-[CC BY 4.0](LICENSE) — free to share and adapt with attribution.
+The project's own work — timestamps, segmentation, alignment, catalog metadata, and code — is licensed under [CC BY 4.0](LICENSE). Recitation recordings remain the property of their reciters and original upstream sources; they are not relicensed. Fonts and Qur'an text are under their own upstream terms (DigitalKhatt: SIL OFL-1.1).
