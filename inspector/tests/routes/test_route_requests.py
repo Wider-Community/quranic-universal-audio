@@ -102,10 +102,6 @@ def _isolated_backend(tmp_path, monkeypatch):
         comments="Pre-seeded pending request for tests.",
     )
 
-    # Silence audit appends so tests don't write JSONL into tmp_path on every call.
-    from services import audit as audit_service
-    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
-
     yield backend
 
     _hf_bucket.reset_backend()
@@ -144,6 +140,14 @@ def test_submit_contributor_happy_path(signed_in_client):
     assert pending is not None
     assert pending.proposed_edits.name_en == "Cleaner Name"
     assert pending.requester.hf_user_id == "u-1"
+
+    # The submit handler drives state.transition("reciter.requested"); assert
+    # the canonical event-log row actually landed in the transitions table
+    # (regression guard: a future refactor that bypasses audit.append would
+    # have silently passed under the previous global-monkeypatch fixture).
+    from services.db import repo_transitions
+    events = [r["event"] for r in repo_transitions.for_slug("rec_clean")]
+    assert "reciter.requested" in events
 
 
 def test_submit_rejects_when_already_pending(signed_in_client):

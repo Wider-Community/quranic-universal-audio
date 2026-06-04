@@ -9,17 +9,15 @@
 import { describe, expect,it } from 'vitest';
 
 import { CAN_IGNORE_CATEGORIES } from '../helpers/categories';
-import { makeSegment } from '../helpers/make-segment';
+import { makeApplyCommandState, makeSegment } from '../helpers/make-segment';
 import { loadOptional } from '../helpers/optional';
 
 const mod = await loadOptional<{ applyCommand: any }>('../../domain/apply-command');
 const applyCommand = mod?.applyCommand ?? null;
 
-const baseState = () => ({
-  byId: { 'uid-as': makeSegment(0, 0, 1000, { segment_uid: 'uid-as' }) },
-  idsByChapter: { 1: ['uid-as'] },
-  selectedChapter: 1 as number | null,
-});
+const baseState = () => makeApplyCommandState([
+  makeSegment(0, 0, 1000, { segment_uid: 'uid-as' }),
+]);
 
 describe.skipIf(!applyCommand)('command/auto-suppress (decoupled)', () => {
   for (const cat of CAN_IGNORE_CATEGORIES) {
@@ -69,16 +67,12 @@ describe.skipIf(!applyCommand)('command/auto-suppress (decoupled)', () => {
   });
 
   it('preserves pre-existing ignored_categories on the segment', () => {
-    const state = {
-      byId: {
-        'uid-as': makeSegment(0, 0, 1000, {
-          segment_uid: 'uid-as',
-          ignored_categories: ['low_confidence'],
-        }),
-      },
-      idsByChapter: { 1: ['uid-as'] },
-      selectedChapter: 1 as number | null,
-    };
+    const state = makeApplyCommandState([
+      makeSegment(0, 0, 1000, {
+        segment_uid: 'uid-as',
+        ignored_categories: ['low_confidence'],
+      }),
+    ]);
     const r = applyCommand(state, {
       type: 'trim',
       segmentUid: 'uid-as',

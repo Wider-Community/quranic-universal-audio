@@ -25,7 +25,7 @@ os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 # anything other than a five-key checklist (all True) + two optional
 # comment strings; the state handler additionally re-computes the live
 # validation counts. Tests that exercise the HTTP boundary use this
-# canonical payload and the ``_clean_validation`` fixture below to mock
+# canonical payload and the ``clean_validation`` fixture below to mock
 # the count gate so they don't need on-disk segs to pass.
 
 _FULL_CHECKLIST_BODY = {
@@ -43,7 +43,7 @@ _FULL_CHECKLIST_BODY = {
 
 
 @pytest.fixture
-def _clean_validation(monkeypatch):
+def clean_validation(monkeypatch):
     """Stub ``validate_reciter_segments`` to report all blocking counts at zero.
 
     Mark-ready re-validates segments live in the state handler; the test
@@ -64,13 +64,10 @@ def _clean_validation(monkeypatch):
             }
         }
 
-    # Patch both the module export and the late-imported binding the
-    # handler uses (``from services.validation import …`` happens inside
-    # _h_marked_ready to keep state.py's import graph light).
+    # The handler does ``from services.validation import …`` lazily inside
+    # _h_marked_ready; that lookup goes through _validation.__dict__ every
+    # call, so one ``setattr`` on the module covers it.
     monkeypatch.setattr(_validation, "validate_reciter_segments", _ok)
-    monkeypatch.setitem(
-        _validation.__dict__, "validate_reciter_segments", _ok,
-    )
     return _ok
 
 
@@ -307,7 +304,7 @@ def test_release_maintainer_can_force_release(signed_in_client, state_persistenc
 # ---------------------------------------------------------------------------
 
 
-def test_mark_unmark_round_trip(signed_in_client, state_persistence, _clean_validation):
+def test_mark_unmark_round_trip(signed_in_client, state_persistence, clean_validation):
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
@@ -333,7 +330,7 @@ def test_mark_unmark_round_trip(signed_in_client, state_persistence, _clean_vali
 
 
 def test_mark_ready_non_assignee_returns_403(
-    signed_in_client, state_persistence, _clean_validation,
+    signed_in_client, state_persistence, clean_validation,
 ):
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="other")])
 
@@ -347,7 +344,7 @@ def test_mark_ready_non_assignee_returns_403(
 
 
 def test_mark_ready_rejects_unchecked_checklist(
-    signed_in_client, state_persistence, _clean_validation,
+    signed_in_client, state_persistence, clean_validation,
 ):
     """Submit without all five attestations checked → 400 with details."""
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
@@ -396,7 +393,6 @@ def test_mark_ready_rejects_nonzero_blocking_counts(
 
     from services import validation as _validation
     monkeypatch.setattr(_validation, "validate_reciter_segments", _has_lc)
-    monkeypatch.setitem(_validation.__dict__, "validate_reciter_segments", _has_lc)
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(
@@ -441,7 +437,6 @@ def test_mark_ready_lc_count_uses_strict_threshold_not_detail(
 
     from services import validation as _validation
     monkeypatch.setattr(_validation, "validate_reciter_segments", _lots_of_detail)
-    monkeypatch.setitem(_validation.__dict__, "validate_reciter_segments", _lots_of_detail)
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(
@@ -466,7 +461,6 @@ def test_mark_ready_lc_count_uses_strict_threshold_not_detail(
             },
         }
     monkeypatch.setattr(_validation, "validate_reciter_segments", _one_strict_lc)
-    monkeypatch.setitem(_validation.__dict__, "validate_reciter_segments", _one_strict_lc)
 
     # Re-seed: previous request marked it ready, so flip back to under-review.
     _replace_state([_row("other_slug", state="under_review", assignee_hf_id="u-1")])
@@ -481,7 +475,7 @@ def test_mark_ready_lc_count_uses_strict_threshold_not_detail(
 
 
 def test_mark_ready_rejects_malformed_body(
-    signed_in_client, state_persistence, _clean_validation,
+    signed_in_client, state_persistence, clean_validation,
 ):
     """Missing checklist field → 400 from the route-level pydantic gate."""
     _replace_state([_row("test_slug", state="under_review", assignee_hf_id="u-1")])
@@ -499,7 +493,7 @@ def test_mark_ready_rejects_malformed_body(
 
 
 def test_release_blocked_after_marked_ready(
-    signed_in_client, state_persistence, _clean_validation,
+    signed_in_client, state_persistence, clean_validation,
 ):
     """Self-release on a marked-ready row must refuse — the reviewer
     has to unmark first (or an admin force-releases)."""
@@ -562,7 +556,7 @@ def test_mark_ready_owner_bypass_persists_bypass_used(signed_in_client, state_pe
 
 
 def test_mark_ready_non_owner_still_requires_form_body(
-    signed_in_client, state_persistence, _clean_validation,
+    signed_in_client, state_persistence, clean_validation,
 ):
     """A contributor without the override capability still hits the
     Pydantic gate — empty body → 400. Sanity check that the bypass path

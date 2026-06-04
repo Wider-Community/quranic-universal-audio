@@ -1,17 +1,12 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { FakeIntersectionObserver } from '../../../../../lib/test-helpers/dom-stubs';
 import { makeSegment } from '../../../__tests__/helpers/make-segment';
 import { segAllData } from '../../../stores/chapter';
 import { closeGuideModal } from '../../../stores/guides';
 import { segValidation } from '../../../stores/validation';
 import GuideModalHarness from './GuideModalHarness.svelte';
-
-class FakeIntersectionObserver {
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
-}
 
 beforeEach(() => {
   vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);

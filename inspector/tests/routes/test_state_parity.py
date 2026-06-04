@@ -197,7 +197,6 @@ def test_mark_ready_propagates_to_all_endpoints(
             "cross_verse": 0, "basmala_amin": 0,
         }}
     monkeypatch.setattr(_validation, "validate_reciter_segments", _ok)
-    monkeypatch.setitem(_validation.__dict__, "validate_reciter_segments", _ok)
 
     client, _ = signed_in_client(hf_user_id="u-1", login="alice")
     resp = client.post(

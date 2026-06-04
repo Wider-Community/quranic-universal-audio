@@ -52,20 +52,27 @@ def test_hydrate_empty_when_no_file(fresh_state):
 # ---------------------------------------------------------------------------
 
 
-def test_delete_records_tombstone(fresh_state, monkeypatch):
+def test_delete_records_tombstone(fresh_state):
     svc, _ = fresh_state
-    from services import audit as audit_service
-    calls = []
-    monkeypatch.setattr(audit_service, "append", lambda **kw: calls.append(kw))
+    from datetime import datetime, timedelta, timezone
+
+    from services.db import repo_transitions
 
     actor = _actor("u-O", role="owner", login="owen")
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
     svc.delete("abc123", actor=actor, reason="content removed per request")
 
     snap = svc.snapshot()
     assert snap.deleted == ["abc123"]
-    assert calls[0]["event"] == "admin.activity_deleted"
-    assert calls[0]["reason"] == "content removed per request"
-    assert calls[0]["payload"] == {"audit_id": "abc123"}
+
+    rows = [
+        r for r in repo_transitions.since(cutoff_iso)
+        if r["event"] == "admin.activity_deleted"
+    ]
+    assert len(rows) == 1
+    assert rows[0]["reason"] == "content removed per request"
+    assert rows[0]["payload"] == {"audit_id": "abc123"}
+    assert rows[0]["actor"]["hf_user_id"] == "u-O"
 
 
 def test_is_deleted_predicate(fresh_state, monkeypatch):

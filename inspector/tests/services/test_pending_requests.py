@@ -25,25 +25,17 @@ from qua_shared.schemas import (
 
 
 @pytest.fixture
-def fresh_pending(tmp_path, monkeypatch):
-    """Per-test FilesystemBackend so each test starts with a clean store."""
-    from services import hf_bucket as _hf_bucket
+def fresh_pending():
+    """Yield the pending_requests service against the autouse ``_substrate_db``.
+
+    pending_requests is SQLite-only; no bucket backend or env vars are needed.
+    Seeds the catalog FK chain (vocab + reciter + delivery) the submit +
+    apply_and_archive tests rely on.
+    """
     from services import pending_requests as pending_requests_service
-    from services import request_archive as request_archive_service
 
-    monkeypatch.setenv("INSPECTOR_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("INSPECTOR_BACKEND", "filesystem")
-    monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))
-
-    backend = _hf_bucket.FilesystemBackend(tmp_path)
-    _hf_bucket.set_backend(backend)
-    # requests.slug FK → deliveries: seed the catalog (vocab + reciter +
-    # delivery) the submit + apply_and_archive tests use.
     _seed_test_catalog_db()
-
-    yield pending_requests_service, backend
-
-    _hf_bucket.reset_backend()
+    yield pending_requests_service
 
 
 def _seed_test_catalog_db():
@@ -97,7 +89,7 @@ def _edits(**kwargs) -> ProposedEdits:
 
 
 def test_hydrate_empty_when_no_file(fresh_pending):
-    svc, _ = fresh_pending
+    svc = fresh_pending
     snap = svc.snapshot()
     assert snap.by_slug == {}
 
@@ -112,8 +104,7 @@ def test_hydrate_empty_when_no_file(fresh_pending):
 
 
 def test_submit_creates_entry(fresh_pending):
-    svc, backend = fresh_pending
-    from services import storage_paths
+    svc = fresh_pending
 
     svc.submit(
         "test_reciter",
@@ -131,14 +122,14 @@ def test_submit_creates_entry(fresh_pending):
 
 
 def test_submit_rejects_when_pending_exists(fresh_pending):
-    svc, _ = fresh_pending
+    svc = fresh_pending
     svc.submit("test_reciter", requester=_actor(), edits=_edits(), comments=None)
     with pytest.raises(svc.RequestAlreadyPending):
         svc.submit("test_reciter", requester=_actor(), edits=_edits(), comments=None)
 
 
 def test_get_returns_entry_or_none(fresh_pending):
-    svc, _ = fresh_pending
+    svc = fresh_pending
     assert svc.get("nope") is None
     svc.submit("test_reciter", requester=_actor(), edits=_edits(), comments=None)
     entry = svc.get("test_reciter")
@@ -147,14 +138,14 @@ def test_get_returns_entry_or_none(fresh_pending):
 
 
 def test_clear_removes_entry(fresh_pending):
-    svc, _ = fresh_pending
+    svc = fresh_pending
     svc.submit("test_reciter", requester=_actor(), edits=_edits(), comments=None)
     svc.clear("test_reciter")
     assert svc.get("test_reciter") is None
 
 
 def test_clear_is_idempotent(fresh_pending):
-    svc, _ = fresh_pending
+    svc = fresh_pending
     svc.clear("nope")  # never existed
     svc.submit("test_reciter", requester=_actor(), edits=_edits(), comments=None)
     svc.clear("test_reciter")
@@ -197,7 +188,7 @@ def _discarded_for(svc_request_archive, slug: str):
 
 
 def test_apply_and_archive_completed_applies_reciter_fields(seeded_catalog, monkeypatch):
-    svc, _ = seeded_catalog
+    svc = seeded_catalog
     from services import audit as audit_service
     from services import catalog as catalog_service
     from services import request_archive as request_archive_service
@@ -230,7 +221,7 @@ def test_apply_and_archive_completed_applies_reciter_fields(seeded_catalog, monk
 
 
 def test_apply_and_archive_completed_applies_delivery_fields(seeded_catalog, monkeypatch):
-    svc, _ = seeded_catalog
+    svc = seeded_catalog
     from services import audit as audit_service
     from services import catalog as catalog_service
     from services import request_archive as request_archive_service
@@ -263,7 +254,7 @@ def test_apply_and_archive_completed_applies_delivery_fields(seeded_catalog, mon
 
 
 def test_apply_and_archive_completed_noop_when_no_pending(seeded_catalog, monkeypatch):
-    svc, _ = seeded_catalog
+    svc = seeded_catalog
     from services import audit as audit_service
     from services import request_archive as request_archive_service
 
@@ -277,7 +268,7 @@ def test_apply_and_archive_completed_noop_when_no_pending(seeded_catalog, monkey
 
 def test_apply_and_archive_completed_with_empty_edits_still_archives(seeded_catalog, monkeypatch):
     """Submission with no proposed edits is still archived on accept."""
-    svc, _ = seeded_catalog
+    svc = seeded_catalog
     from services import audit as audit_service
     from services import request_archive as request_archive_service
 
@@ -295,7 +286,7 @@ def test_apply_and_archive_completed_with_empty_edits_still_archives(seeded_cata
 def test_apply_and_archive_completed_warns_on_riwayah_style_conflict(seeded_catalog, monkeypatch):
     """Proposed (riwayah, style) matching another delivery of the same reciter
     emits a non-blocking audit warning. The edit still applies and archives."""
-    svc, _ = seeded_catalog
+    svc = seeded_catalog
     from datetime import datetime as _dt, timezone as _tz
 
     from qua_shared.schemas import AudioCategory, Delivery
@@ -344,7 +335,7 @@ def test_apply_and_archive_completed_warns_on_riwayah_style_conflict(seeded_cata
 
 
 def test_archive_returned_moves_pending_into_returned(fresh_pending):
-    svc, _ = fresh_pending
+    svc = fresh_pending
     from services import request_archive as request_archive_service
 
     svc.submit(
@@ -372,7 +363,7 @@ def test_archive_returned_moves_pending_into_returned(fresh_pending):
 
 
 def test_archive_returned_noop_when_no_pending(fresh_pending):
-    svc, _ = fresh_pending
+    svc = fresh_pending
     from services import request_archive as request_archive_service
 
     admin = _actor(hf_user_id="admin-1", login="admin", role="maintainer")
@@ -383,7 +374,7 @@ def test_archive_returned_noop_when_no_pending(fresh_pending):
 def test_archive_returned_then_resubmit_keeps_history(fresh_pending):
     """A slug can be returned, re-requested, returned again — both archive
     entries should be preserved in chronological order."""
-    svc, _ = fresh_pending
+    svc = fresh_pending
     from services import request_archive as request_archive_service
 
     admin = _actor(hf_user_id="admin-1", login="admin", role="maintainer")
@@ -401,7 +392,7 @@ def test_archive_returned_then_resubmit_keeps_history(fresh_pending):
 
 
 def test_archive_discarded_moves_pending_into_discarded(fresh_pending):
-    svc, _ = fresh_pending
+    svc = fresh_pending
     from services import request_archive as request_archive_service
 
     svc.submit(
@@ -427,7 +418,7 @@ def test_archive_discarded_moves_pending_into_discarded(fresh_pending):
 
 
 def test_archive_discarded_noop_when_no_pending(fresh_pending):
-    svc, _ = fresh_pending
+    svc = fresh_pending
     from services import request_archive as request_archive_service
 
     admin = _actor(hf_user_id="admin-1", login="admin", role="maintainer")

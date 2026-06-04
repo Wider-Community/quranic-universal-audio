@@ -12,72 +12,28 @@ and rejection of compound cross-verse keys.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+import gzip
 
-_ROOT = Path(__file__).resolve().parents[3]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+import orjson
+import pytest
 
-import gzip  # noqa: E402
-
-import orjson  # noqa: E402
-import pytest  # noqa: E402
-
-from qua_shared.timestamps_dedup import build_raw_v2  # noqa: E402
-from qua_shared.timestamps_reshape import (  # noqa: E402
+from qua_shared.tests.conftest import (
+    PROVENANCE,
+    _chapter_loopback,
+    _ok,
+    _results_loopback,
+)
+from qua_shared.timestamps_dedup import build_raw_v2
+from qua_shared.timestamps_reshape import (
     classify_shard,
     reshape_shard,
 )
-from qua_shared.timestamps_shards import (  # noqa: E402
+from qua_shared.timestamps_shards import (
     build_segment_shards,
     gzip_shard,
 )
 
 CAT = "by_surah_audio"
-
-PROVENANCE = {
-    "created_at": "2026-06-04T00:00:00Z",
-    "audio_source": "by_surah",
-    "aligner_model": "quran_aligner_model",
-    "method": "kalpy",
-    "beam": 50,
-    "shared_cmvn": False,
-    "padding": "forward",
-}
-
-
-def _ok(locations, t0=0.0, step=0.5):
-    """Synthetic MFA 'ok' result: one word per location, sequential times (s)."""
-    words = []
-    for i, loc in enumerate(locations):
-        s = t0 + i * step
-        words.append({
-            "location": loc, "start": s, "end": s + step,
-            "letters": [{"char": "x", "start": s, "end": s + step}],
-            "phones": [{"phone": "P", "start": s, "end": s + step}],
-        })
-    return {"status": "ok", "words": words}
-
-
-def _chapter_loopback():
-    # 1:1 recited across two segments (loopback): words 1-2 then 3-4, then 1:2.
-    return {
-        "ref": "1",
-        "segments": [
-            {"matched_ref": "1:1:1-1:1:2", "time_start": 0, "time_end": 1000},
-            {"matched_ref": "1:1:3-1:1:4", "time_start": 1500, "time_end": 2500},
-            {"matched_ref": "1:2:1-1:2:3", "time_start": 2500, "time_end": 3500},
-        ],
-    }
-
-
-def _results_loopback():
-    return {0: [
-        (0, _ok(["1:1:1", "1:1:2"])),
-        (1, _ok(["1:1:3", "1:1:4"], t0=1.5)),
-        (2, _ok(["1:2:1", "1:2:2", "1:2:3"], t0=2.5)),
-    ]}
 
 
 def _v2_chapter_shard(chapter, results, *, cat=CAT, meta_extra=None):

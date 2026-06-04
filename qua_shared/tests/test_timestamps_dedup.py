@@ -25,39 +25,21 @@ Asserts the dedup-correctness invariants from
 from __future__ import annotations
 
 import gzip
-import sys
-from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[3]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+import orjson
 
-import orjson  # noqa: E402
-
-from qua_shared.timestamps_dedup import (  # noqa: E402
+from qua_shared.tests.conftest import _ok
+from qua_shared.timestamps_dedup import (
     build_raw_v2,
     confidence_by_span,
     project_segment_shard,
 )
-from qua_shared.timestamps_shards import (  # noqa: E402
+from qua_shared.timestamps_shards import (
     build_segment_shards,
     gzip_shard,
 )
 
 CAT = "by_surah_audio"
-
-
-def _ok(locations, t0=0.0, step=0.5):
-    """Synthetic MFA 'ok' result: one word per location, sequential times (s)."""
-    words = []
-    for i, loc in enumerate(locations):
-        s = t0 + i * step
-        words.append({
-            "location": loc, "start": s, "end": s + step,
-            "letters": [{"char": "x", "start": s, "end": s + step}],
-            "phones": [{"phone": "P", "start": s, "end": s + step}],
-        })
-    return {"status": "ok", "words": words}
 
 
 def _roundtrip(chapter, results, *, cat=CAT, conf_by_span=None):

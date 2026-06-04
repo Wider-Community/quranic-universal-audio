@@ -105,7 +105,11 @@ jobs:
 
       - name: Install codegen deps
         run: |
-          pip install -r inspector/requirements-dev.txt
+          # Install runtime requirements alongside dev requirements so codegen
+          # runs against the same pinned pydantic the deployed image + the BE
+          # tests use (prevents silent JSON-schema drift if
+          # pydantic-to-typescript's loose dep resolves to an older pydantic).
+          pip install -r inspector/requirements.txt -r inspector/requirements-dev.txt
           cd inspector/frontend && npm ci
 
       - name: Regenerate FE types

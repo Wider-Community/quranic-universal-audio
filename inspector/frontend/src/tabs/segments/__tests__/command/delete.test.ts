@@ -2,17 +2,15 @@
 
 import { describe, expect,it } from 'vitest';
 
-import { makeSegment } from '../helpers/make-segment';
+import { makeApplyCommandState, makeSegment } from '../helpers/make-segment';
 import { loadOptional } from '../helpers/optional';
 
 const mod = await loadOptional<{ applyCommand: any }>('../../domain/apply-command');
 const applyCommand = mod?.applyCommand ?? null;
 
-const baseState = () => ({
-  byId: { 'uid-del': makeSegment(0, 0, 1000, { segment_uid: 'uid-del' }) },
-  idsByChapter: { 1: ['uid-del'] },
-  selectedChapter: 1 as number | null,
-});
+const baseState = () => makeApplyCommandState([
+  makeSegment(0, 0, 1000, { segment_uid: 'uid-del' }),
+]);
 
 describe.skipIf(!applyCommand)('command/delete', () => {
   it('op produces expected segment mutations', () => {

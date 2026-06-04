@@ -1,25 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { dispatchVisibilityChange, flushMicrotasks, setVisibility } from '../../test-helpers/poll-helpers';
 import { visiblePoll } from '../visible-poll';
-
-function setVisibility(hidden: boolean): void {
-    Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });
-    Object.defineProperty(document, 'visibilityState', {
-        value: hidden ? 'hidden' : 'visible',
-        configurable: true,
-    });
-}
-
-function dispatchVisibilityChange(): void {
-    document.dispatchEvent(new Event('visibilitychange'));
-}
-
-/** Flush queued microtasks without advancing the fake-timer clock. */
-async function flushMicrotasks(): Promise<void> {
-    // A handful of awaits drains promise chains created by runOnce()
-    // (fetcher + onResult), without triggering the interval timer.
-    for (let i = 0; i < 5; i += 1) await Promise.resolve();
-}
 
 describe('visiblePoll', () => {
     beforeEach(() => {

@@ -2,18 +2,16 @@
 
 import { describe, expect,it } from 'vitest';
 
-import { makeSegment } from '../helpers/make-segment';
+import { makeApplyCommandState, makeSegment } from '../helpers/make-segment';
 import { loadOptional } from '../helpers/optional';
 
 const mod = await loadOptional<{ applyCommand: any }>('../../domain/apply-command');
 const applyCommand = mod?.applyCommand ?? null;
 
 describe.skipIf(!applyCommand)('applyCommand', () => {
-  const baseState = {
-    byId: { 'uid-1': makeSegment(0, 0, 1000, { segment_uid: 'uid-1' }) },
-    idsByChapter: { 1: ['uid-1'] },
-    selectedChapter: 1 as number | null,
-  };
+  const baseState = makeApplyCommandState([
+    makeSegment(0, 0, 1000, { segment_uid: 'uid-1' }),
+  ]);
 
   it('returns CommandResult with nextState', () => {
     const r = applyCommand(baseState, { type: 'trim', segmentUid: 'uid-1', delta: { time_start: 100 } } as any);

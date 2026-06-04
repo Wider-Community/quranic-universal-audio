@@ -2,17 +2,15 @@
 
 import { describe, expect,it } from 'vitest';
 
-import { makeSegment } from '../helpers/make-segment';
+import { makeApplyCommandState, makeSegment } from '../helpers/make-segment';
 import { loadOptional } from '../helpers/optional';
 
 const mod = await loadOptional<{ applyCommand: any }>('../../domain/apply-command');
 const applyCommand = mod?.applyCommand ?? null;
 
-const baseState = () => ({
-  byId: { 'uid-split': makeSegment(0, 0, 4000, { segment_uid: 'uid-split' }) },
-  idsByChapter: { 1: ['uid-split'] },
-  selectedChapter: 1 as number | null,
-});
+const baseState = () => makeApplyCommandState([
+  makeSegment(0, 0, 4000, { segment_uid: 'uid-split' }),
+]);
 
 describe.skipIf(!applyCommand)('command/split', () => {
   it('op produces expected segment mutations', () => {
@@ -61,17 +59,13 @@ describe.skipIf(!applyCommand)('command/split', () => {
     // Regression: editing matched_ref kept the wrap intact even when the new
     // ref no longer contained the wrap word range — Ayyub edit_history shows
     // the bug:  "1:24 wrap=11..24" → "1:21 wrap=11..24" (wrap now stale).
-    const state = {
-      byId: {
-        'uid-rep': makeSegment(0, 0, 4000, {
-          segment_uid: 'uid-rep',
-          matched_ref: '48:29:1-48:29:24',
-          wrap_word_ranges: [['48:29:11', '48:29:11', '48:29:24']] as any,
-        }),
-      },
-      idsByChapter: { 1: ['uid-rep'] },
-      selectedChapter: 1 as number | null,
-    };
+    const state = makeApplyCommandState([
+      makeSegment(0, 0, 4000, {
+        segment_uid: 'uid-rep',
+        matched_ref: '48:29:1-48:29:24',
+        wrap_word_ranges: [['48:29:11', '48:29:11', '48:29:24']] as any,
+      }),
+    ]);
     const r = applyCommand(state, {
       type: 'editReference', segmentUid: 'uid-rep', matched_ref: '48:29:1-48:29:3',
     } as any);
@@ -83,17 +77,13 @@ describe.skipIf(!applyCommand)('command/split', () => {
   it('confirmReference (no ref change) preserves wrap', () => {
     // confirm_reference re-affirms the existing matched_ref. The wrap should
     // not be discarded just because the user audited the row.
-    const state = {
-      byId: {
-        'uid-rep': makeSegment(0, 0, 4000, {
-          segment_uid: 'uid-rep',
-          matched_ref: '48:29:1-48:29:24',
-          wrap_word_ranges: [['48:29:11', '48:29:11', '48:29:24']] as any,
-        }),
-      },
-      idsByChapter: { 1: ['uid-rep'] },
-      selectedChapter: 1 as number | null,
-    };
+    const state = makeApplyCommandState([
+      makeSegment(0, 0, 4000, {
+        segment_uid: 'uid-rep',
+        matched_ref: '48:29:1-48:29:24',
+        wrap_word_ranges: [['48:29:11', '48:29:11', '48:29:24']] as any,
+      }),
+    ]);
     const r = applyCommand(state, {
       type: 'editReference', opType: 'confirm_reference', segmentUid: 'uid-rep',
       matched_ref: '48:29:1-48:29:24',
@@ -105,21 +95,17 @@ describe.skipIf(!applyCommand)('command/split', () => {
   it('merge drops wrap from both segs', () => {
     // Merging changes matched_ref + geometry; any wrap on the first seg may
     // not apply to the merged span. Drop for the same reason split does.
-    const state = {
-      byId: {
-        'uid-a': makeSegment(0, 0, 2000, {
-          segment_uid: 'uid-a',
-          matched_ref: '48:29:1-48:29:11',
-          wrap_word_ranges: [['48:29:5', '48:29:5', '48:29:11']] as any,
-        }),
-        'uid-b': makeSegment(1, 2000, 4000, {
-          segment_uid: 'uid-b',
-          matched_ref: '48:29:12-48:29:24',
-        }),
-      },
-      idsByChapter: { 1: ['uid-a', 'uid-b'] },
-      selectedChapter: 1 as number | null,
-    };
+    const state = makeApplyCommandState([
+      makeSegment(0, 0, 2000, {
+        segment_uid: 'uid-a',
+        matched_ref: '48:29:1-48:29:11',
+        wrap_word_ranges: [['48:29:5', '48:29:5', '48:29:11']] as any,
+      }),
+      makeSegment(1, 2000, 4000, {
+        segment_uid: 'uid-b',
+        matched_ref: '48:29:12-48:29:24',
+      }),
+    ]);
     const r = applyCommand(state, {
       type: 'merge', fromUid: 'uid-b', toUid: 'uid-a',
     } as any);
@@ -131,16 +117,12 @@ describe.skipIf(!applyCommand)('command/split', () => {
     // CV wizard: cursors=[1500, 3000] produces 3 pieces with 2 new boundaries.
     // wasls=[true, false] tags child[0].is_wasl=true, child[1].is_wasl=false.
     // The last child (no new boundary after it) inherits parent.is_wasl (default false).
-    const state = {
-      byId: {
-        'uid-cv': makeSegment(0, 0, 4500, {
-          segment_uid: 'uid-cv',
-          matched_ref: '37:151:1-37:153:5',
-        }),
-      },
-      idsByChapter: { 1: ['uid-cv'] },
-      selectedChapter: 1 as number | null,
-    };
+    const state = makeApplyCommandState([
+      makeSegment(0, 0, 4500, {
+        segment_uid: 'uid-cv',
+        matched_ref: '37:151:1-37:153:5',
+      }),
+    ]);
     const r = applyCommand(state, {
       type: 'split',
       segmentUid: 'uid-cv',
@@ -160,17 +142,13 @@ describe.skipIf(!applyCommand)('command/split', () => {
   it('split with parent is_wasl=true preserves it on the LAST child only', () => {
     // Parent's is_wasl=true described the parent→next-seg boundary. After
     // split, that boundary is still owned by the new last child.
-    const state = {
-      byId: {
-        'uid-cv': makeSegment(0, 0, 4000, {
-          segment_uid: 'uid-cv',
-          matched_ref: '2:5:1-2:6:3',
-          is_wasl: true,
-        }),
-      },
-      idsByChapter: { 1: ['uid-cv'] },
-      selectedChapter: 1 as number | null,
-    };
+    const state = makeApplyCommandState([
+      makeSegment(0, 0, 4000, {
+        segment_uid: 'uid-cv',
+        matched_ref: '2:5:1-2:6:3',
+        is_wasl: true,
+      }),
+    ]);
     const r = applyCommand(state, {
       type: 'split',
       segmentUid: 'uid-cv',
@@ -185,17 +163,13 @@ describe.skipIf(!applyCommand)('command/split', () => {
   });
 
   it('setIsWasl toggles is_wasl on the target segment', () => {
-    const state = {
-      byId: {
-        'uid-w': makeSegment(0, 0, 4000, {
-          segment_uid: 'uid-w',
-          matched_ref: '2:5:1-2:5:3',
-          is_wasl: false,
-        }),
-      },
-      idsByChapter: { 1: ['uid-w'] },
-      selectedChapter: 1 as number | null,
-    };
+    const state = makeApplyCommandState([
+      makeSegment(0, 0, 4000, {
+        segment_uid: 'uid-w',
+        matched_ref: '2:5:1-2:5:3',
+        is_wasl: false,
+      }),
+    ]);
     const onResult = applyCommand(state, {
       type: 'setIsWasl', segmentUid: 'uid-w', is_wasl: true,
     } as any);
@@ -217,17 +191,13 @@ describe.skipIf(!applyCommand)('command/split', () => {
     // Regression: a parent repetition seg used to leak its wrap onto every
     // split child, re-tagging post-split clean segs as repetitions and
     // making Auto Split feed the wrong refs to MFA.
-    const state = {
-      byId: {
-        'uid-rep': makeSegment(0, 0, 4000, {
-          segment_uid: 'uid-rep',
-          matched_ref: '48:29:1-48:29:24',
-          wrap_word_ranges: [['48:29:11', '48:29:11', '48:29:24']] as any,
-        }),
-      },
-      idsByChapter: { 1: ['uid-rep'] },
-      selectedChapter: 1 as number | null,
-    };
+    const state = makeApplyCommandState([
+      makeSegment(0, 0, 4000, {
+        segment_uid: 'uid-rep',
+        matched_ref: '48:29:1-48:29:24',
+        wrap_word_ranges: [['48:29:11', '48:29:11', '48:29:24']] as any,
+      }),
+    ]);
     const r = applyCommand(state, {
       type: 'split', segmentUid: 'uid-rep', splitMs: 2000, newUids: ['uid-new'],
     } as any);
