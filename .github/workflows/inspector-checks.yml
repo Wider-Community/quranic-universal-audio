@@ -37,6 +37,11 @@ jobs:
 
       - name: Suggest eslint --fix changes (PR only)
         if: github.event_name == 'pull_request'
+        # Advisory only — surfaces eslint --fix as PR suggestions. A reviewdog
+        # infra hiccup (e.g. "shallow file has changed" during its git fetch on
+        # the shallow checkout) must never gate the build; the real gates are
+        # the lint/check/test/build step below.
+        continue-on-error: true
         uses: reviewdog/action-suggester@v1
         with:
           tool_name: eslint
