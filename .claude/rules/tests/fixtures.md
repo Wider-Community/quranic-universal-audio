@@ -1,6 +1,5 @@
 ---
-description: Conftest + shared-helper discipline (BE + FE)
-globs:
+paths:
   - "inspector/tests/conftest.py"
   - "inspector/tests/**/conftest.py"
   - "qua_shared/tests/conftest.py"

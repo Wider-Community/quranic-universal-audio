@@ -1,6 +1,5 @@
 ---
-description: Where tests live, what they're called, when to rename or move
-globs:
+paths:
   - "inspector/tests/**"
   - "inspector/frontend/src/**/*.test.ts"
   - "inspector/frontend/src/**/*.spec.ts"

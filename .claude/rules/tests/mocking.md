@@ -1,6 +1,5 @@
 ---
-description: Mocking boundary table — what to mock, what NOT to mock (BE + FE)
-globs:
+paths:
   - "inspector/tests/**/*.py"
   - "inspector/frontend/src/**/*.test.ts"
   - "inspector/frontend/src/**/*.spec.ts"
