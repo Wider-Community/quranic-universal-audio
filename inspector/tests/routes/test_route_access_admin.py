@@ -182,7 +182,7 @@ def test_revoke_force_releases_active_claim(signed_in_client):
     assert row is not None
     assert row.state.value == "awaiting_review"
     assert row.assignee_hf_id is None
-    events = {t.event for t in repo_transitions.for_slug("test_slug")}
+    events = {t["event"] for t in repo_transitions.for_slug("test_slug")}
     assert "reciter.released" in events
 
 

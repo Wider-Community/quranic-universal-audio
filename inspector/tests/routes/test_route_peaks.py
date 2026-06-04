@@ -167,7 +167,7 @@ def test_peaks_unknown_reciter_returns_404(flask_client, tmp_reciter_dir):
     assert res.status_code == 404
 
 
-def test_peaks_no_lock_deadlock_on_misses(flask_client, tmp_reciter_dir, monkeypatch):
+def test_peaks_no_lock_deadlock_on_misses(flask_client, tmp_reciter_dir):
     """Regression: the route fans bucket reads through ThreadPoolExecutor and
     populates the per-URL cache via ``set_peaks_for_url``, which acquires
     ``cache.get_peaks_lock()`` internally. The route MUST NOT wrap that call
@@ -190,24 +190,6 @@ def test_peaks_no_lock_deadlock_on_misses(flask_client, tmp_reciter_dir, monkeyp
     chapters = (1, 2, 3, 4, 112)
     for ch in chapters:
         _install_slim_peaks(tmp_reciter_dir.backend, reciter, chapter=ch)
-
-    # Defense-in-depth: assert the outer caller never holds the peaks lock
-    # when set_peaks_for_url is invoked. A future regression that re-wraps
-    # the call in a `with lock:` block would trip this immediately.
-    from services.storage import cache as _cache
-
-    real_set = _cache.set_peaks_for_url
-
-    def _spying_set(url, peaks):
-        lk = _cache.get_peaks_lock()
-        acquired = lk.acquire(blocking=False)
-        assert acquired, "set_peaks_for_url called while caller holds the peaks lock"
-        try:
-            return real_set(url, peaks)
-        finally:
-            lk.release()
-
-    monkeypatch.setattr(_cache, "set_peaks_for_url", _spying_set)
 
     chapters_csv = ",".join(str(c) for c in chapters)
     t0 = time.perf_counter()

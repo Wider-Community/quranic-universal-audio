@@ -54,6 +54,19 @@ def test_existing_db_at_v1_gets_admin_users_additions():
             first_seen  TEXT,
             last_seen   TEXT
         );
+        -- role_assignments is created in 0001 and read by 0003's first_seen
+        -- backfill (UNION over granted_at). Without it the chain blows up
+        -- at migration 0003.
+        CREATE TABLE role_assignments (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            hf_user_id  TEXT NOT NULL,
+            role        TEXT NOT NULL,
+            granted_at  TEXT NOT NULL,
+            granted_by  TEXT,
+            revoked_at  TEXT,
+            revoked_by  TEXT,
+            reason      TEXT
+        );
         -- minimal pre-0002 base tables that 0002's indexes (and downstream
         -- migrations) reference. 0011 drops prefetch_purge_at, 0014 ALTERs
         -- channels, 0015 nulls bitrate_kbps_nominal on deliveries.
@@ -67,7 +80,8 @@ def test_existing_db_at_v1_gets_admin_users_additions():
         CREATE TABLE requests (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             slug          TEXT,
-            requester_id  TEXT NOT NULL
+            requester_id  TEXT NOT NULL,
+            submitted_at  TEXT NOT NULL
         );
         CREATE TABLE claims (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
