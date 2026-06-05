@@ -6,9 +6,9 @@
   <a href="https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Qur'anic%20Universal%20Ayahs-E8C32E" alt="Dataset - Qur'anic Universal Ayahs"></a>
   <!-- stats-badges:start -->
   <br>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Recitations-12-d4842a" alt="Published recitations"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Recitations-13-d4842a" alt="Published recitations"></a>
   <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-16-f0ad4e" alt="Catalog riwayat"></a>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Hours-350h%2B-d4842a" alt="Published audio hours"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Hours-400h%2B-d4842a" alt="Published audio hours"></a>
   <!-- stats-badges:end -->
   <br>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/releases/latest"><img src="https://img.shields.io/github/v/release/Wider-Community/quranic-universal-audio?label=Release&color=4a5568" alt="Latest Release"></a>
