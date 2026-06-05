@@ -33,7 +33,6 @@
     // reciter + ayah). Off/ayah share the single-reciter glyph (ayah just
     // highlights it); both swaps to the random-reciter glyph.
     const SHUFFLE_LABEL = ['Shuffle: off', 'Shuffle ayah (same reciter)', 'Shuffle reciter + ayah'];
-    const shuffleSrc = $derived($shuffleMode === 2 ? '/icons/reciter_random.svg' : '/icons/reciter.svg');
 
     let manifestSlugs = $state(new Set<string>());
     let pickerOpen = $state(false);
@@ -164,7 +163,18 @@
         type="button" class="shuffle-btn" class:on={$shuffleMode !== 0}
         aria-label={SHUFFLE_LABEL[$shuffleMode]} title={SHUFFLE_LABEL[$shuffleMode]}
         onclick={onShuffleClick}
-    ><img class="shuffle-img" src={shuffleSrc} alt="" aria-hidden="true" /></button>
+    ><span class="shuffle-imgs">
+            <!-- Both glyphs render once (decoded at mount); the cycle only flips
+                 which is visible via CSS — no src swap, so no per-toggle decode. -->
+            <img
+                class="shuffle-img" class:active={$shuffleMode !== 2}
+                src="/icons/reciter.svg" alt="" aria-hidden="true"
+            />
+            <img
+                class="shuffle-img" class:active={$shuffleMode === 2}
+                src="/icons/reciter_random.svg" alt="" aria-hidden="true"
+            />
+        </span></button>
 </div>
 
 <style>
@@ -191,14 +201,25 @@
     }
     .shuffle-btn:hover { color: var(--text-primary); border-color: var(--border-strong); background: var(--panel); }
     .shuffle-btn.on { color: var(--accent); background: var(--accent-tint); border-color: var(--accent); }
-    .shuffle-img {
+    /* Wrapper carries the emphasis opacity (off/hover/on); each glyph toggles
+       its own opacity instantly so the swap never re-decodes or re-fetches. */
+    .shuffle-imgs {
+        position: relative;
         width: 18px;
         height: 18px;
         opacity: 0.6;
         transition: opacity var(--t-fast);
     }
-    .shuffle-btn:hover .shuffle-img { opacity: 0.9; }
-    .shuffle-btn.on .shuffle-img { opacity: 1; }
+    .shuffle-btn:hover .shuffle-imgs { opacity: 0.9; }
+    .shuffle-btn.on .shuffle-imgs { opacity: 1; }
+    .shuffle-img {
+        position: absolute;
+        inset: 0;
+        width: 18px;
+        height: 18px;
+        opacity: 0;
+    }
+    .shuffle-img.active { opacity: 1; }
 
     .picker-wrap { position: relative; min-width: 0; }
     .picker-trigger {
