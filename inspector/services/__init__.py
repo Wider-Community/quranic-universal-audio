@@ -32,7 +32,7 @@ from .audio import (
     peaks_slim,
 )
 from .auth import access, auth, hf_users, permissions, predicates, secrets_guard, token_auth
-from .reference import public_state, quran_refs, tajweed, timestamps
+from .reference import public_state, quran_refs, timestamps
 from .segments import (
     auto_detect,
     auto_split,
@@ -86,7 +86,6 @@ _LEGACY_ALIASES = {
     "undo": undo,
     "public_state": public_state,
     "quran_refs": quran_refs,
-    "tajweed": tajweed,
     "timestamps": timestamps,
 }
 

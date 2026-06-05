@@ -77,7 +77,6 @@ from .segment import (
     DetailedMeta,
     DetailedSegment,
 )
-from .tajweed import BridgeInfo, TajweedBridgesResponse
 from .ts_job_record import TsJobRecord, TsJobSettings
 from .ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 
@@ -107,7 +106,6 @@ __all__ = [
     "AdminUsersResponse",
     "AdminUsersSummary",
     "AdminVisitorStats",
-    "BridgeInfo",
     "DetailedDocument",
     "DetailedEntry",
     "DetailedMeta",
@@ -126,7 +124,6 @@ __all__ = [
     "ProbeResult",
     "RequestChange",
     "SourceLink",
-    "TajweedBridgesResponse",
     "TsJobRecord",
     "TsJobSettings",
     "TsValidationDoc",

@@ -336,24 +336,6 @@ export interface VisitorDayStat {
   [k: string]: unknown;
 }
 /**
- * One cross-word tajweed bridge.
- *
- * - ``before_word_idx`` — the bridge tile renders BEFORE this word index
- *   (i.e. between word ``before_word_idx - 1`` and ``before_word_idx``).
- *   Word indices are 1-based, matching the phonemizer + shard convention.
- * - ``rule`` — the source tajweed rule (one of the 8 cross-word rules in
- *   scope; see ``services/reference/tajweed.py::BRIDGE_RULES``).
- * - ``side`` — ``"curr"`` if the merged phoneme lives at the start of word
- *   ``before_word_idx``; ``"prev"`` if it lives at the end of word
- *   ``before_word_idx - 1``. Determined by inspecting the phonemizer's
- *   per-word phoneme output, not by hardcoded per-rule conventions.
- */
-export interface BridgeInfo {
-  before_word_idx: number;
-  rule: string;
-  side: "prev" | "curr";
-}
-/**
  * Whole ``detailed.json`` document.
  *
  * Note: the on-disk JSON key is ``_meta`` (with leading underscore) for
@@ -663,14 +645,6 @@ export interface ProbeResult {
   status?: number | null;
   reachable?: boolean;
   [k: string]: unknown;
-}
-/**
- * ``GET /api/ts/tajweed/<verse_ref>`` body.
- */
-export interface TajweedBridgesResponse {
-  verse_ref: string;
-  stops?: string[];
-  bridges?: BridgeInfo[];
 }
 /**
  * One job run's durable record (settings + status + logs).

@@ -6,7 +6,7 @@
 templates so the frontend doesn't need its own env knob.
 """
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, jsonify
 
 from config import (
     ANALYSIS_LETTER_FONT_SIZE,
@@ -21,7 +21,6 @@ from config import (
     UNIFIED_DISPLAY_MAX_HEIGHT,
 )
 from services import auth as auth_service
-from services import tajweed as ts_tajweed
 from services import timestamps as ts_serve
 from services.audio_meta import vbr_chapters_for_reciter
 from services.auth import capabilities as _capabilities
@@ -130,40 +129,3 @@ def ts_resource(name):
 def ts_vbr(reciter):
     """Return VBR chapters for timestamp clients reading older HF manifests."""
     return jsonify({"vbr_chapters": vbr_chapters_for_reciter(reciter)})
-
-
-# Cross-word tajweed bridges (rules that span a word boundary). Reciter-agnostic
-# given the stop set, so we don't take a reciter in the URL — the FE infers
-# stops from MFA word-end gaps in the loaded shard and forwards them as the
-# ``stops`` query string. The service is lru_cached so concurrent reciters with
-# matching stop patterns share the result.
-_TAJWEED_HEADERS = {"Cache-Control": "public, max-age=86400"}
-
-
-@ts_bp.route("/tajweed/<path:verse_ref>")
-def ts_tajweed_bridges(verse_ref):
-    """Return cross-word tajweed bridges for ``verse_ref`` under inferred stops.
-
-    Query parameters
-    ----------------
-    ``stops``
-        Comma-separated ``surah:ayah:word`` stop refs (one per reciter pause)
-        — passed through to the phonemizer's ``stop_refs``. Empty / missing
-        means the verse is read continuously.
-
-    Response
-    --------
-    ``{"verse_ref", "stops", "bridges": [BridgeInfo, ...]}`` matching
-    :class:`qua_shared.schemas.tajweed.TajweedBridgesResponse`.
-    """
-    raw_stops = request.args.get("stops", "")
-    stops = tuple(s for s in raw_stops.split(",") if s) if raw_stops else ()
-    bridges = ts_tajweed.bridges_for_verse(verse_ref, stops)
-    return orjson_response(
-        {
-            "verse_ref": verse_ref,
-            "stops": list(stops),
-            "bridges": [b.model_dump() for b in bridges],
-        },
-        headers=_TAJWEED_HEADERS,
-    )
