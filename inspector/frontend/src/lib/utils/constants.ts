@@ -45,6 +45,7 @@ export const TAB_NAMES = {
     DASHBOARD: 'dashboard',
     TIMESTAMPS: 'timestamps',
     SEGMENTS: 'segments',
+    GUIDE: 'guide',
 } as const;
 export type TabName = typeof TAB_NAMES[keyof typeof TAB_NAMES];
 

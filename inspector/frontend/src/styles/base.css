@@ -140,6 +140,19 @@ footer {
     border-bottom-color: #1a1a2e;
 }
 
+.tab-btn.unread {
+    border-color: var(--accent, #4cc9f0);
+}
+
+.tab-unread-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent, #4cc9f0);
+    box-shadow: 0 0 0 2px var(--accent-tint, rgba(76, 201, 240, 0.15));
+    margin-left: 2px;
+}
+
 @media (max-width: 899px) {
     .tab-btn {
         flex: 1;
