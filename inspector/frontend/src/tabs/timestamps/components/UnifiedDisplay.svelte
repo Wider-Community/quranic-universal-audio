@@ -136,6 +136,18 @@
         return groups;
     }
 
+    /** Split a phone string into base character(s) and trailing IPA modifiers
+     *  (length ː, emphatic ˤ, ghunnah tilde ̃). The modifier is rendered as a
+     *  superscript so the base stays visually centred in the cell. */
+    // Only length marks (ː / ASCII :) are detached modifiers; ˤ is integral to
+    // the consonant symbol (rˤ, aˤ) and must stay in the base.
+    const PHONE_MOD_RE = /([ː:]+)$/u;
+    function splitPhone(phone: string | undefined): { base: string; mod: string } {
+        if (!phone || phone === 'sil' || phone === 'sp') return { base: phone ?? '', mod: '' };
+        const m = PHONE_MOD_RE.exec(phone);
+        return m ? { base: phone.slice(0, -m[0].length), mod: m[0] } : { base: phone, mod: '' };
+    }
+
     /** Parse the trailing word number from a ``surah:ayah:word`` location.
      *  Returns 0 when the location is malformed — caller filters those out. */
     function buildRendered(
@@ -569,6 +581,7 @@
         {#if block.bridge}
             <div class="crossword-bridge" class:hidden={!$showPhonemes}>
                 {#each block.bridge.phonemes as ph (ph.index)}
+                    {@const parts = splitPhone(ph.interval.phone)}
                     <span
                         class="mega-phoneme"
                         class:silence={!ph.interval.phone ||
@@ -584,7 +597,7 @@
                         role="button"
                         tabindex="-1"
                     >
-                        {ph.interval.phone || '(sil)'}
+                        <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
                     </span>
                 {/each}
             </div>
@@ -641,6 +654,7 @@
             {/if}
             <div class="mega-phonemes" class:hidden={!$showPhonemes} dir="rtl">
                 {#each block.phonemes as ph (ph.index)}
+                    {@const parts = splitPhone(ph.interval.phone)}
                     <span
                         class="mega-phoneme"
                         class:silence={!ph.interval.phone ||
@@ -656,7 +670,7 @@
                         role="button"
                         tabindex="-1"
                     >
-                        {ph.interval.phone || '(sil)'}
+                        <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
                     </span>
                 {/each}
             </div>
