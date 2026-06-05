@@ -3,7 +3,7 @@
 Asserts the TARGET shape: per-chapter ``{"_meta", "segments": [...]}`` where
 each segment is ``{"ref": "surah:ayah", "t": [start, end], "words": [...]}``,
 words keep the ``[widx, s, e, letters, phones]`` shape, segments are in
-recitation order, and ``_meta`` is slim (schema_version 2 + chapter +
+recitation order, and ``_meta`` is slim (current segment schema + chapter +
 normalized audio_category + aligner provenance; no reciter / url_template /
 audio_urls). RAW: every accepted occurrence is one segment entry.
 """
@@ -25,6 +25,7 @@ from qua_shared.tests.conftest import (
 )
 from qua_shared.timestamps_dedup import build_raw_v2
 from qua_shared.timestamps_shards import (
+    SEGMENT_SCHEMA_VERSION,
     build_segment_shards,
     gzip_shard,
 )
@@ -72,7 +73,7 @@ def test_word_shape_widx_s_e_letters_phones():
 
 def test_meta_is_slim_v2():
     meta = _build(_multi_verse_loopback(), _multi_verse_loopback_results())[1]["_meta"]
-    assert meta["schema_version"] == 2
+    assert meta["schema_version"] == SEGMENT_SCHEMA_VERSION
     assert meta["chapter"] == 1
     # category normalized: by_surah_audio -> by_surah
     assert meta["audio_category"] == "by_surah"
@@ -137,5 +138,5 @@ def test_src_meta_defaults_to_v2_doc_meta():
     v2 = build_raw_v2([_multi_verse_loopback()], _multi_verse_loopback_results(), CAT)
     shards = build_segment_shards(v2, audio_category=CAT)
     meta = shards[1]["_meta"]
-    assert meta["schema_version"] == 2 and meta["chapter"] == 1
+    assert meta["schema_version"] == SEGMENT_SCHEMA_VERSION and meta["chapter"] == 1
     assert meta["audio_category"] == "by_surah"

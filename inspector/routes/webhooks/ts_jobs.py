@@ -127,10 +127,9 @@ def hf_publish_complete():
 def release_cut_complete():
     """Record a successful global GH release cut. Idempotent on (version).
 
-    Body: ``{"job_id", "status", "version", "external_uri", "operator_note",
-    "launched_by", "members": [...], "validation_summary"}``. Only acts on a
-    success status. ``members`` carries the per-recitation membership rows
-    the job produced.
+    Body: ``{"job_id", "status", "version", "external_uri", "launched_by",
+    "members": [...], "validation_summary"}``. Only acts on a success status.
+    ``members`` carries the per-recitation membership rows the job produced.
     """
     ok, err = _check_secret()
     if not ok:
@@ -154,7 +153,6 @@ def release_cut_complete():
             job_id,
             version=version,
             external_uri=body.get("external_uri"),
-            operator_note=body.get("operator_note"),
             launched_by=body.get("launched_by"),
             members=body.get("members") or [],
             validation_summary=body.get("validation_summary"),

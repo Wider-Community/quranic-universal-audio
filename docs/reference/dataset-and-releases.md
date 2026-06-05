@@ -37,7 +37,7 @@ separate from publish status. Publish status lives in three tables, all written 
 | Table | Grain | Purpose |
 |---|---|---|
 | `per_recitation_releases` | one current row per `(track, slug)`, `track ∈ {ts, hf}` | TS-gen + HF-dataset push history per reciter. Partial-unique on `(track, slug) WHERE superseded_at IS NULL`. |
-| `gh_releases` | one row per **cut** | Global GH release snapshot: `version`, `produced_at`, `external_uri`, `operator_note`, `validation_summary`, `superseded_at`. |
+| `gh_releases` | one row per **cut** | Global GH release snapshot: `version`, `produced_at`, `external_uri`, `validation_summary`, `superseded_at`. |
 | `gh_release_recitations` | N rows per `gh_releases` | Frozen membership: `slug`, `catalog_snapshot` (JSON), `zip_sha256`, `zip_bytes`, `coverage_ayahs`, `content_hash`, `ts_version`, `change_kind`, `stale_since`. Immutable post-cut. |
 
 - **Supersede, never delete.** A new cut supersedes the prior `gh_releases` current row; a new
@@ -74,9 +74,12 @@ The same predicate drives the Releases-tab buckets and the cut job's member disc
    via `confidence_by_span` for the highest-confidence completing-occasion pick) → builds the three
    tier files (verse/word/letter, top-down), `catalog.json`, a per-recitation `manifest.json`; packs
    a deterministic `<slug>.zip`; computes `content_hash = SHA-256(letter_tier.gz || catalog.json)`.
+   `catalog.json` is built from `catalog/audio_manifest/<slug>.json::chapters`; a GH-eligible
+   recitation with no usable audio URLs is fatal.
 3. Classifies each reciter `added` / `refresh` / `unchanged` (vs prior `content_hash`) and computes
    the version (below).
-4. Builds the dataset-level `manifest.json` + `CHANGELOG.md` (the release body — see
+4. Builds the dataset-level `manifest.json`, `catalog.json`, `release_schemas.json`, and
+   `CHANGELOG.md` (the release body — see
    [Changelog](#changelog-the-release-body)).
 5. Creates ONE GH release tag via the GitHub REST API and uploads every asset.
 6. POSTs the completion webhook → `/api/webhooks/release-cut-complete` →
@@ -107,8 +110,9 @@ per-file sizes and consumers download only what they need.
 gh:releases/v{X.Y.Z}/
 ├── <slug>.zip            # one per reciter (see below)
 ├── manifest.json         # dataset-level: version, per-reciter sha256/bytes/coverage/change_kind, static_refs
+├── release_schemas.json  # machine-readable schemas for release assets
 ├── CHANGELOG.md          # the rendered release body
-├── catalog.json          # dataset-level: array of every reciter's catalog row
+├── catalog.json          # dataset-level: reciter rows with audio URLs paired to timestamps
 ├── shard.py              # consumer helper
 ├── surah_info.json       # static reference
 ├── qpc_hafs.json         # static reference (mushaf text)
@@ -125,14 +129,17 @@ catalog.json               # this reciter's catalog projection (carries audio ch
 manifest.json              # schema_version, release_version, slug, created_at, files{sha256,bytes}
 ```
 
-Each tier self-contains the level below; all times are source-relative milliseconds; all ship the
-canonical (deduplicated) take. There is no per-reciter `README.md`.
+Each tier self-contains the level below; all times are relative to the matching source audio in
+`catalog.json`; all ship the canonical (deduplicated) take. The three `.json.gz` layers keep storage,
+startup speed, and network transfer cheap: download verse, word, or letter detail independently.
+Use `shard.py` when an app prefers local per-surah files. There is no per-reciter `README.md`.
 
 ### Audio policy (as-built)
 
 Audio is **not** bundled. `catalog.json` carries `audio.chapter_urls` (the upstream/source URLs the
 recitation actually serves) plus codec/bitrate/sample-rate/channels meta; consumers fetch audio
-from those URLs. The fuller `redistribution_policy` registry (cdn_link / embedded_consent /
+from those URLs and read timestamps relative to those exact files. The fuller
+`redistribution_policy` registry (cdn_link / embedded_consent /
 internal_only) described in early design is **not implemented** — revisit if embedded-audio
 releases become a real requirement.
 
@@ -155,22 +162,30 @@ releases become a real requirement.
 }
 ```
 
+### `release_schemas.json`
+
+Machine-readable JSON schemas for the release-level files, per-reciter zip files, and the three
+timestamp tiers. It is uploaded beside `manifest.json` so script consumers can validate assets
+without copying schema definitions from the docs.
+
 ## Changelog (the release body)
 
-The release body is rendered by **one shared function**,
+The release body is rendered from
+[`.github/templates/release_body.md`](../../.github/templates/release_body.md) by
 [`render_changelog`](../../qua_shared/release_changelog.py), called by BOTH the cut job (the body
-POSTed to GitHub) and the cut-modal preview endpoint — so the preview is faithful to what ships.
-It is stdlib-only and pure; callers resolve display names + coverage and pass them in.
+POSTed to GitHub) and the cut-modal preview endpoint. The template uses fixed `{{ placeholders }}`
+only; no template dependency. The text stays human-editable, while the renderer owns the generated
+asset table, change tables, examples, and links.
 
 Format (display names only — never slugs):
 
-- Title `# v{X.Y.Z} · {date}` + a one-line summary (`First release — N recitations.` or
-  `Adds A, refreshes R (C carried) over v…`).
-- Optional operator note as a blockquote (HTML-neutralised — untrusted free text).
-- `<details>` **➕ Added — N** accordion → table `Reciter (name_en — name_ar) | Riwāyah | Style |
-  Channel | Coverage`. A `<details>` **↻ Refreshed — N** accordion when present; a `C carried /
-  unchanged.` line otherwise.
-- `<details>` **📐 Schemas** accordion (verse/word/letter tier layouts + static-refs status).
+- Title `# v{X.Y.Z} · {date}`.
+- First visible section: `## What to download` asset table.
+- Short guide sections for audio/timestamp pairing, timestamp levels, recitation changes, and
+  programmatic use.
+- `<details>` **Reciter zip schemas**: verse/word/letter timestamp shapes plus a small example.
+- `<details>` **Catalog and manifest schemas**: release-level `manifest.json`, `catalog.json`,
+  `release_schemas.json`, and static reference status.
 - Inline `**License:** CC-BY-4.0` + repository / HF-dataset links.
 
 Coverage shows exact **ayahs** at cut time; the DB-only preview shows **surahs** (chapter_count)
@@ -184,7 +199,7 @@ come from the `riwayahs` / `styles` / `channels` vocab tables — `catalog.json`
 |---|---|
 | `GET /api/admin/releases/status` | Per-reciter TS/HF/GH status grid + summary + in-flight jobs (FE buckets). `reviews.view`. |
 | `GET /api/admin/release-preview` | DB-only dry-run: change counts, auto-version, rendered changelog. `release.cut_gh`. |
-| `POST /api/admin/cut-release` | Launch the global cut. `release.cut_gh`. Echoes `expected_version_at_preview` to 409 a stale preview. |
+| `POST /api/admin/cut-release` | Launch the global cut. `release.cut_gh`. Body accepts only `version` and `expected_version_at_preview`; echoes the preview version to 409 stale state. |
 | `POST /api/admin/publish-hf/<slug>` | Launch per-reciter HF dataset publish. `release.publish_hf`. |
 
 ## HF dataset schema

@@ -245,6 +245,7 @@ REQUIRED_STATIC_FILES = (
     "data/qpc_hafs.json.gz",
     "data/surah_info.json",
     ".github/config/repo.yml",
+    ".github/templates/release_body.md",
     "LICENSE",
 )
 

@@ -144,7 +144,11 @@ def test_status_released_with_ledger_is_waiting(signed_in_client, monkeypatch):
     assert row["slug"] == "ar.ready_to_publish"
     assert row["state"] == "released"
     assert row["gh_release_eligible"] is True
-    assert row["ts"] == {"version": "real-job-id-123", "produced_at": row["ts"]["produced_at"]}
+    assert row["ts"] == {
+        "version": "real-job-id-123",
+        "produced_at": row["ts"]["produced_at"],
+        "stale_since": None,
+    }
     assert row["hf"] is None
     assert row["gh"] is None
 
@@ -269,9 +273,57 @@ def test_release_preview_uses_display_names(signed_in_client, monkeypatch):
 
     md = body["changelog_preview_md"]
     assert md.startswith("# v0.1.0 · ")
+    assert "\n\n## What to download" in md
+    assert "`catalog.json`" in md and "audio URLs paired with the timestamp data" in md
+    assert "`release_schemas.json`" in md
     assert "Hafs" in md and "114 surahs" in md
     # The delivery slug must not leak into the human-facing body.
     assert "ar_preview" not in md
+
+
+# ---------------------------------------------------------------------------
+# /api/admin/cut-release
+# ---------------------------------------------------------------------------
+
+
+def test_cut_release_rejects_operator_note_field(signed_in_client, monkeypatch):
+    client, _user = signed_in_client(role="owner")
+    _stub_jobs_api(monkeypatch)
+
+    resp = client.post(
+        "/api/admin/cut-release",
+        json={"version": "v1.0.0", "operator_note": "removed"},
+        headers=_HEADERS,
+    )
+
+    assert resp.status_code == 400
+    assert "invalid cut-release request" in resp.get_json()["error"]
+
+
+def test_cut_release_launch_accepts_schema_body_only(signed_in_client, monkeypatch):
+    client, _user = signed_in_client(role="owner")
+    _stub_jobs_api(monkeypatch)
+
+    from services.admin.jobs import cut_release as cut_release_jobs
+
+    called = {}
+
+    def fake_launch(**kwargs):
+        called.update(kwargs)
+        return {"job_id": "j_cut", "url": None}
+
+    monkeypatch.setattr(cut_release_jobs, "launch", fake_launch)
+
+    resp = client.post(
+        "/api/admin/cut-release",
+        json={"version": "v1.0.0", "expected_version_at_preview": None},
+        headers=_HEADERS,
+    )
+
+    assert resp.status_code == 202, resp.get_data(as_text=True)
+    assert resp.get_json() == {"job_id": "j_cut", "url": None}
+    assert called["version"] == "v1.0.0"
+    assert "operator_note" not in called
 
 
 # ---------------------------------------------------------------------------

@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import gzip
 
+import pytest
+
 from qua_jobs import cut_release
 from qua_jobs.cut_release import _verse_for_validate
 from qua_shared.dataset_validation import (
@@ -91,6 +93,18 @@ def test_qpc_none_when_unavailable_everywhere(tmp_path, monkeypatch):
     assert cut_release._load_qpc_bytes(tmp_path) is None
 
 
+def test_qpc_validation_rejects_pointer_bytes():
+    with pytest.raises(RuntimeError, match="not valid QPC JSON"):
+        cut_release._validate_qpc_bytes(_LFS_POINTER)
+
+
+def test_qpc_validation_accepts_real_shape():
+    cut_release._validate_qpc_bytes(
+        b'{"1:1:1":{"id":1,"surah":"1","ayah":"1","word":"1",'
+        b'"location":"1:1:1","text":"bismi"}}'
+    )
+
+
 def test_hash_static_refs_uses_resolved_qpc(tmp_path):
     """The manifest hashes the resolved *decompressed* qpc bytes, regardless of
     whether the staged .gz was usable."""
@@ -100,3 +114,36 @@ def test_hash_static_refs_uses_resolved_qpc(tmp_path):
     assert out["qpc_hafs.json"]["bytes"] == len(qpc)
     assert out["qpc_hafs.json"]["sha256"] == cut_release._sha256_hex(qpc)
     assert "surah_info.json" in out
+
+
+def test_audio_urls_come_from_sidecar_chapters():
+    sidecar = {
+        "schema_version": 1,
+        "slug": "example_reciter",
+        "_meta": {"checksum": "abc", "chapter_count": 1, "category": "by_surah"},
+        "chapters": {
+            "100": {
+                "url": "https://cdn.example/100.mp3",
+                "duration_sec": 60,
+                "bitrate_mode": "cbr",
+            }
+        },
+    }
+
+    assert cut_release._audio_urls_from_manifest("example_reciter", sidecar) == {
+        "100": "https://cdn.example/100.mp3"
+    }
+
+
+def test_empty_audio_urls_are_fatal_for_catalog_build():
+    rec = {"slug": "example_reciter", "audio_category": "by_surah"}
+    verses = {"100:1": {"words": [[1, 0, 100]]}}
+    sidecar = {
+        "schema_version": 1,
+        "slug": "example_reciter",
+        "_meta": {"checksum": "abc", "chapter_count": 0, "category": "by_surah"},
+        "chapters": {},
+    }
+
+    with pytest.raises(RuntimeError, match="no usable audio URLs"):
+        cut_release._build_catalog_json(rec, sidecar, verses)

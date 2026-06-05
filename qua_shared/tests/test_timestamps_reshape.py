@@ -29,6 +29,7 @@ from qua_shared.timestamps_reshape import (
     reshape_shard,
 )
 from qua_shared.timestamps_shards import (
+    SEGMENT_SCHEMA_VERSION,
     build_segment_shards,
     gzip_shard,
 )
@@ -127,7 +128,7 @@ def test_reshape_by_ayah_category_normalized():
     v2_shard = _v2_chapter_shard(chapter, results, cat="by_ayah_audio")
     reshaped = reshape_shard(v2_shard)
     assert reshaped["_meta"]["audio_category"] == "by_ayah"
-    assert reshaped["_meta"]["schema_version"] == 2
+    assert reshaped["_meta"]["schema_version"] == SEGMENT_SCHEMA_VERSION
     assert [s["ref"] for s in reshaped["segments"]] == ["2:255"]
 
 
@@ -141,7 +142,7 @@ def test_reshaped_meta_is_slim_and_drops_path_fields():
         _v2_chapter_shard(_multi_verse_loopback(), _multi_verse_loopback_results())
     )
     meta = reshaped["_meta"]
-    assert meta["schema_version"] == 2 and meta["chapter"] == 1
+    assert meta["schema_version"] == SEGMENT_SCHEMA_VERSION and meta["chapter"] == 1
     assert meta["audio_category"] == "by_surah"
     for k in (
         "padding",

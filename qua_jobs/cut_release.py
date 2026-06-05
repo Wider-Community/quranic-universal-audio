@@ -20,7 +20,6 @@ Env:
   INSPECTOR_CODE_DIR        staged-code root (default: the script's repo root,
                             i.e. ``/aux/code`` in the Job); set for local sim
   RELEASE_VERSION           (optional) operator-supplied vX.Y.Z; bypasses auto-bump
-  OPERATOR_NOTE             (optional) global note rendered into CHANGELOG.md
   LAUNCHED_BY               (optional) hf_user_id of the operator
   JOB_ID                    HF-injected job id
   HF_TOKEN                  HF auth (for repo_config lookup)
@@ -48,6 +47,23 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
+from qua_shared.schemas import (  # noqa: E402
+    AudioManifestSidecar,
+    FileDigest,
+    LetterTimestampsDoc,
+    QpcHafsDoc,
+    RecitationManifest,
+    ReleaseCatalog,
+    ReleaseCatalogAudio,
+    ReleaseCoverage,
+    ReleaseManifest,
+    ReleaseManifestRecitation,
+    ReleaseRecitationCatalog,
+    ReleaseSchemasAsset,
+    VerseTimestampsDoc,
+    WordTimestampsDoc,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("cut_release")
@@ -266,6 +282,10 @@ def _build_tier_files(
     }
     verse_doc = {"_meta": {**meta_common, "tier": "verse", "layout": "[start,end]"}, **verse_body}
 
+    VerseTimestampsDoc.model_validate(verse_doc)
+    WordTimestampsDoc.model_validate(word_doc)
+    LetterTimestampsDoc.model_validate(letter_doc)
+
     return {
         "letter_timestamps.json.gz": _gzip_deterministic(letter_doc),
         "word_timestamps.json.gz": _gzip_deterministic(word_doc),
@@ -311,9 +331,40 @@ def _gzip_deterministic(doc: dict) -> bytes:
     return gzip.compress(payload, compresslevel=6, mtime=0)
 
 
+def _json_model_bytes(model) -> bytes:
+    """Serialize a Pydantic model as deterministic compact JSON bytes."""
+    body = model.model_dump(mode="json", by_alias=True)
+    return json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Catalog + manifest + zip per recitation.
 # ---------------------------------------------------------------------------
+
+
+def _audio_urls_from_manifest(slug: str, audio_manifest: dict | None) -> dict[str, str]:
+    """Return the consumer URL map from ``catalog/audio_manifest/<slug>.json``."""
+    if not audio_manifest:
+        return {}
+    try:
+        sidecar = AudioManifestSidecar.model_validate(audio_manifest)
+        return {
+            key: chapter.url
+            for key, chapter in sorted(sidecar.chapters.items())
+            if chapter.url.strip()
+        }
+    except Exception as exc:
+        # Legacy flat maps are kept as a defensive fallback for old fixtures.
+        legacy = {
+            key: value
+            for key, value in sorted(audio_manifest.items())
+            if (key.isdigit() or ":" in key) and isinstance(value, str) and value.strip()
+        }
+        if legacy:
+            return legacy
+        raise RuntimeError(f"{slug}: invalid audio_manifest sidecar: {exc}") from exc
 
 
 def _build_catalog_json(rec: dict, audio_manifest: dict | None, verses: dict) -> bytes:
@@ -326,59 +377,52 @@ def _build_catalog_json(rec: dict, audio_manifest: dict | None, verses: dict) ->
     "what the source audio actually serves" so this is the consumer-actionable
     URL set without contraction.
     """
-    audio_urls: dict[str, str] = {}
-    if audio_manifest:
-        for k, v in audio_manifest.items():
-            if k == "_meta" or not isinstance(v, str):
-                continue
-            audio_urls[k] = v
+    audio_urls = _audio_urls_from_manifest(rec["slug"], audio_manifest)
+    if not audio_urls:
+        raise RuntimeError(f"{rec['slug']}: audio_manifest has no usable audio URLs")
     surahs = {key.split(":", 1)[0] for key in verses if not key.startswith("_")}
     coverage_ayahs = sum(1 for k in verses if not k.startswith("_"))
-    catalog = {
-        "schema_version": SCHEMA_VERSION,
-        "slug": rec["slug"],
-        "reciter_id": rec.get("reciter_id"),
-        "name_en": rec.get("name_en"),
-        "name_ar": rec.get("name_ar"),
-        "riwayah": rec.get("riwayah"),
-        "style": rec.get("style"),
-        "country": rec.get("country"),
-        "channel": rec.get("channel"),
-        "audio_category": rec.get("audio_category"),
-        "recording_context": rec.get("recording_context"),
-        "recording_year": rec.get("recording_year"),
-        "variant_label": rec.get("variant_label"),
-        "audio": {
-            "chapter_urls": audio_urls,
-            "sample_rate_hz": rec.get("sample_rate_hz"),
-            "channels": rec.get("channels"),
-            "bitrate_mode": rec.get("bitrate_mode"),
-            "bitrate_kbps_nominal": rec.get("bitrate_kbps_nominal"),
-        },
-        "coverage": {"surahs": len(surahs), "ayahs": coverage_ayahs},
-    }
-    return json.dumps(catalog, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
-        "utf-8"
+    catalog = ReleaseRecitationCatalog(
+        schema_version=SCHEMA_VERSION,
+        slug=rec["slug"],
+        reciter_id=rec.get("reciter_id"),
+        name_en=rec.get("name_en"),
+        name_ar=rec.get("name_ar"),
+        riwayah=rec.get("riwayah"),
+        style=rec.get("style"),
+        country=rec.get("country"),
+        channel=rec.get("channel"),
+        audio_category=rec.get("audio_category"),
+        recording_context=rec.get("recording_context"),
+        recording_year=rec.get("recording_year"),
+        variant_label=rec.get("variant_label"),
+        audio=ReleaseCatalogAudio(
+            chapter_urls=audio_urls,
+            sample_rate_hz=rec.get("sample_rate_hz"),
+            channels=rec.get("channels"),
+            bitrate_mode=rec.get("bitrate_mode"),
+            bitrate_kbps_nominal=rec.get("bitrate_kbps_nominal"),
+        ),
+        coverage=ReleaseCoverage(surahs=len(surahs), ayahs=coverage_ayahs),
     )
+    return _json_model_bytes(catalog)
 
 
 def _build_per_recitation_manifest(
     slug: str, version: str, files: dict[str, bytes], created_at: str
 ) -> bytes:
     """``manifest.json`` inside each ``<slug>.zip``."""
-    manifest = {
-        "schema_version": SCHEMA_VERSION,
-        "release_version": version,
-        "slug": slug,
-        "created_at": created_at,
-        "files": {
-            name: {"sha256": _sha256_hex(body), "bytes": len(body)}
+    manifest = RecitationManifest(
+        schema_version=SCHEMA_VERSION,
+        release_version=version,
+        slug=slug,
+        created_at=created_at,
+        files={
+            name: FileDigest(sha256=_sha256_hex(body), bytes=len(body))
             for name, body in sorted(files.items())
         },
-    }
-    return json.dumps(manifest, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
-        "utf-8"
     )
+    return _json_model_bytes(manifest)
 
 
 def _pack_recitation_zip(slug: str, files: dict[str, bytes]) -> bytes:
@@ -458,36 +502,98 @@ def _build_dataset_manifest(
     created_at: str,
 ) -> bytes:
     """Dataset-level ``manifest.json``."""
-    recitations = {}
+    recitations: dict[str, ReleaseManifestRecitation] = {}
     for m in members:
         slug = m["slug"]
-        recitations[slug] = {
-            "zip": f"{slug}.zip",
-            "zip_url": _release_asset_url(owner, repo, version, f"{slug}.zip"),
-            "sha256": m["zip_sha256"],
-            "bytes": m["zip_bytes"],
-            "coverage_ayahs": m["coverage_ayahs"],
-            "content_hash": m["content_hash"],
-            "change_kind": m["change_kind"],
-            "ts_version": m["ts_version"],
-        }
-    body = {
-        "schema_version": SCHEMA_VERSION,
-        "release_version": version,
-        "created_at": created_at,
-        "previous_version": prior_version,
-        "recitation_count": len(members),
-        "static_refs": static_refs,
-        "recitations": recitations,
-        "license": "CC-BY-4.0",
-    }
-    return json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
-        "utf-8"
+        recitations[slug] = ReleaseManifestRecitation(
+            zip=f"{slug}.zip",
+            zip_url=_release_asset_url(owner, repo, version, f"{slug}.zip"),
+            sha256=m["zip_sha256"],
+            bytes=m["zip_bytes"],
+            coverage_ayahs=m["coverage_ayahs"],
+            content_hash=m["content_hash"],
+            change_kind=m["change_kind"],
+            ts_version=m["ts_version"],
+        )
+    manifest = ReleaseManifest(
+        schema_version=SCHEMA_VERSION,
+        release_version=version,
+        created_at=created_at,
+        previous_version=prior_version,
+        recitation_count=len(members),
+        static_refs={k: FileDigest.model_validate(v) for k, v in static_refs.items()},
+        recitations=recitations,
+        license="CC-BY-4.0",
     )
+    return _json_model_bytes(manifest)
 
 
 def _release_asset_url(owner: str, repo: str, version: str, name: str) -> str:
     return f"https://github.com/{owner}/{repo}/releases/download/{version}/{name}"
+
+
+def _timestamp_schema(model, value_schema: dict) -> dict:
+    schema = model.model_json_schema()
+    schema["patternProperties"] = {r"^[1-9]\d{0,2}:[1-9]\d{0,2}$": value_schema}
+    schema["additionalProperties"] = False
+    return schema
+
+
+def _build_release_schemas(version: str) -> bytes:
+    """Machine-readable schemas shipped beside the release assets."""
+    ms_pair = {
+        "type": "array",
+        "prefixItems": [{"type": "integer"}, {"type": "integer"}],
+        "minItems": 2,
+        "maxItems": 2,
+    }
+    word = {
+        "type": "array",
+        "prefixItems": [{"type": "integer"}, {"type": "integer"}, {"type": "integer"}],
+        "minItems": 3,
+        "maxItems": 3,
+    }
+    letter = {
+        "type": "array",
+        "prefixItems": [
+            {"type": "integer"},
+            {"type": "string"},
+            {"type": "integer"},
+            {"type": "integer"},
+        ],
+        "minItems": 4,
+        "maxItems": 4,
+    }
+    word_tier = {
+        "type": "array",
+        "prefixItems": [ms_pair, {"type": "array", "items": word}],
+        "minItems": 2,
+        "maxItems": 2,
+    }
+    letter_tier = {
+        "type": "array",
+        "prefixItems": [
+            ms_pair,
+            {"type": "array", "items": word},
+            {"type": "array", "items": letter},
+        ],
+        "minItems": 3,
+        "maxItems": 3,
+    }
+    asset = ReleaseSchemasAsset(
+        schema_version=SCHEMA_VERSION,
+        release_version=version,
+        schemas={
+            "manifest.json": ReleaseManifest.model_json_schema(),
+            "catalog.json": ReleaseCatalog.model_json_schema(),
+            "reciter/manifest.json": RecitationManifest.model_json_schema(),
+            "reciter/catalog.json": ReleaseRecitationCatalog.model_json_schema(),
+            "verse_timestamps.json.gz": _timestamp_schema(VerseTimestampsDoc, ms_pair),
+            "word_timestamps.json.gz": _timestamp_schema(WordTimestampsDoc, word_tier),
+            "letter_timestamps.json.gz": _timestamp_schema(LetterTimestampsDoc, letter_tier),
+        },
+    )
+    return _json_model_bytes(asset)
 
 
 def _build_changelog(
@@ -495,7 +601,6 @@ def _build_changelog(
     prior_version: str | None,
     members: list[dict],
     static_refs_changed_keys: list[str],
-    operator_note: str | None,
     owner: str,
     repo: str,
     created_at_date: str,
@@ -527,7 +632,6 @@ def _build_changelog(
         release_date=created_at_date,
         members=render_members,
         static_refs_changed_keys=tuple(static_refs_changed_keys),
-        operator_note=operator_note,
         owner=owner,
         repo=repo,
         hf_dataset=hf_dataset,
@@ -634,7 +738,6 @@ def _post_webhook(
     job_id: str,
     external_uri: str,
     members: list[dict],
-    operator_note: str | None,
     launched_by: str | None,
     status: str = "succeeded",
     validation_summary: dict | None = None,
@@ -650,7 +753,6 @@ def _post_webhook(
         "status": status,
         "version": version,
         "external_uri": external_uri,
-        "operator_note": operator_note,
         "launched_by": launched_by,
         "members": members,
     }
@@ -720,6 +822,14 @@ def _load_qpc_bytes(refs_dir: Path) -> bytes | None:
     return None
 
 
+def _validate_qpc_bytes(qpc_bytes: bytes) -> None:
+    """Fail before upload if qpc_hafs.json is not real JSON in the expected shape."""
+    try:
+        QpcHafsDoc.model_validate(json.loads(qpc_bytes))
+    except Exception as exc:
+        raise RuntimeError("qpc_hafs.json is not valid QPC JSON") from exc
+
+
 def _hash_static_refs(refs_dir: Path, qpc_bytes: bytes | None) -> dict[str, dict]:
     """SHA-256 + byte size for each static ref. ``qpc_bytes`` is the already
     resolved, *decompressed* qpc_hafs.json (see ``_load_qpc_bytes``); hashing
@@ -768,7 +878,13 @@ def _preflight() -> int:
         log.error("inspector.db missing at %s", db_path)
         return 13
     code_dir = _code_root()
-    for rel in ("data/surah_info.json", ".github/config/repo.yml", "LICENSE", "qua_jobs/shard.py"):
+    for rel in (
+        "data/surah_info.json",
+        ".github/config/repo.yml",
+        ".github/templates/release_body.md",
+        "LICENSE",
+        "qua_jobs/shard.py",
+    ):
         if not (code_dir / rel).exists():
             log.error("staged file missing: %s", code_dir / rel)
             return 14
@@ -782,7 +898,6 @@ def _preflight() -> int:
 
 def main() -> int:
     job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
-    operator_note = os.environ.get("OPERATOR_NOTE") or None
     launched_by = os.environ.get("LAUNCHED_BY") or None
     version_override = os.environ.get("RELEASE_VERSION", "").strip() or None
 
@@ -821,6 +936,11 @@ def main() -> int:
             "bucket %s missing/corrupt) — cannot cut release",
             QPC_BUCKET_REL,
         )
+        return 14
+    try:
+        _validate_qpc_bytes(qpc_bytes)
+    except RuntimeError as exc:
+        log.error("%s", exc)
         return 14
     from qua_shared.dataset_validation import (
         fatal_violations,
@@ -865,7 +985,6 @@ def main() -> int:
                 job_id=job_id,
                 external_uri="",
                 members=[],
-                operator_note=operator_note,
                 launched_by=launched_by,
                 status="failed",
                 validation_summary={"slug": slug, "summary": rec_summary},
@@ -964,7 +1083,6 @@ def main() -> int:
             job_id=job_id,
             external_uri="",
             members=[],
-            operator_note=operator_note,
             launched_by=launched_by,
             status="failed",
         )
@@ -1001,7 +1119,6 @@ def main() -> int:
         prior_version,
         members,
         static_refs_changed_keys,
-        operator_note,
         owner,
         repo,
         created_at_date,
@@ -1030,6 +1147,7 @@ def main() -> int:
     # Upload order: small assets first, then zips.
     uploads: list[tuple[str, bytes, str]] = []
     uploads.append(("manifest.json", dataset_manifest, "application/json"))
+    uploads.append(("release_schemas.json", _build_release_schemas(version), "application/json"))
     uploads.append(("CHANGELOG.md", changelog_md, "text/markdown"))
     if license_bytes:
         uploads.append(("LICENSE", license_bytes, "text/plain"))
@@ -1065,7 +1183,6 @@ def main() -> int:
         job_id=job_id,
         external_uri=release_html_url,
         members=webhook_members,
-        operator_note=operator_note,
         launched_by=launched_by,
         validation_summary={
             "violation_count": validation_summary_total["violation_count"],
@@ -1079,13 +1196,13 @@ def main() -> int:
 
 def _build_dataset_level_catalog(members: list[dict]) -> bytes:
     """Dataset-level ``catalog.json`` — array of every recitation's catalog row."""
-    body = {
-        "schema_version": SCHEMA_VERSION,
-        "recitations": [m["catalog_snapshot"] for m in members],
-    }
-    return json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
-        "utf-8"
+    catalog = ReleaseCatalog(
+        schema_version=SCHEMA_VERSION,
+        recitations=[
+            ReleaseRecitationCatalog.model_validate(m["catalog_snapshot"]) for m in members
+        ],
     )
+    return _json_model_bytes(catalog)
 
 
 def _fetch_url_json(url: str) -> dict | None:

@@ -132,11 +132,12 @@ COPY inspector/utils/ ./inspector/utils/
 # when composing the bucket-mode manifest. ``qua_jobs/`` ships the HF-Job
 # entrypoints (generate_timestamps / publish_hf / cut_release / shard) that
 # ``services/admin/jobs/base.stage_job_code`` uploads to the aligner-bucket on
-# launch. ``.github/config/repo.yml`` + ``LICENSE`` are read by the job-side
-# scripts (config_loader + cut_release asset upload).
+# launch. ``.github/config/repo.yml``, ``.github/templates`` + ``LICENSE`` are
+# read by the job-side scripts (config_loader + cut_release asset upload).
 COPY qua_shared/ ./qua_shared/
 COPY qua_jobs/ ./qua_jobs/
 COPY .github/config/ ./.github/config/
+COPY .github/templates/ ./.github/templates/
 COPY LICENSE ./LICENSE
 # Linguistic data read by services/data_loader.py via config.py's _QUA_DATA,
 # plus surah_info.json read by services/data_loader.py at startup. These four

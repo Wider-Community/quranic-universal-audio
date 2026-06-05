@@ -10,8 +10,7 @@
 - ``POST /api/admin/cut-release``           launch the global cut job. Owner
                                             (or maintainer with override) via
                                             ``release.cut_gh``. Body carries
-                                            optional ``version``,
-                                            ``operator_note`` and the
+                                            optional ``version`` and the
                                             ``expected_version_at_preview``
                                             re-confirm token.
 - ``GET  /api/admin/releases/status``       compact per-slug release status
@@ -28,9 +27,16 @@ import logging
 from datetime import UTC, datetime
 
 from flask import Blueprint, jsonify, request
+from pydantic import ValidationError
 
 from qua_shared.config_loader import repo_config
 from qua_shared.release_changelog import render_changelog
+from qua_shared.schemas import (
+    AdminCutReleaseRequest,
+    AdminLaunchResponse,
+    AdminReleasePreviewResponse,
+    AdminReleasesStatusResponse,
+)
 from services.admin.jobs import base as jobs_base
 from services.admin.jobs import cut_release as cut_release_jobs
 from services.admin.jobs import hf_publish as hf_publish_jobs
@@ -99,7 +105,8 @@ def publish_hf(user, slug: str):
     except Exception as exc:  # surfaced to the drawer
         log.warning("publish-hf launch for %s failed: %s", slug, exc)
         return jsonify({"error": str(exc)}), 502
-    return jsonify(result), 202
+    out = AdminLaunchResponse.model_validate(result)
+    return jsonify(out.model_dump(mode="json")), 202
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +243,8 @@ def release_preview(user):
         # Echo back so the confirm step can validate the preview hasn't drifted.
         "expected_version_at_preview": computed_version,
     }
-    return jsonify(payload)
+    out = AdminReleasePreviewResponse.model_validate(payload)
+    return jsonify(out.model_dump(mode="json"))
 
 
 def _bump_minor(prior: str | None) -> str:
@@ -255,6 +263,46 @@ def _bump_patch(prior: str | None) -> str:
     return f"v{major}.{minor}.{patch + 1}"
 
 
+def _current_auto_version() -> tuple[str | None, int]:
+    """Return the preview-equivalent auto version and eligible candidate count."""
+    conn = get_conn()
+    candidates = conn.execute("""
+        SELECT prr.slug AS slug,
+               prr.version AS ts_version
+        FROM per_recitation_releases prr
+        JOIN deliveries d ON d.slug = prr.slug
+        JOIN channels c   ON c.slug = d.channel
+        WHERE prr.track = 'ts'
+          AND prr.superseded_at IS NULL
+          AND c.gh_release_eligible = 1
+        ORDER BY prr.slug
+    """).fetchall()
+    if not candidates:
+        return None, 0
+
+    prior = repo_releases.latest_gh_release()
+    prior_members = (
+        {m["slug"]: m for m in repo_releases.gh_release_recitations(prior["id"])} if prior else {}
+    )
+    added = 0
+    refreshed = 0
+    for row in candidates:
+        prior_member = prior_members.get(row["slug"])
+        if prior_member is None:
+            added += 1
+        elif str(prior_member["ts_version"]) != str(row["ts_version"]):
+            refreshed += 1
+
+    prior_version = prior["version"] if prior else None
+    if added:
+        return _bump_minor(prior_version), len(candidates)
+    if refreshed:
+        return _bump_patch(prior_version), len(candidates)
+    if prior_version is None:
+        return "v0.1.0", len(candidates)
+    return None, len(candidates)
+
+
 # ---------------------------------------------------------------------------
 # POST /api/admin/cut-release
 # ---------------------------------------------------------------------------
@@ -266,10 +314,9 @@ def _bump_patch(prior: str | None) -> str:
 def cut_release(user):
     """Launch a global GH release cut.
 
-    Body (all optional):
+    Body:
       - ``version``: vX.Y.Z manual override (required when preview says
         ``needs_manual_version``)
-      - ``operator_note``: a global note rendered into CHANGELOG.md
       - ``expected_version_at_preview``: the version the preview computed —
         rejected (409) if it doesn't match the current auto-compute, so the
         operator re-previews stale state.
@@ -278,41 +325,43 @@ def cut_release(user):
     """
     if jobs_base.running_job_for(kind="cut_release") is not None:
         return jsonify({"error": "a cut_release job is already running"}), 409
-    body = request.get_json(silent=True) or {}
-    version = (body.get("version") or "").strip() or None
-    operator_note = (body.get("operator_note") or "").strip() or None
-    expected = (body.get("expected_version_at_preview") or "").strip() or None
+    try:
+        cut_request = AdminCutReleaseRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as exc:
+        return jsonify({"error": "invalid cut-release request", "details": exc.errors()}), 400
 
-    # Drift check: re-run the cheap preview compute and compare. Skip when the
-    # client didn't echo (older FE).
+    version = (cut_request.version or "").strip() or None
+    expected = (cut_request.expected_version_at_preview or "").strip() or None
+
+    # Drift check: re-run the cheap preview compute and compare. A manual
+    # version override may accompany ``expected=None`` when the preview said
+    # "nothing changed"; that is stable as long as the current auto-version is
+    # still None.
     if expected is not None:
-        # Re-run the candidate diff so a midstream TS regen doesn't slip through.
-        candidates_count = (
-            get_conn()
-            .execute(
-                "SELECT COUNT(*) AS n FROM per_recitation_releases prr "
-                "JOIN deliveries d ON d.slug = prr.slug "
-                "JOIN channels c ON c.slug = d.channel "
-                "WHERE prr.track='ts' AND prr.superseded_at IS NULL "
-                "AND c.gh_release_eligible = 1"
-            )
-            .fetchone()["n"]
-        )
-        if not candidates_count:
+        current_auto_version, candidates_count = _current_auto_version()
+        if candidates_count == 0:
             return jsonify({"error": "no eligible recitations"}), 409
+        if current_auto_version != expected:
+            return jsonify(
+                {
+                    "error": "release preview drifted; refresh the preview before cutting",
+                    "expected_version_at_preview": expected,
+                    "current_computed_version": current_auto_version,
+                }
+            ), 409
 
     webhook_base = request.url_root
     try:
         result = cut_release_jobs.launch(
             version=version,
-            operator_note=operator_note,
             launched_by=getattr(user, "hf_user_id", None),
             webhook_base=webhook_base,
         )
     except Exception as exc:
         log.warning("cut-release launch failed: %s", exc)
         return jsonify({"error": str(exc)}), 502
-    return jsonify(result), 202
+    out = AdminLaunchResponse.model_validate(result)
+    return jsonify(out.model_dump(mode="json")), 202
 
 
 # ---------------------------------------------------------------------------
@@ -424,7 +473,7 @@ def releases_status(user):
         }
         if _is_bucketable(row, in_flight_slugs):
             out.append(row)
-    return jsonify(
+    payload = AdminReleasesStatusResponse.model_validate(
         {
             "latest_gh_release": _slim_release_row(
                 latest_gh,
@@ -435,6 +484,7 @@ def releases_status(user):
             "recitations": out,
         }
     )
+    return jsonify(payload.model_dump(mode="json"))
 
 
 def _is_bucketable(row: dict, in_flight_slugs: set[str]) -> bool:

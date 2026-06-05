@@ -1,47 +1,40 @@
-"""Render the GitHub-release body (the "changelog") — single source of truth.
+"""Render the GitHub-release body from a human-editable Markdown template.
 
-Shared by the two callers that must agree on what a release looks like:
-  - ``qua_jobs/cut_release.py`` — the body actually POSTed to GitHub by the cut HF Job.
-  - ``inspector/routes/admin/releases.py`` — the dry-run preview the operator sees in the
-    cut modal before launching.
-
-Both pass the same member-dict shape (display names + coverage already resolved by the
-caller) so the preview is faithful to what ships. This module is stdlib-only and pure —
-no DB, no I/O — and NEVER emits slugs; callers resolve riwayah/style/channel display names
-from the vocab tables. ``operator_note`` is treated as untrusted free text: HTML-significant
-characters are neutralised so a note can't break out of its blockquote or inject markup.
+The release preview route and ``qua_jobs/cut_release.py`` both call this
+module, so the admin preview and the shipped GitHub body stay in lockstep.
+The template lives at ``.github/templates/release_body.md`` and contains only
+fixed placeholders; all generated tables and schema snippets are built here.
 """
 
 from __future__ import annotations
 
-# (asset name, human description). Folded into one collapsible "Schemas" accordion.
-_TIER_SCHEMAS: list[tuple[str, str]] = [
-    (
-        "verse_timestamps.json.gz",
-        'Tier 1. Positional `"surah:ayah": [start_ms, end_ms]`. '
-        "Times are source-relative milliseconds.",
-    ),
-    (
-        "word_timestamps.json.gz",
-        'Tier 2. Positional `"surah:ayah": [[start, end], [[widx, start, end], ...]]`. '
-        "Source-relative ms.",
-    ),
-    (
-        "letter_timestamps.json.gz",
-        'Tier 3. Positional `"surah:ayah": [[start, end], [words], '
-        "[[widx, char, start, end], ...]]`. Source-relative ms.",
-    ),
-]
+import re
+from collections.abc import Mapping
+
+from qua_shared.config_loader import load_template
+
+_PLACEHOLDER_RE = re.compile(r"{{\s*([a-z_]+)\s*}}")
+_REQUIRED_BLOCKS = {
+    "release_title",
+    "asset_table",
+    "audio_timestamp_pairing",
+    "timestamp_levels",
+    "recitation_changes",
+    "programmatic_use",
+    "reciter_zip_schemas",
+    "release_level_schemas",
+    "release_footer",
+}
 
 
 def _neutralise(value: object) -> str:
-    """Render any value as text with HTML tags neutralised (``<``/``>`` → entities)."""
+    """Render any value as text with HTML tags neutralised."""
     s = "" if value is None else str(value)
     return s.replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _escape_cell(value: object) -> str:
-    """Neutralise a value for a GFM table cell — tags, pipes, backslashes, newlines."""
+    """Neutralise a value for a GFM table cell."""
     s = _neutralise(value).replace("\\", "\\\\").replace("|", "\\|")
     return " ".join(s.split())
 
@@ -49,24 +42,23 @@ def _escape_cell(value: object) -> str:
 def _reciter_cell(m: dict) -> str:
     en = (m.get("name_en") or "").strip()
     ar = (m.get("name_ar") or "").strip()
-    label = f"{en} — {ar}" if en and ar else (en or ar or "(unnamed)")
+    label = f"{en} - {ar}" if en and ar else (en or ar or "(unnamed)")
     return _escape_cell(label)
 
 
 def _coverage_cell(m: dict) -> str:
-    """Exact ayah count when known (cut time), else surah count (DB-only preview)."""
     ayahs = m.get("coverage_ayahs")
     if ayahs is not None:
         return f"{int(ayahs):,} ayahs"
     surahs = m.get("coverage_surahs")
     if surahs is not None:
         return f"{int(surahs)} surahs"
-    return "—"
+    return "-"
 
 
 def _member_table(members: list[dict]) -> list[str]:
     rows = [
-        "| Reciter | Riwāyah | Style | Channel | Coverage |",
+        "| Reciter | Riwayah | Style | Channel | Coverage |",
         "|---|---|---|---|---|",
     ]
     for m in members:
@@ -79,8 +71,7 @@ def _member_table(members: list[dict]) -> list[str]:
 
 
 def _accordion(summary: str, body_lines: list[str]) -> list[str]:
-    # Blank line after <summary> is required for GitHub to render a table/list inside.
-    return [f"<details><summary>{summary}</summary>", "", *body_lines, "</details>", ""]
+    return [f"<details><summary>{summary}</summary>", "", *body_lines, "</details>"]
 
 
 def _plural(n: int) -> str:
@@ -90,9 +81,9 @@ def _plural(n: int) -> str:
 def _summary_sentence(
     previous_version: str | None, n_added: int, n_refresh: int, n_carried: int
 ) -> str:
-    total = n_added + n_refresh + n_carried
     if previous_version is None:
-        return f"First release — **{total}** recitation{_plural(total)}."
+        total = n_added + n_refresh + n_carried
+        return f"First release: **{total}** recitation{_plural(total)}."
     parts: list[str] = []
     if n_added:
         parts.append(f"adds {n_added}")
@@ -103,6 +94,208 @@ def _summary_sentence(
     return f"{body[0].upper()}{body[1:]}{tail} over {previous_version}."
 
 
+def _render_template(blocks: Mapping[str, str]) -> str:
+    template = load_template("release_body")
+    placeholders = set(_PLACEHOLDER_RE.findall(template))
+    unknown = placeholders - _REQUIRED_BLOCKS
+    missing = _REQUIRED_BLOCKS - placeholders
+    if unknown:
+        raise ValueError(f"unknown release template placeholders: {sorted(unknown)}")
+    if missing:
+        raise ValueError(f"missing release template placeholders: {sorted(missing)}")
+
+    out = template
+    for key in _REQUIRED_BLOCKS:
+        out = re.sub(r"{{\s*" + key + r"\s*}}", blocks[key].rstrip(), out)
+    return out.rstrip() + "\n"
+
+
+def _asset_table() -> str:
+    return "\n".join(
+        [
+            "## What to download",
+            "",
+            "| Asset | What it gives you |",
+            "|---|---|",
+            "| `manifest.json` | Release index: reciter zips, download URLs, checksums, sizes, coverage, and change type. |",
+            "| `catalog.json` | Reciter names, riwayah, style, coverage, audio metadata, and the audio URLs paired with the timestamp data. |",
+            "| `<reciter>.zip` | One recitation's verse, word, and letter timestamp files. |",
+            "| `release_schemas.json` | Machine-readable schemas for the release assets. |",
+            "| `shard.py` | Optional helper that splits a large timestamp file into one JSON file per surah. |",
+            "| `surah_info.json` | Surah names, ayah counts, and word counts. |",
+            "| `qpc_hafs.json` | QPC Hafs word reference used by the word and letter indexes. |",
+            "| `LICENSE` | CC-BY-4.0 license text. |",
+        ]
+    )
+
+
+def _audio_timestamp_pairing() -> str:
+    return "\n".join(
+        [
+            "## How audio and timestamps pair",
+            "",
+            "`catalog.json` contains the audio URLs for each recitation. Timestamp values are relative to that matching source audio.",
+            "",
+            "For a surah-based recitation, a value like `\"100:1\": [0, 2831]` means ayah 100:1 starts at `0 ms` and ends at `2831 ms` in the matching surah audio.",
+        ]
+    )
+
+
+def _timestamp_levels() -> str:
+    return "\n".join(
+        [
+            "## Timestamp levels",
+            "",
+            "| File | Use it when you need | Why it is separate |",
+            "|---|---|---|",
+            "| `verse_timestamps.json.gz` | verse playback or verse clips | smallest download |",
+            "| `word_timestamps.json.gz` | word highlighting | faster than loading letters when you only need words |",
+            "| `letter_timestamps.json.gz` | fine-grained alignment | full detail for research and advanced UI |",
+            "",
+            "The files are split and gzipped for storage, speed, and network efficiency. Download only the level you need.",
+            "",
+            "Use `shard.py` when your app prefers per-surah files locally:",
+            "",
+            "```bash",
+            "python shard.py word_timestamps.json.gz --out-dir per_surah",
+            "```",
+        ]
+    )
+
+
+def _recitation_changes(
+    *, previous_version: str | None, added: list[dict], refreshed: list[dict], carried: int
+) -> str:
+    out: list[str] = [
+        "## Recitation changes",
+        "",
+        _summary_sentence(previous_version, len(added), len(refreshed), carried),
+        "",
+    ]
+    if added:
+        out.extend(
+            _accordion(
+                f"Added recitations - {len(added)}",
+                _member_table(added),
+            )
+        )
+        out.append("")
+    if refreshed:
+        out.extend(
+            _accordion(
+                f"Refreshed recitations - {len(refreshed)}",
+                _member_table(refreshed),
+            )
+        )
+        out.append("")
+    if carried:
+        out.append(f"{carried} carried / unchanged.")
+    return "\n".join(out).rstrip()
+
+
+def _programmatic_use() -> str:
+    return "\n".join(
+        [
+            "## Programmatic use",
+            "",
+            "Read `manifest.json`, choose a reciter from `recitations`, download its `zip_url`, and verify the zip with `sha256`.",
+            "",
+            "Use `catalog.json` when you need display names, coverage, audio metadata, or the source audio URLs that the timestamps refer to.",
+        ]
+    )
+
+
+def _reciter_zip_schemas() -> str:
+    return "\n".join(
+        [
+            "<details><summary>Reciter zip schemas</summary>",
+            "",
+            "Each reciter zip contains `manifest.json`, `catalog.json`, and three timestamp files.",
+            "",
+            "```ts",
+            'type VerseKey = "surah:ayah";',
+            "type Ms = number;",
+            "type Word = [word_idx: number, start_ms: Ms, end_ms: Ms];",
+            "type Letter = [word_idx: number, char: string, start_ms: Ms, end_ms: Ms];",
+            "",
+            "type VerseTimestamps = { _meta: Meta & { tier: \"verse\" }, [verse: VerseKey]: [Ms, Ms] };",
+            "type WordTimestamps = { _meta: Meta & { tier: \"word\" }, [verse: VerseKey]: [[Ms, Ms], Word[]] };",
+            "type LetterTimestamps = { _meta: Meta & { tier: \"letter\" }, [verse: VerseKey]: [[Ms, Ms], Word[], Letter[]] };",
+            "```",
+            "",
+            "Small example:",
+            "",
+            "```json",
+            "{",
+            '  "_meta": {"schema_version": 1, "slug": "example_reciter", "tier": "word", "verse_count": 6236},',
+            '  "100:1": [[0, 2831], [[1, 70, 1550], [2, 1550, 2790]]]',
+            "}",
+            "```",
+            "",
+            "`catalog.json` describes one recitation. `manifest.json` lists the files inside the zip with `sha256` and byte size.",
+            "",
+            "</details>",
+        ]
+    )
+
+
+def _release_level_schemas(static_refs_changed_keys: tuple[str, ...]) -> str:
+    refs = ", ".join(
+        f"`{key}` ({'refreshed' if key in static_refs_changed_keys else 'unchanged'})"
+        for key in ("surah_info.json", "qpc_hafs.json")
+    )
+    return "\n".join(
+        [
+            "<details><summary>Catalog and manifest schemas</summary>",
+            "",
+            "```ts",
+            "type ReleaseManifest = {",
+            "  schema_version: 1;",
+            "  release_version: string;",
+            "  recitation_count: number;",
+            "  static_refs: Record<string, { sha256: string; bytes: number }>;",
+            "  recitations: Record<string, {",
+            "    zip: string;",
+            "    zip_url: string;",
+            "    sha256: string;",
+            "    bytes: number;",
+            "    coverage_ayahs: number;",
+            "    change_kind: \"added\" | \"refresh\" | \"unchanged\";",
+            "  }>;",
+            "  license: \"CC-BY-4.0\";",
+            "};",
+            "```",
+            "",
+            "```json",
+            "{",
+            '  "release_version": "v0.1.0",',
+            '  "recitation_count": 9,',
+            '  "recitations": {',
+            '    "example_reciter": {"zip": "example_reciter.zip", "coverage_ayahs": 6236, "change_kind": "added"}',
+            "  }",
+            "}",
+            "```",
+            "",
+            "`catalog.json` is `{ \"schema_version\": 1, \"recitations\": [ReciterCatalog, ...] }`.",
+            "",
+            "`release_schemas.json` contains the machine-readable schemas for these files.",
+            "",
+            f"Static references: {refs}.",
+            "",
+            "</details>",
+        ]
+    )
+
+
+def _release_footer(*, license_id: str, owner: str, repo: str, hf_dataset: str) -> str:
+    out = [f"**License:** {license_id}"]
+    if owner and repo:
+        out.append(f"- Repository: https://github.com/{owner}/{repo}")
+    if hf_dataset:
+        out.append(f"- HF dataset: https://huggingface.co/datasets/{hf_dataset}")
+    return "\n".join(out)
+
+
 def render_changelog(
     *,
     version: str,
@@ -110,57 +303,37 @@ def render_changelog(
     release_date: str,
     members: list[dict],
     static_refs_changed_keys: tuple[str, ...] | list[str] = (),
-    operator_note: str | None = None,
     owner: str = "",
     repo: str = "",
     hf_dataset: str = "",
     license_id: str = "CC-BY-4.0",
 ) -> str:
-    """Return the full release body markdown.
-
-    ``members`` entries carry display names + change_kind + coverage; see the module
-    docstring for the contract. ``release_date`` is a pre-formatted human string.
-    """
+    """Return the full release body markdown."""
     added = [m for m in members if m.get("change_kind") == "added"]
     refreshed = [m for m in members if m.get("change_kind") == "refresh"]
     carried = sum(1 for m in members if m.get("change_kind") == "unchanged")
+    static_refs = tuple(static_refs_changed_keys)
 
-    out: list[str] = [f"# {version} · {release_date}", ""]
-    out.append(_summary_sentence(previous_version, len(added), len(refreshed), carried))
-    out.append("")
-
-    if operator_note and operator_note.strip():
-        out.extend(f"> {_neutralise(line)}" for line in operator_note.strip().splitlines())
-        out.append("")
-
-    if added:
-        out.extend(
-            _accordion(
-                f"➕ Added — {len(added)} recitation{_plural(len(added))}", _member_table(added)
-            )
-        )
-    if refreshed:
-        out.extend(
-            _accordion(
-                f"↻ Refreshed — {len(refreshed)} recitation{_plural(len(refreshed))}",
-                _member_table(refreshed),
-            )
-        )
-    if carried:
-        out.extend([f"{carried} carried / unchanged.", ""])
-
-    schema_lines = [f"- `{name}` — {desc}" for name, desc in _TIER_SCHEMAS]
-    refs = ", ".join(
-        f"`{key}` ({'refreshed' if key in static_refs_changed_keys else 'unchanged'})"
-        for key in ("surah_info.json", "qpc_hafs.json")
+    return _render_template(
+        {
+            "release_title": f"# {version} · {release_date}",
+            "asset_table": _asset_table(),
+            "audio_timestamp_pairing": _audio_timestamp_pairing(),
+            "timestamp_levels": _timestamp_levels(),
+            "recitation_changes": _recitation_changes(
+                previous_version=previous_version,
+                added=added,
+                refreshed=refreshed,
+                carried=carried,
+            ),
+            "programmatic_use": _programmatic_use(),
+            "reciter_zip_schemas": _reciter_zip_schemas(),
+            "release_level_schemas": _release_level_schemas(static_refs),
+            "release_footer": _release_footer(
+                license_id=license_id,
+                owner=owner,
+                repo=repo,
+                hf_dataset=hf_dataset,
+            ),
+        }
     )
-    schema_lines += ["", f"Static references: {refs}."]
-    out.extend(_accordion("📐 Schemas", schema_lines))
-
-    out.append(f"**License:** {license_id}")
-    if owner and repo:
-        out.append(f"- Repository: https://github.com/{owner}/{repo}")
-    if hf_dataset:
-        out.append(f"- HF dataset: https://huggingface.co/datasets/{hf_dataset}")
-
-    return "\n".join(out).rstrip() + "\n"

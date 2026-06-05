@@ -35,6 +35,7 @@ from qua_shared.timestamps_dedup import (
     project_segment_shard,
 )
 from qua_shared.timestamps_shards import (
+    SEGMENT_SCHEMA_VERSION,
     build_segment_shards,
     gzip_shard,
 )
@@ -78,7 +79,7 @@ def test_inflated_shard_is_segment_array():
     }
     results = {0: [(0, _ok(["1:1:1", "1:1:2", "1:1:3"]))]}
     shard, _proj = _roundtrip(chapter, results)
-    assert shard["_meta"]["schema_version"] == 2
+    assert shard["_meta"]["schema_version"] == SEGMENT_SCHEMA_VERSION
     assert isinstance(shard["segments"], list)
     seg = shard["segments"][0]
     assert set(seg) == {"ref", "t", "words"}
