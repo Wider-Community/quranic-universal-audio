@@ -19,6 +19,7 @@
     import { exitLoop } from '../../playback/loop';
     import {
         AyahFilmstrip,
+        buildFilmstripModel,
         ControlIcon,
         RecitationSection,
         type AnimUnit,
@@ -71,6 +72,10 @@
     let colorInput = $state<HTMLInputElement | undefined>(undefined);
 
     const config = $derived($recitationConfigStore);
+    // Recitation-correct cell geometry + per-verse word fractions, rebuilt once
+    // per chapter. Duration-weighted: the cell bar fills to the recited word's
+    // share of the verse's spoken time.
+    const filmstripModel = $derived(buildFilmstripModel(units, 'duration'));
     const near = (a: number, b: number): boolean => Math.abs(a - b) < 0.001;
     const upcomingLabel = $derived(
         near(config.unreachedOpacity, 0.8) ? 'full'
@@ -282,7 +287,7 @@
             />
         {/if}
 
-        {#if config.filmstripShow && ayahs.length}
+        {#if config.filmstripShow && filmstripModel.cells.length}
             <div class="strip-wrap">
                 {#if isTimestamps}
                     <div class="strip-bm" role="group" aria-label="Bookmarks">
@@ -302,7 +307,8 @@
                 <div class="strip-flex">
                     <AyahFilmstrip
                         bind:this={filmstrip}
-                        {ayahs}
+                        {units}
+                        model={filmstripModel}
                         durationMs={$playerContext.durationMs}
                         {getTimeMs}
                         {playing}

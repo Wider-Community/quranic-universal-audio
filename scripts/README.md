@@ -35,6 +35,7 @@ no-op-or-error by design. Idempotent `backfill_*`/`purge_*`/`convert_*` stay in
 - `smoke_boot.py` — build the image, boot it on fixtures, assert `/healthz` (CI boot gate)
 
 ### `devenv/`
+- `setup.sh` — first-time local setup: install FE (`npm ci`) + BE (`pip`) deps so tests/build/lint run (`frontend`/`backend` to scope). Idempotent.
 - `bootstrap_dev_env.py` — provision a contributor's personal bucket + Space
 - `seed_fixtures.py` — download the public fixtures → `.fixtures` (offline tier-0)
 - `make_fixtures_dataset.py` — maintainer: (re)build the PII-free public fixtures dataset
