@@ -1,33 +1,31 @@
-// Phase 5 save tests: payload includes patch field.
+// Save tests: payload includes patch field when applyCommand produces one.
 
-import { describe, expect,it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { loadOptional } from '../helpers/optional';
+import { buildPayloadFromCommandResult } from '../../utils/save/payload';
 
 describe('save patch field', () => {
-  it('payload includes patch field when applyCommand produces one', async () => {
-    const exec = await loadOptional<any>('../../utils/save/payload');
-    if (!exec || !exec.buildPayloadFromCommandResult) {
-      throw new Error('phase-5: builder not yet present');
-    }
+  it('payload includes patch field when applyCommand produces one', () => {
     const result = {
       operation: { op_id: 'x', type: 'trim' },
       affectedChapters: [1],
       patch: { before: [{ segment_uid: 'a' }], after: [{ segment_uid: 'a' }], removedIds: [], insertedIds: [], affectedChapterIds: [1] },
     };
-    const payload = exec.buildPayloadFromCommandResult(result);
-    expect(payload.operations[0].patch).toBeTruthy();
-    expect(payload.operations[0].patch.before[0].segment_uid).toBe('a');
+    const payload = buildPayloadFromCommandResult(result as any);
+    expect(payload.operations[0]!.patch).toBeTruthy();
+    expect((payload.operations[0]!.patch as any).before[0].segment_uid).toBe('a');
   });
 
-  it('legacy save without patch still works (backward compat)', () => {
-    const payload = {
-      full_replace: true,
-      segments: [],
-      operations: [
-        { op_id: 'x', type: 'trim' },
-      ],
+  it('builder omits patch field when applyCommand produced none', () => {
+    // Drive the actual builder so a regression that injects a placeholder
+    // patch surfaces here — the previous literal-only assertion proved
+    // nothing about the production codepath.
+    const result = {
+      operation: { op_id: 'x', type: 'trim' },
+      affectedChapters: [1],
+      patch: undefined,
     };
+    const payload = buildPayloadFromCommandResult(result as any);
     expect('patch' in payload.operations[0]!).toBe(false);
   });
 });

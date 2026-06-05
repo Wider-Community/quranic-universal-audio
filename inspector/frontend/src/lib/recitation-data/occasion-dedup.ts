@@ -141,7 +141,10 @@ export function groupVerseOccasions(segments: SegmentEntry[]): VerseOccasions[] 
 /**
  * Flatten a canonical occasion into the words the per-verse clip renders.
  * Trailing post-completion segments are trimmed (never cut mid-audio); the
- * returned `[startMs, endMs]` span covers the kept segments.
+ * returned `[startMs, endMs]` span covers every kept segment AND every
+ * word/letter time. A word/letter can bleed a few ms past its segment's `t`
+ * bound, so the clip must reach the furthest word/letter end or it would
+ * truncate the final word's tail (mirrors the backend `_canonical_verse`).
  */
 export function canonicalClip(
     occasion: Occasion,
@@ -155,9 +158,20 @@ export function canonicalClip(
     const words: SegmentEntry['words'] = [];
     for (const seg of kept) words.push(...seg.words);
 
-    const startMs = kept[0]?.t[0] ?? 0;
+    let startMs = kept[0]?.t[0] ?? 0;
     let endMs = kept[0]?.t[1] ?? 0;
-    for (const seg of kept) if (seg.t[1] > endMs) endMs = seg.t[1];
+    for (const seg of kept) {
+        if (seg.t[0] < startMs) startMs = seg.t[0];
+        if (seg.t[1] > endMs) endMs = seg.t[1];
+        for (const w of seg.words) {
+            if (w[1] < startMs) startMs = w[1];
+            if (w[2] > endMs) endMs = w[2];
+            for (const lt of w[3] ?? []) {
+                if (lt[1] != null && lt[1] < startMs) startMs = lt[1];
+                if (lt[2] != null && lt[2] > endMs) endMs = lt[2];
+            }
+        }
+    }
     return { words, startMs, endMs };
 }
 

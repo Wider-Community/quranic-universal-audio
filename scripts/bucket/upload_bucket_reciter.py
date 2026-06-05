@@ -21,6 +21,7 @@ Usage::
         --src /tmp/mahmoud_khalil_al_husary_mp3quran/ \\
         --bucket prod --apply
 """
+
 from __future__ import annotations
 
 import argparse
@@ -37,9 +38,13 @@ _BUCKETS = {
 }
 
 _TOP_LEVEL_FILES = [
-    "detailed.json", "segments.json", "edit_history.jsonl",
-    "edit_history_peaks.jsonl", "low_confidence_v2.json",
-    "auto_split_v1.json", "pipeline_meta.json",
+    "detailed.json",
+    "segments.json",
+    "edit_history.jsonl",
+    "edit_history_peaks.jsonl",
+    "low_confidence_v2.json",
+    "auto_split_v1.json",
+    "pipeline_meta.json",
 ]
 
 
@@ -51,8 +56,7 @@ def _setup_paths_and_env(bucket: str) -> None:
     os.environ["INSPECTOR_BUCKET_REPO"] = _BUCKETS[bucket]
 
 
-def upload(backend, slug: str, src: Path, *,
-           include_audio: bool, apply: bool) -> dict:
+def upload(backend, slug: str, src: Path, *, include_audio: bool, apply: bool) -> dict:
     base = f"reciters/{slug}"
     log.info("Target: %s/", base)
 
@@ -65,10 +69,11 @@ def upload(backend, slug: str, src: Path, *,
 
     # 2. Plan: every peaks/<ch>.json.gz locally → upload.
     peaks_local_dir = src / "peaks"
-    peaks_local = sorted(
-        p for p in peaks_local_dir.iterdir()
-        if p.is_file() and p.name.endswith(".json.gz")
-    ) if peaks_local_dir.is_dir() else []
+    peaks_local = (
+        sorted(p for p in peaks_local_dir.iterdir() if p.is_file() and p.name.endswith(".json.gz"))
+        if peaks_local_dir.is_dir()
+        else []
+    )
     for p in peaks_local:
         to_upload.append((p, f"{base}/peaks/{p.name}"))
 
@@ -110,7 +115,8 @@ def upload(backend, slug: str, src: Path, *,
     if not apply:
         log.warning("DRY RUN — pass --apply to write. Nothing pushed.")
         return {
-            "slug": slug, "apply": False,
+            "slug": slug,
+            "apply": False,
             "uploads_planned": len(to_upload),
             "orphan_deletes_planned": len(orphans),
         }
@@ -134,8 +140,10 @@ def upload(backend, slug: str, src: Path, *,
     log.info("Deleted %d orphan plain peaks files", n_del)
 
     return {
-        "slug": slug, "apply": True,
-        "uploaded": n_up, "deleted_orphans": n_del,
+        "slug": slug,
+        "apply": True,
+        "uploaded": n_up,
+        "deleted_orphans": n_del,
     }
 
 
@@ -143,12 +151,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--slug", required=True)
     ap.add_argument("--bucket", choices=sorted(_BUCKETS), default="prod")
-    ap.add_argument("--src", type=Path, required=True,
-                    help="Local slug folder.")
-    ap.add_argument("--include-audio", action="store_true",
-                    help="Also upload audio/*.mp3 (default: skip).")
-    ap.add_argument("--apply", action="store_true",
-                    help="Actually write. Without it, just prints the plan.")
+    ap.add_argument("--src", type=Path, required=True, help="Local slug folder.")
+    ap.add_argument(
+        "--include-audio", action="store_true", help="Also upload audio/*.mp3 (default: skip)."
+    )
+    ap.add_argument(
+        "--apply", action="store_true", help="Actually write. Without it, just prints the plan."
+    )
     args = ap.parse_args()
 
     logging.basicConfig(
@@ -160,10 +169,12 @@ def main() -> int:
 
     _setup_paths_and_env(args.bucket)
     from services.storage.hf_bucket import get_backend
+
     backend = get_backend()
 
-    result = upload(backend, args.slug, args.src,
-                    include_audio=args.include_audio, apply=args.apply)
+    result = upload(
+        backend, args.slug, args.src, include_audio=args.include_audio, apply=args.apply
+    )
     log.info("DONE: %s", result)
     return 0
 

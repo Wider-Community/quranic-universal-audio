@@ -1,0 +1,26 @@
+// pyrightconfig.json (repo root) — SCOPED, gradual type checking.
+// Initially covers only the Pydantic typed core (qua_shared/schemas/), which is
+// already nearly clean (2 errors, both in smoke.py). NON-BLOCKING in CI at first.
+// A repo-wide basic run reports ~636 errors (mostly import-resolution noise from
+// the flat sys.path import layout, not real type bugs), so do NOT widen `include`
+// or make the job blocking until those are triaged. Expand `include` one package
+// at a time as types are added.
+{
+  "include": [
+    "qua_shared/schemas"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "inspector/frontend",
+    ".local",
+    ".claude",
+    "quranic-universal-aligner",
+    "quranic-universal-timestamps"
+  ],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  // Flat-import layout makes some cross-package imports unresolvable to pyright;
+  // demote to warning so they don't dominate the (eventually-blocking) report.
+  "reportMissingImports": "warning",
+  "reportMissingModuleSource": "none"
+}

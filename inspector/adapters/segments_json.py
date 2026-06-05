@@ -8,7 +8,6 @@ file.  The tuple shape and ``_meta`` structure are unchanged (MUST-3).
 
 from __future__ import annotations
 
-import json
 from collections import defaultdict
 from pathlib import Path
 
@@ -53,9 +52,7 @@ def build_segments_doc(entries: list[dict], existing_meta: dict | None = None) -
                     [start_word, end_word, t_from, t_to]
                 )
             else:
-                verse_data[ref].append(
-                    [start_word, end_word, t_from, t_to]
-                )
+                verse_data[ref].append([start_word, end_word, t_from, t_to])
 
     seg_doc: dict = {"_meta": existing_meta or {}}
     for key in sorted(verse_data.keys(), key=seg_sort_key):
@@ -76,6 +73,7 @@ def rebuild(reciter_dir: Path, entries: list[dict]) -> None:
     if segments_path.exists():
         try:
             import orjson
+
             existing_doc = orjson.loads(segments_path.read_bytes())
             existing_meta = existing_doc.get("_meta", {})
         except Exception:
@@ -84,5 +82,6 @@ def rebuild(reciter_dir: Path, entries: list[dict]) -> None:
     seg_doc = build_segments_doc(entries, existing_meta)
 
     import orjson
+
     with open(segments_path, "wb") as f:
         f.write(orjson.dumps(seg_doc))

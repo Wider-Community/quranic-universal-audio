@@ -36,15 +36,14 @@ import queue
 import tempfile
 import threading
 import uuid
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
 from qua_shared.mfa_runtime import MfaRuntime
 from qua_shared.timestamps_pipeline import (
     DEFAULT_ALIGNER_MODEL,
-    _init_worker,
     _worker_align,
     build_mfa_ref,
     download_audio,
@@ -92,7 +91,7 @@ def _file_sha256(path: Path) -> str:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _is_url(source: str) -> bool:
@@ -111,7 +110,7 @@ def run_probe(
     batch_size: int = DEFAULT_BATCH_SIZE,
     workers: int = DEFAULT_WORKERS,
     download_workers: int = DEFAULT_DOWNLOAD_WORKERS,
-    runtime: "MfaRuntime | None" = None,
+    runtime: MfaRuntime | None = None,
 ) -> Path | None:
     """Run a tight-beam MFA probe and write the v2 sidecar.
 
@@ -144,8 +143,8 @@ def run_probe(
         return None
 
     chapter_urls: dict[int, str] = {}
-    manifest_path = Path(audio_manifest).resolve() if audio_manifest else (
-        reciter_dir / "audio_manifest.json"
+    manifest_path = (
+        Path(audio_manifest).resolve() if audio_manifest else (reciter_dir / "audio_manifest.json")
     )
     if manifest_path.is_file():
         try:
@@ -178,17 +177,22 @@ def run_probe(
             return 0
         local_mp3 = audio_dir / f"{chapter}.mp3" if audio_dir else None
         manifest_url = chapter_urls.get(chapter, "") if chapter_urls else ""
-        if not audio_src and not (local_mp3 is not None and local_mp3.is_file()) \
-                and not manifest_url:
-            log.warning("Chapter %s: missing audio (no entry.audio, no local mp3, no manifest URL); skipping", ref)
+        if (
+            not audio_src
+            and not (local_mp3 is not None and local_mp3.is_file())
+            and not manifest_url
+        ):
+            log.warning(
+                "Chapter %s: missing audio (no entry.audio, no local mp3, no manifest URL); skipping",
+                ref,
+            )
             return 0
         try:
             if local_mp3 is not None and local_mp3.is_file():
                 audio_int16 = load_audio_int16(local_mp3)
             elif _is_url(audio_src):
                 if local_mp3 is not None:
-                    log.warning("Chapter %s: local %s missing; falling back to URL",
-                                ref, local_mp3)
+                    log.warning("Chapter %s: local %s missing; falling back to URL", ref, local_mp3)
                 audio_file = download_audio(audio_src)
                 audio_int16 = load_audio_int16(audio_file)
                 audio_file.unlink(missing_ok=True)
@@ -243,9 +247,14 @@ def run_probe(
     bid_counter = 0
     futures: dict = {}
 
-    log.info("Probe: %d chapters, %d download workers, %d MFA workers, "
-             "batch_size=%d, beam=%d",
-             len(entries), download_workers, workers, batch_size, beam)
+    log.info(
+        "Probe: %d chapters, %d download workers, %d MFA workers, batch_size=%d, beam=%d",
+        len(entries),
+        download_workers,
+        workers,
+        batch_size,
+        beam,
+    )
 
     producer = threading.Thread(target=_producer, daemon=True)
     producer.start()
@@ -269,13 +278,14 @@ def run_probe(
             bid_counter += 1
             bid = bid_counter
             batch_state[bid] = {"paths": list(buf_paths), "uids": list(buf_uids)}
-            log.info("Batch %d: submit %d segs at beam=%d",
-                     bid, len(buf_refs), beam)
-            fut = pool.submit(_worker_align,
-                              list(buf_refs), list(buf_paths),
-                              method, beam, False, padding)
+            log.info("Batch %d: submit %d segs at beam=%d", bid, len(buf_refs), beam)
+            fut = pool.submit(
+                _worker_align, list(buf_refs), list(buf_paths), method, beam, False, padding
+            )
             futures[fut] = bid
-            buf_refs.clear(); buf_paths.clear(); buf_uids.clear()
+            buf_refs.clear()
+            buf_paths.clear()
+            buf_uids.clear()
 
         while True:
             try:
@@ -299,12 +309,13 @@ def run_probe(
             state = batch_state[bid]
             try:
                 results = fut.result()
-                for uid, item in zip(state["uids"], results):
+                for uid, item in zip(state["uids"], results, strict=False):
                     if (item or {}).get("status") != "ok":
                         failures.add(uid)
             except Exception as e:
-                log.warning("Batch %d crashed (%s); flagging all %d uids",
-                            bid, e, len(state["uids"]))
+                log.warning(
+                    "Batch %d crashed (%s); flagging all %d uids", bid, e, len(state["uids"])
+                )
                 failures.update(state["uids"])
             for p in state["paths"]:
                 try:

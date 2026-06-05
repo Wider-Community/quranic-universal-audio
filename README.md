@@ -26,15 +26,13 @@
 
 - **Phoneme-based alignment:** 20ms phoneme-level precision yields maximum accuracy, eliminates ambiguity at word boundaries and disambiguate tajweed effects where sounds merge across words.
 
-- **Repetition-safe, gap-free timestamps:** The pipeline transcribes each silence-based segment independently, so repeated words/verses are detected and timestamped correctly. See the [comparison with QUL timestamps](docs/qul_vs_mfa_timestamps.md).
+- **Repetition-aware, gap-free timestamps:** The pipeline transcribes each silence-based segment independently, so repeated words/verses are detected and timestamped correctly. See the [comparison with QUL timestamps](docs/qul_vs_mfa_timestamps.md).
 
 - **Community-driven validation:** No trusting a black-box pipeline. Every stage is automatically checked by dedicated validators and human-correctable through an interactive editing UI. Review flagged errors like missing words or misaligned boundaries, fix them visually, and feed corrections back into the dataset.
 
 - **Submit your own recitations:** Add your favorite reciters and different audio sources to the catalog and we handle the processing — typically within a few days.
 
-- **Comprehensive metadata and versioning:** Each recitation is governed by consistent schemas and metadata and versioned with a full history to track segment updates and timestamp corrections over time.
-
-<!-- ## How we compare -->
+- **Metadata and versioning:** Each recitation is governed by consistent schemas and metadata and versioned with a full history to track segment updates and timestamp corrections over time.
 
 <!-- ## Data Access -->
 
@@ -52,11 +50,11 @@
 
 ## Contributing
 
-Visit the [website](https://hetchyy-quranic-universal-audio.hf.space/) and read the overview info and editing guide to get started in contributing recitations and reviewing.
+Visit the [website](https://hetchyy-quranic-universal-audio.hf.space/) and read the overview info and editing guide to get started in contributing recitations and fixing alignment errors.
 
 Issues and pull requests are welcome. If you've found a bug or have a feature idea, open an [issue](https://github.com/Wider-Community/quranic-universal-audio/issues) or jump into the Discord.
 
-To contribute code to the webapp directly, fork the repo and see [inspector/README.md](inspector/README.md) for setup instructions.
+To contribute code to the repo directly, fork the repo and see [inspector/README.md](inspector/README.md) for setup instructions.
 
 ## Roadmap
 
@@ -78,7 +76,6 @@ To contribute code to the webapp directly, fork the repo and see [inspector/READ
 - [ ] **Orthography** — letter-level timestamps are currently tuned for Uthmani script (DigitalKhatt). Generalise to other scripts where symbols and letter conventions differ, e.g. IndoPak.
 - [ ] **Riwayah** — extend beyond Hafs. Each riwayah has its own pronunciation rules, tajweed, unique sounds, and verse orderings, with fewer and less reliable digital assets than Hafs.
 
-
 ## Acknowledgements
 
 - **[Qur'anic Universal Library (QUL)](https://qul.tarteel.ai)** — Qur'an metadata, the Uthmani script, and the [DigitalKhatt](https://digitalkhatt.org) font.
@@ -86,4 +83,4 @@ To contribute code to the webapp directly, fork the repo and see [inspector/READ
 
 ## License
 
-[CC BY 4.0](LICENSE) — free to share and adapt with attribution.
+The project's own work — timestamps, segmentation, alignment, catalog metadata, and code — is licensed under [CC BY 4.0](LICENSE). Recitation recordings remain the property of their reciters and original upstream sources.

@@ -10,7 +10,6 @@ document ready for atomic write.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from domain.identity import backfill_entries_uids
@@ -33,6 +32,7 @@ def load_entries_from_bytes(raw: bytes) -> tuple[dict, list[dict]]:
     cycles (MUST-4).
     """
     import orjson
+
     doc = orjson.loads(raw)
     meta: dict = doc.get("_meta", {})
     entries: list[dict] = doc.get("entries", [])

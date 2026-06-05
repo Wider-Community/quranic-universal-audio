@@ -37,18 +37,25 @@ import logging
 import sys
 from pathlib import Path
 
+from qua_shared.auto_split_precompute import (
+    DEFAULT_BATCH_SIZE as SPLIT_BATCH_SIZE,
+)
+from qua_shared.auto_split_precompute import (
+    DEFAULT_BEAM as SPLIT_BEAM,
+)
+from qua_shared.auto_split_precompute import (
+    run_precompute,
+)
 from qua_shared.mfa_runtime import MfaRuntime
 from qua_shared.probe_mfa import (
     DEFAULT_BATCH_SIZE as PROBE_BATCH_SIZE,
+)
+from qua_shared.probe_mfa import (
     DEFAULT_DOWNLOAD_WORKERS as PROBE_DL_WORKERS,
+)
+from qua_shared.probe_mfa import (
     DEFAULT_PROBE_BEAM,
     run_probe,
-)
-from qua_shared.auto_split_precompute import (
-    DEFAULT_BATCH_SIZE as SPLIT_BATCH_SIZE,
-    DEFAULT_BEAM as SPLIT_BEAM,
-    DEFAULT_DOWNLOAD_WORKERS as SPLIT_DL_WORKERS,
-    run_precompute,
 )
 
 log = logging.getLogger(__name__)
@@ -137,33 +144,56 @@ def _main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         description="Run probe + auto-split sidecars sharing one MFA pool.",
     )
-    p.add_argument("--reciter-dir", type=Path, required=True,
-                   help="Directory containing detailed.json (and audio/ for fast-path).")
-    p.add_argument("--audio-dir", type=Path, default=None,
-                   help="Per-chapter MP3 directory. Defaults to <reciter-dir>/audio.")
-    p.add_argument("--audio-manifest", type=Path, default=None,
-                   help="Catalog audio_manifest sidecar (chapter URLs). "
-                        "Defaults to <reciter-dir>/audio_manifest.json. "
-                        "Used as a per-chapter URL fallback when neither a "
-                        "staged audio dir nor entry.audio in detailed.json "
-                        "carries the source.")
-    p.add_argument("--mfa-app-path", type=Path, required=True,
-                   help="Path to the local MFA aligner module.")
-    p.add_argument("--repo-root", type=Path, default=None,
-                   help="Repo root (for auto-split's verse word counts).")
+    p.add_argument(
+        "--reciter-dir",
+        type=Path,
+        required=True,
+        help="Directory containing detailed.json (and audio/ for fast-path).",
+    )
+    p.add_argument(
+        "--audio-dir",
+        type=Path,
+        default=None,
+        help="Per-chapter MP3 directory. Defaults to <reciter-dir>/audio.",
+    )
+    p.add_argument(
+        "--audio-manifest",
+        type=Path,
+        default=None,
+        help="Catalog audio_manifest sidecar (chapter URLs). "
+        "Defaults to <reciter-dir>/audio_manifest.json. "
+        "Used as a per-chapter URL fallback when neither a "
+        "staged audio dir nor entry.audio in detailed.json "
+        "carries the source.",
+    )
+    p.add_argument(
+        "--mfa-app-path", type=Path, required=True, help="Path to the local MFA aligner module."
+    )
+    p.add_argument(
+        "--repo-root",
+        type=Path,
+        default=None,
+        help="Repo root (for auto-split's verse word counts).",
+    )
     p.add_argument("--probe-beam", type=int, default=DEFAULT_PROBE_BEAM)
     p.add_argument("--split-beam", type=int, default=SPLIT_BEAM)
-    p.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
-                   help="MFA process pool size (shared across passes). "
-                        f"Default {DEFAULT_WORKERS} fits the 4 GiB login-node "
-                        "cgroup; bump under PBS where the allocation is larger.")
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=DEFAULT_WORKERS,
+        help="MFA process pool size (shared across passes). "
+        f"Default {DEFAULT_WORKERS} fits the 4 GiB login-node "
+        "cgroup; bump under PBS where the allocation is larger.",
+    )
     p.add_argument("--download-workers", type=int, default=PROBE_DL_WORKERS)
     p.add_argument("--probe-batch-size", type=int, default=PROBE_BATCH_SIZE)
     p.add_argument("--split-batch-size", type=int, default=SPLIT_BATCH_SIZE)
-    p.add_argument("--skip-probe", action="store_true",
-                   help="Skip the probe pass; only run auto-split.")
-    p.add_argument("--skip-auto-split", action="store_true",
-                   help="Skip the auto-split pass; only run probe.")
+    p.add_argument(
+        "--skip-probe", action="store_true", help="Skip the probe pass; only run auto-split."
+    )
+    p.add_argument(
+        "--skip-auto-split", action="store_true", help="Skip the auto-split pass; only run probe."
+    )
     args = p.parse_args(argv)
 
     logging.basicConfig(
@@ -194,8 +224,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     if probe_path is None and split_path is None:
         return 1
-    log.info("done — probe=%s  auto_split=%s",
-             probe_path or "(skipped)", split_path or "(skipped)")
+    log.info("done — probe=%s  auto_split=%s", probe_path or "(skipped)", split_path or "(skipped)")
     return 0
 
 

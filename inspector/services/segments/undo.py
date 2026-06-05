@@ -3,15 +3,15 @@
 No Flask imports -- all functions accept parameters and return plain dicts.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from constants import HISTORY_SCHEMA_VERSION
 from domain.command import apply_inverse_patch
 from qua_shared.schemas import Actor
+from services.activity.history_query import parse_history_for_reciter
+from services.segments.save import persist_detailed
 from services.storage import cache, data_dir
 from services.storage.data_loader import load_detailed
-from services.segments.save import persist_detailed
-from services.activity.history_query import parse_history_for_reciter
 from utils.references import chapter_from_ref
 from utils.uuid7 import uuid7
 
@@ -83,7 +83,9 @@ def verify_segment_matches_snapshot(seg: dict, snap: dict) -> str | None:
     Returns an error message if there's a conflict, ``None`` if OK.
     """
     uid = snap.get("segment_uid", "")
-    if seg.get("time_start") != snap.get("time_start") or seg.get("time_end") != snap.get("time_end"):
+    if seg.get("time_start") != snap.get("time_start") or seg.get("time_end") != snap.get(
+        "time_end"
+    ):
         return (
             f"Segment {uid} times changed since this save "
             f"(expected {snap.get('time_start')}-{snap.get('time_end')}, "
@@ -98,8 +100,10 @@ def verify_segment_matches_snapshot(seg: dict, snap: dict) -> str | None:
 # Shared find + verify helper
 # ---------------------------------------------------------------------------
 
-def _find_and_verify(entries: list[dict], snap_after: dict,
-                     chapter_set: set[int]) -> tuple[dict, int, dict]:
+
+def _find_and_verify(
+    entries: list[dict], snap_after: dict, chapter_set: set[int]
+) -> tuple[dict, int, dict]:
     """Look up a segment by UID and verify it matches *snap_after*.
 
     Returns ``(entry, index, seg)`` or raises ``ValueError`` on conflict.
@@ -118,6 +122,7 @@ def _find_and_verify(entries: list[dict], snap_after: dict,
 # ---------------------------------------------------------------------------
 # Per-op-type branch helpers
 # ---------------------------------------------------------------------------
+
 
 def _reverse_trim(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
     """Reverse a trim_segment or auto_fix_missing_word operation."""
@@ -217,6 +222,7 @@ def _reverse_ignore(entries: list[dict], op: dict, chapter_set: set[int]) -> Non
 # Dispatcher
 # ---------------------------------------------------------------------------
 
+
 def _reverse_via_patch(entries: list[dict], op: dict, chapter_set: set[int]) -> None:
     """Apply the inverse of an op by running the patch in reverse.
 
@@ -225,17 +231,17 @@ def _reverse_via_patch(entries: list[dict], op: dict, chapter_set: set[int]) -> 
     outside the batch scope; raise ValueError so the caller can surface it.
     """
     import logging
+
     patch = op["patch"]
     patch_chapters = set(patch.get("affectedChapterIds") or [])
     if patch_chapters and chapter_set and not patch_chapters.issubset(chapter_set):
         outside = patch_chapters - chapter_set
         logging.getLogger(__name__).warning(
             "patch affectedChapterIds %s outside batch chapter_set %s — skipping op",
-            outside, chapter_set,
+            outside,
+            chapter_set,
         )
-        raise ValueError(
-            f"patch claims chapters {outside} outside the batch scope {chapter_set}"
-        )
+        raise ValueError(f"patch claims chapters {outside} outside the batch scope {chapter_set}")
     apply_inverse_patch(entries, patch)
 
 
@@ -263,6 +269,7 @@ def apply_reverse_op(entries: list[dict], op: dict, chapter_set: set[int]) -> No
 # Internal helpers (used by undo_batch / undo_ops)
 # ---------------------------------------------------------------------------
 
+
 def _get_affected_chapters(batch: dict) -> set[int]:
     """Extract all affected chapters from a batch record."""
     affected = set()
@@ -275,17 +282,22 @@ def _get_affected_chapters(batch: dict) -> set[int]:
     return affected
 
 
-def _append_revert_record(reciter: str, target_batch_id: str,
-                          chapter, chapters,
-                          *, actor: Actor,
-                          reverts_op_ids: list[str] | None = None) -> None:
+def _append_revert_record(
+    reciter: str,
+    target_batch_id: str,
+    chapter,
+    chapters,
+    *,
+    actor: Actor,
+    reverts_op_ids: list[str] | None = None,
+) -> None:
     """Append a revert record to edit_history.jsonl via the storage backend."""
     revert = {
         "schema_version": HISTORY_SCHEMA_VERSION,
         "batch_id": uuid7(),
         "reverts_batch_id": target_batch_id,
         "chapter": chapter,
-        "saved_at_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "saved_at_utc": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         "operations": [],
         "actor": actor.model_dump(mode="json"),
     }
@@ -303,6 +315,7 @@ def _append_revert_record(reciter: str, target_batch_id: str,
 # Public undo entry points
 # ---------------------------------------------------------------------------
 
+
 def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tuple:
     """Undo a specific saved batch.  Returns result dict or (error_dict, status).
 
@@ -315,7 +328,8 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
         return {"error": "No edit history found"}, 404
 
     matching = [
-        rec for rec in all_records
+        rec
+        for rec in all_records
         if rec.get("batch_id") == target_batch_id and not rec.get("reverts_batch_id")
     ]
     if not matching:
@@ -328,7 +342,8 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
         return {"error": "Cannot undo a revert record"}, 400
 
     already_reverted = {
-        r.get("reverts_batch_id") for r in all_records
+        r.get("reverts_batch_id")
+        for r in all_records
         if r.get("reverts_batch_id") and not r.get("reverts_op_ids")
     }
     if target_batch_id in already_reverted:
@@ -348,7 +363,9 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
     if per_op_reverted:
         operations = [op for op in operations if op.get("op_id") not in per_op_reverted]
         if not operations:
-            return {"error": "All operations in this batch have already been individually undone"}, 400
+            return {
+                "error": "All operations in this batch have already been individually undone"
+            }, 400
 
     entries = load_detailed(reciter)
     if not entries:
@@ -369,7 +386,8 @@ def undo_batch(reciter: str, target_batch_id: str, *, actor: Actor) -> dict | tu
 
     ch_union = sorted(affected_chapters)
     _append_revert_record(
-        reciter, target_batch_id,
+        reciter,
+        target_batch_id,
         ch_union[0] if len(ch_union) == 1 else None,
         ch_union if len(ch_union) > 1 else None,
         actor=actor,
@@ -403,7 +421,8 @@ def undo_ops(
         return {"error": "No edit history found"}, 404
 
     matching = [
-        rec for rec in all_records
+        rec
+        for rec in all_records
         if rec.get("batch_id") == target_batch_id and not rec.get("reverts_batch_id")
     ]
     if not matching:
@@ -415,7 +434,8 @@ def undo_ops(
         return {"error": "Cannot undo operations in a revert record"}, 400
 
     fully_reverted = {
-        r.get("reverts_batch_id") for r in all_records
+        r.get("reverts_batch_id")
+        for r in all_records
         if r.get("reverts_batch_id") and not r.get("reverts_op_ids")
     }
     if target_batch_id in fully_reverted:
@@ -460,7 +480,8 @@ def undo_ops(
 
     ch_union = sorted(affected_chapters)
     _append_revert_record(
-        reciter, target_batch_id,
+        reciter,
+        target_batch_id,
         ch_union[0] if len(ch_union) == 1 else None,
         ch_union if len(ch_union) > 1 else None,
         actor=actor,

@@ -16,10 +16,9 @@ from __future__ import annotations
 import logging
 
 from qua_shared.schemas import ActivityState, Actor
-
-from services.state import audit
 from services.db import repo_activity
 from services.db import sync as _sync
+from services.state import audit
 
 logger = logging.getLogger(__name__)
 

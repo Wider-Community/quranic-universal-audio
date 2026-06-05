@@ -27,7 +27,6 @@ from __future__ import annotations
 import hashlib
 from typing import Literal
 
-
 Bucket = Literal["public", "hidden"]
 
 
@@ -54,48 +53,50 @@ PUBLIC_EVENTS: dict[str, str] = {
 # Includes every event that used to fire an admin notification card. Those
 # now live in the Admin dashboard surfaces (Reviews / Users / Requests) and
 # the audit trail; no passive feed surfaces them anymore.
-HIDDEN_EVENTS: frozenset[str] = frozenset({
-    # Former ADMIN_ONLY_EVENTS — admin dashboard owns these now.
-    "reciter.released",
-    "reciter.marked_ready",
-    "reciter.unmarked_ready",
-    "reciter.merge_rejected",
-    # `reciter.published` was wrongly on the public rail in v1 — it fires on
-    # TS-gen completion, which is admin infrastructure (not a public-release
-    # milestone). The v2 public `released` event covers HF / GH publishes.
-    "reciter.published",
-    # Audit-only: a TS regen on an already-released reciter (no transition).
-    # Operator-facing via the Releases tab's stale-stamp, not the public rail.
-    "reciter.ts_regenerated",
-    "reciter.unpublished",
-    "reciter.discarded",
-    "reciter.undiscarded",
-    "claim.force_released",
-    "claim.reassigned",
-    "admin.unlocked_for_revision",
-    # Catalog metadata edits.
-    "catalog.edited",
-    # Request review moved off the notifications rail into the Admin dashboard
-    # → Requests tab. The submit event stays public prose (PUBLIC_EVENTS);
-    # the reject outcomes are hidden (still audited).
-    "reciter.request_rejected_soft",
-    "reciter.request_rejected_hard",
-    # Non-blocking warning emitted by ``services.pending_requests.apply_and_archive_completed``
-    # when a requester's proposed (riwayah, style) matches another delivery of
-    # the same reciter. Visible in the audit log for debugging only.
-    "catalog.conflict_warning",
-    # Recorded by the auto-claim hook when an alignment_completed transition
-    # would otherwise have claimed for the requester, but they already hold
-    # another UNDER_REVIEW slug (or were demoted). Audit trail only.
-    "reciter.auto_claim_skipped",
-    "access.role_granted",
-    "access.role_revoked",
-    "access.role_updated",
-    "access.permission_changed",
-    # Owner-only public-feed tombstone (the only remaining mutation against
-    # the activity sidecars).
-    "admin.activity_deleted",
-})
+HIDDEN_EVENTS: frozenset[str] = frozenset(
+    {
+        # Former ADMIN_ONLY_EVENTS — admin dashboard owns these now.
+        "reciter.released",
+        "reciter.marked_ready",
+        "reciter.unmarked_ready",
+        "reciter.merge_rejected",
+        # `reciter.published` was wrongly on the public rail in v1 — it fires on
+        # TS-gen completion, which is admin infrastructure (not a public-release
+        # milestone). The v2 public `released` event covers HF / GH publishes.
+        "reciter.published",
+        # Audit-only: a TS regen on an already-released reciter (no transition).
+        # Operator-facing via the Releases tab's stale-stamp, not the public rail.
+        "reciter.ts_regenerated",
+        "reciter.unpublished",
+        "reciter.discarded",
+        "reciter.undiscarded",
+        "claim.force_released",
+        "claim.reassigned",
+        "admin.unlocked_for_revision",
+        # Catalog metadata edits.
+        "catalog.edited",
+        # Request review moved off the notifications rail into the Admin dashboard
+        # → Requests tab. The submit event stays public prose (PUBLIC_EVENTS);
+        # the reject outcomes are hidden (still audited).
+        "reciter.request_rejected_soft",
+        "reciter.request_rejected_hard",
+        # Non-blocking warning emitted by ``services.pending_requests.apply_and_archive_completed``
+        # when a requester's proposed (riwayah, style) matches another delivery of
+        # the same reciter. Visible in the audit log for debugging only.
+        "catalog.conflict_warning",
+        # Recorded by the auto-claim hook when an alignment_completed transition
+        # would otherwise have claimed for the requester, but they already hold
+        # another UNDER_REVIEW slug (or were demoted). Audit trail only.
+        "reciter.auto_claim_skipped",
+        "access.role_granted",
+        "access.role_revoked",
+        "access.role_updated",
+        "access.permission_changed",
+        # Owner-only public-feed tombstone (the only remaining mutation against
+        # the activity sidecars).
+        "admin.activity_deleted",
+    }
+)
 
 
 # Special case: pre-event state-transition records carrying to_state ==
@@ -156,5 +157,5 @@ def audit_id(record: dict) -> str:
     if isinstance(actor, dict):
         actor_hf = actor.get("hf_user_id") or ""
     result = record.get("result") or "ok"
-    raw = f"{ts}|{event}|{slug}|{actor_hf}|{result}".encode("utf-8")
+    raw = f"{ts}|{event}|{slug}|{actor_hf}|{result}".encode()
     return hashlib.sha1(raw, usedforsecurity=False).hexdigest()[:16]

@@ -5,19 +5,25 @@
 ``services/timestamps.py``). ``/config`` advertises manifest + shard URL
 templates so the frontend doesn't need its own env knob.
 """
+
 from flask import Blueprint, Response, jsonify, request
 
 from config import (
+    ANALYSIS_LETTER_FONT_SIZE,
+    ANALYSIS_WORD_FONT_SIZE,
+    ANIM_CHAR_TRANSITION_DURATION,
+    ANIM_FONT_SIZE,
+    ANIM_HIGHLIGHT_COLOR,
+    ANIM_LINE_HEIGHT,
+    ANIM_TRANSITION_EASING,
+    ANIM_WORD_SPACING,
+    ANIM_WORD_TRANSITION_DURATION,
     UNIFIED_DISPLAY_MAX_HEIGHT,
-    ANIM_HIGHLIGHT_COLOR, ANIM_WORD_TRANSITION_DURATION,
-    ANIM_CHAR_TRANSITION_DURATION, ANIM_TRANSITION_EASING,
-    ANIM_WORD_SPACING, ANIM_LINE_HEIGHT, ANIM_FONT_SIZE,
-    ANALYSIS_WORD_FONT_SIZE, ANALYSIS_LETTER_FONT_SIZE,
 )
-from services.audio_meta import vbr_chapters_for_reciter
 from services import auth as auth_service
 from services import tajweed as ts_tajweed
 from services import timestamps as ts_serve
+from services.audio_meta import vbr_chapters_for_reciter
 from services.auth import capabilities as _capabilities
 from utils.decorators import require_capability
 from utils.json_response import orjson_response
@@ -82,9 +88,7 @@ def ts_shard(reciter, chapter):
     """Serve a per-chapter gzipped segment-array shard (byte pass-through)."""
     # Owner preview: holders of ``timestamps.view_unreleased`` may read shards
     # for generated-but-unreleased reciters; everyone else stays released-only.
-    allow_unreleased = _capabilities.can(
-        auth_service.current_user(), "timestamps.view_unreleased"
-    )
+    allow_unreleased = _capabilities.can(auth_service.current_user(), "timestamps.view_unreleased")
     body = ts_serve.shard_bytes(reciter, chapter, allow_unreleased=allow_unreleased)
     if body is None:
         return jsonify({"error": "Shard not found"}), 404

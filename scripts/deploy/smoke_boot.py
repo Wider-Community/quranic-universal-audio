@@ -144,9 +144,15 @@ def main(argv: list[str] | None = None) -> int:
 
     _rm_container()
     run_cmd = [
-        "docker", "run", "-d", "--name", _CONTAINER,
-        "-p", f"{args.port}:7860",
-        "-v", f"{fixtures}:/app/inspector/.fixtures",
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        _CONTAINER,
+        "-p",
+        f"{args.port}:7860",
+        "-v",
+        f"{fixtures}:/app/inspector/.fixtures",
     ]
     for key, val in _RUN_ENV.items():
         run_cmd += ["-e", f"{key}={val}"]

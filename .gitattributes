@@ -14,3 +14,12 @@
 *.pdf binary
 *.zip binary
 *.svg text eol=lf
+
+# Language stats (GitHub Linguist) — keep non-project code out of the bar.
+# .claude/ is agent tooling (the impeccable skill alone bundles ~1.5 MB of
+# .mjs — more than the whole TS app), and design/ holds throwaway HTML/CSS
+# mockups. Neither is project source; mark vendored so they don't swamp TS.
+.claude/** linguist-vendored
+inspector/frontend/design/** linguist-vendored
+# Codegen'd FE types are generated, not authored.
+inspector/frontend/src/lib/types/generated/** linguist-generated

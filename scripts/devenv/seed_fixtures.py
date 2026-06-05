@@ -87,7 +87,8 @@ def _configure_env() -> None:
     if not env_path.exists():
         env_path.write_text(
             "# Auto-written by scripts/devenv/seed_fixtures.py (Tier-0 offline mode).\n"
-            + "\n".join(_ENV_LINES) + "\n",
+            + "\n".join(_ENV_LINES)
+            + "\n",
             encoding="utf-8",
         )
         print(f"==> Wrote {env_path} (filesystem backend → fixtures)")
@@ -106,10 +107,14 @@ def _configure_env() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    p.add_argument("--force", action="store_true",
-                   help="Re-download even if fixtures already exist (resets local edits).")
-    p.add_argument("--print-env", action="store_true",
-                   help="Only print the env lines; download nothing.")
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-download even if fixtures already exist (resets local edits).",
+    )
+    p.add_argument(
+        "--print-env", action="store_true", help="Only print the env lines; download nothing."
+    )
     args = p.parse_args(argv)
 
     if args.print_env:

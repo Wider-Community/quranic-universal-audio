@@ -37,15 +37,20 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ._extras import strip_and_warn
 
-
 # Fields actively stripped on read with INFO-level "legacy" warning. Writers
 # must never emit these. The set covers every legacy attribute we've seen
 # on real prod buckets (see the audit survey, May 2026).
 _SEG_DEAD_FIELDS: set[str] = {
     # Migration #5 — derivable / never persisted
-    "matched_text", "phonemes_asr", "has_repeated_words",
+    "matched_text",
+    "phonemes_asr",
+    "has_repeated_words",
     # Snapshot-only fields; do not belong on a persisted seg
-    "audio_url", "chapter", "entry_ref", "index_at_save", "display_text",
+    "audio_url",
+    "chapter",
+    "entry_ref",
+    "index_at_save",
+    "display_text",
 }
 
 _ENTRY_DEAD_FIELDS: set[str] = {
@@ -131,11 +136,10 @@ class DetailedSegment(BaseModel):
         )
 
     @model_validator(mode="after")
-    def _validate_time_range(self) -> "DetailedSegment":
+    def _validate_time_range(self) -> DetailedSegment:
         if self.time_end < self.time_start:
             raise ValueError(
-                f"time_end ({self.time_end}) must be >= time_start "
-                f"({self.time_start})"
+                f"time_end ({self.time_end}) must be >= time_start ({self.time_start})"
             )
         return self
 
@@ -169,7 +173,7 @@ class DetailedMeta(BaseModel):
     """The ``_meta`` block at the top of ``detailed.json``.
 
     Kept lean per user direction — ``audio_source`` is load-bearing for
-    ``.github/scripts/build_reciter.py`` + ``package_release.py``;
+    ``scripts/release/build_reciter.py`` + ``package_release.py``;
     pad / floor fields are read by ``services/storage/data_loader.py::
     resolve_pad``; the rest is provenance.
     """

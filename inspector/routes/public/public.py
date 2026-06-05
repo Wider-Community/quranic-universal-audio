@@ -23,9 +23,7 @@ from services import public_activity as public_activity_service
 from services import public_state as public_state_service
 from services import search_normalize as search_normalize_service
 from services.auth import capabilities as cap_service
-
 from utils.decorators import require_capability
-
 
 public_bp = Blueprint("public", __name__, url_prefix="/api/public")
 
@@ -87,7 +85,9 @@ def activity(user):
     # owner-only). The service stays capability-agnostic — it takes a bool.
     include_identity = cap_service.can(user, "identity.see_actor")
     payload = public_activity_service.feed(
-        cursor=cursor, limit=limit, include_identity=include_identity,
+        cursor=cursor,
+        limit=limit,
+        include_identity=include_identity,
     )
     resp = jsonify(payload)
     resp.headers["Cache-Control"] = "no-store"
@@ -149,16 +149,20 @@ def reciters(user):
     buckets = set(request.args.getlist("bucket"))
     invalid = buckets - _VALID_BUCKETS
     if invalid:
-        return jsonify({
-            "error": f"invalid bucket(s): {sorted(invalid)!r}",
-        }), 400
+        return jsonify(
+            {
+                "error": f"invalid bucket(s): {sorted(invalid)!r}",
+            }
+        ), 400
 
     search = (request.args.get("search") or "").strip()
     sort = (request.args.get("sort") or "recent").strip()
     if sort not in _VALID_SORTS:
-        return jsonify({
-            "error": f"invalid sort: {sort!r}; must be one of {sorted(_VALID_SORTS)!r}",
-        }), 400
+        return jsonify(
+            {
+                "error": f"invalid sort: {sort!r}; must be one of {sorted(_VALID_SORTS)!r}",
+            }
+        ), 400
 
     try:
         cursor = int(request.args.get("cursor") or 0)
@@ -197,8 +201,11 @@ def reciters(user):
     page = rows[cursor : cursor + limit]
     next_cursor = cursor + limit if cursor + limit < total else None
 
-    return _with_cache({
-        "reciters": page,
-        "total": total,
-        "next_cursor": next_cursor,
-    }, _LIST_CACHE)
+    return _with_cache(
+        {
+            "reciters": page,
+            "total": total,
+            "next_cursor": next_cursor,
+        },
+        _LIST_CACHE,
+    )

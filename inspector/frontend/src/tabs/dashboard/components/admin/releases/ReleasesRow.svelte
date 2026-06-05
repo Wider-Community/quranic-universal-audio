@@ -44,9 +44,9 @@
         /** Set to true while the row's Regenerate-TS button is racing the
          *  launch response; the parent toggles it to disable the row's action. */
         regenBusy?: boolean;
-        onPublish?: (slug: string) => void;
+        onPublish?: (_slug: string) => void;
         /** Re-run MFA alignment for a published (current/stale) reciter. */
-        onRegenerate?: (slug: string) => void;
+        onRegenerate?: (_slug: string) => void;
     }
     let { row, bucket, inFlightJob = null, busy = false,
           errorMessage = null, regenBusy = false, onPublish, onRegenerate }: Props = $props();

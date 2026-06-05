@@ -7,7 +7,6 @@ import sqlite3
 import pytest
 
 from qua_shared.schemas import Role
-
 from services import db
 from services.db import repo_access
 
@@ -26,21 +25,15 @@ def test_grant_resolve_find(fresh_db):
 
 def test_revoke_then_regrant(fresh_db):
     with db.transaction():
-        repo_access.grant_role(
-            hf_user_id="u1", login="alice", role=Role.MAINTAINER, granted_by="o"
-        )
+        repo_access.grant_role(hf_user_id="u1", login="alice", role=Role.MAINTAINER, granted_by="o")
     with db.transaction():
-        revoked = repo_access.revoke_role(
-            hf_user_id="u1", revoked_by="o", reason="left the team"
-        )
+        revoked = repo_access.revoke_role(hf_user_id="u1", revoked_by="o", reason="left the team")
     assert revoked is not None and not revoked.is_active()
     assert repo_access.resolve_role("u1") == Role.CONTRIBUTOR
     assert repo_access.find_member("u1") is None
     # re-grant after revoke is allowed (partial-unique only blocks active dupes)
     with db.transaction():
-        repo_access.grant_role(
-            hf_user_id="u1", login="alice", role=Role.OWNER, granted_by="o"
-        )
+        repo_access.grant_role(hf_user_id="u1", login="alice", role=Role.OWNER, granted_by="o")
     assert repo_access.resolve_role("u1") == Role.OWNER
     # snapshot keeps both the revoked and the active assignment
     members = repo_access.snapshot().members
@@ -50,21 +43,15 @@ def test_revoke_then_regrant(fresh_db):
 
 def test_double_active_grant_blocked(fresh_db):
     with db.transaction():
-        repo_access.grant_role(
-            hf_user_id="u1", login="alice", role=Role.MAINTAINER, granted_by="o"
-        )
+        repo_access.grant_role(hf_user_id="u1", login="alice", role=Role.MAINTAINER, granted_by="o")
     with pytest.raises(sqlite3.IntegrityError):
         with db.transaction():
-            repo_access.grant_role(
-                hf_user_id="u1", login="alice", role=Role.OWNER, granted_by="o"
-            )
+            repo_access.grant_role(hf_user_id="u1", login="alice", role=Role.OWNER, granted_by="o")
 
 
 def test_update_login_and_role(fresh_db):
     with db.transaction():
-        repo_access.grant_role(
-            hf_user_id="u1", login="alice", role=Role.MAINTAINER, granted_by="o"
-        )
+        repo_access.grant_role(hf_user_id="u1", login="alice", role=Role.MAINTAINER, granted_by="o")
     with db.transaction():
         m = repo_access.update_role(hf_user_id="u1", login="alice2", role=Role.OWNER)
     assert m is not None and m.login == "alice2" and m.role == Role.OWNER
@@ -74,13 +61,15 @@ def test_update_login_and_role(fresh_db):
 def test_ensure_user_idempotent_keeps_first_seen(fresh_db):
     with db.transaction():
         repo_access.ensure_user("u1", login="alice")
-    first = db.get_conn().execute(
-        "SELECT first_seen FROM users WHERE hf_user_id='u1'"
-    ).fetchone()[0]
+    first = (
+        db.get_conn().execute("SELECT first_seen FROM users WHERE hf_user_id='u1'").fetchone()[0]
+    )
     with db.transaction():
         repo_access.ensure_user("u1", login="alice-renamed")
-    row = db.get_conn().execute(
-        "SELECT first_seen, login_cache FROM users WHERE hf_user_id='u1'"
-    ).fetchone()
-    assert row[0] == first              # first_seen preserved
-    assert row[1] == "alice-renamed"    # login_cache refreshed
+    row = (
+        db.get_conn()
+        .execute("SELECT first_seen, login_cache FROM users WHERE hf_user_id='u1'")
+        .fetchone()
+    )
+    assert row[0] == first  # first_seen preserved
+    assert row[1] == "alice-renamed"  # login_cache refreshed

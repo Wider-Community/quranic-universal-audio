@@ -7,7 +7,7 @@ alignment pipeline writes files to ``reciters/<slug>/``, it fires
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 
@@ -30,17 +30,15 @@ from qua_shared.schemas import (
 @pytest.fixture
 def auto_detect_env(tmp_path, monkeypatch):
     from services import auto_detect as auto_detect_service
-    from services import catalog as catalog_service
     from services import hf_bucket as _hf_bucket
-    from services import pending_requests as pending_requests_service
     from services import state as state_service
-    from services import storage_paths
 
     monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))
     backend = _hf_bucket.FilesystemBackend(tmp_path)
     _hf_bucket.set_backend(backend)
 
     from tests.conftest import _seed_catalog
+
     _seed_catalog(
         vocab=Vocab(
             riwayat=[Riwayah(slug="hafs", short="H", name="Hafs")],
@@ -59,7 +57,7 @@ def auto_detect_env(tmp_path, monkeypatch):
                 channel="ch1",
                 audio_category=AudioCategory.BY_SURAH,
                 chapter_count=114,
-                added_at=datetime.now(timezone.utc),
+                added_at=datetime.now(UTC),
                 added_by_hf_id="seed",
             ),
         ],
@@ -72,8 +70,9 @@ def auto_detect_env(tmp_path, monkeypatch):
     _hf_bucket.reset_backend()
 
 
-def _seed_state(backend, *, slug: str, state: ReciterState):
+def _seed_state(*, slug: str, state: ReciterState):
     from tests.conftest import _seed_state as _seed
+
     _seed(slug, state=state.value, reciter_id="rec_a")
 
 
@@ -88,9 +87,12 @@ def test_hydrate_initial_seen_seeds_from_wip(auto_detect_env):
     # up the directory entry.
     backend.write_json_atomic("reciters/preexisting_slug/marker.json", {"x": 1})
     svc.hydrate_initial_seen()
+    # Verify the side effect directly: the slug landed in the seen set.
+    # Without this assertion the test passes for the wrong reason — reconcile
+    # would return 0 whether or not the seen set was populated, because the
+    # slug has no AWAITING_ALIGNMENT state row to advance.
+    assert "preexisting_slug" in svc._seen_slugs
     fired = svc.reconcile_once()
-    # preexisting_slug is in the seen set + no state row exists in
-    # AWAITING_ALIGNMENT anyway, so nothing fires.
     assert fired == 0
 
 
@@ -100,7 +102,7 @@ def test_hydrate_initial_seen_catches_up_stuck_awaiting_alignment(auto_detect_en
     the row would stay stuck forever (reconcile_once only sees NEW slugs).
     """
     svc, state_service, backend = auto_detect_env
-    _seed_state(backend, slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
+    _seed_state(slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
     backend.write_json_atomic("reciters/rec_a/segments.json", {"x": 1})
 
     svc.hydrate_initial_seen()
@@ -120,7 +122,7 @@ def test_hydrate_initial_seen_catches_up_stuck_awaiting_alignment(auto_detect_en
 
 def test_reconcile_fires_on_new_wip_folder_for_awaiting_alignment(auto_detect_env):
     svc, state_service, backend = auto_detect_env
-    _seed_state(backend, slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
+    _seed_state(slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
 
     # Simulate the alignment pipeline writing files.
     backend.write_json_atomic("reciters/rec_a/detailed.json", {"entries": []})
@@ -134,7 +136,7 @@ def test_reconcile_fires_on_new_wip_folder_for_awaiting_alignment(auto_detect_en
 
 def test_reconcile_skips_slug_not_in_awaiting_alignment(auto_detect_env):
     svc, state_service, backend = auto_detect_env
-    _seed_state(backend, slug="rec_a", state=ReciterState.CATALOGUED)
+    _seed_state(slug="rec_a", state=ReciterState.CATALOGUED)
     backend.write_json_atomic("reciters/rec_a/detailed.json", {"entries": []})
 
     fired = svc.reconcile_once()
@@ -146,7 +148,7 @@ def test_reconcile_skips_slug_not_in_awaiting_alignment(auto_detect_env):
 
 def test_reconcile_idempotent_across_calls(auto_detect_env):
     svc, state_service, backend = auto_detect_env
-    _seed_state(backend, slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
+    _seed_state(slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
     backend.write_json_atomic("reciters/rec_a/detailed.json", {"entries": []})
 
     fired_first = svc.reconcile_once()
@@ -185,11 +187,11 @@ def test_reconcile_applies_pending_edits(auto_detect_env):
     """End-to-end: a pending request gets applied to the catalog when the
     pipeline drops files for the slug."""
     svc, state_service, backend = auto_detect_env
+    from qua_shared.schemas import Actor, ProposedEdits, Role
     from services import catalog as catalog_service
     from services import pending_requests as pending_requests_service
-    from qua_shared.schemas import Actor, ProposedEdits, Role
 
-    _seed_state(backend, slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
+    _seed_state(slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
     pending_requests_service.submit(
         "rec_a",
         requester=Actor(hf_user_id="u-req", login_at_time="alice", role=Role.CONTRIBUTOR),
@@ -213,7 +215,12 @@ def test_reconcile_applies_pending_edits(auto_detect_env):
 def test_system_actor_is_owner_role(auto_detect_env):
     """The synthetic actor must carry owner role so it passes the catalog
     edit gates triggered by ``apply_and_archive_completed``."""
+    from qua_shared.schemas import Role
+
     svc, _, _ = auto_detect_env
     assert svc.SYSTEM_ACTOR.hf_user_id == "system"
-    # Role is stored as a string due to use_enum_values=True on Actor.
-    assert str(svc.SYSTEM_ACTOR.role) == "owner"
+    # Actor uses ``use_enum_values=True``, so the role is persisted as
+    # ``Role.OWNER.value``. Compare against ``.value`` directly so a config
+    # flip to use_enum_values=False fails the test instead of silently
+    # passing via ``str(Role.OWNER)`` returning a different shape.
+    assert svc.SYSTEM_ACTOR.role == Role.OWNER.value

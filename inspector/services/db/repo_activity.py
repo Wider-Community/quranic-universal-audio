@@ -15,10 +15,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from . import _serde
+from . import _serde, repo_access
 from .connection import get_conn
-from . import repo_access
-
 
 # ---- global tombstones ----
 
@@ -48,13 +46,14 @@ def undelete(content_hash: str) -> None:
 
 
 def is_deleted(content_hash: str) -> bool:
-    return get_conn().execute(
-        "SELECT 1 FROM activity_tombstones WHERE audit_content_hash = ?", (content_hash,)
-    ).fetchone() is not None
+    return (
+        get_conn()
+        .execute("SELECT 1 FROM activity_tombstones WHERE audit_content_hash = ?", (content_hash,))
+        .fetchone()
+        is not None
+    )
 
 
 def deleted_set() -> set[str]:
-    rows = get_conn().execute(
-        "SELECT audit_content_hash FROM activity_tombstones"
-    ).fetchall()
+    rows = get_conn().execute("SELECT audit_content_hash FROM activity_tombstones").fetchall()
     return {r[0] for r in rows}

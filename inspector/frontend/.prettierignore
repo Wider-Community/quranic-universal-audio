@@ -1,0 +1,3 @@
+# Codegen output owned by `scripts/codegen/regen_fe_types.py` (mirrors the ESLint ignore).
+src/lib/types/generated/
+dist/

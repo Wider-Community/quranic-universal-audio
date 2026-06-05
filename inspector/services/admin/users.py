@@ -25,7 +25,6 @@ from qua_shared.schemas import (
     AdminUserStats,
     Role,
 )
-
 from services.auth import access as access_service
 from services.db import _serde, repo_access, repo_admin_users
 from services.db.connection import current_db_seq
@@ -63,9 +62,7 @@ def set_role(
 
     losing_owner = current == Role.OWNER and target_role != Role.OWNER
     if losing_owner and repo_access.active_owner_count() <= 1:
-        raise LastOwnerError(
-            "You can't remove the last owner — promote another owner first."
-        )
+        raise LastOwnerError("You can't remove the last owner — promote another owner first.")
 
     reason = f"Role set to {target_role.value} via admin dashboard"
 
@@ -135,9 +132,7 @@ def list_users() -> dict:
     )
     payload = AdminUsersResponse(
         users=rows,
-        summary=AdminUsersSummary(
-            registered=len(rows), active_this_week=active_this_week
-        ),
+        summary=AdminUsersSummary(registered=len(rows), active_this_week=active_this_week),
     ).model_dump(mode="json")
 
     cache.set_admin_users_cache(db_seq, payload)

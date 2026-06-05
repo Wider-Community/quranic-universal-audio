@@ -10,12 +10,13 @@ not a script.
 
 ```
 Imported by app/job runtime?                 → it's a package: qua_shared/ or qua_jobs/
-Run ONLY inside a GitHub Action (reads the   → .github/scripts/
-  Actions env / emits release+badge artifacts)?
-Otherwise it's an operational CLI            → scripts/<function>/ :
+Run ONLY inside a GitHub Action AND meaningless        → .github/scripts/
+  standalone (reads $GITHUB_* / posts PR comments)?      (currently none)
+Otherwise it's an operational CLI                      → scripts/<function>/ :
   deploy/       ship the app / build + boot the image
   devenv/       set up a contributor / fixtures
-  codegen/      generate committed artifacts (FE types)
+  codegen/      regenerate committed artifacts (FE types, README badges)
+  release/      build dataset / GitHub-release distribution artifacts
   bucket/       read/write the HF bucket (raw CLI + reciter round-trip)
   backfills/    re-runnable data catch-up / one-off data fixes
   diagnostics/  measure / assert (no mutation)
@@ -40,6 +41,11 @@ no-op-or-error by design. Idempotent `backfill_*`/`purge_*`/`convert_*` stay in
 
 ### `codegen/`
 - `regen_fe_types.py` — regenerate the FE TypeScript types from `qua_shared/schemas/` (CI-checked)
+- `update_readme_badges.py` — regenerate the root README stats badges from the prod bucket (daily cron)
+
+### `release/`
+- `package_release.py` — build per-reciter `.zip` GitHub-Release assets from `data/` (manual dispatch)
+- `build_reciter.py` — build/push the v1 HF audio dataset (manual; v2 publishing is `qua_jobs/publish_hf`)
 
 ### `bucket/`
 - `bucket_ls / stat / cat / put / rm / cp / sync / diff.py` — raw HF-bucket CLI toolkit (`--bucket dev|prod|aligner`, `--yes-prod` to mutate prod)

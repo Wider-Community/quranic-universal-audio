@@ -10,19 +10,18 @@ jobs:
   frontend-checks:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+      # pull-requests: write lets reviewdog post review suggestions on PRs.
+      pull-requests: write
     defaults:
       run:
         working-directory: inspector/frontend
     steps:
       - uses: actions/checkout@v4
-        with:
-          # Need full ref so we can push back; token default is fine for branch pushes
-          token: ${{ github.token }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
           cache-dependency-path: inspector/frontend/package-lock.json
 
@@ -30,24 +29,36 @@ jobs:
         run: npm ci
 
       - name: Autofix lint (import sort + other auto-fixable rules)
-        # Only push back on branch pushes — not PRs (ref starts with refs/pull/)
-        run: |
-          npx eslint --fix src/ || true
-          if ! git diff --quiet; then
-            if [[ "${{ github.ref }}" == refs/heads/* ]]; then
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
-              git add -A
-              git commit -m "style(inspector-frontend): autofix import sort [skip ci]"
-              git push origin HEAD:${{ github.ref_name }} || echo "Push blocked (protected branch) — fixes applied in-place only"
-            fi
-          fi
+        # Apply auto-fixes in-place so the diff can be surfaced as PR
+        # suggestions below. We NEVER commit/push back to the branch — on
+        # pull_request events the diff becomes reviewdog review suggestions;
+        # on branch pushes it is simply discarded.
+        run: npx eslint --fix src/ || true
 
-      - name: Lint, typecheck, test, build
+      - name: Suggest eslint --fix changes (PR only)
+        if: github.event_name == 'pull_request'
+        # Advisory only — surfaces eslint --fix as PR suggestions. A reviewdog
+        # infra hiccup (e.g. "shallow file has changed" during its git fetch on
+        # the shallow checkout) must never gate the build; the real gates are
+        # the lint/check/test/build step below.
+        continue-on-error: true
+        uses: reviewdog/action-suggester@v1
+        with:
+          tool_name: eslint
+          # Limit the suggester to the frontend tree it just fixed.
+          filter_mode: diff_context
+
+      - name: Discard autofix diff before checks
+        # The checks below run against the committed sources; eslint's own
+        # `npm run lint` step re-checks for any non-auto-fixable issues. Reset
+        # so a clean checkout drives lint/check/test/build deterministically.
+        run: git checkout -- src/ || true
+
+      - name: Lint, typecheck, test (with coverage), build
         run: |
           npm run lint
           npm run check
-          npm run test
+          npm run test:coverage
           npm run build
 
   backend-checks:
@@ -79,7 +90,20 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/inspector
-        run: python -m pytest qua_shared/tests
+        run: python -m pytest qua_shared/tests --cov=qua_shared --cov-report=term-missing:skip-covered --no-cov-on-fail
+
+      - name: Install ruff
+        # Pinned so CI matches the version landed alongside the ruleset.
+        working-directory: ${{ github.workspace }}
+        run: python -m pip install ruff==0.15.12
+
+      - name: Ruff lint (blocking)
+        working-directory: ${{ github.workspace }}
+        run: ruff check --output-format=github inspector qua_shared qua_jobs scripts
+
+      - name: Ruff format check (blocking)
+        working-directory: ${{ github.workspace }}
+        run: ruff format --check inspector qua_shared qua_jobs scripts
 
   schema-codegen-check:
     # Verifies inspector/frontend/src/lib/types/generated/schemas.ts is in
@@ -99,13 +123,17 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
           cache-dependency-path: inspector/frontend/package-lock.json
 
       - name: Install codegen deps
         run: |
-          pip install -r inspector/requirements-dev.txt
+          # Install runtime requirements alongside dev requirements so codegen
+          # runs against the same pinned pydantic the deployed image + the BE
+          # tests use (prevents silent JSON-schema drift if
+          # pydantic-to-typescript's loose dep resolves to an older pydantic).
+          pip install -r inspector/requirements.txt -r inspector/requirements-dev.txt
           cd inspector/frontend && npm ci
 
       - name: Regenerate FE types
@@ -119,6 +147,34 @@ jobs:
             echo "::error::and commit the result."
             exit 1
           fi
+
+  type-check:
+    # NON-BLOCKING (continue-on-error) pyright type check, intentionally scoped
+    # to the Pydantic typed core (qua_shared/schemas/) in basic mode. Run via
+    # `npx pyright` so no Python type-checker dependency is added — node 24 is
+    # available. Repo-wide basic mode is ~636 errors of flat-import resolution
+    # noise; this narrow scope reports real schema-typing issues without
+    # gating the build. Flip continue-on-error off (blocking) once the handful
+    # of qua_shared/schemas/ errors are cleared. See CLAUDE.md / rollout notes.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Pyright (basic, qua_shared/schemas only)
+        run: >-
+          npx -y pyright
+          --pythonversion 3.11
+          --level error
+          qua_shared/schemas
 
   scripts-layout-guard:
     # Stops the old scattered-scripts layout from creeping back. Imported-at-runtime
@@ -139,3 +195,22 @@ jobs:
             exit 1
           fi
           echo "scripts layout OK"
+
+  services-flask-free:
+    # services/ business logic stays framework-agnostic. The sole exception is
+    # services/auth/auth.py, whose authlib flask_client OAuth integration is
+    # irreducible. Any other flask/authlib import under services/ is a layering
+    # violation — push it up to routes/ or down to adapters/. See CLAUDE.md +
+    # docs/reference/architecture.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No Flask in services (except auth.py)
+        run: |
+          bad=$(git grep -nE '^[[:space:]]*(from|import)[[:space:]]+(flask|authlib)' -- 'inspector/services/' ':!inspector/services/auth/auth.py' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Flask/authlib imported in services/ outside the auth.py allow-list. Move it to routes/ or adapters/, or extend the allow-list in architecture.md if genuinely irreducible."
+            echo "$bad"
+            exit 1
+          fi
+          echo "services Flask-free OK"

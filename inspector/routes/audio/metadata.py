@@ -4,7 +4,7 @@ import logging
 
 from flask import Blueprint, jsonify
 
-from services import cache, storage_paths
+from services import audio_fetch, cache, storage_paths
 from services.hf_bucket import StorageNotFound, get_backend
 from services.quran_foundation import config as qf_config
 from services.quran_foundation import content as qf_content
@@ -61,6 +61,12 @@ def audio_surahs(category, source, slug):
     show full chapter length before the browser fetches MP3 headers — the
     ``BottomPlayer`` runs ``<audio preload="none">`` and would otherwise
     show ``0:00`` until first play.
+
+    When the sidecar has a null/missing duration for a chapter (e.g. probed
+    before the manifest carried durations), falls back to the duration baked
+    into the slim peaks header (``reciters/<slug>/peaks/<ch>.json.gz``) via
+    ``audio_fetch.read_prefetched_peaks_duration_ms``. Stays ``None`` only
+    when peaks are also absent.
     """
     key = f"{category}/{source}/{slug}"
     cached = cache.get_audio_url_cache(key)
@@ -81,13 +87,18 @@ def audio_surahs(category, source, slug):
                 continue
             duration_sec = v.get("duration_sec")
             duration_ms = (
-                int(round(duration_sec * 1000))
-                if isinstance(duration_sec, (int, float))
-                else None
+                int(round(duration_sec * 1000)) if isinstance(duration_sec, (int, float)) else None
             )
-            surahs[k] = {"url": url, "duration_ms": duration_ms}
         elif isinstance(v, str):
-            surahs[k] = {"url": v, "duration_ms": None}
+            url, duration_ms = v, None
+        else:
+            continue
+        if duration_ms is None:
+            # Manifest never carried a length for this chapter — fall back to
+            # the duration baked into the slim peaks header so the dashboard
+            # scrubber shows a real length instead of 0:00.
+            duration_ms = audio_fetch.read_prefetched_peaks_duration_ms(slug, url)
+        surahs[k] = {"url": url, "duration_ms": duration_ms}
     _apply_qf_routing(source, slug, surahs)
     cache.set_audio_url_cache(key, surahs)
     return jsonify({"surahs": surahs})

@@ -8,7 +8,6 @@ import {
 } from '../claim-confirm-modal';
 
 afterEach(() => {
-    closeClaimConfirm();
     claimConfirmModal.set({ open: false, slug: null, onClaimed: null });
 });
 

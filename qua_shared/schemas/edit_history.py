@@ -21,7 +21,6 @@ inspector-data-storage.md §8.
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -33,22 +32,39 @@ from .audit import Actor
 # May 2026). Stripped on read with an INFO log; writers must never emit.
 _OP_DEAD_FIELDS: set[str] = {
     # Migration #5 — per-op timestamps explicitly banned
-    "applied_at_utc", "ready_at_utc", "started_at_utc",
+    "applied_at_utc",
+    "ready_at_utc",
+    "started_at_utc",
     # v1 pipeline shape (replaced by op_type + targets_before/after)
-    "affected_chapters", "command", "merge_direction",
-    "op_context_category", "patch", "snapshots", "targetSegmentIndex",
+    "affected_chapters",
+    "command",
+    "merge_direction",
+    "op_context_category",
+    "patch",
+    "snapshots",
+    "targetSegmentIndex",
     # v0 user-edit op aliases (replaced by kind/op_type)
-    "type", "value", "field", "op",
+    "type",
+    "value",
+    "field",
+    "op",
 }
 
 # Legacy batch-level fields. The v1 genesis shape used a different vocab
 # (``record_type=genesis`` + ``audio_source`` + ``extraction_params``);
 # v0 used ``save_mode`` + ``chapter`` per-save. Both are stripped on read.
 _BATCH_DEAD_FIELDS: set[str] = {
-    "audio_source", "record_type", "created_at_utc", "extraction_params",
-    "file_hash_after", "reciter",
+    "audio_source",
+    "record_type",
+    "created_at_utc",
+    "extraction_params",
+    "file_hash_after",
+    "reciter",
     # short-lived FE-only metadata that leaked into save payloads
-    "batch_pill", "batch_title", "child_edits", "parent_label",
+    "batch_pill",
+    "batch_title",
+    "child_edits",
+    "parent_label",
     # v0 save_mode (replaced by batch_type)
     "save_mode",
 }
@@ -169,11 +185,7 @@ def parse_edit_history_line(raw: str | bytes) -> EditHistoryBatch | None:
         return None
     obj = json.loads(text)
 
-    if (
-        obj.get("type") == "genesis"
-        or obj.get("record_type") == "genesis"
-        or "batch_id" not in obj
-    ):
+    if obj.get("type") == "genesis" or obj.get("record_type") == "genesis" or "batch_id" not in obj:
         return None
 
     return EditHistoryBatch.model_validate(obj)

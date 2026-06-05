@@ -6,6 +6,7 @@ Covers:
 - ``GET /api/me`` stamps ``last_entry_at`` for a signed-in user and doesn't
   rewrite it on an immediate second call (debounce).
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -19,9 +20,11 @@ from services.db import _serde, repo_access
 
 
 def _last(hf_user_id: str, col: str):
-    row = db.get_conn().execute(
-        f"SELECT {col} FROM users WHERE hf_user_id = ?", (hf_user_id,)
-    ).fetchone()
+    row = (
+        db.get_conn()
+        .execute(f"SELECT {col} FROM users WHERE hf_user_id = ?", (hf_user_id,))
+        .fetchone()
+    )
     return row[0] if row else None
 
 

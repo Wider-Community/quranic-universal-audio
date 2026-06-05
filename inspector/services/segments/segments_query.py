@@ -6,12 +6,12 @@ No Flask imports -- functions accept parameters and return plain dicts/lists.
 import statistics
 
 from config import LOW_CONFIDENCE_RED, LOW_CONFIDENCE_THRESHOLD
-from services.storage import cache
 from services.audio.audio_meta import (
     chapter_bitrate_kbps_for_reciter,
     is_vbr,
     vbr_chapters_for_reciter,
 )
+from services.storage import cache
 from services.storage.data_loader import (
     get_word_counts,
     load_detailed,
@@ -20,8 +20,7 @@ from services.storage.data_loader import (
 from utils.references import chapter_from_ref
 
 
-def get_chapter_data(reciter: str, chapter: int,
-                     verse_filter: str | None = None) -> dict | None:
+def get_chapter_data(reciter: str, chapter: int, verse_filter: str | None = None) -> dict | None:
     """Return segments, audio URL, summary, and issues for a chapter.
 
     Returns ``None`` if no matching entries exist for the ``(reciter, chapter)``
@@ -80,7 +79,9 @@ def get_chapter_data(reciter: str, chapter: int,
     silence_durations = []
     for i in range(len(segments) - 1):
         if segments[i]["entry_idx"] == segments[i + 1]["entry_idx"]:
-            gap = segments[i + 1]["time_start"] - segments[i]["time_end"] + pad_left_ms + pad_right_ms
+            gap = (
+                segments[i + 1]["time_start"] - segments[i]["time_end"] + pad_left_ms + pad_right_ms
+            )
             if gap > 0:
                 silence_durations.append(gap)
     total_silence = sum(silence_durations)

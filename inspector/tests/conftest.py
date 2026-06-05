@@ -19,6 +19,7 @@ test suite:
   Phase 1 lands the registry, this constant flips to read from
   ``inspector.services.validation.registry.IssueRegistry.keys()``.
 """
+
 from __future__ import annotations
 
 import json
@@ -27,77 +28,79 @@ import shutil
 import sys
 from pathlib import Path
 
-import pytest
+# Seed the session-signing secret BEFORE any test module or fixture imports
+# inspector code that touches ``flask.session`` or signs cookies. ``app.py``
+# tolerates a missing secret (warns + 503s OAuth routes) but anything that
+# signs a cookie inside a test needs a value. Centralising the setdefault here
+# means individual test files don't have to repeat the bootstrap.
+os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
+import pytest  # noqa: E402
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "segments"
 EXPECTED_DIR = FIXTURES_DIR / "expected"
 
 
 # Category lists derive from ``services.validation.registry.IssueRegistry``
-# in registry-declared accordion order (Appendix A). The fallback literals
-# match the registry verbatim so the module remains importable even before
-# the validation package is available on ``sys.path``.
-try:
-    from services.validation.registry import (  # type: ignore
-        ALL_CATEGORIES as _REG_ALL,
-        PER_SEGMENT_CATEGORIES as _REG_SEG,
-        PER_VERSE_CATEGORIES as _REG_VERSE,
-        PER_CHAPTER_CATEGORIES as _REG_CHAPTER,
-        CAN_IGNORE_CATEGORIES as _REG_CAN,
-        PERSISTS_IGNORE_CATEGORIES as _REG_PERSIST,
-        AUTO_SUPPRESS_CATEGORIES as _REG_AUTO,
-    )
-    ALL_CATEGORIES = list(_REG_ALL)
-    PER_SEGMENT_CATEGORIES = list(_REG_SEG)
-    PER_VERSE_CATEGORIES = list(_REG_VERSE)
-    PER_CHAPTER_CATEGORIES = list(_REG_CHAPTER)
-    CAN_IGNORE_CATEGORIES = list(_REG_CAN)
-    PERSISTS_IGNORE_CATEGORIES = list(_REG_PERSIST)
-    AUTO_SUPPRESS_CATEGORIES = list(_REG_AUTO)
-except Exception:
-    ALL_CATEGORIES = [
-        "failed", "missing_verses", "missing_words", "structural_errors",
-        "low_confidence", "repetitions", "audio_bleeding", "boundary_adj",
-        "cross_verse", "qalqala", "muqattaat",
-    ]
-    PER_SEGMENT_CATEGORIES = [
-        "failed", "low_confidence", "repetitions", "audio_bleeding",
-        "boundary_adj", "cross_verse", "qalqala", "muqattaat",
-    ]
-    PER_VERSE_CATEGORIES = ["missing_verses", "missing_words"]
-    PER_CHAPTER_CATEGORIES = ["structural_errors"]
-    CAN_IGNORE_CATEGORIES = [
-        "low_confidence", "repetitions", "audio_bleeding", "boundary_adj",
-        "cross_verse",
-    ]
-    PERSISTS_IGNORE_CATEGORIES = list(CAN_IGNORE_CATEGORIES)
-    AUTO_SUPPRESS_CATEGORIES = [
-        "failed", "missing_verses", "structural_errors", "low_confidence",
-        "repetitions", "audio_bleeding", "boundary_adj", "cross_verse",
-    ]
+# in registry-declared accordion order (Appendix A). Imported directly so
+# the suite fails loudly if the registry module can't be imported.
+from datetime import UTC
+
+from services.validation.registry import (  # noqa: E402
+    ALL_CATEGORIES as _REG_ALL,
+)
+from services.validation.registry import (
+    AUTO_SUPPRESS_CATEGORIES as _REG_AUTO,
+)
+from services.validation.registry import (
+    CAN_IGNORE_CATEGORIES as _REG_CAN,
+)
+from services.validation.registry import (
+    PER_CHAPTER_CATEGORIES as _REG_CHAPTER,
+)
+from services.validation.registry import (
+    PER_SEGMENT_CATEGORIES as _REG_SEG,
+)
+from services.validation.registry import (
+    PER_VERSE_CATEGORIES as _REG_VERSE,
+)
+from services.validation.registry import (
+    PERSISTS_IGNORE_CATEGORIES as _REG_PERSIST,
+)
+
+ALL_CATEGORIES = list(_REG_ALL)
+PER_SEGMENT_CATEGORIES = list(_REG_SEG)
+PER_VERSE_CATEGORIES = list(_REG_VERSE)
+PER_CHAPTER_CATEGORIES = list(_REG_CHAPTER)
+CAN_IGNORE_CATEGORIES = list(_REG_CAN)
+PERSISTS_IGNORE_CATEGORIES = list(_REG_PERSIST)
+AUTO_SUPPRESS_CATEGORIES = list(_REG_AUTO)
 
 
 def _read_json(path: Path) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
 @pytest.fixture
 def load_fixture():
     """Return a function that loads ``<name>.detailed.json`` from the fixtures dir."""
+
     def _loader(name: str) -> dict:
         path = FIXTURES_DIR / f"{name}.detailed.json"
         return _read_json(path)
+
     return _loader
 
 
 @pytest.fixture
 def load_expected():
     """Return a function that loads ``expected/<name>.<kind>.json``."""
+
     def _loader(name: str, kind: str) -> dict:
         path = EXPECTED_DIR / f"{name}.{kind}.json"
         return _read_json(path)
+
     return _loader
 
 
@@ -105,6 +108,7 @@ def load_expected():
 def flask_client():
     """Flask test client over the module-level app in ``inspector/app.py``."""
     from app import app
+
     app.config["TESTING"] = True
     return app.test_client()
 
@@ -191,11 +195,11 @@ def _seed_state(
     ``state="under_review"`` with an assignee."""
     from datetime import datetime, timezone
 
+    from qua_shared.schemas import ReciterState, Visibility
     from services import db
     from services.db import repo_access, repo_claims, repo_state
-    from qua_shared.schemas import ReciterState, Visibility
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     st = state if isinstance(state, ReciterState) else ReciterState(state)
     vis = visibility if isinstance(visibility, Visibility) else Visibility(visibility)
     # Schema CHECK: discarded ⇒ visibility_reason NOT NULL.
@@ -205,9 +209,7 @@ def _seed_state(
         # Only seed the default FK chain (vocab+reciter+delivery) when the
         # delivery doesn't already exist — tests that pre-insert a custom
         # catalog must not get the default vocab merged in.
-        if conn.execute(
-            "SELECT 1 FROM deliveries WHERE slug = ?", (slug,)
-        ).fetchone() is None:
+        if conn.execute("SELECT 1 FROM deliveries WHERE slug = ?", (slug,)).fetchone() is None:
             _seed_delivery_chain(conn, slug, reciter_id)
         repo_state.upsert_state(
             slug,
@@ -237,9 +239,9 @@ def _seed_catalog(*, reciters=(), deliveries=(), vocab=None) -> None:
     Default vocab covers the ``_seed_state`` delivery defaults
     (hafs/mur/src/ch). Pass a custom ``Vocab`` when deliveries reference other
     slugs."""
+    from qua_shared.schemas import Channel, Riwayah, Source, Style, Vocab
     from services import db
     from services.db import repo_catalog
-    from qua_shared.schemas import Channel, Riwayah, Source, Style, Vocab
 
     if vocab is None:
         vocab = Vocab(
@@ -260,15 +262,18 @@ def _seed_catalog(*, reciters=(), deliveries=(), vocab=None) -> None:
 def _seed_role(hf_user_id: str, *, login: str = "test_user", role: str = "contributor") -> None:
     """Seed a member's role (CONTRIBUTOR is implicit → just ensure the user row
     for FK targets)."""
+    from qua_shared.schemas import Role
     from services import db
     from services.db import repo_access
-    from qua_shared.schemas import Role
 
     with db.transaction():
         repo_access.ensure_user(hf_user_id, login=login)
         if role != "contributor":
             repo_access.grant_role(
-                hf_user_id=hf_user_id, login=login, role=Role(role), granted_by="test-seed",
+                hf_user_id=hf_user_id,
+                login=login,
+                role=Role(role),
+                granted_by="test-seed",
             )
 
 
@@ -308,6 +313,7 @@ def signed_in_client(monkeypatch):
         monkeypatch.setenv("INSPECTOR_SESSION_SECRET", secrets.token_hex(32))
 
     from app import app
+
     from services import auth as auth_service
 
     app.config["TESTING"] = True
@@ -371,6 +377,7 @@ _SEG_CACHE_NAMES = (
     "_seg_split_group_index",
     "_seg_edit_history",
     "_seg_history_peaks",
+    "_seg_history_peaks_response",
     "_seg_validate_result",
     "_seg_stats_result",
 )
@@ -411,6 +418,7 @@ def _invalidate_seg_caches(reciter: str | None = None):
     # entries pin a stale chapter→URL map across tests.
     try:
         from services.audio import audio_meta as _audio_meta
+
         _audio_meta._clear_for_test()
     except Exception:  # noqa: BLE001
         pass
@@ -455,6 +463,7 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         """
         # Seed a state row so lifecycle-gated routes (lock/save/undo) resolve.
         from services.db import repo_state as _repo_state
+
         if not _repo_state.exists(reciter):
             if under_review_for is None:
                 _seed_state(reciter, state="awaiting_review")
@@ -487,10 +496,10 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         # Fixtures don't ship a pipeline_meta; seed an empty one so tests
         # exercise the post-migration code path without hitting hard-fail.
         from qua_shared.schemas import PipelineMeta
+
         pipeline_meta_doc = PipelineMeta(
             schema_version=1,
-            generated_at=datetime.now(timezone.utc)
-                .isoformat(timespec="seconds").replace("+00:00", "Z"),
+            generated_at=datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
             deleted_basmala_chapters=[],
         ).model_dump(mode="json")
         backend.write_json_atomic(
@@ -527,6 +536,7 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
         hand-author their own ``detailed.json`` and just need the lock
         decorator to pass."""
         from services.db import repo_state as _repo_state
+
         if _repo_state.exists(reciter):
             return
         _seed_state(
@@ -536,13 +546,17 @@ def tmp_reciter_dir(tmp_path, monkeypatch):
             assignee_login="test_user",
         )
 
-    yield type("TmpReciter", (), {
-        "root": tmp_path / "reciters",
-        "install": staticmethod(_install),
-        "seed_under_review": staticmethod(_seed_under_review),
-        "data_dir": tmp_path,
-        "backend": backend,
-    })
+    yield type(
+        "TmpReciter",
+        (),
+        {
+            "root": tmp_path / "reciters",
+            "install": staticmethod(_install),
+            "seed_under_review": staticmethod(_seed_under_review),
+            "data_dir": tmp_path,
+            "backend": backend,
+        },
+    )
 
     # Drop the backend singleton at teardown so the next test re-installs fresh.
     _hf_bucket.reset_backend()
@@ -565,17 +579,3 @@ def assert_keys_superset(
         f"Baseline had {sorted(baseline_keys)!r}; "
         f"live response has {sorted(response_keys)!r}."
     )
-
-
-@pytest.fixture
-def fresh_registry():
-    """Yield a snapshot of the issue registry, or ``None`` pre-Phase-1.
-
-    Tests that parametrize over the registry use ``ALL_CATEGORIES`` until
-    Phase 1 lands ``inspector.services.validation.registry``.
-    """
-    try:
-        from services.validation.registry import IssueRegistry  # type: ignore
-        return IssueRegistry
-    except Exception:
-        return None

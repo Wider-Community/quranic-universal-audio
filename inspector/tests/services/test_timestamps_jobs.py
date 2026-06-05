@@ -5,10 +5,12 @@ in ``job_status`` must backfill the captured log tail onto a logless terminal
 record (the original bug: logs only persisted while the record read
 running/unknown, so successful runs never saved logs → empty history).
 """
+
 from __future__ import annotations
 
 import sys
 import types
+from datetime import UTC
 
 import pytest
 
@@ -39,13 +41,22 @@ def fake_hf(monkeypatch):
 
 def test_backstop_backfills_logs_on_logless_succeeded_record(fake_hf, monkeypatch):
     # Job self-wrote a terminal record but with no logs (the bug case).
-    existing = {"job_id": "j1", "slug": "r", "type": "ts",
-                "status": "succeeded", "started_at": "t0", "ended_at": "t1",
-                "logs": []}
+    existing = {
+        "job_id": "j1",
+        "slug": "r",
+        "type": "ts",
+        "status": "succeeded",
+        "started_at": "t0",
+        "ended_at": "t1",
+        "logs": [],
+    }
     monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: dict(existing))
     written = {}
-    monkeypatch.setattr(timestamps_jobs, "_write_job_record",
-                        lambda rec: written.update(rec.model_dump(exclude_none=True)))
+    monkeypatch.setattr(
+        timestamps_jobs,
+        "_write_job_record",
+        lambda rec: written.update(rec.model_dump(exclude_none=True)),
+    )
 
     out = timestamps_jobs.job_status("r", "j1")
 
@@ -58,8 +69,7 @@ def test_backstop_backfills_logs_on_logless_succeeded_record(fake_hf, monkeypatc
 
 
 def test_backstop_noop_when_record_already_has_logs(fake_hf, monkeypatch):
-    existing = {"job_id": "j1", "slug": "r", "type": "ts",
-                "status": "succeeded", "logs": ["old"]}
+    existing = {"job_id": "j1", "slug": "r", "type": "ts", "status": "succeeded", "logs": ["old"]}
     monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: dict(existing))
     writes = []
     monkeypatch.setattr(timestamps_jobs, "_write_job_record", lambda rec: writes.append(rec))
@@ -71,12 +81,21 @@ def test_backstop_noop_when_record_already_has_logs(fake_hf, monkeypatch):
 
 def test_backstop_sets_terminal_status_on_running_record(fake_hf, monkeypatch):
     fake_hf["stage"] = "failed"
-    existing = {"job_id": "j1", "slug": "r", "type": "ts", "status": "running",
-                "started_at": "t0", "logs": []}
+    existing = {
+        "job_id": "j1",
+        "slug": "r",
+        "type": "ts",
+        "status": "running",
+        "started_at": "t0",
+        "logs": [],
+    }
     monkeypatch.setattr(timestamps_jobs, "read_job_record", lambda slug, jid: dict(existing))
     written = {}
-    monkeypatch.setattr(timestamps_jobs, "_write_job_record",
-                        lambda rec: written.update(rec.model_dump(exclude_none=True)))
+    monkeypatch.setattr(
+        timestamps_jobs,
+        "_write_job_record",
+        lambda rec: written.update(rec.model_dump(exclude_none=True)),
+    )
 
     out = timestamps_jobs.job_status("r", "j1")
 
@@ -95,8 +114,7 @@ def _seed_marked_ready(slug: str = "rec_a") -> None:
     """Seed an under_review reciter with an open, marked-ready claim."""
     from tests.conftest import _seed_state
 
-    _seed_state(slug, state="under_review", assignee_hf_id="u-rev",
-                marked_ready=True)
+    _seed_state(slug, state="under_review", assignee_hf_id="u-rev", marked_ready=True)
 
 
 def test_complete_publishes_marked_ready(monkeypatch):
@@ -115,7 +133,9 @@ def test_complete_publishes_marked_ready(monkeypatch):
     assert row.timestamps_job_ids == ["job-1"]
 
 
-def _seed_released_with_ledger(slug: str, *, ts_version: str, hf_version: str | None = None) -> None:
+def _seed_released_with_ledger(
+    slug: str, *, ts_version: str, hf_version: str | None = None
+) -> None:
     """Seed a released reciter with a current ``ts`` (and optional ``hf``)
     per_recitation_releases row — the post-first-publish shape a regen acts on."""
     from datetime import datetime, timezone
@@ -125,15 +145,22 @@ def _seed_released_with_ledger(slug: str, *, ts_version: str, hf_version: str | 
     from tests.conftest import _seed_state
 
     _seed_state(slug, state="released")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with db.transaction():
         repo_releases.insert_per_recitation_release(
-            track="ts", slug=slug, version=ts_version, produced_at=now,
-            produced_by="SYSTEM_ACTOR", produced_by_job_id=ts_version,
+            track="ts",
+            slug=slug,
+            version=ts_version,
+            produced_at=now,
+            produced_by="SYSTEM_ACTOR",
+            produced_by_job_id=ts_version,
         )
         if hf_version is not None:
             repo_releases.insert_per_recitation_release(
-                track="hf", slug=slug, version=hf_version, produced_at=now,
+                track="hf",
+                slug=slug,
+                version=hf_version,
+                produced_at=now,
                 produced_by="SYSTEM_ACTOR",
             )
 
@@ -175,8 +202,9 @@ def test_complete_regen_on_released_row(monkeypatch):
     # HF membership stamped stale so the operator is driven to re-publish.
     assert repo_releases.current_release("hf", "rec_a")["stale_since"] is not None
     # Audit trail carries the distinct regen event.
-    events = [r for r in repo_transitions.for_slug("rec_a")
-              if r["event"] == "reciter.ts_regenerated"]
+    events = [
+        r for r in repo_transitions.for_slug("rec_a") if r["event"] == "reciter.ts_regenerated"
+    ]
     assert len(events) == 1
     assert events[0]["payload"]["job_id"] == "job-new"
 
@@ -206,6 +234,10 @@ def test_complete_noop_when_not_marked_ready(monkeypatch):
     out = timestamps_jobs.complete_timestamps_job("rec_a", "job-1")
 
     assert out["released"] is False
+    # Pin the reason discriminator so a regression that takes a different
+    # noop branch (e.g. ``no shards``) doesn't silently masquerade as this
+    # one — the other noop tests assert their reason already.
+    assert out["reason"] == "not marked-ready / wrong state"
     assert state_service.get_row("rec_a").state.value == "under_review"
 
 
@@ -240,6 +272,9 @@ def test_complete_unknown_slug_is_noop():
     out = timestamps_jobs.complete_timestamps_job("nope", "job-1")
     assert out["released"] is False
     assert out["reason"] == "unknown slug"
+    # state must be None for unknown slugs — pin so a regression that
+    # synthesizes a phantom state can't slip through.
+    assert out["state"] is None
 
 
 # ---------------------------------------------------------------------------

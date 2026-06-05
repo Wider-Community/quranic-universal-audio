@@ -1,10 +1,9 @@
 """Admin override endpoints (/api/admin/*).
 
-Phase 4 backend surface. Each route is a thin wrapper around a single
-``state.transition`` call gated by maintainer+ role. State-machine
-handlers (`_h_force_released`, `_h_reassigned`,
-`_h_merge_rejected`) own all precondition + invariant checks; routes
-just authenticate, validate body shape, and dispatch.
+Each route is a thin wrapper around a single ``state.transition`` call gated
+by maintainer+ role. State-machine handlers (`_h_force_released`,
+`_h_reassigned`, `_h_merge_rejected`) own all precondition + invariant
+checks; routes just authenticate, validate body shape, and dispatch.
 
 The ``users/lookup`` endpoint is the only one that touches the network —
 a thin proxy over HF's public ``/api/users/<login>/overview`` so the
@@ -25,10 +24,8 @@ from routes._admin_helpers import (
     row_to_dict,
     validate_reason,
 )
-
 from services import hf_users
 from services import state as state_service
-
 from utils.decorators import require_same_origin
 
 logger = logging.getLogger(__name__)
@@ -77,10 +74,12 @@ def force_release(slug: str):
         actor=actor_for(user),
         reason=reason,
     )
-    return jsonify({
-        "row": row_to_dict(new_row),
-        "original_assignee_hf_id": original_assignee,
-    })
+    return jsonify(
+        {
+            "row": row_to_dict(new_row),
+            "original_assignee_hf_id": original_assignee,
+        }
+    )
 
 
 @admin_actions_bp.route("/claim/reassign/<slug>", methods=["POST"])
@@ -105,16 +104,20 @@ def reassign(slug: str):
         logger.warning("reassign: hf lookup failed: %s", e)
         return jsonify({"error": "HF user lookup failed; retry"}), 502
     if target is None:
-        return jsonify({
-            "error": f"unknown HF login {to_login!r}",
-            "unknown_login": to_login,
-        }), 400
+        return jsonify(
+            {
+                "error": f"unknown HF login {to_login!r}",
+                "unknown_login": to_login,
+            }
+        ), 400
 
     before = state_service.get_row(slug)
     if before is not None and before.assignee_hf_id == target.hf_user_id:
-        return jsonify({
-            "error": f"already assigned to {target.login!r}",
-        }), 400
+        return jsonify(
+            {
+                "error": f"already assigned to {target.login!r}",
+            }
+        ), 400
 
     new_row = state_service.transition(
         slug,
@@ -126,15 +129,17 @@ def reassign(slug: str):
         },
         reason=reason,
     )
-    return jsonify({
-        "row": row_to_dict(new_row),
-        "to_user": {
-            "hf_user_id": target.hf_user_id,
-            "login": target.login,
-            "fullname": target.fullname,
-            "avatar_url": target.avatar_url,
-        },
-    })
+    return jsonify(
+        {
+            "row": row_to_dict(new_row),
+            "to_user": {
+                "hf_user_id": target.hf_user_id,
+                "login": target.login,
+                "fullname": target.fullname,
+                "avatar_url": target.avatar_url,
+            },
+        }
+    )
 
 
 @admin_actions_bp.route("/send-back/<slug>", methods=["POST"])
@@ -178,11 +183,11 @@ def users_lookup():
     if target is None:
         return jsonify({"error": f"HF user {login!r} not found"}), 404
 
-    return jsonify({
-        "hf_user_id": target.hf_user_id,
-        "login": target.login,
-        "fullname": target.fullname,
-        "avatar_url": target.avatar_url,
-    })
-
-
+    return jsonify(
+        {
+            "hf_user_id": target.hf_user_id,
+            "login": target.login,
+            "fullname": target.fullname,
+            "avatar_url": target.avatar_url,
+        }
+    )

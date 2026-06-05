@@ -91,11 +91,12 @@ function _q(v: number): number {
 /**
  * Pack a peaks payload into base64 of ``n*2`` int8s — the canonical
  * ``edit_history_peaks.jsonl`` ``peaks_b64`` wire shape (inverse of
- * ``utils.ts::_b64ToInt8``). An ``Int8Array`` is encoded as-is; float buckets
- * are quantized ``round(v*127)`` clamped to [-127, 127]. Used by the History
- * on-play write-back to persist a freshly-computed slice. History slices are
- * small (≤ a few hundred buckets), so the per-byte ``String.fromCharCode``
- * loop is the fastest portable path (same rationale as ``_b64ToInt8``).
+ * ``peaks-decode.ts::b64ToInt8``). An ``Int8Array`` is encoded as-is;
+ * float buckets are quantized ``round(v*127)`` clamped to [-127, 127].
+ * Used by the History on-play write-back to persist a freshly-computed
+ * slice. History slices are small (≤ a few hundred buckets), so the
+ * per-byte ``String.fromCharCode`` loop is the fastest portable path
+ * (same rationale as ``b64ToInt8``).
  */
 export function packPeaksB64(peaks: PeakBucket[] | Int8Array): string {
     let bytes: Int8Array;

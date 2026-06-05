@@ -1,8 +1,8 @@
 """Write a single file to the bucket.
 
-  bucket_put.py reciters/<slug>/audio/_done.json --json '{"schema_version":1,"total_chapters":114}'
-  bucket_put.py debug/note.txt --text 'one-line note'
-  bucket_put.py reciters/<slug>/detailed.json --file ./detailed.json --bucket prod --yes-prod
+bucket_put.py reciters/<slug>/audio/_done.json --json '{"schema_version":1,"total_chapters":114}'
+bucket_put.py debug/note.txt --text 'one-line note'
+bucket_put.py reciters/<slug>/detailed.json --file ./detailed.json --bucket prod --yes-prod
 """
 
 from __future__ import annotations
@@ -17,8 +17,9 @@ import _bootstrap as bs  # noqa: E402
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("path", help="destination path within the bucket")
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--text", help="literal string content")

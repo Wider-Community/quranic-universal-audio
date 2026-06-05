@@ -16,7 +16,6 @@ the current catalog value joined in as the ``from`` side.
 
 from __future__ import annotations
 
-from services.auth import permissions
 from services.db import _serde, repo_requests
 from services.db import sync as _sync
 from services.db.connection import current_db_seq
@@ -62,11 +61,7 @@ def list_requests(*, status: str, caller_is_owner: bool, caller_hf_id: str) -> d
         base = _build_base_rows(db_status)
         cache.set_admin_requests_cache(db_seq, db_status, base)
 
-    viewed = (
-        repo_requests.viewed_ids_for_user(caller_hf_id)
-        if db_status == "pending"
-        else set()
-    )
+    viewed = repo_requests.viewed_ids_for_user(caller_hf_id) if db_status == "pending" else set()
     rows = [_serialize(r, owner=caller_is_owner, viewed=viewed) for r in base]
 
     counts = repo_requests.counts_by_status()
@@ -130,8 +125,10 @@ def _build_base_rows(db_status: str) -> list[dict]:
         reciter = catalog_service.find_reciter(reciter_id) if reciter_id else None
 
         if delivery is not None:
-            name_en = reciter.name_en if reciter is not None else (
-                catalog_service.display_name(slug) or slug
+            name_en = (
+                reciter.name_en
+                if reciter is not None
+                else (catalog_service.display_name(slug) or slug)
             )
             name_ar = reciter.name_ar if reciter is not None else None
             riwayah = delivery.riwayah
@@ -153,29 +150,31 @@ def _build_base_rows(db_status: str) -> list[dict]:
         else:
             conflict = _conflict(slug, delivery, proposed)
 
-        out.append({
-            "id": row["id"],
-            "slug": slug,
-            "kind": kind,
-            "status": row["status"],
-            "submitted_at": row["submitted_at"],
-            "resolved_at": row["resolved_at"],
-            "resolution_reason": row["resolution_reason"],
-            "auto_claim": bool(row["auto_claim"]),
-            "comments": row["comments"],
-            "reciter_id": reciter_id,
-            "name_en": name_en,
-            "name_ar": name_ar,
-            "riwayah": riwayah,
-            "style": style,
-            "proposed_edits": proposed,
-            "changes": _changes_list(proposed, current),
-            "conflict": conflict,
-            "source": payload.get("source") if is_intake else None,
-            "probe": payload.get("probe") if is_intake else None,
-            "_requester": payload.get("requester") or {},
-            "_transitioned_by": payload.get("transitioned_by") or {},
-        })
+        out.append(
+            {
+                "id": row["id"],
+                "slug": slug,
+                "kind": kind,
+                "status": row["status"],
+                "submitted_at": row["submitted_at"],
+                "resolved_at": row["resolved_at"],
+                "resolution_reason": row["resolution_reason"],
+                "auto_claim": bool(row["auto_claim"]),
+                "comments": row["comments"],
+                "reciter_id": reciter_id,
+                "name_en": name_en,
+                "name_ar": name_ar,
+                "riwayah": riwayah,
+                "style": style,
+                "proposed_edits": proposed,
+                "changes": _changes_list(proposed, current),
+                "conflict": conflict,
+                "source": payload.get("source") if is_intake else None,
+                "probe": payload.get("probe") if is_intake else None,
+                "_requester": payload.get("requester") or {},
+                "_transitioned_by": payload.get("transitioned_by") or {},
+            }
+        )
     return out
 
 

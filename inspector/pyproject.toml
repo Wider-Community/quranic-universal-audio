@@ -9,4 +9,33 @@ pythonpath = [".", ".."]
 addopts = [
     "-ra",
     "--strict-markers",
+    "--cov",
+    "--cov-report=term-missing:skip-covered",
+    "--cov-report=xml:.coverage.xml",
+    "--no-cov-on-fail",
+]
+
+[tool.coverage.run]
+source = ["."]
+branch = false
+omit = [
+    "tests/*",
+    "frontend/*",
+    ".bucket/*",
+    "*/__init__.py",
+    "conftest.py",
+    "**/conftest.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+skip_empty = true
+precision = 1
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "^\\s*\\.\\.\\.\\s*$",
+    "if TYPE_CHECKING:",
 ]

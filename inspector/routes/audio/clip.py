@@ -6,6 +6,7 @@ files without leaning on HTML5 ``<audio>.currentTime`` (which mis-seeks them).
 
 The clip plays from byte 0 in the browser, so there's no seek and no drift.
 """
+
 from __future__ import annotations
 
 import logging
@@ -29,6 +30,11 @@ CLIP_BITRATE = "96k"
 # Stream stdout to the client in this chunk size. 64 KB keeps TTFB tight
 # while still amortising syscall overhead.
 STREAM_CHUNK_BYTES = 65_536
+# Floor below which the first ffmpeg chunk is treated as a failed extraction
+# rather than a real clip. A deep seek past the real audio of a no-Xing VBR file
+# muxes a header-only MP3 of a few hundred bytes at rc=0; a genuine clip is far
+# larger. Lets us fail loudly (502) instead of streaming decodable-as-silence.
+MIN_VALID_CLIP_BYTES = 1500
 
 
 def _is_known_chapter_url(reciter: str, url: str) -> bool:
@@ -75,10 +81,16 @@ def seg_segment_clip(reciter):
     duration_sec = (end_ms - start_ms) / 1000.0
 
     cmd = [
-        "ffmpeg", "-hide_banner", "-loglevel", "error",
-        "-ss", f"{start_sec:.3f}",
-        "-i", source,
-        "-t", f"{duration_sec:.3f}",
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-ss",
+        f"{start_sec:.3f}",
+        "-i",
+        source,
+        "-t",
+        f"{duration_sec:.3f}",
         # Drop any non-audio streams. Most mp3quran/qdc MP3s embed an MJPEG
         # cover-art stream (ID3v2 APIC). Without -vn, ffmpeg tries to encode
         # that into the mp3 output via the muxer's default video codec
@@ -86,10 +98,14 @@ def seg_segment_clip(reciter):
         # — fails with "Default encoder for format mp3 (codec png) is
         # probably disabled" and the route returns 200 OK / 0 bytes.
         "-vn",
-        "-c:a", "libmp3lame",
-        "-b:a", CLIP_BITRATE,
-        "-ac", "1",
-        "-f", "mp3",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        CLIP_BITRATE,
+        "-ac",
+        "1",
+        "-f",
+        "mp3",
         "-",
     ]
 
@@ -99,8 +115,58 @@ def seg_segment_clip(reciter):
         logger.error("ffmpeg not found on PATH")
         return jsonify({"error": "ffmpeg not available"}), 500
 
+    def _stderr_tail() -> str:
+        try:
+            if proc.stderr and not proc.stderr.closed:
+                return (proc.stderr.read() or b"").decode("utf-8", errors="replace")[-500:]
+        except (OSError, ValueError):
+            pass
+        return ""
+
+    # Peek the first chunk synchronously so a failed extraction fails LOUD (502)
+    # rather than returning a 200 the AudioPort loads as a valid silent window.
+    # ffmpeg that exits having emitted only a header (e.g. a deep seek past the
+    # real audio of a no-Xing VBR file → ~few-hundred-byte mp3 at rc=0) is caught
+    # here; a streaming clip (proc still running) or a genuine short clip passes.
+    try:
+        first = proc.stdout.read(STREAM_CHUNK_BYTES)
+    except (OSError, ValueError):
+        first = b""
+    # A short first read means ffmpeg hit EOF (clip fully produced, or failed) —
+    # reap it so returncode/size are authoritative before judging (poll() races
+    # the EOF). A full chunk means it's still streaming a real clip.
+    if len(first) < STREAM_CHUNK_BYTES:
+        try:
+            proc.wait(timeout=FFMPEG_FULL_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    exited = proc.poll() is not None
+    if (not first) or (
+        exited and (len(first) < MIN_VALID_CLIP_BYTES or proc.returncode not in (0, None))
+    ):
+        stderr_tail = _stderr_tail()
+        if proc.poll() is None:
+            proc.kill()
+        for stream in (proc.stdout, proc.stderr):
+            if stream:
+                stream.close()
+        logger.warning(
+            "segment_clip produced no usable audio: %d bytes (rc=%s) cmd=%s stderr=%r",
+            len(first),
+            proc.returncode,
+            shlex.join(cmd),
+            stderr_tail,
+        )
+        return jsonify(
+            {
+                "error": "segment audio unavailable",
+                "detail": "no decodable audio for this window (source likely truncated or corrupt)",
+            }
+        ), 502
+
     def _generate():
-        bytes_yielded = 0
+        bytes_yielded = len(first)
+        yield first
         try:
             while True:
                 chunk = proc.stdout.read(STREAM_CHUNK_BYTES)
@@ -114,26 +180,19 @@ def seg_segment_clip(reciter):
                 proc.kill()
                 logger.warning("segment_clip ffmpeg timed out: cmd=%s", shlex.join(cmd))
         finally:
-            # Drain stderr so we can diagnose silent failures (most common:
-            # codec not available in the deployed static ffmpeg → 200/0).
-            stderr_tail = b""
-            try:
-                if proc.stderr and not proc.stderr.closed:
-                    stderr_tail = proc.stderr.read() or b""
-            except (OSError, ValueError):
-                pass
+            stderr_tail = _stderr_tail()
             if proc.stdout:
                 proc.stdout.close()
             if proc.stderr:
                 proc.stderr.close()
             if proc.poll() is None:
                 proc.kill()
-            rc = proc.returncode
-            if bytes_yielded == 0 or (rc is not None and rc != 0):
+            if proc.returncode not in (0, None):
                 logger.warning(
-                    "segment_clip ffmpeg produced %d bytes (rc=%s) cmd=%s stderr=%r",
-                    bytes_yielded, rc, shlex.join(cmd),
-                    stderr_tail.decode("utf-8", errors="replace")[-500:],
+                    "segment_clip ffmpeg exited mid-stream: %d bytes (rc=%s) stderr=%r",
+                    bytes_yielded,
+                    proc.returncode,
+                    stderr_tail,
                 )
 
     headers = {

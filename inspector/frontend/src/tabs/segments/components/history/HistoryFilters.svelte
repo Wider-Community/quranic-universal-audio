@@ -154,7 +154,6 @@
         return n;
     })();
 
-    $: hasFilters = $filterOpTypes.size > 0 || $filterErrCats.size > 0 || $filterHasWasl;
     $: showOps = Object.keys(baseOpCounts).length >= 2;
     $: showCats = Object.keys(baseCatCounts).length >= 2;
     $: showWasl = waslCount > 0;

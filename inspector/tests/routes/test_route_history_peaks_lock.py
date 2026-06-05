@@ -8,12 +8,10 @@ and record/size bounds.
 
 The GET route is public and serves the canonical b64 records.
 """
+
 from __future__ import annotations
 
 import json
-import os
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 _XORIGIN = {"Content-Type": "application/json", "Origin": "http://evil.example"}
@@ -52,14 +50,20 @@ def test_history_peaks_post_unknown_op_id_skipped(flask_client, tmp_reciter_dir)
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
     res = flask_client.post(
         f"/api/seg/history-peaks/{reciter}",
-        data=json.dumps({"records": [{
-            "op_id": "does-not-exist",
-            "url": "https://cdn/1.mp3",
-            "start_ms": 0,
-            "end_ms": 1000,
-            "bps": 10,
-            "peaks_b64": "AAAA",
-        }]}),
+        data=json.dumps(
+            {
+                "records": [
+                    {
+                        "op_id": "does-not-exist",
+                        "url": "https://cdn/1.mp3",
+                        "start_ms": 0,
+                        "end_ms": 1000,
+                        "bps": 10,
+                        "peaks_b64": "AAAA",
+                    }
+                ]
+            }
+        ),
         headers=_HEADERS,
     )
     assert res.status_code == 200

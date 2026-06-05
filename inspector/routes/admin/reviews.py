@@ -22,12 +22,11 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
-from routes._admin_helpers import require_capability_or_403
 from qua_shared.schemas import TsJobSettings
+from routes._admin_helpers import require_capability_or_403
 from services.admin import reviews as reviews_service
 from services.admin import timestamps_jobs as ts_jobs
 from services.state import state as state_service
-
 from utils.decorators import require_capability, require_same_origin
 
 admin_reviews_bp = Blueprint("admin_reviews", __name__, url_prefix="/api/admin")
@@ -111,19 +110,20 @@ def generate_timestamps(user, slug):
     is_first_publish = row.state.value == "under_review" and row.marked_ready
     is_regen = row.state.value == "released"
     if not (is_first_publish or is_regen):
-        return jsonify({
-            "error": "timestamps can only be generated for a marked-ready "
-                     "reciter (first publish) or an already-released reciter "
-                     "(regenerate)",
-            "state": row.state.value,
-        }), 409
+        return jsonify(
+            {
+                "error": "timestamps can only be generated for a marked-ready "
+                "reciter (first publish) or an already-released reciter "
+                "(regenerate)",
+                "state": row.state.value,
+            }
+        ), 409
     err = require_capability_or_403(user, "reciter.publish")
     if err is not None:
         return err
     existing = ts_jobs.running_job_for(slug)
     if existing:
-        return jsonify({"error": "a timestamps job is already running",
-                        "job_id": existing}), 409
+        return jsonify({"error": "a timestamps job is already running", "job_id": existing}), 409
     body = request.get_json(silent=True) or {}
     try:
         settings = _parse_ts_settings(body)

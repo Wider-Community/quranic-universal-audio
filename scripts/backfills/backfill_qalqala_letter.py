@@ -64,6 +64,7 @@ def _normalize_for_drift(result: dict) -> dict:
     """Match bench/snapshot.py's normalization so drift hashing is fair."""
     sys.path.insert(0, str(_REPO_ROOT / "bench"))
     from snapshot import normalize  # noqa: E402
+
     return normalize(result)
 
 
@@ -85,7 +86,9 @@ def _drift_check_against_ground_truth(slug: str) -> tuple[bool, str]:
     for cat in sorted(set(e_cc) | set(a_cc)):
         if e_cc.get(cat) != a_cc.get(cat):
             diffs.append(f"{cat}={e_cc.get(cat)}->{a_cc.get(cat)}")
-    return False, "counts diff: " + ("; ".join(diffs) or "(deep field diff — run bench/drift.py for details)")
+    return False, "counts diff: " + (
+        "; ".join(diffs) or "(deep field diff — run bench/drift.py for details)"
+    )
 
 
 def _archive_path(slug: str) -> str:
@@ -117,16 +120,20 @@ def process_slug(slug: str, *, dry_run: bool) -> dict:
     drift_ok, drift_msg = _drift_check_against_ground_truth(slug)
     if not drift_ok:
         return {
-            "slug": slug, "status": "drift_fail",
-            "n_segs": n_segs, "n_with_letter": n_with_letter,
+            "slug": slug,
+            "status": "drift_fail",
+            "n_segs": n_segs,
+            "n_with_letter": n_with_letter,
             "msg": drift_msg,
         }
 
     archive = _archive_path(slug)
     if dry_run:
         return {
-            "slug": slug, "status": "dry_run_ok",
-            "n_segs": n_segs, "n_with_letter": n_with_letter,
+            "slug": slug,
+            "status": "dry_run_ok",
+            "n_segs": n_segs,
+            "n_with_letter": n_with_letter,
             "would_write_archive": archive,
             "would_promote_to": data_dir.detailed_path(slug),
         }
@@ -141,8 +148,10 @@ def process_slug(slug: str, *, dry_run: bool) -> dict:
     if meta:
         cache.set_seg_meta(slug, meta)
     return {
-        "slug": slug, "status": "promoted",
-        "n_segs": n_segs, "n_with_letter": n_with_letter,
+        "slug": slug,
+        "status": "promoted",
+        "n_segs": n_segs,
+        "n_with_letter": n_with_letter,
         "archive": archive,
     }
 
@@ -151,11 +160,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--slug")
-    g.add_argument("--all", action="store_true",
-                   help="every reciter under reciters/")
+    g.add_argument("--all", action="store_true", help="every reciter under reciters/")
     g.add_argument("--slugs", help="comma-separated")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="compute + drift-check but skip the bucket promotion")
+    ap.add_argument(
+        "--dry-run", action="store_true", help="compute + drift-check but skip the bucket promotion"
+    )
     args = ap.parse_args()
 
     if args.all:
@@ -175,11 +184,12 @@ def main() -> int:
         r = process_slug(slug, dry_run=args.dry_run)
         rows.append(r)
         if r["status"] in ("promoted", "dry_run_ok"):
-            print(f"OK  segs={r['n_segs']}  qalqala_letters={r['n_with_letter']}  "
-                  f"({r['status']})")
+            print(f"OK  segs={r['n_segs']}  qalqala_letters={r['n_with_letter']}  ({r['status']})")
         elif r["status"] == "drift_fail":
-            print(f"DRIFT FAIL  segs={r['n_segs']}  qalqala_letters={r['n_with_letter']}\n"
-                  f"    {r['msg']}")
+            print(
+                f"DRIFT FAIL  segs={r['n_segs']}  qalqala_letters={r['n_with_letter']}\n"
+                f"    {r['msg']}"
+            )
         else:
             print(r["status"])
 

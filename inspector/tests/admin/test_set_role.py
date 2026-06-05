@@ -7,6 +7,7 @@ input validation (400), the last-owner guard (409), and the three dispatch paths
 maintainer who holds an open claim leaves that claim open — a contributor is a
 valid claim holder, so demote is not offboarding.
 """
+
 from __future__ import annotations
 
 ORIGIN = {"Origin": "http://localhost"}
@@ -143,9 +144,7 @@ def test_revoke_cascade_release_false_keeps_claim(seed_role, seed_state):
     seed_role("m", login="m", role="maintainer")
     seed_state("recc", state="under_review", assignee_hf_id="m", assignee_login="m")
 
-    _member, released = access.revoke(
-        hf_user_id="m", actor=_owner_actor(), cascade_release=False
-    )
+    _member, released = access.revoke(hf_user_id="m", actor=_owner_actor(), cascade_release=False)
     assert released == []
     assert repo_claims.open_claims_for_user("m") == ["recc"]
 

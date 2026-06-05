@@ -16,14 +16,10 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from routes._admin_helpers import actor_for
-
 from services.admin import permissions as permissions_service
-
 from utils.decorators import require_capability, require_same_origin
 
-admin_permissions_bp = Blueprint(
-    "admin_permissions", __name__, url_prefix="/api/admin"
-)
+admin_permissions_bp = Blueprint("admin_permissions", __name__, url_prefix="/api/admin")
 
 
 @admin_permissions_bp.route("/permissions", methods=["GET"])
@@ -43,19 +39,31 @@ def set_permission(user, capability: str, tier: str):
     try:
         if body.get("reset"):
             value = permissions_service.reset_grant(
-                capability_id=capability, tier=tier, actor=actor,
+                capability_id=capability,
+                tier=tier,
+                actor=actor,
             )
         else:
             allowed = body.get("allowed")
             if not isinstance(allowed, bool):
-                return jsonify({
-                    "error": "body must include boolean 'allowed' (or 'reset': true)",
-                }), 400
+                return jsonify(
+                    {
+                        "error": "body must include boolean 'allowed' (or 'reset': true)",
+                    }
+                ), 400
             value = permissions_service.set_grant(
-                capability_id=capability, tier=tier, allowed=allowed, actor=actor,
+                capability_id=capability,
+                tier=tier,
+                allowed=allowed,
+                actor=actor,
             )
     except permissions_service.PermissionChangeError as e:
         return jsonify({"error": str(e)}), 400
-    return jsonify({
-        "ok": True, "capability": capability, "tier": tier, "allowed": value,
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "capability": capability,
+            "tier": tier,
+            "allowed": value,
+        }
+    )

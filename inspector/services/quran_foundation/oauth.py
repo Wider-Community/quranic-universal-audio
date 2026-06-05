@@ -74,9 +74,7 @@ def exchange_code(*, code: str, code_verifier: str, redirect_uri: str) -> dict:
 
 
 def refresh(refresh_token: str) -> dict:
-    return _token_request(
-        {"grant_type": "refresh_token", "refresh_token": refresh_token}
-    )
+    return _token_request({"grant_type": "refresh_token", "refresh_token": refresh_token})
 
 
 def _token_request(body: dict) -> dict:
@@ -94,7 +92,5 @@ def _token_request(body: dict) -> dict:
     except requests.RequestException as e:
         raise QfOAuthError(f"QF token request failed: {e}") from e
     if not resp.ok:
-        raise QfOAuthError(
-            f"QF token request {resp.status_code}: {resp.text[:200]}"
-        )
+        raise QfOAuthError(f"QF token request {resp.status_code}: {resp.text[:200]}")
     return resp.json()

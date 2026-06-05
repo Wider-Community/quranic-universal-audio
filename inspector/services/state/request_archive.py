@@ -12,7 +12,6 @@ from __future__ import annotations
 import enum
 
 from qua_shared.schemas import ArchivedRequest, ArchivedRequestsFile
-
 from services.db import repo_requests
 
 

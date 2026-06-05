@@ -38,6 +38,10 @@ beforeEach(() => {
     inlineHandler = vi.fn();
     containerHandler = vi.fn();
     button.addEventListener('click', inlineHandler);
+    // Container handler is attached in bubble phase. The gate's capture-phase
+    // ``stopImmediatePropagation`` halts BOTH the rest of the capture chain
+    // AND propagation to bubble — so an assertion that this handler is not
+    // called is meaningful evidence the gate intercepted the click.
     document.body.addEventListener('click', containerHandler);
 });
 

@@ -15,12 +15,13 @@ Single source of truth for the op→record shape, reused by:
 Canonical record shape (Migration #5): ``{op_id, url, start_ms, end_ms, bps,
 peaks_b64}`` — see ``qua_shared/schemas/peaks_history.py``.
 """
+
 from __future__ import annotations
 
 import base64
 import logging
 import math
-from typing import Iterable
+from collections.abc import Iterable
 
 import numpy as np
 
@@ -88,7 +89,10 @@ def resolve_op_url(
 
 
 def slice_chapter_peaks_b64(
-    reciter: str, url: str, start_ms: int, end_ms: int,
+    reciter: str,
+    url: str,
+    start_ms: int,
+    end_ms: int,
 ) -> tuple[str, int, int, int] | None:
     """Slice the baked chapter peaks for ``url`` over ``[start_ms, end_ms]``.
 
@@ -139,6 +143,7 @@ def audio_url_by_chapter(reciter: str) -> dict[int, str]:
     is cached in ``audio_meta`` after first read.
     """
     from services.audio.audio_meta import chapter_urls
+
     out: dict[int, str] = {}
     for key, url in chapter_urls(reciter).items():
         if ":" in str(key):  # by_ayah keys ("<surah>:<ayah>") — skip
@@ -181,12 +186,14 @@ def build_op_records(
             log.debug("[%s] op %s: no baked chapter peaks to slice", reciter, op_id)
             continue
         peaks_b64, bps, start_ms, end_ms = sliced
-        out.append({
-            "op_id": op_id,
-            "url": normalize_audio_url(url),
-            "start_ms": start_ms,
-            "end_ms": end_ms,
-            "bps": bps,
-            "peaks_b64": peaks_b64,
-        })
+        out.append(
+            {
+                "op_id": op_id,
+                "url": normalize_audio_url(url),
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "bps": bps,
+                "peaks_b64": peaks_b64,
+            }
+        )
     return out

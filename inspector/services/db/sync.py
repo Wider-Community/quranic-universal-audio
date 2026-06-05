@@ -29,11 +29,11 @@ import tempfile
 import threading
 import time
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
 
 from services.storage.hf_bucket import StorageNotFound, get_backend
 
@@ -245,7 +245,7 @@ def pull(dest_path: str | None = None) -> bool:
 
 
 def daily_snapshot(*, today: datetime | None = None) -> str:
-    day = (today or datetime.now(timezone.utc)).date().isoformat()
+    day = (today or datetime.now(UTC)).date().isoformat()
     path = f"db/inspector-{day}.db"
     _write_direct(path, snapshot_bytes())
     _prune_snapshots(today=today)
@@ -253,7 +253,7 @@ def daily_snapshot(*, today: datetime | None = None) -> str:
 
 
 def _prune_snapshots(*, today: datetime | None = None) -> list[str]:
-    cutoff = (today or datetime.now(timezone.utc)).date()
+    cutoff = (today or datetime.now(UTC)).date()
     backend = get_backend()
     try:
         names = backend.list_dir("db")

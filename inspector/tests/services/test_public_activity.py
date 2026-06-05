@@ -8,22 +8,15 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
-
-
-@pytest.fixture(autouse=True)
-def _isolate_activity_state():
-    """No-op post-cutover: the autouse ``_substrate_db`` fixture gives each test
-    a fresh DB, so dismissals/tombstones can't leak across tests."""
-    yield
-
 
 def _install_audit(monkeypatch, records):
     """Patch ``_iter_partitions`` to yield the supplied test records."""
     from services import public_activity
 
     monkeypatch.setattr(
-        public_activity, "_iter_partitions", lambda months=2: iter(records),
+        public_activity,
+        "_iter_partitions",
+        lambda months=2: iter(records),
     )
 
 
@@ -32,13 +25,23 @@ def _install_catalog(monkeypatch, name_by_slug):
     from services import catalog as catalog_service
 
     monkeypatch.setattr(
-        catalog_service, "display_name", lambda slug: name_by_slug.get(slug),
+        catalog_service,
+        "display_name",
+        lambda slug: name_by_slug.get(slug),
     )
 
 
-def _record(event, *, slug="husary_qdc", to_state=None,
-            ts="2026-05-13T12:00:00+00:00", result="ok",
-            actor_hf="u-1", actor_login="alice", actor_role="maintainer"):
+def _record(
+    event,
+    *,
+    slug="husary_qdc",
+    to_state=None,
+    ts="2026-05-13T12:00:00+00:00",
+    result="ok",
+    actor_hf="u-1",
+    actor_login="alice",
+    actor_role="maintainer",
+):
     return {
         "event": event,
         "slug": slug,
@@ -56,15 +59,18 @@ def _record(event, *, slug="husary_qdc", to_state=None,
 def test_classifies_allowlisted_events(monkeypatch):
     from services.public_activity import all_public_cards
 
-    _install_audit(monkeypatch, [
-        _record("catalog.added"),
-        _record("reciter.alignment_completed"),
-        _record("reciter.claimed"),
-        # v2: the public release event is `released` (covers HF push + GH cut).
-        # `reciter.published` (TS-gen completion) is HIDDEN now — admin-only.
-        _record("released"),
-        _record("state.transition", to_state="awaiting_alignment"),
-    ])
+    _install_audit(
+        monkeypatch,
+        [
+            _record("catalog.added"),
+            _record("reciter.alignment_completed"),
+            _record("reciter.claimed"),
+            # v2: the public release event is `released` (covers HF push + GH cut).
+            # `reciter.published` (TS-gen completion) is HIDDEN now — admin-only.
+            _record("released"),
+            _record("state.transition", to_state="awaiting_alignment"),
+        ],
+    )
     _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
 
     cards = all_public_cards()
@@ -91,14 +97,17 @@ def test_marked_ready_is_redacted_from_public_feed(monkeypatch):
 def test_redacts_non_allowlisted_events(monkeypatch):
     from services.public_activity import all_public_cards
 
-    _install_audit(monkeypatch, [
-        _record("claim.force_released"),
-        _record("claim.reassigned"),
-        _record("admin.unlocked_for_revision"),
-        _record("reciter.discarded"),
-        _record("reciter.unmarked_ready"),
-        _record("access.role_granted"),
-    ])
+    _install_audit(
+        monkeypatch,
+        [
+            _record("claim.force_released"),
+            _record("claim.reassigned"),
+            _record("admin.unlocked_for_revision"),
+            _record("reciter.discarded"),
+            _record("reciter.unmarked_ready"),
+            _record("access.role_granted"),
+        ],
+    )
     _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
 
     cards = all_public_cards()
@@ -156,9 +165,12 @@ def test_owner_caller_sees_actor_login(monkeypatch):
     into this bool; the service stays capability-agnostic."""
     from services.public_activity import all_public_cards
 
-    _install_audit(monkeypatch, [
-        _record("reciter.claimed", actor_login="alice", actor_hf="u-A"),
-    ])
+    _install_audit(
+        monkeypatch,
+        [
+            _record("reciter.claimed", actor_login="alice", actor_hf="u-A"),
+        ],
+    )
     _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
 
     cards = all_public_cards(include_identity=True)
@@ -178,12 +190,12 @@ def test_maintainer_caller_does_not_see_actor(monkeypatch):
     assert "actor_login" not in cards[0]
 
 
-def test_tombstoned_audit_id_excluded(monkeypatch, tmp_path):
+def test_tombstoned_audit_id_excluded(monkeypatch):
     """Records whose audit_id is in the global tombstone list disappear."""
+    from qua_shared.schemas import Actor, Role
     from services import activity_classification as ac
     from services import activity_state as activity_state_service
     from services.public_activity import all_public_cards
-    from qua_shared.schemas import Actor, Role
 
     rec = _record("reciter.claimed")
     _install_audit(monkeypatch, [rec])
@@ -192,8 +204,7 @@ def test_tombstoned_audit_id_excluded(monkeypatch, tmp_path):
     actor = Actor(hf_user_id="u-O", login_at_time="owen", role=Role.OWNER)
     # Tombstone the synthetic record's audit_id (no content_hash on it → the
     # card falls back to ac.audit_id, matching this key).
-    activity_state_service.delete(ac.audit_id(rec), actor=actor,
-                                  reason="ten chars or more here")
+    activity_state_service.delete(ac.audit_id(rec), actor=actor, reason="ten chars or more here")
 
     assert all_public_cards() == []
 
@@ -286,10 +297,13 @@ def test_card_falls_back_when_slug_missing_from_catalog(monkeypatch):
 def test_feed_paginates(monkeypatch):
     from services.public_activity import feed
 
-    _install_audit(monkeypatch, [
-        _record("reciter.claimed", ts=f"2026-05-{day:02d}T00:00:00+00:00")
-        for day in range(1, 11)
-    ])
+    _install_audit(
+        monkeypatch,
+        [
+            _record("reciter.claimed", ts=f"2026-05-{day:02d}T00:00:00+00:00")
+            for day in range(1, 11)
+        ],
+    )
     _install_catalog(monkeypatch, {"husary_qdc": "Husary"})
 
     page = feed(cursor=0, limit=3)

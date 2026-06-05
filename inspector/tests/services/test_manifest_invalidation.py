@@ -1,20 +1,37 @@
 """A committed lifecycle transition drops the TS manifest's process cache.
 
-The manifest (services/reference/timestamps.py) is built once and cached behind
-a ``_built`` flag with no other invalidation hook. Without the post-commit drop
-in ``state.transition()`` it would serve the boot-time published-set until the
-next restart (the bug that left freshly-published reciters missing from the
-Timestamps tab). These tests pin the invalidation so that regression can't
-silently return.
+The manifest (services/reference/timestamps.py) is cached behind a ``_built``
+flag and a ``_built_seq`` db_seq snapshot. The db_seq check is the authoritative
+rebuild trigger — any committed write bumps db_seq and the next manifest read
+self-heals. The post-commit ``invalidate()`` call from ``state.transition()``
+is a belt-and-braces explicit drop that keeps the hot path off the seq check.
+These tests pin both halves so neither can silently regress.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
+
+import pytest
 
 from qua_shared.schemas import Actor, AudioCategory, Delivery, ReciterEntry, Role
 from services.reference import timestamps as ts_manifest
 from services.state import state as state_service
+
+_OWNER = Actor(hf_user_id="owner-1", login_at_time="owner", role=Role.OWNER)
+
+
+@pytest.fixture(autouse=True)
+def _reset_ts_manifest_cache():
+    """Clear the process-wide TS manifest cache around every test.
+
+    The autouse ``_substrate_db`` fixture resets the DB but not the manifest's
+    ``_built`` / ``_built_seq`` / ``_served_slugs`` module state. Without this
+    drop, a warmed cache from a previous test leaks into the next case.
+    """
+    ts_manifest.invalidate()
+    yield
+    ts_manifest.invalidate()
 
 
 def _seed_marked_ready(slug: str = "rec_a") -> None:
@@ -24,15 +41,22 @@ def _seed_marked_ready(slug: str = "rec_a") -> None:
 
     _seed_catalog(
         reciters=[ReciterEntry(reciter_id=slug, name_en="Reciter A")],
-        deliveries=[Delivery(
-            slug=slug, reciter_id=slug, riwayah="hafs", style="mur",
-            source="src", channel="ch", audio_category=AudioCategory.BY_SURAH,
-            chapter_count=114, added_at=datetime.now(timezone.utc),
-            added_by_hf_id="seed",
-        )],
+        deliveries=[
+            Delivery(
+                slug=slug,
+                reciter_id=slug,
+                riwayah="hafs",
+                style="mur",
+                source="src",
+                channel="ch",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=datetime.now(UTC),
+                added_by_hf_id="seed",
+            )
+        ],
     )
-    _seed_state(slug, state="under_review", assignee_hf_id="u-rev",
-                marked_ready=True)
+    _seed_state(slug, state="under_review", assignee_hf_id="u-rev", marked_ready=True)
 
 
 def test_transition_drops_manifest_cache():
@@ -41,8 +65,9 @@ def test_transition_drops_manifest_cache():
     assert ts_manifest._built is True
 
     state_service.transition(
-        "rec_a", "reciter.published",
-        actor=Actor(hf_user_id="u-O", login_at_time="o", role=Role.OWNER),
+        "rec_a",
+        "reciter.published",
+        actor=_OWNER,
         payload={"job_id": "job-1"},
     )
 
@@ -56,13 +81,12 @@ def test_transition_invokes_invalidate_hook(monkeypatch):
     _seed_marked_ready("rec_a")
     calls: list[int] = []
     real = ts_manifest.invalidate
-    monkeypatch.setattr(
-        ts_manifest, "invalidate", lambda: (calls.append(1), real())[1]
-    )
+    monkeypatch.setattr(ts_manifest, "invalidate", lambda: (calls.append(1), real())[1])
 
     state_service.transition(
-        "rec_a", "reciter.published",
-        actor=Actor(hf_user_id="u-O", login_at_time="o", role=Role.OWNER),
+        "rec_a",
+        "reciter.published",
+        actor=_OWNER,
         payload={"job_id": "job-1"},
     )
 
@@ -83,8 +107,9 @@ def test_manifest_self_heals_on_db_seq_without_explicit_invalidate(monkeypatch):
     monkeypatch.setattr(ts_manifest, "invalidate", lambda: None)
 
     state_service.transition(
-        "rec_a", "reciter.published",
-        actor=Actor(hf_user_id="u-O", login_at_time="o", role=Role.OWNER),
+        "rec_a",
+        "reciter.published",
+        actor=_OWNER,
         payload={"job_id": "job-1"},
     )
     # _built is still True (invalidate was a no-op), but db_seq advanced →
@@ -101,7 +126,8 @@ def test_manifest_cache_hit_when_db_seq_unchanged(monkeypatch):
     calls: list[int] = []
     real_build = ts_manifest._build_manifest_dict
     monkeypatch.setattr(
-        ts_manifest, "_build_manifest_dict",
+        ts_manifest,
+        "_build_manifest_dict",
         lambda block: (calls.append(1), real_build(block))[1],
     )
     ts_manifest.manifest_bytes()  # same db_seq → no rebuild

@@ -1,29 +1,20 @@
-"""Backend mirror tests for the command/apply-command surface (IS-5).
+"""Backend mirror tests for the command/apply-command surface.
 
 Most of the command logic lives on the frontend; the backend ensures save
 acceptance + history record produces matching shapes.
 """
+
 from __future__ import annotations
 
 import json
 
-import pytest
-
-
-
-import os
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
-
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
-def test_save_payload_carries_op_log_in_canonical_shape(signed_in_client, tmp_reciter_dir):
-    """Save payload includes a per-op `command` envelope describing the discriminated union.
 
-    Phase 3 introduces the `command` field on each operation (the
-    SegmentCommand union literal). The backend must accept and persist
-    this field on the history record.
-    """
+def test_save_payload_carries_op_log_in_canonical_shape(signed_in_client, tmp_reciter_dir):
+    """Save payload includes a per-op `command` envelope describing the
+    discriminated union (SegmentCommand). The backend must accept and persist
+    this field on the history record."""
     reciter = "fixture_reciter"
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for="test-user-1")
     client, _ = signed_in_client(hf_user_id="test-user-1", login="alice")
@@ -56,12 +47,12 @@ def test_save_payload_carries_op_log_in_canonical_shape(signed_in_client, tmp_re
     history_path = tmp_reciter_dir.root / reciter / "edit_history.jsonl"
     record = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])
     op = record["operations"][0]
-    assert "command" in op, "Phase 3 contract: each op carries a `command` envelope"
+    assert "command" in op, "each op carries a `command` envelope"
     assert op["command"]["type"] == "trim"
     assert "segmentUid" in op["command"]
 
 
-def test_history_record_reflects_command_result_metadata(signed_in_client, tmp_reciter_dir):
+def test_save_rejects_op_missing_command_envelope(signed_in_client, tmp_reciter_dir):
     """Save handler rejects ops that lack a ``command`` envelope.
 
     Every operation in the save payload must carry a ``command`` object
@@ -88,6 +79,4 @@ def test_history_record_reflects_command_result_metadata(signed_in_client, tmp_r
         data=json.dumps(payload),
         headers=_HEADERS,
     )
-    assert res.status_code == 400, (
-        "Phase 3 must reject save payloads whose ops lack a `command` envelope"
-    )
+    assert res.status_code == 400, "save must reject payloads whose ops lack a `command` envelope"

@@ -67,10 +67,6 @@ describe('warmSeg — byte formula', () => {
     });
 
     it('does not pass `priority: low` hint', () => {
-        // Dropped — Chrome was deferring the warmup behind other low-priority
-        // work, so the cold-FUSE warm never completed before the user click.
-        // Server-side FUSE warmup is the real win; we want the fetch to run
-        // at default priority so it actually finishes promptly.
         warmSeg(makeSeg(), 'r');
         const init = fetchMock.mock.calls[0]?.[1] as RequestInit & { priority?: string };
         expect(init.priority).toBeUndefined();

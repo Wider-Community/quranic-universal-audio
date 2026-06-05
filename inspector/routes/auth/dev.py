@@ -35,10 +35,12 @@ def dev_set_role():
     body = request.get_json(silent=True) or {}
     role = body.get("role")
     if role not in auth_service.DEV_ROLE_VALUES:
-        return jsonify({
-            "error": "invalid role",
-            "allowed": list(auth_service.DEV_ROLE_VALUES),
-        }), 400
+        return jsonify(
+            {
+                "error": "invalid role",
+                "allowed": list(auth_service.DEV_ROLE_VALUES),
+            }
+        ), 400
 
     resp = make_response(jsonify({"ok": True, "role": role}))
     resp.set_cookie(

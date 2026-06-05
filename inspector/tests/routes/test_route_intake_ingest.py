@@ -8,7 +8,7 @@ Covers 200 (owner cookie + bearer owner), 401 (no creds, bad token), 403
 from __future__ import annotations
 
 import json
-import os
+from datetime import UTC
 
 import pytest
 
@@ -16,14 +16,12 @@ from qua_shared.schemas import (
     Actor,
     Channel,
     ReciterEntry,
-    Role,
     Riwayah,
+    Role,
     Source,
     Style,
     Vocab,
 )
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
@@ -61,11 +59,15 @@ def _seed_accepted_intake() -> str:
     owner = Actor(hf_user_id="u-O", login_at_time="owner", role=Role.OWNER)
     with db.transaction():
         rid = repo_requests.submit(
-            slug=None, requester=requester, kind="existing_reciter_new_combo",
+            slug=None,
+            requester=requester,
+            kind="existing_reciter_new_combo",
             extra_payload={"reciter_id": "rec_x", "source": {"method": "links", "links": []}},
         )
         repo_requests.resolve_by_id(
-            request_id=rid, status="accepted", transitioned_by=owner,
+            request_id=rid,
+            status="accepted",
+            transitioned_by=owner,
         )
     return rid
 
@@ -74,20 +76,30 @@ def _body(slug="rec_x_hafs_ch1"):
     return {
         "reciter": None,
         "delivery": {
-            "slug": slug, "reciter_id": "rec_x", "riwayah": "hafs",
-            "style": "murattal", "source": "src1", "channel": "ch1",
+            "slug": slug,
+            "reciter_id": "rec_x",
+            "riwayah": "hafs",
+            "style": "murattal",
+            "source": "src1",
+            "channel": "ch1",
             "audio_category": "by_surah",
         },
         "vocab_additions": None,
         "audio_manifest": {
-            "chapters": {"1": {"url": "https://cdn.example/001.mp3",
-                               "bitrate_kbps": 128, "bitrate_mode": "cbr"}},
+            "chapters": {
+                "1": {
+                    "url": "https://cdn.example/001.mp3",
+                    "bitrate_kbps": 128,
+                    "bitrate_mode": "cbr",
+                }
+            },
         },
     }
 
 
 def _patch_whoami(monkeypatch, mapping):
     import huggingface_hub
+
     from services.auth import token_auth
 
     token_auth._clear_cache_for_test()
@@ -106,8 +118,7 @@ def _patch_whoami(monkeypatch, mapping):
 def test_ingest_owner_cookie_happy_path(signed_in_client):
     rid = _seed_accepted_intake()
     client, _ = signed_in_client(role="owner", hf_user_id="u-O", login="owner")
-    res = client.post(f"/api/admin/intake/{rid}/ingest", headers=_HEADERS,
-                      data=json.dumps(_body()))
+    res = client.post(f"/api/admin/intake/{rid}/ingest", headers=_HEADERS, data=json.dumps(_body()))
     assert res.status_code == 200, res.data
     body = json.loads(res.data)
     assert body["ok"] and body["slug"] == "rec_x_hafs_ch1"
@@ -116,16 +127,16 @@ def test_ingest_owner_cookie_happy_path(signed_in_client):
 
 def test_ingest_anonymous_401(flask_client):
     rid = _seed_accepted_intake()
-    res = flask_client.post(f"/api/admin/intake/{rid}/ingest", headers=_HEADERS,
-                            data=json.dumps(_body()))
+    res = flask_client.post(
+        f"/api/admin/intake/{rid}/ingest", headers=_HEADERS, data=json.dumps(_body())
+    )
     assert res.status_code == 401
 
 
 def test_ingest_non_owner_cookie_403(signed_in_client):
     rid = _seed_accepted_intake()
     client, _ = signed_in_client(role="maintainer", hf_user_id="u-M", login="maint")
-    res = client.post(f"/api/admin/intake/{rid}/ingest", headers=_HEADERS,
-                      data=json.dumps(_body()))
+    res = client.post(f"/api/admin/intake/{rid}/ingest", headers=_HEADERS, data=json.dumps(_body()))
     assert res.status_code == 403
 
 
@@ -133,9 +144,11 @@ def test_ingest_cookie_path_requires_same_origin(signed_in_client):
     rid = _seed_accepted_intake()
     client, _ = signed_in_client(role="owner", hf_user_id="u-O")
     # No Origin/Referer → cookie path rejects cross-origin.
-    res = client.post(f"/api/admin/intake/{rid}/ingest",
-                      headers={"Content-Type": "application/json"},
-                      data=json.dumps(_body()))
+    res = client.post(
+        f"/api/admin/intake/{rid}/ingest",
+        headers={"Content-Type": "application/json"},
+        data=json.dumps(_body()),
+    )
     assert res.status_code == 403
 
 
@@ -196,20 +209,29 @@ def test_ingest_slug_collision_409(signed_in_client):
     from services.db import repo_catalog
 
     with db.transaction():
-        repo_catalog.insert_delivery(Delivery(
-            slug="rec_x_hafs_ch1", reciter_id="rec_x", riwayah="hafs", style="murattal",
-            source="src1", channel="ch1", audio_category=AudioCategory.BY_SURAH,
-            chapter_count=114, added_at=datetime.now(timezone.utc), added_by_hf_id="seed",
-        ))
+        repo_catalog.insert_delivery(
+            Delivery(
+                slug="rec_x_hafs_ch1",
+                reciter_id="rec_x",
+                riwayah="hafs",
+                style="murattal",
+                source="src1",
+                channel="ch1",
+                audio_category=AudioCategory.BY_SURAH,
+                chapter_count=114,
+                added_at=datetime.now(UTC),
+                added_by_hf_id="seed",
+            )
+        )
     rid = _seed_accepted_intake()
     client, _ = signed_in_client(role="owner", hf_user_id="u-O")
-    res = client.post(f"/api/admin/intake/{rid}/ingest", headers=_HEADERS,
-                      data=json.dumps(_body()))
+    res = client.post(f"/api/admin/intake/{rid}/ingest", headers=_HEADERS, data=json.dumps(_body()))
     assert res.status_code == 409
 
 
 def test_ingest_unknown_request_404(signed_in_client):
     client, _ = signed_in_client(role="owner", hf_user_id="u-O")
-    res = client.post("/api/admin/intake/rq_nope/ingest", headers=_HEADERS,
-                      data=json.dumps(_body()))
+    res = client.post(
+        "/api/admin/intake/rq_nope/ingest", headers=_HEADERS, data=json.dumps(_body())
+    )
     assert res.status_code == 404

@@ -60,6 +60,7 @@ from services.validation.classifier import compute_is_boundary_adj  # noqa: E402
 
 try:
     from quranic_phonemizer import Phonemizer  # noqa: E402
+
     _HAS_PHONEMIZER = True
 except Exception:
     _HAS_PHONEMIZER = False
@@ -97,7 +98,9 @@ def _build_canonical_phonemes(slug: str) -> dict[str, list[str]] | None:
     return {word.location.location_key: word.get_phonemes() for word in result._words}
 
 
-def _stamp_entries(entries: list[dict], single_word_verses: set, canonical: dict | None) -> tuple[int, int]:
+def _stamp_entries(
+    entries: list[dict], single_word_verses: set, canonical: dict | None
+) -> tuple[int, int]:
     """Mutate entries in place; return (segs_stamped, n_with_boundary_adj)."""
     n = 0
     fires = 0
@@ -123,7 +126,13 @@ def _stamp_entries(entries: list[dict], single_word_verses: set, canonical: dict
                 seg["is_boundary_adj"] = False
                 continue
             val = compute_is_boundary_adj(
-                seg, surah, s_ayah, s_word, e_word, single_word_verses, canonical,
+                seg,
+                surah,
+                s_ayah,
+                s_word,
+                e_word,
+                single_word_verses,
+                canonical,
             )
             seg["is_boundary_adj"] = val
             if val:
@@ -134,6 +143,7 @@ def _stamp_entries(entries: list[dict], single_word_verses: set, canonical: dict
 def _normalize_for_drift(result: dict) -> dict:
     sys.path.insert(0, str(_REPO_ROOT / "bench"))
     from snapshot import normalize  # noqa: E402
+
     return normalize(result)
 
 
@@ -180,15 +190,19 @@ def process_slug(slug: str, *, dry_run: bool) -> dict:
     drift_ok, drift_msg = _drift_check_against_ground_truth(slug)
     if not drift_ok:
         return {
-            "slug": slug, "status": "drift_fail",
-            "n_segs": n_segs, "n_fires": n_fires,
+            "slug": slug,
+            "status": "drift_fail",
+            "n_segs": n_segs,
+            "n_fires": n_fires,
             "msg": drift_msg,
         }
 
     if dry_run:
         return {
-            "slug": slug, "status": "dry_run_ok",
-            "n_segs": n_segs, "n_fires": n_fires,
+            "slug": slug,
+            "status": "dry_run_ok",
+            "n_segs": n_segs,
+            "n_fires": n_fires,
             "would_write_archive": _archive_path(slug),
             "would_promote_to": data_dir.detailed_path(slug),
         }
@@ -206,8 +220,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--slug")
-    g.add_argument("--all", action="store_true",
-                   help="every reciter under reciters/")
+    g.add_argument("--all", action="store_true", help="every reciter under reciters/")
     g.add_argument("--slugs", help="comma-separated")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -229,7 +242,9 @@ def main() -> int:
         r = process_slug(slug, dry_run=args.dry_run)
         rows.append(r)
         if r["status"] in ("promoted", "dry_run_ok"):
-            print(f"OK  segs={r['n_segs']}  is_boundary_adj=true count={r['n_fires']}  ({r['status']})")
+            print(
+                f"OK  segs={r['n_segs']}  is_boundary_adj=true count={r['n_fires']}  ({r['status']})"
+            )
         elif r["status"] == "drift_fail":
             print(f"DRIFT FAIL  segs={r['n_segs']}  fires={r['n_fires']}\n    {r['msg']}")
         else:

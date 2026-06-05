@@ -66,12 +66,14 @@ def qf_login():
         state=state, nonce=nonce, code_challenge=pkce.challenge, redirect_uri=redirect_uri
     )
     resp = make_response(redirect(url))
-    tmp = session.encode_oauth_tmp({
-        "state": state,
-        "verifier": pkce.verifier,
-        "redirect_uri": redirect_uri,
-        "popup": request.args.get("popup") == "1",
-    })
+    tmp = session.encode_oauth_tmp(
+        {
+            "state": state,
+            "verifier": pkce.verifier,
+            "redirect_uri": redirect_uri,
+            "popup": request.args.get("popup") == "1",
+        }
+    )
     _set_cookie(resp, session.QF_OAUTH_TMP_COOKIE_NAME, tmp, session.QF_OAUTH_TMP_MAX_AGE)
     return resp
 
@@ -119,7 +121,10 @@ def qf_callback():
     state = request.args.get("state", "")
     logger.info(
         "QF callback: popup=%s has_code=%s has_tmp=%s state_match=%s",
-        popup, bool(code), bool(tmp), bool(tmp) and tmp.get("state") == state,
+        popup,
+        bool(code),
+        bool(tmp),
+        bool(tmp) and tmp.get("state") == state,
     )
     if not code or not tmp or tmp.get("state") != state:
         return _finish(popup, "error", "/?qf_error=state")
@@ -157,11 +162,13 @@ def qf_status():
     payload = session.decode_session(request.cookies.get(session.QF_SESSION_COOKIE_NAME, ""))
     if not payload:
         return jsonify({"connected": False})
-    return jsonify({
-        "connected": True,
-        "login": payload.get("login"),
-        "dev": bool(payload.get("dev")),
-    })
+    return jsonify(
+        {
+            "connected": True,
+            "login": payload.get("login"),
+            "dev": bool(payload.get("dev")),
+        }
+    )
 
 
 @qf_auth_bp.route("/dev-login", methods=["POST"])

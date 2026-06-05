@@ -11,7 +11,7 @@ For VBR-specific port behavior see `vbr.md`.
 | Port | Module | Drives | Kill-switch |
 |---|---|---|---|
 | `segPort` | `tabs/segments/stores/playback.ts` (`new AudioPort()`) | Segments tab | enabled (proxied same-origin URLs) |
-| `dashPort` | `lib/playback/dash-port.ts` | **Dashboard AND Timestamps** (via `BottomPlayer`); supports `adoptElement` gapless swaps; `TimestampsWaveform` reads `dashPort.currentTimeMs()` for karaoke | `disableKillSwitch: true` (can hit a 302→CDN fallback) |
+| `dashPort` | `lib/playback/dash-port.ts` | **Dashboard AND Timestamps** (via `BottomPlayer`); supports `adoptElement` gapless swaps; `TimestampsWaveform` reads `dashPort.currentTimeMs()` for karaoke | `disableKillSwitch: true` (some sources are RAW cross-origin `qf_api` links, not proxied) |
 | `tsPort` | `tabs/timestamps/stores/playback.ts` | nothing — vestigial; delete or rewire | — |
 | per-panel | `tabs/segments/utils/playback/preview.ts` (`new AudioPort()`) | SavePreview / HistoryPanel, isolated from live `playingSegmentIndex` | enabled |
 
@@ -60,7 +60,7 @@ Subscriber API (each returns an unsubscribe fn, snapshotted before fanout): `onL
 
 ### Cross-origin gotcha (`disableKillSwitch`)
 
-`MediaElementAudioSourceNode` requires CORS to read samples; constructing one against a cross-origin URL without CORS silently mutes (Web Audio spec). **The audio-proxy now streams same-origin with `ACAO: *`** (`routes/audio/proxy.py`), so `crossorigin="anonymous"` elements playing **proxied** URLs route through Web Audio fine — the foot-gun is mostly defused. `disableKillSwitch: true` (skips Web Audio entirely; the audible-tail bug at pause returns) is now needed only for **raw cross-origin URLs not wrapped by the proxy** — which is why `dashPort` keeps it (302→CDN fallback). Wrap CBR by_surah URLs via `wrapCbrSrcIfBySurah` (`source.ts`) and keep the kill-switch.
+`MediaElementAudioSourceNode` requires CORS to read samples; constructing one against a cross-origin URL without CORS silently mutes (Web Audio spec). **The audio-proxy now streams same-origin with `ACAO: *`** (`routes/audio/proxy.py`), so `crossorigin="anonymous"` elements playing **proxied** URLs route through Web Audio fine — the foot-gun is mostly defused. `disableKillSwitch: true` (skips Web Audio entirely; the audible-tail bug at pause returns) is now needed only for **raw cross-origin URLs not wrapped by the proxy** — which is why `dashPort` keeps it (some dashboard sources are raw `qf_api` Quran.Foundation links served directly, not through the proxy). Wrap CBR by_surah URLs via `wrapCbrSrcIfBySurah` (`source.ts`) and keep the kill-switch.
 
 ## AudioGraph (Web Audio kill-switch)
 
@@ -97,8 +97,9 @@ cutAudio(el) / uncutAudio(el) // 5 ms ramp to 0 / 1
 For cross-source jumps where the once-per-element constraint forbids re-using one element (TS shuffle / auto-advance):
 
 - `lib/playback/shadow-audio.ts` — warm a hidden `<audio>` element (`shadowPrewarm(url, {slot, seekSec})`, slots `'any'`/`'shuf'`), then `consumeWarm(url)` hands it over and `recycleAsShadow(el, slot)` returns the old one to the pool.
-- `lib/playback/shuffle-prewarm.ts` — thin wrapper remembering which `TsRandomTarget` a warm URL belongs to (`primeShuffle`/`consumeShuffle`/`clearShuffle`).
-- `lib/playback/adopt-signal.ts` — module-level single-shot signal so `BottomPlayer.reactToContext` skips a reload after a gapless adopt (`setAdoptedSource`/`takeAdoptedSource`).
+- `lib/playback/shuffle-prewarm.ts` — thin wrapper remembering which `TsRandomTarget` a warm URL belongs to (`primeShuffle`/`consumeShuffle`/`clearShuffle`). Slot `'shuf'`.
+- `lib/playback/dash-prewarm.ts` — the **dashboard intent-driven look-ahead** (slot `'dash'`, depth 1). Two tiers: `primeDashSpeculative(url, seekSec)` (range-windowed warm for hovers — next/prev button, surah popover, progress bar, filmstrip cell, scrub-settle) and `primeDashCommitted(target)` + `consumeDashCommitted(url)` (full-element warm for the imminent gapless-next chapter, adopted on `dashPort.onEnded`). `clearDashPrewarm()` cancels on reciter/chapter switch. Wired from `BottomPlayer.svelte` (+ `NowReciting`/`AyahFilmstrip` for the filmstrip-hover hook). A committed target outranks speculative hovers (single slot).
+- `lib/playback/adopt-signal.ts` — module-level single-shot signal so `BottomPlayer.reactToContext` skips a reload after a gapless adopt (`setAdoptedSource`/`takeAdoptedSource`). Used by BOTH the TS shuffle adopt and the dashboard gapless-next adopt.
 - `port.adoptElement(el, srcUrl)` transplants the warm element; the kill-switch graph rides along on the element.
 
 ## Segment look-ahead warming (CBR)
@@ -125,6 +126,8 @@ For cross-source jumps where the once-per-element constraint forbids re-using on
 ## Feature-building seams
 
 - **New AudioPort consumer:** import/construct a module-scoped port, `attachElement` on mount, `setSource` → `loadCovering` → `await ready` → `seekAndPlay` (file-absolute ms). Gapless cross-source → prewarm via `shadow-audio.ts` + `adoptElement`.
+- **Dashboard loading ring:** `BottomPlayer` gates `isLoading` on `onPlaying` (actual audible resume) as the single steady-state clear — NOT `onLoad`/canplay (readyState 3 ≠ audible; clearing there stops the ring 1–3 s early). `onWaiting` re-raises on a mid-play stall. A paused chapter-select fires `dashPort.prewarm()` so the play-click isn't a cold start.
+- **New intent-prewarm signal (dashboard):** call `primeDashSpeculative` (hover) or `primeDashCommitted` (committed) from `dash-prewarm.ts`; keep depth 1 (single `'dash'` slot) and `clearDashPrewarm()` on source switch so a stale warm can't adopt.
 - **New peaks consumer:** `getWaveformPeaks(url)` → `viewPeaks(...)` → draw. Decode wire only via `b64ToInt8`. Never branch on peaks shape at the call site.
 - **New boundary policy:** extend the `RangePolicy` union + add a `case` in `_handleBoundary()`; honor the live-element reads so adopt rotation doesn't break it.
 - **New tab's playback:** mirror `dashPort`/`segPort` — module-scoped port in a `stores/playback.ts`, component `attachElement`s a `<audio crossorigin="anonymous">`, a `*PortReady` writable, App-level tab-switch `port.pause()`. Keep the kill-switch on unless it plays raw cross-origin audio.

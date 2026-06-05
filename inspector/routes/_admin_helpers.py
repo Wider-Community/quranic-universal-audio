@@ -13,11 +13,9 @@ from __future__ import annotations
 from flask import jsonify
 
 from qua_shared.schemas import Actor, Role
-
 from services import auth as auth_service
 from services import catalog as catalog_service
 from services import permissions
-
 
 # Re-exported for back-compat with imports of ``MIN_REASON_CHARS`` from this
 # module. The canonical definition lives in ``services/permissions.py``.
@@ -70,9 +68,11 @@ def validate_reason(body: dict, *, required: bool = True):
     norm = permissions.normalize_reason(raw)
     if required and norm is None:
         return None, (
-            jsonify({
-                "error": f"reason must be at least {MIN_REASON_CHARS} characters",
-            }),
+            jsonify(
+                {
+                    "error": f"reason must be at least {MIN_REASON_CHARS} characters",
+                }
+            ),
             400,
         )
     return (norm or ""), None

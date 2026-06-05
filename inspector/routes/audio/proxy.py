@@ -88,17 +88,23 @@ def _stream_cdn(url: str, disposition: str | None = None) -> Response:
         req_headers["Range"] = rng
     try:
         upstream = requests.get(
-            url, headers=req_headers, stream=True, timeout=_UPSTREAM_TIMEOUT_SECS,
+            url,
+            headers=req_headers,
+            stream=True,
+            timeout=_UPSTREAM_TIMEOUT_SECS,
         )
     except requests.RequestException as exc:
         logger.warning("audio_proxy: upstream fetch failed url=%s err=%s", url, exc)
         return jsonify({"error": "upstream audio fetch failed"}), 502
 
-    immutable = f"public, max-age={AUDIO_CACHE_MAX_AGE}, immutable"
+    # Cache only successful bodies. A forwarded upstream error (4xx/5xx) must NOT
+    # carry the immutable 1-year Cache-Control, or the browser pins the failure
+    # and replays it until a hard cache clear.
+    ok = upstream.status_code in (200, 206)
     out_headers = {
         "Content-Type": upstream.headers.get("Content-Type", "audio/mpeg"),
         "Accept-Ranges": "bytes",
-        "Cache-Control": immutable,
+        "Cache-Control": f"public, max-age={AUDIO_CACHE_MAX_AGE}, immutable" if ok else "no-store",
         "Access-Control-Allow-Origin": "*",
     }
     if disposition:

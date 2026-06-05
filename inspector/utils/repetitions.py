@@ -12,13 +12,13 @@ The math is borrowed from the quranic-universal-aligner repo
 (``src/core/segment_types.py``); kept inline so the inspector has no
 cross-repo dependency.
 """
+
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 
-def compute_reading_sequence(ref_from: str, ref_to: str,
-                             wrap_word_ranges: list) -> list[list[str]]:
+def compute_reading_sequence(ref_from: str, ref_to: str, wrap_word_ranges: list) -> list[list[str]]:
     """Return ``[[from1, to1], [from2, to2], ...]`` reading-order sections.
 
     Each entry is a single contiguous span the reciter read. With a wrap
@@ -57,8 +57,9 @@ def _parse_word_ref(ref: str) -> tuple[int, int, int] | None:
         return None
 
 
-def count_words_in_section(ref_from: str, ref_to: str,
-                           verse_word_counts: dict[tuple[int, int], int]) -> int:
+def count_words_in_section(
+    ref_from: str, ref_to: str, verse_word_counts: dict[tuple[int, int], int]
+) -> int:
     """Count words in the inclusive range ``ref_from..ref_to``.
 
     ``verse_word_counts`` is keyed by ``(surah, ayah)`` (the same shape
@@ -73,7 +74,7 @@ def count_words_in_section(ref_from: str, ref_to: str,
     surah = a[0]
     if a[1] == b[1]:
         return max(0, b[2] - a[2] + 1)
-    total = (verse_word_counts.get((surah, a[1]), 0) - a[2] + 1)
+    total = verse_word_counts.get((surah, a[1]), 0) - a[2] + 1
     for ayah in range(a[1] + 1, b[1]):
         total += verse_word_counts.get((surah, ayah), 0)
     total += b[2]
@@ -89,8 +90,10 @@ def section_refs_canonical(sections: Iterable[list[str]]) -> list[str]:
 # Wrap-geometry validation (shared by save_payload + the cleanup script)
 # ---------------------------------------------------------------------------
 
-def _word_position(t: tuple[int, int, int],
-                   verse_word_counts: dict[tuple[int, int], int]) -> int | None:
+
+def _word_position(
+    t: tuple[int, int, int], verse_word_counts: dict[tuple[int, int], int]
+) -> int | None:
     """Linear word position within the surah (1-based across all verses).
 
     Returns ``None`` when any verse along the way isn't in the counts map —
@@ -106,8 +109,9 @@ def _word_position(t: tuple[int, int, int],
     return pos + word
 
 
-def is_wrap_consistent(matched_ref: str, wrap: list,
-                       verse_word_counts: dict[tuple[int, int], int]) -> bool:
+def is_wrap_consistent(
+    matched_ref: str, wrap: list, verse_word_counts: dict[tuple[int, int], int]
+) -> bool:
     """True iff ``wrap`` is geometrically valid for ``matched_ref``.
 
     Two failure modes are caught:

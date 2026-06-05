@@ -112,11 +112,14 @@ def test_toggle_flips_maintainer_force_release_live(signed_in_client):
     assert before.status_code == 403
 
     # Owner grants claim.force_release to the maintainer tier.
-    assert owner.post(
-        "/api/admin/permissions/claim.force_release/maintainer",
-        json={"allowed": True},
-        headers=_ORIGIN,
-    ).status_code == 200
+    assert (
+        owner.post(
+            "/api/admin/permissions/claim.force_release/maintainer",
+            json={"allowed": True},
+            headers=_ORIGIN,
+        ).status_code
+        == 200
+    )
 
     # Now the maintainer passes the capability gate (404 = unknown slug, NOT
     # 403 = forbidden — the gate let them through).
@@ -134,7 +137,6 @@ def test_toggle_emits_audit(signed_in_client):
     from services.db import connection
 
     events = [
-        r[0]
-        for r in connection.get_conn().execute("SELECT event FROM transitions").fetchall()
+        r[0] for r in connection.get_conn().execute("SELECT event FROM transitions").fetchall()
     ]
     assert "access.permission_changed" in events

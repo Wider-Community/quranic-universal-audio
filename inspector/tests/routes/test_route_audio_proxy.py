@@ -9,11 +9,8 @@ These tests mock ``audio_source.resolve`` to the in-memory (BytesIO) branch
 so no bucket/CDN setup is needed; the disposition is computed once and shared
 across all three serve branches, so the bytes branch exercises the logic.
 """
+
 from __future__ import annotations
-
-import os
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 
 def _fake_source(chapter_key: str | None = "2"):

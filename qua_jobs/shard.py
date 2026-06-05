@@ -83,8 +83,9 @@ def split(doc: dict) -> dict[int, dict]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Shard a tier file into per-surah JSON files")
     parser.add_argument("input", type=Path, help="Tier file (.json.gz or .json)")
-    parser.add_argument("--out-dir", type=Path,
-                        help="Output directory (default: <input parent>/per_surah)")
+    parser.add_argument(
+        "--out-dir", type=Path, help="Output directory (default: <input parent>/per_surah)"
+    )
     args = parser.parse_args(argv)
 
     if not args.input.exists():
@@ -102,8 +103,9 @@ def main(argv: list[str] | None = None) -> int:
 
     for surah in sorted(shards):
         target = out_dir / f"{surah}.json"
-        payload = json.dumps(shards[surah], sort_keys=True, ensure_ascii=False,
-                             separators=(",", ":"))
+        payload = json.dumps(
+            shards[surah], sort_keys=True, ensure_ascii=False, separators=(",", ":")
+        )
         target.write_text(payload, encoding="utf-8")
     print(f"wrote {len(shards)} files to {out_dir}")
     return 0

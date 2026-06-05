@@ -26,7 +26,8 @@ def test_lookup_returns_parsed_user(monkeypatch):
         "avatarUrl": "https://huggingface.co/avatars/hetchyy.png",
     }
     monkeypatch.setattr(
-        hf_users.requests, "get",
+        hf_users.requests,
+        "get",
         lambda url, timeout: _mock_response(200, body),
     )
     user = hf_users.lookup("hetchyy")
@@ -42,7 +43,8 @@ def test_lookup_falls_back_to_underscore_id(monkeypatch):
 
     body = {"_id": "legacy42", "user": "old_user"}
     monkeypatch.setattr(
-        hf_users.requests, "get",
+        hf_users.requests,
+        "get",
         lambda url, timeout: _mock_response(200, body),
     )
     user = hf_users.lookup("old_user")
@@ -54,7 +56,8 @@ def test_lookup_returns_none_on_404(monkeypatch):
     from services import hf_users
 
     monkeypatch.setattr(
-        hf_users.requests, "get",
+        hf_users.requests,
+        "get",
         lambda url, timeout: _mock_response(404),
     )
     assert hf_users.lookup("ghost") is None
@@ -64,7 +67,8 @@ def test_lookup_raises_on_5xx(monkeypatch):
     from services import hf_users
 
     monkeypatch.setattr(
-        hf_users.requests, "get",
+        hf_users.requests,
+        "get",
         lambda url, timeout: _mock_response(503),
     )
     with pytest.raises(hf_users.HfUserLookupError):
@@ -86,7 +90,8 @@ def test_lookup_raises_when_id_missing(monkeypatch):
     from services import hf_users
 
     monkeypatch.setattr(
-        hf_users.requests, "get",
+        hf_users.requests,
+        "get",
         lambda url, timeout: _mock_response(200, {"user": "alice"}),
     )
     with pytest.raises(hf_users.HfUserLookupError):
@@ -99,7 +104,8 @@ def test_lookup_returns_none_for_blank_login(monkeypatch):
     # Should short-circuit; no HTTP call.
     called = []
     monkeypatch.setattr(
-        hf_users.requests, "get",
+        hf_users.requests,
+        "get",
         lambda url, timeout: called.append(1) or _mock_response(404),
     )
     assert hf_users.lookup("") is None

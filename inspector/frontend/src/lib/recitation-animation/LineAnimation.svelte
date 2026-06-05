@@ -36,7 +36,7 @@
         /** Whether playback is running (drives the rAF loop). */
         playing: boolean;
         /** Click-to-seek: receives the clicked word's chapter-absolute ms. */
-        onSeekToWord?: (ms: number) => void;
+        onSeekToWord?: (_ms: number) => void;
     }
 
     let { units, config, getTimeMs, playing, onSeekToWord }: Props = $props();

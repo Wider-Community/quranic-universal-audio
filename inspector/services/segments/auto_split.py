@@ -22,20 +22,18 @@ flips the row's button label from *Auto Split* back to plain *Split* and
 falls back to manual single-cursor placement — same UX as a non-candidate
 seg has always had.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
-from services.storage.data_loader import load_auto_split
+from services.storage.data_loader import load_auto_split, load_detailed
 from utils.references import chapter_from_ref
-from services.storage.data_loader import load_detailed
 
 logger = logging.getLogger(__name__)
 
 
-def _find_segment_kind(reciter: str, chapter: int,
-                       segment_uid: str) -> Optional[str]:
+def _find_segment_kind(reciter: str, chapter: int, segment_uid: str) -> str | None:
     """Return ``"cross_verse"`` / ``"repetition"`` / ``None``.
 
     Used only by the response's ``kind`` field when the sidecar reports a
@@ -78,15 +76,17 @@ def compute_auto_split(reciter: str, chapter: int, segment_uid: str) -> dict:
         # Sanity: a sidecar entry without cursors / refs is meaningless;
         # treat it as a miss rather than ship a half-shape to the FE.
         if cursors and refs and kind:
-            return {"cursors": list(cursors), "refs": list(refs),
-                    "kind": kind, "source": "sidecar"}
+            return {"cursors": list(cursors), "refs": list(refs), "kind": kind, "source": "sidecar"}
 
     # Sidecar miss: tell the FE this row has no precomputed cursors. The
     # button falls back to a plain Split. ``kind`` is still useful so the
     # FE can colour-code or telemetry-tag the miss.
-    return {"cursors": None, "refs": None,
-            "kind": _find_segment_kind(reciter, chapter, segment_uid),
-            "source": "miss"}
+    return {
+        "cursors": None,
+        "refs": None,
+        "kind": _find_segment_kind(reciter, chapter, segment_uid),
+        "source": "miss",
+    }
 
 
 def load_auto_split_map(reciter: str) -> dict[str, dict]:
@@ -113,6 +113,5 @@ def load_auto_split_map(reciter: str) -> dict[str, dict]:
         refs = hit.get("refs") or None
         kind = hit.get("kind") or None
         if cursors and refs and kind:
-            out[uid] = {"cursors": list(cursors), "refs": list(refs),
-                        "kind": kind}
+            out[uid] = {"cursors": list(cursors), "refs": list(refs), "kind": kind}
     return out

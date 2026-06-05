@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 
@@ -20,10 +20,8 @@ from qua_shared.schemas import (
     Delivery,
     ReciterCatalog,
     ReciterEntry,
-    RecordingContext,
-    ReciterRow,
     ReciterState,
-    ReciterStateFile,
+    RecordingContext,
     Riwayah,
     Role,
     Source,
@@ -31,7 +29,6 @@ from qua_shared.schemas import (
     Visibility,
     Vocab,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -42,10 +39,29 @@ def _actor(role: str = "contributor", hf_user_id: str = "u-1") -> Actor:
     return Actor(hf_user_id=hf_user_id, login_at_time="alice", role=Role(role))
 
 
+def _record_and_call_through(monkeypatch) -> list[dict]:
+    """Record audit.append calls + pass them through to the real implementation
+    so the durability boundary still writes to ``repo_transitions``. A pure
+    no-op stub would lose the regression-guard on emission entirely.
+    """
+    from services import audit as audit_service
+
+    calls: list[dict] = []
+    real = audit_service.append
+
+    def _capture(*a, **kw):
+        calls.append(kw if not a else {"args": a, "kwargs": kw})
+        return real(*a, **kw)
+
+    monkeypatch.setattr(audit_service, "append", _capture)
+    return calls
+
+
 def _seed_catalog_db():
     """Seed the small test catalog into the SQLite substrate."""
     from services import db
     from services.db import repo_catalog
+
     cat = _seed_catalog()
     with db.transaction():
         repo_catalog.load_vocab(cat.vocab)
@@ -88,7 +104,7 @@ def _seed_catalog():
                 channel="ch1",
                 audio_category=AudioCategory.BY_SURAH,
                 chapter_count=114,
-                added_at=datetime.now(timezone.utc),
+                added_at=datetime.now(UTC),
                 added_by_hf_id="seed",
             ),
         ],
@@ -102,9 +118,7 @@ def state_env(tmp_path, monkeypatch):
     from services import catalog as catalog_service
     from services import hf_bucket as _hf_bucket
     from services import pending_requests as pending_requests_service
-    from services import request_archive as request_archive_service
     from services import state as state_service
-    from services import storage_paths
 
     monkeypatch.setenv("INSPECTOR_FILESYSTEM_ROOT", str(tmp_path))
     backend = _hf_bucket.FilesystemBackend(tmp_path)
@@ -113,6 +127,7 @@ def state_env(tmp_path, monkeypatch):
     # Seed the catalog + a CATALOGUED state row for test_reciter into the DB.
     _seed_catalog_db()
     from tests.conftest import _seed_state
+
     _seed_state("test_reciter", state="catalogued", reciter_id="test_reciter")
 
     yield state_service, pending_requests_service, catalog_service, backend
@@ -126,8 +141,14 @@ def state_env(tmp_path, monkeypatch):
 
 
 def test_requested_happy_path(state_env, monkeypatch):
+    """Drives the canonical happy path and pins both the in-memory pending
+    state and the durability boundary on `repo_transitions`. The transition
+    row in SQLite is the source of truth — a no-op audit stub used elsewhere
+    in this file would let a handler regression that drops the transition
+    write slip through, so we read repo_transitions back directly here."""
     state_service, pending_service, _, _ = state_env
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     state_service.transition(
@@ -151,17 +172,23 @@ def test_requested_happy_path(state_env, monkeypatch):
     assert pending.comments == "Found a higher-quality recording."
     assert pending.requester.hf_user_id == "u-1"
 
+    from services.db import repo_transitions
+
+    events = {t["event"] for t in repo_transitions.for_slug("test_reciter")}
+    assert "reciter.requested" in events
+
 
 def test_requested_creates_row_when_none_exists(state_env, monkeypatch):
     """Most-common path: catalog delivery has no state row yet. Request
     creates a fresh row in AWAITING_ALIGNMENT in one step."""
     state_service, pending_service, _, backend = state_env
     from services import audit as audit_service
-    from services import storage_paths
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     # Drop the seeded row so test_reciter has no delivery_state.
     from services import db as _db
+
     with _db.transaction() as _c:
         _c.execute("DELETE FROM delivery_states WHERE slug = 'test_reciter'")
     assert state_service.get_row("test_reciter") is None
@@ -187,11 +214,12 @@ def test_requested_creates_row_when_none_exists(state_env, monkeypatch):
 def test_requested_rejects_non_catalogued(state_env, monkeypatch):
     state_service, _, _, backend = state_env
     from services import audit as audit_service
-    from services import storage_paths
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     # Flip the row to AWAITING_REVIEW.
     from tests.conftest import _seed_state
+
     _seed_state("test_reciter", state="awaiting_review", reciter_id="test_reciter")
 
     with pytest.raises(state_service.InvalidTransition):
@@ -206,13 +234,17 @@ def test_requested_rejects_non_catalogued(state_env, monkeypatch):
 def test_requested_rejects_discarded_visibility(state_env, monkeypatch):
     state_service, _, _, backend = state_env
     from services import audit as audit_service
-    from services import storage_paths
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     from tests.conftest import _seed_state
+
     _seed_state(
-        "test_reciter", state="catalogued", visibility="discarded",
-        visibility_reason="testing", reciter_id="test_reciter",
+        "test_reciter",
+        state="catalogued",
+        visibility="discarded",
+        visibility_reason="testing",
+        reciter_id="test_reciter",
     )
 
     with pytest.raises(state_service.InvalidTransition):
@@ -225,8 +257,13 @@ def test_requested_rejects_discarded_visibility(state_env, monkeypatch):
 
 
 def test_requested_rejects_when_pending_exists(state_env, monkeypatch):
+    """Exercise the pending-check guard in ``_h_requested``: the row is back at
+    CATALOGUED but a pending entry already exists — the second request must
+    fail on the pending-check, not the state precondition.
+    """
     state_service, pending_service, _, _ = state_env
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     state_service.transition(
@@ -235,9 +272,21 @@ def test_requested_rejects_when_pending_exists(state_env, monkeypatch):
         actor=_actor(),
         payload={"proposed_edits": {}, "comments": None},
     )
-    # Second request for the same slug — row is no longer CATALOGUED,
-    # so it fails on the state check rather than the pending check.
-    with pytest.raises(state_service.InvalidTransition):
+
+    # Force the row back to CATALOGUED while leaving the pending entry alive,
+    # isolating the pending-check guard from the state precondition.
+    from services import db
+    from services.db import repo_state
+
+    with db.transaction():
+        repo_state.update_state(
+            "test_reciter",
+            state=ReciterState.CATALOGUED,
+            state_since=datetime.now(UTC),
+        )
+    assert pending_service.get("test_reciter") is not None
+
+    with pytest.raises(state_service.InvalidTransition, match="pending request"):
         state_service.transition(
             "test_reciter",
             "reciter.requested",
@@ -249,6 +298,7 @@ def test_requested_rejects_when_pending_exists(state_env, monkeypatch):
 def test_requested_rejects_oversized_comments(state_env, monkeypatch):
     state_service, _, _, _ = state_env
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     with pytest.raises(state_service.InvalidTransition):
@@ -263,6 +313,7 @@ def test_requested_rejects_oversized_comments(state_env, monkeypatch):
 def test_requested_rejects_bad_year_in_edits(state_env, monkeypatch):
     state_service, _, _, _ = state_env
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     with pytest.raises(state_service.InvalidTransition):
@@ -286,6 +337,7 @@ def _seed_awaiting_alignment_with_pending(state_env, monkeypatch):
     """Helper: put a slug into AWAITING_ALIGNMENT with a pending request."""
     state_service, pending_service, _, _ = state_env
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
     state_service.transition(
         "test_reciter",
@@ -300,9 +352,7 @@ def _seed_awaiting_alignment_with_pending(state_env, monkeypatch):
 
 
 def test_reject_soft_happy_path(state_env, monkeypatch):
-    state_service, pending_service = _seed_awaiting_alignment_with_pending(
-        state_env, monkeypatch
-    )
+    state_service, pending_service = _seed_awaiting_alignment_with_pending(state_env, monkeypatch)
     assert pending_service.get("test_reciter") is not None
 
     state_service.transition(
@@ -319,8 +369,10 @@ def test_reject_soft_happy_path(state_env, monkeypatch):
 
     # Archive: entry moves into returned.json with reason + admin actor.
     from services import request_archive as request_archive_service
+
     archived = request_archive_service.get_for_slug(
-        "test_reciter", request_archive_service.ArchiveKind.RETURNED,
+        "test_reciter",
+        request_archive_service.ArchiveKind.RETURNED,
     )
     assert len(archived) == 1
     assert archived[0].reason == "not a priority right now"
@@ -355,6 +407,7 @@ def test_reject_soft_requires_reason(state_env, monkeypatch):
 def test_reject_soft_requires_awaiting_alignment(state_env, monkeypatch):
     state_service, _, _, _ = state_env
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     with pytest.raises(state_service.InvalidTransition):
@@ -372,9 +425,7 @@ def test_reject_soft_requires_awaiting_alignment(state_env, monkeypatch):
 
 
 def test_reject_hard_happy_path(state_env, monkeypatch):
-    state_service, pending_service = _seed_awaiting_alignment_with_pending(
-        state_env, monkeypatch
-    )
+    state_service, pending_service = _seed_awaiting_alignment_with_pending(state_env, monkeypatch)
 
     state_service.transition(
         "test_reciter",
@@ -390,8 +441,10 @@ def test_reject_hard_happy_path(state_env, monkeypatch):
     assert pending_service.get("test_reciter") is None
 
     from services import request_archive as request_archive_service
+
     archived = request_archive_service.get_for_slug(
-        "test_reciter", request_archive_service.ArchiveKind.DISCARDED,
+        "test_reciter",
+        request_archive_service.ArchiveKind.DISCARDED,
     )
     assert len(archived) == 1
     assert archived[0].reason == "duplicate of an already-published reciter"
@@ -430,6 +483,7 @@ def test_reject_hard_requires_reason(state_env, monkeypatch):
 def test_alignment_completed_applies_pending_edits(state_env, monkeypatch):
     state_service, pending_service, catalog_service, _ = state_env
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     # User submits a request with proposed edits.
@@ -448,7 +502,9 @@ def test_alignment_completed_applies_pending_edits(state_env, monkeypatch):
     )
     # System actor fires alignment_completed.
     system_actor = Actor(
-        hf_user_id="system", login_at_time="system", role=Role.OWNER,
+        hf_user_id="system",
+        login_at_time="system",
+        role=Role.OWNER,
     )
     state_service.transition(
         "test_reciter",
@@ -471,8 +527,10 @@ def test_alignment_completed_applies_pending_edits(state_env, monkeypatch):
     assert pending_service.get("test_reciter") is None
 
     from services import request_archive as request_archive_service
+
     archived = request_archive_service.get_for_slug(
-        "test_reciter", request_archive_service.ArchiveKind.COMPLETED,
+        "test_reciter",
+        request_archive_service.ArchiveKind.COMPLETED,
     )
     assert len(archived) == 1
     assert archived[0].proposed_edits.name_en == "Approved Name"
@@ -485,6 +543,7 @@ def test_alignment_completed_auto_claims_when_flag_set(state_env, monkeypatch):
     on the requester's behalf, landing the row in UNDER_REVIEW."""
     state_service, _, _, _ = state_env
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     requester = _actor(hf_user_id="u-req", role="contributor")
@@ -497,7 +556,9 @@ def test_alignment_completed_auto_claims_when_flag_set(state_env, monkeypatch):
 
     system = Actor(hf_user_id="system", login_at_time="system", role=Role.OWNER)
     state_service.transition(
-        "test_reciter", "reciter.alignment_completed", actor=system,
+        "test_reciter",
+        "reciter.alignment_completed",
+        actor=system,
     )
 
     row = state_service.get_row("test_reciter")
@@ -511,6 +572,7 @@ def test_alignment_completed_skips_auto_claim_when_flag_unset(state_env, monkeyp
     contributor to pick up."""
     state_service, _, _, _ = state_env
     from services import audit as audit_service
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     state_service.transition(
@@ -521,7 +583,9 @@ def test_alignment_completed_skips_auto_claim_when_flag_unset(state_env, monkeyp
     )
     system = Actor(hf_user_id="system", login_at_time="system", role=Role.OWNER)
     state_service.transition(
-        "test_reciter", "reciter.alignment_completed", actor=system,
+        "test_reciter",
+        "reciter.alignment_completed",
+        actor=system,
     )
     row = state_service.get_row("test_reciter")
     assert row is not None
@@ -529,9 +593,7 @@ def test_alignment_completed_skips_auto_claim_when_flag_unset(state_env, monkeyp
     assert row.assignee_hf_id is None
 
 
-def test_alignment_completed_skips_auto_claim_when_other_claim_held(
-    state_env, monkeypatch, tmp_path,
-):
+def test_alignment_completed_skips_auto_claim_when_other_claim_held(state_env):
     """auto_claim=True but requester already holds another active claim:
     skip silently, row stays in AWAITING_REVIEW for someone else to grab.
     A ``reciter.auto_claim_skipped`` audit record is written so the skip
@@ -541,8 +603,10 @@ def test_alignment_completed_skips_auto_claim_when_other_claim_held(
     # Seed an existing claim for the requester on a different slug
     # (test_reciter is already CATALOGUED from state_env).
     from tests.conftest import _seed_state
-    _seed_state("other_reciter", state="under_review",
-                assignee_hf_id="u-req", assignee_login="alice")
+
+    _seed_state(
+        "other_reciter", state="under_review", assignee_hf_id="u-req", assignee_login="alice"
+    )
 
     requester = _actor(hf_user_id="u-req", role="contributor")
     state_service.transition(
@@ -553,7 +617,9 @@ def test_alignment_completed_skips_auto_claim_when_other_claim_held(
     )
     system = Actor(hf_user_id="system", login_at_time="system", role=Role.OWNER)
     state_service.transition(
-        "test_reciter", "reciter.alignment_completed", actor=system,
+        "test_reciter",
+        "reciter.alignment_completed",
+        actor=system,
     )
     row = state_service.get_row("test_reciter")
     assert row is not None
@@ -563,8 +629,10 @@ def test_alignment_completed_skips_auto_claim_when_other_claim_held(
     assert row.assignee_hf_id is None
 
     from services.db import repo_transitions
+
     skip_records = [
-        r for r in repo_transitions.for_slug("test_reciter")
+        r
+        for r in repo_transitions.for_slug("test_reciter")
         if r["event"] == "reciter.auto_claim_skipped"
     ]
     assert len(skip_records) == 1
@@ -575,9 +643,7 @@ def test_alignment_completed_skips_auto_claim_when_other_claim_held(
     assert skip["payload"]["existing_claim_slug"] == "other_reciter"
 
 
-def test_owner_auto_claim_bypasses_one_claim_limit(
-    state_env, monkeypatch, tmp_path,
-):
+def test_owner_auto_claim_bypasses_one_claim_limit(state_env):
     """Owners are exempt from the one-claim-per-user rule (matches
     can_claim + the /api/claim route): an owner who already holds a claim
     should still get auto-claimed on a second request, and NO skip audit
@@ -586,8 +652,10 @@ def test_owner_auto_claim_bypasses_one_claim_limit(
 
     # test_reciter is CATALOGUED from state_env; add the owner's existing claim.
     from tests.conftest import _seed_state
-    _seed_state("other_reciter", state="under_review",
-                assignee_hf_id="u-owner", assignee_login="alice")
+
+    _seed_state(
+        "other_reciter", state="under_review", assignee_hf_id="u-owner", assignee_login="alice"
+    )
 
     owner = _actor(hf_user_id="u-owner", role="owner")
     state_service.transition(
@@ -598,7 +666,9 @@ def test_owner_auto_claim_bypasses_one_claim_limit(
     )
     system = Actor(hf_user_id="system", login_at_time="system", role=Role.OWNER)
     state_service.transition(
-        "test_reciter", "reciter.alignment_completed", actor=system,
+        "test_reciter",
+        "reciter.alignment_completed",
+        actor=system,
     )
     row = state_service.get_row("test_reciter")
     assert row is not None
@@ -607,8 +677,10 @@ def test_owner_auto_claim_bypasses_one_claim_limit(
     assert row.assignee_hf_id == "u-owner"
 
     from services.db import repo_transitions
+
     skip_records = [
-        r for r in repo_transitions.for_slug("test_reciter")
+        r
+        for r in repo_transitions.for_slug("test_reciter")
         if r["event"] == "reciter.auto_claim_skipped"
     ]
     assert skip_records == []
@@ -617,16 +689,19 @@ def test_owner_auto_claim_bypasses_one_claim_limit(
 def test_alignment_completed_noop_when_no_pending(state_env, monkeypatch):
     state_service, _, _, backend = state_env
     from services import audit as audit_service
-    from services import storage_paths
+
     monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
 
     # Move the row to AWAITING_ALIGNMENT without a pending entry (e.g. admin
     # force-set state).
     from tests.conftest import _seed_state
+
     _seed_state("test_reciter", state="awaiting_alignment", reciter_id="test_reciter")
 
     system_actor = Actor(
-        hf_user_id="system", login_at_time="system", role=Role.OWNER,
+        hf_user_id="system",
+        login_at_time="system",
+        role=Role.OWNER,
     )
     state_service.transition(
         "test_reciter",

@@ -3,30 +3,43 @@ import { describe, expect, it } from 'vitest';
 import { match, normalizeArabic } from '../fuzzy-match';
 
 describe('normalizeArabic', () => {
+    // Each assertion now pins the EXPECTED canonical form rather than just
+    // comparing two normalised values to each other. The latter pattern
+    // passes when both inputs reduce to the empty string — masking a bug
+    // where the diacritic regex eats base letters too. A negative guard
+    // (different unicode preserved) blocks the all-collapse-to-empty mode
+    // from recurring silently.
     it('strips tashkeel diacritics', () => {
-        expect(normalizeArabic('مَكْتَبَة')).toBe(normalizeArabic('مكتبه'));
+        expect(normalizeArabic('مَكْتَبَة')).toBe('مكتبه');
     });
 
     it('collapses alif variants', () => {
-        expect(normalizeArabic('أحمد')).toBe(normalizeArabic('احمد'));
-        expect(normalizeArabic('إبراهيم')).toBe(normalizeArabic('ابراهيم'));
-        expect(normalizeArabic('آدم')).toBe(normalizeArabic('ادم'));
+        expect(normalizeArabic('أحمد')).toBe('احمد');
+        expect(normalizeArabic('إبراهيم')).toBe('ابراهيم');
+        expect(normalizeArabic('آدم')).toBe('ادم');
     });
 
     it('maps taa marbuta to haa', () => {
-        expect(normalizeArabic('الفاتحة')).toBe(normalizeArabic('الفاتحه'));
+        expect(normalizeArabic('الفاتحة')).toBe('الفاتحه');
     });
 
     it('maps alif maksura to yaa', () => {
-        expect(normalizeArabic('موسى')).toBe(normalizeArabic('موسي'));
+        expect(normalizeArabic('موسى')).toBe('موسي');
     });
 
     it('lowercases Latin', () => {
-        expect(normalizeArabic('Husary')).toBe(normalizeArabic('husary'));
+        expect(normalizeArabic('Husary')).toBe('husary');
     });
 
     it('passes empty input through', () => {
         expect(normalizeArabic('')).toBe('');
+    });
+
+    it('does not collapse distinct base letters to a single value', () => {
+        // Negative guard: a regex that ate base Arabic letters would make
+        // both of these collapse to '' and the previous comparison-only
+        // tests would all pass.
+        expect(normalizeArabic('مكتب')).not.toBe(normalizeArabic('مكتبه'));
     });
 });
 

@@ -15,7 +15,6 @@ import logging
 from typing import Any, Literal
 
 from qua_shared.schemas import Actor, AuditRecord
-
 from services.db import repo_transitions
 
 logger = logging.getLogger(__name__)

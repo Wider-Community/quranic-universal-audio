@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import ValidationError
 
@@ -42,7 +42,6 @@ from qua_shared.schemas import (
 )
 from qua_shared.schemas.intake_requests import IntakeSource
 from qua_shared.schemas.state import SLUG_RE
-
 from services.db import _serde, repo_requests
 from services.db import sync as _sync
 from services.storage import storage_paths
@@ -119,6 +118,7 @@ def submit(sub: IntakeSubmission, *, requester: Actor) -> tuple[str, IntakeValid
             extra_payload=extra_payload,
         )
         from services.state import audit
+
         audit.append(
             event="request.intake_submitted",
             actor=requester,
@@ -193,7 +193,9 @@ def accept(request_id: str, *, actor: Actor, reciter_id: str | None = None) -> s
         if kind == "new_reciter":
             repo_requests.set_payload(request_id, payload)
         repo_requests.resolve_by_id(
-            request_id=request_id, status="accepted", transitioned_by=actor,
+            request_id=request_id,
+            status="accepted",
+            transitioned_by=actor,
         )
     _invalidate()
     return request_id
@@ -231,7 +233,9 @@ def ingest(request_id: str, payload: dict, actor: Actor) -> dict:
     Lazy ``catalog``/``state`` imports avoid an import cycle (state → catalog →
     this package at init).
     """
-    from services.state import audit, catalog as catalog_service, state as state_service
+    from services.state import audit
+    from services.state import catalog as catalog_service
+    from services.state import state as state_service
 
     row = repo_requests.get_by_id(request_id)
     if row is None:
@@ -241,9 +245,7 @@ def ingest(request_id: str, payload: dict, actor: Actor) -> dict:
             f"request {request_id} is kind {row['kind']!r}, not a slugless intake"
         )
     if row["status"] != "accepted":
-        raise IngestBadRequest(
-            f"request {request_id} is {row['status']!r}, not an accepted intake"
-        )
+        raise IngestBadRequest(f"request {request_id} is {row['status']!r}, not an accepted intake")
     # Idempotent: already ingested (slug back-filled) → no-op.
     if row["slug"]:
         existing_slug = row["slug"]
@@ -319,8 +321,10 @@ def ingest(request_id: str, payload: dict, actor: Actor) -> dict:
 
         # delivery — construct the Delivery model (never a dict literal).
         delivery = _build_delivery(
-            delivery_in, audio_category=audio_category,
-            chapter_count=len(chapters_in), actor=actor,
+            delivery_in,
+            audio_category=audio_category,
+            chapter_count=len(chapters_in),
+            actor=actor,
         )
         try:
             catalog_service.add_delivery(actor=actor, delivery=delivery, reason=reason)
@@ -329,9 +333,7 @@ def ingest(request_id: str, payload: dict, actor: Actor) -> dict:
             # pre-txn find_delivery check normally catches collisions, so a
             # duplicate here is a writer race; disambiguate for the right status.
             if catalog_service.find_delivery(slug) is not None:
-                raise IngestSlugCollision(
-                    f"delivery slug {slug!r} already exists"
-                ) from e
+                raise IngestSlugCollision(f"delivery slug {slug!r} already exists") from e
             raise IngestVocabMissing(str(e)) from e
 
         # seed AWAITING_ALIGNMENT + pending entry (same path as existing_combo_edit).
@@ -344,7 +346,10 @@ def ingest(request_id: str, payload: dict, actor: Actor) -> dict:
 
         # 7. back-fill requests.slug.
         repo_requests.resolve_by_id(
-            request_id=request_id, status="accepted", transitioned_by=actor, slug=slug,
+            request_id=request_id,
+            status="accepted",
+            transitioned_by=actor,
+            slug=slug,
         )
 
         audit.append(
@@ -368,7 +373,9 @@ def _apply_vocab_additions(vocab_in, *, actor: Actor, catalog_service) -> None:
             continue
         try:
             source = Source(
-                slug=src["slug"], name=src["name"], url=src.get("url"),
+                slug=src["slug"],
+                name=src["name"],
+                url=src.get("url"),
                 audio_categories=src.get("audio_categories") or [],
             )
         except (KeyError, ValidationError) as e:
@@ -379,7 +386,9 @@ def _apply_vocab_additions(vocab_in, *, actor: Actor, catalog_service) -> None:
             continue
         try:
             channel = Channel(
-                slug=ch["slug"], name=ch["name"], short=ch["short"],
+                slug=ch["slug"],
+                name=ch["name"],
+                short=ch["short"],
                 host_patterns=ch.get("host_patterns") or [],
             )
         except (KeyError, ValidationError) as e:
@@ -419,7 +428,7 @@ def _build_delivery(
             chapter_count=chapter_count,
             recording_context=delivery_in.get("recording_context"),
             recording_year=delivery_in.get("recording_year"),
-            added_at=datetime.now(timezone.utc),
+            added_at=datetime.now(UTC),
             added_by_hf_id=actor.hf_user_id,
             **rollup,
         )
@@ -452,19 +461,19 @@ def _build_manifest(
             "bitrate_kbps": entry.get("bitrate_kbps"),
             "bitrate_mode": entry.get("bitrate_mode"),
         }
-    digest_src = "".join(
-        f"{k}={chapters[k]['url']};" for k in sorted(chapters)
-    ).encode("utf-8")
+    digest_src = "".join(f"{k}={chapters[k]['url']};" for k in sorted(chapters)).encode("utf-8")
     checksum = hashlib.sha256(digest_src).hexdigest()[:16]
     try:
         return AudioManifestSidecar(
             slug=slug,
             chapters=chapters,
-            **{"_meta": {
-                "checksum": checksum,
-                "chapter_count": len(chapters),
-                "category": audio_category.value,
-            }},
+            **{
+                "_meta": {
+                    "checksum": checksum,
+                    "chapter_count": len(chapters),
+                    "category": audio_category.value,
+                }
+            },
         )
     except ValidationError as e:
         raise IngestBadRequest(f"invalid audio_manifest: {e}") from e
@@ -482,9 +491,13 @@ def resolve(request_id: str, *, status: str, reason: str, actor: Actor) -> None:
     _require_pending_intake(request_id)
     with _sync.durable_transaction():
         repo_requests.resolve_by_id(
-            request_id=request_id, status=status, transitioned_by=actor, reason=reason,
+            request_id=request_id,
+            status=status,
+            transitioned_by=actor,
+            reason=reason,
         )
         from services.state import audit
+
         audit.append(
             event=f"request.intake_{status}",
             actor=actor,
@@ -523,4 +536,5 @@ def _require_pending_intake(request_id: str):
 
 def _invalidate() -> None:
     from services.storage import cache as _cache
+
     _cache.invalidate_admin_requests_cache()

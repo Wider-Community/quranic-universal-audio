@@ -1,11 +1,11 @@
 // Mark-ready copy module parity test.
 //
 // Guards against drift between:
-//   1. The five checklist keys exported by ../../copy/mark-ready
+//   1. The CHECKLIST_ORDER keys exported by ../../copy/mark-ready
 //   2. The MarkReadyChecklist interface generated from the backend
 //      Pydantic model (lib/types/generated/schemas.ts)
-//   3. The five-key set the backend BLOCKING_COUNT_KEYS uses for the
-//      submission count gate
+//   3. The BLOCKING_COUNT_KEYS set the backend uses for the submission
+//      count gate
 //   4. The actual markdown files (every key must have a ### section)
 //
 // If you add a checklist key on either side, both this test and the

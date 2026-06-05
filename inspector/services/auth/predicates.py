@@ -20,9 +20,7 @@ from qua_shared.schemas import ReciterState, Visibility
 from . import permissions
 
 if TYPE_CHECKING:  # pragma: no cover
-    from qua_shared.schemas import ReciterRow
-
-    from .auth import User
+    pass
 
 
 def _can(user, capability: str) -> bool:

@@ -27,14 +27,15 @@ Examples::
     python3 scripts/backfills/unignore_category.py \
         --slug ahmed_saud_mp3quran --category cross_verse --bucket prod --apply
 """
+
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import sys
 from collections import defaultdict
+from datetime import UTC
 from pathlib import Path
 
 log = logging.getLogger("unignore_category")
@@ -157,31 +158,37 @@ def _collect_revert_targets(
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--slug", required=True)
-    ap.add_argument("--category", required=True,
-                    help='e.g. cross_verse, qalqala, _all')
+    ap.add_argument("--category", required=True, help="e.g. cross_verse, qalqala, _all")
     ap.add_argument("--bucket", choices=sorted(_BUCKETS), default="prod")
-    ap.add_argument("--apply", action="store_true",
-                    help="Mutate. Without this flag the script only reports.")
-    ap.add_argument("--force-on-drift", action="store_true",
-                    help="When undo_ops fails 409 'times changed' on an "
-                         "ignore_issue op (later trim/pad moved time bounds "
-                         "after the ignore landed), bypass the snapshot check "
-                         "and apply the un-ignore directly. Safe because "
-                         "_reverse_ignore only touches ignored_categories + "
-                         "confidence — time bounds are irrelevant to the "
-                         "mutation. Refuses to force when matched_ref drift "
-                         "is present (genuine state change).")
-    ap.add_argument("--strip-stuck", action="store_true",
-                    help="Second pass: for every seg that is currently "
-                         "classifier-flagged as ``--category`` AND still "
-                         "bears the ignore marker after the op-revert pass, "
-                         "STRIP THE IGNORE ENTIRELY (clears ignored=true and "
-                         "ignored_categories). Use for legacy `_all` / "
-                         "`ignored: true` ghosts with no matching ignore_issue "
-                         "op, and for segs where the original op had real "
-                         "matched_ref drift. Writes a synthetic "
-                         "``unignore_orphan`` op into edit_history so the "
-                         "action is auditable.")
+    ap.add_argument(
+        "--apply", action="store_true", help="Mutate. Without this flag the script only reports."
+    )
+    ap.add_argument(
+        "--force-on-drift",
+        action="store_true",
+        help="When undo_ops fails 409 'times changed' on an "
+        "ignore_issue op (later trim/pad moved time bounds "
+        "after the ignore landed), bypass the snapshot check "
+        "and apply the un-ignore directly. Safe because "
+        "_reverse_ignore only touches ignored_categories + "
+        "confidence — time bounds are irrelevant to the "
+        "mutation. Refuses to force when matched_ref drift "
+        "is present (genuine state change).",
+    )
+    ap.add_argument(
+        "--strip-stuck",
+        action="store_true",
+        help="Second pass: for every seg that is currently "
+        "classifier-flagged as ``--category`` AND still "
+        "bears the ignore marker after the op-revert pass, "
+        "STRIP THE IGNORE ENTIRELY (clears ignored=true and "
+        "ignored_categories). Use for legacy `_all` / "
+        "`ignored: true` ghosts with no matching ignore_issue "
+        "op, and for segs where the original op had real "
+        "matched_ref drift. Writes a synthetic "
+        "``unignore_orphan`` op into edit_history so the "
+        "action is auditable.",
+    )
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
 
@@ -193,14 +200,14 @@ def main(argv: list[str] | None = None) -> int:
     _setup_paths_and_env(args.bucket)
 
     # Imports deferred until sys.path is set.
-    from services.storage.data_loader import load_detailed
+    from qua_shared.schemas import Actor
     from services.activity.history_query import parse_history_for_reciter
-    from services.segments.undo import undo_ops, _append_revert_record
     from services.segments.save import persist_detailed
+    from services.segments.undo import _append_revert_record, undo_ops
     from services.state import state as state_service
     from services.storage import cache
+    from services.storage.data_loader import load_detailed
     from utils.references import chapter_from_ref
-    from qua_shared.schemas import Actor
 
     # Hydrate the state store so the save/undo path sees the reciter's
     # lifecycle state. Per-reciter content lives under a single
@@ -214,11 +221,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     detailed_doc = {"entries": entries}
     history = parse_history_for_reciter(args.slug) or []
-    log.info("loaded detailed entries=%d history records=%d",
-             len(entries), len(history))
+    log.info("loaded detailed entries=%d history records=%d", len(entries), len(history))
 
     candidates, stats = _collect_revert_targets(
-        detailed_doc, history, args.category,
+        detailed_doc,
+        history,
+        args.category,
     )
     log.info("scan: %s", stats)
 
@@ -229,13 +237,12 @@ def main(argv: list[str] | None = None) -> int:
     by_batch = defaultdict(list)
     for batch_id, op_id, uid in candidates:
         by_batch[batch_id].append((op_id, uid))
-    log.info("plan: %d revert ops across %d batches",
-             len(candidates), len(by_batch))
+    log.info("plan: %d revert ops across %d batches", len(candidates), len(by_batch))
 
     if not args.apply:
         log.info("DRY RUN — no changes. Re-run with --apply to mutate.")
         # Print first 5 for visibility.
-        for i, (batch_id, op_id, uid) in enumerate(candidates[:5]):
+        for batch_id, op_id, uid in candidates[:5]:
             log.info("  would revert: batch=%s op=%s uid=%s", batch_id, op_id, uid)
         if len(candidates) > 5:
             log.info("  ... (%d more)", len(candidates) - 5)
@@ -261,10 +268,17 @@ def main(argv: list[str] | None = None) -> int:
         result = undo_ops(args.slug, batch_id, op_ids, actor=actor)
         if isinstance(result, tuple):
             err, status = result
-            if (args.force_on_drift and status == 409
-                    and "times changed" in (err.get("error") or "")):
+            if (
+                args.force_on_drift
+                and status == 409
+                and "times changed" in (err.get("error") or "")
+            ):
                 forced = _force_revert_ignore(
-                    args.slug, batch_id, op_pairs, op_by_id, args.category,
+                    args.slug,
+                    batch_id,
+                    op_pairs,
+                    op_by_id,
+                    args.category,
                     actor=actor,
                     persist_detailed=persist_detailed,
                     load_detailed=load_detailed,
@@ -275,8 +289,9 @@ def main(argv: list[str] | None = None) -> int:
                 if forced:
                     n_forced += 1
                     n_ok += 1
-                    log.warning("batch=%s FORCE-reverted (snapshot drift): %s",
-                                batch_id, err.get("error"))
+                    log.warning(
+                        "batch=%s FORCE-reverted (snapshot drift): %s", batch_id, err.get("error")
+                    )
                 else:
                     n_err += 1
                     log.error("batch=%s force-revert failed", batch_id)
@@ -287,23 +302,28 @@ def main(argv: list[str] | None = None) -> int:
             n_ok += result.get("operations_reversed", 0)
             log.info("batch=%s OK (%d op reversed)", batch_id, result.get("operations_reversed", 0))
 
-    log.info("op-revert pass done: reverted=%d forced=%d batches_failed=%d",
-             n_ok, n_forced, n_err)
+    log.info("op-revert pass done: reverted=%d forced=%d batches_failed=%d", n_ok, n_forced, n_err)
 
     n_stuck_stripped = 0
     if args.strip_stuck:
-        from utils.uuid7 import uuid7
         from constants import HISTORY_SCHEMA_VERSION
         from services.storage import data_dir
+        from utils.uuid7 import uuid7
 
         # Re-load: previous reverts may have changed state.
         entries_now = load_detailed(args.slug)
         stuck = _find_stuck_classified_segs(entries_now, args.category)
-        log.info("strip-stuck pass: %d seg(s) still classifier-flagged "
-                 "as %s AND ignored", len(stuck), args.category)
+        log.info(
+            "strip-stuck pass: %d seg(s) still classifier-flagged as %s AND ignored",
+            len(stuck),
+            args.category,
+        )
         for seg, entry_ref in stuck:
             n_stuck_stripped += _strip_ignore_record(
-                args.slug, seg, entry_ref, args.category,
+                args.slug,
+                seg,
+                entry_ref,
+                args.category,
                 actor=actor,
                 persist_detailed=persist_detailed,
                 append_edit_history=data_dir.append_edit_history,
@@ -316,8 +336,13 @@ def main(argv: list[str] | None = None) -> int:
             )
         log.info("strip-stuck pass done: stripped=%d", n_stuck_stripped)
 
-    log.info("ALL DONE: total_segs_un_ignored=%d (revert=%d, force=%d, strip=%d)",
-             n_ok + n_stuck_stripped, n_ok - n_forced, n_forced, n_stuck_stripped)
+    log.info(
+        "ALL DONE: total_segs_un_ignored=%d (revert=%d, force=%d, strip=%d)",
+        n_ok + n_stuck_stripped,
+        n_ok - n_forced,
+        n_forced,
+        n_stuck_stripped,
+    )
     return 0 if n_err == 0 else 1
 
 
@@ -334,8 +359,7 @@ def _classifier_says_cv(matched_ref: str) -> bool:
     return s[0] == e[0] and s[1] != e[1]
 
 
-def _find_stuck_classified_segs(entries: list[dict], category: str
-                                 ) -> list[tuple[dict, str]]:
+def _find_stuck_classified_segs(entries: list[dict], category: str) -> list[tuple[dict, str]]:
     """Return [(seg, entry_ref), ...] for segs that the classifier currently
     flags for ``category`` AND still have any ignore marker.
 
@@ -343,9 +367,7 @@ def _find_stuck_classified_segs(entries: list[dict], category: str
     other categories raise NotImplementedError so we don't silently no-op.
     """
     if category != "cross_verse":
-        raise NotImplementedError(
-            f"--strip-stuck not yet implemented for category={category!r}"
-        )
+        raise NotImplementedError(f"--strip-stuck not yet implemented for category={category!r}")
     stuck: list[tuple[dict, str]] = []
     for e in entries:
         for seg in e.get("segments", []):
@@ -358,10 +380,22 @@ def _find_stuck_classified_segs(entries: list[dict], category: str
     return stuck
 
 
-def _strip_ignore_record(slug, seg, entry_ref, category, *,
-                         actor, persist_detailed, append_edit_history,
-                         append_to_cache, load_detailed, cache,
-                         chapter_from_ref, uuid7, history_schema_version) -> int:
+def _strip_ignore_record(
+    slug,
+    seg,
+    entry_ref,
+    category,
+    *,
+    actor,
+    persist_detailed,
+    append_edit_history,
+    append_to_cache,
+    load_detailed,
+    cache,
+    chapter_from_ref,
+    uuid7,
+    history_schema_version,
+) -> int:
     """Strip ALL ignore markers from this seg and append a synthetic
     ``unignore_orphan`` op to edit_history (Option B semantics).
 
@@ -412,27 +446,33 @@ def _strip_ignore_record(slug, seg, entry_ref, category, *,
     persist_detailed(slug, meta, entries)
 
     ch = chapter_from_ref(target_entry_ref) if target_entry_ref else None
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     record = {
         "schema_version": history_schema_version,
         "batch_id": uuid7(),
-        "saved_at_utc": datetime.now(timezone.utc).isoformat(
-            timespec="milliseconds").replace("+00:00", "Z"),
+        "saved_at_utc": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         "chapter": ch,
-        "operations": [{
-            "op_id": uuid7(),
-            "op_type": "unignore_orphan",
-            "fix_kind": "admin",
-            "targets_before": [snap_before],
-            "targets_after": [snap_after],
-        }],
+        "operations": [
+            {
+                "op_id": uuid7(),
+                "op_type": "unignore_orphan",
+                "fix_kind": "admin",
+                "targets_before": [snap_before],
+                "targets_after": [snap_after],
+            }
+        ],
         "actor": actor.model_dump(mode="json"),
     }
     append_edit_history(slug, record)
     append_to_cache(slug, record)
-    log.info("strip-stuck: uid=%s mr=%s  before_cats=%s before_ig=%s -> stripped",
-             uid, snap_before["matched_ref"],
-             snap_before["ignored_categories"], snap_before["ignored"])
+    log.info(
+        "strip-stuck: uid=%s mr=%s  before_cats=%s before_ig=%s -> stripped",
+        uid,
+        snap_before["matched_ref"],
+        snap_before["ignored_categories"],
+        snap_before["ignored"],
+    )
     return 1
 
 
@@ -495,9 +535,12 @@ def _force_revert_ignore(
 
         # Refuse if matched_ref drifted — that's not a benign time-drift.
         if seg.get("matched_ref", "") != snap_ref:
-            log.error("force-revert: uid %s matched_ref drifted "
-                      "(snapshot=%r live=%r) — not forcing",
-                      uid, snap_ref, seg.get("matched_ref"))
+            log.error(
+                "force-revert: uid %s matched_ref drifted (snapshot=%r live=%r) — not forcing",
+                uid,
+                snap_ref,
+                seg.get("matched_ref"),
+            )
             return False
 
         # Apply un-ignore: mirror _restore_ignored_categories + confidence
@@ -522,7 +565,8 @@ def _force_revert_ignore(
 
     ch_union = sorted(affected_chapters)
     append_revert_record(
-        slug, batch_id,
+        slug,
+        batch_id,
         ch_union[0] if len(ch_union) == 1 else None,
         ch_union if len(ch_union) > 1 else None,
         actor=actor,

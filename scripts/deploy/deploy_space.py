@@ -92,9 +92,7 @@ def _build_frontend(repo: Path) -> None:
 
 
 def _stage(repo: Path, stage_root: Path, *, title: str) -> None:
-    (stage_root / "README.md").write_text(
-        SPACE_README.format(title=title), encoding="utf-8"
-    )
+    (stage_root / "README.md").write_text(SPACE_README.format(title=title), encoding="utf-8")
 
     # Dockerfile + .dockerignore sit at the Space root.
     shutil.copy2(repo / "inspector" / "Dockerfile", stage_root / "Dockerfile")
@@ -105,8 +103,14 @@ def _stage(repo: Path, stage_root: Path, *, title: str) -> None:
         repo / "inspector",
         stage_root / "inspector",
         ignore=shutil.ignore_patterns(
-            "__pycache__", "*.pyc", "tests", ".pytest_cache", ".mypy_cache",
-            "node_modules", ".vite", ".bucket",
+            "__pycache__",
+            "*.pyc",
+            "tests",
+            ".pytest_cache",
+            ".mypy_cache",
+            "node_modules",
+            ".vite",
+            ".bucket",
         ),
     )
 
@@ -137,7 +141,10 @@ def _commit_sha(repo: Path) -> str:
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
-            cwd=repo, check=True, capture_output=True, text=True,
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
         )
         return out.stdout.strip()
     except Exception:
@@ -146,23 +153,25 @@ def _commit_sha(repo: Path) -> str:
 
 def _validate_space_id(space_id: str) -> str:
     if space_id.count("/") != 1 or not all(space_id.split("/")):
-        raise SystemExit(
-            f"space id must be '<owner>/<name>', got {space_id!r}"
-        )
+        raise SystemExit(f"space id must be '<owner>/<name>', got {space_id!r}")
     return space_id
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("space", help="Target Space id, e.g. you/quranic-inspector-foo")
-    p.add_argument("--public", action="store_true",
-                   help="Create the Space public (default: private).")
-    p.add_argument("--skip-build", action="store_true",
-                   help="Skip `npm run build`; ship the existing dist/.")
-    p.add_argument("--no-restart", action="store_true",
-                   help="Don't factory-reboot after upload.")
-    p.add_argument("--dry-run", action="store_true",
-                   help="Stage but don't create/upload. Prints the stage path.")
+    p.add_argument(
+        "--public", action="store_true", help="Create the Space public (default: private)."
+    )
+    p.add_argument(
+        "--skip-build", action="store_true", help="Skip `npm run build`; ship the existing dist/."
+    )
+    p.add_argument("--no-restart", action="store_true", help="Don't factory-reboot after upload.")
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Stage but don't create/upload. Prints the stage path.",
+    )
     args = p.parse_args(argv)
 
     space_id = _validate_space_id(args.space)
@@ -217,13 +226,19 @@ def main(argv: list[str] | None = None) -> int:
         api = HfApi(token=token)
         print(f"==> Ensuring Space {space_id} exists (private={not args.public})")
         api.create_repo(
-            repo_id=space_id, repo_type="space", space_sdk="docker",
-            private=not args.public, exist_ok=True,
+            repo_id=space_id,
+            repo_type="space",
+            space_sdk="docker",
+            private=not args.public,
+            exist_ok=True,
         )
         print(f"==> Uploading to {space_id}")
         api.upload_folder(
-            folder_path=str(stage_root), repo_id=space_id, repo_type="space",
-            commit_message=commit_msg, delete_patterns="*",
+            folder_path=str(stage_root),
+            repo_id=space_id,
+            repo_type="space",
+            commit_message=commit_msg,
+            delete_patterns="*",
         )
         if not args.no_restart:
             # Code-only pushes don't change the Dockerfile hash, so HF won't

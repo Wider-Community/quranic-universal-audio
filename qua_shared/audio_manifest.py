@@ -16,7 +16,6 @@ import urllib.request
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 # Repo root: qua_shared/audio_manifest.py → repo/
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -88,11 +87,9 @@ def detect_input_format(path: Path) -> str:
     raise ValueError(f"Cannot detect format for: {path}")
 
 
-def parse_input(
-    path: Path, fmt: str
-) -> Dict[int, List[Tuple[str, Optional[int]]]]:
+def parse_input(path: Path, fmt: str) -> dict[int, list[tuple[str, int | None]]]:
     """Parse input into ``{sura_num: [(audio_source, verse_or_none), ...]}``."""
-    grouped: Dict[int, List[Tuple[str, Optional[int]]]] = defaultdict(list)
+    grouped: dict[int, list[tuple[str, int | None]]] = defaultdict(list)
 
     if fmt == "verse_json":
         data = _load_json_or_jsonl(path)
@@ -142,12 +139,9 @@ def load_surah_info(surah_info_path: Path) -> dict:
     return {int(k): v for k, v in raw.items()}
 
 
-def _expected_verses(surah_info: dict) -> Dict[int, List[int]]:
+def _expected_verses(surah_info: dict) -> dict[int, list[int]]:
     """Build {sura: [1, 2, ..., num_verses]} for all 114 surahs."""
-    return {
-        sura: list(range(1, data["num_verses"] + 1))
-        for sura, data in surah_info.items()
-    }
+    return {sura: list(range(1, data["num_verses"] + 1)) for sura, data in surah_info.items()}
 
 
 # ── Metadata validation ──────────────────────────────────────────────────
@@ -156,14 +150,20 @@ def _expected_verses(surah_info: dict) -> Dict[int, List[int]]:
 STRICT_META_KEYS = ("reciter", "name_en")
 # Keys that must be present but may be "unknown" if not known
 ALL_META_KEYS = (
-    "reciter", "name_en", "name_ar", "riwayah", "style",
-    "audio_category", "source", "country",
+    "reciter",
+    "name_en",
+    "name_ar",
+    "riwayah",
+    "style",
+    "audio_category",
+    "source",
+    "country",
 )
 VALID_STYLES = ("murattal", "mujawwad", "muallim", "children_repeat", "taraweeh", "unknown")
 VALID_AUDIO_CATEGORIES = ("by_surah", "by_ayah")
 
 
-def validate_meta(path: Path) -> Tuple[List[dict], List[dict]]:
+def validate_meta(path: Path) -> tuple[list[dict], list[dict]]:
     """Check _meta presence and required keys in an audio JSON file.
 
     Returns (errors, warnings) where each item is a dict with 'msg'.
@@ -171,8 +171,8 @@ def validate_meta(path: Path) -> Tuple[List[dict], List[dict]]:
             (use "unknown" if not known).
     Warnings: non-strict key has value "unknown".
     """
-    errors: List[dict] = []
-    warnings: List[dict] = []
+    errors: list[dict] = []
+    warnings: list[dict] = []
 
     if not (path.is_file() and path.suffix == ".json"):
         return errors, warnings  # only applies to JSON files
@@ -195,42 +195,48 @@ def validate_meta(path: Path) -> Tuple[List[dict], List[dict]]:
         if val is None:
             errors.append({"msg": f"_meta missing required key: {key}"})
         elif not val:
-            errors.append({"msg": f"_meta.{key} is empty (use \"unknown\" if not known)"})
+            errors.append({"msg": f'_meta.{key} is empty (use "unknown" if not known)'})
         elif val == "unknown" and is_strict:
-            errors.append({"msg": f"_meta.{key} must have a real value, not \"unknown\""})
+            errors.append({"msg": f'_meta.{key} must have a real value, not "unknown"'})
         elif val == "unknown":
-            warnings.append({"msg": f"_meta.{key} is \"unknown\""})
+            warnings.append({"msg": f'_meta.{key} is "unknown"'})
 
     # Validate constrained values
     style = str(meta.get("style", "")).strip()
     if style and style not in VALID_STYLES:
-        errors.append({"msg": f"_meta.style must be one of {VALID_STYLES}, got \"{style}\""})
+        errors.append({"msg": f'_meta.style must be one of {VALID_STYLES}, got "{style}"'})
 
     audio_cat = str(meta.get("audio_category", "")).strip()
     if audio_cat and audio_cat not in VALID_AUDIO_CATEGORIES:
-        errors.append({"msg": f"_meta.audio_category must be one of {VALID_AUDIO_CATEGORIES}, got \"{audio_cat}\""})
+        errors.append(
+            {
+                "msg": f'_meta.audio_category must be one of {VALID_AUDIO_CATEGORIES}, got "{audio_cat}"'
+            }
+        )
 
     # Identity sanity: filename stem must match _meta.reciter
     reciter = str(meta.get("reciter", "")).strip()
     if reciter and reciter != path.stem:
-        errors.append({
-            "msg": f"_meta.reciter \"{reciter}\" does not match filename stem \"{path.stem}\""
-        })
+        errors.append(
+            {"msg": f'_meta.reciter "{reciter}" does not match filename stem "{path.stem}"'}
+        )
 
     return errors, warnings
 
 
-def validate_format_identity(meta: Optional[dict], fmt: str) -> List[dict]:
+def validate_format_identity(meta: dict | None, fmt: str) -> list[dict]:
     """Cross-check _meta.audio_category against the detected input format."""
-    errors: List[dict] = []
+    errors: list[dict] = []
     if not meta:
         return errors
     cat = str(meta.get("audio_category", "")).strip()
     expected = "by_ayah" if fmt in ("verse_json", "verse_dir") else "by_surah"
     if cat and cat != expected:
-        errors.append({
-            "msg": f"_meta.audio_category=\"{cat}\" but detected format is {fmt} (expected \"{expected}\")"
-        })
+        errors.append(
+            {
+                "msg": f'_meta.audio_category="{cat}" but detected format is {fmt} (expected "{expected}")'
+            }
+        )
     return errors
 
 
@@ -238,7 +244,7 @@ def validate_format_identity(meta: Optional[dict], fmt: str) -> List[dict]:
 
 
 def analyze_sura_coverage(
-    grouped: Dict[int, List[Tuple[str, Optional[int]]]],
+    grouped: dict[int, list[tuple[str, int | None]]],
     surah_info: dict,
 ) -> dict:
     """Sura-level: which of 114 surahs are present/missing."""
@@ -250,11 +256,13 @@ def analyze_sura_coverage(
     duplicates = []
     for sura, entries in sorted(grouped.items()):
         if len(entries) > 1:
-            duplicates.append({
-                "key": str(sura),
-                "count": len(entries),
-                "sources": [e[0] for e in entries],
-            })
+            duplicates.append(
+                {
+                    "key": str(sura),
+                    "count": len(entries),
+                    "sources": [e[0] for e in entries],
+                }
+            )
 
     return {
         "level": "sura",
@@ -267,14 +275,14 @@ def analyze_sura_coverage(
 
 
 def analyze_verse_coverage(
-    grouped: Dict[int, List[Tuple[str, Optional[int]]]],
+    grouped: dict[int, list[tuple[str, int | None]]],
     surah_info: dict,
 ) -> dict:
     """Verse-level: which of 6236 verses are present/missing."""
     expected = _expected_verses(surah_info)
 
-    present_set: set[Tuple[int, int]] = set()
-    verse_sources: Dict[str, List[str]] = defaultdict(list)
+    present_set: set[tuple[int, int]] = set()
+    verse_sources: dict[str, list[str]] = defaultdict(list)
 
     for sura, entries in grouped.items():
         for source, verse in entries:
@@ -283,7 +291,7 @@ def analyze_verse_coverage(
                 verse_sources[f"{sura}:{verse}"].append(source)
 
     # Missing verses grouped by sura
-    missing_by_sura: Dict[int, List[int]] = {}
+    missing_by_sura: dict[int, list[int]] = {}
     total_missing = 0
     for sura in sorted(expected):
         missing_verses = [v for v in expected[sura] if (sura, v) not in present_set]
@@ -323,6 +331,7 @@ _DIRECT_AUDIO_EXTENSIONS = frozenset(
 def _needs_ytdlp(url: str) -> bool:
     """True if the URL requires yt-dlp (not a direct audio file)."""
     from urllib.parse import urlparse
+
     path = urlparse(url).path.split("?")[0].lower()
     return not any(path.endswith(ext) for ext in _DIRECT_AUDIO_EXTENSIONS)
 
@@ -331,27 +340,38 @@ def _check_via_ytdlp(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
     """Check a URL is accessible via yt-dlp --simulate."""
     import shutil
     import subprocess
+
     if not shutil.which("yt-dlp"):
-        return {"url": url, "ok": False, "status": None,
-                "error": "yt-dlp not installed (pip install yt-dlp)",
-                "content_type": None}
+        return {
+            "url": url,
+            "ok": False,
+            "status": None,
+            "error": "yt-dlp not installed (pip install yt-dlp)",
+            "content_type": None,
+        }
     try:
         subprocess.run(
             ["yt-dlp", "--simulate", "--no-warnings", url],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
-        return {"url": url, "ok": True, "status": 200,
-                "error": None, "content_type": "audio/ytdlp"}
+        return {"url": url, "ok": True, "status": 200, "error": None, "content_type": "audio/ytdlp"}
     except subprocess.TimeoutExpired:
-        return {"url": url, "ok": False, "status": None,
-                "error": "yt-dlp timeout", "content_type": None}
+        return {
+            "url": url,
+            "ok": False,
+            "status": None,
+            "error": "yt-dlp timeout",
+            "content_type": None,
+        }
     except Exception as e:
-        return {"url": url, "ok": False, "status": None,
-                "error": str(e), "content_type": None}
+        return {"url": url, "ok": False, "status": None, "error": str(e), "content_type": None}
 
 
-def _audit_response(url: str, status: int, ct: Optional[str],
-                    cl: Optional[int]) -> Tuple[bool, Optional[str]]:
+def _audit_response(
+    url: str, status: int, ct: str | None, cl: int | None
+) -> tuple[bool, str | None]:
     """Validate Content-Type/Length post-fetch. Returns (ok, error)."""
     ct_lower = (ct or "").split(";")[0].strip().lower()
     if ct_lower:
@@ -378,6 +398,7 @@ def check_url(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
         return _check_via_ytdlp(url, timeout=30)
     headers = {"User-Agent": "Mozilla/5.0"}
     import time as _t
+
     for method in ("HEAD", "GET"):
         try:
             req = urllib.request.Request(url, headers=headers, method=method)
@@ -390,7 +411,7 @@ def check_url(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
                 cl_header = resp.headers.get("Content-Length")
                 # On a Range response, prefer Content-Range full size.
                 cr = resp.headers.get("Content-Range")
-                cl: Optional[int] = None
+                cl: int | None = None
                 if cr and "/" in cr:
                     try:
                         cl = int(cr.rsplit("/", 1)[1])
@@ -414,27 +435,51 @@ def check_url(url: str, timeout: int = DEFAULT_URL_TIMEOUT) -> dict:
         except urllib.error.HTTPError as e:
             if method == "HEAD" and e.code == 405:
                 continue  # try GET fallback
-            return {"url": url, "ok": False, "status": e.code,
-                    "error": f"HTTP {e.code}", "content_type": None,
-                    "content_length": None, "latency_ms": None}
+            return {
+                "url": url,
+                "ok": False,
+                "status": e.code,
+                "error": f"HTTP {e.code}",
+                "content_type": None,
+                "content_length": None,
+                "latency_ms": None,
+            }
         except urllib.error.URLError as e:
-            return {"url": url, "ok": False, "status": None,
-                    "error": str(e.reason), "content_type": None,
-                    "content_length": None, "latency_ms": None}
+            return {
+                "url": url,
+                "ok": False,
+                "status": None,
+                "error": str(e.reason),
+                "content_type": None,
+                "content_length": None,
+                "latency_ms": None,
+            }
         except Exception as e:
-            return {"url": url, "ok": False, "status": None,
-                    "error": str(e), "content_type": None,
-                    "content_length": None, "latency_ms": None}
-    return {"url": url, "ok": False, "status": None,
-            "error": "All methods failed", "content_type": None,
-            "content_length": None, "latency_ms": None}
+            return {
+                "url": url,
+                "ok": False,
+                "status": None,
+                "error": str(e),
+                "content_type": None,
+                "content_length": None,
+                "latency_ms": None,
+            }
+    return {
+        "url": url,
+        "ok": False,
+        "status": None,
+        "error": "All methods failed",
+        "content_type": None,
+        "content_length": None,
+        "latency_ms": None,
+    }
 
 
 def check_urls_parallel(
-    url_key_pairs: List[Tuple[str, str]],
+    url_key_pairs: list[tuple[str, str]],
     max_workers: int = DEFAULT_MAX_WORKERS,
     timeout: int = DEFAULT_URL_TIMEOUT,
-) -> List[dict]:
+) -> list[dict]:
     """Check URLs in parallel. Each item is (url, key) where key is e.g. '37:151'.
 
     Returns list of {url, key, ok, status, error, content_type}.
@@ -473,8 +518,14 @@ def check_file(
 ) -> dict:
     """Validate a local audio file (exists, non-zero, optionally ffprobe)."""
     p = Path(file_path)
-    result = {"path": file_path, "ok": True, "exists": True,
-              "size_bytes": None, "error": None, "duration_s": None}
+    result = {
+        "path": file_path,
+        "ok": True,
+        "exists": True,
+        "size_bytes": None,
+        "error": None,
+        "duration_s": None,
+    }
 
     if not p.exists():
         result.update(ok=False, exists=False, error="File not found")
@@ -489,14 +540,16 @@ def check_file(
     if use_ffprobe:
         try:
             cmd = [
-                "ffprobe", "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
                 str(p),
             ]
-            proc = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=ffprobe_timeout
-            )
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=ffprobe_timeout)
             if proc.returncode != 0:
                 stderr = proc.stderr.strip()[:100]
                 result.update(ok=False, error=f"ffprobe error: {stderr}")
@@ -537,7 +590,7 @@ def validate_audio(
 
     # Metadata validation (JSON files only)
     meta_errors, meta_warnings = validate_meta(path)
-    meta_block: Optional[dict] = None
+    meta_block: dict | None = None
     if path.is_file() and path.suffix == ".json":
         try:
             meta_block = _load_json_or_jsonl(path).get("_meta")
@@ -550,7 +603,7 @@ def validate_audio(
         coverage = analyze_sura_coverage(grouped, surah_info)
 
     # Collect all sources with their keys
-    all_sources: List[Tuple[str, str]] = []  # (source, key)
+    all_sources: list[tuple[str, str]] = []  # (source, key)
     for sura, entries in sorted(grouped.items()):
         for source, verse in entries:
             key = f"{sura}:{verse}" if verse is not None else str(sura)
@@ -578,11 +631,13 @@ def validate_audio(
             url_results = check_urls_parallel(url_pairs, max_workers, url_timeout)
             for r in url_results:
                 if not r["ok"]:
-                    errors.append({
-                        "msg": r["error"],
-                        "key": r["key"],
-                        "source": r["url"],
-                    })
+                    errors.append(
+                        {
+                            "msg": r["error"],
+                            "key": r["key"],
+                            "source": r["url"],
+                        }
+                    )
 
         # File checks
         if file_pairs:
@@ -596,11 +651,13 @@ def validate_audio(
                 r["key"] = key
                 file_results.append(r)
                 if not r["ok"]:
-                    errors.append({
-                        "msg": r["error"],
-                        "key": key,
-                        "source": src,
-                    })
+                    errors.append(
+                        {
+                            "msg": r["error"],
+                            "key": key,
+                            "source": src,
+                        }
+                    )
                 if (i + 1) % 500 == 0 or i + 1 == len(file_pairs):
                     print(f"\r  Checking files: {i + 1}/{len(file_pairs)}", end="", flush=True)
             if file_pairs:
@@ -626,11 +683,13 @@ def validate_audio(
 
     # Duplicates as warnings
     for dup in coverage.get("duplicates", []):
-        warnings.append({
-            "msg": f"{dup['count']} audio sources",
-            "key": dup["key"],
-            "sources": dup["sources"],
-        })
+        warnings.append(
+            {
+                "msg": f"{dup['count']} audio sources",
+                "key": dup["key"],
+                "sources": dup["sources"],
+            }
+        )
 
     return {
         "path": str(path),
@@ -645,4 +704,3 @@ def validate_audio(
         "warnings": warnings,
         "meta": meta_block,
     }
-

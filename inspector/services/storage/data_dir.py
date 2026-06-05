@@ -16,11 +16,10 @@ from __future__ import annotations
 import gzip
 import os
 import threading
-from typing import Iterator
+from collections.abc import Iterator
 
 from . import storage_paths
 from .hf_bucket import StorageNotFound, get_backend
-
 
 # ---------------------------------------------------------------------------
 # Read-only TS-shard bucket override (dev convenience)
@@ -48,6 +47,7 @@ def _ts_read_backend_or_default():
         with _ts_read_lock:
             if _ts_read_backend is None:
                 from .hf_bucket import BucketBackend
+
                 _ts_read_backend = BucketBackend(bucket_id=repo)
     return _ts_read_backend
 
@@ -204,5 +204,3 @@ def read_timestamps_chapter(slug: str, chapter: int) -> bytes | None:
     """
     gz = read_timestamps_chapter_gz(slug, chapter)
     return gzip.decompress(gz) if gz is not None else None
-
-

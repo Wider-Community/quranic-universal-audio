@@ -1,5 +1,8 @@
 """Admin Users read path: list aggregations + detail + no-N+1 guard."""
+
 from __future__ import annotations
+
+from datetime import UTC
 
 from services import db
 from services.admin import users as users_service
@@ -25,8 +28,13 @@ def test_list_users_aggregates(seed_role, seed_state):
     seed_role("m1", login="maint", role="maintainer")
     seed_role("c1", login="contrib", role="contributor")
     # c1 holds an open, marked-ready claim on slugA.
-    seed_state("slugA", state="under_review", assignee_hf_id="c1",
-               assignee_login="contrib", marked_ready=True)
+    seed_state(
+        "slugA",
+        state="under_review",
+        assignee_hf_id="c1",
+        assignee_login="contrib",
+        marked_ready=True,
+    )
 
     with db.transaction() as conn:
         _ins_transition(conn, tid="t1", actor="m1", event="reciter.marked_ready")
@@ -68,23 +76,39 @@ def test_zero_action_user_still_listed(seed_role):
 
 
 def test_detail_outcome_and_stats(seed_role, seed_state):
+    from datetime import datetime, timezone
+
+    from tests.conftest import _seed_delivery_chain
+
+    from services.db import repo_claims
+
     seed_role("rev", login="rev", role="contributor")
     # open claim → "claimed, open now". Not marked-ready so it doesn't add a
     # ~0-turnaround pair and skew the avg (the only turnaround pair is pubS).
-    seed_state("openS", state="under_review", assignee_hf_id="rev",
-               assignee_login="rev", marked_ready=False)
+    seed_state(
+        "openS",
+        state="under_review",
+        assignee_hf_id="rev",
+        assignee_login="rev",
+        marked_ready=False,
+    )
     # a closed-as-published claim row for history/turnaround
+    claimed_at = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+    marked_at = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    released_at = datetime(2026, 1, 2, 0, 0, 0, tzinfo=UTC)
     with db.transaction() as conn:
-        conn.execute(
-            "INSERT INTO deliveries(slug,reciter_id,riwayah,style,source,channel,"
-            "audio_category,chapter_count,added_at,added_by_hf_id) VALUES "
-            "('pubS','rid','hafs','mur','src','ch','by_surah',114,'2026-01-01T00:00:00Z','sys')"
+        _seed_delivery_chain(conn, "pubS")
+        repo_claims.open_claim(
+            slug="pubS",
+            assignee_id="rev",
+            assignee_login="rev",
+            claimed_at=claimed_at,
         )
-        conn.execute(
-            "INSERT INTO claims(slug, assignee_id, assignee_login_snapshot, claimed_at, "
-            "released_at, marked_ready_at, close_reason) VALUES "
-            "('pubS','rev','rev','2026-01-01T00:00:00Z','2026-01-02T00:00:00Z',"
-            "'2026-01-01T12:00:00Z','reciter.published')"
+        repo_claims.set_marked_ready("pubS", ready=True, at=marked_at)
+        repo_claims.close_claim(
+            slug="pubS",
+            close_reason="reciter.published",
+            released_at=released_at,
         )
         _ins_request(conn, rid="rq1", requester="rev", status="accepted")
         _ins_request(conn, rid="rq2", requester="rev", status="returned")
@@ -119,9 +143,7 @@ def test_list_users_no_n_plus_1(seed_role, monkeypatch):
             calls["n"] += 1
             return self._conn.execute(*a, **k)
 
-    monkeypatch.setattr(
-        repo_admin_users, "get_conn", lambda: _CountingConn(real_get_conn())
-    )
+    monkeypatch.setattr(repo_admin_users, "get_conn", lambda: _CountingConn(real_get_conn()))
 
     for i in range(3):
         seed_role(f"u{i}", login=f"u{i}", role="contributor")
@@ -136,4 +158,6 @@ def test_list_users_no_n_plus_1(seed_role, monkeypatch):
     nine = calls["n"]
 
     assert three == nine
-    assert three <= 6
+    # Pin the exact aggregation count: base_rows, last_activity_by_actor,
+    # requests_count_by_user, reviews_count_by_actor, open_claims_by_user.
+    assert three == 5

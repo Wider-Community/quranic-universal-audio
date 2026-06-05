@@ -19,14 +19,23 @@ import _bootstrap as bs  # noqa: E402
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("src", help="source bucket path")
     p.add_argument("dst", help="destination bucket path")
-    p.add_argument("--src-bucket", choices=list(bs.BUCKETS), default=None,
-                   help="source bucket (default: --bucket)")
-    p.add_argument("--dst-bucket", choices=list(bs.BUCKETS), default=None,
-                   help="destination bucket (default: --bucket)")
+    p.add_argument(
+        "--src-bucket",
+        choices=list(bs.BUCKETS),
+        default=None,
+        help="source bucket (default: --bucket)",
+    )
+    p.add_argument(
+        "--dst-bucket",
+        choices=list(bs.BUCKETS),
+        default=None,
+        help="destination bucket (default: --bucket)",
+    )
     bs.add_bucket_args(p)
     a = p.parse_args()
 
@@ -43,9 +52,9 @@ def main() -> int:
     src_id = bs.BUCKETS[src_b]
     dst_id = bs.BUCKETS[dst_b]
     copy_files(
-        repo_id=dst_id, repo_type="bucket",
-        operations=[{"src": a.src, "dst": a.dst,
-                     "src_repo_id": src_id, "src_repo_type": "bucket"}],
+        repo_id=dst_id,
+        repo_type="bucket",
+        operations=[{"src": a.src, "dst": a.dst, "src_repo_id": src_id, "src_repo_type": "bucket"}],
     )
     print(f"copied {src_b}:{a.src} → {dst_b}:{a.dst}")
     return 0

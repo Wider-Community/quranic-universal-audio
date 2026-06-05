@@ -40,4 +40,5 @@ def complete(slug: str | None, job_id: str) -> None:
 
 def register() -> None:
     from . import base
+
     base.register_handler(KIND, complete)

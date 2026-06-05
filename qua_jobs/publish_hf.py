@@ -28,7 +28,6 @@ Env:
 
 from __future__ import annotations
 
-import datetime
 import gzip
 import json
 import logging
@@ -42,8 +41,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s",
-                    datefmt="%H:%M:%S")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("publish_hf")
 
 
@@ -64,7 +62,7 @@ def _text_for_ref(matched_ref: str, dk_words: dict, surah_info: dict) -> str:
     """Derive Arabic text for a canonical ``surah:ayah:word-surah:ayah:word``
     matched_ref from the Digital Khatt word map.
 
-    Mirror of ``.github/scripts/build_reciter.py::_text_for_ref`` — the
+    Mirror of ``scripts/release/build_reciter.py::_text_for_ref`` — the
     extractor no longer writes ``matched_text`` (Migration #5), so the
     dataset re-derives it deterministically.
     """
@@ -97,10 +95,7 @@ def _text_for_ref(matched_ref: str, dk_words: dict, surah_info: dict) -> str:
                 words.append(text)
         w += 1
         verse_idx = ay - 1
-        max_w = (
-            verses[verse_idx].get("num_words", 0)
-            if 0 <= verse_idx < len(verses) else 0
-        )
+        max_w = verses[verse_idx].get("num_words", 0) if 0 <= verse_idx < len(verses) else 0
         if w > max_w:
             w = 1
             ay += 1
@@ -108,8 +103,9 @@ def _text_for_ref(matched_ref: str, dk_words: dict, surah_info: dict) -> str:
     return " ".join(words)
 
 
-def _cross_verse_text(matched_ref: str, full_text: str,
-                      target_ayah: int, surah_info: dict, surah_num: str) -> str:
+def _cross_verse_text(
+    matched_ref: str, full_text: str, target_ayah: int, surah_info: dict, surah_num: str
+) -> str:
     """Slice only target_ayah's words from a cross-verse segment's full text."""
     parts = matched_ref.split("-")
     if len(parts) != 2:
@@ -134,6 +130,7 @@ def _cross_verse_text(matched_ref: str, full_text: str,
 # ---------------------------------------------------------------------------
 # Bucket I/O — direct path reads (bucket is mounted at /data in the job).
 # ---------------------------------------------------------------------------
+
 
 def _bucket_root() -> Path:
     return Path(os.environ.get("INSPECTOR_BUCKET_MOUNT", "/data"))
@@ -172,9 +169,10 @@ def _load_timestamps_shards(slug: str, detailed: dict | None = None) -> dict[str
     if not ts_dir.exists():
         return out
     conf_by_span = confidence_by_span(detailed)
-    for path in sorted(ts_dir.iterdir(),
-                       key=lambda p: int(p.name.split(".", 1)[0])
-                       if p.name.split(".", 1)[0].isdigit() else 0):
+    for path in sorted(
+        ts_dir.iterdir(),
+        key=lambda p: int(p.name.split(".", 1)[0]) if p.name.split(".", 1)[0].isdigit() else 0,
+    ):
         name = path.name
         if not (name.endswith(".json") or name.endswith(".json.gz")):
             continue
@@ -224,6 +222,7 @@ def _reshape_timestamps_for_rows(canonical: dict) -> dict[str, dict]:
 # Row construction — port of build_reciter.py::build_rows (trimmed).
 # ---------------------------------------------------------------------------
 
+
 def _detailed_by_ref(detailed: dict) -> dict[str, dict]:
     """Normalize detailed.json entries to a ``surah:ayah → entry`` dict."""
     out: dict[str, dict] = {}
@@ -242,7 +241,9 @@ def _detailed_by_ref(detailed: dict) -> dict[str, dict]:
             sp = mref.split("-", 1)[0].split(":")
             ep = mref.split("-", 1)[1].split(":")
             try:
-                s_surah = int(sp[0]); s_ayah = int(sp[1]); e_ayah = int(ep[1])
+                s_surah = int(sp[0])
+                s_ayah = int(sp[1])
+                e_ayah = int(ep[1])
             except (ValueError, IndexError):
                 continue
             for a in range(s_ayah, e_ayah + 1):
@@ -256,8 +257,9 @@ def _i(x):
     return int(round(x)) if isinstance(x, float) else int(x)
 
 
-def build_rows(timestamps: dict, detailed_by_ref: dict, surah_info: dict,
-               dk_words: dict) -> list[dict]:
+def build_rows(
+    timestamps: dict, detailed_by_ref: dict, surah_info: dict, dk_words: dict
+) -> list[dict]:
     """Build dataset row metadata in canonical verse order.
 
     Each row has the same column shape as v1 + ``clip_start`` (source-ms
@@ -291,11 +293,14 @@ def build_rows(timestamps: dict, detailed_by_ref: dict, surah_info: dict,
                 # entries don't have it — derive from words instead.
                 w_from = seg.get("word_from", seg.get("start_word", 1))
                 w_to = seg.get("word_to", seg.get("end_word", w_from))
-                verse_segments.append([
-                    _i(w_from), _i(w_to),
-                    _i(max(0, t_start - clip_start)),
-                    _i(min(t_end, clip_end) - clip_start),
-                ])
+                verse_segments.append(
+                    [
+                        _i(w_from),
+                        _i(w_to),
+                        _i(max(0, t_start - clip_start)),
+                        _i(min(t_end, clip_end) - clip_start),
+                    ]
+                )
 
             # text_uthmani from detailed.json matched_refs, restricted to the
             # clip range; cross-verse segments use only this ayah's portion.
@@ -306,8 +311,11 @@ def build_rows(timestamps: dict, detailed_by_ref: dict, surah_info: dict,
                 if t_end <= clip_start or t_start >= clip_end:
                     continue
                 mref = det_seg.get("matched_ref", "")
-                seg_text = _text_for_ref(mref, dk_words, surah_info) \
-                    if dk_words else det_seg.get("matched_text", "")
+                seg_text = (
+                    _text_for_ref(mref, dk_words, surah_info)
+                    if dk_words
+                    else det_seg.get("matched_text", "")
+                )
                 if "-" in mref:
                     rp = mref.split("-")
                     if len(rp) == 2:
@@ -320,62 +328,81 @@ def build_rows(timestamps: dict, detailed_by_ref: dict, surah_info: dict,
                                 continue
                             if s_ay != e_ay:
                                 seg_text = _cross_verse_text(
-                                    mref, seg_text, ayah, surah_info, surah_num)
+                                    mref, seg_text, ayah, surah_info, surah_num
+                                )
                 text_parts.append(seg_text)
             text = _strip_quran_markers(" ".join(text_parts))
 
             # Words (clip-relative).
-            verse_words = [[_i(w[0]), _i(w[1] - clip_start), _i(w[2] - clip_start)]
-                           for w in tdata["words"]]
+            verse_words = [
+                [_i(w[0]), _i(w[1] - clip_start), _i(w[2] - clip_start)] for w in tdata["words"]
+            ]
 
             # Synthesize missing segments around the home segments (cross-verse).
             if verse_words and not verse_segments:
-                verse_segments.append([
-                    verse_words[0][0], verse_words[-1][0],
-                    verse_words[0][1], verse_words[-1][2],
-                ])
+                verse_segments.append(
+                    [
+                        verse_words[0][0],
+                        verse_words[-1][0],
+                        verse_words[0][1],
+                        verse_words[-1][2],
+                    ]
+                )
             elif verse_words and verse_segments:
                 first_seg_start = verse_segments[0][2]
                 xv_before = [w for w in verse_words if w[2] <= first_seg_start]
                 if xv_before:
-                    verse_segments.insert(0, [
-                        xv_before[0][0], xv_before[-1][0],
-                        xv_before[0][1], xv_before[-1][2],
-                    ])
+                    verse_segments.insert(
+                        0,
+                        [
+                            xv_before[0][0],
+                            xv_before[-1][0],
+                            xv_before[0][1],
+                            xv_before[-1][2],
+                        ],
+                    )
                 last_seg_end = verse_segments[-1][3]
                 xv_after = [w for w in verse_words if w[1] >= last_seg_end]
                 if xv_after:
-                    verse_segments.append([
-                        xv_after[0][0], xv_after[-1][0],
-                        xv_after[0][1], xv_after[-1][2],
-                    ])
+                    verse_segments.append(
+                        [
+                            xv_after[0][0],
+                            xv_after[-1][0],
+                            xv_after[0][1],
+                            xv_after[-1][2],
+                        ]
+                    )
 
             # Letters: flatten (widx, char, start, end) — clip-relative.
             verse_letters: list[dict] = []
             for widx, letters in tdata.get("letters", []):
                 for ch, s, e in letters:
-                    verse_letters.append({
-                        "word_idx": _i(widx),
-                        "char": ch,
-                        "start_ms": _i(s - clip_start),
-                        "end_ms": _i(e - clip_start),
-                    })
+                    verse_letters.append(
+                        {
+                            "word_idx": _i(widx),
+                            "char": ch,
+                            "start_ms": _i(s - clip_start),
+                            "end_ms": _i(e - clip_start),
+                        }
+                    )
 
             # source_url + chapter info for slicer.
             chapter = int(surah_num)
-            rows.append({
-                "surah": chapter,
-                "ayah": ayah,
-                "duration_ms": _i(clip_end - clip_start),
-                "text_uthmani": text,
-                "segments": verse_segments,
-                "word_timestamps": verse_words,
-                "letter_timestamps": verse_letters,
-                "source_url": entry.get("audio", ""),
-                "chapter": chapter,
-                "clip_start": clip_start,
-                "clip_end": clip_end,
-            })
+            rows.append(
+                {
+                    "surah": chapter,
+                    "ayah": ayah,
+                    "duration_ms": _i(clip_end - clip_start),
+                    "text_uthmani": text,
+                    "segments": verse_segments,
+                    "word_timestamps": verse_words,
+                    "letter_timestamps": verse_letters,
+                    "source_url": entry.get("audio", ""),
+                    "chapter": chapter,
+                    "clip_start": clip_start,
+                    "clip_end": clip_end,
+                }
+            )
     return rows
 
 
@@ -386,12 +413,12 @@ def build_rows(timestamps: dict, detailed_by_ref: dict, surah_info: dict,
 # the slice starts at, so word_timestamps must be rebased to it.
 # ---------------------------------------------------------------------------
 
+
 def _chapter_mp3_path(slug: str, chapter: int) -> Path:
     return _bucket_root() / "reciters" / slug / "audio" / f"{chapter}.mp3"
 
 
-def _stream_copy_slice(src: Path, start_ms: int, end_ms: int,
-                       dst: Path) -> tuple[int, int] | None:
+def _stream_copy_slice(src: Path, start_ms: int, end_ms: int, dst: Path) -> tuple[int, int] | None:
     """ffmpeg ``-c copy -ss X -t Y`` from ``src`` to ``dst``.
 
     Returns ``(actual_start_ms, actual_end_ms)`` of the produced clip — the
@@ -408,19 +435,38 @@ def _stream_copy_slice(src: Path, start_ms: int, end_ms: int,
     dur_s = duration_ms / 1000.0
     try:
         result = subprocess.run(
-            ["ffmpeg", "-y", "-loglevel", "error",
-             "-ss", f"{start_s:.6f}", "-i", str(src),
-             "-t", f"{dur_s:.6f}", "-c", "copy", "-f", "mp3", str(dst)],
-            capture_output=True, timeout=120,
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-ss",
+                f"{start_s:.6f}",
+                "-i",
+                str(src),
+                "-t",
+                f"{dur_s:.6f}",
+                "-c",
+                "copy",
+                "-f",
+                "mp3",
+                str(dst),
+            ],
+            capture_output=True,
+            timeout=120,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
-        log.warning("ffmpeg slice failed for %s [%d,%d]: %s",
-                    src.name, start_ms, end_ms, exc)
+        log.warning("ffmpeg slice failed for %s [%d,%d]: %s", src.name, start_ms, end_ms, exc)
         return None
     if result.returncode != 0 or not dst.exists() or dst.stat().st_size == 0:
-        log.warning("ffmpeg slice failed for %s [%d,%d] rc=%s: %s",
-                    src.name, start_ms, end_ms, result.returncode,
-                    result.stderr.decode("utf-8", "replace")[:200])
+        log.warning(
+            "ffmpeg slice failed for %s [%d,%d] rc=%s: %s",
+            src.name,
+            start_ms,
+            end_ms,
+            result.returncode,
+            result.stderr.decode("utf-8", "replace")[:200],
+        )
         return None
     # ffprobe the actual duration to bound the snap. ``-ss`` before ``-i`` in
     # stream-copy mode snaps to the previous keyframe/frame; the requested
@@ -440,9 +486,18 @@ def _probe_duration_ms(path: Path) -> int | None:
     """ffprobe duration in ms, or None on failure."""
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-            capture_output=True, timeout=30,
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            capture_output=True,
+            timeout=30,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return None
@@ -471,10 +526,8 @@ def _rebase_row(row: dict, actual_start_ms: int) -> None:
     # holds after rebase. Leaving clip_end unchanged would silently de-sync
     # the row's audio-window arithmetic.
     row["clip_end"] = actual_start_ms + row["duration_ms"]
-    row["word_timestamps"] = [[w[0], w[1] + delta, w[2] + delta]
-                              for w in row["word_timestamps"]]
-    row["segments"] = [[s[0], s[1], s[2] + delta, s[3] + delta]
-                       for s in row["segments"]]
+    row["word_timestamps"] = [[w[0], w[1] + delta, w[2] + delta] for w in row["word_timestamps"]]
+    row["segments"] = [[s[0], s[1], s[2] + delta, s[3] + delta] for s in row["segments"]]
     for lt in row["letter_timestamps"]:
         lt["start_ms"] += delta
         lt["end_ms"] += delta
@@ -483,6 +536,7 @@ def _rebase_row(row: dict, actual_start_ms: int) -> None:
 # ---------------------------------------------------------------------------
 # Boundary validation — fatal violations abort; coverage gaps drop verses.
 # ---------------------------------------------------------------------------
+
 
 def _verses_for_validation(rows: list[dict]) -> dict[str, dict]:
     """Re-format rows as the ``validate_dataset`` input shape (source-ms).
@@ -509,8 +563,8 @@ def _verses_for_validation(rows: list[dict]) -> dict[str, dict]:
 # HF dataset push.
 # ---------------------------------------------------------------------------
 
-def _push_to_hf(slug: str, riwayah: str, rows: list[dict],
-                audio_bytes: list[bytes]) -> str:
+
+def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[bytes]) -> str:
     """Build the parquet split and push to HF. Returns the dataset commit SHA."""
     from datasets import Audio, Dataset, Features, Sequence, Value
     from huggingface_hub import HfApi
@@ -519,18 +573,30 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict],
     api = HfApi(token=os.environ.get("HF_TOKEN"))
     api.create_repo(repo_id=repo_id, repo_type="dataset", exist_ok=True)
 
-    data = {k: [] for k in [
-        "audio", "surah", "ayah", "duration_ms", "text_uthmani",
-        "segments", "word_timestamps", "letter_timestamps",
-        "source_url", "source_offset_ms",
-    ]}
+    data = {
+        k: []
+        for k in [
+            "audio",
+            "surah",
+            "ayah",
+            "duration_ms",
+            "text_uthmani",
+            "segments",
+            "word_timestamps",
+            "letter_timestamps",
+            "source_url",
+            "source_offset_ms",
+        ]
+    }
     for i, row in enumerate(rows):
         if audio_bytes[i] is None:
             continue
-        data["audio"].append({
-            "bytes": audio_bytes[i],
-            "path": f"{row['surah']:03d}{row['ayah']:03d}.mp3",
-        })
+        data["audio"].append(
+            {
+                "bytes": audio_bytes[i],
+                "path": f"{row['surah']:03d}{row['ayah']:03d}.mp3",
+            }
+        )
         data["surah"].append(row["surah"])
         data["ayah"].append(row["ayah"])
         data["duration_ms"].append(row["duration_ms"])
@@ -540,16 +606,18 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict],
         # Transpose list-of-struct (build shape) to struct-of-lists
         # (Sequence({...}) on-disk shape, matches prior hub splits).
         lt = row["letter_timestamps"]
-        data["letter_timestamps"].append({
-            "word_idx": [x["word_idx"] for x in lt],
-            "char": [x["char"] for x in lt],
-            "start_ms": [x["start_ms"] for x in lt],
-            "end_ms": [x["end_ms"] for x in lt],
-        })
+        data["letter_timestamps"].append(
+            {
+                "word_idx": [x["word_idx"] for x in lt],
+                "char": [x["char"] for x in lt],
+                "start_ms": [x["start_ms"] for x in lt],
+                "end_ms": [x["end_ms"] for x in lt],
+            }
+        )
         src_url = row["source_url"]
         for prefix in ("https://", "http://"):
             if src_url.startswith(prefix):
-                src_url = src_url[len(prefix):]
+                src_url = src_url[len(prefix) :]
                 break
         data["source_url"].append(src_url)
         data["source_offset_ms"].append(_i(row["clip_start"]))
@@ -557,32 +625,37 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict],
     # Audio(decode=True) matches the existing splits on the hub (consumers
     # expect ``ds[i]["audio"]["array"]``). Torch + torchcodec are installed
     # on the job at launch (see services/admin/jobs/hf_publish.py).
-    features = Features({
-        "audio": Audio(),
-        "surah": Value("int32"),
-        "ayah": Value("int32"),
-        "duration_ms": Value("int32"),
-        "text_uthmani": Value("string"),
-        "segments": Sequence(Sequence(Value("int32"))),
-        "word_timestamps": Sequence(Sequence(Value("int32"))),
-        # ``Sequence({...})`` encodes to struct-of-lists (legacy datasets
-        # behavior) — kept to stay byte-compatible with prior splits on the
-        # hub. Per-row value is fed in the transposed form below.
-        "letter_timestamps": Sequence({
-            "word_idx": Value("int32"),
-            "char": Value("string"),
-            "start_ms": Value("int32"),
-            "end_ms": Value("int32"),
-        }),
-        "source_url": Value("string"),
-        "source_offset_ms": Value("int32"),
-    })
+    features = Features(
+        {
+            "audio": Audio(),
+            "surah": Value("int32"),
+            "ayah": Value("int32"),
+            "duration_ms": Value("int32"),
+            "text_uthmani": Value("string"),
+            "segments": Sequence(Sequence(Value("int32"))),
+            "word_timestamps": Sequence(Sequence(Value("int32"))),
+            # ``Sequence({...})`` encodes to struct-of-lists (legacy datasets
+            # behavior) — kept to stay byte-compatible with prior splits on the
+            # hub. Per-row value is fed in the transposed form below.
+            "letter_timestamps": Sequence(
+                {
+                    "word_idx": Value("int32"),
+                    "char": Value("string"),
+                    "start_ms": Value("int32"),
+                    "end_ms": Value("int32"),
+                }
+            ),
+            "source_url": Value("string"),
+            "source_offset_ms": Value("int32"),
+        }
+    )
     ds = Dataset.from_dict(data, features=features)
 
-    log.info("pushing %d rows to %s/%s/%s", len(data["audio"]),
-             repo_id, riwayah, slug)
+    log.info("pushing %d rows to %s/%s/%s", len(data["audio"]), repo_id, riwayah, slug)
     ds.push_to_hub(
-        repo_id, config_name=riwayah, split=slug,
+        repo_id,
+        config_name=riwayah,
+        split=slug,
         token=os.environ.get("HF_TOKEN"),
         max_shard_size="10GB",
         commit_message=f"publish {riwayah}/{slug}",
@@ -598,6 +671,7 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict],
 def _resolve_dataset_repo_id() -> str:
     """Resolve the HF dataset repo id from config_loader (single source of truth)."""
     from qua_shared.config_loader import repo_config
+
     return repo_config()["hf_dataset"]
 
 
@@ -616,9 +690,16 @@ def _riwayah_for(audio_manifest: dict | None, detailed: dict) -> str:
 # Completion callback.
 # ---------------------------------------------------------------------------
 
-def _post_webhook(*, slug: str, job_id: str, version: str,
-                  external_uri: str, status: str = "succeeded",
-                  validation_summary: dict | None = None) -> bool:
+
+def _post_webhook(
+    *,
+    slug: str,
+    job_id: str,
+    version: str,
+    external_uri: str,
+    status: str = "succeeded",
+    validation_summary: dict | None = None,
+) -> bool:
     """POST the completion webhook so Inspector commits the DB row. Returns
     True on 2xx; False on any failure (the 120s poll worker is the safety net)."""
     url = os.environ.get("INSPECTOR_WEBHOOK_URL", "").strip()
@@ -627,6 +708,7 @@ def _post_webhook(*, slug: str, job_id: str, version: str,
         log.info("webhook URL/secret unset — skipping callback (poll fallback applies)")
         return False
     import urllib.request
+
     body = {
         "kind": "hf_publish",
         "slug": slug,
@@ -640,9 +722,10 @@ def _post_webhook(*, slug: str, job_id: str, version: str,
         body["validation_summary"] = validation_summary
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
-        url, data=data, method="POST",
-        headers={"Content-Type": "application/json",
-                 "X-Inspector-Job-Secret": secret},
+        url,
+        data=data,
+        method="POST",
+        headers={"Content-Type": "application/json", "X-Inspector-Job-Secret": secret},
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -657,9 +740,11 @@ def _post_webhook(*, slug: str, job_id: str, version: str,
 # Preflight — bail with clear exit codes before any heavy work.
 # ---------------------------------------------------------------------------
 
+
 def _which(name: str) -> bool:
     """True if ``name`` is on PATH."""
     from shutil import which
+
     return which(name) is not None
 
 
@@ -668,29 +753,36 @@ def _preflight(slug: str) -> int:
     non-zero exit code on the first failure. Each return code maps to one
     cause so the operator can fix without diving into logs."""
     if not slug:
-        log.error("SLUG env var is required"); return 2
+        log.error("SLUG env var is required")
+        return 2
     if not os.environ.get("HF_TOKEN", "").strip():
-        log.error("HF_TOKEN secret is required"); return 10
+        log.error("HF_TOKEN secret is required")
+        return 10
     if not _which("ffmpeg") or not _which("ffprobe"):
-        log.error("ffmpeg/ffprobe missing from PATH"); return 11
+        log.error("ffmpeg/ffprobe missing from PATH")
+        return 11
     bucket = _bucket_root()
     if not bucket.exists():
-        log.error("bucket mount missing at %s", bucket); return 12
+        log.error("bucket mount missing at %s", bucket)
+        return 12
     detailed_path = bucket / "reciters" / slug / "detailed.json"
     if not detailed_path.exists():
-        log.error("detailed.json missing at %s", detailed_path); return 13
+        log.error("detailed.json missing at %s", detailed_path)
+        return 13
     refs_dir = Path("/aux/code/data")
     if not (refs_dir / "surah_info.json").exists():
-        log.error("static ref surah_info.json missing at %s", refs_dir); return 14
-    if not ((refs_dir / "qpc_hafs.json.gz").exists()
-            or (refs_dir / "qpc_hafs.json").exists()):
-        log.error("static ref qpc_hafs.json[.gz] missing at %s", refs_dir); return 14
+        log.error("static ref surah_info.json missing at %s", refs_dir)
+        return 14
+    if not ((refs_dir / "qpc_hafs.json.gz").exists() or (refs_dir / "qpc_hafs.json").exists()):
+        log.error("static ref qpc_hafs.json[.gz] missing at %s", refs_dir)
+        return 14
     return 0
 
 
 # ---------------------------------------------------------------------------
 # Main.
 # ---------------------------------------------------------------------------
+
 
 def main() -> int:
     slug = os.environ.get("SLUG", "").strip()
@@ -730,17 +822,25 @@ def main() -> int:
 
     # 4. Validate boundaries before any audio work.
     from qua_shared.dataset_validation import (
-        BoundaryValidationError, fatal_violations, validate_dataset,
+        BoundaryValidationError,
+        fatal_violations,
+        validate_dataset,
     )
+
     summary = validate_dataset(_verses_for_validation(rows), surah_info=surah_info)
     fatal = fatal_violations(summary["violations"])
     if fatal:
         log.error("boundary validation failed: %d fatal violation(s)", len(fatal))
         for v in fatal[:5]:
             log.error("  %s", v)
-        _post_webhook(slug=slug, job_id=job_id, version="",
-                      external_uri="", status="failed",
-                      validation_summary=summary)
+        _post_webhook(
+            slug=slug,
+            job_id=job_id,
+            version="",
+            external_uri="",
+            status="failed",
+            validation_summary=summary,
+        )
         raise BoundaryValidationError(summary)
 
     # 5. Stream-copy audio per row. The bucket FUSE mount can't handle many
@@ -749,9 +849,9 @@ def main() -> int:
     # chapter: copy bucket → /tmp once (single bulk sequential read), then
     # fan out ffmpeg slices across workers against the local copy. Drop the
     # local copy when the chapter is done so total tmp footprint stays bounded.
+    import shutil as _shutil
     from collections import defaultdict
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    import shutil as _shutil
 
     audio_bytes: list[bytes | None] = [None] * len(rows)
     failed_slices: list[str] = []
@@ -771,8 +871,13 @@ def main() -> int:
 
     workers = max(4, min(12, (os.cpu_count() or 2) * 3))
     progress_every = max(50, len(rows) // 20)
-    log.info("slicing %d rows across %d chapters with %d workers (progress every %d)",
-             len(rows), len(rows_by_chapter), workers, progress_every)
+    log.info(
+        "slicing %d rows across %d chapters with %d workers (progress every %d)",
+        len(rows),
+        len(rows_by_chapter),
+        workers,
+        progress_every,
+    )
 
     with tempfile.TemporaryDirectory() as td:
         td_path = Path(td)
@@ -781,18 +886,24 @@ def main() -> int:
             chapter_rows = rows_by_chapter[chapter]
             src_bucket = _chapter_mp3_path(slug, chapter)
             if not src_bucket.exists():
-                for i, row in chapter_rows:
+                for _i, row in chapter_rows:
                     failed_slices.append(f"{row['surah']}:{row['ayah']} (no audio)")
                 done += len(chapter_rows)
-                log.info("  ch %d: no audio — %d skipped (total %d/%d, %d failed)",
-                         chapter, len(chapter_rows), done, len(rows),
-                         len(failed_slices))
+                log.info(
+                    "  ch %d: no audio — %d skipped (total %d/%d, %d failed)",
+                    chapter,
+                    len(chapter_rows),
+                    done,
+                    len(rows),
+                    len(failed_slices),
+                )
                 continue
             src_local = td_path / f"chapter_{chapter}.mp3"
             _shutil.copyfile(src_bucket, src_local)
             with ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = [pool.submit(_slice_one, i, row, src_local, td_path)
-                           for i, row in chapter_rows]
+                futures = [
+                    pool.submit(_slice_one, i, row, src_local, td_path) for i, row in chapter_rows
+                ]
                 for fut in as_completed(futures):
                     idx, blob, fail = fut.result()
                     done += 1
@@ -801,8 +912,9 @@ def main() -> int:
                     if fail is not None:
                         failed_slices.append(fail)
                     if done % progress_every == 0 or done == len(rows):
-                        log.info("  sliced %d/%d (%d failed so far)",
-                                 done, len(rows), len(failed_slices))
+                        log.info(
+                            "  sliced %d/%d (%d failed so far)", done, len(rows), len(failed_slices)
+                        )
             try:
                 src_local.unlink()
             except OSError:
@@ -813,9 +925,14 @@ def main() -> int:
         log.warning("failed slices (first 20): %s", failed_slices[:20])
     if sliced_count == 0:
         log.error("every audio slice failed — refusing to push empty dataset")
-        _post_webhook(slug=slug, job_id=job_id, version="",
-                      external_uri="", status="failed",
-                      validation_summary=summary)
+        _post_webhook(
+            slug=slug,
+            job_id=job_id,
+            version="",
+            external_uri="",
+            status="failed",
+            validation_summary=summary,
+        )
         return 16
 
     # 6. Push to HF — gets us a commit sha to record as ``version``.
@@ -826,10 +943,16 @@ def main() -> int:
     repo_id = _resolve_dataset_repo_id()
     external_uri = (
         f"https://huggingface.co/datasets/{repo_id}/tree/{version_sha}"
-        if version_sha else f"https://huggingface.co/datasets/{repo_id}"
+        if version_sha
+        else f"https://huggingface.co/datasets/{repo_id}"
     )
-    _post_webhook(slug=slug, job_id=job_id, version=version_sha or job_id,
-                  external_uri=external_uri, validation_summary=summary)
+    _post_webhook(
+        slug=slug,
+        job_id=job_id,
+        version=version_sha or job_id,
+        external_uri=external_uri,
+        validation_summary=summary,
+    )
 
     log.info("publish_hf: done slug=%s version=%s", slug, version_sha)
     return 0

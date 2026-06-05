@@ -17,6 +17,7 @@ The generated output lands at
 ``inspector/frontend/src/lib/types/generated/schemas.ts`` and is
 committed to git so CI can ``git diff --exit-code`` it.
 """
+
 from __future__ import annotations
 
 from .admin_permissions import (
@@ -36,9 +37,9 @@ from .admin_reviews import (
     AdminReviewDetail,
     AdminReviewOpenClaim,
     AdminReviewRow,
+    AdminReviewsResponse,
     AdminReviewTransition,
     AdminReviewValidation,
-    AdminReviewsResponse,
 )
 from .admin_users import (
     AdminActiveClaim,
@@ -48,9 +49,9 @@ from .admin_users import (
     AdminRoleEvent,
     AdminUserDetail,
     AdminUserRow,
-    AdminUserStats,
     AdminUsersResponse,
     AdminUsersSummary,
+    AdminUserStats,
     AdminVisitorStats,
     VisitorDayStat,
 )

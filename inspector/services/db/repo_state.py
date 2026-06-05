@@ -33,9 +33,9 @@ _WRITABLE: dict[str, Any] = {
     "created_by_transition_id": lambda v: v,
     "timestamps_job_ids": lambda v: _serde.json_dumps(v or []),
     "revision_in_progress": lambda v: (
-        None if v is None else _serde.json_dumps(
-            v.model_dump(mode="json") if hasattr(v, "model_dump") else v
-        )
+        None
+        if v is None
+        else _serde.json_dumps(v.model_dump(mode="json") if hasattr(v, "model_dump") else v)
     ),
 }
 
@@ -51,9 +51,7 @@ def _assemble(ds, claim) -> ReciterRow:
         "visibility_reason": ds["visibility_reason"],
         "last_save_at": _serde.from_iso(ds["last_save_at"]),
         "timestamps_job_ids": _serde.json_loads(ds["timestamps_job_ids"]) or [],
-        "revision_in_progress": (
-            RevisionContext.model_validate(rip_raw) if rip_raw else None
-        ),
+        "revision_in_progress": (RevisionContext.model_validate(rip_raw) if rip_raw else None),
     }
     # assignee/marked_ready come from the open claim, and only exist on
     # under_review rows (ReciterRow's own invariant).
@@ -104,9 +102,10 @@ def all_rows() -> list[ReciterRow]:
 
 
 def exists(slug: str) -> bool:
-    return get_conn().execute(
-        "SELECT 1 FROM delivery_states WHERE slug = ?", (slug,)
-    ).fetchone() is not None
+    return (
+        get_conn().execute("SELECT 1 FROM delivery_states WHERE slug = ?", (slug,)).fetchone()
+        is not None
+    )
 
 
 def upsert_state(
@@ -159,6 +158,4 @@ def update_state(slug: str, **fields) -> None:
         cols.append(f"{key} = ?")
         params.append(_WRITABLE[key](val))
     params.append(slug)
-    get_conn().execute(
-        f"UPDATE delivery_states SET {', '.join(cols)} WHERE slug = ?", params
-    )
+    get_conn().execute(f"UPDATE delivery_states SET {', '.join(cols)} WHERE slug = ?", params)

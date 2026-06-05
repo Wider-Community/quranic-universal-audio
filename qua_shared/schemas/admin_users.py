@@ -30,8 +30,8 @@ class AdminUserRow(BaseModel):
     hf_user_id: str
     login: str | None = None
     role: str = "contributor"
-    joined: str | None = None          # users.first_seen (ISO)
-    last_activity: str | None = None   # MAX(transitions.ts) (ISO)
+    joined: str | None = None  # users.first_seen (ISO)
+    last_activity: str | None = None  # MAX(transitions.ts) (ISO)
     requests: int = 0
     reviews: int = 0
     active_claim: AdminActiveClaim | None = None
@@ -82,7 +82,7 @@ class AdminClaimEvent(BaseModel):
     released_at: str | None = None
     marked_ready_at: str | None = None
     close_reason: str | None = None
-    outcome: str = ""   # derived label: "claimed, open now" / "published" / ...
+    outcome: str = ""  # derived label: "claimed, open now" / "published" / ...
 
 
 class AdminRequestEvent(BaseModel):

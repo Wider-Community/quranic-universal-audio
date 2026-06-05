@@ -46,7 +46,7 @@ class MfaRuntime:
         self.workers = workers
         self._pool: ProcessPoolExecutor | None = None
 
-    def __enter__(self) -> "MfaRuntime":
+    def __enter__(self) -> MfaRuntime:
         self._pool = ProcessPoolExecutor(
             max_workers=self.workers,
             initializer=_init_worker,

@@ -80,13 +80,18 @@ def test_lru_cache_returns_identical_tuple():
     assert first is second
 
 
-def test_stops_order_independent_via_tuple_key():
+def test_stops_order_yields_distinct_cache_keys():
     """The same set of stops in a different order is a different cache key
     (tuple identity) — that's fine; the FE always emits stops in word order
-    so the cache hit rate stays high. This test just locks the behaviour."""
-    a = bridges_for_verse("2:8", ("2:8:3",))
-    b = bridges_for_verse("2:8", ("2:8:3",))
-    assert a is b
+    so the cache hit rate stays high. Identity comparison would be ambiguous
+    when both calls return the interned empty tuple, so we read cache_info()
+    to assert two distinct cache slots were populated."""
+    bridges_for_verse.cache_clear()
+    bridges_for_verse("2:8", ("2:8:3", "2:8:5"))
+    bridges_for_verse("2:8", ("2:8:5", "2:8:3"))
+    info = bridges_for_verse.cache_info()
+    assert info.misses == 2, "different orderings must populate distinct cache slots"
+    assert info.hits == 0
 
 
 def test_no_stops_returns_immutable_tuple():

@@ -13,8 +13,7 @@ Schema: ``qua_shared/schemas/pipeline_meta.py::PipelineMeta``.
 
 from __future__ import annotations
 
-from typing import Iterable
-
+from collections.abc import Iterable
 
 # The aligner's combined "Isti'adha+Basmala" ref is treated as a Basmala
 # deletion. New extractions normalise the snapshot ref to "Basmala" via

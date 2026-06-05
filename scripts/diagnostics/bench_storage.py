@@ -26,9 +26,7 @@ sys.path.insert(0, str(ROOT))
 
 from inspector.services.hf_bucket import BucketBackend  # noqa: E402
 
-BUCKET = os.environ.get(
-    "INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket-dev"
-)
+BUCKET = os.environ.get("INSPECTOR_BUCKET_REPO", "hetchyy/quranic-inspector-bucket-dev")
 SLUG = "mishary_rashid_al_afasy_mp3quran"
 SCRATCH = "reciters/__bench__"
 
@@ -43,6 +41,7 @@ def time_call(fn, *args, **kwargs) -> tuple[float, object]:
 def invalidate_hffs():
     try:
         from huggingface_hub import hffs
+
         hffs.invalidate_cache()
     except Exception:
         pass
@@ -79,7 +78,7 @@ def bench_reads(b: BucketBackend, n_warm: int = 5) -> None:
         warm_samples: list[float] = []
         size = None
 
-        def call() -> object:
+        def call(op: str = op, path: str = path) -> object:
             if op == "read_bytes":
                 return b.read_bytes(path)
             if op == "read_json":
@@ -100,6 +99,7 @@ def bench_reads(b: BucketBackend, n_warm: int = 5) -> None:
                     size = sum(len(repr(x)) for x in res)
                 else:
                     import orjson
+
                     size = len(orjson.dumps(res))
 
         # Warm: no invalidation, repeat
@@ -108,10 +108,8 @@ def bench_reads(b: BucketBackend, n_warm: int = 5) -> None:
             warm_samples.append(dt)
 
         sz_kb = (size or 0) / 1024.0
-        stats(f"{tag:<11} {op:<11} {path[-40:]}", cold_samples,
-              extra=f"[cold, {sz_kb:6.1f} KB]")
-        stats(f"{'':<11} {'':<11} {'(warm)':<40}", warm_samples,
-              extra=f"[warm]")
+        stats(f"{tag:<11} {op:<11} {path[-40:]}", cold_samples, extra=f"[cold, {sz_kb:6.1f} KB]")
+        stats(f"{'':<11} {'':<11} {'(warm)':<40}", warm_samples, extra="[warm]")
 
     # list_dir + exists
     invalidate_hffs()
@@ -140,17 +138,18 @@ def bench_writes(b: BucketBackend, n: int = 3) -> None:
     large = {"rows": [{"i": i, "vals": list(range(20))} for i in range(20_000)]}
 
     import orjson
-    print(f"  small payload: {len(orjson.dumps(small))/1024:.1f} KB")
-    print(f"  large payload: {len(orjson.dumps(large))/1024:.1f} KB")
+
+    print(f"  small payload: {len(orjson.dumps(small)) / 1024:.1f} KB")
+    print(f"  large payload: {len(orjson.dumps(large)) / 1024:.1f} KB")
 
     s = []
-    for i in range(n):
+    for _ in range(n):
         dt, _ = time_call(b.write_json_atomic, small_path, small)
         s.append(dt)
     stats("write_json small  (~1 KB)", s)
 
     s = []
-    for i in range(n):
+    for _ in range(n):
         dt, _ = time_call(b.write_json_atomic, large_path, large)
         s.append(dt)
     stats("write_json large  (1+ MB)", s)
@@ -163,8 +162,7 @@ def bench_writes(b: BucketBackend, n: int = 3) -> None:
     for i in range(n):
         dt, _ = time_call(b.append_jsonl, hist_path, {"i": 1000 + i, "data": "y" * 200})
         s.append(dt)
-    stats("append_jsonl (50-row preseeded)", s,
-          extra="[rmw on bucket, in-place on mount]")
+    stats("append_jsonl (50-row preseeded)", s, extra="[rmw on bucket, in-place on mount]")
 
 
 def cleanup(b: BucketBackend) -> None:
@@ -180,14 +178,15 @@ def cleanup(b: BucketBackend) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mount", default=None,
-                    help="path to local hf-mount of the dev bucket (optional)")
+    ap.add_argument(
+        "--mount", default=None, help="path to local hf-mount of the dev bucket (optional)"
+    )
     ap.add_argument("--skip-writes", action="store_true")
     ap.add_argument("--warm", type=int, default=5)
     args = ap.parse_args()
 
     print(f"bucket={BUCKET}")
-    print(f"mode={'MOUNTED ('+args.mount+')' if args.mount else 'NO MOUNT (hffs.cat_file)'}")
+    print(f"mode={'MOUNTED (' + args.mount + ')' if args.mount else 'NO MOUNT (hffs.cat_file)'}")
     print(f"slug={SLUG}")
 
     b = BucketBackend(BUCKET, mount=args.mount)

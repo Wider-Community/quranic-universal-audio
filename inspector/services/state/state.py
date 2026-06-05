@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from typing import Any, TypedDict
 
 from qua_shared.schemas import (
@@ -31,14 +31,13 @@ from qua_shared.schemas import (
     RevisionContext,
     Visibility,
 )
-
-from . import audit
-from .labels import humanize_state
-from services.auth import permissions
-from services.errors import Codes
 from services import db as _db
+from services.auth import permissions
 from services.db import _serde, repo_access, repo_claims, repo_state, repo_transitions
 from services.db import sync as _sync
+from services.errors import Codes
+
+from .labels import humanize_state
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +294,9 @@ def _require_reason(reason: str | None, event: str) -> str:
     return norm
 
 
-def _state_precondition(action: str, before: ReciterRow, message: str | None = None) -> InvalidTransition:
+def _state_precondition(
+    action: str, before: ReciterRow, message: str | None = None
+) -> InvalidTransition:
     """Build a ``STATE_PRECONDITION`` ``InvalidTransition`` for a rejected
     transition whose row is in the wrong state. ``before`` must be non-None
     (all call sites guard ``before is None`` first). The FE renders friendly
@@ -350,6 +351,7 @@ def transition(
     # (next manifest request, warm sidecar caches) and transitions are
     # admin/edit-frequency, not request-frequency.
     from services.reference import timestamps as _ts_manifest
+
     _ts_manifest.invalidate()
     return new_row
 
@@ -386,6 +388,7 @@ def _apply_event(
     auto_claim_requester: Actor | None = None
     if event == "reciter.alignment_completed":
         from . import pending_requests as _pending_requests
+
         pending = _pending_requests.get(slug)
         if pending is not None and pending.auto_claim:
             auto_claim_requester = pending.requester
@@ -428,8 +431,12 @@ def _persist_state(before: ReciterRow | None, new_row: ReciterRow, *, tid: str) 
         return
     updates: dict[str, Any] = {}
     for col in (
-        "state", "state_since", "visibility", "visibility_reason",
-        "last_save_at", "timestamps_job_ids",
+        "state",
+        "state_since",
+        "visibility",
+        "visibility_reason",
+        "last_save_at",
+        "timestamps_job_ids",
         "revision_in_progress",
     ):
         if getattr(new_row, col) != getattr(before, col):
@@ -477,9 +484,7 @@ def _persist_claim_diff(
             opened_by_transition_id=tid,
         )
     elif before_assignee and not new_assignee:
-        repo_claims.close_claim(
-            slug=new_row.slug, close_reason=event, closed_by_transition_id=tid
-        )
+        repo_claims.close_claim(slug=new_row.slug, close_reason=event, closed_by_transition_id=tid)
 
     # marked_ready toggle on a still-held claim (same assignee).
     if new_assignee and before_assignee == new_assignee and new_row.marked_ready != before_ready:
@@ -492,10 +497,7 @@ def _persist_claim_diff(
             # Bypass submissions don't carry a checklist; persist NULL so
             # the admin Reviews drawer can distinguish "submitted via
             # bypass" from "form submission with empty checklist".
-            checklist_json = (
-                None if bypass or not checklist
-                else _serde.json_dumps(checklist)
-            )
+            checklist_json = None if bypass or not checklist else _serde.json_dumps(checklist)
             repo_claims.set_marked_ready(
                 new_row.slug,
                 ready=True,
@@ -522,7 +524,9 @@ def _maybe_auto_claim(conn: sqlite3.Connection, slug: str, requester: Actor) -> 
         if held is not None and held != slug:
             logger.info(
                 "auto_claim: %s already holds claim on %s; skipping %s",
-                requester.hf_user_id, held, slug,
+                requester.hf_user_id,
+                held,
+                slug,
             )
             repo_transitions.append(
                 event="reciter.auto_claim_skipped",
@@ -550,7 +554,7 @@ def _maybe_auto_claim(conn: sqlite3.Connection, slug: str, requester: Actor) -> 
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # Each handler:
@@ -606,6 +610,7 @@ def _h_alignment_completed(slug, before, actor, payload, reason):
     # ``transition()``, no post-commit queue).
     # Imported here (not at module top) to avoid a circular import.
     from . import pending_requests as _pending_requests
+
     _pending_requests.apply_and_archive_completed(slug, actor=actor)
 
     return _replace(
@@ -649,12 +654,12 @@ def _h_requested(slug, before, actor, payload, reason):
 
     # Defense-in-depth: also checked by the route layer.
     from . import pending_requests as _pending_requests
+
     if _pending_requests.get(slug) is not None:
-        raise InvalidTransition(
-            f"slug {slug!r} already has a pending request"
-        )
+        raise InvalidTransition(f"slug {slug!r} already has a pending request")
 
     from qua_shared.schemas import ProposedEdits as _ProposedEdits
+
     edits_raw = payload.get("proposed_edits") or {}
     try:
         edits = _ProposedEdits.model_validate(edits_raw)
@@ -709,6 +714,7 @@ def _h_request_rejected_soft(slug, before, actor, payload, reason):
     norm_reason = _require_reason(reason, "request_rejected_soft")
 
     from . import pending_requests as _pending_requests
+
     _pending_requests.archive_returned(slug, reason=norm_reason, by_actor=actor)
 
     return _replace(
@@ -733,6 +739,7 @@ def _h_request_rejected_hard(slug, before, actor, payload, reason):
     norm_reason = _require_reason(reason, "request_rejected_hard")
 
     from . import pending_requests as _pending_requests
+
     _pending_requests.archive_discarded(slug, reason=norm_reason, by_actor=actor)
 
     return _replace(
@@ -837,6 +844,7 @@ def _h_marked_ready(slug, before, actor, payload, reason):
     # non-bypass branch records ``bypass_used=False`` implicitly via
     # ``_persist_claim_diff``'s ``payload.get("bypass_used")`` default.
     from services.auth import capabilities as _capabilities
+
     bypass = _capabilities.can(actor, "claim.mark_ready_skip_gates")
     if bypass:
         payload["bypass_used"] = True
@@ -845,8 +853,9 @@ def _h_marked_ready(slug, before, actor, payload, reason):
         # Lazy import: qua_shared.schemas is a sibling import (already used
         # elsewhere in this module), but the validation module pulls heavy
         # bucket loaders — keep it off the top-level state.py import graph.
-        from qua_shared.schemas import BLOCKING_COUNT_KEYS, MarkReadyRequest
         from pydantic import ValidationError
+
+        from qua_shared.schemas import BLOCKING_COUNT_KEYS, MarkReadyRequest
 
         try:
             submission = MarkReadyRequest.model_validate(payload)
@@ -857,9 +866,7 @@ def _h_marked_ready(slug, before, actor, payload, reason):
                 details={"validation_errors": e.errors()},
             ) from e
 
-        unchecked = [
-            k for k, v in submission.checklist.model_dump().items() if not v
-        ]
+        unchecked = [k for k, v in submission.checklist.model_dump().items() if not v]
         if unchecked:
             raise InvalidTransition(
                 "Please check every box in the list before marking ready.",
@@ -895,13 +902,10 @@ def _h_marked_ready(slug, before, actor, payload, reason):
         counts = dict(result.get("category_counts") or {})
         lc_items = result.get("low_confidence") or []
         counts["low_confidence"] = sum(
-            1 for it in lc_items
-            if (it.get("confidence") or 0.0) < LOW_CONFIDENCE_THRESHOLD
+            1 for it in lc_items if (it.get("confidence") or 0.0) < LOW_CONFIDENCE_THRESHOLD
         )
         nonzero = {
-            k: int(counts.get(k, 0))
-            for k in BLOCKING_COUNT_KEYS
-            if int(counts.get(k, 0)) > 0
+            k: int(counts.get(k, 0)) for k in BLOCKING_COUNT_KEYS if int(counts.get(k, 0)) > 0
         }
         if nonzero:
             raise InvalidTransition(
@@ -1066,8 +1070,7 @@ def _h_reassigned(slug, before, actor, payload, reason):
     new_login = payload.get("new_assignee_login")
     if not new_hf or not new_login:
         raise InvalidTransition(
-            "claim.reassigned requires payload "
-            "{new_assignee_hf_id, new_assignee_login}"
+            "claim.reassigned requires payload {new_assignee_hf_id, new_assignee_login}"
         )
     # Reason is optional — pairs with _h_force_released (see comment there).
     return _replace(

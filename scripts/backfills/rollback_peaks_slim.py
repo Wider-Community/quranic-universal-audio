@@ -11,13 +11,13 @@ return ``None`` for the legacy ``.json`` files.
 
 Idempotent: chapters that have no ``.bak`` are skipped (nothing to restore).
 """
+
 from __future__ import annotations
 
 import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Iterable
 
 # Make this script runnable as `python scripts/rollback_peaks_slim.py`
 # from the inspector/ directory.
@@ -60,7 +60,7 @@ def _iter_backups(backend, slug: str) -> list[str]:
 
 
 def _rollback_chapter(backend, slug: str, chapter: str, *, dry_run: bool) -> str:
-    new_path = storage_paths.prefetched_peaks_path(slug, chapter)         # .json.gz
+    new_path = storage_paths.prefetched_peaks_path(slug, chapter)  # .json.gz
     legacy_path = storage_paths.prefetched_peaks_legacy_path(slug, chapter)  # .json
     backup_path = storage_paths.prefetched_peaks_backup_path(slug, chapter)  # .json.bak
 
@@ -73,8 +73,7 @@ def _rollback_chapter(backend, slug: str, chapter: str, *, dry_run: bool) -> str
     # Step 1: restore .bak → .json. If a .json already exists (operator
     # interrupted mid-rollback), don't clobber it — caller can investigate.
     if backend.exists(legacy_path):
-        logger.warning("%s/%s: %s already exists; skipping rename",
-                       slug, chapter, legacy_path)
+        logger.warning("%s/%s: %s already exists; skipping rename", slug, chapter, legacy_path)
         return "legacy-already-exists"
     try:
         backend.move(backup_path, legacy_path)
@@ -117,8 +116,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     backend = get_backend()
     slugs = [args.slug] if args.slug else _iter_all_slugs(backend)

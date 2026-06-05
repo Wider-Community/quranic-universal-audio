@@ -35,15 +35,23 @@ CAT = "by_surah_audio"
 SLUG = "roundtrip_reciter"
 
 
-def _ok(locations, t0=0.0, step=0.5):
+def _ok(locations, t0=0.0, step=0.2):
+    # Segment-RELATIVE word times (s): the pipeline's _convert_word adds the
+    # segment's time_start offset downstream, so words land inside the segment.
+    # t0 is accepted for call-site readability but unused (passing the segment
+    # start here would double-count the offset); step keeps words within span.
     words = []
     for i, loc in enumerate(locations):
-        s = t0 + i * step
-        words.append({
-            "location": loc, "start": s, "end": s + step,
-            "letters": [{"char": "x", "start": s, "end": s + step}],
-            "phones": [{"phone": "P", "start": s, "end": s + step}],
-        })
+        s = i * step
+        words.append(
+            {
+                "location": loc,
+                "start": s,
+                "end": s + step,
+                "letters": [{"char": "x", "start": s, "end": s + step}],
+                "phones": [{"phone": "P", "start": s, "end": s + step}],
+            }
+        )
     return {"status": "ok", "words": words}
 
 
@@ -54,10 +62,9 @@ def _write_shard(chapter_doc, results, *, cat=CAT):
     """
     v2 = build_raw_v2([chapter_doc], results, cat)
     shards = build_segment_shards(v2, audio_category=cat, src_meta=v2.get("_meta"))
-    (chapter, shard_doc), = shards.items()
+    ((chapter, shard_doc),) = shards.items()
     gz = gzip_shard(shard_doc)
-    get_backend().write_bytes_atomic(
-        storage_paths.timestamps_path_gz(SLUG, chapter), gz)
+    get_backend().write_bytes_atomic(storage_paths.timestamps_path_gz(SLUG, chapter), gz)
     return chapter, shard_doc, gz
 
 
@@ -71,11 +78,13 @@ def _loopback_chapter():
             {"matched_ref": "1:1:4-1:1:5", "time_start": 2000, "time_end": 3000},
         ],
     }
-    results = {0: [
-        (0, _ok(["1:1:1", "1:1:2", "1:1:3", "1:1:4"])),
-        (1, _ok(["1:1:3", "1:1:4", "1:1:5"], t0=1.0)),
-        (2, _ok(["1:1:4", "1:1:5"], t0=2.0)),
-    ]}
+    results = {
+        0: [
+            (0, _ok(["1:1:1", "1:1:2", "1:1:3", "1:1:4"])),
+            (1, _ok(["1:1:3", "1:1:4", "1:1:5"], t0=1.0)),
+            (2, _ok(["1:1:4", "1:1:5"], t0=2.0)),
+        ]
+    }
     return chapter, results
 
 
@@ -105,7 +114,6 @@ def test_roundtrip_consumer_dedup(tmp_reciter_dir):
     widxs = [w[0] for w in verse["words"]]
     # within-pass loopback retained (the repeated 3,4); trailing seg trimmed.
     assert widxs == [1, 2, 3, 4, 3, 4, 5]
-    assert set(widxs) >= {1, 2, 3, 4, 5}  # full coverage
     # audio-contiguous clip up to the completing segment (trailing 2000-3000 cut).
     assert verse["verse_start_ms"] == 0
     assert verse["verse_end_ms"] == 2000
@@ -121,19 +129,28 @@ def test_roundtrip_multi_occasion_highest_confidence(tmp_reciter_dir):
             {"matched_ref": "1:1:1-1:1:3", "time_start": 1500, "time_end": 2500},
         ],
     }
-    results = {0: [
-        (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
-        (1, _ok(["1:2:1", "1:2:2"], t0=1.0)),
-        (2, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.5)),
-    ]}
+    results = {
+        0: [
+            (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
+            (1, _ok(["1:2:1", "1:2:2"], t0=1.0)),
+            (2, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.5)),
+        ]
+    }
     chapter, _doc, _gz = _write_shard(chapter_doc, results)
     shard = orjson.loads(data_dir.read_timestamps_chapter(SLUG, chapter))
 
-    detailed = {"entries": [{"ref": 1, "segments": [
-        {"time_start": 0, "time_end": 1000, "confidence": 0.40},
-        {"time_start": 1000, "time_end": 1500, "confidence": 0.99},
-        {"time_start": 1500, "time_end": 2500, "confidence": 0.95},
-    ]}]}
+    detailed = {
+        "entries": [
+            {
+                "ref": 1,
+                "segments": [
+                    {"time_start": 0, "time_end": 1000, "confidence": 0.40},
+                    {"time_start": 1000, "time_end": 1500, "confidence": 0.99},
+                    {"time_start": 1500, "time_end": 2500, "confidence": 0.95},
+                ],
+            }
+        ]
+    }
     proj = project_segment_shard(shard, conf_by_span=confidence_by_span(detailed))
     assert set(proj) == {"1:1", "1:2"}
     # Take B wins on confidence — one canonical contiguous occasion for 1:1.

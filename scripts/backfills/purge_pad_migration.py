@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -25,7 +25,6 @@ sys.path.insert(0, str(_REPO))
 
 from services.storage import data_dir, storage_paths
 from services.storage.hf_bucket import StorageNotFound, get_backend
-
 
 PURGE_TYPE = "pad_migration"
 ARCHIVE_ROOT = "archive/pad_migration"
@@ -72,8 +71,14 @@ def process_slug(backend, slug: str, *, apply: bool, stamp: str) -> dict:
     try:
         raw = backend.read_bytes(path)
     except StorageNotFound:
-        return {"slug": slug, "status": "missing", "bytes_before": 0,
-                "bytes_after": 0, "batches_kept": 0, "batches_purged": 0}
+        return {
+            "slug": slug,
+            "status": "missing",
+            "bytes_before": 0,
+            "bytes_after": 0,
+            "batches_kept": 0,
+            "batches_purged": 0,
+        }
 
     keep, purge, bad = split_records(raw)
     bytes_before = len(raw)
@@ -117,7 +122,7 @@ def main() -> int:
     args = ap.parse_args()
 
     backend = get_backend()
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
     if args.slug:
         targets = [args.slug]
@@ -140,9 +145,17 @@ def main() -> int:
     print("-" * 116)
     total_before = total_after = total_saved = total_purged = 0
     for r in rows:
-        print(fmt.format(r["slug"][:42], r["status"],
-                         r["bytes_before"], r["bytes_after"],
-                         r.get("saved", 0), r["batches_kept"], r["batches_purged"]))
+        print(
+            fmt.format(
+                r["slug"][:42],
+                r["status"],
+                r["bytes_before"],
+                r["bytes_after"],
+                r.get("saved", 0),
+                r["batches_kept"],
+                r["batches_purged"],
+            )
+        )
         total_before += r["bytes_before"]
         total_after += r["bytes_after"]
         total_saved += r.get("saved", 0)

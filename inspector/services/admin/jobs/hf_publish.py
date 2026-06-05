@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from qua_shared.schemas import Actor
 from services.db import repo_releases
@@ -45,8 +45,7 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     # this launch (and vice versa).
     busy = base.running_job_for(slug=slug)
     if busy is not None:
-        raise RuntimeError(
-            f"job already in flight for {slug}: kind={busy[0]} id={busy[1]}")
+        raise RuntimeError(f"job already in flight for {slug}: kind={busy[0]} id={busy[1]}")
 
     base.stage_job_code()
     bucket = resolve_bucket_repo()
@@ -72,14 +71,19 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     deps = "datasets orjson pyyaml torch torchcodec"
     entrypoint = "python /aux/code/qua_jobs/publish_hf.py"
     if base.NEEDS_BOOTSTRAP:
-        command = ["bash", "-lc",
-                   "mamba install -y -c conda-forge python=3.11 "
-                   f"&& /opt/conda/bin/pip install -q huggingface_hub {deps} "
-                   f"&& {entrypoint}"]
+        command = [
+            "bash",
+            "-lc",
+            "mamba install -y -c conda-forge python=3.11 "
+            f"&& /opt/conda/bin/pip install -q huggingface_hub {deps} "
+            f"&& {entrypoint}",
+        ]
     else:
-        command = ["bash", "-lc",
-                   f"/env/bin/pip install -q {deps} "
-                   f"&& conda run -p /env --no-capture-output {entrypoint}"]
+        command = [
+            "bash",
+            "-lc",
+            f"/env/bin/pip install -q {deps} && conda run -p /env --no-capture-output {entrypoint}",
+        ]
 
     job = run_job(
         image=base.JOB_IMAGE,
@@ -90,8 +94,7 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
         secrets=secrets,
         volumes=[
             Volume(type="bucket", source=bucket, mount_path="/data"),
-            Volume(type="bucket", source=base.ALIGNER_BUCKET, mount_path="/aux",
-                   read_only=True),
+            Volume(type="bucket", source=base.ALIGNER_BUCKET, mount_path="/aux", read_only=True),
         ],
         labels={"task": KIND, "reciter": slug},
     )
@@ -101,15 +104,20 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     # Bust the in-flight cache so the next /releases/status fetch reflects
     # the new job without waiting for the 5 s TTL.
     from services.storage import cache as _cache
+
     _cache.invalidate_in_flight_jobs_cache()
     return {"job_id": job_id, "url": url}
 
 
-def complete(slug: str | None, job_id: str, *,
-             version: str | None = None,
-             external_uri: str | None = None,
-             launched_by: str | None = None,
-             validation_summary: dict | None = None) -> dict:
+def complete(
+    slug: str | None,
+    job_id: str,
+    *,
+    version: str | None = None,
+    external_uri: str | None = None,
+    launched_by: str | None = None,
+    validation_summary: dict | None = None,
+) -> dict:
     """Record an HF dataset publish in the DB. Idempotent on (track, slug, version).
 
     Inserts a new ``per_recitation_releases(track='hf')`` row, supersedes any
@@ -123,7 +131,7 @@ def complete(slug: str | None, job_id: str, *,
         return {"ok": False, "reason": "no slug"}
 
     version = version or job_id  # fallback so the unique key has something
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     actor = Actor(
         hf_user_id="SYSTEM_ACTOR",
         login_at_time=launched_by or "system",
@@ -136,14 +144,20 @@ def complete(slug: str | None, job_id: str, *,
         # rows — a retry after a later supersede must NOT re-INSERT.
         existing_any = repo_releases.release_by_version("hf", slug, version)
         if existing_any is not None:
-            log.info("hf_publish.complete(%s, %s): already recorded (id=%s)",
-                     slug, version, existing_any.get("id"))
+            log.info(
+                "hf_publish.complete(%s, %s): already recorded (id=%s)",
+                slug,
+                version,
+                existing_any.get("id"),
+            )
             return {"ok": True, "skipped": "duplicate"}
         # Supersede prior current row FIRST — the partial-unique blocks two
         # current rows for (hf, slug) so we can't insert before clearing.
         repo_releases.supersede_current("hf", slug, except_id=-1, at=now)
         new_id = repo_releases.insert_per_recitation_release(
-            track="hf", slug=slug, version=version,
+            track="hf",
+            slug=slug,
+            version=version,
             produced_at=now,
             produced_by="SYSTEM_ACTOR",
             produced_by_job_id=job_id,
@@ -163,6 +177,7 @@ def complete(slug: str | None, job_id: str, *,
     # the row from "In progress" on the next fetch instead of waiting up to
     # ~5 s for the TTL.
     from services.storage import cache as _cache
+
     _cache.invalidate_in_flight_jobs_cache()
     return {"ok": True, "release_id": new_id}
 

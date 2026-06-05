@@ -7,7 +7,7 @@ short of the speech edge.
 Pure function — no I/O side effects beyond reading ``segments.json`` from disk.
 Used by:
   - inspector/services/validation/timestamps.py (runtime check on Inspector data).
-  - .github/scripts/build_reciter.py --build-manifest (build-time pre-compute
+  - scripts/release/build_reciter.py --build-manifest (build-time pre-compute
     so the deployed Inspector can render the validation panel without a live
     segments.json fetch).
 """
@@ -97,26 +97,34 @@ def compute_boundary_mismatches(
         # Start: flag only if timestamps start AFTER segment start (late).
         start_diff = ts_first_start - best_start_seg[2]
         if start_diff > tolerance:
-            mismatches.append({
-                "verse_key": verse_key,
-                "side": "start",
-                "diff_ms": int(start_diff),
-                "msg": (f"start mismatch: timestamps {_ms_to_hms(ts_first_start)} "
+            mismatches.append(
+                {
+                    "verse_key": verse_key,
+                    "side": "start",
+                    "diff_ms": int(start_diff),
+                    "msg": (
+                        f"start mismatch: timestamps {_ms_to_hms(ts_first_start)} "
                         f"vs segments {_ms_to_hms(best_start_seg[2])} "
-                        f"(diff {start_diff}ms)"),
-            })
+                        f"(diff {start_diff}ms)"
+                    ),
+                }
+            )
 
         # End: flag only if timestamps end BEFORE segment end (short).
         end_diff = best_end_seg[3] - ts_last_end
         if end_diff > tolerance:
-            mismatches.append({
-                "verse_key": verse_key,
-                "side": "end",
-                "diff_ms": int(end_diff),
-                "msg": (f"end mismatch: timestamps {_ms_to_hms(ts_last_end)} "
+            mismatches.append(
+                {
+                    "verse_key": verse_key,
+                    "side": "end",
+                    "diff_ms": int(end_diff),
+                    "msg": (
+                        f"end mismatch: timestamps {_ms_to_hms(ts_last_end)} "
                         f"vs segments {_ms_to_hms(best_end_seg[3])} "
-                        f"(diff {end_diff}ms)"),
-            })
+                        f"(diff {end_diff}ms)"
+                    ),
+                }
+            )
 
     return {
         "has_segments": True,

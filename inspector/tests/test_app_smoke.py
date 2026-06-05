@@ -7,6 +7,7 @@ dependencies — it just returns ``load_surah_info_lite()``.
 
 Import prerequisites handled in ``pyproject.toml`` (``pythonpath = ["."]``).
 """
+
 import pytest
 
 
@@ -16,6 +17,7 @@ def client():
     # a collection-time crash (helps keep the rest of the suite green while
     # this target is iterated on).
     from app import app
+
     app.config["TESTING"] = True
     return app.test_client()
 

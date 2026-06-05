@@ -13,42 +13,31 @@ bounds once so the three fields always agree.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+import gzip
 
-_ROOT = Path(__file__).resolve().parents[3]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
-import gzip  # noqa: E402
-
-from qua_jobs import cut_release  # noqa: E402
-from qua_jobs.cut_release import _verse_for_validate  # noqa: E402
-from qua_shared.dataset_validation import (  # noqa: E402
+from qua_jobs import cut_release
+from qua_jobs.cut_release import _verse_for_validate
+from qua_shared.dataset_validation import (
     check_duration_arithmetic,
 )
 
 # An LFS pointer file — what HF auto-LFS ships for ``data/qpc_hafs.json.gz`` in
 # the job image (LFS'd by extension; the Space build can't smudge it).
-_LFS_POINTER = (
-    b"version https://git-lfs.github.com/spec/v1\n"
-    b"oid sha256:deadbeef\nsize 1452433\n"
-)
+_LFS_POINTER = b"version https://git-lfs.github.com/spec/v1\noid sha256:deadbeef\nsize 1452433\n"
 
 
 def test_verse_start_zero_with_leading_word_gap():
     # verse_start_ms is a real 0; first word's audio starts at 60 ms.
-    v = {"verse_start_ms": 0, "verse_end_ms": 24095,
-         "words": [[1, 60, 2350], [23, 21995, 24095]]}
+    v = {"verse_start_ms": 0, "verse_end_ms": 24095, "words": [[1, 60, 2350], [23, 21995, 24095]]}
     out = _verse_for_validate(v, segments=[])
-    assert out["verse_start_ms"] == 0          # NOT coerced to the word start (60)
+    assert out["verse_start_ms"] == 0  # NOT coerced to the word start (60)
     assert out["verse_end_ms"] == 24095
-    assert out["duration_ms"] == 24095          # end - start, consistent
-    assert check_duration_arithmetic("5:1", out) == []   # no phantom violation
+    assert out["duration_ms"] == 24095  # end - start, consistent
+    assert check_duration_arithmetic("5:1", out) == []  # no phantom violation
 
 
 def test_bounds_fall_back_to_words_when_absent():
-    v = {"words": [[1, 100, 500], [2, 500, 900]]}   # no verse_start/end keys
+    v = {"words": [[1, 100, 500], [2, 500, 900]]}  # no verse_start/end keys
     out = _verse_for_validate(v, segments=[])
     assert out["verse_start_ms"] == 100
     assert out["verse_end_ms"] == 900
@@ -68,6 +57,7 @@ def test_nonzero_start_duration_consistent():
 # auto-LFS by extension), so the real bytes must come from the bucket.
 # Regression for ``BadGzipFile: Not a gzipped file (b've')`` aborting the cut.
 # ---------------------------------------------------------------------------
+
 
 def test_qpc_prefers_local_uncompressed(tmp_path):
     (tmp_path / "qpc_hafs.json").write_bytes(b'{"1:1:1": "x"}')

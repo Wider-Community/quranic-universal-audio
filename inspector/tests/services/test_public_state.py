@@ -6,34 +6,44 @@ assignee redaction — without touching Flask.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 
-def _state_row(slug: str, *, state: str = "awaiting_review",
-               marked_ready: bool = False,
-               assignee_hf_id: str | None = None,
-               visibility: str = "public"):
+def _state_row(
+    slug: str,
+    *,
+    state: str = "awaiting_review",
+    marked_ready: bool = False,
+    assignee_hf_id: str | None = None,
+    visibility: str = "public",
+):
     from qua_shared.schemas import ReciterRow, ReciterState, Visibility
 
     return ReciterRow(
         slug=slug,
         state=ReciterState(state),
-        state_since=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        state_since=datetime(2026, 5, 12, tzinfo=UTC),
         assignee_hf_id=assignee_hf_id,
         assignee_login="alice" if assignee_hf_id else None,
-        assignee_since=datetime(2026, 5, 12, tzinfo=timezone.utc) if assignee_hf_id else None,
+        assignee_since=datetime(2026, 5, 12, tzinfo=UTC) if assignee_hf_id else None,
         marked_ready=marked_ready,
         visibility=Visibility(visibility),
     )
 
 
-def _delivery(slug: str, *, reciter_id: str = "test_reciter",
-              riwayah: str = "hafs", style: str = "murattal",
-              recording_context: str | None = "studio",
-              recording_year: int | None = None,
-              source: str = "mp3quran", channel: str = "mp3quran",
-              audio_category: str = "by_surah",
-              chapter_count: int = 114):
+def _delivery(
+    slug: str,
+    *,
+    reciter_id: str = "test_reciter",
+    riwayah: str = "hafs",
+    style: str = "murattal",
+    recording_context: str | None = "studio",
+    recording_year: int | None = None,
+    source: str = "mp3quran",
+    channel: str = "mp3quran",
+    audio_category: str = "by_surah",
+    chapter_count: int = 114,
+):
     from qua_shared.schemas import AudioCategory, Delivery
 
     return Delivery(
@@ -47,13 +57,17 @@ def _delivery(slug: str, *, reciter_id: str = "test_reciter",
         channel=channel,
         audio_category=AudioCategory(audio_category),
         chapter_count=chapter_count,
-        added_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        added_at=datetime(2026, 1, 1, tzinfo=UTC),
         added_by_hf_id="system_seed",
     )
 
 
-def _reciter(reciter_id: str = "test_reciter", *, name_en: str = "Test Reciter",
-             country: str | None = "Saudi Arabia"):
+def _reciter(
+    reciter_id: str = "test_reciter",
+    *,
+    name_en: str = "Test Reciter",
+    country: str | None = "Saudi Arabia",
+):
     from qua_shared.schemas import ReciterEntry
 
     return ReciterEntry(
@@ -91,10 +105,7 @@ def test_bucket_for_awaiting_alignment_is_requested():
 def test_bucket_for_awaiting_review_is_available_for_review():
     from services.public_state import bucket_for
 
-    assert (
-        bucket_for(_state_row("test_a", state="awaiting_review"))
-        == "available_for_review"
-    )
+    assert bucket_for(_state_row("test_a", state="awaiting_review")) == "available_for_review"
 
 
 def test_bucket_for_under_review_unmarked_is_under_review():
@@ -109,7 +120,10 @@ def test_bucket_for_under_review_marked_ready_is_under_review():
     from services.public_state import bucket_for
 
     row = _state_row(
-        "test_a", state="under_review", assignee_hf_id="u-1", marked_ready=True,
+        "test_a",
+        state="under_review",
+        assignee_hf_id="u-1",
+        marked_ready=True,
     )
     assert bucket_for(row) == "under_review"
 
@@ -151,15 +165,30 @@ def test_to_public_reciter_aggregates_unions_of_facets():
 
     reciter = _reciter()
     dels = [
-        _delivery("a_qdc",        riwayah="hafs", style="murattal",
-                  source="mp3quran", channel="mp3quran",
-                  recording_context="studio"),
-        _delivery("a_qdc_v2",     riwayah="hafs", style="mujawwad",
-                  source="qul",      channel="quranicaudio",
-                  recording_context="broadcast"),
-        _delivery("a_archive",    riwayah="hafs", style="mujawwad",
-                  source="surah-quran", channel="archive_org",
-                  recording_context="broadcast"),
+        _delivery(
+            "a_qdc",
+            riwayah="hafs",
+            style="murattal",
+            source="mp3quran",
+            channel="mp3quran",
+            recording_context="studio",
+        ),
+        _delivery(
+            "a_qdc_v2",
+            riwayah="hafs",
+            style="mujawwad",
+            source="qul",
+            channel="quranicaudio",
+            recording_context="broadcast",
+        ),
+        _delivery(
+            "a_archive",
+            riwayah="hafs",
+            style="mujawwad",
+            source="surah-quran",
+            channel="archive_org",
+            recording_context="broadcast",
+        ),
     ]
     state_index = {}
     public = to_public_reciter(reciter, dels, state_index)
@@ -179,12 +208,16 @@ def test_to_public_reciter_coverage_rollup_full_partial_mixed():
     reciter = _reciter()
 
     full_only = to_public_reciter(
-        reciter, [_delivery("test_a", chapter_count=114)], {},
+        reciter,
+        [_delivery("test_a", chapter_count=114)],
+        {},
     )
     assert full_only["coverage_kind"] == "full"
 
     partial_only = to_public_reciter(
-        reciter, [_delivery("test_b", chapter_count=110)], {},
+        reciter,
+        [_delivery("test_b", chapter_count=110)],
+        {},
     )
     assert partial_only["coverage_kind"] == "partial"
 
@@ -243,8 +276,8 @@ def test_to_public_reciter_skips_discarded_deliveries():
 
 
 def test_to_public_reciter_last_activity_is_max_state_since():
-    from services.public_state import to_public_reciter
     from qua_shared.schemas import ReciterRow, ReciterState, Visibility
+    from services.public_state import to_public_reciter
 
     reciter = _reciter()
     dels = [_delivery("test_a"), _delivery("test_b")]
@@ -252,13 +285,13 @@ def test_to_public_reciter_last_activity_is_max_state_since():
         "test_a": ReciterRow(
             slug="test_a",
             state=ReciterState("awaiting_review"),
-            state_since=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            state_since=datetime(2024, 1, 1, tzinfo=UTC),
             visibility=Visibility("public"),
         ),
         "test_b": ReciterRow(
             slug="test_b",
             state=ReciterState("awaiting_review"),
-            state_since=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            state_since=datetime(2025, 1, 1, tzinfo=UTC),
             visibility=Visibility("public"),
         ),
     }

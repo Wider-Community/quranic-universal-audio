@@ -114,6 +114,14 @@
         }
     }
 
+    // Speculative prewarm on filmstrip ayah-cell hover. The hovered ayah is in
+    // the CURRENT chapter (already the bound source), so a `prewarm()` warms its
+    // decoder + canplay if the chapter hasn't played yet — a no-op (fast-path
+    // reuse) once it has, and a no-op for VBR. Cheap to call per cell.
+    function warmCurrentChapter(): void {
+        void dashPort.prewarm();
+    }
+
     // Load chapter recitation when the published reciter / surah changes.
     $effect(() => {
         if (!isPublished || !reciterSlug || !surahNum) {
@@ -302,6 +310,7 @@
                         hoverMs={$progressHoverMs}
                         scrubMs={$progressScrubMs}
                         onSeek={seek}
+                        onHoverPrewarm={warmCurrentChapter}
                     />
                 </div>
             </div>

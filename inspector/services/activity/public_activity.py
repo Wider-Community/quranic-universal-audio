@@ -20,13 +20,14 @@ stop matching.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Iterable, TypedDict
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from typing import TypedDict
+
+from services.db import _serde, repo_activity, repo_transitions
+from services.state import catalog as catalog_service
 
 from . import activity_classification
-from services.state import catalog as catalog_service
-from services.db import _serde, repo_activity, repo_transitions
-
 
 PublicEventKind = str  # matches keys in activity_classification.PUBLIC_EVENTS
 
@@ -57,12 +58,12 @@ _TEMPLATES: dict[str, str] = {
 def _window_cutoff_iso(months: int) -> str:
     """ISO timestamp for the start of the earliest month in an N-month window
     (current month + previous N-1), matching the legacy partition span."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     year, month = now.year, now.month - (months - 1)
     while month <= 0:
         month += 12
         year -= 1
-    return _serde.to_iso(datetime(year, month, 1, tzinfo=timezone.utc))
+    return _serde.to_iso(datetime(year, month, 1, tzinfo=UTC))
 
 
 def _iter_partitions(months: int) -> Iterable[dict]:

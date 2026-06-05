@@ -6,7 +6,7 @@ The Inspector is a single-worker Flask app serving a Svelte 5 SPA. It manages th
 
 ```
 HTTP ─▶ routes/<domain>/*          thin Flask blueprints: parse → service → jsonify
-                │                   (the ONLY layer allowed to import Flask)
+                │                   (primary Flask layer; only services/ exception is auth/auth.py)
                 ▼
         services/<domain>/*        business logic, Flask-free, returns plain dicts
                 │                   db/ storage/ audio/ auth/ state/ segments/
@@ -19,7 +19,7 @@ HTTP ─▶ routes/<domain>/*          thin Flask blueprints: parse → service 
 ```
 
 Invariants:
-- **Routes are the only Flask importers.** Services accept params, return dicts, raise typed errors. `app.py` maps those errors to the `{error: str}` JSON envelope.
+- **Routes are the Flask layer.** Services accept params, return dicts, raise typed errors; `app.py` maps those errors to the `{error: str}` JSON envelope. The sole `services/` exception is `services/auth/auth.py` — authlib's `flask_client` OAuth integration (`_CacheStateOAuth`/`_CacheStateIntegration` subclass Flask integration) cannot be abstracted away. The `services-flask-free` CI guard enforces this with `auth.py` as the only allow-listed file.
 - **Single worker.** `app.py::_assert_single_worker` refuses to boot under any multi-worker signal. State store, per-slug locks, role cache, OAuth-state cookie, and all in-memory caches assume one process.
 - **SQLite is the source of truth** for the 7 former bucket JSON stores + audit. Reads go through `services/db/repo_*`; writes commit in `services/db/connection.py::transaction()` then sync via `services/db/sync.py`.
 - **Bucket-first reads** for reciter content go through `services/storage/data_dir.py` + `storage_paths.py`, never raw `Path.read_text()`.

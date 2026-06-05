@@ -9,6 +9,7 @@ picks its own cache discipline:
 - ``/quran-refs/version`` — tiny version probe, no-cache; FE polls once at
   app boot to learn the current hash and cache-bust the payload URL.
 """
+
 from __future__ import annotations
 
 import orjson

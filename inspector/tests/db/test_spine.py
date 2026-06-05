@@ -28,17 +28,29 @@ def test_migration_creates_all_tables(fresh_db):
     assert db.current_version(db.get_writer()) == _LATEST_VERSION
     conn = db.get_conn()
     names = {
-        r[0]
-        for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     }
     expected = {
-        "db_meta", "users", "role_assignments", "riwayahs", "styles", "sources",
-        "channels", "recording_contexts", "catalog_meta", "catalog_aliases",
-        "reciters", "deliveries", "transitions", "delivery_states", "claims",
-        "requests", "activity_tombstones", "visitor_daily",
-        "request_views", "review_views",
+        "db_meta",
+        "users",
+        "role_assignments",
+        "riwayahs",
+        "styles",
+        "sources",
+        "channels",
+        "recording_contexts",
+        "catalog_meta",
+        "catalog_aliases",
+        "reciters",
+        "deliveries",
+        "transitions",
+        "delivery_states",
+        "claims",
+        "requests",
+        "activity_tombstones",
+        "visitor_daily",
+        "request_views",
+        "review_views",
     }
     assert expected <= names
     # ``activity_dismissals`` was dropped in migration 0006 (admin notifs rail).
@@ -59,9 +71,7 @@ def test_commit_bumps_db_seq(fresh_db):
         )
     assert db.current_db_seq() == start + 1
     # reader sees the committed row immediately (read-after-write)
-    row = db.get_conn().execute(
-        "SELECT login_cache FROM users WHERE hf_user_id = 'u1'"
-    ).fetchone()
+    row = db.get_conn().execute("SELECT login_cache FROM users WHERE hf_user_id = 'u1'").fetchone()
     assert row[0] == "alice"
 
 
@@ -75,9 +85,10 @@ def test_rollback_on_error_leaves_no_rows_and_no_seq_bump(fresh_db):
             )
             raise ValueError("boom")
     assert db.current_db_seq() == start
-    assert db.get_conn().execute(
-        "SELECT COUNT(*) FROM users WHERE hf_user_id = 'u2'"
-    ).fetchone()[0] == 0
+    assert (
+        db.get_conn().execute("SELECT COUNT(*) FROM users WHERE hf_user_id = 'u2'").fetchone()[0]
+        == 0
+    )
 
 
 def test_nested_transaction_savepoint_partial_rollback(fresh_db):
@@ -90,9 +101,7 @@ def test_nested_transaction_savepoint_partial_rollback(fresh_db):
                 raise RuntimeError("inner boom")
         except RuntimeError:
             pass
-    users = {
-        r[0] for r in db.get_conn().execute("SELECT hf_user_id FROM users").fetchall()
-    }
+    users = {r[0] for r in db.get_conn().execute("SELECT hf_user_id FROM users").fetchall()}
     assert "outer" in users
     assert "inner" not in users
 
@@ -108,7 +117,15 @@ def test_nested_transaction_single_commit_seq(fresh_db):
 
 
 def test_foreign_keys_enforced(fresh_db):
-    # delivery referencing a missing reciter must fail (PRAGMA foreign_keys=ON)
+    """delivery.reciter_id REFERENCES reciters(reciter_id) is enforced under
+    PRAGMA foreign_keys=ON. Seed every other FK target so the rejection is
+    unambiguously attributed to the reciters FK (and not a stray vocab one)."""
+    with db.transaction() as conn:
+        conn.execute("INSERT INTO users(hf_user_id) VALUES ('u1')")
+        conn.execute("INSERT INTO riwayahs(slug,short,name) VALUES ('hafs','h','Hafs')")
+        conn.execute("INSERT INTO styles(slug,short,name) VALUES ('murattal','m','Mur')")
+        conn.execute("INSERT INTO sources(slug,name) VALUES ('src','Src')")
+        conn.execute("INSERT INTO channels(slug,short,name) VALUES ('ch','c','Ch')")
     with pytest.raises(sqlite3.IntegrityError):
         with db.transaction() as conn:
             conn.execute(
@@ -146,9 +163,7 @@ def test_one_open_claim_per_slug(fresh_db):
             )
     # but once the first is released, a new open claim is allowed
     with db.transaction() as conn:
-        conn.execute(
-            "UPDATE claims SET released_at='2026-01-03T00:00:00Z' WHERE slug='d1'"
-        )
+        conn.execute("UPDATE claims SET released_at='2026-01-03T00:00:00Z' WHERE slug='d1'")
         conn.execute(
             "INSERT INTO claims(slug, assignee_id, claimed_at) VALUES "
             "('d1','u2','2026-01-03T00:00:00Z')"

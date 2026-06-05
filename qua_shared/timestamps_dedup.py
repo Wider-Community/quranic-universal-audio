@@ -25,8 +25,8 @@ from collections import defaultdict
 from typing import Any
 
 from qua_shared.timestamps_pipeline import (
-    _normalize_from_results,
     _matched_ref_to_output_key,
+    _normalize_from_results,
 )
 
 V2_SCHEMA_VERSION = 2
@@ -185,15 +185,26 @@ def _canonical_verse(words: list, segs: list[dict]) -> dict:
     """Assemble the canonical verse-map value from the chosen occasion's words.
 
     Concatenates the accumulated word lists (recitation order, loops retained)
-    and stamps ``verse_start_ms`` / ``verse_end_ms`` from the segment span so
-    downstream tier/dataset builders get the clip boundary for free.
+    and stamps ``verse_start_ms`` / ``verse_end_ms`` as the span covering every
+    kept segment AND every word/letter time. A word or letter can bleed a few ms
+    past its segment's ``t`` bound, so the clip must reach the furthest word/letter
+    end or it would truncate the final word's tail (and verse_end < a word's end
+    violates the "all times within [verse_start, verse_end]" invariant).
     """
-    verse_start = segs[0]["t"][0]
-    verse_end = max(int(s["t"][1]) for s in segs)
+    starts = [int(s["t"][0]) for s in segs]
+    ends = [int(s["t"][1]) for s in segs]
+    for w in words:
+        starts.append(int(w[1]))
+        ends.append(int(w[2]))
+        for lt in w[3] if len(w) > 3 else []:
+            if lt[1] is not None:
+                starts.append(int(lt[1]))
+            if lt[2] is not None:
+                ends.append(int(lt[2]))
     return {
         "words": words,
-        "verse_start_ms": int(verse_start),
-        "verse_end_ms": int(verse_end),
+        "verse_start_ms": min(starts),
+        "verse_end_ms": max(ends),
     }
 
 
@@ -244,9 +255,7 @@ def project_segment_shard(
         foreign_starts.sort()
 
         occasions = _split_occasions(verse_segs, foreign_starts)
-        n_words = max(
-            (wi for seg in verse_segs for wi in _seg_widx_set(seg)), default=0
-        )
+        n_words = max((wi for seg in verse_segs for wi in _seg_widx_set(seg)), default=0)
         target = set(range(1, n_words + 1))
 
         chosen = _choose_occasion(occasions, target, conf_by_span)
@@ -267,14 +276,11 @@ def _choose_occasion(
     completing = [occ for occ in occasions if _completes_at(occ, target) is not None]
     if completing:
         ranked = [
-            (i, _occasion_mean_confidence(occ, conf_by_span))
-            for i, occ in enumerate(completing)
+            (i, _occasion_mean_confidence(occ, conf_by_span)) for i, occ in enumerate(completing)
         ]
         if any(conf is not None for _, conf in ranked):
             # Highest mean confidence; tie-break on earliest (lower index).
-            best_i = max(
-                ranked, key=lambda ic: (ic[1] if ic[1] is not None else -1.0, -ic[0])
-            )[0]
+            best_i = max(ranked, key=lambda ic: (ic[1] if ic[1] is not None else -1.0, -ic[0]))[0]
             return completing[best_i]
         return completing[0]  # earliest completing — confidence unavailable
     # No occasion completes — keep the one with the widest word coverage.

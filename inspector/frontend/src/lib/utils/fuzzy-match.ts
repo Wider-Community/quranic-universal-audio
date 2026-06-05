@@ -2,12 +2,13 @@
  * Arabic-normalizing substring matcher.
  *
  * Single canonical implementation consumed by ``SearchableSelect``,
- * ``ReciterPicker`` (Phase 6), and any other component that filters a
- * user-typed query against a list of Arabic-or-Latin labels.
+ * ``ReciterPicker``, and any other component that filters a user-typed
+ * query against a list of Arabic-or-Latin labels.
  *
- * Symmetric with the backend helper at ``inspector/services/search_normalize.py``;
- * the same input string must normalize to the same output in both
- * languages so client-side preview and server-side search agree.
+ * Symmetric with the backend helper at
+ * ``inspector/services/activity/search_normalize.py``; the same input
+ * string must normalize to the same output in both languages so
+ * client-side preview and server-side search agree.
  *
  * Normalizations applied (in order):
  *   1. Lowercase (Latin only — has no effect on Arabic).

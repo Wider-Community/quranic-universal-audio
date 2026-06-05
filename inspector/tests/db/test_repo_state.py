@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from qua_shared.schemas import ReciterState, Visibility
-
 from services import db
-from services.db import repo_state, repo_claims
-from ._helpers import seed_user, seed_delivery
+from services.db import repo_claims, repo_state
+
+from ._helpers import seed_delivery, seed_user
 
 
 def _dt(s="2026-01-01T00:00:00+00:00") -> datetime:
@@ -33,7 +33,9 @@ def test_under_review_assignee_from_open_claim(fresh_db):
     with db.transaction():
         repo_state.upsert_state("d1", state=ReciterState.UNDER_REVIEW, state_since=_dt())
         repo_claims.open_claim(
-            slug="d1", assignee_id="rev1", assignee_login="reviewer",
+            slug="d1",
+            assignee_id="rev1",
+            assignee_login="reviewer",
             claimed_at=_dt("2026-02-02T00:00:00+00:00"),
         )
     row = repo_state.get_row("d1")
@@ -67,12 +69,14 @@ def test_release_clears_assignee(fresh_db):
     # release: close claim + move state out of under_review (publish → released)
     with db.transaction():
         repo_claims.close_claim(slug="d1", close_reason="released")
-        repo_state.update_state(
-            "d1", state=ReciterState.RELEASED, state_since=_dt()
-        )
+        repo_state.update_state("d1", state=ReciterState.RELEASED, state_since=_dt())
+    # Directly assert the open claim was actually closed — the assembled
+    # ReciterRow only fills assignee_* when state == UNDER_REVIEW, so checking
+    # `row.assignee_hf_id is None` alone passes for the wrong reason.
+    assert repo_claims.get_open_claim("d1") is None
     row = repo_state.get_row("d1")
     assert row.state == ReciterState.RELEASED
-    assert row.assignee_hf_id is None  # ReciterRow invariant holds
+    assert row.assignee_hf_id is None
 
 
 def test_retained_columns_roundtrip(fresh_db):

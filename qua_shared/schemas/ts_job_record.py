@@ -47,7 +47,9 @@ class TsJobSettings(BaseModel):
     @classmethod
     def _surface_extras(cls, data: Any) -> Any:
         return strip_and_warn(
-            data, declared=set(cls.model_fields), dead=set(),
+            data,
+            declared=set(cls.model_fields),
+            dead=set(),
             model_name="TsJobSettings",
         )
 
@@ -69,8 +71,8 @@ class TsJobRecord(BaseModel):
     settings: TsJobSettings = Field(default_factory=TsJobSettings)
     status: str = "running"
     started_at: str | None = None  # ISO-8601 UTC
-    ended_at: str | None = None    # ISO-8601 UTC
-    url: str | None = None         # HF job URL
+    ended_at: str | None = None  # ISO-8601 UTC
+    url: str | None = None  # HF job URL
     logs: list[str] = Field(default_factory=list)
     log_truncated: bool = False
     error: str | None = None
@@ -79,6 +81,8 @@ class TsJobRecord(BaseModel):
     @classmethod
     def _surface_extras(cls, data: Any) -> Any:
         return strip_and_warn(
-            data, declared=set(cls.model_fields), dead=set(),
+            data,
+            declared=set(cls.model_fields),
+            dead=set(),
             model_name="TsJobRecord",
         )

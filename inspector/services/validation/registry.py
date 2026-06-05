@@ -25,10 +25,12 @@ The registry is also exposed as a hand-mirrored TypeScript twin at
 ``inspector/frontend/src/tabs/segments/domain/registry.ts``. The two sides are
 asserted equal by ``__tests__/registry/parity.test.ts``.
 """
+
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Iterator, Literal, Mapping
+from typing import Any, Literal
 
 CardType = Literal["generic", "missingWords", "missingVerses", "error"]
 Severity = Literal["error", "warning", "info"]
@@ -254,9 +256,7 @@ PER_VERSE_CATEGORIES: tuple[str, ...] = tuple(
 PER_CHAPTER_CATEGORIES: tuple[str, ...] = tuple(
     k for k, v in _REGISTRY.items() if v.scope == "per_chapter"
 )
-CAN_IGNORE_CATEGORIES: tuple[str, ...] = tuple(
-    k for k, v in _REGISTRY.items() if v.can_ignore
-)
+CAN_IGNORE_CATEGORIES: tuple[str, ...] = tuple(k for k, v in _REGISTRY.items() if v.can_ignore)
 AUTO_SUPPRESS_CATEGORIES: tuple[str, ...] = tuple(
     k for k, v in _REGISTRY.items() if v.auto_suppress
 )

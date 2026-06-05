@@ -8,7 +8,6 @@ type and raw dict/JSON forms.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -26,6 +25,6 @@ class Segment:
     phonemes_asr: str
     entry_ref: str
     audio_url: str
-    wrap_word_ranges: Optional[object] = None
+    wrap_word_ranges: object | None = None
     # Migration #5: has_repeated_words dropped — tautology of bool(wrap_word_ranges).
     ignored_categories: tuple[str, ...] = field(default_factory=tuple)

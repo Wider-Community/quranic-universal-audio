@@ -3,35 +3,41 @@
 from __future__ import annotations
 
 import json
-import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
-
-
-def _state_row(slug: str, *, state: str = "awaiting_review",
-               marked_ready: bool = False,
-               assignee_hf_id: str | None = None,
-               visibility: str = "public"):
+def _state_row(
+    slug: str,
+    *,
+    state: str = "awaiting_review",
+    marked_ready: bool = False,
+    assignee_hf_id: str | None = None,
+    visibility: str = "public",
+):
     from qua_shared.schemas import ReciterRow, ReciterState, Visibility
 
     return ReciterRow(
         slug=slug,
         state=ReciterState(state),
-        state_since=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        state_since=datetime(2026, 5, 12, tzinfo=UTC),
         assignee_hf_id=assignee_hf_id,
         assignee_login="alice" if assignee_hf_id else None,
-        assignee_since=datetime(2026, 5, 12, tzinfo=timezone.utc) if assignee_hf_id else None,
+        assignee_since=datetime(2026, 5, 12, tzinfo=UTC) if assignee_hf_id else None,
         marked_ready=marked_ready,
         visibility=Visibility(visibility),
     )
 
 
-def _delivery(slug: str, *, reciter_id: str,
-              riwayah: str = "hafs_an_asim", style: str = "murattal",
-              source: str = "mp3quran", channel: str = "mp3quran",
-              chapter_count: int = 114):
+def _delivery(
+    slug: str,
+    *,
+    reciter_id: str,
+    riwayah: str = "hafs_an_asim",
+    style: str = "murattal",
+    source: str = "mp3quran",
+    channel: str = "mp3quran",
+    chapter_count: int = 114,
+):
     from qua_shared.schemas import AudioCategory, Delivery
 
     return Delivery(
@@ -43,7 +49,7 @@ def _delivery(slug: str, *, reciter_id: str,
         channel=channel,
         audio_category=AudioCategory.BY_SURAH,
         chapter_count=chapter_count,
-        added_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        added_at=datetime(2026, 1, 1, tzinfo=UTC),
         added_by_hf_id="system_seed",
     )
 
@@ -54,7 +60,7 @@ def _reciter(reciter_id: str, name_en: str):
     return ReciterEntry(reciter_id=reciter_id, name_en=name_en)
 
 
-def _install(monkeypatch, reciters, deliveries, rows):
+def _install(reciters, deliveries, rows):
     """Seed the supplied catalog + state fixtures into the SQLite substrate."""
     from qua_shared.schemas import (
         Channel,
@@ -70,13 +76,15 @@ def _install(monkeypatch, reciters, deliveries, rows):
         riwayat=[Riwayah(slug="hafs_an_asim", short="hafs", name="Hafs")],
         styles=[Style(slug="murattal", short="murattal", name="Murattal")],
         sources=[
-            Source(slug="mp3quran", name="mp3quran",
-                   url="https://mp3quran.net",
-                   audio_categories=["by_surah"]),
+            Source(
+                slug="mp3quran",
+                name="mp3quran",
+                url="https://mp3quran.net",
+                audio_categories=["by_surah"],
+            ),
         ],
         channels=[
-            Channel(slug="mp3quran", short="mp3q", name="mp3quran",
-                    host_patterns=["mp3quran.net"]),
+            Channel(slug="mp3quran", short="mp3q", name="mp3quran", host_patterns=["mp3quran.net"]),
         ],
         recording_contexts=[],
     )
@@ -108,9 +116,8 @@ def _install(monkeypatch, reciters, deliveries, rows):
 # ---------------------------------------------------------------------------
 
 
-def test_stats_returns_six_bucket_counts(flask_client, monkeypatch):
+def test_stats_returns_five_bucket_counts(flask_client):
     _install(
-        monkeypatch,
         reciters=[
             _reciter("husary", "Husary"),
             _reciter("afasy", "Afasy"),
@@ -132,16 +139,19 @@ def test_stats_returns_six_bucket_counts(flask_client, monkeypatch):
     assert body["available_for_request"] == 1
     # Every public bucket key is present, even if count is 0.
     for key in (
-        "available_for_request", "requested", "available_for_review",
-        "under_review", "published",
+        "available_for_request",
+        "requested",
+        "available_for_review",
+        "under_review",
+        "published",
     ):
         assert key in body
 
 
-def test_stats_sets_cache_control(flask_client, monkeypatch):
+def test_stats_sets_cache_control(flask_client):
     # no-store: stats reflect live lifecycle state (bucket counts shift on
     # every claim/transition); a client max-age served stale counts.
-    _install(monkeypatch, reciters=[], deliveries=[], rows=[])
+    _install(reciters=[], deliveries=[], rows=[])
     resp = flask_client.get("/api/public/stats")
     assert "no-store" in resp.headers["Cache-Control"]
 
@@ -151,9 +161,8 @@ def test_stats_sets_cache_control(flask_client, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_reciters_returns_list_with_total_and_next_cursor(flask_client, monkeypatch):
+def test_reciters_returns_list_with_total_and_next_cursor(flask_client):
     _install(
-        monkeypatch,
         reciters=[_reciter("husary", "Husary"), _reciter("afasy", "Afasy")],
         deliveries=[
             _delivery("husary_qdc", reciter_id="husary"),
@@ -169,9 +178,8 @@ def test_reciters_returns_list_with_total_and_next_cursor(flask_client, monkeypa
     assert len(body["reciters"]) == 2
 
 
-def test_reciters_pagination_emits_next_cursor(flask_client, monkeypatch):
+def test_reciters_pagination_emits_next_cursor(flask_client):
     _install(
-        monkeypatch,
         reciters=[
             _reciter("aaa", "Aaa"),
             _reciter("bbb", "Bbb"),
@@ -191,9 +199,8 @@ def test_reciters_pagination_emits_next_cursor(flask_client, monkeypatch):
     assert len(body["reciters"]) == 2
 
 
-def test_reciters_bucket_filter(flask_client, monkeypatch):
+def test_reciters_bucket_filter(flask_client):
     _install(
-        monkeypatch,
         reciters=[_reciter("husary", "Husary"), _reciter("afasy", "Afasy")],
         deliveries=[
             _delivery("husary_qdc", reciter_id="husary"),
@@ -207,9 +214,8 @@ def test_reciters_bucket_filter(flask_client, monkeypatch):
     assert body["reciters"][0]["name"] == "Husary"
 
 
-def test_reciters_search_matches_arabic_normalized(flask_client, monkeypatch):
+def test_reciters_search_matches_arabic_normalized(flask_client):
     _install(
-        monkeypatch,
         reciters=[
             _reciter("husary", "Mahmoud Khalil Al-Husary"),
             _reciter("afasy", "Mishary Rashid Al-Afasy"),
@@ -226,9 +232,8 @@ def test_reciters_search_matches_arabic_normalized(flask_client, monkeypatch):
     assert body["reciters"][0]["name"] == "Mahmoud Khalil Al-Husary"
 
 
-def test_reciters_response_never_includes_assignee_fields(flask_client, monkeypatch):
+def test_reciters_response_never_includes_assignee_fields(flask_client):
     _install(
-        monkeypatch,
         reciters=[_reciter("husary", "Husary")],
         deliveries=[_delivery("husary_qdc", reciter_id="husary")],
         rows=[
@@ -246,27 +251,26 @@ def test_reciters_response_never_includes_assignee_fields(flask_client, monkeypa
     assert "should-be-redacted" not in text
 
 
-def test_reciters_invalid_bucket_returns_400(flask_client, monkeypatch):
-    _install(monkeypatch, reciters=[], deliveries=[], rows=[])
+def test_reciters_invalid_bucket_returns_400(flask_client):
+    _install(reciters=[], deliveries=[], rows=[])
     resp = flask_client.get("/api/public/reciters?bucket=bogus")
     assert resp.status_code == 400
 
 
-def test_reciters_invalid_sort_returns_400(flask_client, monkeypatch):
-    _install(monkeypatch, reciters=[], deliveries=[], rows=[])
+def test_reciters_invalid_sort_returns_400(flask_client):
+    _install(reciters=[], deliveries=[], rows=[])
     resp = flask_client.get("/api/public/reciters?sort=nope")
     assert resp.status_code == 400
 
 
-def test_reciters_limit_out_of_range_returns_400(flask_client, monkeypatch):
-    _install(monkeypatch, reciters=[], deliveries=[], rows=[])
+def test_reciters_limit_out_of_range_returns_400(flask_client):
+    _install(reciters=[], deliveries=[], rows=[])
     assert flask_client.get("/api/public/reciters?limit=0").status_code == 400
     assert flask_client.get("/api/public/reciters?limit=9999").status_code == 400
 
 
-def test_reciter_detail_returns_payload(flask_client, monkeypatch):
+def test_reciter_detail_returns_payload(flask_client):
     _install(
-        monkeypatch,
         reciters=[_reciter("husary", "Husary")],
         deliveries=[_delivery("husary_qdc", reciter_id="husary")],
         rows=[_state_row("husary_qdc", state="released")],
@@ -281,15 +285,14 @@ def test_reciter_detail_returns_payload(flask_client, monkeypatch):
     assert "no-store" in resp.headers["Cache-Control"]
 
 
-def test_reciter_detail_404_on_unknown(flask_client, monkeypatch):
-    _install(monkeypatch, reciters=[], deliveries=[], rows=[])
+def test_reciter_detail_404_on_unknown(flask_client):
+    _install(reciters=[], deliveries=[], rows=[])
     resp = flask_client.get("/api/public/reciter/no-such-reciter")
     assert resp.status_code == 404
 
 
-def test_reciter_detail_omits_assignee_fields(flask_client, monkeypatch):
+def test_reciter_detail_omits_assignee_fields(flask_client):
     _install(
-        monkeypatch,
         reciters=[_reciter("husary", "Husary")],
         deliveries=[_delivery("husary_qdc", reciter_id="husary")],
         rows=[
@@ -306,9 +309,8 @@ def test_reciter_detail_omits_assignee_fields(flask_client, monkeypatch):
     assert "should-be-redacted" not in text
 
 
-def test_reciters_sort_alphabetical(flask_client, monkeypatch):
+def test_reciters_sort_alphabetical(flask_client):
     _install(
-        monkeypatch,
         reciters=[
             _reciter("zaa", "Zaa"),
             _reciter("aaa", "Aaa"),

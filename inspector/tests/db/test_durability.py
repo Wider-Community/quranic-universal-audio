@@ -53,8 +53,9 @@ def test_upload_failure_propagates_and_local_stays_ahead(synced_bucket, monkeypa
     """If the bucket upload fails, the exception propagates (the route turns it
     into 5xx — never a 200 for a write absent from the bucket), while the local
     commit stays ahead so a later retry re-uploads."""
+
     def boom(path, data):  # noqa: ANN001
-        raise IOError("network down")
+        raise OSError("network down")
 
     monkeypatch.setattr(sync, "_write_direct", boom)
 

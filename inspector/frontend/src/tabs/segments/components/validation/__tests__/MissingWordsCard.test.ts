@@ -1,13 +1,19 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { FakeIntersectionObserver } from '../../../../../lib/test-helpers/dom-stubs';
 import { makeSegment } from '../../../__tests__/helpers/make-segment';
 import { segAllData } from '../../../stores/chapter';
 import { segConfig } from '../../../stores/config';
 import MissingWordsCard from '../MissingWordsCard.svelte';
 
+beforeEach(() => {
+  vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+});
+
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   segAllData.set(null);
   segConfig.update((cfg) => ({ ...cfg, accordionContext: null }));
 });

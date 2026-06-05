@@ -1,12 +1,10 @@
 """Patch-based undo tests (IS-9, MUST-8)."""
+
 from __future__ import annotations
 
 import json
-import os
 
 import pytest
-
-os.environ.setdefault("INSPECTOR_SESSION_SECRET", "0" * 64)
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 
@@ -55,9 +53,7 @@ def test_command_produces_complete_patch(op_type, signed_in_client, tmp_reciter_
         # missing removedIds, insertedIds, affectedChapterIds
     }
     res = _save_with_patch(client, reciter, chapter, op_type, bad_patch)
-    assert res.status_code == 400, (
-        "Phase 5 must reject patch envelopes missing required fields"
-    )
+    assert res.status_code == 400, "Phase 5 must reject patch envelopes missing required fields"
 
 
 # test_inverse_patch_restores_state_exactly was removed (Phase 6, Entry-3).
@@ -98,7 +94,9 @@ def test_inverse_patch_restores_ignored_categories(signed_in_client, tmp_reciter
         headers=_HEADERS,
     )
 
-    post = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
+    post = json.loads(
+        (tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8")
+    )
     restored = post["entries"][0]["segments"][0]
     assert restored.get("ignored_categories") == target["ignored_categories"]
 
@@ -134,7 +132,9 @@ def test_inverse_patch_handles_inserted_and_removed_ids(signed_in_client, tmp_re
         headers=_HEADERS,
     )
 
-    post = json.loads((tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8"))
+    post = json.loads(
+        (tmp_reciter_dir.root / reciter / "detailed.json").read_text(encoding="utf-8")
+    )
     uids = [s["segment_uid"] for s in post["entries"][0]["segments"]]
     assert seg0["segment_uid"] in uids
     assert new_uid_a not in uids
@@ -152,4 +152,6 @@ def test_legacy_record_falls_back_to_field_restore(signed_in_client, tmp_reciter
         data=json.dumps({"batch_id": "no-such-batch"}),
         headers=_HEADERS,
     )
-    assert res.status_code in (200, 400, 404)
+    # Unknown batch_id reaches the service layer and 404s; pin it so a
+    # regression doesn't drift this to 200 silently.
+    assert res.status_code == 404, res.get_data(as_text=True)

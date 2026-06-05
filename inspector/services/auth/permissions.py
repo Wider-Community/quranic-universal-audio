@@ -19,7 +19,6 @@ from typing import Any
 
 from qua_shared.schemas import Role
 
-
 MIN_REASON_CHARS = 10
 
 

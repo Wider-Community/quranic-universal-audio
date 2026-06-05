@@ -5,13 +5,12 @@ and transaction-failure lock release."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 
 from qua_shared.schemas import Actor, Delivery, ReciterEntry, Role
-from qua_shared.schemas.catalog import Riwayah, Style, Source, Channel, Vocab
-
+from qua_shared.schemas.catalog import Channel, Riwayah, Source, Style, Vocab
 from services import db
 from services.db import (
     _serde,
@@ -23,7 +22,8 @@ from services.db import (
     repo_requests,
     repo_transitions,
 )
-from ._helpers import seed_user, seed_delivery
+
+from ._helpers import seed_delivery, seed_user
 
 
 def _actor(hf="u1", login="alice", role=Role.OWNER) -> Actor:
@@ -42,9 +42,12 @@ def test_transaction_failure_releases_lock(fresh_db):
     # if the lock had leaked, this second writer would deadlock/raise
     with db.transaction() as conn:
         conn.execute("INSERT INTO users(hf_user_id) VALUES ('y')")
-    assert db.get_conn().execute(
-        "SELECT COUNT(*) FROM users WHERE hf_user_id IN ('x','y')"
-    ).fetchone()[0] == 1  # only 'y' committed
+    assert (
+        db.get_conn()
+        .execute("SELECT COUNT(*) FROM users WHERE hf_user_id IN ('x','y')")
+        .fetchone()[0]
+        == 1
+    )  # only 'y' committed
 
 
 # ---- serde tz handling ----
@@ -54,7 +57,7 @@ def test_from_iso_forces_utc_on_naive():
     aware = _serde.from_iso("2026-01-01T00:00:00+00:00")
     naive = _serde.from_iso("2026-01-01T00:00:00")
     assert aware.tzinfo is not None
-    assert naive.tzinfo == timezone.utc
+    assert naive.tzinfo == UTC
     assert _serde.from_iso(None) is None
 
 
@@ -72,9 +75,9 @@ def test_reassign_closes_old_opens_new(fresh_db):
     assert repo_claims.open_claim_for_user("rev1") is None
     assert repo_claims.open_claim_for_user("rev2") == "d1"
     # old claim closed with reason 'reassigned'
-    closed = db.get_conn().execute(
-        "SELECT close_reason FROM claims WHERE assignee_id='rev1'"
-    ).fetchone()
+    closed = (
+        db.get_conn().execute("SELECT close_reason FROM claims WHERE assignee_id='rev1'").fetchone()
+    )
     assert closed["close_reason"] == "reassigned"
 
 
@@ -84,16 +87,18 @@ def test_reassign_closes_old_opens_new(fresh_db):
 def test_resolve_missing_pending_returns_false(fresh_db):
     seed_delivery("d1")
     with db.transaction():
-        assert repo_requests.resolve(
-            slug="d1", status="accepted", transitioned_by=_actor()
-        ) is False
+        assert (
+            repo_requests.resolve(slug="d1", status="accepted", transitioned_by=_actor()) is False
+        )
 
 
 def test_extra_payload_cannot_override_reserved(fresh_db):
     with pytest.raises(ValueError):
         with db.transaction():
             repo_requests.submit(
-                slug=None, requester=_actor(), kind="new_reciter",
+                slug=None,
+                requester=_actor(),
+                kind="new_reciter",
                 extra_payload={"requester": {"evil": True}},
             )
 
@@ -126,9 +131,7 @@ def test_get_by_content_hash(fresh_db):
 def test_has_any_active(fresh_db):
     assert repo_access.has_any_active() is False
     with db.transaction():
-        repo_access.grant_role(
-            hf_user_id="u1", login="alice", role=Role.OWNER, granted_by="boot"
-        )
+        repo_access.grant_role(hf_user_id="u1", login="alice", role=Role.OWNER, granted_by="boot")
     assert repo_access.has_any_active() is True
     with db.transaction():
         repo_access.revoke_role(hf_user_id="u1", revoked_by="u1")
@@ -140,19 +143,28 @@ def test_has_any_active(fresh_db):
 
 def _seed_vocab_for_catalog():
     with db.transaction():
-        repo_catalog.load_vocab(Vocab(
-            riwayat=[Riwayah(slug="hafs", short="h", name="Hafs")],
-            styles=[Style(slug="mur", short="m", name="Mur")],
-            sources=[Source(slug="src", name="Src")],
-            channels=[Channel(slug="ch", short="c", name="Ch")],
-        ))
+        repo_catalog.load_vocab(
+            Vocab(
+                riwayat=[Riwayah(slug="hafs", short="h", name="Hafs")],
+                styles=[Style(slug="mur", short="m", name="Mur")],
+                sources=[Source(slug="src", name="Src")],
+                channels=[Channel(slug="ch", short="c", name="Ch")],
+            )
+        )
 
 
 def _delivery(slug, src="src", ch="ch"):
     return Delivery(
-        slug=slug, reciter_id="rid", riwayah="hafs", style="mur", source=src, channel=ch,
-        audio_category="by_surah", chapter_count=114,
-        added_at=datetime(2026, 1, 1, tzinfo=timezone.utc), added_by_hf_id="seed",
+        slug=slug,
+        reciter_id="rid",
+        riwayah="hafs",
+        style="mur",
+        source=src,
+        channel=ch,
+        audio_category="by_surah",
+        chapter_count=114,
+        added_at=datetime(2026, 1, 1, tzinfo=UTC),
+        added_by_hf_id="seed",
     )
 
 

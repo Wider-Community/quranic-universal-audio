@@ -179,15 +179,10 @@ class Delivery(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _check_bitrate_invariant(self) -> "Delivery":
+    def _check_bitrate_invariant(self) -> Delivery:
         # bitrate_kbps_nominal must be null when bitrate_mode == mixed.
-        if (
-            self.bitrate_mode == BitrateMode.MIXED
-            and self.bitrate_kbps_nominal is not None
-        ):
-            raise ValueError(
-                "bitrate_kbps_nominal must be null when bitrate_mode == mixed"
-            )
+        if self.bitrate_mode == BitrateMode.MIXED and self.bitrate_kbps_nominal is not None:
+            raise ValueError("bitrate_kbps_nominal must be null when bitrate_mode == mixed")
         return self
 
 
@@ -235,7 +230,7 @@ class ReciterCatalog(BaseModel):
     derived: Derived = Field(default_factory=Derived)
 
     @model_validator(mode="after")
-    def _check_unique_keys(self) -> "ReciterCatalog":
+    def _check_unique_keys(self) -> ReciterCatalog:
         seen_reciter_ids: set[str] = set()
         for r in self.reciters:
             if r.reciter_id in seen_reciter_ids:
@@ -263,17 +258,11 @@ class ReciterCatalog(BaseModel):
                     f"delivery {d.slug!r} references unknown reciter_id {d.reciter_id!r}"
                 )
             if d.riwayah not in riwayat:
-                raise ValueError(
-                    f"delivery {d.slug!r}: riwayah {d.riwayah!r} not in vocab.riwayat"
-                )
+                raise ValueError(f"delivery {d.slug!r}: riwayah {d.riwayah!r} not in vocab.riwayat")
             if d.style not in styles:
-                raise ValueError(
-                    f"delivery {d.slug!r}: style {d.style!r} not in vocab.styles"
-                )
+                raise ValueError(f"delivery {d.slug!r}: style {d.style!r} not in vocab.styles")
             if d.source not in sources:
-                raise ValueError(
-                    f"delivery {d.slug!r}: source {d.source!r} not in vocab.sources"
-                )
+                raise ValueError(f"delivery {d.slug!r}: source {d.source!r} not in vocab.sources")
             if d.channel not in channels:
                 raise ValueError(
                     f"delivery {d.slug!r}: channel {d.channel!r} not in vocab.channels"

@@ -3,7 +3,7 @@
 Splits a `detailed.json` document into per-chapter `.json.gz` shards the
 aligner Space's preload UI fetches on demand. Used by:
 
-  - `.github/scripts/build_reciter.py --build-segments <slug>` — uploads
+  - `scripts/release/build_reciter.py --build-segments <slug>` — uploads
     shards to the HF dataset for the deployed read path.
 
 The aligner Space talks to the same HF dataset as the Inspector's Timestamps
@@ -78,7 +78,7 @@ def split_to_shards(
     # chapter, so audio_url is a single string. For by_ayah, multiple entries
     # share a chapter and each carries its own per-ayah URL.
     by_chapter_segments: dict[int, list[dict]] = {}
-    by_chapter_audio_url: dict[int, str] = {}                # by_surah
+    by_chapter_audio_url: dict[int, str] = {}  # by_surah
     by_chapter_audio_urls_map: dict[int, dict[str, str]] = {}  # by_ayah
 
     for entry in entries:

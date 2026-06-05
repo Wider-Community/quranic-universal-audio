@@ -1,7 +1,6 @@
 """GET /api/seg/validate/<reciter> response-shape tests (MUST-1)."""
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from tests.conftest import assert_keys_superset
 
@@ -15,13 +14,10 @@ def test_validate_response_shape(flask_client, tmp_reciter_dir, load_expected):
     expected_keys = baseline["validate"]["field_keys_top_level"]
 
     res = flask_client.get(f"/api/seg/validate/{reciter}")
-    assert res.status_code in (200, 404), (
-        "expected 200 (validates fixture) or 404 (reciter rooted under tmp not visible)"
-    )
-    if res.status_code == 200:
-        body = res.get_json()
-        assert isinstance(body, dict)
-        assert_keys_superset(expected_keys, list(body.keys()), "GET /api/seg/validate")
+    assert res.status_code == 200, res.get_data(as_text=True)
+    body = res.get_json()
+    assert isinstance(body, dict)
+    assert_keys_superset(expected_keys, list(body.keys()), "GET /api/seg/validate")
 
 
 def test_validate_includes_classified_issues_field_per_snapshot(flask_client, tmp_reciter_dir):
@@ -40,8 +36,14 @@ def test_validate_includes_classified_issues_field_per_snapshot(flask_client, tm
     body = res.get_json()
 
     per_segment_array_keys = {
-        "failed", "low_confidence", "boundary_adj", "cross_verse",
-        "audio_bleeding", "repetitions", "muqattaat", "qalqala",
+        "failed",
+        "low_confidence",
+        "boundary_adj",
+        "cross_verse",
+        "audio_bleeding",
+        "repetitions",
+        "muqattaat",
+        "qalqala",
     }
 
     issues_lists: list[list] = []

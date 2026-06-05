@@ -81,7 +81,7 @@ class ReciterRow(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _check_state_invariants(self) -> "ReciterRow":
+    def _check_state_invariants(self) -> ReciterRow:
         # Per-state required-field invariants per state-mgmt §4 (Editable column).
         state = self.state
         has_assignee = self.assignee_hf_id is not None
@@ -94,18 +94,14 @@ class ReciterRow(BaseModel):
         else:
             # No other state may carry an assignee.
             if has_assignee:
-                raise ValueError(
-                    f"state={state.value!r} must not have assignee_hf_id"
-                )
+                raise ValueError(f"state={state.value!r} must not have assignee_hf_id")
             if self.assignee_login is not None or self.assignee_since is not None:
                 raise ValueError(
                     f"state={state.value!r} must not have assignee_login/assignee_since"
                 )
 
         # marked_ready is only legal on under_review rows that have an assignee.
-        if self.marked_ready and not (
-            state == ReciterState.UNDER_REVIEW and has_assignee
-        ):
+        if self.marked_ready and not (state == ReciterState.UNDER_REVIEW and has_assignee):
             raise ValueError("marked_ready requires under_review + assignee_hf_id")
 
         # revision_in_progress is set by admin.unlocked_for_revision on
@@ -137,7 +133,7 @@ class ReciterStateFile(BaseModel):
     reciters: list[ReciterRow] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _check_unique_slugs(self) -> "ReciterStateFile":
+    def _check_unique_slugs(self) -> ReciterStateFile:
         seen: set[str] = set()
         for r in self.reciters:
             if r.slug in seen:

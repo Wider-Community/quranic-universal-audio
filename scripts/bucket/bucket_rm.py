@@ -1,7 +1,7 @@
 """Delete a bucket file or directory.
 
-  bucket_rm.py debug/note.txt
-  bucket_rm.py reciters/<dead-slug> --recursive --bucket prod --yes-prod
+bucket_rm.py debug/note.txt
+bucket_rm.py reciters/<dead-slug> --recursive --bucket prod --yes-prod
 """
 
 from __future__ import annotations
@@ -15,11 +15,11 @@ import _bootstrap as bs  # noqa: E402
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("path", help="bucket path to delete")
-    p.add_argument("--recursive", action="store_true",
-                   help="required for directories")
+    p.add_argument("--recursive", action="store_true", help="required for directories")
     bs.add_bucket_args(p)
     a = p.parse_args()
     bs.confirm_mutation(a, f"delete {a.path}")
@@ -30,8 +30,7 @@ def main() -> int:
     info = fs.info(target)
     if info.get("type") == "directory":
         if not a.recursive:
-            print(f"refusing to delete directory {target} without --recursive",
-                  file=sys.stderr)
+            print(f"refusing to delete directory {target} without --recursive", file=sys.stderr)
             return 2
         fs.rm(target, recursive=True)
     else:

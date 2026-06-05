@@ -23,10 +23,10 @@ Requirements:
 - ``json-schema-to-typescript`` npm package (pinned in
   ``inspector/frontend/package.json``'s ``devDependencies``).
 """
+
 from __future__ import annotations
 
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 

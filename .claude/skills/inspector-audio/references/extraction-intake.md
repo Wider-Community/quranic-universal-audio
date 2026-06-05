@@ -48,8 +48,10 @@ was removed; content persists indefinitely). See `prefetch.md`.
 Every other source preserves the publisher's mp3 bytes verbatim and only injects
 a Xing seek header (`-c:a copy`). A YouTube/playlist source is the exception:
 the source is opus/m4a, so `segments/audio_io.py::_download_via_ytdlp` fetches
-`bestaudio` and does ONE controlled encode → **128 kbps CBR / 44.1 kHz / mono**,
+`bestaudio` and does ONE controlled encode → **192 kbps CBR / 44.1 kHz / mono**,
 `-vn` (cover-art stripped — an APIC stream 0-byte-muxes on the static ffmpeg).
+192k: `bestaudio` is opus ~130–160 kbps and opus is ~1.4× more bit-efficient than
+mp3, so 192k CBR preserves it transparently; mono since recitation is single-voice.
 The watch URL can't be HTTP-frame-probed, so the audio-manifest sidecar + the
 delivery rollup are authored from a **post-align reprobe** of the produced files
 (`ingest_intake.py::reprobe_persisted_audio`), not from the source URL. These

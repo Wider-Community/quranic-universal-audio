@@ -22,7 +22,6 @@ from typing import Any
 from . import _serde
 from .connection import get_conn
 
-
 # ---------------------------------------------------------------------------
 # per_recitation_releases
 # ---------------------------------------------------------------------------
@@ -49,9 +48,15 @@ def insert_per_recitation_release(
         " launched_by, external_uri, source_catalog_rev, validation_summary"
         ") VALUES (?,?,?,?,?,?,?,?,?,?)",
         (
-            track, slug, version,
-            _serde.to_iso(produced_at), produced_by, produced_by_job_id,
-            launched_by, external_uri, source_catalog_rev,
+            track,
+            slug,
+            version,
+            _serde.to_iso(produced_at),
+            produced_by,
+            produced_by_job_id,
+            launched_by,
+            external_uri,
+            source_catalog_rev,
             _serde.json_dumps(validation_summary) if validation_summary else None,
         ),
     )
@@ -74,11 +79,15 @@ def supersede_current(track: str, slug: str, *, except_id: int, at: datetime) ->
 
 def current_release(track: str, slug: str) -> dict | None:
     """Return the current (non-superseded) row for ``(track, slug)`` or None."""
-    r = get_conn().execute(
-        "SELECT * FROM per_recitation_releases "
-        "WHERE track = ? AND slug = ? AND superseded_at IS NULL",
-        (track, slug),
-    ).fetchone()
+    r = (
+        get_conn()
+        .execute(
+            "SELECT * FROM per_recitation_releases "
+            "WHERE track = ? AND slug = ? AND superseded_at IS NULL",
+            (track, slug),
+        )
+        .fetchone()
+    )
     return dict(r) if r else None
 
 
@@ -90,12 +99,16 @@ def release_by_version(track: str, slug: str, version: str) -> dict | None:
     this lookup, the handler skips when the (track, slug, version) triple
     has already been recorded — superseded rows count.
     """
-    r = get_conn().execute(
-        "SELECT * FROM per_recitation_releases "
-        "WHERE track = ? AND slug = ? AND version = ? "
-        "ORDER BY id DESC LIMIT 1",
-        (track, slug, version),
-    ).fetchone()
+    r = (
+        get_conn()
+        .execute(
+            "SELECT * FROM per_recitation_releases "
+            "WHERE track = ? AND slug = ? AND version = ? "
+            "ORDER BY id DESC LIMIT 1",
+            (track, slug, version),
+        )
+        .fetchone()
+    )
     return dict(r) if r else None
 
 
@@ -105,11 +118,14 @@ def gh_release_by_version(version: str) -> dict | None:
     Same idempotency rationale as ``release_by_version`` — a webhook retry
     after a subsequent cut shouldn't replay the row.
     """
-    r = get_conn().execute(
-        "SELECT * FROM gh_releases WHERE version = ? "
-        "ORDER BY id DESC LIMIT 1",
-        (version,),
-    ).fetchone()
+    r = (
+        get_conn()
+        .execute(
+            "SELECT * FROM gh_releases WHERE version = ? ORDER BY id DESC LIMIT 1",
+            (version,),
+        )
+        .fetchone()
+    )
     return dict(r) if r else None
 
 
@@ -166,8 +182,14 @@ def insert_gh_release(
         " external_uri, source_catalog_rev, operator_note, validation_summary"
         ") VALUES (?,?,?,?,?,?,?,?,?)",
         (
-            version, _serde.to_iso(produced_at), produced_by, produced_by_job_id,
-            launched_by, external_uri, source_catalog_rev, operator_note,
+            version,
+            _serde.to_iso(produced_at),
+            produced_by,
+            produced_by_job_id,
+            launched_by,
+            external_uri,
+            source_catalog_rev,
+            operator_note,
             _serde.json_dumps(validation_summary) if validation_summary else None,
         ),
     )
@@ -177,8 +199,7 @@ def insert_gh_release(
 def supersede_prior_gh_releases(*, except_id: int, at: datetime) -> int:
     """Mark prior non-superseded gh_releases rows as superseded."""
     cur = get_conn().execute(
-        "UPDATE gh_releases SET superseded_at = ? "
-        "WHERE id != ? AND superseded_at IS NULL",
+        "UPDATE gh_releases SET superseded_at = ? WHERE id != ? AND superseded_at IS NULL",
         (_serde.to_iso(at), except_id),
     )
     return int(cur.rowcount)
@@ -186,10 +207,11 @@ def supersede_prior_gh_releases(*, except_id: int, at: datetime) -> int:
 
 def latest_gh_release() -> dict | None:
     """Most-recent non-superseded GH release row or None."""
-    r = get_conn().execute(
-        "SELECT * FROM gh_releases WHERE superseded_at IS NULL "
-        "ORDER BY id DESC LIMIT 1"
-    ).fetchone()
+    r = (
+        get_conn()
+        .execute("SELECT * FROM gh_releases WHERE superseded_at IS NULL ORDER BY id DESC LIMIT 1")
+        .fetchone()
+    )
     return dict(r) if r else None
 
 
@@ -201,16 +223,20 @@ def latest_gh_release_summary() -> dict | None:
     card so the FE can render ``v0.4.2 · 42 recitations · 11.8 MB · cut 7d ago``
     without a second roundtrip + per-member SUM on the FE.
     """
-    r = get_conn().execute(
-        "SELECT gr.id, gr.version, gr.produced_at, gr.external_uri, "
-        "       COUNT(grr.slug)            AS member_count, "
-        "       COALESCE(SUM(grr.zip_bytes), 0) AS total_bytes "
-        "FROM gh_releases gr "
-        "LEFT JOIN gh_release_recitations grr ON grr.release_id = gr.id "
-        "WHERE gr.superseded_at IS NULL "
-        "GROUP BY gr.id "
-        "ORDER BY gr.id DESC LIMIT 1"
-    ).fetchone()
+    r = (
+        get_conn()
+        .execute(
+            "SELECT gr.id, gr.version, gr.produced_at, gr.external_uri, "
+            "       COUNT(grr.slug)            AS member_count, "
+            "       COALESCE(SUM(grr.zip_bytes), 0) AS total_bytes "
+            "FROM gh_releases gr "
+            "LEFT JOIN gh_release_recitations grr ON grr.release_id = gr.id "
+            "WHERE gr.superseded_at IS NULL "
+            "GROUP BY gr.id "
+            "ORDER BY gr.id DESC LIMIT 1"
+        )
+        .fetchone()
+    )
     return dict(r) if r else None
 
 
@@ -232,28 +258,42 @@ def insert_gh_release_recitation(
         " coverage_ayahs, content_hash, ts_version, change_kind"
         ") VALUES (?,?,?,?,?,?,?,?,?)",
         (
-            release_id, slug, _serde.json_dumps(catalog_snapshot),
-            zip_sha256, zip_bytes, coverage_ayahs, content_hash,
-            ts_version, change_kind,
+            release_id,
+            slug,
+            _serde.json_dumps(catalog_snapshot),
+            zip_sha256,
+            zip_bytes,
+            coverage_ayahs,
+            content_hash,
+            ts_version,
+            change_kind,
         ),
     )
 
 
 def gh_release_recitations(release_id: int) -> list[dict]:
-    rows = get_conn().execute(
-        "SELECT * FROM gh_release_recitations WHERE release_id = ? ORDER BY slug",
-        (release_id,),
-    ).fetchall()
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT * FROM gh_release_recitations WHERE release_id = ? ORDER BY slug",
+            (release_id,),
+        )
+        .fetchall()
+    )
     return [dict(r) for r in rows]
 
 
 def latest_gh_release_member(slug: str) -> dict | None:
     """Most-recent gh_release_recitations row for ``slug`` across all releases."""
-    r = get_conn().execute(
-        "SELECT grr.* FROM gh_release_recitations grr "
-        "JOIN gh_releases gr ON gr.id = grr.release_id "
-        "WHERE grr.slug = ? AND gr.superseded_at IS NULL "
-        "ORDER BY gr.id DESC LIMIT 1",
-        (slug,),
-    ).fetchone()
+    r = (
+        get_conn()
+        .execute(
+            "SELECT grr.* FROM gh_release_recitations grr "
+            "JOIN gh_releases gr ON gr.id = grr.release_id "
+            "WHERE grr.slug = ? AND gr.superseded_at IS NULL "
+            "ORDER BY gr.id DESC LIMIT 1",
+            (slug,),
+        )
+        .fetchone()
+    )
     return dict(r) if r else None

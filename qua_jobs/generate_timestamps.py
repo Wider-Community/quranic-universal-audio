@@ -75,7 +75,7 @@ def _bool_env(name: str) -> bool:
 
 
 def _now_iso() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _find_cross_verse_segments(doc: dict) -> list[tuple[str, str]]:
@@ -106,9 +106,9 @@ def _ensure_xing(src: Path, dest: Path) -> bool:
     """
     try:
         result = subprocess.run(
-            ["ffmpeg", "-y", "-i", str(src), "-c:a", "copy", "-f", "mp3",
-             "-v", "error", str(dest)],
-            capture_output=True, timeout=180,
+            ["ffmpeg", "-y", "-i", str(src), "-c:a", "copy", "-f", "mp3", "-v", "error", str(dest)],
+            capture_output=True,
+            timeout=180,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         log.warning("xing remux skipped: %s", exc)
@@ -123,8 +123,7 @@ def _ensure_xing(src: Path, dest: Path) -> bool:
     return True
 
 
-def _persist_chapter_audio(url: str, audio_dest: Path, peaks_dest: Path,
-                           gen_peaks: bool) -> bool:
+def _persist_chapter_audio(url: str, audio_dest: Path, peaks_dest: Path, gen_peaks: bool) -> bool:
     """Download ``url`` → Xing-remux to ``audio_dest`` (+ optional v3 peaks).
 
     Returns the local path the pipeline should align against on success
@@ -142,6 +141,7 @@ def _persist_chapter_audio(url: str, audio_dest: Path, peaks_dest: Path,
         if gen_peaks:
             try:
                 from qua_shared.peaks_compute import compute_audio_peaks, pack_slim
+
                 hd = compute_audio_peaks(str(audio_dest))
                 if hd and hd.get("peaks"):
                     peaks_dest.parent.mkdir(parents=True, exist_ok=True)
@@ -197,8 +197,15 @@ def _bake_missing_peaks(reciter_dir: Path, entries: list) -> None:
     log.info("peaks bake pass: baked=%d skipped=%d failed=%d", baked, skipped, failed)
 
 
-def _write_record(mount: Path, slug: str, settings: dict, *, status: str,
-                  started_at: str, error: str | None = None) -> None:
+def _write_record(
+    mount: Path,
+    slug: str,
+    settings: dict,
+    *,
+    status: str,
+    started_at: str,
+    error: str | None = None,
+) -> None:
     """Self-write the durable job record to ``reciters/<slug>/jobs/ts/<JOB_ID>.json``.
 
     HF injects ``JOB_ID``; if it's absent (e.g. local dry-run) we skip — the
@@ -210,17 +217,23 @@ def _write_record(mount: Path, slug: str, settings: dict, *, status: str,
         return
     try:
         from qua_shared.schemas import TsJobRecord, TsJobSettings
+
         rec = TsJobRecord(
-            job_id=job_id, slug=slug, type="ts",
+            job_id=job_id,
+            slug=slug,
+            type="ts",
             settings=TsJobSettings.model_validate(settings),
-            status=status, started_at=started_at, ended_at=_now_iso(),
-            url=os.environ.get("JOB_URL") or None, error=error,
+            status=status,
+            started_at=started_at,
+            ended_at=_now_iso(),
+            url=os.environ.get("JOB_URL") or None,
+            error=error,
         )
         dest = mount / "reciters" / slug / "jobs" / "ts" / f"{job_id}.json"
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(
-            json.dumps(rec.model_dump(exclude_none=True), ensure_ascii=False),
-            encoding="utf-8")
+            json.dumps(rec.model_dump(exclude_none=True), ensure_ascii=False), encoding="utf-8"
+        )
         log.info("wrote job record %s (status=%s)", dest, status)
     except Exception as exc:  # noqa: BLE001
         log.warning("could not write job record: %s", exc)
@@ -292,8 +305,11 @@ def main() -> int:
 
     # Echoed into the durable record so the panel shows what was actually run.
     settings = {
-        "beams": beams, "persist_audio": persist_audio, "gen_peaks": gen_peaks,
-        "workers": workers, "batch_size": batch_size,
+        "beams": beams,
+        "persist_audio": persist_audio,
+        "gen_peaks": gen_peaks,
+        "workers": workers,
+        "batch_size": batch_size,
         "download_workers": dl_workers,
     }
     started_at = _now_iso()
@@ -301,8 +317,15 @@ def main() -> int:
     log.info(
         "generate_timestamps slug=%s cores=%s workers=%s beams=%s batch=%s "
         "dl_workers=%s persist_audio=%s gen_peaks=%s app=%s",
-        slug, os.cpu_count(), workers, beams, batch_size, dl_workers,
-        persist_audio, gen_peaks, app_path,
+        slug,
+        os.cpu_count(),
+        workers,
+        beams,
+        batch_size,
+        dl_workers,
+        persist_audio,
+        gen_peaks,
+        app_path,
     )
 
     # Inject the per-chapter audio source: detailed.json entries carry no
@@ -326,8 +349,7 @@ def main() -> int:
             f"before generating timestamps: {preview}{more}"
         )
         log.error(msg)
-        _write_record(mount, slug, settings, status="failed",
-                      started_at=started_at, error=msg)
+        _write_record(mount, slug, settings, status="failed", started_at=started_at, error=msg)
         _notify_complete(slug, "failed")
         return 4
 
@@ -335,8 +357,9 @@ def main() -> int:
     chapters_meta = {}
     if manifest_path.exists():
         try:
-            chapters_meta = (json.loads(manifest_path.read_text(encoding="utf-8"))
-                             or {}).get("chapters", {}) or {}
+            chapters_meta = (json.loads(manifest_path.read_text(encoding="utf-8")) or {}).get(
+                "chapters", {}
+            ) or {}
         except Exception as exc:
             log.warning("could not read manifest %s: %s", manifest_path, exc)
     audio_dir = reciter_dir / "audio"
@@ -359,19 +382,23 @@ def main() -> int:
         # bytes MFA aligns == the bytes browsers will play). Otherwise inject
         # the CDN url directly (transient, process() streams it).
         if persist_audio and _persist_chapter_audio(
-                url, local, peaks_dir / f"{ref}.json.gz", gen_peaks):
+            url, local, peaks_dir / f"{ref}.json.gz", gen_peaks
+        ):
             entry["audio"] = str(local)
             persisted += 1
         else:
             entry["audio"] = url
         injected += 1
-    log.info("injected audio for %d/%d chapters (persisted %d to bucket)",
-             injected, len(entries), persisted)
+    log.info(
+        "injected audio for %d/%d chapters (persisted %d to bucket)",
+        injected,
+        len(entries),
+        persisted,
+    )
 
     job_input = Path(tempfile.mkdtemp()) / slug
     job_input.mkdir(parents=True, exist_ok=True)
-    (job_input / "detailed.json").write_text(
-        json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    (job_input / "detailed.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
 
     # In-container MFA: pool path engages when workers>1 AND mfa_app_path is
     # set (process() gates on this). LocalMfaBackend covers the serial
@@ -394,8 +421,7 @@ def main() -> int:
         )
     except Exception as exc:  # noqa: BLE001
         log.exception("alignment failed for %s", slug)
-        _write_record(mount, slug, settings, status="failed",
-                      started_at=started_at, error=str(exc))
+        _write_record(mount, slug, settings, status="failed", started_at=started_at, error=str(exc))
         # Notify the Inspector so the Reviews-tab dot lights up on the
         # (still-under_review) reciter. Best-effort; poll fallback covers a miss.
         _notify_complete(slug, "failed")

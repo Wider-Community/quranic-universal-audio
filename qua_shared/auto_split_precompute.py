@@ -54,20 +54,21 @@ import sys
 import tempfile
 import threading
 import uuid
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 from qua_shared.mfa_runtime import MfaRuntime
 from qua_shared.timestamps_pipeline import (
     DEFAULT_ALIGNER_MODEL,
-    _init_worker,
     _worker_align,
     download_audio,
-    is_compound_cross_verse as _is_compound_cross_verse,
     load_audio_int16,
     slice_audio,
+)
+from qua_shared.timestamps_pipeline import (
+    is_compound_cross_verse as _is_compound_cross_verse,
 )
 
 # Reuse the inspector's pure parsing helpers — same code path so the offline
@@ -89,10 +90,10 @@ from utils.repetitions import (  # noqa: E402
 
 log = logging.getLogger(__name__)
 
-DEFAULT_BEAM = 50          # canonical pipeline beam (vs probe_mfa's 2)
+DEFAULT_BEAM = 50  # canonical pipeline beam (vs probe_mfa's 2)
 DEFAULT_METHOD = "kalpy"
-DEFAULT_PADDING = "none"   # match runtime auto_split._run_mfa
-DEFAULT_BATCH_SIZE = 200   # fewer than probe_mfa (each seg = a sequence)
+DEFAULT_PADDING = "none"  # match runtime auto_split._run_mfa
+DEFAULT_BATCH_SIZE = 200  # fewer than probe_mfa (each seg = a sequence)
 DEFAULT_WORKERS = 12
 DEFAULT_DOWNLOAD_WORKERS = 8
 
@@ -103,10 +104,10 @@ _NAMESPACE_INSPECTOR = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 class _QueueItem(NamedTuple):
-    refs: list[str]                # N per-section refs (sequence mode)
+    refs: list[str]  # N per-section refs (sequence mode)
     wav_path: str
     segment_uid: str
-    kind: str                      # "cross_verse" | "repetition"
+    kind: str  # "cross_verse" | "repetition"
     section_word_counts: list[int]
     time_start_ms: int
 
@@ -122,7 +123,7 @@ def _file_sha256(path: Path) -> str:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _is_url(source: str) -> bool:
@@ -133,6 +134,7 @@ def _is_url(source: str) -> bool:
 # Word-count loading
 # ---------------------------------------------------------------------------
 
+
 def _load_verse_word_counts(repo_root: Path) -> dict[tuple[int, int], int]:
     """Build the ``(surah, ayah) -> word_count`` map from ``data/surah_info.json``.
 
@@ -141,7 +143,7 @@ def _load_verse_word_counts(repo_root: Path) -> dict[tuple[int, int], int]:
     up the inspector cache/bucket layer.
     """
     path = repo_root / "data" / "surah_info.json"
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         doc = json.load(f)
     counts: dict[tuple[int, int], int] = {}
     for surah_str, info in doc.items():
@@ -160,7 +162,7 @@ def load_chapter_urls(manifest_path: Path) -> dict[int, str]:
     falls back to URLs from this sidecar so it can still download chapter audio
     on demand.
     """
-    with open(manifest_path, "r", encoding="utf-8") as f:
+    with open(manifest_path, encoding="utf-8") as f:
         doc = json.load(f)
     chapters = doc.get("chapters") or {}
     urls: dict[int, str] = {}
@@ -178,8 +180,8 @@ def load_chapter_urls(manifest_path: Path) -> dict[int, str]:
 # Cursor extraction (pure)
 # ---------------------------------------------------------------------------
 
-def _section_boundary_cuts(words: list[dict],
-                           section_word_counts: list[int]) -> Optional[list[int]]:
+
+def _section_boundary_cuts(words: list[dict], section_word_counts: list[int]) -> list[int] | None:
     """Return ``N-1`` segment-relative ms cuts between consecutive sections.
 
     Identical to ``inspector.services.auto_split._repetition_cuts`` —
@@ -209,9 +211,12 @@ def _section_boundary_cuts(words: list[dict],
 # ---------------------------------------------------------------------------
 
 
-def _build_seg_candidate(seg: dict, chapter: int, idx: int,
-                         verse_word_counts: dict[tuple[int, int], int],
-                         ) -> Optional[tuple[list[list[str]], list[str], list[int], str, str]]:
+def _build_seg_candidate(
+    seg: dict,
+    chapter: int,
+    idx: int,
+    verse_word_counts: dict[tuple[int, int], int],
+) -> tuple[list[list[str]], list[str], list[int], str, str] | None:
     """Return ``(sections, refs, section_word_counts, kind, uid)`` or None.
 
     Skips segs that don't qualify for Auto Split (single-verse, no wrap) or
@@ -245,9 +250,7 @@ def _build_seg_candidate(seg: dict, chapter: int, idx: int,
         return None
 
     refs = section_refs_canonical(sections)
-    section_word_counts = [
-        count_words_in_section(s[0], s[1], verse_word_counts) for s in sections
-    ]
+    section_word_counts = [count_words_in_section(s[0], s[1], verse_word_counts) for s in sections]
     if not all(c > 0 for c in section_word_counts):
         return None
 
@@ -258,6 +261,7 @@ def _build_seg_candidate(seg: dict, chapter: int, idx: int,
 # ---------------------------------------------------------------------------
 # Main run
 # ---------------------------------------------------------------------------
+
 
 def run_precompute(
     reciter_dir: Path,
@@ -272,7 +276,7 @@ def run_precompute(
     batch_size: int = DEFAULT_BATCH_SIZE,
     workers: int = DEFAULT_WORKERS,
     download_workers: int = DEFAULT_DOWNLOAD_WORKERS,
-    runtime: "MfaRuntime | None" = None,
+    runtime: MfaRuntime | None = None,
 ) -> Path | None:
     """Run the offline pre-compute and write the v1 sidecar.
 
@@ -308,8 +312,8 @@ def run_precompute(
         return None
 
     chapter_urls: dict[int, str] = {}
-    manifest_path = Path(audio_manifest).resolve() if audio_manifest else (
-        reciter_dir / "audio_manifest.json"
+    manifest_path = (
+        Path(audio_manifest).resolve() if audio_manifest else (reciter_dir / "audio_manifest.json")
     )
     if manifest_path.is_file():
         try:
@@ -356,16 +360,18 @@ def run_precompute(
 
         local_mp3 = audio_dir / f"{chapter}.mp3" if audio_dir else None
         manifest_url = chapter_urls.get(chapter, "") if chapter_urls else ""
-        if not audio_src and not (local_mp3 is not None and local_mp3.is_file()) \
-                and not manifest_url:
+        if (
+            not audio_src
+            and not (local_mp3 is not None and local_mp3.is_file())
+            and not manifest_url
+        ):
             return 0
         try:
             if local_mp3 is not None and local_mp3.is_file():
                 audio_int16 = load_audio_int16(local_mp3)
             elif _is_url(audio_src):
                 if local_mp3 is not None:
-                    log.warning("Chapter %s: local %s missing; falling back to URL",
-                                ref, local_mp3)
+                    log.warning("Chapter %s: local %s missing; falling back to URL", ref, local_mp3)
                 audio_file = download_audio(audio_src)
                 audio_int16 = load_audio_int16(audio_file)
                 audio_file.unlink(missing_ok=True)
@@ -376,8 +382,12 @@ def run_precompute(
                 audio_int16 = load_audio_int16(audio_file)
                 audio_file.unlink(missing_ok=True)
         except Exception as e:  # noqa: BLE001
-            log.warning("Chapter %s: audio load failed (%s); skipping %d candidates",
-                        ref, e, len(cand_descriptors))
+            log.warning(
+                "Chapter %s: audio load failed (%s); skipping %d candidates",
+                ref,
+                e,
+                len(cand_descriptors),
+            )
             return 0
 
         count = 0
@@ -390,14 +400,16 @@ def run_precompute(
             except Exception as e:  # noqa: BLE001
                 log.warning("Chapter %s seg %d: slice failed: %s", ref, idx, e)
                 continue
-            seg_queue.put(_QueueItem(
-                refs=list(refs),
-                wav_path=str(wav_path),
-                segment_uid=uid,
-                kind=kind,
-                section_word_counts=list(section_word_counts),
-                time_start_ms=t_start,
-            ))
+            seg_queue.put(
+                _QueueItem(
+                    refs=list(refs),
+                    wav_path=str(wav_path),
+                    segment_uid=uid,
+                    kind=kind,
+                    section_word_counts=list(section_word_counts),
+                    time_start_ms=t_start,
+                )
+            )
             count += 1
         log.info("Chapter %s: queued %d candidates", ref, count)
         return count
@@ -455,12 +467,16 @@ def run_precompute(
                 "refs": list(buf_refs),
             }
             log.info("Batch %d: submit %d candidates at beam=%d", bid, len(buf_refs), beam)
-            fut = pool.submit(_worker_align,
-                              list(buf_refs), list(buf_paths),
-                              method, beam, False, padding)
+            fut = pool.submit(
+                _worker_align, list(buf_refs), list(buf_paths), method, beam, False, padding
+            )
             futures[fut] = bid
-            buf_refs.clear(); buf_paths.clear(); buf_uids.clear()
-            buf_kinds.clear(); buf_swc.clear(); buf_tstart.clear()
+            buf_refs.clear()
+            buf_paths.clear()
+            buf_uids.clear()
+            buf_kinds.clear()
+            buf_swc.clear()
+            buf_tstart.clear()
 
         while True:
             try:
@@ -470,7 +486,7 @@ def run_precompute(
             if item is None:
                 _flush()
                 break
-            buf_refs.append(item.refs)         # list[str] per seg (sequence mode)
+            buf_refs.append(item.refs)  # list[str] per seg (sequence mode)
             buf_paths.append(item.wav_path)
             buf_uids.append(item.segment_uid)
             buf_kinds.append(item.kind)
@@ -489,18 +505,27 @@ def run_precompute(
             try:
                 results = fut.result()
             except Exception as e:  # noqa: BLE001
-                log.warning("Batch %d crashed (%s); dropping all %d candidates",
-                            bid, e, len(state["uids"]))
+                log.warning(
+                    "Batch %d crashed (%s); dropping all %d candidates", bid, e, len(state["uids"])
+                )
                 for p in state["paths"]:
-                    try: os.unlink(p)
-                    except OSError: pass
+                    try:
+                        os.unlink(p)
+                    except OSError:
+                        pass
                 del batch_state[bid]
                 n_done += 1
                 continue
 
             for uid, kind, swc, t_start, refs, item in zip(
-                    state["uids"], state["kinds"], state["swc"], state["tstart"],
-                    state["refs"], results):
+                state["uids"],
+                state["kinds"],
+                state["swc"],
+                state["tstart"],
+                state["refs"],
+                results,
+                strict=False,
+            ):
                 if not item or item.get("status") != "ok":
                     continue
                 words = item.get("words") or []
@@ -516,8 +541,10 @@ def run_precompute(
                 }
 
             for p in state["paths"]:
-                try: os.unlink(p)
-                except OSError: pass
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
             del batch_state[bid]
             n_done += 1
             if n_done % 5 == 0 or n_done == n_total:
@@ -548,8 +575,7 @@ def run_precompute(
     }
     with open(sidecar_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
-    log.info("Wrote %s (%d hits / %d candidates)",
-             sidecar_path, len(by_uid), candidate_count)
+    log.info("Wrote %s (%d hits / %d candidates)", sidecar_path, len(by_uid), candidate_count)
     return sidecar_path
 
 
@@ -557,26 +583,39 @@ def run_precompute(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def _main(argv: list[str] | None = None) -> int:
     import argparse
+
     p = argparse.ArgumentParser(
-        description="Pre-compute the Auto Split cursor sidecar for a reciter.")
-    p.add_argument("--reciter-dir", required=True, type=Path,
-                   help="Directory containing detailed.json.")
-    p.add_argument("--mfa-app-path", required=True, type=Path,
-                   help="Path to the local MFA aligner module.")
-    p.add_argument("--audio-dir", type=Path, default=None,
-                   help="Optional dir holding per-chapter MP3s named <chapter>.mp3 "
-                        "(extraction's audio_persist output). Read from local file "
-                        "instead of the URL in detailed.json; falls back to URL on miss.")
+        description="Pre-compute the Auto Split cursor sidecar for a reciter."
+    )
+    p.add_argument(
+        "--reciter-dir", required=True, type=Path, help="Directory containing detailed.json."
+    )
+    p.add_argument(
+        "--mfa-app-path", required=True, type=Path, help="Path to the local MFA aligner module."
+    )
+    p.add_argument(
+        "--audio-dir",
+        type=Path,
+        default=None,
+        help="Optional dir holding per-chapter MP3s named <chapter>.mp3 "
+        "(extraction's audio_persist output). Read from local file "
+        "instead of the URL in detailed.json; falls back to URL on miss.",
+    )
     p.add_argument("--beam", type=int, default=DEFAULT_BEAM)
     p.add_argument("--method", default=DEFAULT_METHOD)
     p.add_argument("--padding", default=DEFAULT_PADDING)
     p.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     p.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
     p.add_argument("--download-workers", type=int, default=DEFAULT_DOWNLOAD_WORKERS)
-    p.add_argument("--repo-root", type=Path, default=None,
-                   help="Repo root (used to find data/surah_info.json). Defaults to two levels above this script.")
+    p.add_argument(
+        "--repo-root",
+        type=Path,
+        default=None,
+        help="Repo root (used to find data/surah_info.json). Defaults to two levels above this script.",
+    )
     p.add_argument("-v", "--verbose", action="count", default=0)
     args = p.parse_args(argv)
 
