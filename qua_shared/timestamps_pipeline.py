@@ -1201,9 +1201,12 @@ def process(
     # build_segment_shards emits each one RAW as a recitation-ordered segment
     # entry ({ref, t, words}) — no dedup at write. Consumers derive whatever
     # projection they need; the inspector read-path is a byte pass-through.
-    from qua_shared.timestamps_bridges import tag_v2_doc  # lazy: keep phonemizer off the inspector import path
-    from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
     from quranic_phonemizer import Phonemizer
+
+    from qua_shared.timestamps_bridges import (
+        tag_v2_doc,  # lazy: keep phonemizer off the inspector import path
+    )
+    from qua_shared.timestamps_dedup import build_raw_v2  # lazy: avoid import cycle
 
     ts_dir = output_dir / "timestamps"
     ts_dir.mkdir(parents=True, exist_ok=True)

@@ -91,5 +91,5 @@ def test_detect_shafawi_on_prev_tail(pm):
     bridges = detect_segment_bridges(pm, "2:10")
     assert any(r == "idgham_shafawi" for _, r in bridges)
     flat = _flat(pm, "2:10")
-    for idx, rule in bridges:
+    for idx, _rule in bridges:
         assert _looks_like_merger(flat[idx])

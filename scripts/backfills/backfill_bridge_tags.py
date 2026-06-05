@@ -94,7 +94,7 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, log) -> dict:
     dist = Counter()
     total_tagged = total_repeat = 0
     violations = []
-    for ch, path in shards:
+    for _ch, path in shards:
         data = json.loads(gzip.decompress(fs.read_bytes(path)))
         n, rep, viol = _tag_shard(pm, data)
         total_tagged += n
