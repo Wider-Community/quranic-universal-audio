@@ -27,11 +27,14 @@ on:
         default: false
 
 # Deploy only checks out and uploads to the HF Space — it never writes back to
-# the repo. The reusable inspector-checks.yml frontend-checks job no longer
-# pushes autofixes (it surfaces them as PR suggestions instead), and this
-# workflow runs only on push/dispatch (never pull_request), so read is enough.
+# the repo. But it calls the reusable inspector-checks.yml, whose frontend-checks
+# job declares `pull-requests: write` (for reviewdog PR suggestions). A reusable
+# job cannot request more than the caller grants, so the caller must grant it too
+# or the run fails at startup — even though reviewdog's step is skipped on push.
+# Mirrors docker-publish.yml (the other caller).
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   # Avoid two pushes deploying simultaneously — the Hub upload is idempotent
