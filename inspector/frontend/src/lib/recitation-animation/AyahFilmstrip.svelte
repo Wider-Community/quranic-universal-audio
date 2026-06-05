@@ -15,8 +15,12 @@
      *   - snap:   center the active cell only when the ayah changes; drag = snap.
      *
      * User scrub/drag/click stays TIME-based (seeking); playback is the only
-     * recitation-driven path. Surface-agnostic: fed `units` + a prebuilt
-     * `FilmstripModel` + a time accessor + an onSeek cb.
+     * recitation-driven path. Every deliberate scroll (click, key, snap-center,
+     * loopback, linear-bar seek) runs through ONE JS tween (`glideTo`) with
+     * distance-proportional duration + ease-in-out, so a one-cell hop and a
+     * scroll to the far end of the strip feel like the same motion. Live drag
+     * and hybrid playback tracking write `offset` directly. Surface-agnostic:
+     * fed `units` + a prebuilt `FilmstripModel` + a time accessor + an onSeek cb.
      */
     import { type RecitationAnimConfig } from './config';
     import type { FilmstripModel } from './filmstrip-model';
@@ -57,13 +61,21 @@
     /** Min backward cell-fill delta (fraction) that counts as a within-verse
      *  word loopback worth gliding. */
     const JUMP_FRAC_EPS = 0.01;
-    /** How long the loopback/seek glide eases before direct tracking resumes. */
-    const GLIDE_MS = 320;
+
+    // ---- scroll-glide tuning (distance-proportional, single feel everywhere) ----
+    /** ms per px of scroll distance — the glide's velocity (↑ = slower). */
+    const GLIDE_MS_PER_PX = 0.9;
+    /** Floor so a tiny hop is still a visible glide, not a snap. */
+    const GLIDE_MIN_MS = 300;
+    /** Cap so a full-film seek stays a smooth scroll-through, not endless. */
+    const GLIDE_MAX_MS = 1500;
+    /** An audio-time jump beyond this in one frame ⇒ a seek (glide), not the
+     *  normal forward creep of playback. */
+    const SEEK_JUMP_MS = 400;
 
     let containerEl = $state<HTMLDivElement | undefined>(undefined);
     let cw = $state(0); // container width
     let offset = $state(0); // px scrolled into the cells region (needle position)
-    let animate = $state(false); // CSS transition on the track (snap + glide moves)
     let dragging = $state(false);
 
     // Recitation-driven playback state (written by the rAF driver / refresh).
@@ -73,7 +85,19 @@
     let frozenIdx = $state(-1); // last active cell, held while silent
     let jumping = $state(false); // mid-glide → cell-fill eases too
     let lastActiveUnit = -1; // O(1) fast-path hint for findActiveAt
-    let glideTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastTimeMs = -1; // previous frame's audio time, for seek detection
+    let fillGlideTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // JS scroll tween — the single source of animated `offset` moves. Distance-
+    // proportional duration + soft ease, so a one-cell hop and a scroll to the
+    // far end of the strip feel like the same motion, just longer.
+    interface Tween { from: number; to: number; startT: number; dur: number; }
+    let tween: Tween | null = null;
+    let tweenRaf = 0;
+    const reducedMotion = typeof matchMedia === 'function'
+        && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // ease-in-out sine — soft start AND stop (the old ease-out started abruptly).
+    const easeInOut = (p: number): number => 0.5 - Math.cos(Math.PI * p) / 2;
 
     interface Cell {
         ayah: number;
@@ -185,6 +209,54 @@
         containerEl?.style.setProperty('--cell-active-fill', clamp(0, 1, frac) * 100 + '%');
     }
 
+    // ---- scroll tween: the one animated path that moves `offset` ----
+    function stepTween(now: number): void {
+        const t = tween;
+        if (!t) { tweenRaf = 0; return; }
+        const p = clamp(0, 1, (now - t.startT) / t.dur);
+        offset = t.from + (t.to - t.from) * easeInOut(p);
+        if (p >= 1) { tween = null; tweenRaf = 0; return; }
+        tweenRaf = requestAnimationFrame(stepTween);
+    }
+    /** Distance-proportional glide duration (clamped). The shared "feel". */
+    function glideDur(dist: number): number {
+        return clamp(GLIDE_MIN_MS, dist * GLIDE_MS_PER_PX, GLIDE_MAX_MS);
+    }
+    /** Animate `offset` to a target — the one animated path for every deliberate
+     *  strip scroll (click, key, snap-center, loopback, seek). Strip only. */
+    function glideTo(target: number): void {
+        target = clamp(0, lastRight, target);
+        const dist = Math.abs(target - offset);
+        if (reducedMotion || dist < 1) {
+            tween = null;
+            offset = target;
+            return;
+        }
+        tween = { from: offset, to: target, startT: performance.now(), dur: glideDur(dist) };
+        if (!tweenRaf) tweenRaf = requestAnimationFrame(stepTween);
+    }
+    function cancelTween(): void {
+        tween = null;
+        if (tweenRaf) cancelAnimationFrame(tweenRaf);
+        tweenRaf = 0;
+    }
+    /** Ease the active cell's fill bar over `dur` (a loopback rewind or a seek),
+     *  matched to the strip glide. Off for normal forward play (the bar tracks
+     *  per-frame with no transition, so it can't lag). */
+    function armFillGlide(dur: number): void {
+        if (reducedMotion) return;
+        containerEl?.style.setProperty('--cell-glide-dur', dur + 'ms');
+        jumping = true;
+        if (fillGlideTimer) clearTimeout(fillGlideTimer);
+        fillGlideTimer = setTimeout(() => { jumping = false; }, dur);
+    }
+    /** A discrete strip move (loopback / seek / user nav): glide the strip AND
+     *  ease the fill over the same distance-proportional time. */
+    function jumpTo(target: number): void {
+        armFillGlide(glideDur(Math.abs(clamp(0, lastRight, target) - offset)));
+        glideTo(target);
+    }
+
     /** A recitation discontinuity (loopback / seek) vs a smooth advance. */
     function isJump(prevIdx: number, newIdx: number, prevFrac: number, newFrac: number): boolean {
         if (prevIdx < 0) return false; // first activation — no glide
@@ -193,44 +265,51 @@
         if (newIdx === prevIdx && newFrac < prevFrac - JUMP_FRAC_EPS) return true; // word loopback
         return false;
     }
-    function triggerGlide(): void {
-        jumping = true;
-        animate = true;
-        if (glideTimer) clearTimeout(glideTimer);
-        glideTimer = setTimeout(() => {
-            jumping = false;
-            // Snap keeps its track transition on (it always glides ayah hops);
-            // hybrid/tuner return to direct per-frame writes.
-            if (config.filmstripMotion !== 'snap') animate = false;
-        }, GLIDE_MS);
-    }
 
     /** One rAF step of recitation-driven playback. */
     function drivePlayback(): void {
-        const tSec = (getTimeMs() + config.leadMs) / 1000;
+        const nowMs = getTimeMs();
+        const tSec = (nowMs + config.leadMs) / 1000;
         const r = recitationAt(tSec, lastActiveUnit);
+        // A large audio-time jump in one frame is a seek (e.g. a linear-bar
+        // click), not the normal forward creep — glide to it like any other.
+        const seeked = lastTimeMs >= 0 && Math.abs(nowMs - lastTimeMs) > SEEK_JUMP_MS;
+        lastTimeMs = nowMs;
         if (!r) {
             // Silence: freeze — hold offset + fill, drop highlight/cursor. The
             // last active cell (frozenIdx) stays as a de-accented, held bar.
             silent = true;
             return;
         }
+        const prevIdx = activeIdx;
+        const prevFrac = cellFrac;
         lastActiveUnit = r.unitIdx;
-        const jumped = isJump(activeIdx, r.idx, cellFrac, r.frac);
+        const discont = seeked || isJump(prevIdx, r.idx, prevFrac, r.frac);
         silent = false;
         activeIdx = r.idx;
         cellFrac = r.frac;
         frozenIdx = r.idx;
         setFill(r.frac);
-        if (jumped) triggerGlide();
-        if (config.filmstripMotion === 'snap') return; // centering effect owns offset
-        if (!jumping) animate = false;
-        offset = offsetForReci(r);
+
+        const snap = config.filmstripMotion === 'snap';
+        const target = snap ? offsetForCellCenter(r.idx) : offsetForReci(r);
+        if (discont) {
+            jumpTo(target); // loopback / seek → glide strip + ease bar
+            return;
+        }
+        if (snap) {
+            // Smooth forward play: center the new verse on each ayah change.
+            if (r.idx !== prevIdx) glideTo(target);
+            return;
+        }
+        if (tween) return; // a glide is still settling — let it own offset
+        offset = target; // hybrid/tuner continuous tracking
     }
 
     // rAF while playing: drive the recitation mapping (all modes).
     $effect(() => {
         if (!playing) return;
+        lastTimeMs = -1; // don't read the first frame as a seek
         let raf = 0;
         const loop = (): void => {
             if (!dragging && scrubMs == null) drivePlayback();
@@ -240,24 +319,13 @@
         return () => cancelAnimationFrame(raf);
     });
 
-    // Snap mode: glide the active cell to center when the ayah changes (now
-    // recitation-driven, so a cross-verse loopback scrolls back here). Yields to
-    // a progress-bar scrub (the scroll-follow effect owns offset then).
-    $effect(() => {
-        void activeIdx;
-        if (config.filmstripMotion !== 'snap' || dragging || scrubMs != null
-            || silent || activeIdx < 0 || cw === 0) return;
-        animate = true;
-        offset = offsetForCellCenter(activeIdx);
-    });
-
     // Progress-bar drag → scroll-follow the dragged time (both motion modes).
     // Maps the time through the recitation timeline so it tracks the recited
-    // position (correct under overlap/repeats). The playback driver is suspended
-    // while scrubMs is non-null. Silence in the scrub → hold (no move).
+    // position (correct under overlap/repeats). Direct follow (no glide) — you're
+    // scrubbing live. Silence in the scrub → hold (no move).
     $effect(() => {
         if (scrubMs == null || cw === 0) return;
-        animate = false;
+        cancelTween();
         const r = recitationAt(scrubMs / 1000, -1);
         if (r) offset = clamp(0, lastRight, offsetForReci(r));
     });
@@ -270,7 +338,9 @@
         silent = false;
         frozenIdx = -1;
         lastActiveUnit = -1;
-        if (glideTimer) clearTimeout(glideTimer);
+        lastTimeMs = -1;
+        cancelTween();
+        if (fillGlideTimer) clearTimeout(fillGlideTimer);
         jumping = false;
         containerEl?.style.removeProperty('--cell-active-fill');
     });
@@ -285,7 +355,7 @@
         moved = false;
         dragStartX = e.clientX;
         dragStartOffset = offset;
-        animate = false;
+        cancelTween(); // the drag owns offset now
         containerEl?.setPointerCapture(e.pointerId);
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp, { once: true });
@@ -309,8 +379,7 @@
         } else {
             const i = nearestCell(offset);
             if (i >= 0) {
-                animate = true;
-                offset = offsetForCellCenter(i);
+                glideTo(offsetForCellCenter(i));
                 onSeek(seekMsForCell(i));
             }
         }
@@ -319,8 +388,7 @@
         if (!containerEl) return;
         const i = cellAtClientX(clientX);
         if (i < 0) return;
-        animate = true;
-        offset = offsetForCellCenter(i);
+        glideTo(offsetForCellCenter(i));
         onSeek(seekMsForCell(i));
     }
 
@@ -355,11 +423,11 @@
         cellFrac = r.frac;
         frozenIdx = r.idx;
         lastActiveUnit = r.unitIdx;
+        lastTimeMs = -1; // resync; the next playing frame isn't a seek
         setFill(r.frac);
-        animate = true;
-        offset = config.filmstripMotion === 'snap'
+        jumpTo(config.filmstripMotion === 'snap'
             ? offsetForCellCenter(r.idx)
-            : offsetForReci(r);
+            : offsetForReci(r));
     }
 
     /** Force the new chapter's first ayah into view before audio canplay. */
@@ -370,8 +438,9 @@
         silent = false;
         frozenIdx = -1;
         lastActiveUnit = -1;
+        lastTimeMs = -1;
+        cancelTween();
         containerEl?.style.removeProperty('--cell-active-fill');
-        animate = true;
         offset = offsetForCellCenter(0);
     }
 </script>
@@ -395,16 +464,13 @@
                 e.preventDefault();
                 const d = e.key === 'ArrowRight' ? 1 : -1;
                 const i = clamp(0, cells.length - 1, (activeIdx < 0 ? 0 : activeIdx) + d);
-                animate = true;
-                offset = offsetForCellCenter(i);
+                glideTo(offsetForCellCenter(i));
                 onSeek(seekMsForCell(i));
             }
         }}
     >
         <div
             class="track"
-            class:animate
-            class:snap-glide={config.filmstripMotion === 'snap'}
             style:transform="translateX({-offset}px)"
         >
             <div class="pad" style:width="{pad}px"></div>
@@ -452,6 +518,9 @@
     .filmstrip:focus-visible {
         outline: none;
     }
+    /* The transform is driven imperatively by the JS scroll tween (`glideTo`),
+       so the track carries NO CSS transition — every scroll, near or far, runs
+       through one distance-proportional, ease-in-out animation. */
     .track {
         position: absolute;
         top: 50%;
@@ -461,14 +530,6 @@
         transform: translateX(0);
         will-change: transform;
         translate: 0 -50%;
-    }
-    .track.animate {
-        transition: transform var(--t-base, 200ms) var(--ease-out-quart, ease);
-    }
-    /* Snap mode glides whole-ayah hops, so it gets a longer, more dramatic
-       slide-and-settle (ease-out-expo) than hybrid's quick release snap. */
-    .track.snap-glide.animate {
-        transition: transform 560ms cubic-bezier(0.16, 1, 0.3, 1);
     }
     .pad {
         flex: 0 0 auto;
@@ -535,9 +596,10 @@
         background: var(--accent-tint-soft);
     }
     /* Eased fill ONLY during a loopback/seek glide — never a permanent
-       transition (that would lag every forward-play frame). */
+       transition (that would lag every forward-play frame). Duration is shared
+       with the strip scroll (`--cell-glide-dur`) so bar + scroll move as one. */
     .cell.active .cell-fill.glide {
-        transition: width var(--t-base, 200ms) var(--ease-out-quart, ease);
+        transition: width var(--cell-glide-dur, 320ms) ease-in-out;
     }
     .cell-num {
         position: relative;
@@ -579,9 +641,9 @@
         right: 0;
         background: linear-gradient(to left, var(--panel), transparent);
     }
+    /* The strip scroll is JS-driven and already skips the tween under reduced
+       motion (`reducedMotion` in glideTo); kill the fill-glide transition too. */
     @media (prefers-reduced-motion: reduce) {
-        .track.animate,
-        .track.snap-glide.animate,
         .cell.active .cell-fill.glide {
             transition: none;
         }
