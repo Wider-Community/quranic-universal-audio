@@ -78,8 +78,7 @@ The same predicate drives the Releases-tab buckets and the cut job's member disc
    recitation with no usable audio URLs is fatal.
 3. Classifies each reciter `added` / `refresh` / `unchanged` (vs prior `content_hash`) and computes
    the version (below).
-4. Builds the dataset-level `manifest.json`, `catalog.json`, `release_schemas.json`, and
-   `CHANGELOG.md` (the release body — see
+4. Builds the dataset-level `manifest.json`, `catalog.json`, and `CHANGELOG.md` (the release body — see
    [Changelog](#changelog-the-release-body)).
 5. Creates ONE GH release tag via the GitHub REST API and uploads every asset.
 6. POSTs the completion webhook → `/api/webhooks/release-cut-complete` →
@@ -110,7 +109,6 @@ per-file sizes and consumers download only what they need.
 gh:releases/v{X.Y.Z}/
 ├── <slug>.zip            # one per reciter (see below)
 ├── manifest.json         # dataset-level: version, per-reciter sha256/bytes/coverage/change_kind, static_refs
-├── release_schemas.json  # machine-readable schemas for release assets
 ├── CHANGELOG.md          # the rendered release body
 ├── catalog.json          # dataset-level: reciter rows with audio URLs paired to timestamps
 ├── shard.py              # consumer helper
@@ -162,12 +160,6 @@ releases become a real requirement.
 }
 ```
 
-### `release_schemas.json`
-
-Machine-readable JSON schemas for the release-level files, per-reciter zip files, and the three
-timestamp tiers. It is uploaded beside `manifest.json` so script consumers can validate assets
-without copying schema definitions from the docs.
-
 ## Changelog (the release body)
 
 The release body is rendered from
@@ -179,13 +171,12 @@ asset table, change tables, examples, and links.
 
 Format (display names only — never slugs):
 
-- Title `# v{X.Y.Z} · {date}`.
+- Title `# {date}`. GitHub already shows the tag above the body.
 - First visible section: `## What to download` asset table.
-- Short guide sections for audio/timestamp pairing, timestamp levels, recitation changes, and
+- Short guide sections for audio/timestamp pairing, timestamp levels, recitations, and
   programmatic use.
 - `<details>` **Reciter zip schemas**: verse/word/letter timestamp shapes plus a small example.
-- `<details>` **Catalog and manifest schemas**: release-level `manifest.json`, `catalog.json`,
-  `release_schemas.json`, and static reference status.
+- `<details>` **Catalog and manifest schemas**: release-level `manifest.json` and `catalog.json`.
 - Inline `**License:** CC-BY-4.0` + repository / HF-dataset links.
 
 Coverage shows exact **ayahs** at cut time; the DB-only preview shows **surahs** (chapter_count)

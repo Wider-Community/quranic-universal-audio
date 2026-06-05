@@ -181,14 +181,6 @@ class LetterTimestampsDoc(_TimestampDoc):
             raise ValueError("letter timestamp must be [[start_ms,end_ms], words, letters]")
 
 
-class ReleaseSchemasAsset(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    schema_version: int = SCHEMA_VERSION
-    release_version: str
-    schemas: dict[str, dict[str, Any]] = Field(default_factory=dict)
-
-
 class QpcHafsWord(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -220,13 +212,7 @@ def _is_ms_pair(v: Any) -> bool:
 
 
 def _is_word(v: Any) -> bool:
-    return (
-        isinstance(v, list)
-        and len(v) == 3
-        and _is_int(v[0])
-        and _is_int(v[1])
-        and _is_int(v[2])
-    )
+    return isinstance(v, list) and len(v) == 3 and _is_int(v[0]) and _is_int(v[1]) and _is_int(v[2])
 
 
 def _is_letter(v: Any) -> bool:

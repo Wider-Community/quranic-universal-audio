@@ -44,10 +44,13 @@ def test_first_release_added_only():
         repo="quranic-universal-audio",
         hf_dataset="hetchyy/quranic-universal-ayahs",
     )
-    assert md.startswith("# v0.1.0 · 2026-06-03\n\n## What to download")
+    assert md.startswith("# 2026-06-03\n\n## What to download")
     assert "This release publishes" not in md
-    assert "| `catalog.json` | Reciter names, riwayah, style, coverage, audio metadata, and the audio URLs paired with the timestamp data. |" in md
-    assert "| `release_schemas.json` | Machine-readable schemas for the release assets. |" in md
+    assert (
+        "| `catalog.json` | Reciter names, riwayah, style, coverage, audio metadata, and the audio URLs paired with the timestamp data. |"
+        in md
+    )
+    assert "release_schemas.json" not in md
     assert "First release: **2** recitations." in md
     assert "<details><summary>Added recitations - 2</summary>" in md
     assert "Abdulbasit Abdulsamad" in md
@@ -116,7 +119,7 @@ def test_audio_pairing_and_timestamp_layers_are_explained():
     assert "Timestamp values are relative to that matching source audio." in md
     assert "storage, speed, and network efficiency" in md
     assert "Use `shard.py` when your app prefers per-surah files locally" in md
-    assert '"100:1": [0, 2831]' in md
+    assert '"1:1": [0, 2831]' in md
 
 
 def test_license_inline_and_links():
@@ -155,4 +158,7 @@ def test_schema_sections_are_collapsed():
     assert "<details><summary>Reciter zip schemas</summary>" in md
     assert "<details><summary>Catalog and manifest schemas</summary>" in md
     assert "type VerseTimestamps" in md
+    assert '"tier": "verse"' in md
+    assert '"tier": "word"' in md
+    assert '"tier": "letter"' in md
     assert "type ReleaseManifest" in md

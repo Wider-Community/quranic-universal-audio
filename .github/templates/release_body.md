@@ -12,6 +12,6 @@
 
 {{ reciter_zip_schemas }}
 
-{{ release_level_schemas }}
+{{ catalog_manifest_shapes }}
 
 {{ release_footer }}

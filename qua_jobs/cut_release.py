@@ -60,7 +60,6 @@ from qua_shared.schemas import (  # noqa: E402
     ReleaseManifest,
     ReleaseManifestRecitation,
     ReleaseRecitationCatalog,
-    ReleaseSchemasAsset,
     VerseTimestampsDoc,
     WordTimestampsDoc,
 )
@@ -324,10 +323,8 @@ def _verse_sort_key(key: str) -> tuple[int, int]:
 
 
 def _gzip_deterministic(doc: dict) -> bytes:
-    """Serialize JSON with sorted keys + gzip at level 6, mtime=0."""
-    payload = json.dumps(doc, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
-        "utf-8"
-    )
+    """Serialize JSON preserving insertion order + gzip at level 6, mtime=0."""
+    payload = json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     return gzip.compress(payload, compresslevel=6, mtime=0)
 
 
@@ -530,70 +527,6 @@ def _build_dataset_manifest(
 
 def _release_asset_url(owner: str, repo: str, version: str, name: str) -> str:
     return f"https://github.com/{owner}/{repo}/releases/download/{version}/{name}"
-
-
-def _timestamp_schema(model, value_schema: dict) -> dict:
-    schema = model.model_json_schema()
-    schema["patternProperties"] = {r"^[1-9]\d{0,2}:[1-9]\d{0,2}$": value_schema}
-    schema["additionalProperties"] = False
-    return schema
-
-
-def _build_release_schemas(version: str) -> bytes:
-    """Machine-readable schemas shipped beside the release assets."""
-    ms_pair = {
-        "type": "array",
-        "prefixItems": [{"type": "integer"}, {"type": "integer"}],
-        "minItems": 2,
-        "maxItems": 2,
-    }
-    word = {
-        "type": "array",
-        "prefixItems": [{"type": "integer"}, {"type": "integer"}, {"type": "integer"}],
-        "minItems": 3,
-        "maxItems": 3,
-    }
-    letter = {
-        "type": "array",
-        "prefixItems": [
-            {"type": "integer"},
-            {"type": "string"},
-            {"type": "integer"},
-            {"type": "integer"},
-        ],
-        "minItems": 4,
-        "maxItems": 4,
-    }
-    word_tier = {
-        "type": "array",
-        "prefixItems": [ms_pair, {"type": "array", "items": word}],
-        "minItems": 2,
-        "maxItems": 2,
-    }
-    letter_tier = {
-        "type": "array",
-        "prefixItems": [
-            ms_pair,
-            {"type": "array", "items": word},
-            {"type": "array", "items": letter},
-        ],
-        "minItems": 3,
-        "maxItems": 3,
-    }
-    asset = ReleaseSchemasAsset(
-        schema_version=SCHEMA_VERSION,
-        release_version=version,
-        schemas={
-            "manifest.json": ReleaseManifest.model_json_schema(),
-            "catalog.json": ReleaseCatalog.model_json_schema(),
-            "reciter/manifest.json": RecitationManifest.model_json_schema(),
-            "reciter/catalog.json": ReleaseRecitationCatalog.model_json_schema(),
-            "verse_timestamps.json.gz": _timestamp_schema(VerseTimestampsDoc, ms_pair),
-            "word_timestamps.json.gz": _timestamp_schema(WordTimestampsDoc, word_tier),
-            "letter_timestamps.json.gz": _timestamp_schema(LetterTimestampsDoc, letter_tier),
-        },
-    )
-    return _json_model_bytes(asset)
 
 
 def _build_changelog(
@@ -1147,7 +1080,6 @@ def main() -> int:
     # Upload order: small assets first, then zips.
     uploads: list[tuple[str, bytes, str]] = []
     uploads.append(("manifest.json", dataset_manifest, "application/json"))
-    uploads.append(("release_schemas.json", _build_release_schemas(version), "application/json"))
     uploads.append(("CHANGELOG.md", changelog_md, "text/markdown"))
     if license_bytes:
         uploads.append(("LICENSE", license_bytes, "text/plain"))

@@ -22,7 +22,7 @@ _REQUIRED_BLOCKS = {
     "recitation_changes",
     "programmatic_use",
     "reciter_zip_schemas",
-    "release_level_schemas",
+    "catalog_manifest_shapes",
     "release_footer",
 }
 
@@ -120,7 +120,6 @@ def _asset_table() -> str:
             "| `manifest.json` | Release index: reciter zips, download URLs, checksums, sizes, coverage, and change type. |",
             "| `catalog.json` | Reciter names, riwayah, style, coverage, audio metadata, and the audio URLs paired with the timestamp data. |",
             "| `<reciter>.zip` | One recitation's verse, word, and letter timestamp files. |",
-            "| `release_schemas.json` | Machine-readable schemas for the release assets. |",
             "| `shard.py` | Optional helper that splits a large timestamp file into one JSON file per surah. |",
             "| `surah_info.json` | Surah names, ayah counts, and word counts. |",
             "| `qpc_hafs.json` | QPC Hafs word reference used by the word and letter indexes. |",
@@ -136,7 +135,7 @@ def _audio_timestamp_pairing() -> str:
             "",
             "`catalog.json` contains the audio URLs for each recitation. Timestamp values are relative to that matching source audio.",
             "",
-            "For a surah-based recitation, a value like `\"100:1\": [0, 2831]` means ayah 100:1 starts at `0 ms` and ends at `2831 ms` in the matching surah audio.",
+            'For a surah-based recitation, a value like `"100:1": [0, 2831]` means ayah 100:1 starts at `0 ms` and ends at `2831 ms` in the matching surah audio.',
         ]
     )
 
@@ -167,7 +166,7 @@ def _recitation_changes(
     *, previous_version: str | None, added: list[dict], refreshed: list[dict], carried: int
 ) -> str:
     out: list[str] = [
-        "## Recitation changes",
+        "## Recitations",
         "",
         _summary_sentence(previous_version, len(added), len(refreshed), carried),
         "",
@@ -218,32 +217,40 @@ def _reciter_zip_schemas() -> str:
             "type Word = [word_idx: number, start_ms: Ms, end_ms: Ms];",
             "type Letter = [word_idx: number, char: string, start_ms: Ms, end_ms: Ms];",
             "",
-            "type VerseTimestamps = { _meta: Meta & { tier: \"verse\" }, [verse: VerseKey]: [Ms, Ms] };",
-            "type WordTimestamps = { _meta: Meta & { tier: \"word\" }, [verse: VerseKey]: [[Ms, Ms], Word[]] };",
-            "type LetterTimestamps = { _meta: Meta & { tier: \"letter\" }, [verse: VerseKey]: [[Ms, Ms], Word[], Letter[]] };",
+            'type VerseTimestamps = { _meta: Meta & { tier: "verse" }, [verse: VerseKey]: [Ms, Ms] };',
+            'type WordTimestamps = { _meta: Meta & { tier: "word" }, [verse: VerseKey]: [[Ms, Ms], Word[]] };',
+            'type LetterTimestamps = { _meta: Meta & { tier: "letter" }, [verse: VerseKey]: [[Ms, Ms], Word[], Letter[]] };',
             "```",
             "",
             "Small example:",
             "",
             "```json",
             "{",
-            '  "_meta": {"schema_version": 1, "slug": "example_reciter", "tier": "word", "verse_count": 6236},',
-            '  "100:1": [[0, 2831], [[1, 70, 1550], [2, 1550, 2790]]]',
+            '  "_meta": {"schema_version": 1, "slug": "example_reciter", "tier": "verse", "verse_count": 6236},',
+            '  "1:1": [0, 2831]',
             "}",
             "```",
             "",
-            "`catalog.json` describes one recitation. `manifest.json` lists the files inside the zip with `sha256` and byte size.",
+            "```json",
+            "{",
+            '  "_meta": {"schema_version": 1, "slug": "example_reciter", "tier": "word", "verse_count": 6236},',
+            '  "1:1": [[0, 2831], [[1, 70, 1550], [2, 1550, 2790]]]',
+            "}",
+            "```",
+            "",
+            "```json",
+            "{",
+            '  "_meta": {"schema_version": 1, "slug": "example_reciter", "tier": "letter", "verse_count": 6236},',
+            '  "1:1": [[0, 2831], [[1, 70, 1550]], [[1, "ب", 70, 180]]]',
+            "}",
+            "```",
             "",
             "</details>",
         ]
     )
 
 
-def _release_level_schemas(static_refs_changed_keys: tuple[str, ...]) -> str:
-    refs = ", ".join(
-        f"`{key}` ({'refreshed' if key in static_refs_changed_keys else 'unchanged'})"
-        for key in ("surah_info.json", "qpc_hafs.json")
-    )
+def _catalog_manifest_shapes() -> str:
     return "\n".join(
         [
             "<details><summary>Catalog and manifest schemas</summary>",
@@ -260,9 +267,9 @@ def _release_level_schemas(static_refs_changed_keys: tuple[str, ...]) -> str:
             "    sha256: string;",
             "    bytes: number;",
             "    coverage_ayahs: number;",
-            "    change_kind: \"added\" | \"refresh\" | \"unchanged\";",
+            '    change_kind: "added" | "refresh" | "unchanged";',
             "  }>;",
-            "  license: \"CC-BY-4.0\";",
+            '  license: "CC-BY-4.0";',
             "};",
             "```",
             "",
@@ -276,11 +283,7 @@ def _release_level_schemas(static_refs_changed_keys: tuple[str, ...]) -> str:
             "}",
             "```",
             "",
-            "`catalog.json` is `{ \"schema_version\": 1, \"recitations\": [ReciterCatalog, ...] }`.",
-            "",
-            "`release_schemas.json` contains the machine-readable schemas for these files.",
-            "",
-            f"Static references: {refs}.",
+            '`catalog.json` is `{ "schema_version": 1, "recitations": [ReciterCatalog, ...] }`.',
             "",
             "</details>",
         ]
@@ -312,11 +315,9 @@ def render_changelog(
     added = [m for m in members if m.get("change_kind") == "added"]
     refreshed = [m for m in members if m.get("change_kind") == "refresh"]
     carried = sum(1 for m in members if m.get("change_kind") == "unchanged")
-    static_refs = tuple(static_refs_changed_keys)
-
     return _render_template(
         {
-            "release_title": f"# {version} · {release_date}",
+            "release_title": f"# {release_date}",
             "asset_table": _asset_table(),
             "audio_timestamp_pairing": _audio_timestamp_pairing(),
             "timestamp_levels": _timestamp_levels(),
@@ -328,7 +329,7 @@ def render_changelog(
             ),
             "programmatic_use": _programmatic_use(),
             "reciter_zip_schemas": _reciter_zip_schemas(),
-            "release_level_schemas": _release_level_schemas(static_refs),
+            "catalog_manifest_shapes": _catalog_manifest_shapes(),
             "release_footer": _release_footer(
                 license_id=license_id,
                 owner=owner,

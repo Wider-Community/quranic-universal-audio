@@ -272,10 +272,10 @@ def test_release_preview_uses_display_names(signed_in_client, monkeypatch):
     assert body["release_date"]
 
     md = body["changelog_preview_md"]
-    assert md.startswith("# v0.1.0 · ")
+    assert md.startswith("# ")
     assert "\n\n## What to download" in md
     assert "`catalog.json`" in md and "audio URLs paired with the timestamp data" in md
-    assert "`release_schemas.json`" in md
+    assert "`release_schemas.json`" not in md
     assert "Hafs" in md and "114 surahs" in md
     # The delivery slug must not leak into the human-facing body.
     assert "ar_preview" not in md

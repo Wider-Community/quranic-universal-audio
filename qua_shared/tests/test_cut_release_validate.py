@@ -14,6 +14,7 @@ bounds once so the three fields always agree.
 from __future__ import annotations
 
 import gzip
+import json
 
 import pytest
 
@@ -52,6 +53,29 @@ def test_nonzero_start_duration_consistent():
     out = _verse_for_validate(v, segments=[])
     assert out["duration_ms"] == 12694
     assert check_duration_arithmetic("22:1", out) == []
+
+
+def test_release_timestamp_tiers_preserve_verse_order():
+    verses = {
+        "1:1": {"words": [[1, 0, 100]]},
+        "2:1": {"words": [[1, 100, 200]]},
+        "10:1": {"words": [[1, 200, 300]]},
+        "100:1": {"words": [[1, 300, 400]]},
+    }
+    files = cut_release._build_tier_files(
+        "example_reciter",
+        verses,
+        delivery_meta={"audio_category": "by_surah"},
+    )
+
+    for name in (
+        "verse_timestamps.json.gz",
+        "word_timestamps.json.gz",
+        "letter_timestamps.json.gz",
+    ):
+        doc = json.loads(gzip.decompress(files[name]).decode("utf-8"))
+        keys = [key for key in doc if key != "_meta"]
+        assert keys == ["1:1", "2:1", "10:1", "100:1"]
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +124,7 @@ def test_qpc_validation_rejects_pointer_bytes():
 
 def test_qpc_validation_accepts_real_shape():
     cut_release._validate_qpc_bytes(
-        b'{"1:1:1":{"id":1,"surah":"1","ayah":"1","word":"1",'
-        b'"location":"1:1:1","text":"bismi"}}'
+        b'{"1:1:1":{"id":1,"surah":"1","ayah":"1","word":"1","location":"1:1:1","text":"bismi"}}'
     )
 
 
