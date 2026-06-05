@@ -293,7 +293,14 @@
             if (!reciterAudio) return;
             const verses: ChapVerse[] = [];
             for (const ref of chapterVerseRefs(shard)) {
-                const data = assembleVerseFromShard(slug, shard, ref, qpc, dk, reciterAudio);
+                // keepAllTakes: the Timestamps tab is the faithfulness surface —
+                // a verse recited several times back-to-back renders its words
+                // as inline repeats and the clip span covers every take, so
+                // playback rides through all of them (the dashboard board stays
+                // canonical via load-chapter.ts).
+                const data = assembleVerseFromShard(slug, shard, ref, qpc, dk, reciterAudio, {
+                    keepAllTakes: true,
+                });
                 if (!data) continue;
                 verses.push({
                     ref,

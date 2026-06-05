@@ -447,6 +447,13 @@ function shardOccasions(shard: TsShardResponse): Map<string, VerseOccasions> {
  *
  * Audio routing (`audio_url` + `audio_category`) is sourced from `reciterAudio`
  * — the manifest's reciter block, the live source — never from the shard.
+ *
+ * `keepAllTakes` retains the canonical occasion verbatim instead of trimming at
+ * first completion, so a verse recited several times back-to-back surfaces as
+ * inline repeated words and the clip span covers every take (the Timestamps tab
+ * faithfulness view, which plays through all takes). Interleaved / multi-verse
+ * loopbacks stay canonical-only either way — they're separate occasions and only
+ * the canonical one is selected here.
  */
 export function assembleVerseFromShard(
     reciter: string,
@@ -455,6 +462,7 @@ export function assembleVerseFromShard(
     qpc: Record<string, { text?: string }>,
     dk: Record<string, { text?: string }>,
     reciterAudio: TsReciterAudio,
+    opts?: { keepAllTakes?: boolean },
 ): TsVerseData | null {
     if (verseRef === '_meta') return null;
 
@@ -469,7 +477,7 @@ export function assembleVerseFromShard(
     const nWords = maxWordIndex(verseSegs);
     const grouped = shardOccasions(shard).get(verseRef);
     const occasion = grouped?.canonical ?? verseSegs;
-    const clip = canonicalClip(occasion, nWords);
+    const clip = canonicalClip(occasion, nWords, { keepAllTakes: opts?.keepAllTakes });
     const wordsRaw = clip.words;
 
     const intervals: PhonemeInterval[] = [];
