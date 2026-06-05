@@ -10,6 +10,11 @@ Two shard shapes share the deterministic gzip writer here:
     (read path is a byte pass-through). See
     `docs/planning/ts-segment-array-migration.md`.
 
+Phone tuples are ``[phone, start_ms, end_ms]``, optionally extended to
+``[phone, start, end, geminate_start, geminate_end, bridge_rule]`` — slot 5
+carries the cross-word tajweed bridge rule (see `timestamps_bridges`), stamped
+at write time by the pipeline. Schema version 3 = bridge-tagged.
+
 Both are gzipped via `gzip_shard` (level 6, mtime 0 → byte-stable output).
 """
 
@@ -48,7 +53,7 @@ _SEGMENT_META_PROVENANCE = (
     "created_at",
 )
 
-SEGMENT_SCHEMA_VERSION = 2
+SEGMENT_SCHEMA_VERSION = 3
 
 
 def _filter_mfa_failures(failures: list[dict] | None, chapter: int) -> list[dict]:

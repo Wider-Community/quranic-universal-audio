@@ -539,6 +539,7 @@ export function assembleVerseFromShard(
             };
             if (ph[3] === true) interval.geminate_start = true;
             if (ph[4] === true) interval.geminate_end = true;
+            if (ph[5]) interval.bridge = ph[5] as string;
             intervals.push(interval);
         }
         const phonemeIndices = Array.from(
