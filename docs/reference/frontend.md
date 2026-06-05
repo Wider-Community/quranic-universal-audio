@@ -95,6 +95,8 @@ The **Dashboard tab** is the entry view: public reciter browse/search/filter/pla
 
 Shared player rule: deliberate navigation resumes playback even when the audio was paused. This includes ayah/surah steps, surah or delivery changes, progress/filmstrip/line seeks, Timestamps keyboard navigation, validation jumps, and manual shuffle/random-reciter triggers. Passive inspection (popovers, hover previews, zoom/pan, speed/download/bookmark/display toggles) must stay paused.
 
+Recitation-animation (`lib/recitation-animation/`, mounted by `NowReciting` above the player in both Dashboard + Timestamps tabs): the `AyahFilmstrip` ayah scrubber and the `LineAnimation` teleprompter are **recitation-driven, not clock-driven**. Both map playback time → the recited word via the shared `findActiveAt` (`recitation-active.ts`): a flat per-occurrence interval timeline that returns `null` during silence gaps and travels backward on loopbacks (the raw, non-deduped occurrences the shard retains "for the filmstrip" — see [timestamps-job.md](timestamps-job.md) §1a). The filmstrip's per-verse cell bar fills to the recited word's **duration-weighted** position in the verse (`filmstrip-model.ts`), so a within-verse word loopback rewinds the bar and a cross-verse loopback scrolls the strip back (same glide in both `snap`/`hybrid` modes); during silence the active cell de-highlights, the cursor/needle hide, and the bar **freezes**. The bottom `PlayerProgress` scrubber stays time-linear — only the cell bar is recitation-adaptive.
+
 ### `lib/catalog/`, `lib/refs/`, `lib/icons/`
 
 | Path | Role |

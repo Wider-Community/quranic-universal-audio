@@ -1,0 +1,79 @@
+import { describe, expect, it } from 'vitest';
+
+import { buildFilmstripModel } from '../filmstrip-model';
+import type { AnimUnit, TimeSpan } from '../types';
+
+function unit(location: string, intervals: Array<[number, number]>): AnimUnit {
+    const [surahRaw, ayahRaw, wordRaw] = location.split(':');
+    const surah = Number(surahRaw);
+    const ayah = Number(ayahRaw);
+    const spans: TimeSpan[] = intervals.map(([start, end]) => ({ start, end }));
+    return {
+        location,
+        ayahKey: `${surah}:${ayah}`,
+        surah,
+        ayah,
+        word: Number(wordRaw),
+        text: location,
+        start: spans[0]!.start,
+        end: spans[spans.length - 1]!.end,
+        intervals: spans,
+        letters: [],
+    };
+}
+
+// One verse, 3 words of canonical duration 1s / 2s / 1s. Word 2 is ALSO recited
+// again much later (a loopback) — its second occurrence must not inflate widths.
+const verse = [
+    unit('1:1:1', [[0, 1]]),
+    unit('1:1:2', [[1, 3], [10, 12]]),
+    unit('1:1:3', [[3, 4]]),
+];
+
+describe('buildFilmstripModel canonDurSec', () => {
+    it('sizes the cell by canonical first-occurrence durations, not the loopback', () => {
+        const model = buildFilmstripModel(verse, 'duration');
+        // 1 + 2 + 1 = 4s; a naive max(end)-min(start) would read 12s.
+        expect(model.cells[0]!.canonDurSec).toBeCloseTo(4, 6);
+    });
+
+    it('exposes the verse canonical start as the seek target', () => {
+        const model = buildFilmstripModel(verse, 'duration');
+        expect(model.cells[0]!.canonStartSec).toBeCloseTo(0, 6);
+    });
+});
+
+describe('buildFilmstripModel word fractions', () => {
+    it('weights word bands by duration (1/2/1 → quarters)', () => {
+        const words = buildFilmstripModel(verse, 'duration').cells[0]!.words;
+        expect(words.map((w) => w.frac0)).toEqual([0, 0.25, 0.75]);
+        expect(words.map((w) => w.frac1)).toEqual([0.25, 0.75, 1]);
+    });
+
+    it('weights word bands equally when asked (1/3 each)', () => {
+        const words = buildFilmstripModel(verse, 'equal').cells[0]!.words;
+        expect(words[0]!.frac1).toBeCloseTo(1 / 3, 6);
+        expect(words[1]!.frac1).toBeCloseTo(2 / 3, 6);
+        expect(words[2]!.frac1).toBeCloseTo(1, 6);
+    });
+});
+
+describe('buildFilmstripModel lookups', () => {
+    it('maps every unit to its verse cell across two verses', () => {
+        const units = [
+            unit('1:1:1', [[0, 1]]),
+            unit('1:1:2', [[1, 2]]),
+            unit('1:2:1', [[2, 3]]),
+        ];
+        const model = buildFilmstripModel(units, 'duration');
+        expect(Array.from(model.cellOfUnit)).toEqual([0, 0, 1]);
+        expect(model.indexByAyahKey.get('1:1')).toBe(0);
+        expect(model.indexByAyahKey.get('1:2')).toBe(1);
+    });
+
+    it('returns an empty model for no units', () => {
+        const model = buildFilmstripModel([], 'duration');
+        expect(model.cells).toEqual([]);
+        expect(model.cellOfUnit.length).toBe(0);
+    });
+});

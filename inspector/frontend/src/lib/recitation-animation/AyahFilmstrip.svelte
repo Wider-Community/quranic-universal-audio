@@ -1,70 +1,96 @@
 <script lang="ts">
     /**
-     * Center-anchored ayah filmstrip — a non-linear, by-ayah scrubber that sits
-     * above the (linear) progress bar. Cells = ayahs, width
-     * proportional-with-normalization (min/max clamp). A fixed center needle
-     * marks "now"; the strip slides so the live playhead stays centered. Manual
-     * drag scrubs; click jumps. Three motion models (config.filmstripMotion):
+     * Center-anchored ayah filmstrip — a by-ayah scrubber that sits above the
+     * (linear) progress bar. Cells = ayahs, width proportional to each verse's
+     * canonical recited length (min/max clamp). A fixed center needle marks
+     * "now"; the strip slides so the live recited position stays centered.
+     *
+     * Recitation-driven, not clock-driven: the active cell + its progress fill
+     * follow which WORD is being recited (via the shared `findActiveAt`
+     * timeline), so silences freeze it and loopbacks travel it backward — the
+     * strip and the teleprompter line stay in lockstep. Three motion models
+     * (config.filmstripMotion):
      *   - tuner:  continuous center; drag scrubs exact time.
      *   - hybrid: continuous center; drag snaps to whole ayahs on release.
      *   - snap:   center the active cell only when the ayah changes; drag = snap.
      *
-     * Surface-agnostic: fed ayah boundaries + a time accessor + an onSeek cb.
+     * User scrub/drag/click stays TIME-based (seeking); playback is the only
+     * recitation-driven path. Surface-agnostic: fed `units` + a prebuilt
+     * `FilmstripModel` + a time accessor + an onSeek cb.
      */
     import { type RecitationAnimConfig } from './config';
-    import type { AyahBoundary } from './types';
+    import type { FilmstripModel } from './filmstrip-model';
+    import { buildSortedIntervals, findActiveAt } from './recitation-active';
+    import type { AnimUnit } from './types';
 
     interface Props {
-        ayahs: AyahBoundary[];
+        units: AnimUnit[];
+        model: FilmstripModel;
         durationMs: number;
         getTimeMs: () => number;
         playing: boolean;
         config: RecitationAnimConfig;
         onSeek: (_ms: number) => void;
-        /** Preview-highlight the ayah spanning this time (e.g. progress-bar
+        /** Preview-highlight the ayah recited at this time (e.g. progress-bar
          *  hover). null = no preview. */
         hoverMs?: number | null;
         /** Active progress-bar *drag* time — the strip scroll-follows it (both
          *  motion modes) while non-null, suspending the playback driver. null =
          *  not scrubbing. */
         scrubMs?: number | null;
-        /** Speculative-prewarm hook: fired with a cell's start (ms) when the
-         *  pointer enters it, so the surface can warm that position. Optional —
-         *  surfaces that don't prewarm omit it. */
+        /** Speculative-prewarm hook: fired with a cell's seek (ms) when the
+         *  pointer enters it, so the surface can warm that position. Optional. */
         onHoverPrewarm?: (_ms: number) => void;
     }
 
     let {
-        ayahs, getTimeMs, playing, config, onSeek,
+        units, model, getTimeMs, playing, config, onSeek,
         hoverMs = null, scrubMs = null, onHoverPrewarm,
     }: Props = $props();
 
     const clamp = (lo: number, hi: number, v: number): number => Math.min(hi, Math.max(lo, v));
     const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
+    /** A backward verse jump, or a forward verse skip larger than this many
+     *  cells, is a loopback/seek discontinuity → glide rather than teleport. */
+    const JUMP_CELL_GAP = 1;
+    /** Min backward cell-fill delta (fraction) that counts as a within-verse
+     *  word loopback worth gliding. */
+    const JUMP_FRAC_EPS = 0.01;
+    /** How long the loopback/seek glide eases before direct tracking resumes. */
+    const GLIDE_MS = 320;
+
     let containerEl = $state<HTMLDivElement | undefined>(undefined);
     let cw = $state(0); // container width
-    let nowMs = $state(0);
     let offset = $state(0); // px scrolled into the cells region (needle position)
-    let animate = $state(false); // CSS transition on the track (snap moves only)
+    let animate = $state(false); // CSS transition on the track (snap + glide moves)
     let dragging = $state(false);
+
+    // Recitation-driven playback state (written by the rAF driver / refresh).
+    let activeIdx = $state(-1); // cell of the recited word; holds during silence
+    let cellFrac = $state(0); // word-proportional fill of the active cell
+    let silent = $state(false); // in a silence gap → frozen, no highlight/cursor
+    let frozenIdx = $state(-1); // last active cell, held while silent
+    let jumping = $state(false); // mid-glide → cell-fill eases too
+    let lastActiveUnit = -1; // O(1) fast-path hint for findActiveAt
+    let glideTimer: ReturnType<typeof setTimeout> | null = null;
 
     interface Cell {
         ayah: number;
-        startMs: number;
-        endMs: number;
-        dur: number;
         w: number;
         cumBefore: number; // px before this cell's left (cells + gaps)
     }
 
+    // Cell widths from each verse's CANONICAL recited duration — never inflated
+    // by a loopback's later occurrence (unlike the old ayah max-end boundary).
     const cells = $derived.by((): Cell[] => {
-        if (!ayahs.length) return [];
-        const durs = ayahs.map((a) => Math.max(1, a.endMs - a.startMs));
+        const mc = model.cells;
+        if (!mc.length) return [];
+        const durs = mc.map((c) => Math.max(1, c.canonDurSec * 1000));
         const maxDur = Math.max(...durs);
         const out: Cell[] = [];
         let cum = 0;
-        for (let i = 0; i < ayahs.length; i++) {
+        for (let i = 0; i < mc.length; i++) {
             const propW = (durs[i]! / maxDur) * config.filmstripMaxCellPx;
             const w = Math.round(
                 clamp(
@@ -73,69 +99,43 @@
                     lerp(config.filmstripMinCellPx, propW, config.filmstripProportional),
                 ),
             );
-            out.push({
-                ayah: ayahs[i]!.ayah,
-                startMs: ayahs[i]!.startMs,
-                endMs: ayahs[i]!.endMs,
-                dur: durs[i]!,
-                w,
-                cumBefore: cum,
-            });
+            out.push({ ayah: mc[i]!.ayah, w, cumBefore: cum });
             cum += w + config.filmstripGapPx;
         }
         return out;
     });
 
+    const sorted = $derived(buildSortedIntervals(units));
     const lastRight = $derived(
         cells.length ? cells[cells.length - 1]!.cumBefore + cells[cells.length - 1]!.w : 0,
     );
     const pad = $derived(cw / 2); // leading/trailing spacer so edges can center
 
-    // Cells are produced in temporal order from `ayahs` (built by
-    // loadChapterRecitation), so startMs is ascending. Binary search the
-    // largest i where cells[i].startMs <= t — this collapses the original
-    // "inside [start,end)" and "last with start <= t" branches (both return
-    // the same idx for non-overlapping cells).
-    function indexForTime(t: number): number {
-        const n = cells.length;
-        if (n === 0 || t < cells[0]!.startMs) return -1;
-        let lo = 0;
-        let hi = n - 1;
-        while (lo < hi) {
-            const mid = (lo + hi + 1) >> 1;
-            if (cells[mid]!.startMs <= t) lo = mid;
-            else hi = mid - 1;
-        }
-        return lo;
+    interface Reci { unitIdx: number; idx: number; frac: number; }
+
+    /** Map a time (seconds) to the recited cell + its word-proportional fill,
+     *  or null during a silence gap. `hint` seeds the O(1) fast-path (-1 for
+     *  random-access lookups like hover/scrub). */
+    function recitationAt(tSec: number, hint: number): Reci | null {
+        const h = findActiveAt(units, sorted, tSec, hint);
+        if (!h) return null;
+        const idx = model.cellOfUnit[h.unitIdx] ?? -1;
+        if (idx < 0) return null;
+        const cell = model.cells[idx]!;
+        const wf = cell.words[h.unitIdx - cell.unitStart];
+        const span = h.ivEnd - h.ivStart;
+        const intra = span > 0 ? clamp(0, 1, (tSec - h.ivStart) / span) : 0;
+        const frac = wf ? wf.frac0 + intra * (wf.frac1 - wf.frac0) : 0;
+        return { unitIdx: h.unitIdx, idx, frac };
     }
-    const activeIdx = $derived(indexForTime(nowMs));
-    const hoverIdx = $derived(hoverMs == null ? -1 : indexForTime(hoverMs));
-    // Snap mode has no moving needle (the strip is always centered on the active
-    // cell), so instead we highlight the cell under where the invisible needle
-    // would sit — i.e. the nearest cell to the current scroll offset. While
-    // playing it equals the active cell; while dragging it follows the drag,
-    // showing which ayah a release will snap to. -1 (off) outside snap mode.
-    const cursorIdx = $derived(config.filmstripMotion === 'snap' ? nearestCell(offset) : -1);
 
     function offsetForCellCenter(i: number): number {
         const c = cells[i];
         return c ? c.cumBefore + c.w / 2 : 0;
     }
-    function continuousOffset(t: number): number {
-        const i = indexForTime(t);
-        if (i < 0) return 0;
-        const c = cells[i]!;
-        return c.cumBefore + clamp(0, 1, (t - c.startMs) / c.dur) * c.w;
-    }
-    function timeAtOffset(off: number): number {
-        for (let i = 0; i < cells.length; i++) {
-            const c = cells[i]!;
-            if (off <= c.cumBefore + c.w) {
-                const f = clamp(0, 1, (off - c.cumBefore) / c.w);
-                return c.startMs + f * c.dur;
-            }
-        }
-        return cells.length ? cells[cells.length - 1]!.endMs : 0;
+    function offsetForReci(r: Reci): number {
+        const c = cells[r.idx];
+        return c ? c.cumBefore + r.frac * c.w : offset;
     }
     function nearestCell(off: number): number {
         let best = -1;
@@ -149,59 +149,130 @@
         }
         return best;
     }
+    /** Map a strip offset back to a canonical seek time (ms) — tuner drag. */
+    function timeAtOffset(off: number): number {
+        for (let i = 0; i < cells.length; i++) {
+            const c = cells[i]!;
+            if (off <= c.cumBefore + c.w) {
+                const f = clamp(0, 1, (off - c.cumBefore) / c.w);
+                const mc = model.cells[i]!;
+                return (mc.canonStartSec + f * mc.canonDurSec) * 1000;
+            }
+        }
+        const last = model.cells[model.cells.length - 1];
+        return last ? (last.canonStartSec + last.canonDurSec) * 1000 : 0;
+    }
+    /** The seek target for picking a cell — the verse's canonical first start. */
+    function seekMsForCell(i: number): number {
+        const mc = model.cells[i];
+        return mc ? mc.canonStartSec * 1000 : 0;
+    }
+    /** Cell recited at a given time (random access) — hover/scrub preview. */
+    function cellViaTime(ms: number): number {
+        const h = findActiveAt(units, sorted, ms / 1000, -1);
+        return h ? (model.cellOfUnit[h.unitIdx] ?? -1) : -1;
+    }
 
-    // rAF while playing: track time, and (tuner/hybrid) keep the playhead centered.
+    const hoverIdx = $derived(hoverMs == null ? -1 : cellViaTime(hoverMs));
+    // Snap mode has no moving needle (the strip is always centered on the active
+    // cell), so instead we ring the cell under where the invisible needle would
+    // sit. Hidden during silence (no cursor while frozen). -1 outside snap mode.
+    const cursorIdx = $derived(
+        config.filmstripMotion === 'snap' && !silent ? nearestCell(offset) : -1,
+    );
+
+    function setFill(frac: number): void {
+        containerEl?.style.setProperty('--cell-active-fill', clamp(0, 1, frac) * 100 + '%');
+    }
+
+    /** A recitation discontinuity (loopback / seek) vs a smooth advance. */
+    function isJump(prevIdx: number, newIdx: number, prevFrac: number, newFrac: number): boolean {
+        if (prevIdx < 0) return false; // first activation — no glide
+        if (newIdx < prevIdx) return true; // back to an earlier verse
+        if (newIdx - prevIdx > JUMP_CELL_GAP) return true; // forward verse skip
+        if (newIdx === prevIdx && newFrac < prevFrac - JUMP_FRAC_EPS) return true; // word loopback
+        return false;
+    }
+    function triggerGlide(): void {
+        jumping = true;
+        animate = true;
+        if (glideTimer) clearTimeout(glideTimer);
+        glideTimer = setTimeout(() => {
+            jumping = false;
+            // Snap keeps its track transition on (it always glides ayah hops);
+            // hybrid/tuner return to direct per-frame writes.
+            if (config.filmstripMotion !== 'snap') animate = false;
+        }, GLIDE_MS);
+    }
+
+    /** One rAF step of recitation-driven playback. */
+    function drivePlayback(): void {
+        const tSec = (getTimeMs() + config.leadMs) / 1000;
+        const r = recitationAt(tSec, lastActiveUnit);
+        if (!r) {
+            // Silence: freeze — hold offset + fill, drop highlight/cursor. The
+            // last active cell (frozenIdx) stays as a de-accented, held bar.
+            silent = true;
+            return;
+        }
+        lastActiveUnit = r.unitIdx;
+        const jumped = isJump(activeIdx, r.idx, cellFrac, r.frac);
+        silent = false;
+        activeIdx = r.idx;
+        cellFrac = r.frac;
+        frozenIdx = r.idx;
+        setFill(r.frac);
+        if (jumped) triggerGlide();
+        if (config.filmstripMotion === 'snap') return; // centering effect owns offset
+        if (!jumping) animate = false;
+        offset = offsetForReci(r);
+    }
+
+    // rAF while playing: drive the recitation mapping (all modes).
     $effect(() => {
         if (!playing) return;
         let raf = 0;
         const loop = (): void => {
-            nowMs = getTimeMs();
-            if (!dragging && scrubMs == null && config.filmstripMotion !== 'snap') {
-                animate = false;
-                offset = continuousOffset(nowMs);
-            }
+            if (!dragging && scrubMs == null) drivePlayback();
             raf = requestAnimationFrame(loop);
         };
         raf = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(raf);
     });
 
-    // Per-frame fill is driven by ONE CSS variable on the container instead of
-    // a `style:width` write on every cell (which previously rebuilt N inline
-    // styles per frame — 286 for Baqarah). The active cell reads the var via
-    // `.cell.active .cell-fill { width: var(--cell-active-fill, 0%) }`;
-    // reached cells are pinned to 100% and future cells to 0% in plain CSS.
-    $effect(() => {
-        if (!containerEl) return;
-        const i = activeIdx;
-        if (i < 0) {
-            containerEl.style.removeProperty('--cell-active-fill');
-            return;
-        }
-        const c = cells[i];
-        if (!c) return;
-        const f = clamp(0, 1, (nowMs - c.startMs) / c.dur);
-        containerEl.style.setProperty('--cell-active-fill', f * 100 + '%');
-    });
-
-    // Snap mode: glide the active cell to center when the ayah changes. Yields
-    // to a progress-bar scrub (the scroll-follow effect owns offset then).
+    // Snap mode: glide the active cell to center when the ayah changes (now
+    // recitation-driven, so a cross-verse loopback scrolls back here). Yields to
+    // a progress-bar scrub (the scroll-follow effect owns offset then).
     $effect(() => {
         void activeIdx;
         if (config.filmstripMotion !== 'snap' || dragging || scrubMs != null
-            || activeIdx < 0 || cw === 0) return;
+            || silent || activeIdx < 0 || cw === 0) return;
         animate = true;
         offset = offsetForCellCenter(activeIdx);
     });
 
     // Progress-bar drag → scroll-follow the dragged time (both motion modes).
-    // Direct offset write (no CSS transition) mirrors the strip's own drag, so
-    // it tracks the pointer smoothly; the playback driver above is suspended
-    // while scrubMs is non-null. On release the parent seeks + the strip settles.
+    // Maps the time through the recitation timeline so it tracks the recited
+    // position (correct under overlap/repeats). The playback driver is suspended
+    // while scrubMs is non-null. Silence in the scrub → hold (no move).
     $effect(() => {
         if (scrubMs == null || cw === 0) return;
         animate = false;
-        offset = clamp(0, lastRight, continuousOffset(scrubMs));
+        const r = recitationAt(scrubMs / 1000, -1);
+        if (r) offset = clamp(0, lastRight, offsetForReci(r));
+    });
+
+    // Reset recitation state when the chapter (units identity) changes.
+    $effect(() => {
+        void units; // track
+        activeIdx = -1;
+        cellFrac = 0;
+        silent = false;
+        frozenIdx = -1;
+        lastActiveUnit = -1;
+        if (glideTimer) clearTimeout(glideTimer);
+        jumping = false;
+        containerEl?.style.removeProperty('--cell-active-fill');
     });
 
     // Drag — pan the strip; release scrubs (tuner) or snaps to an ayah.
@@ -240,7 +311,7 @@
             if (i >= 0) {
                 animate = true;
                 offset = offsetForCellCenter(i);
-                onSeek(cells[i]!.startMs);
+                onSeek(seekMsForCell(i));
             }
         }
     }
@@ -250,7 +321,7 @@
         if (i < 0) return;
         animate = true;
         offset = offsetForCellCenter(i);
-        onSeek(cells[i]!.startMs);
+        onSeek(seekMsForCell(i));
     }
 
     /** Map a viewport x to the cell index under it (needle at cw/2; track
@@ -262,30 +333,44 @@
         return nearestCell(clamp(0, lastRight, off));
     }
 
-    /** Speculative-prewarm hook on pointer hover (no button): warm the position
-     *  of the cell under the pointer. Suppressed while dragging (the strip owns
-     *  the pointer then). */
+    /** Speculative-prewarm hook on pointer hover (no button): warm the seek
+     *  position of the cell under the pointer. Suppressed while dragging. */
     function onHoverMove(e: PointerEvent): void {
         if (!onHoverPrewarm || dragging) return;
         const i = cellAtClientX(e.clientX);
-        if (i >= 0) onHoverPrewarm(cells[i]!.startMs);
+        if (i >= 0) onHoverPrewarm(seekMsForCell(i));
     }
 
     /** Re-sync after a seek while paused (parent calls this). */
     export function refresh(): void {
-        nowMs = getTimeMs();
         if (cw === 0) return;
+        const r = recitationAt((getTimeMs() + config.leadMs) / 1000, -1);
+        if (!r) {
+            // Landed in a gap → hold the frozen state (or nothing, pre-first).
+            silent = true;
+            return;
+        }
+        silent = false;
+        activeIdx = r.idx;
+        cellFrac = r.frac;
+        frozenIdx = r.idx;
+        lastActiveUnit = r.unitIdx;
+        setFill(r.frac);
         animate = true;
-        offset = config.filmstripMotion === 'tuner'
-            ? continuousOffset(nowMs)
-            : (activeIdx >= 0 ? offsetForCellCenter(activeIdx) : offset);
+        offset = config.filmstripMotion === 'snap'
+            ? offsetForCellCenter(r.idx)
+            : offsetForReci(r);
     }
 
     /** Force the new chapter's first ayah into view before audio canplay. */
     export function showFirstAyah(): void {
-        const first = cells[0];
-        if (!first) return;
-        nowMs = first.startMs;
+        if (!cells.length) return;
+        activeIdx = -1;
+        cellFrac = 0;
+        silent = false;
+        frozenIdx = -1;
+        lastActiveUnit = -1;
+        containerEl?.style.removeProperty('--cell-active-fill');
         animate = true;
         offset = offsetForCellCenter(0);
     }
@@ -312,7 +397,7 @@
                 const i = clamp(0, cells.length - 1, (activeIdx < 0 ? 0 : activeIdx) + d);
                 animate = true;
                 offset = offsetForCellCenter(i);
-                onSeek(cells[i]!.startMs);
+                onSeek(seekMsForCell(i));
             }
         }}
     >
@@ -326,20 +411,21 @@
             {#each cells as c, i (c.ayah)}
                 <div
                     class="cell"
-                    class:active={i === activeIdx}
-                    class:reached={i < activeIdx}
+                    class:active={!silent && i === activeIdx}
+                    class:reached={i < (silent ? frozenIdx : activeIdx)}
+                    class:frozen={silent && i === frozenIdx}
                     class:preview={i === hoverIdx && i !== activeIdx}
                     class:cursor={i === cursorIdx}
                     style:width="{c.w}px"
                     style:margin-right="{config.filmstripGapPx}px"
                 >
-                    <div class="cell-fill"></div>
+                    <div class="cell-fill" class:glide={jumping && i === activeIdx}></div>
                     <span class="cell-num">{c.ayah}</span>
                 </div>
             {/each}
             <div class="pad" style:width="{pad}px"></div>
         </div>
-        {#if config.filmstripMotion !== 'snap'}
+        {#if config.filmstripMotion !== 'snap' && !silent}
             <div class="needle" aria-hidden="true"></div>
         {/if}
         <div class="fade fade-l" aria-hidden="true"></div>
@@ -409,6 +495,12 @@
         border-color: var(--accent);
         background: var(--accent-tint-soft);
     }
+    /* Frozen cell — the verse held under a silence pause. De-accented (the
+     *  highlight drops) but keeps its partial fill so the bar reads "held, not
+     *  finished" until recitation regenerates. */
+    .cell.frozen {
+        border-color: var(--border-default);
+    }
     /* Snap-mode cursor cell — the ayah under the invisible needle (active cell
      *  while playing, drag target while scrubbing). An inset accent ring keeps it
      *  distinct from `.active`'s tinted fill so both can show at once mid-drag. */
@@ -416,7 +508,7 @@
         border-color: var(--accent);
         box-shadow: inset 0 0 0 1px var(--accent);
     }
-    /* Progress-bar hover preview — the verse spanned by the hovered time. */
+    /* Progress-bar hover preview — the verse recited at the hovered time. */
     .cell.preview {
         border-color: var(--accent-strong);
         border-style: dashed;
@@ -432,14 +524,20 @@
         background: var(--accent-tint);
         pointer-events: none;
     }
-    /* Active cell width is driven by `--cell-active-fill` on the .filmstrip
-       container, written once per rAF tick by the imperative effect. */
-    .cell.active .cell-fill {
+    /* Active + frozen cells read the per-frame fill var (written by the driver);
+       the frozen one simply holds the last value. */
+    .cell.active .cell-fill,
+    .cell.frozen .cell-fill {
         width: var(--cell-active-fill, 0%);
     }
     .cell.reached .cell-fill {
         width: 100%;
         background: var(--accent-tint-soft);
+    }
+    /* Eased fill ONLY during a loopback/seek glide — never a permanent
+       transition (that would lag every forward-play frame). */
+    .cell.active .cell-fill.glide {
+        transition: width var(--t-base, 200ms) var(--ease-out-quart, ease);
     }
     .cell-num {
         position: relative;
@@ -483,7 +581,8 @@
     }
     @media (prefers-reduced-motion: reduce) {
         .track.animate,
-        .track.snap-glide.animate {
+        .track.snap-glide.animate,
+        .cell.active .cell-fill.glide {
             transition: none;
         }
     }
