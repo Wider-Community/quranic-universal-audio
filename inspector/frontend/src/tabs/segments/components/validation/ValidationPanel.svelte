@@ -15,7 +15,13 @@
      * Virtualization: the cards container for the open category virtualizes
      * its list when the item count exceeds VIRTUALIZE_THRESHOLD. Only the
      * window of cards intersecting the viewport (plus BUFFER_ROWS above/below)
-     * are mounted; spacer divs preserve the container's scroll height.
+     * are mounted; spacer divs preserve the container's scroll height. Row
+     * heights are measured per-row into `cardHeights` (prefix-summed into
+     * `cardOffsets`, binary-searched to map scrollTop → first visible row);
+     * unmeasured rows fall back to the running `estCardHeight`. Per-row sizing
+     * is required because context-shown accordions (failed / missing_words /
+     * audio_bleeding) render tall, highly variable cards — a single global
+     * average fed back into the window, which oscillated and hard-froze the tab.
      * Card context-state (Show/Hide Context toggle) is tracked in a per-type
      * Map so cards restore their state on re-mount as the window slides.
      */
@@ -124,8 +130,58 @@
     $: valUiScrollTop.set(cardsScrollTop);
 
     let cardsViewportHeight = CARDS_VIEWPORT_HEIGHT_FALLBACK;
-    let measuredCardHeight = $valUiMeasuredCardHeight ?? FALLBACK_CARD_HEIGHT;
-    $: valUiMeasuredCardHeight.set(measuredCardHeight);
+
+    // Per-row virtualization model. `cardHeights[i]` is the measured slot height
+    // (card box + 8px gap) of displayedItems[i]; unmeasured rows fall back to
+    // `estCardHeight`. `cardOffsets` are prefix sums (row tops) and a binary
+    // search maps scrollTop → first visible row. Measuring a row updates only
+    // that row's height, so window position never feeds back into a single
+    // global average — this is what stops the variable-height oscillation that
+    // hard-froze context-shown accordions (failed / missing_words /
+    // audio_bleeding) on scroll. `estCardHeight` only sizes the unseen region.
+    let estCardHeight = $valUiMeasuredCardHeight ?? FALLBACK_CARD_HEIGHT;
+    $: valUiMeasuredCardHeight.set(estCardHeight);
+    let cardHeights: number[] = [];
+    let cardOffsets: number[] = [0];
+    let totalContentHeight = 0;
+
+    function recomputeOffsets(): void {
+        const n = openTotal;
+        const offsets: number[] = new Array(n + 1);
+        let acc = 0;
+        offsets[0] = 0;
+        for (let i = 0; i < n; i++) {
+            acc += cardHeights[i] ?? estCardHeight;
+            offsets[i + 1] = acc;
+        }
+        cardOffsets = offsets;
+        totalContentHeight = acc;
+    }
+
+    /** Largest row index whose top offset is ≤ y (clamped to [0, openTotal]). */
+    function rowAtOffset(y: number): number {
+        let lo = 0;
+        let hi = openTotal;
+        while (lo < hi) {
+            const mid = (lo + hi + 1) >> 1;
+            if ((cardOffsets[mid] ?? Infinity) <= y) lo = mid;
+            else hi = mid - 1;
+        }
+        return lo;
+    }
+
+    // Reset the height model when the open category changes or the row count
+    // shifts (filter / structural edit). Re-measure is cheap — only the mounted
+    // window is walked.
+    let _prevVirtKey = '';
+    $: {
+        const key = `${openCategory}|${openTotal}`;
+        if (key !== _prevVirtKey) {
+            _prevVirtKey = key;
+            cardHeights = [];
+            recomputeOffsets();
+        }
+    }
 
     let cardsContainerEl: HTMLDivElement | null = null;
     let _hasRestoredScroll = false;
@@ -150,16 +206,35 @@
     // After each update: re-measure card heights + sync window refs → Map.
     // Two concerns merged into one afterUpdate to avoid duplicate DOM walks.
     afterUpdate(() => {
-        // Measure
+        // Measure each mounted card into its absolute slot; refresh the unseen-
+        // region estimate from the window average. Only the changed rows pin —
+        // a row's height is independent of scroll, so this converges.
         if (cardsContainerEl) {
+            cardsViewportHeight = cardsContainerEl.clientHeight || cardsViewportHeight;
             const cards = cardsContainerEl.querySelectorAll<HTMLElement>('.val-card-wrapper');
             if (cards.length > 0) {
+                let changed = false;
                 let sum = 0;
-                for (const c of cards) sum += c.getBoundingClientRect().height;
-                const avg = sum / cards.length + 8; // +gap
-                if (avg > 20 && Math.abs(avg - measuredCardHeight) > 4) {
-                    measuredCardHeight = avg;
+                for (let li = 0; li < cards.length; li++) {
+                    const el = cards[li];
+                    if (!el) continue;
+                    const h = el.getBoundingClientRect().height + 8; // +gap
+                    if (h <= 20) continue;
+                    sum += h;
+                    const absIdx = startIdx + li;
+                    const prev = cardHeights[absIdx];
+                    if (prev == null || Math.abs(prev - h) > 1) {
+                        cardHeights[absIdx] = h;
+                        changed = true;
+                    }
                 }
+                const avg = sum / cards.length;
+                let estChanged = false;
+                if (avg > 20 && Math.abs(avg - estCardHeight) > 4) {
+                    estCardHeight = avg;
+                    estChanged = true;
+                }
+                if (changed || estChanged) recomputeOffsets();
             }
         }
         // Sync window-slice refs to absolute-index Map
@@ -176,7 +251,7 @@
     $: if (openCategory !== _prevOpenCategory) {
         _prevOpenCategory = openCategory;
         cardsScrollTop = 0;
-        measuredCardHeight = FALLBACK_CARD_HEIGHT;
+        estCardHeight = FALLBACK_CARD_HEIGHT;
         if (cardsContainerEl) {
             cardsContainerEl.scrollTop = 0;
         }
@@ -629,12 +704,12 @@
         }
         return -1;
     })();
-    $: baseStartIdx = virtualize
-        ? Math.max(0, Math.floor(cardsScrollTop / measuredCardHeight) - BUFFER_ROWS)
-        : 0;
-    $: baseEndIdx = virtualize
-        ? Math.min(openTotal, Math.ceil((cardsScrollTop + cardsViewportHeight) / measuredCardHeight) + BUFFER_ROWS)
-        : openTotal;
+    $: baseStartIdx = (void cardOffsets, virtualize
+        ? Math.max(0, rowAtOffset(cardsScrollTop) - BUFFER_ROWS)
+        : 0);
+    $: baseEndIdx = (void cardOffsets, virtualize
+        ? Math.min(openTotal, rowAtOffset(cardsScrollTop + cardsViewportHeight) + 1 + BUFFER_ROWS)
+        : openTotal);
     // Expand the window to cover the editing card so scrolling away doesn't
     // unmount it. Bound check against openTotal handles items added/removed
     // by re-validation while still in edit mode.
@@ -644,8 +719,10 @@
     $: endIdx = virtualize && editingItemIdx >= 0
         ? Math.max(baseEndIdx, editingItemIdx + 1)
         : baseEndIdx;
-    $: topSpacerPx = virtualize ? startIdx * measuredCardHeight : 0;
-    $: bottomSpacerPx = virtualize ? Math.max(0, (openTotal - endIdx) * measuredCardHeight) : 0;
+    $: topSpacerPx = virtualize ? (cardOffsets[startIdx] ?? 0) : 0;
+    $: bottomSpacerPx = virtualize
+        ? Math.max(0, totalContentHeight - (cardOffsets[endIdx] ?? totalContentHeight))
+        : 0;
 
     // ---- ErrorCard refs (window-slice array, synced to absolute Map in afterUpdate) ----
     // `windowCardRefs` holds bind:this refs for the currently rendered slice.
