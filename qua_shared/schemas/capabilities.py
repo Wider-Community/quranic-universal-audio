@@ -479,6 +479,16 @@ CAPABILITIES: tuple[Capability, ...] = (
         contributor=False,
         maintainer=False,
     ),
+    _c(
+        "segments.see_flagger_identity",
+        G_IDENTITY,
+        "See who flagged a segment",
+        "Reveal the full login and id of the flagger and follow-up authors on "
+        "a flagged segment. Others see only the author's role (e.g. "
+        "'a contributor').",
+        contributor=False,
+        maintainer=True,
+    ),
 )
 
 

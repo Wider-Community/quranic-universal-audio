@@ -38,6 +38,12 @@
         /** Anatomy mode: show each slot's NAME ("Reference", "Confidence", …)
          *  in place of a value, so the card reads as a labelled diagram. */
         placeholder?: boolean;
+        /** Depict the segment as already flagged (warm flag button fill). */
+        flagged?: boolean;
+        /** Render a mock flag comment thread below the card. */
+        showFlagComment?: boolean;
+        /** Comment text shown in the mock thread (when `showFlagComment`). */
+        flagComment?: string;
     }
 
     let {
@@ -56,6 +62,9 @@
         compact = false,
         emphasize = [],
         placeholder = false,
+        flagged = false,
+        showFlagComment = false,
+        flagComment = 'The reciter pauses mid-word here. Not sure if this should be one segment or two; second opinion welcome.',
     }: Props = $props();
 
     // In placeholder (anatomy) mode each slot shows its own name.
@@ -74,6 +83,7 @@
     }
 </script>
 
+<div class="eg-mock-wrap" class:eg-mock-flagged={showFlagComment}>
 <div class="seg-row eg-static" class:eg-compact={compact} aria-hidden="true">
     <div class="seg-left">
         <div class="eg-wave {ec('peak')}">
@@ -122,6 +132,18 @@
                 <div class="seg-row-play-actions {ec('play')}">
                     <button type="button" tabindex="-1" class="btn btn-sm seg-card-play-btn">&#9654;</button>
                     <button type="button" tabindex="-1" class="btn btn-sm seg-card-goto-btn">Go to</button>
+                    <button
+                        type="button"
+                        tabindex="-1"
+                        aria-label="Flag segment"
+                        class="btn btn-sm seg-flag-btn eg-flag-btn {ec('flag')}"
+                        class:is-flagged={flagged}
+                    >
+                        <svg class="seg-flag-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                            <path d="M3.5 1.5v13" />
+                            <path d="M3.5 2.2h8.2l-1.7 2.6 1.7 2.6H3.5z" />
+                        </svg>
+                    </button>
                 </div>
                 <div class="seg-actions">
                     <button type="button" tabindex="-1" class="btn btn-sm btn-adjust {ec('adjust')}">Adjust</button>
@@ -166,4 +188,28 @@
             <div class="seg-text-body {ec('arabic')}" class:eg-ph-text={placeholder}>{dArabic}</div>
         </div>
     {/if}
+</div>
+
+{#if showFlagComment}
+    <div class="eg-flag-thread">
+        <div class="eg-flag-comment">
+            <div class="eg-flag-comment-head">
+                <span class="eg-flag-author">a contributor</span>
+                <span class="eg-flag-time">2 hours ago</span>
+            </div>
+            <div class="eg-flag-body">{flagComment}</div>
+        </div>
+        <div class="eg-flag-comment eg-flag-reply-comment">
+            <div class="eg-flag-comment-head">
+                <span class="eg-flag-author eg-flag-author-reply">a maintainer</span>
+                <span class="eg-flag-time">12 minutes ago</span>
+            </div>
+            <div class="eg-flag-body">Good catch. Leave it as one segment; the pause is too short to split on.</div>
+        </div>
+        <div class="eg-flag-reply">
+            <span class="eg-flag-reply-input">Add a reply…</span>
+            <span class="eg-flag-reply-send">Reply</span>
+        </div>
+    </div>
+{/if}
 </div>

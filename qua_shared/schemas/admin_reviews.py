@@ -109,10 +109,9 @@ class AdminReviewTransition(BaseModel):
 class AdminReviewDetail(BaseModel):
     """Full per-recitation payload for the General drawer.
 
-    Carries everything except the live validation counts (lazy-loaded via
-    ``/api/admin/reviews/<slug>/validation`` only when the accordion expands —
-    ``validate_reciter_segments`` walks the bucket and is too expensive to
-    eager-fetch on every drawer open).
+    ``flagged_issues_count`` is the number of segments carrying a manual flag
+    (``detailed.json`` segs with a ``flag`` block). Computed from one cached
+    ``load_detailed`` read on drawer open; the FE hides the pill when it is 0.
     """
 
     model_config = ConfigDict(extra="allow")
@@ -130,18 +129,4 @@ class AdminReviewDetail(BaseModel):
     claim_history: list[AdminReviewClaimHistoryEntry] = Field(default_factory=list)
     transitions: list[AdminReviewTransition] = Field(default_factory=list)
     timestamps_job_ids: list[str] = Field(default_factory=list)
-
-
-class AdminReviewValidation(BaseModel):
-    """Validation category counts for one slug.
-
-    ``has_data`` is False when ``validate_reciter_segments`` returns None
-    (no ``detailed.json`` on the bucket yet — typical for fresh
-    ``awaiting_review`` rows that haven't been touched).
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    slug: str
-    category_counts: dict[str, int] = Field(default_factory=dict)
-    has_data: bool = False
+    flagged_issues_count: int = 0

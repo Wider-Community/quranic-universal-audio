@@ -23,7 +23,6 @@ from qua_shared.schemas import (
     AdminReviewRow,
     AdminReviewsResponse,
     AdminReviewTransition,
-    AdminReviewValidation,
     MarkReadySubmission,
     ReciterState,
 )
@@ -251,6 +250,12 @@ def get_review_detail(slug: str) -> dict | None:
 
     job_ids = _serde.json_loads(base["timestamps_job_ids"]) or []
 
+    # Flagged-issue count from detailed.json (one cached read on drawer open).
+    from services.segments.flags import count_flagged
+    from services.storage.data_loader import load_detailed
+
+    flagged_count = count_flagged(load_detailed(slug) or [])
+
     return AdminReviewDetail(
         slug=base["slug"],
         state=base["state"],
@@ -265,25 +270,5 @@ def get_review_detail(slug: str) -> dict | None:
         claim_history=claim_history,
         transitions=transitions,
         timestamps_job_ids=job_ids,
-    ).model_dump(mode="json")
-
-
-def get_review_validation(slug: str) -> dict:
-    """Validation category counts for a slug.
-
-    Wraps the existing ``validate_reciter_segments`` and returns just the
-    accordion-shaped counts. ``has_data=False`` when the reciter has no
-    ``detailed.json`` on the bucket yet (fresh ``awaiting_review`` rows).
-    """
-    # Local import — the validation module pulls heavy bucket loaders at
-    # import time; keep the top-level module light for the list endpoint.
-    from services.validation import validate_reciter_segments
-
-    result = validate_reciter_segments(slug)
-    if result is None:
-        return AdminReviewValidation(slug=slug, has_data=False).model_dump(mode="json")
-    return AdminReviewValidation(
-        slug=slug,
-        category_counts=result.get("category_counts") or {},
-        has_data=True,
+        flagged_issues_count=flagged_count,
     ).model_dump(mode="json")

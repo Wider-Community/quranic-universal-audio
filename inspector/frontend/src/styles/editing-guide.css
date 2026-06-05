@@ -131,6 +131,114 @@
     font-size: 0.9rem;
 }
 
+/* ---- flag button (mock, for the flagging guide) ---- */
+/* The real flag button styles live scoped in SegmentRow.svelte; the mock card
+ * is a separate component, so the guide redeclares an inert visual twin here. */
+.eg-flag-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    padding: 6px 8px;
+    color: var(--text-muted);
+    background: var(--panel);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-2, 5px);
+}
+.eg-flag-btn.is-flagged {
+    color: var(--state-warn-fg);
+    background: var(--state-warn-bg);
+    border-color: var(--state-warn-border);
+}
+.eg-flag-btn .seg-flag-icon {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+.eg-flag-btn.is-flagged .seg-flag-icon path:nth-child(2) {
+    fill: var(--state-warn-bg);
+}
+
+/* ---- mock flag comment thread ---- */
+.eg-mock-wrap.eg-mock-flagged {
+    display: flex;
+    flex-direction: column;
+}
+.eg-flag-thread {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2, 8px);
+    margin: 8px 0 0 12px;
+    padding: 12px;
+    background: var(--canvas-inset);
+    border: 1px solid var(--state-warn-border);
+    border-radius: var(--r-2, 5px);
+}
+.eg-flag-comment {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.eg-flag-reply-comment {
+    padding-left: 12px;
+    border-left: 1px solid var(--border-quiet);
+}
+.eg-flag-comment-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.eg-flag-author {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--state-warn-fg);
+}
+.eg-flag-author-reply {
+    color: var(--text-secondary);
+}
+.eg-flag-time {
+    margin-left: auto;
+    font-size: 10.5px;
+    color: var(--text-faint);
+}
+.eg-flag-body {
+    margin: 0;
+    padding: 8px 12px;
+    background: var(--panel);
+    border-radius: 3px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+.eg-flag-comment:first-child .eg-flag-body {
+    border-left: 2px solid var(--state-warn-border);
+}
+.eg-flag-reply {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.eg-flag-reply-input {
+    flex: 1;
+    padding: 7px 8px;
+    font-size: 13px;
+    color: var(--text-muted);
+    background: var(--panel);
+    border: 1px solid var(--border-default);
+    border-radius: 3px;
+}
+.eg-flag-reply-send {
+    flex: 0 0 auto;
+    padding: 5px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--accent-fg);
+    background: var(--state-warn-fg);
+    border-radius: var(--r-2, 5px);
+}
+
 /* ---- special ops (auto-fill / ignore) ---- */
 .eg-special {
     display: grid;

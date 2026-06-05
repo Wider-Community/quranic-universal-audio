@@ -19,6 +19,7 @@ KNOWN_SEGMENT_FIELDS = {
     "qalqala_letter",  # persisted classifier optimisation (migrate_wip §2)
     "is_boundary_adj",  # persisted classifier optimisation (migrate_wip §2)
     "is_wasl",  # declared DetailedSegment field; persisted when truthy
+    "flag",  # flagged-issue thread (SegmentFlag); persisted when present
     "ignored_categories",
     "ignored",
     "audio_url",

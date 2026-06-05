@@ -27,10 +27,13 @@ from constants import (
 from services import cache
 from services import state as state_service
 from services.audio_meta import chapter_meta, vbr_chapters_for_reciter
+from services.auth.auth import current_user
+from services.auth.capabilities import can
 from services.data_loader import (
     load_detailed,
     resolve_pad,
 )
+from services.segments.flags import flag_view
 from services.segments_query import get_chapter_data
 from services.state import catalog as catalog_service
 from services.validation.registry import ALL_CATEGORIES
@@ -144,7 +147,13 @@ def seg_auto_split_map(reciter):
 
 @seg_data_bp.route("/all/<reciter>")
 def seg_all(reciter):
-    """Return all segments across all chapters for a reciter."""
+    """Return all segments across all chapters for a reciter.
+
+    Flag threads are reduced to the FE-facing shape here: author identity is
+    redacted to the role only unless the viewer holds
+    ``segments.see_flagger_identity``, and each comment carries a ``mine``
+    marker so the flagger can edit their own root comment.
+    """
     entries = load_detailed(reciter)
     if not entries:
         return jsonify({"error": "Reciter not found"}), 404
@@ -154,6 +163,10 @@ def seg_all(reciter):
     # post Migration #5. The legacy per-entry ``audio`` field is no longer
     # written by the extractor and no longer read here.
     from services.audio.audio_meta import chapter_urls
+
+    viewer = current_user()
+    viewer_id = getattr(viewer, "hf_user_id", None)
+    can_see_flagger = can(viewer, "segments.see_flagger_identity")
 
     audio_by_chapter: dict[str, str] = dict(chapter_urls(reciter))
     segments = []
@@ -191,6 +204,8 @@ def seg_all(reciter):
                 seg_dict["ignored_categories"] = ["_all"]
             if seg.get("is_wasl"):
                 seg_dict["is_wasl"] = True
+            if seg.get("flag"):
+                seg_dict["flag"] = flag_view(seg["flag"], viewer_id, can_see_flagger)
             segments.append(seg_dict)
 
     pad_left_ms, pad_right_ms, min_silence_floor_ms = resolve_pad(cache.get_seg_meta(reciter))
