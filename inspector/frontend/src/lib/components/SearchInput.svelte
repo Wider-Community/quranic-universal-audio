@@ -60,6 +60,8 @@
     .icon {
         position: absolute;
         left: var(--s-3);
+        top: 50%;
+        transform: translateY(-50%);
         display: flex;
         color: var(--text-faint);
         pointer-events: none;
@@ -90,6 +92,8 @@
     .count {
         position: absolute;
         right: var(--s-3);
+        top: 50%;
+        transform: translateY(-50%);
         font-size: 10.5px;
         color: var(--text-faint);
         font-family: var(--font-mono);
