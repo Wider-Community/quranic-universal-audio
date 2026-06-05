@@ -12,6 +12,7 @@ paths:
 - Prefer the simplest solution that actually works
 - Avoid premature optimization
 - Optimize for clarity over cleverness
+- Do not overengineer or overabstract
 
 ### DRY (Don't Repeat Yourself)
 
@@ -23,7 +24,6 @@ paths:
 
 - Do not build features or abstractions before they are needed
 - Avoid speculative generality
-- Start simple, then refactor when the pressure is real
 
 ## File Organization
 
@@ -41,19 +41,7 @@ ALWAYS handle errors comprehensively:
 - Log detailed error context on the server side
 - Never silently swallow errors
 
-## Input Validation
-
-ALWAYS validate at system boundaries:
-- Validate all user input before processing
-- Use schema-based validation where available
-- Fail fast with clear error messages
-- Never trust external data (API responses, user input, file content)
-
 ## Code Smells to Avoid
-
-### Deep Nesting
-
-Prefer early returns over nested conditionals once the logic starts stacking.
 
 ### Magic Numbers
 
