@@ -1,11 +1,6 @@
 /**
  * Shared Arabic text utilities — tashkeel stripping, character grouping,
  * letter-equivalence helpers shared across timestamps and animation tabs.
- *
- * Cross-word tajweed bridge detection used to live here as
- * ``IDGHAM_GHUNNAH_START``; it now flows from the backend route
- * ``GET /api/ts/tajweed/<verse_ref>`` (powered by ``quranic_phonemizer``)
- * and is consumed via ``loadTajweedBridges`` in ``lib/recitation-data``.
  */
 
 export const TASHKEEL = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u08F0-\u08F2]/g;

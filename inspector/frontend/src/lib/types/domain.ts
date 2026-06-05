@@ -195,6 +195,10 @@ export interface PhonemeInterval {
     geminate_start?: boolean;
     /** Set on the second half of a split geminate; consumers use this to skip rendering. */
     geminate_end?: boolean;
+    /** Cross-word tajweed bridge rule (idgham) when this phone is a merger that
+     *  fuses with the previous word; the Timestamps tab renders it as a tile
+     *  between word blocks. Baked into the shard at generation (schema v3). */
+    bridge?: string;
 }
 
 /** Single letter with optional per-letter timing. */

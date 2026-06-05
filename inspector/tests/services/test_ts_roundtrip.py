@@ -95,7 +95,7 @@ def test_read_path_is_byte_passthrough(tmp_reciter_dir):
     # The inflated form decodes to the segment-array shard shape.
     inflated = data_dir.read_timestamps_chapter(SLUG, chapter)
     shard = orjson.loads(inflated)
-    assert shard["_meta"]["schema_version"] == 2
+    assert shard["_meta"]["schema_version"] == 3
     assert isinstance(shard["segments"], list)
     assert all(set(s) == {"ref", "t", "words"} for s in shard["segments"])
 

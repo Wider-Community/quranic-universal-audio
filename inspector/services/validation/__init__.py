@@ -32,10 +32,9 @@ from services.validation._structural import _check_structural_errors
 
 # Phonemizer is no longer loaded in the validate runtime path. The phonemic
 # side of boundary_adj is captured at backfill / extraction time via
-# ``scripts/backfills/backfill_boundary_adj.py`` (the sole quranic_phonemizer
-# consumer in the project) and persisted as ``is_boundary_adj`` on every
-# segment. The classifier reads the persisted value instead of recomputing —
-# canonical=None throughout the runtime path.
+# ``scripts/backfills/backfill_boundary_adj.py`` and persisted as
+# ``is_boundary_adj`` on every segment. The classifier reads the persisted
+# value instead of recomputing — canonical=None throughout the runtime path.
 from services.validation.classifier import (
     _check_boundary_adj,
     classify_entry,

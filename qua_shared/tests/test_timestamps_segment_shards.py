@@ -72,7 +72,7 @@ def test_word_shape_widx_s_e_letters_phones():
 
 def test_meta_is_slim_v2():
     meta = _build(_multi_verse_loopback(), _multi_verse_loopback_results())[1]["_meta"]
-    assert meta["schema_version"] == 2
+    assert meta["schema_version"] == 3
     assert meta["chapter"] == 1
     # category normalized: by_surah_audio -> by_surah
     assert meta["audio_category"] == "by_surah"
@@ -137,5 +137,5 @@ def test_src_meta_defaults_to_v2_doc_meta():
     v2 = build_raw_v2([_multi_verse_loopback()], _multi_verse_loopback_results(), CAT)
     shards = build_segment_shards(v2, audio_category=CAT)
     meta = shards[1]["_meta"]
-    assert meta["schema_version"] == 2 and meta["chapter"] == 1
+    assert meta["schema_version"] == 3 and meta["chapter"] == 1
     assert meta["audio_category"] == "by_surah"

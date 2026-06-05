@@ -31,7 +31,7 @@ import type {
     TsVbrResponse,
 } from '../types/api';
 import type { Letter, PhonemeInterval, TsVerseData, TsWord } from '../types/domain';
-import type { BridgeInfo, TajweedBridgesResponse, TsValidationDoc } from '../types/generated/schemas';
+import type { TsValidationDoc } from '../types/generated/schemas';
 
 import {
     type VerseOccasions,
@@ -413,44 +413,6 @@ export async function loadTsValidation(reciter: string): Promise<TsValidationDoc
 }
 
 // ---------------------------------------------------------------------------
-// Cross-word tajweed bridges (GET /api/ts/tajweed/<verse_ref>?stops=...)
-// ---------------------------------------------------------------------------
-
-/** In-flight + resolved cache keyed by `${verseRef}|${stopRefs.join(',')}`.
- *  Stays bounded because the verse-load path replaces verseRef each navigation
- *  and the FE only renders one verse at a time, so the working set is small.
- *  Stop refs are reciter-derived but the BACKEND value is reciter-agnostic — so
- *  two reciters with the same stops at the same verse share both this cache and
- *  the backend lru_cache. */
-const _tajweedBridges: Map<string, Promise<BridgeInfo[]>> = new Map();
-
-/** Fetch cross-word tajweed bridges for `verseRef` under `stopRefs`.
- *
- *  Errors swallow to `[]` so the bridge UI degrades silently — the rest of the
- *  TS tab keeps rendering. The backend route is cheap (lru_cached + warm at
- *  boot), so a failure here is operationally noteworthy but not user-facing. */
-export function loadTajweedBridges(
-    verseRef: string,
-    stopRefs: readonly string[],
-): Promise<BridgeInfo[]> {
-    const key = `${verseRef}|${stopRefs.join(',')}`;
-    const hit = _tajweedBridges.get(key);
-    if (hit) return hit;
-    const url = `/api/ts/tajweed/${verseRef}${
-        stopRefs.length ? `?stops=${stopRefs.join(',')}` : ''
-    }`;
-    const promise = fetchJson<TajweedBridgesResponse>(url)
-        .then((body) => body.bridges ?? [])
-        .catch((e) => {
-            console.warn('loadTajweedBridges failed:', verseRef, e);
-            _tajweedBridges.delete(key); // allow retry on transient failure
-            return [] as BridgeInfo[];
-        });
-    _tajweedBridges.set(key, promise);
-    return promise;
-}
-
-// ---------------------------------------------------------------------------
 // Segment-array assembly
 // ---------------------------------------------------------------------------
 
@@ -539,6 +501,7 @@ export function assembleVerseFromShard(
             };
             if (ph[3] === true) interval.geminate_start = true;
             if (ph[4] === true) interval.geminate_end = true;
+            if (ph[5]) interval.bridge = ph[5] as string;
             intervals.push(interval);
         }
         const phonemeIndices = Array.from(
@@ -697,5 +660,4 @@ export function _resetForTests(): void {
     _dk = null;
     _shards.clear();
     _vbrChapters.clear();
-    _tajweedBridges.clear();
 }
