@@ -500,7 +500,12 @@
             if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
                 e.preventDefault();
                 const d = e.key === 'ArrowRight' ? 1 : -1;
-                const i = clamp(0, cells.length - 1, (activeIdx < 0 ? 0 : activeIdx) + d);
+                // Anchor on the cell recited at the LIVE audio position, not the
+                // (possibly frozen/stale) `activeIdx` — inside a dropped re-take
+                // the active cell can lag, and ±1 off it would skip verses.
+                const live = cellViaTime(getTimeMs());
+                const base = live >= 0 ? live : (activeIdx < 0 ? 0 : activeIdx);
+                const i = clamp(0, cells.length - 1, base + d);
                 glideTo(offsetForCellCenter(i));
                 onSeek(seekMsForCell(i));
             }

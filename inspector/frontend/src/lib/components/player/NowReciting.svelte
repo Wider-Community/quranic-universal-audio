@@ -20,7 +20,9 @@
     import {
         AyahFilmstrip,
         buildFilmstripModel,
+        buildSortedIntervals,
         ControlIcon,
+        findActiveAt,
         RecitationSection,
         type AnimUnit,
         type AyahBoundary,
@@ -33,6 +35,7 @@
         granIconName,
         motionIconName,
         recitationAvailable,
+        recitationAyahAt,
         recitationAyahs,
         recitationConfigStore,
         recitationFocus,
@@ -76,6 +79,25 @@
     // per chapter. Duration-weighted: the cell bar fills to the recited word's
     // share of the verse's spoken time.
     const filmstripModel = $derived(buildFilmstripModel(units, 'duration'));
+
+    // Recitation locator over the full-coverage units — resolves the ayahKey
+    // being RECITED at a time (covers re-takes), published for the footer seek
+    // buttons so prev/next anchor on the actual verse, not canonical-start order.
+    const sortedIntervals = $derived(buildSortedIntervals(units));
+    $effect(() => {
+        const u = units;
+        const sorted = sortedIntervals;
+        if (!u.length) {
+            recitationAyahAt.set(null);
+            return;
+        }
+        recitationAyahAt.set((ms: number): string | null => {
+            const h = findActiveAt(u, sorted, ms / 1000, -1);
+            return h ? (u[h.unitIdx]?.ayahKey ?? null) : null;
+        });
+        return () => recitationAyahAt.set(null);
+    });
+
     const near = (a: number, b: number): boolean => Math.abs(a - b) < 0.001;
     const upcomingLabel = $derived(
         near(config.unreachedOpacity, 0.8) ? 'full'
