@@ -444,9 +444,9 @@ def _mutate_seg_flag(seg: dict, intent: str, comment: str, actor: Actor, now: st
     if intent == "set":
         if not comment:
             return {"error": "A comment is required to flag a segment."}, 400
-        seg["flag"] = SegmentFlag(
-            comment=comment, actor=actor, flagged_at_utc=now
-        ).model_dump(mode="json")
+        seg["flag"] = SegmentFlag(comment=comment, actor=actor, flagged_at_utc=now).model_dump(
+            mode="json"
+        )
         return None
 
     if intent == "edit":
@@ -468,9 +468,9 @@ def _mutate_seg_flag(seg: dict, intent: str, comment: str, actor: Actor, now: st
             return {"error": "A comment is required for a follow-up."}, 400
         flag = SegmentFlag.model_validate(existing)
         reply = FlagFollowUp(comment=comment, actor=actor, at_utc=now)
-        seg["flag"] = flag.model_copy(
-            update={"follow_ups": [*flag.follow_ups, reply]}
-        ).model_dump(mode="json")
+        seg["flag"] = flag.model_copy(update={"follow_ups": [*flag.follow_ups, reply]}).model_dump(
+            mode="json"
+        )
         return None
 
     return {"error": f"unknown flag intent: {intent!r}"}, 400

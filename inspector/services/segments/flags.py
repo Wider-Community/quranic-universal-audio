@@ -52,8 +52,5 @@ def flag_view(flag: dict, viewer_id: str | None, can_see_identity: bool) -> dict
 def count_flagged(entries: list[dict]) -> int:
     """Number of segments carrying a flag across ``detailed.json`` entries."""
     return sum(
-        1
-        for entry in entries
-        for seg in entry.get("segments", [])
-        if seg.get("flag") is not None
+        1 for entry in entries for seg in entry.get("segments", []) if seg.get("flag") is not None
     )
