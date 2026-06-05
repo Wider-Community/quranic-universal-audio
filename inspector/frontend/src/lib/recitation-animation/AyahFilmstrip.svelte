@@ -15,15 +15,21 @@
      *   - snap:   center the active cell only when the ayah changes; drag = snap.
      *
      * User scrub/drag/click stays TIME-based (seeking); playback is the only
-     * recitation-driven path. Every deliberate scroll (click, key, snap-center,
-     * loopback, linear-bar seek) runs through ONE JS tween (`glideTo`) with
-     * distance-proportional duration + ease-in-out, so a one-cell hop and a
-     * scroll to the far end of the strip feel like the same motion. Live drag
-     * and hybrid playback tracking write `offset` directly. Surface-agnostic:
-     * fed `units` + a prebuilt `FilmstripModel` + a time accessor + an onSeek cb.
+     * recitation-driven path. Scroll moves split by kind so they never fight:
+     *   - Continuous playback (hybrid/tuner) tracks the LIVE recited position
+     *     each frame via `stepScroll` — instant in forward play, and on a
+     *     loopback/seek a per-frame catch-up that chases the still-moving target
+     *     (never freezes on a stale snapshot). Scroll, fill and audio stay locked.
+     *   - Discrete moves to a FIXED point (snap-center, click, key, drag-release,
+     *     paused refresh) run through ONE JS tween (`glideTo`) with distance-
+     *     proportional duration + ease-in-out, so a one-cell hop and a far scroll
+     *     feel like the same motion. Live drag writes `offset` directly.
+     * Surface-agnostic: fed `units` + a prebuilt `FilmstripModel` + a time
+     * accessor + an onSeek cb.
      */
     import { type RecitationAnimConfig } from './config';
     import type { FilmstripModel } from './filmstrip-model';
+    import { stepScroll } from './filmstrip-scroll';
     import { buildSortedIntervals, findActiveAt } from './recitation-active';
     import type { AnimUnit } from './types';
 
@@ -84,13 +90,17 @@
     let silent = $state(false); // in a silence gap → frozen, no highlight/cursor
     let frozenIdx = $state(-1); // last active cell, held while silent
     let jumping = $state(false); // mid-glide → cell-fill eases too
+    let following = false; // continuous mode: smoothing offset toward live target
+    let followTarget = 0; // last catch-up target — feeds stepScroll's velocity landing
     let lastActiveUnit = -1; // O(1) fast-path hint for findActiveAt
     let lastTimeMs = -1; // previous frame's audio time, for seek detection
     let fillGlideTimer: ReturnType<typeof setTimeout> | null = null;
 
-    // JS scroll tween — the single source of animated `offset` moves. Distance-
-    // proportional duration + soft ease, so a one-cell hop and a scroll to the
-    // far end of the strip feel like the same motion, just longer.
+    // JS scroll tween for DISCRETE moves to a fixed point (snap-center, click,
+    // key, drag-release, paused refresh). Distance-proportional duration + soft
+    // ease, so a one-cell hop and a far scroll feel like the same motion, just
+    // longer. Continuous playback tracking does NOT use this (it would snapshot a
+    // stale target); it tracks the live position via `stepScroll` instead.
     interface Tween { from: number; to: number; startT: number; dur: number; }
     let tween: Tween | null = null;
     let tweenRaf = 0;
@@ -239,16 +249,30 @@
         tween = null;
         if (tweenRaf) cancelAnimationFrame(tweenRaf);
         tweenRaf = 0;
+        following = false; // drop any continuous catch-up too
+        followTarget = 0;
     }
-    /** Ease the active cell's fill bar over `dur` (a loopback rewind or a seek),
-     *  matched to the strip glide. Off for normal forward play (the bar tracks
-     *  per-frame with no transition, so it can't lag). */
+    /** Ease the active cell's fill bar across a SINGLE loopback/seek rewind, then
+     *  drop the transition so subsequent forward frames track instantly. The
+     *  transition is short and one-shot — holding it across the whole glide would
+     *  make every per-frame `setFill` chase a moving target and visibly lag the
+     *  audio (the fill would crawl, never catching up). */
     function armFillGlide(dur: number): void {
         if (reducedMotion) return;
         containerEl?.style.setProperty('--cell-glide-dur', dur + 'ms');
         jumping = true;
         if (fillGlideTimer) clearTimeout(fillGlideTimer);
+        // One eased step is ~one transition; clear once it has landed so forward
+        // play is instant again. `disarmFillGlide` also clears it on the next
+        // non-jump frame, whichever comes first.
         fillGlideTimer = setTimeout(() => { jumping = false; }, dur);
+    }
+    /** Drop the eased-fill transition the moment forward tracking resumes, so a
+     *  loopback's eased rewind never bleeds into the live per-frame fill. */
+    function disarmFillGlide(): void {
+        if (!jumping) return;
+        jumping = false;
+        if (fillGlideTimer) { clearTimeout(fillGlideTimer); fillGlideTimer = null; }
     }
     /** A discrete strip move (loopback / seek / user nav): glide the strip AND
      *  ease the fill over the same distance-proportional time. */
@@ -293,17 +317,30 @@
 
         const snap = config.filmstripMotion === 'snap';
         const target = snap ? offsetForCellCenter(r.idx) : offsetForReci(r);
-        if (discont) {
-            jumpTo(target); // loopback / seek → glide strip + ease bar
-            return;
-        }
+
         if (snap) {
-            // Smooth forward play: center the new verse on each ayah change.
-            if (r.idx !== prevIdx) glideTo(target);
+            // Snap centers the active cell — a fixed point, not a moving one, so
+            // a one-shot glide is correct. Loopback/seek eases the fill too.
+            if (discont) jumpTo(target);
+            else { disarmFillGlide(); if (r.idx !== prevIdx) glideTo(target); }
             return;
         }
-        if (tween) return; // a glide is still settling — let it own offset
-        offset = target; // hybrid/tuner continuous tracking
+
+        // Hybrid/tuner continuously center the LIVE recited position. `stepScroll`
+        // tracks it instantly in forward play, and on a loopback/seek arms a
+        // smooth catch-up that chases the moving target (never a stale snapshot),
+        // so scroll, fill and audio stay locked together. A discontinuity also
+        // eases the fill once.
+        if (discont) armFillGlide(GLIDE_MIN_MS);
+        else disarmFillGlide();
+        const wasFollowing = following;
+        if (tween) cancelTween(); // a paused-refresh glide can't co-own offset
+        const s = stepScroll(
+            offset, target, discont, wasFollowing, followTarget, lastRight, reducedMotion,
+        );
+        offset = s.offset;
+        following = s.following;
+        followTarget = s.prevTarget;
     }
 
     // rAF while playing: drive the recitation mapping (all modes).

@@ -37,6 +37,7 @@ export {
     type WordFrac,
     type WordWeighting,
 } from './filmstrip-model';
+export { stepScroll, type ScrollState } from './filmstrip-scroll';
 export type {
     AnimUnit,
     AyahBoundary,
