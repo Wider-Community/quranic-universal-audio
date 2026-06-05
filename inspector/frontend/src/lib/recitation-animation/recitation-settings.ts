@@ -46,6 +46,14 @@ export const recitationAyahStarts: Readable<number[]> = derived(
  *  Timestamps or before the first focus arrives — callers gate on it. */
 export const recitationFocus = writable<{ surah: number; ayah: number } | null>(null);
 
+/** Resolve the ayahKey ("surah:ayah") actually being RECITED at a chapter-
+ *  absolute time (ms), via the recitation locator over the full-coverage units
+ *  — or null in a real silence gap. Published by NowReciting (closes over the
+ *  loaded chapter's units); read by the footer seek buttons so prev/next land
+ *  one verse away even when the playhead sits inside a re-take whose canonical
+ *  start ordering doesn't match the audio. `null` when no chapter is loaded. */
+export const recitationAyahAt = writable<((ms: number) => string | null) | null>(null);
+
 // Persist config + collapse on every change (skip the initial subscribe fire).
 let persistReady = false;
 function persist(): void {

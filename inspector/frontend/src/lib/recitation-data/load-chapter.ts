@@ -7,6 +7,12 @@
  * or `null` when the reciter/chapter has no timestamps shard (caller hides the
  * section). Keeps the dashboard consumer free of any `tabs/*` import.
  *
+ * Each verse's geometry + text come from its canonical occasion, but EVERY
+ * occasion's recited span (loopbacks / re-dos) is folded onto the units via
+ * `chapterOccasionIntervals` so the recitation locator covers the full chapter
+ * audio — the highlight travels back into a re-recited verse instead of freezing
+ * on the canonical span while a discarded take plays.
+ *
  * Scope guard: `buildChapterRecitation` recovers chapter-absolute word times by
  * adding back each verse's per-verse offset, which is only correct for
  * `by_surah` reciters (one shared chapter file). `by_ayah` reciters have
@@ -21,6 +27,7 @@ import {
 import type { AnimUnit, AyahBoundary } from '../recitation-animation/types';
 import {
     assembleVerseFromShard,
+    chapterOccasionIntervals,
     chapterVerseRefs,
     loadChapterShard,
     loadDk,
@@ -70,6 +77,12 @@ export async function loadChapterRecitation(
     }
     if (!verses.length) return null;
 
-    const built = buildChapterRecitation(reciter, chapter, verses);
+    // Fold every occasion's recited span (canonical + loopbacks / re-dos) onto
+    // the units so the recitation locator covers the full chapter audio — the
+    // highlight travels back into a re-recited verse instead of freezing on the
+    // canonical-only span while the audio plays a discarded take.
+    const occasionIntervals = chapterOccasionIntervals(shard);
+
+    const built = buildChapterRecitation(reciter, chapter, verses, occasionIntervals);
     return { units: built.units, ayahs: built.ayahs, contentEndMs: built.contentEndMs };
 }

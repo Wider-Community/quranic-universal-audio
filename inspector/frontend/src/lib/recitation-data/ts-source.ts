@@ -591,6 +591,44 @@ export function verseOccasionsFromShard(shard: TsShardResponse): VerseOccasions[
     return [...shardOccasions(shard).values()];
 }
 
+/** A single recited span of one word, chapter-absolute, in seconds. */
+export interface OccasionInterval {
+    /** "surah:ayah:word". */
+    location: string;
+    start: number;
+    end: number;
+}
+
+/**
+ * Every word's recited span across ALL occasions of every verse, chapter-
+ * absolute (seconds). The canonical occasion is included alongside the
+ * loopbacks / re-dos, so the full-chapter player can cover the entire audio
+ * timeline — the recited highlight travels back into a re-recited verse instead
+ * of freezing on the canonical-only span.
+ *
+ * Geometry / text still come from the canonical occasion (via
+ * `assembleVerseFromShard`); this only supplies the extra `intervals` the
+ * recitation locator (`findActiveAt`) matches against. Words are keyed by
+ * location so the chapter builder folds them onto the matching deduped unit.
+ */
+export function chapterOccasionIntervals(shard: TsShardResponse): OccasionInterval[] {
+    const out: OccasionInterval[] = [];
+    for (const g of shardOccasions(shard).values()) {
+        for (const occasion of g.occasions) {
+            for (const seg of occasion) {
+                for (const w of seg.words) {
+                    out.push({
+                        location: `${g.ref}:${w[0]}`,
+                        start: w[1] / 1000,
+                        end: w[2] / 1000,
+                    });
+                }
+            }
+        }
+    }
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Random target picking
 // ---------------------------------------------------------------------------

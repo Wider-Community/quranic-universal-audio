@@ -44,6 +44,44 @@ export function adjacentAyahStartMs(
 }
 
 /**
+ * Ayah-boundary seek target, anchored on a KNOWN current-ayah index rather than
+ * inferred from start ordering.
+ *
+ * The position-based `adjacentAyahStartMs` infers the current ayah from the last
+ * start at/below the playhead — wrong inside a re-take (a loopback / re-do) whose
+ * audio plays AFTER a later verse's canonical start, so the playhead reads as
+ * that later verse and prev/next skip. When the recitation locator can resolve
+ * which verse is actually being recited, pass its index here for an exact step.
+ *
+ * @param starts  Ascending ayah start times (ms, chapter-absolute).
+ * @param ci      Index (into `starts`) of the ayah being recited now.
+ * @param curMs   Chapter-absolute playhead (ms).
+ * @param dir     +1 forward, -1 back.
+ * @returns Chapter-absolute target ms, or null when there's nowhere to go.
+ */
+export function adjacentAyahStartFromIndex(
+    starts: number[],
+    ci: number,
+    curMs: number,
+    dir: 1 | -1,
+    restartMs = 1500,
+): number | null {
+    if (!starts.length || ci < 0 || ci >= starts.length) return null;
+
+    if (dir > 0) {
+        const ni = ci + 1;
+        return ni < starts.length ? starts[ni]! : null;
+    }
+
+    if (ci <= 0) return starts[0]!;
+    const curStart = starts[ci]!;
+    // Inside a re-take, `curMs` can be far past the canonical start; restart the
+    // current verse (its canonical pass) rather than dropping to the previous.
+    if (curMs - curStart > restartMs) return curStart;
+    return starts[ci - 1]!;
+}
+
+/**
  * The ayah start nearest to `ms` (magnetic snap). Used when dragging the linear
  * progress bar so a release lands on an ayah start, never mid-ayah. `starts` is
  * the list of chapter-absolute ayah start times (ms). Returns null when empty so

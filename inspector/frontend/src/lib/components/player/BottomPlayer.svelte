@@ -17,7 +17,11 @@
     import { fetchSurahsForDelivery, type SurahEntry } from '../../api/audio-surahs';
     import { setAdoptedSource, takeAdoptedSource } from '../../playback/adopt-signal';
     import { ensureAudioContextRunning } from '../../playback/audio-graph';
-    import { adjacentAyahStartMs, nearestAyahStartMs } from '../../playback/ayah-seek';
+    import {
+        adjacentAyahStartFromIndex,
+        adjacentAyahStartMs,
+        nearestAyahStartMs,
+    } from '../../playback/ayah-seek';
     import {
         clearDashPrewarm,
         consumeDashCommitted,
@@ -28,7 +32,11 @@
     import { dashPort } from '../../playback/dash-port';
     import { exitLoop, loopTarget } from '../../playback/loop';
     import { recycleAsShadow } from '../../playback/shadow-audio';
-    import { recitationAyahStarts } from '../../recitation-animation/recitation-settings';
+    import {
+        recitationAyahAt,
+        recitationAyahs,
+        recitationAyahStarts,
+    } from '../../recitation-animation/recitation-settings';
     import {
         loadPersistedSlice,
         persistSlice,
@@ -405,26 +413,44 @@
         }));
     }
 
+    // Index (into the ascending ayah-start list) of the verse actually being
+    // RECITED at `ms`, via the recitation locator — covers re-takes whose audio
+    // plays past a later verse's canonical start. -1 when the resolver isn't
+    // published (no chapter loaded) or the playhead is in a real silence gap, so
+    // the caller falls back to start-ordering inference.
+    function recitedAyahIndex(ms: number): number {
+        const resolve = $recitationAyahAt;
+        if (!resolve) return -1;
+        const key = resolve(ms);
+        if (!key) return -1;
+        return $recitationAyahs.findIndex((a) => a.ayahKey === key);
+    }
+
     // Whenever ayah boundaries are loaded for whatever's selected, the seek
     // buttons jump ayah-by-ayah (prev/next ayah start; back restarts the current
     // ayah if >1.5s in) — no bucket/condition gate. With no boundaries (e.g. a
     // non-timestamped reciter) they fall back to the ±15s nudge.
+    function ayahSeekTarget(cur: number, dir: 1 | -1): number | null {
+        if (!$recitationAyahStarts.length) return null;
+        // Prefer the recitation-resolved current verse (correct inside a re-take);
+        // fall back to position-from-start ordering in a silence gap.
+        const ci = recitedAyahIndex(cur);
+        return ci >= 0
+            ? adjacentAyahStartFromIndex($recitationAyahStarts, ci, cur, dir)
+            : adjacentAyahStartMs($recitationAyahStarts, cur, dir);
+    }
     function seekBack(): void {
         exitLoop(); // any deliberate seek drops loop mode
         const cur = dashPort.currentTimeMs();
-        if ($recitationAyahStarts.length) {
-            const t = adjacentAyahStartMs($recitationAyahStarts, cur, -1);
-            if (t !== null) { void seekAndResume(t); return; }
-        }
+        const t = ayahSeekTarget(cur, -1);
+        if (t !== null) { void seekAndResume(t); return; }
         void seekAndResume(Math.max(0, cur - 15_000));
     }
     function seekForward(): void {
         exitLoop();
         const cur = dashPort.currentTimeMs();
-        if ($recitationAyahStarts.length) {
-            const t = adjacentAyahStartMs($recitationAyahStarts, cur, 1);
-            if (t !== null) { void seekAndResume(t); return; }
-        }
+        const t = ayahSeekTarget(cur, 1);
+        if (t !== null) { void seekAndResume(t); return; }
         void seekAndResume(cur + 15_000);
     }
 

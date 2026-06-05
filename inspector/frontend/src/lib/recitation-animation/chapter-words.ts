@@ -18,6 +18,7 @@
  * before calling this. See the plan's scope guard.
  */
 
+import type { OccasionInterval } from '../recitation-data/ts-source';
 import type { TsVerseData } from '../types/domain';
 import type { AnimUnit, AyahBoundary, ChapterRecitation } from './types';
 
@@ -38,14 +39,26 @@ function parseLocation(location: string): { surah: number; ayah: number; word: n
 /**
  * Build chapter-absolute recitation data from assembled verses.
  *
- * @param reciter slug
- * @param chapter 1-based surah number
- * @param verses  assembled verses (any order; sorted internally by abs start)
+ * Geometry + text come from each verse's CANONICAL occasion (the assembled
+ * `verses`). `occasionIntervals` supplies the recited span of EVERY occasion
+ * (canonical + loopbacks / re-dos) keyed by location, chapter-absolute; those
+ * spans are folded onto each word's `intervals` so the recitation locator
+ * covers the whole audio timeline (the highlight travels back into a re-recited
+ * verse instead of freezing on the canonical-only span). The canonical occasion
+ * is the earliest pass, so `intervals[0]` stays the canonical span after the
+ * ascending sort — preserving cell geometry + letter-timeline anchoring.
+ *
+ * @param reciter          slug
+ * @param chapter          1-based surah number
+ * @param verses           assembled verses (any order; sorted internally by abs start)
+ * @param occasionIntervals every occasion's word spans (chapter-absolute, seconds);
+ *                          empty array = canonical-only (geometry unchanged either way)
  */
 export function buildChapterRecitation(
     reciter: string,
     chapter: number,
     verses: AssembledVerse[],
+    occasionIntervals: OccasionInterval[] = [],
 ): ChapterRecitation {
     const units: AnimUnit[] = [];
 
@@ -91,6 +104,25 @@ export function buildChapterRecitation(
             byLoc.set(u.location, u);
         }
     }
+
+    // Fold every occasion's recited span onto its word so the recitation locator
+    // covers the dropped re-takes the canonical occasion discarded. Only words
+    // that already have a canonical unit get extra spans (a re-take never adds a
+    // new word index). Near-identical spans (the canonical occasion is also in
+    // `occasionIntervals`) are deduped so the canonical interval isn't doubled.
+    const SPAN_EPS = 0.0005; // 0.5ms — sub-frame; collapses the canonical dupe
+    for (const oi of occasionIntervals) {
+        const unit = byLoc.get(oi.location);
+        if (!unit) continue;
+        const dup = unit.intervals.some(
+            (iv) => Math.abs(iv.start - oi.start) < SPAN_EPS && Math.abs(iv.end - oi.end) < SPAN_EPS,
+        );
+        if (dup) continue;
+        unit.intervals.push({ start: oi.start, end: oi.end });
+        if (oi.start < unit.start) unit.start = oi.start;
+        if (oi.end > unit.end) unit.end = oi.end;
+    }
+
     const deduped = [...byLoc.values()].sort(
         (a, b) => a.surah - b.surah || a.ayah - b.ayah || a.word - b.word,
     );
