@@ -30,4 +30,4 @@ dist/
 .coverage
 .coverage.*
 coverage/
-htmlcov/
+htmlcov/.claude/skills/impeccable/scripts/
