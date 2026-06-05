@@ -29,17 +29,15 @@ from datetime import UTC, datetime
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
-from qua_shared.config_loader import repo_config
-from qua_shared.release_changelog import render_changelog
 from qua_shared.schemas import (
     AdminCutReleaseRequest,
     AdminLaunchResponse,
-    AdminReleasePreviewResponse,
     AdminReleasesStatusResponse,
 )
 from services.admin.jobs import base as jobs_base
 from services.admin.jobs import cut_release as cut_release_jobs
 from services.admin.jobs import hf_publish as hf_publish_jobs
+from services.admin.release_preview import build_release_preview, current_auto_version
 from services.db import get_conn, repo_releases
 from services.state import state as state_service
 from utils.decorators import require_capability, require_same_origin
@@ -126,181 +124,12 @@ def release_preview(user):
     DB query. Use the returned ``expected_version_at_preview`` token as the
     confirm-step idempotency check.
     """
-    conn = get_conn()
-    # Display names (riwayah/style/channel) come from the vocab tables — the
-    # human-facing changelog never shows slugs. ``coverage_surahs`` is cheap
-    # (chapter_count); exact ayah coverage is only known at cut time, so the
-    # preview shows surahs and the shipped release shows ayahs.
-    candidates = conn.execute("""
-        SELECT prr.slug AS slug,
-               prr.version AS ts_version,
-               r.name_en AS name_en,
-               r.name_ar AS name_ar,
-               rw.name AS riwayah,
-               st.name AS style,
-               ch.name AS channel,
-               d.chapter_count AS coverage_surahs
-        FROM per_recitation_releases prr
-        JOIN deliveries d ON d.slug = prr.slug
-        JOIN channels c   ON c.slug = d.channel
-        JOIN riwayahs rw  ON rw.slug = d.riwayah
-        JOIN styles st    ON st.slug = d.style
-        JOIN channels ch  ON ch.slug = d.channel
-        JOIN reciters r   ON r.reciter_id = d.reciter_id
-        WHERE prr.track = 'ts'
-          AND prr.superseded_at IS NULL
-          AND c.gh_release_eligible = 1
-        ORDER BY prr.slug
-    """).fetchall()
-
-    prior = repo_releases.latest_gh_release()
-    prior_members = (
-        {m["slug"]: m for m in repo_releases.gh_release_recitations(prior["id"])} if prior else {}
-    )
-
-    added: list[dict] = []
-    refreshed: list[dict] = []
-    unchanged: list[dict] = []
-    for r in candidates:
-        slug = r["slug"]
-        ts_version = str(r["ts_version"])
-        prior_member = prior_members.get(slug)
-        row_payload = {
-            "slug": slug,
-            "name_en": r["name_en"],
-            "name_ar": r["name_ar"],
-            "riwayah": r["riwayah"],
-            "style": r["style"],
-            "channel": r["channel"],
-            "coverage_surahs": r["coverage_surahs"],
-            "ts_version": ts_version,
-        }
-        if prior_member is None:
-            row_payload["change_kind"] = "added"
-            added.append(row_payload)
-        elif str(prior_member["ts_version"]) != ts_version:
-            row_payload["change_kind"] = "refresh"
-            refreshed.append(row_payload)
-        else:
-            row_payload["change_kind"] = "unchanged"
-            unchanged.append(row_payload)
-
-    # Compute the auto-version (preview-only — actual cut recomputes inside
-    # the job, possibly with a content_hash-driven reclassification).
-    prior_version = prior["version"] if prior else None
-    if added:
-        computed_version = _bump_minor(prior_version)
-    elif refreshed:
-        computed_version = _bump_patch(prior_version)
-    elif prior_version is None:
-        computed_version = "v0.1.0"
-    else:
-        computed_version = None  # "nothing changed" — operator must override
-    needs_override = computed_version is None
-
-    cfg = repo_config()
-    owner, repo, hf_dataset = (
-        cfg.get("repo_owner", ""),
-        cfg.get("repo_name", ""),
-        cfg.get("hf_dataset", ""),
-    )
-    release_date = datetime.now(UTC).strftime("%Y-%m-%d")
-    # change_kind is already stamped on each row; the renderer buckets by it.
-    # coverage_ayahs is unknown pre-cut → renderer falls back to surahs.
-    preview_members = [{**m, "coverage_ayahs": None} for m in (added + refreshed + unchanged)]
-
-    payload = {
-        "computed_version": computed_version,
-        "needs_manual_version": needs_override,
-        "previous_version": prior_version,
-        # change_kind enum is {added, refresh, unchanged}. ``removed`` is NOT a
-        # change_kind — once a slug ships in a GH release it stays in subsequent
-        # releases (any drop is an operational decision outside the cut flow).
-        "change_counts": {
-            "added": len(added),
-            "refresh": len(refreshed),
-            "unchanged": len(unchanged),
-        },
-        "added": added,
-        "refreshed": refreshed,
-        "release_date": release_date,
-        "license": "CC-BY-4.0",
-        "links": {
-            "repo": f"https://github.com/{owner}/{repo}" if owner and repo else "",
-            "hf_dataset": (f"https://huggingface.co/datasets/{hf_dataset}" if hf_dataset else ""),
-        },
-        # Same shared renderer the cut job uses — preview == what ships (modulo
-        # coverage: preview shows surahs, the cut shows exact ayahs).
-        "changelog_preview_md": render_changelog(
-            version=computed_version or "v?.?.?",
-            previous_version=prior_version,
-            release_date=release_date,
-            members=preview_members,
-            owner=owner,
-            repo=repo,
-            hf_dataset=hf_dataset,
-        ),
-        # Echo back so the confirm step can validate the preview hasn't drifted.
-        "expected_version_at_preview": computed_version,
-    }
-    out = AdminReleasePreviewResponse.model_validate(payload)
+    out = build_release_preview()
     return jsonify(out.model_dump(mode="json"))
 
 
-def _bump_minor(prior: str | None) -> str:
-    if not prior:
-        return "v0.1.0"
-    parts = prior.lstrip("v").split(".")
-    major, minor = int(parts[0]), int(parts[1])
-    return f"v{major}.{minor + 1}.0"
-
-
-def _bump_patch(prior: str | None) -> str:
-    if not prior:
-        return "v0.1.0"
-    parts = prior.lstrip("v").split(".")
-    major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
-    return f"v{major}.{minor}.{patch + 1}"
-
-
 def _current_auto_version() -> tuple[str | None, int]:
-    """Return the preview-equivalent auto version and eligible candidate count."""
-    conn = get_conn()
-    candidates = conn.execute("""
-        SELECT prr.slug AS slug,
-               prr.version AS ts_version
-        FROM per_recitation_releases prr
-        JOIN deliveries d ON d.slug = prr.slug
-        JOIN channels c   ON c.slug = d.channel
-        WHERE prr.track = 'ts'
-          AND prr.superseded_at IS NULL
-          AND c.gh_release_eligible = 1
-        ORDER BY prr.slug
-    """).fetchall()
-    if not candidates:
-        return None, 0
-
-    prior = repo_releases.latest_gh_release()
-    prior_members = (
-        {m["slug"]: m for m in repo_releases.gh_release_recitations(prior["id"])} if prior else {}
-    )
-    added = 0
-    refreshed = 0
-    for row in candidates:
-        prior_member = prior_members.get(row["slug"])
-        if prior_member is None:
-            added += 1
-        elif str(prior_member["ts_version"]) != str(row["ts_version"]):
-            refreshed += 1
-
-    prior_version = prior["version"] if prior else None
-    if added:
-        return _bump_minor(prior_version), len(candidates)
-    if refreshed:
-        return _bump_patch(prior_version), len(candidates)
-    if prior_version is None:
-        return "v0.1.0", len(candidates)
-    return None, len(candidates)
+    return current_auto_version()
 
 
 # ---------------------------------------------------------------------------

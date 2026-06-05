@@ -242,7 +242,7 @@ REQUIRED_ENTRYPOINTS = (
     "qua_jobs/shard.py",
 )
 REQUIRED_STATIC_FILES = (
-    "data/qpc_hafs.json.gz",
+    "data/qpc_hafs.json",
     "data/surah_info.json",
     ".github/config/repo.yml",
     ".github/templates/release_body.md",
@@ -271,12 +271,12 @@ def _resolve_required_static(rel: str) -> tuple[Path | None, bytes | None]:
     src = REPO_ROOT / rel
     if src.exists():
         return src, None
-    if rel == "data/qpc_hafs.json.gz":
-        uncompressed = REPO_ROOT / "data" / "qpc_hafs.json"
-        if uncompressed.exists():
+    if rel == "data/qpc_hafs.json":
+        compressed = REPO_ROOT / "data" / "qpc_hafs.json.gz"
+        if compressed.exists():
             import gzip as _gzip
 
-            return None, _gzip.compress(uncompressed.read_bytes(), compresslevel=6, mtime=0)
+            return None, _gzip.decompress(compressed.read_bytes())
     return None, None
 
 

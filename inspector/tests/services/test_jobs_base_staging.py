@@ -49,7 +49,7 @@ def test_stage_job_code_uploads_every_required_path(stub_batch, monkeypatch, tmp
 
     Mirrors the other tests' tmp_path + REPO_ROOT monkeypatch isolation so
     the assertion no longer depends on the real ``qua_shared`` / ``qua_jobs``
-    trees on disk or on whether ``qpc_hafs.json.gz`` exists in this checkout.
+    trees on disk or on whether ``qpc_hafs.json`` exists in this checkout.
     """
     (tmp_path / "qua_shared").mkdir(parents=True)
     (tmp_path / "qua_shared" / "__init__.py").write_text("")
@@ -59,7 +59,7 @@ def test_stage_job_code_uploads_every_required_path(stub_batch, monkeypatch, tmp
         (tmp_path / ep).write_text("# stub")
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "surah_info.json").write_text("{}")
-    (tmp_path / "data" / "qpc_hafs.json.gz").write_bytes(b"\x1f\x8bstub-gz")
+    (tmp_path / "data" / "qpc_hafs.json").write_text("{}")
     (tmp_path / ".github" / "config").mkdir(parents=True)
     (tmp_path / ".github" / "config" / "repo.yml").write_text("hf_dataset: foo/bar")
     (tmp_path / ".github" / "templates").mkdir(parents=True)
@@ -76,11 +76,8 @@ def test_stage_job_code_uploads_every_required_path(stub_batch, monkeypatch, tmp
         assert f"code/{rel}" in targets, f"missing static upload: {rel}"
 
 
-def test_stage_job_code_auto_gzips_qpc_when_only_uncompressed_present(
-    stub_batch, monkeypatch, tmp_path
-):
-    """In a dev tree with ``data/qpc_hafs.json`` but no ``.gz``, the resolver
-    gzip-compresses on the fly and uploads under the ``.gz`` target path."""
+def test_stage_job_code_decompresses_qpc_when_only_gzip_present(stub_batch, monkeypatch, tmp_path):
+    """When only ``data/qpc_hafs.json.gz`` exists, stage plain JSON."""
     (tmp_path / "qua_shared").mkdir(parents=True)
     (tmp_path / "qua_jobs").mkdir(parents=True)
     for ep in base.REQUIRED_ENTRYPOINTS:
@@ -88,7 +85,11 @@ def test_stage_job_code_auto_gzips_qpc_when_only_uncompressed_present(
         (tmp_path / ep).write_text("# stub")
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "surah_info.json").write_text("{}")
-    (tmp_path / "data" / "qpc_hafs.json").write_text('{"1:1:1": {"text": "x"}}')
+    import gzip as _gzip
+
+    (tmp_path / "data" / "qpc_hafs.json.gz").write_bytes(
+        _gzip.compress(b'{"1:1:1": {"text": "x"}}')
+    )
     (tmp_path / ".github" / "config").mkdir(parents=True)
     (tmp_path / ".github" / "config" / "repo.yml").write_text("hf_dataset: foo/bar")
     (tmp_path / ".github" / "templates").mkdir(parents=True)
@@ -100,10 +101,7 @@ def test_stage_job_code_auto_gzips_qpc_when_only_uncompressed_present(
 
     assert len(stub_batch) == 1
     by_target = {target: blob for _src, target, blob in stub_batch[0]["snapshot"]}
-    assert "code/data/qpc_hafs.json.gz" in by_target
-    import gzip as _gzip
-
-    assert _gzip.decompress(by_target["code/data/qpc_hafs.json.gz"]) == b'{"1:1:1": {"text": "x"}}'
+    assert by_target["code/data/qpc_hafs.json"] == b'{"1:1:1": {"text": "x"}}'
 
 
 def test_stage_job_code_raises_when_entrypoint_missing(stub_batch, monkeypatch, tmp_path):

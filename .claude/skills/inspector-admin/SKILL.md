@@ -41,6 +41,7 @@ Every script:
 | `scripts/admin_state.py SLUG --event EVENT [--reason R] [--payload '{...}']` | Generic `state.transition` wrapper. Event names → see `state-machine.md`. |
 | `scripts/admin_publish.py SLUG --job-id JOB_ID` | `complete_timestamps_job`: under_review+marked_ready → released. Used when the deployed Space's webhook missed a callback. |
 | `scripts/admin_ts_job.py {launch,cancel,status,record,history,publish,monitor} SLUG [JOB_ID] [...]` | TS-job lifecycle CLI (one home for what `launch_ts_job.py` used to do, plus cancel/status/publish). |
+| `scripts/admin_release.py {preview,cut,monitor} [JOB_ID] [...]` | GH release preview + cut helper using the shared release-preview renderer and cut-release job service. |
 | `scripts/admin_claim.py SLUG {show,release,reassign} [--to LOGIN]` | Force-release or reassign a claim. |
 | `scripts/admin_users.py {list,show,grant,revoke} [--hf-id ID] [--login L] [--role owner\|maintainer\|contributor]` | User mgmt — list, look up, change role. |
 | `scripts/admin_requests.py {list,show,resolve} [REQUEST_ID]` | Browse and act on the request queue. |
@@ -63,6 +64,10 @@ python .claude/skills/inspector-admin/scripts/admin_ts_job.py launch <slug> --be
 
 # Look up the full state of one reciter
 python .claude/skills/inspector-admin/scripts/admin_reciter.py <slug> --prod
+
+# Preview and cut a global GH release
+python .claude/skills/inspector-admin/scripts/admin_release.py preview --prod
+python .claude/skills/inspector-admin/scripts/admin_release.py cut --prod --yes-prod --monitor
 
 # Emergency read-only SQL
 python .claude/skills/inspector-admin/scripts/admin_db.py exec "select slug, state, marked_ready from delivery_states where state='under_review'" --prod
