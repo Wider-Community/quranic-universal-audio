@@ -7,9 +7,7 @@
 const source = `
 # Flagging
 
-Flag any issue for weird cases or when unsure — leave a comment explaining it.
-
-A flag is a short thread. The person who raised it edits their own comment; anyone reviewing this reciter can add a follow-up reply. Clearing the comment removes the flag.
+Flag any issue for weird cases or when unsure.
 
 ::component{name="flagging-demo"}
 `;

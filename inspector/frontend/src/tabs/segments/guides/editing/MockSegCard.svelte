@@ -64,7 +64,7 @@
         placeholder = false,
         flagged = false,
         showFlagComment = false,
-        flagComment = 'The reciter pauses mid-word here. Not sure if this should be one segment or two; second opinion welcome.',
+        flagComment = 'The audio here is cutting out.',
     }: Props = $props();
 
     // In placeholder (anatomy) mode each slot shows its own name.
@@ -204,7 +204,7 @@
                 <span class="eg-flag-author eg-flag-author-reply">a maintainer</span>
                 <span class="eg-flag-time">12 minutes ago</span>
             </div>
-            <div class="eg-flag-body">Good catch. Leave it as one segment; the pause is too short to split on.</div>
+            <div class="eg-flag-body">Good catch. It is a minor issue, so probably fine to leave as is.</div>
         </div>
         <div class="eg-flag-reply">
             <span class="eg-flag-reply-input">Add a reply…</span>
