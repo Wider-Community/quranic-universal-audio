@@ -365,7 +365,7 @@
         align-items: center;
         justify-content: center;
         gap: var(--s-4);
-        padding: 0 0 var(--s-2);
+        padding: 10px 0;
         flex-wrap: nowrap;
     }
     /* Mobile toolbar: tighten gap, hide sort label, keep everything on one row, shrink search input and submit button */
@@ -404,7 +404,8 @@
         letter-spacing: 0.08em;
     }
     .sort select {
-        padding: var(--s-2) var(--s-2);
+        height: 32px;
+        padding: 0 var(--s-2);
         background: var(--panel);
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
