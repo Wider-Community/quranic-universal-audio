@@ -128,7 +128,9 @@ def main() -> int:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--slug", help="single reciter slug")
     g.add_argument("--all", action="store_true", help="every reciter with timestamps")
-    ap.add_argument("--write", action="store_true", help="upload re-tagged shards (default: dry-run)")
+    ap.add_argument(
+        "--write", action="store_true", help="upload re-tagged shards (default: dry-run)"
+    )
     bs.add_bucket_args(ap)
     args = ap.parse_args()
     if args.write:
@@ -151,7 +153,9 @@ def main() -> int:
     log("\n=== corpus bridge distribution ===")
     for rule, c in grand.most_common():
         log(f"  {c:6}  {rule}")
-    log(f"\ntotal violations: {grand_viol}  ({'DRY-RUN' if not args.write else 'WROTE schema_version=' + str(SEGMENT_SCHEMA_VERSION)})")
+    log(
+        f"\ntotal violations: {grand_viol}  ({'DRY-RUN' if not args.write else 'WROTE schema_version=' + str(SEGMENT_SCHEMA_VERSION)})"
+    )
     return 1 if grand_viol else 0
 
 

@@ -3,6 +3,7 @@
 The pure stamping logic (``_apply_bridge_tags``) is tested deterministically; the
 phonemizer-backed detection is exercised when ``quranic_phonemizer`` is present.
 """
+
 from __future__ import annotations
 
 import pytest

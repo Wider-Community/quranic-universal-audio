@@ -102,9 +102,7 @@ def detect_segment_bridges(pm, seg_ref: str) -> list[tuple[int, str]]:
         if not prev.letter_mappings or not curr.letter_mappings:
             continue
         curr_targets = {
-            t.rule.value
-            for t in curr.letter_mappings[0].tajweed_rules
-            if not t.is_source
+            t.rule.value for t in curr.letter_mappings[0].tajweed_rules if not t.is_source
         }
         rule = None
         for e in reversed(prev.letter_mappings):
