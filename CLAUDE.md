@@ -30,8 +30,11 @@ Can access from `HF_TOKEN` in `.env`
 
 ## Commands
 
+**First-time setup (fresh checkout / ephemeral container): run `scripts/devenv/setup.sh`** to install FE (`npm ci`) + BE (`pip`) deps before running tests/build — then use the pinned `npm run *` scripts below, never `npx`/`npm exec` (they can pull a mismatched vitest).
+
 | Task | Command |
 |---|---|
+| First-time setup (FE + BE deps) | `scripts/devenv/setup.sh` (`frontend` / `backend` to scope) |
 | Build frontend | `cd frontend && npm install && npm run build` |
 | Run server (dev) | `python3 inspector/app.py` → http://localhost:5000 |
 | Frontend HMR | `cd frontend && npm run dev` → http://localhost:5173 (proxies `/api`) |
