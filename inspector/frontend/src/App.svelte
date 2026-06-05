@@ -30,6 +30,8 @@
     import { segPort } from './tabs/segments/stores/playback';
     import { tsPort } from './tabs/timestamps/stores/playback';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
+    import { allGuidesRead } from './tabs/segments/guides/registry';
+    import EditingGuideTab from './tabs/guide/EditingGuideTab.svelte';
 
     // `activeTab` follows the shared store so external navigation (e.g. the
     // Bookmarks sidebar calling setActiveTab) switches tabs here too.
@@ -90,7 +92,7 @@
         // bundle used only by the Segments tab. Deferred to SegmentsTab's
         // onMount so Dashboard/Timestamps-only visitors don't pay the cost.
         const savedTab = localStorage.getItem(LS_KEYS.ACTIVE_TAB);
-        const validTabs: string[] = [TAB_NAMES.DASHBOARD, TAB_NAMES.TIMESTAMPS, TAB_NAMES.SEGMENTS];
+        const validTabs: string[] = [TAB_NAMES.DASHBOARD, TAB_NAMES.TIMESTAMPS, TAB_NAMES.SEGMENTS, TAB_NAMES.GUIDE];
         if (savedTab && validTabs.includes(savedTab)) {
             setActiveTab(savedTab);
         } else {
@@ -227,6 +229,31 @@
                     </svg>
                     <span class="tab-label">Segments</span>
                 </button>
+                <button
+                    class="tab-btn"
+                    class:active={activeTab === TAB_NAMES.GUIDE}
+                    class:unread={$currentUser.hf_user_id != null
+                        && !allGuidesRead($currentUser.guides_read)}
+                    data-tab={TAB_NAMES.GUIDE}
+                    on:click={() => setActiveTab(TAB_NAMES.GUIDE)}
+                >
+                    <svg
+                        class="tab-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                    </svg>
+                    <span class="tab-label">Editing guide</span>
+                    {#if $currentUser.hf_user_id != null && !allGuidesRead($currentUser.guides_read)}
+                        <span class="tab-unread-dot" aria-label="Unread guides"></span>
+                    {/if}
+                </button>
             </nav>
         </div>
 
@@ -308,6 +335,13 @@
     {#if mountedTabs.has(TAB_NAMES.SEGMENTS)}
         <div class="tab-panel" hidden={activeTab !== TAB_NAMES.SEGMENTS}>
             <SegmentsTab />
+        </div>
+    {/if}
+
+    <!-- ============ Editing Guide Tab ============ -->
+    {#if mountedTabs.has(TAB_NAMES.GUIDE)}
+        <div class="tab-panel" hidden={activeTab !== TAB_NAMES.GUIDE}>
+            <EditingGuideTab />
         </div>
     {/if}
 </div>

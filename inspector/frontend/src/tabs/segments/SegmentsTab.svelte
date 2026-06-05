@@ -16,7 +16,7 @@
     import { loadQuranRefs } from '../../lib/refs/quran-refs';
     import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
     import { setEditingMode, syncEditingMode } from '../../lib/stores/editing-mode';
-    import { openGuidesGate } from '../../lib/stores/guides-gate';
+
     import type { SegReciter } from '../../lib/types/domain';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady } from '../../lib/utils/surah-info';
@@ -318,28 +318,7 @@
     style:--seg-font-size={cssFontSize || null}
     style:--seg-word-spacing={cssWordSpacing || null}
 >
-    {#if !$historyVisible && !$savePreviewVisible}
-        <!-- Persistent entry point to the review guides + shortcuts. Opens the same
-             modal the first-edit gate uses, in voluntary `browse` mode — available
-             any time, not just when a blocked edit triggers the gate. The cyan
-             unread dot mirrors the old per-accordion ? badge: shown only to a
-             signed-in user who still has guides left to read. -->
-        <div class="seg-guide-bar">
-            <button
-                type="button"
-                class="seg-guide-entry"
-                class:unread={$currentUser.hf_user_id != null
-                    && !allGuidesRead($currentUser.guides_read)}
-                on:click={() => openGuidesGate('browse')}
-            >
-                <span class="seg-guide-entry-icon" aria-hidden="true">📖</span>
-                <span>Editing guide</span>
-                {#if $currentUser.hf_user_id != null && !allGuidesRead($currentUser.guides_read)}
-                    <span class="seg-guide-entry-dot" aria-label="Unread guides"></span>
-                {/if}
-            </button>
-        </div>
-    {/if}
+
 
     <!-- StatsPanel transitively imports chart.js (~85 KB br). Lazy-load so
          the charts chunk only ships when a maintainer/owner actually views
@@ -412,46 +391,5 @@
        footer min-height is `--seg-footer-h` (60px); add a token cushion. */
     #segments-panel-inner {
         padding-bottom: calc(var(--seg-footer-actual-h, var(--seg-footer-h, 60px)) + var(--s-3));
-    }
-
-    /* Persistent guide/shortcuts entry point at the top of the tab. */
-    .seg-guide-bar {
-        display: flex;
-        justify-content: flex-start;
-        margin-bottom: var(--s-2, 8px);
-    }
-    .seg-guide-entry {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        padding: 6px 12px;
-        border: 1px solid #2c3a59;
-        border-radius: 8px;
-        background: #101a33;
-        color: #c5cfe7;
-        font-size: 0.84rem;
-        cursor: pointer;
-        transition: background 0.15s ease, border-color 0.15s ease;
-    }
-    .seg-guide-entry:hover,
-    .seg-guide-entry:focus-visible {
-        background: #16223f;
-        border-color: #3a4a6e;
-        color: #fff;
-        outline: none;
-    }
-    .seg-guide-entry-icon { font-size: 0.95rem; line-height: 1; }
-    /* Unread: a signed-in reviewer still has required guides to read. Mirror the
-       old per-accordion ? badge — cyan accent border + halo. */
-    .seg-guide-entry.unread {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 1px var(--accent-tint);
-    }
-    .seg-guide-entry-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--accent);
-        box-shadow: 0 0 0 2px var(--accent-tint);
     }
 </style>
