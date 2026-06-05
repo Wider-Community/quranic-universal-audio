@@ -251,10 +251,20 @@ def get_review_detail(slug: str) -> dict | None:
     job_ids = _serde.json_loads(base["timestamps_job_ids"]) or []
 
     # Flagged-issue count from detailed.json (one cached read on drawer open).
+    # Best-effort: a bucket read failure must not break the DB-backed drawer
+    # detail — the count is non-critical metadata, default to 0 on error.
     from services.segments.flags import count_flagged
     from services.storage.data_loader import load_detailed
 
-    flagged_count = count_flagged(load_detailed(slug) or [])
+    try:
+        flagged_count = count_flagged(load_detailed(slug) or [])
+    except Exception:  # noqa: BLE001 — count is best-effort; never fail the detail
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "[%s] flagged-issue count read failed; defaulting to 0", slug, exc_info=True
+        )
+        flagged_count = 0
 
     return AdminReviewDetail(
         slug=base["slug"],
