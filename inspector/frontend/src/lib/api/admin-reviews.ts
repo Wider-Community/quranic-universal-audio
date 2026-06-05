@@ -4,14 +4,12 @@
  *
  * - fetchAdminReviews             list across the four buckets
  * - fetchAdminReviewDetail        per-slug payload for the General drawer
- * - fetchAdminReviewValidation    lazy category counts (expands accordion)
  * - forceReleaseClaim             remove the current reviewer's open claim
  */
 
 import type {
     AdminReviewDetail,
     AdminReviewsResponse,
-    AdminReviewValidation,
 } from '../types/generated/schemas';
 
 export async function fetchAdminReviews(signal?: AbortSignal): Promise<AdminReviewsResponse> {
@@ -49,18 +47,6 @@ export async function fetchAdminReviewDetail(
     if (resp.status === 404) return null;
     if (!resp.ok) throw new Error(`fetchAdminReviewDetail: HTTP ${resp.status}`);
     return (await resp.json()) as AdminReviewDetail;
-}
-
-export async function fetchAdminReviewValidation(
-    slug: string,
-    signal?: AbortSignal,
-): Promise<AdminReviewValidation> {
-    const resp = await fetch(
-        `/api/admin/reviews/${encodeURIComponent(slug)}/validation`,
-        { signal },
-    );
-    if (!resp.ok) throw new Error(`fetchAdminReviewValidation: HTTP ${resp.status}`);
-    return (await resp.json()) as AdminReviewValidation;
 }
 
 async function postWithReason(path: string, reason: string): Promise<void> {

@@ -116,7 +116,15 @@ def apply_inverse_patch(entries: list[dict], patch: dict) -> list[dict]:
         for i, seg in enumerate(entry.get("segments", [])):
             uid = seg.get("segment_uid")
             if uid and uid in before_by_uid and uid not in removed_set:
-                entry["segments"][i] = _hydrate(before_by_uid[uid])
+                restored = _hydrate(before_by_uid[uid])
+                # `flag` is backend-owned — only flag ops mutate it, and FE
+                # snapshots never carry it. Preserve the live value so an
+                # unrelated undo can't drop (or corrupt) a segment's flag.
+                if "flag" in seg:
+                    restored["flag"] = seg["flag"]
+                else:
+                    restored.pop("flag", None)
+                entry["segments"][i] = restored
 
     # 3. Re-insert segments that the forward command removed.
     #    We match by the snapshot's ``entry_ref`` (set by ``snapshotSeg`` on

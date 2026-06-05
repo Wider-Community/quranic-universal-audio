@@ -5,10 +5,7 @@
 - ``GET  /api/admin/reviews/<slug>``             per-slug detail for the
                                                  General drawer (current
                                                  claim, history, timeline,
-                                                 job ids).
-- ``GET  /api/admin/reviews/<slug>/validation``  lazy-fetched validation
-                                                 category counts (expensive —
-                                                 walks the bucket).
+                                                 job ids, flagged-issue count).
 - ``GET  /api/admin/reviews/unviewed-count``     per-caller marked-ready
                                                  unread count (polled by the
                                                  admin entry-button dot).
@@ -57,12 +54,6 @@ def review_detail(user, slug):
     if detail is None:
         return jsonify({"error": "unknown slug"}), 404
     return jsonify(detail)
-
-
-@admin_reviews_bp.route("/reviews/<slug>/validation")
-@require_capability("reviews.view")
-def review_validation(user, slug):
-    return jsonify(reviews_service.get_review_validation(slug))
 
 
 @admin_reviews_bp.route("/reviews/<slug>/view", methods=["POST"])

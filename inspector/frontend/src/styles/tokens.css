@@ -68,6 +68,13 @@
        semantic token so component CSS doesn't reach for a bucket color. */
     --state-error-fg:            oklch(0.86 0.130 75);
 
+    /* Warm "attention" amber — manual flags, mark-ready bypass, flagged-issue
+       counts. The one warning voice, distinct from the cyan accent and the
+       lifecycle state hues; paired with a label/shape, never colour alone. */
+    --state-warn-fg:             oklch(0.86 0.130 75);
+    --state-warn-bg:             oklch(0.86 0.130 75 / 0.12);
+    --state-warn-border:         oklch(0.86 0.130 75 / 0.40);
+
     /* ---------- type ---------- */
     --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
                   "Helvetica Neue", Arial, sans-serif;
@@ -101,6 +108,7 @@
     --r-1: 3px;
     --r-2: 5px;
     --r-3: 8px;
+    --r-pill: 999px;
 
     /* ---------- motion ---------- */
     --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);

@@ -13,7 +13,11 @@ export default {
             .map((f) => (path.isAbsolute(f) ? f : path.join(root, f)))
             .filter((f) => {
                 const rel = path.relative(frontendRoot, f);
-                return rel && !rel.startsWith('..');
+                if (!rel || rel.startsWith('..')) return false;
+                // Codegen'd types are eslint-ignored; passing them explicitly
+                // bypasses the ignore and `eslint --fix` strips the regen
+                // banner, breaking the schema-codegen-check diff.
+                return !rel.split(path.sep).join('/').startsWith('src/lib/types/generated/');
             });
         if (abs.length === 0) return [];
         return `node ${eslintBin} --config ${eslintConfig} --fix ${abs.join(' ')}`;

@@ -38,6 +38,7 @@ GUIDE_VIEW_KEYS = (
     "qalqala",
     "muqattaat",
     "basmala_amin",
+    "flagging",
 )
 GUIDE_VIEW_KEY_ALIASES = {
     "low_confidence_v2": "low_confidence",

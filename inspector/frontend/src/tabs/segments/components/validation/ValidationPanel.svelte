@@ -30,6 +30,7 @@
     import { get } from 'svelte/store';
 
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
+    import { can } from '../../../../lib/stores/capabilities';
     import { currentUser } from '../../../../lib/stores/current-user';
     import type {
         SegValAnyItem,
@@ -60,6 +61,7 @@
     import { filterStaleIssues } from '../../utils/validation/stale';
     import { _fetchPeaks } from '../../utils/waveform/utils';
     import ErrorCard from './ErrorCard.svelte';
+    import FlaggedCard from './FlaggedCard.svelte';
 
     // ---- Props ----
     /** Filter results to this chapter number. null = all chapters. */
@@ -499,6 +501,15 @@
     }
     $: hasAny = categories.length > 0;
 
+    // ---- Flagged Issues (non-registry top accordion) ----
+    // A manual "needs a second look" thread per segment. Deliberately NOT in
+    // IssueRegistry — it must not leak into filters or issue-type counts. The
+    // open-state uses a reserved key that can't collide with a registry kind.
+    const FLAGGED_KEY = '__flagged__';
+    $: flaggedSegs = ($segAllData?.segments ?? []).filter((s) => s.flag != null);
+    const canSeeFlaggerStore = can('segments.see_flagger_identity');
+    $: canSeeFlagger = $canSeeFlaggerStore;
+
     // ---- Virtualization window for the open category ----
     $: openCat = categories.find((c) => c.type === openCategory) ?? null;
     // Displayed items inside the open accordion: pinned snapshot keys (in
@@ -873,10 +884,43 @@
     }
 </script>
 
-{#if hasAny}
+{#if hasAny || flaggedSegs.length > 0}
     <div class="seg-validation-panel">
         {#if label}
             <div class="val-section-label">{label}</div>
+        {/if}
+
+        {#if flaggedSegs.length > 0}
+            <details
+                class="flagged-accordion"
+                data-category={FLAGGED_KEY}
+                open={openCategory === FLAGGED_KEY}
+                on:toggle={(e) => handleAccordionToggle(e, FLAGGED_KEY)}
+            >
+                <summary class="val-summary">
+                    <button
+                        type="button"
+                        class="val-guide-btn"
+                        class:unread={$currentUser.hf_user_id != null
+                            && !isGuideRead($currentUser.guides_read, 'flagging')}
+                        aria-label="Open guide for Flagged Issues"
+                        title="Open guide for Flagged Issues"
+                        on:click={(e) => openGuide(e, 'flagging')}
+                    >?</button>
+                    <span class="val-summary-main">
+                        <span class="val-summary-title">Flagged Issues</span>
+                        <span class="val-count flagged-count">{flaggedSegs.length}</span>
+                    </span>
+                </summary>
+
+                {#if openCategory === FLAGGED_KEY}
+                    <div class="val-cards-container flagged-cards">
+                        {#each flaggedSegs as fseg (fseg.segment_uid ?? `${fseg.chapter}:${fseg.index}`)}
+                            <FlaggedCard seg={fseg} {canSeeFlagger} />
+                        {/each}
+                    </div>
+                {/if}
+            </details>
         {/if}
 
         {#each categories as cat (cat.type)}
@@ -984,3 +1028,29 @@
         {/each}
     </div>
 {/if}
+
+<style>
+    /* Flagged Issues — a warm-amber top accordion, set apart from the cyan/red
+       validation categories so a manual flag reads as "a human asked for a
+       second look", not an automated validation error. */
+    .flagged-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        margin-left: 4px;
+        padding: 1px 7px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--state-warn-fg);
+        background: var(--state-warn-bg);
+        border: 1px solid var(--state-warn-border);
+        border-radius: var(--r-pill);
+    }
+
+    .flagged-cards {
+        padding-top: var(--s-2);
+    }
+</style>

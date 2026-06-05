@@ -16,7 +16,7 @@
  * dispatcher's convenience and never leaks into the operation log.
  */
 
-import type { EditOp, Segment } from '../../../lib/types/domain';
+import type { EditOp, FlagAuthor, Segment } from '../../../lib/types/domain';
 import type { SegSnapshot } from '../stores/dirty';
 
 // ---------------------------------------------------------------------------
@@ -31,7 +31,8 @@ export type Operation =
     | 'delete'
     | 'ignoreIssue'
     | 'autoFixMissingWord'
-    | 'setIsWasl';
+    | 'setIsWasl'
+    | 'flagSegment';
 
 // ---------------------------------------------------------------------------
 // Command shapes
@@ -141,6 +142,23 @@ export interface SetIsWaslCommand extends CommandBase {
     is_wasl: boolean;
 }
 
+/** Flag a segment with a comment thread. The actor + timestamps are stamped
+ *  server-side (never trusted from the client). ``intent`` distinguishes:
+ *  - ``set``      — create a flag (comment required).
+ *  - ``edit``     — replace the root comment (flagger only); an EMPTY comment
+ *                   removes the whole flag (the unflag mechanism).
+ *  - ``followup`` — append a reply (any editor; comment required).
+ *  ``author`` is the optimistic FE-shape author used for immediate display
+ *  (the next /all refetch carries the authoritative redacted shape). */
+export interface FlagSegmentCommand extends CommandBase {
+    type: 'flagSegment';
+    segmentUid: string;
+    comment: string;
+    intent: 'set' | 'edit' | 'followup';
+    /** Optimistic author for the new root/follow-up comment (current user). */
+    author?: FlagAuthor;
+}
+
 export type SegmentCommand =
     | TrimCommand
     | SplitCommand
@@ -149,7 +167,8 @@ export type SegmentCommand =
     | DeleteCommand
     | IgnoreIssueCommand
     | AutoFixMissingWordCommand
-    | SetIsWaslCommand;
+    | SetIsWaslCommand
+    | FlagSegmentCommand;
 
 // ---------------------------------------------------------------------------
 // Result shapes
