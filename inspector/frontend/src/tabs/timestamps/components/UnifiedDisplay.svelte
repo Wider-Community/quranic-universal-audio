@@ -142,7 +142,9 @@
     /** Split a phone string into base character(s) and trailing IPA modifiers
      *  (length ː, emphatic ˤ, ghunnah tilde ̃). The modifier is rendered as a
      *  superscript so the base stays visually centred in the cell. */
-    const PHONE_MOD_RE = /([ːˤ]+)$/u;
+    // Only length marks (ː / ASCII :) are detached modifiers; ˤ is integral to
+    // the consonant symbol (rˤ, aˤ) and must stay in the base.
+    const PHONE_MOD_RE = /([ː:]+)$/u;
     function splitPhone(phone: string | undefined): { base: string; mod: string } {
         if (!phone || phone === 'sil' || phone === 'sp') return { base: phone ?? '', mod: '' };
         const m = PHONE_MOD_RE.exec(phone);
@@ -690,8 +692,7 @@
                         role="button"
                         tabindex="-1"
                     >
-                        <span class="ph-base">{parts.base || '(sil)'}</span>
-                        {#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
+                        <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
                     </span>
                 {/each}
             </div>
@@ -764,8 +765,7 @@
                         role="button"
                         tabindex="-1"
                     >
-                        <span class="ph-base">{parts.base || '(sil)'}</span>
-                        {#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
+                        <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
                     </span>
                 {/each}
             </div>
