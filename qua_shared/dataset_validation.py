@@ -97,36 +97,44 @@ def check_intra_segment_gapless(ref: str, verse: dict) -> list[Violation]:
     padding + silence removal post-MFA, so MFA's intra-segment boundaries
     are gapless by design — a non-zero gap inside a segment means the
     invariant broke somewhere.
+
+    Words are matched to a segment by its **time window**, not by word index.
+    A reciter can loop back and re-recite words (a lookback), so the same word
+    index appears more than once in the verse; an index-keyed lookup would pair
+    a word from one pass with the repeat from another and report a phantom gap.
+    Each segment's time span isolates the right occurrences, so each pass is
+    checked for contiguity on its own.
     """
     segments = verse.get("segments") or []
     words = verse.get("words") or []
     if not segments or len(words) < 2:
         return []
-    # widx → (start, end) lookup
-    wmap: dict[int, tuple[int, int]] = {}
-    for w in words:
-        wmap[int(w[0])] = (int(w[1]), int(w[2]))
 
     out: list[Violation] = []
     for seg in segments:
-        w_from, w_to = int(seg[0]), int(seg[1])
-        if w_to <= w_from:
+        if len(seg) < 4:
             continue
-        for widx in range(w_from, w_to):
-            cur = wmap.get(widx)
-            nxt = wmap.get(widx + 1)
-            if cur is None or nxt is None:
-                continue
-            if nxt[0] != cur[1]:
+        seg_start, seg_end = int(seg[2]), int(seg[3])
+        if seg_end <= seg_start:
+            continue
+        # Word occurrences that fall inside this segment's time span, in time
+        # order — half-open on start so back-to-back segments don't double-count.
+        in_seg = sorted(
+            (int(w[1]), int(w[2]), int(w[0]))
+            for w in words
+            if seg_start <= int(w[1]) < seg_end
+        )
+        for (a_start, a_end, a_idx), (b_start, b_end, b_idx) in zip(in_seg, in_seg[1:]):
+            if b_start != a_end:
                 out.append(
                     _violation(
                         ref,
                         "intra_segment_gap",
-                        word_a=widx,
-                        word_b=widx + 1,
-                        a_end=cur[1],
-                        b_start=nxt[0],
-                        gap_ms=nxt[0] - cur[1],
+                        word_a=a_idx,
+                        word_b=b_idx,
+                        a_end=a_end,
+                        b_start=b_start,
+                        gap_ms=b_start - a_end,
                     )
                 )
     return out
