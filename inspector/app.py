@@ -401,15 +401,18 @@ def _boot_substrate() -> None:
     # Release-job poll worker: 120 s background scan over running HF Jobs so
     # the DB-side completion handler fires even if the job's webhook callback
     # didn't reach us (firewall, dev localhost, restart window). Registered
-    # handlers cover hf_publish; cut_release is webhook-only (needs full
-    # members payload) so it doesn't register here. Opt-out via
-    # ``INSPECTOR_RELEASE_POLL=0``.
+    # handlers cover hf_publish + hf_publish_batch; cut_release is webhook-only
+    # (needs full members payload) so it doesn't register here. The batch
+    # handler reads its members from the durable bucket record on the poll path.
+    # Opt-out via ``INSPECTOR_RELEASE_POLL=0``.
     if os.environ.get("INSPECTOR_RELEASE_POLL", "1") == "1":
         try:
             from services.admin.jobs import base as _jobs_base
             from services.admin.jobs import hf_publish as _hf_publish_jobs
+            from services.admin.jobs import hf_publish_batch as _hf_publish_batch_jobs
 
             _hf_publish_jobs.register()
+            _hf_publish_batch_jobs.register()
             _jobs_base.start_poll_worker()
             logger.info("release-job poll worker started")
         except Exception as e:  # noqa: BLE001

@@ -130,7 +130,8 @@ COPY inspector/utils/ ./inspector/utils/
 # qua_shared/ is shared with the CI build pipeline. Inspector imports
 # ``qua_shared.timestamps_shards`` for ``SCHEMA_VERSION`` + ``derive_url_template``
 # when composing the bucket-mode manifest. ``qua_jobs/`` ships the HF-Job
-# entrypoints (generate_timestamps / publish_hf / cut_release / shard) that
+# entrypoints (generate_timestamps / publish_hf / publish_hf_batch /
+# cut_release / shard) that
 # ``services/admin/jobs/base.stage_job_code`` uploads to the aligner-bucket on
 # launch. ``.github/config/repo.yml``, ``docs/templates/`` (release-body +
 # dataset-card render-templates) + ``LICENSE`` are read by config_loader (the

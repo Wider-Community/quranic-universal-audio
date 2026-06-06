@@ -248,6 +248,18 @@ class AdminGhReleaseMember(BaseModel):
     ts_version: str | None = None
 
 
+class AdminPublishError(BaseModel):
+    """A reciter's failure in the most recent batch publish. Surfaced on the
+    row so the FE can re-bucket it into "Failed to publish" until a retry
+    supersedes it with a successful HF release."""
+
+    model_config = ConfigDict(extra="allow")
+
+    message: str
+    job_id: str
+    at: str | None = None
+
+
 class AdminReleaseStatusRow(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -262,6 +274,7 @@ class AdminReleaseStatusRow(BaseModel):
     ts: AdminReleaseRow | None
     hf: AdminReleaseRow | None
     gh: AdminGhReleaseMember | None
+    publish_error: AdminPublishError | None = None
 
 
 class AdminLatestGhRelease(BaseModel):
@@ -286,10 +299,22 @@ class AdminReleasesSummary(BaseModel):
 class AdminInFlightJob(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    kind: Literal["hf_publish", "cut_release", "timestamps"]
+    kind: Literal["hf_publish", "hf_publish_batch", "cut_release", "timestamps"]
     slug: str | None
     job_id: str
     started_at: str | None
+    url: str | None = None
+
+
+class AdminLastBatch(BaseModel):
+    """Summary of the most recent batch publish, for the dismissable banner."""
+
+    model_config = ConfigDict(extra="allow")
+
+    job_id: str
+    at: str | None = None
+    published_count: int
+    failed_count: int
 
 
 class AdminReleasesStatusResponse(BaseModel):
@@ -299,6 +324,7 @@ class AdminReleasesStatusResponse(BaseModel):
     summary: AdminReleasesSummary | None
     in_flight: list[AdminInFlightJob]
     recitations: list[AdminReleaseStatusRow]
+    last_batch: AdminLastBatch | None = None
 
 
 class AdminReleasePreviewRow(BaseModel):
@@ -351,6 +377,12 @@ class AdminCutReleaseRequest(BaseModel):
 
     version: str | None = None
     expected_version_at_preview: str | None = None
+
+
+class AdminPublishBatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slugs: list[str] = Field(..., min_length=1)
 
 
 class AdminLaunchResponse(BaseModel):

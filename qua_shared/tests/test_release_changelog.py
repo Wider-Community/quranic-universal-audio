@@ -47,7 +47,7 @@ def test_first_release_added_only():
     assert md.startswith("# 2026-06-03\n\n## What to download")
     assert "This release publishes" not in md
     assert (
-        "| `catalog.json` | Reciter names, riwayah, style, coverage, audio metadata, and the audio URLs paired with the timestamp data. |"
+        "| `catalog.json` (per recitation) | Reciter names, riwayah, style, coverage, audio metadata, and the audio URLs paired with the timestamp data. |"
         in md
     )
     assert "release_schemas.json" not in md

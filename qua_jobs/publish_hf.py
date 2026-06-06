@@ -41,6 +41,8 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from qua_shared.letter_vocab import to_external_char  # noqa: E402
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("publish_hf")
 
@@ -377,7 +379,9 @@ def build_rows(
                     verse_letters.append(
                         {
                             "word_idx": _i(widx),
-                            "char": ch,
+                            # Internal 57-token alphabet -> published 42-token set
+                            # (same mapping as the GH release letter tier).
+                            "char": to_external_char(ch),
                             "start_ms": _i(s - clip_start),
                             "end_ms": _i(e - clip_start),
                         }
@@ -686,7 +690,9 @@ def _sync_dataset_catalog_and_card(repo_id: str) -> None:
         push_catalog_dataset,
         render_dataset_card,
         upload_dataset_card,
+        upload_vocab_file,
     )
+    from qua_shared.letter_vocab import vocab_json_bytes
 
     db_path = _bucket_root() / "db" / "inspector.db"
     if not db_path.exists():
@@ -703,6 +709,7 @@ def _sync_dataset_catalog_and_card(repo_id: str) -> None:
         stats=stats,
     )
     upload_dataset_card(repo_id=repo_id, content=card, token=token)
+    upload_vocab_file(repo_id=repo_id, content=vocab_json_bytes(), token=token)
 
 
 def _riwayah_for(audio_manifest: dict | None, detailed: dict) -> str:
@@ -814,14 +821,43 @@ def _preflight(slug: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-def main() -> int:
-    slug = os.environ.get("SLUG", "").strip()
-    job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
-    log.info("publish_hf: slug=%s job=%s", slug, job_id)
+def _result(
+    slug: str,
+    status: str,
+    *,
+    version: str = "",
+    external_uri: str = "",
+    validation_summary: dict | None = None,
+    error: str | None = None,
+    exit_code: int = 0,
+) -> dict:
+    """Build the ``publish_slug`` result dict (shared by single + batch)."""
+    return {
+        "slug": slug,
+        "status": status,
+        "version": version,
+        "external_uri": external_uri,
+        "validation_summary": validation_summary,
+        "error": error,
+        "exit_code": exit_code,
+    }
 
+
+def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
+    """Publish one recitation to the HF dataset. Returns a result dict; never
+    posts a webhook or raises (the caller — single or batch — owns reporting).
+
+    ``sync_card`` re-renders the dataset catalog + card after the push. The
+    single entrypoint runs it per publish; the batch runner skips it per slug
+    and syncs once at the end (one push of N splits → one card render).
+
+    Result: ``{slug, status: "succeeded"|"failed", version, external_uri,
+    validation_summary, error, exit_code}``. ``exit_code`` lets the single
+    entrypoint preserve its operator-facing process codes.
+    """
     rc = _preflight(slug)
     if rc != 0:
-        return rc
+        return _result(slug, "failed", error=f"preflight failed (rc={rc})", exit_code=rc)
 
     # 1. Load bucket artifacts.
     detailed = _load_detailed(slug)
@@ -829,7 +865,7 @@ def main() -> int:
     canonical = _load_timestamps_shards(slug)
     if not canonical:
         log.error("no timestamps shards on bucket for %s", slug)
-        return 3
+        return _result(slug, "failed", error="no timestamps shards on bucket", exit_code=3)
     timestamps = _reshape_timestamps_for_rows(canonical)
 
     # 2. Load static refs from staged code dir. qpc_hafs ships gzipped to
@@ -848,14 +884,10 @@ def main() -> int:
     log.info("built %d rows for %s", len(rows), slug)
     if not rows:
         log.error("no rows built — detailed.json + timestamps disagreement?")
-        return 15
+        return _result(slug, "failed", error="no rows built (detailed/timestamps disagree)", exit_code=15)
 
     # 4. Validate boundaries before any audio work.
-    from qua_shared.dataset_validation import (
-        BoundaryValidationError,
-        fatal_violations,
-        validate_dataset,
-    )
+    from qua_shared.dataset_validation import fatal_violations, validate_dataset
 
     summary = validate_dataset(_verses_for_validation(rows), surah_info=surah_info)
     fatal = fatal_violations(summary["violations"])
@@ -863,15 +895,13 @@ def main() -> int:
         log.error("boundary validation failed: %d fatal violation(s)", len(fatal))
         for v in fatal[:5]:
             log.error("  %s", v)
-        _post_webhook(
-            slug=slug,
-            job_id=job_id,
-            version="",
-            external_uri="",
-            status="failed",
+        return _result(
+            slug,
+            "failed",
             validation_summary=summary,
+            error=f"boundary validation failed ({len(fatal)} fatal)",
+            exit_code=1,
         )
-        raise BoundaryValidationError(summary)
 
     # 5. Stream-copy audio per row. The bucket FUSE mount can't handle many
     # parallel random-access reads of the same chapter mp3 (12-wide parallel
@@ -955,39 +985,52 @@ def main() -> int:
         log.warning("failed slices (first 20): %s", failed_slices[:20])
     if sliced_count == 0:
         log.error("every audio slice failed — refusing to push empty dataset")
-        _post_webhook(
-            slug=slug,
-            job_id=job_id,
-            version="",
-            external_uri="",
-            status="failed",
+        return _result(
+            slug,
+            "failed",
             validation_summary=summary,
+            error="every audio slice failed",
+            exit_code=16,
         )
-        return 16
 
     # 6. Push to HF — gets us a commit sha to record as ``version``.
     riwayah = _riwayah_for(audio_manifest, detailed)
     version_sha = _push_to_hf(slug, riwayah, rows, audio_bytes)
 
     repo_id = _resolve_dataset_repo_id()
-    _sync_dataset_catalog_and_card(repo_id)
+    if sync_card:
+        _sync_dataset_catalog_and_card(repo_id)
 
-    # 7. Notify Inspector.
     external_uri = (
         f"https://huggingface.co/datasets/{repo_id}/tree/{version_sha}"
         if version_sha
         else f"https://huggingface.co/datasets/{repo_id}"
     )
-    _post_webhook(
-        slug=slug,
-        job_id=job_id,
+    log.info("publish_hf: done slug=%s version=%s", slug, version_sha)
+    return _result(
+        slug,
+        "succeeded",
         version=version_sha or job_id,
         external_uri=external_uri,
         validation_summary=summary,
     )
 
-    log.info("publish_hf: done slug=%s version=%s", slug, version_sha)
-    return 0
+
+def main() -> int:
+    slug = os.environ.get("SLUG", "").strip()
+    job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
+    log.info("publish_hf: slug=%s job=%s", slug, job_id)
+
+    result = publish_slug(slug, job_id, sync_card=True)
+    _post_webhook(
+        slug=slug,
+        job_id=job_id,
+        version=result["version"] or job_id,
+        external_uri=result["external_uri"],
+        status=result["status"],
+        validation_summary=result["validation_summary"],
+    )
+    return int(result["exit_code"])
 
 
 if __name__ == "__main__":

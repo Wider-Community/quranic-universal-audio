@@ -111,9 +111,11 @@ gh:releases/v{X.Y.Z}/
 ├── manifest.json         # dataset-level: version, per-reciter sha256/bytes/coverage/change_kind, static_refs
 ├── CHANGELOG.md          # the rendered release body
 ├── catalog.json          # dataset-level: reciter rows with audio URLs paired to timestamps
-├── shard.py              # consumer helper
+├── shard.py              # consumer helper (per-surah file splitter)
+├── check_updates.py      # consumer helper (per-reciter update check)
 ├── surah_info.json       # static reference
 ├── qpc_hafs.json         # static reference (mushaf text)
+├── letter_vocab.json     # letter-tier char alphabet (42 tokens) + tokenization rule
 └── LICENSE               # CC-BY-4.0
 ```
 
@@ -131,6 +133,17 @@ Each tier self-contains the level below; all times are relative to the matching 
 `catalog.json`; all ship the canonical (deduplicated) take. The three `.json.gz` layers keep storage,
 startup speed, and network transfer cheap: download verse, word, or letter detail independently.
 Use `shard.py` when an app prefers local per-surah files. There is no per-reciter `README.md`.
+
+**Letter-tier `char` alphabet.** Internal shards (`reciters/<slug>/timestamps/<ch>.json.gz`)
+carry a 57-token grapheme alphabet (haraka stripped upstream, but the maddah mark and madd
+composites retained). At publish time **both** `cut_release` and `publish_hf` map each `char`
+through `qua_shared/letter_vocab.to_external_char`, which drops the maddah mark (`U+0653`) to
+yield a stable **42-token** external alphabet — a non-lossy, prolongation-only collapse (no two
+distinct letters merge). The mapping is **fail-loud**: an unknown token aborts the cut so a new
+riwayah/orthography is caught rather than silently shipped. The alphabet is published verbatim
+as `letter_vocab.json` (release root + the HF dataset repo), generated from the same module so
+it cannot drift from the emitted data. Internal shards and the Inspector animation are
+unchanged. See `qua_shared/letter_vocab.py`.
 
 ### Audio policy (as-built)
 
@@ -191,7 +204,38 @@ come from the `riwayahs` / `styles` / `channels` vocab tables — `catalog.json`
 | `GET /api/admin/releases/status` | Per-reciter TS/HF/GH status grid + summary + in-flight jobs (FE buckets). `reviews.view`. |
 | `GET /api/admin/release-preview` | DB-only dry-run: change counts, auto-version, rendered changelog. `release.cut_gh`. |
 | `POST /api/admin/cut-release` | Launch the global cut. `release.cut_gh`. Body accepts only `version` and `expected_version_at_preview`; echoes the preview version to 409 stale state. |
-| `POST /api/admin/publish-hf/<slug>` | Launch per-reciter HF dataset publish. `release.publish_hf`. |
+| `POST /api/admin/publish-hf/<slug>` | Launch per-reciter HF dataset publish (single). `release.publish_hf`. |
+| `POST /api/admin/publish-hf-batch` | Launch ONE job publishing a batch of slugs. Body `{slugs: [...]}`. `release.publish_hf`. |
+| `POST /api/admin/release-jobs/<job_id>/cancel` | Cancel any in-flight release job (publish / batch / cut / timestamps). Outer gate `reviews.view`; the cancel itself is re-gated per kind. |
+
+### Batch publish (the `hf_publish_batch` kind)
+
+`publish-hf-batch` launches one HF Job running
+[qua_jobs/publish_hf_batch.py](../../qua_jobs/publish_hf_batch.py), which loops
+[`publish_hf.publish_slug`](../../qua_jobs/publish_hf.py) over each slug (one slug failing never
+aborts the batch) and re-renders the dataset catalog/card **once** at the end. The job:
+
+1. writes a durable batch record to `jobs/_global/hf_publish_batch/<job_id>.json`
+   (`{completed_at, members:[{slug, status, version, external_uri, error}]}`), then
+2. POSTs `/api/webhooks/hf-publish-batch-complete` →
+   [`services.admin.jobs.hf_publish_batch.complete()`](../../inspector/services/admin/jobs/hf_publish_batch.py),
+   which calls the single-publish `hf_publish.complete()` per **succeeded** member (idempotent
+   `per_recitation_releases(track='hf')` insert + `released` event) and leaves failures in the
+   record. The 120 s poll fallback reconciles by reading the same record (no webhook payload).
+
+Global single-flight: one batch at a time; a single publish or a cut is rejected while a batch is in
+flight, and vice-versa (labels `task=hf_publish_batch`, `reciter=_batch`).
+
+`GET /api/admin/releases/status` reads the newest batch record and derives **failed** slugs (a
+failure clears once a current `hf` release lands at/after the batch). The status payload adds
+`recitations[].publish_error` (per-row, → the FE "Failed to publish" bucket) and a top-level
+`last_batch {job_id, at, published_count, failed_count}` (→ the dismissable summary banner). In-flight
+job entries carry `url` for the FE "Open on HF" link; cancel is the generic route above.
+
+The Releases tab is **select-only**: publishable rows (waiting / stale / failed / published) carry a
+checkbox; a sticky action bar publishes the selection as one batch (a single selection = a batch of
+one). There are no per-row publish buttons. In-flight rows show a minimal status (badge + elapsed +
+Open-on-HF + Cancel); the global cut/batch job surfaces the same in the summary card strip.
 
 ## HF dataset schema
 

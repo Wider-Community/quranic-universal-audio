@@ -32,15 +32,26 @@ from pydantic import ValidationError
 from qua_shared.schemas import (
     AdminCutReleaseRequest,
     AdminLaunchResponse,
+    AdminPublishBatchRequest,
     AdminReleasesStatusResponse,
 )
+from routes._admin_helpers import require_capability_or_403
 from services.admin.jobs import base as jobs_base
 from services.admin.jobs import cut_release as cut_release_jobs
 from services.admin.jobs import hf_publish as hf_publish_jobs
+from services.admin.jobs import hf_publish_batch as hf_publish_batch_jobs
 from services.admin.release_preview import build_release_preview, current_auto_version
 from services.db import get_conn, repo_releases
 from services.state import state as state_service
 from utils.decorators import require_capability, require_same_origin
+
+# Per-kind capability gates for the generic release-job cancel route.
+_CANCEL_CAPS = {
+    "hf_publish": "release.publish_hf",
+    "hf_publish_batch": "release.publish_hf",
+    "cut_release": "release.cut_gh",
+    "timestamps": "reviews.generate_timestamps",
+}
 
 log = logging.getLogger("inspector")
 
@@ -97,6 +108,16 @@ def publish_hf(user, slug: str):
                 "job_id": cut_busy[1],
             }
         ), 409
+    # A batch publish may be processing this slug (or about to) — don't race it.
+    batch_busy = jobs_base.running_job_for(kind="hf_publish_batch")
+    if batch_busy is not None:
+        return jsonify(
+            {
+                "error": "a batch publish is in flight — wait for it to finish",
+                "kind": batch_busy[0],
+                "job_id": batch_busy[1],
+            }
+        ), 409
     webhook_base = request.url_root
     try:
         result = hf_publish_jobs.launch(slug, webhook_base=webhook_base)
@@ -105,6 +126,100 @@ def publish_hf(user, slug: str):
         return jsonify({"error": str(exc)}), 502
     out = AdminLaunchResponse.model_validate(result)
     return jsonify(out.model_dump(mode="json")), 202
+
+
+# ---------------------------------------------------------------------------
+# POST /api/admin/publish-hf-batch
+# ---------------------------------------------------------------------------
+
+
+@admin_releases_bp.route("/publish-hf-batch", methods=["POST"])
+@require_same_origin
+@require_capability("release.publish_hf")
+def publish_hf_batch(user):
+    """Launch ONE HF Job that publishes a batch of recitations.
+
+    Body: ``{"slugs": [str, ...]}``. Pre-flight: every slug must exist and have
+    a current ``ts`` release row; none may have a job already in flight; no
+    ``cut_release`` and no other ``hf_publish_batch`` may be running. The job
+    publishes each split independently (one slug failing never aborts the
+    batch) and reports per-slug results via the completion webhook.
+
+    Returns 202 ``{job_id, url}``.
+    """
+    try:
+        req = AdminPublishBatchRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as exc:
+        return jsonify({"error": "invalid batch request", "details": exc.errors()}), 400
+
+    # De-dup while preserving order.
+    slugs = list(dict.fromkeys(s.strip() for s in req.slugs if s.strip()))
+    if not slugs:
+        return jsonify({"error": "no slugs provided"}), 400
+
+    if jobs_base.running_job_for(kind="cut_release") is not None:
+        return jsonify({"error": "a cut_release is in flight — wait for it to finish"}), 409
+    if jobs_base.running_job_for(kind="hf_publish_batch") is not None:
+        return jsonify({"error": "a batch publish is already running"}), 409
+
+    for slug in slugs:
+        if state_service.get_row(slug) is None:
+            return jsonify({"error": f"unknown slug: {slug}"}), 404
+        if repo_releases.current_release("ts", slug) is None:
+            return jsonify(
+                {"error": f"{slug} has no current TS release — generate timestamps first"}
+            ), 409
+        busy = jobs_base.running_job_for(slug=slug)
+        if busy is not None:
+            return jsonify(
+                {"error": f"a job is already running for {slug}", "kind": busy[0], "job_id": busy[1]}
+            ), 409
+
+    webhook_base = request.url_root
+    try:
+        result = hf_publish_batch_jobs.launch(slugs, webhook_base=webhook_base)
+    except Exception as exc:
+        log.warning("publish-hf-batch launch failed: %s", exc)
+        return jsonify({"error": str(exc)}), 502
+    out = AdminLaunchResponse.model_validate(result)
+    return jsonify(out.model_dump(mode="json")), 202
+
+
+# ---------------------------------------------------------------------------
+# POST /api/admin/release-jobs/<job_id>/cancel
+# ---------------------------------------------------------------------------
+
+
+@admin_releases_bp.route("/release-jobs/<job_id>/cancel", methods=["POST"])
+@require_same_origin
+@require_capability("reviews.view")
+def cancel_release_job(user, job_id):
+    """Cancel an in-flight release job (publish / batch / cut / timestamps).
+
+    Outer gate is ``reviews.view`` (anyone who sees the Releases tab); the
+    actual cancel is then gated per-kind against the same capability that
+    launched it (publish/batch → ``release.publish_hf``, cut → ``release.cut_gh``,
+    timestamps → ``reviews.generate_timestamps``). Returns
+    ``{job_id, canceled}``; 404 if the job isn't found, 502 on HF error."""
+    from huggingface_hub import cancel_job as hf_cancel_job
+
+    kind = jobs_base.kind_for_job(job_id)
+    if kind is None:
+        return jsonify({"error": "job not found"}), 404
+    cap = _CANCEL_CAPS.get(kind)
+    if cap is not None:
+        denied = require_capability_or_403(user, cap)
+        if denied is not None:
+            return denied
+    try:
+        hf_cancel_job(job_id)
+    except Exception as exc:
+        log.warning("cancel release job %s (%s) failed: %s", job_id, kind, exc)
+        return jsonify({"error": str(exc)}), 502
+    from services.storage import cache as _cache
+
+    _cache.invalidate_in_flight_jobs_cache()
+    return jsonify({"job_id": job_id, "canceled": True})
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +269,10 @@ def cut_release(user):
     """
     if jobs_base.running_job_for(kind="cut_release") is not None:
         return jsonify({"error": "a cut_release job is already running"}), 409
+    if jobs_base.running_job_for(kind="hf_publish_batch") is not None:
+        return jsonify(
+            {"error": "a batch publish is in flight — wait for it to finish before cutting"}
+        ), 409
     try:
         cut_request = AdminCutReleaseRequest.model_validate(request.get_json(silent=True) or {})
     except ValidationError as exc:
@@ -263,7 +382,46 @@ def releases_status(user):
     # surfaces in the "In progress" bucket (a regen on a released row has no
     # other in-flight signal — there's no state change). hf_publish + cut_release
     # are the dataset/GH tracks.
-    in_flight = jobs_base.list_in_flight_jobs(("hf_publish", "cut_release", "timestamps"))
+    in_flight = jobs_base.list_in_flight_jobs(
+        ("hf_publish", "hf_publish_batch", "cut_release", "timestamps")
+    )
+
+    # Most-recent batch publish outcome — drives the "Failed to publish" bucket
+    # (per-row ``publish_error``) and the dismissable summary banner
+    # (``last_batch``). A failed member clears once a later HF release for that
+    # slug supersedes it (the operator retried successfully).
+    batch_outcome = hf_publish_batch_jobs.latest_batch_outcome()
+    batch_failures: dict[str, dict] = {}
+    last_batch: dict | None = None
+    if batch_outcome is not None:
+        members = batch_outcome.get("members") or []
+        completed_at = batch_outcome.get("completed_at")
+        batch_job_id = batch_outcome.get("job_id") or ""
+        published_count = sum(1 for m in members if m.get("status") == "succeeded")
+        failed_count = 0
+        for m in members:
+            if m.get("status") == "succeeded":
+                continue
+            slug = (m.get("slug") or "").strip()
+            if not slug:
+                continue
+            # Cleared if a current HF release landed at/after this batch.
+            hf_row = repo_releases.current_release("hf", slug)
+            if hf_row is not None and completed_at and (hf_row.get("produced_at") or "") >= completed_at:
+                continue
+            batch_failures[slug] = {
+                "message": m.get("error") or "publish failed",
+                "job_id": batch_job_id,
+                "at": completed_at,
+            }
+            failed_count += 1
+        if failed_count > 0:
+            last_batch = {
+                "job_id": batch_job_id,
+                "at": completed_at,
+                "published_count": published_count,
+                "failed_count": failed_count,
+            }
 
     deliveries = conn.execute("""
         SELECT d.slug, d.riwayah, d.style, d.channel,
@@ -299,8 +457,9 @@ def releases_status(user):
             "gh": _slim_release_row(
                 gh, fields=("change_kind", "stale_since", "release_id", "ts_version")
             ),
+            "publish_error": batch_failures.get(slug),
         }
-        if _is_bucketable(row, in_flight_slugs):
+        if _is_bucketable(row, in_flight_slugs) or slug in batch_failures:
             out.append(row)
     payload = AdminReleasesStatusResponse.model_validate(
         {
@@ -311,6 +470,7 @@ def releases_status(user):
             "summary": summary,
             "in_flight": in_flight,
             "recitations": out,
+            "last_batch": last_batch,
         }
     )
     return jsonify(payload.model_dump(mode="json"))

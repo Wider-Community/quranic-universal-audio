@@ -5,12 +5,13 @@
 | Asset | What it gives you |
 |---|---|
 | `manifest.json` | Release index: reciter zips, download URLs, checksums, sizes, coverage, and change type. |
-| `catalog.json` | Reciter names, riwayah, style, coverage, audio metadata, and the audio URLs paired with the timestamp data. |
-| `<reciter>.zip` | One recitation's verse, word, and letter timestamp files. |
+| `<recitation>.zip` | One recitation's verse, word, and letter timestamp files. |
+| `catalog.json` (per recitation) | Reciter names, riwayah, style, coverage, audio metadata, and the audio URLs paired with the timestamp data. |
 | `shard.py` | Optional helper that splits a large timestamp file into one JSON file per surah. |
 | `check_updates.py` | Optional helper that checks the latest release for updates to the reciters you use; add `--sync` to re-download them. |
 | `surah_info.json` | Surah names, ayah counts, and word counts. |
 | `qpc_hafs.json` | QPC Hafs word reference used by the word and letter indexes. |
+| `letter_vocab.json` | The letter-tier character vocabulary: every token the `char` field can take, with codepoints, Unicode names, and notes. |
 | `LICENSE` | CC-BY-4.0 license text. |
 
 ## How audio and timestamps pair
@@ -73,10 +74,7 @@ type WordTimestamps = { _meta: Meta & { tier: "word" }, [verse: VerseKey]: [[Ms,
 type LetterTimestamps = { _meta: Meta & { tier: "letter" }, [verse: VerseKey]: [[Ms, Ms], Word[], Letter[]] };
 ```
 
-A worked example — Surah al-Fātiḥah ayah 1:1 (`بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ`, 4 words). The three
-tiers describe the **same** verse at increasing detail: each tier embeds the one above it, and every
-number is milliseconds from the start of the source audio. The `//` notes below are for explanation
-only — the shipped files are plain JSON with no comments.
+The three tiers describe the **same** verse at increasing detail: each tier embeds the one above it, and every number is milliseconds from the start of the source audio.
 
 **Verse tier** — just the verse span (`[start_ms, end_ms]`):
 
@@ -107,7 +105,7 @@ only — the shipped files are plain JSON with no comments.
 ```
 
 `word_idx` is 1-based within the verse. When a reciter loops back or re-recites part of a verse,
-`word_idx` can repeat or step backwards here — that is faithful to the audio, not an error.
+`word_idx` can repeat or step backwards.
 
 **Letter tier** — the word tier, plus a single flat list of letters, each tagged with the `word_idx`
 it belongs to (`[word_idx, char, start_ms, end_ms]`):
@@ -126,14 +124,18 @@ it belongs to (`[word_idx, char, start_ms, end_ms]`):
       [2, "ا", 770, 900],   // word 2: ٱللَّهِ
       [2, "ل", 900, 1120],
       [2, "ه", 1120, 1280]
-      // ... words 3 and 4 continue the same flat list
+      // ... words 3 and 4
     ]
   ]
 }
 ```
 
 Letters are one flat array for the whole verse (not nested inside each word) — read each letter's
-`word_idx` to know which word it falls in. `char` values are base letters without diacritics.
+`word_idx` to know which word it falls in. Each `char` is one token from a fixed 42-token
+alphabet: short vowels (haraka) are stripped and the maddah prolongation mark is dropped, but
+distinct letters are kept apart — including the silent/structural ones (the superscript "dagger"
+alef, alef-wasla, the small waw/yeh, and each hamza seat). The full token list with codepoints,
+Unicode names, and rendering notes ships as `letter_vocab.json` in this release.
 
 </details>
 

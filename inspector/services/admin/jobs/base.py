@@ -46,6 +46,11 @@ TERMINAL = (
 )
 TERMINAL_SUCCESS = ("succeeded", "completed")
 
+# Reciter-label sentinels for jobs that aren't scoped to a single slug:
+# ``_global`` (cut_release) and ``_batch`` (hf_publish_batch). Both normalize
+# to ``slug=None`` on the wire.
+GLOBAL_SLUGS = (None, "_global", "_batch")
+
 
 # ---------------------------------------------------------------------------
 # Repo root + aligner bucket + base job image. Same defaults as the legacy
@@ -131,13 +136,30 @@ def running_job_for(*, kind: str | None = None, slug: str | None = None) -> tupl
                 continue
             if slug is not None and j_slug != slug:
                 continue
-            if slug is None and kind is not None and j_slug not in (None, "_global"):
+            if slug is None and kind is not None and j_slug not in GLOBAL_SLUGS:
                 continue
             status = hf_status_str(job)
             if status in ("running", "pending", "updating"):
                 return j_kind, (hf_job_id(job) or "")
     except Exception as exc:
         log.warning("running_job_for(kind=%s, slug=%s) failed: %s", kind, slug, exc)
+    return None
+
+
+def kind_for_job(job_id: str) -> str | None:
+    """Return the ``labels.task`` (kind) of the HF Job ``job_id``, or None.
+
+    Used by the generic release-job cancel route to pick the right capability
+    gate per kind without the caller already knowing the kind."""
+    from huggingface_hub import list_jobs
+
+    try:
+        for job in list_jobs():
+            if (hf_job_id(job) or "") == job_id:
+                labels = getattr(job, "labels", {}) or {}
+                return labels.get("task")
+    except Exception as exc:
+        log.warning("kind_for_job(%s) failed: %s", job_id, exc)
     return None
 
 
@@ -171,7 +193,7 @@ def list_in_flight_jobs(kinds: tuple[str, ...]) -> list[dict]:
             if status not in ("running", "pending", "updating"):
                 continue
             slug = labels.get("reciter")
-            if slug == "_global":
+            if slug in ("_global", "_batch"):
                 slug = None
             # ``created_at`` on the HF Jobs SDK is a datetime; ISO-format it
             # for the wire. ``started_at`` is set when execution actually
@@ -188,6 +210,9 @@ def list_in_flight_jobs(kinds: tuple[str, ...]) -> list[dict]:
                     "slug": slug,
                     "job_id": hf_job_id(job) or "",
                     "started_at": started,
+                    # HF job page URL — the FE renders an "Open on HF" link so
+                    # the operator can watch logs / the job stream directly.
+                    "url": getattr(job, "url", None),
                 }
             )
     except Exception as exc:
@@ -238,6 +263,7 @@ def read_record_bytes(kind: str, slug: str | None, job_id: str) -> bytes | None:
 REQUIRED_ENTRYPOINTS = (
     "qua_jobs/generate_timestamps.py",
     "qua_jobs/publish_hf.py",
+    "qua_jobs/publish_hf_batch.py",
     "qua_jobs/cut_release.py",
     "qua_jobs/shard.py",
     "qua_jobs/check_updates.py",
@@ -390,7 +416,7 @@ def _poll_terminal_jobs() -> None:
         jid = hf_job_id(job)
         if not jid:
             continue
-        slug_arg = None if slug in (None, "_global") else slug
+        slug_arg = None if slug in ("_global", "_batch") else slug
         try:
             _HANDLERS[kind](slug_arg, jid)
         except Exception as exc:
