@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from qua_shared.hf_dataset_catalog import (
     CATALOG_COLUMNS,
     CATALOG_CONFIG_NAME,
     HfDatasetCatalogStats,
+    _hf_release_meta,
     build_catalog_dataset,
     hub_published_splits_by_config,
     project_catalog_rows,
@@ -88,7 +90,14 @@ def test_project_catalog_rows_joins_vocab_and_publish_state():
     rows = project_catalog_rows(
         _catalog(),
         ts_releases={"maher_al_muaiqly_mp3quran": {"version": "ts-1"}},
-        hf_releases={"maher_al_muaiqly_mp3quran": {"version": "sha-1", "stale_since": None}},
+        hf_releases={
+            "maher_al_muaiqly_mp3quran": {
+                "version": "sha-1",
+                "stale_since": None,
+                "published_at": "2026-06-01T00:00:00Z",
+                "updated_at": "2026-06-04T00:00:00Z",
+            }
+        },
         published_slugs={"maher_al_meaqli"},
     )
 
@@ -103,7 +112,6 @@ def test_project_catalog_rows_joins_vocab_and_publish_state():
             "style": "Murattal",
             "recording_context": "Studio",
             "recording_year": 2020,
-            "source": "MP3Quran",
             "channel": "MP3Quran",
             "audio_category": "by_surah",
             "chapter_count": 114,
@@ -113,8 +121,9 @@ def test_project_catalog_rows_joins_vocab_and_publish_state():
             "channels": 2,
             "bitrate_mode": "cbr",
             "bitrate_kbps_nominal": 128,
-            "total_duration_sec": 81000,
-            "added_at": "2026-06-05T00:00:00Z",
+            "total_duration_hours": 22.5,
+            "published_at": "2026-06-01T00:00:00Z",
+            "updated_at": "2026-06-04T00:00:00Z",
         }
     ]
 
@@ -137,6 +146,39 @@ def test_internal_columns_excluded_from_public_projection():
     assert "variant_label" not in CATALOG_COLUMNS
     assert "gh_release_eligible" not in rows[0]
     assert "variant_label" not in rows[0]
+
+
+def test_hf_release_meta_first_publish_and_latest_refresh(tmp_path):
+    db = tmp_path / "inspector.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE per_recitation_releases ("
+        " id INTEGER PRIMARY KEY, track TEXT, slug TEXT, version TEXT,"
+        " produced_at TEXT, superseded_at TEXT, stale_since TEXT)"
+    )
+    # Reciter republished twice: first row superseded, latest is current.
+    conn.executemany(
+        "INSERT INTO per_recitation_releases"
+        "(track, slug, version, produced_at, superseded_at) VALUES (?,?,?,?,?)",
+        [
+            ("hf", "reciter_a", "v1", "2026-06-01T00:00:00Z", "2026-06-04T00:00:00Z"),
+            ("hf", "reciter_a", "v2", "2026-06-04T00:00:00Z", None),
+            ("ts", "reciter_a", "ts1", "2026-05-01T00:00:00Z", None),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    meta = _hf_release_meta(db)
+
+    assert meta == {
+        "reciter_a": {
+            "version": "v2",
+            "stale_since": None,
+            "published_at": "2026-06-01T00:00:00Z",  # first publish, from superseded row
+            "updated_at": "2026-06-04T00:00:00Z",  # current row, advances on republish
+        }
+    }
 
 
 class _TreeItem:

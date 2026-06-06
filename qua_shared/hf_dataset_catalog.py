@@ -31,7 +31,6 @@ CATALOG_COLUMNS = (
     "style",
     "recording_context",
     "recording_year",
-    "source",
     "channel",
     "audio_category",
     "chapter_count",
@@ -41,8 +40,9 @@ CATALOG_COLUMNS = (
     "channels",
     "bitrate_mode",
     "bitrate_kbps_nominal",
-    "total_duration_sec",
-    "added_at",
+    "total_duration_hours",
+    "published_at",
+    "updated_at",
 )
 
 
@@ -158,6 +158,41 @@ def _current_release_rows(db_path: Path, track: str) -> dict[str, sqlite3.Row]:
         conn.close()
 
 
+def _hf_release_meta(db_path: Path) -> dict[str, dict[str, Any]]:
+    """Per-slug HF publish metadata: first publish (``published_at``) and latest
+    publish/refresh (``updated_at``), plus ``version``/``stale_since``.
+
+    ``updated_at`` is the current (non-superseded) row's ``produced_at`` — it
+    advances on every republish. ``published_at`` is the earliest ``produced_at``
+    across all rows for the slug. Both ``produced_at`` values are ``to_iso`` UTC
+    strings (Z-suffixed), so a lexicographic ``MIN`` is the earliest instant.
+    """
+    conn = _connect(db_path)
+    try:
+        current = conn.execute(
+            "SELECT slug, version, stale_since, produced_at FROM per_recitation_releases "
+            "WHERE track = 'hf' AND superseded_at IS NULL"
+        ).fetchall()
+        firsts = conn.execute(
+            "SELECT slug, MIN(produced_at) AS first_at FROM per_recitation_releases "
+            "WHERE track = 'hf' GROUP BY slug"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    finally:
+        conn.close()
+    first_by = {r["slug"]: r["first_at"] for r in firsts}
+    return {
+        r["slug"]: {
+            "version": r["version"],
+            "stale_since": r["stale_since"],
+            "published_at": first_by.get(r["slug"], r["produced_at"]),
+            "updated_at": r["produced_at"],
+        }
+        for r in current
+    }
+
+
 def project_catalog_rows(
     catalog: ReciterCatalog,
     *,
@@ -169,7 +204,6 @@ def project_catalog_rows(
     reciters = {r.reciter_id: r for r in catalog.reciters}
     riwayat = {r.slug: r for r in catalog.vocab.riwayat}
     styles = {s.slug: s for s in catalog.vocab.styles}
-    sources = {s.slug: s for s in catalog.vocab.sources}
     channels = {c.slug: c for c in catalog.vocab.channels}
     contexts = {c.slug: c for c in catalog.vocab.recording_contexts}
     ts_releases = ts_releases or {}
@@ -187,6 +221,7 @@ def project_catalog_rows(
         reciter = reciters.get(delivery.reciter_id)
         channel = channels.get(delivery.channel)
         context = contexts.get(delivery.recording_context or "")
+        hf_meta = hf_releases.get(delivery.slug) or {}
 
         rows.append(
             {
@@ -203,9 +238,6 @@ def project_catalog_rows(
                 else delivery.style,
                 "recording_context": context.name if context else delivery.recording_context,
                 "recording_year": delivery.recording_year,
-                "source": sources[delivery.source].name
-                if delivery.source in sources
-                else delivery.source,
                 "channel": channel.name if channel else delivery.channel,
                 "audio_category": str(delivery.audio_category.value),
                 "chapter_count": delivery.chapter_count,
@@ -215,8 +247,11 @@ def project_catalog_rows(
                 "channels": delivery.channels,
                 "bitrate_mode": str(delivery.bitrate_mode.value),
                 "bitrate_kbps_nominal": delivery.bitrate_kbps_nominal,
-                "total_duration_sec": delivery.total_duration_sec,
-                "added_at": delivery.added_at.isoformat().replace("+00:00", "Z"),
+                "total_duration_hours": round(delivery.total_duration_sec / 3600, 1)
+                if delivery.total_duration_sec is not None
+                else None,
+                "published_at": hf_meta.get("published_at"),
+                "updated_at": hf_meta.get("updated_at"),
             }
         )
     return rows
@@ -226,7 +261,7 @@ def _stats_from_rows(rows: list[dict[str, Any]]) -> HfDatasetCatalogStats:
     return HfDatasetCatalogStats(
         timestamped_recitations=len(rows),
         timestamped_riwayat=len({r["riwayah"] for r in rows}),
-        timestamped_seconds=sum(int(r["total_duration_sec"] or 0) for r in rows),
+        timestamped_seconds=int(round(sum((r["total_duration_hours"] or 0) for r in rows) * 3600)),
     )
 
 
@@ -313,7 +348,7 @@ def build_projection_from_sqlite(
     rows = project_catalog_rows(
         catalog,
         ts_releases=_current_release_rows(db_path, "ts"),
-        hf_releases=_current_release_rows(db_path, "hf"),
+        hf_releases=_hf_release_meta(db_path),
         published_slugs=published_slugs,
     )
     stats = (
@@ -342,7 +377,6 @@ def catalog_features():
             "style": Value("string"),
             "recording_context": Value("string"),
             "recording_year": Value("int32"),
-            "source": Value("string"),
             "channel": Value("string"),
             "audio_category": Value("string"),
             "chapter_count": Value("int32"),
@@ -352,8 +386,9 @@ def catalog_features():
             "channels": Value("int32"),
             "bitrate_mode": Value("string"),
             "bitrate_kbps_nominal": Value("int32"),
-            "total_duration_sec": Value("int32"),
-            "added_at": Value("string"),
+            "total_duration_hours": Value("float32"),
+            "published_at": Value("string"),
+            "updated_at": Value("string"),
         }
     )
 

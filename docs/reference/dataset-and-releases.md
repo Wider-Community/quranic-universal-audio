@@ -222,11 +222,13 @@ HF config `mushafs`, split `all`, is the dataset catalog projection. It is rebui
 `ReciterCatalog` v2 and pushed by the active admin HF publish job after a recitation split lands.
 
 Grain is one published delivery row. Rows include delivery slug, reciter identity,
-readable riwayah/style/source/channel labels, audio metadata, and coverage (`CATALOG_COLUMNS`).
-Admin lifecycle / publish-ledger fields and the internal release-gating signal
-`gh_release_eligible` stay out of the public dataset; `variant_label` is likewise dropped from the
-projection. The underlying `Channel.gh_release_eligible` / `Delivery.variant_label` fields remain in
-the catalog — they drive GH release-cut eligibility and admin UI, just not the public projection.
+readable riwayah/style/channel labels, audio metadata, duration, and HF-publish timestamps
+(`published_at` = first publish, `updated_at` = last publish/refresh, from
+`per_recitation_releases(track='hf')`) — see `CATALOG_COLUMNS`. Admin lifecycle / publish-ledger
+fields, the internal release-gating signal `gh_release_eligible`, the niche `variant_label`, and the
+upstream `source` label all stay out of the public dataset. The underlying
+`Channel.gh_release_eligible` / `Delivery.variant_label` / `Delivery.source` fields remain in the
+catalog — they drive GH release-cut eligibility and admin UI, just not the public projection.
 
 This is separate from GitHub release `catalog.json`: the release artifact pairs timestamp tiers with
 source audio URLs for offline consumers, while the HF `mushafs` config is a parquet catalog for

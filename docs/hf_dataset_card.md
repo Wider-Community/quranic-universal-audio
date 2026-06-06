@@ -40,7 +40,7 @@ This dataset pairs ayah by ayah audio with word-level timestamps, letter timesta
 
 Mushaf configs contain one row per ayah. Each row includes embedded ayah audio, recited Uthmani text, word timestamps, letter timestamps, waqf-aware segments, and source-audio mappings.
 
-The `mushafs` subset is the dataset catalog index. It has one row per published mushaf, joined with reciter names, riwayah/style/source/channel labels, audio metadata, and coverage.
+The `mushafs` subset is the dataset catalog index. It has one row per published mushaf, joined with reciter names, riwayah/style/channel labels, audio metadata, and coverage.
 
 Remaining subsets are grouped by riwayah, and splits are specific mushafs.
 
@@ -71,24 +71,22 @@ One row per published mushaf.
 | `reciter_id` | `string` | Stable reciter identifier (shared across that reciter's mushafs). |
 | `name_en`, `name_ar` | `string` | Reciter display name (English / Arabic). |
 | `country` | `string` | Reciter country, ISO 3166-1 alpha-2 (e.g. `SA`). |
-| `riwayah` | `string` | Readable riwayah name (e.g. `Hafs`). |
-| `style` | `string` | Readable recitation style (e.g. `Murattal`, `Mujawwad`). |
-| `recording_context` | `string` | Readable context (e.g. `Studio`, `Masjid`). |
+| `riwayah` | `string` | Riwayah name (e.g. `Hafs`). |
+| `style` | `string` | recitation style (e.g. `Murattal`, `Mujawwad`). |
+| `recording_context` | `string` | Recitation context (e.g. `Studio`, `Taraweeh`). |
 | `recording_year` | `int32` | Year recorded, when known. |
-| `source` | `string` | Readable upstream source name. |
-| `channel` | `string` | Readable distribution channel name. |
+| `channel` | `string` | Distribution channel name. |
 | `audio_category` | `string` | How source audio is segmented: `by_surah` \| `by_ayah`. |
-| `chapter_count` | `int32` | Number of chapters in the mushaf (114 = complete). |
-| `codec` | `string` | Audio codec, e.g. `mp3`. |
-| `container` | `string` | File container, e.g. `mp3`. |
-| `sample_rate_hz` | `int32` | Sample rate, e.g. `44100`. |
+| `chapter_count` | `int32` | Number of chapters in the mushaf. |
+| `codec` | `string` | Audio codec. |
+| `container` | `string` | File container. |
+| `sample_rate_hz` | `int32` | Sample rate. |
 | `channels` | `int32` | `1` = mono, `2` = stereo. |
 | `bitrate_mode` | `string` | `cbr` \| `vbr` \| `mixed` \| `unknown`. `mixed` = chapters differ. |
 | `bitrate_kbps_nominal` | `int32` | Nominal bitrate; `null` when `bitrate_mode` is `mixed`. |
-| `total_duration_sec` | `int32` | Total mushaf audio duration. |
-| `added_at` | `string` | When the mushaf was added, ISO-8601 (`...Z`). |
-
-Audio format is a per-mushaf property: every ayah clip is a byte-exact stream-copy of its chapter master, so the `codec` / `bitrate_mode` / `sample_rate_hz` / `channels` here apply to all of that mushaf's clips. Join a per-ayah row back to its mushaf by `slug` to recover format.
+| `total_duration_hours` | `float32` | Total mushaf audio duration, in hours (1 dp). |
+| `published_at` | `string` | When the mushaf first entered the dataset, ISO-8601. |
+| `updated_at` | `string` | When the mushaf was last published/refreshed, ISO-8601. |
 
 ## Usage
 
@@ -119,8 +117,8 @@ print(catalog[0]["name_en"], catalog[0]["riwayah"])
 
 ## Notes
 
-- Best for quick access to verse audio and timestamps together, gapped playback, and ML research.
-- For app playback from full chapter audio, [GitHub releases](https://github.com/Wider-Community/quranic-universal-audio/releases/latest) might be a more suitable format.
+- Best for quick access to verse audio and timestamps together, ayah-by-ayah playback, and ML research.
+- Also see [GitHub releases](https://github.com/Wider-Community/quranic-universal-audio/releases/latest), a parallel format with JSON files.
 - **Stay updated:** click **Watch** (the bell, top-right of this dataset) and enable notifications to hear when recitations are added or refreshed.
 - Recitation audio is not relicensed, and remains the property of upstream sources/reciters.
 
