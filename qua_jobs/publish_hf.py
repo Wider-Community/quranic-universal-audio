@@ -692,7 +692,7 @@ def _sync_dataset_catalog_and_card(repo_id: str) -> None:
         upload_dataset_card,
         upload_vocab_file,
     )
-    from qua_shared.letter_vocab import vocab_json_bytes
+    from qua_shared.letter_vocab import VOCAB_FILENAME, vocab_csv_bytes
 
     db_path = _bucket_root() / "db" / "inspector.db"
     if not db_path.exists():
@@ -709,7 +709,9 @@ def _sync_dataset_catalog_and_card(repo_id: str) -> None:
         stats=stats,
     )
     upload_dataset_card(repo_id=repo_id, content=card, token=token)
-    upload_vocab_file(repo_id=repo_id, content=vocab_json_bytes(), token=token)
+    upload_vocab_file(
+        repo_id=repo_id, filename=VOCAB_FILENAME, content=vocab_csv_bytes(), token=token
+    )
 
 
 def _riwayah_for(audio_manifest: dict | None, detailed: dict) -> str:

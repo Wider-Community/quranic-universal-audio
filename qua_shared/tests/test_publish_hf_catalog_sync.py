@@ -37,8 +37,8 @@ def test_publish_hf_syncs_catalog_and_card_after_split(monkeypatch, tmp_path):
     def fake_upload_dataset_card(*, repo_id: str, content: str, token: str | None):
         called["upload"] = (repo_id, content, token)
 
-    def fake_upload_vocab_file(*, repo_id: str, content: bytes, token: str | None):
-        called["vocab"] = (repo_id, content, token)
+    def fake_upload_vocab_file(*, repo_id: str, filename: str, content: bytes, token: str | None):
+        called["vocab"] = (repo_id, filename, content, token)
 
     monkeypatch.setenv("INSPECTOR_BUCKET_MOUNT", str(bucket))
     monkeypatch.setenv("HF_TOKEN", "hf_test")
@@ -79,6 +79,6 @@ def test_publish_hf_syncs_catalog_and_card_after_split(monkeypatch, tmp_path):
     )
     assert called["upload"] == ("owner/dataset", "RENDERED CARD", "hf_test")
 
-    from qua_shared.letter_vocab import vocab_json_bytes
+    from qua_shared.letter_vocab import VOCAB_FILENAME, vocab_csv_bytes
 
-    assert called["vocab"] == ("owner/dataset", vocab_json_bytes(), "hf_test")
+    assert called["vocab"] == ("owner/dataset", VOCAB_FILENAME, vocab_csv_bytes(), "hf_test")
