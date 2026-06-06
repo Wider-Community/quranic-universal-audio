@@ -534,3 +534,20 @@ def upload_dataset_card(*, repo_id: str, content: str, token: str | None) -> Non
         ],
         commit_message="update dataset card",
     )
+
+
+def upload_vocab_file(*, repo_id: str, content: bytes, token: str | None) -> None:
+    """Commit the letter-tier vocab document as the dataset's ``letter_vocab.json``."""
+    from huggingface_hub import CommitOperationAdd, HfApi
+
+    HfApi(token=token).create_commit(
+        repo_id=repo_id,
+        repo_type="dataset",
+        operations=[
+            CommitOperationAdd(
+                path_in_repo="letter_vocab.json",
+                path_or_fileobj=content,
+            ),
+        ],
+        commit_message="update letter vocab",
+    )

@@ -78,6 +78,47 @@ def test_release_timestamp_tiers_preserve_verse_order():
         assert keys == ["1:1", "2:1", "10:1", "100:1"]
 
 
+def test_letter_tier_maps_internal_alphabet_to_external_42_set():
+    # 19:1 muqattaat كٓهيعٓصٓ — internal letters carry the maddah mark; the cut
+    # must emit the collapsed (maddah-free) external tokens, with timings intact.
+    verses = {
+        "19:1": {
+            "words": [
+                [
+                    1,
+                    0,
+                    500,
+                    [
+                        ["كٓ", 0, 100],
+                        ["ه", 100, 200],
+                        ["ي", 200, 300],
+                        ["عٓ", 300, 400],
+                        ["صٓ", 400, 500],
+                    ],
+                ]
+            ]
+        }
+    }
+    files = cut_release._build_tier_files(
+        "example_reciter", verses, delivery_meta={"audio_category": "by_surah"}
+    )
+    doc = json.loads(gzip.decompress(files["letter_timestamps.json.gz"]).decode("utf-8"))
+    letters = doc["19:1"][2]  # [[widx, char, start, end], ...]
+    chars = [lt[1] for lt in letters]
+    assert chars == ["ك", "ه", "ي", "ع", "ص"]  # maddah dropped
+    assert all("ٓ" not in c for c in chars)
+    assert letters[0] == [1, "ك", 0, 100]  # timing preserved
+
+
+def test_letter_tier_fails_loud_on_unknown_token():
+    # A haraka-bearing letter is not in the external alphabet → cut aborts.
+    verses = {"1:1": {"words": [[1, 0, 100, [["بَ", 0, 100]]]]}}
+    with pytest.raises(ValueError):
+        cut_release._build_tier_files(
+            "example_reciter", verses, delivery_meta={"audio_category": "by_surah"}
+        )
+
+
 # ---------------------------------------------------------------------------
 # qpc_hafs byte resolution: the staged image .gz is an LFS pointer (HF
 # auto-LFS by extension), so the real bytes must come from the bucket.

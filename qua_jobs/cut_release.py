@@ -48,6 +48,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from qua_shared.letter_vocab import to_external_char, vocab_json_bytes  # noqa: E402
 from qua_shared.schemas import (  # noqa: E402
     AudioManifestSidecar,
     FileDigest,
@@ -240,7 +241,9 @@ def _build_tier_files(
             word_array.append([widx, ws, we])
             letters = w[3] if len(w) > 3 else []
             for ch, ls, le in letters:
-                letter_array.append([widx, ch, int(ls), int(le)])
+                # Map the internal 57-token alphabet to the published 42-token
+                # external set (drops the maddah mark; fail-loud on unknown).
+                letter_array.append([widx, to_external_char(ch), int(ls), int(le)])
 
         verse_body[key] = verse_pos
         word_body[key] = [verse_pos, word_array]
@@ -1080,6 +1083,10 @@ def main() -> int:
     uploads.append(("catalog.json", catalog_all, "application/json"))
     uploads.append(("shard.py", shard_py, "text/x-python"))
     uploads.append(("check_updates.py", check_updates_py, "text/x-python"))
+    # Letter-tier character vocabulary (the 42-token external alphabet that the
+    # letter_timestamps.json.gz `char` field draws from). Generated from the
+    # canonical mapping module so it can never drift from the emitted data.
+    uploads.append(("letter_vocab.json", vocab_json_bytes(), "application/json"))
     for name, body in static_files.items():
         uploads.append((name, body, "application/json"))
     for m in members:
