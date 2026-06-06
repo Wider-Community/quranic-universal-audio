@@ -248,6 +248,50 @@ describe('assembleVerseFromShard — loopback occasion dedup', () => {
 });
 
 // ---------------------------------------------------------------------------
+// assembleVerseFromShard — keepAllTakes (consecutive repeats faithfulness)
+//
+// A verse recited several times back-to-back is one occasion (no foreign verse
+// interleaves). The default clip trims post-completion takes; keepAllTakes
+// retains them so the Timestamps view shows inline repeats and plays all takes.
+// ---------------------------------------------------------------------------
+
+describe('assembleVerseFromShard — keepAllTakes', () => {
+    // 1:1 (words 1-2) recited twice, consecutively — a single occasion.
+    function consecutiveRepeatShard(): TsShardResponse {
+        return {
+            _meta: { schema_version: 2, chapter: 1, audio_category: 'by_surah' },
+            segments: [
+                seg('1:1', 5000, 6000, [makeWord(1, 5000, 5500), makeWord(2, 5500, 6000)]),
+                seg('1:1', 6500, 7500, [makeWord(1, 6500, 7000), makeWord(2, 7000, 7500)]),
+            ],
+        };
+    }
+
+    it('trims the repeat to one take by default (canonical clip)', () => {
+        const shard = consecutiveRepeatShard();
+        const result = assembleVerseFromShard('r', shard, '1:1', fakeQpc, fakeDk, RA_SURAH);
+        expect(result!.words.map((w) => w.location)).toEqual(['1:1:1', '1:1:2']);
+        // Clip ends at the first take's end (6000); take 2 is dropped.
+        expect(result!.time_start_ms).toBe(5000);
+        expect(result!.time_end_ms).toBe(6000);
+    });
+
+    it('keeps every take inline and spans all of them when keepAllTakes is set', () => {
+        const shard = consecutiveRepeatShard();
+        const result = assembleVerseFromShard(
+            'r', shard, '1:1', fakeQpc, fakeDk, RA_SURAH, { keepAllTakes: true },
+        );
+        // Both takes render inline — the verse's words repeated in order.
+        expect(result!.words.map((w) => w.location)).toEqual([
+            '1:1:1', '1:1:2', '1:1:1', '1:1:2',
+        ]);
+        // Clip span now covers both takes so playback rides through all of them.
+        expect(result!.time_start_ms).toBe(5000);
+        expect(result!.time_end_ms).toBe(7500);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // chapterVerseRefs
 // ---------------------------------------------------------------------------
 
