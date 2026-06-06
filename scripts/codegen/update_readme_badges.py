@@ -89,7 +89,7 @@ def collect_stats(
     try:
         published = conn.execute(
             """
-            SELECT d.slug, d.total_duration_sec
+            SELECT d.slug, d.total_duration_sec, d.riwayah
             FROM deliveries d
             JOIN delivery_states s ON s.slug = d.slug
             WHERE s.state = 'released'
@@ -97,9 +97,13 @@ def collect_stats(
             ORDER BY d.slug
             """
         ).fetchall()
-        riwayat = conn.execute("SELECT COUNT(DISTINCT riwayah) FROM deliveries").fetchone()[0]
     finally:
         conn.close()
+
+    # Riwayat counts only what's actually available (the released/public set),
+    # not every riwayah in the catalog vocab — keeps the README consistent with
+    # the HF dataset card, which counts riwayat across its published splits.
+    riwayat = len({row["riwayah"] for row in published})
 
     seconds = 0
     missing_duration: list[str] = []
@@ -136,7 +140,7 @@ def render_badges(stats: BadgeStats) -> str:
         (
             '  <a href="data/RECITERS.md"><img src="'
             f'{badge_url("Riwayat", riwayat, "f0ad4e")}" '
-            'alt="Catalog riwayat"></a>'
+            'alt="Published riwayat"></a>'
         ),
         (
             '  <a href="data/RECITERS.md"><img src="'

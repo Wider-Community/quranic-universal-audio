@@ -25,9 +25,15 @@ def test_publish_hf_syncs_catalog_and_card_after_split(monkeypatch, tmp_path):
         return {"hafs_an_asim": ["maher_al_meaqli"]}
 
     def fake_push_catalog_dataset(
-        *, repo_id: str, db_path: Path, token: str | None, published_slugs: set[str]
+        *,
+        repo_id: str,
+        db_path: Path,
+        token: str | None,
+        published_slugs: set[str],
+        now_iso: str | None = None,
     ):
         called["push"] = (repo_id, db_path, token, published_slugs)
+        called["now_iso"] = now_iso
         return stats
 
     def fake_render_dataset_card(*, template_path: Path, splits_by_config, stats):

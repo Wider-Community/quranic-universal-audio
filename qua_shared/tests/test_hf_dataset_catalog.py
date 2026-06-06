@@ -128,6 +128,21 @@ def test_project_catalog_rows_joins_vocab_and_publish_state():
     ]
 
 
+def test_project_catalog_rows_stamps_now_when_no_hf_ledger_row():
+    # In-job catalog build: the hf ledger row is written post-job, so a
+    # just-published reciter has no hf_meta yet. ``now_iso`` must backfill both
+    # timestamps instead of leaving them null.
+    rows = project_catalog_rows(
+        _catalog(),
+        hf_releases={},
+        published_slugs={"maher_al_meaqli"},
+        now_iso="2026-06-06T11:00:00Z",
+    )
+    assert len(rows) == 1
+    assert rows[0]["published_at"] == "2026-06-06T11:00:00Z"
+    assert rows[0]["updated_at"] == "2026-06-06T11:00:00Z"
+
+
 def test_catalog_dataset_features_match_pushed_schema():
     rows = project_catalog_rows(_catalog(), published_slugs={"maher_al_meaqli"})
     ds = build_catalog_dataset(rows)

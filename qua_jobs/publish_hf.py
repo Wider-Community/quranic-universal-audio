@@ -129,6 +129,40 @@ def _cross_verse_text(
     return full_text
 
 
+def _seg_word_range(
+    matched_ref: str, surah_num: str, ayah: int, surah_info: dict
+) -> tuple[int, int] | None:
+    """Word-index span (``word_from``, ``word_to``) a segment covers WITHIN one ayah.
+
+    detailed.json segments carry no ``word_from``/``word_to`` — the span is
+    encoded in ``matched_ref`` (``s:a:w-s:a:w`` or a single ``s:a:w``). Returns
+    1-based ``(w_from, w_to)`` clipped to ``(surah_num, ayah)``, or ``None`` when
+    the segment doesn't cover this ayah at all.
+    """
+    if not matched_ref:
+        return None
+    start, _, end = matched_ref.partition("-") if "-" in matched_ref else (matched_ref, "", matched_ref)
+    sp = start.split(":")
+    ep = end.split(":")
+    if len(sp) != 3 or len(ep) != 3:
+        return None
+    try:
+        s_su, s_ay, s_w = int(sp[0]), int(sp[1]), int(sp[2])
+        e_su, e_ay, e_w = int(ep[0]), int(ep[1]), int(ep[2])
+    except ValueError:
+        return None
+    su = int(surah_num)
+    if (su, ayah) < (s_su, s_ay) or (su, ayah) > (e_su, e_ay):
+        return None
+    w_from = s_w if (s_su, s_ay) == (su, ayah) else 1
+    if (e_su, e_ay) == (su, ayah):
+        w_to = e_w
+    else:
+        verses = surah_info.get(str(su), {}).get("verses", [])
+        w_to = verses[ayah - 1].get("num_words", e_w) if 0 <= ayah - 1 < len(verses) else e_w
+    return w_from, max(w_from, w_to)
+
+
 # ---------------------------------------------------------------------------
 # Bucket I/O — direct path reads (bucket is mounted at /data in the job).
 # ---------------------------------------------------------------------------
@@ -257,14 +291,21 @@ def _i(x):
 
 
 def build_rows(
-    timestamps: dict, detailed_by_ref: dict, surah_info: dict, dk_words: dict
+    timestamps: dict,
+    detailed_by_ref: dict,
+    surah_info: dict,
+    dk_words: dict,
+    chapter_urls: dict[str, str] | None = None,
 ) -> list[dict]:
     """Build dataset row metadata in canonical verse order.
 
     Each row has the same column shape as v1 + ``clip_start`` (source-ms
     boundary the audio slice starts at; consumed by the slicer + persisted
-    as ``source_offset_ms``).
+    as ``source_offset_ms``). ``chapter_urls`` maps ``str(chapter) -> audio URL``
+    (from the audio manifest) — detailed.json no longer carries a per-entry
+    ``audio`` field, so ``source_url`` is resolved from here.
     """
+    chapter_urls = chapter_urls or {}
     rows: list[dict] = []
     for surah_num in sorted(surah_info, key=int):
         surah = surah_info[surah_num]
@@ -280,18 +321,18 @@ def build_rows(
             clip_start = tdata["verse_start_ms"]
             clip_end = tdata["verse_end_ms"]
 
-            # Segments: only those overlapping the clip; trim to clip; clip-relative.
+            # Segments: only those overlapping the clip AND covering this ayah;
+            # trim to clip; clip-relative. Word span comes from matched_ref.
             verse_segments: list[list[int]] = []
-            # detailed.json segments are reused as the "segments" column.
             for seg in entry.get("segments", []) or []:
                 t_start = seg.get("time_start", 0)
                 t_end = seg.get("time_end", 0)
                 if t_end <= clip_start or t_start >= clip_end:
                     continue
-                # Use detailed.json's word range (start/end widx). Some legacy
-                # entries don't have it — derive from words instead.
-                w_from = seg.get("word_from", seg.get("start_word", 1))
-                w_to = seg.get("word_to", seg.get("end_word", w_from))
+                wr = _seg_word_range(seg.get("matched_ref", ""), surah_num, ayah, surah_info)
+                if wr is None:
+                    continue
+                w_from, w_to = wr
                 verse_segments.append(
                     [
                         _i(w_from),
@@ -398,7 +439,7 @@ def build_rows(
                     "segments": verse_segments,
                     "word_timestamps": verse_words,
                     "letter_timestamps": verse_letters,
-                    "source_url": entry.get("audio", ""),
+                    "source_url": chapter_urls.get(str(chapter), ""),
                     "chapter": chapter,
                     "clip_start": clip_start,
                     "clip_end": clip_end,
@@ -698,10 +739,16 @@ def _sync_dataset_catalog_and_card(repo_id: str) -> None:
     if not db_path.exists():
         raise RuntimeError(f"Inspector DB missing at {db_path}")
     token = os.environ.get("HF_TOKEN")
+    # Stamp now for just-published rows that have no hf ledger row yet (the
+    # ledger is written post-job by hf_publish.complete) so published_at /
+    # updated_at aren't null in the catalog parquet.
+    from datetime import UTC, datetime
+
+    now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     splits_by_config = hub_published_splits_by_config(repo_id=repo_id, token=token)
     published = {slug for slugs in splits_by_config.values() for slug in slugs}
     stats = push_catalog_dataset(
-        repo_id=repo_id, db_path=db_path, token=token, published_slugs=published
+        repo_id=repo_id, db_path=db_path, token=token, published_slugs=published, now_iso=now_iso
     )
     card = render_dataset_card(
         template_path=template_path("hf_dataset_card"),
@@ -880,9 +927,14 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
     else:
         dk_words = json.loads((refs_dir / "qpc_hafs.json").read_bytes())
 
-    # 3. Build rows.
+    # 3. Build rows. source_url comes from the audio manifest's chapter URLs
+    # (detailed.json carries no per-entry audio field).
     detailed_by_ref = _detailed_by_ref(detailed)
-    rows = build_rows(timestamps, detailed_by_ref, surah_info, dk_words)
+    chapter_urls = {
+        str(ch): (entry or {}).get("url", "")
+        for ch, entry in ((audio_manifest or {}).get("chapters") or {}).items()
+    }
+    rows = build_rows(timestamps, detailed_by_ref, surah_info, dk_words, chapter_urls)
     log.info("built %d rows for %s", len(rows), slug)
     if not rows:
         log.error("no rows built — detailed.json + timestamps disagreement?")

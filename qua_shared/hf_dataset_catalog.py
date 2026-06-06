@@ -199,8 +199,15 @@ def project_catalog_rows(
     ts_releases: dict[str, Any] | None = None,
     hf_releases: dict[str, Any] | None = None,
     published_slugs: set[str] | None = None,
+    now_iso: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Flatten ``ReciterCatalog`` v2 to the HF dataset catalog row shape."""
+    """Flatten ``ReciterCatalog`` v2 to the HF dataset catalog row shape.
+
+    ``now_iso`` stamps ``published_at``/``updated_at`` for any published row that
+    has no ``hf`` ledger row yet. The catalog is built inside the publish job,
+    but the ledger row is written afterwards by ``hf_publish.complete()`` — so
+    without this the just-published reciter's timestamps would be ``null``.
+    """
     reciters = {r.reciter_id: r for r in catalog.reciters}
     riwayat = {r.slug: r for r in catalog.vocab.riwayat}
     styles = {s.slug: s for s in catalog.vocab.styles}
@@ -250,8 +257,8 @@ def project_catalog_rows(
                 "total_duration_hours": round(delivery.total_duration_sec / 3600, 1)
                 if delivery.total_duration_sec is not None
                 else None,
-                "published_at": hf_meta.get("published_at"),
-                "updated_at": hf_meta.get("updated_at"),
+                "published_at": hf_meta.get("published_at") or now_iso,
+                "updated_at": hf_meta.get("updated_at") or now_iso,
             }
         )
     return rows
@@ -343,6 +350,7 @@ def build_projection_from_sqlite(
     db_path: Path,
     *,
     published_slugs: set[str] | None = None,
+    now_iso: str | None = None,
 ) -> CatalogProjection:
     catalog = load_catalog_from_sqlite(db_path)
     rows = project_catalog_rows(
@@ -350,6 +358,7 @@ def build_projection_from_sqlite(
         ts_releases=_current_release_rows(db_path, "ts"),
         hf_releases=_hf_release_meta(db_path),
         published_slugs=published_slugs,
+        now_iso=now_iso,
     )
     stats = (
         _stats_from_published_splits(catalog, published_slugs)
@@ -405,10 +414,13 @@ def push_catalog_dataset(
     db_path: Path,
     token: str | None,
     published_slugs: set[str] | None = None,
+    now_iso: str | None = None,
 ) -> HfDatasetCatalogStats:
     if published_slugs is None:
         published_slugs = hub_published_split_slugs(repo_id=repo_id, token=token)
-    projection = build_projection_from_sqlite(db_path, published_slugs=published_slugs)
+    projection = build_projection_from_sqlite(
+        db_path, published_slugs=published_slugs, now_iso=now_iso
+    )
     ds = build_catalog_dataset(projection.rows)
     ds.push_to_hub(
         repo_id,
