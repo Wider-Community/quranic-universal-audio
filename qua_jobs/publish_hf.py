@@ -4,9 +4,11 @@
 Reads the recitation's bucket artifacts (``detailed.json`` + per-chapter
 ``timestamps/<n>.json.gz`` + Xing-master ``audio/<n>.mp3``) and pushes a
 parquet split to the public HF dataset under ``<riwayah>/<slug>``. Audio
-clips are produced by ffmpeg STREAM-COPY (``-c copy``) from the bucket
-chapter master — no pydub decode/re-encode, ≤26 ms boundary snap, word
-timestamps re-based to the snapped boundary.
+clips are produced by in-process MP3 frame-index slicing
+(``qua_shared/mp3_frames.py``) — each chapter is read + indexed once, then
+every verse clip is a byte-exact frame-range copy with the start snapped to
+the frame boundary <= clip_start; word timestamps re-base to that boundary.
+No per-clip subprocess (no ffmpeg/ffprobe), no pydub decode/re-encode.
 
 The HF Job NEVER writes ``db/inspector.db``. On success it POSTs the
 completion webhook (``INSPECTOR_WEBHOOK_URL``) with the HF dataset revision
@@ -32,9 +34,7 @@ import gzip
 import json
 import logging
 import os
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -42,6 +42,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from qua_shared.letter_vocab import to_external_char  # noqa: E402
+from qua_shared.mp3_frames import FrameIndex, build_frame_index, slice_frames  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("publish_hf")
@@ -449,10 +450,14 @@ def build_rows(
 
 
 # ---------------------------------------------------------------------------
-# Stream-copy audio slicing via ffmpeg. The bucket holds Xing-injected MP3s
-# per chapter at ``reciters/<slug>/audio/<ch>.mp3``. ffmpeg ``-c copy`` snaps
-# to the nearest frame boundary (~26 ms for MP3) — the snapped offset is what
-# the slice starts at, so word_timestamps must be rebased to it.
+# In-process frame-index audio slicing. The bucket holds Xing-injected MP3s
+# per chapter at ``reciters/<slug>/audio/<ch>.mp3``. Each chapter is read once,
+# its MP3 frame grid is parsed in pure Python, and every verse clip is a
+# byte-exact copy of the frame range covering ``[clip_start, clip_end]`` — no
+# per-clip ffmpeg/ffprobe subprocess. The start snaps back to the frame
+# boundary <= clip_start; ``actual_start_ms`` is read off the grid, so
+# word_timestamps rebase against the true frame boundary (the old ffprobe-snap
+# heuristic mis-estimated this — see qua_shared/mp3_frames.py).
 # ---------------------------------------------------------------------------
 
 
@@ -460,95 +465,54 @@ def _chapter_mp3_path(slug: str, chapter: int) -> Path:
     return _bucket_root() / "reciters" / slug / "audio" / f"{chapter}.mp3"
 
 
-def _stream_copy_slice(src: Path, start_ms: int, end_ms: int, dst: Path) -> tuple[int, int] | None:
-    """ffmpeg ``-c copy -ss X -t Y`` from ``src`` to ``dst``.
+def _frame_slice(
+    data: bytes, index: FrameIndex, start_ms: int, end_ms: int
+) -> tuple[bytes, int, int] | None:
+    """Frame-exact clip of ``[start_ms, end_ms]`` from an indexed chapter MP3.
 
-    Returns ``(actual_start_ms, actual_end_ms)`` of the produced clip — the
-    snapped offsets are derived after the cut by probing the result's
-    duration; the start snap is bounded by ffmpeg to the nearest frame
-    boundary <= start_ms. Caller rebases word timestamps to ``actual_start_ms``.
-
-    None on ffmpeg failure (caller drops the verse).
+    Returns ``(clip_bytes, actual_start_ms, actual_end_ms)`` — the byte range of
+    the frames covering the window, with the start snapped to the frame boundary
+    <= ``start_ms``. ``None`` for an empty/degenerate window (caller drops the
+    verse). Mirrors ffmpeg ``-c copy``'s frame-copy semantics minus the
+    subprocess; the produced bytes decode bit-identically to the ffmpeg slice's
+    overlapping audio.
     """
-    duration_ms = max(0, end_ms - start_ms)
-    if duration_ms <= 0:
+    fs = slice_frames(data, index, start_ms, end_ms)
+    if fs is None:
         return None
-    start_s = start_ms / 1000.0
-    dur_s = duration_ms / 1000.0
-    try:
-        result = subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-loglevel",
-                "error",
-                "-ss",
-                f"{start_s:.6f}",
-                "-i",
-                str(src),
-                "-t",
-                f"{dur_s:.6f}",
-                "-c",
-                "copy",
-                "-f",
-                "mp3",
-                str(dst),
-            ],
-            capture_output=True,
-            timeout=120,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
-        log.warning("ffmpeg slice failed for %s [%d,%d]: %s", src.name, start_ms, end_ms, exc)
-        return None
-    if result.returncode != 0 or not dst.exists() or dst.stat().st_size == 0:
-        log.warning(
-            "ffmpeg slice failed for %s [%d,%d] rc=%s: %s",
-            src.name,
-            start_ms,
-            end_ms,
-            result.returncode,
-            result.stderr.decode("utf-8", "replace")[:200],
-        )
-        return None
-    # ffprobe the actual duration to bound the snap. ``-ss`` before ``-i`` in
-    # stream-copy mode snaps to the previous keyframe/frame; the requested
-    # start may shift back by up to one MP3 frame (~26 ms at 44.1 kHz).
-    actual_dur_ms = _probe_duration_ms(dst)
-    if actual_dur_ms is None:
-        # Conservative fallback — assume no shift.
-        return start_ms, end_ms
-    # Snap heuristic: ffmpeg returned `actual_dur_ms` of audio; the requested
-    # window was `duration_ms`. The snap is `actual - duration` (positive →
-    # frame boundary moved earlier; the slice starts a frame before the request).
-    snap_ms = max(0, actual_dur_ms - duration_ms)
-    return start_ms - snap_ms, start_ms - snap_ms + actual_dur_ms
+    return fs.data, fs.actual_start_ms, fs.actual_end_ms
 
 
-def _probe_duration_ms(path: Path) -> int | None:
-    """ffprobe duration in ms, or None on failure."""
+def _slice_workers() -> int:
+    """Worker count sized to the container's real CPU quota, not host cores.
+
+    ``os.cpu_count()`` reports host cores inside the HF container (e.g. 64 on a
+    2-vCPU flavor) → 6x oversubscription of CPU-bound slicing. Read the cgroup
+    quota / scheduler affinity and cap at quota + 1.
+    """
+    quota: int | None = None
+    # cgroup v2: ``<quota> <period>`` in microseconds ("max" = unbounded).
     try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                str(path),
-            ],
-            capture_output=True,
-            timeout=30,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return None
-    if result.returncode != 0:
-        return None
-    try:
-        return int(round(float(result.stdout.decode("utf-8").strip()) * 1000))
-    except (ValueError, AttributeError):
-        return None
+        raw = Path("/sys/fs/cgroup/cpu.max").read_text().split()
+        if len(raw) == 2 and raw[0] != "max":
+            quota = max(1, int(int(raw[0]) / int(raw[1])))
+    except (OSError, ValueError):
+        quota = None
+    # cgroup v1 fallback.
+    if quota is None:
+        try:
+            q = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text().strip())
+            p = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read_text().strip())
+            if q > 0 and p > 0:
+                quota = max(1, int(q / p))
+        except (OSError, ValueError):
+            quota = None
+    if quota is None:
+        try:
+            quota = len(os.sched_getaffinity(0))  # type: ignore[attr-defined]
+        except AttributeError:
+            quota = os.cpu_count() or 2
+    return max(2, min(quota + 1, 12))
 
 
 def _rebase_row(row: dict, actual_start_ms: int) -> None:
@@ -827,15 +791,8 @@ def _post_webhook(
 # ---------------------------------------------------------------------------
 
 
-def _which(name: str) -> bool:
-    """True if ``name`` is on PATH."""
-    from shutil import which
-
-    return which(name) is not None
-
-
 def _preflight(slug: str) -> int:
-    """Verify env, binaries, bucket inputs, static refs. Returns 0 on go,
+    """Verify env, bucket inputs, static refs. Returns 0 on go,
     non-zero exit code on the first failure. Each return code maps to one
     cause so the operator can fix without diving into logs."""
     if not slug:
@@ -844,9 +801,6 @@ def _preflight(slug: str) -> int:
     if not os.environ.get("HF_TOKEN", "").strip():
         log.error("HF_TOKEN secret is required")
         return 10
-    if not _which("ffmpeg") or not _which("ffprobe"):
-        log.error("ffmpeg/ffprobe missing from PATH")
-        return 11
     bucket = _bucket_root()
     if not bucket.exists():
         log.error("bucket mount missing at %s", bucket)
@@ -957,13 +911,13 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
             exit_code=1,
         )
 
-    # 5. Stream-copy audio per row. The bucket FUSE mount can't handle many
-    # parallel random-access reads of the same chapter mp3 (12-wide parallel
-    # ffmpegs starve each other, hit the 120 s subprocess timeout). Per
-    # chapter: copy bucket → /tmp once (single bulk sequential read), then
-    # fan out ffmpeg slices across workers against the local copy. Drop the
-    # local copy when the chapter is done so total tmp footprint stays bounded.
-    import shutil as _shutil
+    # 5. Slice audio per row, in-process. Each chapter MP3 is read from the
+    # bucket once (single bulk sequential read — FUSE/NFS hates random access),
+    # its frame grid is parsed once, then every verse clip is a byte-exact copy
+    # of the frames covering [clip_start, clip_end] — no per-clip ffmpeg/ffprobe.
+    # Chapters are processed across a pool sized to the real CPU quota so bucket
+    # reads + index builds overlap; per-chapter the slicing itself is cheap
+    # pure-Python (bound by chapter count, not verse count).
     from collections import defaultdict
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -974,16 +928,37 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
     for i, row in enumerate(rows):
         rows_by_chapter[int(row["chapter"])].append((i, row))
 
-    def _slice_one(i: int, row: dict, src_local: Path, td_path: Path):
-        dst = td_path / f"{i:06d}.mp3"
-        cut = _stream_copy_slice(src_local, row["clip_start"], row["clip_end"], dst)
-        if cut is None:
-            return i, None, f"{row['surah']}:{row['ayah']}"
-        actual_start, _ = cut
-        _rebase_row(row, actual_start)
-        return i, dst.read_bytes(), None
+    def _slice_chapter(chapter: int, chapter_rows: list[tuple[int, dict]]):
+        """Read + index one chapter MP3, slice all its verse rows in-process.
 
-    workers = max(4, min(12, (os.cpu_count() or 2) * 3))
+        Returns ``(produced, failures)`` where ``produced`` is a list of
+        ``(row_index, clip_bytes)`` and ``failures`` a list of ``"surah:ayah"``
+        labels. Rebases each produced row to its snapped frame boundary.
+        """
+        src_bucket = _chapter_mp3_path(slug, chapter)
+        if not src_bucket.exists():
+            return [], [f"{row['surah']}:{row['ayah']} (no audio)" for _, row in chapter_rows]
+        try:
+            data = src_bucket.read_bytes()
+        except OSError as exc:
+            log.warning("ch %d: read failed: %s", chapter, exc)
+            return [], [f"{row['surah']}:{row['ayah']} (read error)" for _, row in chapter_rows]
+        index = build_frame_index(data)
+        if index.n_frames <= 0:
+            return [], [f"{row['surah']}:{row['ayah']} (no frames)" for _, row in chapter_rows]
+        produced: list[tuple[int, bytes]] = []
+        failures: list[str] = []
+        for i, row in chapter_rows:
+            cut = _frame_slice(data, index, row["clip_start"], row["clip_end"])
+            if cut is None:
+                failures.append(f"{row['surah']}:{row['ayah']}")
+                continue
+            clip_bytes, actual_start, _actual_end = cut
+            _rebase_row(row, actual_start)
+            produced.append((i, clip_bytes))
+        return produced, failures
+
+    workers = _slice_workers()
     progress_every = max(50, len(rows) // 20)
     log.info(
         "slicing %d rows across %d chapters with %d workers (progress every %d)",
@@ -993,46 +968,20 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
         progress_every,
     )
 
-    with tempfile.TemporaryDirectory() as td:
-        td_path = Path(td)
-        done = 0
-        for chapter in sorted(rows_by_chapter):
-            chapter_rows = rows_by_chapter[chapter]
-            src_bucket = _chapter_mp3_path(slug, chapter)
-            if not src_bucket.exists():
-                for _i, row in chapter_rows:
-                    failed_slices.append(f"{row['surah']}:{row['ayah']} (no audio)")
-                done += len(chapter_rows)
-                log.info(
-                    "  ch %d: no audio — %d skipped (total %d/%d, %d failed)",
-                    chapter,
-                    len(chapter_rows),
-                    done,
-                    len(rows),
-                    len(failed_slices),
-                )
-                continue
-            src_local = td_path / f"chapter_{chapter}.mp3"
-            _shutil.copyfile(src_bucket, src_local)
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = [
-                    pool.submit(_slice_one, i, row, src_local, td_path) for i, row in chapter_rows
-                ]
-                for fut in as_completed(futures):
-                    idx, blob, fail = fut.result()
-                    done += 1
-                    if blob is not None:
-                        audio_bytes[idx] = blob
-                    if fail is not None:
-                        failed_slices.append(fail)
-                    if done % progress_every == 0 or done == len(rows):
-                        log.info(
-                            "  sliced %d/%d (%d failed so far)", done, len(rows), len(failed_slices)
-                        )
-            try:
-                src_local.unlink()
-            except OSError:
-                pass
+    done = 0
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_slice_chapter, ch, rows_by_chapter[ch]): ch
+            for ch in sorted(rows_by_chapter)
+        }
+        for fut in as_completed(futures):
+            produced, failures = fut.result()
+            for idx, blob in produced:
+                audio_bytes[idx] = blob
+            failed_slices.extend(failures)
+            done += len(produced) + len(failures)
+            if done % progress_every < (len(produced) + len(failures)) or done == len(rows):
+                log.info("  sliced %d/%d (%d failed so far)", done, len(rows), len(failed_slices))
     sliced_count = sum(1 for b in audio_bytes if b is not None)
     log.info("audio: %d sliced, %d failed", sliced_count, len(failed_slices))
     if failed_slices:
