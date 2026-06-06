@@ -38,13 +38,13 @@ QUL over-counts on 358 verses (355 by one word, 3 by two). The pattern is consis
 | 19:12 | 7 | 8 | `يَـٰيَحْيَىٰ` split |
 | 37:102 | 26 | 28 | two such splits in one verse |
 
-QUA matches the canonical word count on every verse. An app mapping word index to mushaf text will misalign on the over-counted verses.
+QUA matches the canonical word count on every verse. An app mapping word index to mushaf text will misalign on the over-counted verses, unless using the correct word mapping.
 
 ---
 
 ## 2. Repetition
 
-When a reciter repeats a phrase — for emphasis, after a breath, or re-reciting a passage — the word indices step backwards. A timing file that ignores this runs out of words before the end of the verse.
+When a reciter repeats part of an ayah and loops back, the word indices step backwards. A timing file that ignores this runs out of words before the end of the verse.
 
 | | QUL | QUA |
 |---|---:|---:|
@@ -58,10 +58,10 @@ Verses QUL reads as sequential but where the reciter repeats (seek the surah aud
 
 | Verse | QUA word path | Repeated span | Audio |
 |---|---|---|---|
-| 2:14 | 1–6, 5–6, 7–16 | words 5–6 | [002.mp3 @ 196s](https://server10.mp3quran.net/minsh/002.mp3) |
-| 2:17 | 1–12, 6–12, 13–17 | words 6–12 | [002.mp3 @ 246s](https://server10.mp3quran.net/minsh/002.mp3) |
-| 2:31 | 1–10, 9–10, 11–15 | words 9–10 | [002.mp3 @ 662s](https://server10.mp3quran.net/minsh/002.mp3) |
-| 2:38 | 1–8, 5–8, 9–17 | words 5–8 | [002.mp3 @ 835s](https://server10.mp3quran.net/minsh/002.mp3) |
+| 2:14 | 1–6, 5–6, 7–16 | words 5–6 | [002.mp3 @ 3:16](https://server10.mp3quran.net/minsh/002.mp3) |
+| 2:17 | 1–12, 6–12, 13–17 | words 6–12 | [002.mp3 @ 4:06](https://server10.mp3quran.net/minsh/002.mp3) |
+| 2:31 | 1–10, 9–10, 11–15 | words 9–10 | [002.mp3 @ 11:02](https://server10.mp3quran.net/minsh/002.mp3) |
+| 2:38 | 1–8, 5–8, 9–17 | words 5–8 | [002.mp3 @ 13:55](https://server10.mp3quran.net/minsh/002.mp3) |
 
 Where both mark a repeat but disagree on the span, the offset follows from §1: QUL's extra word shifts its indices by one.
 
