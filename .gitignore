@@ -22,6 +22,7 @@ node_modules/
 # Local
 .tmp/
 .playwright-mcp
+.local/
 
 # Release packaging output
 dist/
@@ -30,4 +31,9 @@ dist/
 .coverage
 .coverage.*
 coverage/
-htmlcov/.claude/skills/impeccable/scripts/
+htmlcov/
+.claude/skills/impeccable/scripts/
+
+# Nested working repos (separate clones, not part of this repo)
+quranic-universal-aligner/
+quranic-universal-timestamps/
