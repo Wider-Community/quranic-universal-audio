@@ -58,10 +58,10 @@ Verses QUL reads as sequential but where the reciter repeats (seek the surah aud
 
 | Verse | QUA word path | Repeated span | Audio |
 |---|---|---|---|
-| 2:14 | 1–6, 5–6, 7–16 | words 5–6 | [002.mp3 @ 3:16](https://server10.mp3quran.net/minsh/002.mp3) |
-| 2:17 | 1–12, 6–12, 13–17 | words 6–12 | [002.mp3 @ 4:06](https://server10.mp3quran.net/minsh/002.mp3) |
-| 2:31 | 1–10, 9–10, 11–15 | words 9–10 | [002.mp3 @ 11:02](https://server10.mp3quran.net/minsh/002.mp3) |
-| 2:38 | 1–8, 5–8, 9–17 | words 5–8 | [002.mp3 @ 13:55](https://server10.mp3quran.net/minsh/002.mp3) |
+| 2:14 | 1–6, 5–16 | words 5–6 | [002.mp3 @ 3:16](https://server10.mp3quran.net/minsh/002.mp3) |
+| 2:17 | 1–12, 6–17 | words 6–12 | [002.mp3 @ 4:06](https://server10.mp3quran.net/minsh/002.mp3) |
+| 2:31 | 1–10, 9–15 | words 9–10 | [002.mp3 @ 11:02](https://server10.mp3quran.net/minsh/002.mp3) |
+| 2:38 | 1–8, 5–17 | words 5–8 | [002.mp3 @ 13:55](https://server10.mp3quran.net/minsh/002.mp3) |
 
 Where both mark a repeat but disagree on the span, the offset follows from §1: QUL's extra word shifts its indices by one.
 
@@ -105,9 +105,9 @@ QUA words are ~1.7× longer than QUL words on average.
 | Median gap between words | 440 ms | 0 ms |
 | Words with a gap before them | 98.9% | 6.4% |
 
-The two systems use different conventions. QUL measures speech-only intervals and leaves the silence between words unassigned. QUA extends each word to the start of the next within a continuous segment, and only leaves a gap at a real pause (a segment boundary). The word onset still marks where each word is articulated, so speech-only spans can be recovered; QUL does not provide the gap-free form.
+The two systems use different conventions. QUL measures speech-only intervals and leaves the "silence between words" unassigned. QUA extends each word to the start of the next within a continuous segment, and only leaves a gap at a real pause (a segment boundary). The word onset still marks where each word is articulated, so speech-only spans can be recovered; QUL does not provide the gap-free form.
 
-For follow-along highlighting, the gap-free form keeps the highlight continuous through a breath group instead of dropping between every word.
+For follow-along highlighting, the gap-free form keeps the highlight continuous through a recitation pass instead of dropping between every word.
 
 ---
 
@@ -115,14 +115,10 @@ For follow-along highlighting, the gap-free form keeps the highlight continuous 
 
 - Word index to mushaf text is reliable (100% against QPC Hafs).
 - Repeats are preserved, so highlighting stays aligned when the reciter loops back.
-- Word durations are "until the next word" within a segment, not speech-only intervals.
-- Verse onsets agree with QUL to ~130 ms; verse ends differ by the madd/trailing-silence convention.
-
-For review work, the word counts and repeat detection are a solid starting point; verse endings and repeated passages are where manual checks are most useful.
-
+- Word durations are "until the next word" within a segment
 ---
 
-<details><summary>Method</summary>
+## Appendix - Method
 
 - **Inputs:** QUL = `ayah-recitation-muhammad-siddiq-al-minshawi-murattal-hafs-959.json` (Tarteel CDN export); QUA = `mohammed_siddiq_al_minshawi_mp3quran` release zip (`word_timestamps.json.gz`). Ground truth = `data/surah_info.json` per-verse word counts (QPC Hafs).
 - **Frames:** QUL segments are per-ayah; QUA word times are within-surah, so each verse's words are rebased by the verse start before any timing comparison.
@@ -130,4 +126,4 @@ For review work, the word counts and repeat detection are a solid starting point
 - **Repeat:** a verse has a repeat when its word-index sequence is non-increasing at any step.
 - All numbers were produced by `.local/qul_compare/analyse.py` over all 6,236 verses.
 
-</details>
+---

@@ -27,7 +27,7 @@
   <a href="#acknowledgements">Acknowledgments/License</a>
 </p>
 
-## Key Highlights
+## Highlights
 
 - **Unified Qur'anic audio hub:** A single consistent schema with comprehensive metadata for reciters and recitations instead of scattered websites, CDN APIs, YouTube playlists, and raw files with different formats.
 

@@ -6,6 +6,7 @@ __pycache__/
 .pytest_cache
 *.bak
 node_modules/
+.ruff_cache/
 
 # IDEs / Agents
 .vscode/
