@@ -26,101 +26,56 @@ goes through :func:`to_external_char`.
 
 ``to_external_char`` is **fail-loud**: any token it produces that is not in
 :data:`VOCAB_TOKENS` raises, so a future riwayah / orthography change surfaces at
-cut time instead of silently shipping an undocumented token. The companion asset
-:func:`vocab_json_bytes` (published as ``letter_vocab.json`` next to the release's
-``qpc_hafs.json``) documents the alphabet for downstream consumers.
+cut time instead of silently shipping an undocumented token.
 
-Extensibility: the vocab document is ``schema_version``-stamped and scoped by
-``script`` + ``riwayah``. Today only Hafs ``an Asim`` in the QPC Uthmani script is
-populated; additional riwayat/orthographies extend this (a riwayah-keyed registry)
-rather than mutating the Hafs alphabet.
+The companion asset :func:`vocab_csv_bytes` documents the alphabet for downstream
+consumers (``char,codepoint,name`` CSV). It ships as :data:`VOCAB_FILENAME` — the
+riwayah + script are encoded in the *filename* (``letter_vocab_hafs_qpc.csv``) so a
+future riwayah/orthography adds its own file (``letter_vocab_warsh_qpc.csv``, …)
+rather than mutating this one. The tokenization rule itself lives in the release
+notes + dataset card, not inside the asset.
 """
 
 from __future__ import annotations
 
-import json
+import csv
+import io
 import unicodedata
 
 # The maddah (prolongation) mark. Dropped from every token at publish time.
 MADDAH = "ٓ"  # ARABIC MADDAH ABOVE
 
-# Vocab document provenance.
-SCHEMA_VERSION = 1
-SCRIPT = "uthmani_hafs_qpc"
+# Provenance — encoded in the published asset's filename for extensibility.
 RIWAYAH = "hafs_an_asim"
+SCRIPT = "uthmani_hafs_qpc"
+VOCAB_FILENAME = "letter_vocab_hafs_qpc.csv"
 
 # === The 42-token external alphabet ===
-# Defined by codepoint (single code point each — the maddah composites collapse to
-# their base) to remove any glyph-transcription risk. Each entry is
-# ``(codepoint, category, gloss)``; the token, U+ string, and Unicode name are
-# derived below. Order is meaningful (grouped + roughly frequency-sorted within
-# group) and is preserved in the published asset.
-_VOCAB_SPEC: tuple[tuple[int, str, str], ...] = (
-    # --- 27 ordinary consonants ---
-    (0x0628, "consonant", "beh"),
-    (0x062A, "consonant", "teh"),
-    (0x062B, "consonant", "theh"),
-    (0x062C, "consonant", "jeem"),
-    (0x062D, "consonant", "hah"),
-    (0x062E, "consonant", "khah"),
-    (0x062F, "consonant", "dal"),
-    (0x0630, "consonant", "thal"),
-    (0x0631, "consonant", "reh"),
-    (0x0632, "consonant", "zain"),
-    (0x0633, "consonant", "seen"),
-    (0x0634, "consonant", "sheen"),
-    (0x0635, "consonant", "sad"),
-    (0x0636, "consonant", "dad"),
-    (0x0637, "consonant", "tah"),
-    (0x0638, "consonant", "zah"),
-    (0x0639, "consonant", "ain"),
-    (0x063A, "consonant", "ghain"),
-    (0x0641, "consonant", "feh"),
-    (0x0642, "consonant", "qaf"),
-    (0x0643, "consonant", "kaf"),
-    (0x0644, "consonant", "lam"),
-    (0x0645, "consonant", "meem"),
-    (0x0646, "consonant", "noon"),
-    (0x0647, "consonant", "heh"),
-    (0x0648, "consonant", "waw"),
-    (0x064A, "consonant", "yeh"),
-    # --- 4 alef / ta-marbuta (distinct written letters, never folded) ---
-    (0x0627, "alef", "alef"),
-    (0x0671, "alef", "alef wasla (silent connecting alef)"),
-    (0x0649, "alef", "alef maksura"),
-    (0x0629, "alef", "teh marbuta"),
-    # --- 6 hamza family (seat is part of letter identity) ---
-    (0x0621, "hamza", "hamza"),
-    (0x0623, "hamza", "alef with hamza above"),
-    (0x0625, "hamza", "alef with hamza below"),
-    (0x0624, "hamza", "waw with hamza above"),
-    (0x0626, "hamza", "yeh with hamza above"),
-    (0x0654, "hamza", "bare hamza above (seatless hamza mark)"),
-    # --- 5 special / silent / superscript letters ---
-    (0x0670, "special", "superscript (dagger) alef — long aa written above; also stands alone"),
-    (0x06E5, "special", "small waw (silent/assimilated glide)"),
-    (0x06E6, "special", "small yeh (silent/assimilated glide)"),
-    (0x06E7, "special", "small high yeh"),
-    (0x06E8, "special", "small high noon"),
+# Ordered codepoints (single code point each — the maddah composites collapse to
+# their base). Token + U+ string + Unicode name are derived below. Order is
+# grouped (consonants, alef family, hamza family, special/silent) and preserved
+# in the published CSV.
+_CODEPOINTS: tuple[int, ...] = (
+    # 27 ordinary consonants
+    0x0628, 0x062A, 0x062B, 0x062C, 0x062D, 0x062E, 0x062F, 0x0630, 0x0631,
+    0x0632, 0x0633, 0x0634, 0x0635, 0x0636, 0x0637, 0x0638, 0x0639, 0x063A,
+    0x0641, 0x0642, 0x0643, 0x0644, 0x0645, 0x0646, 0x0647, 0x0648, 0x064A,
+    # 4 alef / ta-marbuta (distinct written letters, never folded)
+    0x0627, 0x0671, 0x0649, 0x0629,
+    # 6 hamza family (seat is part of letter identity)
+    0x0621, 0x0623, 0x0625, 0x0624, 0x0626, 0x0654,
+    # 5 special / silent / superscript letters
+    0x0670, 0x06E5, 0x06E6, 0x06E7, 0x06E8,
 )
 
-
-def _entry(cp: int, category: str, gloss: str) -> dict:
-    token = chr(cp)
-    return {
-        "token": token,
-        "codepoints": [f"U+{cp:04X}"],
-        "names": [unicodedata.name(token, "?")],
-        "category": category,
-        "gloss": gloss,
-    }
-
-
-# Ordered, fully-annotated alphabet — the body of the published asset.
-EXTERNAL_VOCAB: list[dict] = [_entry(cp, cat, gloss) for cp, cat, gloss in _VOCAB_SPEC]
+# Ordered, flat rows — the body of the published CSV.
+EXTERNAL_VOCAB: list[dict] = [
+    {"char": chr(cp), "codepoint": f"U+{cp:04X}", "name": unicodedata.name(chr(cp), "?")}
+    for cp in _CODEPOINTS
+]
 
 # Fast membership set + the drift guard's source of truth.
-VOCAB_TOKENS: frozenset[str] = frozenset(chr(cp) for cp, _cat, _gloss in _VOCAB_SPEC)
+VOCAB_TOKENS: frozenset[str] = frozenset(chr(cp) for cp in _CODEPOINTS)
 
 assert len(EXTERNAL_VOCAB) == len(VOCAB_TOKENS) == 42, "external letter vocab must be 42 unique tokens"
 
@@ -143,38 +98,11 @@ def to_external_char(ch: str) -> str:
     return ext
 
 
-def vocab_document() -> dict:
-    """The full ``letter_vocab.json`` document (alphabet + provenance + rules)."""
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "script": SCRIPT,
-        "riwayah": RIWAYAH,
-        "description": (
-            "Character vocabulary for the letter tier (letter_timestamps.json.gz / the "
-            "dataset's letter_timestamps.char). Each letter's `char` is one of these tokens."
-        ),
-        "tokenization": {
-            "rule": (
-                "Grapheme tokens from the Uthmani word text. Short vowels (haraka: "
-                "fatha/damma/kasra/sukun/shadda/tanween and waqf marks) are stripped; "
-                "the maddah prolongation mark (U+0653) is also dropped. Madd/silent "
-                "skeleton letters are kept as distinct tokens: the superscript (dagger) "
-                "alef U+0670, the small waw/yeh U+06E5/U+06E6, the small-high yeh/noon "
-                "U+06E7/U+06E8, alef-wasla U+0671, and every hamza seat."
-            ),
-            "render_hint": (
-                "A few tokens are standalone combining marks (U+0670, U+0654, U+06E7, "
-                "U+06E8). To render one in isolation, prefix it with a base such as ZWSP "
-                "(U+200B) so it does not attach to surrounding text."
-            ),
-            "token_count": len(EXTERNAL_VOCAB),
-        },
-        "tokens": EXTERNAL_VOCAB,
-    }
-
-
-def vocab_json_bytes() -> bytes:
-    """Deterministic UTF-8 bytes for the ``letter_vocab.json`` release/dataset asset."""
-    return (
-        json.dumps(vocab_document(), ensure_ascii=False, indent=2).encode("utf-8") + b"\n"
-    )
+def vocab_csv_bytes() -> bytes:
+    """Deterministic UTF-8 CSV (``char,codepoint,name``) for the published asset."""
+    buf = io.StringIO(newline="")
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(["char", "codepoint", "name"])
+    for entry in EXTERNAL_VOCAB:
+        writer.writerow([entry["char"], entry["codepoint"], entry["name"]])
+    return buf.getvalue().encode("utf-8")

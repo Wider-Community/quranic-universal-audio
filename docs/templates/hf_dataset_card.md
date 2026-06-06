@@ -57,7 +57,7 @@ Remaining subsets are grouped by riwayah, and splits are specific mushafs.
 | `text_uthmani` | `string` | Recited Uthmani text (normalized) |
 | `segments` | `[[int,int,int,int]]` | Waqf/pause-aware regions: `[word_from, word_to, start_ms, end_ms]`. |
 | `word_timestamps` | `[[int,int,int]]` | `[word_idx, start_ms, end_ms]`; word indices are 1-based. |
-| `letter_timestamps` | struct of lists | `word_idx`, `char`, `start_ms`, `end_ms`. `char` is one token from a fixed 42-token alphabet — see `letter_vocab.json` in this repo. |
+| `letter_timestamps` | struct of lists | `word_idx`, `char`, `start_ms`, `end_ms`. `char` is one token from a fixed 42-token alphabet — see `letter_vocab_hafs_qpc.csv` in this repo. |
 | `source_url` | `string` | Original chapter or ayah audio URL. |
 | `source_offset_ms` | `int32` | Clip start inside `source_url`. |
 
@@ -68,8 +68,8 @@ All row timestamps are relative to the ayah clip. Use `source_offset_ms + timest
 Each `letter_timestamps.char` is one token from a fixed **42-token** alphabet. Short vowels
 (haraka) are stripped and the maddah prolongation mark is dropped, but distinct letters stay
 apart — including the silent/structural ones (the superscript "dagger" alef, alef-wasla, the
-small waw/yeh, and each hamza seat). The complete token list — with codepoints, Unicode names,
-the tokenization rule, and rendering notes — is published as `letter_vocab.json` in this repo.
+small waw/yeh, and each hamza seat). The complete token list (`char,codepoint,name`) is
+published as `letter_vocab_hafs_qpc.csv` in this repo.
 
 ## Catalog Schema
 

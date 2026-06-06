@@ -1,53 +1,40 @@
 from __future__ import annotations
 
-import json
+import csv
+import io
 
 import pytest
 
 from qua_shared.letter_vocab import (
     EXTERNAL_VOCAB,
     MADDAH,
+    VOCAB_FILENAME,
     VOCAB_TOKENS,
     to_external_char,
-    vocab_document,
-    vocab_json_bytes,
+    vocab_csv_bytes,
 )
 
-# Every internal base+maddah composite seen in real released data, and the base
-# it must collapse to (codepoint pairs for clarity).
-_MADDAH_COMPOSITES = {
-    "آ": "ا",  # alef -> alef (آ)
-    "وٓ": "و",  # waw
-    "ىٓ": "ى",  # alef maksura
-    "يٓ": "ي",  # yeh
-    "لٓ": "ل",  # lam (muqattaat)
-    "مٓ": "م",  # meem
-    "نٓ": "ن",  # noon
-    "سٓ": "س",  # seen
-    "صٓ": "ص",  # sad
-    "عٓ": "ع",  # ain
-    "قٓ": "ق",  # qaf
-    "كٓ": "ك",  # kaf
-    "ٰٓ": "ٰ",  # dagger alef -> dagger alef
-    "ۥٓ": "ۥ",  # small waw
-    "ۦٓ": "ۦ",  # small yeh
-}
+# The 15 bases that appear carrying a maddah in real released data. The internal
+# token is the DECOMPOSED base + U+0653 (built explicitly so the fixture matches
+# the real bytes, not a precomposed glyph like U+0622).
+_MADDAH_BASES = ["ا", "و", "ى", "ي", "ل", "م", "ن", "س", "ص", "ع", "ق", "ك", "ٰ", "ۥ", "ۦ"]
+_MADDAH_COMPOSITES = {base + MADDAH: base for base in _MADDAH_BASES}
 
 # Tokens that must survive untouched (the silent/structural keep-list).
 _PRESERVED = ["ٰ", "ۥ", "ۦ", "ۧ", "ۨ", "ٱ", "ٔ", "ء"]
 
 
-def test_vocab_is_42_unique_annotated_tokens():
+def test_vocab_is_42_unique_tokens():
     assert len(EXTERNAL_VOCAB) == 42
     assert len(VOCAB_TOKENS) == 42
-    tokens = [e["token"] for e in EXTERNAL_VOCAB]
+    tokens = [e["char"] for e in EXTERNAL_VOCAB]
     assert len(set(tokens)) == 42
     assert set(tokens) == set(VOCAB_TOKENS)
     for e in EXTERNAL_VOCAB:
-        assert e["codepoints"] and e["names"] and e["category"] and e["gloss"]
-        assert e["category"] in {"consonant", "alef", "hamza", "special"}
-        # single-codepoint tokens only (maddah composites collapsed)
-        assert len(e["token"]) == 1
+        assert set(e) == {"char", "codepoint", "name"}  # no gloss/category/array noise
+        assert len(e["char"]) == 1  # single-codepoint tokens only
+        assert e["codepoint"] == f"U+{ord(e['char']):04X}"
+        assert e["name"]
 
 
 def test_maddah_composites_collapse_to_base():
@@ -63,39 +50,38 @@ def test_preserved_tokens_pass_through_unchanged():
 
 
 def test_consonants_pass_through_unchanged():
-    for e in EXTERNAL_VOCAB:
-        if e["category"] == "consonant":
-            assert to_external_char(e["token"]) == e["token"]
+    # the 27 ordinary consonants are the first block
+    for tok in "بتثجحخدذرزسشصضطظعغفقكلمنهوي":
+        assert to_external_char(tok) == tok
 
 
 def test_fail_loud_on_unknown_token():
-    # haraka-bearing token (fatha) is not in the external alphabet
     with pytest.raises(ValueError):
-        to_external_char("بَ")  # beh + fatha
-    # a foreign letter
+        to_external_char("بَ")  # beh + fatha (haraka not in alphabet)
     with pytest.raises(ValueError):
-        to_external_char("ݢ")  # arabic letter keheh with dot above
-    # a bare maddah on its own collapses to empty -> not a token
+        to_external_char("ݢ")  # foreign letter
     with pytest.raises(ValueError):
-        to_external_char(MADDAH)
+        to_external_char(MADDAH)  # bare maddah collapses to empty
 
 
-def test_vocab_json_is_deterministic_and_complete():
-    b1 = vocab_json_bytes()
-    b2 = vocab_json_bytes()
+def test_vocab_csv_is_deterministic_and_complete():
+    b1 = vocab_csv_bytes()
+    b2 = vocab_csv_bytes()
     assert b1 == b2
-    doc = json.loads(b1)
-    assert doc["schema_version"] == 1
-    assert doc["riwayah"] == "hafs_an_asim"
-    assert doc["tokenization"]["token_count"] == 42
-    assert len(doc["tokens"]) == 42
-    # document() and the serialized form agree
-    assert json.loads(b1) == vocab_document()
+    assert VOCAB_FILENAME == "letter_vocab_hafs_qpc.csv"
+    rows = list(csv.reader(io.StringIO(b1.decode("utf-8"))))
+    assert rows[0] == ["char", "codepoint", "name"]
+    body = rows[1:]
+    assert len(body) == 42
+    chars = [r[0] for r in body]
+    assert set(chars) == set(VOCAB_TOKENS)
+    for char, codepoint, name in body:
+        assert codepoint == f"U+{ord(char):04X}"
+        assert name
 
 
 def test_mapping_over_a_real_muqattaat_verse():
-    # 19:1 = كٓهيعٓصٓ — three maddah composites + plain letters; result must be
-    # within the alphabet, maddah-free, and length-preserving.
+    # 19:1 = كٓهيعٓصٓ — maddah composites + plain letters.
     internal = ["كٓ", "ه", "ي", "عٓ", "صٓ"]
     external = [to_external_char(c) for c in internal]
     assert external == ["ك", "ه", "ي", "ع", "ص"]

@@ -48,7 +48,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from qua_shared.letter_vocab import to_external_char, vocab_json_bytes  # noqa: E402
+from qua_shared.letter_vocab import VOCAB_FILENAME, to_external_char, vocab_csv_bytes  # noqa: E402
 from qua_shared.schemas import (  # noqa: E402
     AudioManifestSidecar,
     FileDigest,
@@ -1086,7 +1086,7 @@ def main() -> int:
     # Letter-tier character vocabulary (the 42-token external alphabet that the
     # letter_timestamps.json.gz `char` field draws from). Generated from the
     # canonical mapping module so it can never drift from the emitted data.
-    uploads.append(("letter_vocab.json", vocab_json_bytes(), "application/json"))
+    uploads.append((VOCAB_FILENAME, vocab_csv_bytes(), "text/csv"))
     for name, body in static_files.items():
         uploads.append((name, body, "application/json"))
     for m in members:
