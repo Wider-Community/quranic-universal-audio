@@ -66,10 +66,21 @@ export interface AdminGhReleaseMember {
   [k: string]: unknown;
 }
 export interface AdminInFlightJob {
-  kind: "hf_publish" | "cut_release" | "timestamps";
+  kind: "hf_publish" | "hf_publish_batch" | "cut_release" | "timestamps";
   slug: string | null;
   job_id: string;
   started_at: string | null;
+  url?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * Summary of the most recent batch publish, for the dismissable banner.
+ */
+export interface AdminLastBatch {
+  job_id: string;
+  at?: string | null;
+  published_count: number;
+  failed_count: number;
   [k: string]: unknown;
 }
 export interface AdminLatestGhRelease {
@@ -91,6 +102,23 @@ export interface AdminPermissionGroup {
 export interface AdminPermissionsResponse {
   groups?: AdminPermissionGroup[];
   tiers?: string[];
+  [k: string]: unknown;
+}
+export interface AdminPublishBatchRequest {
+  /**
+   * @minItems 1
+   */
+  slugs: [string, ...string[]];
+}
+/**
+ * A reciter's failure in the most recent batch publish. Surfaced on the
+ * row so the FE can re-bucket it into "Failed to publish" until a retry
+ * supersedes it with a successful HF release.
+ */
+export interface AdminPublishError {
+  message: string;
+  job_id: string;
+  at?: string | null;
   [k: string]: unknown;
 }
 export interface AdminReleaseLinks {
@@ -148,6 +176,7 @@ export interface AdminReleaseStatusRow {
   ts: AdminReleaseRow | null;
   hf: AdminReleaseRow | null;
   gh: AdminGhReleaseMember | null;
+  publish_error?: AdminPublishError | null;
   [k: string]: unknown;
 }
 export interface AdminReleasesStatusResponse {
@@ -155,6 +184,7 @@ export interface AdminReleasesStatusResponse {
   summary: AdminReleasesSummary | null;
   in_flight: AdminInFlightJob[];
   recitations: AdminReleaseStatusRow[];
+  last_batch?: AdminLastBatch | null;
   [k: string]: unknown;
 }
 export interface AdminReleasesSummary {

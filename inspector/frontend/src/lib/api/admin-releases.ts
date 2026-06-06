@@ -3,7 +3,9 @@
  *
  * - fetchReleasesStatus    per-recitation status grid (TS / HF / GH badges)
  * - fetchReleasePreview    dry-run diff + auto-version + CHANGELOG preview
- * - publishHf              launch HF dataset publish for a slug
+ * - publishHfBatch         launch ONE job publishing a batch of slugs
+ * - cancelReleaseJob       cancel an in-flight release job by id
+ * - regenerateTs           re-run MFA alignment for a published slug
  * - cutRelease             launch the global GH release cut job
  *
  */
@@ -12,8 +14,10 @@ import type {
     AdminCutReleaseRequest,
     AdminGhReleaseMember,
     AdminInFlightJob,
+    AdminLastBatch,
     AdminLatestGhRelease,
     AdminLaunchResponse,
+    AdminPublishError,
     AdminReleasePreviewResponse,
     AdminReleasePreviewRow,
     AdminReleaseRow,
@@ -28,6 +32,8 @@ export type ReleaseStatusRow = AdminReleaseStatusRow;
 export type LatestGhRelease = AdminLatestGhRelease;
 export type ReleasesSummary = AdminReleasesSummary;
 export type InFlightJob = AdminInFlightJob;
+export type LastBatch = AdminLastBatch;
+export type PublishError = AdminPublishError;
 export type ReleasesStatusResponse = AdminReleasesStatusResponse;
 export type ReleasePreviewRow = AdminReleasePreviewRow;
 export type ReleasePreviewResponse = AdminReleasePreviewResponse;
@@ -56,15 +62,26 @@ export async function fetchReleasePreview(signal?: AbortSignal): Promise<Release
     return _unwrap<ReleasePreviewResponse>(resp);
 }
 
-/** Launch the HF dataset publish job for a slug. Returns the launched job
- *  id; throws the server error verbatim (e.g. the 409 "a cut_release is in
- *  flight"). */
-export async function publishHf(slug: string): Promise<LaunchResponse> {
+/** Launch ONE HF Job that publishes a batch of slugs. A single slug is just a
+ *  batch of one. Returns the launched job id; throws the server error verbatim
+ *  (e.g. the 409 "a cut_release is in flight" / "a job is already running"). */
+export async function publishHfBatch(slugs: string[]): Promise<LaunchResponse> {
+    const resp = await fetch('/api/admin/publish-hf-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slugs }),
+    });
+    return _unwrap<LaunchResponse>(resp);
+}
+
+/** Cancel an in-flight release job (publish / batch / cut / timestamps) by id.
+ *  Hard-kills the HF Job container; the next status poll drops the row. */
+export async function cancelReleaseJob(jobId: string): Promise<{ job_id: string; canceled: boolean }> {
     const resp = await fetch(
-        `/api/admin/publish-hf/${encodeURIComponent(slug)}`,
+        `/api/admin/release-jobs/${encodeURIComponent(jobId)}/cancel`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' } },
     );
-    return _unwrap<LaunchResponse>(resp);
+    return _unwrap<{ job_id: string; canceled: boolean }>(resp);
 }
 
 /** Launch an MFA timestamps-regeneration job for an already-released slug.

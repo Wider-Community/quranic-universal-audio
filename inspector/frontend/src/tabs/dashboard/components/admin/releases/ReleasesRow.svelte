@@ -2,20 +2,20 @@
     /**
      * One recitation row in the Releases tab landing list.
      *
-     * Two-zone flex (mirrors ``ReviewsRow.svelte``): identity grows on the
-     * left, intrinsic-width meta cluster on the right.
+     * Two-zone flex (mirrors ``ReviewsRow.svelte``): a select checkbox +
+     * identity grow on the left, intrinsic-width meta cluster on the right.
      *   Line 1 — Latin name (primary) + Arabic name (muted, trailing).
      *   Line 2 — riwayah · style · channel (muted dotted).
-     *   Right — TS / HF / GH chips + action button (bucket-dependent).
+     *   Right — TS / HF / GH chips + bucket-dependent trailing affordance.
      *
-     * ``bucket`` drives the action: Re-publish for stale / published_current,
-     * Publish-to-HF for waiting, spinner+job link for in_flight, no button
-     * for excluded. Published (current + stale) rows ALSO expose a secondary
-     * "Regenerate TS" action that re-runs MFA alignment — on completion the row
-     * lands in "Stale on HF" (the HF release got stale-stamped) ready to
-     * re-publish. Publish is gated by ``release.publish_hf``; regen by
-     * ``reviews.generate_timestamps`` + ``reciter.publish`` — all per the
-     * capability registry (NOT a hardcoded role per CLAUDE.md).
+     * Publishing is select-only: publishable rows (waiting / stale_hf / failed /
+     * published_current) show a checkbox and the parent's action bar fires one
+     * batch job for the selection. ``in_flight`` rows show a minimal job status
+     * (badge + elapsed + Open-on-HF + Cancel); ``failed`` rows show the publish
+     * error inline; ``excluded`` rows are read-only. Published (current + stale)
+     * rows also expose a secondary "Regenerate TS" action that re-runs MFA
+     * alignment, gated by ``reviews.generate_timestamps`` + ``reciter.publish``
+     * per the capability registry (NOT a hardcoded role per CLAUDE.md).
      */
     import { can } from '../../../../../lib/stores/capabilities';
     import type {
@@ -25,6 +25,7 @@
 
     export type ReleasesBucket =
         | 'in_flight'
+        | 'failed'
         | 'stale_hf'
         | 'waiting'
         | 'published_current'
@@ -35,23 +36,28 @@
         bucket: ReleasesBucket;
         /** Live job for this row (only set when bucket === 'in_flight'). */
         inFlightJob?: InFlightJob | null;
-        /** Set to true while the row's Publish button is racing the launch
-         *  response; the parent toggles it to disable the row's action. */
-        busy?: boolean;
-        /** Optional inline error (e.g. 409 from publish) — rendered below the
+        /** Whether this row can be selected for a batch publish. */
+        selectable?: boolean;
+        /** Whether this row is currently selected. */
+        selected?: boolean;
+        /** Optional inline error (e.g. a failed cancel) — rendered below the
          *  meta cluster, mirrors Reviews row pattern. */
         errorMessage?: string | null;
         /** Set to true while the row's Regenerate-TS button is racing the
          *  launch response; the parent toggles it to disable the row's action. */
         regenBusy?: boolean;
-        onPublish?: (_slug: string) => void;
+        /** True while a cancel for this row's in-flight job is racing. */
+        canceling?: boolean;
+        onToggleSelect?: (_slug: string) => void;
         /** Re-run MFA alignment for a published (current/stale) reciter. */
         onRegenerate?: (_slug: string) => void;
+        /** Cancel this row's in-flight job. */
+        onCancel?: (_jobId: string) => void;
     }
-    let { row, bucket, inFlightJob = null, busy = false,
-          errorMessage = null, regenBusy = false, onPublish, onRegenerate }: Props = $props();
+    let { row, bucket, inFlightJob = null, selectable = false, selected = false,
+          errorMessage = null, regenBusy = false, canceling = false,
+          onToggleSelect, onRegenerate, onCancel }: Props = $props();
 
-    const canPublish = can('release.publish_hf');
     // Regen is publish-equivalent (re-runs the MFA job that auto-publishes),
     // so it needs both the generate + publish caps — same pair the Reviews-tab
     // Generate-TS action checks.
@@ -89,26 +95,37 @@
         return s.length > 8 ? s.slice(0, 7) : s;
     }
 
-    function ghChipLabel(): { glyph: string; label: string; tone: 'ok' | 'warn' | 'faint' | 'excluded' } {
+    function ghChipLabel(): {
+        glyph: string;
+        label: string;
+        tone: 'pending' | 'settled' | 'warn' | 'faint' | 'excluded';
+    } {
         if (!row.gh_release_eligible) {
             return { glyph: '–', label: 'excluded', tone: 'excluded' };
         }
         if (!row.gh) return { glyph: '·', label: 'not in cut', tone: 'faint' };
         if (row.gh.stale_since) return { glyph: '⚠', label: `stale (${row.gh.change_kind})`, tone: 'warn' };
-        const map: Record<string, string> = { added: '+ added', refresh: '↻ refresh', unchanged: '· current' };
-        return { glyph: '', label: map[row.gh.change_kind] ?? row.gh.change_kind, tone: 'ok' };
+        // added/refresh will change in the next cut (violet "pending change");
+        // unchanged is settled into the current cut (muted, reads as at-rest).
+        if (row.gh.change_kind === 'unchanged') return { glyph: '·', label: 'current', tone: 'settled' };
+        const map: Record<string, string> = { added: '+ added', refresh: '↻ refresh' };
+        return { glyph: '', label: map[row.gh.change_kind] ?? row.gh.change_kind, tone: 'pending' };
     }
     const ghChip = $derived(ghChipLabel());
-
-    function actionLabel(): string {
-        if (bucket === 'stale_hf') return 'Re-publish (stale)';
-        if (bucket === 'waiting') return 'Publish to HF';
-        if (bucket === 'published_current') return 'Re-publish';
-        return '';
-    }
 </script>
 
-<div class="row" class:row--inflight={bucket === 'in_flight'}>
+<div class="row" class:row--inflight={bucket === 'in_flight'} class:row--selected={selected}>
+    {#if selectable}
+        <label class="select" title="Select for batch publish">
+            <input
+                type="checkbox"
+                checked={selected}
+                onchange={() => onToggleSelect?.(row.slug)}
+            />
+        </label>
+    {:else}
+        <span class="select-spacer" aria-hidden="true"></span>
+    {/if}
     <div class="identity">
         <div class="id-name">
             {#if row.name_en}
@@ -153,43 +170,47 @@
         </span>
 
         {#if bucket === 'in_flight'}
-            <span class="action-flight" title={`Job ${inFlightJob?.job_id ?? ''}`}>
-                <span class="flight-dot" aria-hidden="true"></span>
-                in flight{inFlightJob?.started_at ? ` · ${fmtRelative(inFlightJob.started_at)}` : ''}
+            <span class="flight" title={`Job ${inFlightJob?.job_id ?? ''}`}>
+                <span class="badge run"><span class="flight-dot" aria-hidden="true"></span>running</span>
+                {#if inFlightJob?.started_at}
+                    <span class="flight-when">{fmtRelative(inFlightJob.started_at)}</span>
+                {/if}
+                {#if inFlightJob?.url}
+                    <a class="hf-link" href={inFlightJob.url} target="_blank" rel="noopener noreferrer"
+                        title="Open the job on Hugging Face — logs stream live there">Open on HF ↗</a>
+                {/if}
+                {#if inFlightJob?.job_id && onCancel}
+                    <button
+                        class="cancel-job"
+                        type="button"
+                        onclick={(e) => { e.stopPropagation(); onCancel?.(inFlightJob.job_id); }}
+                        disabled={canceling}
+                        title="Cancel this job — in-progress work is lost"
+                    >{canceling ? 'Cancelling…' : 'Cancel'}</button>
+                {/if}
             </span>
         {:else if bucket === 'excluded'}
             <span class="action-faint" title="Channel is not in the GH release allow-list">
                 read-only
             </span>
-        {:else}
+        {:else if showRegen && onRegenerate && $canGenerateTs && $canReciterPublish}
             <span class="actions">
-                {#if showRegen && onRegenerate && $canGenerateTs && $canReciterPublish}
-                    <button
-                        class="btn btn-ghost"
-                        type="button"
-                        onclick={(e) => { e.stopPropagation(); onRegenerate?.(row.slug); }}
-                        disabled={busy || regenBusy}
-                        title="Re-run MFA alignment — re-publish afterwards to refresh HF/GH"
-                    >
-                        {regenBusy ? 'Launching…' : 'Regenerate TS'}
-                    </button>
-                {/if}
-                {#if onPublish && $canPublish}
-                    <button
-                        class="btn"
-                        class:btn-warn={bucket === 'stale_hf'}
-                        type="button"
-                        onclick={(e) => { e.stopPropagation(); onPublish?.(row.slug); }}
-                        disabled={busy || regenBusy || !row.ts}
-                        title={!row.ts ? 'Generate timestamps before publishing' : ''}
-                    >
-                        {busy ? 'Launching…' : actionLabel()}
-                    </button>
-                {/if}
+                <button
+                    class="btn btn-ghost"
+                    type="button"
+                    onclick={(e) => { e.stopPropagation(); onRegenerate?.(row.slug); }}
+                    disabled={regenBusy}
+                    title="Re-run MFA alignment — re-publish afterwards to refresh HF/GH"
+                >
+                    {regenBusy ? 'Launching…' : 'Regenerate TS'}
+                </button>
             </span>
         {/if}
     </div>
 
+    {#if row.publish_error}
+        <div class="row-err" role="alert">Last publish failed: {row.publish_error.message}</div>
+    {/if}
     {#if errorMessage}
         <div class="row-err" role="alert">{errorMessage}</div>
     {/if}
@@ -198,9 +219,9 @@
 <style>
     .row {
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: auto 1fr auto;
         align-items: center;
-        column-gap: var(--s-5);
+        column-gap: var(--s-3);
         padding: var(--s-2) var(--s-3);
         border-bottom: 1px solid var(--border-quiet);
         transition: background-color var(--t-fast);
@@ -209,6 +230,20 @@
     .row:hover { background: var(--panel); }
     .row--inflight { background: var(--accent-tint-soft); }
     .row--inflight:hover { background: var(--accent-tint); }
+    .row--selected { background: var(--accent-tint-soft); }
+    .row--selected:hover { background: var(--accent-tint); }
+
+    /* Select column — checkbox for publishable rows, a fixed-width spacer
+       otherwise so identity columns stay aligned across buckets. */
+    .select,
+    .select-spacer {
+        width: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .select { cursor: pointer; }
+    .select input { accent-color: var(--accent); cursor: pointer; margin: 0; }
 
     .identity {
         min-width: 0;
@@ -285,26 +320,35 @@
     }
     .chip-val { font-variant-numeric: tabular-nums; }
     .chip-faint { color: var(--text-faint); }
+    /* Stale HF release — amber, the dark-theme error/attention hue. */
     .chip-stale {
-        background: oklch(0.97 0.04 80);
-        border-color: oklch(0.84 0.130 70);
+        background: var(--state-error-bg);
+        border-color: oklch(0.86 0.130 75 / 0.4);
+        color: var(--state-error-fg);
     }
     .chip-stale-dot {
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background: oklch(0.84 0.130 70);
+        background: var(--state-error-fg);
         margin-left: 2px;
     }
-    .chip-ok {
-        background: var(--accent-tint-soft);
-        border-color: var(--accent-tint);
-        color: var(--accent-strong);
+    /* GH tones — added/refresh pend a change (violet), unchanged is settled
+       (muted), stale needs attention (amber), the rest are demoted (faint). */
+    .chip-pending {
+        background: var(--state-available-bg);
+        border-color: oklch(0.84 0.110 300 / 0.4);
+        color: var(--state-available-fg);
+    }
+    .chip-settled {
+        background: var(--panel);
+        border-color: var(--border-quiet);
+        color: var(--text-muted);
     }
     .chip-warn {
-        background: oklch(0.97 0.04 80);
-        border-color: oklch(0.84 0.130 70);
-        color: oklch(0.40 0.10 70);
+        background: var(--state-error-bg);
+        border-color: oklch(0.86 0.130 75 / 0.4);
+        color: var(--state-error-fg);
     }
     .chip-excluded {
         background: var(--panel);
@@ -344,23 +388,29 @@
         border-color: var(--border-default);
         color: var(--text-primary);
     }
-    .btn-warn {
-        border-color: oklch(0.84 0.130 70);
-        color: oklch(0.42 0.10 70);
-    }
-    .btn-warn:hover:not(:disabled) {
-        background: oklch(0.97 0.04 80);
-    }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .action-flight {
+    /* In-flight job status — minimal: badge + elapsed + Open-on-HF + Cancel. */
+    .flight {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: var(--s-2);
         font-size: var(--fs-meta);
-        color: var(--accent-strong);
         font-family: var(--font-mono);
     }
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 9.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        border-radius: 999px;
+        padding: 2px 8px;
+        background: var(--panel-2);
+        color: var(--text-secondary);
+    }
+    .badge.run { color: var(--accent-strong); background: var(--accent-tint-soft); }
     .flight-dot {
         width: 7px;
         height: 7px;
@@ -372,6 +422,35 @@
         0%, 100% { opacity: 1; }
         50%      { opacity: 0.35; }
     }
+    .flight-when {
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+    }
+    .hf-link {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: var(--accent-strong);
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .hf-link:hover { text-decoration: underline; }
+    /* Cancel — destructive secondary affordance, error-tinted so the intent is
+       unambiguous next to "Open on HF ↗". */
+    .cancel-job {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        background: transparent;
+        color: var(--state-error-fg);
+        border: 1px solid oklch(0.86 0.130 75 / 0.4);
+        border-radius: var(--r-1);
+        padding: 2px 8px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .cancel-job:hover:not(:disabled) { background: var(--state-error-bg); }
+    .cancel-job:disabled { opacity: 0.6; cursor: not-allowed; }
 
     .action-faint {
         font-size: var(--fs-meta);
