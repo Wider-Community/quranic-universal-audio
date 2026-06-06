@@ -25,6 +25,7 @@ Where a reference doc here touches those domains (e.g. the route map in `archite
 | [accordion-guides.md](accordion-guides.md) | Validation accordion help-modal guide templates (`tabs/segments/guides/`). |
 | [config-deploy.md](config-deploy.md) | Env vars, Space secrets, image build, deploy workflow, healthz, single-worker invariant. |
 | [data-migrations.md](data-migrations.md) | One-shot migration / backfill scripts (`scripts/migrations/`, `scripts/backfills/`) — detection, apply CLI, rollback. |
+| [api-roadmap.md](api-roadmap.md) | **Roadmap / vision (not built yet).** The planned public data API — typed pip/npm SDKs over static CDN-hosted data + an optional HF-Space compute layer; the why, the caching/versioning model, and the build sequence. |
 | [testing.md](testing.md) | Test suites — pytest (BE + qua_shared) and vitest (FE), conftest fixtures (`signed_in_client`, `tmp_reciter_dir`, `seed_state`, `state_persistence`), mocking boundaries, schema-parity policy, coverage, phase-gates. |
 
 Audio: see `.claude/skills/inspector-audio/` (peaks, audio proxy/source, bucket audio/peaks read-only, VBR/Xing, probes).

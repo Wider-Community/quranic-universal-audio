@@ -111,6 +111,7 @@ Deep, agent-facing reference docs live in `docs/reference/` (flat). **Read the o
 | [`dataset-and-releases.md`](docs/reference/dataset-and-releases.md) | dataset releasing — bucket-as-canonical + 3 adapter formats (HF, GH release tiers, future API), `releases` table, publish state model, schema |
 | [`config-deploy.md`](docs/reference/config-deploy.md) | env vars, secrets, image build, deploy, healthz |
 | [`data-migrations.md`](docs/reference/data-migrations.md) | one-shot migration/backfill scripts |
+| [`api-roadmap.md`](docs/reference/api-roadmap.md) | **roadmap (not built)** — planned public data API: typed pip/npm SDKs over static CDN data + optional HF-Space compute layer; caching/versioning model + build sequence |
 
 **Keep references current.** They are the *what-is* contract: when you change a subsystem, update its reference doc in the same change (code wins on conflict — fix the doc to match). **Add a new reference** when a new surface/subsytem/feature/convention appears that an agent would need to get oriented — and add a one-line row to the table above + `docs/reference/README.md`.
 
