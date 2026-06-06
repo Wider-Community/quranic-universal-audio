@@ -163,7 +163,7 @@ releases become a real requirement.
 ## Changelog (the release body)
 
 The release body is rendered from
-[`.github/templates/release_body.md`](../../.github/templates/release_body.md) by
+[`docs/templates/release_body.md`](../templates/release_body.md) by
 [`render_changelog`](../../qua_shared/release_changelog.py), called by BOTH the cut job (the body
 POSTed to GitHub) and the cut-modal preview endpoint. The template uses fixed `{{ placeholders }}`
 only; no template dependency. The text stays human-editable, while the renderer owns the generated
@@ -236,7 +236,7 @@ dataset discovery and filtering.
 
 ### Dataset card (README) — rendered at release time
 
-The dataset card is not uploaded verbatim. [`docs/hf_dataset_card.md`](../hf_dataset_card.md) is a
+The dataset card is not uploaded verbatim. [`docs/templates/hf_dataset_card.md`](../templates/hf_dataset_card.md) is a
 **template** with `{{configs}}` (frontmatter) and `{{recitations}}` / `{{riwayat}}` / `{{hours}}`
 (header badges) placeholders. On each publish, `_sync_dataset_catalog_and_card` enumerates the actual
 hub splits once via `hub_published_splits_by_config` (the just-pushed split is already present;

@@ -15,7 +15,7 @@ from qua_shared.hf_dataset_catalog import (
 )
 from qua_shared.schemas.catalog import ReciterCatalog
 
-_CARD_TEMPLATE = Path(__file__).resolve().parents[2] / "docs" / "hf_dataset_card.md"
+_CARD_TEMPLATE = Path(__file__).resolve().parents[2] / "docs" / "templates" / "hf_dataset_card.md"
 
 
 def _catalog() -> ReciterCatalog:

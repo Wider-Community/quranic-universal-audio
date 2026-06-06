@@ -66,7 +66,7 @@ def test_publish_hf_syncs_catalog_and_card_after_split(monkeypatch, tmp_path):
         {"maher_al_meaqli"},
     )
     assert called["render"] == (
-        Path(publish_hf._REPO_ROOT) / "docs" / "hf_dataset_card.md",
+        Path(publish_hf._REPO_ROOT) / "docs" / "templates" / "hf_dataset_card.md",
         {"hafs_an_asim": ["maher_al_meaqli"]},
         stats,
     )

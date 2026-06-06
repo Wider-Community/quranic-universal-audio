@@ -680,6 +680,7 @@ def _sync_dataset_catalog_and_card(repo_id: str) -> None:
     badges, and the ``mushafs`` catalog stats are all derived from that one
     enumeration so they agree.
     """
+    from qua_shared.config_loader import template_path
     from qua_shared.hf_dataset_catalog import (
         hub_published_splits_by_config,
         push_catalog_dataset,
@@ -697,7 +698,7 @@ def _sync_dataset_catalog_and_card(repo_id: str) -> None:
         repo_id=repo_id, db_path=db_path, token=token, published_slugs=published
     )
     card = render_dataset_card(
-        template_path=_REPO_ROOT / "docs" / "hf_dataset_card.md",
+        template_path=template_path("hf_dataset_card"),
         splits_by_config=splits_by_config,
         stats=stats,
     )

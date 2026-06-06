@@ -3,7 +3,7 @@
 The release preview route and ``qua_jobs/cut_release.py`` both call this
 module, so the admin preview and the shipped GitHub body stay in lockstep.
 The static prose, tables, and schema snippets live as real Markdown in
-``.github/templates/release_body.md``; this module fills only the computed
+``docs/templates/release_body.md``; this module fills only the computed
 placeholders: the dated ``release_title``, the per-cut ``recitation_changes``
 membership block, and the config-driven ``release_footer`` links.
 """

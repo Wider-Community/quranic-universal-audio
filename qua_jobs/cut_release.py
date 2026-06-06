@@ -805,7 +805,7 @@ def _preflight() -> int:
     for rel in (
         "data/surah_info.json",
         ".github/config/repo.yml",
-        ".github/templates/release_body.md",
+        "docs/templates/release_body.md",
         "LICENSE",
         "qua_jobs/shard.py",
         "qua_jobs/check_updates.py",
