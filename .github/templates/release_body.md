@@ -15,9 +15,9 @@
 
 ## How audio and timestamps pair
 
-`catalog.json` contains the audio URLs for each recitation. Timestamp values are relative to that matching source audio.
+`catalog.json` contains the audio URLs for each recitation, and every timestamp value is milliseconds relative to that matching source audio.
 
-For a surah-based recitation, a value like `"100:1": [0, 2831]` means ayah 100:1 starts at `0 ms` and ends at `2831 ms` in the matching surah audio.
+For a surah-based recitation, the verse-tier entry `"1:1": [0, 2831]` means ayah 1:1 starts at `0 ms` and ends at `2831 ms` within surah 1's audio file. (For an ayah-based recitation each ayah has its own audio file, so the same `[0, 2831]` is measured from the start of that ayah's file.)
 
 ## Timestamp levels
 
@@ -73,28 +73,67 @@ type WordTimestamps = { _meta: Meta & { tier: "word" }, [verse: VerseKey]: [[Ms,
 type LetterTimestamps = { _meta: Meta & { tier: "letter" }, [verse: VerseKey]: [[Ms, Ms], Word[], Letter[]] };
 ```
 
-Small example:
+A worked example — Surah al-Fātiḥah ayah 1:1 (`بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ`, 4 words). The three
+tiers describe the **same** verse at increasing detail: each tier embeds the one above it, and every
+number is milliseconds from the start of the source audio. The `//` notes below are for explanation
+only — the shipped files are plain JSON with no comments.
 
-```json
+**Verse tier** — just the verse span (`[start_ms, end_ms]`):
+
+```jsonc
 {
-  "_meta": {"schema_version": 1, "slug": "example_reciter", "tier": "verse", "verse_count": 6236},
+  "_meta": { "schema_version": 1, "slug": "example_reciter", "tier": "verse", "verse_count": 6236 },
+  // "surah:ayah": [verse_start_ms, verse_end_ms]
   "1:1": [0, 2831]
 }
 ```
 
-```json
+**Word tier** — the verse span, then one `[word_idx, start_ms, end_ms]` per recited word:
+
+```jsonc
 {
-  "_meta": {"schema_version": 1, "slug": "example_reciter", "tier": "word", "verse_count": 6236},
-  "1:1": [[0, 2831], [[1, 70, 1550], [2, 1550, 2790]]]
+  "_meta": { "schema_version": 1, "slug": "example_reciter", "tier": "word", "verse_count": 6236 },
+  // "surah:ayah": [ [verse_start_ms, verse_end_ms], [ [word_idx, start_ms, end_ms], ... ] ]
+  "1:1": [
+    [0, 2831],
+    [
+      [1,   70,  770],   // بِسْمِ
+      [2,  770, 1280],   // ٱللَّهِ
+      [3, 1280, 2050],   // ٱلرَّحْمَٰنِ
+      [4, 2050, 2790]    // ٱلرَّحِيمِ
+    ]
+  ]
 }
 ```
 
-```json
+`word_idx` is 1-based within the verse. When a reciter loops back or re-recites part of a verse,
+`word_idx` can repeat or step backwards here — that is faithful to the audio, not an error.
+
+**Letter tier** — the word tier, plus a single flat list of letters, each tagged with the `word_idx`
+it belongs to (`[word_idx, char, start_ms, end_ms]`):
+
+```jsonc
 {
-  "_meta": {"schema_version": 1, "slug": "example_reciter", "tier": "letter", "verse_count": 6236},
-  "1:1": [[0, 2831], [[1, 70, 1550]], [[1, "ب", 70, 180]]]
+  "_meta": { "schema_version": 1, "slug": "example_reciter", "tier": "letter", "verse_count": 6236 },
+  // "surah:ayah": [ [verse_start, verse_end], words[], [ [word_idx, char, start_ms, end_ms], ... ] ]
+  "1:1": [
+    [0, 2831],
+    [ [1, 70, 770], [2, 770, 1280], [3, 1280, 2050], [4, 2050, 2790] ],
+    [
+      [1, "ب",  70, 300],   // word 1: بِسْمِ
+      [1, "س", 300, 560],
+      [1, "م", 560, 770],
+      [2, "ا", 770, 900],   // word 2: ٱللَّهِ
+      [2, "ل", 900, 1120],
+      [2, "ه", 1120, 1280]
+      // ... words 3 and 4 continue the same flat list
+    ]
+  ]
 }
 ```
+
+Letters are one flat array for the whole verse (not nested inside each word) — read each letter's
+`word_idx` to know which word it falls in. `char` values are base letters without diacritics.
 
 </details>
 

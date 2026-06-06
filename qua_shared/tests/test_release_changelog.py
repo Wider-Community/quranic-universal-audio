@@ -115,11 +115,15 @@ def test_audio_pairing_and_timestamp_layers_are_explained():
         release_date="d",
         members=[_member("R")],
     )
-    assert "`catalog.json` contains the audio URLs for each recitation." in md
-    assert "Timestamp values are relative to that matching source audio." in md
+    assert "`catalog.json` contains the audio URLs for each recitation" in md
+    assert "every timestamp value is milliseconds relative to that matching source audio." in md
     assert "storage, speed, and network efficiency" in md
     assert "Use `shard.py` when your app prefers per-surah files locally" in md
     assert '"1:1": [0, 2831]' in md
+    # the worked example spans multiple words + letters (not a single ب letter)
+    assert "ٱللَّهِ" in md
+    assert '"س"' in md and '"ا"' in md
+    assert "loops back or re-recites" in md
 
 
 def test_staying_up_to_date_section_and_asset_row():
