@@ -60,7 +60,7 @@ Both formats support both gapless surah and ayah-by-ayah playback. Both ship a s
 ## Technical Overview
 
 <p align="center">
-  <img src="docs/quranic_universal_aligner_pipeline.svg" alt="Pipeline diagram">
+  <img src="docs/qua_pipeline.svg" alt="Pipeline diagram">
 </p>
 
 | Component | Description |
