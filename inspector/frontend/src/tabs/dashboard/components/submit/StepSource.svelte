@@ -13,8 +13,8 @@
      * paste, CSV / JSON drop, and per-chapter inline rows — all writing
      * into the same 114-row store array.
      *
-     * Submit is a no-op until backend lands, so every interaction is local
-     * state only. Playlist URL is captured but never parsed.
+     * This step only writes into the wizard store; the SubmitWizard shell
+     * posts the assembled payload to the intake API on the final step.
      */
     import { fade, fly } from 'svelte/transition';
 

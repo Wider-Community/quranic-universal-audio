@@ -14,9 +14,9 @@ Doing that well depends on a second goal: unifying recitations in one place. We 
 - **Tajweed research** — measure ghunnah and madd durations from letter timestamps, study cross-word effects and silent-letter interactions, and support tajweed teaching.
 - **ML research** — a large, diverse corpus (reciters, paces, styles, riwayat) for speech recognition, tajweed, recitation start/stop detection, and reciter identification.
 
-## How it works
+## How it Works
 
-Each mushaf is run through our AI pipeline, automatically split into segments at the reciter's pauses and matched to the Qur'anic text. Since the algorithms and AI are not always perfect, and for the sanctity of the Qur'an, we do a lot of post-processing and verification to catch and flag possible issues and low confidence segments. After familiarizing with the editing guide, a reviewer then listens through them and corrects any errors.
+Each mushaf is run through our AI pipeline, automatically split into segments at the reciter's pauses and matched to the Qur'anic text. Since the algorithms and AI are not always perfect, and for the sanctity of the Qur'an, we do a lot of post-processing and verification to catch and flag possible issues and low confidence segments. After getting familiar with the editing guide, a reviewer then listens through them and corrects any errors.
 
 Only once the segments are reviewed, timestamps are generated and published — doing that last is what keeps them accurate. Any issues discovered after publication are simply fixed in the segments as usual, and timestamps are refreshed, which is what makes the pipeline iterative and self-correcting.
 
@@ -27,7 +27,7 @@ Every recitation carries a status that shows where it is on that path:
 ::lifecycle
 - available_for_request: We have the audio ready, but no one has requested alignment yet.
 - requested: Alignment has been requested; the pipeline is processing the audio.
-- available_for_review: Stage 1 alignment is done and waiting for someone to claim and review the errors.
+- available_for_review: Initial alignment completed; awaiting someone to review the errors.
 - under_review: A reviewer has claimed it and is correcting the segments.
 - published: Reviewed, timestamped, and live for anyone to use the data.
 
@@ -55,14 +55,14 @@ Anyone is welcome to contribute — you just need to login with an account. The 
 
 - **Supporting the project:** like, star, post, share the data and spread the project.
 
-## Accessing the data
+## Data Access
 
-The verse-, word- and letter-level timestamps are published in two open formats, both built from the same reviewed data and free to use (CC BY 4.0). Pick by how you'll use them:
+The verse-, word- and letter-level timestamps are published in two open formats, pick by your use case:
 
-- **[GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)** — JSON files per recitation, in verse, word and letter tiers, paired with the original chapter audio by URL. Best for apps and offline use: gapless playback from the full surah audio by default, and version-pinned so a release never changes under you. Audio isn't bundled — you stream it from the source links. Cut shortly after timestamps are generated or refreshed.
-- **[Hugging Face Dataset](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)** — the same timestamps in parquet, one row per ayah with the ayah's audio embedded. Best for ML and analysis: query and filter rows, and get audio plus timestamps together. Geared to ayah-by-ayah by default, and always reflects the latest data.
+- **[GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)** — JSON files per recitation, in verse, word and letter tiers, paired with the original chapter audio by URL; best for apps and offline use. Audio isn't bundled — you stream it from the source links. Released shortly after timestamps are generated or refreshed.
+- **[Hugging Face Dataset](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)** — the same timestamps in parquet, one row per ayah with the ayah's audio embedded. Best for ML and analysis: query and filter rows, and get audio plus timestamps together.
 
-Either format works for both whole-surah and ayah-by-ayah playback — the above is just the more natural fit for each. Both ship a single verified take per verse, so repeated readings and false starts are cleaned out; in the rare case a reciter repeats an ayah, follow-along highlighting may pause until they move past the repetition. A unified API for on-demand access — including the full, unfiltered takes — is on the roadmap.
+Both formats support both gapless surah and ayah-by-ayah playback. Both ship a single take per ayah (the first occurrence), so in rare cases where a reciter repeats an ayah fully or partially, follow-along highlighting may pause until they move past the repetition (within-ayah repetitions are still preserved). This only applies to gapless playback; ayah-by-ayah playback is unaffected. A unified API — which also exposes the full, unfiltered duplicates — is on the roadmap.
 
 ## Privacy
 

@@ -7,9 +7,8 @@
      * header are distinct from the bigger reciter-detail modal. Focus
      * trap, Esc-to-close, and body scroll lock mirror Modal.svelte.
      *
-     * Submit is a deliberate no-op until the backend ingest path lands —
-     * the button just closes the wizard. See PRODUCT.md for the
-     * "no theatre" rule.
+     * Submit posts the built payload to the intake API (submitIntake);
+     * on success it toasts and closes, surfacing any backend warnings.
      */
     import { onDestroy, tick } from 'svelte';
     import { fade, fly } from 'svelte/transition';

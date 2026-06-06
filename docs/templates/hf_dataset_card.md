@@ -32,9 +32,11 @@ size_categories:
 
 <h1 align="center">Qur'anic Universal Ayahs</h1>
 
-Qur'anic Universal Audio (QUA) is a community-verified project for consistent Qur'an recitation audio and timing data.
+Qur'anic Universal Audio (QUA) is a project that unifies recitations on the internet and generates timing data using forced alignment — community-verified results and constantly expanding dataset.
 
 This dataset pairs ayah by ayah audio with word-level timestamps, letter timestamps, and waqf-aware segment data. Repeated words are preserved in `text_uthmani` and `word_timestamps`, so the row reflects what the reciter actually recited rather than a plain copy of canonical ayah text.
+
+> **Tip:** Click the three dots (···) at the top right and toggle **Notifications** to get updates whenever recitations are added or refreshed.
 
 ## Dataset
 
@@ -72,7 +74,7 @@ One row per published mushaf.
 | `name_en`, `name_ar` | `string` | Reciter display name (English / Arabic). |
 | `country` | `string` | Reciter country, ISO 3166-1 alpha-2 (e.g. `SA`). |
 | `riwayah` | `string` | Riwayah name (e.g. `Hafs`). |
-| `style` | `string` | recitation style (e.g. `Murattal`, `Mujawwad`). |
+| `style` | `string` | Recitation style (e.g. `Murattal`, `Mujawwad`). |
 | `recording_context` | `string` | Recitation context (e.g. `Studio`, `Taraweeh`). |
 | `recording_year` | `int32` | Year recorded, when known. |
 | `channel` | `string` | Distribution channel name. |
@@ -118,8 +120,7 @@ print(catalog[0]["name_en"], catalog[0]["riwayah"])
 ## Notes
 
 - Best for quick access to verse audio and timestamps together, ayah-by-ayah playback, and ML research.
-- Also see [GitHub releases](https://github.com/Wider-Community/quranic-universal-audio/releases/latest), a parallel format with JSON files.
-- **Stay updated:** click **Watch** (the bell, top-right of this dataset) and enable notifications to hear when recitations are added or refreshed.
+- Also see [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases/latest), a parallel format using JSON files with versioning and checksums, suitable for offline usage.
 - Recitation audio is not relicensed, and remains the property of upstream sources/reciters.
 
 ## License
