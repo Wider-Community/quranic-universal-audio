@@ -190,6 +190,16 @@ Things to *not* overstate or get wrong:
    dynamic clips. SDK routes those transparently. (Re-evaluate against the free HF datasets-server first.)
 5. **Dedicated CDN** — only if HF/GH limits are hit.
 
+### Positioning recommendation
+
+Lead with one path so newcomers aren't paralyzed, then progressively disclose the rest:
+
+| On-ramp          | Recommend it when…                                                                                 |
+|------------------|---------------------------------------------------------------------------------------------------|
+| **SDK (pip/npm) ← default**   | Building an app/tooling in Python or JS; want ergonomics, types, caching, auto-updates.       |
+| **HF dataset**   | ML training/data pipelines, bulk/SQL analytics, audio-embedded, zero-install exploration.          |
+| **GitHub Releases** | Any other language, zero-dependency, offline/vendored, auditable, citable, simple one-offs.        |
+
 ## Open decisions (defer until building)
 
 - Sharding granularity (per-surah vs per-reciter) + exact URL scheme.
