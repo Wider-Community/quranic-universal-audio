@@ -877,7 +877,7 @@ def main() -> int:
 
     now = datetime.datetime.now(datetime.UTC)
     created_at_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    created_at_date = now.strftime("%Y-%m-%d")
+    created_at_date = now.strftime("%d-%m-%Y")
 
     members: list[dict] = []
     validation_summary_total = {"violation_count": 0, "by_kind": {}, "violations": []}

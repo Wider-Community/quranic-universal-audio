@@ -82,7 +82,7 @@ def build_release_preview() -> AdminReleasePreviewResponse:
         cfg.get("repo_name", ""),
         cfg.get("hf_dataset", ""),
     )
-    release_date = datetime.now(UTC).strftime("%Y-%m-%d")
+    release_date = datetime.now(UTC).strftime("%d-%m-%Y")
     preview_members = [{**m, "coverage_ayahs": None} for m in (added + refreshed + unchanged)]
 
     return AdminReleasePreviewResponse.model_validate(
