@@ -312,11 +312,7 @@ def derive_url_template(manifest_data: dict, audio_cat: str) -> str:
     manifest layout doesn't match a templatable pattern. The template is
     validated against a second entry to guard against false positives.
 
-    Used by:
-      - ``scripts/release/build_reciter.py`` — inlined into shard ``_meta``
-        and the manifest's per-reciter block.
-      - ``inspector/services/timestamps.py`` — same template, served from
-        the local-mode manifest endpoint.
+    Used by the Inspector timestamps manifest and legacy HF preload shards.
     """
     entries = {k: v for k, v in manifest_data.items() if k != "_meta"}
     if not entries:
