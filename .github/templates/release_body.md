@@ -10,6 +10,8 @@
 
 {{ programmatic_use }}
 
+{{ staying_up_to_date }}
+
 {{ reciter_zip_schemas }}
 
 {{ catalog_manifest_shapes }}

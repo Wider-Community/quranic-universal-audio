@@ -21,6 +21,7 @@ _REQUIRED_BLOCKS = {
     "timestamp_levels",
     "recitation_changes",
     "programmatic_use",
+    "staying_up_to_date",
     "reciter_zip_schemas",
     "catalog_manifest_shapes",
     "release_footer",
@@ -121,6 +122,7 @@ def _asset_table() -> str:
             "| `catalog.json` | Reciter names, riwayah, style, coverage, audio metadata, and the audio URLs paired with the timestamp data. |",
             "| `<reciter>.zip` | One recitation's verse, word, and letter timestamp files. |",
             "| `shard.py` | Optional helper that splits a large timestamp file into one JSON file per surah. |",
+            "| `check_updates.py` | Optional helper that checks the latest release for updates to the reciters you use; add `--sync` to re-download them. |",
             "| `surah_info.json` | Surah names, ayah counts, and word counts. |",
             "| `qpc_hafs.json` | QPC Hafs word reference used by the word and letter indexes. |",
             "| `LICENSE` | CC-BY-4.0 license text. |",
@@ -200,6 +202,27 @@ def _programmatic_use() -> str:
             "Read `manifest.json`, choose a reciter from `recitations`, download its `zip_url`, and verify the zip with `sha256`.",
             "",
             "Use `catalog.json` when you need display names, coverage, audio metadata, or the source audio URLs that the timestamps refer to.",
+        ]
+    )
+
+
+def _staying_up_to_date() -> str:
+    return "\n".join(
+        [
+            "## Staying up to date",
+            "",
+            "We occasionally fix issues or batch-refresh a reciter's timestamps with an improved alignment model, so a reciter you already use can change in a later release. Two ways to keep track:",
+            "",
+            "- **All releases** - click **Watch -> Custom -> Releases** at the top of the GitHub repository. GitHub emails you on every release, and the notes above always list which reciters were added or refreshed.",
+            "- **Only the reciters you use** - run `check_updates.py` against the `manifest.json` you downloaded. It exits non-zero when any of your reciters changed, so a scheduled GitHub Action or CI job notifies you automatically; add `--sync` to also re-download the changed zips.",
+            "",
+            "```bash",
+            "# report which of your reciters changed (exit 1 if any)",
+            "python check_updates.py manifest.json --reciters mishary_rashid_al_afasy_mp3quran",
+            "",
+            "# or keep your local copy in sync automatically",
+            "python check_updates.py manifest.json --sync",
+            "```",
         ]
     )
 
@@ -328,6 +351,7 @@ def render_changelog(
                 carried=carried,
             ),
             "programmatic_use": _programmatic_use(),
+            "staying_up_to_date": _staying_up_to_date(),
             "reciter_zip_schemas": _reciter_zip_schemas(),
             "catalog_manifest_shapes": _catalog_manifest_shapes(),
             "release_footer": _release_footer(

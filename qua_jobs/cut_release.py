@@ -808,6 +808,7 @@ def _preflight() -> int:
         ".github/templates/release_body.md",
         "LICENSE",
         "qua_jobs/shard.py",
+        "qua_jobs/check_updates.py",
     ):
         if not (code_dir / rel).exists():
             log.error("staged file missing: %s", code_dir / rel)
@@ -1055,6 +1056,7 @@ def main() -> int:
     license_path = _code_root() / "LICENSE"
     license_bytes = license_path.read_bytes() if license_path.exists() else b""
     shard_py = (_code_root() / "qua_jobs" / "shard.py").read_bytes()
+    check_updates_py = (_code_root() / "qua_jobs" / "check_updates.py").read_bytes()
     static_files: dict[str, bytes] = {}
     si_path = refs_dir / "surah_info.json"
     if si_path.exists():
@@ -1077,6 +1079,7 @@ def main() -> int:
     catalog_all = _build_dataset_level_catalog(members)
     uploads.append(("catalog.json", catalog_all, "application/json"))
     uploads.append(("shard.py", shard_py, "text/x-python"))
+    uploads.append(("check_updates.py", check_updates_py, "text/x-python"))
     for name, body in static_files.items():
         uploads.append((name, body, "application/json"))
     for m in members:

@@ -240,6 +240,7 @@ REQUIRED_ENTRYPOINTS = (
     "qua_jobs/publish_hf.py",
     "qua_jobs/cut_release.py",
     "qua_jobs/shard.py",
+    "qua_jobs/check_updates.py",
 )
 REQUIRED_STATIC_FILES = (
     "data/qpc_hafs.json",

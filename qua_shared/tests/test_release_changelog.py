@@ -122,6 +122,20 @@ def test_audio_pairing_and_timestamp_layers_are_explained():
     assert '"1:1": [0, 2831]' in md
 
 
+def test_staying_up_to_date_section_and_asset_row():
+    md = render_changelog(
+        version="v0.3.0",
+        previous_version="v0.2.0",
+        release_date="d",
+        members=[_member("R", change_kind="refresh")],
+    )
+    assert "## Staying up to date" in md
+    assert "Watch -> Custom -> Releases" in md
+    assert "python check_updates.py manifest.json --sync" in md
+    # asset-table row advertises the helper
+    assert "`check_updates.py` |" in md
+
+
 def test_license_inline_and_links():
     md = render_changelog(
         version="v0.1.0",

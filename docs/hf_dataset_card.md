@@ -121,6 +121,7 @@ print(catalog[0]["name_en"], catalog[0]["riwayah"])
 
 - Best for quick access to verse audio and timestamps together, gapped playback, and ML research.
 - For app playback from full chapter audio, [GitHub releases](https://github.com/Wider-Community/quranic-universal-audio/releases/latest) might be a more suitable format.
+- **Stay updated:** click **Watch** (the bell, top-right of this dataset) and enable notifications to hear when recitations are added or refreshed.
 - Recitation audio is not relicensed, and remains the property of upstream sources/reciters.
 
 ## License
