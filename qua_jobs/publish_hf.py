@@ -672,20 +672,36 @@ def _resolve_dataset_repo_id() -> str:
     return repo_config()["hf_dataset"]
 
 
-def _sync_dataset_catalog_and_card(repo_id: str, _version: str) -> None:
-    """Refresh the HF dataset catalog config and dataset card."""
-    from qua_shared.hf_dataset_catalog import push_catalog_dataset, upload_dataset_card_file
+def _sync_dataset_catalog_and_card(repo_id: str) -> None:
+    """Refresh the HF dataset catalog config and re-render the dataset card.
+
+    The verse split was already pushed before this runs, so the published-split
+    enumeration includes the just-published reciter. Frontmatter ``configs``, header
+    badges, and the ``mushafs`` catalog stats are all derived from that one
+    enumeration so they agree.
+    """
+    from qua_shared.hf_dataset_catalog import (
+        hub_published_splits_by_config,
+        push_catalog_dataset,
+        render_dataset_card,
+        upload_dataset_card,
+    )
 
     db_path = _bucket_root() / "db" / "inspector.db"
     if not db_path.exists():
         raise RuntimeError(f"Inspector DB missing at {db_path}")
     token = os.environ.get("HF_TOKEN")
-    push_catalog_dataset(repo_id=repo_id, db_path=db_path, token=token)
-    upload_dataset_card_file(
-        repo_id=repo_id,
-        card_path=_REPO_ROOT / "docs" / "hf_dataset_card.md",
-        token=token,
+    splits_by_config = hub_published_splits_by_config(repo_id=repo_id, token=token)
+    published = {slug for slugs in splits_by_config.values() for slug in slugs}
+    stats = push_catalog_dataset(
+        repo_id=repo_id, db_path=db_path, token=token, published_slugs=published
     )
+    card = render_dataset_card(
+        template_path=_REPO_ROOT / "docs" / "hf_dataset_card.md",
+        splits_by_config=splits_by_config,
+        stats=stats,
+    )
+    upload_dataset_card(repo_id=repo_id, content=card, token=token)
 
 
 def _riwayah_for(audio_manifest: dict | None, detailed: dict) -> str:
@@ -953,7 +969,7 @@ def main() -> int:
     version_sha = _push_to_hf(slug, riwayah, rows, audio_bytes)
 
     repo_id = _resolve_dataset_repo_id()
-    _sync_dataset_catalog_and_card(repo_id, version_sha or job_id)
+    _sync_dataset_catalog_and_card(repo_id)
 
     # 7. Notify Inspector.
     external_uri = (

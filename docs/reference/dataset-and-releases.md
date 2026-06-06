@@ -222,12 +222,27 @@ HF config `mushafs`, split `all`, is the dataset catalog projection. It is rebui
 `ReciterCatalog` v2 and pushed by the active admin HF publish job after a recitation split lands.
 
 Grain is one published delivery row. Rows include delivery slug, reciter identity,
-readable riwayah/style/source/channel labels, audio metadata, coverage, and GH release eligibility.
-Admin lifecycle and publish-ledger fields stay out of the public dataset.
+readable riwayah/style/source/channel labels, audio metadata, and coverage (`CATALOG_COLUMNS`).
+Admin lifecycle / publish-ledger fields and the internal release-gating signal
+`gh_release_eligible` stay out of the public dataset; `variant_label` is likewise dropped from the
+projection. The underlying `Channel.gh_release_eligible` / `Delivery.variant_label` fields remain in
+the catalog — they drive GH release-cut eligibility and admin UI, just not the public projection.
 
 This is separate from GitHub release `catalog.json`: the release artifact pairs timestamp tiers with
 source audio URLs for offline consumers, while the HF `mushafs` config is a parquet catalog for
 dataset discovery and filtering.
+
+### Dataset card (README) — rendered at release time
+
+The dataset card is not uploaded verbatim. [`docs/hf_dataset_card.md`](../hf_dataset_card.md) is a
+**template** with `{{configs}}` (frontmatter) and `{{recitations}}` / `{{riwayat}}` / `{{hours}}`
+(header badges) placeholders. On each publish, `_sync_dataset_catalog_and_card` enumerates the actual
+hub splits once via `hub_published_splits_by_config` (the just-pushed split is already present;
+`mushafs`/`segments`/`timestamps` excluded), then `render_dataset_card` builds the `configs:` block
+(one `config_name` per riwayah + `mushafs`/`all` last) and fills the badges from the same
+`HfDatasetCatalogStats` (`_stats_from_published_splits`) used for the `mushafs` projection. So
+frontmatter, badges, and catalog stats can't drift from the published set. The GitHub repo README
+badges are a separate, broader metric maintained by `update-badges.yml` CI and are unaffected.
 
 ### Audio: preserve, don't normalize
 

@@ -27,12 +27,12 @@ jobs:
       - name: Install dependencies
         run: pip install 'huggingface_hub>=1.10'
 
-      - name: Update badges
+      - name: Update README badges
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python scripts/codegen/update_readme_badges.py
 
-      - name: Commit README update
+      - name: Commit docs update
         run: |
           if git diff --quiet -- README.md; then
             echo "README badges already current"
@@ -41,5 +41,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add README.md
-          git commit -m "docs(readme): update stats badges"
+          git commit -m "docs(readme): update badges"
           git push

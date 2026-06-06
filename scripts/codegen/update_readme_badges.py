@@ -7,11 +7,15 @@ import argparse
 import json
 import os
 import sqlite3
+import sys
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import quote
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from qua_shared.hf_dataset_catalog import badge_url, format_hours  # noqa: E402
 
 PROD_BUCKET_ID = "hetchyy/quranic-inspector-bucket"
 DB_BUCKET_PATH = "db/inspector.db"
@@ -115,16 +119,6 @@ def collect_stats(
         )
 
     return BadgeStats(recitations=len(published), riwayat=int(riwayat or 0), seconds=seconds)
-
-
-def format_hours(seconds: int) -> str:
-    hours = int(seconds // 3600)
-    floored = (hours // 50) * 50
-    return f"{floored:,}h+"
-
-
-def badge_url(label: str, value: str, color: str) -> str:
-    return f"https://img.shields.io/badge/{quote(label, safe='')}-{quote(value, safe='')}-{color}"
 
 
 def render_badges(stats: BadgeStats) -> str:
