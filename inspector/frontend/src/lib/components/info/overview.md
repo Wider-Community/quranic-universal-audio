@@ -59,10 +59,10 @@ Anyone is welcome to contribute — you just need to login with an account. The 
 
 The verse-, word- and letter-level timestamps are published in two open formats, both built from the same reviewed data and free to use (CC BY 4.0). Pick by how you'll use them:
 
-- **[GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)** — JSON files per recitation, in verse, word and letter tiers, paired with the original chapter audio by URL. Best for apps and offline use: continuous (gapless) playback from the full surah audio, and version-pinned so a release never changes under you. Audio isn't bundled — you stream it from the source links. Cut shortly after timestamps are generated or refreshed.
-- **[Hugging Face Dataset](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)** — the same timestamps in parquet, one row per ayah with the ayah's audio embedded. Best for ML and analysis: query and filter rows, and get audio plus timestamps together. Clips are per-ayah (gapped), and the dataset always reflects the latest data.
+- **[GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)** — JSON files per recitation, in verse, word and letter tiers, paired with the original chapter audio by URL. Best for apps and offline use: gapless playback from the full surah audio by default, and version-pinned so a release never changes under you. Audio isn't bundled — you stream it from the source links. Cut shortly after timestamps are generated or refreshed.
+- **[Hugging Face Dataset](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)** — the same timestamps in parquet, one row per ayah with the ayah's audio embedded. Best for ML and analysis: query and filter rows, and get audio plus timestamps together. Geared to ayah-by-ayah by default, and always reflects the latest data.
 
-Both ship a single verified take per verse — repeated readings and false starts are already cleaned out. A unified API for on-demand access is on the roadmap.
+Either format works for both whole-surah and ayah-by-ayah playback — the above is just the more natural fit for each. Both ship a single verified take per verse, so repeated readings and false starts are cleaned out; in the rare case a reciter repeats an ayah, follow-along highlighting may pause until they move past the repetition. A unified API for on-demand access — including the full, unfiltered takes — is on the roadmap.
 
 ## Privacy
 

@@ -43,11 +43,11 @@ Timestamps and metadata ship in two open formats, both projected from the same c
 | **Best for** | Apps, offline use, archives | ML research, training, analysis |
 | **Shape** | JSON per recitation, in verse / word / letter tiers | Parquet, one row per ayah |
 | **Audio** | Not bundled — original chapter URLs in `catalog.json` | Embedded per-ayah clip in every row |
-| **Playback** | Continuous (gapless) from the full surah audio | Isolated per-ayah clips |
+| **Playback** | Whole-surah, gapless by default | Ayah-by-ayah by default |
 | **Versioning** | Version-pinned snapshots (`vX.Y.Z`), reproducible | Rolling — always the latest |
 | **Fetch what you need** | One reciter, or just the tier you need | Query and filter rows; load one riwayah or reciter |
 
-Both ship a single verified take per verse — repeated readings and false starts are already cleaned out. A unified, low-latency **API** for on-demand access is on the [roadmap](#roadmap).
+Either format does both gapless and ayah-by-ayah playback — the **Playback** row is just the more natural fit. Both ship a single verified take per verse, so repeated readings and false starts are cleaned out; in the rare case a reciter repeats an ayah, follow-along highlighting may pause until they move past the repetition. A unified, low-latency **API** — which also exposes the full, unfiltered takes — is on the [roadmap](#roadmap).
 
 ## Technical Overview
 
