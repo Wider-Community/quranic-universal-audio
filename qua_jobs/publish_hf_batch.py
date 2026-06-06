@@ -29,6 +29,7 @@ Env:
 
 from __future__ import annotations
 
+import gc
 import json
 import logging
 import os
@@ -146,6 +147,12 @@ def main() -> int:
         members.append(_member(result))
         if result.get("status") == "succeeded":
             any_succeeded = True
+        # Reset memory between reciters — each publish_slug builds ~6k rows +
+        # the per-verse audio slices + the parquet Dataset; without forcing a
+        # collect the footprint accumulates across the loop and OOMs the
+        # container on a later (lookback-heavy) reciter.
+        result = None
+        gc.collect()
 
     # Re-render the dataset catalog + card ONCE after all splits are pushed.
     if any_succeeded:
