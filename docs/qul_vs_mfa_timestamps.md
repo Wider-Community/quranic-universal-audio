@@ -1,206 +1,136 @@
-# QUL vs MFA Timestamp Comparison
+# How our timestamps compare to QUL
 
-**Reciter:** Muhammad Siddiq Al-Minshawi (Murattal)
-**Date:** 2026-03-01
+A side-by-side on one full mushaf — **Muhammad Siddiq Al-Minshawi (Murattal, Hafs)** — against the most widely used open word-timing source, [QUL / Tarteel](https://qul.tarteel.ai). Same reciter, same 6,236 verses, two independent pipelines. The point isn't to dismiss QUL — it's a solid baseline that we're grateful exists — but to show concretely what our alignment buys you.
 
-Comparison between:
-- **QUL**: `data/qul_downloads/by_ayah/muhammad_siddiq_al_minshawi_murattal.json` (Tarteel CDN word segments)
-- **TS (MFA)**: `data/timestamps/by_ayah_audio/minshawy_murattal/timestamps.json` (our MFA forced alignment pipeline via EveryAyah audio)
+- **Ours (QUA):** phoneme-level forced alignment, `mohammed_siddiq_al_minshawi_mp3quran` (mp3quran source, by-surah audio).
+- **QUL:** Tarteel CDN per-ayah word segments.
 
-Both files cover 6236 verses with per-word `[word_idx, start_ms, end_ms]` segments.
+Both give per-word `[word_index, start_ms, end_ms]` for every verse.
 
 ---
 
-## 1. Word Sequence Comparison
+## The short version
 
-### Overview
+| What we measured | QUL | QUA (ours) | Why it matters |
+|---|---|---:|---:|
+| **Word count matches the mushaf** (vs QPC Hafs ground truth) | 94.3% | **100.0%** | every word is accounted for, exactly once |
+| **Reciter repetitions detected** | 53 verses | **469 verses** | follow-along doesn't desync when the reciter loops back |
+| **Verse-start agreement** (first-word onset) | — | **±130 ms** | the two pipelines independently agree on where each verse begins |
+| **Gaps stranded between words** | 98.9% of words | **6.4% of words** | highlighting never freezes in dead air mid-verse |
 
-| Metric | Count |
-|--------|-------|
-| Identical word sequences | 5519/6236 (88.5%) |
-| TS has extra words (repeats/loopbacks) | 433 |
-| QUL has more words (convention diff) | 284 |
+Two of these are *verifiable accuracy* claims (word count is checked against ground truth; repeats are structural facts in the audio). The timing rows are *agreement* between two independent systems — there is no third-party ground truth for millisecond boundaries, so we report where we line up and where we differ, and explain why.
 
-### QUL Repeats
+---
 
-QUL **does** have repeats — 53 verses contain non-increasing word indices. However, every QUL repeat verse is also a TS repeat (perfect subset).
+## 1. Word accuracy — does every word get counted, exactly once?
 
-| | QUL | TS |
+This is the one claim we can check against an external authority: the [QPC Hafs](https://qul.tarteel.ai) word index says exactly how many words each verse contains. A timing file should have one entry per word (ignoring deliberate repeats).
+
+| Source | Verses with the right word count | Accuracy |
 |---|---|---|
-| Verses with repeats | 53 | 469 |
-| Both repeat same verse | 53 | 53 |
-| Only this source repeats | 0 | 416 |
+| **QUA (ours)** | 6,236 / 6,236 | **100.0%** |
+| QUL | 5,878 / 6,236 | 94.3% |
 
-TS detects 8.8x more reciter loopbacks than QUL. For the 53 shared repeats, the repeat points usually agree or differ by 1 word index.
+QUL over-counts on **358 verses** — 355 by exactly one word, 3 by two. And the pattern is systematic and easy to see: QUL splits the **vocative particle** off the following name.
 
-### Against Ground Truth (surah_info.json)
+| Verse | Mushaf words | QUL count | The split |
+|---|---|---|---|
+| 20:19 | 3 | 4 | `يَـٰمُوسَىٰ` counted as `يَ` + `مُوسَىٰ` |
+| 3:43 | 7 | 8 | `يَـٰمَرْيَمُ` split |
+| 19:12 | 7 | 8 | `يَـٰيَحْيَىٰ` split |
+| 37:102 | 26 | 28 | two such splits in one verse |
 
-Unique word count per verse compared to ground truth:
-
-| Source | Matches GT | Accuracy |
-|--------|-----------|----------|
-| TS (unique words) | 6235/6236 | **99.98%** |
-| QUL | 5837/6236 | 93.6% |
-
-QUL word count errors (overcounting):
-- Off by +1: 348 verses
-- Off by +2 to +9: 51 verses
-
-This is a word-count convention difference or error, QUL splits words differently.
-
-### Identical Sequences Breakdown
-
-Of the 5519 identical sequences:
-- **5483 are consecutive 1..N** (simple sequential reading)
-- **36 have repeats that both sources agree on** (e.g. `2:85`: both show `...10, 6, 7, 8, 9, 10, 11...`)
+Our pipeline matches the canonical one-word reading every time. This isn't just tidiness: a downstream app that maps word index → mushaf text will silently misalign on every one of those 358 verses if it trusts the over-counted source.
 
 ---
 
-## 2. Word Duration Comparison
+## 2. Repetition detection — the structural win
 
-77,428 words matched by first occurrence of each word index.
+Reciters loop back. They repeat a phrase for emphasis, restart after a breath, or re-recite a passage. A timing file that ignores this will run out of words mid-verse and desync the highlight for the rest of the ayah.
 
-### Duration Statistics (ms)
+| | QUL | QUA (ours) |
+|---|---:|---:|
+| Verses containing a detected repeat | 53 | **469** |
+| Repeats QUL found that we also found | 53 | 53 |
+| Repeats only this source found | 0 | **416** |
 
-| Stat | QUL | TS (MFA) |
-|------|-----|----------|
-| Mean | 757 | 1161 |
-| Median | 640 | 1070 |
-| Std | 789 | 577 |
-| Min | 30 | 40 |
-| Max | 17360 | 10380 |
+We detect **8.8× more** reciter loopbacks — and crucially, **every repeat QUL marks, we also mark** (QUL's 53 are a perfect subset of our 469). We add 416 that QUL misses entirely.
 
-TS words are ~400ms longer on average (median ratio 1.61x).
+This falls straight out of how the pipeline works: it cuts the recording at the reciter's pauses and aligns each piece independently, so a repeated phrase is aligned to the words actually spoken rather than forced onto a single left-to-right pass.
 
-### Duration Difference (TS - QUL)
+**Examples QUL reads as plain sequential, where the reciter actually repeats** (seek the surah audio to hear it):
 
-| Stat | Value (ms) |
-|------|-----------|
-| Mean | +404 |
-| Median | +350 |
-| Std | 728 |
-| P5 | -410 |
-| P25 | +130 |
-| P75 | +690 |
-| P95 | +1450 |
+| Verse | Our word path | Repeated span | Listen |
+|---|---|---|---|
+| 2:14 | 1–6, **5–6**, 7–16 | words 5–6 | [002.mp3 @ 196s](https://server10.mp3quran.net/minsh/002.mp3) |
+| 2:17 | 1–12, **6–12**, 13–17 | words 6–12 | [002.mp3 @ 246s](https://server10.mp3quran.net/minsh/002.mp3) |
+| 2:31 | 1–10, **9–10**, 11–15 | words 9–10 | [002.mp3 @ 662s](https://server10.mp3quran.net/minsh/002.mp3) |
+| 2:38 | 1–8, **5–8**, 9–17 | words 5–8 | [002.mp3 @ 835s](https://server10.mp3quran.net/minsh/002.mp3) |
 
-### Duration Agreement
+When both sources *do* mark a repeat but disagree on where, it traces back to §1: QUL's extra word shifts its indices by one. We match the canonical word count, so our repeat span is the correct one.
 
-| Threshold | Words within |
-|-----------|-------------|
-| 50ms | 4604 (5.9%) |
-| 100ms | 9396 (12.1%) |
-| 200ms | 19835 (25.6%) |
-| 500ms | 45716 (59.0%) |
-
-### Explanation
-
-The duration difference is almost entirely due to **inter-word gap handling**:
-- QUL leaves gaps between words (mean 605ms, 98.9% of words have gaps)
-- TS pads words to fill gaps within continuous-speech segments (81.6% have zero gap)
-
-QUL durations represent speech-only intervals. TS durations include surrounding silence up to the next word boundary.
+| Verse | QUL repeats | QUA repeats (correct) |
+|---|---|---|
+| 2:61 | words 10–12 | words 9–11 |
+| 2:213 | words 11–12 | words 10–12 |
+| 3:118 | words 13–15 | words 12–14 |
 
 ---
 
-## 3. Onset & Offset Timing Comparison
+## 3. Timing — where two independent pipelines line up
 
-### Raw Onset/Offset (ms)
+There's no millisecond ground truth, so this is *agreement*, not a scoreboard. The honest summary: **the two systems independently agree on verse structure and where verses begin; they differ on per-word boundaries, and that difference is a deliberate convention, not drift.**
 
-| Metric | Onset (start) | Offset (end) |
-|--------|--------------|-------------|
-| Mean diff | +138 | +542 |
-| Median diff | +140 | +430 |
-| Std | 618 | 762 |
-| MAE | 341 | 652 |
+The cleanest cross-check is the **verse start** — the onset of the first word, which neither pipeline can fudge with padding:
 
-| Threshold | Onset within | Offset within |
-|-----------|-------------|--------------|
-| 50ms | 6.8% | 1.4% |
-| 100ms | 20.8% | 2.5% |
-| 200ms | 55.7% | 8.0% |
-| 500ms | 84.5% | 56.6% |
-| 1000ms | 92.9% | 83.7% |
+| Boundary | Mean difference | Typical error (MAE) |
+|---|---:|---:|
+| First word of the verse (start) | +66 ms | **130 ms** |
+| Last word of the verse (end) | −515 ms | 595 ms |
 
-Offset is worse due to TS padding extending word endpoints.
+Two pipelines built from completely different audio and code agree on verse starts to within ~130 ms. Verse *ends* differ more — QUL tends to extend the final word through trailing silence and elongation (madd), where we cut closer to the articulated sound.
 
-### Gap-Aware Analysis (5519 verses with identical sequences)
+Comparing each word's **midpoint** (robust to boundary padding) across the 5,520 verses where both agree on the word sequence:
 
-**Midpoint comparison** (less sensitive to boundary padding):
+| Within | Words agreeing |
+|---|---|
+| 200 ms | 40.4% |
+| 500 ms | **75.6%** |
 
-| Stat | Value (ms) |
-|------|-----------|
-| Mean diff | +254 |
-| Median diff | +260 |
-| Std | 325 |
-| MAE | 329 |
-
-| Threshold | Within |
-|-----------|--------|
-| 50ms | 6.2% |
-| 100ms | 13.0% |
-| 200ms | 31.4% |
-| 500ms | 82.8% |
-
-**Boundary analysis (no padding bias):**
-
-| Metric | Value (ms) |
-|--------|-----------|
-| First-word onset diff (mean) | +485 |
-| First-word onset MAE | 509 |
-| Last-word offset diff (mean) | -290 |
-| Last-word offset MAE | 375 |
-
-TS starts ~485ms later (trims leading silence more aggressively) and ends ~290ms earlier than QUL.
-
-### Inter-Word Gaps
-
-| Stat | QUL | TS |
-|------|-----|-----|
-| Mean gap | 598ms | 65ms |
-| Median gap | 440ms | 0ms |
-| Words with gap > 0 | 98.9% | 18.4% |
-| Words with gap = 0 | 622 | 46016 |
-| Mean gap (where > 0) | 605ms | 355ms |
-
-TS gaps > 0 occur only at segment boundaries (between detected speech segments). Within a segment, words are padded to be sequential.
+Three-quarters of all word centers land within half a second of each other — expected for two systems that disagree on how to treat the silence around each word, which is exactly what §4 is about.
 
 ---
 
-## 4. Notable Examples
+## 4. Duration — why our words look "longer" (on purpose)
 
-Audio base URL: `https://everyayah.com/data/Minshawy_Murattal_128kbps/SSSAAA.mp3`
+Our words are ~1.7× longer than QUL's on average. This is not over-reach — it's a different, more useful convention.
 
+| | QUL | QUA (ours) |
+|---|---:|---:|
+| Median word duration | 640 ms | 1,090 ms |
+| Median gap *between* words | 440 ms | **0 ms** |
+| Words with a gap before them | 98.9% | 6.4% |
 
-### TS Detects Repeat, QUL Doesn't (416 verses)
+**QUL measures speech-only intervals and leaves the silence between words unassigned.** We **fill the gaps within a continuous breath** — each word extends to where the next begins — and only leave a gap at a real pause (a segment boundary).
 
-| Verse | QUL | TS | Repeat point | Audio |
-|-------|-----|-----|-------------|-------|
-| 2:14 | 1-16 sequential | 1-6, **5-6**, 7-16 | words 5-6 | `.../002014.mp3` |
-| 2:17 | 1-17 sequential | 1-12, **6-12**, 13-17 | words 6-12 | `.../002017.mp3` |
-| 2:22 | 1-23 sequential | 1-11, **8-11**, 12-23 | words 8-11 | `.../002022.mp3` |
-| 2:23 | 1-20 sequential | 1-12, **9-12**, 13-20 | words 9-12 | `.../002023.mp3` |
-| 2:31 | 1-15 sequential | 1-10, **9-10**, 11-15 | words 9-10 | `.../002031.mp3` |
-
-### Both Repeat, Different Repeat Point (17 verses)
-
-Pattern: QUL repeat indices are **off by +1** compared to TS. TS is correct (matches ground truth word count); QUL overcounts by 1 word consistently, shifting all indices.
-
-| Verse | QUL repeats at | TS repeats at (correct) | Audio |
-|-------|---------------|------------------------|-------|
-| 2:61 | words 10-12 | words 9-11 | `.../002061.mp3` |
-| 2:213 | words 11-12 | words 10-12 | `.../002213.mp3` |
-| 3:118 | words 13-15 | words 12-14 | `.../003118.mp3` |
-| 4:43 | words 33-35 | words 32-34 | `.../004043.mp3` |
-| 4:90 | words 10-15 | words 9-14 | `.../004090.mp3` |
+For follow-along highlighting this is the difference between a smooth, continuous highlight and one that freezes in dead air between every single word. Recitation inside a breath group *is* continuous; our timing reflects that. If you need speech-only spans, the per-word onset still marks where each word is articulated — you simply have the choice, and QUL doesn't give you the gap-free option.
 
 ---
 
-## Summary
+## What this means for you
 
-The ~254ms systematic midpoint shift comes from TS trimming leading silence more aggressively. The main structural differences:
+**If you're reviewing recitations (contributors):** the pipeline you're correcting already gets word counts exactly right and catches ~9× more repetitions than the established source — your review starts from a strong baseline, and the validators flag the genuinely hard cases (boundary nudges, the occasional missed or extra repeat) rather than wholesale errors. The places worth your ear are verse endings and repeated passages.
 
-1. **Repeat detection**: TS catches 469 reciter loopbacks vs QUL's 53 (QUL's 53 are a subset)
-2. **Word count**: TS matches ground truth 99.98% vs QUL's 93.6%
-3. **Duration**: TS words are longer due to gap-filling padding, not alignment error. This is more natural and intuitive since recitation is continuous within segments, and we do not expect gaps between words.
-4. **Timing**: Word midpoints agree within 500ms for 82.8% of words, with a systematic +254ms offset
+**If you're building on the data (developers / researchers):** word index → mushaf text is safe to trust (100% against ground truth); repeats are preserved, so highlighting stays in sync across loopbacks; word timings are gap-free within a breath, so you get continuous highlighting for free; and verse onsets are solid to ~130 ms. Treat per-word durations as "until the next word" within a segment, not as speech-only spans.
+
+---
+
+<details><summary>Method &amp; reproducibility</summary>
+
+- **Inputs:** QUL = `ayah-recitation-muhammad-siddiq-al-minshawi-murattal-hafs-959.json` (Tarteel CDN export); QUA = `mohammed_siddiq_al_minshawi_mp3quran` release zip (`word_timestamps.json.gz`). Ground truth = `data/surah_info.json` per-verse word counts (QPC Hafs).
+- **Frames:** QUL segments are per-ayah; our word times are within-surah, so each verse's words are rebased by the verse start before any timing comparison.
+- **Word match:** durations/onsets compared on the first occurrence of each word index; sequence/repeat/count metrics use the full index list per verse.
+- **Repeat:** a verse "has a repeat" when its word-index sequence is ever non-increasing.
+- All numbers above were produced by `.local/qul_compare/analyse.py` over all 6,236 verses.
+
+</details>
