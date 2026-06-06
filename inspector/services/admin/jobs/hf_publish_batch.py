@@ -29,10 +29,11 @@ log = logging.getLogger("inspector")
 KIND = "hf_publish_batch"
 BATCH_LABEL_SLUG = "_batch"
 
-# A batch processes N recitations sequentially in one container, so it needs
-# more RAM headroom than a single publish (cpu-basic) — even with per-reciter
-# memory reset, a lookback-heavy muallim reciter has a large peak footprint.
-JOB_FLAVOR = os.environ.get("INSPECTOR_HF_BATCH_JOB_FLAVOR", "cpu-upgrade")
+# Each recitation is published in its own child process (see publish_hf_batch),
+# so the per-reciter peak — not the sum — is what must fit. cpu-basic handles a
+# single reciter; process isolation guarantees the OS reclaims each one's memory
+# before the next starts.
+JOB_FLAVOR = os.environ.get("INSPECTOR_HF_BATCH_JOB_FLAVOR", "cpu-basic")
 JOB_TIMEOUT = os.environ.get("INSPECTOR_HF_BATCH_JOB_TIMEOUT", "3h")
 
 

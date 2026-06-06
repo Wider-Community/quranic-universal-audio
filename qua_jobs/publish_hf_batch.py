@@ -2,10 +2,14 @@
 """HF Job entrypoint: publish a BATCH of recitations to the HF dataset.
 
 Reads ``SLUGS`` (a JSON array) and runs ``publish_hf.publish_slug`` for each
-slug in turn, collecting a per-slug member result. Each slug's split is pushed
-independently — one slug failing (validation, audio, push) never aborts the
-batch, it just lands as a ``failed`` member. After every slug is processed the
-dataset catalog + card are re-rendered ONCE (one batch of pushes → one render).
+slug in its own forked subprocess, collecting a per-slug member result. The
+isolation matters: each publish peaks at several GB (rows + audio slices + the
+parquet Dataset), and the OS only reclaims that memory when the child exits —
+so the footprint never accumulates across the batch and OOM-kills the container.
+Each slug's split is pushed independently — one slug failing (validation, audio,
+push, OOM, timeout) never aborts the batch, it just lands as a ``failed``
+member. After every slug is processed the dataset catalog + card are re-rendered
+ONCE (one batch of pushes → one render).
 
 The HF Job NEVER writes ``db/inspector.db``. On completion it:
   1. writes a durable batch record to
@@ -29,11 +33,12 @@ Env:
 
 from __future__ import annotations
 
-import gc
 import json
 import logging
+import multiprocessing as mp
 import os
 import sys
+import tempfile
 import urllib.request
 from pathlib import Path
 
@@ -127,6 +132,58 @@ def _post_webhook(*, job_id: str, members: list[dict], launched_by: str | None) 
         return False
 
 
+def _publish_worker(slug: str, job_id: str, out_path: str) -> None:
+    """Child-process entry: publish one slug, write its result dict as JSON.
+
+    Runs in a forked subprocess so the OS reclaims ALL of this reciter's memory
+    (rows + audio slices + the parquet Dataset, several GB peak) on exit —
+    ``gc.collect()`` alone leaves the freed pages in the process RSS, which
+    accumulated across reciters and OOM-killed the container.
+    """
+    try:
+        res = publish_slug(slug, job_id, sync_card=False)
+    except Exception as exc:
+        res = {"slug": slug, "status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+    try:
+        Path(out_path).write_text(json.dumps(res), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _publish_isolated(slug: str, job_id: str, ctx, timeout_s: int) -> dict:
+    """Publish ``slug`` in a child process; return its result dict.
+
+    A subprocess that OOM-kills (exitcode -9), crashes, times out, or writes no
+    result is recorded as a failed member — the batch never aborts on one slug.
+    """
+    fd, out_path = tempfile.mkstemp(prefix=f"pub_{slug}_", suffix=".json")
+    os.close(fd)
+    try:
+        p = ctx.Process(target=_publish_worker, args=(slug, job_id, out_path))
+        p.start()
+        p.join(timeout=timeout_s)
+        if p.is_alive():
+            p.terminate()
+            p.join(30)
+            return {"slug": slug, "status": "failed", "error": f"timeout after {timeout_s}s"}
+        raw = ""
+        try:
+            raw = Path(out_path).read_text(encoding="utf-8")
+        except OSError:
+            raw = ""
+        if not raw:
+            ec = p.exitcode
+            reason = "OOMKilled" if ec == -9 else f"subprocess exited {ec} with no result"
+            log.error("  %s: %s", slug, reason)
+            return {"slug": slug, "status": "failed", "error": reason}
+        return json.loads(raw)
+    finally:
+        try:
+            os.unlink(out_path)
+        except OSError:
+            pass
+
+
 def main() -> int:
     job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
     slugs = _parse_slugs()
@@ -135,24 +192,17 @@ def main() -> int:
         log.error("SLUGS env var is required (JSON array)")
         return 2
 
+    ctx = mp.get_context("fork")
+    per_reciter_timeout = int(os.environ.get("INSPECTOR_BATCH_RECITER_TIMEOUT_S", "2700"))
+
     members: list[dict] = []
     any_succeeded = False
     for i, slug in enumerate(slugs, 1):
-        log.info("=== [%d/%d] publishing %s ===", i, len(slugs), slug)
-        try:
-            result = publish_slug(slug, job_id, sync_card=False)
-        except Exception as exc:  # never let one slug abort the batch
-            log.exception("publish_slug(%s) raised", slug)
-            result = {"slug": slug, "status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+        log.info("=== [%d/%d] publishing %s (isolated) ===", i, len(slugs), slug)
+        result = _publish_isolated(slug, job_id, ctx, per_reciter_timeout)
         members.append(_member(result))
         if result.get("status") == "succeeded":
             any_succeeded = True
-        # Reset memory between reciters — each publish_slug builds ~6k rows +
-        # the per-verse audio slices + the parquet Dataset; without forcing a
-        # collect the footprint accumulates across the loop and OOMs the
-        # container on a later (lookback-heavy) reciter.
-        result = None
-        gc.collect()
 
     # Re-render the dataset catalog + card ONCE after all splits are pushed.
     if any_succeeded:
