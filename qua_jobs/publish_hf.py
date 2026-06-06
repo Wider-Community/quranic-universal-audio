@@ -62,9 +62,9 @@ def _text_for_ref(matched_ref: str, dk_words: dict, surah_info: dict) -> str:
     """Derive Arabic text for a canonical ``surah:ayah:word-surah:ayah:word``
     matched_ref from the Digital Khatt word map.
 
-    Mirror of ``scripts/release/build_reciter.py::_text_for_ref`` — the
-    extractor no longer writes ``matched_text`` (Migration #5), so the
-    dataset re-derives it deterministically.
+    Mirror of the legacy dataset builder's text derivation. The extractor no
+    longer writes ``matched_text`` (Migration #5), so the dataset re-derives it
+    deterministically.
     """
     if not matched_ref or "-" not in matched_ref:
         return ""
@@ -153,22 +153,19 @@ def _load_audio_manifest(slug: str) -> dict | None:
         return None
 
 
-def _load_timestamps_shards(slug: str, detailed: dict | None = None) -> dict[str, dict]:
+def _load_timestamps_shards(slug: str) -> dict[str, dict]:
     """Read every ``reciters/<slug>/timestamps/<ch>.json.gz`` segment-array shard,
-    project each to the canonical verse map (completion-based occasion dedup),
-    and merge into one global dict.
+    project each to the canonical verse map (completion-based occasion dedup, the
+    EARLIEST completing occasion), and merge into one global dict.
 
-    Per-segment confidence is joined from ``detailed`` so the highest-confidence
-    completing occasion wins. Returns ``{"surah:ayah": {"words": [...],
-    "verse_start_ms", "verse_end_ms"}}``.
+    Returns ``{"surah:ayah": {"words": [...], "verse_start_ms", "verse_end_ms"}}``.
     """
-    from qua_shared.timestamps_dedup import confidence_by_span, project_segment_shard
+    from qua_shared.timestamps_dedup import project_segment_shard
 
     ts_dir = _bucket_root() / "reciters" / slug / "timestamps"
     out: dict[str, dict] = {}
     if not ts_dir.exists():
         return out
-    conf_by_span = confidence_by_span(detailed)
     for path in sorted(
         ts_dir.iterdir(),
         key=lambda p: int(p.name.split(".", 1)[0]) if p.name.split(".", 1)[0].isdigit() else 0,
@@ -180,7 +177,7 @@ def _load_timestamps_shards(slug: str, detailed: dict | None = None) -> dict[str
         if name.endswith(".gz"):
             raw = gzip.decompress(raw)
         shard = json.loads(raw)
-        out.update(project_segment_shard(shard, conf_by_span=conf_by_span))
+        out.update(project_segment_shard(shard))
     return out
 
 
@@ -219,7 +216,7 @@ def _reshape_timestamps_for_rows(canonical: dict) -> dict[str, dict]:
 
 
 # ---------------------------------------------------------------------------
-# Row construction — port of build_reciter.py::build_rows (trimmed).
+# Row construction.
 # ---------------------------------------------------------------------------
 
 
@@ -675,6 +672,22 @@ def _resolve_dataset_repo_id() -> str:
     return repo_config()["hf_dataset"]
 
 
+def _sync_dataset_catalog_and_card(repo_id: str, _version: str) -> None:
+    """Refresh the HF dataset catalog config and dataset card."""
+    from qua_shared.hf_dataset_catalog import push_catalog_dataset, upload_dataset_card_file
+
+    db_path = _bucket_root() / "db" / "inspector.db"
+    if not db_path.exists():
+        raise RuntimeError(f"Inspector DB missing at {db_path}")
+    token = os.environ.get("HF_TOKEN")
+    push_catalog_dataset(repo_id=repo_id, db_path=db_path, token=token)
+    upload_dataset_card_file(
+        repo_id=repo_id,
+        card_path=_REPO_ROOT / "docs" / "hf_dataset_card.md",
+        token=token,
+    )
+
+
 def _riwayah_for(audio_manifest: dict | None, detailed: dict) -> str:
     """Find the riwayah slug. Audio manifest ``_meta.riwayah`` is canonical;
     detailed.json ``_meta`` is the legacy fallback."""
@@ -796,7 +809,7 @@ def main() -> int:
     # 1. Load bucket artifacts.
     detailed = _load_detailed(slug)
     audio_manifest = _load_audio_manifest(slug)
-    canonical = _load_timestamps_shards(slug, detailed)
+    canonical = _load_timestamps_shards(slug)
     if not canonical:
         log.error("no timestamps shards on bucket for %s", slug)
         return 3
@@ -939,8 +952,10 @@ def main() -> int:
     riwayah = _riwayah_for(audio_manifest, detailed)
     version_sha = _push_to_hf(slug, riwayah, rows, audio_bytes)
 
-    # 7. Notify Inspector.
     repo_id = _resolve_dataset_repo_id()
+    _sync_dataset_catalog_and_card(repo_id, version_sha or job_id)
+
+    # 7. Notify Inspector.
     external_uri = (
         f"https://huggingface.co/datasets/{repo_id}/tree/{version_sha}"
         if version_sha

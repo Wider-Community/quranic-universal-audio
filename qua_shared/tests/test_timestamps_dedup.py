@@ -31,7 +31,6 @@ import orjson
 from qua_shared.tests.conftest import _ok
 from qua_shared.timestamps_dedup import (
     build_raw_v2,
-    confidence_by_span,
     project_segment_shard,
 )
 from qua_shared.timestamps_shards import (
@@ -43,7 +42,7 @@ from qua_shared.timestamps_shards import (
 CAT = "by_surah_audio"
 
 
-def _roundtrip(chapter, results, *, cat=CAT, conf_by_span=None):
+def _roundtrip(chapter, results, *, cat=CAT):
     """Full chain: raw v2 → segment shards → gz → inflate → consumer dedup.
 
     Returns ``(shard_doc, projected)`` for the single chapter under test, where
@@ -59,7 +58,7 @@ def _roundtrip(chapter, results, *, cat=CAT, conf_by_span=None):
     inflated = orjson.loads(gzip.decompress(gzip_shard(shard_doc)))
     assert inflated == shard_doc, "(a) shard survives gzip → inflate unchanged"
 
-    projected = project_segment_shard(inflated, conf_by_span=conf_by_span)
+    projected = project_segment_shard(inflated)
     return inflated, projected
 
 
@@ -162,10 +161,34 @@ def test_trailing_redundant_redo_trimmed():
     assert proj["1:1"]["verse_end_ms"] == 1000  # (e) trailing re-do trimmed
 
 
-# --- multi-occasion: interleaved re-do → one canonical take, highest conf ---
+# --- leading false-start: redundant prefix trimmed (symmetric to trailing) ---
 
 
-def test_two_occasions_highest_confidence_wins():
+def test_leading_false_start_trimmed():
+    # 1:1 recited 1-3 (abandoned), then restarted from word 1 and completed.
+    # One occasion (no foreign verse). The leading 1-3 is redundant.
+    chapter = {
+        "ref": "1",
+        "segments": [
+            {"matched_ref": "1:1:1-1:1:3", "time_start": 0, "time_end": 1000},
+            {"matched_ref": "1:1:1-1:1:5", "time_start": 1000, "time_end": 3000},
+        ],
+    }
+    results = {
+        0: [
+            (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
+            (1, _ok(["1:1:1", "1:1:2", "1:1:3", "1:1:4", "1:1:5"], t0=1.0)),
+        ]
+    }
+    _shard, proj = _roundtrip(chapter, results)
+    assert _widxs(proj["1:1"]) == [1, 2, 3, 4, 5]  # leading [1,2,3] dropped
+    assert proj["1:1"]["verse_start_ms"] == 1000  # clip starts at the restart
+
+
+# --- multi-occasion: interleaved re-do → earliest canonical take ---
+
+
+def test_two_occasions_earliest_wins():
     # 1:1 take A, then 1:2 (breaks the run), then 1:1 take B (both complete).
     chapter = {
         "ref": "1",
@@ -182,46 +205,13 @@ def test_two_occasions_highest_confidence_wins():
             (2, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.5)),
         ]
     }
-    # detailed.json confidence join: take B (1500-2500) beats take A (0-1000).
-    detailed = {
-        "entries": [
-            {
-                "ref": 1,
-                "segments": [
-                    {"time_start": 0, "time_end": 1000, "confidence": 0.40},
-                    {"time_start": 1000, "time_end": 1500, "confidence": 0.99},
-                    {"time_start": 1500, "time_end": 2500, "confidence": 0.95},
-                ],
-            }
-        ]
-    }
-    _shard, proj = _roundtrip(chapter, results, conf_by_span=confidence_by_span(detailed))
+    _shard, proj = _roundtrip(chapter, results)
     assert set(proj) == {"1:1", "1:2"}
-    # 1:1 canonical = take B (one contiguous occasion); 1:2 = its only take.
-    assert proj["1:1"]["verse_start_ms"] == 1500
-    assert proj["1:1"]["verse_end_ms"] == 2500
+    # 1:1 canonical = take A (earliest completing occasion); 1:2 = its only take.
+    assert proj["1:1"]["verse_start_ms"] == 0
+    assert proj["1:1"]["verse_end_ms"] == 1000
     assert _widxs(proj["1:1"]) == [1, 2, 3]
     assert _widxs(proj["1:2"]) == [1, 2]
-
-
-def test_two_occasions_no_confidence_falls_back_to_earliest():
-    chapter = {
-        "ref": "1",
-        "segments": [
-            {"matched_ref": "1:1:1-1:1:3", "time_start": 0, "time_end": 1000},
-            {"matched_ref": "1:2:1-1:2:2", "time_start": 1000, "time_end": 1500},
-            {"matched_ref": "1:1:1-1:1:3", "time_start": 1500, "time_end": 2500},
-        ],
-    }
-    results = {
-        0: [
-            (0, _ok(["1:1:1", "1:1:2", "1:1:3"])),
-            (1, _ok(["1:2:1", "1:2:2"], t0=1.0)),
-            (2, _ok(["1:1:1", "1:1:2", "1:1:3"], t0=1.5)),
-        ]
-    }
-    _shard, proj = _roundtrip(chapter, results)  # no confidence
-    assert proj["1:1"]["verse_start_ms"] == 0  # earliest completing occasion
 
 
 # --- by_ayah chapter ref ("2:255") projects the same way ---

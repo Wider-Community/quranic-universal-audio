@@ -178,23 +178,14 @@ def _prior_release_members(conn: sqlite3.Connection) -> tuple[str | None, dict[s
 
 def _load_canonical_verses(slug: str) -> dict[str, dict]:
     """Read every ``reciters/<slug>/timestamps/<ch>.json.gz`` segment-array shard,
-    project each to the canonical verse map (completion-based occasion dedup),
-    and merge. Per-segment confidence is joined from ``detailed.json`` so the
-    highest-confidence completing occasion wins.
+    project each to the canonical verse map (completion-based occasion dedup, the
+    EARLIEST completing occasion), and merge.
     """
-    from qua_shared.timestamps_dedup import confidence_by_span, project_segment_shard
+    from qua_shared.timestamps_dedup import project_segment_shard
 
     ts_dir = _bucket_root() / "reciters" / slug / "timestamps"
     if not ts_dir.exists():
         return {}
-    det_path = _bucket_root() / "reciters" / slug / "detailed.json"
-    detailed = None
-    if det_path.exists():
-        try:
-            detailed = json.loads(det_path.read_bytes())
-        except (json.JSONDecodeError, OSError):
-            detailed = None
-    conf_by_span = confidence_by_span(detailed)
     out: dict[str, dict] = {}
     for path in sorted(
         ts_dir.iterdir(),
@@ -207,7 +198,7 @@ def _load_canonical_verses(slug: str) -> dict[str, dict]:
         if name.endswith(".gz"):
             raw = gzip.decompress(raw)
         shard = json.loads(raw)
-        out.update(project_segment_shard(shard, conf_by_span=conf_by_span))
+        out.update(project_segment_shard(shard))
     return out
 
 

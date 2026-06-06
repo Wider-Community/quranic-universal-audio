@@ -70,8 +70,8 @@ The same predicate drives the Releases-tab buckets and the cut job's member disc
 
 1. Reads the bucket DB read-only → eligible reciters + the prior release's membership.
 2. Per reciter: reads every segment-array `timestamps/<ch>.json.gz` shard and projects the canonical
-   verse map (`_load_canonical_verses` → `project_segment_shard`, joining `detailed.json` confidence
-   via `confidence_by_span` for the highest-confidence completing-occasion pick) → builds the three
+   verse map (`_load_canonical_verses` → `project_segment_shard`, the earliest completing occasion)
+   → builds the three
    tier files (verse/word/letter, top-down), `catalog.json`, a per-recitation `manifest.json`; packs
    a deterministic `<slug>.zip`; computes `content_hash = SHA-256(letter_tier.gz || catalog.json)`.
    `catalog.json` is built from `catalog/audio_manifest/<slug>.json::chapters`; a GH-eligible
@@ -215,12 +215,26 @@ come from the `riwayahs` / `styles` / `channels` vocab tables — `catalog.json`
 - **Subset (config)** = riwayah slug (e.g. `hafs_an_asim`). **Split** = delivery slug. Readability
   comes from `name_en` / `name_ar`, not the split key.
 
+### Dataset catalog config
+
+HF config `mushafs`, split `all`, is the dataset catalog projection. It is rebuilt by
+[`qua_shared.hf_dataset_catalog`](../../qua_shared/hf_dataset_catalog.py) from the Inspector SQLite
+`ReciterCatalog` v2 and pushed by the active admin HF publish job after a recitation split lands.
+
+Grain is one published delivery row. Rows include delivery slug, reciter identity,
+readable riwayah/style/source/channel labels, audio metadata, coverage, and GH release eligibility.
+Admin lifecycle and publish-ledger fields stay out of the public dataset.
+
+This is separate from GitHub release `catalog.json`: the release artifact pairs timestamp tiers with
+source audio URLs for offline consumers, while the HF `mushafs` config is a parquet catalog for
+dataset discovery and filtering.
+
 ### Audio: preserve, don't normalize
 
 Embedded bytes are stream-copied from the bucket Xing-injected chapter master — source codec /
 bitrate / sample-rate / channels preserved; slice frame-snapped (≤26 ms earlier than first word,
 word timestamps re-based). Consumers resample at load; filter by codec/SR/channels via the
-`reciters` config columns. For the full natural recording, stream from `source_url` directly.
+`mushafs` config columns. For full-chapter app playback, prefer the GitHub release assets.
 
 ## Dedup semantics — what projection loses / preserves
 
@@ -232,13 +246,14 @@ release/dataset adapters.
 | Lost in projection | Preserved |
 |---|---|
 | A non-canonical occasion's word/letter timestamps (an interleaved re-recitation of the same verse) | The whole verse `{1..N}` — the canonical occasion reaches full word coverage by construction |
-| Trailing post-completion redundancy + a redundant complete re-do (the lower-confidence occasion) | Every recited segment in the bucket shard, time-ordered, addressable via `source_url` + offsets |
+| A leading false-start prefix + trailing post-completion redundancy (an abandoned/redundant re-do within the canonical occasion) | Every recited segment in the bucket shard, time-ordered, addressable via `source_url` + offsets |
 
 The projection picks a single **occasion** (maximal contiguous run, no foreign verse interleaved)
-that completes word coverage `{1..N}`; within-pass backward loops inside that occasion are kept
-verbatim, so the canonical row is never missing a widx. Among multiple completing occasions the
-highest mean alignment confidence wins; trailing post-completion segments are trimmed. Consumers
-wanting alternate takes read the raw bucket shards (every segment present).
+that completes word coverage `{1..N}`; within-pass backward **lookbacks** (a jump back to a
+non-first word) inside that occasion are kept verbatim, so the canonical row is never missing a widx.
+Among multiple completing occasions the **earliest** (first recited) wins; a **leading false-start**
+(a restart at word 1 whose run re-covers the verse) and **trailing** post-completion segments are
+trimmed. Consumers wanting alternate takes read the raw bucket shards (every segment present).
 
 ### Failed-alignment & deletes at publish
 

@@ -9,9 +9,9 @@
  * canonical (completing) occasion, and exposes ALL occasions in recitation order
  * for the (deferred) loopback filmstrip.
  *
- * Confidence join differs from the backend: `detailed.json` confidences aren't
- * fetched client-side, so among multiple completing occasions we pick the
- * EARLIEST (the backend prefers highest mean confidence). Same shape otherwise.
+ * Among multiple completing occasions both this and the backend pick the
+ * EARLIEST (first recited); the canonical clip trims both a leading false-start
+ * and trailing post-completion redundancy. Same shape as the backend.
  */
 
 import type { SegmentEntry } from '../types/api';
@@ -139,12 +139,39 @@ export function groupVerseOccasions(segments: SegmentEntry[]): VerseOccasions[] 
 }
 
 /**
+ * Maximal contiguous word coverage check: does `segs` cover every widx in
+ * `target`? Used to detect a redundant leading false-start.
+ */
+function coversTarget(segs: Occasion, target: Set<number>): boolean {
+    const cov = new Set<number>();
+    for (const seg of segs) for (const wi of segWidxSet(seg)) cov.add(wi);
+    for (const t of target) if (!cov.has(t)) return false;
+    return true;
+}
+
+/**
+ * Drop a redundant leading false-start: keep only from the LAST segment that
+ * restarts the verse at word 1 whose run still covers the whole verse. An
+ * abandoned prefix before such a restart is redundant; mid-verse lookbacks
+ * (a backward jump to a non-first word) never restart at 1, so they are kept.
+ */
+function trimLeadingFalseStart(kept: Occasion, target: Set<number>): Occasion {
+    if (target.size === 0) return kept;
+    let best = 0;
+    for (let r = 1; r < kept.length; r++) {
+        if (kept[r]!.words[0]?.[0] !== 1) continue;
+        if (coversTarget(kept.slice(r), target)) best = r;
+    }
+    return kept.slice(best);
+}
+
+/**
  * Flatten a canonical occasion into the words the per-verse clip renders.
- * Trailing post-completion segments are trimmed (never cut mid-audio); the
- * returned `[startMs, endMs]` span covers every kept segment AND every
- * word/letter time. A word/letter can bleed a few ms past its segment's `t`
- * bound, so the clip must reach the furthest word/letter end or it would
- * truncate the final word's tail (mirrors the backend `_canonical_verse`).
+ * Both a leading false-start and trailing post-completion segments are trimmed
+ * (never cut mid-audio); the returned `[startMs, endMs]` span covers every kept
+ * segment AND every word/letter time. A word/letter can bleed a few ms past its
+ * segment's `t` bound, so the clip must reach the furthest word/letter end or it
+ * would truncate the final word's tail (mirrors the backend `_canonical_verse`).
  */
 export function canonicalClip(
     occasion: Occasion,
@@ -153,7 +180,8 @@ export function canonicalClip(
     const target = new Set<number>();
     for (let i = 1; i <= nWords; i++) target.add(i);
     const comp = completesAt(occasion, target);
-    const kept = comp !== null ? occasion.slice(0, comp + 1) : occasion;
+    const trailing = comp !== null ? occasion.slice(0, comp + 1) : occasion;
+    const kept = trimLeadingFalseStart(trailing, target);
 
     const words: SegmentEntry['words'] = [];
     for (const seg of kept) words.push(...seg.words);

@@ -23,7 +23,6 @@ import orjson
 
 from qua_shared.timestamps_dedup import (
     build_raw_v2,
-    confidence_by_span,
     project_segment_shard,
 )
 from qua_shared.timestamps_shards import build_segment_shards, gzip_shard
@@ -119,7 +118,7 @@ def test_roundtrip_consumer_dedup(tmp_reciter_dir):
     assert verse["verse_end_ms"] == 2000
 
 
-def test_roundtrip_multi_occasion_highest_confidence(tmp_reciter_dir):
+def test_roundtrip_multi_occasion_earliest_wins(tmp_reciter_dir):
     # 1:1 take A, 1:2 interleaves, 1:1 take B — both 1:1 occasions complete.
     chapter_doc = {
         "ref": "1",
@@ -139,22 +138,10 @@ def test_roundtrip_multi_occasion_highest_confidence(tmp_reciter_dir):
     chapter, _doc, _gz = _write_shard(chapter_doc, results)
     shard = orjson.loads(data_dir.read_timestamps_chapter(SLUG, chapter))
 
-    detailed = {
-        "entries": [
-            {
-                "ref": 1,
-                "segments": [
-                    {"time_start": 0, "time_end": 1000, "confidence": 0.40},
-                    {"time_start": 1000, "time_end": 1500, "confidence": 0.99},
-                    {"time_start": 1500, "time_end": 2500, "confidence": 0.95},
-                ],
-            }
-        ]
-    }
-    proj = project_segment_shard(shard, conf_by_span=confidence_by_span(detailed))
+    proj = project_segment_shard(shard)
     assert set(proj) == {"1:1", "1:2"}
-    # Take B wins on confidence — one canonical contiguous occasion for 1:1.
-    assert proj["1:1"]["verse_start_ms"] == 1500
-    assert proj["1:1"]["verse_end_ms"] == 2500
+    # Take A wins (earliest completing) — one canonical contiguous occasion.
+    assert proj["1:1"]["verse_start_ms"] == 0
+    assert proj["1:1"]["verse_end_ms"] == 1000
     assert [w[0] for w in proj["1:1"]["words"]] == [1, 2, 3]
     assert [w[0] for w in proj["1:2"]["words"]] == [1, 2]
