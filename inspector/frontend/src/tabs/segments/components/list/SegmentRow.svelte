@@ -28,7 +28,8 @@
     import { fetchJsonOrNull } from '../../../../lib/api';
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import { quranRefs } from '../../../../lib/refs/quran-refs';
-    import type { Segment } from '../../../../lib/types/domain';
+    import { currentUser } from '../../../../lib/stores/current-user';
+    import type { FlagAuthor, Segment } from '../../../../lib/types/domain';
     import { clearAccordionPin } from '../../stores/accordion-pin';
     import { ensureAutoSplitMap } from '../../stores/auto-split';
     import {
@@ -77,6 +78,7 @@
     } from '../../utils/data/references';
     import { deleteSegment } from '../../utils/edit/delete';
     import { enterEditWithBuffer } from '../../utils/edit/enter';
+    import { flagSegment } from '../../utils/edit/flag';
     import { mergeAdjacent } from '../../utils/edit/merge';
     import { beginRefEdit } from '../../utils/edit/reference';
     import { playFromSegment } from '../../utils/playback/playback';
@@ -660,6 +662,53 @@
         beginRefEdit(seg, validationCategory, _mountId);
     }
 
+    // ---------------------------------------------------------------------
+    // Flag — manual "needs a second look" thread (local toggle, NOT editMode)
+    // ---------------------------------------------------------------------
+    // A flag is a comment thread, not a canvas/structural edit, so its inline
+    // editor lives in row-local state and never touches `setEdit`/`editMode`.
+    // Only the flagger (`seg.flag.mine`) may edit/clear an existing flag;
+    // anyone may create one. `flagSegment` handles the dispatch + dirty/save.
+    let flagEditing = false;
+    let flagDraft = '';
+    $: isFlagged = !!seg.flag;
+    $: canEditFlag = !isFlagged || !!seg.flag?.mine;
+    $: flagAuthor = {
+        role: $currentUser.role,
+        login: $currentUser.login,
+        id: $currentUser.hf_user_id,
+    } as FlagAuthor;
+    // Apply is disabled when creating with no text; an existing flag allows a
+    // blank draft so clearing it removes the flag (unflag).
+    $: flagApplyDisabled = !isFlagged && flagDraft.trim().length === 0;
+
+    function openFlagEditor(e: MouseEvent): void {
+        e.stopPropagation();
+        if (!canEditFlag) return;
+        flagDraft = seg.flag?.comment ?? '';
+        flagEditing = true;
+    }
+    function cancelFlagEditor(): void {
+        flagEditing = false;
+        flagDraft = '';
+    }
+    function applyFlagEditor(): void {
+        const ok = flagSegment(seg, flagDraft, isFlagged ? 'edit' : 'set', flagAuthor);
+        if (ok) {
+            flagEditing = false;
+            flagDraft = '';
+        }
+    }
+    function onFlagKeydown(e: KeyboardEvent): void {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelFlagEditor();
+        } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            if (!flagApplyDisabled) applyFlagEditor();
+        }
+    }
+
     function onRowClick(e: MouseEvent): void {
         if (get(editMode) || readOnly) return;
         const t = e.target as Element;
@@ -776,13 +825,40 @@
             <SplitPanel {seg} canvas={editSegCanvas} />
         {:else if !readOnly}
             <div class="seg-row-controls">
-                {#if showPlayBtn || showGotoBtn}
+                {#if showPlayBtn || showGotoBtn || !isContext}
                     <div class="seg-row-play-actions">
                         {#if showPlayBtn}
                             <button class="btn btn-sm seg-card-play-btn" title="Play segment audio" on:click={onPlayClick} on:mouseenter={onPlayHover} on:mouseleave={onPlayLeave}>{playGlyph}</button>
                         {/if}
                         {#if showGotoBtn}
                             <button class="btn btn-sm seg-card-goto-btn" on:click={onGotoClick}>Go to</button>
+                        {/if}
+                        {#if !isContext}
+                            <span class="seg-flag-wrap">
+                                <button
+                                    class="btn btn-sm seg-flag-btn"
+                                    class:is-flagged={isFlagged}
+                                    class:is-open={flagEditing}
+                                    class:is-readonly={isFlagged && !canEditFlag}
+                                    aria-pressed={isFlagged}
+                                    aria-label={!canEditFlag
+                                        ? 'Flagged by another reviewer; view comment'
+                                        : isFlagged ? 'Flagged; view or edit comment' : 'Flag this segment'}
+                                    title={isFlagged ? seg.flag?.comment : 'Flag this segment for a second look'}
+                                    on:click={openFlagEditor}
+                                >
+                                    <svg class="seg-flag-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                                        <path d="M3.5 1.5v13" />
+                                        <path d="M3.5 2.2h8.2l-1.7 2.6 1.7 2.6H3.5z" />
+                                    </svg>
+                                </button>
+                                {#if isFlagged && !flagEditing}
+                                    <span class="seg-flag-tip" role="tooltip">
+                                        <span class="seg-flag-tip-label">Flagged</span>
+                                        <span class="seg-flag-tip-body">{seg.flag?.comment}</span>
+                                    </span>
+                                {/if}
+                            </span>
                         {/if}
                     </div>
                 {/if}
@@ -806,6 +882,33 @@
                     </div>
                 {/if}
             </div>
+
+            {#if flagEditing}
+                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                <div class="seg-flag-editor" on:click={(e) => e.stopPropagation()}>
+                    <textarea
+                        class="seg-flag-input"
+                        bind:value={flagDraft}
+                        rows="2"
+                        placeholder="Describe the issue, or why you're unsure…"
+                        on:keydown={onFlagKeydown}
+                        on:mousedown={(e) => e.stopPropagation()}
+                    ></textarea>
+                    <div class="seg-flag-editor-foot">
+                        <span class="seg-flag-hint">
+                            {isFlagged ? 'Clear the comment to remove the flag.' : 'A comment is required.'}
+                        </span>
+                        <span class="seg-flag-editor-actions">
+                            <button class="btn btn-sm seg-flag-cancel" on:click|stopPropagation={cancelFlagEditor}>Cancel</button>
+                            <button
+                                class="btn btn-sm seg-flag-apply"
+                                disabled={flagApplyDisabled}
+                                on:click|stopPropagation={applyFlagEditor}
+                            >{isFlagged && flagDraft.trim().length === 0 ? 'Remove flag' : isFlagged ? 'Update' : 'Flag'}</button>
+                        </span>
+                    </div>
+                </div>
+            {/if}
         {/if}
     </div>
 
@@ -841,3 +944,175 @@
         <div class="seg-text-body" class:seg-history-changed={changedRef}>{bodyText}</div>
     </div>
 </div>
+
+<style>
+    /* ---- Flag button (manual "needs a second look") ---- */
+    /* A peer of the play/go-to controls. Idle reads as a quiet outline; an
+       active flag fills with the warm amber attention token so a flagged row
+       is legible at a glance without competing with the cyan accent. */
+    .seg-flag-wrap {
+        position: relative;
+        display: inline-flex;
+    }
+
+    .seg-flag-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 32px;
+        padding: 6px 8px;
+        color: var(--text-muted);
+        background: var(--panel);
+        border: 1px solid var(--border-default);
+        border-radius: var(--r-2);
+        transition:
+            color var(--t-fast) var(--ease-out-quart),
+            background var(--t-fast) var(--ease-out-quart),
+            border-color var(--t-fast) var(--ease-out-quart);
+    }
+    .seg-flag-btn:hover {
+        color: var(--state-warn-fg);
+        border-color: var(--state-warn-border);
+        background: var(--state-warn-bg);
+    }
+    .seg-flag-btn.is-flagged {
+        color: var(--state-warn-fg);
+        background: var(--state-warn-bg);
+        border-color: var(--state-warn-border);
+    }
+    .seg-flag-btn.is-open {
+        color: var(--state-warn-fg);
+        border-color: var(--state-warn-fg);
+        background: var(--state-warn-bg);
+    }
+    .seg-flag-btn.is-readonly {
+        cursor: default;
+    }
+    .seg-flag-icon {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+    }
+    /* Flagged pole fills, unflagged stays hollow — a hue-independent shape cue. */
+    .seg-flag-btn.is-flagged .seg-flag-icon path:nth-child(2) {
+        fill: var(--state-warn-bg);
+    }
+
+    /* ---- Hover tooltip: re-read the root comment from the button ---- */
+    .seg-flag-tip {
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 0;
+        z-index: 40;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        width: max-content;
+        max-width: 260px;
+        padding: var(--s-2) var(--s-3);
+        background: var(--elevated);
+        border: 1px solid var(--state-warn-border);
+        border-radius: var(--r-2);
+        box-shadow: 0 6px 20px oklch(0.13 0.034 285 / 0.55);
+        opacity: 0;
+        transform: translateY(3px);
+        pointer-events: none;
+        transition:
+            opacity var(--t-fast) var(--ease-out-quart),
+            transform var(--t-fast) var(--ease-out-quart);
+    }
+    .seg-flag-wrap:hover .seg-flag-tip,
+    .seg-flag-btn:focus-visible + .seg-flag-tip {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    .seg-flag-tip-label {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--state-warn-fg);
+    }
+    .seg-flag-tip-body {
+        font-size: var(--fs-meta);
+        line-height: var(--lh-normal);
+        color: var(--text-primary);
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    /* ---- Inline comment editor ---- */
+    .seg-flag-editor {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-2);
+        margin-top: var(--s-2);
+        padding: var(--s-2) var(--s-3);
+        background: var(--canvas-inset);
+        border: 1px solid var(--state-warn-border);
+        border-radius: var(--r-2);
+    }
+    .seg-flag-input {
+        width: 100%;
+        resize: vertical;
+        min-height: 44px;
+        padding: 6px 8px;
+        font: var(--fs-body)/var(--lh-normal) var(--font-sans);
+        color: var(--text-primary);
+        background: var(--panel);
+        border: 1px solid var(--border-default);
+        border-radius: var(--r-1);
+    }
+    .seg-flag-input::placeholder {
+        color: var(--text-muted);
+    }
+    .seg-flag-input:focus-visible {
+        outline: none;
+        border-color: var(--state-warn-fg);
+        box-shadow: 0 0 0 2px var(--state-warn-bg);
+    }
+    .seg-flag-editor-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--s-3);
+        flex-wrap: wrap;
+    }
+    .seg-flag-hint {
+        font-size: var(--fs-meta);
+        color: var(--text-muted);
+    }
+    .seg-flag-editor-actions {
+        display: inline-flex;
+        gap: var(--s-2);
+        margin-left: auto;
+    }
+    .seg-flag-cancel {
+        color: var(--text-secondary);
+        background: var(--panel);
+        border: 1px solid var(--border-default);
+        border-radius: var(--r-2);
+    }
+    .seg-flag-cancel:hover {
+        color: var(--text-primary);
+        background: var(--panel-2);
+    }
+    .seg-flag-apply {
+        color: var(--accent-fg);
+        background: var(--state-warn-fg);
+        border: 1px solid var(--state-warn-fg);
+        border-radius: var(--r-2);
+        font-weight: 600;
+    }
+    .seg-flag-apply:hover:not(:disabled) {
+        background: oklch(from var(--state-warn-fg) calc(l + 0.04) c h);
+    }
+    .seg-flag-apply:disabled {
+        color: var(--text-faint);
+        background: var(--panel);
+        border-color: var(--border-default);
+        cursor: not-allowed;
+    }
+</style>

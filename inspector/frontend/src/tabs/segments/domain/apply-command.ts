@@ -31,6 +31,7 @@ import type {
     CommandResult,
     DeleteCommand,
     EditReferenceCommand,
+    FlagSegmentCommand,
     IgnoreIssueCommand,
     MergeCommand,
     Operation,
@@ -67,6 +68,7 @@ const OP_TYPE_BY_COMMAND: Readonly<Record<Operation, string>> = Object.freeze({
     ignoreIssue: 'ignore_issue',
     autoFixMissingWord: 'auto_fix_missing_word',
     setIsWasl: 'set_is_wasl',
+    flagSegment: 'flag_segment',
 });
 
 const STRUCTURAL_COMMANDS: ReadonlySet<Operation> = new Set([
@@ -613,6 +615,61 @@ function _reduceSetIsWasl(
     };
 }
 
+function _reduceFlagSegment(
+    state: ApplyCommandState,
+    cmd: FlagSegmentCommand,
+    ctx?: ApplyCommandContext,
+): CommandResult {
+    const target = _findSeg(state, cmd.segmentUid);
+    if (!target) throw new Error(`applyCommand[flagSegment]: segment '${cmd.segmentUid}' not found`);
+    const chapter = _chapterFor(target, state);
+
+    const comment = cmd.comment.trim();
+    const author = cmd.author ?? { role: null };
+    const now = new Date().toISOString();
+
+    // Optimistic FE-shape flag for immediate display; the authoritative
+    // redacted shape arrives on the next /api/seg/all read. The flag is NOT
+    // captured in `snapshotSeg` (it would corrupt detailed.json on undo —
+    // it's backend-owned), so the snapshots below carry no flag.
+    const next = _cloneSeg(target);
+    if (cmd.intent === 'set') {
+        next.flag = { comment, at: now, author, mine: true, follow_ups: [] };
+    } else if (cmd.intent === 'edit') {
+        if (!comment) {
+            next.flag = null; // clearing the comment removes the flag
+        } else if (next.flag) {
+            next.flag = { ...next.flag, comment };
+        }
+    } else if (next.flag) {
+        next.flag = {
+            ...next.flag,
+            follow_ups: [...next.flag.follow_ups, { comment, at: now, author, mine: true }],
+        };
+    }
+
+    const op = _baseOperation(cmd, target, chapter, target.index, ctx);
+    op.op_context_category = null; // never a validation category
+    op.fix_kind = cmd.fixKind ?? 'manual';
+    op.snapshots.before = [_snapshot(target)];
+    op.snapshots.after = [_snapshot(next)];
+    op.targets_before = op.snapshots.before;
+    op.targets_after = op.snapshots.after;
+    op.affected_chapters = [chapter];
+
+    const nextState: CommandNextState = {
+        byId: { [next.segment_uid ?? cmd.segmentUid]: next },
+        affectedChapter: chapter,
+    };
+    return {
+        nextState,
+        operation: op,
+        affectedChapters: [chapter],
+        validationDelta: { resolved: [], introduced: [] },
+        patch: _buildPatch([_snapshot(target)], [_snapshot(next)], [], [], [chapter]),
+    };
+}
+
 function _reduceAutoFixMissingWord(
     state: ApplyCommandState,
     cmd: AutoFixMissingWordCommand,
@@ -681,6 +738,8 @@ export function applyCommand(
             return _reduceAutoFixMissingWord(state as ApplyCommandState, command, ctx);
         case 'setIsWasl':
             return _reduceSetIsWasl(state as ApplyCommandState, command, ctx);
+        case 'flagSegment':
+            return _reduceFlagSegment(state as ApplyCommandState, command, ctx);
         default: {
             const _exhaustive: never = command;
             throw new Error(`applyCommand: unsupported command type ${(_exhaustive as { type: string }).type}`);

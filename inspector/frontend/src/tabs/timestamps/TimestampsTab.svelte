@@ -59,7 +59,6 @@
         loadDk,
         loadManifest,
         loadQpc,
-        loadTajweedBridges,
         loadTsValidation,
         loadVerseTranslations,
         reciterAudioFromManifest,
@@ -78,14 +77,12 @@
     import { manualShuffleRequest, shuffleAyah, shuffleMode } from './stores/shuffle';
     import { tsValidation } from './stores/validation';
     import {
-        loadedTajweedBridges,
         loadedVerse,
         selectedChapter,
         selectedReciter,
         selectedVerse,
         type TsLoadedVerse,
     } from './stores/verse';
-    import { stopRefsFromGaps } from './utils/stops';
     import { setupZoomLifecycle } from './utils/zoom';
 
     // ---- Local display constants ----
@@ -296,7 +293,14 @@
             if (!reciterAudio) return;
             const verses: ChapVerse[] = [];
             for (const ref of chapterVerseRefs(shard)) {
-                const data = assembleVerseFromShard(slug, shard, ref, qpc, dk, reciterAudio);
+                // keepAllTakes: the Timestamps tab is the faithfulness surface —
+                // a verse recited several times back-to-back renders its words
+                // as inline repeats and the clip span covers every take, so
+                // playback rides through all of them (the dashboard board stays
+                // canonical via load-chapter.ts).
+                const data = assembleVerseFromShard(slug, shard, ref, qpc, dk, reciterAudio, {
+                    keepAllTakes: true,
+                });
                 if (!data) continue;
                 verses.push({
                     ref,
@@ -692,25 +696,6 @@
         loadVerseTranslations(lv.data.words, lang)
             .then((map) => { if (token === _trReq) verseTranslations.set(map); })
             .catch(() => { if (token === _trReq) verseTranslations.set({}); });
-    }
-
-    // ---------------------------------------------------------------------
-    // Cross-word tajweed bridges — reciter-specific waqf inferred from MFA
-    // word-end gaps, fed to /api/ts/tajweed so the gold bridge tile only
-    // renders where the reciter actually carried the rule through.
-    // ---------------------------------------------------------------------
-    let _bridgeReq = 0;
-    $: refreshTajweedBridges($loadedVerse);
-    function refreshTajweedBridges(lv: typeof $loadedVerse): void {
-        if (!lv || lv.data.words.length === 0) {
-            loadedTajweedBridges.set([]);
-            return;
-        }
-        const stops = stopRefsFromGaps(lv.data.words);
-        const token = ++_bridgeReq;
-        loadTajweedBridges(lv.data.verse_ref, stops)
-            .then((bridges) => { if (token === _bridgeReq) loadedTajweedBridges.set(bridges); })
-            .catch(() => { if (token === _bridgeReq) loadedTajweedBridges.set([]); });
     }
 
     // (The once-per-verse shuffle guard resets implicitly: `shuffleFiredForRef`

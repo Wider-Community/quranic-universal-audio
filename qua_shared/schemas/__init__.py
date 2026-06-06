@@ -30,7 +30,6 @@ from .admin_reviews import (
     AdminReviewRow,
     AdminReviewsResponse,
     AdminReviewTransition,
-    AdminReviewValidation,
 )
 from .admin_users import (
     AdminActiveClaim,
@@ -133,6 +132,8 @@ from .segment import (
     DetailedEntry,
     DetailedMeta,
     DetailedSegment,
+    FlagFollowUp,
+    SegmentFlag,
     parse_detailed_segment,
 )
 from .state import (
@@ -180,7 +181,6 @@ __all__ = [
     "AdminReviewOpenClaim",
     "AdminReviewRow",
     "AdminReviewTransition",
-    "AdminReviewValidation",
     "AdminReviewsResponse",
     "AdminRoleEvent",
     "AdminUserDetail",
@@ -211,6 +211,8 @@ __all__ = [
     "EditHistoryBatch",
     "EditOperation",
     "FileDigest",
+    "FlagFollowUp",
+    "SegmentFlag",
     "BLOCKING_COUNT_KEYS",
     "ChecklistKey",
     "IntakeAttestations",

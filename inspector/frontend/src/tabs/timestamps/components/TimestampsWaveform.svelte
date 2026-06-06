@@ -82,6 +82,12 @@
     const LETTER_LINE_WIDTH = 1.5;
     const PHONEME_LINE_WIDTH = 1;
 
+    // Minimum avg pixel spacing between boundaries before a tier's lines are
+    // suppressed. Prevents the waveform becoming a wall of stripes when zoomed
+    // out; lines reappear automatically as the user zooms in.
+    const MIN_PHONEME_LINE_SPACING_PX = 12;
+    const MIN_LETTER_LINE_SPACING_PX  = 8;
+
     // ---- Sizing ----
 
     let containerEl: HTMLDivElement;
@@ -642,8 +648,16 @@
         }
 
         // Draw phoneme → letter → word so the strongest tier renders on top.
-        _strokeLines(ctx, phonemeXs, height, phonemeColor, PHONEME_LINE_WIDTH);
-        _strokeLines(ctx, letterXs, height, letterColor, LETTER_LINE_WIDTH);
+        // Suppress a tier when its average pixel spacing falls below the
+        // minimum threshold — lines become unreadable noise when too dense.
+        const avgPhSpacing = phonemeXs.length > 1 ? width / phonemeXs.length : Infinity;
+        const avgLtSpacing = letterXs.length  > 1 ? width / letterXs.length  : Infinity;
+        _strokeLines(ctx,
+            avgPhSpacing >= MIN_PHONEME_LINE_SPACING_PX ? phonemeXs : [],
+            height, phonemeColor, PHONEME_LINE_WIDTH);
+        _strokeLines(ctx,
+            avgLtSpacing >= MIN_LETTER_LINE_SPACING_PX ? letterXs : [],
+            height, letterColor, LETTER_LINE_WIDTH);
         _strokeLines(ctx, wordXs, height, wordColor, WORD_LINE_WIDTH);
 
         // 4. Playhead. Zoom-aware via `tToX` — playback outside the visible

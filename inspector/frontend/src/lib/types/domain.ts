@@ -20,6 +20,31 @@ export type VerseRef = string;
 // Segments
 // ---------------------------------------------------------------------------
 
+/** Author of a flag comment, as served by /api/seg/all. The role is always
+ *  present; ``login``/``id`` only when the viewer holds
+ *  ``segments.see_flagger_identity`` (otherwise identity is redacted to the
+ *  role). ``mine`` lets the flagger find their own comment without identities
+ *  leaking. */
+export interface FlagAuthor {
+    role: string | null;
+    login?: string | null;
+    id?: string | null;
+}
+
+/** One comment in a flag thread (root or follow-up), FE-facing shape. */
+export interface FlagComment {
+    comment: string;
+    at: string | null;
+    author: FlagAuthor;
+    mine: boolean;
+}
+
+/** A segment's flag thread: a root comment plus append-only follow-up replies.
+ *  Redacted/`mine`-stamped server-side; never the canonical persisted shape. */
+export interface SegmentFlagView extends FlagComment {
+    follow_ups: FlagComment[];
+}
+
 /** A single segment row as returned by /api/seg/data (chapter-scoped). */
 export interface Segment {
     index: number;
@@ -44,6 +69,10 @@ export interface Segment {
     /** Stable UID assigned on first server load; present on /api/seg/all. */
     segment_uid?: string;
     entry_ref?: string;
+    /** Manual "needs a second look" flag thread. Present (on /api/seg/all)
+     *  only when the segment is flagged. Redacted display shape — kept out of
+     *  edit-history snapshots; the persisted canonical flag is backend-owned. */
+    flag?: SegmentFlagView | null;
     /**
      * Client-computed: (next.time_start - this.time_end) + pad_left_ms + pad_right_ms
      * for the next segment in the same entry. `null` when there is no
@@ -195,6 +224,10 @@ export interface PhonemeInterval {
     geminate_start?: boolean;
     /** Set on the second half of a split geminate; consumers use this to skip rendering. */
     geminate_end?: boolean;
+    /** Cross-word tajweed bridge rule (idgham) when this phone is a merger that
+     *  fuses with the previous word; the Timestamps tab renders it as a tile
+     *  between word blocks. Baked into the shard at generation (schema v3). */
+    bridge?: string;
 }
 
 /** Single letter with optional per-letter timing. */

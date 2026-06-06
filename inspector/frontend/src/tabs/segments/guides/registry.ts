@@ -2,6 +2,7 @@ import basmalaAminGuide from './accordion/basmala_amin.guide';
 import boundaryAdjGuide from './accordion/boundary_adj.guide';
 import crossVerseGuide from './accordion/cross_verse.guide';
 import failedGuide from './accordion/failed.guide';
+import flaggingGuide from './accordion/flagging.guide';
 import generalEditingGuide from './accordion/general_editing.guide';
 import lowConfidenceGuide from './accordion/low_confidence.guide';
 import lowConfidenceV2Guide from './accordion/low_confidence_v2.guide';
@@ -26,6 +27,7 @@ const accordionGuides: Readonly<Record<string, string>> = Object.freeze({
     qalqala: qalqalaGuide,
     muqattaat: muqattaatGuide,
     basmala_amin: basmalaAminGuide,
+    flagging: flaggingGuide,
 });
 
 export function getAccordionGuide(category: string): string | null {
@@ -74,6 +76,7 @@ export const REQUIRED_GUIDE_KEYS: readonly string[] = Object.freeze([
     'qalqala',
     'muqattaat',
     'basmala_amin',
+    'flagging',
 ]);
 
 /** True iff this user has opened the guide for `category` (alias-aware). */

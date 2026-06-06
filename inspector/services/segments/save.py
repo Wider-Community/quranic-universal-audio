@@ -21,7 +21,7 @@ from adapters.save_payload import make_seg as _adapter_make_seg
 from adapters.segments_json import build_segments_doc as _adapter_build_segments_doc
 from constants import HISTORY_SCHEMA_VERSION
 from domain.command import validate_patch_dict
-from qua_shared.schemas import Actor
+from qua_shared.schemas import Actor, FlagFollowUp, SegmentFlag
 from services.audio import op_peaks as op_peaks_svc
 from services.audio.peaks_history import append_peaks_records
 from services.segments.qalqala import compute_qalqala_letter
@@ -71,6 +71,11 @@ _ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset(
         "autoFixMissingWord",
         "set_is_wasl",
         "setIsWasl",
+        # Flag a segment with a comment thread (set / edit-or-clear root /
+        # append follow-up). Server-authoritative actor + timestamp; not a
+        # validation category. Applied by ``_apply_flag_ops``.
+        "flag_segment",
+        "flagSegment",
         # ``confirm_reference`` is a reducer-edge variant of editReference recorded
         # on ``op_type`` only; the ``command.type`` itself remains ``editReference``.
     }
@@ -418,6 +423,94 @@ def _apply_patch(matching: list[dict], updates: dict) -> None:
             _stamp_persisted_classifier_fields(flat_segments[idx], single_word_verses)
 
 
+def _utc_now_iso() -> str:
+    """Millisecond ISO-8601 UTC stamp with a ``Z`` suffix (batch-clock format)."""
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _mutate_seg_flag(seg: dict, intent: str, comment: str, actor: Actor, now: str):
+    """Apply one flag intent to ``seg`` in place. Returns ``None`` or ``(err, status)``.
+
+    Intents:
+      - ``set`` — create a flag (comment required).
+      - ``edit`` — replace the root comment (flagger-only); an empty comment
+        removes the whole flag (the unflag mechanism).
+      - ``followup`` — append a reply (any editor; comment required).
+
+    The flag is always rebuilt through ``SegmentFlag`` so ``actor`` and the
+    timestamps stay server-authoritative — the client never supplies identity.
+    """
+    existing = seg.get("flag")
+    if intent == "set":
+        if not comment:
+            return {"error": "A comment is required to flag a segment."}, 400
+        seg["flag"] = SegmentFlag(comment=comment, actor=actor, flagged_at_utc=now).model_dump(
+            mode="json"
+        )
+        return None
+
+    if intent == "edit":
+        if not existing:
+            return {"error": "No flag to edit on this segment."}, 404
+        flag = SegmentFlag.model_validate(existing)
+        if flag.actor.hf_user_id != actor.hf_user_id:
+            return {"error": "Only the flagger can edit this comment."}, 403
+        if not comment:
+            seg.pop("flag", None)  # clearing the comment removes the flag
+            return None
+        seg["flag"] = flag.model_copy(update={"comment": comment}).model_dump(mode="json")
+        return None
+
+    if intent == "followup":
+        if not existing:
+            return {"error": "No flag to reply to on this segment."}, 404
+        if not comment:
+            return {"error": "A comment is required for a follow-up."}, 400
+        flag = SegmentFlag.model_validate(existing)
+        reply = FlagFollowUp(comment=comment, actor=actor, at_utc=now)
+        seg["flag"] = flag.model_copy(update={"follow_ups": [*flag.follow_ups, reply]}).model_dump(
+            mode="json"
+        )
+        return None
+
+    return {"error": f"unknown flag intent: {intent!r}"}, 400
+
+
+def _apply_flag_ops(matching: list[dict], operations: list, *, actor: Actor):
+    """Apply every ``flag_segment`` op in ``operations`` to ``matching`` in place.
+
+    Resolves the target by ``segment_uid`` against the current (post-apply)
+    segments so it composes with any patch/full_replace in the same batch.
+    Returns ``None`` on success or an ``(error_dict, http_status)`` tuple.
+    """
+    flag_ops = [
+        op for op in operations if isinstance(op, dict) and op.get("op_type") == "flag_segment"
+    ]
+    if not flag_ops:
+        return None
+
+    by_uid: dict[str, dict] = {}
+    for e in matching:
+        for seg in e.get("segments", []):
+            uid = seg.get("segment_uid")
+            if uid:
+                by_uid[uid] = seg
+
+    now = _utc_now_iso()
+    for op in flag_ops:
+        cmd = op.get("command") or {}
+        uid = cmd.get("segmentUid")
+        seg = by_uid.get(uid)
+        if seg is None:
+            return {"error": f"flag target segment not found: {uid!r}"}, 404
+        err = _mutate_seg_flag(
+            seg, cmd.get("intent") or "set", (cmd.get("comment") or "").strip(), actor, now
+        )
+        if err is not None:
+            return err
+    return None
+
+
 def _persist_and_record(
     reciter: str, chapter: int, entries: list[dict], meta: dict, updates: dict, *, actor: Actor
 ) -> dict:
@@ -548,6 +641,12 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
             return err
     else:
         _apply_patch(matching, updates)
+
+    # Flag ops carry their payload in the operation envelope, not in
+    # ``segments`` — applied here with a server-authoritative actor + clock.
+    flag_err = _apply_flag_ops(matching, updates.get("operations") or [], actor=actor)
+    if flag_err is not None:
+        return flag_err
 
     # ``ignored_categories`` is mutated only when the payload explicitly
     # carries it (Ignore action, or explicit ``[]`` clear -- MUST-7).

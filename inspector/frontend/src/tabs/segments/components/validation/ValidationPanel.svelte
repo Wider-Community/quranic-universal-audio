@@ -15,7 +15,13 @@
      * Virtualization: the cards container for the open category virtualizes
      * its list when the item count exceeds VIRTUALIZE_THRESHOLD. Only the
      * window of cards intersecting the viewport (plus BUFFER_ROWS above/below)
-     * are mounted; spacer divs preserve the container's scroll height.
+     * are mounted; spacer divs preserve the container's scroll height. Row
+     * heights are measured per-row into `cardHeights` (prefix-summed into
+     * `cardOffsets`, binary-searched to map scrollTop → first visible row);
+     * unmeasured rows fall back to the running `estCardHeight`. Per-row sizing
+     * is required because context-shown accordions (failed / missing_words /
+     * audio_bleeding) render tall, highly variable cards — a single global
+     * average fed back into the window, which oscillated and hard-froze the tab.
      * Card context-state (Show/Hide Context toggle) is tracked in a per-type
      * Map so cards restore their state on re-mount as the window slides.
      */
@@ -24,6 +30,7 @@
     import { get } from 'svelte/store';
 
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
+    import { can } from '../../../../lib/stores/capabilities';
     import { currentUser } from '../../../../lib/stores/current-user';
     import type {
         SegValAnyItem,
@@ -54,6 +61,7 @@
     import { filterStaleIssues } from '../../utils/validation/stale';
     import { _fetchPeaks } from '../../utils/waveform/utils';
     import ErrorCard from './ErrorCard.svelte';
+    import FlaggedCard from './FlaggedCard.svelte';
 
     // ---- Props ----
     /** Filter results to this chapter number. null = all chapters. */
@@ -124,8 +132,58 @@
     $: valUiScrollTop.set(cardsScrollTop);
 
     let cardsViewportHeight = CARDS_VIEWPORT_HEIGHT_FALLBACK;
-    let measuredCardHeight = $valUiMeasuredCardHeight ?? FALLBACK_CARD_HEIGHT;
-    $: valUiMeasuredCardHeight.set(measuredCardHeight);
+
+    // Per-row virtualization model. `cardHeights[i]` is the measured slot height
+    // (card box + 8px gap) of displayedItems[i]; unmeasured rows fall back to
+    // `estCardHeight`. `cardOffsets` are prefix sums (row tops) and a binary
+    // search maps scrollTop → first visible row. Measuring a row updates only
+    // that row's height, so window position never feeds back into a single
+    // global average — this is what stops the variable-height oscillation that
+    // hard-froze context-shown accordions (failed / missing_words /
+    // audio_bleeding) on scroll. `estCardHeight` only sizes the unseen region.
+    let estCardHeight = $valUiMeasuredCardHeight ?? FALLBACK_CARD_HEIGHT;
+    $: valUiMeasuredCardHeight.set(estCardHeight);
+    let cardHeights: number[] = [];
+    let cardOffsets: number[] = [0];
+    let totalContentHeight = 0;
+
+    function recomputeOffsets(): void {
+        const n = openTotal;
+        const offsets: number[] = new Array(n + 1);
+        let acc = 0;
+        offsets[0] = 0;
+        for (let i = 0; i < n; i++) {
+            acc += cardHeights[i] ?? estCardHeight;
+            offsets[i + 1] = acc;
+        }
+        cardOffsets = offsets;
+        totalContentHeight = acc;
+    }
+
+    /** Largest row index whose top offset is ≤ y (clamped to [0, openTotal]). */
+    function rowAtOffset(y: number): number {
+        let lo = 0;
+        let hi = openTotal;
+        while (lo < hi) {
+            const mid = (lo + hi + 1) >> 1;
+            if ((cardOffsets[mid] ?? Infinity) <= y) lo = mid;
+            else hi = mid - 1;
+        }
+        return lo;
+    }
+
+    // Reset the height model when the open category changes or the row count
+    // shifts (filter / structural edit). Re-measure is cheap — only the mounted
+    // window is walked.
+    let _prevVirtKey = '';
+    $: {
+        const key = `${openCategory}|${openTotal}`;
+        if (key !== _prevVirtKey) {
+            _prevVirtKey = key;
+            cardHeights = [];
+            recomputeOffsets();
+        }
+    }
 
     let cardsContainerEl: HTMLDivElement | null = null;
     let _hasRestoredScroll = false;
@@ -150,16 +208,35 @@
     // After each update: re-measure card heights + sync window refs → Map.
     // Two concerns merged into one afterUpdate to avoid duplicate DOM walks.
     afterUpdate(() => {
-        // Measure
+        // Measure each mounted card into its absolute slot; refresh the unseen-
+        // region estimate from the window average. Only the changed rows pin —
+        // a row's height is independent of scroll, so this converges.
         if (cardsContainerEl) {
+            cardsViewportHeight = cardsContainerEl.clientHeight || cardsViewportHeight;
             const cards = cardsContainerEl.querySelectorAll<HTMLElement>('.val-card-wrapper');
             if (cards.length > 0) {
+                let changed = false;
                 let sum = 0;
-                for (const c of cards) sum += c.getBoundingClientRect().height;
-                const avg = sum / cards.length + 8; // +gap
-                if (avg > 20 && Math.abs(avg - measuredCardHeight) > 4) {
-                    measuredCardHeight = avg;
+                for (let li = 0; li < cards.length; li++) {
+                    const el = cards[li];
+                    if (!el) continue;
+                    const h = el.getBoundingClientRect().height + 8; // +gap
+                    if (h <= 20) continue;
+                    sum += h;
+                    const absIdx = startIdx + li;
+                    const prev = cardHeights[absIdx];
+                    if (prev == null || Math.abs(prev - h) > 1) {
+                        cardHeights[absIdx] = h;
+                        changed = true;
+                    }
                 }
+                const avg = sum / cards.length;
+                let estChanged = false;
+                if (avg > 20 && Math.abs(avg - estCardHeight) > 4) {
+                    estCardHeight = avg;
+                    estChanged = true;
+                }
+                if (changed || estChanged) recomputeOffsets();
             }
         }
         // Sync window-slice refs to absolute-index Map
@@ -176,7 +253,7 @@
     $: if (openCategory !== _prevOpenCategory) {
         _prevOpenCategory = openCategory;
         cardsScrollTop = 0;
-        measuredCardHeight = FALLBACK_CARD_HEIGHT;
+        estCardHeight = FALLBACK_CARD_HEIGHT;
         if (cardsContainerEl) {
             cardsContainerEl.scrollTop = 0;
         }
@@ -424,6 +501,15 @@
     }
     $: hasAny = categories.length > 0;
 
+    // ---- Flagged Issues (non-registry top accordion) ----
+    // A manual "needs a second look" thread per segment. Deliberately NOT in
+    // IssueRegistry — it must not leak into filters or issue-type counts. The
+    // open-state uses a reserved key that can't collide with a registry kind.
+    const FLAGGED_KEY = '__flagged__';
+    $: flaggedSegs = ($segAllData?.segments ?? []).filter((s) => s.flag != null);
+    const canSeeFlaggerStore = can('segments.see_flagger_identity');
+    $: canSeeFlagger = $canSeeFlaggerStore;
+
     // ---- Virtualization window for the open category ----
     $: openCat = categories.find((c) => c.type === openCategory) ?? null;
     // Displayed items inside the open accordion: pinned snapshot keys (in
@@ -629,12 +715,12 @@
         }
         return -1;
     })();
-    $: baseStartIdx = virtualize
-        ? Math.max(0, Math.floor(cardsScrollTop / measuredCardHeight) - BUFFER_ROWS)
-        : 0;
-    $: baseEndIdx = virtualize
-        ? Math.min(openTotal, Math.ceil((cardsScrollTop + cardsViewportHeight) / measuredCardHeight) + BUFFER_ROWS)
-        : openTotal;
+    $: baseStartIdx = (void cardOffsets, virtualize
+        ? Math.max(0, rowAtOffset(cardsScrollTop) - BUFFER_ROWS)
+        : 0);
+    $: baseEndIdx = (void cardOffsets, virtualize
+        ? Math.min(openTotal, rowAtOffset(cardsScrollTop + cardsViewportHeight) + 1 + BUFFER_ROWS)
+        : openTotal);
     // Expand the window to cover the editing card so scrolling away doesn't
     // unmount it. Bound check against openTotal handles items added/removed
     // by re-validation while still in edit mode.
@@ -644,8 +730,10 @@
     $: endIdx = virtualize && editingItemIdx >= 0
         ? Math.max(baseEndIdx, editingItemIdx + 1)
         : baseEndIdx;
-    $: topSpacerPx = virtualize ? startIdx * measuredCardHeight : 0;
-    $: bottomSpacerPx = virtualize ? Math.max(0, (openTotal - endIdx) * measuredCardHeight) : 0;
+    $: topSpacerPx = virtualize ? (cardOffsets[startIdx] ?? 0) : 0;
+    $: bottomSpacerPx = virtualize
+        ? Math.max(0, totalContentHeight - (cardOffsets[endIdx] ?? totalContentHeight))
+        : 0;
 
     // ---- ErrorCard refs (window-slice array, synced to absolute Map in afterUpdate) ----
     // `windowCardRefs` holds bind:this refs for the currently rendered slice.
@@ -796,10 +884,43 @@
     }
 </script>
 
-{#if hasAny}
+{#if hasAny || flaggedSegs.length > 0}
     <div class="seg-validation-panel">
         {#if label}
             <div class="val-section-label">{label}</div>
+        {/if}
+
+        {#if flaggedSegs.length > 0}
+            <details
+                class="flagged-accordion"
+                data-category={FLAGGED_KEY}
+                open={openCategory === FLAGGED_KEY}
+                on:toggle={(e) => handleAccordionToggle(e, FLAGGED_KEY)}
+            >
+                <summary class="val-summary">
+                    <button
+                        type="button"
+                        class="val-guide-btn"
+                        class:unread={$currentUser.hf_user_id != null
+                            && !isGuideRead($currentUser.guides_read, 'flagging')}
+                        aria-label="Open guide for Flagged Issues"
+                        title="Open guide for Flagged Issues"
+                        on:click={(e) => openGuide(e, 'flagging')}
+                    >?</button>
+                    <span class="val-summary-main">
+                        <span class="val-summary-title">Flagged Issues</span>
+                        <span class="val-count flagged-count">{flaggedSegs.length}</span>
+                    </span>
+                </summary>
+
+                {#if openCategory === FLAGGED_KEY}
+                    <div class="val-cards-container flagged-cards">
+                        {#each flaggedSegs as fseg (fseg.segment_uid ?? `${fseg.chapter}:${fseg.index}`)}
+                            <FlaggedCard seg={fseg} {canSeeFlagger} />
+                        {/each}
+                    </div>
+                {/if}
+            </details>
         {/if}
 
         {#each categories as cat (cat.type)}
@@ -907,3 +1028,29 @@
         {/each}
     </div>
 {/if}
+
+<style>
+    /* Flagged Issues — a warm-amber top accordion, set apart from the cyan/red
+       validation categories so a manual flag reads as "a human asked for a
+       second look", not an automated validation error. */
+    .flagged-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        margin-left: 4px;
+        padding: 1px 7px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--state-warn-fg);
+        background: var(--state-warn-bg);
+        border: 1px solid var(--state-warn-border);
+        border-radius: var(--r-pill);
+    }
+
+    .flagged-cards {
+        padding-top: var(--s-2);
+    }
+</style>

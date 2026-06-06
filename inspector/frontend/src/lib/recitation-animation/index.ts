@@ -24,6 +24,20 @@ export {
     type Granularity,
     type RecitationAnimConfig,
 } from './config';
+export {
+    buildSortedIntervals,
+    findActiveAt,
+    type ActiveHit,
+    type SortedInterval,
+} from './recitation-active';
+export {
+    buildFilmstripModel,
+    type FilmstripModel,
+    type VerseCell,
+    type WordFrac,
+    type WordWeighting,
+} from './filmstrip-model';
+export { stepScroll, type ScrollState } from './filmstrip-scroll';
 export type {
     AnimUnit,
     AyahBoundary,

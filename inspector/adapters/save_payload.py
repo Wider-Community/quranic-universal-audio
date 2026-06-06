@@ -96,6 +96,13 @@ def make_seg(
     elif bool(existing.get("is_wasl")):
         result["is_wasl"] = True
 
+    # Flag thread is never carried in the save payload — it is mutated only
+    # via flag ops. Inherit any existing flag so a structural full_replace
+    # doesn't wipe it.
+    existing_flag = existing.get("flag")
+    if existing_flag:
+        result["flag"] = existing_flag
+
     return result
 
 

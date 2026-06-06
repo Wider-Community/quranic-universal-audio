@@ -5,27 +5,16 @@
      * Opens on row body click. Carries everything that's "ambient reference"
      * for one recitation, not tied to a single action: current claim with
      * remove, full reviewer history, fully expanded chronological timeline,
-     * lazy-loaded validation counts, passive timestamps-job-id list.
-     *
-     * Detail payload is one GET; validation counts are a separate lazy GET
-     * triggered only when the accordion block expands (the underlying call
-     * walks the bucket and is too expensive to eager-fetch).
+     * and the flagged-issue count. Whole payload is one GET.
      */
-    import {
-        fetchAdminReviewDetail,
-        fetchAdminReviewValidation,
-    } from '../../../../../lib/api/admin-reviews';
+    import { fetchAdminReviewDetail } from '../../../../../lib/api/admin-reviews';
     import { isOwner } from '../../../../../lib/stores/current-user';
-    import type {
-        AdminReviewDetail,
-        AdminReviewValidation,
-    } from '../../../../../lib/types/generated/schemas';
+    import type { AdminReviewDetail } from '../../../../../lib/types/generated/schemas';
     import {
         CHECKLIST_ORDER,
         type ChecklistKey,
         markReadyCopy,
     } from '../../../../segments/copy/mark-ready';
-    import { IssueRegistry } from '../../../../segments/domain/registry';
     import ExpandedTimeline from './ExpandedTimeline.svelte';
     import ReviewerActionsPopover from './ReviewerActionsPopover.svelte';
 
@@ -56,11 +45,6 @@
      * fires ``onaction`` on success so the drawer + parent list refetch. */
     let popoverOpen = $state(false);
 
-    let valExpanded = $state(false);
-    let validation = $state<AdminReviewValidation | null>(null);
-    let valLoading = $state(false);
-    let valError = $state<string | null>(null);
-
     // Refetch the detail when the selected slug changes. AbortController
     // prevents stale responses overwriting a fresher one mid-flight.
     $effect(() => {
@@ -70,9 +54,6 @@
         error = null;
         detail = null;
         popoverOpen = false;
-        valExpanded = false;
-        validation = null;
-        valError = null;
         fetchAdminReviewDetail(target, ac.signal)
             .then((d) => {
                 if (ac.signal.aborted) return;
@@ -148,38 +129,6 @@
     const reviewerHistory = $derived(
         (detail?.claim_history ?? []).filter((c) => c.released_at !== null),
     );
-
-    // Validation categories rendered in accordion order from the FE registry
-    // (the parity test guarantees alignment with the Python source).
-    type CategoryView = { kind: string; title: string; count: number };
-    const categoryRows = $derived<CategoryView[]>(
-        Object.values(IssueRegistry)
-            .slice()
-            .sort((a, b) => a.accordionOrder - b.accordionOrder)
-            .map((def) => ({
-                kind: def.kind,
-                title: def.displayTitle,
-                count: validation?.category_counts?.[def.kind] ?? 0,
-            })),
-    );
-
-    async function loadValidation(): Promise<void> {
-        if (validation !== null || valLoading) return;
-        valLoading = true;
-        valError = null;
-        try {
-            validation = await fetchAdminReviewValidation(slug);
-        } catch (e) {
-            valError = (e as Error).message ?? "Couldn't compute counts.";
-        } finally {
-            valLoading = false;
-        }
-    }
-
-    function toggleValidation(): void {
-        valExpanded = !valExpanded;
-        if (valExpanded) void loadValidation();
-    }
 
     /** Fired by the popover after a successful Reassign / Force-release.
      * Refetch the drawer detail in place so the current-claim block reflects
@@ -373,70 +322,20 @@
                 <ExpandedTimeline {transitions} newestFirst />
             </section>
 
-            <!-- Validation (lazy) -->
-            <section class="dsection">
-                <button
-                    class="collapsible-head"
-                    type="button"
-                    aria-expanded={valExpanded}
-                    onclick={toggleValidation}
-                >
-                    <span class="chev" class:open={valExpanded}>▸</span>
-                    <span class="dsection-head no-margin">Validation counts</span>
-                    {#if validation?.has_data === false}
-                        <span class="aside">no data</span>
-                    {:else if validation}
-                        {@const total = Object.values(validation.category_counts ?? {}).reduce(
-                            (a, b) => a + b,
-                            0,
-                        )}
-                        <span class="aside">{total} total</span>
-                    {:else}
-                        <span class="aside">click to load</span>
-                    {/if}
-                </button>
-                {#if valExpanded}
-                    <div class="val-body">
-                        {#if valLoading}
-                            <div class="state small">Computing…</div>
-                        {:else if valError}
-                            <div class="state error small" role="alert">{valError}</div>
-                        {:else if validation && !validation.has_data}
-                            <div class="empty-block">No detailed.json on the bucket yet.</div>
-                        {:else if validation}
-                            <ul class="cat-list">
-                                {#each categoryRows as row (row.kind)}
-                                    <li class="cat-row" class:zero={row.count === 0}>
-                                        <span class="cat-title">{row.title}</span>
-                                        <span class="cat-count">{row.count}</span>
-                                    </li>
-                                {/each}
-                            </ul>
-                        {/if}
+            <!-- Flagged issues — shown only when the reciter has any. -->
+            {#if (detail.flagged_issues_count ?? 0) > 0}
+                <section class="dsection">
+                    <h3 class="dsection-head">
+                        Flagged issues
+                        <span class="flagged-pill">{detail.flagged_issues_count}</span>
+                    </h3>
+                    <div class="flagged-note">
+                        {detail.flagged_issues_count}
+                        {detail.flagged_issues_count === 1 ? 'segment' : 'segments'} flagged
+                        for a second look in the Segments editor.
                     </div>
-                {/if}
-            </section>
-
-            <!-- Jobs -->
-            {@const jobIds = detail.timestamps_job_ids ?? []}
-            <section class="dsection">
-                <h3 class="dsection-head">
-                    Jobs
-                    <span class="aside">{jobIds.length} timestamps</span>
-                </h3>
-                {#if jobIds.length === 0}
-                    <div class="empty-block">No jobs run for this recitation yet.</div>
-                {:else}
-                    <ul class="job-list">
-                        {#each jobIds as jid (jid)}
-                            <li class="job-row">
-                                <span class="job-name">timestamps-refresh</span>
-                                <span class="job-id">{jid}</span>
-                            </li>
-                        {/each}
-                    </ul>
-                {/if}
-            </section>
+                </section>
+            {/if}
         {/if}
     </div>
 </aside>
@@ -514,7 +413,6 @@
         color: var(--text-muted);
         font-size: var(--fs-meta);
     }
-    .state.small { padding: var(--s-3) 0; text-align: left; }
     .state.error { color: var(--state-error-fg); }
 
     .dsection { margin-bottom: var(--s-6); }
@@ -532,7 +430,6 @@
         justify-content: space-between;
         font-weight: 500;
     }
-    .dsection-head.no-margin { margin: 0; }
     .dsection-head .aside {
         color: var(--text-faint);
         font-family: var(--font-mono);
@@ -636,70 +533,26 @@
         font-variant-numeric: tabular-nums;
     }
 
-    /* validation */
-    .collapsible-head {
-        display: flex;
+    /* flagged issues */
+    .flagged-pill {
+        display: inline-flex;
         align-items: center;
-        gap: var(--s-2);
-        width: 100%;
-        background: transparent;
-        border: 0;
-        padding: var(--s-1) 0 var(--s-3);
-        cursor: pointer;
-        font: inherit;
-        text-align: left;
-        color: var(--text-primary);
-    }
-    .collapsible-head:hover { color: var(--text-secondary); }
-    .chev {
-        color: var(--text-faint);
-        font-family: var(--font-mono);
-        font-size: 10px;
-        display: inline-block;
-        transition: transform var(--t-fast) var(--ease-out-quart);
-    }
-    .chev.open { transform: rotate(90deg); }
-    .val-body { margin-top: var(--s-2); }
-    .cat-list { list-style: none; padding: 0; margin: 0; }
-    .cat-row {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        padding: 4px 0;
-        border-bottom: 1px solid var(--border-quiet);
-        font-size: var(--fs-body);
-    }
-    .cat-row:last-child { border-bottom: 0; }
-    .cat-row.zero { color: var(--text-faint); }
-    .cat-title { color: var(--text-secondary); }
-    .cat-row.zero .cat-title { color: var(--text-faint); }
-    .cat-count {
+        min-width: 18px;
+        padding: 1px 7px;
         font-family: var(--font-mono);
         font-size: 11px;
         font-variant-numeric: tabular-nums;
-        color: var(--text-primary);
+        font-weight: 600;
+        color: var(--state-warn-fg);
+        background: oklch(from var(--state-warn-fg) l c h / 0.12);
+        border: 1px solid oklch(from var(--state-warn-fg) l c h / 0.4);
+        border-radius: var(--r-pill);
+        justify-content: center;
     }
-    .cat-row.zero .cat-count { color: var(--text-faint); }
-
-    /* jobs */
-    .job-list { list-style: none; padding: 0; margin: 0; }
-    .job-row {
-        display: flex;
-        align-items: baseline;
-        gap: var(--s-3);
-        padding: 4px 0;
-        border-bottom: 1px solid var(--border-quiet);
-    }
-    .job-row:last-child { border-bottom: 0; }
-    .job-name {
-        font-size: var(--fs-body);
+    .flagged-note {
+        font-size: var(--fs-meta);
         color: var(--text-secondary);
-    }
-    .job-id {
-        font-family: var(--font-mono);
-        font-size: 10.5px;
-        color: var(--text-faint);
-        word-break: break-all;
+        line-height: var(--lh-normal);
     }
 
     .empty-block {

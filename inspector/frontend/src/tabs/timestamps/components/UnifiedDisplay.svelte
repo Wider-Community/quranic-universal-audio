@@ -18,7 +18,6 @@
 
     import { dashPort } from '../../../lib/playback/dash-port';
     import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
-    import type { BridgeInfo } from '../../../lib/types/generated/schemas';
     import {
         showLetters,
         showPhonemes,
@@ -29,7 +28,7 @@
     } from '../stores/display';
     import type { TsLoopTarget } from '../stores/playback';
     import { autoMode, loopTarget } from '../stores/playback';
-    import { loadedTajweedBridges, loadedVerse } from '../stores/verse';
+    import { loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
 
@@ -64,15 +63,13 @@
     // Container ref used for imperative highlight updates.
     let rootEl: HTMLDivElement;
 
-    // Reactive: rebuild rendered structure whenever loadedVerse OR its bridges
-    // change. Bridges arrive asynchronously after the verse paints (the
-    // /api/ts/tajweed fetch is independent), so we re-run buildRendered when
-    // they land — that's what flips the cross-word phoneme out of the regular
-    // mega-phoneme row and into the gold bridge tile.
+    // Reactive: rebuild rendered structure whenever loadedVerse changes. Bridges
+    // are baked into the shard (each merger phone carries a ``bridge`` rule), so
+    // there's nothing async to wait for — buildRendered just lifts the tagged
+    // phones into gold bridge tiles.
     $: rendered = buildRendered(
         $loadedVerse?.data.words ?? [],
         $loadedVerse?.data.intervals ?? [],
-        $loadedTajweedBridges,
     );
 
     // Reset previous-index cache when structure changes (new verse, etc.)
@@ -139,116 +136,45 @@
         return groups;
     }
 
+    /** Split a phone string into base character(s) and trailing IPA modifiers
+     *  (length ː, emphatic ˤ, ghunnah tilde ̃). The modifier is rendered as a
+     *  superscript so the base stays visually centred in the cell. */
+    // Only length marks (ː / ASCII :) are detached modifiers; ˤ is integral to
+    // the consonant symbol (rˤ, aˤ) and must stay in the base.
+    const PHONE_MOD_RE = /([ː:]+)$/u;
+    function splitPhone(phone: string | undefined): { base: string; mod: string } {
+        if (!phone || phone === 'sil' || phone === 'sp') return { base: phone ?? '', mod: '' };
+        const m = PHONE_MOD_RE.exec(phone);
+        return m ? { base: phone.slice(0, -m[0].length), mod: m[0] } : { base: phone, mod: '' };
+    }
+
     /** Parse the trailing word number from a ``surah:ayah:word`` location.
      *  Returns 0 when the location is malformed — caller filters those out. */
-    function wordNumOf(word: TsWord): number {
-        const parts = word.location.split(':');
-        const n = parseInt(parts[parts.length - 1] ?? '0', 10);
-        return Number.isFinite(n) ? n : 0;
-    }
-
-    /** Does this shard phoneme carry the merger signature for our 8 cross-word
-     *  rules? Mirrors the backend's :func:`_is_merger_phoneme` (pharyngeal-aware
-     *  doubled-prefix + ghunnah tilde) — *required on the FE* because MFA's
-     *  word-segmentation can put the merged phoneme on the OTHER side of the
-     *  boundary than the phonemizer's per-word convention says it should be
-     *  (e.g. Ahmed Talib 46:29: phonemizer-without-stops puts ``m̃`` at curr's
-     *  first position of ``مِّنَ``; MFA appended it to the prev word's tail on
-     *  ``نَفَرࣰا`` after the trigger letter's vowel). The backend's ``side`` is a
-     *  hint built from the phonemizer's per-letter output; we override it with
-     *  the actual shard placement so the bridge tile shows the real merger
-     *  phoneme, never an adjacent haraka. */
-    const GHUNNAH_TILDE = '̃';
-    const PHARYNGEAL = 'ˤ';
-    function isMergerPhoneme(p: string | undefined): boolean {
-        if (!p) return false;
-        if (p.includes(GHUNNAH_TILDE) || p.includes('ñ')) return true;
-        const base = p.replaceAll(PHARYNGEAL, '');
-        return base.length >= 2 && base[0] === base[1];
-    }
-
     function buildRendered(
         words: TsWord[],
         intervals: PhonemeInterval[],
-        bridgeInfos: BridgeInfo[],
     ): RenderedBlock[] {
         if (!words.length) return [];
 
-        // Shards intentionally carry duplicate word occurrences when the
-        // reciter repeats a phrase (the second take is part of the
-        // recitation, not a pathology). For each shard pair we therefore
-        // ask: are these two adjacent occurrences a real (N-1 → N) Quran
-        // boundary? If they are AND the backend predicted a bridge for that
-        // boundary, render it in this specific pair. Pairs that are
-        // restart-bounded (next word number ≤ this one) get no bridge — the
-        // cross-word rule legitimately can't fire across a repetition jump.
-        // This yields one bridge tile per real adjacent crossing, including
-        // the second tile in a (16,17,18,19, 17,18,19, 20) repeat sequence.
-        const bridgeByWordNum = new Map<number, BridgeInfo>();
-        for (const b of bridgeInfos) bridgeByWordNum.set(b.before_word_idx, b);
-
-        const bridgePhoneByBlock = new Map<number, number>();
+        // Cross-word bridges are baked into the shard at generation: a phoneme
+        // carrying a ``bridge`` rule is the idgham merger that fuses two words.
+        // Lift it out of its inline row into the gold tile at the boundary — no
+        // scanning, no side inference. A merger at a word's head renders before
+        // that block; one in a word's tail (idgham shafawi) bridges into the
+        // next block. The generator placed the tag on the exact merger interval,
+        // so there's nothing to disambiguate here.
+        const bridgeBeforeBlock = new Map<number, RenderedPhoneme>();
         const excluded = new Set<number>();
-        for (let i = 1; i < words.length; i++) {
-            const prev = words[i - 1]!;
-            const curr = words[i]!;
-            const prevWn = wordNumOf(prev);
-            const currWn = wordNumOf(curr);
-            if (prevWn === 0 || currWn === 0 || currWn !== prevWn + 1) continue;
-            const b = bridgeByWordNum.get(currWn);
-            if (!b) continue;
-
-            // The backend's ``side`` hint is built from the phonemizer's
-            // per-letter output, which assumes a stable convention for where
-            // the merged phoneme lives. MFA shards don't always agree — the
-            // same idgham can land at prev's tail or curr's head depending on
-            // how the aligner segmented the audio (Ahmed Talib 46:29 word 17→
-            // 18 shafawi: ``m̃`` lands at prev[-2] because MFA pulled the
-            // dammah of ``مُّن`` into the prev word along with the geminated
-            // meem). So we ignore the hint and scan a small window from both
-            // sides of the boundary, picking the first merger phoneme found —
-            // ghunnah-tilde or doubled-consonant prefix. If neither side has
-            // a merger within the window the rule didn't fire in this
-            // recording (waqf without timing gap), and we suppress the bridge
-            // so the tile never shows a stray haraka.
-            //
-            // A merger already claimed by the PREVIOUS boundary is skipped
-            // (``!excluded.has``): when the middle word dissolves to just its
-            // haraka (28:86 مِّن → only its kasra survives) MFA can place the
-            // first boundary's ``m̃`` at مِّن's head; without this guard the
-            // next boundary's prev-tail scan walks back over the kasra and
-            // re-grabs that same ``m̃`` (the "double-m̃" bug), leaving the real
-            // doubled-consonant bridge stranded in the next word's row.
-            const SCAN_WINDOW = 3;
-            const prevIdx = prev.phoneme_indices;
-            const currIdx = curr.phoneme_indices;
-            let pi: number | undefined;
-            let piInPrev = false;
-            if (prevIdx && prevIdx.length > 0) {
-                for (let k = 0; k < Math.min(SCAN_WINDOW, prevIdx.length); k++) {
-                    const idx = prevIdx[prevIdx.length - 1 - k]!;
-                    if (!excluded.has(idx) && isMergerPhoneme(intervals[idx]?.phone)) { pi = idx; piInPrev = true; break; }
+        for (let wi = 0; wi < words.length; wi++) {
+            const indices = words[wi]?.phoneme_indices ?? [];
+            for (let k = 0; k < indices.length; k++) {
+                const pi = indices[k]!;
+                if (!intervals[pi]?.bridge) continue;
+                const target = k === 0 ? wi : wi + 1;
+                if (target < words.length) {
+                    bridgeBeforeBlock.set(target, { interval: intervals[pi]!, index: pi });
+                    excluded.add(pi);
                 }
-            }
-            if (pi === undefined && currIdx && currIdx.length > 0) {
-                for (let k = 0; k < Math.min(SCAN_WINDOW, currIdx.length); k++) {
-                    const idx = currIdx[k]!;
-                    if (!excluded.has(idx) && isMergerPhoneme(intervals[idx]?.phone)) { pi = idx; break; }
-                }
-            }
-            if (pi === undefined || pi < 0) continue;
-            bridgePhoneByBlock.set(i, pi);
-            excluded.add(pi);
-            // When the bridge sits in the prev word's tail, MFA sometimes leaves
-            // trailing haraka *after* the merger phoneme in that same prev
-            // segment (28:60 أُوتِيتُمْ). Those are the merged letter's residue,
-            // not a following sound, so drop them. We do NOT touch the curr
-            // word's head: a fully-dissolving middle word (28:86 مِّن, whose م, ن
-            // both merge into bridges) keeps only its own haraka there, and that
-            // kasra must still render in its row.
-            if (piInPrev && prevIdx) {
-                const piPos = prevIdx.indexOf(pi);
-                for (let j = piPos + 1; j < prevIdx.length; j++) excluded.add(prevIdx[j]!);
             }
         }
 
@@ -257,20 +183,11 @@
             const word = words[wi];
             if (!word) continue;
 
-            // Bridge before this block (never before the first block).
-            let bridge: RenderedBridge | null = null;
-            const bridgePi = bridgePhoneByBlock.get(wi);
-            if (bridgePi !== undefined) {
-                const iv = intervals[bridgePi];
-                if (iv && !iv.geminate_end) {
-                    bridge = { phonemes: [{ interval: iv, index: bridgePi }] };
-                }
-            }
+            const bp = bridgeBeforeBlock.get(wi);
+            const bridge: RenderedBridge | null = bp ? { phonemes: [bp] } : null;
 
-            // Phoneme row, excluding any index claimed by an adjacent bridge.
-            const indices = word.phoneme_indices || [];
             const phonemes: RenderedPhoneme[] = [];
-            for (const pi of indices) {
+            for (const pi of word.phoneme_indices ?? []) {
                 if (excluded.has(pi)) continue;
                 const iv = intervals[pi];
                 if (iv && !iv.geminate_end) phonemes.push({ interval: iv, index: pi });
@@ -664,6 +581,7 @@
         {#if block.bridge}
             <div class="crossword-bridge" class:hidden={!$showPhonemes}>
                 {#each block.bridge.phonemes as ph (ph.index)}
+                    {@const parts = splitPhone(ph.interval.phone)}
                     <span
                         class="mega-phoneme"
                         class:silence={!ph.interval.phone ||
@@ -679,7 +597,7 @@
                         role="button"
                         tabindex="-1"
                     >
-                        {ph.interval.phone || '(sil)'}
+                        <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
                     </span>
                 {/each}
             </div>
@@ -736,6 +654,7 @@
             {/if}
             <div class="mega-phonemes" class:hidden={!$showPhonemes} dir="rtl">
                 {#each block.phonemes as ph (ph.index)}
+                    {@const parts = splitPhone(ph.interval.phone)}
                     <span
                         class="mega-phoneme"
                         class:silence={!ph.interval.phone ||
@@ -751,7 +670,7 @@
                         role="button"
                         tabindex="-1"
                     >
-                        {ph.interval.phone || '(sil)'}
+                        <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
                     </span>
                 {/each}
             </div>

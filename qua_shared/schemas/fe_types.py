@@ -39,7 +39,6 @@ from .admin_reviews import (
     AdminReviewRow,
     AdminReviewsResponse,
     AdminReviewTransition,
-    AdminReviewValidation,
 )
 from .admin_users import (
     AdminActiveClaim,
@@ -94,8 +93,9 @@ from .segment import (
     DetailedEntry,
     DetailedMeta,
     DetailedSegment,
+    FlagFollowUp,
+    SegmentFlag,
 )
-from .tajweed import BridgeInfo, TajweedBridgesResponse
 from .ts_job_record import TsJobRecord, TsJobSettings
 from .ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 
@@ -132,7 +132,6 @@ __all__ = [
     "AdminReviewOpenClaim",
     "AdminReviewRow",
     "AdminReviewTransition",
-    "AdminReviewValidation",
     "AdminReviewsResponse",
     "AdminRoleEvent",
     "AdminUserDetail",
@@ -141,13 +140,13 @@ __all__ = [
     "AdminUsersResponse",
     "AdminUsersSummary",
     "AdminVisitorStats",
-    "BridgeInfo",
     "DetailedDocument",
     "DetailedEntry",
     "DetailedMeta",
     "DetailedSegment",
     "EditHistoryBatch",
     "EditOperation",
+    "FlagFollowUp",
     "IntakeAttestations",
     "IntakeSource",
     "IntakeSubmission",
@@ -159,8 +158,8 @@ __all__ = [
     "ProbeResponse",
     "ProbeResult",
     "RequestChange",
+    "SegmentFlag",
     "SourceLink",
-    "TajweedBridgesResponse",
     "TsJobRecord",
     "TsJobSettings",
     "TsValidationDoc",

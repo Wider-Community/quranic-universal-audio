@@ -36,6 +36,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ._extras import strip_and_warn
+from .audit import Actor
 
 # Fields actively stripped on read with INFO-level "legacy" warning. Writers
 # must never emit these. The set covers every legacy attribute we've seen
@@ -60,6 +61,46 @@ _ENTRY_DEAD_FIELDS: set[str] = {
 }
 
 _META_DEAD_FIELDS: set[str] = set()  # no known-dead fields on _meta
+
+
+class FlagFollowUp(BaseModel):
+    """One append-only reply on a segment's flag thread.
+
+    Anyone with edit access can add a follow-up; they are never edited or
+    deleted in place (the whole flag disappears when the flagger clears the
+    root comment). ``actor`` carries the author identity exactly like an
+    edit-history batch actor — the segments read route redacts it to the
+    role only for callers without ``segments.see_flagger_identity``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    comment: str = Field(..., min_length=1)
+    actor: Actor
+    at_utc: str = Field(..., min_length=1)  # ISO-8601 UTC
+
+
+class SegmentFlag(BaseModel):
+    """A flag on a single segment: a required root comment + reply thread.
+
+    Persisted on the segment (``DetailedSegment.flag``) and mutated through
+    the normal command/save pipeline, so it shows in the History panel and
+    is reversible via the patch path. It is NOT a validation category and
+    never appears in filters / issue types.
+
+    - ``comment`` — the flagger's root note (required, non-empty). Editing it
+      to empty removes the whole flag (the unflag mechanism).
+    - ``actor`` — who created the flag. Redacted to ``role`` only on the wire
+      unless the caller holds ``segments.see_flagger_identity``.
+    - ``follow_ups`` — append-only replies from any editor.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    comment: str = Field(..., min_length=1)
+    actor: Actor
+    flagged_at_utc: str = Field(..., min_length=1)  # ISO-8601 UTC
+    follow_ups: list[FlagFollowUp] = Field(default_factory=list)
 
 
 class DetailedSegment(BaseModel):
@@ -124,6 +165,12 @@ class DetailedSegment(BaseModel):
     # the field stays absent on every untouched seg. See ``adapters/save_payload.py``
     # for the matching omit-when-false serialization rule.
     is_wasl: bool = False
+
+    # === Flagged-issue thread (manual "needs a second look" annotation) ===
+    # Written by the flag command; ``None``/absent on every unflagged seg
+    # (omitted via ``model_dump(exclude_none=True)``). Removed by clearing
+    # the root comment. Never a validation category. See ``SegmentFlag``.
+    flag: SegmentFlag | None = None
 
     @model_validator(mode="before")
     @classmethod

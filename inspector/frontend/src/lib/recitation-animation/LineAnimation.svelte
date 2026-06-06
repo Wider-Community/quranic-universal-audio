@@ -23,6 +23,7 @@
         type HighlightCache,
     } from './engine/index-cache';
     import { fittedPrefixLength } from './line-window';
+    import { type ActiveHit, buildSortedIntervals, findActiveAt } from './recitation-active';
     import type { AnimUnit } from './types';
 
     /** U+06DD ARABIC END OF AYAH — the same glyph segment cards use. */
@@ -65,23 +66,8 @@
     const ayahRanges = $derived(ayahUnitRanges(units));
 
     // Flat sorted-by-start list of every occurrence interval across all units,
-    // for binary-search active lookup on fast-path miss. Each `units[i]` has
-    // ≥1 ascending intervals (`types.ts::AnimUnit`); reading-order is normally
-    // also temporal order so this is usually `units.map(u => u.intervals[0])`,
-    // but repeats can interleave — sort defensively. Built once per chapter
-    // (≈6.2k entries for Baqarah ≈ 150 KB, ~negligible).
-    interface SortedInterval { start: number; end: number; unitIdx: number; }
-    const sortedIntervals = $derived.by((): SortedInterval[] => {
-        const out: SortedInterval[] = [];
-        for (let i = 0; i < units.length; i++) {
-            const u = units[i]!;
-            for (const iv of u.intervals) {
-                out.push({ start: iv.start, end: iv.end, unitIdx: i });
-            }
-        }
-        out.sort((a, b) => a.start - b.start);
-        return out;
-    });
+    // for binary-search active lookup on fast-path miss. Built once per chapter.
+    const sortedIntervals = $derived(buildSortedIntervals(units));
     const ayahEndIdx = $derived(
         config.clearOnAyahEnd
             ? (ayahRanges.get(pageAyahKey)?.[1] ?? units.length)
@@ -204,47 +190,11 @@
         return fittedPrefixLength(fits);
     }
 
-    /** Active-unit lookup with O(1) fast-path and O(log N) bsearch fallback.
-     *  Returns the unit's GLOBAL index plus the occurrence interval containing
-     *  `t` (sweepChar needs the interval bounds to remap the canonical letter
-     *  timeline on repeats). null = silence gap. */
-    interface ActiveHit { unitIdx: number; ivStart: number; ivEnd: number; }
-    function findActive(t: number): ActiveHit | null {
-        const n = units.length;
-        if (n === 0) return null;
-        // Fast path: same unit as last frame, or the next unit. Covers the
-        // common forward-playback case in O(1) — no allocation, no bsearch.
-        for (const cand of [globalActive, globalActive + 1]) {
-            if (cand < 0 || cand >= n) continue;
-            const u = units[cand]!;
-            for (const iv of u.intervals) {
-                if (t >= iv.start && t < iv.end) {
-                    return { unitIdx: cand, ivStart: iv.start, ivEnd: iv.end };
-                }
-            }
-        }
-        // Fallback: bsearch the flat sorted interval list. Handles seek-back,
-        // silence gaps, and repeats where a later reading-order unit's first
-        // occurrence has not yet started but an earlier unit's repeat has.
-        const arr = sortedIntervals;
-        if (arr.length === 0 || t < arr[0]!.start) return null;
-        let lo = 0;
-        let hi = arr.length - 1;
-        while (lo < hi) {
-            const mid = (lo + hi + 1) >> 1;
-            if (arr[mid]!.start <= t) lo = mid;
-            else hi = mid - 1;
-        }
-        const iv = arr[lo]!;
-        if (t < iv.end) return { unitIdx: iv.unitIdx, ivStart: iv.start, ivEnd: iv.end };
-        return null;
-    }
-
     function doSweep(t?: number, hit?: ActiveHit | null): void {
         const tt = t ?? (getTimeMs() + config.leadMs) / 1000;
-        // `tick()` already computed `findActive` to drive paging; reuse its
+        // `tick()` already computed the active hit to drive paging; reuse its
         // result rather than re-bsearching. Structure-effect callers omit it.
-        const h = hit !== undefined ? hit : findActive(tt);
+        const h = hit !== undefined ? hit : findActiveAt(units, sortedIntervals, tt, globalActive);
         if (config.granularity === 'char') {
             sweepChar(tt, h);
             return;
@@ -376,7 +326,7 @@
     function tick(): void {
         if (!units.length) return;
         const t = (getTimeMs() + config.leadMs) / 1000;
-        const hit = findActive(t);
+        const hit = findActiveAt(units, sortedIntervals, t, globalActive);
         const ga = hit?.unitIdx ?? -1;
         if (ga >= 0) {
             const activeAyah = units[ga]!.ayahKey;

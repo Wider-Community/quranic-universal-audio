@@ -8,6 +8,7 @@
     import { currentUser, loadCurrentUser, markGuideReadLocally } from '../../../../lib/stores/current-user';
     import type { HistoryBatch } from '../../../../lib/types/domain';
     import EditingGuideContent from '../../guides/editing/EditingGuideContent.svelte';
+    import FlaggingGuideContent from '../../guides/editing/FlaggingGuideContent.svelte';
     import { getGuideExample } from '../../guides/examples';
     import { guideTitleFromBlocks, parseGuideSource } from '../../guides/parser';
     import { getAccordionGuide, guideViewKey, isGuideRead } from '../../guides/registry';
@@ -28,6 +29,7 @@
     // instead of the data-driven example cards.
     const GUIDE_COMPONENTS: Record<string, typeof EditingGuideContent> = {
         'editing-guide': EditingGuideContent,
+        'flagging-demo': FlaggingGuideContent,
         overview: OverviewContent,
     };
 

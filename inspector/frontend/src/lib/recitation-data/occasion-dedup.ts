@@ -167,8 +167,11 @@ function trimLeadingFalseStart(kept: Occasion, target: Set<number>): Occasion {
 
 /**
  * Flatten a canonical occasion into the words the per-verse clip renders.
- * Both a leading false-start and trailing post-completion segments are trimmed
- * (never cut mid-audio); the returned `[startMs, endMs]` span covers every kept
+ * By default both a leading false-start and trailing post-completion segments
+ * are trimmed (never cut mid-audio) so the clip is one clean take; pass
+ * `keepAllTakes` to retain the whole occasion verbatim, which surfaces
+ * consecutive full re-recitations as inline repeats (the Timestamps
+ * faithfulness view). The returned `[startMs, endMs]` span covers every kept
  * segment AND every word/letter time. A word/letter can bleed a few ms past its
  * segment's `t` bound, so the clip must reach the furthest word/letter end or it
  * would truncate the final word's tail (mirrors the backend `_canonical_verse`).
@@ -176,12 +179,18 @@ function trimLeadingFalseStart(kept: Occasion, target: Set<number>): Occasion {
 export function canonicalClip(
     occasion: Occasion,
     nWords: number,
+    opts?: { keepAllTakes?: boolean },
 ): { words: SegmentEntry['words']; startMs: number; endMs: number } {
     const target = new Set<number>();
     for (let i = 1; i <= nWords; i++) target.add(i);
     const comp = completesAt(occasion, target);
-    const trailing = comp !== null ? occasion.slice(0, comp + 1) : occasion;
-    const kept = trimLeadingFalseStart(trailing, target);
+    let kept: Occasion;
+    if (opts?.keepAllTakes) {
+        kept = occasion;
+    } else {
+        const trailing = comp !== null ? occasion.slice(0, comp + 1) : occasion;
+        kept = trimLeadingFalseStart(trailing, target);
+    }
 
     const words: SegmentEntry['words'] = [];
     for (const seg of kept) words.push(...seg.words);

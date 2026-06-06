@@ -20,6 +20,8 @@ Current categories (each `accordion/<cat>.guide.ts`, registered in `registry.ts`
 
 Plus one **non-category** guide: `general_editing` (first in `REQUIRED_GUIDE_KEYS`) — the illustrated **editing guide**. It teaches the editing UI itself (segment anatomy, every edit op, special ops, saving/history) rather than a validation flag, so it is **never** surfaced as a per-accordion `?` (no validation category ever equals `general_editing`) — only in the `GuidesGateModal` list and the top entry point. Its source is just an `# Editing guide` H1 (supplies the title) + a `::component{name="editing-guide"}` directive; the whole body is hand-authored Svelte under `guides/editing/`.
 
+And one more illustrated non-category guide: `flagging` (**last** in `REQUIRED_GUIDE_KEYS`) — opened from the `?` on the non-registry **Flagged Issues** accordion. Source is an `# Flagging` H1 + a one-line description + `::component{name="flagging-demo"}` (no `::example` blocks); the body is `guides/editing/FlaggingGuideContent.svelte` (reuses `.eg-*` classes + `MockSegCard`'s `'flag'` emphasis mode). See [segments-editor.md → Flagged issues](segments-editor.md#flagged-issues).
+
 ## Guide syntax
 
 Line-oriented, parsed by `parser.ts`. Blank line flushes the current paragraph.

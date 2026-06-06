@@ -198,15 +198,23 @@
 .mega-phoneme {
     flex: 1;
     min-width: 0;
-    padding: 4px 8px;
+    padding: 3px 5px;
     background: #0f0f23;
     border-radius: 3px;
     font-family: 'Consolas', 'Monaco', monospace;
     font-size: 0.85rem;
     color: #aaa;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    /* Phoneme strings are IPA/Latin — isolate from the outer RTL row so
+       length marks and emphatic modifiers always render after the base char. */
+    direction: ltr;
+    unicode-bidi: isolate;
     transition: background 0.1s, color 0.1s;
     border: 1px solid transparent;
+    position: relative;
 }
 
 .mega-phoneme.silence {
@@ -216,6 +224,15 @@
 
 .mega-phoneme.geminate {
     /* Underline removed - geminate phonemes still highlight via .active class */
+}
+
+/* IPA modifier superscript (length ː, emphatic ˤ, ghunnah tilde) */
+.ph-mod {
+    font-size: 0.65em;
+    line-height: 1;
+    vertical-align: super;
+    margin-left: 1px;
+    opacity: 0.75;
 }
 
 /* Standalone phoneme (silence between words) */

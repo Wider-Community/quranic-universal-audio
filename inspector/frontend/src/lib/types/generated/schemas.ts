@@ -324,10 +324,9 @@ export interface MarkReadyChecklist {
 /**
  * Full per-recitation payload for the General drawer.
  *
- * Carries everything except the live validation counts (lazy-loaded via
- * ``/api/admin/reviews/<slug>/validation`` only when the accordion expands —
- * ``validate_reciter_segments`` walks the bucket and is too expensive to
- * eager-fetch on every drawer open).
+ * ``flagged_issues_count`` is the number of segments carrying a manual flag
+ * (``detailed.json`` segs with a ``flag`` block). Computed from one cached
+ * ``load_detailed`` read on drawer open; the FE hides the pill when it is 0.
  */
 export interface AdminReviewDetail {
   slug: string;
@@ -343,6 +342,7 @@ export interface AdminReviewDetail {
   claim_history?: AdminReviewClaimHistoryEntry[];
   transitions?: AdminReviewTransition[];
   timestamps_job_ids?: string[];
+  flagged_issues_count?: number;
   [k: string]: unknown;
 }
 export interface AdminReviewOpenClaim {
@@ -378,21 +378,6 @@ export interface AdminReviewRow {
   channel: string;
   open_claim?: AdminReviewOpenClaim | null;
   unread?: boolean;
-  [k: string]: unknown;
-}
-/**
- * Validation category counts for one slug.
- *
- * ``has_data`` is False when ``validate_reciter_segments`` returns None
- * (no ``detailed.json`` on the bucket yet — typical for fresh
- * ``awaiting_review`` rows that haven't been touched).
- */
-export interface AdminReviewValidation {
-  slug: string;
-  category_counts?: {
-    [k: string]: number;
-  };
-  has_data?: boolean;
   [k: string]: unknown;
 }
 export interface AdminReviewsResponse {
@@ -466,24 +451,6 @@ export interface VisitorDayStat {
   unique_signed_in?: number;
   unique_anon?: number;
   [k: string]: unknown;
-}
-/**
- * One cross-word tajweed bridge.
- *
- * - ``before_word_idx`` — the bridge tile renders BEFORE this word index
- *   (i.e. between word ``before_word_idx - 1`` and ``before_word_idx``).
- *   Word indices are 1-based, matching the phonemizer + shard convention.
- * - ``rule`` — the source tajweed rule (one of the 8 cross-word rules in
- *   scope; see ``services/reference/tajweed.py::BRIDGE_RULES``).
- * - ``side`` — ``"curr"`` if the merged phoneme lives at the start of word
- *   ``before_word_idx``; ``"prev"`` if it lives at the end of word
- *   ``before_word_idx - 1``. Determined by inspecting the phonemizer's
- *   per-word phoneme output, not by hardcoded per-rule conventions.
- */
-export interface BridgeInfo {
-  before_word_idx: number;
-  rule: string;
-  side: "prev" | "curr";
 }
 /**
  * Whole ``detailed.json`` document.
@@ -579,6 +546,52 @@ export interface DetailedSegment {
   ignored_categories?: string[] | null;
   ignored?: boolean | null;
   is_wasl?: boolean;
+  flag?: SegmentFlag | null;
+}
+/**
+ * A flag on a single segment: a required root comment + reply thread.
+ *
+ * Persisted on the segment (``DetailedSegment.flag``) and mutated through
+ * the normal command/save pipeline, so it shows in the History panel and
+ * is reversible via the patch path. It is NOT a validation category and
+ * never appears in filters / issue types.
+ *
+ * - ``comment`` — the flagger's root note (required, non-empty). Editing it
+ *   to empty removes the whole flag (the unflag mechanism).
+ * - ``actor`` — who created the flag. Redacted to ``role`` only on the wire
+ *   unless the caller holds ``segments.see_flagger_identity``.
+ * - ``follow_ups`` — append-only replies from any editor.
+ */
+export interface SegmentFlag {
+  comment: string;
+  actor: Actor;
+  flagged_at_utc: string;
+  follow_ups?: FlagFollowUp[];
+}
+export interface Actor {
+  /**
+   * OIDC sub; canonical
+   */
+  hf_user_id: string;
+  /**
+   * HF login at write time
+   */
+  login_at_time: string;
+  role: Role;
+}
+/**
+ * One append-only reply on a segment's flag thread.
+ *
+ * Anyone with edit access can add a follow-up; they are never edited or
+ * deleted in place (the whole flag disappears when the flagger clears the
+ * root comment). ``actor`` carries the author identity exactly like an
+ * edit-history batch actor — the segments read route redacts it to the
+ * role only for callers without ``segments.see_flagger_identity``.
+ */
+export interface FlagFollowUp {
+  comment: string;
+  actor: Actor;
+  at_utc: string;
 }
 /**
  * One JSONL line in ``edit_history.jsonl`` — a batch of operations.
@@ -615,17 +628,6 @@ export interface EditHistoryBatch {
   validation_summary_after?: {
     [k: string]: unknown;
   };
-}
-export interface Actor {
-  /**
-   * OIDC sub; canonical
-   */
-  hf_user_id: string;
-  /**
-   * HF login at write time
-   */
-  login_at_time: string;
-  role: Role;
 }
 /**
  * One operation in a batch. Shape is intentionally permissive — the
@@ -795,14 +797,6 @@ export interface ProbeResult {
   status?: number | null;
   reachable?: boolean;
   [k: string]: unknown;
-}
-/**
- * ``GET /api/ts/tajweed/<verse_ref>`` body.
- */
-export interface TajweedBridgesResponse {
-  verse_ref: string;
-  stops?: string[];
-  bridges?: BridgeInfo[];
 }
 /**
  * One job run's durable record (settings + status + logs).
