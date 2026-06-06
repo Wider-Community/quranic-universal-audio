@@ -81,7 +81,7 @@ To contribute code to the repo directly, fork the repo and see [inspector/README
 
 **Access**
 
-- [ ] **Unified API** — one consistent, comprehensive, well-documented API for audio + timestamps, optimised for latency and ease of use. Built for app developers and researchers, parallel to the GitHub releases and HF dataset.
+- [ ] **Unified API/SDKs** — typed Python/JS client (`pip`/`npm`) over the published QUA artifacts: fetches and caches only requested data, defaults to latest with optional pinning and offline vendoring, and exposes the schemas for type consistency.
 - [ ] **Global CDN** — mirror all recitations and audio across regions, prewarmed with demand-based routing for low-latency delivery everywhere.
 
 **Coverage + Quality**
