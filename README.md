@@ -55,7 +55,7 @@ Timestamps and metadata ship in two open formats — pick by your use case.
 | **Versioning** | Version-pinned snapshots (`vX.Y.Z`), reproducible | Rolling — always the latest |
 | **Fetch what you need** | Full release or specific reciters | Query and filter rows; load one riwayah or reciter |
 
-Both formats support both gapless surah and ayah-by-ayah playback. Both ship a single take per ayah (the first occurrence), so in rare cases where a reciter repeats an ayah fully or partially, follow-along highlighting may pause until they move past the repetition (within-ayah repetitions are still preserved). This only applies to gapless playback; ayah-by-ayah playback is unaffected. A unified API — which also exposes the full, unfiltered duplicates — is on the [roadmap](#roadmap).
+Both formats support both gapless surah and ayah-by-ayah playback. Both ship a single take per full ayah (the first occurrence), so in rare cases where a reciter repeats an ayah fully or partially, follow-along highlighting may pause until they move past the repetition (within-ayah repetitions are still preserved). This only applies to gapless playback; ayah-by-ayah playback is unaffected. A unified API — which also exposes the full, unfiltered duplicates — is on the [roadmap](#roadmap).
 
 ## Technical Overview
 
