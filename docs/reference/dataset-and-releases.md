@@ -115,7 +115,7 @@ gh:releases/v{X.Y.Z}/
 ├── check_updates.py      # consumer helper (per-reciter update check)
 ├── surah_info.json       # static reference
 ├── qpc_hafs.json         # static reference (mushaf text)
-├── letter_vocab.json     # letter-tier char alphabet (42 tokens) + tokenization rule
+├── letter_vocab_hafs_qpc.csv  # letter-tier char alphabet (42 tokens): char,codepoint,name
 └── LICENSE               # CC-BY-4.0
 ```
 
@@ -140,10 +140,12 @@ composites retained). At publish time **both** `cut_release` and `publish_hf` ma
 through `qua_shared/letter_vocab.to_external_char`, which drops the maddah mark (`U+0653`) to
 yield a stable **42-token** external alphabet — a non-lossy, prolongation-only collapse (no two
 distinct letters merge). The mapping is **fail-loud**: an unknown token aborts the cut so a new
-riwayah/orthography is caught rather than silently shipped. The alphabet is published verbatim
-as `letter_vocab.json` (release root + the HF dataset repo), generated from the same module so
-it cannot drift from the emitted data. Internal shards and the Inspector animation are
-unchanged. See `qua_shared/letter_vocab.py`.
+riwayah/orthography is caught rather than silently shipped. The alphabet is published as a flat
+`char,codepoint,name` CSV at `letter_vocab_hafs_qpc.csv` (release root + the HF dataset repo) —
+the riwayah/script are in the *filename* so a future riwayah adds its own file
+(`letter_vocab_warsh_qpc.csv`, …); the tokenization rule lives here + in the release notes.
+Generated from the same module so it cannot drift from the emitted data. Internal shards and the
+Inspector animation are unchanged. See `qua_shared/letter_vocab.py`.
 
 ### Audio policy (as-built)
 

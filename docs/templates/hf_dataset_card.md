@@ -63,14 +63,6 @@ Remaining subsets are grouped by riwayah, and splits are specific mushafs.
 
 All row timestamps are relative to the ayah clip. Use `source_offset_ms + timestamp_ms` when mapping a row back to its source audio.
 
-### Letter tokenization
-
-Each `letter_timestamps.char` is one token from a fixed **42-token** alphabet. Short vowels
-(haraka) are stripped and the maddah prolongation mark is dropped, but distinct letters stay
-apart — including the silent/structural ones (the superscript "dagger" alef, alef-wasla, the
-small waw/yeh, and each hamza seat). The complete token list (`char,codepoint,name`) is
-published as `letter_vocab_hafs_qpc.csv` in this repo.
-
 ## Catalog Schema
 
 One row per published mushaf.

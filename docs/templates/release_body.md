@@ -11,14 +11,14 @@
 | `check_updates.py` | Optional helper that checks the latest release for updates to the reciters you use; add `--sync` to re-download them. |
 | `surah_info.json` | Surah names, ayah counts, and word counts. |
 | `qpc_hafs.json` | QPC Hafs word reference used by the word and letter indexes. |
-| `letter_vocab.json` | The letter-tier character vocabulary: every token the `char` field can take, with codepoints, Unicode names, and notes. |
+| `letter_vocab_hafs_qpc.csv` | The letter-tier character vocabulary (`char,codepoint,name`). |
 | `LICENSE` | CC-BY-4.0 license text. |
 
 ## How audio and timestamps pair
 
 `catalog.json` contains the audio URLs for each recitation, and every timestamp value is milliseconds relative to that matching source audio.
 
-For a surah-based recitation, the verse-tier entry `"1:1": [0, 2831]` means ayah 1:1 starts at `0 ms` and ends at `2831 ms` within surah 1's audio file. (For an ayah-based recitation each ayah has its own audio file, so the same `[0, 2831]` is measured from the start of that ayah's file.)
+The verse-tier entry `"1:1": [0, 2831]` means ayah 1:1 starts at `0 ms` and ends at `2831 ms` within surah 1's audio file.
 
 ## Timestamp levels
 
@@ -104,11 +104,9 @@ The three tiers describe the **same** verse at increasing detail: each tier embe
 }
 ```
 
-`word_idx` is 1-based within the verse. When a reciter loops back or re-recites part of a verse,
-`word_idx` can repeat or step backwards.
+`word_idx` is 1-based within the verse. When a reciter loops back or re-recites part of a verse, `word_idx` can repeat or step backwards.
 
-**Letter tier** — the word tier, plus a single flat list of letters, each tagged with the `word_idx`
-it belongs to (`[word_idx, char, start_ms, end_ms]`):
+**Letter tier** — the word tier, plus a single flat list of letters, each tagged with the `word_idx` it belongs to (`[word_idx, char, start_ms, end_ms]`):
 
 ```jsonc
 {
@@ -123,6 +121,7 @@ it belongs to (`[word_idx, char, start_ms, end_ms]`):
       [1, "م", 560, 770],
       [2, "ا", 770, 900],   // word 2: ٱللَّهِ
       [2, "ل", 900, 1120],
+      [2, "ل", 900, 1120],
       [2, "ه", 1120, 1280]
       // ... words 3 and 4
     ]
@@ -130,12 +129,9 @@ it belongs to (`[word_idx, char, start_ms, end_ms]`):
 }
 ```
 
-Letters are one flat array for the whole verse (not nested inside each word) — read each letter's
-`word_idx` to know which word it falls in. Each `char` is one token from a fixed 42-token
-alphabet: short vowels (haraka) are stripped and the maddah prolongation mark is dropped, but
-distinct letters are kept apart — including the silent/structural ones (the superscript "dagger"
-alef, alef-wasla, the small waw/yeh, and each hamza seat). The full token list with codepoints,
-Unicode names, and rendering notes ships as `letter_vocab.json` in this release.
+Letters are one flat array for the whole verse (not nested inside each word) — read each letter's `word_idx` to know which word it falls in.
+
+Each `char` is one token from a fixed 42-token alphabet where distinct letters are kept apart — including the silent/structural ones (the superscript "dagger" alef, alef-wasla, the small waw/yeh, and each hamza shape). The full token list (`char,codepoint,name`) ships as `letter_vocab_hafs_qpc.csv` in this release.
 
 </details>
 
