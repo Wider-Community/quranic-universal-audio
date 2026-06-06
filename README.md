@@ -34,7 +34,20 @@
 
 - **Metadata and versioning:** Each recitation is governed by consistent schemas and metadata and versioned with a full history to track segment updates and timestamp corrections over time.
 
-<!-- ## Data Access -->
+## Data Access
+
+Timestamps and metadata ship in two open formats, both projected from the same community-verified source and licensed [CC BY 4.0](LICENSE). Pick by how you'll use them.
+
+| | [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases) | [Hugging Face Dataset](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs) |
+|---|---|---|
+| **Best for** | Apps, offline use, archives | ML research, training, analysis |
+| **Shape** | JSON per recitation, in verse / word / letter tiers | Parquet, one row per ayah |
+| **Audio** | Not bundled — original chapter URLs in `catalog.json` | Embedded per-ayah clip in every row |
+| **Playback** | Continuous (gapless) from the full surah audio | Isolated per-ayah clips |
+| **Versioning** | Version-pinned snapshots (`vX.Y.Z`), reproducible | Rolling — always the latest |
+| **Fetch what you need** | One reciter, or just the tier you need | Query and filter rows; load one riwayah or reciter |
+
+Both ship a single verified take per verse — repeated readings and false starts are already cleaned out. A unified, low-latency **API** for on-demand access is on the [roadmap](#roadmap).
 
 ## Technical Overview
 
