@@ -13,7 +13,14 @@ export default {
             .map((f) => (path.isAbsolute(f) ? f : path.join(root, f)))
             .filter((f) => {
                 const rel = path.relative(frontendRoot, f);
-                return rel && !rel.startsWith('..');
+                if (!rel || rel.startsWith('..')) return false;
+                // Codegen output (scripts/codegen/regen_fe_types.py). eslint --fix
+                // strips its `eslint-disable` banner, breaking schema-codegen-check.
+                // eslint.config.js ignores this dir, but that pattern is
+                // frontend-relative and lint-staged runs from the repo root, so the
+                // ignore misses — enforce the skip here.
+                const norm = rel.split(path.sep).join('/');
+                return !norm.startsWith('src/lib/types/generated/');
             });
         if (abs.length === 0) return [];
         return `node ${eslintBin} --config ${eslintConfig} --fix ${abs.join(' ')}`;
