@@ -82,9 +82,7 @@ def test_me_marked_ready_claim_does_not_block(signed_in_client):
     """A marked-ready claim is admin-side: it drops out of ``active_claim``
     (so the one-at-a-time hold is released and the user can claim another)
     but stays in ``active_claims`` (still assigned to them)."""
-    _seed_state_row(
-        "ready_slug", assignee_hf_id="u-3", state="under_review", marked_ready=True
-    )
+    _seed_state_row("ready_slug", assignee_hf_id="u-3", state="under_review", marked_ready=True)
     client, user = signed_in_client(hf_user_id="u-3", login="carol", role="contributor")
     resp = client.get("/api/me")
     assert resp.status_code == 200
