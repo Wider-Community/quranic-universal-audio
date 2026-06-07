@@ -300,7 +300,10 @@ badges are a separate, broader metric maintained by `update-badges.yml` CI and a
 Embedded bytes are stream-copied from the bucket Xing-injected chapter master — source codec /
 bitrate / sample-rate / channels preserved; slice frame-snapped (≤26 ms earlier than first word,
 word timestamps re-based). Consumers resample at load; filter by codec/SR/channels via the
-`mushafs` config columns. For full-chapter app playback, prefer the GitHub release assets.
+`mushafs` config columns. For full-chapter app playback, prefer the GitHub release assets. A verse
+with an **interior no-match gap** is the one exception to "single contiguous slice": its clip is the
+kept runs stitched gaplessly (the no-match audio excised) — see
+[Failed-alignment, no-match & deletes](#failed-alignment-no-match--deletes-at-publish).
 
 ## Dedup semantics — what projection loses / preserves
 
@@ -321,13 +324,37 @@ Among multiple completing occasions the **earliest** (first recited) wins; a **l
 (a restart at word 1 whose run re-covers the verse) and **trailing** post-completion segments are
 trimmed. Consumers wanting alternate takes read the raw bucket shards (every segment present).
 
-### Failed-alignment & deletes at publish
+### Failed-alignment, no-match & deletes at publish
 
-`failed_alignment` (recorded in `_meta.mfa_failures`) and `deleted` (filtered at intake) both
-collapse to "never reached the bucket shard" — the segment-array shard carries only aligned,
-accepted segments. Per-verse, `project_segment_shard` keeps the canonical occasion; if no occasion
-reaches full coverage `{1..N}` it falls back to the widest-coverage occasion, and a verse with no
-shippable coverage is dropped from both the dataset and the GH tier files (logged for transparency).
+Three reviewer/pipeline actions converge to "never reached the bucket shard" — the segment-array
+shard carries only aligned, accepted, **ref-bearing** segments:
+
+- **No-match** = the reviewer enters an empty `matched_ref`. `build_mfa_ref` returns `None`, so the
+  segment is skipped before MFA (it leaves **no** `_meta.mfa_failures` entry) — it stays in
+  `detailed.json` with its time window but contributes no ref/text/words.
+- **Failed alignment** = MFA ran and returned non-`ok` (the only thing recorded in
+  `_meta.mfa_failures`).
+- **Deleted** = removed from `detailed.json` entirely (editor delete / filtered at intake).
+
+Per-verse, `project_segment_shard` keeps the canonical occasion; if no occasion reaches full
+coverage `{1..N}` it falls back to the widest-coverage occasion. Two distinct outcomes:
+
+- **Whole verse gone** (its only segment, or all its segments, missing) → the verse has zero shard
+  segments → `project_segment_shard` never emits it → it is dropped from **both** the HF dataset
+  (`build_rows`: `if not tdata: continue`) and the GH tier files (`if not words: continue`).
+- **Interior gap** (a middle segment missing — kept words 1-3 + 8-10, gap at 4-7) → the verse still
+  ships. Its word/letter/segment metadata and `text_uthmani` already exclude the gap words
+  (`coverage_gap` is reported but **non-fatal** — the verse is genuinely missing those words). The
+  clip window `[verse_start, verse_end]` spans the gap, so the **audio** would otherwise carry the
+  phantom no-match audio. The **HF dataset publish excises it**: `build_rows` computes `keep_runs`
+  (`[clip_start, clip_end]` minus the no-match segment spans, via `_subtract_spans`), and
+  `_slice_chapter` stitches the kept runs with `mp3_frames.slice_frames_multi` + `_rebase_row_multi`
+  (gapless re-base; logged per reciter). A contiguous verse (one run) takes the original
+  single-slice path unchanged. The **GH release** ships timestamps relative to source URLs (no
+  embedded audio), so it leaves the gap in place — its word timestamps simply skip it.
+  Leading/trailing no-match audio is already outside `[clip_start, clip_end]` (the window spans
+  first→last kept word), so only **interior** gaps stitch.
+
 Post-mark-ready, only in-verse segments exist (the TS job blocks compound cross-verse refs), so there
 are no cross-verse dedup cases.
 
@@ -348,6 +375,12 @@ same `project_segment_shard` canonical take over the same raw bucket segments. A
 byte-substring of the bucket chapter (after per-slice Xing if VBR); the dataset slice may start
 ≤26 ms before the first word (frame snap), with word timestamps re-based. **No intentional drift** —
 if they diverge where they should match, it's a bug.
+
+**One intentional exception:** for a verse with an interior no-match gap, the dataset clip excises
+the gap audio (stitched kept runs), while the in-app TS-tab segment-clip route is unchanged and
+still plays the contiguous `[verse_start, verse_end]` window including the gap. So for those (rare)
+verses the dataset audio is shorter than the TS-tab clip by the excised gap. Word timestamps still
+agree once re-based; only the audio bytes differ.
 
 ## Event classification
 
