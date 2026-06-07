@@ -69,7 +69,7 @@ ENGLISH_ALIASES: dict[str, str] = {
     "naml": "An-Naml", "qasas": "Al-Qasas", "ankabut": "Al-Ankaboot", "ankabout": "Al-Ankaboot",
     "rum": "Ar-Room", "room": "Ar-Room", "sajdah": "As-Sajda", "sajda": "As-Sajda",
     "ahzab": "Al-Ahzaab", "fatir": "Faatir", "yaseen": "Yaseen", "yasin": "Yaseen",
-    "yaseen": "Yaseen", "saffat": "As-Saaffaat", "saad": "Saad", "zumar": "Az-Zumar",
+    "saffat": "As-Saaffaat", "saad": "Saad", "zumar": "Az-Zumar",
     "ghafir": "Ghafir", "fussilat": "Fussilat", "shuraa": "Ash-Shura", "shura": "Ash-Shura",
     "zukhruf": "Az-Zukhruf", "dukhan": "Ad-Dukhaan", "jathiyah": "Al-Jaathiya",
     "jathiya": "Al-Jaathiya", "ahqaf": "Al-Ahqaf", "fath": "Al-Fath", "hujurat": "Al-Hujuraat",

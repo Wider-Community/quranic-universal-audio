@@ -12,8 +12,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from qua_shared.playlist_match import (
     build_surah_matchers,
     match_title_to_surah,
