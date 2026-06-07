@@ -24,8 +24,13 @@ _SURAH_INFO = json.loads(
 
 
 def _entry(chapter, title, matched_name="", url="https://www.youtube.com/watch?v=x"):
-    return {"chapter": chapter, "url": url, "title": title, "matched_name": matched_name,
-            "confidence": "exact"}
+    return {
+        "chapter": chapter,
+        "url": url,
+        "title": title,
+        "matched_name": matched_name,
+        "confidence": "exact",
+    }
 
 
 def test_match_title_resolves_english_suffix_and_arabic():
@@ -68,19 +73,25 @@ def test_correct_title_matched_map_passes():
 
 
 def test_duplicate_chapter_is_rejected():
-    dup = {"playlist_url": "u", "entries": [
-        _entry(5, "Surah Al-Ma'idah", matched_name="Al-Maaida"),
-        _entry(5, "Surah Al-An'am", matched_name="Al-An'aam"),
-    ]}
+    dup = {
+        "playlist_url": "u",
+        "entries": [
+            _entry(5, "Surah Al-Ma'idah", matched_name="Al-Maaida"),
+            _entry(5, "Surah Al-An'am", matched_name="Al-An'aam"),
+        ],
+    }
     rep = validate_chapter_map(dup, _SURAH_INFO, expect_count=None)
     assert not rep.ok
     assert any("assigned to >1 entry" in e for e in rep.errors)
 
 
 def test_matched_name_mismatch_is_rejected():
-    m = {"playlist_url": "u", "entries": [
-        _entry(2, "Surah Al-Baqarah", matched_name="An-Nisaa"),  # wrong matched_name
-    ]}
+    m = {
+        "playlist_url": "u",
+        "entries": [
+            _entry(2, "Surah Al-Baqarah", matched_name="An-Nisaa"),  # wrong matched_name
+        ],
+    }
     rep = validate_chapter_map(m, _SURAH_INFO, expect_count=None)
     assert not rep.ok
     assert any("matched_name" in e for e in rep.errors)
@@ -94,9 +105,12 @@ def test_incomplete_cover_flagged_when_full_expected():
 
 
 def test_unresolvable_title_warns_not_errors():
-    m = {"playlist_url": "u", "entries": [
-        _entry(1, "intro nasheed — recitation montage", matched_name="Al-Faatiha"),
-    ]}
+    m = {
+        "playlist_url": "u",
+        "entries": [
+            _entry(1, "intro nasheed — recitation montage", matched_name="Al-Faatiha"),
+        ],
+    }
     rep = validate_chapter_map(m, _SURAH_INFO, expect_count=None)
     # matched_name is correct for ch1, title unresolvable → warning, not error
     assert rep.ok, rep.errors
