@@ -391,12 +391,15 @@ export function setupZoomLifecycle(): void {
         prevLoop = lt;
     });
 
-    let prevUrl = get(loadedVerse)?.data.audio_url ?? null;
+    // Reset zoom on chapter change. (by_surah audio is one file per chapter, so
+    // this matches the prior audio_url-keyed signal without depending on the URL,
+    // which is no longer template-derived.)
+    let prevChapter = get(loadedVerse)?.data.chapter ?? null;
     loadedVerse.subscribe((lv) => {
-        const url = lv?.data.audio_url ?? null;
-        if (url !== prevUrl) {
+        const chapter = lv?.data.chapter ?? null;
+        if (chapter !== prevChapter) {
             animateZoomTo(null, 0);
-            prevUrl = url;
+            prevChapter = chapter;
         }
     });
 }

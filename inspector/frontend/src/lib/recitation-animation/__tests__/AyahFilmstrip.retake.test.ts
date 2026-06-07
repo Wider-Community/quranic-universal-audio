@@ -30,17 +30,14 @@ import { buildFilmstripModel } from '../filmstrip-model';
  */
 
 const RECITER = 'nasser_al_qatami_mp3quran';
-const RECITER_AUDIO: TsReciterAudio = {
-    url_template: 'example.com/{surah:03d}.mp3',
-    audio_category: 'by_surah',
-};
+const RECITER_AUDIO: TsReciterAudio = { audio_category: 'by_surah' };
 const EMPTY: Record<string, { text?: string }> = {};
 
 function buildUnits(): ReturnType<typeof buildChapterRecitation>['units'] {
     const shard = shard102 as unknown as TsShardResponse;
     const verses: AssembledVerse[] = [];
     for (const ref of chapterVerseRefs(shard)) {
-        const data = assembleVerseFromShard(RECITER, shard, ref, EMPTY, EMPTY, RECITER_AUDIO);
+        const data = assembleVerseFromShard(RECITER, shard, ref, EMPTY, EMPTY, RECITER_AUDIO, '');
         if (data) verses.push({ verseRef: ref, data });
     }
     return buildChapterRecitation(RECITER, 102, verses, chapterOccasionIntervals(shard)).units;

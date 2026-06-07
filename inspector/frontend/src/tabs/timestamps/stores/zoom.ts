@@ -15,7 +15,7 @@
  *
  * Reset to `null` by:
  *   - `loopTarget` becoming `null` (loop turned off).
- *   - `loadedVerse` audio_url changing (user navigated to a different verse).
+ *   - `loadedVerse` chapter changing (user navigated to a different chapter).
  *
  * The `setupZoomLifecycle()` helper in `utils/zoom.ts` wires those triggers;
  * `TimestampsTab.svelte` calls it once on mount.

@@ -1,8 +1,9 @@
 """Timestamp manifest + per-chapter shard server.
 
 Bucket-only: manifest is composed from state (released reciters)
-+ catalog (display + delivery metadata) + audio_manifest sidecars (URL
-template). Per-chapter shards are read as raw gzip from
++ catalog (display + delivery metadata). Per-chapter audio URLs are not in
+the manifest — the FE reads them from the canonical ``/api/audio/surahs``
+endpoint. Per-chapter shards are read as raw gzip from
 ``<bucket>/reciters/<slug>/timestamps/<chapter>.json.gz`` on demand — the
 bucket gz body is the wire body (segment-array shape), so serving is a byte
 pass-through cached through a small per-process LRU so chapter scrubbing
@@ -22,8 +23,8 @@ from datetime import UTC, datetime
 
 from config import DK_SCRIPT_PATH
 from qua_shared.schemas import ReciterCatalog
-from qua_shared.timestamps_shards import SCHEMA_VERSION, derive_url_template
-from services.audio.audio_meta import chapter_numbers, chapter_urls, vbr_chapters_for_reciter
+from qua_shared.timestamps_shards import SCHEMA_VERSION
+from services.audio.audio_meta import chapter_numbers, vbr_chapters_for_reciter
 from services.state import catalog as catalog_service
 from services.state import state as state_service
 from services.storage import data_dir, static_refs
@@ -111,10 +112,10 @@ def _ts_chapters_for(slug: str, delivery) -> list[int]:
     Everything else (partial reciters, by_ayah, no delivery) falls back to the
     gap-accurate sidecar keys.
 
-    NOTE: ``url_template`` + ``vbr_chapters`` still come from the sidecar (see
+    NOTE: ``vbr_chapters`` still comes from the sidecar (see
     ``_bucket_reciter_block``), so this hardens the chapter list but does not yet
-    avoid the per-slug sidecar read — moving those two fields into the catalog is
-    the follow-up that would let the manifest build skip the bucket entirely.
+    avoid the per-slug sidecar read — moving that field into the catalog is the
+    follow-up that would let the manifest build skip the bucket entirely.
     """
     if (
         delivery is not None
@@ -125,30 +126,6 @@ def _ts_chapters_for(slug: str, delivery) -> list[int]:
     return chapter_numbers(slug)
 
 
-def _url_template(slug: str, audio_category: str) -> str:
-    """Resolve the audio URL template from the in-memory audio_manifest sidecar cache.
-
-    ``audio_meta.chapter_urls`` reads through ``_SIDECAR_CACHE`` — first hit
-    per slug pays the bucket read, subsequent hits are dict lookups. Returns
-    ``""`` when the sidecar is absent or the template can't be derived —
-    callers degrade gracefully (no audio playback URL).
-    """
-    flat = chapter_urls(slug)
-    if not flat:
-        log.warning("timestamps: no chapter URLs derivable from sidecar for %s", slug)
-        return ""
-    template = derive_url_template(flat, audio_category) or ""
-    if not template:
-        log.warning(
-            "timestamps: derive_url_template returned empty for %s (audio_cat=%s, "
-            "chapter_count=%d)",
-            slug,
-            audio_category,
-            len(flat),
-        )
-    return template
-
-
 def _bucket_reciter_block(
     slug: str,
     ts_chapters: list[int],
@@ -157,9 +134,12 @@ def _bucket_reciter_block(
 ) -> dict | None:
     """Compose a manifest reciter block for a bucket-mode reciter.
 
-    Joins the catalog (display + delivery metadata) with the audio_manifest
-    sidecar (URL template) and the precomputed VBR chapter list. Falls back
-    to slug-derived defaults when the catalog has no delivery for ``slug``.
+    Joins the catalog (display + delivery metadata) with the precomputed VBR
+    chapter list. Per-chapter audio URLs are NOT carried here — the FE resolves
+    them from the canonical ``/api/audio/surahs`` endpoint (audio-manifest
+    sidecar), so a non-templatable source (e.g. per-chapter YouTube IDs) is
+    served correctly. Falls back to slug-derived defaults when the catalog has
+    no delivery for ``slug``.
 
     The caller passes one shared ``catalog`` snapshot so the manifest build
     doesn't re-snapshot (deep-copy) per reciter inside ``_ensure_built``, and
@@ -183,7 +163,6 @@ def _bucket_reciter_block(
         "style": style,
         "source": source,
         "audio_category": audio_category,
-        "url_template": _url_template(slug, audio_category),
         "ts_chapters": ts_chapters,
         "vbr_chapters": vbr_chapters_for_reciter(slug),
     }

@@ -5,19 +5,23 @@ A *bridge* is a cross-word tajweed merger phoneme (idgham) — a nasalised
 of one word into the start of the next. The Timestamps tab renders it as a tile
 between two word blocks.
 
-This module is the **single source** for locating bridge phonemes, shared by:
+This module is the **single source** for bridge phonemes, shared by the live TS
+pipeline (``timestamps_pipeline``) and the one-time backfill. ``tag_segment_words``
+does two things to a segment, both anchored to the phonemizer:
 
-- the live TS pipeline (``timestamps_pipeline._normalize_from_results``), which
-  stamps the tag onto freshly-aligned shards, and
-- the one-time backfill, which stamps existing shards.
+- **Re-attribution** — re-slices the shard's flat phones into words by the
+  phonemizer's natural per-word counts. The aligner's word-boundary allocation
+  can park a phone on the wrong word (idgham shafawi: مِّن's kasra lands on
+  شهداءكم's tail after the merged meem); this restores canonical attribution so
+  the FE stays a pure renderer.
+- **Tagging** — stamps each merger phone with its rule (slot 5 of the tuple).
 
 It does NOT classify by phoneme shape (a geminate merger is byte-identical to a
 within-word shaddah geminate — ``ٱلرَّحْمَٰن → rˤrˤ`` looks exactly like an idgham
-``rˤrˤ``). Instead it asks the phonemizer where the cross-word rules fire and
-returns the **flat phoneme index** of each merger. The flat phone sequence of a
-segment is allocation-invariant and reproduces the shard's stored phones exactly
-(verified byte-for-byte across the published corpus), so a flat index resolved
-here lands on the correct shard interval regardless of word-boundary allocation.
+``rˤrˤ``). It asks the phonemizer where the cross-word rules fire and uses the
+**flat phoneme index** of each merger. The flat phone sequence of a segment is
+allocation-invariant and reproduces the shard's stored phones byte-for-byte
+(verified across the published corpus), so the index lands on the right phone.
 
 The 8 in-scope rules are the complete set of cross-word *mergers*; ikhfaa/iqlab
 are cross-word but non-merging and out of scope. ``idgham_mutajanisayn_naqis``
@@ -67,36 +71,32 @@ def _looks_like_merger(phone: str) -> bool:
     return len(base) >= 2 and base[0] == base[1]
 
 
-def detect_segment_bridges(pm, seg_ref: str) -> list[tuple[int, str]]:
-    """Return ``[(flat_phoneme_index, rule), ...]`` for one segment.
+def _scan_mapping(mapping) -> tuple[list[tuple[int, str]], list[int]]:
+    """Return ``(bridges, counts)`` for a phonemizer ``get_mapping()`` result.
 
-    ``seg_ref`` is the segment's word-range ref (e.g. ``"2:2:1-2:2:4"`` or a
-    single ``"2:5:3"``) — the same range that produced the shard's phones, so the
-    last word is pausal and cross-word rules at the pause are naturally
-    suppressed. ``pm`` is a ``quranic_phonemizer.Phonemizer``.
+    ``counts[i]`` is word ``i``'s shard-visible phoneme count — empty-string
+    phonemes and the ``Q`` qalqala marker (dropped by ``transform_phonemes``)
+    are excluded, so the counts re-slice the shard's flat phone array exactly.
+    ``bridges`` is ``[(flat_phoneme_index, rule), ...]``: shafawi's merger is the
+    previous word's last phoneme (``…m̃ |``), every other rule's is the current
+    word's first (``| m̃ / | ll …``).
 
-    Uses ``get_mapping()`` (the phonemizer's natural per-word attribution) — NOT
+    Uses the phonemizer's natural per-word attribution (``get_mapping``) — NOT
     ``letter_phoneme_mappings()``, which reassigns merger phonemes across word
-    boundaries and would shift the flat offset off the merger. The flat index
-    counts non-empty word-level phonemes in word order and aligns 1:1 with the
-    shard's flattened phone array (the flat sequence is allocation-invariant and
-    reproduces the shard byte-for-byte).
+    boundaries. The flat sequence is allocation-invariant and reproduces the
+    shard byte-for-byte.
     """
-    mapping = pm.phonemize(ref=seg_ref).get_mapping()
     words = mapping.words
-    out: list[tuple[int, str]] = []
-
-    # Flat span [first_idx, last_idx] of each word's shard-visible phonemes
-    # (None if the word contributes none). The shard drops empty-string phonemes
-    # and the ``Q`` qalqala marker (``transform_phonemes``), so the flat count
-    # must drop them too for positions to align. Mergers are never ``Q``.
+    counts: list[int] = []
     spans: list[tuple[int, int] | None] = []
     acc = 0
     for w in words:
         n = sum(1 for p in w.phonemes if p and p != "Q")
+        counts.append(n)
         spans.append((acc, acc + n - 1) if n else None)
         acc += n
 
+    bridges: list[tuple[int, str]] = []
     for i in range(len(words) - 1):
         prev, curr = words[i], words[i + 1]
         if not prev.letter_mappings or not curr.letter_mappings:
@@ -113,33 +113,40 @@ def detect_segment_bridges(pm, seg_ref: str) -> list[tuple[int, str]]:
                 break
         if rule is None:
             continue
-
-        # shafawi's merger is the prev word's last phoneme (…m̃ |); every other
-        # rule's merger is the curr word's first phoneme (| m̃ / | ll …).
         span = spans[i] if rule in _MERGER_ON_PREV else spans[i + 1]
         if span is None:
             continue
-        flat = span[1] if rule in _MERGER_ON_PREV else span[0]
-        out.append((flat, rule))
+        bridges.append((span[1] if rule in _MERGER_ON_PREV else span[0], rule))
 
-    return out
+    return bridges, counts
+
+
+def detect_segment_bridges(pm, seg_ref: str) -> list[tuple[int, str]]:
+    """Return ``[(flat_phoneme_index, rule), ...]`` for one segment ref."""
+    return _scan_mapping(pm.phonemize(ref=seg_ref).get_mapping())[0]
 
 
 def tag_segment_words(pm, verse_key: str, words: list) -> int:
-    """Stamp bridge rules onto a single segment's compact word list, in place.
+    """Tag bridges + canonicalise phone attribution on one segment, in place.
 
     ``words`` is a segment's word list as written to the shard — each word is
     ``[widx, start_ms, end_ms, [[char,s,e]...], [[phone,s,e]...]]`` in ascending,
     contiguous word order. ``verse_key`` is the segment's home verse (``"2:48"``).
 
-    A tagged phone tuple grows to length 6:
-    ``[phone, start, end, None, None, rule]`` (slots 3/4 kept for the FE reader's
-    geminate flags). Returns the number of phones tagged.
+    Two effects, both anchored to the phonemizer (the single source of truth):
 
-    Skips segments whose word indices aren't ascending-contiguous (repeats /
-    out-of-order passes) — those can't be reproduced by a single range phonemize
-    and are handled upstream. Defensively refuses to tag a phone that doesn't
-    look like a merger, so an unexpected drift never mis-stamps a vowel.
+    1. **Re-attribution** — the shard's flat phones are re-sliced into words by
+       the phonemizer's natural per-word counts. The aligner's word-boundary
+       allocation can park a phone on the wrong word (idgham shafawi: مِّن's kasra
+       lands on شهداءكم after the merged meem); this restores each phone to its
+       word so the FE stays a pure renderer. Word start/end are recomputed.
+    2. **Tagging** — the merger phone grows to length 6 with its rule at slot 5
+       (``[phone, start, end, None, None, rule]``; slots 3/4 are the FE reader's
+       geminate flags).
+
+    Returns the number of phones tagged. Skips (returns 0, no mutation) for
+    repeats / out-of-order words, or if the phonemizer shape doesn't match the
+    shard (flat count or word count) — a safety guard that never corrupts.
     """
     if not words:
         return 0
@@ -148,32 +155,45 @@ def tag_segment_words(pm, verse_key: str, words: list) -> int:
         return 0
     lo, hi = widxs[0], widxs[-1]
     seg_ref = f"{verse_key}:{lo}" if lo == hi else f"{verse_key}:{lo}-{verse_key}:{hi}"
-    bridges = dict(detect_segment_bridges(pm, seg_ref))
-    if not bridges:
+    bridges, counts = _scan_mapping(pm.phonemize(ref=seg_ref).get_mapping())
+    return _apply_to_words(words, bridges, counts)
+
+
+def _retime(word: list) -> None:
+    """Set a word's start/end (slots 1/2) from its first/last phone."""
+    phones = word[4]
+    if phones:
+        word[1] = phones[0][1]
+        word[2] = phones[-1][2]
+
+
+def _apply_to_words(words: list, bridges: list[tuple[int, str]], counts: list[int]) -> int:
+    """Re-slice ``words``' phones to ``counts`` and stamp ``bridges``, in place.
+
+    ``counts`` is the phonemizer's per-word phone count; ``bridges`` is
+    ``[(flat_index, rule), ...]``. Both index the segment's flat phone array (all
+    phones across words in order). No-op + return 0 when the shapes don't line up
+    with the shard (guards against corrupting on unexpected phonemizer drift)."""
+    if len(counts) != len(words):
         return 0
-    return _apply_bridge_tags(words, bridges)
+    flat = [ph for wd in words for ph in wd[4] if ph[0]]
+    if sum(counts) != len(flat):
+        return 0
 
-
-def _apply_bridge_tags(words: list, bridges: dict[int, str]) -> int:
-    """Stamp ``{flat_index: rule}`` onto a segment's compact phone tuples.
-
-    Flat index counts non-empty phones across ``words`` in order (matching
-    ``detect_segment_bridges``). A tagged tuple grows to length 6 with ``rule``
-    at slot 5. Defensively refuses to tag a phone that doesn't look like a
-    merger. Returns the number of phones tagged."""
     tagged = 0
-    flat = 0
-    for wd in words:
-        for ph in wd[4]:
-            if not ph[0]:
-                continue
-            rule = bridges.get(flat)
-            if rule is not None and _looks_like_merger(ph[0]):
-                while len(ph) <= _BRIDGE_SLOT:
-                    ph.append(None)
-                ph[_BRIDGE_SLOT] = rule
-                tagged += 1
-            flat += 1
+    for fidx, rule in bridges:
+        if 0 <= fidx < len(flat) and _looks_like_merger(flat[fidx][0]):
+            ph = flat[fidx]
+            while len(ph) <= _BRIDGE_SLOT:
+                ph.append(None)
+            ph[_BRIDGE_SLOT] = rule
+            tagged += 1
+
+    off = 0
+    for wi, c in enumerate(counts):
+        words[wi][4] = flat[off : off + c]
+        off += c
+        _retime(words[wi])
     return tagged
 
 
