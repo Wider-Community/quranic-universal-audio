@@ -126,8 +126,11 @@ verse_timestamps.json.gz   # tier 1: "surah:ayah": [start_ms, end_ms]
 word_timestamps.json.gz    # tier 2: + [[widx, start, end], ...]
 letter_timestamps.json.gz  # tier 3: + [[widx, char, start, end], ...]
 catalog.json               # this reciter's catalog projection (carries audio chapter_urls)
-manifest.json              # schema_version, release_version, slug, created_at, files{sha256,bytes}
 ```
+
+The zip carries no per-reciter `manifest.json`: zip integrity is the release-level `manifest.json`'s
+per-zip `sha256`, and the in-zip `catalog.json` already self-identifies the reciter (`slug`). Only
+the release-level `manifest.json` exists.
 
 Each tier self-contains the level below; all times are relative to the matching source audio in
 `catalog.json`; all ship the canonical (deduplicated) take. The three `.json.gz` layers keep storage,
