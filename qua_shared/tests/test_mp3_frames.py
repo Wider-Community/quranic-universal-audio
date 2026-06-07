@@ -157,6 +157,23 @@ def test_slice_empty_window_returns_none():
     assert slice_frames(data, idx, 200, 100) is None
 
 
+def test_slice_start_at_or_after_audio_end_returns_none():
+    # A verse whose clip_start lands at/after the chapter audio's end (truncated
+    # source audio vs longer timestamps) resolves the start frame to the grid
+    # sentinel; the byte_end lookup then read one past ``offsets`` and raised
+    # IndexError, aborting the whole reciter's publish. It must drop the verse.
+    data = _cbr_stream(10, with_id3=False)  # 10 frames ~ 261 ms total
+    idx = build_frame_index(data)
+    assert idx.duration_ms == pytest.approx(10 * _V1_FRAME_MS, abs=0.01)
+    # Start past the end, with a non-degenerate window — the crash case.
+    assert slice_frames(data, idx, 300, 400) is None
+    # Start at/after the total duration (the sentinel boundary) — also dropped.
+    assert slice_frames(data, idx, int(idx.duration_ms) + 1, 99999) is None
+    # A window that starts in-range but extends past the end still slices.
+    tail = slice_frames(data, idx, 200, 99999)
+    assert tail is not None and tail.data
+
+
 def test_overlapping_windows_each_copy_their_own_frames():
     data = _cbr_stream(100, with_id3=False)
     idx = build_frame_index(data)
