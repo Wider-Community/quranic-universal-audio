@@ -124,7 +124,9 @@ def check_intra_segment_gapless(ref: str, verse: dict) -> list[Violation]:
             for w in words
             if seg_start <= int(w[1]) < seg_end
         )
-        for (a_start, a_end, a_idx), (b_start, b_end, b_idx) in zip(in_seg, in_seg[1:]):
+        for (_a_start, a_end, a_idx), (b_start, _b_end, b_idx) in zip(
+            in_seg, in_seg[1:], strict=False
+        ):
             if b_start != a_end:
                 out.append(
                     _violation(
