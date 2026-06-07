@@ -14,8 +14,12 @@ matching per-reciter history "tier" view lives in ``history_tiers.py``.
 
 from __future__ import annotations
 
+import logging
+
 from qua_shared.segment_edit_ops import batch_affects_timestamps
 from services.activity import history_query
+
+logger = logging.getLogger(__name__)
 
 
 def ts_stale_info(slug: str, *, produced_at: str) -> dict | None:
@@ -26,10 +30,19 @@ def ts_stale_info(slug: str, *, produced_at: str) -> dict | None:
     collects those saved after it that carry a timestamp-affecting op. Returns
     ``{"stale_since": <earliest such saved_at_utc>, "edits_since": <count>}`` when
     any exist, else ``None`` (nothing generated, or only annotation edits since).
+
+    Best-effort: a failed edit-history read (e.g. bucket unavailable) yields
+    ``None`` rather than propagating — this feeds the releases-status grid for
+    every reciter, so one unreadable history must not 500 the whole page.
     """
+    try:
+        batches = history_query.parse_history_for_reciter(slug)
+    except Exception:  # noqa: BLE001 — best-effort; bucket/read failure → not stale
+        logger.warning("ts_stale_info(%s): edit-history read failed; treating as not stale", slug)
+        return None
     stale_since: str | None = None
     count = 0
-    for batch in history_query.parse_history_for_reciter(slug):
+    for batch in batches:
         saved_at = batch.get("saved_at_utc")
         if not saved_at or saved_at <= produced_at:
             continue

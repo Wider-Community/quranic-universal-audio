@@ -60,6 +60,17 @@ def test_edit_before_generation_is_not_stale(monkeypatch):
     assert ts_staleness.ts_stale_info("slug", produced_at=_GEN_AT) is None
 
 
+def test_edit_history_read_failure_is_not_stale(monkeypatch):
+    """A failed edit-history read (e.g. bucket unavailable) must not propagate —
+    the status grid calls this per reciter and one failure can't 500 the page."""
+
+    def _boom(_slug):
+        raise RuntimeError("bucket 401")
+
+    monkeypatch.setattr(history_query, "parse_history_for_reciter", _boom)
+    assert ts_staleness.ts_stale_info("slug", produced_at=_GEN_AT) is None
+
+
 def test_mixed_batch_counts_only_affecting_and_keeps_earliest(monkeypatch):
     _patch_history(
         monkeypatch,
