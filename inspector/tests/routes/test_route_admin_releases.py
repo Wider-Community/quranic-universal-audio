@@ -146,7 +146,6 @@ def test_status_released_with_ledger_is_waiting(signed_in_client, monkeypatch):
     row = rows[0]
     assert row["slug"] == "ar.ready_to_publish"
     assert row["state"] == "released"
-    assert row["gh_release_eligible"] is True
     assert row["ts"] == {
         "version": "real-job-id-123",
         "produced_at": row["ts"]["produced_at"],
@@ -191,26 +190,22 @@ def test_status_inert_rows_filtered(signed_in_client, monkeypatch, seed_state):
     assert slugs == ["ar.visible"]
 
 
-def test_status_excluded_only_for_candidates(signed_in_client, monkeypatch, seed_state):
-    """An ineligible channel row only surfaces in the response when it
-    would otherwise be a release candidate (released or has TS) — not
-    every catalog row from that channel."""
+def test_status_ignores_channel_eligibility_flag(signed_in_client, monkeypatch, seed_state):
+    """The channel ``gh_release_eligible`` flag no longer gates anything. A
+    released reciter with a current TS row on a flag-0 channel surfaces as a
+    normal bucketable row, and the eligibility field is gone from the wire."""
     client, _user = signed_in_client(role="maintainer")
     _stub_jobs_api(monkeypatch)
     _seed_ineligible_channel("private_ch")
-
-    # Ineligible + released → surfaces (excluded bucket).
-    _seed_delivery_on_channel("ar.excluded-candidate", channel="private_ch", reciter_id="r3")
-    seed_state("ar.excluded-candidate", state="released")
-    # Ineligible + awaiting_review → dropped (not a candidate).
-    _seed_delivery_on_channel("ar.excluded-inert", channel="private_ch", reciter_id="r4")
-    seed_state("ar.excluded-inert", state="awaiting_review")
+    _seed_delivery_on_channel("ar.flag_off", channel="private_ch", reciter_id="r3")
+    seed_state("ar.flag_off", state="released")
+    _seed_ledger_ts("ar.flag_off")
 
     resp = client.get("/api/admin/releases/status")
     body = resp.get_json()
-    slugs = [r["slug"] for r in body["recitations"]]
-    assert slugs == ["ar.excluded-candidate"]
-    assert body["recitations"][0]["gh_release_eligible"] is False
+    row = next(r for r in body["recitations"] if r["slug"] == "ar.flag_off")
+    assert row["state"] == "released" and row["ts"] is not None
+    assert "gh_release_eligible" not in row
 
 
 def test_status_in_flight_slug_is_bucketable(signed_in_client, monkeypatch):

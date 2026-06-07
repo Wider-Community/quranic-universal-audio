@@ -2,8 +2,8 @@
 """HF Job entrypoint: cut a global GitHub release (v2 track).
 
 Reads the inspector DB (read-only) to discover every recitation eligible for
-GH releases (``channels.gh_release_eligible = 1`` + current
-``per_recitation_releases(track='ts')`` row), builds the per-recitation tier
+GH releases (a current ``per_recitation_releases(track='ts')`` row), builds the
+per-recitation tier
 files + ``catalog.json`` + zip + content_hash, builds the dataset-level
 ``manifest.json`` + ``CHANGELOG.md``, computes the version, and uses the
 GitHub REST API to create the release tag and upload every asset.
@@ -107,8 +107,8 @@ def _open_inspector_db_readonly() -> sqlite3.Connection:
 
 def _eligible_recitations(conn: sqlite3.Connection) -> list[dict]:
     """Return ``[{slug, ts_version, delivery_meta, channel_meta, reciter_meta}, ...]``
-    for every recitation eligible for GH release: channel ``gh_release_eligible=1``
-    AND a current ``per_recitation_releases(track='ts')`` row.
+    for every recitation eligible for GH release: a current
+    ``per_recitation_releases(track='ts')`` row. Every channel is releasable.
 
     Selects both the FK slugs (``riwayah``/``style``/``channel`` — kept so
     ``catalog.json`` keeps its stable consumer schema) AND the vocab display names
@@ -141,14 +141,12 @@ def _eligible_recitations(conn: sqlite3.Connection) -> list[dict]:
           r.country AS country
         FROM per_recitation_releases prr
         JOIN deliveries d ON d.slug = prr.slug
-        JOIN channels c   ON c.slug = d.channel
         JOIN riwayahs rw  ON rw.slug = d.riwayah
         JOIN styles st    ON st.slug = d.style
         JOIN channels ch  ON ch.slug = d.channel
         JOIN reciters r   ON r.reciter_id = d.reciter_id
         WHERE prr.track = 'ts'
           AND prr.superseded_at IS NULL
-          AND c.gh_release_eligible = 1
         ORDER BY prr.slug
     """).fetchall()
     return [dict(r) for r in rows]

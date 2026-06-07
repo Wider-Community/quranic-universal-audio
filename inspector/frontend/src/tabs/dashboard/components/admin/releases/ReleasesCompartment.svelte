@@ -8,10 +8,10 @@
      *      flight alert strip.
      *   2. Sticky filter bar — search (Arabic + Latin name) + facet chips
      *      (Riwayah / Style / Channel) + sort toggle (stalest / name) + clear.
-     *   3. Five collapsible state sections — In progress / Stale on HF /
-     *      Waiting to publish / Published & current / Excluded from GH.
-     *      Priority-first bucketing: in_flight → stale_hf → waiting →
-     *      published → excluded. A row belongs to exactly one bucket.
+     *   3. Five collapsible state sections — In progress / Failed to publish /
+     *      Stale on HF / Waiting to publish / Published & current.
+     *      Priority-first bucketing: in_flight → failed → stale_hf → waiting →
+     *      published. A row belongs to exactly one bucket.
      *
      * Single bulk fetch via ``/api/admin/releases/status`` + FE-side bucketing
      * (same pattern as ReviewsCompartment). 30 s poll picks up new in-flight
@@ -127,9 +127,6 @@
     function isPublishedCurrent(r: ReleaseStatusRow): boolean {
         return r.hf !== null && !r.hf.stale_since;
     }
-    function isExcluded(r: ReleaseStatusRow): boolean {
-        return !r.gh_release_eligible;
-    }
 
     function bucketOf(r: ReleaseStatusRow): ReleasesBucket | null {
         if (isInFlight(r)) return 'in_flight';
@@ -137,7 +134,6 @@
         if (isStaleHf(r)) return 'stale_hf';
         if (isWaiting(r)) return 'waiting';
         if (isPublishedCurrent(r)) return 'published_current';
-        if (isExcluded(r)) return 'excluded';
         return null;   // fresh / inert — hide
     }
 
@@ -213,13 +209,12 @@
         { key: 'stale_hf',          label: 'Stale on HF',         mark: 'stale',     defaultCollapsed: false, hideWhenEmpty: false },
         { key: 'waiting',           label: 'Waiting to publish',  mark: 'waiting',   defaultCollapsed: false, hideWhenEmpty: false },
         { key: 'published_current', label: 'Published & current', mark: 'published', defaultCollapsed: true,  hideWhenEmpty: false },
-        { key: 'excluded',          label: 'Excluded from GH',    mark: 'excluded',  defaultCollapsed: true,  hideWhenEmpty: false },
     ];
 
     const bucketed = $derived.by(() => {
         const out: Record<ReleasesBucket, ReleaseStatusRow[]> = {
             in_flight: [], failed: [], stale_hf: [], waiting: [],
-            published_current: [], excluded: [],
+            published_current: [],
         };
         for (const r of filteredRows) {
             const b = bucketOf(r);
@@ -229,12 +224,11 @@
     });
 
     /** Number of rows that COULD land in the next GH cut — released + has
-     *  TS + eligible channel + (new OR refreshable). Surfaced in the summary
-     *  card's "No releases yet · N ready" state and as Cut-button context. */
+     *  TS + (new OR refreshable). Surfaced in the summary card's "No releases
+     *  yet · N ready" state and as Cut-button context. */
     const readyCount = $derived(
         allRows.filter((r) =>
             r.state === 'released'
-            && r.gh_release_eligible
             && r.ts !== null
             && (r.gh === null || !!r.hf?.stale_since || (r.ts && summary?.produced_at && r.ts.produced_at > summary.produced_at)),
         ).length,
@@ -250,17 +244,15 @@
         if (summary && summary.produced_at) {
             const cutAt = summary.produced_at;
             const anyFresher = allRows.some((r) =>
-                r.gh_release_eligible
-                && r.ts !== null
+                r.ts !== null
                 && r.ts.produced_at > cutAt,
             );
             const anyStaleMember = allRows.some(
-                (r) => r.gh_release_eligible && !!r.gh?.stale_since,
+                (r) => !!r.gh?.stale_since,
             );
             const anyAdded = allRows.some(
                 (r) =>
-                    r.gh_release_eligible
-                    && r.state === 'released'
+                    r.state === 'released'
                     && r.ts !== null
                     && r.gh === null,
             );
@@ -276,7 +268,7 @@
     function loadCollapsed(): Record<ReleasesBucket, boolean> {
         const fallback: Record<ReleasesBucket, boolean> = {
             in_flight: false, failed: false, stale_hf: false, waiting: false,
-            published_current: true, excluded: true,
+            published_current: true,
         };
         try {
             const raw = localStorage.getItem(COLLAPSE_LS_KEY);
@@ -288,7 +280,6 @@
                 stale_hf: parsed.stale_hf ?? fallback.stale_hf,
                 waiting: parsed.waiting ?? fallback.waiting,
                 published_current: parsed.published_current ?? fallback.published_current,
-                excluded: parsed.excluded ?? fallback.excluded,
             };
         } catch {
             return fallback;
@@ -733,7 +724,6 @@
     .mark-failed    { background: var(--state-error-fg); }
     .mark-waiting   { background: var(--state-available-fg); }
     .mark-published { background: var(--state-published-fg); }
-    .mark-excluded  { background: var(--text-faint); }
 
     .state-name {
         font-size: var(--fs-row);
