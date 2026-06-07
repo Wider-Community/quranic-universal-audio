@@ -2,10 +2,13 @@
 """HF Job entrypoint: publish a BATCH of recitations to the HF dataset.
 
 Reads ``SLUGS`` (a JSON array) and runs ``publish_hf.publish_slug`` for each
-slug in its own forked subprocess, collecting a per-slug member result. The
-isolation matters: each publish peaks at several GB (rows + audio slices + the
-parquet Dataset), and the OS only reclaims that memory when the child exits —
-so the footprint never accumulates across the batch and OOM-kills the container.
+slug in its own SPAWNED subprocess, collecting a per-slug member result. The
+isolation matters twice over: (1) each publish peaks at several GB (rows + audio
+slices + the parquet Dataset), and the OS only reclaims that memory when the
+child exits — so the footprint never accumulates across the batch and OOM-kills
+the container; (2) spawn (not fork) starts a fresh interpreter so torch/datasets
+import clean — forking after they are imported makes torchcodec encode + the
+threaded slicer crawl (~45 min vs the ~68 s a clean top-level process takes).
 Each slug's split is pushed independently — one slug failing (validation, audio,
 push, OOM, timeout) never aborts the batch, it just lands as a ``failed``
 member. After every slug is processed the dataset catalog + card are re-rendered
@@ -135,10 +138,11 @@ def _post_webhook(*, job_id: str, members: list[dict], launched_by: str | None) 
 def _publish_worker(slug: str, job_id: str, out_path: str) -> None:
     """Child-process entry: publish one slug, write its result dict as JSON.
 
-    Runs in a forked subprocess so the OS reclaims ALL of this reciter's memory
+    Runs in a SPAWNED subprocess so the OS reclaims ALL of this reciter's memory
     (rows + audio slices + the parquet Dataset, several GB peak) on exit —
     ``gc.collect()`` alone leaves the freed pages in the process RSS, which
-    accumulated across reciters and OOM-killed the container.
+    accumulated across reciters and OOM-killed the container. spawn (not fork)
+    also gives a clean interpreter so torch/datasets import fresh per reciter.
     """
     try:
         res = publish_slug(slug, job_id, sync_card=False)
@@ -192,7 +196,13 @@ def main() -> int:
         log.error("SLUGS env var is required (JSON array)")
         return 2
 
-    ctx = mp.get_context("fork")
+    # SPAWN, not fork: each reciter publish runs torchcodec encoding + a threaded
+    # slicer. Forking AFTER torch/datasets are imported (their OpenMP + internal
+    # thread pools already live) makes that work in the child crawl (~45 min vs
+    # the ~68 s a clean top-level process takes — fork-after-threads is undefined).
+    # spawn starts a fresh interpreter so torch imports clean in the child; memory
+    # is still fully reclaimed on child exit (kills the accumulation OOM).
+    ctx = mp.get_context("spawn")
     per_reciter_timeout = int(os.environ.get("INSPECTOR_BATCH_RECITER_TIMEOUT_S", "2700"))
 
     members: list[dict] = []

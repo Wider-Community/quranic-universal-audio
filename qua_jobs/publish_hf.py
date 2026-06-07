@@ -484,12 +484,22 @@ def _frame_slice(
 
 
 def _slice_workers() -> int:
-    """Worker count sized to the container's real CPU quota, not host cores.
+    """Worker count for the chapter-slicing pool.
 
-    ``os.cpu_count()`` reports host cores inside the HF container (e.g. 64 on a
-    2-vCPU flavor) → 6x oversubscription of CPU-bound slicing. Read the cgroup
-    quota / scheduler affinity and cap at quota + 1.
+    Slicing is **I/O-bound on the bucket mount** (each worker does one bulk
+    multi-MB chapter read), NOT CPU-bound — the in-memory frame slicing is cheap
+    pure-Python. The HF bucket *volume* mount thrashes under many concurrent
+    large reads: 3 workers slice 6.2k rows / 114 chapters in ~17 s, but 9 (what
+    quota+1 yields on cpu-upgrade's 8 vCPU) stalls so hard the loop didn't reach
+    row 311 in 45 min. So this is capped LOW and decoupled from CPU count.
+    ``INSPECTOR_SLICE_WORKERS`` overrides for tuning.
     """
+    override = os.environ.get("INSPECTOR_SLICE_WORKERS", "").strip()
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
     quota: int | None = None
     # cgroup v2: ``<quota> <period>`` in microseconds ("max" = unbounded).
     try:
@@ -512,7 +522,8 @@ def _slice_workers() -> int:
             quota = len(os.sched_getaffinity(0))  # type: ignore[attr-defined]
         except AttributeError:
             quota = os.cpu_count() or 2
-    return max(2, min(quota + 1, 12))
+    # I/O-bound on the bucket mount → cap at 3 (proven fast) regardless of vCPU.
+    return max(2, min(quota + 1, 3))
 
 
 def _rebase_row(row: dict, actual_start_ms: int) -> None:
