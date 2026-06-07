@@ -192,13 +192,19 @@ def main() -> int:
     bs.add_common_args(pm, mutating=False)
 
     a = p.parse_args()
-    # status/record/history/monitor are read-only — need_actor=False saves the
-    # env-vars-must-exist check + skips actor construction.
-    is_read_only = a.cmd in ("status", "record", "history", "monitor")
-    ctx = bs.setup(a, need_actor=not is_read_only)
-    return {"launch": _do_launch, "cancel": _do_cancel, "status": _do_status,
-            "record": _do_record, "history": _do_history,
-            "publish": _do_publish, "monitor": _do_monitor}[a.cmd](a, ctx)
+    # launch/cancel/publish mutate (need actor + --yes-prod); status/record/
+    # history/monitor are read-only. Only cancel + publish do an in-process
+    # bucket-DB write (cancel_job / complete_timestamps_job) → safe_write; launch
+    # only queues an HF job (no DB write, and --monitor needs the Space up).
+    mutates = a.cmd in ("launch", "cancel", "publish")
+    safe_write = a.cmd in ("cancel", "publish")
+    return bs.run(
+        a,
+        lambda ctx: {"launch": _do_launch, "cancel": _do_cancel, "status": _do_status,
+                     "record": _do_record, "history": _do_history,
+                     "publish": _do_publish, "monitor": _do_monitor}[a.cmd](a, ctx),
+        need_actor=mutates, mutates=mutates, safe_write=safe_write,
+    )
 
 
 if __name__ == "__main__":

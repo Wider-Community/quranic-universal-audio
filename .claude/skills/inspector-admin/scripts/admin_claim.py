@@ -84,8 +84,12 @@ def main() -> int:
     pra.add_argument("--to", required=True); pra.add_argument("--reason")
     bs.add_common_args(pra)
     a = p.parse_args()
-    ctx = bs.setup(a, need_actor=a.cmd != "show")
-    return {"show": _show, "release": _release, "reassign": _reassign}[a.cmd](a, ctx)
+    write = a.cmd in ("release", "reassign")
+    return bs.run(
+        a,
+        lambda ctx: {"show": _show, "release": _release, "reassign": _reassign}[a.cmd](a, ctx),
+        need_actor=write, mutates=write, safe_write=write,
+    )
 
 
 if __name__ == "__main__":

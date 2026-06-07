@@ -75,11 +75,15 @@ def main() -> int:
     pt = sub.add_parser("tables"); bs.add_common_args(pt, mutating=False)
 
     a = p.parse_args()
-    # Read-only exec needs DB but not actor; --write needs both. Pass mutates
-    # explicitly so the --yes-prod gate fires for --write but skips for SELECT.
+    # Read-only exec needs DB but not actor; --write needs both + the single-
+    # writer pause (safe_write). bs.run routes the prod write through
+    # prod_safe_setup; SELECT/tables just read.
     is_write = a.cmd == "exec" and getattr(a, "write", False)
-    ctx = bs.setup(a, need_actor=is_write, mutates=is_write)
-    return {"exec": _exec, "tables": _tables}[a.cmd](a, ctx)
+    return bs.run(
+        a,
+        lambda ctx: {"exec": _exec, "tables": _tables}[a.cmd](a, ctx),
+        need_actor=is_write, mutates=is_write, safe_write=is_write,
+    )
 
 
 if __name__ == "__main__":

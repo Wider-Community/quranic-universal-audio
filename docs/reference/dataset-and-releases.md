@@ -385,5 +385,6 @@ agree once re-based; only the audio bytes differ.
 ## Event classification
 
 Publish actions fire events into
-[activity_classification.py](../../inspector/services/activity/activity_classification.py): TS
-generation is admin-only infrastructure; `released` / dataset-publish events are public.
+[activity_classification.py](../../inspector/services/activity/activity_classification.py): the
+in-app publish milestone `reciter.published` (TS-gen completion → `released` state) is public on
+the rail; `released` / dataset-publish events (HF push + GH cut) are hidden operator infrastructure.
