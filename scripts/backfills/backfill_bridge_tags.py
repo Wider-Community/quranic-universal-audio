@@ -24,7 +24,9 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import re
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -42,15 +44,39 @@ from qua_shared.timestamps_shards import (  # noqa: E402
 )
 
 
+def _rl(fn, *args, **kwargs):
+    """Run a bucket op, backing off on HF 429 rate-limit errors (2500/5min).
+
+    Honours the ``Retry after N seconds`` hint when present; re-raises anything
+    that isn't a rate-limit error so real failures still surface."""
+    for attempt in range(8):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            msg = str(e)
+            if "429" not in msg and "rate limit" not in msg.lower():
+                raise
+            m = re.search(r"[Rr]etry after (\d+)", msg)
+            wait = (int(m.group(1)) + 5) if m else 60
+            print(f"  rate-limited — sleeping {wait}s (attempt {attempt + 1}/8)", flush=True)
+            time.sleep(wait)
+    raise RuntimeError("rate-limit retries exhausted")
+
+
+def _write_shard(fs, path: str, blob: bytes) -> None:
+    with fs.open(path, "wb") as fh:
+        fh.write(blob)
+
+
 def _list_reciters(fs, bucket: str) -> list[str]:
     base = bs.abs_path(bucket, "reciters")
-    return sorted(p.split("/")[-1] for p in fs.ls(base, detail=False))
+    return sorted(p.split("/")[-1] for p in _rl(fs.ls, base, detail=False))
 
 
 def _shard_paths(fs, bucket: str, slug: str) -> list[tuple[int, str]]:
     base = bs.abs_path(bucket, f"reciters/{slug}/timestamps")
     try:
-        files = fs.ls(base, detail=False)
+        files = _rl(fs.ls, base, detail=False)
     except FileNotFoundError:
         return []
     out = []
@@ -95,7 +121,7 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, log) -> dict:
     total_tagged = total_repeat = 0
     violations = []
     for _ch, path in shards:
-        data = json.loads(gzip.decompress(fs.read_bytes(path)))
+        data = json.loads(gzip.decompress(_rl(fs.read_bytes, path)))
         n, rep, viol = _tag_shard(pm, data)
         total_tagged += n
         total_repeat += rep
@@ -107,8 +133,7 @@ def process_reciter(fs, bucket: str, slug: str, *, write: bool, log) -> dict:
                         dist[phn[5]] += 1
         if write:
             data.setdefault("_meta", {})["schema_version"] = SEGMENT_SCHEMA_VERSION
-            with fs.open(path, "wb") as fh:
-                fh.write(gzip_shard(data))
+            _rl(_write_shard, fs, path, gzip_shard(data))
     log(
         f"{slug:44} shards={len(shards):3} tagged={total_tagged:6} "
         f"repeat_segs={total_repeat:4} violations={len(violations)}"

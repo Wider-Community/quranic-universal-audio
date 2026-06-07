@@ -1,7 +1,7 @@
 """Tests for cross-word tajweed bridge detection + tagging.
 
-The pure stamping logic (``_apply_bridge_tags``) is tested deterministically; the
-phonemizer-backed detection is exercised when ``quranic_phonemizer`` is present.
+The pure re-slice/stamp core (``_apply_to_words``) is tested deterministically;
+the phonemizer-backed detection is exercised when ``quranic_phonemizer`` present.
 """
 
 from __future__ import annotations
@@ -10,16 +10,18 @@ import pytest
 
 from qua_shared.timestamps_bridges import (
     BRIDGE_RULES,
-    _apply_bridge_tags,
+    _apply_to_words,
     _looks_like_merger,
     detect_segment_bridges,
     tag_segment_words,
 )
 
 
-def _word(widx, phones):
-    """Minimal compact word: [widx, start, end, letters, [[phone,s,e], ...]]."""
-    return [widx, 0, 0, [], [[p, 0, 0] for p in phones]]
+def _word(widx, phones, t0=0):
+    """Minimal compact word: [widx, start, end, letters, [[phone, s, e], ...]].
+    Phone times are globally monotonic from ``t0`` so re-time is observable:
+    phone i → [p, t0+i, t0+i+1]."""
+    return [widx, 0, 0, [], [[p, t0 + i, t0 + i + 1] for i, p in enumerate(phones)]]
 
 
 def test_looks_like_merger():
@@ -33,22 +35,34 @@ def test_looks_like_merger():
     assert not _looks_like_merger("")
 
 
-def test_apply_bridge_tags_stamps_slot5():
-    # flat phones: a(0) m̃(1) | i(2) rˤrˤ(3)
-    words = [_word(1, ["a", "m̃"]), _word(2, ["i", "rˤrˤ"])]
-    n = _apply_bridge_tags(words, {1: "idgham_shafawi", 3: "idgham_bila_ghunnah_noon"})
-    assert n == 2
-    assert words[0][4][1] == ["m̃", 0, 0, None, None, "idgham_shafawi"]
-    assert words[1][4][1] == ["rˤrˤ", 0, 0, None, None, "idgham_bila_ghunnah_noon"]
-    # untagged phones stay length-3
-    assert words[0][4][0] == ["a", 0, 0]
+def test_apply_reattributes_shafawi_kasra_to_next_word():
+    # Aligner parked مِّن's kasra "i" on شهداءكم after the merged meem (m̃);
+    # canonical counts put شهداءكم=[k,u,m̃], مِّن=[i,ŋ]. Flat: k u m̃ | i ŋ.
+    words = [_word(14, ["k", "u", "m̃", "i"]), _word(15, ["ŋ"], t0=4)]
+    n = _apply_to_words(words, [(2, "idgham_shafawi")], [3, 2])
+    assert n == 1
+    # شهداءكم keeps k u m̃ (m̃ tagged); the stranded kasra moved to مِّن's head.
+    assert [p[0] for p in words[0][4]] == ["k", "u", "m̃"]
+    assert words[0][4][2] == ["m̃", 2, 3, None, None, "idgham_shafawi"]
+    assert [p[0] for p in words[1][4]] == ["i", "ŋ"]
+    # word start/end re-timed from the new phone slices.
+    assert words[0][1] == 0 and words[0][2] == 3  # k.start .. m̃.end
+    assert words[1][1] == 3 and words[1][2] == 5  # i.start .. ŋ.end
 
 
-def test_apply_bridge_tags_refuses_non_merger():
+def test_apply_refuses_non_merger_index():
     # A drifted index pointing at a vowel must NOT be stamped.
     words = [_word(1, ["a", "b"])]
-    assert _apply_bridge_tags(words, {0: "idgham_shafawi"}) == 0
-    assert words[0][4][0] == ["a", 0, 0]
+    assert _apply_to_words(words, [(0, "idgham_shafawi")], [2]) == 0
+    assert words[0][4][0] == ["a", 0, 1]
+
+
+def test_apply_noop_on_shape_mismatch():
+    # Phonemizer count total != shard flat count → skip, no mutation.
+    words = [_word(1, ["a", "m̃"])]
+    before = [list(p) for p in words[0][4]]
+    assert _apply_to_words(words, [(1, "idgham_shafawi")], [5]) == 0
+    assert words[0][4] == before
 
 
 def test_tag_segment_words_skips_non_contiguous():
