@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from qua_shared.timestamps_bridges import (
+    _BRIDGE_SLOT,
     BRIDGE_RULES,
     _apply_to_words,
     _looks_like_merger,
@@ -48,6 +49,23 @@ def test_apply_reattributes_shafawi_kasra_to_next_word():
     # word start/end re-timed from the new phone slices.
     assert words[0][1] == 0 and words[0][2] == 3  # k.start .. m̃.end
     assert words[1][1] == 3 and words[1][2] == 5  # i.start .. ŋ.end
+
+
+def test_apply_first_word_owns_head_merger_duration():
+    # idgham ghunnah noon: مَن + يَ… , merger ñ/m̃ at the curr word's head.
+    # Flat: m i m̃ a n. The first word must hold through the merger so word
+    # highlighting stays on it during the ghunnah; the curr word starts after.
+    words = [_word(7, ["m", "i"]), _word(8, ["m̃", "a", "n"], t0=2)]
+    n = _apply_to_words(words, [(2, "idgham_ghunnah_noon")], [2, 3])
+    assert n == 1
+    # Phone attribution unchanged: the merger still lives on the curr word
+    # (lifted to the bridge tile by the FE) and carries its rule tag.
+    assert [p[0] for p in words[1][4]] == ["m̃", "a", "n"]
+    assert words[1][4][0][_BRIDGE_SLOT] == "idgham_ghunnah_noon"
+    # First word owns the merger duration: its envelope ends at the merger end.
+    assert words[0][1] == 0 and words[0][2] == 3  # m.start .. m̃.end
+    # Second word's envelope begins at its next phone, past the merger.
+    assert words[1][1] == 3 and words[1][2] == 5  # a.start .. n.end
 
 
 def test_apply_refuses_non_merger_index():
