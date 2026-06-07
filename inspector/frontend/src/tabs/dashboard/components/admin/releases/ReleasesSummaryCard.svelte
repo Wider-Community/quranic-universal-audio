@@ -38,9 +38,13 @@
          *  "Nothing changed since last cut". */
         cutDisabledReason: string | null;
         onJumpToInFlight?: () => void;
+        /** Job id currently being canceled (disables its Cancel button). */
+        cancelingJob?: string | null;
+        /** Cancel a global in-flight job (cut / batch) straight from the strip. */
+        onCancelJob?: (_jobId: string) => void;
     }
     let { summary, inFlight, readyCount, onCut, cutDisabledReason,
-          onJumpToInFlight }: Props = $props();
+          onJumpToInFlight, cancelingJob = null, onCancelJob }: Props = $props();
 
     const canCut = can('release.cut_gh');
 
@@ -97,20 +101,36 @@
 <section class="card">
     {#if inFlight.length > 0}
         {@const solo = inFlight.length === 1 ? inFlight[0] : null}
-        <button
-            class="flight-strip"
-            type="button"
-            onclick={() => onJumpToInFlight?.()}
-            title="Jump to In progress section"
-        >
-            <span class="flight-spinner" aria-hidden="true"></span>
-            <span class="flight-label">
-                {solo ? jobLabel(solo) : `${inFlight.length} jobs in flight`}
-            </span>
-            {#if solo?.started_at}
-                <span class="flight-when">· {fmtRelative(solo.started_at)}</span>
+        {@const global = solo && solo.slug === null ? solo : null}
+        <div class="flight-strip">
+            <button
+                class="flight-jump"
+                type="button"
+                onclick={() => onJumpToInFlight?.()}
+                title="Jump to In progress section"
+            >
+                <span class="flight-spinner" aria-hidden="true"></span>
+                <span class="flight-label">
+                    {solo ? jobLabel(solo) : `${inFlight.length} jobs in flight`}
+                </span>
+                {#if solo?.started_at}
+                    <span class="flight-when">· {fmtRelative(solo.started_at)}</span>
+                {/if}
+            </button>
+            {#if global?.url}
+                <a class="hf-link" href={global.url} target="_blank" rel="noopener noreferrer"
+                    title="Open the job on Hugging Face">Open on HF ↗</a>
             {/if}
-        </button>
+            {#if global?.job_id && onCancelJob}
+                <button
+                    class="cancel-job"
+                    type="button"
+                    onclick={() => onCancelJob?.(global.job_id)}
+                    disabled={cancelingJob === global.job_id}
+                    title="Cancel this job — in-progress work is lost"
+                >{cancelingJob === global.job_id ? 'Cancelling…' : 'Cancel'}</button>
+            {/if}
+        </div>
     {/if}
 
     <div class="card-row">
@@ -280,7 +300,8 @@
     }
 
     /* In-flight strip — sits above the version line. Matches the chip-style
-     * affordance from Reviews; click jumps the list. */
+     * affordance from Reviews; the label jumps the list, and a global job
+     * (cut / batch) gets an inline Open-on-HF link + Cancel. */
     .flight-strip {
         display: inline-flex;
         align-items: center;
@@ -289,14 +310,44 @@
         background: var(--accent-tint-soft);
         border: 1px solid var(--accent-tint);
         border-radius: 999px;
+        font-size: var(--fs-meta);
+        padding: 3px 10px;
+    }
+    .flight-jump {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: transparent;
+        border: 0;
         color: var(--accent-strong);
         font: inherit;
         font-size: var(--fs-meta);
-        padding: 3px 10px;
         cursor: pointer;
-        transition: background-color var(--t-fast);
+        padding: 0;
     }
-    .flight-strip:hover { background: var(--accent-tint); }
+    .hf-link {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--accent-strong);
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .hf-link:hover { text-decoration: underline; }
+    .cancel-job {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        background: transparent;
+        color: var(--state-error-fg);
+        border: 1px solid oklch(0.86 0.130 75 / 0.4);
+        border-radius: var(--r-1);
+        padding: 1px 7px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .cancel-job:hover:not(:disabled) { background: var(--state-error-bg); }
+    .cancel-job:disabled { opacity: 0.6; cursor: not-allowed; }
     .flight-spinner {
         width: 8px;
         height: 8px;

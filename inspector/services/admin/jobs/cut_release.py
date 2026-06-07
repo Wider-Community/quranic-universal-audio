@@ -47,7 +47,6 @@ JOB_TIMEOUT = os.environ.get("INSPECTOR_CUT_JOB_TIMEOUT", "1h")
 def launch(
     *,
     version: str | None = None,
-    operator_note: str | None = None,
     launched_by: str | None = None,
     webhook_base: str | None = None,
 ) -> dict:
@@ -69,8 +68,6 @@ def launch(
     }
     if version:
         env["RELEASE_VERSION"] = version
-    if operator_note:
-        env["OPERATOR_NOTE"] = operator_note
     if launched_by:
         env["LAUNCHED_BY"] = launched_by
     secrets = {"HF_TOKEN": get_token()}
@@ -135,7 +132,6 @@ def complete(
     *,
     version: str | None = None,
     external_uri: str | None = None,
-    operator_note: str | None = None,
     launched_by: str | None = None,
     members: list[dict] | None = None,
     validation_summary: dict | None = None,
@@ -183,7 +179,6 @@ def complete(
             produced_by_job_id=job_id,
             launched_by=launched_by,
             external_uri=external_uri,
-            operator_note=operator_note,
             validation_summary=validation_summary,
         )
         for m in members:

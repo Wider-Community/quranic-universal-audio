@@ -72,6 +72,17 @@ Symptom → likely root → first probe. Ordered by area, not severity. VBR-only
 | Seek lands at file-relative when caller expected file-absolute | Caller wrote `el.currentTime` directly | Find the offending callsite via grep. All seeks must go through the port. |
 | Time updates show wrong file-absolute ms | `_window.offsetMs` stale (wasn't updated after a swap) | `_window` is set synchronously in `_swapTo` (`audio-port.ts:591-630`, `this._window = win` at `:605`). If stale, a custom load path is bypassing the port. |
 
+## Dataset publish — offline per-verse slicing (`qua_jobs/publish_hf.py`)
+
+The HF dataset publish job cuts ~6,235 per-verse clips from each chapter MP3 via **in-process MP3 frame-index slicing** (`qua_shared/mp3_frames.py`), NOT ffmpeg. `build_frame_index(data)` parses the chapter's frame grid once (skips ID3 + Xing/Info/VBRI); `slice_frames` copies the byte range of the frames covering `[clip_start, clip_end]`, snapping the start to the frame boundary ≤ clip_start. `_rebase_row` shifts clip-relative word/letter/segment times by `clip_start - actual_start_ms`.
+
+| Symptom | Likely root | First probe |
+|---|---|---|
+| Published verse audio clipped at the onset (~50 ms missing) | Pre-rewrite ffmpeg `-ss` overshot the seek by 1–2 frames AND the old `snap = actual_dur − requested_dur` heuristic assumed a *backward* snap that never happened → rebase delta wrong in sign. **Fixed** by the frame-index slicer (true frame ≤ clip_start). | Compare `actual_start_ms` from `slice_frames` vs the source frame ffmpeg's first audio frame lands on (decode both, find ff PCM inside the wider clip). |
+| Every clip duration off by ~1 frame vs old output | Expected — frame-index window is `[≤start, ≥end]` (correct superset); ffmpeg's was a forward-shifted window. Audio frames are byte-identical where they overlap. | `slice_frames` duration must be within ±1 MP3 frame of the ffmpeg `-c copy` clip; PCM of the overlap is bit-identical. |
+| Slicing slow / oversubscribed on small flavor | Worker pool sized from `os.cpu_count()` (host cores) not the cgroup quota → 6× oversubscription on 2-vCPU. **Fixed** via `_slice_workers()` reading `/sys/fs/cgroup/cpu.max`. | Log line "slicing N rows … with K workers" — K should be ≈ vCPU+1, not host cores. |
+| VBR verse mistimed in the dataset | Frame index used a fixed per-frame duration instead of reading each frame header — desyncs on Xing-injected VBR. `mp3_frames` reads bitrate/sr per frame; the Xing/Info/VBRI header frame is skipped. | `build_frame_index(data).n_frames` vs `ffprobe -show_packets` frame count; durations must match. |
+
 ## Adding a new bug shape
 
 When investigating a bug not covered here, append a row in the right section after diagnosis. Keep entries to one symptom-line + one root-line + one probe-line. If the new bug is VBR-only, add it to `vbr.md` instead.

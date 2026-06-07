@@ -65,8 +65,10 @@
     --state-discarded-bg:        oklch(0.55 0.010 268 / 0.10);
 
     /* Error text in dashboard/picker loading states. Kept as a separate
-       semantic token so component CSS doesn't reach for a bucket color. */
+       semantic token so component CSS doesn't reach for a bucket color. The
+       0.14-alpha bg pairs the fg for amber chips/pills (e.g. a stale release). */
     --state-error-fg:            oklch(0.86 0.130 75);
+    --state-error-bg:            oklch(0.86 0.130 75 / 0.14);
 
     /* Warm "attention" amber — manual flags, mark-ready bypass, flagged-issue
        counts. The one warning voice, distinct from the cyan accent and the

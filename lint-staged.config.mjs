@@ -14,10 +14,13 @@ export default {
             .filter((f) => {
                 const rel = path.relative(frontendRoot, f);
                 if (!rel || rel.startsWith('..')) return false;
-                // Codegen'd types are eslint-ignored; passing them explicitly
-                // bypasses the ignore and `eslint --fix` strips the regen
-                // banner, breaking the schema-codegen-check diff.
-                return !rel.split(path.sep).join('/').startsWith('src/lib/types/generated/');
+                // Codegen output (scripts/codegen/regen_fe_types.py). eslint --fix
+                // strips its `eslint-disable` banner, breaking schema-codegen-check.
+                // eslint.config.js ignores this dir, but that pattern is
+                // frontend-relative and lint-staged runs from the repo root, so the
+                // ignore misses — enforce the skip here.
+                const norm = rel.split(path.sep).join('/');
+                return !norm.startsWith('src/lib/types/generated/');
             });
         if (abs.length === 0) return [];
         return `node ${eslintBin} --config ${eslintConfig} --fix ${abs.join(' ')}`;

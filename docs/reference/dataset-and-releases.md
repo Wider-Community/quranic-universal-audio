@@ -37,7 +37,7 @@ separate from publish status. Publish status lives in three tables, all written 
 | Table | Grain | Purpose |
 |---|---|---|
 | `per_recitation_releases` | one current row per `(track, slug)`, `track ∈ {ts, hf}` | TS-gen + HF-dataset push history per reciter. Partial-unique on `(track, slug) WHERE superseded_at IS NULL`. |
-| `gh_releases` | one row per **cut** | Global GH release snapshot: `version`, `produced_at`, `external_uri`, `operator_note`, `validation_summary`, `superseded_at`. |
+| `gh_releases` | one row per **cut** | Global GH release snapshot: `version`, `produced_at`, `external_uri`, `validation_summary`, `superseded_at`. |
 | `gh_release_recitations` | N rows per `gh_releases` | Frozen membership: `slug`, `catalog_snapshot` (JSON), `zip_sha256`, `zip_bytes`, `coverage_ayahs`, `content_hash`, `ts_version`, `change_kind`, `stale_since`. Immutable post-cut. |
 
 - **Supersede, never delete.** A new cut supersedes the prior `gh_releases` current row; a new
@@ -70,13 +70,15 @@ The same predicate drives the Releases-tab buckets and the cut job's member disc
 
 1. Reads the bucket DB read-only → eligible reciters + the prior release's membership.
 2. Per reciter: reads every segment-array `timestamps/<ch>.json.gz` shard and projects the canonical
-   verse map (`_load_canonical_verses` → `project_segment_shard`, joining `detailed.json` confidence
-   via `confidence_by_span` for the highest-confidence completing-occasion pick) → builds the three
+   verse map (`_load_canonical_verses` → `project_segment_shard`, the earliest completing occasion)
+   → builds the three
    tier files (verse/word/letter, top-down), `catalog.json`, a per-recitation `manifest.json`; packs
    a deterministic `<slug>.zip`; computes `content_hash = SHA-256(letter_tier.gz || catalog.json)`.
+   `catalog.json` is built from `catalog/audio_manifest/<slug>.json::chapters`; a GH-eligible
+   recitation with no usable audio URLs is fatal.
 3. Classifies each reciter `added` / `refresh` / `unchanged` (vs prior `content_hash`) and computes
    the version (below).
-4. Builds the dataset-level `manifest.json` + `CHANGELOG.md` (the release body — see
+4. Builds the dataset-level `manifest.json`, `catalog.json`, and `CHANGELOG.md` (the release body — see
    [Changelog](#changelog-the-release-body)).
 5. Creates ONE GH release tag via the GitHub REST API and uploads every asset.
 6. POSTs the completion webhook → `/api/webhooks/release-cut-complete` →
@@ -108,10 +110,12 @@ gh:releases/v{X.Y.Z}/
 ├── <slug>.zip            # one per reciter (see below)
 ├── manifest.json         # dataset-level: version, per-reciter sha256/bytes/coverage/change_kind, static_refs
 ├── CHANGELOG.md          # the rendered release body
-├── catalog.json          # dataset-level: array of every reciter's catalog row
-├── shard.py              # consumer helper
+├── catalog.json          # dataset-level: reciter rows with audio URLs paired to timestamps
+├── shard.py              # consumer helper (per-surah file splitter)
+├── check_updates.py      # consumer helper (per-reciter update check)
 ├── surah_info.json       # static reference
 ├── qpc_hafs.json         # static reference (mushaf text)
+├── letter_vocab_hafs_qpc.csv  # letter-tier char alphabet (42 tokens): char,codepoint,name
 └── LICENSE               # CC-BY-4.0
 ```
 
@@ -122,17 +126,36 @@ verse_timestamps.json.gz   # tier 1: "surah:ayah": [start_ms, end_ms]
 word_timestamps.json.gz    # tier 2: + [[widx, start, end], ...]
 letter_timestamps.json.gz  # tier 3: + [[widx, char, start, end], ...]
 catalog.json               # this reciter's catalog projection (carries audio chapter_urls)
-manifest.json              # schema_version, release_version, slug, created_at, files{sha256,bytes}
 ```
 
-Each tier self-contains the level below; all times are source-relative milliseconds; all ship the
-canonical (deduplicated) take. There is no per-reciter `README.md`.
+The zip carries no per-reciter `manifest.json`: zip integrity is the release-level `manifest.json`'s
+per-zip `sha256`, and the in-zip `catalog.json` already self-identifies the reciter (`slug`). Only
+the release-level `manifest.json` exists.
+
+Each tier self-contains the level below; all times are relative to the matching source audio in
+`catalog.json`; all ship the canonical (deduplicated) take. The three `.json.gz` layers keep storage,
+startup speed, and network transfer cheap: download verse, word, or letter detail independently.
+Use `shard.py` when an app prefers local per-surah files. There is no per-reciter `README.md`.
+
+**Letter-tier `char` alphabet.** Internal shards (`reciters/<slug>/timestamps/<ch>.json.gz`)
+carry a 57-token grapheme alphabet (haraka stripped upstream, but the maddah mark and madd
+composites retained). At publish time **both** `cut_release` and `publish_hf` map each `char`
+through `qua_shared/letter_vocab.to_external_char`, which drops the maddah mark (`U+0653`) to
+yield a stable **42-token** external alphabet — a non-lossy, prolongation-only collapse (no two
+distinct letters merge). The mapping is **fail-loud**: an unknown token aborts the cut so a new
+riwayah/orthography is caught rather than silently shipped. The alphabet is published as a flat
+`char,codepoint,name` CSV at `letter_vocab_hafs_qpc.csv` (release root + the HF dataset repo) —
+the riwayah/script are in the *filename* so a future riwayah adds its own file
+(`letter_vocab_warsh_qpc.csv`, …); the tokenization rule lives here + in the release notes.
+Generated from the same module so it cannot drift from the emitted data. Internal shards and the
+Inspector animation are unchanged. See `qua_shared/letter_vocab.py`.
 
 ### Audio policy (as-built)
 
 Audio is **not** bundled. `catalog.json` carries `audio.chapter_urls` (the upstream/source URLs the
 recitation actually serves) plus codec/bitrate/sample-rate/channels meta; consumers fetch audio
-from those URLs. The fuller `redistribution_policy` registry (cdn_link / embedded_consent /
+from those URLs and read timestamps relative to those exact files. The fuller
+`redistribution_policy` registry (cdn_link / embedded_consent /
 internal_only) described in early design is **not implemented** — revisit if embedded-audio
 releases become a real requirement.
 
@@ -157,20 +180,21 @@ releases become a real requirement.
 
 ## Changelog (the release body)
 
-The release body is rendered by **one shared function**,
+The release body is rendered from
+[`docs/templates/release_body.md`](../templates/release_body.md) by
 [`render_changelog`](../../qua_shared/release_changelog.py), called by BOTH the cut job (the body
-POSTed to GitHub) and the cut-modal preview endpoint — so the preview is faithful to what ships.
-It is stdlib-only and pure; callers resolve display names + coverage and pass them in.
+POSTed to GitHub) and the cut-modal preview endpoint. The template uses fixed `{{ placeholders }}`
+only; no template dependency. The text stays human-editable, while the renderer owns the generated
+asset table, change tables, examples, and links.
 
 Format (display names only — never slugs):
 
-- Title `# v{X.Y.Z} · {date}` + a one-line summary (`First release — N recitations.` or
-  `Adds A, refreshes R (C carried) over v…`).
-- Optional operator note as a blockquote (HTML-neutralised — untrusted free text).
-- `<details>` **➕ Added — N** accordion → table `Reciter (name_en — name_ar) | Riwāyah | Style |
-  Channel | Coverage`. A `<details>` **↻ Refreshed — N** accordion when present; a `C carried /
-  unchanged.` line otherwise.
-- `<details>` **📐 Schemas** accordion (verse/word/letter tier layouts + static-refs status).
+- Title `# {date}`. GitHub already shows the tag above the body.
+- First visible section: `## What to download` asset table.
+- Short guide sections for audio/timestamp pairing, timestamp levels, recitations, and
+  programmatic use.
+- `<details>` **Reciter zip schemas**: verse/word/letter timestamp shapes plus a small example.
+- `<details>` **Catalog and manifest schemas**: release-level `manifest.json` and `catalog.json`.
 - Inline `**License:** CC-BY-4.0` + repository / HF-dataset links.
 
 Coverage shows exact **ayahs** at cut time; the DB-only preview shows **surahs** (chapter_count)
@@ -184,8 +208,39 @@ come from the `riwayahs` / `styles` / `channels` vocab tables — `catalog.json`
 |---|---|
 | `GET /api/admin/releases/status` | Per-reciter TS/HF/GH status grid + summary + in-flight jobs (FE buckets). `reviews.view`. |
 | `GET /api/admin/release-preview` | DB-only dry-run: change counts, auto-version, rendered changelog. `release.cut_gh`. |
-| `POST /api/admin/cut-release` | Launch the global cut. `release.cut_gh`. Echoes `expected_version_at_preview` to 409 a stale preview. |
-| `POST /api/admin/publish-hf/<slug>` | Launch per-reciter HF dataset publish. `release.publish_hf`. |
+| `POST /api/admin/cut-release` | Launch the global cut. `release.cut_gh`. Body accepts only `version` and `expected_version_at_preview`; echoes the preview version to 409 stale state. |
+| `POST /api/admin/publish-hf/<slug>` | Launch per-reciter HF dataset publish (single). `release.publish_hf`. |
+| `POST /api/admin/publish-hf-batch` | Launch ONE job publishing a batch of slugs. Body `{slugs: [...]}`. `release.publish_hf`. |
+| `POST /api/admin/release-jobs/<job_id>/cancel` | Cancel any in-flight release job (publish / batch / cut / timestamps). Outer gate `reviews.view`; the cancel itself is re-gated per kind. |
+
+### Batch publish (the `hf_publish_batch` kind)
+
+`publish-hf-batch` launches one HF Job running
+[qua_jobs/publish_hf_batch.py](../../qua_jobs/publish_hf_batch.py), which loops
+[`publish_hf.publish_slug`](../../qua_jobs/publish_hf.py) over each slug (one slug failing never
+aborts the batch) and re-renders the dataset catalog/card **once** at the end. The job:
+
+1. writes a durable batch record to `jobs/_global/hf_publish_batch/<job_id>.json`
+   (`{completed_at, members:[{slug, status, version, external_uri, error}]}`), then
+2. POSTs `/api/webhooks/hf-publish-batch-complete` →
+   [`services.admin.jobs.hf_publish_batch.complete()`](../../inspector/services/admin/jobs/hf_publish_batch.py),
+   which calls the single-publish `hf_publish.complete()` per **succeeded** member (idempotent
+   `per_recitation_releases(track='hf')` insert + `released` event) and leaves failures in the
+   record. The 120 s poll fallback reconciles by reading the same record (no webhook payload).
+
+Global single-flight: one batch at a time; a single publish or a cut is rejected while a batch is in
+flight, and vice-versa (labels `task=hf_publish_batch`, `reciter=_batch`).
+
+`GET /api/admin/releases/status` reads the newest batch record and derives **failed** slugs (a
+failure clears once a current `hf` release lands at/after the batch). The status payload adds
+`recitations[].publish_error` (per-row, → the FE "Failed to publish" bucket) and a top-level
+`last_batch {job_id, at, published_count, failed_count}` (→ the dismissable summary banner). In-flight
+job entries carry `url` for the FE "Open on HF" link; cancel is the generic route above.
+
+The Releases tab is **select-only**: publishable rows (waiting / stale / failed / published) carry a
+checkbox; a sticky action bar publishes the selection as one batch (a single selection = a batch of
+one). There are no per-row publish buttons. In-flight rows show a minimal status (badge + elapsed +
+Open-on-HF + Cancel); the global cut/batch job surfaces the same in the summary card strip.
 
 ## HF dataset schema
 
@@ -209,12 +264,43 @@ come from the `riwayahs` / `styles` / `channels` vocab tables — `catalog.json`
 - **Subset (config)** = riwayah slug (e.g. `hafs_an_asim`). **Split** = delivery slug. Readability
   comes from `name_en` / `name_ar`, not the split key.
 
+### Dataset catalog config
+
+HF config `mushafs`, split `all`, is the dataset catalog projection. It is rebuilt by
+[`qua_shared.hf_dataset_catalog`](../../qua_shared/hf_dataset_catalog.py) from the Inspector SQLite
+`ReciterCatalog` v2 and pushed by the active admin HF publish job after a recitation split lands.
+
+Grain is one published delivery row. Rows include delivery slug, reciter identity,
+readable riwayah/style/channel labels, audio metadata, duration, and HF-publish timestamps
+(`published_at` = first publish, `updated_at` = last publish/refresh, from
+`per_recitation_releases(track='hf')`) — see `CATALOG_COLUMNS`. Admin lifecycle / publish-ledger
+fields, the internal release-gating signal `gh_release_eligible`, the niche `variant_label`, and the
+upstream `source` label all stay out of the public dataset. The underlying
+`Channel.gh_release_eligible` / `Delivery.variant_label` / `Delivery.source` fields remain in the
+catalog — they drive GH release-cut eligibility and admin UI, just not the public projection.
+
+This is separate from GitHub release `catalog.json`: the release artifact pairs timestamp tiers with
+source audio URLs for offline consumers, while the HF `mushafs` config is a parquet catalog for
+dataset discovery and filtering.
+
+### Dataset card (README) — rendered at release time
+
+The dataset card is not uploaded verbatim. [`docs/templates/hf_dataset_card.md`](../templates/hf_dataset_card.md) is a
+**template** with `{{configs}}` (frontmatter) and `{{recitations}}` / `{{riwayat}}` / `{{hours}}`
+(header badges) placeholders. On each publish, `_sync_dataset_catalog_and_card` enumerates the actual
+hub splits once via `hub_published_splits_by_config` (the just-pushed split is already present;
+`mushafs`/`segments`/`timestamps` excluded), then `render_dataset_card` builds the `configs:` block
+(one `config_name` per riwayah + `mushafs`/`all` last) and fills the badges from the same
+`HfDatasetCatalogStats` (`_stats_from_published_splits`) used for the `mushafs` projection. So
+frontmatter, badges, and catalog stats can't drift from the published set. The GitHub repo README
+badges are a separate, broader metric maintained by `update-badges.yml` CI and are unaffected.
+
 ### Audio: preserve, don't normalize
 
 Embedded bytes are stream-copied from the bucket Xing-injected chapter master — source codec /
 bitrate / sample-rate / channels preserved; slice frame-snapped (≤26 ms earlier than first word,
 word timestamps re-based). Consumers resample at load; filter by codec/SR/channels via the
-`reciters` config columns. For the full natural recording, stream from `source_url` directly.
+`mushafs` config columns. For full-chapter app playback, prefer the GitHub release assets.
 
 ## Dedup semantics — what projection loses / preserves
 
@@ -226,13 +312,14 @@ release/dataset adapters.
 | Lost in projection | Preserved |
 |---|---|
 | A non-canonical occasion's word/letter timestamps (an interleaved re-recitation of the same verse) | The whole verse `{1..N}` — the canonical occasion reaches full word coverage by construction |
-| Trailing post-completion redundancy + a redundant complete re-do (the lower-confidence occasion) | Every recited segment in the bucket shard, time-ordered, addressable via `source_url` + offsets |
+| A leading false-start prefix + trailing post-completion redundancy (an abandoned/redundant re-do within the canonical occasion) | Every recited segment in the bucket shard, time-ordered, addressable via `source_url` + offsets |
 
 The projection picks a single **occasion** (maximal contiguous run, no foreign verse interleaved)
-that completes word coverage `{1..N}`; within-pass backward loops inside that occasion are kept
-verbatim, so the canonical row is never missing a widx. Among multiple completing occasions the
-highest mean alignment confidence wins; trailing post-completion segments are trimmed. Consumers
-wanting alternate takes read the raw bucket shards (every segment present).
+that completes word coverage `{1..N}`; within-pass backward **lookbacks** (a jump back to a
+non-first word) inside that occasion are kept verbatim, so the canonical row is never missing a widx.
+Among multiple completing occasions the **earliest** (first recited) wins; a **leading false-start**
+(a restart at word 1 whose run re-covers the verse) and **trailing** post-completion segments are
+trimmed. Consumers wanting alternate takes read the raw bucket shards (every segment present).
 
 ### Failed-alignment & deletes at publish
 

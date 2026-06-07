@@ -54,6 +54,46 @@ export interface AdminClaimEvent {
   outcome?: string;
   [k: string]: unknown;
 }
+export interface AdminCutReleaseRequest {
+  version?: string | null;
+  expected_version_at_preview?: string | null;
+}
+export interface AdminGhReleaseMember {
+  change_kind: "added" | "refresh" | "unchanged";
+  stale_since?: string | null;
+  release_id?: number | null;
+  ts_version?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminInFlightJob {
+  kind: "hf_publish" | "hf_publish_batch" | "cut_release" | "timestamps";
+  slug: string | null;
+  job_id: string;
+  started_at: string | null;
+  url?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * Summary of the most recent batch publish, for the dismissable banner.
+ */
+export interface AdminLastBatch {
+  job_id: string;
+  at?: string | null;
+  published_count: number;
+  failed_count: number;
+  [k: string]: unknown;
+}
+export interface AdminLatestGhRelease {
+  version: string;
+  produced_at: string;
+  external_uri?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminLaunchResponse {
+  job_id: string;
+  url: string | null;
+  [k: string]: unknown;
+}
 export interface AdminPermissionGroup {
   group: string;
   capabilities?: AdminCapabilityRow[];
@@ -62,6 +102,98 @@ export interface AdminPermissionGroup {
 export interface AdminPermissionsResponse {
   groups?: AdminPermissionGroup[];
   tiers?: string[];
+  [k: string]: unknown;
+}
+export interface AdminPublishBatchRequest {
+  /**
+   * @minItems 1
+   */
+  slugs: [string, ...string[]];
+}
+/**
+ * A reciter's failure in the most recent batch publish. Surfaced on the
+ * row so the FE can re-bucket it into "Failed to publish" until a retry
+ * supersedes it with a successful HF release.
+ */
+export interface AdminPublishError {
+  message: string;
+  job_id: string;
+  at?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminReleaseLinks {
+  repo: string;
+  hf_dataset: string;
+  [k: string]: unknown;
+}
+export interface AdminReleasePreviewCounts {
+  added: number;
+  refresh: number;
+  unchanged: number;
+  [k: string]: unknown;
+}
+export interface AdminReleasePreviewResponse {
+  computed_version: string | null;
+  needs_manual_version: boolean;
+  previous_version: string | null;
+  change_counts: AdminReleasePreviewCounts;
+  added: AdminReleasePreviewRow[];
+  refreshed: AdminReleasePreviewRow[];
+  release_date: string;
+  license: string;
+  links: AdminReleaseLinks;
+  changelog_preview_md: string;
+  expected_version_at_preview: string | null;
+  [k: string]: unknown;
+}
+export interface AdminReleasePreviewRow {
+  slug: string;
+  name_en?: string | null;
+  name_ar?: string | null;
+  riwayah: string;
+  style: string;
+  channel: string;
+  coverage_surahs?: number | null;
+  change_kind: "added" | "refresh" | "unchanged";
+  ts_version: string;
+  [k: string]: unknown;
+}
+export interface AdminReleaseRow {
+  version: string;
+  produced_at: string;
+  stale_since?: string | null;
+  [k: string]: unknown;
+}
+export interface AdminReleaseStatusRow {
+  slug: string;
+  name_en?: string | null;
+  name_ar?: string | null;
+  state?: string | null;
+  riwayah: string;
+  style: string;
+  channel: string;
+  gh_release_eligible: boolean;
+  ts: AdminReleaseRow | null;
+  hf: AdminReleaseRow | null;
+  gh: AdminGhReleaseMember | null;
+  publish_error?: AdminPublishError | null;
+  [k: string]: unknown;
+}
+export interface AdminReleasesStatusResponse {
+  latest_gh_release: AdminLatestGhRelease | null;
+  summary: AdminReleasesSummary | null;
+  in_flight: AdminInFlightJob[];
+  recitations: AdminReleaseStatusRow[];
+  last_batch?: AdminLastBatch | null;
+  [k: string]: unknown;
+}
+export interface AdminReleasesSummary {
+  version: string | null;
+  produced_at: string | null;
+  external_uri: string | null;
+  member_count: number;
+  total_bytes: number;
+  days_since_cut: number | null;
   [k: string]: unknown;
 }
 export interface AdminRequestCounts {
@@ -336,7 +468,7 @@ export interface DetailedDocument {
  * The ``_meta`` block at the top of ``detailed.json``.
  *
  * Kept lean per user direction — ``audio_source`` is load-bearing for
- * ``scripts/release/build_reciter.py`` + ``package_release.py``;
+ * legacy release code;
  * pad / floor fields are read by ``services/storage/data_loader.py::
  * resolve_pad``; the rest is provenance.
  */

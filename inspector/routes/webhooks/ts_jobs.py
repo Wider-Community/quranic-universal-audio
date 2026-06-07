@@ -24,7 +24,7 @@ import os
 from flask import Blueprint, jsonify, request
 
 from services.admin import timestamps_jobs as ts_jobs
-from services.admin.jobs import cut_release, hf_publish
+from services.admin.jobs import cut_release, hf_publish, hf_publish_batch
 
 log = logging.getLogger("inspector")
 
@@ -123,14 +123,45 @@ def hf_publish_complete():
     return jsonify({"ok": True, **result})
 
 
+@webhooks_bp.route("/hf-publish-batch-complete", methods=["POST"])
+def hf_publish_batch_complete():
+    """Record a batch HF dataset publish. Idempotent per member.
+
+    Body: ``{"job_id", "status", "members": [...], "launched_by"}``. Each member
+    is ``{"slug", "status", "version", "external_uri", "validation_summary",
+    "error"}``. Succeeded members insert an ``hf`` release row (via
+    ``hf_publish.complete``); failures are left to surface from the durable
+    batch record. Only acts on a success status (the job ran to completion).
+    """
+    ok, err = _check_secret()
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    job_id = (body.get("job_id") or "").strip()
+    status = (body.get("status") or "").strip().lower()
+    if not job_id:
+        return jsonify({"error": "job_id is required"}), 400
+    if status not in _SUCCESS:
+        return jsonify({"ok": True, "skipped": "non-success status"})
+    try:
+        result = hf_publish_batch.complete(
+            job_id,
+            members=body.get("members") or [],
+            launched_by=body.get("launched_by"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("hf-publish-batch-complete webhook (%s) failed: %s", job_id, exc)
+        return jsonify({"error": str(exc)}), 502
+    return jsonify({"ok": True, **result})
+
+
 @webhooks_bp.route("/release-cut-complete", methods=["POST"])
 def release_cut_complete():
     """Record a successful global GH release cut. Idempotent on (version).
 
-    Body: ``{"job_id", "status", "version", "external_uri", "operator_note",
-    "launched_by", "members": [...], "validation_summary"}``. Only acts on a
-    success status. ``members`` carries the per-recitation membership rows
-    the job produced.
+    Body: ``{"job_id", "status", "version", "external_uri", "launched_by",
+    "members": [...], "validation_summary"}``. Only acts on a success status.
+    ``members`` carries the per-recitation membership rows the job produced.
     """
     ok, err = _check_secret()
     if not ok:
@@ -154,7 +185,6 @@ def release_cut_complete():
             job_id,
             version=version,
             external_uri=body.get("external_uri"),
-            operator_note=body.get("operator_note"),
             launched_by=body.get("launched_by"),
             members=body.get("members") or [],
             validation_summary=body.get("validation_summary"),

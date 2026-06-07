@@ -7,9 +7,7 @@ short of the speech edge.
 Pure function — no I/O side effects beyond reading ``segments.json`` from disk.
 Used by:
   - inspector/services/validation/timestamps.py (runtime check on Inspector data).
-  - scripts/release/build_reciter.py --build-manifest (build-time pre-compute
-    so the deployed Inspector can render the validation panel without a live
-    segments.json fetch).
+  - qua_jobs/publish_hf.py and qua_jobs/cut_release.py (publish-time validation).
 """
 
 from __future__ import annotations

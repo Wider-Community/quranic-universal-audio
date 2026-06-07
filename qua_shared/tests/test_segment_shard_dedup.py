@@ -7,17 +7,14 @@ dedup. These tests exercise the rule on synthetic segment-array shards:
   - sequential split (no foreign verse) → every segment retained;
   - within-pass backward loopback → retained verbatim (never deduped);
   - full-then-trailing-redundancy → trailing post-completion segment trimmed;
-  - two completing occasions → highest mean confidence wins (earliest on a tie /
-    when confidence is unavailable);
+  - leading false-start (restart at word 1) → redundant prefix trimmed;
+  - two completing occasions → the EARLIEST (first recited) wins;
   - a verse re-done after another verse interleaves → exactly one canonical take.
 """
 
 from __future__ import annotations
 
-from qua_shared.timestamps_dedup import (
-    confidence_by_span,
-    project_segment_shard,
-)
+from qua_shared.timestamps_dedup import project_segment_shard
 
 
 def _w(widx: int, s: int, e: int) -> list:
@@ -97,53 +94,54 @@ def test_full_then_trailing_trimmed():
     assert out["1:1"]["verse_end_ms"] == 1000
 
 
-# --- two completing occasions (split by a foreign verse): highest conf wins ---
+# --- leading false-start (restart at word 1): redundant prefix trimmed ---
 
 
-def test_two_occasions_highest_confidence_wins():
+def test_leading_false_start_trimmed():
+    # w1-3 (abandoned), then a restart at word 1 that completes {1..5}. One
+    # occasion (no foreign verse). The leading 1-3 is a redundant false start.
+    shard = _shard(
+        [
+            _seg("1:1", 0, 1000, [1, 2, 3]),
+            _seg("1:1", 1000, 3000, [1, 2, 3, 4, 5]),
+        ]
+    )
+    out = project_segment_shard(shard)
+    assert _widxs(out["1:1"]) == [1, 2, 3, 4, 5]  # leading [1,2,3] dropped
+    assert out["1:1"]["verse_start_ms"] == 1000  # clip starts at the restart
+    assert out["1:1"]["verse_end_ms"] == 3000
+
+
+def test_leading_false_start_not_trimmed_for_lookback():
+    # A mid-verse lookback jumps back to word 3 (NOT word 1) — kept verbatim.
+    shard = _shard(
+        [
+            _seg("1:1", 0, 1500, [1, 2, 3, 4, 5]),
+            _seg("1:1", 1500, 3000, [3, 4, 5]),
+        ]
+    )
+    out = project_segment_shard(shard)
+    # Completes at the first segment; the trailing lookback seg is trimmed, the
+    # leading pass is preserved (no restart at word 1 to trim).
+    assert _widxs(out["1:1"]) == [1, 2, 3, 4, 5]
+    assert out["1:1"]["verse_start_ms"] == 0
+
+
+# --- two completing occasions (split by a foreign verse): earliest wins ---
+
+
+def test_two_occasions_earliest_wins():
     # 1:1 take A, then 1:2 (breaks the run), then 1:1 take B (also complete).
     shard = _shard(
         [
-            _seg("1:1", 0, 1000, [1, 2, 3]),  # occasion A
+            _seg("1:1", 0, 1000, [1, 2, 3]),  # occasion A (earliest)
             _seg("1:2", 1000, 1500, [1, 2]),  # foreign — breaks the run
             _seg("1:1", 1500, 2500, [1, 2, 3]),  # occasion B
         ]
     )
-    # detailed.json confidence join: B (span 1500-2500) is higher than A.
-    detailed = {
-        "entries": [
-            {
-                "ref": 1,
-                "segments": [
-                    {"time_start": 0, "time_end": 1000, "confidence": 0.40},
-                    {"time_start": 1500, "time_end": 2500, "confidence": 0.95},
-                    {"time_start": 1000, "time_end": 1500, "confidence": 0.99},
-                ],
-            }
-        ]
-    }
-    conf = confidence_by_span(detailed)
-    out = project_segment_shard(shard, conf_by_span=conf)
-    assert out["1:1"]["verse_start_ms"] == 1500  # occasion B chosen
-    assert out["1:1"]["verse_end_ms"] == 2500
-
-    # Flip confidences → occasion A now wins.
-    detailed["entries"][0]["segments"][0]["confidence"] = 0.99
-    detailed["entries"][0]["segments"][1]["confidence"] = 0.10
-    out2 = project_segment_shard(shard, conf_by_span=confidence_by_span(detailed))
-    assert out2["1:1"]["verse_start_ms"] == 0
-
-
-def test_two_occasions_no_confidence_falls_back_to_earliest():
-    shard = _shard(
-        [
-            _seg("1:1", 0, 1000, [1, 2, 3]),
-            _seg("1:2", 1000, 1500, [1, 2]),
-            _seg("1:1", 1500, 2500, [1, 2, 3]),
-        ]
-    )
-    out = project_segment_shard(shard)  # no conf_by_span
-    assert out["1:1"]["verse_start_ms"] == 0  # earliest completing occasion
+    out = project_segment_shard(shard)
+    assert out["1:1"]["verse_start_ms"] == 0  # earliest completing occasion (A)
+    assert out["1:1"]["verse_end_ms"] == 1000
 
 
 # --- interleaved full re-do: exactly one canonical take across verses ---
@@ -151,7 +149,7 @@ def test_two_occasions_no_confidence_falls_back_to_earliest():
 
 def test_interleaved_full_redo_one_canonical_each():
     # Recitation: 1:1(A) 1:2(A) 1:1(B-redo) 1:2(B-redo). Each verse re-recited
-    # after the other interleaved → two occasions per verse, one canonical.
+    # after the other interleaved → two occasions per verse, earliest canonical.
     shard = _shard(
         [
             _seg("1:1", 0, 1000, [1, 2]),
@@ -160,22 +158,9 @@ def test_interleaved_full_redo_one_canonical_each():
             _seg("1:2", 3000, 4000, [1, 2, 3]),
         ]
     )
-    detailed = {
-        "entries": [
-            {
-                "ref": 1,
-                "segments": [
-                    {"time_start": 0, "time_end": 1000, "confidence": 0.5},
-                    {"time_start": 1000, "time_end": 2000, "confidence": 0.5},
-                    {"time_start": 2000, "time_end": 3000, "confidence": 0.9},  # 1:1 B wins
-                    {"time_start": 3000, "time_end": 4000, "confidence": 0.3},  # 1:2 A wins
-                ],
-            }
-        ]
-    }
-    out = project_segment_shard(shard, conf_by_span=confidence_by_span(detailed))
+    out = project_segment_shard(shard)
     assert set(out) == {"1:1", "1:2"}
-    assert _widxs(out["1:1"]) == [1, 2] and out["1:1"]["verse_start_ms"] == 2000
+    assert _widxs(out["1:1"]) == [1, 2] and out["1:1"]["verse_start_ms"] == 0
     assert _widxs(out["1:2"]) == [1, 2, 3] and out["1:2"]["verse_start_ms"] == 1000
 
 

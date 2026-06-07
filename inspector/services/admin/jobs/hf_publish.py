@@ -33,7 +33,7 @@ log = logging.getLogger("inspector")
 
 KIND = "hf_publish"
 
-JOB_FLAVOR = os.environ.get("INSPECTOR_HF_JOB_FLAVOR", "cpu-basic")
+JOB_FLAVOR = os.environ.get("INSPECTOR_HF_JOB_FLAVOR", "cpu-upgrade")
 JOB_TIMEOUT = os.environ.get("INSPECTOR_HF_JOB_TIMEOUT", "30m")
 
 

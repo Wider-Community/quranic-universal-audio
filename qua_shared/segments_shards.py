@@ -3,8 +3,7 @@
 Splits a `detailed.json` document into per-chapter `.json.gz` shards the
 aligner Space's preload UI fetches on demand. Used by:
 
-  - `scripts/release/build_reciter.py --build-segments <slug>` — uploads
-    shards to the HF dataset for the deployed read path.
+  - legacy HF dataset preload shards under `segments/<slug>/<chapter>.json.gz`.
 
 The aligner Space talks to the same HF dataset as the Inspector's Timestamps
 tab, sharing one manifest. This module is the segments-side twin of

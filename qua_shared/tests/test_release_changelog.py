@@ -2,9 +2,8 @@
 
 ``qua_shared/release_changelog.py`` is the single source of truth for the GH
 release body, used by both the cut HF Job and the Inspector cut-modal preview.
-These guard the format contract: display names only (no slugs), accordions for
-Added/Refreshed, coverage fallback (ayahs→surahs), and that ``operator_note`` is
-emitted as inert escaped text.
+These guard the format contract: title first, asset table first, display names
+only (no slugs), concise guide copy, and two collapsed schema sections.
 """
 
 from __future__ import annotations
@@ -45,9 +44,18 @@ def test_first_release_added_only():
         repo="quranic-universal-audio",
         hf_dataset="hetchyy/quranic-universal-ayahs",
     )
-    assert md.startswith("# v0.1.0 · 2026-06-03")
-    assert "First release — **2** recitations." in md
-    assert "<details><summary>➕ Added — 2 recitations</summary>" in md
+    assert md.startswith("# 2026-06-03\n\n## What to download")
+    assert "This release publishes" not in md
+    assert (
+        "| `catalog.json` | Release-level catalog: reciter names, riwayah, style, coverage, "
+        "audio metadata, and the audio URLs paired with the timestamp data. |"
+    ) in md
+    # The release-level files index the whole release; each zip carries its own catalog.
+    assert "plus its own `catalog.json`." in md
+    assert "each zip also carries its own `catalog.json`" in md
+    assert "release_schemas.json" not in md
+    assert "First release: **2** recitations." in md
+    assert "<details><summary>Added recitations - 2</summary>" in md
     assert "Abdulbasit Abdulsamad" in md
     # No refreshed / carried sections on a clean first cut.
     assert "Refreshed" not in md
@@ -80,8 +88,8 @@ def test_added_refreshed_and_carried():
         release_date="2026-07-01",
         members=members,
     )
-    assert "<details><summary>➕ Added — 1 recitation</summary>" in md
-    assert "<details><summary>↻ Refreshed — 1 recitation</summary>" in md
+    assert "<details><summary>Added recitations - 1</summary>" in md
+    assert "<details><summary>Refreshed recitations - 1</summary>" in md
     assert "2 carried / unchanged." in md
     assert "Adds 1, refreshes 1 (2 carried) over v0.1.0." in md
 
@@ -100,20 +108,39 @@ def test_coverage_cell_ayahs_then_surahs():
         release_date="d",
         members=[_member("R", coverage_ayahs=None, coverage_surahs=114)],
     )
-    assert "114 surahs" in md_surahs and "ayahs" not in md_surahs.split("Schemas")[0]
+    assert "114 surahs" in md_surahs and "ayahs" not in md_surahs.split("Reciter zip schemas")[0]
 
 
-def test_operator_note_is_inert():
+def test_audio_pairing_and_timestamp_layers_are_explained():
     md = render_changelog(
         version="v0.1.0",
         previous_version=None,
         release_date="d",
         members=[_member("R")],
-        operator_note="Upgrade v3.\n</summary><script>alert(1)</script>",
     )
-    assert "> Upgrade v3." in md
-    assert "&lt;/summary&gt;&lt;script&gt;alert(1)&lt;/script&gt;" in md
-    assert "<script>" not in md
+    assert "`catalog.json` contains the audio URLs for each recitation" in md
+    assert "every timestamp value is milliseconds relative to that matching source audio." in md
+    assert "storage, speed, and network efficiency" in md
+    assert "Use `shard.py` when your app prefers per-surah files locally" in md
+    assert '"1:1": [0, 2831]' in md
+    # the worked example spans multiple words + letters (not a single ب letter)
+    assert "ٱللَّهِ" in md
+    assert '"س"' in md and '"ا"' in md
+    assert "loops back or re-recites" in md
+
+
+def test_staying_up_to_date_section_and_asset_row():
+    md = render_changelog(
+        version="v0.3.0",
+        previous_version="v0.2.0",
+        release_date="d",
+        members=[_member("R", change_kind="refresh")],
+    )
+    assert "## Staying up to date" in md
+    assert "Watch -> Custom -> Releases" in md
+    assert "python check_updates.py manifest.json --sync" in md
+    # asset-table row advertises the helper
+    assert "`check_updates.py` |" in md
 
 
 def test_license_inline_and_links():
@@ -140,3 +167,19 @@ def test_table_cell_pipe_escaped():
         members=[_member("A | B")],
     )
     assert "A \\| B" in md
+
+
+def test_schema_sections_are_collapsed():
+    md = render_changelog(
+        version="v0.1.0",
+        previous_version=None,
+        release_date="d",
+        members=[_member("R")],
+    )
+    assert "<details><summary>Reciter zip schemas</summary>" in md
+    assert "<details><summary>Catalog and manifest schemas</summary>" in md
+    assert "type VerseTimestamps" in md
+    assert '"tier": "verse"' in md
+    assert '"tier": "word"' in md
+    assert '"tier": "letter"' in md
+    assert "type ReleaseManifest" in md

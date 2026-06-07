@@ -4,9 +4,11 @@
 Reads the recitation's bucket artifacts (``detailed.json`` + per-chapter
 ``timestamps/<n>.json.gz`` + Xing-master ``audio/<n>.mp3``) and pushes a
 parquet split to the public HF dataset under ``<riwayah>/<slug>``. Audio
-clips are produced by ffmpeg STREAM-COPY (``-c copy``) from the bucket
-chapter master — no pydub decode/re-encode, ≤26 ms boundary snap, word
-timestamps re-based to the snapped boundary.
+clips are produced by in-process MP3 frame-index slicing
+(``qua_shared/mp3_frames.py``) — each chapter is read + indexed once, then
+every verse clip is a byte-exact frame-range copy with the start snapped to
+the frame boundary <= clip_start; word timestamps re-base to that boundary.
+No per-clip subprocess (no ffmpeg/ffprobe), no pydub decode/re-encode.
 
 The HF Job NEVER writes ``db/inspector.db``. On success it POSTs the
 completion webhook (``INSPECTOR_WEBHOOK_URL``) with the HF dataset revision
@@ -32,14 +34,15 @@ import gzip
 import json
 import logging
 import os
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
+from qua_shared.letter_vocab import to_external_char  # noqa: E402
+from qua_shared.mp3_frames import FrameIndex, build_frame_index, slice_frames  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("publish_hf")
@@ -62,9 +65,9 @@ def _text_for_ref(matched_ref: str, dk_words: dict, surah_info: dict) -> str:
     """Derive Arabic text for a canonical ``surah:ayah:word-surah:ayah:word``
     matched_ref from the Digital Khatt word map.
 
-    Mirror of ``scripts/release/build_reciter.py::_text_for_ref`` — the
-    extractor no longer writes ``matched_text`` (Migration #5), so the
-    dataset re-derives it deterministically.
+    Mirror of the legacy dataset builder's text derivation. The extractor no
+    longer writes ``matched_text`` (Migration #5), so the dataset re-derives it
+    deterministically.
     """
     if not matched_ref or "-" not in matched_ref:
         return ""
@@ -127,6 +130,42 @@ def _cross_verse_text(
     return full_text
 
 
+def _seg_word_range(
+    matched_ref: str, surah_num: str, ayah: int, surah_info: dict
+) -> tuple[int, int] | None:
+    """Word-index span (``word_from``, ``word_to``) a segment covers WITHIN one ayah.
+
+    detailed.json segments carry no ``word_from``/``word_to`` — the span is
+    encoded in ``matched_ref`` (``s:a:w-s:a:w`` or a single ``s:a:w``). Returns
+    1-based ``(w_from, w_to)`` clipped to ``(surah_num, ayah)``, or ``None`` when
+    the segment doesn't cover this ayah at all.
+    """
+    if not matched_ref:
+        return None
+    start, _, end = (
+        matched_ref.partition("-") if "-" in matched_ref else (matched_ref, "", matched_ref)
+    )
+    sp = start.split(":")
+    ep = end.split(":")
+    if len(sp) != 3 or len(ep) != 3:
+        return None
+    try:
+        s_su, s_ay, s_w = int(sp[0]), int(sp[1]), int(sp[2])
+        e_su, e_ay, e_w = int(ep[0]), int(ep[1]), int(ep[2])
+    except ValueError:
+        return None
+    su = int(surah_num)
+    if (su, ayah) < (s_su, s_ay) or (su, ayah) > (e_su, e_ay):
+        return None
+    w_from = s_w if (s_su, s_ay) == (su, ayah) else 1
+    if (e_su, e_ay) == (su, ayah):
+        w_to = e_w
+    else:
+        verses = surah_info.get(str(su), {}).get("verses", [])
+        w_to = verses[ayah - 1].get("num_words", e_w) if 0 <= ayah - 1 < len(verses) else e_w
+    return w_from, max(w_from, w_to)
+
+
 # ---------------------------------------------------------------------------
 # Bucket I/O — direct path reads (bucket is mounted at /data in the job).
 # ---------------------------------------------------------------------------
@@ -153,22 +192,19 @@ def _load_audio_manifest(slug: str) -> dict | None:
         return None
 
 
-def _load_timestamps_shards(slug: str, detailed: dict | None = None) -> dict[str, dict]:
+def _load_timestamps_shards(slug: str) -> dict[str, dict]:
     """Read every ``reciters/<slug>/timestamps/<ch>.json.gz`` segment-array shard,
-    project each to the canonical verse map (completion-based occasion dedup),
-    and merge into one global dict.
+    project each to the canonical verse map (completion-based occasion dedup, the
+    EARLIEST completing occasion), and merge into one global dict.
 
-    Per-segment confidence is joined from ``detailed`` so the highest-confidence
-    completing occasion wins. Returns ``{"surah:ayah": {"words": [...],
-    "verse_start_ms", "verse_end_ms"}}``.
+    Returns ``{"surah:ayah": {"words": [...], "verse_start_ms", "verse_end_ms"}}``.
     """
-    from qua_shared.timestamps_dedup import confidence_by_span, project_segment_shard
+    from qua_shared.timestamps_dedup import project_segment_shard
 
     ts_dir = _bucket_root() / "reciters" / slug / "timestamps"
     out: dict[str, dict] = {}
     if not ts_dir.exists():
         return out
-    conf_by_span = confidence_by_span(detailed)
     for path in sorted(
         ts_dir.iterdir(),
         key=lambda p: int(p.name.split(".", 1)[0]) if p.name.split(".", 1)[0].isdigit() else 0,
@@ -180,7 +216,7 @@ def _load_timestamps_shards(slug: str, detailed: dict | None = None) -> dict[str
         if name.endswith(".gz"):
             raw = gzip.decompress(raw)
         shard = json.loads(raw)
-        out.update(project_segment_shard(shard, conf_by_span=conf_by_span))
+        out.update(project_segment_shard(shard))
     return out
 
 
@@ -219,7 +255,7 @@ def _reshape_timestamps_for_rows(canonical: dict) -> dict[str, dict]:
 
 
 # ---------------------------------------------------------------------------
-# Row construction — port of build_reciter.py::build_rows (trimmed).
+# Row construction.
 # ---------------------------------------------------------------------------
 
 
@@ -258,14 +294,21 @@ def _i(x):
 
 
 def build_rows(
-    timestamps: dict, detailed_by_ref: dict, surah_info: dict, dk_words: dict
+    timestamps: dict,
+    detailed_by_ref: dict,
+    surah_info: dict,
+    dk_words: dict,
+    chapter_urls: dict[str, str] | None = None,
 ) -> list[dict]:
     """Build dataset row metadata in canonical verse order.
 
     Each row has the same column shape as v1 + ``clip_start`` (source-ms
     boundary the audio slice starts at; consumed by the slicer + persisted
-    as ``source_offset_ms``).
+    as ``source_offset_ms``). ``chapter_urls`` maps ``str(chapter) -> audio URL``
+    (from the audio manifest) — detailed.json no longer carries a per-entry
+    ``audio`` field, so ``source_url`` is resolved from here.
     """
+    chapter_urls = chapter_urls or {}
     rows: list[dict] = []
     for surah_num in sorted(surah_info, key=int):
         surah = surah_info[surah_num]
@@ -281,18 +324,18 @@ def build_rows(
             clip_start = tdata["verse_start_ms"]
             clip_end = tdata["verse_end_ms"]
 
-            # Segments: only those overlapping the clip; trim to clip; clip-relative.
+            # Segments: only those overlapping the clip AND covering this ayah;
+            # trim to clip; clip-relative. Word span comes from matched_ref.
             verse_segments: list[list[int]] = []
-            # detailed.json segments are reused as the "segments" column.
             for seg in entry.get("segments", []) or []:
                 t_start = seg.get("time_start", 0)
                 t_end = seg.get("time_end", 0)
                 if t_end <= clip_start or t_start >= clip_end:
                     continue
-                # Use detailed.json's word range (start/end widx). Some legacy
-                # entries don't have it — derive from words instead.
-                w_from = seg.get("word_from", seg.get("start_word", 1))
-                w_to = seg.get("word_to", seg.get("end_word", w_from))
+                wr = _seg_word_range(seg.get("matched_ref", ""), surah_num, ayah, surah_info)
+                if wr is None:
+                    continue
+                w_from, w_to = wr
                 verse_segments.append(
                     [
                         _i(w_from),
@@ -380,7 +423,9 @@ def build_rows(
                     verse_letters.append(
                         {
                             "word_idx": _i(widx),
-                            "char": ch,
+                            # Internal 57-token alphabet -> published 42-token set
+                            # (same mapping as the GH release letter tier).
+                            "char": to_external_char(ch),
                             "start_ms": _i(s - clip_start),
                             "end_ms": _i(e - clip_start),
                         }
@@ -397,7 +442,7 @@ def build_rows(
                     "segments": verse_segments,
                     "word_timestamps": verse_words,
                     "letter_timestamps": verse_letters,
-                    "source_url": entry.get("audio", ""),
+                    "source_url": chapter_urls.get(str(chapter), ""),
                     "chapter": chapter,
                     "clip_start": clip_start,
                     "clip_end": clip_end,
@@ -407,10 +452,14 @@ def build_rows(
 
 
 # ---------------------------------------------------------------------------
-# Stream-copy audio slicing via ffmpeg. The bucket holds Xing-injected MP3s
-# per chapter at ``reciters/<slug>/audio/<ch>.mp3``. ffmpeg ``-c copy`` snaps
-# to the nearest frame boundary (~26 ms for MP3) — the snapped offset is what
-# the slice starts at, so word_timestamps must be rebased to it.
+# In-process frame-index audio slicing. The bucket holds Xing-injected MP3s
+# per chapter at ``reciters/<slug>/audio/<ch>.mp3``. Each chapter is read once,
+# its MP3 frame grid is parsed in pure Python, and every verse clip is a
+# byte-exact copy of the frame range covering ``[clip_start, clip_end]`` — no
+# per-clip ffmpeg/ffprobe subprocess. The start snaps back to the frame
+# boundary <= clip_start; ``actual_start_ms`` is read off the grid, so
+# word_timestamps rebase against the true frame boundary (the old ffprobe-snap
+# heuristic mis-estimated this — see qua_shared/mp3_frames.py).
 # ---------------------------------------------------------------------------
 
 
@@ -418,95 +467,65 @@ def _chapter_mp3_path(slug: str, chapter: int) -> Path:
     return _bucket_root() / "reciters" / slug / "audio" / f"{chapter}.mp3"
 
 
-def _stream_copy_slice(src: Path, start_ms: int, end_ms: int, dst: Path) -> tuple[int, int] | None:
-    """ffmpeg ``-c copy -ss X -t Y`` from ``src`` to ``dst``.
+def _frame_slice(
+    data: bytes, index: FrameIndex, start_ms: int, end_ms: int
+) -> tuple[bytes, int, int] | None:
+    """Frame-exact clip of ``[start_ms, end_ms]`` from an indexed chapter MP3.
 
-    Returns ``(actual_start_ms, actual_end_ms)`` of the produced clip — the
-    snapped offsets are derived after the cut by probing the result's
-    duration; the start snap is bounded by ffmpeg to the nearest frame
-    boundary <= start_ms. Caller rebases word timestamps to ``actual_start_ms``.
-
-    None on ffmpeg failure (caller drops the verse).
+    Returns ``(clip_bytes, actual_start_ms, actual_end_ms)`` — the byte range of
+    the frames covering the window, with the start snapped to the frame boundary
+    <= ``start_ms``. ``None`` for an empty/degenerate window (caller drops the
+    verse). Mirrors ffmpeg ``-c copy``'s frame-copy semantics minus the
+    subprocess; the produced bytes decode bit-identically to the ffmpeg slice's
+    overlapping audio.
     """
-    duration_ms = max(0, end_ms - start_ms)
-    if duration_ms <= 0:
+    fs = slice_frames(data, index, start_ms, end_ms)
+    if fs is None:
         return None
-    start_s = start_ms / 1000.0
-    dur_s = duration_ms / 1000.0
-    try:
-        result = subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-loglevel",
-                "error",
-                "-ss",
-                f"{start_s:.6f}",
-                "-i",
-                str(src),
-                "-t",
-                f"{dur_s:.6f}",
-                "-c",
-                "copy",
-                "-f",
-                "mp3",
-                str(dst),
-            ],
-            capture_output=True,
-            timeout=120,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
-        log.warning("ffmpeg slice failed for %s [%d,%d]: %s", src.name, start_ms, end_ms, exc)
-        return None
-    if result.returncode != 0 or not dst.exists() or dst.stat().st_size == 0:
-        log.warning(
-            "ffmpeg slice failed for %s [%d,%d] rc=%s: %s",
-            src.name,
-            start_ms,
-            end_ms,
-            result.returncode,
-            result.stderr.decode("utf-8", "replace")[:200],
-        )
-        return None
-    # ffprobe the actual duration to bound the snap. ``-ss`` before ``-i`` in
-    # stream-copy mode snaps to the previous keyframe/frame; the requested
-    # start may shift back by up to one MP3 frame (~26 ms at 44.1 kHz).
-    actual_dur_ms = _probe_duration_ms(dst)
-    if actual_dur_ms is None:
-        # Conservative fallback — assume no shift.
-        return start_ms, end_ms
-    # Snap heuristic: ffmpeg returned `actual_dur_ms` of audio; the requested
-    # window was `duration_ms`. The snap is `actual - duration` (positive →
-    # frame boundary moved earlier; the slice starts a frame before the request).
-    snap_ms = max(0, actual_dur_ms - duration_ms)
-    return start_ms - snap_ms, start_ms - snap_ms + actual_dur_ms
+    return fs.data, fs.actual_start_ms, fs.actual_end_ms
 
 
-def _probe_duration_ms(path: Path) -> int | None:
-    """ffprobe duration in ms, or None on failure."""
+def _slice_workers() -> int:
+    """Worker count for the chapter-slicing pool.
+
+    Slicing is **I/O-bound on the bucket mount** (each worker does one bulk
+    multi-MB chapter read), NOT CPU-bound — the in-memory frame slicing is cheap
+    pure-Python. The HF bucket *volume* mount thrashes under many concurrent
+    large reads: 3 workers slice 6.2k rows / 114 chapters in ~17 s, but 9 (what
+    quota+1 yields on cpu-upgrade's 8 vCPU) stalls so hard the loop didn't reach
+    row 311 in 45 min. So this is capped LOW and decoupled from CPU count.
+    ``INSPECTOR_SLICE_WORKERS`` overrides for tuning.
+    """
+    override = os.environ.get("INSPECTOR_SLICE_WORKERS", "").strip()
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
+    quota: int | None = None
+    # cgroup v2: ``<quota> <period>`` in microseconds ("max" = unbounded).
     try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                str(path),
-            ],
-            capture_output=True,
-            timeout=30,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return None
-    if result.returncode != 0:
-        return None
-    try:
-        return int(round(float(result.stdout.decode("utf-8").strip()) * 1000))
-    except (ValueError, AttributeError):
-        return None
+        raw = Path("/sys/fs/cgroup/cpu.max").read_text().split()
+        if len(raw) == 2 and raw[0] != "max":
+            quota = max(1, int(int(raw[0]) / int(raw[1])))
+    except (OSError, ValueError):
+        quota = None
+    # cgroup v1 fallback.
+    if quota is None:
+        try:
+            q = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text().strip())
+            p = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read_text().strip())
+            if q > 0 and p > 0:
+                quota = max(1, int(q / p))
+        except (OSError, ValueError):
+            quota = None
+    if quota is None:
+        try:
+            quota = len(os.sched_getaffinity(0))  # type: ignore[attr-defined]
+        except AttributeError:
+            quota = os.cpu_count() or 2
+    # I/O-bound on the bucket mount → cap at 3 (proven fast) regardless of vCPU.
+    return max(2, min(quota + 1, 3))
 
 
 def _rebase_row(row: dict, actual_start_ms: int) -> None:
@@ -675,6 +694,50 @@ def _resolve_dataset_repo_id() -> str:
     return repo_config()["hf_dataset"]
 
 
+def _sync_dataset_catalog_and_card(repo_id: str) -> None:
+    """Refresh the HF dataset catalog config and re-render the dataset card.
+
+    The verse split was already pushed before this runs, so the published-split
+    enumeration includes the just-published reciter. Frontmatter ``configs``, header
+    badges, and the ``mushafs`` catalog stats are all derived from that one
+    enumeration so they agree.
+    """
+    from qua_shared.config_loader import template_path
+    from qua_shared.hf_dataset_catalog import (
+        hub_published_splits_by_config,
+        push_catalog_dataset,
+        render_dataset_card,
+        upload_dataset_card,
+        upload_vocab_file,
+    )
+    from qua_shared.letter_vocab import VOCAB_FILENAME, vocab_csv_bytes
+
+    db_path = _bucket_root() / "db" / "inspector.db"
+    if not db_path.exists():
+        raise RuntimeError(f"Inspector DB missing at {db_path}")
+    token = os.environ.get("HF_TOKEN")
+    # Stamp now for just-published rows that have no hf ledger row yet (the
+    # ledger is written post-job by hf_publish.complete) so published_at /
+    # updated_at aren't null in the catalog parquet.
+    from datetime import UTC, datetime
+
+    now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    splits_by_config = hub_published_splits_by_config(repo_id=repo_id, token=token)
+    published = {slug for slugs in splits_by_config.values() for slug in slugs}
+    stats = push_catalog_dataset(
+        repo_id=repo_id, db_path=db_path, token=token, published_slugs=published, now_iso=now_iso
+    )
+    card = render_dataset_card(
+        template_path=template_path("hf_dataset_card"),
+        splits_by_config=splits_by_config,
+        stats=stats,
+    )
+    upload_dataset_card(repo_id=repo_id, content=card, token=token)
+    upload_vocab_file(
+        repo_id=repo_id, filename=VOCAB_FILENAME, content=vocab_csv_bytes(), token=token
+    )
+
+
 def _riwayah_for(audio_manifest: dict | None, detailed: dict) -> str:
     """Find the riwayah slug. Audio manifest ``_meta.riwayah`` is canonical;
     detailed.json ``_meta`` is the legacy fallback."""
@@ -741,15 +804,8 @@ def _post_webhook(
 # ---------------------------------------------------------------------------
 
 
-def _which(name: str) -> bool:
-    """True if ``name`` is on PATH."""
-    from shutil import which
-
-    return which(name) is not None
-
-
 def _preflight(slug: str) -> int:
-    """Verify env, binaries, bucket inputs, static refs. Returns 0 on go,
+    """Verify env, bucket inputs, static refs. Returns 0 on go,
     non-zero exit code on the first failure. Each return code maps to one
     cause so the operator can fix without diving into logs."""
     if not slug:
@@ -758,9 +814,6 @@ def _preflight(slug: str) -> int:
     if not os.environ.get("HF_TOKEN", "").strip():
         log.error("HF_TOKEN secret is required")
         return 10
-    if not _which("ffmpeg") or not _which("ffprobe"):
-        log.error("ffmpeg/ffprobe missing from PATH")
-        return 11
     bucket = _bucket_root()
     if not bucket.exists():
         log.error("bucket mount missing at %s", bucket)
@@ -784,22 +837,51 @@ def _preflight(slug: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-def main() -> int:
-    slug = os.environ.get("SLUG", "").strip()
-    job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
-    log.info("publish_hf: slug=%s job=%s", slug, job_id)
+def _result(
+    slug: str,
+    status: str,
+    *,
+    version: str = "",
+    external_uri: str = "",
+    validation_summary: dict | None = None,
+    error: str | None = None,
+    exit_code: int = 0,
+) -> dict:
+    """Build the ``publish_slug`` result dict (shared by single + batch)."""
+    return {
+        "slug": slug,
+        "status": status,
+        "version": version,
+        "external_uri": external_uri,
+        "validation_summary": validation_summary,
+        "error": error,
+        "exit_code": exit_code,
+    }
 
+
+def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
+    """Publish one recitation to the HF dataset. Returns a result dict; never
+    posts a webhook or raises (the caller — single or batch — owns reporting).
+
+    ``sync_card`` re-renders the dataset catalog + card after the push. The
+    single entrypoint runs it per publish; the batch runner skips it per slug
+    and syncs once at the end (one push of N splits → one card render).
+
+    Result: ``{slug, status: "succeeded"|"failed", version, external_uri,
+    validation_summary, error, exit_code}``. ``exit_code`` lets the single
+    entrypoint preserve its operator-facing process codes.
+    """
     rc = _preflight(slug)
     if rc != 0:
-        return rc
+        return _result(slug, "failed", error=f"preflight failed (rc={rc})", exit_code=rc)
 
     # 1. Load bucket artifacts.
     detailed = _load_detailed(slug)
     audio_manifest = _load_audio_manifest(slug)
-    canonical = _load_timestamps_shards(slug, detailed)
+    canonical = _load_timestamps_shards(slug)
     if not canonical:
         log.error("no timestamps shards on bucket for %s", slug)
-        return 3
+        return _result(slug, "failed", error="no timestamps shards on bucket", exit_code=3)
     timestamps = _reshape_timestamps_for_rows(canonical)
 
     # 2. Load static refs from staged code dir. qpc_hafs ships gzipped to
@@ -812,20 +894,23 @@ def main() -> int:
     else:
         dk_words = json.loads((refs_dir / "qpc_hafs.json").read_bytes())
 
-    # 3. Build rows.
+    # 3. Build rows. source_url comes from the audio manifest's chapter URLs
+    # (detailed.json carries no per-entry audio field).
     detailed_by_ref = _detailed_by_ref(detailed)
-    rows = build_rows(timestamps, detailed_by_ref, surah_info, dk_words)
+    chapter_urls = {
+        str(ch): (entry or {}).get("url", "")
+        for ch, entry in ((audio_manifest or {}).get("chapters") or {}).items()
+    }
+    rows = build_rows(timestamps, detailed_by_ref, surah_info, dk_words, chapter_urls)
     log.info("built %d rows for %s", len(rows), slug)
     if not rows:
         log.error("no rows built — detailed.json + timestamps disagreement?")
-        return 15
+        return _result(
+            slug, "failed", error="no rows built (detailed/timestamps disagree)", exit_code=15
+        )
 
     # 4. Validate boundaries before any audio work.
-    from qua_shared.dataset_validation import (
-        BoundaryValidationError,
-        fatal_violations,
-        validate_dataset,
-    )
+    from qua_shared.dataset_validation import fatal_violations, validate_dataset
 
     summary = validate_dataset(_verses_for_validation(rows), surah_info=surah_info)
     fatal = fatal_violations(summary["violations"])
@@ -833,23 +918,21 @@ def main() -> int:
         log.error("boundary validation failed: %d fatal violation(s)", len(fatal))
         for v in fatal[:5]:
             log.error("  %s", v)
-        _post_webhook(
-            slug=slug,
-            job_id=job_id,
-            version="",
-            external_uri="",
-            status="failed",
+        return _result(
+            slug,
+            "failed",
             validation_summary=summary,
+            error=f"boundary validation failed ({len(fatal)} fatal)",
+            exit_code=1,
         )
-        raise BoundaryValidationError(summary)
 
-    # 5. Stream-copy audio per row. The bucket FUSE mount can't handle many
-    # parallel random-access reads of the same chapter mp3 (12-wide parallel
-    # ffmpegs starve each other, hit the 120 s subprocess timeout). Per
-    # chapter: copy bucket → /tmp once (single bulk sequential read), then
-    # fan out ffmpeg slices across workers against the local copy. Drop the
-    # local copy when the chapter is done so total tmp footprint stays bounded.
-    import shutil as _shutil
+    # 5. Slice audio per row, in-process. Each chapter MP3 is read from the
+    # bucket once (single bulk sequential read — FUSE/NFS hates random access),
+    # its frame grid is parsed once, then every verse clip is a byte-exact copy
+    # of the frames covering [clip_start, clip_end] — no per-clip ffmpeg/ffprobe.
+    # Chapters are processed across a pool sized to the real CPU quota so bucket
+    # reads + index builds overlap; per-chapter the slicing itself is cheap
+    # pure-Python (bound by chapter count, not verse count).
     from collections import defaultdict
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -860,16 +943,37 @@ def main() -> int:
     for i, row in enumerate(rows):
         rows_by_chapter[int(row["chapter"])].append((i, row))
 
-    def _slice_one(i: int, row: dict, src_local: Path, td_path: Path):
-        dst = td_path / f"{i:06d}.mp3"
-        cut = _stream_copy_slice(src_local, row["clip_start"], row["clip_end"], dst)
-        if cut is None:
-            return i, None, f"{row['surah']}:{row['ayah']}"
-        actual_start, _ = cut
-        _rebase_row(row, actual_start)
-        return i, dst.read_bytes(), None
+    def _slice_chapter(chapter: int, chapter_rows: list[tuple[int, dict]]):
+        """Read + index one chapter MP3, slice all its verse rows in-process.
 
-    workers = max(4, min(12, (os.cpu_count() or 2) * 3))
+        Returns ``(produced, failures)`` where ``produced`` is a list of
+        ``(row_index, clip_bytes)`` and ``failures`` a list of ``"surah:ayah"``
+        labels. Rebases each produced row to its snapped frame boundary.
+        """
+        src_bucket = _chapter_mp3_path(slug, chapter)
+        if not src_bucket.exists():
+            return [], [f"{row['surah']}:{row['ayah']} (no audio)" for _, row in chapter_rows]
+        try:
+            data = src_bucket.read_bytes()
+        except OSError as exc:
+            log.warning("ch %d: read failed: %s", chapter, exc)
+            return [], [f"{row['surah']}:{row['ayah']} (read error)" for _, row in chapter_rows]
+        index = build_frame_index(data)
+        if index.n_frames <= 0:
+            return [], [f"{row['surah']}:{row['ayah']} (no frames)" for _, row in chapter_rows]
+        produced: list[tuple[int, bytes]] = []
+        failures: list[str] = []
+        for i, row in chapter_rows:
+            cut = _frame_slice(data, index, row["clip_start"], row["clip_end"])
+            if cut is None:
+                failures.append(f"{row['surah']}:{row['ayah']}")
+                continue
+            clip_bytes, actual_start, _actual_end = cut
+            _rebase_row(row, actual_start)
+            produced.append((i, clip_bytes))
+        return produced, failures
+
+    workers = _slice_workers()
     progress_every = max(50, len(rows) // 20)
     log.info(
         "slicing %d rows across %d chapters with %d workers (progress every %d)",
@@ -879,83 +983,72 @@ def main() -> int:
         progress_every,
     )
 
-    with tempfile.TemporaryDirectory() as td:
-        td_path = Path(td)
-        done = 0
-        for chapter in sorted(rows_by_chapter):
-            chapter_rows = rows_by_chapter[chapter]
-            src_bucket = _chapter_mp3_path(slug, chapter)
-            if not src_bucket.exists():
-                for _i, row in chapter_rows:
-                    failed_slices.append(f"{row['surah']}:{row['ayah']} (no audio)")
-                done += len(chapter_rows)
-                log.info(
-                    "  ch %d: no audio — %d skipped (total %d/%d, %d failed)",
-                    chapter,
-                    len(chapter_rows),
-                    done,
-                    len(rows),
-                    len(failed_slices),
-                )
-                continue
-            src_local = td_path / f"chapter_{chapter}.mp3"
-            _shutil.copyfile(src_bucket, src_local)
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = [
-                    pool.submit(_slice_one, i, row, src_local, td_path) for i, row in chapter_rows
-                ]
-                for fut in as_completed(futures):
-                    idx, blob, fail = fut.result()
-                    done += 1
-                    if blob is not None:
-                        audio_bytes[idx] = blob
-                    if fail is not None:
-                        failed_slices.append(fail)
-                    if done % progress_every == 0 or done == len(rows):
-                        log.info(
-                            "  sliced %d/%d (%d failed so far)", done, len(rows), len(failed_slices)
-                        )
-            try:
-                src_local.unlink()
-            except OSError:
-                pass
+    done = 0
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_slice_chapter, ch, rows_by_chapter[ch]): ch
+            for ch in sorted(rows_by_chapter)
+        }
+        for fut in as_completed(futures):
+            produced, failures = fut.result()
+            for idx, blob in produced:
+                audio_bytes[idx] = blob
+            failed_slices.extend(failures)
+            done += len(produced) + len(failures)
+            if done % progress_every < (len(produced) + len(failures)) or done == len(rows):
+                log.info("  sliced %d/%d (%d failed so far)", done, len(rows), len(failed_slices))
     sliced_count = sum(1 for b in audio_bytes if b is not None)
     log.info("audio: %d sliced, %d failed", sliced_count, len(failed_slices))
     if failed_slices:
         log.warning("failed slices (first 20): %s", failed_slices[:20])
     if sliced_count == 0:
         log.error("every audio slice failed — refusing to push empty dataset")
-        _post_webhook(
-            slug=slug,
-            job_id=job_id,
-            version="",
-            external_uri="",
-            status="failed",
+        return _result(
+            slug,
+            "failed",
             validation_summary=summary,
+            error="every audio slice failed",
+            exit_code=16,
         )
-        return 16
 
     # 6. Push to HF — gets us a commit sha to record as ``version``.
     riwayah = _riwayah_for(audio_manifest, detailed)
     version_sha = _push_to_hf(slug, riwayah, rows, audio_bytes)
 
-    # 7. Notify Inspector.
     repo_id = _resolve_dataset_repo_id()
+    if sync_card:
+        _sync_dataset_catalog_and_card(repo_id)
+
     external_uri = (
         f"https://huggingface.co/datasets/{repo_id}/tree/{version_sha}"
         if version_sha
         else f"https://huggingface.co/datasets/{repo_id}"
     )
-    _post_webhook(
-        slug=slug,
-        job_id=job_id,
+    log.info("publish_hf: done slug=%s version=%s", slug, version_sha)
+    return _result(
+        slug,
+        "succeeded",
         version=version_sha or job_id,
         external_uri=external_uri,
         validation_summary=summary,
     )
 
-    log.info("publish_hf: done slug=%s version=%s", slug, version_sha)
-    return 0
+
+def main() -> int:
+    slug = os.environ.get("SLUG", "").strip()
+    job_id = os.environ.get("JOB_ID", "").strip() or "unknown"
+    log.info("publish_hf: slug=%s job=%s", slug, job_id)
+
+    result = publish_slug(slug, job_id, sync_card=True)
+    _post_webhook(
+        slug=slug,
+        job_id=job_id,
+        version=result["version"] or job_id,
+        external_uri=result["external_uri"],
+        status=result["status"],
+        validation_summary=result["validation_summary"],
+    )
+    return int(result["exit_code"])
 
 
 if __name__ == "__main__":

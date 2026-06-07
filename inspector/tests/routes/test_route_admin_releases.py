@@ -32,16 +32,19 @@ _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 # ---------------------------------------------------------------------------
 
 
-def _stub_jobs_api(monkeypatch, *, in_flight=()):
+def _stub_jobs_api(monkeypatch, *, in_flight=(), batch_outcome=None):
     """Stub the HF Jobs API so route tests don't hit the network.
 
-    Pass ``in_flight`` as a list of ``{kind, slug, job_id, started_at}`` dicts
-    to simulate live jobs (e.g. for the in-flight bucket assertion).
+    Pass ``in_flight`` as a list of ``{kind, slug, job_id, started_at, url}``
+    dicts to simulate live jobs. ``batch_outcome`` stubs the newest batch
+    record read by the status endpoint (defaults to None — no prior batch).
     """
     from services.admin.jobs import base as jobs_base
+    from services.admin.jobs import hf_publish_batch as batch_jobs
 
     monkeypatch.setattr(jobs_base, "list_in_flight_jobs", lambda kinds: list(in_flight))
     monkeypatch.setattr(jobs_base, "running_job_for", lambda **_: None)
+    monkeypatch.setattr(batch_jobs, "latest_batch_outcome", lambda: batch_outcome)
 
 
 def _seed_eligible_channel(slug: str = "mp3quran") -> None:
@@ -144,7 +147,11 @@ def test_status_released_with_ledger_is_waiting(signed_in_client, monkeypatch):
     assert row["slug"] == "ar.ready_to_publish"
     assert row["state"] == "released"
     assert row["gh_release_eligible"] is True
-    assert row["ts"] == {"version": "real-job-id-123", "produced_at": row["ts"]["produced_at"]}
+    assert row["ts"] == {
+        "version": "real-job-id-123",
+        "produced_at": row["ts"]["produced_at"],
+        "stale_since": None,
+    }
     assert row["hf"] is None
     assert row["gh"] is None
 
@@ -268,10 +275,58 @@ def test_release_preview_uses_display_names(signed_in_client, monkeypatch):
     assert body["release_date"]
 
     md = body["changelog_preview_md"]
-    assert md.startswith("# v0.1.0 · ")
+    assert md.startswith("# ")
+    assert "\n\n## What to download" in md
+    assert "`catalog.json`" in md and "audio URLs paired with the timestamp data" in md
+    assert "`release_schemas.json`" not in md
     assert "Hafs" in md and "114 surahs" in md
     # The delivery slug must not leak into the human-facing body.
     assert "ar_preview" not in md
+
+
+# ---------------------------------------------------------------------------
+# /api/admin/cut-release
+# ---------------------------------------------------------------------------
+
+
+def test_cut_release_rejects_operator_note_field(signed_in_client, monkeypatch):
+    client, _user = signed_in_client(role="owner")
+    _stub_jobs_api(monkeypatch)
+
+    resp = client.post(
+        "/api/admin/cut-release",
+        json={"version": "v1.0.0", "operator_note": "removed"},
+        headers=_HEADERS,
+    )
+
+    assert resp.status_code == 400
+    assert "invalid cut-release request" in resp.get_json()["error"]
+
+
+def test_cut_release_launch_accepts_schema_body_only(signed_in_client, monkeypatch):
+    client, _user = signed_in_client(role="owner")
+    _stub_jobs_api(monkeypatch)
+
+    from services.admin.jobs import cut_release as cut_release_jobs
+
+    called = {}
+
+    def fake_launch(**kwargs):
+        called.update(kwargs)
+        return {"job_id": "j_cut", "url": None}
+
+    monkeypatch.setattr(cut_release_jobs, "launch", fake_launch)
+
+    resp = client.post(
+        "/api/admin/cut-release",
+        json={"version": "v1.0.0", "expected_version_at_preview": None},
+        headers=_HEADERS,
+    )
+
+    assert resp.status_code == 202, resp.get_data(as_text=True)
+    assert resp.get_json() == {"job_id": "j_cut", "url": None}
+    assert called["version"] == "v1.0.0"
+    assert "operator_note" not in called
 
 
 # ---------------------------------------------------------------------------
@@ -311,3 +366,90 @@ def test_publish_hf_rejects_no_ledger(signed_in_client, monkeypatch, seed_state)
     resp = client.post("/api/admin/publish-hf/ar_no_ledger", headers=_HEADERS)
     assert resp.status_code == 409
     assert "has no current TS release" in resp.get_json()["error"]
+
+
+# ---------------------------------------------------------------------------
+# /api/admin/publish-hf-batch
+# ---------------------------------------------------------------------------
+
+
+def test_publish_hf_batch_launches_with_deduped_slugs(signed_in_client, monkeypatch):
+    """A batch of ledgered slugs launches one job; the route de-dups slugs
+    (preserving order) before handing them to the launcher."""
+    client, _user = signed_in_client(role="maintainer")
+    _stub_jobs_api(monkeypatch)
+    _seed_released("ar_b1", channel="mp3quran", reciter_id="rb1")
+    _seed_ledger_ts("ar_b1")
+    _seed_released("ar_b2", channel="mp3quran", reciter_id="rb2")
+    _seed_ledger_ts("ar_b2")
+
+    from services.admin.jobs import hf_publish_batch as batch_jobs
+
+    seen = {}
+    monkeypatch.setattr(
+        batch_jobs,
+        "launch",
+        lambda slugs, webhook_base=None: seen.update(slugs=slugs) or {"job_id": "j_b", "url": "u"},
+    )
+
+    resp = client.post(
+        "/api/admin/publish-hf-batch",
+        json={"slugs": ["ar_b1", "ar_b2", "ar_b1"]},
+        headers=_HEADERS,
+    )
+    assert resp.status_code == 202, resp.get_data(as_text=True)
+    assert resp.get_json() == {"job_id": "j_b", "url": "u"}
+    assert seen["slugs"] == ["ar_b1", "ar_b2"]
+
+
+def test_publish_hf_batch_rejects_member_without_ledger(signed_in_client, monkeypatch):
+    """If any selected slug lacks a current TS row the whole batch 409s — no
+    partial launch."""
+    client, _user = signed_in_client(role="maintainer")
+    _stub_jobs_api(monkeypatch)
+    _seed_released("ar_have_ts", channel="mp3quran", reciter_id="rb3")
+    _seed_ledger_ts("ar_have_ts")
+    _seed_released("ar_no_ts", channel="mp3quran", reciter_id="rb4")  # no ledger
+
+    resp = client.post(
+        "/api/admin/publish-hf-batch",
+        json={"slugs": ["ar_have_ts", "ar_no_ts"]},
+        headers=_HEADERS,
+    )
+    assert resp.status_code == 409
+    assert "ar_no_ts" in resp.get_json()["error"]
+
+
+def test_status_surfaces_publish_error_and_last_batch(signed_in_client, monkeypatch):
+    """A slug failed in the most-recent batch (and not since republished) gets
+    a ``publish_error`` on its row and is reflected in the ``last_batch``
+    summary banner payload."""
+    client, _user = signed_in_client(role="maintainer")
+    _stub_jobs_api(
+        monkeypatch,
+        batch_outcome={
+            "job_id": "j_batch",
+            "completed_at": "2026-06-05T10:00:00Z",
+            "members": [
+                {"slug": "ar_failed", "status": "failed", "error": "every audio slice failed"},
+            ],
+        },
+    )
+    # The failed slug is released + ledgered (waiting to publish) but carries no
+    # HF row → the failure is still live.
+    _seed_released("ar_failed", channel="mp3quran", reciter_id="rb5")
+    _seed_ledger_ts("ar_failed")
+
+    resp = client.get("/api/admin/releases/status")
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    body = resp.get_json()
+
+    row = next(r for r in body["recitations"] if r["slug"] == "ar_failed")
+    assert row["publish_error"]["message"] == "every audio slice failed"
+    assert row["publish_error"]["job_id"] == "j_batch"
+    assert body["last_batch"] == {
+        "job_id": "j_batch",
+        "at": "2026-06-05T10:00:00Z",
+        "published_count": 0,
+        "failed_count": 1,
+    }

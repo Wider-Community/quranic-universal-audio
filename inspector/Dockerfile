@@ -130,13 +130,16 @@ COPY inspector/utils/ ./inspector/utils/
 # qua_shared/ is shared with the CI build pipeline. Inspector imports
 # ``qua_shared.timestamps_shards`` for ``SCHEMA_VERSION`` + ``derive_url_template``
 # when composing the bucket-mode manifest. ``qua_jobs/`` ships the HF-Job
-# entrypoints (generate_timestamps / publish_hf / cut_release / shard) that
+# entrypoints (generate_timestamps / publish_hf / publish_hf_batch /
+# cut_release / shard) that
 # ``services/admin/jobs/base.stage_job_code`` uploads to the aligner-bucket on
-# launch. ``.github/config/repo.yml`` + ``LICENSE`` are read by the job-side
-# scripts (config_loader + cut_release asset upload).
+# launch. ``.github/config/repo.yml``, ``docs/templates/`` (release-body +
+# dataset-card render-templates) + ``LICENSE`` are read by config_loader (the
+# inspector release preview + the job-side cut_release/publish_hf renderers).
 COPY qua_shared/ ./qua_shared/
 COPY qua_jobs/ ./qua_jobs/
 COPY .github/config/ ./.github/config/
+COPY docs/templates/ ./docs/templates/
 COPY LICENSE ./LICENSE
 # Linguistic data read by services/data_loader.py via config.py's _QUA_DATA,
 # plus surah_info.json read by services/data_loader.py at startup. These four

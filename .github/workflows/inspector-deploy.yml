@@ -13,6 +13,7 @@ on:
       - "data/digital_khatt_v2_script.json"
       - "data/phoneme_sub_costs.json"
       - ".dockerignore"
+      - "docs/templates/**"
       - ".github/workflows/inspector-deploy.yml"
   workflow_dispatch:
     inputs:

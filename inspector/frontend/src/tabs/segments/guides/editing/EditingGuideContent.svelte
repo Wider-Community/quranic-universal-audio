@@ -143,7 +143,7 @@
             <li>Listening to entire surahs (using the surah picker) and verifying no issues with segment boundaries and references</li>
             <li>Checking for any audio quality issues</li>
             <li>Increasing the low confidence threshold beyond the default and reviewing those segments as well</li>
-            <li>Using filters to search for potnetially problematic segments (e.g. 1 or 2 words, many words, very short/long duration segments, etc.)</li>
+            <li>Using filters to search for potentially problematic segments (e.g. 1 or 2 words, many words, very short/long duration segments, etc.)</li>
         </ul>
     </div>
 

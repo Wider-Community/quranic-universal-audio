@@ -1,47 +1,36 @@
-"""Render the GitHub-release body (the "changelog") — single source of truth.
+"""Render the GitHub-release body from a human-editable Markdown template.
 
-Shared by the two callers that must agree on what a release looks like:
-  - ``qua_jobs/cut_release.py`` — the body actually POSTed to GitHub by the cut HF Job.
-  - ``inspector/routes/admin/releases.py`` — the dry-run preview the operator sees in the
-    cut modal before launching.
-
-Both pass the same member-dict shape (display names + coverage already resolved by the
-caller) so the preview is faithful to what ships. This module is stdlib-only and pure —
-no DB, no I/O — and NEVER emits slugs; callers resolve riwayah/style/channel display names
-from the vocab tables. ``operator_note`` is treated as untrusted free text: HTML-significant
-characters are neutralised so a note can't break out of its blockquote or inject markup.
+The release preview route and ``qua_jobs/cut_release.py`` both call this
+module, so the admin preview and the shipped GitHub body stay in lockstep.
+The static prose, tables, and schema snippets live as real Markdown in
+``docs/templates/release_body.md``; this module fills only the computed
+placeholders: the dated ``release_title``, the per-cut ``recitation_changes``
+membership block, and the config-driven ``release_footer`` links.
 """
 
 from __future__ import annotations
 
-# (asset name, human description). Folded into one collapsible "Schemas" accordion.
-_TIER_SCHEMAS: list[tuple[str, str]] = [
-    (
-        "verse_timestamps.json.gz",
-        'Tier 1. Positional `"surah:ayah": [start_ms, end_ms]`. '
-        "Times are source-relative milliseconds.",
-    ),
-    (
-        "word_timestamps.json.gz",
-        'Tier 2. Positional `"surah:ayah": [[start, end], [[widx, start, end], ...]]`. '
-        "Source-relative ms.",
-    ),
-    (
-        "letter_timestamps.json.gz",
-        'Tier 3. Positional `"surah:ayah": [[start, end], [words], '
-        "[[widx, char, start, end], ...]]`. Source-relative ms.",
-    ),
-]
+import re
+from collections.abc import Mapping
+
+from qua_shared.config_loader import load_template
+
+_PLACEHOLDER_RE = re.compile(r"{{\s*([a-z_]+)\s*}}")
+_REQUIRED_BLOCKS = {
+    "release_title",
+    "recitation_changes",
+    "release_footer",
+}
 
 
 def _neutralise(value: object) -> str:
-    """Render any value as text with HTML tags neutralised (``<``/``>`` → entities)."""
+    """Render any value as text with HTML tags neutralised."""
     s = "" if value is None else str(value)
     return s.replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _escape_cell(value: object) -> str:
-    """Neutralise a value for a GFM table cell — tags, pipes, backslashes, newlines."""
+    """Neutralise a value for a GFM table cell."""
     s = _neutralise(value).replace("\\", "\\\\").replace("|", "\\|")
     return " ".join(s.split())
 
@@ -49,24 +38,23 @@ def _escape_cell(value: object) -> str:
 def _reciter_cell(m: dict) -> str:
     en = (m.get("name_en") or "").strip()
     ar = (m.get("name_ar") or "").strip()
-    label = f"{en} — {ar}" if en and ar else (en or ar or "(unnamed)")
+    label = f"{en} - {ar}" if en and ar else (en or ar or "(unnamed)")
     return _escape_cell(label)
 
 
 def _coverage_cell(m: dict) -> str:
-    """Exact ayah count when known (cut time), else surah count (DB-only preview)."""
     ayahs = m.get("coverage_ayahs")
     if ayahs is not None:
         return f"{int(ayahs):,} ayahs"
     surahs = m.get("coverage_surahs")
     if surahs is not None:
         return f"{int(surahs)} surahs"
-    return "—"
+    return "-"
 
 
 def _member_table(members: list[dict]) -> list[str]:
     rows = [
-        "| Reciter | Riwāyah | Style | Channel | Coverage |",
+        "| Reciter | Riwayah | Style | Channel | Coverage |",
         "|---|---|---|---|---|",
     ]
     for m in members:
@@ -79,8 +67,7 @@ def _member_table(members: list[dict]) -> list[str]:
 
 
 def _accordion(summary: str, body_lines: list[str]) -> list[str]:
-    # Blank line after <summary> is required for GitHub to render a table/list inside.
-    return [f"<details><summary>{summary}</summary>", "", *body_lines, "</details>", ""]
+    return [f"<details><summary>{summary}</summary>", "", *body_lines, "</details>"]
 
 
 def _plural(n: int) -> str:
@@ -90,9 +77,9 @@ def _plural(n: int) -> str:
 def _summary_sentence(
     previous_version: str | None, n_added: int, n_refresh: int, n_carried: int
 ) -> str:
-    total = n_added + n_refresh + n_carried
     if previous_version is None:
-        return f"First release — **{total}** recitation{_plural(total)}."
+        total = n_added + n_refresh + n_carried
+        return f"First release: **{total}** recitation{_plural(total)}."
     parts: list[str] = []
     if n_added:
         parts.append(f"adds {n_added}")
@@ -103,6 +90,61 @@ def _summary_sentence(
     return f"{body[0].upper()}{body[1:]}{tail} over {previous_version}."
 
 
+def _render_template(blocks: Mapping[str, str]) -> str:
+    template = load_template("release_body")
+    placeholders = set(_PLACEHOLDER_RE.findall(template))
+    unknown = placeholders - _REQUIRED_BLOCKS
+    missing = _REQUIRED_BLOCKS - placeholders
+    if unknown:
+        raise ValueError(f"unknown release template placeholders: {sorted(unknown)}")
+    if missing:
+        raise ValueError(f"missing release template placeholders: {sorted(missing)}")
+
+    out = template
+    for key in _REQUIRED_BLOCKS:
+        out = re.sub(r"{{\s*" + key + r"\s*}}", lambda _m, k=key: blocks[k].rstrip(), out)
+    return out.rstrip() + "\n"
+
+
+def _recitation_changes(
+    *, previous_version: str | None, added: list[dict], refreshed: list[dict], carried: int
+) -> str:
+    out: list[str] = [
+        "## Recitations",
+        "",
+        _summary_sentence(previous_version, len(added), len(refreshed), carried),
+        "",
+    ]
+    if added:
+        out.extend(
+            _accordion(
+                f"Added recitations - {len(added)}",
+                _member_table(added),
+            )
+        )
+        out.append("")
+    if refreshed:
+        out.extend(
+            _accordion(
+                f"Refreshed recitations - {len(refreshed)}",
+                _member_table(refreshed),
+            )
+        )
+        out.append("")
+    if carried:
+        out.append(f"{carried} carried / unchanged.")
+    return "\n".join(out).rstrip()
+
+
+def _release_footer(*, license_id: str, owner: str, repo: str, hf_dataset: str) -> str:
+    out = [f"**License:** {license_id}"]
+    if owner and repo:
+        out.append(f"- Repository: https://github.com/{owner}/{repo}")
+    if hf_dataset:
+        out.append(f"- HF dataset: https://huggingface.co/datasets/{hf_dataset}")
+    return "\n".join(out)
+
+
 def render_changelog(
     *,
     version: str,
@@ -110,57 +152,29 @@ def render_changelog(
     release_date: str,
     members: list[dict],
     static_refs_changed_keys: tuple[str, ...] | list[str] = (),
-    operator_note: str | None = None,
     owner: str = "",
     repo: str = "",
     hf_dataset: str = "",
     license_id: str = "CC-BY-4.0",
 ) -> str:
-    """Return the full release body markdown.
-
-    ``members`` entries carry display names + change_kind + coverage; see the module
-    docstring for the contract. ``release_date`` is a pre-formatted human string.
-    """
+    """Return the full release body markdown."""
     added = [m for m in members if m.get("change_kind") == "added"]
     refreshed = [m for m in members if m.get("change_kind") == "refresh"]
     carried = sum(1 for m in members if m.get("change_kind") == "unchanged")
-
-    out: list[str] = [f"# {version} · {release_date}", ""]
-    out.append(_summary_sentence(previous_version, len(added), len(refreshed), carried))
-    out.append("")
-
-    if operator_note and operator_note.strip():
-        out.extend(f"> {_neutralise(line)}" for line in operator_note.strip().splitlines())
-        out.append("")
-
-    if added:
-        out.extend(
-            _accordion(
-                f"➕ Added — {len(added)} recitation{_plural(len(added))}", _member_table(added)
-            )
-        )
-    if refreshed:
-        out.extend(
-            _accordion(
-                f"↻ Refreshed — {len(refreshed)} recitation{_plural(len(refreshed))}",
-                _member_table(refreshed),
-            )
-        )
-    if carried:
-        out.extend([f"{carried} carried / unchanged.", ""])
-
-    schema_lines = [f"- `{name}` — {desc}" for name, desc in _TIER_SCHEMAS]
-    refs = ", ".join(
-        f"`{key}` ({'refreshed' if key in static_refs_changed_keys else 'unchanged'})"
-        for key in ("surah_info.json", "qpc_hafs.json")
+    return _render_template(
+        {
+            "release_title": f"# {release_date}",
+            "recitation_changes": _recitation_changes(
+                previous_version=previous_version,
+                added=added,
+                refreshed=refreshed,
+                carried=carried,
+            ),
+            "release_footer": _release_footer(
+                license_id=license_id,
+                owner=owner,
+                repo=repo,
+                hf_dataset=hf_dataset,
+            ),
+        }
     )
-    schema_lines += ["", f"Static references: {refs}."]
-    out.extend(_accordion("📐 Schemas", schema_lines))
-
-    out.append(f"**License:** {license_id}")
-    if owner and repo:
-        out.append(f"- Repository: https://github.com/{owner}/{repo}")
-    if hf_dataset:
-        out.append(f"- HF dataset: https://huggingface.co/datasets/{hf_dataset}")
-
-    return "\n".join(out).rstrip() + "\n"

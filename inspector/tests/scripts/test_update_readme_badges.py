@@ -108,5 +108,7 @@ def test_collect_stats_filters_public_released_and_uses_manifest_fallback(tmp_pa
     stats = badges.collect_stats(db_path, manifest_reader=manifest_reader)
 
     assert stats.recitations == 2
-    assert stats.riwayat == 3
+    # Riwayat counts only the released/public set (hafs + warsh), NOT the wip or
+    # discarded rows' riwayat — consistent with the published dataset.
+    assert stats.riwayat == 2
     assert stats.seconds == 3630

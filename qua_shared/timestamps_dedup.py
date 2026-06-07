@@ -94,30 +94,6 @@ def is_v2(doc: dict) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def confidence_by_span(detailed: dict | None) -> dict[tuple[int, int], float]:
-    """Build a ``{(time_start, time_end): confidence}`` lookup from detailed.json.
-
-    Used to join per-segment alignment confidence onto segment-array shards for
-    the highest-confidence pick in ``project_segment_shard``. ``(time_start,
-    time_end)`` is unique per segment, so it keys cleanly. Returns an empty dict
-    when ``detailed`` is missing or carries no confidences.
-    """
-    out: dict[tuple[int, int], float] = {}
-    if not detailed:
-        return out
-    for entry in detailed.get("entries", []) or []:
-        for seg in entry.get("segments", []) or []:
-            conf = seg.get("confidence")
-            if conf is None:
-                continue
-            ts = seg.get("time_start")
-            te = seg.get("time_end")
-            if ts is None or te is None:
-                continue
-            out[(int(ts), int(te))] = float(conf)
-    return out
-
-
 def _seg_widx_set(seg: dict) -> set[int]:
     """Word indices covered by one segment-array segment ``{ref, t, words}``.
 
@@ -162,23 +138,35 @@ def _completes_at(occasion: list[dict], target: set[int]) -> int | None:
     return None
 
 
-def _occasion_mean_confidence(
-    occasion: list[dict], conf_by_span: dict[tuple[int, int], float] | None
-) -> float | None:
-    """Mean alignment confidence across an occasion's segments.
+def _first_widx(seg: dict) -> int | None:
+    """First word index in a segment, or None if it carries no words."""
+    words = seg.get("words") or []
+    return int(words[0][0]) if words else None
 
-    Joins each segment to ``detailed.json`` by its ``(start_ms, end_ms)`` span
-    (unique per segment). Returns None if no segment has a confidence, so the
-    caller can fall back to the earliest completing occasion.
+
+def _trim_leading_false_start(kept: list[dict], target: set[int]) -> list[dict]:
+    """Drop a redundant leading false-start from a canonical run.
+
+    A false-start is an abandoned attempt: the reciter recites a leading prefix,
+    then restarts the verse from word 1 and completes it. Symmetric to the
+    trailing trim — keep only from the LAST segment that restarts at word 1 whose
+    run still covers the whole verse ``target``; everything before it is
+    redundant. Mid-verse lookbacks (a backward jump to a non-first word) never
+    restart at word 1, so they are untouched. The restart is a natural segment
+    boundary, so trimming stays audio-contiguous.
     """
-    if not conf_by_span:
-        return None
-    vals = [
-        conf_by_span[(seg["t"][0], seg["t"][1])]
-        for seg in occasion
-        if (seg["t"][0], seg["t"][1]) in conf_by_span
-    ]
-    return sum(vals) / len(vals) if vals else None
+    if not target:
+        return kept
+    best = 0
+    for r in range(1, len(kept)):
+        if _first_widx(kept[r]) != 1:
+            continue
+        cov: set[int] = set()
+        for seg in kept[r:]:
+            cov |= _seg_widx_set(seg)
+        if target.issubset(cov):
+            best = r
+    return kept[best:]
 
 
 def _canonical_verse(words: list, segs: list[dict]) -> dict:
@@ -208,11 +196,7 @@ def _canonical_verse(words: list, segs: list[dict]) -> dict:
     }
 
 
-def project_segment_shard(
-    shard: dict,
-    *,
-    conf_by_span: dict[tuple[int, int], float] | None = None,
-) -> dict[str, dict]:
+def project_segment_shard(shard: dict) -> dict[str, dict]:
     """Project a segment-array shard to the canonical per-verse map.
 
     ``shard`` is the bucket artifact ``{"_meta": {...}, "segments":
@@ -227,11 +211,10 @@ def project_segment_shard(
         within-pass backward loops verbatim; the occasion COMPLETES when coverage
         first reaches ``{1..N}`` (N = max word index across all the verse's
         segments — every recited word);
-      - canonical = the segments up to and including the completing one (trailing
-        post-completion redundancy trimmed; never cut the middle of audio);
-      - among multiple completing occasions, pick the HIGHEST mean alignment
-        confidence (joined via ``conf_by_span``); fall back to the EARLIEST
-        completing occasion when confidence is unavailable;
+      - canonical = the segments around the completing one, with BOTH a leading
+        false-start (an abandoned prefix before a restart at word 1) and trailing
+        post-completion redundancy trimmed; the middle of audio is never cut;
+      - among multiple completing occasions, pick the EARLIEST (first recited);
       - verses that never complete in any single occasion fall back to the
         occasion with the widest coverage (longest contiguous take).
       - non-canonical occasions are dropped.
@@ -258,31 +241,19 @@ def project_segment_shard(
         n_words = max((wi for seg in verse_segs for wi in _seg_widx_set(seg)), default=0)
         target = set(range(1, n_words + 1))
 
-        chosen = _choose_occasion(occasions, target, conf_by_span)
+        chosen = _choose_occasion(occasions, target)
         out[ref] = _project_occasion(chosen, target)
     return out
 
 
-def _choose_occasion(
-    occasions: list[list[dict]],
-    target: set[int],
-    conf_by_span: dict[tuple[int, int], float] | None,
-) -> list[dict]:
-    """Pick the canonical occasion (completing, then highest mean confidence).
+def _choose_occasion(occasions: list[list[dict]], target: set[int]) -> list[dict]:
+    """Pick the canonical occasion: the EARLIEST completing one.
 
-    Falls back to the earliest completing occasion when no confidence is
-    available, and to the widest-coverage occasion when none complete.
+    Falls back to the widest-coverage occasion when none complete.
     """
     completing = [occ for occ in occasions if _completes_at(occ, target) is not None]
     if completing:
-        ranked = [
-            (i, _occasion_mean_confidence(occ, conf_by_span)) for i, occ in enumerate(completing)
-        ]
-        if any(conf is not None for _, conf in ranked):
-            # Highest mean confidence; tie-break on earliest (lower index).
-            best_i = max(ranked, key=lambda ic: (ic[1] if ic[1] is not None else -1.0, -ic[0]))[0]
-            return completing[best_i]
-        return completing[0]  # earliest completing — confidence unavailable
+        return completing[0]  # earliest completing (first recited)
     # No occasion completes — keep the one with the widest word coverage.
     return max(
         occasions,
@@ -291,9 +262,10 @@ def _choose_occasion(
 
 
 def _project_occasion(occasion: list[dict], target: set[int]) -> dict:
-    """Trim trailing post-completion segments, then assemble the verse value."""
+    """Trim leading false-start + trailing redundancy, then assemble the value."""
     comp = _completes_at(occasion, target)
     kept = occasion[: comp + 1] if comp is not None else occasion
+    kept = _trim_leading_false_start(kept, target)
     words: list = []
     for seg in kept:
         words.extend(seg.get("words") or [])

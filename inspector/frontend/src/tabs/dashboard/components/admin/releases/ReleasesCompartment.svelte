@@ -26,8 +26,9 @@
      * are noise).
      */
     import {
+        cancelReleaseJob,
         fetchReleasesStatus,
-        publishHf,
+        publishHfBatch,
         regenerateTs,
         type InFlightJob,
         type ReleaseStatusRow,
@@ -35,6 +36,7 @@
     } from '../../../../../lib/api/admin-releases';
     import { releasesStore } from '../../../../../lib/stores/releases.svelte';
     import CutReleaseModal from './CutReleaseModal.svelte';
+    import ReleasesActionBar from './ReleasesActionBar.svelte';
     import ReleasesRow, { type ReleasesBucket } from './ReleasesRow.svelte';
     import ReleasesSummaryCard from './ReleasesSummaryCard.svelte';
 
@@ -43,9 +45,26 @@
     let error = $state<string | null>(null);
 
     let cutModalOpen = $state(false);
-    let busySlug = $state<string | null>(null);
     let busyRegenSlug = $state<string | null>(null);
     let rowError = $state<{ slug: string; message: string } | null>(null);
+
+    // Batch-publish selection + action state.
+    let selected = $state<Set<string>>(new Set());
+    let batchBusy = $state(false);
+    let batchError = $state<string | null>(null);
+    let cancelingJob = $state<string | null>(null);
+    // Dismissed batch-summary banners, keyed by job id (localStorage-backed).
+    let dismissedBatches = $state<Set<string>>(loadDismissedBatches());
+
+    const BATCH_DISMISS_LS_KEY = 'insp_releases_batch_dismissed';
+    function loadDismissedBatches(): Set<string> {
+        try {
+            const raw = localStorage.getItem(BATCH_DISMISS_LS_KEY);
+            return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+        } catch {
+            return new Set();
+        }
+    }
 
     // Trigger refetch from internal mutations (publish action) without
     // touching the store's refreshSeq.
@@ -96,6 +115,9 @@
     function isInFlight(r: ReleaseStatusRow): boolean {
         return inFlightSlugs.has(r.slug);
     }
+    function isFailed(r: ReleaseStatusRow): boolean {
+        return !!r.publish_error;
+    }
     function isStaleHf(r: ReleaseStatusRow): boolean {
         return !!r.hf?.stale_since;
     }
@@ -111,11 +133,21 @@
 
     function bucketOf(r: ReleaseStatusRow): ReleasesBucket | null {
         if (isInFlight(r)) return 'in_flight';
+        if (isFailed(r)) return 'failed';
         if (isStaleHf(r)) return 'stale_hf';
         if (isWaiting(r)) return 'waiting';
         if (isPublishedCurrent(r)) return 'published_current';
         if (isExcluded(r)) return 'excluded';
         return null;   // fresh / inert — hide
+    }
+
+    // Buckets whose rows can be selected for a batch publish.
+    const SELECTABLE_BUCKETS: ReadonlySet<ReleasesBucket> = new Set<ReleasesBucket>([
+        'waiting', 'stale_hf', 'failed', 'published_current',
+    ]);
+    function isSelectable(r: ReleaseStatusRow): boolean {
+        const b = bucketOf(r);
+        return b !== null && SELECTABLE_BUCKETS.has(b);
     }
 
     // ---- filter + sort ----
@@ -177,6 +209,7 @@
     };
     const SECTIONS: Section[] = [
         { key: 'in_flight',         label: 'In progress',         mark: 'inflight',  defaultCollapsed: false, hideWhenEmpty: true },
+        { key: 'failed',            label: 'Failed to publish',   mark: 'failed',    defaultCollapsed: false, hideWhenEmpty: true },
         { key: 'stale_hf',          label: 'Stale on HF',         mark: 'stale',     defaultCollapsed: false, hideWhenEmpty: false },
         { key: 'waiting',           label: 'Waiting to publish',  mark: 'waiting',   defaultCollapsed: false, hideWhenEmpty: false },
         { key: 'published_current', label: 'Published & current', mark: 'published', defaultCollapsed: true,  hideWhenEmpty: false },
@@ -185,7 +218,7 @@
 
     const bucketed = $derived.by(() => {
         const out: Record<ReleasesBucket, ReleaseStatusRow[]> = {
-            in_flight: [], stale_hf: [], waiting: [],
+            in_flight: [], failed: [], stale_hf: [], waiting: [],
             published_current: [], excluded: [],
         };
         for (const r of filteredRows) {
@@ -242,7 +275,7 @@
     const COLLAPSE_LS_KEY = 'insp_releases_collapsed';
     function loadCollapsed(): Record<ReleasesBucket, boolean> {
         const fallback: Record<ReleasesBucket, boolean> = {
-            in_flight: false, stale_hf: false, waiting: false,
+            in_flight: false, failed: false, stale_hf: false, waiting: false,
             published_current: true, excluded: true,
         };
         try {
@@ -251,6 +284,7 @@
             const parsed = JSON.parse(raw) as Partial<Record<ReleasesBucket, boolean>>;
             return {
                 in_flight: parsed.in_flight ?? fallback.in_flight,
+                failed: parsed.failed ?? fallback.failed,
                 stale_hf: parsed.stale_hf ?? fallback.stale_hf,
                 waiting: parsed.waiting ?? fallback.waiting,
                 published_current: parsed.published_current ?? fallback.published_current,
@@ -268,19 +302,80 @@
         catch { /* ignore */ }
     }
 
+    // ---- selection ----
+    function toggleSelect(slug: string): void {
+        const next = new Set(selected);
+        if (next.has(slug)) next.delete(slug);
+        else next.add(slug);
+        selected = next;
+    }
+    function clearSelection(): void {
+        selected = new Set();
+    }
+    /** Select every publishable row currently visible (filtered). */
+    function selectAll(): void {
+        const next = new Set<string>();
+        for (const r of filteredRows) {
+            if (isSelectable(r)) next.add(r.slug);
+        }
+        selected = next;
+    }
+    /** Toggle every row in one section — select all if any unselected, else clear. */
+    function toggleSectionSelect(rows: ReleaseStatusRow[]): void {
+        const next = new Set(selected);
+        const allSel = rows.length > 0 && rows.every((r) => next.has(r.slug));
+        for (const r of rows) {
+            if (allSel) next.delete(r.slug);
+            else next.add(r.slug);
+        }
+        selected = next;
+    }
+
+    /** Count of selectable rows in the current filtered view. */
+    const selectableCount = $derived(filteredRows.filter(isSelectable).length);
+
     // ---- actions ----
-    async function onPublish(slug: string): Promise<void> {
-        if (busySlug !== null) return;
-        busySlug = slug;
-        rowError = null;
+    async function onPublishBatch(): Promise<void> {
+        if (batchBusy || selected.size === 0) return;
+        batchBusy = true;
+        batchError = null;
         try {
-            await publishHf(slug);
+            await publishHfBatch([...selected]);
+            clearSelection();
             refetch();   // the server cache is already busted; this gets the new in_flight
         } catch (e) {
-            rowError = { slug, message: (e as Error).message ?? 'Publish failed' };
+            batchError = (e as Error).message ?? 'Batch publish failed';
         } finally {
-            busySlug = null;
+            batchBusy = false;
         }
+    }
+
+    async function onCancelJob(jobId: string): Promise<void> {
+        if (cancelingJob !== null) return;
+        if (!window.confirm('Cancel this job? Any in-progress work will be lost.')) return;
+        cancelingJob = jobId;
+        try {
+            await cancelReleaseJob(jobId);
+            refetch();
+        } catch (e) {
+            batchError = (e as Error).message ?? 'Cancel failed';
+        } finally {
+            cancelingJob = null;
+        }
+    }
+
+    // ---- batch summary banner ----
+    const lastBatch = $derived(resp?.last_batch ?? null);
+    const showBanner = $derived(
+        lastBatch !== null && !dismissedBatches.has(lastBatch.job_id),
+    );
+    function dismissBanner(): void {
+        if (!lastBatch) return;
+        const next = new Set(dismissedBatches);
+        next.add(lastBatch.job_id);
+        dismissedBatches = next;
+        try { localStorage.setItem(BATCH_DISMISS_LS_KEY, JSON.stringify([...next])); }
+        catch { /* ignore */ }
     }
 
     /** Re-run MFA alignment for a published reciter. The launch invalidates the
@@ -305,20 +400,21 @@
         refetch();
     }
 
-    function scrollToInFlight(): void {
+    function jumpToSection(key: ReleasesBucket): void {
         // Expand the section first (it's only mounted when non-empty, but
         // could be collapsed by the operator) and then scroll into view.
-        collapsed.in_flight = false;
+        collapsed[key] = false;
         try { localStorage.setItem(COLLAPSE_LS_KEY, JSON.stringify(collapsed)); }
         catch { /* ignore */ }
         // Defer one tick so the {#if} mounts before the scroll. Locate the
         // section by data attribute — Svelte 5 doesn't allow a conditional
         // bind:this inside an each-loop.
         queueMicrotask(() => {
-            const el = listAreaEl?.querySelector<HTMLElement>('[data-section="in_flight"]');
+            const el = listAreaEl?.querySelector<HTMLElement>(`[data-section="${key}"]`);
             el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     }
+    const scrollToInFlight = () => jumpToSection('in_flight');
 </script>
 
 <div class="releases">
@@ -334,7 +430,25 @@
             onCut={() => (cutModalOpen = true)}
             cutDisabledReason={cutDisabledReason}
             onJumpToInFlight={scrollToInFlight}
+            cancelingJob={cancelingJob}
+            onCancelJob={onCancelJob}
         />
+
+        {#if showBanner && lastBatch}
+            <div class="batch-banner" class:has-failures={lastBatch.failed_count > 0} role="status">
+                <span class="banner-text">
+                    Batch publish finished —
+                    <strong>{lastBatch.published_count}</strong> published{#if lastBatch.failed_count > 0},
+                        <strong class="fail">{lastBatch.failed_count}</strong> failed{/if}.
+                </span>
+                {#if lastBatch.failed_count > 0}
+                    <button class="banner-link" type="button" onclick={() => jumpToSection('failed')}>
+                        View failures
+                    </button>
+                {/if}
+                <button class="banner-dismiss" type="button" onclick={dismissBanner} aria-label="Dismiss">×</button>
+            </div>
+        {/if}
 
         {#if allRows.length === 0}
             <div class="zero-state">
@@ -425,23 +539,38 @@
 
             {#each SECTIONS as section (section.key)}
                 {@const rows = bucketed[section.key]}
+                {@const sectionSelectable = SELECTABLE_BUCKETS.has(section.key)}
+                {@const allSel = rows.length > 0 && rows.every((r) => selected.has(r.slug))}
                 {#if !(section.hideWhenEmpty && rows.length === 0)}
                     <section
                         class="state-section"
                         class:collapsed={collapsed[section.key]}
                         data-section={section.key}
                     >
-                        <button
-                            class="state-head"
-                            type="button"
-                            aria-expanded={!collapsed[section.key]}
-                            onclick={() => toggle(section.key)}
-                        >
-                            <span class="state-mark mark-{section.mark}"></span>
-                            <span class="state-name">{section.label}</span>
-                            <span class="state-count">{rows.length}</span>
-                            <span class="state-toggle" aria-hidden="true">▾</span>
-                        </button>
+                        <div class="state-head-row">
+                            {#if sectionSelectable && rows.length > 0}
+                                <label class="head-select" title="Select all in this section">
+                                    <input
+                                        type="checkbox"
+                                        checked={allSel}
+                                        onchange={() => toggleSectionSelect(rows)}
+                                    />
+                                </label>
+                            {:else}
+                                <span class="head-select-spacer" aria-hidden="true"></span>
+                            {/if}
+                            <button
+                                class="state-head"
+                                type="button"
+                                aria-expanded={!collapsed[section.key]}
+                                onclick={() => toggle(section.key)}
+                            >
+                                <span class="state-mark mark-{section.mark}"></span>
+                                <span class="state-name">{section.label}</span>
+                                <span class="state-count">{rows.length}</span>
+                                <span class="state-toggle" aria-hidden="true">▾</span>
+                            </button>
+                        </div>
                         {#if !collapsed[section.key]}
                             <div class="state-body">
                                 {#if rows.length === 0}
@@ -453,11 +582,14 @@
                                                 row={row}
                                                 bucket={section.key}
                                                 inFlightJob={section.key === 'in_flight' ? jobForSlug(row.slug) : null}
-                                                busy={busySlug === row.slug}
+                                                selectable={sectionSelectable}
+                                                selected={selected.has(row.slug)}
                                                 regenBusy={busyRegenSlug === row.slug}
+                                                canceling={cancelingJob === jobForSlug(row.slug)?.job_id}
                                                 errorMessage={rowError?.slug === row.slug ? rowError.message : null}
-                                                onPublish={onPublish}
+                                                onToggleSelect={toggleSelect}
                                                 onRegenerate={onRegenerate}
+                                                onCancel={onCancelJob}
                                             />
                                         {/each}
                                     </div>
@@ -468,6 +600,16 @@
                 {/if}
             {/each}
         </div>
+
+        <ReleasesActionBar
+            count={selected.size}
+            selectableCount={selectableCount}
+            busy={batchBusy}
+            error={batchError}
+            onPublish={onPublishBatch}
+            onSelectAll={selectAll}
+            onClear={clearSelection}
+        />
         {/if}
     {/if}
 
@@ -504,6 +646,23 @@
     }
     .state.error { color: var(--state-error-fg); }
 
+    .state-head-row {
+        display: flex;
+        align-items: stretch;
+        gap: var(--s-2);
+        border-bottom: 1px solid var(--border-quiet);
+    }
+    .head-select,
+    .head-select-spacer {
+        width: 16px;
+        flex: 0 0 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding-left: var(--s-3);
+    }
+    .head-select { cursor: pointer; }
+    .head-select input { accent-color: var(--accent); cursor: pointer; margin: 0; }
     .state-head {
         display: flex;
         align-items: center;
@@ -511,8 +670,8 @@
         padding: var(--s-2) var(--s-1);
         background: transparent;
         border: 0;
-        border-bottom: 1px solid var(--border-quiet);
-        width: 100%;
+        flex: 1;
+        min-width: 0;
         cursor: pointer;
         font: inherit;
         color: var(--text-primary);
@@ -520,6 +679,46 @@
         user-select: none;
     }
     .state-head:hover { background: var(--panel); }
+
+    /* Batch-publish summary banner — sits under the summary card. */
+    .batch-banner {
+        display: flex;
+        align-items: center;
+        gap: var(--s-3);
+        padding: var(--s-2) var(--s-3);
+        background: var(--accent-tint-soft);
+        border: 1px solid var(--accent-tint);
+        border-radius: var(--r-1);
+        font-size: var(--fs-meta);
+        color: var(--text-secondary);
+    }
+    .batch-banner.has-failures {
+        background: var(--state-error-bg);
+        border-color: oklch(0.86 0.130 75 / 0.4);
+    }
+    .banner-text strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .banner-text strong.fail { color: var(--state-error-fg); }
+    .banner-link {
+        background: transparent;
+        border: 0;
+        color: var(--accent);
+        font: inherit;
+        font-size: var(--fs-meta);
+        cursor: pointer;
+        padding: 0;
+    }
+    .banner-link:hover { color: var(--accent-strong); text-decoration: underline; }
+    .banner-dismiss {
+        margin-left: auto;
+        background: transparent;
+        border: 0;
+        color: var(--text-faint);
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0 var(--s-1);
+    }
+    .banner-dismiss:hover { color: var(--text-primary); }
 
     .state-mark {
         width: 8px;
@@ -530,7 +729,8 @@
     /* Section mark colours — reuse Reviews palette to keep the visual family
      * coherent across compartments. */
     .mark-inflight  { background: var(--state-under-review-fg); }
-    .mark-stale     { background: oklch(0.84 0.130 70); }
+    .mark-stale     { background: var(--state-error-fg); }
+    .mark-failed    { background: var(--state-error-fg); }
     .mark-waiting   { background: var(--state-available-fg); }
     .mark-published { background: var(--state-published-fg); }
     .mark-excluded  { background: var(--text-faint); }

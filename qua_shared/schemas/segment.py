@@ -220,7 +220,7 @@ class DetailedMeta(BaseModel):
     """The ``_meta`` block at the top of ``detailed.json``.
 
     Kept lean per user direction — ``audio_source`` is load-bearing for
-    ``scripts/release/build_reciter.py`` + ``package_release.py``;
+    legacy release code;
     pad / floor fields are read by ``services/storage/data_loader.py::
     resolve_pad``; the rest is provenance.
     """

@@ -7,3 +7,4 @@ test-results/
 blob-report/
 .playwright/
 vite.config.ts.timestamp-*
+.ruff_cache/

@@ -18,15 +18,24 @@
 
 <p align="center">The all-in-one audio and timing hub for Qur'anic apps, developers, and researchers. A timestamps visualizer, editing tool and community-verified dataset unifying recitations at scale with word- and letter-level timestamps.</p>
 
-## Key Highlights
+<p align="center">
+  <a href="#key-highlights">Highlights</a> ·
+  <a href="#data-access">Data Access</a> ·
+  <a href="#technical-overview">How it works</a> ·
+  <a href="#contributing">Contribute</a> ·
+  <a href="#roadmap">Roadmap</a> ·
+  <a href="#acknowledgements">Acknowledgments/License</a>
+</p>
+
+## Highlights
 
 - **Unified Qur'anic audio hub:** A single consistent schema with comprehensive metadata for reciters and recitations instead of scattered websites, CDN APIs, YouTube playlists, and raw files with different formats.
 
 - **Large-scale, multi-riwayah, multi-style:** Full Qur'an coverage across many recitations and hours of audio, spanning mujawwad, murattal, muallim, taraweeh and children repeat styles.
 
-- **Phoneme-based alignment:** 20ms phoneme-level precision yields maximum accuracy, eliminates ambiguity at word boundaries and disambiguate tajweed effects where sounds merge across words.
+- **Phoneme-based alignment:** 20ms phoneme-level precision yields maximum accuracy, eliminates ambiguity at word boundaries and disambiguates tajweed effects where sounds merge across words.
 
-- **Repetition-aware, gap-free timestamps:** The pipeline transcribes each silence-based segment independently, so repeated words/verses are detected and timestamped correctly. See the [comparison with QUL timestamps](docs/qul_vs_mfa_timestamps.md).
+- **Repetition-aware, gap-free timestamps:** The pipeline transcribes each silence-based segment independently, so repeated words are detected and timestamped correctly. See the [comparison with QUL timestamps](docs/qul_timestamp_comparison.md).
 
 - **Community-driven validation:** No trusting a black-box pipeline. Every stage is automatically checked by dedicated validators and human-correctable through an interactive editing UI. Review flagged errors like missing words or misaligned boundaries, fix them visually, and feed corrections back into the dataset.
 
@@ -34,18 +43,30 @@
 
 - **Metadata and versioning:** Each recitation is governed by consistent schemas and metadata and versioned with a full history to track segment updates and timestamp corrections over time.
 
-<!-- ## Data Access -->
+## Data Access
+
+Timestamps and metadata ship in two open formats — pick by your use case.
+
+| | [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases) | [Hugging Face Dataset](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs) |
+|---|---|---|
+| **Best for** | Apps, offline use, archives | ML research, analysis, direct audio access |
+| **Shape** | JSON per recitation, in ayah / word / letter tiers | Parquet, one row per ayah |
+| **Audio** | Not bundled — original surah URLs in `catalog.json` | Embedded per-ayah clip in every row |
+| **Versioning** | Version-pinned snapshots (`vX.Y.Z`), reproducible | Rolling — always the latest |
+| **Fetch what you need** | Full release or specific reciters | Query and filter rows; load one riwayah or reciter |
+
+Both formats support both gapless surah and ayah-by-ayah playback. Both ship a single take per full ayah (the first occurrence), so in rare cases where a reciter repeats an ayah fully or partially, follow-along highlighting may pause until they move past the repetition (within-ayah repetitions are still preserved). This only applies to gapless playback; ayah-by-ayah playback is unaffected. A unified API — which also exposes the full, unfiltered duplicates — is on the [roadmap](#roadmap).
 
 ## Technical Overview
 
 <p align="center">
-  <img src="docs/quranic_universal_aligner_pipeline.svg" alt="Pipeline diagram">
+  <img src="docs/qua_pipeline.svg" alt="Pipeline diagram">
 </p>
 
 | Component | Description |
 |-----------|-------------|
 | [`Quranic Universal Aligner`](https://huggingface.co/spaces/hetchyy/quranic-universal-aligner) | Demo running on Hugging Face GPU demonstrating our alignment toolkit, also available via [API](docs/client_api.md) |
-| [`inspector/`](inspector/) | Entry website for browsing reciters, viewing timestmaps interactively and editing alignment results |
+| [`inspector/`](inspector/) | Entry website for browsing reciters, viewing timestamps interactively and editing alignment results |
 | [quranic-phonemizer](https://github.com/Hetchy/Quranic-Phonemizer) | External package — Qur'an-specific G2P; the foundation that allows phoneme-level alignment |
 
 ## Contributing
@@ -60,21 +81,18 @@ To contribute code to the repo directly, fork the repo and see [inspector/README
 
 **Access**
 
-- [ ] **Unified API** — one consistent, comprehensive, well-documented API for audio + timestamps, optimised for latency and ease of use. Built for app developers and researchers, parallel to the GitHub releases and HF dataset.
+- [ ] **Unified API/SDKs** — typed Python/JS client (`pip`/`npm`) over the published QUA artifacts: fetches and caches only requested data, defaults to latest with optional pinning and offline vendoring, and exposes the schemas for type consistency.
 - [ ] **Global CDN** — mirror all recitations and audio across regions, prewarmed with demand-based routing for low-latency delivery everywhere.
 
-**Coverage**
+**Coverage + Quality**
 
-- [ ] **100+ recitations** — reach 100+ fully aligned recitations.
-
-**Quality**
-
+- [ ] **100+ recitations** — reach 100+ fully aligned and verified recitations.
 - [ ] **Letter-level precision** — word and letter timestamps are both high quality; close the few minor systematic and timing differences in letter timestamps that depend on context, tajweed, and reciter.
 
 **Generalisation**
 
 - [ ] **Orthography** — letter-level timestamps are currently tuned for Uthmani script (DigitalKhatt). Generalise to other scripts where symbols and letter conventions differ, e.g. IndoPak.
-- [ ] **Riwayah** — extend beyond Hafs. Each riwayah has its own pronunciation rules, tajweed, unique sounds, and verse orderings, with fewer and less reliable digital assets than Hafs.
+- [ ] **Riwayah** — extend beyond Hafs. Each riwayah has its own pronunciation rules, tajweed, unique sounds, and ayah orderings, with fewer and less reliable digital assets than Hafs.
 
 ## Acknowledgements
 

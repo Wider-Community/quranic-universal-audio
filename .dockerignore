@@ -50,6 +50,12 @@ data/**/*.bak
 docs/
 *.md
 !inspector/CONTRIBUTING.md
+# Render-templates the inspector image needs at runtime (release-body preview)
+# + ship to the job. Re-include the dir AND the .md files (the `docs/` and
+# `*.md` excludes above would otherwise drop them from the build context).
+!docs/templates/
+!docs/templates/release_body.md
+!docs/templates/hf_dataset_card.md
 
 # --- Inspector internals not needed at runtime ---
 inspector/CLAUDE.md

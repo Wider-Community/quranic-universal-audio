@@ -6,12 +6,10 @@ that worked because legacy releases committed both files to the repo when a
 reciter shipped. v2 publish tracks (``per_recitation_releases``) keep state
 in the DB; the legacy data/ paths are dropped post-Phase-3.
 
-Public entry points keep their v1 signatures so the offline callers
-(``scripts/release/*`` and the new ``qua_jobs/cut_release.py``) don't
-churn. Internally, when an Inspector DB connection is available we use it;
-when running outside Inspector (e.g. legacy GitHub Actions still in flight
-during the migration window), we fall back to the git-tracked check so the
-old release.yml keeps working until Phase 2 deletes it.
+Public entry points keep their v1 signatures so offline callers such as
+``qua_jobs/cut_release.py`` don't churn. Internally, when an Inspector DB
+connection is available we use it; otherwise we fall back to the git-tracked
+check for old local data snapshots.
 
 Both backends produce the same set of slugs at the cutover boundary
 (Phase-1 acceptance test in ``scripts/diagnostics/check_eligibility_parity.py``).

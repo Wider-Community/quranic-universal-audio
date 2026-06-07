@@ -107,6 +107,7 @@ Deep, agent-facing reference docs live in `docs/reference/` (flat). **Read the o
 | [`capabilities.md`](docs/reference/capabilities.md) | data-driven capability authz — resolver, override store, Permissions tab, **convention for adding a gate that surfaces in the UI** |
 | [`admin-dashboard.md`](docs/reference/admin-dashboard.md) | admin modal — Users compartment, owner-only role picker, `/api/admin/*` |
 | [`catalog.md`](docs/reference/catalog.md) | reciter catalog — layers, slug convention, audio manifests, naming guide |
+| [`audio-metadata-pipeline.md`](docs/reference/audio-metadata-pipeline.md) | audio metadata generation/probing/auditing/backfill — VBR & phantom-tail caveats, source-probe pitfalls, bucket/mount, the diagnostics+backfills tooling, new-source/channel runbook |
 | [`segments-editor.md`](docs/reference/segments-editor.md) | command grammar, normalized state, identity, save flow, edit_history, undo |
 | [`validation.md`](docs/reference/validation.md) | validation engine, categories, persisted classifier fields, bench/drift harness |
 | [`frontend.md`](docs/reference/frontend.md) | Svelte 5 SPA — dashboard/timestamps/segments tabs, lib, stores, charts |
@@ -114,6 +115,7 @@ Deep, agent-facing reference docs live in `docs/reference/` (flat). **Read the o
 | [`dataset-and-releases.md`](docs/reference/dataset-and-releases.md) | dataset releasing — bucket-as-canonical + 3 adapter formats (HF, GH release tiers, future API), `releases` table, publish state model, schema |
 | [`config-deploy.md`](docs/reference/config-deploy.md) | env vars, secrets, image build, deploy, healthz |
 | [`data-migrations.md`](docs/reference/data-migrations.md) | one-shot migration/backfill scripts |
+| [`api-roadmap.md`](docs/reference/api-roadmap.md) | **roadmap (not built)** — planned public data API: typed pip/npm SDKs over static CDN data + optional HF-Space compute layer; caching/versioning model + build sequence |
 
 **Keep references current.** They are the *what-is* contract: when you change a subsystem, update its reference doc in the same change (code wins on conflict — fix the doc to match). **Add a new reference** when a new surface/subsytem/feature/convention appears that an agent would need to get oriented — and add a one-line row to the table above + `docs/reference/README.md`.
 
