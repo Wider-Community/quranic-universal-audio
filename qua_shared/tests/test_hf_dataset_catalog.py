@@ -3,6 +3,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from qua_shared.hf_dataset_catalog import (
     CATALOG_COLUMNS,
     CATALOG_CONFIG_NAME,
@@ -144,6 +146,7 @@ def test_project_catalog_rows_stamps_now_when_no_hf_ledger_row():
 
 
 def test_catalog_dataset_features_match_pushed_schema():
+    pytest.importorskip("datasets", reason="datasets is a job-runtime-only dep")
     rows = project_catalog_rows(_catalog(), published_slugs={"maher_al_meaqli"})
     ds = build_catalog_dataset(rows)
     feature_names = list(ds.features.keys())
