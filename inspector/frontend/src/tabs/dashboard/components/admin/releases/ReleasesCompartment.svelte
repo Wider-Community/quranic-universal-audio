@@ -30,6 +30,7 @@
         cancelReleaseJob,
         fetchReleasesStatus,
         publishHfBatch,
+        refreshHfCatalog,
         regenerateTs,
         type InFlightJob,
         type ReleaseStatusRow,
@@ -54,6 +55,7 @@
     let batchBusy = $state(false);
     let batchError = $state<string | null>(null);
     let cancelingJob = $state<string | null>(null);
+    let refreshBusy = $state(false);
     // Dismissed batch-summary banners, keyed by job id (localStorage-backed).
     let dismissedBatches = $state<Set<string>>(loadDismissedBatches());
 
@@ -344,6 +346,24 @@
         }
     }
 
+    /** Launch the global mushafs-catalog refresh — the cheap remediation for
+     *  catalog-metadata drift. The launch busts the server in-flight cache, so
+     *  the refetch surfaces the refresh job in the strip; on completion the
+     *  catalog_edit HF staleness clears and the drift count drops to 0. */
+    async function onRefreshCatalog(): Promise<void> {
+        if (refreshBusy) return;
+        refreshBusy = true;
+        batchError = null;
+        try {
+            await refreshHfCatalog();
+            refetch();
+        } catch (e) {
+            batchError = (e as Error).message ?? 'Catalog refresh failed';
+        } finally {
+            refreshBusy = false;
+        }
+    }
+
     async function onCancelJob(jobId: string): Promise<void> {
         if (cancelingJob !== null) return;
         if (!window.confirm('Cancel this job? Any in-progress work will be lost.')) return;
@@ -426,6 +446,8 @@
             onJumpToInFlight={scrollToInFlight}
             cancelingJob={cancelingJob}
             onCancelJob={onCancelJob}
+            catalogDriftCount={resp?.catalog_drift_count ?? 0}
+            onRefreshCatalog={onRefreshCatalog}
         />
 
         {#if showBanner && lastBatch}

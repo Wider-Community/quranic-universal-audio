@@ -12,6 +12,15 @@
 /* Do not modify it by hand - just update the pydantic models and then re-run the script
 */
 
+/**
+ * Why a published artifact is stale — drives the remediation suggestion.
+ *
+ * Severity-ordered (``ts_regen`` > ``catalog_edit``): when both apply to one
+ * row the stronger wins, because a TS regen needs a full republish that also
+ * refreshes the catalog, whereas a catalog edit needs only the cheap refresh.
+ * The reason→action mapping lives in ``qua_shared/release_staleness.py``.
+ */
+export type StaleReason = "ts_regen" | "catalog_edit";
 export type Role = "contributor" | "maintainer" | "owner" | "pipeline";
 
 export interface AdminActiveClaim {
@@ -61,12 +70,28 @@ export interface AdminCutReleaseRequest {
 export interface AdminGhReleaseMember {
   change_kind: "added" | "refresh" | "unchanged";
   stale_since?: string | null;
+  stale_reason?: StaleReason | null;
+  suggested_action?: SuggestedAction | null;
   release_id?: number | null;
   ts_version?: string | null;
   [k: string]: unknown;
 }
+/**
+ * The remediation the FE should offer (or merely note) for a stale row.
+ *
+ * Resolved server-side from ``(StaleReason, track)`` so the reason→action
+ * mapping stays single-sourced (no BE↔FE parity drift). The FE maps the
+ * ``action`` code to an API call and gates the control on ``capability``.
+ */
+export interface SuggestedAction {
+  action: string;
+  kind: "actionable" | "informational";
+  label: string;
+  capability?: string | null;
+  [k: string]: unknown;
+}
 export interface AdminInFlightJob {
-  kind: "hf_publish" | "hf_publish_batch" | "cut_release" | "timestamps";
+  kind: "hf_publish" | "hf_publish_batch" | "cut_release" | "timestamps" | "refresh_catalog";
   slug: string | null;
   job_id: string;
   started_at: string | null;
@@ -162,6 +187,8 @@ export interface AdminReleaseRow {
   version: string;
   produced_at: string;
   stale_since?: string | null;
+  stale_reason?: StaleReason | null;
+  suggested_action?: SuggestedAction | null;
   [k: string]: unknown;
 }
 export interface AdminReleaseStatusRow {
@@ -184,6 +211,7 @@ export interface AdminReleasesStatusResponse {
   in_flight: AdminInFlightJob[];
   recitations: AdminReleaseStatusRow[];
   last_batch?: AdminLastBatch | null;
+  catalog_drift_count?: number;
   [k: string]: unknown;
 }
 export interface AdminReleasesSummary {

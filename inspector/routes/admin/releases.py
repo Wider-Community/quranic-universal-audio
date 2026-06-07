@@ -29,6 +29,7 @@ from datetime import UTC, datetime
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
+from qua_shared import release_staleness
 from qua_shared.schemas import (
     AdminCutReleaseRequest,
     AdminLaunchResponse,
@@ -40,6 +41,7 @@ from services.admin.jobs import base as jobs_base
 from services.admin.jobs import cut_release as cut_release_jobs
 from services.admin.jobs import hf_publish as hf_publish_jobs
 from services.admin.jobs import hf_publish_batch as hf_publish_batch_jobs
+from services.admin.jobs import refresh_catalog as refresh_catalog_jobs
 from services.admin.release_preview import build_release_preview, current_auto_version
 from services.db import get_conn, repo_releases
 from services.state import state as state_service
@@ -49,6 +51,7 @@ from utils.decorators import require_capability, require_same_origin
 _CANCEL_CAPS = {
     "hf_publish": "release.publish_hf",
     "hf_publish_batch": "release.publish_hf",
+    "refresh_catalog": "release.publish_hf",
     "cut_release": "release.cut_gh",
     "timestamps": "reviews.generate_timestamps",
 }
@@ -118,6 +121,10 @@ def publish_hf(user, slug: str):
                 "job_id": batch_busy[1],
             }
         ), 409
+    # A catalog refresh pushes the same dataset catalog + card this publish syncs.
+    refresh_busy = jobs_base.running_job_for(kind="refresh_catalog")
+    if refresh_busy is not None:
+        return jsonify({"error": "a catalog refresh is in flight — wait for it to finish"}), 409
     webhook_base = request.url_root
     try:
         result = hf_publish_jobs.launch(slug, webhook_base=webhook_base)
@@ -161,6 +168,8 @@ def publish_hf_batch(user):
         return jsonify({"error": "a cut_release is in flight — wait for it to finish"}), 409
     if jobs_base.running_job_for(kind="hf_publish_batch") is not None:
         return jsonify({"error": "a batch publish is already running"}), 409
+    if jobs_base.running_job_for(kind="refresh_catalog") is not None:
+        return jsonify({"error": "a catalog refresh is in flight — wait for it to finish"}), 409
 
     for slug in slugs:
         if state_service.get_row(slug) is None:
@@ -184,6 +193,35 @@ def publish_hf_batch(user):
         result = hf_publish_batch_jobs.launch(slugs, webhook_base=webhook_base)
     except Exception as exc:
         log.warning("publish-hf-batch launch failed: %s", exc)
+        return jsonify({"error": str(exc)}), 502
+    out = AdminLaunchResponse.model_validate(result)
+    return jsonify(out.model_dump(mode="json")), 202
+
+
+# ---------------------------------------------------------------------------
+# POST /api/admin/refresh-hf-catalog
+# ---------------------------------------------------------------------------
+
+
+@admin_releases_bp.route("/refresh-hf-catalog", methods=["POST"])
+@require_same_origin
+@require_capability("release.publish_hf")
+def refresh_hf_catalog(user):
+    """Launch a global HF dataset catalog refresh (the ``mushafs`` subset only).
+
+    Rebuilds the dataset catalog config + card from the live SQLite catalog with
+    no audio re-slice — the cheap remediation for ``catalog_edit`` HF staleness.
+    Single-flight against refresh / batch / per-slug publish (all push the same
+    dataset catalog + card). Returns 202 ``{job_id, url}``.
+    """
+    if jobs_base.running_job_for(kind="refresh_catalog") is not None:
+        return jsonify({"error": "a catalog refresh is already running"}), 409
+    if jobs_base.running_job_for(kind="hf_publish_batch") is not None:
+        return jsonify({"error": "a batch publish is in flight — wait for it to finish"}), 409
+    try:
+        result = refresh_catalog_jobs.launch(webhook_base=request.url_root)
+    except Exception as exc:
+        log.warning("refresh-hf-catalog launch failed: %s", exc)
         return jsonify({"error": str(exc)}), 502
     out = AdminLaunchResponse.model_validate(result)
     return jsonify(out.model_dump(mode="json")), 202
@@ -387,7 +425,7 @@ def releases_status(user):
     # other in-flight signal — there's no state change). hf_publish + cut_release
     # are the dataset/GH tracks.
     in_flight = jobs_base.list_in_flight_jobs(
-        ("hf_publish", "hf_publish_batch", "cut_release", "timestamps")
+        ("hf_publish", "hf_publish_batch", "cut_release", "timestamps", "refresh_catalog")
     )
 
     # Most-recent batch publish outcome — drives the "Failed to publish" bucket
@@ -444,11 +482,25 @@ def releases_status(user):
     in_flight_slugs = {j["slug"] for j in in_flight if j.get("slug")}
 
     out: list[dict] = []
+    catalog_drift_count = 0
     for d in deliveries:
         slug = d["slug"]
         ts = repo_releases.current_release("ts", slug)
         hf = repo_releases.current_release("hf", slug)
         gh = repo_releases.latest_gh_release_member(slug)
+        hf_slim = _with_suggestion(
+            _slim_release_row(hf, fields=("version", "produced_at", "stale_since", "stale_reason")),
+            track="hf",
+        )
+        gh_slim = _with_suggestion(
+            _slim_release_row(
+                gh,
+                fields=("change_kind", "stale_since", "stale_reason", "release_id", "ts_version"),
+            ),
+            track="gh",
+        )
+        if hf_slim and hf_slim.get("stale_reason") == "catalog_edit":
+            catalog_drift_count += 1
         row = {
             "slug": slug,
             "name_en": d["name_en"],
@@ -458,10 +510,8 @@ def releases_status(user):
             "style": d["style"],
             "channel": d["channel"],
             "ts": _slim_release_row(ts, fields=("version", "produced_at")),
-            "hf": _slim_release_row(hf, fields=("version", "produced_at", "stale_since")),
-            "gh": _slim_release_row(
-                gh, fields=("change_kind", "stale_since", "release_id", "ts_version")
-            ),
+            "hf": hf_slim,
+            "gh": gh_slim,
             "publish_error": batch_failures.get(slug),
         }
         if _is_bucketable(row, in_flight_slugs) or slug in batch_failures:
@@ -476,9 +526,24 @@ def releases_status(user):
             "in_flight": in_flight,
             "recitations": out,
             "last_batch": last_batch,
+            "catalog_drift_count": catalog_drift_count,
         }
     )
     return jsonify(payload.model_dump(mode="json"))
+
+
+def _with_suggestion(row: dict | None, *, track: str) -> dict | None:
+    """Attach the resolved ``suggested_action`` to a slim hf/gh row when stale.
+
+    The reason→action mapping is single-sourced in ``release_staleness`` and
+    serialized here so the FE renders the remediation without reimplementing it.
+    """
+    if row is None or not row.get("stale_since"):
+        return row
+    action = release_staleness.suggested_action(row.get("stale_reason"), track)
+    if action is not None:
+        row["suggested_action"] = action.model_dump(mode="json")
+    return row
 
 
 def _is_bucketable(row: dict, in_flight_slugs: set[str]) -> bool:

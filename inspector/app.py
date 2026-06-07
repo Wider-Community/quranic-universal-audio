@@ -400,9 +400,11 @@ def _boot_substrate() -> None:
             from services.admin.jobs import base as _jobs_base
             from services.admin.jobs import hf_publish as _hf_publish_jobs
             from services.admin.jobs import hf_publish_batch as _hf_publish_batch_jobs
+            from services.admin.jobs import refresh_catalog as _refresh_catalog_jobs
 
             _hf_publish_jobs.register()
             _hf_publish_batch_jobs.register()
+            _refresh_catalog_jobs.register()
             _jobs_base.start_poll_worker()
             logger.info("release-job poll worker started")
         except Exception as e:  # noqa: BLE001

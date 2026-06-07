@@ -42,11 +42,22 @@
         cancelingJob?: string | null;
         /** Cancel a global in-flight job (cut / batch) straight from the strip. */
         onCancelJob?: (_jobId: string) => void;
+        /** Number of HF rows stale solely from a catalog edit — badges the
+         *  "Refresh dataset catalog" CTA. 0 hides the badge (button stays). */
+        catalogDriftCount?: number;
+        /** Launch the global mushafs-catalog refresh. */
+        onRefreshCatalog?: () => void;
     }
     let { summary, inFlight, readyCount, onCut, cutDisabledReason,
-          onJumpToInFlight, cancelingJob = null, onCancelJob }: Props = $props();
+          onJumpToInFlight, cancelingJob = null, onCancelJob,
+          catalogDriftCount = 0, onRefreshCatalog }: Props = $props();
 
     const canCut = can('release.cut_gh');
+    const canPublish = can('release.publish_hf');
+
+    const isRefreshInFlight = $derived(
+        inFlight.some((j) => j.kind === 'refresh_catalog'),
+    );
 
     // Trigger is armed (accent-bordered, ready to fire) whenever the parent
     // has nothing disabling it. A cut_release in-flight surfaces as its own
@@ -93,6 +104,7 @@
 
     function jobLabel(j: InFlightJob): string {
         if (j.kind === 'cut_release') return 'Cutting GH release';
+        if (j.kind === 'refresh_catalog') return 'Refreshing dataset catalog';
         if (j.kind === 'timestamps') return `Generating timestamps ${j.slug ?? '?'}`;
         return `Publishing ${j.slug ?? '?'}`;
     }
@@ -167,24 +179,49 @@
             {/if}
         </div>
 
-        {#if $canCut}
-            <button
-                class="cut-btn"
-                class:armed={isArmed}
-                class:in-flight={isCutInFlight}
-                type="button"
-                onclick={onCut}
-                disabled={cutDisabledReason !== null}
-                title={cutDisabledReason ?? ''}
-            >
-                {#if isCutInFlight}
-                    <span class="cut-pulse" aria-hidden="true"></span>
-                    <span>Cutting</span>
-                {:else}
-                    {summary ? 'Cut release' : 'Cut first release'}
-                {/if}
-            </button>
-        {/if}
+        <div class="actions">
+            {#if $canPublish && (catalogDriftCount > 0 || isRefreshInFlight)}
+                <button
+                    class="refresh-btn"
+                    class:in-flight={isRefreshInFlight}
+                    type="button"
+                    onclick={() => onRefreshCatalog?.()}
+                    disabled={isRefreshInFlight}
+                    title={isRefreshInFlight
+                        ? 'Catalog refresh in flight'
+                        : `${catalogDriftCount} recitation${catalogDriftCount === 1 ? '' : 's'} with metadata drift — rebuild the dataset catalog`}
+                >
+                    {#if isRefreshInFlight}
+                        <span class="cut-pulse" aria-hidden="true"></span>
+                        <span>Refreshing</span>
+                    {:else}
+                        <span>Refresh catalog</span>
+                        {#if catalogDriftCount > 0}
+                            <span class="drift-badge">{catalogDriftCount}</span>
+                        {/if}
+                    {/if}
+                </button>
+            {/if}
+
+            {#if $canCut}
+                <button
+                    class="cut-btn"
+                    class:armed={isArmed}
+                    class:in-flight={isCutInFlight}
+                    type="button"
+                    onclick={onCut}
+                    disabled={cutDisabledReason !== null}
+                    title={cutDisabledReason ?? ''}
+                >
+                    {#if isCutInFlight}
+                        <span class="cut-pulse" aria-hidden="true"></span>
+                        <span>Cutting</span>
+                    {:else}
+                        {summary ? 'Cut release' : 'Cut first release'}
+                    {/if}
+                </button>
+            {/if}
+        </div>
     </div>
 </section>
 
@@ -241,6 +278,54 @@
         font-variant-numeric: tabular-nums;
     }
     .metric-faint { color: var(--text-faint); }
+
+    .actions {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s-2);
+    }
+
+    /* Refresh-catalog CTA — same ghost-outline vocabulary as the cut button but
+     * never "armed"; it's a low-consequence reconcile. The drift count rides as
+     * a small pill so the operator sees how many rows desynced. */
+    .refresh-btn {
+        background: transparent;
+        border: 1px solid var(--border-quiet);
+        color: var(--text-muted);
+        border-radius: var(--r-1);
+        padding: 4px 12px;
+        font: inherit;
+        font-size: var(--fs-meta);
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: border-color var(--t-fast), color var(--t-fast),
+                    background-color var(--t-fast);
+    }
+    .refresh-btn:hover:not(:disabled) {
+        border-color: var(--border-default);
+        color: var(--text-primary);
+    }
+    .refresh-btn.in-flight {
+        border-color: var(--accent-tint);
+        color: var(--accent-strong);
+        cursor: not-allowed;
+    }
+    .drift-badge {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1;
+        color: var(--accent-strong);
+        background: var(--accent-tint-soft);
+        border: 1px solid var(--accent-tint);
+        border-radius: 999px;
+        padding: 2px 6px;
+        font-variant-numeric: tabular-nums;
+    }
 
     /* Trigger inherits the ReviewsRow .btn vocabulary — ghost outline at rest,
      * accent-bordered when armed, muted pulse when a cut is in flight. No

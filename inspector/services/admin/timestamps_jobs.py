@@ -42,7 +42,7 @@ import os
 from datetime import UTC
 from pathlib import Path
 
-from qua_shared.schemas import TsJobRecord, TsJobSettings
+from qua_shared.schemas import StaleReason, TsJobRecord, TsJobSettings
 from services.state import state as state_service
 from services.storage.hf_bucket import StorageNotFound, get_backend, resolve_bucket_repo
 
@@ -550,7 +550,7 @@ def complete_timestamps_job(slug: str, job_id: str) -> dict:
             )
             # Stamp the HF + most-recent-GH membership as stale (re-publishing
             # clears stale in v1; no explicit ack endpoint).
-            repo_releases.stamp_stale_on_ts_regen(slug, at=now)
+            repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
     except state_service.StateError as exc:
         # Lost a double-fire race, or the row changed under us (e.g. reviewer
         # un-marked). Benign — the winning caller (or a re-run) handles it.
@@ -626,7 +626,7 @@ def _regenerate_timestamps_on_released(slug: str, job_id: str) -> dict:
             produced_by_job_id=job_id,
         )
         # Re-publishing clears stale; TS regen sets it on the HF/GH membership.
-        repo_releases.stamp_stale_on_ts_regen(slug, at=now)
+        repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
         audit.append(
             "reciter.ts_regenerated",
             actor=SYSTEM_ACTOR,

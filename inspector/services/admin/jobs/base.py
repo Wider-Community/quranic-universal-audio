@@ -264,6 +264,7 @@ REQUIRED_ENTRYPOINTS = (
     "qua_jobs/generate_timestamps.py",
     "qua_jobs/publish_hf.py",
     "qua_jobs/publish_hf_batch.py",
+    "qua_jobs/refresh_hf_catalog.py",
     "qua_jobs/cut_release.py",
     "qua_jobs/shard.py",
     "qua_jobs/check_updates.py",

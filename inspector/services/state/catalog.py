@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from datetime import UTC, datetime
 
 from qua_shared.schemas import (
     Actor,
@@ -25,14 +26,23 @@ from qua_shared.schemas import (
     ReciterCatalog,
     ReciterEntry,
     Source,
+    StaleReason,
 )
 from services.db import errors as db_errors
-from services.db import repo_catalog
+from services.db import repo_catalog, repo_releases
 from services.db import sync as _sync
 
 from . import audit
 
 logger = logging.getLogger(__name__)
+
+# Catalog fields that surface in a public projection (HF ``mushafs`` catalog +
+# GH release ``catalog.json``). Editing one of these desyncs the published
+# artifacts → stamp the affected delivery rows ``catalog_edit``-stale. Fields
+# outside this set (``notes``/``variant_label``/``source``) are admin-only and
+# never warrant a republish. Keep in lockstep with the edit surfaces below.
+PUBLIC_DELIVERY_FIELDS = frozenset({"riwayah", "style", "recording_context", "recording_year"})
+PUBLIC_RECITER_FIELDS = frozenset({"name_en", "name_ar", "country"})
 
 
 # ---- Errors ----
@@ -189,6 +199,10 @@ def edit_reciter(
             payload={"kind": "reciter", "reciter_id": reciter_id, "patch": patch},
             reason=reason,
         )
+        if PUBLIC_RECITER_FIELDS & patch.keys():
+            repo_releases.stamp_stale_for_reciter(
+                reciter_id, at=datetime.now(UTC), reason=StaleReason.CATALOG_EDIT
+            )
     return updated or existing
 
 
@@ -260,6 +274,8 @@ def edit_delivery(
             payload={"kind": "delivery", "slug": slug, "patch": patch},
             reason=reason,
         )
+        if PUBLIC_DELIVERY_FIELDS & patch.keys():
+            repo_releases.stamp_stale(slug, at=datetime.now(UTC), reason=StaleReason.CATALOG_EDIT)
     return updated or existing
 
 

@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timezone
 
 import pytest
 
+from qua_shared.schemas import StaleReason
 from services import db
 from services.db import get_conn, repo_releases
 
@@ -136,8 +137,8 @@ def test_partial_unique_blocks_two_current(fresh_db):
             )
 
 
-def test_stamp_stale_on_ts_regen(fresh_db):
-    """When TS regenerates, the slug's current HF row gets stale_since stamped."""
+def test_stamp_stale_marks_hf_with_reason(fresh_db):
+    """A stamp records both stale_since and the reason on the current HF row."""
     now = _now()
     with db.transaction():
         slug = _seed_minimal_delivery()
@@ -148,10 +149,84 @@ def test_stamp_stale_on_ts_regen(fresh_db):
             produced_at=now,
             produced_by="a",
         )
-        n = repo_releases.stamp_stale_on_ts_regen(slug, at=now)
+        n = repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
     assert n == 1
     hf_row = repo_releases.current_release("hf", slug)
     assert hf_row["stale_since"] is not None
+    assert hf_row["stale_reason"] == "ts_regen"
+
+
+def test_stamp_stale_catalog_edit_then_ts_regen_upgrades_reason(fresh_db):
+    """A more-severe ts_regen overrides an existing catalog_edit reason (the
+    clear path must not later treat the row as catalog-only)."""
+    now = _now()
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        repo_releases.insert_per_recitation_release(
+            track="hf", slug=slug, version="abc123", produced_at=now, produced_by="a"
+        )
+        repo_releases.stamp_stale(slug, at=now, reason=StaleReason.CATALOG_EDIT)
+        first = repo_releases.current_release("hf", slug)["stale_since"]
+        repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
+    hf_row = repo_releases.current_release("hf", slug)
+    assert hf_row["stale_reason"] == "ts_regen"
+    # stale_since records FIRST stale time — preserved across the upgrade.
+    assert hf_row["stale_since"] == first
+
+
+def test_stamp_stale_ts_regen_not_downgraded_by_catalog_edit(fresh_db):
+    """A weaker catalog_edit must NOT overwrite an existing ts_regen reason."""
+    now = _now()
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        repo_releases.insert_per_recitation_release(
+            track="hf", slug=slug, version="abc123", produced_at=now, produced_by="a"
+        )
+        repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
+        n = repo_releases.stamp_stale(slug, at=now, reason=StaleReason.CATALOG_EDIT)
+    assert n == 0  # nothing changed
+    assert repo_releases.current_release("hf", slug)["stale_reason"] == "ts_regen"
+
+
+def test_clear_catalog_stale_hf_clears_only_catalog_edit(fresh_db):
+    """The catalog refresh clears catalog_edit HF rows but leaves ts_regen ones
+    (those still need a republish)."""
+    now = _now()
+    with db.transaction():
+        cat = _seed_minimal_delivery("minshawy_murattal")
+        repo_releases.insert_per_recitation_release(
+            track="hf", slug=cat, version="c1", produced_at=now, produced_by="a"
+        )
+        ts = _seed_minimal_delivery("minshawy_mujawwad")
+        repo_releases.insert_per_recitation_release(
+            track="hf", slug=ts, version="t1", produced_at=now, produced_by="a"
+        )
+        repo_releases.stamp_stale(cat, at=now, reason=StaleReason.CATALOG_EDIT)
+        repo_releases.stamp_stale(ts, at=now, reason=StaleReason.TS_REGEN)
+        cleared = repo_releases.clear_catalog_stale_hf()
+    assert cleared == 1
+    assert repo_releases.current_release("hf", cat)["stale_since"] is None
+    assert repo_releases.current_release("hf", cat)["stale_reason"] is None
+    assert repo_releases.current_release("hf", ts)["stale_since"] is not None
+
+
+def test_stamp_stale_for_reciter_fans_out_to_all_deliveries(fresh_db):
+    """A reciter-level catalog edit stamps every published delivery of that
+    reciter (the public field appears in each delivery's catalog projection)."""
+    now = _now()
+    with db.transaction():
+        a = _seed_minimal_delivery("minshawy_murattal")
+        b = _seed_minimal_delivery("minshawy_mujawwad")  # same reciter_id 'minshawy'
+        for slug in (a, b):
+            repo_releases.insert_per_recitation_release(
+                track="hf", slug=slug, version=f"v-{slug}", produced_at=now, produced_by="a"
+            )
+        n = repo_releases.stamp_stale_for_reciter(
+            "minshawy", at=now, reason=StaleReason.CATALOG_EDIT
+        )
+    assert n == 2
+    assert repo_releases.current_release("hf", a)["stale_reason"] == "catalog_edit"
+    assert repo_releases.current_release("hf", b)["stale_reason"] == "catalog_edit"
 
 
 def test_gh_release_insert_and_membership(fresh_db):
