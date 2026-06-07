@@ -395,7 +395,11 @@ def catalog_features():
             "channels": Value("int32"),
             "bitrate_mode": Value("string"),
             "bitrate_kbps_nominal": Value("int32"),
-            "total_duration_hours": Value("float32"),
+            # float64, not float32: the value is round(sec/3600, 1) (e.g. 31.4),
+            # which float32 cannot represent exactly — widening it back in a
+            # viewer shows 31.399999…/31.40000…. float64 displays the 1-decimal
+            # value cleanly.
+            "total_duration_hours": Value("float64"),
             "published_at": Value("string"),
             "updated_at": Value("string"),
         }
