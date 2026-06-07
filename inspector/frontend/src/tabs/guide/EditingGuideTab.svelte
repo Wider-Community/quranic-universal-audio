@@ -56,10 +56,13 @@
     let activeModalKey: string | null = null;
     let modalContentContainer: HTMLElement;
 
+    // Track guides read in this session (does not persist across page refreshes)
+    let readKeys = new Set<string>();
+
     $: items = REQUIRED_GUIDE_KEYS.map((key) => ({
         key,
         title: GUIDE_TITLES[key] || key,
-        read: isGuideRead($currentUser.guides_read, key),
+        read: readKeys.has(guideViewKey(key)),
     }));
 
     $: readCount = items.filter((i) => i.read).length;
@@ -98,6 +101,10 @@
     let _recordedFor: string | null = null;
     $: if (activeModalKey && activeModalKey !== _recordedFor) {
         _recordedFor = activeModalKey;
+        const vk = guideViewKey(activeModalKey);
+        if (!readKeys.has(vk)) {
+            readKeys = new Set([...readKeys, vk]);
+        }
         void recordCategoryRead(activeModalKey);
     }
 
