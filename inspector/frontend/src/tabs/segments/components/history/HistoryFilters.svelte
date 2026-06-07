@@ -19,15 +19,19 @@
         buildDisplayItems,
         chainHasWaslAnnotation,
         editChains,
+        entryAffectsTimestamps,
         filterErrCats,
         filterHasWasl,
         filterOpTypes,
+        filterTier,
         flatItems,
         historyData,
         itemHasWaslAnnotation,
         setSortMode,
         sortMode,
+        tierOf,
         toggleFilter,
+        toggleTierFilter,
         toggleWaslFilter,
     } from '../../stores/history';
     import { EDIT_OP_LABELS, ERROR_CAT_LABELS } from '../../utils/constants';
@@ -154,13 +158,64 @@
         return n;
     })();
 
+    // Generation tiers --------------------------------------------------------
+    // Partition the unfiltered entries by TS-generation tier. Only surfaced when
+    // the current (post-latest-generation) tier holds timestamp-affecting edits
+    // — i.e. there's actually drift to regenerate; no pending edits → no section.
+    $: gens = $historyData?.generations ?? [];
+    $: tierStats = (() => {
+        if (gens.length === 0) return { tiers: [] as Array<{ index: number; count: number; affecting: number; isCurrent: boolean }>, pendingAffecting: 0 };
+        const byTier = new Map<number, { count: number; affecting: number }>();
+        for (const entry of unfilteredEntries) {
+            const t = tierOf(entry.date, gens);
+            const s = byTier.get(t) ?? { count: 0, affecting: 0 };
+            s.count += 1;
+            if (entryAffectsTimestamps(entry)) s.affecting += 1;
+            byTier.set(t, s);
+        }
+        const currentIdx = gens.length;
+        const pendingAffecting = byTier.get(currentIdx)?.affecting ?? 0;
+        const tiers = [...byTier.entries()]
+            .sort((a, b) => a[0] - b[0])
+            .map(([index, s]) => ({ index, count: s.count, affecting: s.affecting, isCurrent: index === currentIdx }));
+        return { tiers, pendingAffecting };
+    })();
+    $: showTiers = tierStats.pendingAffecting > 0;
+
+    function tierLabel(index: number, isCurrent: boolean): string {
+        if (isCurrent) return 'Pending regen';
+        if (index === 0) return 'Initial';
+        return `After gen ${index}`;
+    }
+
     $: showOps = Object.keys(baseOpCounts).length >= 2;
     $: showCats = Object.keys(baseCatCounts).length >= 2;
     $: showWasl = waslCount > 0;
-    $: hasAny = showOps || showCats || showWasl;
+    $: hasAny = showOps || showCats || showWasl || showTiers;
 </script>
 
 <div id="seg-history-filters" class="seg-history-filters" class:hidden-none={!hasAny}>
+    {#if showTiers}
+        <div class="seg-history-filter-section">
+            <span class="seg-history-filter-label" title="Edits partitioned by timestamp generation. The 'Pending regen' tier holds edits not yet reflected in the generated timestamps.">Timestamps:</span>
+            <div id="seg-history-filter-tiers" class="seg-history-filter-pills">
+                {#each tierStats.tiers as t}
+                    <button
+                        class="seg-history-filter-pill"
+                        class:active={$filterTier === t.index}
+                        class:tier-pending={t.isCurrent}
+                        data-filter-type="tier"
+                        data-filter-value={t.index}
+                        title={t.isCurrent ? `${t.affecting} timestamp-affecting edit(s) since the last generation — regenerate to apply` : `Edits in this generation tier`}
+                        on:click={() => toggleTierFilter(t.index)}
+                    >
+                        {t.isCurrent ? '⚠ ' : ''}{tierLabel(t.index, t.isCurrent)} <span class="pill-count">{t.isCurrent ? t.affecting : t.count}</span>
+                    </button>
+                {/each}
+            </div>
+        </div>
+    {/if}
+
     {#if showOps}
         <div class="seg-history-filter-section">
             <span class="seg-history-filter-label">Edit type:</span>
@@ -242,5 +297,14 @@
 <style>
     .hidden-none {
         display: none !important;
+    }
+    /* The current ("pending regen") tier — amber attention, matching the
+       Releases-tab TS-stale chip. */
+    .tier-pending {
+        border-color: oklch(0.86 0.130 75 / 0.45);
+        color: var(--state-error-fg);
+    }
+    .tier-pending.active {
+        background: var(--state-error-bg);
     }
 </style>

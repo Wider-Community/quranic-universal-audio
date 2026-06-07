@@ -123,6 +123,23 @@ def _seed_ledger_ts(slug: str, version: str = "real-job-id") -> None:
         )
 
 
+def _seed_catalog_stale_hf(slug: str, version: str = "hf-rev") -> None:
+    """Insert a current track='hf' row for ``slug`` and stamp it catalog_edit-stale."""
+    from qua_shared.schemas import StaleReason
+    from services import db
+    from services.db import repo_releases
+
+    with db.transaction():
+        repo_releases.insert_per_recitation_release(
+            track="hf",
+            slug=slug,
+            version=version,
+            produced_at=datetime.now(UTC),
+            produced_by="test",
+        )
+        repo_releases.stamp_stale(slug, at=datetime.now(UTC), reason=StaleReason.CATALOG_EDIT)
+
+
 # ---------------------------------------------------------------------------
 # /api/admin/releases/status
 # ---------------------------------------------------------------------------
@@ -150,6 +167,9 @@ def test_status_released_with_ledger_is_waiting(signed_in_client, monkeypatch):
         "version": "real-job-id-123",
         "produced_at": row["ts"]["produced_at"],
         "stale_since": None,
+        "stale_reason": None,
+        "suggested_action": None,
+        "edits_since": None,
     }
     assert row["hf"] is None
     assert row["gh"] is None
@@ -206,6 +226,90 @@ def test_status_ignores_channel_eligibility_flag(signed_in_client, monkeypatch, 
     row = next(r for r in body["recitations"] if r["slug"] == "ar.flag_off")
     assert row["state"] == "released" and row["ts"] is not None
     assert "gh_release_eligible" not in row
+
+
+def test_status_surfaces_catalog_edit_drift_and_suggestion(signed_in_client, monkeypatch):
+    """A catalog_edit-stale HF row carries stale_reason + the resolved
+    refresh suggestion, and bumps the top-level catalog_drift_count."""
+    client, _user = signed_in_client(role="maintainer")
+    _stub_jobs_api(monkeypatch)
+    _seed_released("ar.drifted", channel="mp3quran")
+    _seed_ledger_ts("ar.drifted")
+    _seed_catalog_stale_hf("ar.drifted")
+
+    resp = client.get("/api/admin/releases/status")
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    body = resp.get_json()
+    row = next(r for r in body["recitations"] if r["slug"] == "ar.drifted")
+    assert row["hf"]["stale_since"] is not None
+    assert row["hf"]["stale_reason"] == "catalog_edit"
+    assert row["hf"]["suggested_action"]["action"] == "refresh_hf_catalog"
+    assert row["hf"]["suggested_action"]["kind"] == "actionable"
+    assert body["catalog_drift_count"] == 1
+
+
+def test_status_surfaces_ts_segments_edited_staleness(signed_in_client, monkeypatch, seed_state):
+    """A reciter whose segments were edited after generation carries the
+    computed ``segments_edited`` staleness + regen suggestion on its TS track,
+    and is bucketable even though it's neither released nor published."""
+    from services.segments import ts_staleness
+
+    client, _user = signed_in_client(role="maintainer")
+    _stub_jobs_api(monkeypatch)
+    _seed_eligible_channel("mp3quran")
+    _seed_delivery_on_channel("ar.edited", channel="mp3quran", reciter_id="r9")
+    seed_state("ar.edited", state="under_review")  # not released, no HF row
+    _seed_ledger_ts("ar.edited")
+    monkeypatch.setattr(
+        ts_staleness,
+        "ts_stale_info",
+        lambda slug, *, produced_at: (
+            {"stale_since": "2026-03-02T00:00:00Z", "edits_since": 3}
+            if slug == "ar.edited"
+            else None
+        ),
+    )
+
+    resp = client.get("/api/admin/releases/status")
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    body = resp.get_json()
+    row = next(r for r in body["recitations"] if r["slug"] == "ar.edited")
+    assert row["ts"]["stale_reason"] == "segments_edited"
+    assert row["ts"]["edits_since"] == 3
+    assert row["ts"]["suggested_action"]["action"] == "regenerate_ts"
+    assert row["ts"]["suggested_action"]["capability"] == "reviews.generate_timestamps"
+    assert row["hf"] is None  # purely TS-track staleness
+
+
+def test_refresh_hf_catalog_launches(signed_in_client, monkeypatch):
+    """POST /api/admin/refresh-hf-catalog launches the job and returns 202."""
+    from services.admin.jobs import refresh_catalog as refresh_jobs
+
+    client, _user = signed_in_client(role="maintainer")
+    _stub_jobs_api(monkeypatch)
+    monkeypatch.setattr(
+        refresh_jobs, "launch", lambda **_: {"job_id": "job-x", "url": "https://hf/job-x"}
+    )
+
+    resp = client.post("/api/admin/refresh-hf-catalog", headers=_HEADERS)
+    assert resp.status_code == 202, resp.get_data(as_text=True)
+    assert resp.get_json()["job_id"] == "job-x"
+
+
+def test_refresh_hf_catalog_rejects_while_in_flight(signed_in_client, monkeypatch):
+    """A second refresh is rejected (409) while one is already running."""
+    from services.admin.jobs import base as jobs_base
+
+    client, _user = signed_in_client(role="maintainer")
+    _stub_jobs_api(monkeypatch)
+    monkeypatch.setattr(
+        jobs_base,
+        "running_job_for",
+        lambda **kw: ("refresh_catalog", "j1") if kw.get("kind") == "refresh_catalog" else None,
+    )
+
+    resp = client.post("/api/admin/refresh-hf-catalog", headers=_HEADERS)
+    assert resp.status_code == 409, resp.get_data(as_text=True)
 
 
 def test_status_in_flight_slug_is_bucketable(signed_in_client, monkeypatch):

@@ -1,9 +1,13 @@
 <script lang="ts">
     /**
-     * Per-combination 4-state timeline.
+     * Per-combination lifecycle timeline (4 nodes + 1 conditional).
      *
      * Renders the simplified lifecycle of a single delivery:
      *   requested → available_for_review → under_review → published
+     *
+     * Plus a conditional 5th node "Timestamps refreshed" when the delivery's
+     * timestamps were regenerated after the first generation
+     * (``ts_refresh_dates`` — latest date, ×N when repeated).
      *
      * Off-axis buckets:
      *   - available_for_request → no nodes reached, no current
@@ -56,9 +60,20 @@
     const bucket = $derived(delivery?.bucket ?? null);
     const currentIdx = $derived(reachedIndex(bucket));
     const bucketDates = $derived(delivery?.bucket_dates ?? {});
+    const tsRefreshDates = $derived(delivery?.ts_refresh_dates ?? []);
 
-    const items = $derived(
-        AXIS.map((b, i) => {
+    interface TimelineItem {
+        id: string;
+        label: string;
+        reached: boolean;
+        current: boolean;
+        date: string;
+        visits: number;
+        tooltip: string;
+    }
+
+    const items = $derived.by<TimelineItem[]>(() => {
+        const axis: TimelineItem[] = AXIS.map((b, i) => {
             const reached = i <= currentIdx;
             const entries = bucketDates[b] ?? [];
             // First-reached as the node date; fall back to state_since for the
@@ -74,23 +89,34 @@
             const tooltip = visits > 1
                 ? `${PUBLIC_BUCKET_LABELS[b]} — entered ${visits}×:\n${entries.map(fmtDateTime).join('\n')}`
                 : '';
-            return {
-                bucket: b,
-                label: PUBLIC_BUCKET_LABELS[b],
-                reached,
-                current: i === currentIdx,
-                date,
+            return { id: b, label: PUBLIC_BUCKET_LABELS[b], reached, current: i === currentIdx, date, visits, tooltip };
+        });
+
+        // Conditional 5th node — timestamp regenerations (every TS generation
+        // after the first). Shows the LATEST refresh date + ×N when repeated.
+        if (tsRefreshDates.length > 0) {
+            const latest = tsRefreshDates[tsRefreshDates.length - 1]!;
+            const visits = tsRefreshDates.length;
+            axis.push({
+                id: 'ts_refreshed',
+                label: 'Timestamps refreshed',
+                reached: true,
+                current: false,
+                date: fmtDate(latest),
                 visits,
-                tooltip,
-            };
-        })
-    );
+                tooltip: visits > 1
+                    ? `Timestamps refreshed — ${visits}×:\n${tsRefreshDates.map(fmtDateTime).join('\n')}`
+                    : `Timestamps refreshed ${fmtDateTime(latest)}`,
+            });
+        }
+        return axis;
+    });
 </script>
 
 <div class="timeline" role="list" aria-label="Combination lifecycle">
     <div class="axis"></div>
-    <ol class="nodes">
-        {#each items as item, i (item.bucket)}
+    <ol class="nodes" style="grid-template-columns: repeat({items.length}, 1fr)">
+        {#each items as item, i (item.id)}
             <li
                 class="node"
                 class:reached={item.reached}
@@ -128,7 +154,7 @@
         padding: 0;
         margin: 0;
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(4, 1fr);  /* overridden inline by node count */
         position: relative;
     }
     .node {

@@ -101,3 +101,58 @@ def test_bucket_dates_admin_jump_skips_intermediate(fresh_db):
 
 def test_bucket_dates_empty_for_unknown_slug(fresh_db):
     assert _bucket_dates_for_slug("nonexistent") == {}
+
+
+# ---------------------------------------------------------------------------
+# _ts_refresh_dates_for_slug — regenerations (every TS generation after the
+# first) feeding the conditional "Timestamps refreshed" timeline node.
+# ---------------------------------------------------------------------------
+
+
+def _insert_ts_generations(slug: str, ats: list) -> None:
+    from services import db
+    from services.db import repo_releases
+
+    with db.transaction():
+        for i, at in enumerate(ats):
+            repo_releases.supersede_current("ts", slug, except_id=-1, at=at)
+            repo_releases.insert_per_recitation_release(
+                track="ts", slug=slug, version=f"g{i}", produced_at=at, produced_by="sys"
+            )
+
+
+def test_ts_refresh_dates_excludes_first_generation(fresh_db):
+    """Three generations → two refreshes (the first is the initial publish),
+    returned ascending."""
+    from datetime import datetime
+
+    from services.public_state import _ts_refresh_dates_for_slug
+
+    seed_delivery("d3")
+    ats = [
+        datetime(2026, 1, 1, tzinfo=UTC),
+        datetime(2026, 2, 1, tzinfo=UTC),
+        datetime(2026, 3, 1, tzinfo=UTC),
+    ]
+    _insert_ts_generations("d3", ats)
+    dates = _ts_refresh_dates_for_slug("d3")
+    assert len(dates) == 2
+    assert dates == sorted(dates)
+    assert dates[-1].startswith("2026-03-01")
+
+
+def test_ts_refresh_dates_empty_when_single_generation(fresh_db):
+    """A reciter generated once (never refreshed) → no refresh node."""
+    from datetime import datetime
+
+    from services.public_state import _ts_refresh_dates_for_slug
+
+    seed_delivery("d4")
+    _insert_ts_generations("d4", [datetime(2026, 1, 1, tzinfo=UTC)])
+    assert _ts_refresh_dates_for_slug("d4") == []
+
+
+def test_ts_refresh_dates_empty_for_unknown_slug(fresh_db):
+    from services.public_state import _ts_refresh_dates_for_slug
+
+    assert _ts_refresh_dates_for_slug("nonexistent") == []

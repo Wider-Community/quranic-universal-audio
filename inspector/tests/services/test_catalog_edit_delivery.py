@@ -191,3 +191,64 @@ def test_edit_delivery_persists_to_substrate(fresh_catalog, monkeypatch):
     # Read back through the catalog snapshot (the substrate is the source of truth).
     d = catalog_service.find_delivery("rec_a")
     assert d.riwayah == "warsh"
+
+
+def _seed_hf_row(slug: str) -> None:
+    from services import db
+    from services.db import repo_releases
+
+    with db.transaction():
+        repo_releases.insert_per_recitation_release(
+            track="hf",
+            slug=slug,
+            version=f"v-{slug}",
+            produced_at=datetime.now(UTC),
+            produced_by="seed",
+        )
+
+
+def test_edit_delivery_stamps_catalog_edit_stale(fresh_catalog, monkeypatch):
+    """Editing a public-projection field marks the slug's published HF row stale
+    with reason ``catalog_edit`` so the dataset drift surfaces."""
+    catalog_service, _ = fresh_catalog
+    from services import audit as audit_service
+    from services.db import repo_releases
+
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+    _seed_hf_row("rec_a")
+
+    catalog_service.edit_delivery(actor=_actor(), slug="rec_a", recording_year=2020)
+    hf = repo_releases.current_release("hf", "rec_a")
+    assert hf["stale_since"] is not None
+    assert hf["stale_reason"] == "catalog_edit"
+
+
+def test_edit_reciter_name_fans_out_catalog_stale(fresh_catalog, monkeypatch):
+    """A public reciter field (name_en) stamps catalog_edit staleness on the
+    reciter's published deliveries."""
+    catalog_service, _ = fresh_catalog
+    from services import audit as audit_service
+    from services.db import repo_releases
+
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+    _seed_hf_row("rec_a")
+
+    catalog_service.edit_reciter(actor=_actor(), reciter_id="rec_a", name_en="Reciter Alpha")
+    hf = repo_releases.current_release("hf", "rec_a")
+    assert hf["stale_reason"] == "catalog_edit"
+
+
+def test_edit_reciter_notes_only_does_not_stamp(fresh_catalog, monkeypatch):
+    """``notes`` is admin-only (not in any public projection) — editing it must
+    NOT stale the published artifacts."""
+    catalog_service, _ = fresh_catalog
+    from services import audit as audit_service
+    from services.db import repo_releases
+
+    monkeypatch.setattr(audit_service, "append", lambda *a, **kw: None)
+    _seed_hf_row("rec_a")
+
+    catalog_service.edit_reciter(actor=_actor(), reciter_id="rec_a", notes="internal note")
+    hf = repo_releases.current_release("hf", "rec_a")
+    assert hf["stale_since"] is None
+    assert hf["stale_reason"] is None

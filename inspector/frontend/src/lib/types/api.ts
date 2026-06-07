@@ -9,6 +9,7 @@ import type {
     ApiErrorBody,
     AudioPeaks,
     EditOp,
+    GenerationBoundary,
     HistoryBatch,
     HistorySummary,
     Ref,
@@ -476,6 +477,9 @@ export interface SegSaveChartResponse {
 export interface SegEditHistoryResponse {
     batches: HistoryBatch[];
     summary: HistorySummary | null;
+    /** Ascending TS-generation boundaries — drives the history tier filter.
+     *  Absent/empty when the reciter has never had timestamps generated. */
+    generations?: GenerationBoundary[];
 }
 
 // ===========================================================================

@@ -36,15 +36,44 @@ separate from publish status. Publish status lives in three tables, all written 
 
 | Table | Grain | Purpose |
 |---|---|---|
-| `per_recitation_releases` | one current row per `(track, slug)`, `track ∈ {ts, hf}` | TS-gen + HF-dataset push history per reciter. Partial-unique on `(track, slug) WHERE superseded_at IS NULL`. |
+| `per_recitation_releases` | one current row per `(track, slug)`, `track ∈ {ts, hf}` | TS-gen + HF-dataset push history per reciter. Partial-unique on `(track, slug) WHERE superseded_at IS NULL`. `stale_since` + `stale_reason` track HF-row staleness. |
 | `gh_releases` | one row per **cut** | Global GH release snapshot: `version`, `produced_at`, `external_uri`, `validation_summary`, `superseded_at`. |
-| `gh_release_recitations` | N rows per `gh_releases` | Frozen membership: `slug`, `catalog_snapshot` (JSON), `zip_sha256`, `zip_bytes`, `coverage_ayahs`, `content_hash`, `ts_version`, `change_kind`, `stale_since`. Immutable post-cut. |
+| `gh_release_recitations` | N rows per `gh_releases` | Frozen membership: `slug`, `catalog_snapshot` (JSON), `zip_sha256`, `zip_bytes`, `coverage_ayahs`, `content_hash`, `ts_version`, `change_kind`, `stale_since`, `stale_reason`. Immutable post-cut (except the stale stamps). |
 
 - **Supersede, never delete.** A new cut supersedes the prior `gh_releases` current row; a new
   TS/HF row supersedes the prior `(track, slug)` row. History is retained for audit.
-- **`stale_since`.** When TS is regenerated for a slug, `repo_releases.stamp_stale_on_ts_regen`
-  stamps that slug's current `hf` row AND its membership in the most-recent `gh_releases` as stale
-  — surfaced in the Releases tab as "needs re-publish / re-cut". TS regen never auto-unpublishes.
+- **`stale_since` + `stale_reason`.** `repo_releases.stamp_stale(slug, at, reason)` stamps that
+  slug's current `hf` row AND its membership in the most-recent `gh_releases` stale, tagging *why*
+  (`StaleReason`, severity-ordered — the more severe reason wins when both apply; `stale_since` keeps
+  the *first* stale time). Two triggers:
+  - **`ts_regen`** — TS regenerated (`timestamps_jobs.complete_timestamps_job` /
+    `_regenerate_timestamps_on_released`). Needs a full HF republish / GH cut.
+  - **`catalog_edit`** — a public-projection catalog field changed (`services/state/catalog.py::edit_delivery`
+    / `edit_reciter`, gated on `PUBLIC_DELIVERY_FIELDS` / `PUBLIC_RECITER_FIELDS`; reciter edits fan
+    out to every delivery of the reciter). Cheap to fix on HF (catalog refresh below); GH reflects it
+    on the next cut.
+
+  A third reason — **`segments_edited`** — lives on the **`ts`** track and is **computed, never
+  stamped** (`services/segments/ts_staleness.py::ts_stale_info`, called from the status route). The
+  generated timestamps go stale the moment a timestamp-affecting segment edit
+  (`qua_shared/segment_edit_ops.py::TS_AFFECTING_OP_TYPES` = trim/split/merge/delete + edit_reference
+  + auto_fix_missing_word — annotations like confirm_reference/ignore_issue/flag_segment/set_is_wasl
+  are excluded) is saved after the current `ts` row's `produced_at`. Computed (vs stamped) because the
+  segments save path is SQLite-free by design and the signal must auto-clear when a regeneration moves
+  `produced_at` past every edit. The remediation is a slug-scoped **regenerate timestamps**
+  (`reviews.generate_timestamps`), which then cascades to the existing `ts_regen` HF/GH staleness. The
+  Releases tab surfaces it as the `stale_ts` ("Timestamps behind edits") bucket; the Segments history
+  panel surfaces the same edits as the **tier filter** (see [`segments-editor.md`](segments-editor.md)).
+
+  The reason→remediation mapping is single-sourced in
+  [`qua_shared/release_staleness.py`](../../qua_shared/release_staleness.py) (`StaleReason`,
+  `SuggestedAction`, `_SUGGESTIONS` keyed by `(reason, track)`). The status route resolves + serializes
+  the `SuggestedAction` per stale row so the FE renders the remediation without reimplementing it —
+  adding a new staleness measure is a `StaleReason` value + one `_SUGGESTIONS` row. Neither trigger
+  auto-unpublishes. `refresh_catalog.complete` calls `repo_releases.clear_catalog_stale_hf()` to clear
+  *only* `catalog_edit` HF staleness after a refresh (`ts_regen` rows stay stale — they still need a
+  republish; severity ordering guarantees a row that also needs a republish never reads as
+  catalog-only).
 - **Idempotency.** `complete()` handlers no-op when a row already exists for the version
   (`gh_release_by_version` / `release_by_version`), so a webhook retried after a later cut can't
   replay.
@@ -211,6 +240,7 @@ come from the `riwayahs` / `styles` / `channels` vocab tables — `catalog.json`
 | `POST /api/admin/cut-release` | Launch the global cut. `release.cut_gh`. Body accepts only `version` and `expected_version_at_preview`; echoes the preview version to 409 stale state. |
 | `POST /api/admin/publish-hf/<slug>` | Launch per-reciter HF dataset publish (single). `release.publish_hf`. |
 | `POST /api/admin/publish-hf-batch` | Launch ONE job publishing a batch of slugs. Body `{slugs: [...]}`. `release.publish_hf`. |
+| `POST /api/admin/refresh-hf-catalog` | Launch the global catalog-only refresh (`mushafs` config + card, no audio re-slice). Reuses `release.publish_hf`. Single-flight against publish / batch / refresh. The cheap remediation for `catalog_edit` HF drift; clears those stamps on completion. |
 | `POST /api/admin/release-jobs/<job_id>/cancel` | Cancel any in-flight release job (publish / batch / cut / timestamps). Outer gate `reviews.view`; the cancel itself is re-gated per kind. |
 
 ### Batch publish (the `hf_publish_batch` kind)

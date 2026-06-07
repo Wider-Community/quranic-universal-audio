@@ -13,6 +13,7 @@ those extra keys explicitly.
 from __future__ import annotations
 
 import re
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
@@ -231,12 +232,53 @@ def _is_letter(v: Any) -> bool:
 # ---------------------------------------------------------------------------
 
 
+class StaleReason(str, Enum):
+    """Why an artifact is stale — drives the remediation suggestion.
+
+    Severity-ordered (``segments_edited`` > ``ts_regen`` > ``catalog_edit``):
+    when more than one applies to a row the stronger wins, because regenerating
+    timestamps (the fix for ``segments_edited``) subsumes a republish, which in
+    turn subsumes a catalog refresh. The reason→action mapping lives in
+    ``qua_shared/release_staleness.py``.
+
+    ``segments_edited`` lives on the ``ts`` track only (computed, never stamped):
+    segments were edited after the timestamps were generated, so the generated
+    timestamps are behind the segments and need regenerating. The other two live
+    on the published ``hf`` / ``gh`` tracks.
+    """
+
+    TS_REGEN = "ts_regen"  # per-verse timestamps changed → full republish / cut
+    CATALOG_EDIT = "catalog_edit"  # catalog metadata changed → HF catalog refresh / next cut
+    SEGMENTS_EDITED = "segments_edited"  # segments edited after TS gen → regenerate timestamps
+
+
+class SuggestedAction(BaseModel):
+    """The remediation the FE should offer (or merely note) for a stale row.
+
+    Resolved server-side from ``(StaleReason, track)`` so the reason→action
+    mapping stays single-sourced (no BE↔FE parity drift). The FE maps the
+    ``action`` code to an API call and gates the control on ``capability``.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    action: str  # "refresh_hf_catalog" | "republish_hf" | "recut_gh" | "none"
+    kind: Literal["actionable", "informational"]
+    label: str
+    capability: str | None = None
+
+
 class AdminReleaseRow(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     version: str
     produced_at: str
     stale_since: str | None = None
+    stale_reason: StaleReason | None = None
+    suggested_action: SuggestedAction | None = None
+    #: Count of timestamp-affecting edits since this row was produced. Only set
+    #: on the ``ts`` track when ``stale_reason == segments_edited``.
+    edits_since: int | None = None
 
 
 class AdminGhReleaseMember(BaseModel):
@@ -244,6 +286,8 @@ class AdminGhReleaseMember(BaseModel):
 
     change_kind: ChangeKind
     stale_since: str | None = None
+    stale_reason: StaleReason | None = None
+    suggested_action: SuggestedAction | None = None
     release_id: int | None = None
     ts_version: str | None = None
 
@@ -298,7 +342,7 @@ class AdminReleasesSummary(BaseModel):
 class AdminInFlightJob(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    kind: Literal["hf_publish", "hf_publish_batch", "cut_release", "timestamps"]
+    kind: Literal["hf_publish", "hf_publish_batch", "cut_release", "timestamps", "refresh_catalog"]
     slug: str | None
     job_id: str
     started_at: str | None
@@ -324,6 +368,9 @@ class AdminReleasesStatusResponse(BaseModel):
     in_flight: list[AdminInFlightJob]
     recitations: list[AdminReleaseStatusRow]
     last_batch: AdminLastBatch | None = None
+    #: Number of current HF rows stale solely due to a catalog edit — drives the
+    #: summary-card "Refresh dataset catalog" CTA badge.
+    catalog_drift_count: int = 0
 
 
 class AdminReleasePreviewRow(BaseModel):

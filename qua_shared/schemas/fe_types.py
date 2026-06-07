@@ -87,6 +87,8 @@ from .release import (
     AdminReleasesStatusResponse,
     AdminReleasesSummary,
     AdminReleaseStatusRow,
+    StaleReason,
+    SuggestedAction,
 )
 from .segment import (
     DetailedDocument,
@@ -160,6 +162,8 @@ __all__ = [
     "RequestChange",
     "SegmentFlag",
     "SourceLink",
+    "StaleReason",
+    "SuggestedAction",
     "TsJobRecord",
     "TsJobSettings",
     "TsValidationDoc",

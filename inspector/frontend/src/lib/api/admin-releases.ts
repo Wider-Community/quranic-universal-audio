@@ -7,6 +7,7 @@
  * - cancelReleaseJob       cancel an in-flight release job by id
  * - regenerateTs           re-run MFA alignment for a published slug
  * - cutRelease             launch the global GH release cut job
+ * - refreshHfCatalog       rebuild only the HF dataset ``mushafs`` catalog
  *
  */
 
@@ -24,6 +25,7 @@ import type {
     AdminReleaseStatusRow,
     AdminReleasesStatusResponse,
     AdminReleasesSummary,
+    SuggestedAction,
 } from '../types/generated/schemas';
 
 export type ReleaseRow = AdminReleaseRow;
@@ -39,6 +41,7 @@ export type ReleasePreviewRow = AdminReleasePreviewRow;
 export type ReleasePreviewResponse = AdminReleasePreviewResponse;
 export type LaunchResponse = AdminLaunchResponse;
 export type CutReleaseBody = AdminCutReleaseRequest;
+export type StaleSuggestion = SuggestedAction;
 
 async function _unwrap<T>(resp: Response): Promise<T> {
     if (resp.ok) return (await resp.json()) as T;
@@ -108,3 +111,24 @@ export async function cutRelease(body: CutReleaseBody): Promise<LaunchResponse> 
     });
     return _unwrap<LaunchResponse>(resp);
 }
+
+/** Launch the global HF dataset catalog refresh (the ``mushafs`` subset only).
+ *  Rebuilds the dataset catalog config + card from the live catalog with no
+ *  audio re-slice — the cheap remediation for ``catalog_edit`` HF staleness.
+ *  Gated by ``release.publish_hf``. Throws the server 409 verbatim when a
+ *  refresh / batch is already in flight. */
+export async function refreshHfCatalog(): Promise<LaunchResponse> {
+    const resp = await fetch('/api/admin/refresh-hf-catalog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    return _unwrap<LaunchResponse>(resp);
+}
+
+/** Map an actionable ``SuggestedAction.action`` code to its launcher. Keeps the
+ *  reason→action wiring on the FE to this one table (the label / kind / gate all
+ *  come from the server-resolved suggestion). ``republish_hf`` has no direct
+ *  launcher here — it routes through the select-and-publish batch flow. */
+export const SUGGESTION_LAUNCHERS: Record<string, () => Promise<LaunchResponse>> = {
+    refresh_hf_catalog: refreshHfCatalog,
+};
