@@ -30,10 +30,13 @@ KIND = "hf_publish_batch"
 BATCH_LABEL_SLUG = "_batch"
 
 # Each recitation is published in its own child process (see publish_hf_batch),
-# so the per-reciter peak — not the sum — is what must fit. cpu-basic handles a
-# single reciter; process isolation guarantees the OS reclaims each one's memory
-# before the next starts.
-JOB_FLAVOR = os.environ.get("INSPECTOR_HF_BATCH_JOB_FLAVOR", "cpu-basic")
+# so the per-reciter PEAK (not the sum) is the constraint — isolation reclaims
+# each reciter's memory before the next. The peak scales with audio size, and
+# the parquet push of the largest reciter (~43h / ~2.5 GB audio) crosses
+# cpu-basic's 16 GB, so the batch runs on cpu-upgrade (32 GB). A single child
+# OOM trips a cgroup OOM that fails the whole job, so headroom must cover the
+# biggest reciter, not the average.
+JOB_FLAVOR = os.environ.get("INSPECTOR_HF_BATCH_JOB_FLAVOR", "cpu-upgrade")
 JOB_TIMEOUT = os.environ.get("INSPECTOR_HF_BATCH_JOB_TIMEOUT", "3h")
 
 
