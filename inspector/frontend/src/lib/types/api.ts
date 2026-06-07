@@ -64,11 +64,10 @@ export interface TsManifestReciter {
     riwayah: string;
     style: string;
     source?: string;
-    /** "by_surah" or "by_ayah" — shard-internal short form, not "*_audio". */
+    /** "by_surah" or "by_ayah" — shard-internal short form, not "*_audio".
+     *  Per-chapter audio URLs are NOT in the manifest — resolve them from the
+     *  canonical `/api/audio/surahs` endpoint (the audio-manifest sidecar). */
     audio_category: 'by_surah' | 'by_ayah';
-    /** Templated URL (`{surah:03d}` / `{ayah:03d}`). Empty string when audio
-     *  manifests don't fit a templatable pattern. */
-    url_template: string;
     /** Sorted list of chapter numbers the reciter has shards for. */
     ts_chapters: number[];
     /** Sorted list of chapters whose audio is known VBR. Optional for older HF manifests. */

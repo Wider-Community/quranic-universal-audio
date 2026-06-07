@@ -70,9 +70,11 @@ export async function loadChapterRecitation(
     ]);
     if (signal?.aborted) return null;
 
+    // The animation consumes only word/letter timings — `audio_url` is unused
+    // here (playback rides the shared player on canonical URLs), so pass "".
     const verses: AssembledVerse[] = [];
     for (const verseRef of chapterVerseRefs(shard)) {
-        const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk, reciterAudio);
+        const data = assembleVerseFromShard(reciter, shard, verseRef, qpc, dk, reciterAudio, '');
         if (data) verses.push({ verseRef, data });
     }
     if (!verses.length) return null;

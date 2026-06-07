@@ -284,16 +284,23 @@
         }
         tsLoading.set(true);
         try {
-            const [shard, qpc, dk] = await Promise.all([
+            // Canonical per-chapter audio URL comes from /api/audio/surahs (the
+            // audio-manifest sidecar) — same source playback uses, usually warm
+            // from the player; fetched in parallel with the shard.
+            const [shard, qpc, dk, surahs] = await Promise.all([
                 loadChapterShard(slug, chapter),
                 loadQpc(),
                 loadDk(),
+                fetchSurahsForDelivery(block.source ?? '', slug).catch(
+                    (): Awaited<ReturnType<typeof fetchSurahsForDelivery>> => ({}),
+                ),
             ]);
             const reciterAudio = reciterAudioFromManifest(manifest, slug);
             if (!reciterAudio) return;
+            const chapterUrl = surahs[String(chapter)]?.url ?? '';
             const verses: ChapVerse[] = [];
             for (const ref of chapterVerseRefs(shard)) {
-                const data = assembleVerseFromShard(slug, shard, ref, qpc, dk, reciterAudio);
+                const data = assembleVerseFromShard(slug, shard, ref, qpc, dk, reciterAudio, chapterUrl);
                 if (!data) continue;
                 verses.push({
                     ref,
@@ -559,7 +566,7 @@
             ]);
             const ra = reciterAudioFromManifest(manifest, target.reciter);
             const data = ra
-                ? assembleVerseFromShard(target.reciter, shard, target.verseRef, qpc, dk, ra)
+                ? assembleVerseFromShard(target.reciter, shard, target.verseRef, qpc, dk, ra, rawUrl)
                 : null;
             if (data) seekSec = data.time_start_ms / 1000;
         } catch { /* seek 0 is an acceptable fallback */ }
