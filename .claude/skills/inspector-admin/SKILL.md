@@ -89,3 +89,5 @@ with prod_safe_setup(a, need_actor=False) as ctx:   # prod: pauses Space, pulls 
 ```
 
 `prod_safe_setup` pauses BEFORE the pull (snapshot = the Space's final state), runs the mutation as the sole writer, and **always resumes in `finally`** (a failed edit never leaves prod paused). On `--dev` it's a plain `setup()` — dev has no live Space, single-writer already. The Space re-pulls on boot (app.py boot = pull+migrate), so the edit is durable with no manual restart. Bare `setup()` remains for read-only ops (`admin_db exec` without `--write`, previews).
+
+It guards **both** competing writers: the live Space (eliminated by the pause) and a **second concurrent admin run** — a TTL'd bucket advisory lock (`db/.admin_lock.json`, 20 min) is held across the whole pause→edit→resume window, so a second admin **aborts** (`admin lock held by '<login>' …`) rather than overlapping and un-pausing the Space mid-edit. A crashed holder's lock self-expires.

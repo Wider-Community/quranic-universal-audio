@@ -42,6 +42,7 @@ import os
 import sys
 import tempfile
 import time
+import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -163,6 +164,58 @@ def setup(args: argparse.Namespace, *, need_db: bool = True,
                         db_path=db_path, db_synced=db_synced)
 
 
+# Bucket advisory lock — serialises concurrent admin single-writer windows so
+# two admin runs can't overlap their pause/edit/resume (which would let one's
+# resume un-pause the Space mid-edit of the other). TTL'd so a crashed holder
+# self-clears. Best-effort (read-check-write + read-back, not a true CAS) —
+# enough to catch accidental concurrency, not adversarial contention.
+_ADMIN_LOCK_PATH = "db/.admin_lock.json"
+_ADMIN_LOCK_TTL_S = 1200
+
+
+def _acquire_admin_lock(backend: object, nonce: str, login: str) -> None:
+    existing = None
+    try:
+        if backend.exists(_ADMIN_LOCK_PATH):  # type: ignore[attr-defined]
+            existing = backend.read_json(_ADMIN_LOCK_PATH)  # type: ignore[attr-defined]
+    except Exception:
+        existing = None
+    if (
+        isinstance(existing, dict)
+        and existing.get("nonce") != nonce
+        and float(existing.get("expires_at", 0)) > time.time()
+    ):
+        raise RuntimeError(
+            f"admin lock held by '{existing.get('login')}' since "
+            f"{existing.get('acquired_at')} (expires {existing.get('expires_at')}). "
+            "Another inspector-admin prod write is in progress — aborting."
+        )
+    payload = {
+        "nonce": nonce,
+        "login": login,
+        "acquired_at": time.time(),
+        "expires_at": time.time() + _ADMIN_LOCK_TTL_S,
+    }
+    backend.write_json_atomic(_ADMIN_LOCK_PATH, payload)  # type: ignore[attr-defined]
+    # Read-back: if a near-simultaneous writer overwrote us, we lost the race.
+    try:
+        back = backend.read_json(_ADMIN_LOCK_PATH)  # type: ignore[attr-defined]
+    except Exception:
+        back = payload
+    if not (isinstance(back, dict) and back.get("nonce") == nonce):
+        raise RuntimeError("admin lock race lost to a concurrent admin run — aborting.")
+
+
+def _release_admin_lock(backend: object, nonce: str) -> None:
+    try:
+        if backend.exists(_ADMIN_LOCK_PATH):  # type: ignore[attr-defined]
+            cur = backend.read_json(_ADMIN_LOCK_PATH)  # type: ignore[attr-defined]
+            if isinstance(cur, dict) and cur.get("nonce") == nonce:
+                backend.delete(_ADMIN_LOCK_PATH)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+
 def _wait_space_stage(api: object, target: str, *, timeout_s: int = 180) -> str:
     """Poll the Space runtime stage until it equals ``target`` or times out.
     Returns the last observed stage."""
@@ -193,6 +246,11 @@ def prod_safe_setup(args: argparse.Namespace, **setup_kw) -> Iterator[BootstrapC
     state. Resume runs in ``finally`` so a failed mutation never leaves prod
     paused. On dev this is a plain ``setup`` (no pause — single writer already).
 
+    Two competing writers are both handled: the live Space (eliminated by the
+    pause) AND another concurrent admin run (excluded by a TTL'd bucket advisory
+    lock held across the whole pause→edit→resume window — a second admin aborts
+    rather than overlapping and un-pausing the Space mid-edit).
+
     Usage::
 
         with prod_safe_setup(a, need_actor=False) as ctx:
@@ -205,22 +263,39 @@ def prod_safe_setup(args: argparse.Namespace, **setup_kw) -> Iterator[BootstrapC
         return
 
     _load_env()  # HF_TOKEN for HfApi + pause/restart
+    # Bucket env + sys.path so get_backend() resolves the prod bucket for the lock.
+    rr = repo_root()
+    for p in (str(rr), str(rr / "inspector")):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    os.environ["INSPECTOR_BUCKET_REPO"] = BUCKETS["prod"]
+    os.environ["INSPECTOR_ALLOW_PROD_BUCKET"] = "1"
+    from services.storage.hf_bucket import get_backend
+
+    backend = get_backend()
+    nonce = uuid.uuid4().hex
+    login = os.environ.get("INSPECTOR_DEV_OWNER_LOGIN", "admin").strip() or "admin"
+
     from huggingface_hub import HfApi, pause_space, restart_space
 
     api = HfApi()
-    print(f"pausing {PROD_SPACE_ID} (single-writer window) ...", flush=True)
-    pause_space(PROD_SPACE_ID)
-    stage = _wait_space_stage(api, "PAUSED", timeout_s=120)
-    if stage != "PAUSED":
-        print(f"space not confirmed PAUSED (stage={stage}); resuming, refusing to edit", flush=True)
-        restart_space(PROD_SPACE_ID)
-        raise RuntimeError(f"could not pause {PROD_SPACE_ID} for a safe write")
+    _acquire_admin_lock(backend, nonce, login)  # raises if another admin holds it
     try:
-        yield setup(args, **setup_kw)  # pull fresh under pause
+        print(f"pausing {PROD_SPACE_ID} (single-writer window) ...", flush=True)
+        pause_space(PROD_SPACE_ID)
+        stage = _wait_space_stage(api, "PAUSED", timeout_s=120)
+        if stage != "PAUSED":
+            print(f"space not confirmed PAUSED (stage={stage}); resuming, refusing to edit", flush=True)
+            restart_space(PROD_SPACE_ID)
+            raise RuntimeError(f"could not pause {PROD_SPACE_ID} for a safe write")
+        try:
+            yield setup(args, **setup_kw)  # pull fresh under pause
+        finally:
+            print(f"resuming {PROD_SPACE_ID} ...", flush=True)
+            restart_space(PROD_SPACE_ID)
+            _wait_space_stage(api, "RUNNING", timeout_s=180)
     finally:
-        print(f"resuming {PROD_SPACE_ID} ...", flush=True)
-        restart_space(PROD_SPACE_ID)
-        _wait_space_stage(api, "RUNNING", timeout_s=180)
+        _release_admin_lock(backend, nonce)
 
 
 def after_write_banner(args: argparse.Namespace) -> None:
