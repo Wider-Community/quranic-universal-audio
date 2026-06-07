@@ -352,5 +352,6 @@ if they diverge where they should match, it's a bug.
 ## Event classification
 
 Publish actions fire events into
-[activity_classification.py](../../inspector/services/activity/activity_classification.py): TS
-generation is admin-only infrastructure; `released` / dataset-publish events are public.
+[activity_classification.py](../../inspector/services/activity/activity_classification.py): the
+in-app publish milestone `reciter.published` (TS-gen completion → `released` state) is public on
+the rail; `released` / dataset-publish events (HF push + GH cut) are hidden operator infrastructure.
