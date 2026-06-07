@@ -42,14 +42,22 @@ def insert_per_recitation_release(
     external_uri: str | None = None,
     source_catalog_rev: str | None = None,
     validation_summary: dict[str, Any] | None = None,
+    affected_chapters: list[int] | None = None,
+    prior_ts_version: str | None = None,
 ) -> int:
     """Insert a new release row. Caller must supersede the prior current row
-    in the same transaction (see ``supersede_current``)."""
+    in the same transaction (see ``supersede_current``).
+
+    ``affected_chapters`` (the chapters a ts regen folded in) and
+    ``prior_ts_version`` (the superseded ts row's version) are regen provenance
+    on the ``ts`` track — null on a first publish / the ``hf`` track.
+    """
     cur = get_conn().execute(
         "INSERT INTO per_recitation_releases("
         " track, slug, version, produced_at, produced_by, produced_by_job_id,"
-        " launched_by, external_uri, source_catalog_rev, validation_summary"
-        ") VALUES (?,?,?,?,?,?,?,?,?,?)",
+        " launched_by, external_uri, source_catalog_rev, validation_summary,"
+        " affected_chapters, prior_ts_version"
+        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             track,
             slug,
@@ -61,6 +69,8 @@ def insert_per_recitation_release(
             external_uri,
             source_catalog_rev,
             _serde.json_dumps(validation_summary) if validation_summary else None,
+            _serde.json_dumps(affected_chapters) if affected_chapters else None,
+            prior_ts_version,
         ),
     )
     return int(cur.lastrowid)

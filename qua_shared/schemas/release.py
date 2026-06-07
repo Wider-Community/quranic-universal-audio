@@ -279,6 +279,9 @@ class AdminReleaseRow(BaseModel):
     #: Count of timestamp-affecting edits since this row was produced. Only set
     #: on the ``ts`` track when ``stale_reason == segments_edited``.
     edits_since: int | None = None
+    #: Chapters touched by those edits — the default scope for an affected-only
+    #: regeneration. Only set on the ``ts`` track when ``segments_edited``.
+    affected_chapters: list[int] | None = None
 
 
 class AdminGhReleaseMember(BaseModel):

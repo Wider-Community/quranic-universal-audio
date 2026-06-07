@@ -22,6 +22,7 @@
         InFlightJob,
         ReleaseStatusRow,
     } from '../../../../../lib/api/admin-releases';
+    import { surahOptionText } from '../../../../../lib/utils/surah-info';
 
     export type ReleasesBucket =
         | 'in_flight'
@@ -108,6 +109,12 @@
         return 'stale';
     }
 
+    /** Affected chapters as "5 Al-Māʾidah, 12 Yūsuf" (surah names; falls back to
+     *  bare numbers before surah-info loads). */
+    function affectedChaptersText(chs: number[]): string {
+        return chs.map((c) => surahOptionText(c)).join(', ');
+    }
+
     /** TS chip tooltip — generation + the "behind by N edits" staleness note. */
     function tsChipTitle(): string {
         if (!row.ts) return 'No timestamps yet';
@@ -115,6 +122,8 @@
         if (row.ts.stale_since) {
             const n = row.ts.edits_since ?? 0;
             t += ` · ${n} edit${n === 1 ? '' : 's'} since generation`;
+            const chs = row.ts.affected_chapters ?? [];
+            if (chs.length) t += `\nAffected chapters: ${affectedChaptersText(chs)}`;
             if (row.ts.suggested_action) t += ` — ${row.ts.suggested_action.label}`;
         }
         return t;

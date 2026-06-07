@@ -74,3 +74,35 @@ def test_generate_ts_unknown_slug_404(signed_in_client):
     resp = client.post(f"{_URL}/nope", headers=_HEADERS)
 
     assert resp.status_code == 404
+
+
+def test_generate_ts_scopes_to_affected_chapters(signed_in_client, monkeypatch, seed_state):
+    """An affected-only regen threads ``chapters`` into the launch settings."""
+    from services.admin import timestamps_jobs as ts_jobs
+
+    client, _user = signed_in_client(role="maintainer")
+    seed_state("rec_a", state="released")
+    monkeypatch.setattr(ts_jobs, "running_job_for", lambda slug: None)
+    captured: dict = {}
+
+    def _capture(slug, settings=None, webhook_base=None):
+        captured["chapters"] = settings.chapters
+        return {"job_id": "j_test", "url": None}
+
+    monkeypatch.setattr(ts_jobs, "launch", _capture)
+
+    resp = client.post(f"{_URL}/rec_a", headers=_HEADERS, json={"chapters": [12, 5, 5]})
+
+    assert resp.status_code == 202, resp.get_data(as_text=True)
+    assert captured["chapters"] == [5, 12]  # deduped + sorted
+
+
+def test_generate_ts_rejects_out_of_range_chapters(signed_in_client, monkeypatch, seed_state):
+    client, _user = signed_in_client(role="maintainer")
+    _stub_launch(monkeypatch)
+    seed_state("rec_a", state="released")
+
+    resp = client.post(f"{_URL}/rec_a", headers=_HEADERS, json={"chapters": [0, 200]})
+
+    assert resp.status_code == 400
+    assert "chapters" in resp.get_json()["error"]

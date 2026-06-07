@@ -717,6 +717,32 @@ def _normalize_from_results(chapters, results_by_ch, audio_category):
     return norm, failures
 
 
+def _merge_ts_validation(path: Path, fresh: dict, refresh_chapters: set[int]) -> dict:
+    """Merge a partial run's ``ts_validation`` into the existing whole-reciter
+    sidecar at ``path``. Keeps the prior file's flagged verses for chapters NOT
+    in ``refresh_chapters`` and takes ``fresh``'s verses for the refreshed ones.
+    Returns ``fresh`` unchanged when there's no readable prior file."""
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return fresh
+
+    def _surah_of(verse_key: str) -> int | None:
+        try:
+            return int(str(verse_key).split(":")[0])
+        except (ValueError, IndexError):
+            return None
+
+    merged = {
+        k: v
+        for k, v in (existing.get("verses") or {}).items()
+        if _surah_of(k) not in refresh_chapters
+    }
+    merged.update(fresh.get("verses") or {})
+    fresh["verses"] = dict(sorted(merged.items(), key=lambda kv: kv[0]))
+    return fresh
+
+
 def process(
     input_dir: Path,
     backend: MfaBackend | None,
@@ -728,6 +754,7 @@ def process(
     output_dir: Path | None = None,
     padding: str = "forward",
     refresh_verses: set[str] | None = None,
+    refresh_chapters: set[int] | None = None,
     download_workers: int = DEFAULT_DOWNLOAD_WORKERS,
     workers: int = DEFAULT_WORKERS,
     mfa_app_path: str | Path | None = None,
@@ -748,6 +775,10 @@ def process(
     bypassed) — this is the local Katana / Kalpy path. Otherwise the
     single supplied ``backend`` is called serially per (batch, beam),
     which is what the HF Space wrapper uses.
+
+    ``refresh_chapters`` (surah numbers) scopes the run to those chapters only —
+    untouched chapters keep their existing shards, and the whole-reciter
+    ``ts_validation.json`` is merged rather than clobbered.
 
     Returns the resolved output directory on success. Returns None when
     nothing was written.
@@ -855,7 +886,16 @@ def process(
     skipped_chapters = []
 
     # Build list of chapters to process
-    if refresh_verses:
+    if refresh_chapters:
+        # Affected-only regen: process only the named chapters (surah numbers).
+        # Untouched shards stay on the bucket; ts_validation.json is merged below.
+        refresh_chapter_strs = {str(c) for c in refresh_chapters}
+        chapters_to_process = [
+            (ch_idx, chapter)
+            for ch_idx, chapter in enumerate(chapters)
+            if str(chapter.get("ref", "")).split(":")[0] in refresh_chapter_strs
+        ]
+    elif refresh_verses:
         # Refresh: process only surahs containing target verses
         chapters_to_process = [
             (ch_idx, chapter)
@@ -1257,6 +1297,14 @@ def process(
     ts_validation = build_ts_validation(
         chapters, results_by_beam, beams, reciter=reciter, method=method
     )
+    # ts_validation.json is a WHOLE-RECITER sidecar but a partial run only
+    # produced flags for the processed chapters. Merge: drop the existing flags
+    # for the refreshed chapters (they're rebuilt) and keep every other chapter's,
+    # so an affected-only regen never clobbers untouched chapters' flags.
+    if refresh_chapters:
+        ts_validation = _merge_ts_validation(
+            output_dir / "ts_validation.json", ts_validation, refresh_chapters
+        )
     (output_dir / "ts_validation.json").write_text(
         json.dumps(ts_validation, ensure_ascii=False), encoding="utf-8"
     )

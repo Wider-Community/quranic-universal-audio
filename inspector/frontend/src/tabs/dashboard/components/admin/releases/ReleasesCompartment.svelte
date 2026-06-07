@@ -38,6 +38,7 @@
     } from '../../../../../lib/api/admin-releases';
     import { releasesStore } from '../../../../../lib/stores/releases.svelte';
     import CutReleaseModal from './CutReleaseModal.svelte';
+    import RegenerateScopeDialog from './RegenerateScopeDialog.svelte';
     import ReleasesActionBar from './ReleasesActionBar.svelte';
     import ReleasesRow, { type ReleasesBucket } from './ReleasesRow.svelte';
     import ReleasesSummaryCard from './ReleasesSummaryCard.svelte';
@@ -48,6 +49,9 @@
 
     let cutModalOpen = $state(false);
     let busyRegenSlug = $state<string | null>(null);
+    // Row awaiting a Full-vs-Affected scope choice (only when it has affected
+    // chapters); null = no dialog open.
+    let regenScopeRow = $state<ReleaseStatusRow | null>(null);
     let rowError = $state<{ slug: string; message: string } | null>(null);
 
     // Batch-publish selection + action state.
@@ -404,12 +408,28 @@
     /** Re-run MFA alignment for a published reciter. The launch invalidates the
      *  server in-flight cache, so the refetch surfaces the row in "In progress";
      *  on completion the HF release is stale-stamped → it lands in "Stale on HF". */
-    async function onRegenerate(slug: string): Promise<void> {
+    /** Entry point from the row's Regenerate button. When the row's timestamps
+     *  are behind specific chapters, open the Full-vs-Affected dialog; otherwise
+     *  (a plain published-current regen) launch a full regen directly. */
+    function onRegenerate(slug: string): void {
+        if (busyRegenSlug !== null) return;
+        const row = allRows.find((r) => r.slug === slug) ?? null;
+        if (row?.ts?.affected_chapters && row.ts.affected_chapters.length > 0) {
+            regenScopeRow = row;
+            return;
+        }
+        void doRegenerate(slug);
+    }
+
+    /** Launch the regen job. ``chapters`` scopes it to affected chapters; omit
+     *  for a full reciter regen. */
+    async function doRegenerate(slug: string, chapters?: number[]): Promise<void> {
         if (busyRegenSlug !== null) return;
         busyRegenSlug = slug;
         rowError = null;
+        regenScopeRow = null;
         try {
-            await regenerateTs(slug);
+            await regenerateTs(slug, chapters);
             refetch();
         } catch (e) {
             rowError = { slug, message: (e as Error).message ?? 'Regenerate failed' };
@@ -636,6 +656,16 @@
             onClear={clearSelection}
         />
         {/if}
+    {/if}
+
+    {#if regenScopeRow}
+        <RegenerateScopeDialog
+            name={regenScopeRow.name_en || regenScopeRow.slug}
+            affectedChapters={regenScopeRow.ts?.affected_chapters ?? []}
+            busy={busyRegenSlug === regenScopeRow.slug}
+            onclose={() => (regenScopeRow = null)}
+            onlaunch={(chapters) => doRegenerate(regenScopeRow!.slug, chapters)}
+        />
     {/if}
 
     {#if cutModalOpen}

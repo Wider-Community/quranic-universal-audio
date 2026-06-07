@@ -224,6 +224,7 @@ def _write_record(
             type="ts",
             settings=TsJobSettings.model_validate(settings),
             status=status,
+            chapters_refreshed=settings.get("chapters"),
             started_at=started_at,
             ended_at=_now_iso(),
             url=os.environ.get("JOB_URL") or None,
@@ -302,12 +303,19 @@ def main() -> int:
     method = os.environ.get("METHOD", DEFAULT_METHOD)
     persist_audio = _bool_env("PERSIST_AUDIO")
     gen_peaks = _bool_env("GEN_PEAKS")
+    # Affected-only regen: process just these chapters (untouched shards stay,
+    # ts_validation.json is merged not clobbered). Empty/absent = full reciter.
+    refresh_chapters: set[int] | None = None
+    raw_chapters = os.environ.get("CHAPTERS", "").strip()
+    if raw_chapters:
+        refresh_chapters = {int(c) for c in raw_chapters.split(",") if c.strip()}
 
     # Echoed into the durable record so the panel shows what was actually run.
     settings = {
         "beams": beams,
         "persist_audio": persist_audio,
         "gen_peaks": gen_peaks,
+        "chapters": sorted(refresh_chapters) if refresh_chapters else None,
         "workers": workers,
         "batch_size": batch_size,
         "download_workers": dl_workers,
@@ -415,6 +423,7 @@ def main() -> int:
             output_dir=reciter_dir,
             padding=padding,
             refresh_verses=None,
+            refresh_chapters=refresh_chapters,
             download_workers=dl_workers,
             workers=workers,
             mfa_app_path=app_path,

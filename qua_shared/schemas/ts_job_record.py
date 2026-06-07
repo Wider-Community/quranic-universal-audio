@@ -36,6 +36,10 @@ class TsJobSettings(BaseModel):
     beams: list[int] = Field(default_factory=lambda: [50])
     persist_audio: bool = False
     gen_peaks: bool = False
+    #: Regenerate only these chapters (surah numbers). ``None`` = full reciter.
+    #: Untouched chapters keep their existing shards; the run merges (not
+    #: clobbers) the whole-reciter ``ts_validation.json``.
+    chapters: list[int] | None = None
     # Advanced (server-default when omitted by the form).
     workers: int | None = None
     flavor: str | None = None
@@ -70,6 +74,9 @@ class TsJobRecord(BaseModel):
     type: str = "ts"  # job kind — matches the jobs/<type>/ bucket namespace
     settings: TsJobSettings = Field(default_factory=TsJobSettings)
     status: str = "running"
+    #: Chapters this run actually re-aligned (echoes ``settings.chapters``);
+    #: ``None`` = full reciter. Operational audit for partial regenerations.
+    chapters_refreshed: list[int] | None = None
     started_at: str | None = None  # ISO-8601 UTC
     ended_at: str | None = None  # ISO-8601 UTC
     url: str | None = None  # HF job URL

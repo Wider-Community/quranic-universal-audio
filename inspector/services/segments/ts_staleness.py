@@ -28,8 +28,14 @@ def ts_stale_info(slug: str, *, produced_at: str) -> dict | None:
     ``produced_at`` is the current ``per_recitation_releases(track='ts')`` row's
     generation time (ISO-8601 UTC). Walks the reciter's edit-history batches and
     collects those saved after it that carry a timestamp-affecting op. Returns
-    ``{"stale_since": <earliest such saved_at_utc>, "edits_since": <count>}`` when
-    any exist, else ``None`` (nothing generated, or only annotation edits since).
+    ``{"stale_since": <earliest such saved_at_utc>, "edits_since": <count>,
+    "affected_chapters": <sorted chapter list>}`` when any exist, else ``None``
+    (nothing generated, or only annotation edits since).
+
+    ``affected_chapters`` is the set of chapters touched by those edits — the
+    union of each batch's ``chapter`` (Inspector save) / ``chapters`` (pipeline
+    multi-chapter). It drives the Releases display, the regen scope default, and
+    the persisted regen provenance.
 
     Best-effort: a failed edit-history read (e.g. bucket unavailable) yields
     ``None`` rather than propagating — this feeds the releases-status grid for
@@ -42,6 +48,7 @@ def ts_stale_info(slug: str, *, produced_at: str) -> dict | None:
         return None
     stale_since: str | None = None
     count = 0
+    affected: set[int] = set()
     for batch in batches:
         saved_at = batch.get("saved_at_utc")
         if not saved_at or saved_at <= produced_at:
@@ -51,6 +58,16 @@ def ts_stale_info(slug: str, *, produced_at: str) -> dict | None:
         count += 1
         if stale_since is None or saved_at < stale_since:
             stale_since = saved_at
+        ch = batch.get("chapter")
+        if isinstance(ch, int):
+            affected.add(ch)
+        for c in batch.get("chapters") or []:
+            if isinstance(c, int):
+                affected.add(c)
     if count == 0:
         return None
-    return {"stale_since": stale_since, "edits_since": count}
+    return {
+        "stale_since": stale_since,
+        "edits_since": count,
+        "affected_chapters": sorted(affected),
+    }

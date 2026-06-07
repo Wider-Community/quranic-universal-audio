@@ -196,6 +196,7 @@ export interface AdminReleaseRow {
   stale_reason?: StaleReason | null;
   suggested_action?: SuggestedAction | null;
   edits_since?: number | null;
+  affected_chapters?: number[] | null;
   [k: string]: unknown;
 }
 export interface AdminReleaseStatusRow {
@@ -846,6 +847,7 @@ export interface TsJobRecord {
   type?: string;
   settings?: TsJobSettings;
   status?: string;
+  chapters_refreshed?: number[] | null;
   started_at?: string | null;
   ended_at?: string | null;
   url?: string | null;
@@ -863,6 +865,7 @@ export interface TsJobSettings {
   beams?: number[];
   persist_audio?: boolean;
   gen_peaks?: boolean;
+  chapters?: number[] | null;
   workers?: number | null;
   flavor?: string | null;
   timeout?: string | null;

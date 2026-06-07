@@ -7,6 +7,7 @@ Covers per_recitation_releases insert + supersede + stale-stamp, gh_releases
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timezone
 
 import pytest
@@ -227,6 +228,39 @@ def test_stamp_stale_for_reciter_fans_out_to_all_deliveries(fresh_db):
     assert n == 2
     assert repo_releases.current_release("hf", a)["stale_reason"] == "catalog_edit"
     assert repo_releases.current_release("hf", b)["stale_reason"] == "catalog_edit"
+
+
+def test_insert_persists_regen_provenance(fresh_db):
+    """``affected_chapters`` (JSON list) + ``prior_ts_version`` round-trip on the
+    ts row — the inputs a future granular changelog reads."""
+    now = _now()
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        repo_releases.insert_per_recitation_release(
+            track="ts",
+            slug=slug,
+            version="g2",
+            produced_at=now,
+            produced_by="a",
+            affected_chapters=[5, 12],
+            prior_ts_version="g1",
+        )
+    row = repo_releases.current_release("ts", slug)
+    assert json.loads(row["affected_chapters"]) == [5, 12]
+    assert row["prior_ts_version"] == "g1"
+
+
+def test_insert_without_provenance_leaves_nulls(fresh_db):
+    """A first publish (no prior) stores NULLs, not empty strings."""
+    now = _now()
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        repo_releases.insert_per_recitation_release(
+            track="ts", slug=slug, version="g1", produced_at=now, produced_by="a"
+        )
+    row = repo_releases.current_release("ts", slug)
+    assert row["affected_chapters"] is None
+    assert row["prior_ts_version"] is None
 
 
 def test_all_releases_for_track_slug_returns_all_ordered(fresh_db):
