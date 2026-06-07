@@ -173,7 +173,14 @@ def _apply_to_words(words: list, bridges: list[tuple[int, str]], counts: list[in
     ``counts`` is the phonemizer's per-word phone count; ``bridges`` is
     ``[(flat_index, rule), ...]``. Both index the segment's flat phone array (all
     phones across words in order). No-op + return 0 when the shapes don't line up
-    with the shard (guards against corrupting on unexpected phonemizer drift)."""
+    with the shard (guards against corrupting on unexpected phonemizer drift).
+
+    The merger's *duration* is always owned by the FIRST word of the boundary so
+    word highlighting / clips stay on it through the ghunnah: shafawi already
+    lands on the prev word's tail, and for the head-merger rules (idgham
+    ghunnah/bila-ghunnah …) the curr word's start is pushed past the merger and
+    the prev word's end is extended to the merger's end. Phone attribution is
+    untouched — the merger phone keeps its tag and renders in the bridge tile."""
     if len(counts) != len(words):
         return 0
     flat = [ph for wd in words for ph in wd[4] if ph[0]]
@@ -190,10 +197,26 @@ def _apply_to_words(words: list, bridges: list[tuple[int, str]], counts: list[in
             tagged += 1
 
     off = 0
+    head_to_word: dict[int, int] = {}
     for wi, c in enumerate(counts):
+        head_to_word[off] = wi
         words[wi][4] = flat[off : off + c]
         off += c
         _retime(words[wi])
+
+    for fidx, rule in bridges:
+        if rule in _MERGER_ON_PREV:
+            continue  # merger is the prev word's tail → first word already owns it
+        if not (0 <= fidx < len(flat)) or not _looks_like_merger(flat[fidx][0]):
+            continue
+        w = head_to_word.get(fidx)  # head-merger rules land the merger at a word head
+        if not w:  # None (not a head) or 0 (no prev word) → leave as-is
+            continue
+        cur = words[w][4]
+        if len(cur) < 2:
+            continue  # fully-dissolving word: nothing left to own its own span
+        words[w - 1][2] = flat[fidx][2]  # first word holds through the ghunnah
+        words[w][1] = cur[1][1]  # second word starts at its next phone
     return tagged
 
 

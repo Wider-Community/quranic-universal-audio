@@ -67,8 +67,12 @@ def main() -> int:
                      choices=("owner", "maintainer", "contributor"))
     bs.add_common_args(psr)
     a = p.parse_args()
-    ctx = bs.setup(a, need_actor=a.cmd == "set-role")
-    return {"list": _list, "show": _show, "set-role": _set_role}[a.cmd](a, ctx)
+    write = a.cmd == "set-role"
+    return bs.run(
+        a,
+        lambda ctx: {"list": _list, "show": _show, "set-role": _set_role}[a.cmd](a, ctx),
+        need_actor=write, mutates=write, safe_write=write,
+    )
 
 
 if __name__ == "__main__":

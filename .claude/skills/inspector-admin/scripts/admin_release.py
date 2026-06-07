@@ -240,13 +240,21 @@ def main() -> int:
 
     a = p.parse_args()
     need_db = a.cmd in {"preview", "cut", "complete"}
-    ctx = bs.setup(a, need_db=need_db, need_actor=False)
-    return {
-        "preview": _do_preview,
-        "cut": _do_cut,
-        "complete": _do_complete,
-        "monitor": _do_monitor,
-    }[a.cmd](a, ctx)
+    # cut + complete mutate (--yes-prod). Only `complete` does an in-process DB
+    # write (records the gh_releases ledger) → safe_write; `cut` only launches
+    # the HF job (the ledger lands later via webhook / `complete`).
+    mutates = a.cmd in ("cut", "complete")
+    safe_write = a.cmd == "complete"
+    return bs.run(
+        a,
+        lambda ctx: {
+            "preview": _do_preview,
+            "cut": _do_cut,
+            "complete": _do_complete,
+            "monitor": _do_monitor,
+        }[a.cmd](a, ctx),
+        need_actor=False, mutates=mutates, safe_write=safe_write, need_db=need_db,
+    )
 
 
 if __name__ == "__main__":

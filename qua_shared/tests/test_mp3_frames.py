@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from qua_shared.mp3_frames import build_frame_index, slice_frames
+from qua_shared.mp3_frames import build_frame_index, slice_frames, slice_frames_multi
 
 # ---------------------------------------------------------------------------
 # Synthetic MP3 byte-stream builders — no ffmpeg needed.
@@ -186,6 +186,63 @@ def test_overlapping_windows_each_copy_their_own_frames():
     overlap_frame = data[overlap_off : overlap_off + _frame_len(128)]
     assert overlap_frame in a.data
     assert overlap_frame in b.data
+
+
+# ---------------------------------------------------------------------------
+# slice_frames_multi — stitch non-adjacent ranges (interior no-match excision).
+# ---------------------------------------------------------------------------
+
+
+def test_multi_single_range_equals_slice_frames():
+    # One range must produce the exact same bytes as slice_frames (the common,
+    # no-gap path stays a byte-for-byte no-op).
+    data = _cbr_stream(100, with_id3=False)
+    idx = build_frame_index(data)
+    single = slice_frames(data, idx, 200, 800)
+    ms = slice_frames_multi(data, idx, [(200, 800)])
+    assert single is not None and ms is not None
+    assert ms.data == single.data
+    assert len(ms.runs) == 1
+    assert ms.runs[0].actual_start_ms == single.actual_start_ms
+    assert ms.runs[0].actual_end_ms == single.actual_end_ms
+    assert ms.runs[0].cum_offset_ms == 0
+
+
+def test_multi_excises_gap_and_concatenates_kept_runs():
+    data = _cbr_stream(100, with_id3=False)
+    idx = build_frame_index(data)
+    # Keep [0,300) and [600,900); excise the [300,600) middle.
+    run_a = slice_frames(data, idx, 0, 300)
+    run_c = slice_frames(data, idx, 600, 900)
+    ms = slice_frames_multi(data, idx, [(0, 300), (600, 900)])
+    assert run_a is not None and run_c is not None and ms is not None
+    # Concatenated bytes == run A bytes + run C bytes (gap dropped).
+    assert ms.data == run_a.data + run_c.data
+    # Two runs; second run's cum_offset == first run's snapped duration.
+    assert len(ms.runs) == 2
+    assert ms.runs[0].cum_offset_ms == 0
+    assert ms.runs[1].cum_offset_ms == run_a.actual_end_ms - run_a.actual_start_ms
+    # The gap is excised: the stitched clip is exactly the two kept runs (by
+    # construction) and strictly shorter than a single contiguous [0,900] slice.
+    # (Synthetic frames are byte-identical, so compare lengths, not contents.)
+    full = slice_frames(data, idx, 0, 900)
+    assert full is not None
+    assert len(ms.data) == len(run_a.data) + len(run_c.data)
+    assert len(ms.data) < len(full.data)
+
+
+def test_multi_drops_degenerate_ranges():
+    data = _cbr_stream(20, with_id3=False)
+    idx = build_frame_index(data)
+    # First range is degenerate (start>=end); only the second contributes.
+    ms = slice_frames_multi(data, idx, [(100, 100), (200, 400)])
+    only = slice_frames(data, idx, 200, 400)
+    assert ms is not None and only is not None
+    assert ms.data == only.data
+    assert len(ms.runs) == 1
+    # All-degenerate → None.
+    assert slice_frames_multi(data, idx, [(100, 100), (300, 200)]) is None
+    assert slice_frames_multi(data, idx, []) is None
 
 
 # ---------------------------------------------------------------------------

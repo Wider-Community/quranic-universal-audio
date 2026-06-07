@@ -57,6 +57,12 @@ BUCKETS = {
 # Deployed prod Space that holds the SQLite writer (single-writer invariant).
 PROD_SPACE_ID = os.environ.get("INSPECTOR_SPACE_ID", "hetchyy/quranic-universal-audio")
 
+# Set True only while inside a ``prod_safe_setup`` window (Space paused). ``setup``
+# refuses a prod MUTATION when this is False, so a bare prod write can't slip
+# through the clobber-prone path — every prod mutation must go via ``run`` /
+# ``prod_safe_setup``.
+_SAFE_WINDOW = False
+
 
 def repo_root() -> Path:
     # .claude/skills/inspector-admin/scripts/<file>.py → up 4 = repo root
@@ -107,7 +113,8 @@ class BootstrapCtx:
 
 def setup(args: argparse.Namespace, *, need_db: bool = True,
           need_actor: bool = True,
-          mutates: bool | None = None) -> BootstrapCtx:
+          mutates: bool | None = None,
+          safe_write: bool = False) -> BootstrapCtx:
     _ensure_utf8_stdout()
 
     rr = repo_root()
@@ -133,6 +140,20 @@ def setup(args: argparse.Namespace, *, need_db: bool = True,
             and not getattr(args, "yes_prod", False)
             and not getattr(args, "dry_run", False)):
         print("refusing to write to prod bucket without --yes-prod",
+              file=sys.stderr)
+        sys.exit(2)
+    # Single-writer guard: an in-process bucket-DB write (``safe_write``) MUST
+    # run inside a prod_safe_setup window (Space paused) or the live Space
+    # clobbers the edit within minutes. ``run(..., safe_write=True)`` routes it
+    # through that window automatically; a direct prod DB write here is a bug.
+    # (Job launches set safe_write=False — they touch no DB in-process, so they
+    # need --yes-prod but NOT the pause; pausing would also break --monitor.)
+    if (bucket_kind == "prod" and safe_write
+            and not getattr(args, "dry_run", False)
+            and not _SAFE_WINDOW):
+        print("refusing a direct prod DB write outside prod_safe_setup — route it "
+              "through bs.run(..., safe_write=True) so the Space is paused "
+              "(single-writer). See the skill's prod_safe_setup section.",
               file=sys.stderr)
         sys.exit(2)
 
@@ -257,9 +278,16 @@ def prod_safe_setup(args: argparse.Namespace, **setup_kw) -> Iterator[BootstrapC
             with durable_transaction() as con:
                 con.execute(...)            # any bucket-DB mutation
     """
+    global _SAFE_WINDOW
     prod = getattr(args, "prod", False)
     if not prod:
-        yield setup(args, **setup_kw)
+        # dev has no live Space — single writer already; just mark the window so
+        # setup()'s guard treats the (harmless) dev mutation as sanctioned.
+        _SAFE_WINDOW = True
+        try:
+            yield setup(args, **setup_kw)
+        finally:
+            _SAFE_WINDOW = False
         return
 
     _load_env()  # HF_TOKEN for HfApi + pause/restart
@@ -288,6 +316,7 @@ def prod_safe_setup(args: argparse.Namespace, **setup_kw) -> Iterator[BootstrapC
             print(f"space not confirmed PAUSED (stage={stage}); resuming, refusing to edit", flush=True)
             restart_space(PROD_SPACE_ID)
             raise RuntimeError(f"could not pause {PROD_SPACE_ID} for a safe write")
+        _SAFE_WINDOW = True
         try:
             yield setup(args, **setup_kw)  # pull fresh under pause
         finally:
@@ -295,7 +324,35 @@ def prod_safe_setup(args: argparse.Namespace, **setup_kw) -> Iterator[BootstrapC
             restart_space(PROD_SPACE_ID)
             _wait_space_stage(api, "RUNNING", timeout_s=180)
     finally:
+        _SAFE_WINDOW = False
         _release_admin_lock(backend, nonce)
+
+
+def run(args, handler, *, need_actor: bool = True, mutates: bool = True,
+        safe_write: bool = False, need_db: bool = True):
+    """Set up + run ``handler(ctx)``, prod-safe by construction.
+
+    The single entrypoint for every admin command. Two independent signals:
+
+    * ``mutates`` — the op has a prod side effect (DB write OR job launch); drives
+      the ``--yes-prod`` gate + actor construction.
+    * ``safe_write`` — the op does an IN-PROCESS bucket-DB write; when prod (and
+      not ``--dry-run``) the WHOLE handler runs inside ``prod_safe_setup`` so the
+      Space is paused single-writer for the write. Job launches set
+      ``safe_write=False`` — they touch no DB in-process, so pausing is both
+      unnecessary and harmful (it would break ``--monitor``'s webhook).
+
+    ``handler`` takes the ``BootstrapCtx`` and returns the process exit code.
+    """
+    prod = getattr(args, "prod", False)
+    dry = getattr(args, "dry_run", False)
+    if safe_write and prod and not dry:
+        with prod_safe_setup(args, need_actor=need_actor, need_db=need_db,
+                             mutates=mutates, safe_write=True) as ctx:
+            return handler(ctx)
+    ctx = setup(args, need_actor=need_actor, need_db=need_db,
+                mutates=mutates, safe_write=safe_write)
+    return handler(ctx)
 
 
 def after_write_banner(args: argparse.Namespace) -> None:

@@ -254,3 +254,73 @@ def slice_frames(data: bytes, index: FrameIndex, start_ms: int, end_ms: int) -> 
         actual_start_ms=int(round(starts[i0])),
         actual_end_ms=int(round(starts[i1 + 1])),
     )
+
+
+@dataclass(frozen=True)
+class RunMap:
+    """One kept run inside a stitched (gap-excised) clip.
+
+    ``actual_start_ms`` / ``actual_end_ms`` are the snapped source-ms window the
+    run's frames cover (same semantics as ``FrameSlice``). ``cum_offset_ms`` is
+    the run's start position along the CONCATENATED clip's timeline (sum of all
+    prior runs' snapped durations) — so a source time ``t`` inside this run maps
+    to clip-relative ``(t - actual_start_ms) + cum_offset_ms``.
+    """
+
+    actual_start_ms: int
+    actual_end_ms: int
+    cum_offset_ms: int
+
+
+@dataclass(frozen=True)
+class MultiFrameSlice:
+    """A clip stitched from several non-adjacent frame ranges of one MP3.
+
+    ``data`` is the concatenated raw frames (headerless, same shape as
+    ``FrameSlice.data`` — a valid MP3 audio payload). ``runs`` carries one
+    ``RunMap`` per kept range, in clip order, for rebasing timestamps onto the
+    gap-excised timeline.
+    """
+
+    data: bytes
+    runs: list[RunMap]
+
+
+def slice_frames_multi(
+    data: bytes, index: FrameIndex, ranges: list[tuple[int, int]]
+) -> MultiFrameSlice | None:
+    """Slice several source-ms ranges and concatenate their frames into one clip.
+
+    Each ``(start_ms, end_ms)`` range is cut with ``slice_frames`` (independent
+    frame-boundary snap per range) and the raw frame bytes are concatenated in
+    order — excising whatever audio falls between the ranges (e.g. a no-match
+    gap). Ranges that slice to nothing are skipped; returns ``None`` if every
+    range drops or ``ranges`` is empty.
+
+    A single range yields the same bytes as ``slice_frames`` (the common,
+    no-gap case stays a no-op). Concatenating whole frames is byte-equivalent to
+    ffmpeg ``-c copy`` of each range appended; the only artifact is a brief
+    bit-reservoir discontinuity at each splice (acceptable — the same ~26 ms
+    frame snap already applies at every clip head).
+    """
+    if not ranges:
+        return None
+    parts: list[bytes] = []
+    runs: list[RunMap] = []
+    cum = 0
+    for start_ms, end_ms in ranges:
+        fs = slice_frames(data, index, start_ms, end_ms)
+        if fs is None:
+            continue
+        parts.append(fs.data)
+        runs.append(
+            RunMap(
+                actual_start_ms=fs.actual_start_ms,
+                actual_end_ms=fs.actual_end_ms,
+                cum_offset_ms=cum,
+            )
+        )
+        cum += fs.actual_end_ms - fs.actual_start_ms
+    if not parts:
+        return None
+    return MultiFrameSlice(data=b"".join(parts), runs=runs)

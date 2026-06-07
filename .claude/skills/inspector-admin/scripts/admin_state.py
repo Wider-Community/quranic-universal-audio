@@ -32,26 +32,29 @@ def main() -> int:
     bs.add_common_args(p)
     a = p.parse_args()
 
-    ctx = bs.setup(a)
-    from services.state import state as state_service  # noqa: E402
+    def _run(ctx) -> int:
+        from services.state import state as state_service  # noqa: E402
 
-    row = state_service.get_row(a.slug)
-    if row is None:
-        print(f"unknown slug {a.slug}", file=sys.stderr)
-        return 4
-    print(f"BEFORE: state={row.state.value}  marked_ready={row.marked_ready}")
+        row = state_service.get_row(a.slug)
+        if row is None:
+            print(f"unknown slug {a.slug}", file=sys.stderr)
+            return 4
+        print(f"BEFORE: state={row.state.value}  marked_ready={row.marked_ready}")
 
-    payload = json.loads(a.payload) if a.payload else None
-    if a.dry_run:
-        print(f"DRY RUN — would call transition(slug={a.slug!r}, event={a.event!r}, "
-              f"reason={a.reason!r}, payload={payload!r})")
+        payload = json.loads(a.payload) if a.payload else None
+        if a.dry_run:
+            print(f"DRY RUN — would call transition(slug={a.slug!r}, event={a.event!r}, "
+                  f"reason={a.reason!r}, payload={payload!r})")
+            return 0
+
+        new_row = state_service.transition(
+            a.slug, a.event, actor=ctx.actor, payload=payload, reason=a.reason)
+        print(f"AFTER:  state={new_row.state.value}  marked_ready={new_row.marked_ready}")
+        bs.after_write_banner(a)
         return 0
 
-    new_row = state_service.transition(
-        a.slug, a.event, actor=ctx.actor, payload=payload, reason=a.reason)
-    print(f"AFTER:  state={new_row.state.value}  marked_ready={new_row.marked_ready}")
-    bs.after_write_banner(a)
-    return 0
+    # transition() always does an in-process bucket-DB write.
+    return bs.run(a, _run, need_actor=True, mutates=True, safe_write=True)
 
 
 if __name__ == "__main__":

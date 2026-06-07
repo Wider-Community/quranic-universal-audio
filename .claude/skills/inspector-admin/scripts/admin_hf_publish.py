@@ -101,8 +101,14 @@ def main() -> int:
     bs.add_common_args(pm, mutating=False)
 
     a = p.parse_args()
-    ctx = bs.setup(a, need_db=False, need_actor=False)
-    return {"launch": _do_launch, "monitor": _do_monitor}[a.cmd](a, ctx)
+    # launch only queues an HF job (no in-process DB write; --monitor needs the
+    # Space up) → mutates for the --yes-prod gate, but safe_write=False (no pause).
+    mutates = a.cmd == "launch"
+    return bs.run(
+        a,
+        lambda ctx: {"launch": _do_launch, "monitor": _do_monitor}[a.cmd](a, ctx),
+        need_actor=False, mutates=mutates, safe_write=False, need_db=False,
+    )
 
 
 if __name__ == "__main__":
