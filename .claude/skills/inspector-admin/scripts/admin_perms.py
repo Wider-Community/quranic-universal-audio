@@ -80,8 +80,12 @@ def main() -> int:
     bs.add_common_args(pr)
 
     a = p.parse_args()
-    ctx = bs.setup(a, need_actor=a.cmd != "matrix")
-    return {"matrix": _matrix, "set": _set, "reset": _reset}[a.cmd](a, ctx)
+    write = a.cmd in ("set", "reset")
+    return bs.run(
+        a,
+        lambda ctx: {"matrix": _matrix, "set": _set, "reset": _reset}[a.cmd](a, ctx),
+        need_actor=write, mutates=write, safe_write=write,
+    )
 
 
 if __name__ == "__main__":

@@ -100,10 +100,13 @@ def main() -> int:
     bs.add_common_args(pp, mutating=False)
 
     a = p.parse_args()
-    is_read_only = a.cmd in ("list", "show", "probe")
-    ctx = bs.setup(a, need_actor=not is_read_only)
-    return {"list": _list, "show": _show, "resolve": _resolve,
-            "accept": _accept, "probe": _probe}[a.cmd](a, ctx)
+    write = a.cmd in ("resolve", "accept")
+    return bs.run(
+        a,
+        lambda ctx: {"list": _list, "show": _show, "resolve": _resolve,
+                     "accept": _accept, "probe": _probe}[a.cmd](a, ctx),
+        need_actor=write, mutates=write, safe_write=write,
+    )
 
 
 if __name__ == "__main__":

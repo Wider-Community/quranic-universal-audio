@@ -77,17 +77,28 @@ python .claude/skills/inspector-admin/scripts/admin_db.py exec "select slug, sta
 
 The DB sync goes through `durable_transaction` so the new bytes land on the bucket before the script returns. **But** a bare `setup()` write against prod is *not durable*: the deployed Space is a second, live writer whose `db_seq` advances on every commit (visitor/activity heartbeats), so it overtakes the sync CAS — which only refuses a *lower* seq — and **clobbers the out-of-band edit within a minute or two**. (Observed: a reconcile of 11 ledger rows reverted to 5 after the Space's next write.)
 
-The safe path is **single-writer**: pause the Space → pull fresh → mutate → resume. Wrap every prod mutation in `prod_safe_setup` (in `_bootstrap.py`):
+The safe path is **single-writer**: pause the Space → pull fresh → mutate → resume.
+
+**Every script routes through `bs.run` — you don't call `setup` directly.** `run` takes the handler and two intent flags and picks the safe path automatically:
 
 ```python
-from _bootstrap import prod_safe_setup, add_common_args
+from _bootstrap import run, add_common_args
 add_common_args(p); a = p.parse_args()
-with prod_safe_setup(a, need_actor=False) as ctx:   # prod: pauses Space, pulls fresh
-    with durable_transaction() as con:
-        con.execute(...)                            # any bucket-DB mutation
-# Space auto-resumes here (in finally) → boots + re-pulls the corrected DB.
+write = a.cmd in ("set", "reset")          # this subcommand's intent
+return bs.run(
+    a,
+    lambda ctx: DISPATCH[a.cmd](a, ctx),
+    need_actor=write,     # construct the Actor (audit) for writes
+    mutates=write,        # any prod side effect → enforces --yes-prod
+    safe_write=write,     # IN-PROCESS bucket-DB write → run inside prod_safe_setup
+)
 ```
 
-`prod_safe_setup` pauses BEFORE the pull (snapshot = the Space's final state), runs the mutation as the sole writer, and **always resumes in `finally`** (a failed edit never leaves prod paused). On `--dev` it's a plain `setup()` — dev has no live Space, single-writer already. The Space re-pulls on boot (app.py boot = pull+migrate), so the edit is durable with no manual restart. Bare `setup()` remains for read-only ops (`admin_db exec` without `--write`, previews).
+- **`safe_write=True`** (a `durable_transaction` / `transition` / repo write) → on prod the whole handler runs inside `prod_safe_setup`: pause Space → pull fresh → mutate → resume (auto, in `finally`). This is the clobber-proof path.
+- **`safe_write=False` but `mutates=True`** → a **job launch** (`cut`, `hf-publish launch`, `ts launch`). It touches no DB in-process, so it must NOT pause (pausing would also break `--monitor`'s webhook) — but it still needs `--yes-prod`.
+- **`mutates=False`** → read-only (no actor, no pause, no `--yes-prod`).
+- **`--dev`** / **`--dry-run`** → never pauses (dev has no live Space; dry-run does no write).
+
+`setup` now **refuses a direct prod `safe_write` outside a `prod_safe_setup` window** (`sys.exit(2)`), so a bare prod DB write can't regress past `run`. The Space re-pulls on boot (app.py = pull+migrate), so the edit is durable with no manual restart.
 
 It guards **both** competing writers: the live Space (eliminated by the pause) and a **second concurrent admin run** — a TTL'd bucket advisory lock (`db/.admin_lock.json`, 20 min) is held across the whole pause→edit→resume window, so a second admin **aborts** (`admin lock held by '<login>' …`) rather than overlapping and un-pausing the Space mid-edit. A crashed holder's lock self-expires.
