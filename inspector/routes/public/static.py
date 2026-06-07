@@ -12,8 +12,11 @@ picks its own cache discipline:
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import orjson
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response, abort, jsonify, send_file
 
 from services import catalog as catalog_service
 from services import db as db_service
@@ -78,3 +81,48 @@ def quran_refs_json() -> Response:
     response.headers["Cache-Control"] = _QURAN_REFS_CACHE_CONTROL
     response.headers["ETag"] = f'"{digest}"'
     return response
+
+
+# Segments-guide example clips. Served here (not as a plain dist static asset)
+# because on the deployed Space HF auto-LFS promotes the larger ``.mp3`` (by
+# size, ~100 KB+), so the in-image ``dist/guide-audio/`` copy is a git-lfs
+# pointer stub. The bucket (Xet-backed) always carries the real bytes, so we
+# resolve local-dist-first then fall back to ``reference/guide-audio/``.
+_GUIDE_AUDIO_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist" / "guide-audio"
+_GUIDE_AUDIO_BUCKET_DIR = "reference/guide-audio"
+_GUIDE_AUDIO_CACHE_CONTROL = "public, max-age=31536000, immutable"
+_GUIDE_AUDIO_NAME_RE = re.compile(r"^[a-z0-9_]+\.mp3$")
+
+
+def _is_lfs_pointer(p: Path) -> bool:
+    """True if ``p`` is an unsmudged git-LFS pointer stub, not the real bytes."""
+    try:
+        with p.open("rb") as f:
+            return f.read(40).startswith(b"version https://git-lfs")
+    except OSError:
+        return False
+
+
+@static_bp.route("/guide-audio/<name>")
+def guide_audio(name: str) -> Response:
+    """Serve a segments-guide example mp3 clip (real bytes, never an LFS stub).
+
+    Resolves the local ``dist/guide-audio/<name>`` first (real in dev / a
+    correctly-shipped image), else the bucket ``reference/guide-audio/<name>``.
+    """
+    if not _GUIDE_AUDIO_NAME_RE.match(name):
+        abort(404)
+    local = _GUIDE_AUDIO_DIST / name
+    if local.is_file() and not _is_lfs_pointer(local):
+        resp = send_file(str(local), mimetype="audio/mpeg", conditional=True)
+        resp.headers["Cache-Control"] = _GUIDE_AUDIO_CACHE_CONTROL
+        return resp
+    from services.storage.hf_bucket import get_backend
+
+    try:
+        body = get_backend().read_bytes(f"{_GUIDE_AUDIO_BUCKET_DIR}/{name}")
+    except Exception:
+        abort(404)
+    resp = Response(body, mimetype="audio/mpeg")
+    resp.headers["Cache-Control"] = _GUIDE_AUDIO_CACHE_CONTROL
+    return resp
