@@ -38,11 +38,11 @@ PUBLIC_EVENTS: dict[str, str] = {
     "reciter.requested": "requested",
     "reciter.alignment_completed": "available_review",
     "reciter.claimed": "under_review",
-    # `released` is the single v2 public-facing release event. Fires for BOTH
-    # HF dataset pushes (per-recitation) and GH release cuts (global), with the
-    # payload's ``track`` discriminating. v1's `reciter.published` (TS-gen
-    # completion) is admin infrastructure now and lives in HIDDEN_EVENTS.
-    "released": "released",
+    # `reciter.published` is the public publish milestone — fired by the system
+    # on timestamps-job completion (the `under_review → released` transition),
+    # meaning the reciter is now in-app published. Dataset/GH publishes
+    # (`released`) are operator infrastructure and live in HIDDEN_EVENTS.
+    "reciter.published": "published",
 }
 
 
@@ -60,10 +60,11 @@ HIDDEN_EVENTS: frozenset[str] = frozenset(
         "reciter.marked_ready",
         "reciter.unmarked_ready",
         "reciter.merge_rejected",
-        # `reciter.published` was wrongly on the public rail in v1 — it fires on
-        # TS-gen completion, which is admin infrastructure (not a public-release
-        # milestone). The v2 public `released` event covers HF / GH publishes.
-        "reciter.published",
+        # Dataset/GH publishes — fired for HF dataset pushes (per-recitation)
+        # and GH release cuts (global), discriminated by the payload's ``track``.
+        # Operator infrastructure surfaced via the Releases tab, not the public
+        # rail; the in-app publish milestone is `reciter.published` (PUBLIC).
+        "released",
         # Audit-only: a TS regen on an already-released reciter (no transition).
         # Operator-facing via the Releases tab's stale-stamp, not the public rail.
         "reciter.ts_regenerated",

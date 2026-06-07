@@ -52,10 +52,10 @@ def _record(
         ("catalog.added", "added"),
         ("reciter.alignment_completed", "available_review"),
         ("reciter.claimed", "under_review"),
-        # `released` covers BOTH HF dataset push + GH release cut in v2.
-        # `reciter.published` (TS gen completion) is HIDDEN in v2 — it's admin
-        # infrastructure, not a public-release milestone.
-        ("released", "released"),
+        # `reciter.published` (TS-gen completion → state becomes `released`) is
+        # the public publish milestone. Dataset/GH publishes (`released`) are
+        # HIDDEN — operator infrastructure, surfaced via the Releases tab.
+        ("reciter.published", "published"),
     ],
 )
 def test_public_events_classified_with_kind(event, expected_kind):
@@ -84,8 +84,9 @@ def test_awaiting_alignment_state_transition_classified_public_requested():
         "reciter.marked_ready",
         "reciter.unmarked_ready",
         "reciter.merge_rejected",
-        # v2: TS-gen completion is admin infrastructure (was wrongly PUBLIC in v1).
-        "reciter.published",
+        # Dataset/GH publishes — operator infrastructure (Releases tab), not the
+        # public rail. The in-app publish milestone is `reciter.published`.
+        "released",
         "reciter.unpublished",
         "reciter.discarded",
         "reciter.undiscarded",
