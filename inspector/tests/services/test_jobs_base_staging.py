@@ -62,8 +62,9 @@ def test_stage_job_code_uploads_every_required_path(stub_batch, monkeypatch, tmp
     (tmp_path / "data" / "qpc_hafs.json").write_text("{}")
     (tmp_path / ".github" / "config").mkdir(parents=True)
     (tmp_path / ".github" / "config" / "repo.yml").write_text("hf_dataset: foo/bar")
-    (tmp_path / ".github" / "templates").mkdir(parents=True)
-    (tmp_path / ".github" / "templates" / "release_body.md").write_text("{{ release_title }}")
+    (tmp_path / "docs" / "templates").mkdir(parents=True)
+    (tmp_path / "docs" / "templates" / "release_body.md").write_text("{{ release_title }}")
+    (tmp_path / "docs" / "templates" / "hf_dataset_card.md").write_text("{{ dataset_title }}")
     (tmp_path / "LICENSE").write_text("MIT")
     monkeypatch.setattr(base, "REPO_ROOT", tmp_path)
 
@@ -92,8 +93,9 @@ def test_stage_job_code_decompresses_qpc_when_only_gzip_present(stub_batch, monk
     )
     (tmp_path / ".github" / "config").mkdir(parents=True)
     (tmp_path / ".github" / "config" / "repo.yml").write_text("hf_dataset: foo/bar")
-    (tmp_path / ".github" / "templates").mkdir(parents=True)
-    (tmp_path / ".github" / "templates" / "release_body.md").write_text("{{ release_title }}")
+    (tmp_path / "docs" / "templates").mkdir(parents=True)
+    (tmp_path / "docs" / "templates" / "release_body.md").write_text("{{ release_title }}")
+    (tmp_path / "docs" / "templates" / "hf_dataset_card.md").write_text("{{ dataset_title }}")
     (tmp_path / "LICENSE").write_text("MIT")
     monkeypatch.setattr(base, "REPO_ROOT", tmp_path)
 
