@@ -884,15 +884,23 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
         return _result(slug, "failed", error="no timestamps shards on bucket", exit_code=3)
     timestamps = _reshape_timestamps_for_rows(canonical)
 
-    # 2. Load static refs from staged code dir. qpc_hafs ships gzipped to
-    # dodge HF's auto-LFS-promote on the Space repo.
+    # 2. Load static refs from staged code dir. qpc_hafs: prefer the staged
+    # uncompressed json, then a VALID staged .gz; HF auto-LFS-promotes *.gz by
+    # extension so the staged .gz can be a git-lfs pointer (not gzip) — in that
+    # case the real bytes live in the bucket reference. Mirrors cut_release's
+    # _load_qpc_bytes.
     refs_dir = Path("/aux/code/data")
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
-    qpc_path = refs_dir / "qpc_hafs.json.gz"
-    if qpc_path.exists():
-        dk_words = json.loads(gzip.decompress(qpc_path.read_bytes()))
+    plain = refs_dir / "qpc_hafs.json"
+    gz = refs_dir / "qpc_hafs.json.gz"
+    gz_raw = gz.read_bytes() if gz.exists() else b""
+    if plain.exists():
+        dk_words = json.loads(plain.read_bytes())
+    elif gz_raw and not gz_raw.startswith(b"version https://git-lfs"):
+        dk_words = json.loads(gzip.decompress(gz_raw))
     else:
-        dk_words = json.loads((refs_dir / "qpc_hafs.json").read_bytes())
+        bucket_gz = _bucket_root() / "reference" / "qpc_hafs.json.gz"
+        dk_words = json.loads(gzip.decompress(bucket_gz.read_bytes()))
 
     # 3. Build rows. source_url comes from the audio manifest's chapter URLs
     # (detailed.json carries no per-entry audio field).
