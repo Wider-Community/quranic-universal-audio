@@ -17,7 +17,11 @@ import json
 
 
 def _seed_state_row(
-    slug: str, *, assignee_hf_id: str | None = None, state: str = "awaiting_review"
+    slug: str,
+    *,
+    assignee_hf_id: str | None = None,
+    state: str = "awaiting_review",
+    marked_ready: bool = False,
 ):
     """Seed a single state row for ``slug`` into the SQLite substrate."""
     from tests.conftest import _seed_state
@@ -28,6 +32,7 @@ def _seed_state_row(
         assignee_hf_id=assignee_hf_id,
         assignee_login="someone" if assignee_hf_id else "test_user",
         visibility="public",
+        marked_ready=marked_ready,
     )
 
 
@@ -71,6 +76,21 @@ def test_me_active_claim_reflects_held_under_review(signed_in_client):
     resp = client.get("/api/me")
     assert resp.status_code == 200
     assert json.loads(resp.data)["active_claim"] == "test_slug"
+
+
+def test_me_marked_ready_claim_does_not_block(signed_in_client):
+    """A marked-ready claim is admin-side: it drops out of ``active_claim``
+    (so the one-at-a-time hold is released and the user can claim another)
+    but stays in ``active_claims`` (still assigned to them)."""
+    _seed_state_row(
+        "ready_slug", assignee_hf_id="u-3", state="under_review", marked_ready=True
+    )
+    client, user = signed_in_client(hf_user_id="u-3", login="carol", role="contributor")
+    resp = client.get("/api/me")
+    assert resp.status_code == 200
+    body = json.loads(resp.data)
+    assert body["active_claim"] is None
+    assert body["active_claims"] == ["ready_slug"]
 
 
 def test_me_role_reflects_live_access_revoke(signed_in_client):

@@ -22,7 +22,7 @@ from services import auth as auth_service
 from services import state as state_service
 from services.admin import visitors as visitor_service
 from services.auth import capabilities as cap_service
-from services.db import repo_access, repo_guides
+from services.db import repo_access, repo_claims, repo_guides
 from services.db import sync as _sync
 
 logger = logging.getLogger(__name__)
@@ -218,7 +218,14 @@ def auth_logout():
 @auth_bp.route("/me")
 def auth_me():
     """Identity + active_claim(s). Anonymous gets a null-filled shape so the
-    SPA reads a uniform schema regardless of auth state."""
+    SPA reads a uniform schema regardless of auth state.
+
+    ``active_claim`` is the *blocking* claim — the open, not-yet-marked-ready
+    claim that prevents the user from claiming another (null once they mark it
+    ready or hold none). ``active_claims`` is the full set of under-review slugs
+    assigned to them (a marked-ready reciter stays in this list). Marking ready
+    therefore releases the one-at-a-time hold, mirroring the backend policy in
+    ``repo_claims.open_claim_for_user``."""
     user = auth_service.current_user()
     dev_mode = auth_service.is_dev_mode()
     if user is None:
@@ -251,13 +258,18 @@ def auth_me():
         for r in state_service.all_rows()
         if r.state == ReciterState.UNDER_REVIEW and r.assignee_hf_id == user.hf_user_id
     ]
+    # The blocking claim excludes marked-ready rows (admin-side until publish /
+    # send-back), so a contributor is free to claim something new once they
+    # submit. ``active_claims`` above keeps the full under-review set for the
+    # picker's "mine" highlight.
+    blocking_claim = repo_claims.open_claim_for_user(user.hf_user_id)
     role_val = user.role.value if hasattr(user.role, "value") else user.role
     return jsonify(
         {
             "login": user.login,
             "hf_user_id": user.hf_user_id,
             "role": role_val,
-            "active_claim": active_claims[0] if active_claims else None,
+            "active_claim": blocking_claim,
             "active_claims": active_claims,
             "dev_mode": dev_mode,
             # Resolved capability ids the caller currently holds — recomputed fresh

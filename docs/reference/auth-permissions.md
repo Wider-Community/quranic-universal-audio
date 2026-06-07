@@ -29,7 +29,7 @@ Flat shims re-export it: `from services import auth`, `from services import perm
 | login | `GET /api/auth/login?return=<path>` | 503 if `is_oauth_configured()` false; stores `_safe_return_path` in flask session; `authorize_redirect(_callback_url())` |
 | callback | `GET /api/auth/callback` | exchanges code; reads `userinfo.sub` → `hf_user_id`, `preferred_username`/`name` → `login`; `encode_session(login, hf_user_id)`; sets cookie; 302 to safe return path |
 | logout | `POST /api/auth/logout` | clears cookie (`max_age=0`). Claims survive |
-| me | `GET /api/me` | `{login, hf_user_id, role, active_claim, active_claims, dev_mode}`; uniform null-filled shape when anonymous |
+| me | `GET /api/me` | `{login, hf_user_id, role, active_claim, active_claims, dev_mode}`; uniform null-filled shape when anonymous. `active_claim` = the **blocking** claim (open, not-marked-ready; via `repo_claims.open_claim_for_user`) — the field every FE one-claim gate keys off; marking ready releases the one-at-a-time hold so it drops to null. `active_claims` = the full under-review set assigned to the user (a marked-ready reciter stays in it; drives the picker's "mine" highlight) |
 | current user | `auth.py::current_user() -> User \| None` | reads cookie → `decode_session` → `resolve_role`; returns `User(hf_user_id, login, role)` frozen dataclass with live `role` |
 
 `is_oauth_configured()` = `OAUTH_CLIENT_ID` set AND `get_session_secret()` doesn't raise `MissingSecret`.
