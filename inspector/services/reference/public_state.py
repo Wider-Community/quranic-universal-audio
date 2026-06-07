@@ -83,6 +83,10 @@ class PublicDelivery(TypedDict, total=False):
     # per *distinct* visit to that bucket. Modal-only — attached by the detail /
     # admin-view paths (NOT the cached list), so it's absent on list payloads.
     bucket_dates: dict[str, list[str]]
+    # Timestamp-regeneration dates: every TS generation after the first, ISO
+    # ascending. Empty when never regenerated. Modal-only (same paths as
+    # ``bucket_dates``) — drives the conditional "Timestamps refreshed" node.
+    ts_refresh_dates: list[str]
     riwayah: str
     style: str
     recording_context: str | None
@@ -216,10 +220,31 @@ def _bucket_dates_for_slug(slug: str) -> dict[str, list[str]]:
     return out
 
 
+def _ts_refresh_dates_for_slug(slug: str) -> list[str]:
+    """Timestamp-regeneration dates for a delivery — every TS generation after
+    the first.
+
+    Each ``per_recitation_releases(track='ts')`` row (current + superseded) is
+    one generation; the first is the initial publish, the rest are refreshes
+    (``complete_timestamps_job`` inserts a fresh row per regen). Returns the
+    refresh ``produced_at`` values ascending; empty when never regenerated.
+    """
+    from services.db import repo_releases
+
+    produced = [
+        r["produced_at"]
+        for r in repo_releases.all_releases_for_track_slug("ts", slug)
+        if r.get("produced_at")
+    ]
+    return produced[1:]
+
+
 def _attach_bucket_dates(deliveries: list[PublicDelivery]) -> None:
-    """Populate ``bucket_dates`` on each delivery in place (modal paths only)."""
+    """Populate ``bucket_dates`` + ``ts_refresh_dates`` on each delivery in place
+    (modal paths only)."""
     for d in deliveries:
         d["bucket_dates"] = _bucket_dates_for_slug(d["slug"])
+        d["ts_refresh_dates"] = _ts_refresh_dates_for_slug(d["slug"])
 
 
 def _primary_bucket(buckets: list[PublicBucket]) -> PublicBucket:
