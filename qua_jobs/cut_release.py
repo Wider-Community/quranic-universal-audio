@@ -4,7 +4,7 @@
 Reads the inspector DB (read-only) to discover every recitation eligible for
 GH releases (``channels.gh_release_eligible = 1`` + current
 ``per_recitation_releases(track='ts')`` row), builds the per-recitation tier
-files + catalog + manifest + zip + content_hash, builds the dataset-level
+files + ``catalog.json`` + zip + content_hash, builds the dataset-level
 ``manifest.json`` + ``CHANGELOG.md``, computes the version, and uses the
 GitHub REST API to create the release tag and upload every asset.
 
@@ -54,7 +54,6 @@ from qua_shared.schemas import (  # noqa: E402
     FileDigest,
     LetterTimestampsDoc,
     QpcHafsDoc,
-    RecitationManifest,
     ReleaseCatalog,
     ReleaseCatalogAudio,
     ReleaseCoverage,
@@ -399,25 +398,9 @@ def _build_catalog_json(rec: dict, audio_manifest: dict | None, verses: dict) ->
     return _json_model_bytes(catalog)
 
 
-def _build_per_recitation_manifest(
-    slug: str, version: str, files: dict[str, bytes], created_at: str
-) -> bytes:
-    """``manifest.json`` inside each ``<slug>.zip``."""
-    manifest = RecitationManifest(
-        schema_version=SCHEMA_VERSION,
-        release_version=version,
-        slug=slug,
-        created_at=created_at,
-        files={
-            name: FileDigest(sha256=_sha256_hex(body), bytes=len(body))
-            for name, body in sorted(files.items())
-        },
-    )
-    return _json_model_bytes(manifest)
-
-
 def _pack_recitation_zip(slug: str, files: dict[str, bytes]) -> bytes:
-    """Pack the recitation's files into a deterministic zip.
+    """Pack the recitation's files (tier files + ``catalog.json``) into a
+    deterministic zip.
 
     .gz entries: store (already compressed). .json/.md/.py: deflate level 9.
     mtime=0 on every entry header for byte stability.
@@ -940,12 +923,8 @@ def main() -> int:
         # content_hash — over letter tier + catalog bytes.
         content_hash = _sha256_hex(tier_files["letter_timestamps.json.gz"] + catalog_bytes)
 
-        # Per-recitation manifest.json (carries the version it was packed for —
-        # auto-version is computed below from the candidate members list, so we
-        # patch the version into per-rec manifests in a second pass).
         files = dict(tier_files)
         files["catalog.json"] = catalog_bytes
-        files["manifest.json"] = b"__PENDING_VERSION__"  # placeholder; patched below
 
         coverage_ayahs = sum(1 for k in verses if not k.startswith("_"))
         change_kind = _classify_change_kind(rec, prior_members, content_hash)
@@ -1017,16 +996,10 @@ def main() -> int:
         return 6
     log.info("computed version: %s", version)
 
-    # 5. Patch per-recitation manifests with the version + pack zips.
+    # 5. Pack each recitation's zip (tier files + catalog.json — the zip
+    # content is version-independent, so a single pass suffices).
     for m in members:
-        files = m["_files"]
-        files["manifest.json"] = _build_per_recitation_manifest(
-            m["slug"],
-            version,
-            {k: v for k, v in files.items() if k != "manifest.json"},
-            created_at_iso,
-        )
-        zip_data = _pack_recitation_zip(m["slug"], files)
+        zip_data = _pack_recitation_zip(m["slug"], m["_files"])
         m["_zip_bytes"] = zip_data
         m["zip_sha256"] = _sha256_hex(zip_data)
         m["zip_bytes"] = len(zip_data)

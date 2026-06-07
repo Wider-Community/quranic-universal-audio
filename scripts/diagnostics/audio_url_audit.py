@@ -39,10 +39,10 @@ from _mp3probe import canonical_archive_url  # noqa: E402
 
 NODE_RE = re.compile(r"^https?://(?:ia\d+\.us|dn\d+\.ca)\.archive\.org/\d+/items/")
 CHANNELS = {"archive", "mp3quran", "tvquran", "qdc", "quranicaudio", "everyayah", "qf"}
-TIMEOUT_S = 15
+TIMEOUT_S = 8
 
 
-def reachable(url: str, tries: int = 2) -> bool:
+def reachable(url: str, tries: int = 1) -> bool:
     for attempt in range(tries):
         try:
             r = u.urlopen(
@@ -58,15 +58,6 @@ def reachable(url: str, tries: int = 2) -> bool:
     return False
 
 
-def classify(url: str) -> str:
-    if reachable(url):
-        return "ok"
-    canon = canonical_archive_url(url)
-    if canon != url and reachable(canon):
-        return "fixable"
-    return "dead"
-
-
 def identity(slug: str) -> str:
     """Recitation identity = slug minus channel + trailing year/disambiguator tokens.
     Keeps reciter name + riwayah + style so cross-channel duplicates collapse."""
@@ -77,6 +68,9 @@ def identity(slug: str) -> str:
 
 
 def audit_slug(path: str, quick: bool) -> dict:
+    """Classify each chapter url. archive staleness is per-item, so probe the
+    stored node ONCE (ch1); per chapter test the canonical form (live host →
+    fast 206/404, no 15s node timeouts). Non-archive urls are tested directly."""
     slug = os.path.basename(path)[:-5]
     try:
         m = json.load(open(path))
@@ -86,16 +80,32 @@ def audit_slug(path: str, quick: bool) -> dict:
     keys = sorted((k for k in chapters if ":" not in k and k.isdigit()), key=int)
     if quick:
         keys = keys[:1]
+
+    urls = {k: ((chapters[k] or {}).get("url") or "") for k in keys}
+    is_archive = any(NODE_RE.match(u_) for u_ in urls.values())
+    stored_node_ok = False
+    if is_archive:
+        first = next((urls[k] for k in keys if NODE_RE.match(urls[k])), "")
+        stored_node_ok = bool(first) and reachable(first)
+
     verdict = {"ok": [], "fixable": [], "dead": []}
     for k in keys:
-        url = (chapters[k] or {}).get("url") or ""
+        url = urls[k]
         if not url:
             verdict["dead"].append(k)
             continue
-        verdict[classify(url)].append(k)
+        node = NODE_RE.match(url)
+        eff = canonical_archive_url(url) if node else url
+        if reachable(eff):
+            # node url reachable as-is only when its stored node tested live.
+            verdict["ok" if (not node or stored_node_ok) else "fixable"].append(k)
+        else:
+            verdict["dead"].append(k)
     return {
         "slug": slug,
         "identity": identity(slug),
+        "is_archive": is_archive,
+        "stored_node_ok": stored_node_ok,
         "n": len(keys),
         "ok": len(verdict["ok"]),
         "fixable": len(verdict["fixable"]),

@@ -47,9 +47,12 @@ def test_first_release_added_only():
     assert md.startswith("# 2026-06-03\n\n## What to download")
     assert "This release publishes" not in md
     assert (
-        "| `catalog.json` (per recitation) | Reciter names, riwayah, style, coverage, audio metadata, and the audio URLs paired with the timestamp data. |"
-        in md
-    )
+        "| `catalog.json` | Release-level catalog: reciter names, riwayah, style, coverage, "
+        "audio metadata, and the audio URLs paired with the timestamp data. |"
+    ) in md
+    # The release-level files index the whole release; each zip carries its own catalog.
+    assert "plus its own `catalog.json`." in md
+    assert "each zip also carries its own `catalog.json`" in md
     assert "release_schemas.json" not in md
     assert "First release: **2** recitations." in md
     assert "<details><summary>Added recitations - 2</summary>" in md
