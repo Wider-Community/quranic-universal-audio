@@ -779,21 +779,20 @@
         border-color: var(--accent);
     }
 
-    /* Inner sub-modal hosting the RequestForm. Sits above the reciter
-       Modal's backdrop without nesting Modal (which would compete on
-       focus trap + scroll lock). */
+    /* Inner sub-modal hosting the RequestForm. Must sit above the reciter
+       Modal's backdrop (z 120) without nesting Modal (which would compete on
+       focus trap + scroll lock), and above the bottom player (z 110). */
     .form-backdrop {
         position: fixed;
         inset: 0;
         background: oklch(0.06 0.005 268 / 0.65);
-        z-index: 110;
+        z-index: 130;
         display: flex;
         align-items: center;
         justify-content: center;
         padding: var(--s-6);
-        /* The bottom player is fixed at z-index 110 (same as this backdrop),
-           so it paints over anything that reaches the viewport bottom. Reserve
-           its height so the centered modal — and its footer — clear it. */
+        /* Reserve the bottom player's height so the centered modal — and its
+           footer — stay clear of where the player sits. */
         padding-bottom: calc(var(--s-6) + var(--player-h, 72px));
     }
 </style>
