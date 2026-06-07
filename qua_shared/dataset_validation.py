@@ -120,9 +120,7 @@ def check_intra_segment_gapless(ref: str, verse: dict) -> list[Violation]:
         # Word occurrences that fall inside this segment's time span, in time
         # order — half-open on start so back-to-back segments don't double-count.
         in_seg = sorted(
-            (int(w[1]), int(w[2]), int(w[0]))
-            for w in words
-            if seg_start <= int(w[1]) < seg_end
+            (int(w[1]), int(w[2]), int(w[0])) for w in words if seg_start <= int(w[1]) < seg_end
         )
         for (_a_start, a_end, a_idx), (b_start, _b_end, b_idx) in zip(
             in_seg, in_seg[1:], strict=False

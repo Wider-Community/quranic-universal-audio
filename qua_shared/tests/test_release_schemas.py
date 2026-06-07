@@ -29,9 +29,7 @@ def _meta(tier: str, layout: str) -> dict:
 
 
 def test_timestamp_tier_shapes_validate():
-    VerseTimestampsDoc.model_validate(
-        {"_meta": _meta("verse", "[start,end]"), "100:1": [0, 2831]}
-    )
+    VerseTimestampsDoc.model_validate({"_meta": _meta("verse", "[start,end]"), "100:1": [0, 2831]})
     WordTimestampsDoc.model_validate(
         {
             "_meta": _meta("word", "[[start,end], words]"),

@@ -57,15 +57,51 @@ VOCAB_FILENAME = "letter_vocab_hafs_qpc.csv"
 # in the published CSV.
 _CODEPOINTS: tuple[int, ...] = (
     # 27 ordinary consonants
-    0x0628, 0x062A, 0x062B, 0x062C, 0x062D, 0x062E, 0x062F, 0x0630, 0x0631,
-    0x0632, 0x0633, 0x0634, 0x0635, 0x0636, 0x0637, 0x0638, 0x0639, 0x063A,
-    0x0641, 0x0642, 0x0643, 0x0644, 0x0645, 0x0646, 0x0647, 0x0648, 0x064A,
+    0x0628,
+    0x062A,
+    0x062B,
+    0x062C,
+    0x062D,
+    0x062E,
+    0x062F,
+    0x0630,
+    0x0631,
+    0x0632,
+    0x0633,
+    0x0634,
+    0x0635,
+    0x0636,
+    0x0637,
+    0x0638,
+    0x0639,
+    0x063A,
+    0x0641,
+    0x0642,
+    0x0643,
+    0x0644,
+    0x0645,
+    0x0646,
+    0x0647,
+    0x0648,
+    0x064A,
     # 4 alef / ta-marbuta (distinct written letters, never folded)
-    0x0627, 0x0671, 0x0649, 0x0629,
+    0x0627,
+    0x0671,
+    0x0649,
+    0x0629,
     # 6 hamza family (seat is part of letter identity)
-    0x0621, 0x0623, 0x0625, 0x0624, 0x0626, 0x0654,
+    0x0621,
+    0x0623,
+    0x0625,
+    0x0624,
+    0x0626,
+    0x0654,
     # 5 special / silent / superscript letters
-    0x0670, 0x06E5, 0x06E6, 0x06E7, 0x06E8,
+    0x0670,
+    0x06E5,
+    0x06E6,
+    0x06E7,
+    0x06E8,
 )
 
 # Ordered, flat rows — the body of the published CSV.
@@ -77,7 +113,9 @@ EXTERNAL_VOCAB: list[dict] = [
 # Fast membership set + the drift guard's source of truth.
 VOCAB_TOKENS: frozenset[str] = frozenset(chr(cp) for cp in _CODEPOINTS)
 
-assert len(EXTERNAL_VOCAB) == len(VOCAB_TOKENS) == 42, "external letter vocab must be 42 unique tokens"
+assert len(EXTERNAL_VOCAB) == len(VOCAB_TOKENS) == 42, (
+    "external letter vocab must be 42 unique tokens"
+)
 
 
 def to_external_char(ch: str) -> str:

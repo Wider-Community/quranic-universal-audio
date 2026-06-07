@@ -16,8 +16,8 @@ def test_lookback_repeated_word_index_is_not_a_gap():
     verse = {
         "words": [[1, 0, 100], [2, 100, 200], [2, 500, 600], [3, 600, 700]],
         "segments": [
-            (1, 2, 0, 200),     # pass 1: words 1-2, time [0,200]
-            (2, 3, 500, 700),   # pass 2: words 2-3, time [500,700]
+            (1, 2, 0, 200),  # pass 1: words 1-2, time [0,200]
+            (2, 3, 500, 700),  # pass 2: words 2-3, time [500,700]
         ],
     }
     assert check_intra_segment_gapless("2:35", verse) == []

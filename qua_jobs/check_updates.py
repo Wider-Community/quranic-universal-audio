@@ -42,9 +42,7 @@ STATUS_REMOVED = "removed"  # in your baseline, gone from the latest release
 STATUS_UNKNOWN = "unknown"  # requested via --reciters but in neither manifest
 
 
-def compute_updates(
-    baseline: dict, latest: dict, reciters: list[str] | None = None
-) -> dict:
+def compute_updates(baseline: dict, latest: dict, reciters: list[str] | None = None) -> dict:
     """Diff a baseline release manifest against the latest, per reciter.
 
     ``baseline`` and ``latest`` are dataset-level ``manifest.json`` dicts
@@ -230,9 +228,7 @@ def _sync(result: dict, manifest_path: Path, latest: dict, token: str | None) ->
         dest = out_dir / f"{u['slug']}.zip"
         print(f"  downloading {dest.name} ...")
         _download(u["zip_url"], dest, token)
-    manifest_path.write_text(
-        json.dumps(latest, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    manifest_path.write_text(json.dumps(latest, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"  refreshed {manifest_path.name} to {latest.get('release_version')}")
 
 

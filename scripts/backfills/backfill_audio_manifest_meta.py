@@ -136,31 +136,44 @@ def resolve_chapter(args, fs, bucket, slug, ch, entry, drift_pct):
     new = dict(entry)
 
     # Stale archive.org node url repaired to its canonical form (also fixes playback).
-    if args.rewrite_urls and src and not src.error and src.resolved_url and src.resolved_url != entry.get("url"):
+    if (
+        args.rewrite_urls
+        and src
+        and not src.error
+        and src.resolved_url
+        and src.resolved_url != entry.get("url")
+    ):
         new["url"] = src.resolved_url
         method.append("url:canonical")
 
     # bitrate / mode
     if cur["bitrate_kbps"] is None:
         if bdec:
-            new["bitrate_kbps"] = bdec["bitrate_kbps"]; method.append("kbps:bucket")
+            new["bitrate_kbps"] = bdec["bitrate_kbps"]
+            method.append("kbps:bucket")
         elif src and src.bitrate_kbps:
-            new["bitrate_kbps"] = src.bitrate_kbps; method.append("kbps:source")
+            new["bitrate_kbps"] = src.bitrate_kbps
+            method.append("kbps:source")
     if cur["bitrate_mode"] is None:
         if bdec:
-            new["bitrate_mode"] = bdec["bitrate_mode"]; method.append("mode:bucket")
+            new["bitrate_mode"] = bdec["bitrate_mode"]
+            method.append("mode:bucket")
         elif src and src.bitrate_mode:
-            new["bitrate_mode"] = src.bitrate_mode; method.append("mode:source")
+            new["bitrate_mode"] = src.bitrate_mode
+            method.append("mode:source")
 
     # duration: prefer peaks (decoded, dead-tail-free)
     dur = cur["duration_sec"]
     if dur is None:
         if peaks_ms is not None:
-            dur = peaks_ms / 1000.0; method.append("dur:peaks")
+            dur = peaks_ms / 1000.0
+            method.append("dur:peaks")
         elif bdec:
-            dur = bdec["duration_sec"]; method.append("dur:bucket")
+            dur = bdec["duration_sec"]
+            method.append("dur:bucket")
         elif src and src.duration_sec:
-            dur = src.duration_sec; method.append(f"dur:source:{src.method}")
+            dur = src.duration_sec
+            method.append(f"dur:source:{src.method}")
     elif args.fix_drift and peaks_ms is not None:
         pk = peaks_ms / 1000.0
         if pk > 0 and abs(dur - pk) / pk * 100.0 >= drift_pct:
@@ -229,7 +242,9 @@ def process_slug(args, fs, bucket, slug, drift_pct):
             src_errors.append(ch)
         elif note == "unresolved":
             unresolved.append(ch)
-        meta_changed = {f: new.get(f) for f in META_FIELDS} != {f: entry.get(f) for f in META_FIELDS}
+        meta_changed = {f: new.get(f) for f in META_FIELDS} != {
+            f: entry.get(f) for f in META_FIELDS
+        }
         if meta_changed or new.get("url") != entry.get("url"):
             chapters[ch] = new
             changed += 1
@@ -275,7 +290,11 @@ def process_slug(args, fs, bucket, slug, drift_pct):
     if roll_mode == "mixed":
         roll_nominal = None  # model validator forbids a nominal on mixed
     elif kbpss:
-        roll_nominal = round(sum(kbpss) / len(kbpss)) if roll_mode == "vbr" else max(set(kbpss), key=kbpss.count)
+        roll_nominal = (
+            round(sum(kbpss) / len(kbpss))
+            if roll_mode == "vbr"
+            else max(set(kbpss), key=kbpss.count)
+        )
     else:
         roll_nominal = None
     rollup = {
@@ -320,9 +339,13 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     p.add_argument("--slug", action="append", default=[], help="slug (repeatable)")
-    p.add_argument("--all-null", default="", help="path to a sweep JSON; process every null_metadata slug")
+    p.add_argument(
+        "--all-null", default="", help="path to a sweep JSON; process every null_metadata slug"
+    )
     p.add_argument("--mount", default="", help="local hf-mount root (bucket reads, no API)")
-    p.add_argument("--fix-drift", action="store_true", help="also overwrite duration from peaks when it drifts")
+    p.add_argument(
+        "--fix-drift", action="store_true", help="also overwrite duration from peaks when it drifts"
+    )
     p.add_argument("--drift-pct", type=float, default=8.0)
     p.add_argument(
         "--allow-full",
@@ -341,7 +364,11 @@ def main() -> int:
         help="path to url_audit JSON; drop each reciter's dead_chapters + recompute count/checksum",
     )
     p.add_argument("--workers", type=int, default=8)
-    p.add_argument("--out-dir", default="/tmp/manifest_backfill", help="where dry-run corrected sidecars are written")
+    p.add_argument(
+        "--out-dir",
+        default="/tmp/manifest_backfill",
+        help="where dry-run corrected sidecars are written",
+    )
     p.add_argument("--sql-out", default="", help="write delivery-row rollup UPDATE statements here")
     p.add_argument("--apply", action="store_true", help="write corrected sidecars to the bucket")
     bs.add_bucket_args(p)
@@ -377,10 +404,12 @@ def main() -> int:
             if r.get("error"):
                 tail = r["error"]
             else:
-                tail = (f"changed={r['changed']}/{r['n_chapters']} "
-                        f"url_fix={r['url_rewrites']} "
-                        f"needs_full={len(r['needs_full'])} src_err={len(r['src_errors'])} "
-                        f"unresolved={len(r['unresolved'])}")
+                tail = (
+                    f"changed={r['changed']}/{r['n_chapters']} "
+                    f"url_fix={r['url_rewrites']} "
+                    f"needs_full={len(r['needs_full'])} src_err={len(r['src_errors'])} "
+                    f"unresolved={len(r['unresolved'])}"
+                )
             print(f"  [{i}/{len(slugs)}] {r['slug']}: {tail}", file=sys.stderr)
 
     ok = [r for r in results if not r.get("error")]
@@ -390,9 +419,11 @@ def main() -> int:
     total_serr = sum(len(r["src_errors"]) for r in ok)
     total_unres = sum(len(r["unresolved"]) for r in ok)
     errs = [r for r in results if r.get("error")]
-    print(f"\n==== {total_changed} chapters changed across {len(slugs)} slugs | "
-          f"url-rewrites={total_urlfix} | needs_full(headerless-VBR)={total_full} | "
-          f"source-errors={total_serr} | unresolved={total_unres} | manifest-errors={len(errs)} ====")
+    print(
+        f"\n==== {total_changed} chapters changed across {len(slugs)} slugs | "
+        f"url-rewrites={total_urlfix} | needs_full(headerless-VBR)={total_full} | "
+        f"source-errors={total_serr} | unresolved={total_unres} | manifest-errors={len(errs)} ===="
+    )
     for r in results:
         if r.get("error"):
             print(f"  ERROR {r['slug']}: {r['error']}")
@@ -406,8 +437,10 @@ def main() -> int:
             flags.append(f"src_err={r['src_errors'][:8]}")
         if r["unresolved"]:
             flags.append(f"unresolved={r['unresolved'][:8]}")
-        print(f"\n{r['slug']}: {r['changed']}/{r['n_chapters']} changed"
-              + ("  " + " ".join(flags) if flags else ""))
+        print(
+            f"\n{r['slug']}: {r['changed']}/{r['n_chapters']} changed"
+            + ("  " + " ".join(flags) if flags else "")
+        )
         for s in r["sample"]:
             print(f"    {s}")
 
@@ -426,7 +459,9 @@ def main() -> int:
             continue
         v = _validate(r["sidecar"])
         if v:
-            print(f"  SCHEMA FAIL {r['slug']}: {v}", file=sys.stderr); bad += 1; continue
+            print(f"  SCHEMA FAIL {r['slug']}: {v}", file=sys.stderr)
+            bad += 1
+            continue
         written.append(r)
         body = json.dumps(r["sidecar"], ensure_ascii=False, indent=2)
         if a.apply:
@@ -449,7 +484,13 @@ def main() -> int:
         ru = r["rollup"]
         sets = ", ".join(
             f"{col} = {sqlstr(ru[col])}"
-            for col in ("chapter_count", "total_duration_sec", "bitrate_mode", "bitrate_kbps_nominal", "sample_rate_hz")
+            for col in (
+                "chapter_count",
+                "total_duration_sec",
+                "bitrate_mode",
+                "bitrate_kbps_nominal",
+                "sample_rate_hz",
+            )
             if ru.get(col) is not None
         )
         if sets:
@@ -459,11 +500,15 @@ def main() -> int:
         print(f"\n{len(sql_lines)} delivery-row UPDATE statements -> {a.sql_out}")
 
     if a.apply:
-        print(f"\nAPPLIED {len(written)} manifests to {bucket}. "
-              f"Run the {a.sql_out or '--sql-out'} UPDATEs via admin_db.py, then restart the prod Space.")
+        print(
+            f"\nAPPLIED {len(written)} manifests to {bucket}. "
+            f"Run the {a.sql_out or '--sql-out'} UPDATEs via admin_db.py, then restart the prod Space."
+        )
     else:
-        print(f"\ndry-run — {len(written)} corrected sidecars in {out_dir}/. "
-              f"Re-run with --apply (--yes-prod for prod).")
+        print(
+            f"\ndry-run — {len(written)} corrected sidecars in {out_dir}/. "
+            f"Re-run with --apply (--yes-prod for prod)."
+        )
     return 0
 
 

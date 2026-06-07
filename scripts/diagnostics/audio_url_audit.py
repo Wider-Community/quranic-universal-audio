@@ -116,10 +116,16 @@ def audit_slug(path: str, quick: bool) -> dict:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--mount", required=True, help="hf-mount root for manifest reads")
-    p.add_argument("--archive-only", action="store_true", help="only reciters with archive node urls")
-    p.add_argument("--quick", action="store_true", help="test only ch1 per reciter (fast health sweep)")
+    p.add_argument(
+        "--archive-only", action="store_true", help="only reciters with archive node urls"
+    )
+    p.add_argument(
+        "--quick", action="store_true", help="test only ch1 per reciter (fast health sweep)"
+    )
     p.add_argument("--workers", type=int, default=8)
     p.add_argument("--json", action="store_true")
     p.add_argument("--bucket", default="prod")  # accepted for symmetry; reads come from --mount
@@ -136,7 +142,10 @@ def main() -> int:
                 m = json.load(open(path))
             except Exception:  # noqa: BLE001
                 continue
-            if not any(NODE_RE.match((e or {}).get("url") or "") for e in (m.get("chapters") or {}).values()):
+            if not any(
+                NODE_RE.match((e or {}).get("url") or "")
+                for e in (m.get("chapters") or {}).values()
+            ):
                 continue
         paths.append(path)
 
@@ -162,7 +171,9 @@ def main() -> int:
     tot_ok = sum(r["ok"] for r in ok_res)
     tot_fix = sum(r["fixable"] for r in ok_res)
     tot_dead = sum(r["dead"] for r in ok_res)
-    print(f"\n==== {len(ok_res)} reciters | chapters ok={tot_ok} fixable={tot_fix} dead={tot_dead} ====")
+    print(
+        f"\n==== {len(ok_res)} reciters | chapters ok={tot_ok} fixable={tot_fix} dead={tot_dead} ===="
+    )
 
     print("\n-- reciters by health (valid-after-fix / total) --")
     for r in sorted(ok_res, key=lambda r: (r["ok"] + r["fixable"]) / r["n"] if r["n"] else 1):
@@ -171,10 +182,13 @@ def main() -> int:
         sib_note = ""
         if sibs:
             best = max(sibs, key=lambda s: s["ok"] + s["fixable"])
-            sib_note = f"  ALT[{best['slug']}: valid {best['ok']+best['fixable']}/{best['n']}]"
+            sib_note = f"  ALT[{best['slug']}: valid {best['ok'] + best['fixable']}/{best['n']}]"
         if valid < r["n"]:
-            print(f"  {r['slug']}: valid {valid}/{r['n']} (ok={r['ok']} fix={r['fixable']} dead={r['dead']})"
-                  + (f" dead={r['dead_chapters'][:10]}" if r['dead'] else "") + sib_note)
+            print(
+                f"  {r['slug']}: valid {valid}/{r['n']} (ok={r['ok']} fix={r['fixable']} dead={r['dead']})"
+                + (f" dead={r['dead_chapters'][:10]}" if r["dead"] else "")
+                + sib_note
+            )
 
     print("\n-- removal candidates (mostly dead AND a healthier same-recitation alt exists) --")
     for r in sorted(ok_res, key=lambda r: (r["ok"] + r["fixable"]) / r["n"] if r["n"] else 1):
@@ -184,8 +198,10 @@ def main() -> int:
             continue
         best = max(sibs, key=lambda s: s["ok"] + s["fixable"])
         if valid / r["n"] < 0.5 and (best["ok"] + best["fixable"]) / best["n"] > valid / r["n"]:
-            print(f"  drop {r['slug']} (valid {valid}/{r['n']}) -> keep {best['slug']} "
-                  f"(valid {best['ok']+best['fixable']}/{best['n']})")
+            print(
+                f"  drop {r['slug']} (valid {valid}/{r['n']}) -> keep {best['slug']} "
+                f"(valid {best['ok'] + best['fixable']}/{best['n']})"
+            )
     return 0
 
 

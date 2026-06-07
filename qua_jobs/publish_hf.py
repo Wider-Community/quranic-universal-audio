@@ -142,7 +142,9 @@ def _seg_word_range(
     """
     if not matched_ref:
         return None
-    start, _, end = matched_ref.partition("-") if "-" in matched_ref else (matched_ref, "", matched_ref)
+    start, _, end = (
+        matched_ref.partition("-") if "-" in matched_ref else (matched_ref, "", matched_ref)
+    )
     sp = start.split(":")
     ep = end.split(":")
     if len(sp) != 3 or len(ep) != 3:
@@ -903,7 +905,9 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
     log.info("built %d rows for %s", len(rows), slug)
     if not rows:
         log.error("no rows built — detailed.json + timestamps disagreement?")
-        return _result(slug, "failed", error="no rows built (detailed/timestamps disagree)", exit_code=15)
+        return _result(
+            slug, "failed", error="no rows built (detailed/timestamps disagree)", exit_code=15
+        )
 
     # 4. Validate boundaries before any audio work.
     from qua_shared.dataset_validation import fatal_violations, validate_dataset

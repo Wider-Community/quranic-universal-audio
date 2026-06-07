@@ -172,7 +172,11 @@ def publish_hf_batch(user):
         busy = jobs_base.running_job_for(slug=slug)
         if busy is not None:
             return jsonify(
-                {"error": f"a job is already running for {slug}", "kind": busy[0], "job_id": busy[1]}
+                {
+                    "error": f"a job is already running for {slug}",
+                    "kind": busy[0],
+                    "job_id": busy[1],
+                }
             ), 409
 
     webhook_base = request.url_root
@@ -407,7 +411,11 @@ def releases_status(user):
                 continue
             # Cleared if a current HF release landed at/after this batch.
             hf_row = repo_releases.current_release("hf", slug)
-            if hf_row is not None and completed_at and (hf_row.get("produced_at") or "") >= completed_at:
+            if (
+                hf_row is not None
+                and completed_at
+                and (hf_row.get("produced_at") or "") >= completed_at
+            ):
                 continue
             batch_failures[slug] = {
                 "message": m.get("error") or "publish failed",

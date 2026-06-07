@@ -180,9 +180,18 @@ _HAVE_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is
 
 def _ffprobe_dur_ms(path: Path) -> int:
     out = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-        capture_output=True, text=True,
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
     )
     return int(round(float(out.stdout.strip()) * 1000))
 
@@ -190,8 +199,7 @@ def _ffprobe_dur_ms(path: Path) -> int:
 def _pcm(path: Path) -> bytes:
     """Decode an MP3 to raw s16le mono PCM for sample-level comparison."""
     out = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", str(path), "-f", "s16le",
-         "-ac", "1", "-ar", "44100", "-"],
+        ["ffmpeg", "-v", "error", "-i", str(path), "-f", "s16le", "-ac", "1", "-ar", "44100", "-"],
         capture_output=True,
     )
     return out.stdout
@@ -202,9 +210,21 @@ def test_slice_audio_matches_ffmpeg_copy(tmp_path):
     # Synthesize a 60 s CBR MP3 (a sine tone) with ffmpeg.
     src = tmp_path / "tone.mp3"
     subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
-         "-i", "sine=frequency=440:duration=60", "-c:a", "libmp3lame",
-         "-b:a", "128k", str(src)],
+        [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=60",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "128k",
+            str(src),
+        ],
         check=True,
     )
     data = src.read_bytes()
@@ -219,9 +239,23 @@ def test_slice_audio_matches_ffmpeg_copy(tmp_path):
 
         ff = tmp_path / "ff.mp3"
         subprocess.run(
-            ["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{start_ms/1000:.6f}",
-             "-i", str(src), "-t", f"{(end_ms-start_ms)/1000:.6f}",
-             "-c", "copy", "-f", "mp3", str(ff)],
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-ss",
+                f"{start_ms / 1000:.6f}",
+                "-i",
+                str(src),
+                "-t",
+                f"{(end_ms - start_ms) / 1000:.6f}",
+                "-c",
+                "copy",
+                "-f",
+                "mp3",
+                str(ff),
+            ],
             check=True,
         )
         ff_dur = _ffprobe_dur_ms(ff)

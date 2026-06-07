@@ -33,6 +33,7 @@ def canonical_archive_url(url: str) -> str:
     m = _ARCHIVE_NODE_RE.match(url)
     return f"https://archive.org/download/{m.group(1)}" if m else url
 
+
 # [version_id][bitrate_index] kbps. version_id: 3=MPEG1, 2=MPEG2, 0=MPEG2.5
 _BR_V1 = [None, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, None]
 _BR_V2 = [None, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, None]
@@ -202,7 +203,14 @@ def probe_source(url: str, *, allow_full: bool = True) -> SourceProbe:
     try:
         data = _fetch_full(url)
     except Exception as e:  # noqa: BLE001
-        return SourceProbe(None, nominal_kbps, "vbr", sr, resolved_url=rewritten, error=f"full:{type(e).__name__}:{e}")
+        return SourceProbe(
+            None,
+            nominal_kbps,
+            "vbr",
+            sr,
+            resolved_url=rewritten,
+            error=f"full:{type(e).__name__}:{e}",
+        )
     off = _skip_id3(data)
     pos, h = _first_frame(data, off)
     if h is None:
