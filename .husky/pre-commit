@@ -1,4 +1,20 @@
 #!/usr/bin/env sh
 # Runs by default on every commit. Bypass with `git commit --no-verify`.
-# -p false: serial task chunks; parallel ESLint hit OOM on large stage sets.
-exec node ./node_modules/lint-staged/bin/lint-staged.js -p false
+#
+# lint-staged only lints frontend files (inspector/frontend/**/*.{ts,js,svelte};
+# see lint-staged.config.mjs). node_modules is gitignored and NOT shared across
+# git worktrees, so a fresh worktree has no root deps. To avoid failing
+# backend/docs-only commits there, skip lint-staged unless frontend files are
+# actually staged — and give a clear install hint if they are but deps are missing.
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+if printf '%s\n' "$staged" | grep -qE '^inspector/frontend/.*\.(ts|js|svelte)$'; then
+    if [ ! -f ./node_modules/lint-staged/bin/lint-staged.js ]; then
+        echo "pre-commit: staged frontend files need lint-staged, but root deps are missing." >&2
+        echo "            run 'npm install' at the repo root (once per worktree)." >&2
+        exit 1
+    fi
+    # -p false: serial task chunks; parallel ESLint hit OOM on large stage sets.
+    exec node ./node_modules/lint-staged/bin/lint-staged.js -p false
+fi
+# No frontend files staged → nothing for lint-staged to do.
+exit 0
