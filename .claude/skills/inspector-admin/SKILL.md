@@ -73,6 +73,21 @@ python .claude/skills/inspector-admin/scripts/admin_release.py cut --prod --yes-
 python .claude/skills/inspector-admin/scripts/admin_db.py exec "select slug, state, marked_ready from delivery_states where state='under_review'" --prod
 ```
 
-## After any write
+## Prod writes MUST be single-writer (`prod_safe_setup`)
 
-The DB sync goes through `durable_transaction` so the new bytes are on the bucket before the script returns. **But** the deployed prod Space holds an in-memory SQLite snapshot per-process — out-of-band writes only become visible on Space restart. Every mutating script prints a reminder banner; treat it as a checklist item, not a footnote.
+The DB sync goes through `durable_transaction` so the new bytes land on the bucket before the script returns. **But** a bare `setup()` write against prod is *not durable*: the deployed Space is a second, live writer whose `db_seq` advances on every commit (visitor/activity heartbeats), so it overtakes the sync CAS — which only refuses a *lower* seq — and **clobbers the out-of-band edit within a minute or two**. (Observed: a reconcile of 11 ledger rows reverted to 5 after the Space's next write.)
+
+The safe path is **single-writer**: pause the Space → pull fresh → mutate → resume. Wrap every prod mutation in `prod_safe_setup` (in `_bootstrap.py`):
+
+```python
+from _bootstrap import prod_safe_setup, add_common_args
+add_common_args(p); a = p.parse_args()
+with prod_safe_setup(a, need_actor=False) as ctx:   # prod: pauses Space, pulls fresh
+    with durable_transaction() as con:
+        con.execute(...)                            # any bucket-DB mutation
+# Space auto-resumes here (in finally) → boots + re-pulls the corrected DB.
+```
+
+`prod_safe_setup` pauses BEFORE the pull (snapshot = the Space's final state), runs the mutation as the sole writer, and **always resumes in `finally`** (a failed edit never leaves prod paused). On `--dev` it's a plain `setup()` — dev has no live Space, single-writer already. The Space re-pulls on boot (app.py boot = pull+migrate), so the edit is durable with no manual restart. Bare `setup()` remains for read-only ops (`admin_db exec` without `--write`, previews).
+
+It guards **both** competing writers: the live Space (eliminated by the pause) and a **second concurrent admin run** — a TTL'd bucket advisory lock (`db/.admin_lock.json`, 20 min) is held across the whole pause→edit→resume window, so a second admin **aborts** (`admin lock held by '<login>' …`) rather than overlapping and un-pausing the Space mid-edit. A crashed holder's lock self-expires.

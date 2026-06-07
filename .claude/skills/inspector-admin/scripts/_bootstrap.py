@@ -11,6 +11,13 @@ Everything every admin script needs in one place:
     - if need_db: pulls the SQLite from the bucket + initialises the writer
     - if need_actor: constructs a real Actor from INSPECTOR_DEV_OWNER_* env
 
+  prod_safe_setup(args, **setup_kw) → context manager yielding BootstrapCtx
+    - THE required wrapper for any PROD bucket-DB mutation. Pauses the deployed
+      Space (single-writer), pulls fresh, yields ctx for the mutation, then
+      ALWAYS resumes (Space re-pulls the corrected DB on boot). A bare setup()
+      prod write is clobbered by the live Space's advancing db_seq — never do it.
+    - dev: a plain setup() (already single-writer), no pause.
+
   add_common_args(parser, *, mutating=True)
     - adds --prod / --yes-prod / --dry-run
 
@@ -34,15 +41,21 @@ import argparse
 import os
 import sys
 import tempfile
+import time
+import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 # Bucket id table mirrors inspector/services/storage/hf_bucket.py.
 BUCKETS = {
     "dev": "hetchyy/quranic-inspector-bucket-dev",
     "prod": "hetchyy/quranic-inspector-bucket",
 }
+
+# Deployed prod Space that holds the SQLite writer (single-writer invariant).
+PROD_SPACE_ID = os.environ.get("INSPECTOR_SPACE_ID", "hetchyy/quranic-universal-audio")
 
 
 def repo_root() -> Path:
@@ -151,14 +164,150 @@ def setup(args: argparse.Namespace, *, need_db: bool = True,
                         db_path=db_path, db_synced=db_synced)
 
 
+# Bucket advisory lock — serialises concurrent admin single-writer windows so
+# two admin runs can't overlap their pause/edit/resume (which would let one's
+# resume un-pause the Space mid-edit of the other). TTL'd so a crashed holder
+# self-clears. Best-effort (read-check-write + read-back, not a true CAS) —
+# enough to catch accidental concurrency, not adversarial contention.
+_ADMIN_LOCK_PATH = "db/.admin_lock.json"
+_ADMIN_LOCK_TTL_S = 1200
+
+
+def _acquire_admin_lock(backend: object, nonce: str, login: str) -> None:
+    existing = None
+    try:
+        if backend.exists(_ADMIN_LOCK_PATH):  # type: ignore[attr-defined]
+            existing = backend.read_json(_ADMIN_LOCK_PATH)  # type: ignore[attr-defined]
+    except Exception:
+        existing = None
+    if (
+        isinstance(existing, dict)
+        and existing.get("nonce") != nonce
+        and float(existing.get("expires_at", 0)) > time.time()
+    ):
+        raise RuntimeError(
+            f"admin lock held by '{existing.get('login')}' since "
+            f"{existing.get('acquired_at')} (expires {existing.get('expires_at')}). "
+            "Another inspector-admin prod write is in progress — aborting."
+        )
+    payload = {
+        "nonce": nonce,
+        "login": login,
+        "acquired_at": time.time(),
+        "expires_at": time.time() + _ADMIN_LOCK_TTL_S,
+    }
+    backend.write_json_atomic(_ADMIN_LOCK_PATH, payload)  # type: ignore[attr-defined]
+    # Read-back: if a near-simultaneous writer overwrote us, we lost the race.
+    try:
+        back = backend.read_json(_ADMIN_LOCK_PATH)  # type: ignore[attr-defined]
+    except Exception:
+        back = payload
+    if not (isinstance(back, dict) and back.get("nonce") == nonce):
+        raise RuntimeError("admin lock race lost to a concurrent admin run — aborting.")
+
+
+def _release_admin_lock(backend: object, nonce: str) -> None:
+    try:
+        if backend.exists(_ADMIN_LOCK_PATH):  # type: ignore[attr-defined]
+            cur = backend.read_json(_ADMIN_LOCK_PATH)  # type: ignore[attr-defined]
+            if isinstance(cur, dict) and cur.get("nonce") == nonce:
+                backend.delete(_ADMIN_LOCK_PATH)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+
+def _wait_space_stage(api: object, target: str, *, timeout_s: int = 180) -> str:
+    """Poll the Space runtime stage until it equals ``target`` or times out.
+    Returns the last observed stage."""
+    deadline = time.time() + timeout_s
+    last = None
+    while time.time() < deadline:
+        stage = api.get_space_runtime(PROD_SPACE_ID).stage  # type: ignore[attr-defined]
+        if stage != last:
+            print(f"  space stage: {stage}", flush=True)
+            last = stage
+        if stage == target:
+            return stage
+        time.sleep(3)
+    return last or "?"
+
+
+@contextmanager
+def prod_safe_setup(args: argparse.Namespace, **setup_kw) -> Iterator[BootstrapCtx]:
+    """Single-writer guard for prod-mutating admin ops — yields a ``BootstrapCtx``.
+
+    A live prod Space monotonically advances ``db_seq`` on every write, so it
+    eventually overtakes and CLOBBERS any out-of-band bucket-DB edit (the sync
+    CAS only refuses a *lower* seq). The ONLY safe path is single-writer: PAUSE
+    the Space, pull fresh (its final state), mutate + sync, then RESUME — the
+    Space boots and re-pulls the corrected DB (app.py boot does pull+migrate).
+
+    Order matters: pause BEFORE the DB pull so the snapshot is the Space's final
+    state. Resume runs in ``finally`` so a failed mutation never leaves prod
+    paused. On dev this is a plain ``setup`` (no pause — single writer already).
+
+    Two competing writers are both handled: the live Space (eliminated by the
+    pause) AND another concurrent admin run (excluded by a TTL'd bucket advisory
+    lock held across the whole pause→edit→resume window — a second admin aborts
+    rather than overlapping and un-pausing the Space mid-edit).
+
+    Usage::
+
+        with prod_safe_setup(a, need_actor=False) as ctx:
+            with durable_transaction() as con:
+                con.execute(...)            # any bucket-DB mutation
+    """
+    prod = getattr(args, "prod", False)
+    if not prod:
+        yield setup(args, **setup_kw)
+        return
+
+    _load_env()  # HF_TOKEN for HfApi + pause/restart
+    # Bucket env + sys.path so get_backend() resolves the prod bucket for the lock.
+    rr = repo_root()
+    for p in (str(rr), str(rr / "inspector")):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    os.environ["INSPECTOR_BUCKET_REPO"] = BUCKETS["prod"]
+    os.environ["INSPECTOR_ALLOW_PROD_BUCKET"] = "1"
+    from services.storage.hf_bucket import get_backend
+
+    backend = get_backend()
+    nonce = uuid.uuid4().hex
+    login = os.environ.get("INSPECTOR_DEV_OWNER_LOGIN", "admin").strip() or "admin"
+
+    from huggingface_hub import HfApi, pause_space, restart_space
+
+    api = HfApi()
+    _acquire_admin_lock(backend, nonce, login)  # raises if another admin holds it
+    try:
+        print(f"pausing {PROD_SPACE_ID} (single-writer window) ...", flush=True)
+        pause_space(PROD_SPACE_ID)
+        stage = _wait_space_stage(api, "PAUSED", timeout_s=120)
+        if stage != "PAUSED":
+            print(f"space not confirmed PAUSED (stage={stage}); resuming, refusing to edit", flush=True)
+            restart_space(PROD_SPACE_ID)
+            raise RuntimeError(f"could not pause {PROD_SPACE_ID} for a safe write")
+        try:
+            yield setup(args, **setup_kw)  # pull fresh under pause
+        finally:
+            print(f"resuming {PROD_SPACE_ID} ...", flush=True)
+            restart_space(PROD_SPACE_ID)
+            _wait_space_stage(api, "RUNNING", timeout_s=180)
+    finally:
+        _release_admin_lock(backend, nonce)
+
+
 def after_write_banner(args: argparse.Namespace) -> None:
     if not getattr(args, "prod", False):
         return
     print()
     print("=" * 72)
-    print("WROTE TO PROD BUCKET. The deployed Space (hetchyy/quranic-universal-audio)")
-    print("holds an in-memory SQLite snapshot per-process — restart it for the new")
-    print("rows to become visible in the UI.")
+    print(f"WROTE TO PROD BUCKET. If this op used prod_safe_setup(), the Space")
+    print(f"({PROD_SPACE_ID}) was paused for the write and auto-resumed — the rows")
+    print("are durable (the Space re-pulled the corrected DB on boot).")
+    print("If it used bare setup(), the live Space will CLOBBER this write on its")
+    print("next commit — re-do it through prod_safe_setup().")
     print("=" * 72)
 
 

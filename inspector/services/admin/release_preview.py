@@ -30,7 +30,6 @@ def build_release_preview() -> AdminReleasePreviewResponse:
         JOIN reciters r   ON r.reciter_id = d.reciter_id
         WHERE prr.track = 'ts'
           AND prr.superseded_at IS NULL
-          AND c.gh_release_eligible = 1
         ORDER BY prr.slug
     """).fetchall()
 
