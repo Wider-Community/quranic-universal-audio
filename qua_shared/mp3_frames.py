@@ -231,6 +231,13 @@ def slice_frames(data: bytes, index: FrameIndex, start_ms: int, end_ms: int) -> 
     starts = index.starts_ms
     offsets = index.offsets
     i0 = _frame_at_or_before(starts, float(start_ms))
+    # ``start_ms`` at/after the last frame's start resolves i0 to the sentinel
+    # index (``n_frames``) — there is no real frame to copy and ``offsets[i1+1]``
+    # below would read past the array. This happens when a verse's clip_start
+    # lands beyond the chapter audio's end (truncated/short source audio vs
+    # longer timestamps). Drop the verse rather than crash the whole publish.
+    if i0 >= index.n_frames:
+        return None
     # End frame: the last frame that starts strictly before end_ms (so the
     # frame containing end_ms is included). Clip to the last real frame.
     import bisect

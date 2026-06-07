@@ -2,7 +2,7 @@
  * Current-user identity store.
  *
  * Loaded on app boot from `/api/me`. Replaced after sign-in/sign-out and
- * after any state-mutating claim action that touches `active_claim`.
+ * after any state-mutating claim action that touches the blocking claim.
  *
  * Shape is stable for anonymous (all fields null) so consumers can read
  * the same schema regardless of auth state.
@@ -18,9 +18,15 @@ export interface CurrentUser {
     login: string | null;
     hf_user_id: string | null;
     role: Role;
-    /** The primary active claim slug (first of `active_claims`, or null). */
+    /**
+     * The *blocking* claim slug — the open, not-yet-marked-ready claim that
+     * prevents the user from claiming another (null once they mark it ready or
+     * hold none). Owners are exempt from the one-at-a-time rule. This is the
+     * field every one-claim gate keys off.
+     */
     active_claim: string | null;
-    /** All slugs currently under_review and assigned to this user. Owners may hold multiple. */
+    /** All slugs currently under_review and assigned to this user (a marked-ready
+     *  reciter stays here). Owners may hold multiple. */
     active_claims: string[];
     /**
      * True when the backend is running with the dev-mode auth bypass

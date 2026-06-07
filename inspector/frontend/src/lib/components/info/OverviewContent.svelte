@@ -129,7 +129,7 @@
     });
 </script>
 
-{#snippet inline(tokens: InlineToken[])}{#each tokens as t, i (i)}{#if t.href}<a href={t.href} target="_blank" rel="noopener noreferrer">{t.text}</a>{:else if t.bold}<strong>{t.text}</strong>{:else}{t.text}{/if}{/each}{/snippet}
+{#snippet inline(tokens: InlineToken[])}{#each tokens as t, i (i)}{#if t.href}<a href={t.href} target="_blank" rel="noopener noreferrer">{#if t.bold}<strong>{t.text}</strong>{:else}{t.text}{/if}</a>{:else if t.bold}<strong>{t.text}</strong>{:else}{t.text}{/if}{/each}{/snippet}
 
 {#if sections.length > 1}
     <nav class="info-index" aria-label="Jump to section" bind:this={navEl}>

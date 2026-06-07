@@ -13,6 +13,7 @@ picks its own cache discipline:
 from __future__ import annotations
 
 import re
+from io import BytesIO
 from pathlib import Path
 
 import orjson
@@ -115,14 +116,18 @@ def guide_audio(name: str) -> Response:
     local = _GUIDE_AUDIO_DIST / name
     if local.is_file() and not _is_lfs_pointer(local):
         resp = send_file(str(local), mimetype="audio/mpeg", conditional=True)
-        resp.headers["Cache-Control"] = _GUIDE_AUDIO_CACHE_CONTROL
-        return resp
-    from services.storage.hf_bucket import get_backend
+    else:
+        from services.storage.hf_bucket import get_backend
 
-    try:
-        body = get_backend().read_bytes(f"{_GUIDE_AUDIO_BUCKET_DIR}/{name}")
-    except Exception:
-        abort(404)
-    resp = Response(body, mimetype="audio/mpeg")
+        try:
+            body = get_backend().read_bytes(f"{_GUIDE_AUDIO_BUCKET_DIR}/{name}")
+        except Exception:
+            abort(404)
+        # send_file over BytesIO (not a bare Response) so Werkzeug honours Range:
+        # clip playback seeks into the file, so the larger clips need 206s.
+        resp = send_file(
+            BytesIO(body), mimetype="audio/mpeg", conditional=True, etag=f"guide-{name}-{len(body)}"
+        )
     resp.headers["Cache-Control"] = _GUIDE_AUDIO_CACHE_CONTROL
+    resp.headers["Accept-Ranges"] = "bytes"
     return resp
