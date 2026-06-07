@@ -15,8 +15,11 @@ from services.segments import ts_staleness
 _GEN_AT = "2026-03-01T12:00:00Z"
 
 
-def _batch(saved_at: str, op_type: str) -> dict:
-    return {"saved_at_utc": saved_at, "operations": [{"op_type": op_type}]}
+def _batch(saved_at: str, op_type: str, chapter: int | None = None) -> dict:
+    b: dict = {"saved_at_utc": saved_at, "operations": [{"op_type": op_type}]}
+    if chapter is not None:
+        b["chapter"] = chapter
+    return b
 
 
 def _patch_history(monkeypatch, batches):
@@ -27,12 +30,16 @@ def test_structural_edit_after_generation_is_stale(monkeypatch):
     _patch_history(
         monkeypatch,
         [
-            _batch("2026-03-02T09:00:00Z", "trim_segment"),
-            _batch("2026-03-03T09:00:00Z", "split_segment"),
+            _batch("2026-03-02T09:00:00Z", "trim_segment", chapter=5),
+            _batch("2026-03-03T09:00:00Z", "split_segment", chapter=12),
         ],
     )
     info = ts_staleness.ts_stale_info("slug", produced_at=_GEN_AT)
-    assert info == {"stale_since": "2026-03-02T09:00:00Z", "edits_since": 2}
+    assert info == {
+        "stale_since": "2026-03-02T09:00:00Z",
+        "edits_since": 2,
+        "affected_chapters": [5, 12],
+    }
 
 
 def test_reference_edit_after_generation_is_stale(monkeypatch):
@@ -75,10 +82,30 @@ def test_mixed_batch_counts_only_affecting_and_keeps_earliest(monkeypatch):
     _patch_history(
         monkeypatch,
         [
-            _batch("2026-03-05T09:00:00Z", "merge_segments"),
-            _batch("2026-03-02T09:00:00Z", "delete_segment"),  # earliest affecting
-            _batch("2026-03-04T09:00:00Z", "ignore_issue"),  # excluded
+            _batch("2026-03-05T09:00:00Z", "merge_segments", chapter=2),
+            _batch("2026-03-02T09:00:00Z", "delete_segment", chapter=2),  # earliest affecting
+            _batch("2026-03-04T09:00:00Z", "ignore_issue", chapter=9),  # excluded
         ],
     )
     info = ts_staleness.ts_stale_info("slug", produced_at=_GEN_AT)
-    assert info == {"stale_since": "2026-03-02T09:00:00Z", "edits_since": 2}
+    assert info == {
+        "stale_since": "2026-03-02T09:00:00Z",
+        "edits_since": 2,
+        "affected_chapters": [2],  # chapter 9 (ignore_issue) excluded
+    }
+
+
+def test_affected_chapters_union_single_and_multi_chapter_batches(monkeypatch):
+    """``chapter`` (Inspector save) and ``chapters`` (pipeline) both contribute."""
+    multi = {
+        "saved_at_utc": "2026-03-02T09:00:00Z",
+        "operations": [{"op_type": "split_segment"}],
+        "chapters": [30, 31],
+    }
+    _patch_history(
+        monkeypatch,
+        [multi, _batch("2026-03-03T09:00:00Z", "trim_segment", chapter=1)],
+    )
+    info = ts_staleness.ts_stale_info("slug", produced_at=_GEN_AT)
+    assert info is not None
+    assert info["affected_chapters"] == [1, 30, 31]

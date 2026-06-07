@@ -151,11 +151,22 @@ def _parse_ts_settings(body: dict) -> TsJobSettings:
     workers = body.get("workers")
     if workers is not None and (not isinstance(workers, int) or not 1 <= workers <= 64):
         raise ValueError("workers must be an integer in 1..64")
+    chapters_raw = body.get("chapters")
+    chapters: list[int] | None = None
+    if chapters_raw is not None:
+        if not isinstance(chapters_raw, list) or not all(
+            isinstance(c, int) and 1 <= c <= 114 for c in chapters_raw
+        ):
+            raise ValueError("chapters must be a list of integers in 1..114")
+        chapters = sorted(set(chapters_raw))
+        if not chapters:
+            chapters = None  # empty list = full reciter
     try:
         return TsJobSettings(
             beams=beams,
             persist_audio=bool(body.get("persist_audio", False)),
             gen_peaks=bool(body.get("gen_peaks", False)),
+            chapters=chapters,
             workers=workers,
             flavor=body.get("flavor") or None,
             timeout=body.get("timeout") or None,

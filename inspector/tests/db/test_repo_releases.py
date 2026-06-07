@@ -7,13 +7,16 @@ Covers per_recitation_releases insert + supersede + stale-stamp, gh_releases
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timezone
 
 import pytest
 
 from qua_shared.schemas import StaleReason
 from services import db
+from services.admin.timestamps_jobs import _ts_regen_provenance
 from services.db import get_conn, repo_releases
+from services.segments import ts_staleness
 
 
 def _now() -> datetime:
@@ -227,6 +230,148 @@ def test_stamp_stale_for_reciter_fans_out_to_all_deliveries(fresh_db):
     assert n == 2
     assert repo_releases.current_release("hf", a)["stale_reason"] == "catalog_edit"
     assert repo_releases.current_release("hf", b)["stale_reason"] == "catalog_edit"
+
+
+def test_insert_persists_regen_provenance(fresh_db):
+    """``affected_chapters`` (JSON list) + ``prior_ts_version`` round-trip on the
+    ts row — the inputs a future granular changelog reads."""
+    now = _now()
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        repo_releases.insert_per_recitation_release(
+            track="ts",
+            slug=slug,
+            version="g2",
+            produced_at=now,
+            produced_by="a",
+            affected_chapters=[5, 12],
+            prior_ts_version="g1",
+        )
+    row = repo_releases.current_release("ts", slug)
+    assert json.loads(row["affected_chapters"]) == [5, 12]
+    assert row["prior_ts_version"] == "g1"
+
+
+def test_insert_without_provenance_leaves_nulls(fresh_db):
+    """A first publish (no prior) stores NULLs, not empty strings."""
+    now = _now()
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        repo_releases.insert_per_recitation_release(
+            track="ts", slug=slug, version="g1", produced_at=now, produced_by="a"
+        )
+    row = repo_releases.current_release("ts", slug)
+    assert row["affected_chapters"] is None
+    assert row["prior_ts_version"] is None
+
+
+def _stub_affected(monkeypatch, chapters: list[int]) -> None:
+    """Make ``_ts_regen_provenance``'s edit-history read return ``chapters``."""
+    monkeypatch.setattr(
+        ts_staleness,
+        "ts_stale_info",
+        lambda _s, *, produced_at: {
+            "stale_since": "x",
+            "edits_since": len(chapters),
+            "affected_chapters": list(chapters),
+        },
+    )
+
+
+def test_regen_provenance_chains_across_multiple_regens(fresh_db, monkeypatch):
+    """Multiple regens before a re-release: each ts row records the delta since
+    the PRIOR gen + chains via prior_ts_version; superseded rows keep their delta
+    so a changelog can union the chapters changed since the last release. A
+    re-publish (hf row) between regens must not disturb the ts chain."""
+    t0 = datetime(2026, 1, 1, tzinfo=UTC)
+    t2 = datetime(2026, 1, 2, tzinfo=UTC)
+    t4 = datetime(2026, 1, 3, tzinfo=UTC)
+
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        repo_releases.insert_per_recitation_release(
+            track="ts", slug=slug, version="gen0", produced_at=t0, produced_by="a"
+        )
+
+    # regen1 folds in chapter 5 (computed off gen0's produced_at).
+    _stub_affected(monkeypatch, [5])
+    prior_v, affected = _ts_regen_provenance(slug)
+    assert prior_v == "gen0"
+    assert affected == [5]
+    with db.transaction():
+        repo_releases.supersede_current("ts", slug, except_id=-1, at=t2)
+        repo_releases.insert_per_recitation_release(
+            track="ts",
+            slug=slug,
+            version="gen1",
+            produced_at=t2,
+            produced_by="a",
+            affected_chapters=affected,
+            prior_ts_version=prior_v,
+        )
+
+    # A re-publish between regens — the ts chain must be unaffected.
+    with db.transaction():
+        repo_releases.insert_per_recitation_release(
+            track="hf", slug=slug, version="hf1", produced_at=t2, produced_by="a"
+        )
+
+    # regen2 folds in chapter 12 (computed off gen1, the now-current ts row).
+    _stub_affected(monkeypatch, [12])
+    prior_v, affected = _ts_regen_provenance(slug)
+    assert prior_v == "gen1"
+    assert affected == [12]
+    with db.transaction():
+        repo_releases.supersede_current("ts", slug, except_id=-1, at=t4)
+        repo_releases.insert_per_recitation_release(
+            track="ts",
+            slug=slug,
+            version="gen2",
+            produced_at=t4,
+            produced_by="a",
+            affected_chapters=affected,
+            prior_ts_version=prior_v,
+        )
+
+    chain = repo_releases.all_releases_for_track_slug("ts", slug)
+    assert [(r["version"], r["prior_ts_version"]) for r in chain] == [
+        ("gen0", None),
+        ("gen1", "gen0"),
+        ("gen2", "gen1"),
+    ]
+    # Superseded gen1 keeps its delta — history not lost.
+    deltas = [json.loads(r["affected_chapters"]) for r in chain if r["affected_chapters"]]
+    assert deltas == [[5], [12]]
+    # Changelog aggregate since the last release (gen0) = union of the deltas.
+    assert sorted({c for d in deltas for c in d}) == [5, 12]
+
+
+def test_regen_provenance_same_chapter_twice_dedups_in_union(fresh_db, monkeypatch):
+    """Editing + regenerating the SAME chapter twice records it on each gen; the
+    changelog union dedups to one chapter."""
+    t0 = datetime(2026, 2, 1, tzinfo=UTC)
+    t2 = datetime(2026, 2, 2, tzinfo=UTC)
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        repo_releases.insert_per_recitation_release(
+            track="ts", slug=slug, version="g0", produced_at=t0, produced_by="a"
+        )
+    _stub_affected(monkeypatch, [7])
+    prior_v, affected = _ts_regen_provenance(slug)
+    with db.transaction():
+        repo_releases.supersede_current("ts", slug, except_id=-1, at=t2)
+        repo_releases.insert_per_recitation_release(
+            track="ts",
+            slug=slug,
+            version="g1",
+            produced_at=t2,
+            produced_by="a",
+            affected_chapters=affected,
+            prior_ts_version=prior_v,
+        )
+    chain = repo_releases.all_releases_for_track_slug("ts", slug)
+    deltas = [json.loads(r["affected_chapters"]) for r in chain if r["affected_chapters"]]
+    assert sorted({c for d in deltas for c in d}) == [7]
 
 
 def test_all_releases_for_track_slug_returns_all_ordered(fresh_db):

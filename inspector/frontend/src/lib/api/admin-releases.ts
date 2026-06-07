@@ -88,14 +88,19 @@ export async function cancelReleaseJob(jobId: string): Promise<{ job_id: string;
 }
 
 /** Launch an MFA timestamps-regeneration job for an already-released slug.
- *  POSTs to the existing generate-timestamps route (no change). On success the
- *  reciter stays released but its HF/GH releases are stamped stale, moving the
- *  row to "Stale on HF" so the operator re-publishes. Throws the server error
- *  verbatim (e.g. the 409 "a timestamps job is already running"). */
-export async function regenerateTs(slug: string): Promise<LaunchResponse> {
+ *  POSTs to the existing generate-timestamps route. ``chapters`` scopes the run
+ *  to those surah numbers (affected-only regen); omit for a full reciter. On
+ *  success the reciter stays released but its HF/GH releases are stamped stale,
+ *  moving the row to "Stale on HF" so the operator re-publishes. Throws the
+ *  server error verbatim (e.g. the 409 "a timestamps job is already running"). */
+export async function regenerateTs(slug: string, chapters?: number[]): Promise<LaunchResponse> {
     const resp = await fetch(
         `/api/admin/generate-timestamps/${encodeURIComponent(slug)}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(chapters && chapters.length ? { chapters } : {}),
+        },
     );
     return _unwrap<LaunchResponse>(resp);
 }

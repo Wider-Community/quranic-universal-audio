@@ -381,7 +381,8 @@ def releases_status(user):
           gh_release_eligible: bool,
           ts: {version, produced_at,            # stale_* set when segments were
                stale_since?, stale_reason?,     # edited after generation
-               suggested_action?, edits_since?} | null,
+               suggested_action?, edits_since?,
+               affected_chapters?} | null,
           hf: {version, produced_at, stale_since} | null,
           gh: {change_kind, stale_since, release_id, ts_version} | null,
         }, ...]
@@ -514,6 +515,7 @@ def releases_status(user):
                 ts_slim["stale_since"] = info["stale_since"]
                 ts_slim["stale_reason"] = "segments_edited"
                 ts_slim["edits_since"] = info["edits_since"]
+                ts_slim["affected_chapters"] = info.get("affected_chapters")
                 ts_slim = _with_suggestion(ts_slim, track="ts")
         row = {
             "slug": slug,

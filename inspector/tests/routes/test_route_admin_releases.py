@@ -170,6 +170,7 @@ def test_status_released_with_ledger_is_waiting(signed_in_client, monkeypatch):
         "stale_reason": None,
         "suggested_action": None,
         "edits_since": None,
+        "affected_chapters": None,
     }
     assert row["hf"] is None
     assert row["gh"] is None
@@ -264,7 +265,7 @@ def test_status_surfaces_ts_segments_edited_staleness(signed_in_client, monkeypa
         ts_staleness,
         "ts_stale_info",
         lambda slug, *, produced_at: (
-            {"stale_since": "2026-03-02T00:00:00Z", "edits_since": 3}
+            {"stale_since": "2026-03-02T00:00:00Z", "edits_since": 3, "affected_chapters": [5, 12]}
             if slug == "ar.edited"
             else None
         ),
@@ -276,6 +277,7 @@ def test_status_surfaces_ts_segments_edited_staleness(signed_in_client, monkeypa
     row = next(r for r in body["recitations"] if r["slug"] == "ar.edited")
     assert row["ts"]["stale_reason"] == "segments_edited"
     assert row["ts"]["edits_since"] == 3
+    assert row["ts"]["affected_chapters"] == [5, 12]
     assert row["ts"]["suggested_action"]["action"] == "regenerate_ts"
     assert row["ts"]["suggested_action"]["capability"] == "reviews.generate_timestamps"
     assert row["hf"] is None  # purely TS-track staleness
