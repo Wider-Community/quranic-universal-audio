@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 
@@ -13,6 +14,18 @@ badges = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 sys.modules[SPEC.name] = badges
 SPEC.loader.exec_module(badges)
+
+
+def test_cli_help_does_not_import_site_packages():
+    result = subprocess.run(
+        [sys.executable, "-S", str(SCRIPT_PATH), "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--dry-run" in result.stdout
 
 
 def test_format_hours_floors_to_50_with_plus():
