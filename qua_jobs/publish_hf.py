@@ -308,9 +308,7 @@ def _subtract_spans(lo: int, hi: int, spans: list[tuple[int, int]]) -> list[tupl
     no-gap case → identical to today's single contiguous slice). Overlapping /
     out-of-window spans are clipped and merged.
     """
-    clipped = sorted(
-        (max(lo, a), min(hi, b)) for a, b in spans if min(hi, b) > max(lo, a)
-    )
+    clipped = sorted((max(lo, a), min(hi, b)) for a, b in spans if min(hi, b) > max(lo, a))
     runs: list[tuple[int, int]] = []
     cur = lo
     for a, b in clipped:

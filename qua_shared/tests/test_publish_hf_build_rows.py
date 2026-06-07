@@ -96,10 +96,15 @@ def test_build_rows_keep_runs_contiguous_single_run():
     # No no-match segment → one run spanning the whole verse (today's behavior).
     detailed = {
         "entries": [
-            {"ref": "1:1", "segments": [{"time_start": 0, "time_end": 4000, "matched_ref": "1:1:1-1:1:4"}]}
+            {
+                "ref": "1:1",
+                "segments": [{"time_start": 0, "time_end": 4000, "matched_ref": "1:1:1-1:1:4"}],
+            }
         ]
     }
-    timestamps = {"1:1": _ts([[1, 0, 1000], [2, 1000, 2000], [3, 2000, 3000], [4, 3000, 4000]], 0, 4000)}
+    timestamps = {
+        "1:1": _ts([[1, 0, 1000], [2, 1000, 2000], [3, 2000, 3000], [4, 3000, 4000]], 0, 4000)
+    }
     rows = build_rows(timestamps, _detailed_by_ref(detailed), _SURAH_INFO, {}, {"1": "u"})
     assert rows[0]["keep_runs"] == [(0, 4000)]
 
@@ -119,7 +124,9 @@ def test_build_rows_keep_runs_interior_no_match_splits():
             }
         ]
     }
-    timestamps = {"1:1": _ts([[1, 0, 1000], [2, 1000, 2000], [3, 3000, 3500], [4, 3500, 4000]], 0, 4000)}
+    timestamps = {
+        "1:1": _ts([[1, 0, 1000], [2, 1000, 2000], [3, 3000, 3500], [4, 3500, 4000]], 0, 4000)
+    }
     rows = build_rows(timestamps, _detailed_by_ref(detailed), _SURAH_INFO, {}, {"1": "u"})
     assert len(rows) == 1
     assert rows[0]["keep_runs"] == [(0, 2000), (3000, 4000)]
@@ -130,11 +137,16 @@ def test_build_rows_full_verse_no_match_drops_row():
     # absent from timestamps → no row built (point 2: full-verse drop).
     detailed = {
         "entries": [
-            {"ref": "1:1", "segments": [{"time_start": 0, "time_end": 4000, "matched_ref": "1:1:1-1:1:4"}]},
+            {
+                "ref": "1:1",
+                "segments": [{"time_start": 0, "time_end": 4000, "matched_ref": "1:1:1-1:1:4"}],
+            },
             {"ref": "1:2", "segments": [{"time_start": 4000, "time_end": 6000, "matched_ref": ""}]},
         ]
     }
-    timestamps = {"1:1": _ts([[1, 0, 1000], [2, 1000, 2000], [3, 2000, 3000], [4, 3000, 4000]], 0, 4000)}
+    timestamps = {
+        "1:1": _ts([[1, 0, 1000], [2, 1000, 2000], [3, 2000, 3000], [4, 3000, 4000]], 0, 4000)
+    }
     rows = build_rows(timestamps, _detailed_by_ref(detailed), _SURAH_INFO, {}, {"1": "u"})
     assert [(r["surah"], r["ayah"]) for r in rows] == [(1, 1)]
 
@@ -159,7 +171,12 @@ def test_rebase_row_multi_excises_gap_gaplessly():
     assert row["clip_start"] == 0
     assert row["clip_end"] == 3000
     # Word 3 now starts exactly at word 2's end (2000) — the gap is gone.
-    assert row["word_timestamps"] == [[1, 0, 1000], [2, 1000, 2000], [3, 2000, 2500], [4, 2500, 3000]]
+    assert row["word_timestamps"] == [
+        [1, 0, 1000],
+        [2, 1000, 2000],
+        [3, 2000, 2500],
+        [4, 2500, 3000],
+    ]
     assert row["segments"] == [[1, 2, 0, 2000], [3, 4, 2000, 3000]]
     assert row["letter_timestamps"][0]["start_ms"] == 2000
     assert row["letter_timestamps"][0]["end_ms"] == 2100
