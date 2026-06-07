@@ -26,6 +26,7 @@
     export type ReleasesBucket =
         | 'in_flight'
         | 'failed'
+        | 'stale_ts'
         | 'stale_hf'
         | 'waiting'
         | 'published_current';
@@ -62,9 +63,12 @@
     // Generate-TS action checks.
     const canGenerateTs = can('reviews.generate_timestamps');
     const canReciterPublish = can('reciter.publish');
-    // Only published rows can be regenerated — waiting rows have never been
-    // published (Publish is their action); in_flight rows have no action.
-    const showRegen = $derived(bucket === 'published_current' || bucket === 'stale_hf');
+    // Regenerate is the CTA for published rows AND for any row whose generated
+    // timestamps are behind its segments (TS-track ``segments_edited`` staleness),
+    // whatever bucket it lands in. in_flight rows have no action.
+    const showRegen = $derived(
+        bucket === 'published_current' || bucket === 'stale_hf' || !!row.ts?.stale_since,
+    );
 
     function fmtRelative(iso: string | null | undefined): string {
         if (!iso) return '';
@@ -95,11 +99,25 @@
     }
 
     /** Human tag for the staleness cause — "metadata" (a catalog edit, cheap
-     *  to reconcile) vs "timestamps" (a TS regen, needs a republish). */
+     *  to reconcile), "timestamps" (a TS regen, needs a republish), or "edited"
+     *  (segments edited after generation, on the TS track — needs a regen). */
     function staleReasonLabel(reason: string | null | undefined): string {
         if (reason === 'catalog_edit') return 'metadata';
         if (reason === 'ts_regen') return 'timestamps';
+        if (reason === 'segments_edited') return 'edited';
         return 'stale';
+    }
+
+    /** TS chip tooltip — generation + the "behind by N edits" staleness note. */
+    function tsChipTitle(): string {
+        if (!row.ts) return 'No timestamps yet';
+        let t = `TS ${row.ts.version} · ${fmtRelative(row.ts.produced_at)}`;
+        if (row.ts.stale_since) {
+            const n = row.ts.edits_since ?? 0;
+            t += ` · ${n} edit${n === 1 ? '' : 's'} since generation`;
+            if (row.ts.suggested_action) t += ` — ${row.ts.suggested_action.label}`;
+        }
+        return t;
     }
 
     function ghChipLabel(): {
@@ -151,10 +169,14 @@
     </div>
 
     <div class="row-meta">
-        <span class="chip chip-ts" title={row.ts ? `TS ${row.ts.version} · ${fmtRelative(row.ts.produced_at)}` : 'No timestamps yet'}>
+        <span class="chip chip-ts" class:chip-stale={row.ts?.stale_since} title={tsChipTitle()}>
             <span class="chip-key">TS</span>
             {#if row.ts}
                 <span class="chip-val">{fmtRelative(row.ts.produced_at)}</span>
+                {#if row.ts.stale_since}
+                    <span class="chip-stale-dot" aria-label="stale"></span>
+                    <span class="reason-tag">{staleReasonLabel(row.ts.stale_reason)}</span>
+                {/if}
             {:else}
                 <span class="chip-val chip-faint">—</span>
             {/if}

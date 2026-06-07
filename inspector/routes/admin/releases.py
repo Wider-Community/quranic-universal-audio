@@ -44,6 +44,7 @@ from services.admin.jobs import hf_publish_batch as hf_publish_batch_jobs
 from services.admin.jobs import refresh_catalog as refresh_catalog_jobs
 from services.admin.release_preview import build_release_preview, current_auto_version
 from services.db import get_conn, repo_releases
+from services.segments import ts_staleness
 from services.state import state as state_service
 from utils.decorators import require_capability, require_same_origin
 
@@ -378,7 +379,9 @@ def releases_status(user):
           slug, name_en, name_ar, state,
           riwayah, style, channel,
           gh_release_eligible: bool,
-          ts: {version, produced_at} | null,
+          ts: {version, produced_at,            # stale_* set when segments were
+               stale_since?, stale_reason?,     # edited after generation
+               suggested_action?, edits_since?} | null,
           hf: {version, produced_at, stale_since} | null,
           gh: {change_kind, stale_since, release_id, ts_version} | null,
         }, ...]
@@ -501,6 +504,17 @@ def releases_status(user):
         )
         if hf_slim and hf_slim.get("stale_reason") == "catalog_edit":
             catalog_drift_count += 1
+        # TS-track staleness is computed (not stamped): segments edited after the
+        # generation leave the generated timestamps behind. Enrich the slim row so
+        # it carries the same stale_reason/suggested_action shape as hf/gh.
+        ts_slim = _slim_release_row(ts, fields=("version", "produced_at"))
+        if ts_slim and ts is not None and ts.get("produced_at"):
+            info = ts_staleness.ts_stale_info(slug, produced_at=ts["produced_at"])
+            if info:
+                ts_slim["stale_since"] = info["stale_since"]
+                ts_slim["stale_reason"] = "segments_edited"
+                ts_slim["edits_since"] = info["edits_since"]
+                ts_slim = _with_suggestion(ts_slim, track="ts")
         row = {
             "slug": slug,
             "name_en": d["name_en"],
@@ -509,7 +523,7 @@ def releases_status(user):
             "riwayah": d["riwayah"],
             "style": d["style"],
             "channel": d["channel"],
-            "ts": _slim_release_row(ts, fields=("version", "produced_at")),
+            "ts": ts_slim,
             "hf": hf_slim,
             "gh": gh_slim,
             "publish_error": batch_failures.get(slug),
@@ -559,6 +573,10 @@ def _is_bucketable(row: dict, in_flight_slugs: set[str]) -> bool:
     if row["hf"] is not None:
         return True
     if row["gh"] is not None:
+        return True
+    # Generated-but-unpublished reciter whose timestamps are behind its segments:
+    # surface it so the "Regenerate timestamps" CTA is reachable.
+    if row["ts"] is not None and row["ts"].get("stale_since"):
         return True
     if row["state"] == "released" and row["ts"] is not None:
         return True

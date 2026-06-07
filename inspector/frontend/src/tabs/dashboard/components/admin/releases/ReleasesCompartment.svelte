@@ -126,6 +126,12 @@
     function isStaleHf(r: ReleaseStatusRow): boolean {
         return !!r.hf?.stale_since;
     }
+    // Generated timestamps are behind the segments (segments edited after the
+    // last generation). Upstream of an HF republish — regenerating re-stamps HF
+    // stale anyway — so this takes priority over stale_hf in the bucketing.
+    function isStaleTs(r: ReleaseStatusRow): boolean {
+        return !!r.ts?.stale_since;
+    }
     function isWaiting(r: ReleaseStatusRow): boolean {
         return r.state === 'released' && r.hf === null && r.ts !== null;
     }
@@ -136,6 +142,7 @@
     function bucketOf(r: ReleaseStatusRow): ReleasesBucket | null {
         if (isInFlight(r)) return 'in_flight';
         if (isFailed(r)) return 'failed';
+        if (isStaleTs(r)) return 'stale_ts';
         if (isStaleHf(r)) return 'stale_hf';
         if (isWaiting(r)) return 'waiting';
         if (isPublishedCurrent(r)) return 'published_current';
@@ -211,6 +218,7 @@
     const SECTIONS: Section[] = [
         { key: 'in_flight',         label: 'In progress',         mark: 'inflight',  defaultCollapsed: false, hideWhenEmpty: true },
         { key: 'failed',            label: 'Failed to publish',   mark: 'failed',    defaultCollapsed: false, hideWhenEmpty: true },
+        { key: 'stale_ts',          label: 'Timestamps behind edits', mark: 'edited', defaultCollapsed: false, hideWhenEmpty: true },
         { key: 'stale_hf',          label: 'Stale on HF',         mark: 'stale',     defaultCollapsed: false, hideWhenEmpty: false },
         { key: 'waiting',           label: 'Waiting to publish',  mark: 'waiting',   defaultCollapsed: false, hideWhenEmpty: false },
         { key: 'published_current', label: 'Published & current', mark: 'published', defaultCollapsed: true,  hideWhenEmpty: false },
@@ -218,7 +226,7 @@
 
     const bucketed = $derived.by(() => {
         const out: Record<ReleasesBucket, ReleaseStatusRow[]> = {
-            in_flight: [], failed: [], stale_hf: [], waiting: [],
+            in_flight: [], failed: [], stale_ts: [], stale_hf: [], waiting: [],
             published_current: [],
         };
         for (const r of filteredRows) {
@@ -272,7 +280,7 @@
     const COLLAPSE_LS_KEY = 'insp_releases_collapsed';
     function loadCollapsed(): Record<ReleasesBucket, boolean> {
         const fallback: Record<ReleasesBucket, boolean> = {
-            in_flight: false, failed: false, stale_hf: false, waiting: false,
+            in_flight: false, failed: false, stale_ts: false, stale_hf: false, waiting: false,
             published_current: true,
         };
         try {
@@ -282,6 +290,7 @@
             return {
                 in_flight: parsed.in_flight ?? fallback.in_flight,
                 failed: parsed.failed ?? fallback.failed,
+                stale_ts: parsed.stale_ts ?? fallback.stale_ts,
                 stale_hf: parsed.stale_hf ?? fallback.stale_hf,
                 waiting: parsed.waiting ?? fallback.waiting,
                 published_current: parsed.published_current ?? fallback.published_current,
@@ -746,6 +755,7 @@
      * coherent across compartments. */
     .mark-inflight  { background: var(--state-under-review-fg); }
     .mark-stale     { background: var(--state-error-fg); }
+    .mark-edited    { background: var(--state-error-fg); }
     .mark-failed    { background: var(--state-error-fg); }
     .mark-waiting   { background: var(--state-available-fg); }
     .mark-published { background: var(--state-published-fg); }

@@ -169,6 +169,7 @@ def test_status_released_with_ledger_is_waiting(signed_in_client, monkeypatch):
         "stale_since": None,
         "stale_reason": None,
         "suggested_action": None,
+        "edits_since": None,
     }
     assert row["hf"] is None
     assert row["gh"] is None
@@ -245,6 +246,39 @@ def test_status_surfaces_catalog_edit_drift_and_suggestion(signed_in_client, mon
     assert row["hf"]["suggested_action"]["action"] == "refresh_hf_catalog"
     assert row["hf"]["suggested_action"]["kind"] == "actionable"
     assert body["catalog_drift_count"] == 1
+
+
+def test_status_surfaces_ts_segments_edited_staleness(signed_in_client, monkeypatch, seed_state):
+    """A reciter whose segments were edited after generation carries the
+    computed ``segments_edited`` staleness + regen suggestion on its TS track,
+    and is bucketable even though it's neither released nor published."""
+    from services.segments import ts_staleness
+
+    client, _user = signed_in_client(role="maintainer")
+    _stub_jobs_api(monkeypatch)
+    _seed_eligible_channel("mp3quran")
+    _seed_delivery_on_channel("ar.edited", channel="mp3quran", reciter_id="r9")
+    seed_state("ar.edited", state="under_review")  # not released, no HF row
+    _seed_ledger_ts("ar.edited")
+    monkeypatch.setattr(
+        ts_staleness,
+        "ts_stale_info",
+        lambda slug, *, produced_at: (
+            {"stale_since": "2026-03-02T00:00:00Z", "edits_since": 3}
+            if slug == "ar.edited"
+            else None
+        ),
+    )
+
+    resp = client.get("/api/admin/releases/status")
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    body = resp.get_json()
+    row = next(r for r in body["recitations"] if r["slug"] == "ar.edited")
+    assert row["ts"]["stale_reason"] == "segments_edited"
+    assert row["ts"]["edits_since"] == 3
+    assert row["ts"]["suggested_action"]["action"] == "regenerate_ts"
+    assert row["ts"]["suggested_action"]["capability"] == "reviews.generate_timestamps"
+    assert row["hf"] is None  # purely TS-track staleness
 
 
 def test_refresh_hf_catalog_launches(signed_in_client, monkeypatch):

@@ -233,16 +233,23 @@ def _is_letter(v: Any) -> bool:
 
 
 class StaleReason(str, Enum):
-    """Why a published artifact is stale — drives the remediation suggestion.
+    """Why an artifact is stale — drives the remediation suggestion.
 
-    Severity-ordered (``ts_regen`` > ``catalog_edit``): when both apply to one
-    row the stronger wins, because a TS regen needs a full republish that also
-    refreshes the catalog, whereas a catalog edit needs only the cheap refresh.
-    The reason→action mapping lives in ``qua_shared/release_staleness.py``.
+    Severity-ordered (``segments_edited`` > ``ts_regen`` > ``catalog_edit``):
+    when more than one applies to a row the stronger wins, because regenerating
+    timestamps (the fix for ``segments_edited``) subsumes a republish, which in
+    turn subsumes a catalog refresh. The reason→action mapping lives in
+    ``qua_shared/release_staleness.py``.
+
+    ``segments_edited`` lives on the ``ts`` track only (computed, never stamped):
+    segments were edited after the timestamps were generated, so the generated
+    timestamps are behind the segments and need regenerating. The other two live
+    on the published ``hf`` / ``gh`` tracks.
     """
 
     TS_REGEN = "ts_regen"  # per-verse timestamps changed → full republish / cut
     CATALOG_EDIT = "catalog_edit"  # catalog metadata changed → HF catalog refresh / next cut
+    SEGMENTS_EDITED = "segments_edited"  # segments edited after TS gen → regenerate timestamps
 
 
 class SuggestedAction(BaseModel):
@@ -269,6 +276,9 @@ class AdminReleaseRow(BaseModel):
     stale_since: str | None = None
     stale_reason: StaleReason | None = None
     suggested_action: SuggestedAction | None = None
+    #: Count of timestamp-affecting edits since this row was produced. Only set
+    #: on the ``ts`` track when ``stale_reason == segments_edited``.
+    edits_since: int | None = None
 
 
 class AdminGhReleaseMember(BaseModel):

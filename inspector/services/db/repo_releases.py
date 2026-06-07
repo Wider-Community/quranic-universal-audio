@@ -115,6 +115,35 @@ def release_by_version(track: str, slug: str, version: str) -> dict | None:
     return dict(r) if r else None
 
 
+def all_releases_for_track_slug(track: str, slug: str) -> list[dict]:
+    """Every row (current + superseded) for ``(track, slug)`` ordered by
+    ``produced_at`` ascending — the full generation/publish history.
+
+    Supersede stamps ``superseded_at`` and never deletes, so this reconstructs
+    each TS generation (track='ts') or each publish (track='hf') as a boundary
+    timeline. Feeds the Segments history "tier" view.
+    """
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT * FROM per_recitation_releases "
+            "WHERE track = ? AND slug = ? ORDER BY produced_at ASC, id ASC",
+            (track, slug),
+        )
+        .fetchall()
+    )
+    return [dict(r) for r in rows]
+
+
+def all_gh_releases() -> list[dict]:
+    """Every gh_releases row (current + superseded) ordered by ``produced_at``
+    ascending — the full cut history (cut markers for the history timeline)."""
+    rows = (
+        get_conn().execute("SELECT * FROM gh_releases ORDER BY produced_at ASC, id ASC").fetchall()
+    )
+    return [dict(r) for r in rows]
+
+
 def gh_release_by_version(version: str) -> dict | None:
     """Return ANY gh_releases row (current OR superseded) for ``version``.
 

@@ -37,6 +37,7 @@ export {
     computeFilteredSummary,
     countVersesFromBatches,
     countVersesFromItems,
+    entryAffectsTimestamps,
     flattenBatchesToItems,
     formatHistDate,
     groupRelatedOps,
@@ -46,6 +47,8 @@ export {
     itemMatchesCatFilter,
     itemMatchesOpFilter,
     SHORT_LABELS,
+    tierOf,
+    TS_AFFECTING_OP_TYPES,
     versesFromRef,
     type DisplayEntry,
     type FilteredItemSummary,
@@ -80,6 +83,12 @@ export const filterErrCats = writable<Set<string>>(new Set());
  *  ``is_wasl === true``. Surfaces only the affirmative WASL assertions
  *  (waqf is the default state and would dominate the list otherwise). */
 export const filterHasWasl = writable<boolean>(false);
+
+/** Active TS-generation tier filter (null = all tiers). When set, the batches
+ *  list shows only edits in that tier — "initial", "after gen #N", or the
+ *  current (pending-regen) tier. Driven by the timeline pills in
+ *  ``HistoryFilters``; only surfaced when there are post-generation edits. */
+export const filterTier = writable<number | null>(null);
 
 /** Sort order: by edit time (newest first) or by Quran chapter:verse. */
 export const sortMode = writable<'time' | 'quran'>('time');
@@ -154,11 +163,17 @@ export function toggleWaslFilter(): void {
     filterHasWasl.update((v) => !v);
 }
 
+/** Toggle the tier filter: selecting the active tier clears it (back to all). */
+export function toggleTierFilter(tier: number): void {
+    filterTier.update((cur) => (cur === tier ? null : tier));
+}
+
 /** Clear all filter axes in a single tick. */
 export function clearFilters(): void {
     filterOpTypes.set(new Set());
     filterErrCats.set(new Set());
     filterHasWasl.set(false);
+    filterTier.set(null);
 }
 
 /** Set the sort mode (time | quran). */

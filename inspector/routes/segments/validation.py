@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify
 
 from services import cache
 from services.history_query import load_edit_history
+from services.segments.history_tiers import generation_timeline
 from services.stats import compute_stats
 from services.validation import validate_reciter_segments
 from utils.json_response import orjson_cached_response
@@ -43,5 +44,13 @@ def seg_stats(reciter):
 
 @seg_val_bp.route("/edit-history/<reciter>")
 def seg_edit_history(reciter):
-    """Return edit history batches and summary stats for the reciter."""
-    return orjson_cached_response(load_edit_history(reciter))
+    """Return edit history batches, summary stats, and the TS-generation timeline.
+
+    ``generations`` (the per-generation boundary list) is computed fresh from the
+    release tables on each call and merged onto the cached ``{batches, summary}``
+    blob — so the heavy edit-history parse stays cached while the boundary list
+    stays current after a regeneration without an explicit cache bust.
+    """
+    history = load_edit_history(reciter)
+    payload = {**history, "generations": generation_timeline(reciter)}
+    return orjson_cached_response(payload)

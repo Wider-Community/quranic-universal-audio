@@ -229,6 +229,26 @@ def test_stamp_stale_for_reciter_fans_out_to_all_deliveries(fresh_db):
     assert repo_releases.current_release("hf", b)["stale_reason"] == "catalog_edit"
 
 
+def test_all_releases_for_track_slug_returns_all_ordered(fresh_db):
+    """Returns current + superseded rows for (track, slug) ascending by
+    produced_at — the generation-history timeline for the tier view."""
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+    t2 = datetime(2026, 2, 1, tzinfo=UTC)
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        repo_releases.insert_per_recitation_release(
+            track="ts", slug=slug, version="g1", produced_at=t1, produced_by="a"
+        )
+        repo_releases.supersede_current("ts", slug, except_id=-1, at=t2)
+        repo_releases.insert_per_recitation_release(
+            track="ts", slug=slug, version="g2", produced_at=t2, produced_by="a"
+        )
+    rows = repo_releases.all_releases_for_track_slug("ts", slug)
+    assert [r["version"] for r in rows] == ["g1", "g2"]
+    # other tracks excluded
+    assert repo_releases.all_releases_for_track_slug("hf", slug) == []
+
+
 def test_gh_release_insert_and_membership(fresh_db):
     now = _now()
     with db.transaction():

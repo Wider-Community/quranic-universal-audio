@@ -1,4 +1,4 @@
-import type { EditOp, HistoryBatch } from '../../../../lib/types/domain';
+import type { EditOp, GenerationBoundary, HistoryBatch } from '../../../../lib/types/domain';
 import type {
     EditChain,
     EditChainOp,
@@ -6,6 +6,15 @@ import type {
     OpFlatItem,
 } from '../../types/segments';
 import { deriveOpIssueDelta, usesStoredClassifiedIssues } from '../validation/classified-issues';
+
+/** Op types whose edits change the generated timestamps artifact. Lockstep
+ *  mirror of ``qua_shared/segment_edit_ops.py::TS_AFFECTING_OP_TYPES`` (= the
+ *  FE ``STRUCTURAL_COMMANDS`` ∪ the two reference-mapping ops); keep in step.
+ *  Used to flag the current-tier edits that aren't yet in the timestamps. */
+export const TS_AFFECTING_OP_TYPES: ReadonlySet<string> = new Set([
+    'trim_segment', 'split_segment', 'merge_segments', 'delete_segment',
+    'edit_reference', 'auto_fix_missing_word',
+]);
 
 /** Marker re-exported for parity tests that assert the post-Phase-2 helper
  *  is in place (the history-row delta path reads `classified_issues` from
@@ -15,10 +24,33 @@ export { usesStoredClassifiedIssues };
 // Re-export for consumers that want these types from a utils path.
 export type { HistorySnapshot, OpFlatItem, EditChain, EditChainOp };
 
-/** Display entry produced by `buildDisplayItems` for the batches list. */
+/** Display entry produced by `buildDisplayItems` for the batches list.
+ *  `tier` is the TS-generation tier the entry falls in (0 = before the first
+ *  generation; N = after generation #N; the highest value = the current tier
+ *  whose edits aren't yet in the generated timestamps). */
 export type DisplayEntry =
-    | { type: 'chain'; chain: EditChain; date: string }
-    | { type: 'op-item'; item: OpFlatItem; date: string };
+    | { type: 'chain'; chain: EditChain; date: string; tier?: number }
+    | { type: 'op-item'; item: OpFlatItem; date: string; tier?: number };
+
+/** Tier an edit saved at `date` belongs to: the count of generations produced
+ *  at-or-before it. `gens` must be ascending by `produced_at`. */
+export function tierOf(date: string, gens: GenerationBoundary[]): number {
+    let t = 0;
+    for (const g of gens) {
+        if (g.produced_at && g.produced_at <= date) t += 1;
+        else break;
+    }
+    return t;
+}
+
+/** True iff a display entry carries a timestamp-affecting op (so a current-tier
+ *  entry is "not yet in the timestamps"). */
+export function entryAffectsTimestamps(entry: DisplayEntry): boolean {
+    const ops = entry.type === 'chain'
+        ? entry.chain.ops.map((c) => c.op)
+        : entry.item.group;
+    return ops.some((op) => TS_AFFECTING_OP_TYPES.has(op.op_type));
+}
 
 /** Flat history summary returned by `computeFilteredSummary`. */
 export interface FilteredItemSummary {
@@ -269,8 +301,12 @@ export function buildDisplayItems(
     fOpTypes: Set<string>,
     fErrCats: Set<string>,
     fHasWasl: boolean = false,
+    gens: GenerationBoundary[] = [],
+    fTier: number | null = null,
 ): DisplayEntry[] {
     const out: DisplayEntry[] = [];
+    const keepTier = (date: string): boolean =>
+        fTier === null || tierOf(date, gens) === fTier;
     if (chains) {
         const batchOpIds = new Set<string>(batches.flatMap((b) => (b.operations || []).map((op) => op.op_id)));
         for (const chain of chains.values()) {
@@ -278,14 +314,17 @@ export function buildDisplayItems(
             if (fOpTypes.size > 0 && !chainMatchesOpFilter(chain, fOpTypes)) continue;
             if (fErrCats.size > 0 && !chainMatchesCatFilter(chain, fErrCats)) continue;
             if (fHasWasl && !chainHasWaslAnnotation(chain)) continue;
-            out.push({ type: 'chain', chain, date: chain.latestDate || '' });
+            const date = chain.latestDate || '';
+            if (!keepTier(date)) continue;
+            out.push({ type: 'chain', chain, date, tier: tierOf(date, gens) });
         }
     }
     for (const item of items) {
         if (fOpTypes.size > 0 && !itemMatchesOpFilter(item, fOpTypes)) continue;
         if (fErrCats.size > 0 && !itemMatchesCatFilter(item, fErrCats)) continue;
         if (fHasWasl && !itemHasWaslAnnotation(item)) continue;
-        out.push({ type: 'op-item', item, date: item.date });
+        if (!keepTier(item.date)) continue;
+        out.push({ type: 'op-item', item, date: item.date, tier: tierOf(item.date, gens) });
     }
 
     if (mode === 'quran') {

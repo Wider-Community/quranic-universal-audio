@@ -13,14 +13,20 @@
 */
 
 /**
- * Why a published artifact is stale — drives the remediation suggestion.
+ * Why an artifact is stale — drives the remediation suggestion.
  *
- * Severity-ordered (``ts_regen`` > ``catalog_edit``): when both apply to one
- * row the stronger wins, because a TS regen needs a full republish that also
- * refreshes the catalog, whereas a catalog edit needs only the cheap refresh.
- * The reason→action mapping lives in ``qua_shared/release_staleness.py``.
+ * Severity-ordered (``segments_edited`` > ``ts_regen`` > ``catalog_edit``):
+ * when more than one applies to a row the stronger wins, because regenerating
+ * timestamps (the fix for ``segments_edited``) subsumes a republish, which in
+ * turn subsumes a catalog refresh. The reason→action mapping lives in
+ * ``qua_shared/release_staleness.py``.
+ *
+ * ``segments_edited`` lives on the ``ts`` track only (computed, never stamped):
+ * segments were edited after the timestamps were generated, so the generated
+ * timestamps are behind the segments and need regenerating. The other two live
+ * on the published ``hf`` / ``gh`` tracks.
  */
-export type StaleReason = "ts_regen" | "catalog_edit";
+export type StaleReason = "ts_regen" | "catalog_edit" | "segments_edited";
 export type Role = "contributor" | "maintainer" | "owner" | "pipeline";
 
 export interface AdminActiveClaim {
@@ -189,6 +195,7 @@ export interface AdminReleaseRow {
   stale_since?: string | null;
   stale_reason?: StaleReason | null;
   suggested_action?: SuggestedAction | null;
+  edits_since?: number | null;
   [k: string]: unknown;
 }
 export interface AdminReleaseStatusRow {

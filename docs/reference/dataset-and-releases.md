@@ -53,6 +53,18 @@ separate from publish status. Publish status lives in three tables, all written 
     out to every delivery of the reciter). Cheap to fix on HF (catalog refresh below); GH reflects it
     on the next cut.
 
+  A third reason — **`segments_edited`** — lives on the **`ts`** track and is **computed, never
+  stamped** (`services/segments/ts_staleness.py::ts_stale_info`, called from the status route). The
+  generated timestamps go stale the moment a timestamp-affecting segment edit
+  (`qua_shared/segment_edit_ops.py::TS_AFFECTING_OP_TYPES` = trim/split/merge/delete + edit_reference
+  + auto_fix_missing_word — annotations like confirm_reference/ignore_issue/flag_segment/set_is_wasl
+  are excluded) is saved after the current `ts` row's `produced_at`. Computed (vs stamped) because the
+  segments save path is SQLite-free by design and the signal must auto-clear when a regeneration moves
+  `produced_at` past every edit. The remediation is a slug-scoped **regenerate timestamps**
+  (`reviews.generate_timestamps`), which then cascades to the existing `ts_regen` HF/GH staleness. The
+  Releases tab surfaces it as the `stale_ts` ("Timestamps behind edits") bucket; the Segments history
+  panel surfaces the same edits as the **tier filter** (see [`segments-editor.md`](segments-editor.md)).
+
   The reason→remediation mapping is single-sourced in
   [`qua_shared/release_staleness.py`](../../qua_shared/release_staleness.py) (`StaleReason`,
   `SuggestedAction`, `_SUGGESTIONS` keyed by `(reason, track)`). The status route resolves + serializes

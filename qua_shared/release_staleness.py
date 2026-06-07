@@ -18,10 +18,14 @@ from .schemas.release import StaleReason, SuggestedAction
 # Higher wins when a row qualifies under multiple reasons. A ``ts_regen`` needs
 # a full republish (which also refreshes the catalog), so it dominates a
 # ``catalog_edit``; the catalog-refresh clear path relies on this ordering so it
-# never clears a row that still needs a republish.
+# never clears a row that still needs a republish. ``segments_edited`` outranks
+# both (regenerating timestamps subsumes a republish) — it lives on the ``ts``
+# track and is computed, not stamped, so it never competes on a stamped row, but
+# the ordering keeps the model coherent.
 _SEVERITY: dict[StaleReason, int] = {
     StaleReason.CATALOG_EDIT: 1,
     StaleReason.TS_REGEN: 2,
+    StaleReason.SEGMENTS_EDITED: 3,
 }
 
 
@@ -60,6 +64,11 @@ _SUGGESTIONS: dict[tuple[StaleReason, str], SuggestedAction] = {
         "refresh_hf_catalog", "Refresh dataset catalog", "release.publish_hf"
     ),
     (StaleReason.CATALOG_EDIT, "gh"): _informational("recut_gh", "Reflected on next cut"),
+    # ts-track only: the generated timestamps are behind the segments. Slug-scoped
+    # remediation (the FE launcher passes the row's slug).
+    (StaleReason.SEGMENTS_EDITED, "ts"): _actionable(
+        "regenerate_ts", "Regenerate timestamps", "reviews.generate_timestamps"
+    ),
 }
 
 
