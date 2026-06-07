@@ -172,7 +172,6 @@ export interface AdminReleaseStatusRow {
   riwayah: string;
   style: string;
   channel: string;
-  gh_release_eligible: boolean;
   ts: AdminReleaseRow | null;
   hf: AdminReleaseRow | null;
   gh: AdminGhReleaseMember | null;

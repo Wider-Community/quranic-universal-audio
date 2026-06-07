@@ -12,7 +12,7 @@
      * published_current) show a checkbox and the parent's action bar fires one
      * batch job for the selection. ``in_flight`` rows show a minimal job status
      * (badge + elapsed + Open-on-HF + Cancel); ``failed`` rows show the publish
-     * error inline; ``excluded`` rows are read-only. Published (current + stale)
+     * error inline. Published (current + stale)
      * rows also expose a secondary "Regenerate TS" action that re-runs MFA
      * alignment, gated by ``reviews.generate_timestamps`` + ``reciter.publish``
      * per the capability registry (NOT a hardcoded role per CLAUDE.md).
@@ -28,8 +28,7 @@
         | 'failed'
         | 'stale_hf'
         | 'waiting'
-        | 'published_current'
-        | 'excluded';
+        | 'published_current';
 
     interface Props {
         row: ReleaseStatusRow;
@@ -64,7 +63,7 @@
     const canGenerateTs = can('reviews.generate_timestamps');
     const canReciterPublish = can('reciter.publish');
     // Only published rows can be regenerated — waiting rows have never been
-    // published (Publish is their action), in_flight/excluded have no action.
+    // published (Publish is their action); in_flight rows have no action.
     const showRegen = $derived(bucket === 'published_current' || bucket === 'stale_hf');
 
     function fmtRelative(iso: string | null | undefined): string {
@@ -98,11 +97,8 @@
     function ghChipLabel(): {
         glyph: string;
         label: string;
-        tone: 'pending' | 'settled' | 'warn' | 'faint' | 'excluded';
+        tone: 'pending' | 'settled' | 'warn' | 'faint';
     } {
-        if (!row.gh_release_eligible) {
-            return { glyph: '–', label: 'excluded', tone: 'excluded' };
-        }
         if (!row.gh) return { glyph: '·', label: 'not in cut', tone: 'faint' };
         if (row.gh.stale_since) return { glyph: '⚠', label: `stale (${row.gh.change_kind})`, tone: 'warn' };
         // added/refresh will change in the next cut (violet "pending change");
@@ -188,10 +184,6 @@
                         title="Cancel this job — in-progress work is lost"
                     >{canceling ? 'Cancelling…' : 'Cancel'}</button>
                 {/if}
-            </span>
-        {:else if bucket === 'excluded'}
-            <span class="action-faint" title="Channel is not in the GH release allow-list">
-                read-only
             </span>
         {:else if showRegen && onRegenerate && $canGenerateTs && $canReciterPublish}
             <span class="actions">
@@ -350,11 +342,6 @@
         border-color: oklch(0.86 0.130 75 / 0.4);
         color: var(--state-error-fg);
     }
-    .chip-excluded {
-        background: var(--panel);
-        color: var(--text-faint);
-        border-color: var(--border-quiet);
-    }
 
     .actions {
         display: inline-flex;
@@ -452,11 +439,6 @@
     .cancel-job:hover:not(:disabled) { background: var(--state-error-bg); }
     .cancel-job:disabled { opacity: 0.6; cursor: not-allowed; }
 
-    .action-faint {
-        font-size: var(--fs-meta);
-        color: var(--text-faint);
-        font-style: italic;
-    }
 
     .row-err {
         grid-column: 1 / -1;

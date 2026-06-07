@@ -433,11 +433,9 @@ def releases_status(user):
 
     deliveries = conn.execute("""
         SELECT d.slug, d.riwayah, d.style, d.channel,
-               c.gh_release_eligible,
                r.name_en, r.name_ar,
                ds.state
         FROM deliveries d
-        JOIN channels        c  ON c.slug = d.channel
         JOIN reciters        r  ON r.reciter_id = d.reciter_id
         LEFT JOIN delivery_states ds ON ds.slug = d.slug
         ORDER BY d.slug
@@ -459,7 +457,6 @@ def releases_status(user):
             "riwayah": d["riwayah"],
             "style": d["style"],
             "channel": d["channel"],
-            "gh_release_eligible": bool(d["gh_release_eligible"]),
             "ts": _slim_release_row(ts, fields=("version", "produced_at")),
             "hf": _slim_release_row(hf, fields=("version", "produced_at", "stale_since")),
             "gh": _slim_release_row(
@@ -499,11 +496,6 @@ def _is_bucketable(row: dict, in_flight_slugs: set[str]) -> bool:
     if row["gh"] is not None:
         return True
     if row["state"] == "released" and row["ts"] is not None:
-        return True
-    # Excluded: only surface ineligible rows that would otherwise be
-    # release candidates — keeps the section from becoming a giant
-    # "every reciter from an ineligible channel" dump.
-    if not row["gh_release_eligible"] and (row["ts"] is not None or row["state"] == "released"):
         return True
     return False
 

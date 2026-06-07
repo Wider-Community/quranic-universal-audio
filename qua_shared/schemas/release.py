@@ -270,7 +270,6 @@ class AdminReleaseStatusRow(BaseModel):
     riwayah: str
     style: str
     channel: str
-    gh_release_eligible: bool
     ts: AdminReleaseRow | None
     hf: AdminReleaseRow | None
     gh: AdminGhReleaseMember | None
