@@ -25,4 +25,19 @@ export default {
         if (abs.length === 0) return [];
         return `node ${eslintBin} --config ${eslintConfig} --fix ${abs.join(' ')}`;
     },
+    // Python: ruff lint-autofix + format, mirroring the backend-checks CI job.
+    // The set of linted vs excluded paths is owned entirely by ruff.toml (its
+    // target dirs + extend-exclude) — NOT re-listed here. `--force-exclude`
+    // makes ruff apply those excludes to explicitly-passed files, so a new
+    // top-level package is covered automatically and an excluded tree
+    // (inspector/frontend, .local, the embedded repos) is skipped with no
+    // second list to drift. Invoked as `python -m ruff` since the console
+    // script isn't always on PATH.
+    '**/*.py': (filenames) => {
+        const files = filenames.join(' ');
+        return [
+            `python -m ruff check --fix --force-exclude ${files}`,
+            `python -m ruff format --force-exclude ${files}`,
+        ];
+    },
 };
