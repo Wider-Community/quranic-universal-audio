@@ -25,6 +25,7 @@
      * and hide the filter bar in that case (chip counts over an empty set
      * are noise).
      */
+    import { untrack } from 'svelte';
     import {
         cancelReleaseJob,
         fetchReleasesStatus,
@@ -77,7 +78,9 @@
         refetchSeq;            // tracked dep (manual bump)
         releasesStore.refreshSeq;   // tracked dep (external — e.g. cut modal)
         const ac = new AbortController();
-        loading = resp === null;   // only show the spinner on the cold load
+        // untrack: reading resp here must NOT make it a dep, else setting
+        // resp in .then re-triggers this effect → infinite fetch loop.
+        loading = untrack(() => resp) === null;   // spinner only on cold load
         error = null;
         fetchReleasesStatus(ac.signal)
             .then((r) => {

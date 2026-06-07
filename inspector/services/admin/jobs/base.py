@@ -287,24 +287,41 @@ class JobStagingError(RuntimeError):
     """
 
 
+def _is_lfs_pointer(p: Path) -> bool:
+    """True if ``p`` is a git-LFS pointer stub, not the real bytes. On an HF
+    Space build, ``*.gz`` files are LFS'd by extension and reach the image
+    unsmudged (a ~130-byte ``version https://git-lfs…`` stub)."""
+    try:
+        with p.open("rb") as f:
+            return f.read(40).startswith(b"version https://git-lfs")
+    except OSError:
+        return False
+
+
 def _resolve_required_static(rel: str) -> tuple[Path | None, bytes | None]:
     """Resolve a REQUIRED_STATIC_FILES entry to either a local path or in-memory bytes.
 
-    For ``data/qpc_hafs.json.gz``: in dev the ``.gz`` may not exist on disk —
-    the source-of-truth is the uncompressed ``data/qpc_hafs.json``; gzip it
-    on the fly so dev launches don't require a manual pre-build step. In the
-    deployed image the ``.gz`` is shipped via ``upload_inspector.py`` and
-    used as-is.
+    For ``data/qpc_hafs.json``: prefer the uncompressed file on disk (dev +
+    image when shipped). Otherwise decompress the sibling ``.gz`` on the fly.
+    On a deployed Space the ``.gz`` can arrive as an LFS pointer (unsmudged);
+    in that case the real bytes live in the bucket at ``reference/qpc_hafs.json.gz``,
+    so fall back to reading them from there.
     """
+    import gzip as _gzip
+
     src = REPO_ROOT / rel
-    if src.exists():
+    if src.exists() and not _is_lfs_pointer(src):
         return src, None
     if rel == "data/qpc_hafs.json":
         compressed = REPO_ROOT / "data" / "qpc_hafs.json.gz"
         if compressed.exists():
-            import gzip as _gzip
+            if not _is_lfs_pointer(compressed):
+                return None, _gzip.decompress(compressed.read_bytes())
+            # .gz present but an LFS pointer (deployed image) → real bytes
+            # live in the bucket reference.
+            from services.storage.hf_bucket import get_backend
 
-            return None, _gzip.decompress(compressed.read_bytes())
+            return None, _gzip.decompress(get_backend().read_bytes("reference/qpc_hafs.json.gz"))
     return None, None
 
 
