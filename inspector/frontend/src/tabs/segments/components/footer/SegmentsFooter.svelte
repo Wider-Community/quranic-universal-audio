@@ -484,7 +484,8 @@
                              or send back (force-release). The pill is a passive
                              status indicator, not a button. -->
                         <span class="status-pill marked-ready" title="Awaiting admin review">
-                            Marked ready · awaiting admin
+                            <span class="pill-main">Marked ready · awaiting admin</span>
+                            <span class="pill-hint">You can claim a different reciter</span>
                         </span>
                     {:else}
                         <ClaimButton slug={$selectedReciter || ''} task={reciterTask} {onClaimed} />
@@ -856,15 +857,21 @@
        once the reviewer has submitted. Passive: no hover, no cursor. */
     .status-pill.marked-ready {
         display: inline-flex;
-        align-items: center;
-        padding: 5px 12px;
-        font: 500 var(--fs-meta)/1 var(--font-sans);
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1px;
+        padding: 4px 12px;
+        font: 500 var(--fs-meta)/1.25 var(--font-sans);
         color: var(--state-warn-fg);
         background: oklch(from var(--state-warn-fg) l c h / 0.10);
         border: 1px solid oklch(from var(--state-warn-fg) l c h / 0.40);
         border-radius: var(--r-pill);
         letter-spacing: 0.01em;
         white-space: nowrap;
+    }
+    .status-pill.marked-ready .pill-hint {
+        font-weight: 400;
+        opacity: 0.75;
     }
     .save-group {
         display: inline-flex;

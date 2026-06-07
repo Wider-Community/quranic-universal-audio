@@ -108,6 +108,28 @@ describe('ClaimButton', () => {
         expect(btn!.classList.contains('lg')).toBe(false);
     });
 
+    it('renders the Claim button once the held claim is marked ready (active_claim null, active_claims non-empty)', () => {
+        // Marking ready clears the blocking `active_claim` but leaves the
+        // reciter in `active_claims` — the contributor is now free to claim a
+        // different one, so the button must surface for the new slug.
+        currentUser.set({
+            login: 'me',
+            hf_user_id: 'u-1',
+            role: 'contributor',
+            active_claim: null,
+            active_claims: ['marked-ready-slug'],
+            dev_mode: false,
+            capabilities: [],
+            guides_read: [],
+        });
+
+        const { container } = render(ClaimButton, {
+            props: { slug: 'different-reciter', task: makeTask(true), onClaimed: null },
+        });
+
+        expect(container.querySelector('button')).not.toBeNull();
+    });
+
     it('is labelled "Claim review" and opens the confirm modal on click (no immediate claim)', () => {
         closeClaimConfirm();
         currentUser.set({
