@@ -107,6 +107,7 @@ Deep, agent-facing reference docs live in `docs/reference/` (flat). **Read the o
 | [`capabilities.md`](docs/reference/capabilities.md) | data-driven capability authz — resolver, override store, Permissions tab, **convention for adding a gate that surfaces in the UI** |
 | [`admin-dashboard.md`](docs/reference/admin-dashboard.md) | admin modal — Users compartment, owner-only role picker, `/api/admin/*` |
 | [`catalog.md`](docs/reference/catalog.md) | reciter catalog — layers, slug convention, audio manifests, naming guide |
+| [`audio-metadata-pipeline.md`](docs/reference/audio-metadata-pipeline.md) | audio metadata generation/probing/auditing/backfill — VBR & phantom-tail caveats, source-probe pitfalls, bucket/mount, the diagnostics+backfills tooling, new-source/channel runbook |
 | [`segments-editor.md`](docs/reference/segments-editor.md) | command grammar, normalized state, identity, save flow, edit_history, undo |
 | [`validation.md`](docs/reference/validation.md) | validation engine, categories, persisted classifier fields, bench/drift harness |
 | [`frontend.md`](docs/reference/frontend.md) | Svelte 5 SPA — dashboard/timestamps/segments tabs, lib, stores, charts |

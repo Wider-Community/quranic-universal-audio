@@ -104,7 +104,12 @@ def _decode_bucket_mp3(data: bytes) -> dict | None:
         rates.add(h["kbps"])
         pos += h["frame_size"]
     mode = "cbr" if len(rates) <= 1 else "vbr"
-    return {"duration_sec": pr.real_dur_s, "bitrate_kbps": int(pr.declared_kbps), "bitrate_mode": mode}
+    return {
+        "duration_sec": pr.real_dur_s,
+        "bitrate_kbps": int(pr.declared_kbps),
+        "bitrate_mode": mode,
+        "sample_rate": pr.sr,
+    }
 
 
 # --- per-chapter resolution --------------------------------------------------
@@ -164,6 +169,14 @@ def resolve_chapter(args, fs, bucket, slug, ch, entry, drift_pct):
     if dur is not None:
         new["duration_sec"] = int(round(dur))
 
+    # Sample rate, captured opportunistically from whichever probe ran (for the
+    # delivery-row rollup; not stored per-chapter in the sidecar).
+    sr = None
+    if bdec:
+        sr = bdec.get("sample_rate")
+    elif src:
+        sr = src.sample_rate
+
     # Classify the outcome for reporting.
     note = None
     still_null = any(new.get(f) is None for f in META_FIELDS)
@@ -173,7 +186,7 @@ def resolve_chapter(args, fs, bucket, slug, ch, entry, drift_pct):
         note = f"source-error:{src.error}"
     elif still_null:
         note = "unresolved"
-    return new, method, note
+    return new, method, note, sr
 
 
 def process_slug(args, fs, bucket, slug, drift_pct):
@@ -189,18 +202,25 @@ def process_slug(args, fs, bucket, slug, drift_pct):
     chapters = sidecar.get("chapters") or {}
     keys = sorted((k for k in chapters if ":" not in k and k.isdigit()), key=int)
 
+    dead = set(args.dead_map.get(slug, [])) if args.dead_map else set()
+
     changed = 0
     url_rewrites = 0
     needs_full: list[str] = []
     src_errors: list[str] = []
     unresolved: list[str] = []
     sample: list[str] = []
+    sample_rates: dict[int, int] = {}
     for ch in keys:
+        if ch in dead:
+            continue  # removed below; don't probe a known-dead url
         entry = dict(chapters[ch] or {})
         needs_null = any(entry.get(f) is None for f in META_FIELDS)
         if not needs_null and not args.fix_drift:
             continue
-        new, method, note = resolve_chapter(args, fs, bucket, slug, ch, entry, drift_pct)
+        new, method, note, sr = resolve_chapter(args, fs, bucket, slug, ch, entry, drift_pct)
+        if sr:
+            sample_rates[sr] = sample_rates.get(sr, 0) + 1
         if new.get("url") != entry.get("url"):
             url_rewrites += 1
         if note == "needs_full":
@@ -219,24 +239,64 @@ def process_slug(args, fs, bucket, slug, drift_pct):
                     + ", ".join(f"{f}={new.get(f)}" for f in META_FIELDS)
                 )
 
-    # URLs changed → recompute the _meta.checksum exactly as services/admin/intake.py does.
-    if url_rewrites:
+    # Remove dead chapters from the sidecar + _meta.chapter_count.
+    removed = [ch for ch in dead if ch in chapters]
+    for ch in removed:
+        del chapters[ch]
+
+    # URLs changed or chapters removed → recompute _meta.checksum exactly as
+    # services/admin/intake.py does (sorted "key=url;" pairs, sha256[:16]).
+    if url_rewrites or removed:
         import hashlib
 
+        sidecar.setdefault("_meta", {})
         digest = "".join(
             f"{k}={chapters[k]['url']};" for k in sorted(chapters) if chapters[k].get("url")
         ).encode("utf-8")
-        sidecar.setdefault("_meta", {})["checksum"] = hashlib.sha256(digest).hexdigest()[:16]
+        sidecar["_meta"]["checksum"] = hashlib.sha256(digest).hexdigest()[:16]
+        sidecar["_meta"]["chapter_count"] = sum(1 for k in chapters if ":" not in k and k.isdigit())
+
+    # Delivery-row rollup from the corrected manifest (coverage + encoder fields).
+    live = [chapters[k] for k in chapters if ":" not in k and k.isdigit()]
+    durs = [e["duration_sec"] for e in live if isinstance(e.get("duration_sec"), (int, float))]
+    # Only roll up a total when EVERY live chapter has a duration — a partial sum
+    # (some chapters still null from probe failures) would undercount coverage.
+    dur_complete = bool(live) and len(durs) == len(live)
+    modes = {e.get("bitrate_mode") for e in live if e.get("bitrate_mode")}
+    kbpss = [e["bitrate_kbps"] for e in live if isinstance(e.get("bitrate_kbps"), (int, float))]
+    if not modes:
+        roll_mode = None
+    elif modes == {"cbr"}:
+        roll_mode = "cbr"
+    elif modes == {"vbr"}:
+        roll_mode = "vbr"
+    else:
+        roll_mode = "mixed"
+    if roll_mode == "mixed":
+        roll_nominal = None  # model validator forbids a nominal on mixed
+    elif kbpss:
+        roll_nominal = round(sum(kbpss) / len(kbpss)) if roll_mode == "vbr" else max(set(kbpss), key=kbpss.count)
+    else:
+        roll_nominal = None
+    rollup = {
+        "chapter_count": len(live),
+        "total_duration_sec": int(round(sum(durs))) if dur_complete else None,
+        "bitrate_mode": roll_mode,
+        "bitrate_kbps_nominal": roll_nominal,
+        "sample_rate_hz": max(sample_rates, key=sample_rates.get) if sample_rates else None,
+    }
 
     return {
         "slug": slug,
         "n_chapters": len(keys),
         "changed": changed,
         "url_rewrites": url_rewrites,
+        "removed": removed,
         "needs_full": needs_full,
         "src_errors": src_errors,
         "unresolved": unresolved,
         "sample": sample,
+        "rollup": rollup,
         "sidecar": sidecar,
         "man_rel": man_rel,
     }
@@ -275,11 +335,24 @@ def main() -> int:
         help="repair stale archive.org node urls to canonical archive.org/download form "
         "(fixes playback too) and recompute _meta.checksum",
     )
+    p.add_argument(
+        "--remove-dead",
+        default="",
+        help="path to url_audit JSON; drop each reciter's dead_chapters + recompute count/checksum",
+    )
     p.add_argument("--workers", type=int, default=8)
     p.add_argument("--out-dir", default="/tmp/manifest_backfill", help="where dry-run corrected sidecars are written")
+    p.add_argument("--sql-out", default="", help="write delivery-row rollup UPDATE statements here")
     p.add_argument("--apply", action="store_true", help="write corrected sidecars to the bucket")
     bs.add_bucket_args(p)
     a = p.parse_args()
+
+    a.dead_map = {}
+    if a.remove_dead:
+        doc = json.load(open(a.remove_dead))
+        for r in doc.get("per_reciter", doc.get("reciters", [])):
+            if r.get("dead_chapters"):
+                a.dead_map[r["slug"]] = [str(c) for c in r["dead_chapters"]]
 
     fs, bucket = bs.resolve(a)
     slugs = list(a.slug)
@@ -338,14 +411,23 @@ def main() -> int:
         for s in r["sample"]:
             print(f"    {s}")
 
-    # Validate + emit/apply.
+    total_removed = sum(len(r.get("removed", [])) for r in ok)
+    if a.dead_map:
+        print(f"dead chapters removed: {total_removed}")
+
+    # Validate + emit/apply manifests.
     bad = 0
+    written = []
     for r in results:
-        if r.get("error") or not r["changed"]:
+        if r.get("error"):
+            continue
+        touched = r["changed"] or r.get("removed")
+        if not touched:
             continue
         v = _validate(r["sidecar"])
         if v:
             print(f"  SCHEMA FAIL {r['slug']}: {v}", file=sys.stderr); bad += 1; continue
+        written.append(r)
         body = json.dumps(r["sidecar"], ensure_ascii=False, indent=2)
         if a.apply:
             bs.confirm_mutation(a, f"write {r['man_rel']}")
@@ -357,10 +439,31 @@ def main() -> int:
     if bad:
         print(f"\n{bad} slugs failed schema validation — not written", file=sys.stderr)
         return 1
+
+    # Delivery-row rollup UPDATE statements (apply separately via admin_db.py --write).
+    def sqlstr(v):
+        return "NULL" if v is None else (f"'{v}'" if isinstance(v, str) else str(v))
+
+    sql_lines = []
+    for r in written:
+        ru = r["rollup"]
+        sets = ", ".join(
+            f"{col} = {sqlstr(ru[col])}"
+            for col in ("chapter_count", "total_duration_sec", "bitrate_mode", "bitrate_kbps_nominal", "sample_rate_hz")
+            if ru.get(col) is not None
+        )
+        if sets:
+            sql_lines.append(f"UPDATE deliveries SET {sets} WHERE slug = '{r['slug']}';")
+    if a.sql_out and sql_lines:
+        Path(a.sql_out).write_text("\n".join(sql_lines) + "\n", encoding="utf-8")
+        print(f"\n{len(sql_lines)} delivery-row UPDATE statements -> {a.sql_out}")
+
     if a.apply:
-        print(f"\nAPPLIED to {bucket}. Effect requires a prod Space restart to propagate.")
+        print(f"\nAPPLIED {len(written)} manifests to {bucket}. "
+              f"Run the {a.sql_out or '--sql-out'} UPDATEs via admin_db.py, then restart the prod Space.")
     else:
-        print(f"\ndry-run — corrected sidecars in {out_dir}/. Re-run with --apply (--yes-prod for prod).")
+        print(f"\ndry-run — {len(written)} corrected sidecars in {out_dir}/. "
+              f"Re-run with --apply (--yes-prod for prod).")
     return 0
 
 
