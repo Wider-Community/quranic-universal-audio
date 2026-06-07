@@ -7,6 +7,7 @@
  * - cancelReleaseJob       cancel an in-flight release job by id
  * - regenerateTs           re-run MFA alignment for a published slug
  * - cutRelease             launch the global GH release cut job
+ * - refreshHfCatalog       rebuild only the HF dataset ``mushafs`` catalog
  *
  */
 
@@ -24,6 +25,7 @@ import type {
     AdminReleaseStatusRow,
     AdminReleasesStatusResponse,
     AdminReleasesSummary,
+    SuggestedAction,
 } from '../types/generated/schemas';
 
 export type ReleaseRow = AdminReleaseRow;
@@ -39,6 +41,7 @@ export type ReleasePreviewRow = AdminReleasePreviewRow;
 export type ReleasePreviewResponse = AdminReleasePreviewResponse;
 export type LaunchResponse = AdminLaunchResponse;
 export type CutReleaseBody = AdminCutReleaseRequest;
+export type StaleSuggestion = SuggestedAction;
 
 async function _unwrap<T>(resp: Response): Promise<T> {
     if (resp.ok) return (await resp.json()) as T;
@@ -85,14 +88,19 @@ export async function cancelReleaseJob(jobId: string): Promise<{ job_id: string;
 }
 
 /** Launch an MFA timestamps-regeneration job for an already-released slug.
- *  POSTs to the existing generate-timestamps route (no change). On success the
- *  reciter stays released but its HF/GH releases are stamped stale, moving the
- *  row to "Stale on HF" so the operator re-publishes. Throws the server error
- *  verbatim (e.g. the 409 "a timestamps job is already running"). */
-export async function regenerateTs(slug: string): Promise<LaunchResponse> {
+ *  POSTs to the existing generate-timestamps route. ``chapters`` scopes the run
+ *  to those surah numbers (affected-only regen); omit for a full reciter. On
+ *  success the reciter stays released but its HF/GH releases are stamped stale,
+ *  moving the row to "Stale on HF" so the operator re-publishes. Throws the
+ *  server error verbatim (e.g. the 409 "a timestamps job is already running"). */
+export async function regenerateTs(slug: string, chapters?: number[]): Promise<LaunchResponse> {
     const resp = await fetch(
         `/api/admin/generate-timestamps/${encodeURIComponent(slug)}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(chapters && chapters.length ? { chapters } : {}),
+        },
     );
     return _unwrap<LaunchResponse>(resp);
 }
@@ -108,3 +116,24 @@ export async function cutRelease(body: CutReleaseBody): Promise<LaunchResponse> 
     });
     return _unwrap<LaunchResponse>(resp);
 }
+
+/** Launch the global HF dataset catalog refresh (the ``mushafs`` subset only).
+ *  Rebuilds the dataset catalog config + card from the live catalog with no
+ *  audio re-slice — the cheap remediation for ``catalog_edit`` HF staleness.
+ *  Gated by ``release.publish_hf``. Throws the server 409 verbatim when a
+ *  refresh / batch is already in flight. */
+export async function refreshHfCatalog(): Promise<LaunchResponse> {
+    const resp = await fetch('/api/admin/refresh-hf-catalog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    return _unwrap<LaunchResponse>(resp);
+}
+
+/** Map an actionable ``SuggestedAction.action`` code to its launcher. Keeps the
+ *  reason→action wiring on the FE to this one table (the label / kind / gate all
+ *  come from the server-resolved suggestion). ``republish_hf`` has no direct
+ *  launcher here — it routes through the select-and-publish batch flow. */
+export const SUGGESTION_LAUNCHERS: Record<string, () => Promise<LaunchResponse>> = {
+    refresh_hf_catalog: refreshHfCatalog,
+};

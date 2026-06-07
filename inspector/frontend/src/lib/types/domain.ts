@@ -145,6 +145,16 @@ export interface HistoryBatch {
     reverted_op_ids?: string[];
 }
 
+/** One TS-generation boundary in the edit-history timeline (ascending). The
+ *  FE partitions edit batches into tiers split by these `produced_at` times.
+ *  `published` marks a generation that an HF publish landed on. */
+export interface GenerationBoundary {
+    version: string | null;
+    produced_at: string | null;
+    published: boolean;
+    published_at: string | null;
+}
+
 export interface HistorySummary {
     total_operations: number;
     total_batches: number;

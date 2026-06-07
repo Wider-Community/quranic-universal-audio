@@ -22,10 +22,12 @@
         InFlightJob,
         ReleaseStatusRow,
     } from '../../../../../lib/api/admin-releases';
+    import { surahOptionText } from '../../../../../lib/utils/surah-info';
 
     export type ReleasesBucket =
         | 'in_flight'
         | 'failed'
+        | 'stale_ts'
         | 'stale_hf'
         | 'waiting'
         | 'published_current';
@@ -62,9 +64,12 @@
     // Generate-TS action checks.
     const canGenerateTs = can('reviews.generate_timestamps');
     const canReciterPublish = can('reciter.publish');
-    // Only published rows can be regenerated — waiting rows have never been
-    // published (Publish is their action); in_flight rows have no action.
-    const showRegen = $derived(bucket === 'published_current' || bucket === 'stale_hf');
+    // Regenerate is the CTA for published rows AND for any row whose generated
+    // timestamps are behind its segments (TS-track ``segments_edited`` staleness),
+    // whatever bucket it lands in. in_flight rows have no action.
+    const showRegen = $derived(
+        bucket === 'published_current' || bucket === 'stale_hf' || !!row.ts?.stale_since,
+    );
 
     function fmtRelative(iso: string | null | undefined): string {
         if (!iso) return '';
@@ -94,13 +99,45 @@
         return s.length > 8 ? s.slice(0, 7) : s;
     }
 
+    /** Human tag for the staleness cause — "metadata" (a catalog edit, cheap
+     *  to reconcile), "timestamps" (a TS regen, needs a republish), or "edited"
+     *  (segments edited after generation, on the TS track — needs a regen). */
+    function staleReasonLabel(reason: string | null | undefined): string {
+        if (reason === 'catalog_edit') return 'metadata';
+        if (reason === 'ts_regen') return 'timestamps';
+        if (reason === 'segments_edited') return 'edited';
+        return 'stale';
+    }
+
+    /** Affected chapters as "5 Al-Māʾidah, 12 Yūsuf" (surah names; falls back to
+     *  bare numbers before surah-info loads). */
+    function affectedChaptersText(chs: number[]): string {
+        return chs.map((c) => surahOptionText(c)).join(', ');
+    }
+
+    /** TS chip tooltip — generation + the "behind by N edits" staleness note. */
+    function tsChipTitle(): string {
+        if (!row.ts) return 'No timestamps yet';
+        let t = `TS ${row.ts.version} · ${fmtRelative(row.ts.produced_at)}`;
+        if (row.ts.stale_since) {
+            const n = row.ts.edits_since ?? 0;
+            t += ` · ${n} edit${n === 1 ? '' : 's'} since generation`;
+            const chs = row.ts.affected_chapters ?? [];
+            if (chs.length) t += `\nAffected chapters: ${affectedChaptersText(chs)}`;
+            if (row.ts.suggested_action) t += ` — ${row.ts.suggested_action.label}`;
+        }
+        return t;
+    }
+
     function ghChipLabel(): {
         glyph: string;
         label: string;
         tone: 'pending' | 'settled' | 'warn' | 'faint';
     } {
         if (!row.gh) return { glyph: '·', label: 'not in cut', tone: 'faint' };
-        if (row.gh.stale_since) return { glyph: '⚠', label: `stale (${row.gh.change_kind})`, tone: 'warn' };
+        if (row.gh.stale_since) {
+            return { glyph: '⚠', label: `stale · ${staleReasonLabel(row.gh.stale_reason)}`, tone: 'warn' };
+        }
         // added/refresh will change in the next cut (violet "pending change");
         // unchanged is settled into the current cut (muted, reads as at-rest).
         if (row.gh.change_kind === 'unchanged') return { glyph: '·', label: 'current', tone: 'settled' };
@@ -141,26 +178,33 @@
     </div>
 
     <div class="row-meta">
-        <span class="chip chip-ts" title={row.ts ? `TS ${row.ts.version} · ${fmtRelative(row.ts.produced_at)}` : 'No timestamps yet'}>
+        <span class="chip chip-ts" class:chip-stale={row.ts?.stale_since} title={tsChipTitle()}>
             <span class="chip-key">TS</span>
             {#if row.ts}
                 <span class="chip-val">{fmtRelative(row.ts.produced_at)}</span>
+                {#if row.ts.stale_since}
+                    <span class="chip-stale-dot" aria-label="stale"></span>
+                    <span class="reason-tag">{staleReasonLabel(row.ts.stale_reason)}</span>
+                {/if}
             {:else}
                 <span class="chip-val chip-faint">—</span>
             {/if}
         </span>
 
-        <span class="chip chip-hf" class:chip-stale={row.hf?.stale_since} title={row.hf ? `HF ${shortVer(row.hf.version)} · ${fmtRelative(row.hf.produced_at)}${row.hf.stale_since ? ' · stale' : ''}` : 'Not published'}>
+        <span class="chip chip-hf" class:chip-stale={row.hf?.stale_since} title={row.hf ? `HF ${shortVer(row.hf.version)} · ${fmtRelative(row.hf.produced_at)}${row.hf.stale_since ? ` · stale (${staleReasonLabel(row.hf.stale_reason)})${row.hf.suggested_action ? ` — ${row.hf.suggested_action.label}` : ''}` : ''}` : 'Not published'}>
             <span class="chip-key">HF</span>
             {#if row.hf}
                 <span class="chip-val">{fmtRelative(row.hf.produced_at)}</span>
-                {#if row.hf.stale_since}<span class="chip-stale-dot" aria-label="stale"></span>{/if}
+                {#if row.hf.stale_since}
+                    <span class="chip-stale-dot" aria-label="stale"></span>
+                    <span class="reason-tag">{staleReasonLabel(row.hf.stale_reason)}</span>
+                {/if}
             {:else}
                 <span class="chip-val chip-faint">—</span>
             {/if}
         </span>
 
-        <span class="chip chip-gh chip-{ghChip.tone}" title={`GH: ${ghChip.label}`}>
+        <span class="chip chip-gh chip-{ghChip.tone}" title={`GH: ${ghChip.label}${row.gh?.suggested_action ? ` — ${row.gh.suggested_action.label}` : ''}`}>
             <span class="chip-key">GH</span>
             <span class="chip-val">{ghChip.glyph}{ghChip.glyph ? ' ' : ''}{ghChip.label}</span>
         </span>
@@ -324,6 +368,17 @@
         border-radius: 50%;
         background: var(--state-error-fg);
         margin-left: 2px;
+    }
+    /* Why the row is stale — "metadata" (cheap refresh) vs "timestamps"
+       (republish). Inherits the amber stale palette from .chip-stale. */
+    .reason-tag {
+        margin-left: 4px;
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        opacity: 0.85;
     }
     /* GH tones — added/refresh pend a change (violet), unchanged is settled
        (muted), stale needs attention (amber), the rest are demoted (faint). */

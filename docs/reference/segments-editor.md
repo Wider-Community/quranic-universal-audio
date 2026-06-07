@@ -210,6 +210,10 @@ Server: `services/activity/history_query.py`. `load_edit_history` (cached, per-r
 
 Client store: `stores/history.ts` (`historyData`, `historyDataStale`, edit chains). Utils `utils/history/`: `loader.ts` (lazy per-reciter fetch + `resetHistoryLoader`), `render.ts` (response → store), `chains.ts` (`buildEditChains` — split-chain construction), `items.ts` (`groupRelatedOps`, flatten batches into display items), `actions.ts` (panel lifecycle). Components `components/history/`: `HistoryPanel`, `HistoryBatch`, `HistoryOp`, `HistoryArrows`, `HistoryFilters`, `EditChainRow`.
 
+### Generation tiers (timestamps-staleness)
+
+The edit-history response also carries `generations` — the ascending TS-generation boundary list (`services/segments/history_tiers.py::generation_timeline` over `repo_releases.all_releases_for_track_slug`, merged onto the cached blob in the route so the heavy parse stays cached). The FE partitions batches into **tiers** split by these boundaries (`items.ts::tierOf`): tier 0 = before the first generation ("Initial"), tier N = after generation #N, and the highest tier = the current edits not yet folded into the generated timestamps. `HistoryFilters` renders a **tier filter** (one pill per tier) that surfaces **only when the current tier holds timestamp-affecting edits** (`entryAffectsTimestamps` against `TS_AFFECTING_OP_TYPES` — the lockstep mirror of `qua_shared/segment_edit_ops.py`); with nothing pending the section is hidden. The "Pending regen" pill is the same drift that flags the reciter's `ts` track stale on the Releases tab (`segments_edited` — see [`dataset-and-releases.md`](dataset-and-releases.md)).
+
 ## Flagged issues
 
 A manual "needs a second look" annotation any editor can attach to a segment — a required root comment plus an append-only reply thread. **Not a validation category**: it never appears in the filter dropdown or issue types, and produces no history category pill.

@@ -40,6 +40,7 @@
         filterErrCats,
         filterHasWasl,
         filterOpTypes,
+        filterTier,
         flatItems,
         historyData,
         historyLoadState,
@@ -60,7 +61,9 @@
     import HistoryFilters from './HistoryFilters.svelte';
 
     // Filtered flat items -----------------------------------------------------
-    $: hasFilters = $filterOpTypes.size > 0 || $filterErrCats.size > 0 || $filterHasWasl;
+    $: hasFilters = $filterOpTypes.size > 0 || $filterErrCats.size > 0 || $filterHasWasl || $filterTier !== null;
+
+    $: generations = $historyData?.generations ?? [];
 
     // Batches display ---------------------------------------------------------
     $: displayEntries = (!$historyData || !$historyData.batches) ? [] : buildDisplayItems(
@@ -71,6 +74,8 @@
         $filterOpTypes,
         $filterErrCats,
         $filterHasWasl,
+        generations,
+        $filterTier,
     );
 
     // Summary derivation ------------------------------------------------------

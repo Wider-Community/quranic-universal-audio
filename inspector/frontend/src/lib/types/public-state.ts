@@ -94,6 +94,13 @@ export interface PublicDelivery {
      * date, the full list is the per-node tooltip history.
      */
     bucket_dates?: Record<string, string[]>;
+    /**
+     * Timestamp-regeneration dates (every TS generation after the first), ISO
+     * ascending. Present only on modal payloads; empty/absent when the
+     * timestamps were never regenerated. Drives the conditional "Timestamps
+     * refreshed" timeline node (latest date + ×N).
+     */
+    ts_refresh_dates?: string[];
 }
 
 export interface PublicReciter {

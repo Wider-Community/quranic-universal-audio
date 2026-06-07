@@ -42,7 +42,7 @@ import os
 from datetime import UTC
 from pathlib import Path
 
-from qua_shared.schemas import TsJobRecord, TsJobSettings
+from qua_shared.schemas import StaleReason, TsJobRecord, TsJobSettings
 from services.state import state as state_service
 from services.storage.hf_bucket import StorageNotFound, get_backend, resolve_bucket_repo
 
@@ -262,6 +262,9 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
         env["PERSIST_AUDIO"] = "1"
     if settings.gen_peaks:
         env["GEN_PEAKS"] = "1"
+    # Affected-only regen scope — the job re-aligns just these chapters.
+    if settings.chapters:
+        env["CHAPTERS"] = ",".join(str(c) for c in settings.chapters)
     # Advanced overrides: form value > server env default.
     workers = settings.workers or _env_int("INSPECTOR_TS_JOB_WORKERS")
     if workers:
@@ -313,6 +316,7 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
                 slug=slug,
                 settings=settings.model_copy(update={"flavor": flavor, "timeout": timeout}),
                 status="running",
+                chapters_refreshed=settings.chapters,
                 started_at=_now_iso(),
                 url=url,
             )
@@ -460,6 +464,29 @@ def job_status(slug: str, job_id: str, *, log_tail: int = 400) -> dict:
     }
 
 
+def _ts_regen_provenance(slug: str) -> tuple[str | None, list[int] | None]:
+    """Provenance for a new ``ts`` row, read from the row it will supersede.
+
+    Returns ``(prior_ts_version, affected_chapters)`` — the superseded version and
+    the chapters edited since its generation (what this regen folds in). Both
+    ``None`` on a first publish (no prior ts row). Call BEFORE ``supersede_current``
+    (a superseded row drops out of ``current_release``). Best-effort: a failed
+    edit-history read yields no affected chapters."""
+    from services.db import repo_releases
+    from services.segments import ts_staleness
+
+    prior = repo_releases.current_release("ts", slug)
+    if prior is None:
+        return None, None
+    produced_at = prior.get("produced_at")
+    affected: list[int] | None = None
+    if produced_at:
+        info = ts_staleness.ts_stale_info(slug, produced_at=produced_at)
+        if info:
+            affected = info["affected_chapters"]
+    return prior.get("version"), affected
+
+
 def complete_timestamps_job(slug: str, job_id: str) -> dict:
     """Record a succeeded timestamps job for ``slug``. Idempotent.
 
@@ -528,6 +555,7 @@ def complete_timestamps_job(slug: str, job_id: str) -> dict:
     from services.db import repo_releases
     from services.db.sync import durable_transaction
 
+    prior_ts_version, affected_chapters = _ts_regen_provenance(slug)
     try:
         with durable_transaction() as _:
             new_row = state_service.transition(
@@ -547,10 +575,12 @@ def complete_timestamps_job(slug: str, job_id: str) -> dict:
                 produced_at=now,
                 produced_by="SYSTEM_ACTOR",
                 produced_by_job_id=job_id,
+                affected_chapters=affected_chapters,
+                prior_ts_version=prior_ts_version,
             )
             # Stamp the HF + most-recent-GH membership as stale (re-publishing
             # clears stale in v1; no explicit ack endpoint).
-            repo_releases.stamp_stale_on_ts_regen(slug, at=now)
+            repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
     except state_service.StateError as exc:
         # Lost a double-fire race, or the row changed under us (e.g. reviewer
         # un-marked). Benign — the winning caller (or a re-run) handles it.
@@ -612,6 +642,7 @@ def _regenerate_timestamps_on_released(slug: str, job_id: str) -> dict:
         )
         return {"slug": slug, "state": "released", "released": False, "reason": "no shards"}
 
+    prior_ts_version, affected_chapters = _ts_regen_provenance(slug)
     now = datetime.now(UTC)
     with durable_transaction() as _:
         # Supersede prior current ts row FIRST — partial-unique on (track, slug)
@@ -624,9 +655,11 @@ def _regenerate_timestamps_on_released(slug: str, job_id: str) -> dict:
             produced_at=now,
             produced_by="SYSTEM_ACTOR",
             produced_by_job_id=job_id,
+            affected_chapters=affected_chapters,
+            prior_ts_version=prior_ts_version,
         )
         # Re-publishing clears stale; TS regen sets it on the HF/GH membership.
-        repo_releases.stamp_stale_on_ts_regen(slug, at=now)
+        repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
         audit.append(
             "reciter.ts_regenerated",
             actor=SYSTEM_ACTOR,

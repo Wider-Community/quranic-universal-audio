@@ -24,7 +24,7 @@ import os
 from flask import Blueprint, jsonify, request
 
 from services.admin import timestamps_jobs as ts_jobs
-from services.admin.jobs import cut_release, hf_publish, hf_publish_batch
+from services.admin.jobs import cut_release, hf_publish, hf_publish_batch, refresh_catalog
 
 log = logging.getLogger("inspector")
 
@@ -151,6 +151,32 @@ def hf_publish_batch_complete():
         )
     except Exception as exc:  # noqa: BLE001
         log.warning("hf-publish-batch-complete webhook (%s) failed: %s", job_id, exc)
+        return jsonify({"error": str(exc)}), 502
+    return jsonify({"ok": True, **result})
+
+
+@webhooks_bp.route("/hf-catalog-refresh-complete", methods=["POST"])
+def hf_catalog_refresh_complete():
+    """Clear ``catalog_edit`` HF staleness after a successful catalog refresh.
+
+    Body: ``{"job_id", "status"}``. Only acts on a success status — the global
+    ``mushafs`` parquet was rebuilt from canonical, so catalog-only-stale HF
+    rows are now reconciled. Idempotent (clearing already-clear rows is a no-op).
+    """
+    ok, err = _check_secret()
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    job_id = (body.get("job_id") or "").strip()
+    status = (body.get("status") or "").strip().lower()
+    if not job_id:
+        return jsonify({"error": "job_id is required"}), 400
+    if status not in _SUCCESS:
+        return jsonify({"ok": True, "skipped": "non-success status"})
+    try:
+        result = refresh_catalog.complete(None, job_id)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("hf-catalog-refresh-complete webhook (%s) failed: %s", job_id, exc)
         return jsonify({"error": str(exc)}), 502
     return jsonify({"ok": True, **result})
 

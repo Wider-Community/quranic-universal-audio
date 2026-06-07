@@ -12,6 +12,21 @@
 /* Do not modify it by hand - just update the pydantic models and then re-run the script
 */
 
+/**
+ * Why an artifact is stale — drives the remediation suggestion.
+ *
+ * Severity-ordered (``segments_edited`` > ``ts_regen`` > ``catalog_edit``):
+ * when more than one applies to a row the stronger wins, because regenerating
+ * timestamps (the fix for ``segments_edited``) subsumes a republish, which in
+ * turn subsumes a catalog refresh. The reason→action mapping lives in
+ * ``qua_shared/release_staleness.py``.
+ *
+ * ``segments_edited`` lives on the ``ts`` track only (computed, never stamped):
+ * segments were edited after the timestamps were generated, so the generated
+ * timestamps are behind the segments and need regenerating. The other two live
+ * on the published ``hf`` / ``gh`` tracks.
+ */
+export type StaleReason = "ts_regen" | "catalog_edit" | "segments_edited";
 export type Role = "contributor" | "maintainer" | "owner" | "pipeline";
 
 export interface AdminActiveClaim {
@@ -61,12 +76,28 @@ export interface AdminCutReleaseRequest {
 export interface AdminGhReleaseMember {
   change_kind: "added" | "refresh" | "unchanged";
   stale_since?: string | null;
+  stale_reason?: StaleReason | null;
+  suggested_action?: SuggestedAction | null;
   release_id?: number | null;
   ts_version?: string | null;
   [k: string]: unknown;
 }
+/**
+ * The remediation the FE should offer (or merely note) for a stale row.
+ *
+ * Resolved server-side from ``(StaleReason, track)`` so the reason→action
+ * mapping stays single-sourced (no BE↔FE parity drift). The FE maps the
+ * ``action`` code to an API call and gates the control on ``capability``.
+ */
+export interface SuggestedAction {
+  action: string;
+  kind: "actionable" | "informational";
+  label: string;
+  capability?: string | null;
+  [k: string]: unknown;
+}
 export interface AdminInFlightJob {
-  kind: "hf_publish" | "hf_publish_batch" | "cut_release" | "timestamps";
+  kind: "hf_publish" | "hf_publish_batch" | "cut_release" | "timestamps" | "refresh_catalog";
   slug: string | null;
   job_id: string;
   started_at: string | null;
@@ -162,6 +193,10 @@ export interface AdminReleaseRow {
   version: string;
   produced_at: string;
   stale_since?: string | null;
+  stale_reason?: StaleReason | null;
+  suggested_action?: SuggestedAction | null;
+  edits_since?: number | null;
+  affected_chapters?: number[] | null;
   [k: string]: unknown;
 }
 export interface AdminReleaseStatusRow {
@@ -184,6 +219,7 @@ export interface AdminReleasesStatusResponse {
   in_flight: AdminInFlightJob[];
   recitations: AdminReleaseStatusRow[];
   last_batch?: AdminLastBatch | null;
+  catalog_drift_count?: number;
   [k: string]: unknown;
 }
 export interface AdminReleasesSummary {
@@ -811,6 +847,7 @@ export interface TsJobRecord {
   type?: string;
   settings?: TsJobSettings;
   status?: string;
+  chapters_refreshed?: number[] | null;
   started_at?: string | null;
   ended_at?: string | null;
   url?: string | null;
@@ -828,6 +865,7 @@ export interface TsJobSettings {
   beams?: number[];
   persist_audio?: boolean;
   gen_peaks?: boolean;
+  chapters?: number[] | null;
   workers?: number | null;
   flavor?: string | null;
   timeout?: string | null;

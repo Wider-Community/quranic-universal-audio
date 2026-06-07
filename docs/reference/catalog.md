@@ -282,6 +282,8 @@ All catalog writes go through `inspector/services/state/catalog.py` (sole writer
 
 Audit `patch` shape `{field: {from, to}}` is computed in the service; the repo persists only. Reads: `snapshot()` (cached on `db_seq`), `find_delivery`, `find_reciter`, `display_name`.
 
+**Public-projection edits stamp release staleness.** `edit_delivery` / `edit_reciter` carry `PUBLIC_DELIVERY_FIELDS` / `PUBLIC_RECITER_FIELDS` — the catalog fields that surface in the HF `mushafs` catalog + GH release `catalog.json`. When a changed field is in that set, the service stamps the affected published `hf`/`gh` rows `catalog_edit`-stale (`repo_releases.stamp_stale` / `stamp_stale_for_reciter`, reciter edits fanning out to every delivery) inside the same txn — so the Releases tab surfaces the drift and offers the cheap catalog refresh. Admin-only fields (`notes` / `variant_label` / `source`) never stamp. → [`dataset-and-releases.md`](dataset-and-releases.md).
+
 ## 9. Adding a single reciter / delivery
 
 1. **Check for collision.** `find_reciter(reciter_id)` and scan `name_en`/`name_ar` variants. If the reciter exists, you're adding a *delivery* — skip to step 3.

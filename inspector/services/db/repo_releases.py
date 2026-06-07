@@ -19,6 +19,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from qua_shared import release_staleness
+from qua_shared.schemas import StaleReason
+
 from . import _serde
 from .connection import get_conn
 
@@ -39,14 +42,22 @@ def insert_per_recitation_release(
     external_uri: str | None = None,
     source_catalog_rev: str | None = None,
     validation_summary: dict[str, Any] | None = None,
+    affected_chapters: list[int] | None = None,
+    prior_ts_version: str | None = None,
 ) -> int:
     """Insert a new release row. Caller must supersede the prior current row
-    in the same transaction (see ``supersede_current``)."""
+    in the same transaction (see ``supersede_current``).
+
+    ``affected_chapters`` (the chapters a ts regen folded in) and
+    ``prior_ts_version`` (the superseded ts row's version) are regen provenance
+    on the ``ts`` track — null on a first publish / the ``hf`` track.
+    """
     cur = get_conn().execute(
         "INSERT INTO per_recitation_releases("
         " track, slug, version, produced_at, produced_by, produced_by_job_id,"
-        " launched_by, external_uri, source_catalog_rev, validation_summary"
-        ") VALUES (?,?,?,?,?,?,?,?,?,?)",
+        " launched_by, external_uri, source_catalog_rev, validation_summary,"
+        " affected_chapters, prior_ts_version"
+        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             track,
             slug,
@@ -58,6 +69,8 @@ def insert_per_recitation_release(
             external_uri,
             source_catalog_rev,
             _serde.json_dumps(validation_summary) if validation_summary else None,
+            _serde.json_dumps(affected_chapters) if affected_chapters else None,
+            prior_ts_version,
         ),
     )
     return int(cur.lastrowid)
@@ -112,6 +125,35 @@ def release_by_version(track: str, slug: str, version: str) -> dict | None:
     return dict(r) if r else None
 
 
+def all_releases_for_track_slug(track: str, slug: str) -> list[dict]:
+    """Every row (current + superseded) for ``(track, slug)`` ordered by
+    ``produced_at`` ascending — the full generation/publish history.
+
+    Supersede stamps ``superseded_at`` and never deletes, so this reconstructs
+    each TS generation (track='ts') or each publish (track='hf') as a boundary
+    timeline. Feeds the Segments history "tier" view.
+    """
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT * FROM per_recitation_releases "
+            "WHERE track = ? AND slug = ? ORDER BY produced_at ASC, id ASC",
+            (track, slug),
+        )
+        .fetchall()
+    )
+    return [dict(r) for r in rows]
+
+
+def all_gh_releases() -> list[dict]:
+    """Every gh_releases row (current + superseded) ordered by ``produced_at``
+    ascending — the full cut history (cut markers for the history timeline)."""
+    rows = (
+        get_conn().execute("SELECT * FROM gh_releases ORDER BY produced_at ASC, id ASC").fetchall()
+    )
+    return [dict(r) for r in rows]
+
+
 def gh_release_by_version(version: str) -> dict | None:
     """Return ANY gh_releases row (current OR superseded) for ``version``.
 
@@ -129,34 +171,90 @@ def gh_release_by_version(version: str) -> dict | None:
     return dict(r) if r else None
 
 
-def stamp_stale_on_ts_regen(slug: str, *, at: datetime) -> int:
-    """Mark the current ``hf`` row for ``slug`` (if any) as stale, AND mark
-    that slug's row in the most-recent ``gh_releases`` (if it was a member)
-    as stale. Returns the total number of stale stamps applied.
+def _reason_value(reason: StaleReason | str) -> str:
+    return reason.value if isinstance(reason, StaleReason) else str(reason)
 
-    Called by ``ts.complete()`` (via the legacy ``complete_timestamps_job``
-    after this lands in Phase 3) inside the same durable_transaction as the
-    ``per_recitation_releases(track='ts')`` insert.
+
+def _should_stamp(row: dict, incoming: StaleReason | str) -> bool:
+    """Stamp a fresh row, or upgrade an already-stale one to a more severe
+    reason (so a later ``ts_regen`` overrides an earlier ``catalog_edit`` — the
+    catalog-refresh clear path depends on this ordering)."""
+    if row.get("stale_since") is None:
+        return True
+    return release_staleness.more_severe(
+        row.get("stale_reason"), StaleReason(_reason_value(incoming))
+    )
+
+
+def stamp_stale(slug: str, *, at: datetime, reason: StaleReason | str) -> int:
+    """Mark the current ``hf`` row for ``slug`` (if any) and that slug's row in
+    the most-recent ``gh_releases`` (if a member) stale with ``reason``. Returns
+    the number of stamps applied (fresh or reason-upgrades).
+
+    ``stale_since`` records *first* stale time (preserved on a reason upgrade
+    via ``COALESCE``); ``stale_reason`` always reflects the most severe cause.
+    Runs inside the caller's ``durable_transaction``.
     """
     iso = _serde.to_iso(at)
+    rv = _reason_value(reason)
+    conn = get_conn()
     n = 0
-    cur = get_conn().execute(
-        "UPDATE per_recitation_releases SET stale_since = ? "
-        "WHERE track = 'hf' AND slug = ? "
-        "AND superseded_at IS NULL AND stale_since IS NULL",
-        (iso, slug),
-    )
-    n += int(cur.rowcount)
-    cur = get_conn().execute(
-        "UPDATE gh_release_recitations SET stale_since = ? "
-        "WHERE slug = ? AND stale_since IS NULL "
-        "AND release_id = (SELECT id FROM gh_releases "
-        "                  WHERE superseded_at IS NULL "
-        "                  ORDER BY id DESC LIMIT 1)",
-        (iso, slug),
-    )
-    n += int(cur.rowcount)
+
+    hf = conn.execute(
+        "SELECT id, stale_since, stale_reason FROM per_recitation_releases "
+        "WHERE track = 'hf' AND slug = ? AND superseded_at IS NULL",
+        (slug,),
+    ).fetchone()
+    if hf is not None and _should_stamp(dict(hf), reason):
+        conn.execute(
+            "UPDATE per_recitation_releases "
+            "SET stale_since = COALESCE(stale_since, ?), stale_reason = ? WHERE id = ?",
+            (iso, rv, hf["id"]),
+        )
+        n += 1
+
+    gh = conn.execute(
+        "SELECT grr.release_id, grr.slug, grr.stale_since, grr.stale_reason "
+        "FROM gh_release_recitations grr JOIN gh_releases gr ON gr.id = grr.release_id "
+        "WHERE grr.slug = ? AND gr.superseded_at IS NULL "
+        "ORDER BY gr.id DESC LIMIT 1",
+        (slug,),
+    ).fetchone()
+    if gh is not None and _should_stamp(dict(gh), reason):
+        conn.execute(
+            "UPDATE gh_release_recitations "
+            "SET stale_since = COALESCE(stale_since, ?), stale_reason = ? "
+            "WHERE release_id = ? AND slug = ?",
+            (iso, rv, gh["release_id"], gh["slug"]),
+        )
+        n += 1
     return n
+
+
+def stamp_stale_for_reciter(reciter_id: str, *, at: datetime, reason: StaleReason | str) -> int:
+    """Fan ``stamp_stale`` out across every delivery of ``reciter_id`` (a
+    reciter-level catalog field appears in each delivery's catalog projection).
+    Returns the total stamps applied."""
+    slugs = [
+        r["slug"]
+        for r in get_conn()
+        .execute("SELECT slug FROM deliveries WHERE reciter_id = ?", (reciter_id,))
+        .fetchall()
+    ]
+    return sum(stamp_stale(s, at=at, reason=reason) for s in slugs)
+
+
+def clear_catalog_stale_hf() -> int:
+    """Clear staleness from current ``hf`` rows stale *solely* due to a catalog
+    edit (a global ``mushafs`` refresh rebuilds the whole catalog parquet from
+    canonical). Leaves ``ts_regen`` rows stale — those still need a republish.
+    Returns the number of rows cleared."""
+    cur = get_conn().execute(
+        "UPDATE per_recitation_releases SET stale_since = NULL, stale_reason = NULL "
+        "WHERE track = 'hf' AND stale_since IS NOT NULL AND stale_reason = ?",
+        (StaleReason.CATALOG_EDIT.value,),
+    )
+    return int(cur.rowcount)
 
 
 # ---------------------------------------------------------------------------
