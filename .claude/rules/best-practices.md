@@ -1,8 +1,3 @@
----
-paths:
-  - "inspector/**/*"
----
-
 # Best Practices
 
 ## Core Principles
