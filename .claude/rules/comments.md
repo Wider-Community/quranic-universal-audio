@@ -1,8 +1,3 @@
----
-paths:
-  - "inspector/**/*"
----
-
 # Comments
 
 - No dead / legacy comments mentioning things that do not exist anymore
