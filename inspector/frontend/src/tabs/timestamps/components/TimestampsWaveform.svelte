@@ -328,13 +328,16 @@
         startSec: number,
         endSec: number,
     ): Promise<void> {
-        if (!url) { _clearPeaks(); return; }
+        if (!reciter) { _clearPeaks(); return; }
         const startMs = Math.max(0, Math.round(startSec * 1000));
         const endMs = Math.round(endSec * 1000);
         if (endMs <= startMs) { _clearPeaks(); return; }
-        if (!reciter) { _clearPeaks(); return; }
-
-        const key = `${url}:${startMs}:${endMs}`;
+        // `url` may be null/'' for a non-templatable source — the baked
+        // chapter-peaks fast path needs only reciter+chapter, so don't bail here.
+        // The ffmpeg fallback (fetchSegmentPeaks) no-ops on empty url, clearing
+        // cleanly.
+        const safeUrl = url ?? '';
+        const key = `${safeUrl}:${startMs}:${endMs}`;
         const gen = ++fetchGen;
 
         // FAST PATH: baked 10bps chapter peaks (server-cached, sliced
@@ -350,7 +353,7 @@
                 chMap = null;
             }
             if (gen !== fetchGen) return; // a newer verse landed mid-fetch
-            const chEntry = chMap ? pickChapterPeaks(chMap, url) : null;
+            const chEntry = chMap ? pickChapterPeaks(chMap, safeUrl) : null;
             if (chEntry && chEntry.peaks instanceof Int8Array && chEntry.duration_ms > 0) {
                 const sliced = _sliceVerseLocal(chEntry.peaks, chEntry.duration_ms, startMs, endMs);
                 if (sliced && sliced.peaks.length) {
@@ -373,7 +376,7 @@
         let entry: SegmentPeaks | null | undefined = _lruGet(key);
         if (!entry) {
             try {
-                entry = await fetchSegmentPeaks(reciter, url, startMs, endMs, chapter || undefined);
+                entry = await fetchSegmentPeaks(reciter, safeUrl, startMs, endMs, chapter || undefined);
             } catch (e) {
                 console.error('Waveform peaks fetch failed:', e);
                 return;

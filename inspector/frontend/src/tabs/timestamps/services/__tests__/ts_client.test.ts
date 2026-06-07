@@ -10,16 +10,14 @@ import {
     vbrChaptersFromManifest,
 } from '../ts_client';
 
-// Audio routing is sourced from the manifest's reciter block — these helpers
-// build the same data the production code passes in.
-const RA_SURAH: TsReciterAudio = {
-    audio_category: 'by_surah',
-    url_template: 'server7.mp3quran.net/s_gmd/{surah:03d}.mp3',
-};
-const RA_AYAH: TsReciterAudio = {
-    audio_category: 'by_ayah',
-    url_template: 'everyayah.com/data/Saad_40k/{surah:03d}{ayah:03d}.mp3',
-};
+// audio_category is sourced from the manifest's reciter block; the canonical
+// per-chapter URL is injected by the caller (resolved from /api/audio/surahs).
+const RA_SURAH: TsReciterAudio = { audio_category: 'by_surah' };
+const RA_AYAH: TsReciterAudio = { audio_category: 'by_ayah' };
+
+// Canonical URLs the caller would pass in (no longer template-derived).
+const CH_URL = 'https://server7.mp3quran.net/s_gmd/001.mp3'; // by_surah chapter file
+const AYAH_URL = 'https://everyayah.com/data/Saad_40k/001001.mp3'; // by_ayah verse file
 
 vi.mock('../../../../lib/api', () => ({
     fetchArrayBuffer: vi.fn(),
@@ -94,39 +92,40 @@ const fakeDk = {
 };
 
 // ---------------------------------------------------------------------------
-// assembleVerseFromShard — audio routing from the manifest
+// assembleVerseFromShard — canonical audio URL injection
 //
-// Audio routing (url_template + audio_category) is sourced from the manifest's
-// reciter block, never the shard's slim `_meta` (which carries no audio fields).
-// The by_surah offset adjustment 0-anchors word times to the verse's clip start.
+// `audio_category` is sourced from the manifest's reciter block; the per-chapter
+// URL is the canonical link the caller resolved from /api/audio/surahs and is
+// echoed verbatim into `audio_url` (never recomputed from a template). The
+// by_surah offset adjustment 0-anchors word times to the verse's clip start.
 // ---------------------------------------------------------------------------
 
-describe('assembleVerseFromShard — audio routing from manifest', () => {
-    it('templates the audio URL from the manifest and 0-anchors by_surah words', () => {
+describe('assembleVerseFromShard — canonical audio URL', () => {
+    it('uses the injected canonical chapter URL and 0-anchors by_surah words', () => {
         const shard: TsShardResponse = {
             _meta: { schema_version: 2, chapter: 1, audio_category: 'by_surah' },
             segments: [seg('1:1', 5000, 6000, [makeWord(1, 5000, 6000)])],
         };
-        const reciterAudio: TsReciterAudio = {
-            audio_category: 'by_surah',
-            url_template: 'server7.mp3quran.net/shur/{surah:03d}.mp3',
-        };
-        const result = assembleVerseFromShard('r', shard, '1:1', fakeQpc, fakeDk, reciterAudio);
+        const url = 'https://server7.mp3quran.net/shur/001.mp3';
+        const result = assembleVerseFromShard('r', shard, '1:1', fakeQpc, fakeDk, RA_SURAH, url);
         expect(result).not.toBeNull();
-        expect(result!.audio_url).toBe('https://server7.mp3quran.net/shur/001.mp3');
+        expect(result!.audio_url).toBe(url);
         expect(result!.audio_category).toBe('by_surah_audio');
         expect(result!.time_start_ms).toBe(5000);
         expect(result!.words[0]!.start).toBeCloseTo(0);
     });
 
-    it('returns an empty audio_url when the manifest template is empty', () => {
+    it('uses a non-templatable per-chapter URL verbatim (YouTube by_surah)', () => {
+        // Regression: a YouTube by_surah delivery has a distinct video id per
+        // chapter (no {surah} pattern). The old template path emitted "" here and
+        // the waveform blanked; the canonical URL must flow through unchanged.
         const shard: TsShardResponse = {
-            _meta: { schema_version: 2, chapter: 1, audio_category: 'by_ayah' },
-            segments: [seg('1:1', 0, 500, [makeWord(1, 0, 500)])],
+            _meta: { schema_version: 2, chapter: 2, audio_category: 'by_surah' },
+            segments: [seg('2:1', 4000, 12000, [makeWord(1, 4000, 12000)])],
         };
-        const reciterAudio: TsReciterAudio = { audio_category: 'by_ayah', url_template: '' };
-        const result = assembleVerseFromShard('r', shard, '1:1', fakeQpc, fakeDk, reciterAudio);
-        expect(result!.audio_url).toBe('');
+        const url = 'https://www.youtube.com/watch?v=E5sWmvpn0EI';
+        const result = assembleVerseFromShard('r', shard, '2:1', fakeQpc, fakeDk, RA_SURAH, url);
+        expect(result!.audio_url).toBe(url);
     });
 });
 
@@ -138,7 +137,7 @@ describe('assembleVerseFromShard (by_ayah)', () => {
     const shard = byAyahShard();
 
     it('builds a verse with second-scaled timings, location strings, and intervals', () => {
-        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk, RA_AYAH);
+        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk, RA_AYAH, AYAH_URL);
         expect(result).not.toBeNull();
         expect(result!.reciter).toBe('saad_al_ghamdi');
         expect(result!.chapter).toBe(1);
@@ -163,13 +162,13 @@ describe('assembleVerseFromShard (by_ayah)', () => {
     });
 
     it('time_start_ms stays 0 and time_end_ms tracks the segment span end for by_ayah', () => {
-        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk, RA_AYAH);
+        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk, RA_AYAH, AYAH_URL);
         expect(result!.time_start_ms).toBe(0);
         expect(result!.time_end_ms).toBe(1500); // segment span end (ms)
     });
 
     it('returns null for an unknown verse ref', () => {
-        expect(assembleVerseFromShard('saad_al_ghamdi', shard, '99:99', fakeQpc, fakeDk, RA_AYAH)).toBeNull();
+        expect(assembleVerseFromShard('saad_al_ghamdi', shard, '99:99', fakeQpc, fakeDk, RA_AYAH, AYAH_URL)).toBeNull();
     });
 });
 
@@ -181,7 +180,7 @@ describe('assembleVerseFromShard (by_surah)', () => {
     const shard = bySurahShard();
 
     it('subtracts the verse start offset from word/letter/interval timings', () => {
-        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk, RA_SURAH);
+        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk, RA_SURAH, CH_URL);
         expect(result!.audio_category).toBe('by_surah_audio');
 
         // Verse starts at 5s of the surah file → all timings shift by -5s.
@@ -219,7 +218,7 @@ describe('assembleVerseFromShard — loopback occasion dedup', () => {
                 seg('2:2', 11770, 14920, [makeWord(6, 11770, 13000), makeWord(7, 13000, 14920)]),
             ],
         };
-        const result = assembleVerseFromShard('r', shard, '2:2', fakeQpc, fakeDk, RA_SURAH);
+        const result = assembleVerseFromShard('r', shard, '2:2', fakeQpc, fakeDk, RA_SURAH, CH_URL);
         expect(result).not.toBeNull();
         expect(result!.words.map((w) => w.location)).toEqual([
             '2:2:1', '2:2:5', '2:2:6', '2:2:7',
@@ -240,7 +239,7 @@ describe('assembleVerseFromShard — loopback occasion dedup', () => {
                 seg('1:1', 1500, 2500, [makeWord(1, 1500, 2000), makeWord(2, 2000, 2500)]),
             ],
         };
-        const result = assembleVerseFromShard('r', shard, '1:1', fakeQpc, fakeDk, RA_AYAH);
+        const result = assembleVerseFromShard('r', shard, '1:1', fakeQpc, fakeDk, RA_AYAH, AYAH_URL);
         expect(result!.words.map((w) => w.location)).toEqual(['1:1:1', '1:1:2']);
         // Occasion A spans 0-1000.
         expect(result!.time_end_ms).toBe(1000);
@@ -268,7 +267,7 @@ describe('assembleVerseFromShard — consecutive repeats', () => {
 
     it('trims the repeat to one take (canonical clip)', () => {
         const shard = consecutiveRepeatShard();
-        const result = assembleVerseFromShard('r', shard, '1:1', fakeQpc, fakeDk, RA_SURAH);
+        const result = assembleVerseFromShard('r', shard, '1:1', fakeQpc, fakeDk, RA_SURAH, CH_URL);
         expect(result!.words.map((w) => w.location)).toEqual(['1:1:1', '1:1:2']);
         // Clip ends at the first take's end (6000); take 2 is dropped.
         expect(result!.time_start_ms).toBe(5000);

@@ -328,11 +328,9 @@ export async function loadVbrChapters(reciter: string): Promise<number[]> {
  * sidecar. The shard's slim `_meta` carries no audio routing fields.
  */
 export interface TsReciterAudio {
-    /** Templated audio URL with `{surah:03d}` / `{ayah:03d}` placeholders. Empty
-     *  string when the audio manifest can't be expressed as a single template. */
-    url_template: string;
     /** Short form (`'by_surah'` / `'by_ayah'`) — the contract the FE drives
-     *  audio routing + offset logic from. */
+     *  audio routing + offset logic from. Per-chapter audio URLs are NOT in the
+     *  manifest; resolve them from the canonical `/api/audio/surahs` endpoint. */
     audio_category: 'by_surah' | 'by_ayah';
 }
 
@@ -345,33 +343,7 @@ export function reciterAudioFromManifest(
 ): TsReciterAudio | null {
     const block = manifest.reciters?.[reciter];
     if (!block) return null;
-    return {
-        url_template: block.url_template ?? '',
-        audio_category: block.audio_category,
-    };
-}
-
-/**
- * Resolve the audio URL for `(surah, ayah)` from the manifest's `url_template`.
- *
- * `url_template` carries `{surah:03d}` / `{ayah:03d}` placeholders for by_ayah
- * reciters and just `{surah:03d}` for by_surah; protocol-less templates get an
- * `https://` prefix. Returns the empty string when the template is empty — caller
- * must NOT push that into an `<audio>` element (browser resolves "" to the page
- * URL and errors).
- */
-export function resolveAudioUrl(
-    urlTemplate: string,
-    surah: number,
-    ayah: number,
-): string {
-    if (!urlTemplate) return '';
-    const httpsTmpl = /^https?:\/\//i.test(urlTemplate) ? urlTemplate : `https://${urlTemplate}`;
-    return httpsTmpl
-        .replace(/\{surah:03d\}/g, String(surah).padStart(3, '0'))
-        .replace(/\{ayah:03d\}/g, String(ayah).padStart(3, '0'))
-        .replace(/\{surah\}/g, String(surah))
-        .replace(/\{ayah\}/g, String(ayah));
+    return { audio_category: block.audio_category };
 }
 
 /**
@@ -445,8 +417,11 @@ function shardOccasions(shard: TsShardResponse): Map<string, VerseOccasions> {
  * Identity flows top-down: the caller knows which slug it fetched `shard` for
  * (it's in the URL), so `reciter` is a param and rides back on the result.
  *
- * Audio routing (`audio_url` + `audio_category`) is sourced from `reciterAudio`
- * — the manifest's reciter block, the live source — never from the shard.
+ * `audio_category` (offset logic) comes from `reciterAudio` — the manifest's
+ * reciter block. `chapterAudioUrl` is the canonical per-chapter link the caller
+ * resolved from `/api/audio/surahs` (the audio-manifest sidecar) — never
+ * recomputed from a template, so non-templatable sources (per-chapter YouTube
+ * IDs) resolve correctly. For by_surah every verse in the chapter shares it.
  */
 export function assembleVerseFromShard(
     reciter: string,
@@ -455,6 +430,7 @@ export function assembleVerseFromShard(
     qpc: Record<string, { text?: string }>,
     dk: Record<string, { text?: string }>,
     reciterAudio: TsReciterAudio,
+    chapterAudioUrl: string,
 ): TsVerseData | null {
     if (verseRef === '_meta') return null;
 
@@ -515,10 +491,9 @@ export function assembleVerseFromShard(
         });
     }
 
-    // Audio URL — template comes from the manifest's reciter block (live).
-    const surahNum = chapter;
-    const ayahNum = parseInt(verseRef.split(':')[1] ?? '0', 10);
-    const audioUrl = resolveAudioUrl(reciterAudio.url_template, surahNum, ayahNum);
+    // Audio URL — canonical per-chapter link resolved by the caller from
+    // `/api/audio/surahs` (the audio-manifest sidecar), never a template.
+    const audioUrl = chapterAudioUrl;
 
     // The TsVerseData type expects the long form ("by_*_audio") — the manifest
     // carries the short form. Map here.

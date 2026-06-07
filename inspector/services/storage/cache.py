@@ -539,9 +539,10 @@ def set_audio_manifest_url_index_cache(slug: str, idx: dict[str, str]) -> None:
 def invalidate_audio_manifest_cache() -> None:
     """Drop ALL cached audio-manifest sidecars + their URL indexes.
 
-    The TS manifest build derives ``url_template`` / ``vbr_chapters`` from these
-    sidecars; clearing them alongside a manifest rebuild guards against a stale
-    sidecar (e.g. a re-extracted reciter) leaking old URLs into the manifest."""
+    The TS manifest build derives ``vbr_chapters`` from these sidecars and the
+    ``/api/audio/surahs`` route serves their per-chapter URLs; clearing them
+    alongside a manifest rebuild guards against a stale sidecar (e.g. a
+    re-extracted reciter) leaking old URLs."""
     _audio_manifest.clear()
     _audio_manifest_url_index.clear()
 

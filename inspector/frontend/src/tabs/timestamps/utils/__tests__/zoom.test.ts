@@ -514,16 +514,17 @@ describe('setupZoomLifecycle', () => {
         expect(farFrames).toBeGreaterThan(nearFrames);
     });
 
-    it('verse change snaps tsZoom to null', () => {
+    it('chapter change snaps tsZoom to null', () => {
         setupZoomLifecycle();
         loopTarget.set({ kind: 'word', wordIndex: 1, startSec: 4, endSec: 5 });
         finishTween();
         expect(get(tsZoom)).not.toBeNull();
-        // Change audio_url → verse-change path clears.
+        // Change chapter → chapter-change path clears the zoom. (by_surah audio
+        // is one file per chapter, so this is the navigation that resets.)
         const cur = get(loadedVerse)!;
         loadedVerse.set({
             ...cur,
-            data: { ...cur.data, audio_url: 'http://audio/2.mp3' },
+            data: { ...cur.data, chapter: cur.data.chapter + 1 },
         });
         expect(get(tsZoom)).toBeNull();
     });
