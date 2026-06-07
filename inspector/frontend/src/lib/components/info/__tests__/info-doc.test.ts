@@ -47,6 +47,13 @@ describe('parseInline', () => {
             { bold: false, text: ' or reach out.' },
         ]);
     });
+
+    it('parses a bold-wrapped link into a single bold href run', () => {
+        expect(parseInline('**[GitHub Releases](https://x.test/r)** — JSON files.')).toEqual([
+            { bold: true, text: 'GitHub Releases', href: 'https://x.test/r' },
+            { bold: false, text: ' — JSON files.' },
+        ]);
+    });
 });
 
 describe('parseInfoDoc', () => {

@@ -34,11 +34,14 @@ export interface InfoDoc {
     blocks: InfoBlock[];
 }
 
-// Matches either `**bold**` (group 1) or `[text](href)` (groups 2 + 3).
-const INLINE_RE = /\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)]+)\)/g;
+// Bold link `**[text](href)**` (groups 1+2) must come BEFORE plain bold, else
+// `**...**` swallows the link markup as literal text. Then `**bold**` (group 3)
+// and plain `[text](href)` (groups 4+5).
+const INLINE_RE =
+    /\*\*\[([^\]]+)\]\(([^)]+)\)\*\*|\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)]+)\)/g;
 const BUCKETS = new Set<string>(PUBLIC_BUCKETS);
 
-/** Split a line into bold / link / plain runs. Always returns ≥1 token. */
+/** Split a line into bold / link / bold-link / plain runs. Always returns ≥1 token. */
 export function parseInline(text: string): InlineToken[] {
     const tokens: InlineToken[] = [];
     let last = 0;
@@ -46,9 +49,11 @@ export function parseInline(text: string): InlineToken[] {
         const idx = m.index ?? 0;
         if (idx > last) tokens.push({ bold: false, text: text.slice(last, idx) });
         if (m[1] !== undefined) {
-            tokens.push({ bold: true, text: m[1] });
+            tokens.push({ bold: true, text: m[1], href: m[2] });
+        } else if (m[3] !== undefined) {
+            tokens.push({ bold: true, text: m[3] });
         } else {
-            tokens.push({ bold: false, text: m[2] ?? '', href: m[3] ?? '' });
+            tokens.push({ bold: false, text: m[4] ?? '', href: m[5] ?? '' });
         }
         last = idx + m[0].length;
     }
