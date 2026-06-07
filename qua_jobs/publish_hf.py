@@ -42,7 +42,13 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from qua_shared.letter_vocab import to_external_char  # noqa: E402
-from qua_shared.mp3_frames import FrameIndex, build_frame_index, slice_frames  # noqa: E402
+from qua_shared.mp3_frames import (  # noqa: E402
+    FrameIndex,
+    MultiFrameSlice,
+    build_frame_index,
+    slice_frames,
+    slice_frames_multi,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("publish_hf")
@@ -293,6 +299,29 @@ def _i(x):
     return int(round(x)) if isinstance(x, float) else int(x)
 
 
+def _subtract_spans(lo: int, hi: int, spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Return ``[lo, hi]`` minus ``spans`` as a list of kept runs (source-ms).
+
+    Used to excise interior no-match audio: ``spans`` are the no-match segments'
+    time windows inside a verse, ``[lo, hi]`` the verse clip window. With no
+    overlapping span the result is the single run ``[(lo, hi)]`` (the common,
+    no-gap case → identical to today's single contiguous slice). Overlapping /
+    out-of-window spans are clipped and merged.
+    """
+    clipped = sorted(
+        (max(lo, a), min(hi, b)) for a, b in spans if min(hi, b) > max(lo, a)
+    )
+    runs: list[tuple[int, int]] = []
+    cur = lo
+    for a, b in clipped:
+        if a > cur:
+            runs.append((cur, a))
+        cur = max(cur, b)
+    if cur < hi:
+        runs.append((cur, hi))
+    return runs
+
+
 def build_rows(
     timestamps: dict,
     detailed_by_ref: dict,
@@ -431,6 +460,24 @@ def build_rows(
                         }
                     )
 
+            # Kept audio runs = the verse clip window minus any INTERIOR
+            # no-match segment (empty matched_ref). A no-match segment stays in
+            # detailed.json with its time window but contributes no ref/text/
+            # words, so its audio would otherwise sit as a phantom gap inside the
+            # single contiguous clip. Subtracting its span splits the clip into
+            # runs the slicer stitches gaplessly. Leading/trailing no-match is
+            # already outside [clip_start, clip_end] (the window spans first→last
+            # kept word), so only interior gaps produce >1 run.
+            nomatch_spans: list[tuple[int, int]] = []
+            for seg in entry.get("segments", []) or []:
+                if seg.get("matched_ref", ""):
+                    continue  # has a ref → kept, not a no-match
+                a = max(clip_start, int(seg.get("time_start", 0)))
+                b = min(clip_end, int(seg.get("time_end", 0)))
+                if b > a:
+                    nomatch_spans.append((a, b))
+            keep_runs = _subtract_spans(int(clip_start), int(clip_end), nomatch_spans)
+
             # source_url + chapter info for slicer.
             chapter = int(surah_num)
             rows.append(
@@ -446,6 +493,7 @@ def build_rows(
                     "chapter": chapter,
                     "clip_start": clip_start,
                     "clip_end": clip_end,
+                    "keep_runs": keep_runs,
                 }
             )
     return rows
@@ -550,6 +598,47 @@ def _rebase_row(row: dict, actual_start_ms: int) -> None:
     for lt in row["letter_timestamps"]:
         lt["start_ms"] += delta
         lt["end_ms"] += delta
+
+
+def _rebase_row_multi(row: dict, runs: list) -> None:
+    """Re-base a stitched (gap-excised) clip's clip-relative times piecewise.
+
+    Each ``RunMap`` in ``runs`` maps a source-ms window onto the concatenated
+    clip timeline. A clip-relative time ``t`` (offset from the ORIGINAL
+    ``clip_start``) is re-anchored by finding the run its source time
+    ``t + clip_start`` falls in and mapping it to ``(t_src - run.actual_start_ms)
+    + run.cum_offset_ms`` — so the gap audio between runs is removed and the
+    surviving words/letters/segments play back-to-back. Sets ``duration_ms`` to
+    the stitched length and ``clip_start`` to the first run's snapped boundary
+    (the source offset of the clip's byte 0).
+    """
+    orig_cs = row["clip_start"]
+
+    def _map(t_rel: int) -> int:
+        t_src = t_rel + orig_cs
+        for r in runs:
+            if r.actual_start_ms <= t_src <= r.actual_end_ms:
+                return (t_src - r.actual_start_ms) + r.cum_offset_ms
+        # Defensive: a time outside every run (e.g. landed in an excised gap or
+        # past the end). Clamp to the nearest run boundary so the clip stays
+        # monotonic rather than crashing — kept words never hit this in practice.
+        if t_src <= runs[0].actual_start_ms:
+            return 0
+        for r in runs:
+            if t_src < r.actual_start_ms:
+                return r.cum_offset_ms
+        last = runs[-1]
+        return last.cum_offset_ms + (last.actual_end_ms - last.actual_start_ms)
+
+    total = sum(r.actual_end_ms - r.actual_start_ms for r in runs)
+    row["word_timestamps"] = [[w[0], _map(w[1]), _map(w[2])] for w in row["word_timestamps"]]
+    row["segments"] = [[s[0], s[1], _map(s[2]), _map(s[3])] for s in row["segments"]]
+    for lt in row["letter_timestamps"]:
+        lt["start_ms"] = _map(lt["start_ms"])
+        lt["end_ms"] = _map(lt["end_ms"])
+    row["clip_start"] = runs[0].actual_start_ms
+    row["duration_ms"] = total
+    row["clip_end"] = runs[0].actual_start_ms + total
 
 
 # ---------------------------------------------------------------------------
@@ -954,32 +1043,48 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
     def _slice_chapter(chapter: int, chapter_rows: list[tuple[int, dict]]):
         """Read + index one chapter MP3, slice all its verse rows in-process.
 
-        Returns ``(produced, failures)`` where ``produced`` is a list of
-        ``(row_index, clip_bytes)`` and ``failures`` a list of ``"surah:ayah"``
-        labels. Rebases each produced row to its snapped frame boundary.
+        Returns ``(produced, failures, stitched)`` where ``produced`` is a list
+        of ``(row_index, clip_bytes)``, ``failures`` a list of ``"surah:ayah"``
+        labels, and ``stitched`` the ``"surah:ayah"`` labels whose clip excised
+        ≥1 interior no-match gap (>1 kept run). Contiguous verses (one run) take
+        the original single ``_frame_slice`` path unchanged.
         """
         src_bucket = _chapter_mp3_path(slug, chapter)
         if not src_bucket.exists():
-            return [], [f"{row['surah']}:{row['ayah']} (no audio)" for _, row in chapter_rows]
+            return [], [f"{row['surah']}:{row['ayah']} (no audio)" for _, row in chapter_rows], []
         try:
             data = src_bucket.read_bytes()
         except OSError as exc:
             log.warning("ch %d: read failed: %s", chapter, exc)
-            return [], [f"{row['surah']}:{row['ayah']} (read error)" for _, row in chapter_rows]
+            return [], [f"{row['surah']}:{row['ayah']} (read error)" for _, row in chapter_rows], []
         index = build_frame_index(data)
         if index.n_frames <= 0:
-            return [], [f"{row['surah']}:{row['ayah']} (no frames)" for _, row in chapter_rows]
+            return [], [f"{row['surah']}:{row['ayah']} (no frames)" for _, row in chapter_rows], []
         produced: list[tuple[int, bytes]] = []
         failures: list[str] = []
+        stitched: list[str] = []
         for i, row in chapter_rows:
-            cut = _frame_slice(data, index, row["clip_start"], row["clip_end"])
-            if cut is None:
-                failures.append(f"{row['surah']}:{row['ayah']}")
-                continue
-            clip_bytes, actual_start, _actual_end = cut
-            _rebase_row(row, actual_start)
-            produced.append((i, clip_bytes))
-        return produced, failures
+            keep_runs = row.get("keep_runs") or [(row["clip_start"], row["clip_end"])]
+            if len(keep_runs) <= 1:
+                # Common path: single contiguous run → byte-identical to before.
+                cut = _frame_slice(data, index, row["clip_start"], row["clip_end"])
+                if cut is None:
+                    failures.append(f"{row['surah']}:{row['ayah']}")
+                    continue
+                clip_bytes, actual_start, _actual_end = cut
+                _rebase_row(row, actual_start)
+                produced.append((i, clip_bytes))
+            else:
+                # Interior no-match gap(s): stitch the kept runs, drop the gap
+                # audio, rebase word/letter/segment times gaplessly.
+                ms: MultiFrameSlice | None = slice_frames_multi(data, index, keep_runs)
+                if ms is None:
+                    failures.append(f"{row['surah']}:{row['ayah']}")
+                    continue
+                _rebase_row_multi(row, ms.runs)
+                produced.append((i, ms.data))
+                stitched.append(f"{row['surah']}:{row['ayah']}")
+        return produced, failures, stitched
 
     workers = _slice_workers()
     progress_every = max(50, len(rows) // 20)
@@ -992,21 +1097,29 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
     )
 
     done = 0
+    stitched_slices: list[str] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(_slice_chapter, ch, rows_by_chapter[ch]): ch
             for ch in sorted(rows_by_chapter)
         }
         for fut in as_completed(futures):
-            produced, failures = fut.result()
+            produced, failures, stitched = fut.result()
             for idx, blob in produced:
                 audio_bytes[idx] = blob
             failed_slices.extend(failures)
+            stitched_slices.extend(stitched)
             done += len(produced) + len(failures)
             if done % progress_every < (len(produced) + len(failures)) or done == len(rows):
                 log.info("  sliced %d/%d (%d failed so far)", done, len(rows), len(failed_slices))
     sliced_count = sum(1 for b in audio_bytes if b is not None)
     log.info("audio: %d sliced, %d failed", sliced_count, len(failed_slices))
+    if stitched_slices:
+        log.info(
+            "audio: %d verse(s) had interior no-match gaps excised: %s",
+            len(stitched_slices),
+            sorted(stitched_slices)[:20],
+        )
     if failed_slices:
         log.warning("failed slices (first 20): %s", failed_slices[:20])
     if sliced_count == 0:
