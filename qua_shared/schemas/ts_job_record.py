@@ -34,8 +34,6 @@ class TsJobSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     beams: list[int] = Field(default_factory=lambda: [50])
-    persist_audio: bool = False
-    gen_peaks: bool = False
     #: Regenerate only these chapters (surah numbers). ``None`` = full reciter.
     #: Untouched chapters keep their existing shards; the run merges (not
     #: clobbers) the whole-reciter ``ts_validation.json``.
@@ -50,10 +48,14 @@ class TsJobSettings(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _surface_extras(cls, data: Any) -> Any:
+        # ``persist_audio`` / ``gen_peaks`` are retired knobs that older on-disk
+        # job records still nest under ``settings``. The job no longer persists
+        # audio nor bakes peaks (both are populated offline); strip-with-warn so
+        # legacy records still parse instead of failing extra="forbid".
         return strip_and_warn(
             data,
             declared=set(cls.model_fields),
-            dead=set(),
+            dead={"persist_audio", "gen_peaks"},
             model_name="TsJobSettings",
         )
 

@@ -9,6 +9,10 @@ segment-array per-chapter shards to
 layout). Blocks before alignment if any segment carries a compound
 cross-verse ``matched_ref`` (segment shards require single-verse refs).
 
+Alignment-only: the job never persists audio nor bakes peaks. Chapter audio
+and waveform peaks are populated offline (katana extraction → bucket); a
+chapter missing from the bucket is aligned transiently from its CDN url.
+
 Launched by ``inspector/services/admin/timestamps_jobs.py`` via
 ``huggingface_hub.run_job``. Configured entirely through env vars.
 
@@ -20,11 +24,8 @@ Env:
   BEAMS              comma-separated beams; canonical = max (default ``50``)
   WORKERS            process-pool size (default min(cpu_count, 8))
   BATCH_SIZE / DOWNLOAD_WORKERS / PADDING / METHOD  pipeline tunables
-  PERSIST_AUDIO      "1" → download missing chapter audio from the CDN and
-                     write it (Xing-injected) back to reciters/<slug>/audio/
-  GEN_PEAKS          "1" → also compute v3 slim peaks for EVERY chapter (not
-                     just persisted ones), so the Timestamps tab never has to
-                     live-ffmpeg the waveform. Independent of PERSIST_AUDIO.
+  CHAPTERS           comma-separated surahs for affected-only regen (absent =
+                     full reciter)
   JOB_ID             HF-injected job id; used to self-write the durable
                      record at reciters/<slug>/jobs/ts/<JOB_ID>.json
   INSPECTOR_WEBHOOK_URL     (optional) Inspector endpoint to POST on success so
@@ -42,7 +43,6 @@ import datetime
 import json
 import logging
 import os
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -57,7 +57,6 @@ from qua_shared.timestamps_pipeline import (  # noqa: E402
     DEFAULT_METHOD,
     DEFAULT_PADDING,
     LocalMfaBackend,
-    download_audio,
     is_compound_cross_verse,
     process,
 )
@@ -68,10 +67,6 @@ log = logging.getLogger("generate_timestamps")
 def _beams(raw: str) -> list[int]:
     out = [int(t) for t in raw.replace(" ", "").split(",") if t]
     return out or [50]
-
-
-def _bool_env(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _now_iso() -> str:
@@ -94,107 +89,6 @@ def _find_cross_verse_segments(doc: dict) -> list[tuple[str, str]]:
             if matched_ref and is_compound_cross_verse(matched_ref):
                 offenders.append((ch_ref, matched_ref))
     return offenders
-
-
-def _ensure_xing(src: Path, dest: Path) -> bool:
-    """Remux ``src`` MP3 → ``dest`` with a Xing/Info header (browser-seekable).
-
-    Mirror of ``.local/extraction/segments/audio_persist.py::_ensure_xing``:
-    ``ffmpeg -c:a copy -f mp3`` writes the Xing TOC without re-encoding.
-    Returns True on success; on any failure leaves ``dest`` absent and the
-    caller falls back to copying the raw bytes.
-    """
-    try:
-        result = subprocess.run(
-            ["ffmpeg", "-y", "-i", str(src), "-c:a", "copy", "-f", "mp3", "-v", "error", str(dest)],
-            capture_output=True,
-            timeout=180,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
-        log.warning("xing remux skipped: %s", exc)
-        if dest.exists():
-            dest.unlink()
-        return False
-    if result.returncode != 0 or not dest.exists() or dest.stat().st_size == 0:
-        log.warning("xing remux failed (rc=%s)", result.returncode)
-        if dest.exists():
-            dest.unlink()
-        return False
-    return True
-
-
-def _persist_chapter_audio(url: str, audio_dest: Path, peaks_dest: Path, gen_peaks: bool) -> bool:
-    """Download ``url`` → Xing-remux to ``audio_dest`` (+ optional v3 peaks).
-
-    Returns the local path the pipeline should align against on success
-    (always ``audio_dest`` once written), or empty on failure (caller keeps
-    the CDN url). Best-effort: peaks failure doesn't fail the audio persist.
-    """
-    import shutil
-
-    audio_dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = None
-    try:
-        tmp = download_audio(url)
-        if not _ensure_xing(tmp, audio_dest):
-            shutil.copyfile(tmp, audio_dest)  # raw fallback (VBR mis-seek risk)
-        if gen_peaks:
-            try:
-                from qua_shared.peaks_compute import compute_audio_peaks, pack_slim
-
-                hd = compute_audio_peaks(str(audio_dest))
-                if hd and hd.get("peaks"):
-                    peaks_dest.parent.mkdir(parents=True, exist_ok=True)
-                    peaks_dest.write_bytes(pack_slim(hd))
-            except Exception as exc:  # noqa: BLE001
-                log.warning("peaks gen failed for %s: %s", audio_dest.name, exc)
-        return True
-    except Exception as exc:  # noqa: BLE001
-        log.warning("persist audio failed for %s: %s", audio_dest.name, exc)
-        return False
-    finally:
-        if tmp is not None:
-            try:
-                Path(tmp).unlink(missing_ok=True)
-            except OSError:
-                pass
-
-
-def _bake_missing_peaks(reciter_dir: Path, entries: list) -> None:
-    """Bake slim v3 peaks for every by_surah chapter that doesn't have them yet.
-
-    Decouples peak baking from ``PERSIST_AUDIO``: ``_persist_chapter_audio``
-    only bakes for chapters it freshly downloads, so chapters that already had
-    bucket audio (or that we aligned straight from the CDN url) would otherwise
-    ship without peaks and force the Timestamps tab onto the 289-762ms live
-    ffmpeg path per verse. Computes from ``entry["audio"]`` (local bucket file
-    or CDN url), skips existing files + by_ayah refs, best-effort.
-    """
-    from qua_shared.peaks_compute import compute_audio_peaks, pack_slim  # noqa: E402
-
-    peaks_dir = reciter_dir / "peaks"
-    peaks_dir.mkdir(parents=True, exist_ok=True)
-    baked = skipped = failed = 0
-    for entry in entries:
-        ref = str(entry.get("ref", ""))
-        src = entry.get("audio")
-        if not ref or ":" in ref or not src:
-            continue
-        dest = peaks_dir / f"{ref}.json.gz"
-        if dest.exists():
-            skipped += 1
-            continue
-        try:
-            hd = compute_audio_peaks(str(src))
-            if not hd or not hd.get("peaks"):
-                failed += 1
-                continue
-            dest.write_bytes(pack_slim(hd))
-            baked += 1
-        except Exception as exc:  # noqa: BLE001
-            log.warning("peaks bake failed for ch%s: %s", ref, exc)
-            failed += 1
-    log.info("peaks bake pass: baked=%d skipped=%d failed=%d", baked, skipped, failed)
 
 
 def _write_record(
@@ -301,8 +195,6 @@ def main() -> int:
     dl_workers = int(os.environ.get("DOWNLOAD_WORKERS", str(DEFAULT_DOWNLOAD_WORKERS)))
     padding = os.environ.get("PADDING", DEFAULT_PADDING)
     method = os.environ.get("METHOD", DEFAULT_METHOD)
-    persist_audio = _bool_env("PERSIST_AUDIO")
-    gen_peaks = _bool_env("GEN_PEAKS")
     # Affected-only regen: process just these chapters (untouched shards stay,
     # ts_validation.json is merged not clobbered). Empty/absent = full reciter.
     refresh_chapters: set[int] | None = None
@@ -313,8 +205,6 @@ def main() -> int:
     # Echoed into the durable record so the panel shows what was actually run.
     settings = {
         "beams": beams,
-        "persist_audio": persist_audio,
-        "gen_peaks": gen_peaks,
         "chapters": sorted(refresh_chapters) if refresh_chapters else None,
         "workers": workers,
         "batch_size": batch_size,
@@ -323,16 +213,13 @@ def main() -> int:
     started_at = _now_iso()
 
     log.info(
-        "generate_timestamps slug=%s cores=%s workers=%s beams=%s batch=%s "
-        "dl_workers=%s persist_audio=%s gen_peaks=%s app=%s",
+        "generate_timestamps slug=%s cores=%s workers=%s beams=%s batch=%s dl_workers=%s app=%s",
         slug,
         os.cpu_count(),
         workers,
         beams,
         batch_size,
         dl_workers,
-        persist_audio,
-        gen_peaks,
         app_path,
     )
 
@@ -371,38 +258,25 @@ def main() -> int:
         except Exception as exc:
             log.warning("could not read manifest %s: %s", manifest_path, exc)
     audio_dir = reciter_dir / "audio"
-    peaks_dir = reciter_dir / "peaks"
     entries = doc.get("entries", [])
     injected = 0
-    persisted = 0
     for entry in entries:
         ref = str(entry.get("ref", ""))
         local = audio_dir / f"{ref}.mp3"
         if local.exists():
+            # Bucket audio present — align against the persisted bytes.
             entry["audio"] = str(local)
             injected += 1
             continue
+        # Missing from the bucket: align transiently from the CDN url
+        # (process() streams it). The job never persists it — audio is
+        # populated offline; the Releases tab warns if it's still missing.
         url = (chapters_meta.get(ref) or {}).get("url")
         if not url:
             continue
-        # Missing from the bucket. With persist_audio on, download + Xing-remux
-        # into the bucket now and align against the persisted copy (so the
-        # bytes MFA aligns == the bytes browsers will play). Otherwise inject
-        # the CDN url directly (transient, process() streams it).
-        if persist_audio and _persist_chapter_audio(
-            url, local, peaks_dir / f"{ref}.json.gz", gen_peaks
-        ):
-            entry["audio"] = str(local)
-            persisted += 1
-        else:
-            entry["audio"] = url
+        entry["audio"] = url
         injected += 1
-    log.info(
-        "injected audio for %d/%d chapters (persisted %d to bucket)",
-        injected,
-        len(entries),
-        persisted,
-    )
+    log.info("injected audio for %d/%d chapters", injected, len(entries))
 
     job_input = Path(tempfile.mkdtemp()) / slug
     job_input.mkdir(parents=True, exist_ok=True)
@@ -437,11 +311,6 @@ def main() -> int:
         return 1
 
     _write_record(mount, slug, settings, status="succeeded", started_at=started_at)
-    # Peaks bake pass: independent of PERSIST_AUDIO so every chapter (incl. ones
-    # that already had bucket audio or aligned straight from the CDN) gets slim
-    # peaks. Runs after alignment so a slow/failed bake never risks the shards.
-    if gen_peaks:
-        _bake_missing_peaks(reciter_dir, entries)
     # Tell the Inspector the job succeeded so it auto-publishes the reciter.
     # Best-effort; the Inspector's poll fallback covers a missed callback.
     _notify_complete(slug, "succeeded")

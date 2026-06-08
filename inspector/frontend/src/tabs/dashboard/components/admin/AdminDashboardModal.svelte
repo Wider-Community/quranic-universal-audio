@@ -53,8 +53,6 @@
                     {t.label}
                     {#if t.id === 'requests' && adminDashboard.unviewedRequests > 0}
                         <span class="am-tab-count">{adminDashboard.unviewedRequests}</span>
-                    {:else if t.id === 'reviews' && adminDashboard.unviewedReviews > 0}
-                        <span class="am-tab-count">{adminDashboard.unviewedReviews}</span>
                     {/if}
                 </button>
             {/each}

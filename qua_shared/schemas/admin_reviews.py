@@ -1,14 +1,14 @@
 """Admin Reviews-tab wire schemas.
 
-Backed by ``/api/admin/reviews/list`` (maintainer+). Per-recitation rows
-across the four buckets the Reviews tab covers (Marked ready, Under review,
-Published, Available for review). The state-vs-bucket mapping is computed
+Backed by ``/api/admin/reviews/list`` (maintainer+). Per-recitation rows for
+the slimmed Reviews tab, which covers read-only oversight of two buckets
+(Under review + Available for review). The state-vs-bucket mapping is computed
 on the FE — the wire only carries the canonical state + open-claim shape:
 
-* Marked ready = ``state == "under_review"`` AND ``open_claim.marked_ready_at`` set
 * Under review = ``state == "under_review"`` AND ``open_claim.marked_ready_at`` null
-* Published    = ``state == "released"``
 * Available    = ``state == "awaiting_review"``
+
+Marked-ready and released recitations moved to the Releases tab.
 
 Timestamps are ISO-8601 UTC strings exactly as stored in the substrate; the
 FE formats relatives. ``ConfigDict(extra="allow")`` for forward compatibility
@@ -52,22 +52,12 @@ class AdminReviewRow(BaseModel):
     style: str
     channel: str
     open_claim: AdminReviewOpenClaim | None = None
-    # True only for ``state == under_review`` AND open_claim has a
-    # ``marked_ready_at`` later than this caller's recorded ``review_views``
-    # row (or no row exists). Drives the per-row ``.unread`` dot in the FE.
-    # Defaults to False so non-marked-ready rows stay clean even if a stale
-    # view row would otherwise satisfy the predicate vacuously.
-    unread: bool = False
 
 
 class AdminReviewsResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     rows: list[AdminReviewRow] = Field(default_factory=list)
-    # Per-caller count of marked-ready entries this admin hasn't viewed yet.
-    # Mirrors ``AdminRequestsResponse.unviewed_count`` so the compartment can
-    # sync the dashboard store on every fetch without a second roundtrip.
-    unviewed_marked_ready: int = 0
 
 
 # ---- detail drawer ----

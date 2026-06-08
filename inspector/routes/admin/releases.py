@@ -37,6 +37,7 @@ from qua_shared.schemas import (
     AdminReleasesStatusResponse,
 )
 from routes._admin_helpers import require_capability_or_403
+from services.admin import release_readiness
 from services.admin.jobs import base as jobs_base
 from services.admin.jobs import cut_release as cut_release_jobs
 from services.admin.jobs import hf_publish as hf_publish_jobs
@@ -378,13 +379,15 @@ def releases_status(user):
         "recitations": [{
           slug, name_en, name_ar, state,
           riwayah, style, channel,
-          gh_release_eligible: bool,
+          marked_ready: bool,                   # under_review + marked, no ts yet
           ts: {version, produced_at,            # stale_* set when segments were
                stale_since?, stale_reason?,     # edited after generation
                suggested_action?, edits_since?,
                affected_chapters?} | null,
           hf: {version, produced_at, stale_since} | null,
           gh: {change_kind, stale_since, release_id, ts_version} | null,
+          readiness: {audio_missing, peaks_missing,   # non-blocking warn pill
+               audio_missing_chapters, peaks_missing_chapters} | null,
         }, ...]
       }
 
@@ -476,10 +479,12 @@ def releases_status(user):
     deliveries = conn.execute("""
         SELECT d.slug, d.riwayah, d.style, d.channel,
                r.name_en, r.name_ar,
-               ds.state
+               ds.state,
+               c.marked_ready_at
         FROM deliveries d
         JOIN reciters        r  ON r.reciter_id = d.reciter_id
         LEFT JOIN delivery_states ds ON ds.slug = d.slug
+        LEFT JOIN claims c ON c.slug = d.slug AND c.released_at IS NULL
         ORDER BY d.slug
     """).fetchall()
 
@@ -517,6 +522,9 @@ def releases_status(user):
                 ts_slim["edits_since"] = info["edits_since"]
                 ts_slim["affected_chapters"] = info.get("affected_chapters")
                 ts_slim = _with_suggestion(ts_slim, track="ts")
+        # Marked-ready, not-yet-timestamped reciters feed the "Ready to generate"
+        # bucket (claim is marked ready while still ``under_review``, no ts row).
+        marked_ready = d["state"] == "under_review" and d["marked_ready_at"] is not None
         row = {
             "slug": slug,
             "name_en": d["name_en"],
@@ -525,12 +533,16 @@ def releases_status(user):
             "riwayah": d["riwayah"],
             "style": d["style"],
             "channel": d["channel"],
+            "marked_ready": marked_ready,
             "ts": ts_slim,
             "hf": hf_slim,
             "gh": gh_slim,
             "publish_error": batch_failures.get(slug),
         }
         if _is_bucketable(row, in_flight_slugs) or slug in batch_failures:
+            # Audio/peaks readiness is a non-blocking warn — compute only for
+            # rows the FE will actually render (TTL-cached, never gates).
+            row["readiness"] = release_readiness.reciter_bucket_readiness(slug)
             out.append(row)
     payload = AdminReleasesStatusResponse.model_validate(
         {
@@ -571,6 +583,10 @@ def _is_bucketable(row: dict, in_flight_slugs: set[str]) -> bool:
     activity. Priority-first like the FE — any single match returns True.
     """
     if row["slug"] in in_flight_slugs:
+        return True
+    # Marked-ready but not yet timestamped → "Ready to generate". Ordered after
+    # the in-flight check so a running first-gen reads as "In progress".
+    if row.get("marked_ready") and row["ts"] is None:
         return True
     if row["hf"] is not None:
         return True

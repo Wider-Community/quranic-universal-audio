@@ -47,8 +47,7 @@ def _do_launch(a, ctx) -> int:
     if existing:
         print(f"a job is already in-flight: {existing}", file=sys.stderr); return 5
     settings = TsJobSettings(
-        beams=_beams(a.beams), persist_audio=not a.no_persist_audio,
-        gen_peaks=not a.no_gen_peaks, workers=a.workers,
+        beams=_beams(a.beams), workers=a.workers,
         download_workers=a.dl_workers, flavor=a.flavor, timeout=a.timeout,
     )
     _print(f"settings: {settings.model_dump(exclude_none=False)}")
@@ -157,9 +156,7 @@ def main() -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pl = sub.add_parser("launch", help="launch a TS job for SLUG")
-    pl.add_argument("slug"); pl.add_argument("--beams", default="30,2")
-    pl.add_argument("--no-persist-audio", action="store_true")
-    pl.add_argument("--no-gen-peaks", action="store_true")
+    pl.add_argument("slug"); pl.add_argument("--beams", default="50,2")
     pl.add_argument("--workers", type=int, default=None)
     pl.add_argument("--dl-workers", type=int, default=None)
     pl.add_argument("--flavor", default=None); pl.add_argument("--timeout", default=None)

@@ -191,6 +191,21 @@ def test_stamp_stale_ts_regen_not_downgraded_by_catalog_edit(fresh_db):
     assert repo_releases.current_release("hf", slug)["stale_reason"] == "ts_regen"
 
 
+def test_stamp_stale_no_hf_row_does_not_error(fresh_db):
+    """Regen on a released reciter that has a TS row but was never published to
+    HF: ``stamp_stale`` must no-op cleanly (no current hf row, no gh membership)
+    rather than raise — the "Behind edits" → regen path runs for ts-only rows."""
+    now = _now()
+    with db.transaction():
+        slug = _seed_minimal_delivery()
+        repo_releases.insert_per_recitation_release(
+            track="ts", slug=slug, version="t1", produced_at=now, produced_by="a"
+        )
+        n = repo_releases.stamp_stale(slug, at=now, reason=StaleReason.TS_REGEN)
+    assert n == 0
+    assert repo_releases.current_release("hf", slug) is None
+
+
 def test_clear_catalog_stale_hf_clears_only_catalog_edit(fresh_db):
     """The catalog refresh clears catalog_edit HF rows but leaves ts_regen ones
     (those still need a republish)."""

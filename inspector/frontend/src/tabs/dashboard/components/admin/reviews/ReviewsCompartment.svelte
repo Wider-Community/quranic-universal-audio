@@ -1,18 +1,15 @@
 <script lang="ts">
     /**
-     * Admin Reviews compartment.
+     * Admin Reviews compartment — read-only review oversight.
      *
-     * Fetches the per-recitation list once via /api/admin/reviews/list, splits
-     * it across four state buckets, and renders a collapsible section per
-     * bucket. Section order is fixed by priority: marked-ready first, available
-     * last (collapsed by default — it's typically the longest tail).
+     * Fetches the per-recitation list once via /api/admin/reviews/list and
+     * renders two collapsible sections: Under review (claimed, not yet marked
+     * ready) and Available for review (claimable). Marked-ready, publishing,
+     * and all staleness now live in the Releases tab — once a reviewer marks
+     * a recitation ready it leaves this tab entirely.
      *
-     * The state-vs-bucket mapping is computed FE-side from the canonical wire
-     * shape; backend deliberately stays state-neutral. See
-     * qua_shared/schemas/admin_reviews.py for the bucket→predicate contract.
-     *
-     * Row body click opens the General drawer (M2). Action button drawers
-     * (Ops) land in M3.
+     * Owner claim controls (change/remove reviewer) live in the General drawer.
+     * Row body click opens that drawer.
      */
     import { fetchAdminReviews } from '../../../../../lib/api/admin-reviews';
     import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
@@ -20,10 +17,8 @@
         AdminReviewRow,
         AdminReviewsResponse,
     } from '../../../../../lib/types/generated/schemas';
-    import { adminDashboard } from '../../../stores/admin-dashboard.svelte';
     import ReviewsGeneralDrawer from './ReviewsGeneralDrawer.svelte';
     import ReviewsRow from './ReviewsRow.svelte';
-    import ReviewsTimestampsDrawer from './ReviewsTimestampsDrawer.svelte';
 
     let resp = $state<AdminReviewsResponse | null>(null);
     let loading = $state(true);
@@ -44,11 +39,6 @@
                 if (ac.signal.aborted) return;
                 resp = r;
                 loading = false;
-                // Sync the dashboard-wide marked-ready counter so the entry-
-                // button dot and the Reviews-tab pill agree with the freshly
-                // fetched list — also reconciles any drift from optimistic
-                // decrements on drawer open.
-                adminDashboard.setUnviewedReviews(r.unviewed_marked_ready ?? 0);
             })
             .catch((e: unknown) => {
                 if (ac.signal.aborted) return;
@@ -62,15 +52,10 @@
         refetchSeq += 1;
     }
 
-    // Bucket predicates — see schemas/admin_reviews.py for the contract.
-    function isMarkedReady(r: AdminReviewRow): boolean {
-        return r.state === 'under_review' && !!r.open_claim?.marked_ready_at;
-    }
+    // Bucket predicates. Marked-ready rows leave Reviews for the Releases tab,
+    // so Under review carries only claims not yet marked ready.
     function isUnderReview(r: AdminReviewRow): boolean {
         return r.state === 'under_review' && !r.open_claim?.marked_ready_at;
-    }
-    function isPublished(r: AdminReviewRow): boolean {
-        return r.state === 'released';
     }
     function isAvailable(r: AdminReviewRow): boolean {
         return r.state === 'awaiting_review';
@@ -121,9 +106,7 @@
     const styleValues = $derived(countBy(allRows, 'style'));
     const channelValues = $derived(countBy(allRows, 'channel'));
 
-    const markedReady = $derived(filteredRows.filter(isMarkedReady));
     const underReview = $derived(filteredRows.filter(isUnderReview));
-    const published = $derived(filteredRows.filter(isPublished));
     const available = $derived(filteredRows.filter(isAvailable));
 
     const narrowedToZero = $derived(
@@ -132,18 +115,15 @@
             && reviewsStore.hasActiveFilters,
     );
 
-    type SectionKey = 'marked_ready' | 'under_review' | 'published' | 'available';
+    type SectionKey = 'under_review' | 'available';
 
     const COLLAPSE_LS_KEY = 'insp_reviews_collapsed';
 
-    // Collapsed-by-default: only Available. The other three are where the
-    // urgency lives. Cached to localStorage so the maintainer's section
-    // preferences persist across reloads.
+    // Collapsed-by-default: only Available (the longer claimable tail). Cached
+    // to localStorage so the maintainer's preference persists across reloads.
     function loadCollapsed(): Record<SectionKey, boolean> {
         const fallback: Record<SectionKey, boolean> = {
-            marked_ready: false,
             under_review: false,
-            published: false,
             available: true,
         };
         try {
@@ -151,9 +131,7 @@
             if (!raw) return fallback;
             const parsed = JSON.parse(raw) as Partial<Record<SectionKey, boolean>>;
             return {
-                marked_ready: parsed.marked_ready ?? fallback.marked_ready,
                 under_review: parsed.under_review ?? fallback.under_review,
-                published: parsed.published ?? fallback.published,
                 available: parsed.available ?? fallback.available,
             };
         } catch {
@@ -172,19 +150,14 @@
         }
     }
 
-    // Section order is FIXED — see plan §State-machine mapping.
     const SECTIONS: { key: SectionKey; label: string; mark: string }[] = [
-        { key: 'marked_ready', label: 'Marked ready', mark: 'marked-ready' },
         { key: 'under_review', label: 'Under review', mark: 'under-review' },
-        { key: 'published', label: 'Published', mark: 'published' },
         { key: 'available', label: 'Available for review', mark: 'available' },
     ];
 
     function rowsFor(key: SectionKey): AdminReviewRow[] {
         switch (key) {
-            case 'marked_ready': return markedReady;
             case 'under_review': return underReview;
-            case 'published': return published;
             case 'available': return available;
         }
     }
@@ -332,18 +305,11 @@
             role="presentation"
             onclick={() => reviewsStore.close()}
         ></div>
-        {#if reviewsStore.openDrawer === 'general'}
-            <ReviewsGeneralDrawer
-                slug={reviewsStore.selectedSlug}
-                onclose={() => reviewsStore.close()}
-                onaction={refetch}
-            />
-        {:else if reviewsStore.openDrawer === 'timestamps'}
-            <ReviewsTimestampsDrawer
-                slug={reviewsStore.selectedSlug}
-                onclose={() => reviewsStore.close()}
-            />
-        {/if}
+        <ReviewsGeneralDrawer
+            slug={reviewsStore.selectedSlug}
+            onclose={() => reviewsStore.close()}
+            onaction={refetch}
+        />
     {/if}
 </div>
 
@@ -407,9 +373,7 @@
         border-radius: 1px;
         flex: 0 0 auto;
     }
-    .state-mark.marked-ready { background: oklch(0.84 0.130 70); }
     .state-mark.under-review { background: var(--state-under-review-fg); }
-    .state-mark.published    { background: var(--state-published-fg); }
     .state-mark.available    { background: var(--state-available-fg); }
 
     .state-name {

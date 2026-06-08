@@ -1,26 +1,21 @@
 <script lang="ts">
     /** Trigger above the Admin notifications rail. Visible to maintainers +
      * owners ($isAdmin); opens the admin dashboard modal. Carries a single
-     * quiet dot (no number) when the caller has any unviewed admin work —
-     * polled in parallel from /api/admin/requests/unviewed-count and
-     * /api/admin/reviews/unviewed-count and OR'd via the dashboard store.
-     * One dot keeps the trigger calm; the per-tab pills inside the modal
-     * differentiate which surface needs attention. */
+     * quiet dot (no number) when the caller has unviewed open requests —
+     * polled from /api/admin/requests/unviewed-count. (Review notifications
+     * were retired with the Releases-tab restructure; the marked-ready queue
+     * now lives in Releases without a notification.) */
     import { onDestroy } from 'svelte';
 
     import { fetchUnviewedRequestCount } from '../../../../lib/api/admin-requests';
-    import { fetchUnviewedReviewCount } from '../../../../lib/api/admin-reviews';
     import { isAdmin } from '../../../../lib/stores/current-user';
     import { visiblePoll } from '../../../../lib/utils/visible-poll';
     import { adminDashboard } from '../../stores/admin-dashboard.svelte';
 
     let teardownRequests: (() => void) | null = null;
-    let teardownReviews: (() => void) | null = null;
 
-    // Two independent pollers — failure of one (e.g. transient 5xx) doesn't
-    // blank the other's dot. Same 30s cadence; Page-Visibility-aware via
-    // visiblePoll so background tabs don't churn. Idempotent guards keep
-    // the pollers stable across dev role-switcher flips.
+    // Page-Visibility-aware (visiblePoll) so background tabs don't churn.
+    // Idempotent guard keeps the poller stable across dev role-switcher flips.
     $effect(() => {
         if (!$isAdmin) return;
         if (teardownRequests === null) {
@@ -31,35 +26,20 @@
                 onError: () => {},
             });
         }
-        if (teardownReviews === null) {
-            teardownReviews = visiblePoll<number>({
-                intervalMs: 30_000,
-                fetcher: (signal) => fetchUnviewedReviewCount(signal),
-                onResult: (n) => adminDashboard.setUnviewedReviews(n),
-                onError: () => {},
-            });
-        }
     });
 
     onDestroy(() => {
         teardownRequests?.();
-        teardownReviews?.();
     });
 
     const unviewedRequests = $derived(adminDashboard.unviewedRequests);
-    const unviewedReviews = $derived(adminDashboard.unviewedReviews);
-    const hasUnviewed = $derived(unviewedRequests > 0 || unviewedReviews > 0);
+    const hasUnviewed = $derived(unviewedRequests > 0);
 
-    const dotLabel = $derived.by(() => {
-        const parts: string[] = [];
-        if (unviewedRequests > 0) {
-            parts.push(`${unviewedRequests} unviewed request${unviewedRequests === 1 ? '' : 's'}`);
-        }
-        if (unviewedReviews > 0) {
-            parts.push(`${unviewedReviews} review update${unviewedReviews === 1 ? '' : 's'}`);
-        }
-        return parts.join(' · ');
-    });
+    const dotLabel = $derived(
+        unviewedRequests > 0
+            ? `${unviewedRequests} unviewed request${unviewedRequests === 1 ? '' : 's'}`
+            : '',
+    );
 </script>
 
 {#if $isAdmin}

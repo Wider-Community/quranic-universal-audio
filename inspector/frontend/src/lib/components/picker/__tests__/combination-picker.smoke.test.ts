@@ -100,10 +100,8 @@ vi.mock('../../../api/admin-reviews', () => ({
                         claimed_at: '2026-01-01T00:00:00Z',
                         marked_ready_at: '2026-01-02T00:00:00Z',
                     },
-                    unread: false,
                 },
             ],
-            unviewed_marked_ready: 0,
         }),
     ),
 }));

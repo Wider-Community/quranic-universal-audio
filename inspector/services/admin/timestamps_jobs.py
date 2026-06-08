@@ -221,8 +221,10 @@ def _resolve_launched_job_id(slug: str) -> str | None:
 def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = None) -> dict:
     """Launch the timestamps job for ``slug`` and link its id to the reciter.
 
-    ``settings`` carries the admin's form choices (beams, persist_audio,
-    gen_peaks, + advanced workers/flavor/timeout/batch_size/download_workers).
+    ``settings`` carries the admin's form choices (beams + advanced
+    workers/flavor/timeout/batch_size/download_workers). The job is
+    alignment-only — it never persists audio nor bakes peaks (both are
+    populated offline by katana extraction).
     Writes the initial ``running`` job record at launch so the panel can show
     it even if the job dies before self-writing. Returns ``{"job_id", "url"}``.
     Caller must enforce single-flight via ``running_job_for`` first.
@@ -258,10 +260,6 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
     }
     if settings.beams:
         env["BEAMS"] = ",".join(str(b) for b in settings.beams)
-    if settings.persist_audio:
-        env["PERSIST_AUDIO"] = "1"
-    if settings.gen_peaks:
-        env["GEN_PEAKS"] = "1"
     # Affected-only regen scope — the job re-aligns just these chapters.
     if settings.chapters:
         env["CHAPTERS"] = ",".join(str(c) for c in settings.chapters)

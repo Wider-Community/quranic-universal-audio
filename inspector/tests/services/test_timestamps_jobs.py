@@ -278,50 +278,23 @@ def test_complete_unknown_slug_is_noop():
 
 
 # ---------------------------------------------------------------------------
-# Job-completion notification dot (delivery_states.last_job_finished_at)
+# Job completion → publish / state
 # ---------------------------------------------------------------------------
 
 
-def _count(hf_user_id: str = "admin") -> int:
-    from services.db import repo_review_views
-
-    return repo_review_views.count_unviewed_for_user(hf_user_id)
-
-
-def _view(slug: str, hf_user_id: str = "admin") -> None:
-    from services.admin import reviews as reviews_service
-
-    reviews_service.mark_viewed(slug, caller_hf_id=hf_user_id)
-
-
-def test_marked_ready_lights_the_dot():
-    _seed_marked_ready("rec_a")
-    assert _count() == 1  # marked-ready, never viewed (existing behavior)
-
-
-def test_success_relights_dot_after_view(monkeypatch):
-    """A finished job is a fresh event even after the admin viewed the
-    marked-ready row — success publishes and re-lights on the Published row."""
+def test_complete_publishes_marked_ready_reciter(monkeypatch):
+    """A successful job on a marked-ready reciter auto-releases it (the
+    Ready-to-generate → Publish-to-HF transition)."""
     _seed_marked_ready("rec_a")
     monkeypatch.setattr(timestamps_jobs, "_has_any_shard", lambda slug: True)
-    _view("rec_a")
-    assert _count() == 0
 
     out = timestamps_jobs.complete_timestamps_job("rec_a", "job-1")
     assert out["released"] is True
-    assert _count() == 1  # job-finished, unviewed since release
-
-    _view("rec_a")
-    assert _count() == 0
 
 
-def test_failure_relights_dot_without_state_change():
+def test_failure_leaves_reciter_under_review():
     from services.state import state as state_service
 
     _seed_marked_ready("rec_a")
-    _view("rec_a")
-    assert _count() == 0
-
     timestamps_jobs.note_timestamps_job_failed("rec_a")
     assert state_service.get_row("rec_a").state.value == "under_review"  # no publish
-    assert _count() == 1  # failure lights the Marked-ready dot

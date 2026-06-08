@@ -2,9 +2,10 @@
 
 One row per (guide ``view_key``, user) the first time that user opens the
 guide. The set powers the FE unread border + the first-edit onboarding gate
-(see ``docs/reference/accordion-guides.md``). Mirrors ``repo_review_views`` but
-write-once: ``INSERT OR IGNORE`` — once a guide is read it stays read, so there
-is no unread transition and no ``viewed_at`` advance.
+(see ``docs/reference/accordion-guides.md``). Mirrors the ``request_views``
+per-user view-mark pattern but write-once: ``INSERT OR IGNORE`` — once a guide
+is read it stays read, so there is no unread transition and no ``viewed_at``
+advance.
 
 ``view_key`` is the *collapsed* form (``low_confidence_v2`` folds into
 ``low_confidence`` — one required reading); the route normalises before calling
@@ -24,7 +25,7 @@ def record_view(hf_user_id: str, view_key: str, *, at: datetime | None = None) -
     """Mark ``view_key`` read for this user (idempotent first-write-wins).
 
     ``ensure_user`` keeps the FK valid for callers whose ``users`` row hasn't
-    been created yet (mirrors ``repo_review_views.mark_viewed``).
+    been created yet.
     """
     repo_access.ensure_user(hf_user_id)
     get_conn().execute(
