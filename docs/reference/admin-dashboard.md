@@ -1,6 +1,6 @@
 # Admin dashboard
 
-Owner/maintainer control surface launched from the Dashboard activity rail. A wide modal with a top tab strip; **Users**, **Requests**, **Reviews**, and **Permissions** ship. The **Permissions** tab is **owner-only** — it's filtered out of the tab strip for non-owners (`tabs = ALL_TABS.filter(t => !t.ownerOnly || $isOwner)` in `AdminDashboardModal.svelte`), and an active-tab guard snaps back to Users on a live owner→maintainer demotion.
+Owner/maintainer control surface launched from the Dashboard activity rail. A wide modal with a top tab strip; **Users**, **Requests**, **Reviews**, **Releases**, and **Permissions** ship. The modal reopens to the **last active tab** (localStorage `insp_admin_active_tab`, validated against the live tab set; `openModal()` defaults to it). The **Permissions** tab is **owner-only** — it's filtered out of the tab strip for non-owners (`tabs = ALL_TABS.filter(t => !t.ownerOnly || $isOwner)` in `AdminDashboardModal.svelte`), and an active-tab guard snaps back to Users on a live owner→maintainer demotion.
 
 ## Permissions compartment (owner-only)
 
@@ -8,7 +8,7 @@ Owner/maintainer control surface launched from the Dashboard activity rail. A wi
 
 Gated on `$isAdmin` (maintainer **or** owner). Read-only data for maintainers; the role picker (Users), request resolution (Requests), and reviewer overrides (Reviews → General-drawer popover) are owner-only or use existing owner-gated routes.
 
-The entry button (`AdminDashboardButton`) shows a single quiet **dot** (no number) when the caller has **any** unviewed admin work — either unviewed open requests **or** unviewed marked-ready reviews — OR'd from `adminDashboard.unviewedRequests` and `adminDashboard.unviewedReviews`. Two independent 30s `visiblePoll`s drive those counters (`/api/admin/requests/unviewed-count` + `/api/admin/reviews/unviewed-count`); the tooltip lists both counts. Inside the modal the **Requests** and **Reviews** tabs each carry an independent numeric pill (`am-tab-count`) so a maintainer can see at a glance which surface needs attention.
+The entry button (`AdminDashboardButton`) shows a single quiet **dot** (no number) when the caller has unviewed open **requests** (`adminDashboard.unviewedRequests`, driven by a 30s `visiblePoll` on `/api/admin/requests/unviewed-count`). Inside the modal the **Requests** tab carries a numeric pill (`am-tab-count`). The marked-ready review notification was retired with the Releases-tab restructure — marked-ready work moved to Releases and carries no notification.
 
 ## Frontend
 
@@ -16,22 +16,39 @@ The entry button (`AdminDashboardButton`) shows a single quiet **dot** (no numbe
 
 | File | Role |
 |---|---|
-| `AdminDashboardButton.svelte` | Entry button above the activity rail; rendered only when `$isAdmin`. Opens the modal via the store. Runs the two unviewed-count pollers (requests + reviews) — quiet dot when either is > 0. |
-| `AdminDashboardModal.svelte` | `Modal size="wide"` + tab strip (`adminDashboard.activeTab`). Renders `UsersCompartment` / `RequestsCompartment` / `reviews/ReviewsCompartment`; Requests and Reviews tabs each carry an independent `am-tab-count` pill. |
+| `AdminDashboardButton.svelte` | Entry button above the activity rail; rendered only when `$isAdmin`. Opens the modal via the store. Runs the requests unviewed-count poller — quiet dot when > 0. |
+| `AdminDashboardModal.svelte` | `Modal size="wide"` + tab strip (`adminDashboard.activeTab`, persisted to localStorage). Renders `UsersCompartment` / `RequestsCompartment` / `reviews/ReviewsCompartment` / `releases/ReleasesCompartment` / `PermissionsCompartment`; the Requests tab carries the `am-tab-count` pill. |
 | `RequestsCompartment.svelte` | Status facets (open / accepted / sent back / discarded + counts) over a review queue. Clicking a pending row expands an inline review (proposed-changes diff over `ProposedEdits` fields, requester note, conflict notice). Expanding a pending request marks it viewed (clears the unviewed dot/pill, decrements the badge). **Owner-only** inline reason + Send back / Discard; maintainers are read-only. Archived rows show a read-only resolution footer. Lazy-fetched on first activation + light `visiblePoll` while open. |
-| `reviews/ReviewsCompartment.svelte` | Per-recitation oversight surface — four collapsible state buckets (Marked ready / Under review / Published / Available for review) split FE-side from one `/api/admin/reviews/list` fetch. Section order is fixed; Available collapsed by default (localStorage-persisted). Filter bar (Arabic + Latin search · riwayah/style/channel facets · `stalled`/`name` sort). Syncs `adminDashboard.setUnviewedReviews(resp.unviewed_marked_ready)` on every fetch so the entry-button dot / tab pill reconcile against the freshly-fetched list. |
-| `reviews/ReviewsRow.svelte` | One row per recitation (`<tr>` so all sections share a `<colgroup>` for column alignment). Reciter cell shows Latin primary + Arabic muted trailing; renders a 7px `.unread` dot before the name when the row is server-marked unread **and** not yet session-viewed (the dot disappears synchronously on click). `Segments` button deep-links via `selectedReciter` + `setActiveTab('segments')` + `adminDashboard.close()`. On **under-review** rows a `Generate TS` button opens the Timestamps drawer (`reviewsStore.open(slug, 'timestamps')`). Row body click opens the General drawer; all drawer opens go through `reviewsStore.open()` which fires the best-effort viewed-mark POST and the row optimistically decrements `adminDashboard.unviewedReviews`. |
-| `reviews/ReviewsGeneralDrawer.svelte` | Current-claim chip is the popover trigger for owners (subtle hover ring + caret); maintainers see static text. **Mark-ready submission** card (between Current reviewer and Reviewer history, visible only when `current_claim.mark_ready_submission` is set) renders the reviewer's checklist as a 6-row ✓ list plus the two optional comment boxes as quoted blocks — labels come from the same `tabs/segments/copy/mark-ready` module the reviewer saw, single source of truth. **Bypass submissions** (`submission.bypass_used === true`, written when an owner skipped the form via `claim.mark_ready_skip_gates`) replace the checklist with an italic "Submitted via owner bypass — the form checklist and the zero-count validation gates were skipped." line and display an "owner bypass" pill in the section header; the warning-tinted border on the card flags it visually. The two comment blocks still render when populated, regardless of mode. Also holds the reviewer-history table (closed claims), expanded vertical timeline, and a **Flagged issues** count (shown only when `flagged_issues_count > 0`) summarising segments flagged for a second look in the Segments editor. (Timestamps-job control + history moved to the dedicated `ReviewsTimestampsDrawer` — see below.) |
+| `reviews/ReviewsCompartment.svelte` | Slimmed read-only oversight surface — two collapsible buckets (**Under review** [claimed, not yet marked ready] / **Available for review**) split FE-side from one `/api/admin/reviews/list` fetch. Available collapsed by default (localStorage-persisted). Filter bar (Arabic + Latin search · riwayah/style/channel facets · `stalled`/`name` sort). Marked-ready / published / staleness moved to the Releases tab. |
+| `reviews/ReviewsRow.svelte` | One recitation row — Latin primary + Arabic muted trailing + reviewer chip; age (stale ⚠ when a claim is > 7d old) + a `Segments` deep-link (`selectedReciter` + `setActiveTab('segments')` + `adminDashboard.close()`). Row body click opens the General drawer. No Generate-TS / unread dot (retired with the restructure). |
+| `reviews/ReviewsGeneralDrawer.svelte` | Current-claim chip is the popover trigger for owners (subtle hover ring + caret); maintainers see static text. **Mark-ready submission** card (between Current reviewer and Reviewer history, visible only when `current_claim.mark_ready_submission` is set) renders the reviewer's checklist as a 6-row ✓ list plus the two optional comment boxes as quoted blocks — labels come from the same `tabs/segments/copy/mark-ready` module the reviewer saw. **Bypass submissions** (`submission.bypass_used === true`) replace the checklist with an italic bypass line + an "owner bypass" pill. Also holds the reviewer-history table (closed claims), expanded vertical timeline, and a **Flagged issues** count (shown only when `flagged_issues_count > 0`). |
 | `reviews/ReviewerActionsPopover.svelte` | **Owner-only** mode-driven popover anchored to the current-claim chip — three views: `menu` (Change reviewer / Remove reviewer), `change` (debounced 300 ms HF login lookup → resolved user card + reason → Reassign; disables when picked login equals current reviewer), `remove` (reason → Force-release). RolePicker-style click-outside + Escape dismissal; success fires `onaction` so the drawer + parent list refetch. |
-| `reviews/ReviewsTimestampsDrawer.svelte` | Timestamps-generation control panel (under-review rows). **Settings form** — beam, probe beams, persist-audio + gen-peaks toggles, collapsible Advanced (workers/flavor/timeout) → `generateTimestamps(slug, settings)` (409 single-flight inline). **Live log pane** — `visiblePoll` on `GET /jobs/<id>` while running. **Job history** — `GET /reciters/<slug>/ts-jobs`; clicking a past run loads `GET /jobs/<id>/record` and renders its persisted logs read-only. Replaces the deleted Ops drawer. Deep dive: [timestamps-job.md](timestamps-job.md). |
-| `reviews/ExpandedTimeline.svelte` | Vertical chronological timeline with tone variants (transition / admin / job dot styles). Newest-first sort. |
+| `reviews/ExpandedTimeline.svelte` | Vertical chronological timeline with tone variants (transition / admin / job dot styles). Newest-first sort. Reused by the Releases row's Timeline expand. |
 | `UsersCompartment.svelte` | Fetches the list once + visitor stats; people/traffic ribbon, search + role-filter toolbar, master table, detail drawer. Owns inline role-change orchestration (optimistic + revert + error banner). |
 | `UsersTable.svelte` | Sortable master table. Role cell is a `RolePicker` (`editable={canEditRoles}`); the cell stops click-propagation only when editable so non-owners still open the drawer. |
 | `UserDetailDrawer.svelte` | Lazy per-user detail (stats, role/claims/requests/activity timelines, HF profile link). Header pill is a `RolePicker`; reflects the live row role via `roleOverride`. |
 
+### Releases compartment (FE)
+
+`tabs/dashboard/components/admin/releases/` — the single operator lifecycle home. Sections are organized **by action needed** (mutually exclusive, priority order): In progress · Failed to publish · **Ready to generate** (marked-ready, no ts) · **Behind edits** (ts stale) · **Republish to HF** (hf stale) · **Publish to HF** (released, first publish) · Published & current. `bucketOf()` mirrors the route's `_is_bucketable`.
+
+| File | Role |
+|---|---|
+| `ReleasesCompartment.svelte` | Bulk `/api/admin/releases/status` fetch + FE bucketing + filter bar; owns the single-open in-row expansion state (`expanded = {slug, mode}` — one open across the whole list), the batch-publish selection + action bar, the cut modal, and send-back on Ready-to-generate rows. Also fetches `/api/admin/release-preview` for the header what's-next. |
+| `ReleasesRow.svelte` | TS/HF/GH chips + non-blocking **readiness** warn pill (`audio N · peaks N missing`) + reviewer chip on Ready-to-generate rows. Action cluster: Generate/Regenerate (opens the `ts` expand) · Timeline · Reviewers · Past jobs · Segments redirect; Send back on Ready-to-generate; in-flight controls on running rows. Renders `ReleasesRowExpansion` below when this row is the open one. |
+| `ReleasesRowExpansion.svelte` | The one shared, button-switched panel — renders `ReleasesTsSettings` (`ts`), `ExpandedTimeline` (`timeline`), `ReviewerHistoryView` (`reviewers`), or `ReleasesPastJobs` (`jobs`). Timeline + Reviewers share one lazy `fetchAdminReviewDetail`. |
+| `ReleasesTsSettings.svelte` | Unified generate/regenerate form — beam 50 + probe 2, collapsible Advanced, inline Full-vs-Affected scope chooser. Launches via `generateTimestamps`. |
+| `ReleasesPastJobs.svelte` | Job history + live `visiblePoll` log tail; on terminal success triggers a status refetch. |
+| `ReviewerHistoryView.svelte` | Read-only current-reviewer + mark-ready submission + closed-claim history + flagged count (no claim mutation). |
+| `ReleasesSummaryCard.svelte` | Current GH release + **what's-next** preview ("Adds N, refreshes M (K carried) over vX.Y.Z") + Cut / Refresh-catalog buttons + in-flight strip. |
+| `CutReleaseModal.svelte` · `ReleasesActionBar.svelte` | Cut dry-run document; sticky batch-publish bar. |
+
+Full release model: [dataset-and-releases.md](dataset-and-releases.md). TS gen/regen subsystem: [timestamps-job.md](timestamps-job.md).
+
 State:
-- `tabs/dashboard/stores/admin-dashboard.svelte.ts` (`adminDashboard`: `open`, `activeTab`, `unviewedRequests`, `unviewedReviews`, `openModal/close/setTab/setUnviewed*`).
-- `lib/stores/reviews.svelte.ts` (`reviewsStore`: `selectedSlug`, `openDrawer`, `filters`, `sortBy`, `viewedThisSession`; `open(slug, kind)` is what fires `markReviewViewed` once per slug). The store stays `lib/`-pure — cross-store counter decrement is owned by the row.
+- `tabs/dashboard/stores/admin-dashboard.svelte.ts` (`adminDashboard`: `open`, `activeTab` [localStorage-persisted], `unviewedRequests`, `openModal/close/setTab/setUnviewedRequests`).
+- `lib/stores/reviews.svelte.ts` (`reviewsStore`: `selectedSlug`, `openDrawer` [`'general'`], `filters`, `sortBy`, `refreshSeq`; `open(slug)`).
+- `lib/stores/releases.svelte.ts` (`releasesStore`: `filters`, `sortBy`, `refreshSeq` + `requestRefresh()`).
 
 Cross-tab building blocks in `lib/components/`: `RolePill` (presentational badge), `RolePicker` (owner-editable wrapper — bare pill when `editable=false`, dropdown of role pills + click-outside/Escape when `true`), `Avatar`, `Timeline`. API clients `lib/api/admin-users.ts`, `lib/api/admin-requests.ts`, `lib/api/admin-reviews.ts`; formatters `lib/utils/admin-format.ts`.
 
@@ -81,38 +98,25 @@ Routes live in `admin_reviews_bp` (`routes/admin/reviews.py`); reads + per-admin
 
 | Route | Purpose |
 |---|---|
-| `GET /admin/reviews/list` | One whole-table JOIN over `delivery_states` + `deliveries` + `reciters` + open `claims`, filtered to the four review states (`awaiting_review`, `under_review`, `awaiting_timestamps`, `released`). Per-caller: each row carries `unread` (true only for `under_review` rows whose open claim's `marked_ready_at` is later than this admin's `review_views.viewed_at`), and the response carries the aggregate `unviewed_marked_ready` count. Not cached — sub-second JOIN, refreshed on every admin action. |
-| `GET /admin/reviews/<slug>` | General-drawer payload — base + current claim + claim history + transition timeline + `timestamps_job_ids` + `flagged_issues_count` (segments carrying a `flag`, from one cached `load_detailed`). Bounded queries + one detailed read; cheap enough to fetch eagerly on every drawer open. 404 on unknown slug. |
-| `GET /admin/reviews/unviewed-count` | Per-caller marked-ready unread count for the entry-button dot poller. `Cache-Control: no-store`. |
-| `POST /admin/reviews/<slug>/view` | Upsert the caller's `viewed_at` for `slug` (fired on the first drawer open per slug in a session). `@require_same_origin`. Returns 404 on unknown slug. |
+| `GET /admin/reviews/list` | One whole-table JOIN over `delivery_states` + `deliveries` + `reciters` + open `claims`, filtered to the two states the slimmed tab covers (`awaiting_review`, `under_review`). Canonical rows (state + open-claim shape); the FE renders Under review [not marked-ready] + Available. Not cached — sub-second JOIN, refreshed on every admin action. |
+| `GET /admin/reviews/<slug>` | General-drawer payload — base + current claim + claim history + transition timeline + `timestamps_job_ids` + `flagged_issues_count` (segments carrying a `flag`, from one cached `load_detailed`). Bounded queries + one detailed read; cheap enough to fetch eagerly on every drawer open. Also fed (lazily) by the Releases row's Timeline + Reviewers expands. 404 on unknown slug. |
 
-**Timestamps-generation** endpoints (`@require_capability("reviews.generate_timestamps")`, maintainer+) — drive the `ReviewsTimestampsDrawer`. Full subsystem: [timestamps-job.md](timestamps-job.md).
-- `POST /api/admin/generate-timestamps/<slug>` — launch the in-container MFA job. Body → `_parse_ts_settings` → `TsJobSettings` (`beam` + `probe_beams` → `beams`, persist-audio/gen-peaks toggles, Advanced workers/flavor/timeout). 202 `{job_id, url}`; 409 if a job is already running for the slug; 400 invalid; 404 unknown. `@require_same_origin`. Does **not** transition the reciter.
+> The marked-ready unviewed-count / per-admin view-mark surface (`/reviews/unviewed-count`, `/reviews/<slug>/view`, the `review_views` table + `repo_review_views`, the `unread` / `unviewed_marked_ready` schema fields) was **removed** with the Releases restructure — marked-ready work moved to Releases without a notification.
+
+**Timestamps-generation** endpoints (`@require_capability("reviews.generate_timestamps")`, maintainer+) — drive the Releases-tab in-row `ReleasesTsSettings` / `ReleasesPastJobs` expands. Full subsystem: [timestamps-job.md](timestamps-job.md).
+- `POST /api/admin/generate-timestamps/<slug>` — launch the in-container MFA (alignment-only) job. Body → `_parse_ts_settings` → `TsJobSettings` (`beam` + `probe_beams` → `beams`, optional `chapters` for affected-only regen, Advanced workers/flavor/timeout — no audio/peaks toggles). Valid from `under_review`+marked-ready (first publish → auto-release on success) or `released` (regen). 202 `{job_id, url}`; 409 if a job is already running for the slug; 400 invalid; 404 unknown. `@require_same_origin`. Does **not** transition the reciter at launch.
 - `GET /api/admin/jobs/<job_id>` — live status + bounded log tail (HF authoritative).
 - `GET /api/admin/jobs/<job_id>/record` — persisted record (settings + status + full logs) from `jobs/ts/<job_id>.json`; 404 if none.
-- `GET /api/admin/reciters/<slug>/ts-jobs` — persisted records for the slug (newest first), for the drawer's history list.
+- `GET /api/admin/reciters/<slug>/ts-jobs` — persisted records for the slug (newest first), for the Past-jobs expand's history list.
 
-General-drawer popover mutations reuse existing per-slug routes:
-- `POST /api/admin/claim/force-release/<slug>` — **owner-only** (`_require_owner` at both route + state-machine handler level). Used by the popover's Remove path.
+Reviewer-management mutations reuse existing per-slug routes:
+- `POST /api/admin/claim/force-release/<slug>` — **owner-only** (`_require_owner` at both route + state-machine handler level). Used by the General-drawer popover's Remove path.
 - `POST /api/admin/claim/reassign/<slug>` — **owner-only**. Used by the popover's Change path; resolves `to_login` server-side via `hf_users.lookup` before persisting `claim.reassigned`.
 - `POST /api/admin/users/lookup` — maintainer+. Lookup-only (no mutation); the popover hits it on debounced input to render the resolved-user card.
-- `POST /api/admin/send-back/<slug>` — maintainer+ (quality gate, not a claim mutation). Rejects marked-ready work for more review.
+- `POST /api/admin/send-back/<slug>` — maintainer+ (quality gate, not a claim mutation). Rejects marked-ready work for more review. Surfaced on the Releases **Ready-to-generate** row (the new home of marked-ready work); sending back returns the reciter to `under_review`, where it reappears in the Reviews tab.
 - Publish / unpublish / unlock-for-revision are listed but **disabled** (see `docs/planning/reviews-tab-deferred.md`).
 
-The owner-only tightening on force-release + reassign was a deliberate split: **owners manage who reviews; maintainers gate what ships**. Maintainers retain Send-back-to-UR (reject marked-ready work for more review) but cannot eject or transfer claims.
-
-#### Per-admin view marks (`review_views`)
-
-Mirror of `request_views` (migration 0004) but keyed by **slug**, not request id, with **upsert** semantics (latest view wins). Migration 0005 (`inspector/services/db/migrations/0005_review_views.sql`); repo `inspector/services/db/repo_review_views.py`.
-
-```
-review_views(slug, hf_user_id, viewed_at)  PK (slug, hf_user_id)
-ix_review_views_user ON (hf_user_id)
-```
-
-The unread predicate is `viewed_at IS NULL OR viewed_at < claims.marked_ready_at` — **cycle-safe** by construction: maintainer sends back → claim closes → reviewer re-claims and re-marks ready → new `marked_ready_at > viewed_at` → the dot re-arms. No GC needed; stale rows (slug no longer in `delivery_states`, or claim now closed) are harmless because the predicate joins on the **live** open claim.
-
-The Reviews compartment + the entry-button poller agree on this aggregate via `unviewed_marked_ready` on the list response (compartment refetch path) and the `/unviewed-count` endpoint (button-poll path) — both compute the same SQL predicate, so any optimistic FE decrement reconciles on the next read.
+The owner-only tightening on force-release + reassign was a deliberate split: **owners manage who reviews; maintainers gate what ships**. Maintainers retain Send-back-to-UR but cannot eject or transfer claims.
 
 ### Role change (`services/admin/users.py::set_role`)
 

@@ -62,7 +62,7 @@ separate from publish status. Publish status lives in three tables, all written 
   segments save path is SQLite-free by design and the signal must auto-clear when a regeneration moves
   `produced_at` past every edit. The remediation is a slug-scoped **regenerate timestamps**
   (`reviews.generate_timestamps`), which then cascades to the existing `ts_regen` HF/GH staleness. The
-  Releases tab surfaces it as the `stale_ts` ("Timestamps behind edits") bucket; the Segments history
+  Releases tab surfaces it as the `behind_edits` ("Behind edits") section; the Segments history
   panel surfaces the same edits as the **tier filter** (see [`segments-editor.md`](segments-editor.md)).
 
   The reason→remediation mapping is single-sourced in
@@ -267,10 +267,14 @@ failure clears once a current `hf` release lands at/after the batch). The status
 `last_batch {job_id, at, published_count, failed_count}` (→ the dismissable summary banner). In-flight
 job entries carry `url` for the FE "Open on HF" link; cancel is the generic route above.
 
-The Releases tab is **select-only**: publishable rows (waiting / stale / failed / published) carry a
-checkbox; a sticky action bar publishes the selection as one batch (a single selection = a batch of
-one). There are no per-row publish buttons. In-flight rows show a minimal status (badge + elapsed +
-Open-on-HF + Cancel); the global cut/batch job surfaces the same in the summary card strip.
+Publishing is **select-only**: publishable rows (Publish to HF / Republish to HF / Failed / Published &
+current) carry a checkbox; a sticky action bar publishes the selection as one batch (a single selection
+= a batch of one). There are no per-row publish buttons. In-flight rows show a minimal status (badge +
+elapsed + Open-on-HF + Cancel); the global cut/batch job surfaces the same in the summary card strip.
+The Releases tab is the single operator lifecycle home — sections are organized **by action needed**
+(Ready to generate / Behind edits / Republish to HF / Publish to HF / Published & current), generation
+and regeneration share one in-row expand, and the summary card shows the "what's next" cut preview.
+Full UI map: [`admin-dashboard.md`](admin-dashboard.md).
 
 ## HF dataset schema
 

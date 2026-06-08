@@ -78,7 +78,7 @@ The guides are **enforced**: each reviewer reads every guide once (globally,
 per user) before their first edit unlocks. Three coupled pieces:
 
 **Storage (per-user, SQLite).** `guide_views (view_key, hf_user_id, viewed_at)`
-— a write-once junction mirroring `review_views`/`request_views`. Opening a
+— a write-once junction mirroring the `request_views` per-user view-mark pattern. Opening a
 guide `POST`s `/api/guides/viewed {category}`; the route collapses the category
 to its stored `view_key` (`low_confidence_v2 → low_confidence`), validates it
 against the `GUIDE_VIEW_KEYS` allowlist in `inspector/constants.py`, and
