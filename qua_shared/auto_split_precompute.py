@@ -135,7 +135,21 @@ def _is_url(source: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _load_verse_word_counts(repo_root: Path) -> dict[tuple[int, int], int]:
+def word_counts_from_surah_info(surah_info: dict) -> dict[tuple[int, int], int]:
+    """Build the ``(surah, ayah) -> word_count`` map from a loaded surah_info dict.
+
+    ``surah_info`` is ``{surah_str: {"verses": [{"verse": int, "num_words": int},
+    ...]}}`` — the in-memory shape both publish/release jobs already hold.
+    """
+    counts: dict[tuple[int, int], int] = {}
+    for surah_str, info in surah_info.items():
+        surah = int(surah_str)
+        for v in info.get("verses", []):
+            counts[(surah, int(v["verse"]))] = int(v["num_words"])
+    return counts
+
+
+def load_verse_word_counts(repo_root: Path) -> dict[tuple[int, int], int]:
     """Build the ``(surah, ayah) -> word_count`` map from ``data/surah_info.json``.
 
     Mirrors what ``inspector.services.data_loader.get_word_counts`` returns,
@@ -144,13 +158,7 @@ def _load_verse_word_counts(repo_root: Path) -> dict[tuple[int, int], int]:
     """
     path = repo_root / "data" / "surah_info.json"
     with open(path, encoding="utf-8") as f:
-        doc = json.load(f)
-    counts: dict[tuple[int, int], int] = {}
-    for surah_str, info in doc.items():
-        surah = int(surah_str)
-        for v in info.get("verses", []):
-            counts[(surah, int(v["verse"]))] = int(v["num_words"])
-    return counts
+        return word_counts_from_surah_info(json.load(f))
 
 
 def load_chapter_urls(manifest_path: Path) -> dict[int, str]:
@@ -325,7 +333,7 @@ def run_precompute(
         log.warning("audio_manifest %s not found; URL fallback disabled", manifest_path)
 
     repo_root = repo_root or _REPO_ROOT
-    verse_word_counts = _load_verse_word_counts(repo_root)
+    verse_word_counts = load_verse_word_counts(repo_root)
 
     with open(detailed_path, encoding="utf-8") as f:
         doc = json.load(f)

@@ -246,6 +246,47 @@ def project_segment_shard(shard: dict) -> dict[str, dict]:
     return out
 
 
+def select_complete_verses(
+    projected: dict[str, dict],
+    word_counts: dict[tuple[int, int], int],
+) -> tuple[dict[str, dict], list[str]]:
+    """Drop verses whose canonical take is missing any reference word index.
+
+    A publish-time gate layered on top of ``project_segment_shard`` (NOT part of
+    the projection — the editor/TS-tab read path must keep showing incomplete
+    verses so reviewers can fix them; only the release/dataset adapters gate).
+
+    Completeness is by word INDEX, mirroring the editor's missing-words check
+    (``inspector/services/validation/_missing.py``): a verse is complete iff
+    ``{1..N_ref}`` is a subset of the indices that carry a published word timing.
+    That covered set is the words actually present in the artifact, so it is the
+    correct "does this verse contain every word" test — it can differ marginally
+    from the matched_ref-span definition when MFA timed fewer words than a
+    segment's span. Verses with no known reference count are kept (fail-open).
+
+    Returns ``(kept_map, sorted_dropped_refs)``.
+    """
+    kept: dict[str, dict] = {}
+    dropped: list[str] = []
+    for ref, v in projected.items():
+        try:
+            surah_s, ayah_s = ref.split(":", 1)
+            key = (int(surah_s), int(ayah_s))
+        except (ValueError, AttributeError):
+            kept[ref] = v
+            continue
+        n_ref = word_counts.get(key)
+        if not n_ref:
+            kept[ref] = v
+            continue
+        covered = {int(w[0]) for w in (v.get("words") or [])}
+        if set(range(1, n_ref + 1)).issubset(covered):
+            kept[ref] = v
+        else:
+            dropped.append(ref)
+    return kept, sorted(dropped)
+
+
 def _choose_occasion(occasions: list[list[dict]], target: set[int]) -> list[dict]:
     """Pick the canonical occasion: the EARLIEST completing one.
 

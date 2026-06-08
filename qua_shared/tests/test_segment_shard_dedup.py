@@ -14,7 +14,7 @@ dedup. These tests exercise the rule on synthetic segment-array shards:
 
 from __future__ import annotations
 
-from qua_shared.timestamps_dedup import project_segment_shard
+from qua_shared.timestamps_dedup import project_segment_shard, select_complete_verses
 
 
 def _w(widx: int, s: int, e: int) -> list:
@@ -196,3 +196,79 @@ def test_verse_bounds_cover_word_and_letter_bleed():
         assert v["verse_start_ms"] <= w[1] and w[2] <= v["verse_end_ms"]
         for _ch, ls, le in w[3]:
             assert v["verse_start_ms"] <= ls and le <= v["verse_end_ms"]
+
+
+# --- select_complete_verses: publish-time gate dropping incomplete verses ---
+
+
+def _projected(*widxs: int) -> dict:
+    """A projected canonical-take value carrying one word entry per index."""
+    return {
+        "words": [_w(wi, i * 10, i * 10 + 10) for i, wi in enumerate(widxs)],
+        "verse_start_ms": 0,
+        "verse_end_ms": len(widxs) * 10,
+    }
+
+
+def test_gate_drops_verse_missing_trailing_words():
+    # 10-word verse recited only through word 8 → dropped.
+    projected = {"1:1": _projected(1, 2, 3, 4, 5, 6, 7, 8)}
+    kept, dropped = select_complete_verses(projected, {(1, 1): 10})
+    assert kept == {}
+    assert dropped == ["1:1"]
+
+
+def test_gate_drops_verse_missing_interior_word():
+    # Word 3 never recited (gap), rest present → dropped.
+    projected = {"1:1": _projected(1, 2, 4, 5, 6, 7, 8, 9, 10)}
+    kept, dropped = select_complete_verses(projected, {(1, 1): 10})
+    assert kept == {}
+    assert dropped == ["1:1"]
+
+
+def test_gate_keeps_fully_covered_verse():
+    projected = {"1:1": _projected(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)}
+    kept, dropped = select_complete_verses(projected, {(1, 1): 10})
+    assert set(kept) == {"1:1"}
+    assert dropped == []
+
+
+def test_gate_uses_word_indices_not_count():
+    # 10 word entries (a duplicated index 10) but index 3 absent → still dropped:
+    # completeness is by INDEX coverage, never by len(words) >= N_ref.
+    projected = {"1:1": _projected(1, 2, 4, 5, 6, 7, 8, 9, 10, 10)}
+    assert len(projected["1:1"]["words"]) == 10
+    kept, dropped = select_complete_verses(projected, {(1, 1): 10})
+    assert kept == {}
+    assert dropped == ["1:1"]
+
+
+def test_gate_keeps_verse_with_unknown_reference_count():
+    # No reference word count for the ref → fail-open, keep unchanged.
+    projected = {"2:5": _projected(1, 2)}
+    kept, dropped = select_complete_verses(projected, {(1, 1): 10})
+    assert kept == {"2:5": projected["2:5"]}
+    assert dropped == []
+
+
+def test_gate_drops_only_incomplete_verses_in_mixed_map():
+    projected = {
+        "1:1": _projected(1, 2, 3),  # complete (3-word verse)
+        "1:2": _projected(1, 2),  # incomplete (missing word 3)
+        "1:3": _projected(1, 2, 3, 4),  # complete (4-word verse)
+    }
+    word_counts = {(1, 1): 3, (1, 2): 3, (1, 3): 4}
+    kept, dropped = select_complete_verses(projected, word_counts)
+    assert set(kept) == {"1:1", "1:3"}
+    assert dropped == ["1:2"]
+
+
+def test_gate_through_projection_drops_trailing_incomplete():
+    # End-to-end: a shard recited only through word 8 of a 10-word verse projects
+    # to a canonical take of {1..8}, which the gate then drops.
+    shard = _shard([_seg("1:1", 0, 1000, [1, 2, 3, 4, 5, 6, 7, 8])])
+    projected = project_segment_shard(shard)
+    assert _widxs(projected["1:1"]) == [1, 2, 3, 4, 5, 6, 7, 8]
+    kept, dropped = select_complete_verses(projected, {(1, 1): 10})
+    assert kept == {}
+    assert dropped == ["1:1"]

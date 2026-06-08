@@ -989,6 +989,23 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
         bucket_gz = _bucket_root() / "reference" / "qpc_hafs.json.gz"
         dk_words = json.loads(gzip.decompress(bucket_gz.read_bytes()))
 
+    # 2b. Gate incomplete verses: any verse missing a reference word index (never
+    # recited) is dropped — no row, no audio slice. Coverage falls by that count.
+    # The editor/TS tab still shows these (only the published artifacts gate).
+    from qua_shared.auto_split_precompute import word_counts_from_surah_info
+    from qua_shared.timestamps_dedup import select_complete_verses
+
+    timestamps, dropped_incomplete = select_complete_verses(
+        timestamps, word_counts_from_surah_info(surah_info)
+    )
+    if dropped_incomplete:
+        log.info(
+            "gated %d incomplete verse(s) (missing words) from %s: %s",
+            len(dropped_incomplete),
+            slug,
+            dropped_incomplete,
+        )
+
     # 3. Build rows. source_url comes from the audio manifest's chapter URLs
     # (detailed.json carries no per-entry audio field).
     detailed_by_ref = _detailed_by_ref(detailed)
