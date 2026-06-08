@@ -18,6 +18,8 @@ export interface UserNotification {
     title: string;
     /** Frozen expanded detail (admin reason / reply text); may be null. */
     body: string | null;
+    /** Event-specific extras (e.g. `{segment_uid}` for a flag reply). */
+    payload: Record<string, unknown> | null;
     created_at: string;
     seen_at: string | null;
     dismissed_at: string | null;

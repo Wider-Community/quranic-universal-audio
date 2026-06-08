@@ -8,6 +8,24 @@ Rail placement: right column, under the admin-dashboard button, above Recent
 activity (`tabs/dashboard/components/NotificationsRail.svelte`, rendered inside
 `ActivityRail.svelte`'s `.rail-wrap`). Hidden for anonymous users.
 
+## Click-through (event-aware redirects)
+
+Each expanded notification carries one explicit, labelled action so the
+destination is transparent before clicking (`NotificationsRail.navTarget`):
+
+| Event | Action | Destination |
+|---|---|---|
+| `reciter.alignment_completed`, `reciter.claimed` | "Review in Segments →" | `gotoSegments(slug)` — Segments tab, reciter loaded (mirrors the post-claim redirect) |
+| `flag.reply` | "Open flagged segment →" | `gotoSegments(slug, {openFlagged, focusFlaggedUid})` — Segments tab + Flagged accordion open + scrolled to the flagged segment |
+| everything else | "View reciter →" | dashboard detail modal (`openDetail`), when the reciter is still catalogued |
+
+The flag deep-link is a cross-tab handoff: `gotoSegments` writes
+`pendingSegmentsDeepLink` (`lib/utils/goto-segments.ts`); `ValidationPanel`
+consumes it once the reciter's flagged segments load — opens the `__flagged__`
+accordion and scrolls the `[data-flag-uid=...]` card into view. It waits for the
+target uid to appear so a stale (previous-reciter) flag list never triggers it.
+`flag.reply` notifications carry `payload.segment_uid` for this.
+
 ## Model
 
 Notifications are **materialized** — one `notifications` row per (target user,

@@ -14,6 +14,7 @@
 
     import type { UserNotification } from '../../../lib/api/notifications';
     import { currentUser, isSignedIn } from '../../../lib/stores/current-user';
+    import { gotoSegments } from '../../../lib/utils/goto-segments';
     import { relativeTime } from '../../../lib/utils/relative-time';
     import { resolveDeliverySlug } from '../stores/catalog-data';
     import { openDetail } from '../stores/dashboard-state';
@@ -32,6 +33,38 @@
         if (!n.slug) return;
         const resolved = resolveDeliverySlug(n.slug);
         if (resolved) openDetail(resolved.reciter.reciter_id, n.slug);
+    }
+
+    /**
+     * Where clicking a notification should take the user, with an explicit
+     * label so the destination is transparent before they click:
+     * - alignment-ready / assigned → open the reciter in the Segments tab
+     *   (mirrors the post-claim redirect).
+     * - flag reply → open it in Segments, open the Flagged accordion, and
+     *   scroll to the flagged segment.
+     * - everything else (request/intake rejections) → the dashboard detail
+     *   modal, when the reciter is still in the catalog.
+     */
+    function navTarget(n: UserNotification): { label: string; go: () => void } | null {
+        const slug = n.slug;
+        if (!slug) return null;
+        switch (n.event) {
+            case 'reciter.alignment_completed':
+            case 'reciter.claimed':
+                return { label: 'Review in Segments →', go: () => gotoSegments(slug) };
+            case 'flag.reply': {
+                const uid =
+                    typeof n.payload?.segment_uid === 'string' ? n.payload.segment_uid : undefined;
+                return {
+                    label: 'Open flagged segment →',
+                    go: () => gotoSegments(slug, { openFlagged: true, focusFlaggedUid: uid }),
+                };
+            }
+            default:
+                return resolveDeliverySlug(slug)
+                    ? { label: 'View reciter →', go: () => openReciter(n) }
+                    : null;
+        }
     }
 </script>
 
@@ -69,6 +102,7 @@
         {:else}
             <ol class="list">
                 {#each list as n (n.id)}
+                    {@const target = navTarget(n)}
                     <li class="item" class:unseen={notifications.view === 'active' && !n.seen_at}>
                         <details>
                             <summary>
@@ -78,9 +112,9 @@
                             {#if n.body}
                                 <p class="body">{n.body}</p>
                             {/if}
-                            {#if n.slug && resolveDeliverySlug(n.slug)}
-                                <button type="button" class="link" onclick={() => openReciter(n)}>
-                                    View reciter →
+                            {#if target}
+                                <button type="button" class="link" onclick={target.go}>
+                                    {target.label}
                                 </button>
                             {/if}
                         </details>

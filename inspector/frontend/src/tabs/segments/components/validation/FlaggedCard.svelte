@@ -94,7 +94,7 @@
     }
 </script>
 
-<div class="flagged-card">
+<div class="flagged-card" data-flag-uid={seg.segment_uid}>
     <SegmentRow {seg} instanceRole="accordion" />
 
     {#if flag}

@@ -26,7 +26,7 @@
      * Map so cards restore their state on re-mount as the window slides.
      */
 
-    import { afterUpdate, onDestroy } from 'svelte';
+    import { afterUpdate, onDestroy, tick } from 'svelte';
     import { get } from 'svelte/store';
 
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
@@ -40,6 +40,7 @@
     } from '../../../../lib/types/api';
     import { activeTab } from '../../../../lib/utils/active-tab';
     import { TAB_NAMES } from '../../../../lib/utils/constants';
+    import { pendingSegmentsDeepLink, type SegmentsDeepLink } from '../../../../lib/utils/goto-segments';
     import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
     import { IssueRegistry } from '../../domain/registry';
     import { hasAccordionGuide, isGuideRead } from '../../guides/registry';
@@ -507,6 +508,29 @@
     // open-state uses a reserved key that can't collide with a registry kind.
     const FLAGGED_KEY = '__flagged__';
     $: flaggedSegs = ($segAllData?.segments ?? []).filter((s) => s.flag != null);
+
+    // Consume a pending flag deep-link (e.g. from a "flag reply" notification):
+    // open the Flagged accordion and scroll to the flagged segment once the
+    // reciter's data has loaded. Consumed once, then cleared. For a targeted
+    // reply we wait until the matching segment is present so we don't fire on a
+    // previous reciter's stale flag list.
+    $: maybeConsumeFlagDeepLink($pendingSegmentsDeepLink, flaggedSegs);
+
+    async function maybeConsumeFlagDeepLink(dl: SegmentsDeepLink | null, flagged: typeof flaggedSegs): Promise<void> {
+        if (!dl?.openFlagged || flagged.length === 0) return;
+        if (dl.focusFlaggedUid && !flagged.some((s) => s.segment_uid === dl.focusFlaggedUid)) return;
+        pendingSegmentsDeepLink.set(null);
+        valUiOpenCategory.set(FLAGGED_KEY);
+        await tick();
+        const uid = dl.focusFlaggedUid;
+        if (!uid) return;
+        requestAnimationFrame(() => {
+            const sel = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(uid) : uid;
+            document
+                .querySelector(`[data-flag-uid="${sel}"]`)
+                ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+    }
     const canSeeFlaggerStore = can('segments.see_flagger_identity');
     $: canSeeFlagger = $canSeeFlaggerStore;
 
