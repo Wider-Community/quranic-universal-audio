@@ -77,7 +77,7 @@ def test_classifies_allowlisted_events(monkeypatch):
     kinds = sorted({c["kind"] for c in cards})
     assert kinds == [
         "added",
-        "available_review",
+        "available_for_review",
         "published",
         "requested",
         "under_review",

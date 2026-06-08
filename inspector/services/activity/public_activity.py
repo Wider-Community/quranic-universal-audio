@@ -49,7 +49,7 @@ class PublicActivityCard(TypedDict, total=False):
 _TEMPLATES: dict[str, str] = {
     "added": "{name} added to catalog",
     "requested": "{name} has been requested",
-    "available_review": "{name} is now available for review",
+    "available_for_review": "{name} is now available for review",
     "under_review": "{name} is now under review",
     "published": "{name} is now published",
 }

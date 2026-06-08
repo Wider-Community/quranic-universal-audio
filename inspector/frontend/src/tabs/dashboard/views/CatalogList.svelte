@@ -23,7 +23,7 @@
     import type { RowEntry } from '../components/CatalogTable.svelte';
     import CatalogTable from '../components/CatalogTable.svelte';
     import SubmitWizard from '../components/submit/SubmitWizard.svelte';
-    import { catalogData, loadCatalog } from '../stores/catalog-data';
+    import { catalogData, startCatalogPolling } from '../stores/catalog-data';
     import {
         clearAllFilters,
         type DashboardSort,
@@ -35,9 +35,7 @@
     } from '../stores/dashboard-state';
     import { openSubmitWizard } from '../stores/submit-wizard';
 
-    onMount(() => {
-        void loadCatalog();
-    });
+    onMount(() => startCatalogPolling());
 
     let descriptor: SchemaDescriptor | null = null;
     $: allDeliveries = $catalogData.reciters.flatMap((r) => r.deliveries);

@@ -8,7 +8,7 @@
 export type PublicEventKind =
     | 'added'
     | 'requested'
-    | 'available_review'
+    | 'available_for_review'
     | 'under_review'
     | 'published';
 

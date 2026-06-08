@@ -50,7 +50,7 @@ def _record(
     "event,expected_kind",
     [
         ("catalog.added", "added"),
-        ("reciter.alignment_completed", "available_review"),
+        ("reciter.alignment_completed", "available_for_review"),
         ("reciter.claimed", "under_review"),
         # `reciter.published` (TS-gen completion → state becomes `released`) is
         # the public publish milestone. Dataset/GH publishes (`released`) are

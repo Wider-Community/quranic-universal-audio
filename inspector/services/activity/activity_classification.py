@@ -36,7 +36,7 @@ PUBLIC_EVENTS: dict[str, str] = {
     # `reciter.requested` shows on the public rail as plain "X was requested"
     # prose. Request *review* lives in the Admin dashboard → Requests tab.
     "reciter.requested": "requested",
-    "reciter.alignment_completed": "available_review",
+    "reciter.alignment_completed": "available_for_review",
     "reciter.claimed": "under_review",
     # `reciter.published` is the public publish milestone — fired by the system
     # on timestamps-job completion (the `under_review → released` transition),

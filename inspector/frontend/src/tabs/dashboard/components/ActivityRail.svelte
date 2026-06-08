@@ -60,7 +60,7 @@
     const ACTION: Record<PublicEventKind, string> = {
         added: 'added to catalog',
         requested: 'has been requested',
-        available_review: 'is now available for review',
+        available_for_review: 'is now available for review',
         under_review: 'is now under review',
         published: 'is now published',
     };

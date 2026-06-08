@@ -7,7 +7,7 @@
      * Mounts validation, history, and save-preview panels as Svelte children.
      */
 
-    import { onMount, tick } from 'svelte';
+    import { onDestroy, onMount, tick } from 'svelte';
     import { get, type Readable } from 'svelte/store';
 
     import { fetchJson } from '../../lib/api';
@@ -20,7 +20,7 @@
     import type { SegReciter } from '../../lib/types/domain';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady } from '../../lib/utils/surah-info';
-    import { catalogData, loadCatalog } from '../dashboard/stores/catalog-data';
+    import { catalogData, loadCatalog, startCatalogPolling } from '../dashboard/stores/catalog-data';
     import EditOverlay from './components/edit/EditOverlay.svelte';
     import FiltersBar from './components/filters/FiltersBar.svelte';
     import SegmentsFooter from './components/footer/SegmentsFooter.svelte';
@@ -308,7 +308,11 @@
         cssFontSize = cfg.fontSize;
         cssWordSpacing = cfg.wordSpacing;
         await loadReciters();
+        stopCatalogPoll = startCatalogPolling();
     });
+
+    let stopCatalogPoll: (() => void) | null = null;
+    onDestroy(() => stopCatalogPoll?.());
 </script>
 
 <svelte:window on:keydown={onKeydown} />
