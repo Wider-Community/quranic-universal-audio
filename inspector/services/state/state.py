@@ -383,20 +383,32 @@ def _apply_event(
     # their own transition rows (catalog.edited) mid-handler.
     repo_access.ensure_user(actor.hf_user_id, login=actor.login_at_time)
 
-    # Capture auto-claim intent BEFORE the handler resolves (clears) the pending
-    # request via apply_and_archive_completed.
+    # Capture pending-request context BEFORE the handler resolves (clears) the
+    # pending entry via apply_and_archive_completed / archive_returned. Used for
+    # the folded auto-claim AND for per-user notifications (the requester isn't
+    # recoverable post-handler — the row is archived and the slug may be reused).
     auto_claim_requester: Actor | None = None
-    if event == "reciter.alignment_completed":
+    notify_extra: dict[str, Any] = {}
+    if event in (
+        "reciter.alignment_completed",
+        "reciter.request_rejected_soft",
+        "reciter.request_rejected_hard",
+    ):
         from . import pending_requests as _pending_requests
 
         pending = _pending_requests.get(slug)
-        if pending is not None and pending.auto_claim:
-            auto_claim_requester = pending.requester
+        if pending is not None:
+            if event == "reciter.alignment_completed" and pending.auto_claim:
+                # The folded reciter.claimed below sends the "assigned"
+                # notification; don't also send "ready for review".
+                auto_claim_requester = pending.requester
+            else:
+                notify_extra["requester"] = pending.requester
 
     new_row = handler(slug, before, actor, payload, reason)
 
     # Transition row FIRST (delivery_states/claims reference its id).
-    tid = repo_transitions.append(
+    record = repo_transitions.append(
         event=event,
         actor=actor,
         slug=slug,
@@ -404,12 +416,18 @@ def _apply_event(
         to_state=new_row.state.value,
         payload=payload,
         reason=reason,
-    ).request_id
+    )
+    tid = record.request_id
     _persist_state(before, new_row, tid=tid)
     _persist_claim_diff(before, new_row, tid=tid, event=event, payload=payload)
 
     if auto_claim_requester is not None:
         _maybe_auto_claim(conn, slug, auto_claim_requester)
+
+    # Per-user notifications (best-effort — never raises into the transition).
+    from services.notifications import emit as _notify
+
+    _notify.emit_for_event(conn, record, before=before, extra=notify_extra)
 
     return new_row
 
@@ -543,6 +561,9 @@ def _maybe_auto_claim(conn: sqlite3.Connection, slug: str, requester: Actor) -> 
         payload={
             "assignee_hf_id": requester.hf_user_id,
             "assignee_login": requester.login_at_time,
+            # Marks this claim as the auto-claim fold (not a manual self-claim)
+            # so the notifications resolver sends the "assigned" notification.
+            "notify_auto_claim": True,
         },
         reason=None,
     )

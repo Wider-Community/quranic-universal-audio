@@ -14,6 +14,7 @@ Where a reference doc here touches those domains (e.g. the route map in `archite
 | [database.md](database.md) | The SQLite substrate (`inspector.db`) — connection/txn/WAL, repos, migrations, bucket sync + db_seq CAS. Source of truth for state/catalog/access/audit/activity/claims/requests. |
 | [state-machine.md](state-machine.md) | Reciter lifecycle states, flags, transition matrix, events, `services/state/state.py`. |
 | [auth-permissions.md](auth-permissions.md) | HF OAuth identity, roles, permission predicates, edit-lock, CSRF, admin endpoints, audit actor, activity rails. |
+| [notifications.md](notifications.md) | Per-user "My Notifications" Dashboard rail — materialized `notifications` table, the `services/notifications` emitter (lifecycle + intake + segment-flag-reply), event→target resolver, dismiss/archive, `/api/me/notifications`. |
 | [capabilities.md](capabilities.md) | The data-driven capability system (owner-configurable permission matrix) — the resolver `can()`, override store, the Permissions tab, and **the convention for adding a gate so it surfaces in the UI**. |
 | [admin-dashboard.md](admin-dashboard.md) | Owner/maintainer admin modal — Users compartment (list + detail drawer), owner-only role picker, `/api/admin/*` endpoints. |
 | [catalog.md](catalog.md) | Reciter catalog (now SQLite `repo_catalog`) — layers, slug convention, audio manifests, naming guide, maintenance. |

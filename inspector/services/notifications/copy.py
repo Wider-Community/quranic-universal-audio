@@ -1,0 +1,40 @@
+"""Frozen title strings for per-user notifications.
+
+Every notification names its reciter — the title is computed once at emit time
+(``emit._reciter_name``) and interpolated here, then stored verbatim on the
+row. Kept in one module so the wording is easy to audit and unit-test.
+"""
+
+from __future__ import annotations
+
+
+def request_sent_back(name: str) -> str:
+    return f"Your request for {name} was sent back"
+
+
+def request_discarded(name: str) -> str:
+    return f"Your request for {name} was discarded"
+
+
+def ready_for_review(name: str) -> str:
+    return f"{name} is ready for review"
+
+
+def assigned(name: str) -> str:
+    return f"You've been assigned to {name}"
+
+
+def force_released(name: str) -> str:
+    return f"Your review of {name} was released — it hadn't been active for a while"
+
+
+def submission_sent_back(name: str) -> str:
+    return f"Your submission for {name} was sent back"
+
+
+def submission_discarded(name: str) -> str:
+    return f"Your submission for {name} was discarded"
+
+
+def flag_reply(name: str) -> str:
+    return f"New reply on a segment you flagged in {name}"

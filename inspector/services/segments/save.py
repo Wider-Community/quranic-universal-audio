@@ -481,13 +481,16 @@ def _apply_flag_ops(matching: list[dict], operations: list, *, actor: Actor):
 
     Resolves the target by ``segment_uid`` against the current (post-apply)
     segments so it composes with any patch/full_replace in the same batch.
-    Returns ``None`` on success or an ``(error_dict, http_status)`` tuple.
+    Returns ``(err_or_none, replies)``: ``err`` is ``None`` on success or an
+    ``(error_dict, http_status)`` tuple; ``replies`` describes each follow-up on
+    a flag owned by someone other than the actor, so the caller can notify the
+    original flagger after a successful save.
     """
     flag_ops = [
         op for op in operations if isinstance(op, dict) and op.get("op_type") == "flag_segment"
     ]
     if not flag_ops:
-        return None
+        return None, []
 
     by_uid: dict[str, dict] = {}
     for e in matching:
@@ -497,18 +500,25 @@ def _apply_flag_ops(matching: list[dict], operations: list, *, actor: Actor):
                 by_uid[uid] = seg
 
     now = _utc_now_iso()
+    replies: list[dict] = []
     for op in flag_ops:
         cmd = op.get("command") or {}
         uid = cmd.get("segmentUid")
         seg = by_uid.get(uid)
         if seg is None:
-            return {"error": f"flag target segment not found: {uid!r}"}, 404
-        err = _mutate_seg_flag(
-            seg, cmd.get("intent") or "set", (cmd.get("comment") or "").strip(), actor, now
-        )
+            return ({"error": f"flag target segment not found: {uid!r}"}, 404), replies
+        intent = cmd.get("intent") or "set"
+        comment = (cmd.get("comment") or "").strip()
+        # Capture the original flagger BEFORE the reply is appended.
+        prior_flagger = ((seg.get("flag") or {}).get("actor") or {}).get("hf_user_id")
+        err = _mutate_seg_flag(seg, intent, comment, actor, now)
         if err is not None:
-            return err
-    return None
+            return err, replies
+        if intent == "followup" and prior_flagger and prior_flagger != actor.hf_user_id:
+            replies.append(
+                {"flagger_id": prior_flagger, "segment_uid": uid, "comment": comment, "at_utc": now}
+            )
+    return None, replies
 
 
 def _persist_and_record(
@@ -644,7 +654,7 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
 
     # Flag ops carry their payload in the operation envelope, not in
     # ``segments`` — applied here with a server-authoritative actor + clock.
-    flag_err = _apply_flag_ops(matching, updates.get("operations") or [], actor=actor)
+    flag_err, flag_replies = _apply_flag_ops(matching, updates.get("operations") or [], actor=actor)
     if flag_err is not None:
         return flag_err
 
@@ -654,7 +664,7 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
     # ``ignored_categories``: that contract is reserved for explicit Ignore.
     # Card dismissal for soft-rule categories is purely a frontend
     # session-state concern.
-    return _persist_and_record(
+    result = _persist_and_record(
         reciter,
         chapter,
         entries,
@@ -662,3 +672,19 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
         updates,
         actor=actor,
     )
+
+    # Notify the original flagger of each reply on their flag — only after the
+    # save persisted. Best-effort (own durable txn); never affects the save.
+    if flag_replies and not (isinstance(result, tuple)):
+        from services.notifications import emit as _notify
+
+        for r in flag_replies:
+            _notify.notify_flag_reply(
+                flagger_id=r["flagger_id"],
+                replier=actor,
+                slug=reciter,
+                segment_uid=r["segment_uid"],
+                comment=r["comment"],
+                at_utc=r["at_utc"],
+            )
+    return result

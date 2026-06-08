@@ -104,6 +104,7 @@ Deep, agent-facing reference docs live in `docs/reference/` (flat). **Read the o
 | [`database.md`](docs/reference/database.md) | the SQLite substrate — repos, migrations, bucket sync, db_seq CAS |
 | [`state-machine.md`](docs/reference/state-machine.md) | lifecycle states, flags, transition matrix, events |
 | [`auth-permissions.md`](docs/reference/auth-permissions.md) | OAuth identity, roles, predicates, edit-lock, CSRF, admin endpoints, activity rails |
+| [`notifications.md`](docs/reference/notifications.md) | per-user "My Notifications" Dashboard rail — `notifications` table, `services/notifications` emitter, event→target resolver, dismiss/archive, `/api/me/notifications` |
 | [`capabilities.md`](docs/reference/capabilities.md) | data-driven capability authz — resolver, override store, Permissions tab, **convention for adding a gate that surfaces in the UI** |
 | [`admin-dashboard.md`](docs/reference/admin-dashboard.md) | admin modal — Users compartment, owner-only role picker, `/api/admin/*` |
 | [`catalog.md`](docs/reference/catalog.md) | reciter catalog — layers, slug convention, audio manifests, naming guide |

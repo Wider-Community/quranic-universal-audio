@@ -22,7 +22,7 @@ from services import auth as auth_service
 from services import state as state_service
 from services.admin import visitors as visitor_service
 from services.auth import capabilities as cap_service
-from services.db import repo_access, repo_claims, repo_guides
+from services.db import repo_access, repo_claims, repo_guides, repo_notifications
 from services.db import sync as _sync
 
 logger = logging.getLogger(__name__)
@@ -243,6 +243,7 @@ def auth_me():
                 # No identity → no per-user read marks. Stable empty list keeps the
                 # FE schema uniform (it gates the unread border / edit gate on this).
                 "guides_read": [],
+                "notifications_unread": 0,
             }
         )
     # Page-entry recency: /api/me runs on every SPA load / focus, so this is
@@ -280,6 +281,9 @@ def auth_me():
             # each accordion ? and the first-edit onboarding gate. Best-effort: a
             # read failure must never break identity resolution.
             "guides_read": _guides_read_safe(user.hf_user_id),
+            # Unread per-user notification count — drives the rail badge on first
+            # load. Best-effort: a read failure must never break identity.
+            "notifications_unread": _notifications_unread_safe(user.hf_user_id),
         }
     )
 
@@ -292,3 +296,13 @@ def _guides_read_safe(hf_user_id: str) -> list[str]:
     except Exception:  # noqa: BLE001
         logger.exception("auth.me: read_views failed (continuing)")
         return []
+
+
+def _notifications_unread_safe(hf_user_id: str) -> int:
+    """``repo_notifications.unread_count`` wrapped so a DB hiccup degrades to 0
+    rather than 500-ing identity resolution."""
+    try:
+        return repo_notifications.unread_count(hf_user_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("auth.me: unread_count failed (continuing)")
+        return 0

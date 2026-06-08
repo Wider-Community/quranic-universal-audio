@@ -23,6 +23,7 @@
     import { titleCaseSlug } from '../../../lib/utils/delivery-label';
     import { relativeTime } from '../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../lib/utils/visible-poll';
+    import NotificationsRail from './NotificationsRail.svelte';
     import AdminDashboardButton from './admin/AdminDashboardButton.svelte';
 
     // Capability-gated affordances (both default owner-only, so this matches
@@ -100,6 +101,8 @@
 
 <div class="rail-wrap">
     <AdminDashboardButton />
+
+    <NotificationsRail />
 
     <aside class="activity" aria-label="Recent activity">
         <header>

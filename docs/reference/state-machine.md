@@ -178,3 +178,5 @@ All claim-ownership checks use `hf_user_id`, never `login`. One-claim-per-user i
 ## Transition audit
 
 Every `transition()` writes exactly one `transitions` row (FK-first, before the `delivery_states`/`claims` diffs) via `repo_transitions.append`, enrolled in the same transaction (SAVEPOINT when nested). Columns: `id`, `seq`, `ts`, `slug`, `event`, `from_state`, `to_state`, `actor_id`, `actor_login_snapshot`, `actor_role_snapshot`, `reason`, `result`, `payload` (JSON), `content_hash`. Actor snapshot = `{hf_user_id, login_at_time (cookie snapshot, never refetched), role}`. `repo_transitions` read helpers (`for_slug`, `since`, `feed`) back the activity feeds.
+
+After the transition row + state/claim diffs, `_apply_event` calls `services.notifications.emit_for_event` (best-effort, inside the same txn) to fan the event out to the affected user's "My Notifications" rail — e.g. the requester on a soft/hard reject, the prior assignee on `claim.force_released`, the requester on the auto-claim fold. The requester for reject/alignment events is captured BEFORE the handler runs (the pending row is archived mid-handler). See [notifications.md](notifications.md).

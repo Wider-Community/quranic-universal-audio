@@ -175,6 +175,7 @@ describe('CombinationPicker', () => {
             dev_mode: false,
             capabilities: ['reviews.view'],
             guides_read: [],
+            notifications_unread: 0,
         });
 
         const { container } = render(CombinationPicker, {
