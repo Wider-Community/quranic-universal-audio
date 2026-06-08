@@ -222,6 +222,7 @@ export interface AdminReleaseStatusRow {
   style: string;
   channel: string;
   marked_ready?: boolean;
+  reviewer_login?: string | null;
   ts: AdminReleaseRow | null;
   hf: AdminReleaseRow | null;
   gh: AdminGhReleaseMember | null;

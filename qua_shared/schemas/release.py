@@ -337,6 +337,9 @@ class AdminReleaseStatusRow(BaseModel):
     #: (``state == under_review`` + ``marked_ready_at`` set). Drives the
     #: "Ready to generate" bucket.
     marked_ready: bool = False
+    #: Login of the reviewer who marked it ready — shown on Ready-to-generate
+    #: rows (null otherwise).
+    reviewer_login: str | None = None
     ts: AdminReleaseRow | None
     hf: AdminReleaseRow | None
     gh: AdminGhReleaseMember | None

@@ -480,7 +480,7 @@ def releases_status(user):
         SELECT d.slug, d.riwayah, d.style, d.channel,
                r.name_en, r.name_ar,
                ds.state,
-               c.marked_ready_at
+               c.marked_ready_at, c.assignee_login_snapshot
         FROM deliveries d
         JOIN reciters        r  ON r.reciter_id = d.reciter_id
         LEFT JOIN delivery_states ds ON ds.slug = d.slug
@@ -534,6 +534,7 @@ def releases_status(user):
             "style": d["style"],
             "channel": d["channel"],
             "marked_ready": marked_ready,
+            "reviewer_login": d["assignee_login_snapshot"] if marked_ready else None,
             "ts": ts_slim,
             "hf": hf_slim,
             "gh": gh_slim,

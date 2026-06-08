@@ -22,11 +22,15 @@
     import { can } from '../../../../../lib/stores/capabilities';
     import type {
         InFlightJob,
+        ReleasePreviewResponse,
         ReleasesSummary,
     } from '../../../../../lib/api/admin-releases';
 
     interface Props {
         summary: ReleasesSummary | null;
+        /** Dry-run "what's next" preview — change counts + the version the
+         *  next cut would compute. Null while loading or on a maintainer 403. */
+        preview?: ReleasePreviewResponse | null;
         inFlight: InFlightJob[];
         /** Number of recitations that would land in the next cut — surfaced
          *  in the "No releases yet" state and as supplementary info on the
@@ -48,12 +52,27 @@
         /** Launch the global mushafs-catalog refresh. */
         onRefreshCatalog?: () => void;
     }
-    let { summary, inFlight, readyCount, onCut, cutDisabledReason,
+    let { summary, preview = null, inFlight, readyCount, onCut, cutDisabledReason,
           onJumpToInFlight, cancelingJob = null, onCancelJob,
           catalogDriftCount = 0, onRefreshCatalog }: Props = $props();
 
     const canCut = can('release.cut_gh');
     const canPublish = can('release.publish_hf');
+
+    // "What's next" — only meaningful when the next cut has something to ship.
+    const nextChanges = $derived.by(() => {
+        if (!preview) return null;
+        const c = preview.change_counts;
+        const total = (c.added ?? 0) + (c.refresh ?? 0);
+        if (total === 0) return null;
+        return {
+            added: c.added ?? 0,
+            refresh: c.refresh ?? 0,
+            unchanged: c.unchanged ?? 0,
+            version: preview.computed_version,
+            previous: preview.previous_version,
+        };
+    });
 
     const isRefreshInFlight = $derived(
         inFlight.some((j) => j.kind === 'refresh_catalog'),
@@ -177,6 +196,19 @@
                     <span class="metric metric-faint">Nothing to release yet</span>
                 </div>
             {/if}
+
+            {#if nextChanges}
+                <div class="next-line" title="What the next cut would ship">
+                    <span class="next-tag added">Adds {nextChanges.added}</span>
+                    <span class="next-tag refresh">refreshes {nextChanges.refresh}</span>
+                    <span class="next-tag carried">({nextChanges.unchanged} carried)</span>
+                    {#if nextChanges.version}
+                        <span class="next-ver">→ {nextChanges.version}</span>
+                    {:else if nextChanges.previous}
+                        <span class="next-ver">over {nextChanges.previous}</span>
+                    {/if}
+                </div>
+            {/if}
         </div>
 
         <div class="actions">
@@ -278,6 +310,22 @@
         font-variant-numeric: tabular-nums;
     }
     .metric-faint { color: var(--text-faint); }
+
+    /* "What's next" cut preview — reuses the cut-modal diff vocabulary. */
+    .next-line {
+        display: flex;
+        align-items: baseline;
+        gap: var(--s-2);
+        margin-top: 2px;
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        font-variant-numeric: tabular-nums;
+        flex-wrap: wrap;
+    }
+    .next-tag.added { color: var(--state-published-fg); }
+    .next-tag.refresh { color: var(--state-error-fg); }
+    .next-tag.carried { color: var(--text-faint); }
+    .next-ver { color: var(--text-secondary); }
 
     .actions {
         display: inline-flex;
