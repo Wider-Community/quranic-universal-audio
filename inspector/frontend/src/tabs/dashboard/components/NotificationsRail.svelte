@@ -51,18 +51,18 @@
         switch (n.event) {
             case 'reciter.alignment_completed':
             case 'reciter.claimed':
-                return { label: 'Review in Segments →', go: () => gotoSegments(slug) };
+                return { label: 'Review in Segments', go: () => gotoSegments(slug) };
             case 'flag.reply': {
                 const uid =
                     typeof n.payload?.segment_uid === 'string' ? n.payload.segment_uid : undefined;
                 return {
-                    label: 'Open flagged segment →',
+                    label: 'Open flagged segment',
                     go: () => gotoSegments(slug, { openFlagged: true, focusFlaggedUid: uid }),
                 };
             }
             default:
                 return resolveDeliverySlug(slug)
-                    ? { label: 'View reciter →', go: () => openReciter(n) }
+                    ? { label: 'View reciter', go: () => openReciter(n) }
                     : null;
         }
     }
@@ -104,35 +104,38 @@
                 {#each list as n (n.id)}
                     {@const target = navTarget(n)}
                     <li class="item" class:unseen={notifications.view === 'active' && !n.seen_at}>
-                        <details>
-                            <summary>
-                                <span class="title">{n.title}</span>
-                                <time class="time" datetime={n.created_at}>{relativeTime(n.created_at)}</time>
-                            </summary>
+                        <div class="body-wrap">
+                            <p class="title">{n.title}</p>
                             {#if n.body}
                                 <p class="body">{n.body}</p>
                             {/if}
+                            <time class="time" datetime={n.created_at}>{relativeTime(n.created_at)}</time>
+                        </div>
+                        <div class="actions">
                             {#if target}
-                                <button type="button" class="link" onclick={target.go}>
-                                    {target.label}
-                                </button>
+                                <button
+                                    class="act"
+                                    type="button"
+                                    aria-label={target.label}
+                                    title={target.label}
+                                    onclick={target.go}>↗</button>
                             {/if}
-                        </details>
-                        {#if notifications.view === 'active'}
-                            <button
-                                class="act"
-                                type="button"
-                                aria-label="Dismiss"
-                                title="Dismiss to archive"
-                                onclick={() => notifications.dismiss(n.id)}>✕</button>
-                        {:else}
-                            <button
-                                class="act"
-                                type="button"
-                                aria-label="Restore"
-                                title="Restore to active"
-                                onclick={() => notifications.restore(n.id)}>↩</button>
-                        {/if}
+                            {#if notifications.view === 'active'}
+                                <button
+                                    class="act"
+                                    type="button"
+                                    aria-label="Dismiss"
+                                    title="Dismiss to archive"
+                                    onclick={() => notifications.dismiss(n.id)}>✕</button>
+                            {:else}
+                                <button
+                                    class="act"
+                                    type="button"
+                                    aria-label="Restore"
+                                    title="Restore to active"
+                                    onclick={() => notifications.restore(n.id)}>↩</button>
+                            {/if}
+                        </div>
                     </li>
                 {/each}
             </ol>
@@ -202,7 +205,7 @@
     }
     .item {
         display: grid;
-        grid-template-columns: 1fr 24px;
+        grid-template-columns: 1fr auto;
         gap: var(--s-2);
         padding: var(--s-3) 0;
         border-bottom: 1px solid var(--border-quiet);
@@ -211,53 +214,48 @@
     .item:last-child { border-bottom: none; }
     .item.unseen .title { font-weight: 600; color: var(--text-primary); }
 
-    details { min-width: 0; }
-    summary {
-        cursor: pointer;
-        list-style: none;
+    .body-wrap {
+        min-width: 0;
         display: flex;
         flex-direction: column;
         gap: 2px;
     }
-    summary::-webkit-details-marker { display: none; }
     .title {
+        margin: 0;
         font-size: var(--fs-body);
         color: var(--text-secondary);
         line-height: var(--lh-normal);
+    }
+    .body {
+        margin: 0;
+        font-size: var(--fs-meta);
+        color: var(--text-muted);
+        line-height: var(--lh-normal);
+        white-space: pre-wrap;
     }
     .time {
         font-size: 10.5px;
         color: var(--text-faint);
         font-variant-numeric: tabular-nums;
     }
-    .body {
-        margin: var(--s-2) 0 0;
-        font-size: var(--fs-meta);
-        color: var(--text-muted);
-        line-height: var(--lh-normal);
-        white-space: pre-wrap;
+    .actions {
+        display: flex;
+        align-items: center;
+        gap: 2px;
     }
-    .link {
-        margin-top: var(--s-2);
-        background: transparent;
-        border: 0;
-        padding: 0;
-        font-size: var(--fs-meta);
-        color: var(--accent-fg, var(--state-under-review-fg));
-        cursor: pointer;
-    }
-    .link:hover { text-decoration: underline; }
     .act {
         background: transparent;
         border: 0;
         color: var(--text-muted);
         font-size: 13px;
         line-height: 1;
-        padding: 0 2px;
+        padding: 2px 3px;
         cursor: pointer;
-        align-self: start;
-        margin-top: 2px;
-        transition: color var(--t-fast);
+        border-radius: var(--radius-sm, 4px);
+        transition: color var(--t-fast), background var(--t-fast);
     }
-    .act:hover { color: var(--text-primary); }
+    .act:hover {
+        color: var(--text-primary);
+        background: var(--surface-raised, var(--border-quiet));
+    }
 </style>
