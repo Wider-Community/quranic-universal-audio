@@ -833,6 +833,10 @@ def main() -> int:
     # 2. Build per-recitation artifacts and accumulate member rows.
     refs_dir = _code_root() / "data"
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
+    from qua_shared.auto_split_precompute import word_counts_from_surah_info
+    from qua_shared.timestamps_dedup import select_complete_verses
+
+    word_counts = word_counts_from_surah_info(surah_info)
 
     # qpc_hafs is a consumer-facing release asset. The staged image .gz is an
     # LFS pointer (HF auto-LFS by extension), so resolve the real decompressed
@@ -871,6 +875,18 @@ def main() -> int:
         if not verses:
             log.warning("  %s: no timestamps shards — skipping", slug)
             continue
+
+        # Gate incomplete verses: any verse missing a reference word index (never
+        # recited) is dropped from the release — absent from the tier JSON and
+        # excluded from coverage_ayahs. The editor/TS tab still shows them.
+        verses, dropped_incomplete = select_complete_verses(verses, word_counts)
+        if dropped_incomplete:
+            log.info(
+                "  %s: gated %d incomplete verse(s) (missing words): %s",
+                slug,
+                len(dropped_incomplete),
+                dropped_incomplete,
+            )
 
         # Load detailed.json so the intra-segment gapless check has segments
         # to validate (plan §"Boundary enforcement" — the four checks include

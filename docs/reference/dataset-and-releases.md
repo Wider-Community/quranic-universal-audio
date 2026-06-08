@@ -99,7 +99,8 @@ The same predicate drives the Releases-tab buckets and the cut job's member disc
 
 1. Reads the bucket DB read-only → eligible reciters + the prior release's membership.
 2. Per reciter: reads every segment-array `timestamps/<ch>.json.gz` shard and projects the canonical
-   verse map (`_load_canonical_verses` → `project_segment_shard`, the earliest completing occasion)
+   verse map (`_load_canonical_verses` → `project_segment_shard`, the earliest completing occasion),
+   then drops incomplete verses via `select_complete_verses` (missing a reference word index)
    → builds the three
    tier files (verse/word/letter, top-down), `catalog.json`, a per-recitation `manifest.json`; packs
    a deterministic `<slug>.zip`; computes `content_hash = SHA-256(letter_tier.gz || catalog.json)`.
@@ -366,24 +367,36 @@ shard carries only aligned, accepted, **ref-bearing** segments:
   `_meta.mfa_failures`).
 - **Deleted** = removed from `detailed.json` entirely (editor delete / filtered at intake).
 
-Per-verse, `project_segment_shard` keeps the canonical occasion; if no occasion reaches full
-coverage `{1..N}` it falls back to the widest-coverage occasion. Two distinct outcomes:
+Per-verse, `project_segment_shard` keeps the canonical occasion (falling back to the
+widest-coverage occasion if none reaches full coverage `{1..N}`). A **publish-time completeness
+gate** — `select_complete_verses` (`qua_shared/timestamps_dedup.py`), run by both adapters against
+the reference word counts from `surah_info` — then drops any verse whose canonical take is missing a
+reference word index. Completeness is by word **index** (`{1..N_ref}` ⊆ covered indices), mirroring
+the editor's missing-words check; verses with no known reference count are kept (fail-open). Two
+distinct drop cases:
 
-- **Whole verse gone** (its only segment, or all its segments, missing) → the verse has zero shard
-  segments → `project_segment_shard` never emits it → it is dropped from **both** the HF dataset
-  (`build_rows`: `if not tdata: continue`) and the GH tier files (`if not words: continue`).
-- **Interior gap** (a middle segment missing — kept words 1-3 + 8-10, gap at 4-7) → the verse still
-  ships. Its word/letter/segment metadata and `text_uthmani` already exclude the gap words
-  (`coverage_gap` is reported but **non-fatal** — the verse is genuinely missing those words). The
-  clip window `[verse_start, verse_end]` spans the gap, so the **audio** would otherwise carry the
-  phantom no-match audio. The **HF dataset publish excises it**: `build_rows` computes `keep_runs`
-  (`[clip_start, clip_end]` minus the no-match segment spans, via `_subtract_spans`), and
-  `_slice_chapter` stitches the kept runs with `mp3_frames.slice_frames_multi` + `_rebase_row_multi`
-  (gapless re-base; logged per reciter). A contiguous verse (one run) takes the original
-  single-slice path unchanged. The **GH release** ships timestamps relative to source URLs (no
-  embedded audio), so it leaves the gap in place — its word timestamps simply skip it.
-  Leading/trailing no-match audio is already outside `[clip_start, clip_end]` (the window spans
-  first→last kept word), so only **interior** gaps stitch.
+- **Whole verse gone** (its only segment, or all its segments, missing) → zero shard segments →
+  `project_segment_shard` never emits it.
+- **Incomplete verse** (any reference word index never recited — interior *or* trailing, e.g. a
+  10-word verse recited only through word 8, or kept words 1-3 + 8-10 with 4-7 missing) → the gate
+  drops it.
+
+Either way the verse is absent from **both** the HF dataset (no row, no audio — `build_rows`:
+`if not tdata: continue`) and the GH tier files (`if not words: continue`); `coverage_ayahs` /
+`verse_count` fall by the dropped count and each job logs the dropped refs. The editor's Segments +
+TS tabs **still show** these verses (only the published artifacts gate) so reviewers can complete or
+correct them — an intentional editor-vs-published divergence.
+
+**Interior no-match audio** is a separate, orthogonal case: a verse that *does* cover every word
+index but carries a no-match segment (empty `matched_ref`, no words) inside its
+`[verse_start, verse_end]` window — leftover/duplicated audio between recited words. It survives the
+gate. The **HF dataset publish excises it**: `build_rows` computes `keep_runs` (`[clip_start,
+clip_end]` minus the no-match segment spans, via `_subtract_spans`), and `_slice_chapter` stitches
+the kept runs with `mp3_frames.slice_frames_multi` + `_rebase_row_multi` (gapless re-base; logged
+per reciter). A contiguous verse (one run) takes the original single-slice path unchanged. The **GH
+release** ships timestamps relative to source URLs (no embedded audio), so it leaves the no-match
+span in place. Leading/trailing no-match audio is already outside `[clip_start, clip_end]` (the
+window spans first→last kept word), so only **interior** spans stitch.
 
 Post-mark-ready, only in-verse segments exist (the TS job blocks compound cross-verse refs), so there
 are no cross-verse dedup cases.
@@ -392,11 +405,11 @@ are no cross-verse dedup cases.
 
 Each artifact runs a fail-blocking validation pass before it is produced; the summary is persisted
 to the `gh_releases.validation_summary` / `per_recitation_releases.validation_summary` row.
-Block on: pydantic round-trip of all rows; every non-dropped verse has a contributing segment;
-`duration_ms == last_word_end - first_word_start`; `word_timestamps` sorted by `start_ms`; dropped
-verses ≤ threshold (default 0 for full reciters). Warn on: audio-slice checksum drift; TS-tab vs
-dataset-slice parity probe. Boundary checks run at cut time via
-[dataset_validation.py](../../qua_shared/dataset_validation.py); fatal violations abort the cut.
+Block on the `HARD_FAIL_KINDS` in [dataset_validation.py](../../qua_shared/dataset_validation.py):
+`word_bleed_first`, `word_bleed_last`, `duration_arithmetic`, `intra_segment_gap` — `fatal_violations`
+aborts the cut on any of these. `coverage_gap` is reported but **non-fatal**, and incomplete verses
+are gated out by `select_complete_verses` *before* validation runs, so `coverage_gap` does not fire
+for emitted verses. Warn on: audio-slice checksum drift; TS-tab vs dataset-slice parity probe.
 
 ## TS-tab vs dataset-row parity
 
@@ -406,11 +419,13 @@ byte-substring of the bucket chapter (after per-slice Xing if VBR); the dataset 
 ≤26 ms before the first word (frame snap), with word timestamps re-based. **No intentional drift** —
 if they diverge where they should match, it's a bug.
 
-**One intentional exception:** for a verse with an interior no-match gap, the dataset clip excises
-the gap audio (stitched kept runs), while the in-app TS-tab segment-clip route is unchanged and
-still plays the contiguous `[verse_start, verse_end]` window including the gap. So for those (rare)
-verses the dataset audio is shorter than the TS-tab clip by the excised gap. Word timestamps still
-agree once re-based; only the audio bytes differ.
+**One intentional exception:** for a complete verse carrying interior no-match audio, the dataset
+clip excises that audio (stitched kept runs), while the in-app TS-tab segment-clip route is unchanged
+and still plays the contiguous `[verse_start, verse_end]` window including it. So for those (rare)
+verses the dataset audio is shorter than the TS-tab clip by the excised span. Word timestamps still
+agree once re-based; only the audio bytes differ. (Verses that are *incomplete* — missing a word
+index — never reach this path; the completeness gate drops them from the published artifacts while
+the editor still shows them.)
 
 ## Event classification
 
