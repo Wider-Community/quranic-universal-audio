@@ -331,6 +331,16 @@ describe('AudioPort — attachElement', () => {
         expect(port.element).toBeNull();
         expect(port.window).toBeNull();
     });
+
+    it('applies the remembered playback rate to a newly attached element', () => {
+        port.setPlaybackRate(1.5);
+        const elB = makeAudioStub({ src: '', readyState: 4 });
+
+        port.attachElement(elB as unknown as HTMLAudioElement);
+
+        expect(elB.playbackRate).toBe(1.5);
+        expect(port.playbackRate).toBe(1.5);
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -385,6 +395,39 @@ describe('AudioPort — adoptElement', () => {
         expect(warm.play).toHaveBeenCalledTimes(1);
         // Original element untouched.
         expect(audio.play).not.toHaveBeenCalled();
+    });
+
+    it('preserves the selected playback rate when adopting a warm element', () => {
+        port.setPlaybackRate(1.75);
+        const warm = makeAudioStub({ src: 'http://cdn/x.mp3', readyState: 4 });
+        port.setSource({ audioUrl: 'http://cdn/x.mp3', reciter: 'r1', vbr: false });
+
+        port.adoptElement(warm as unknown as HTMLAudioElement, 'http://cdn/x.mp3');
+        port.seekAndPlay(0);
+
+        expect(warm.playbackRate).toBe(1.75);
+        expect(warm.play).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 7c. Playback rate persistence
+// ---------------------------------------------------------------------------
+
+describe('AudioPort — playback rate persistence', () => {
+    it('reapplies the selected playback rate before source swaps and play()', async () => {
+        port.setPlaybackRate(1.5);
+        port.setSource({ audioUrl: 'http://cdn/a.mp3', reciter: 'r1', vbr: false });
+        const r = port.loadCovering(0, 1000);
+        expect(audio.playbackRate).toBe(1.5);
+        audio._fireEvent('canplay');
+        await r.ready;
+
+        audio.playbackRate = 1;
+        port.play();
+
+        expect(audio.playbackRate).toBe(1.5);
+        expect(audio.play).toHaveBeenCalledTimes(1);
     });
 });
 
