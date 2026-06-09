@@ -200,6 +200,23 @@ def test_audio_urls_come_from_sidecar_chapters():
     }
 
 
+def test_audio_urls_tolerate_legacy_sidecar_metadata():
+    sidecar = {
+        "_meta": {"source": "intake_ingest_manual", "chapter_count": 1},
+        "chapters": {
+            "2": {
+                "url": "https://cdn.example/2.mp3",
+                "duration_sec": 8848.826,
+                "max_linear_seek_err_ms": 26,
+            }
+        },
+    }
+
+    assert cut_release._audio_urls_from_manifest("legacy_reciter", sidecar) == {
+        "2": "https://cdn.example/2.mp3"
+    }
+
+
 def test_empty_audio_urls_are_fatal_for_catalog_build():
     rec = {"slug": "example_reciter", "audio_category": "by_surah"}
     verses = {"100:1": {"words": [[1, 0, 100]]}}

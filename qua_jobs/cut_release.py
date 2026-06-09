@@ -50,7 +50,6 @@ if str(_REPO_ROOT) not in sys.path:
 
 from qua_shared.letter_vocab import VOCAB_FILENAME, to_external_char, vocab_csv_bytes  # noqa: E402
 from qua_shared.schemas import (  # noqa: E402
-    AudioManifestSidecar,
     FileDigest,
     LetterTimestampsDoc,
     QpcHafsDoc,
@@ -336,23 +335,25 @@ def _audio_urls_from_manifest(slug: str, audio_manifest: dict | None) -> dict[st
     """Return the consumer URL map from ``catalog/audio_manifest/<slug>.json``."""
     if not audio_manifest:
         return {}
-    try:
-        sidecar = AudioManifestSidecar.model_validate(audio_manifest)
-        return {
-            key: chapter.url
-            for key, chapter in sorted(sidecar.chapters.items())
-            if chapter.url.strip()
+    chapters = audio_manifest.get("chapters")
+    if isinstance(chapters, dict):
+        urls = {
+            key: chapter["url"].strip()
+            for key, chapter in sorted(chapters.items())
+            if (key.isdigit() or ":" in key)
+            and isinstance(chapter, dict)
+            and isinstance(chapter.get("url"), str)
+            and chapter["url"].strip()
         }
-    except Exception as exc:
-        # Legacy flat maps are kept as a defensive fallback for old fixtures.
-        legacy = {
-            key: value
-            for key, value in sorted(audio_manifest.items())
-            if (key.isdigit() or ":" in key) and isinstance(value, str) and value.strip()
-        }
-        if legacy:
-            return legacy
-        raise RuntimeError(f"{slug}: invalid audio_manifest sidecar: {exc}") from exc
+        if urls:
+            return urls
+
+    # Legacy flat maps are kept as a defensive fallback for old fixtures.
+    return {
+        key: value.strip()
+        for key, value in sorted(audio_manifest.items())
+        if (key.isdigit() or ":" in key) and isinstance(value, str) and value.strip()
+    }
 
 
 def _build_catalog_json(rec: dict, audio_manifest: dict | None, verses: dict) -> bytes:
