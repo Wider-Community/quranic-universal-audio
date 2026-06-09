@@ -144,7 +144,9 @@ def eval_auto_gen_ts(cfg: AutomationConfig, now: datetime) -> None:
         # Already kicked a gen for this mark-ready? Wait for it — the ts release
         # (which stops this loop) lands only when completion settles, lagging the
         # tick. Without this, a succeeded-but-not-completed job re-fires every tick.
-        if _already_launched_since(watermarks, slug, _serde.from_iso(_claim_val(claim, "marked_ready_at"))):
+        if _already_launched_since(
+            watermarks, slug, _serde.from_iso(_claim_val(claim, "marked_ready_at"))
+        ):
             continue
         try:
             timestamps_jobs.launch(

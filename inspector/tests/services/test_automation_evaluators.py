@@ -194,9 +194,7 @@ def _seed_stale_slug(monkeypatch, *, last_edit: str, watermark: dict[str, dateti
     monkeypatch.setattr(evaluators, "_delivery_slugs", lambda: ["rec_a"])
     monkeypatch.setattr(evaluators, "_in_flight_slugs", lambda kinds: set())
     monkeypatch.setattr(evaluators.timestamps_jobs, "latest_terminal_failed_slugs", lambda: set())
-    monkeypatch.setattr(
-        evaluators.timestamps_jobs, "latest_job_started_by_slug", lambda: watermark
-    )
+    monkeypatch.setattr(evaluators.timestamps_jobs, "latest_job_started_by_slug", lambda: watermark)
     monkeypatch.setattr(
         evaluators.repo_releases,
         "current_release",
