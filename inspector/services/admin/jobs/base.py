@@ -413,6 +413,29 @@ def register_handler(kind: str, fn: PollHandler) -> None:
     _HANDLERS[kind] = fn
 
 
+#: Kinds whose completion CAN run on the poll path — their ``complete()`` does an
+#: idempotent DB write from ``(slug, job_id)`` alone. ``cut_release`` is excluded
+#: on purpose: it is webhook-only (its complete() needs the full members payload
+#: the poll path cannot reconstruct).
+POLL_COMPLETABLE_KINDS = ("ts", "hf_publish", "hf_publish_batch", "refresh_catalog")
+
+
+def register_poll_handlers() -> None:
+    """Register every poll-completable kind's handler in one place.
+
+    Single source of truth for boot wiring so a kind can't be silently dropped —
+    ``ts`` was, which left automated TS regens (no webhook, no open drawer) with
+    no completion path at all: ``produced_at`` never advanced, so the recitation
+    stayed permanently behind-edits and the auto-regen automation relaunched every
+    tick. Deferred imports avoid a circular import at module load."""
+    from . import hf_publish, hf_publish_batch, refresh_catalog, ts
+
+    ts.register()
+    hf_publish.register()
+    hf_publish_batch.register()
+    refresh_catalog.register()
+
+
 def _poll_terminal_jobs() -> None:
     """Single tick: scan running HF jobs, dispatch any newly terminal to its handler."""
     from huggingface_hub import list_jobs
