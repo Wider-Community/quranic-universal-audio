@@ -220,6 +220,60 @@ def latest_terminal_failed_slugs() -> set[str]:
     }
 
 
+def _job_start_dt(job) -> datetime.datetime | None:
+    """Aware-UTC start time of an HF job (``started_at`` once running, else
+    ``created_at``), or None if neither is parseable."""
+    raw = getattr(job, "started_at", None) or getattr(job, "created_at", None)
+    if raw is None:
+        return None
+    if isinstance(raw, datetime.datetime):
+        dt = raw
+    else:
+        try:
+            dt = datetime.datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
+def latest_job_started_by_slug() -> dict[str, datetime.datetime]:
+    """Map ``slug`` → the start time of its MOST-RECENT timestamps job (any
+    status, terminal or not).
+
+    The automations use this as a *relaunch watermark*. Generated-TS staleness /
+    readiness is a **computed** signal that only clears once a regen's async
+    ``complete()`` handler advances ``produced_at`` (webhook, or the 120 s poll) —
+    which lags the 60 s reconciler tick. Without this guard the evaluator
+    re-fired a job every tick while a regen it already launched was still settling
+    (succeeded-but-not-yet-completed), spamming duplicate jobs. A slug whose newest
+    job started at/after the watermark already has a regen pending, so we skip it
+    until genuinely newer edits arrive. Best-effort: a ``list_jobs`` failure yields
+    ``{}`` (falls back to the in-flight / failed guards)."""
+    from huggingface_hub import list_jobs
+
+    out: dict[str, datetime.datetime] = {}
+    try:
+        for job in list_jobs():
+            labels = getattr(job, "labels", {}) or {}
+            if labels.get("task") != "timestamps":
+                continue
+            slug = labels.get("reciter")
+            if not slug:
+                continue
+            dt = _job_start_dt(job)
+            if dt is None:
+                continue
+            prev = out.get(slug)
+            if prev is None or dt > prev:
+                out[slug] = dt
+    except Exception as exc:  # never crash the reconciler on a list failure
+        log.warning("latest_job_started_by_slug() failed: %s", exc)
+        return {}
+    return out
+
+
 def _resolve_launched_job_id(slug: str) -> str | None:
     """Return the canonical HF job id for the most recently launched job for
     ``slug``. ``run_job()``'s returned id is transient and does not match the

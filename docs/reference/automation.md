@@ -71,6 +71,17 @@ owner-only under `ReleasesSummaryCard`); API in `lib/api/admin-releases.ts`.
 - **Single-flight.** Every launch already enforces per-slug + global single-flight
   (`running_job_for`); evaluators also pre-skip in-flight slugs and the
   cut/batch/refresh globals.
+- **Relaunch watermark (one job per edit-burst).** TS staleness / mark-ready is a
+  *computed* signal that clears only when a regen's async completion advances the
+  `ts` release `produced_at` (webhook, or the 120 s poll) — which lags the 60 s
+  tick. So `auto_gen_ts` + `stale_ts_regen` additionally skip a slug whose newest
+  timestamps job (`timestamps_jobs.latest_job_started_by_slug`) started at/after
+  the staleness/readiness watermark (`last_edit_at` / `marked_ready_at`): a regen
+  covering those edits is already pending, so they wait rather than re-fire. This
+  bounds launches to exactly one per edit-burst **even if completion never clears
+  staleness** (broken webhook + missed poll) — the slug then stays visibly stale
+  for manual attention instead of spawning unbounded jobs. The in-flight + failed
+  guards alone do NOT cover the succeeded-but-not-yet-completed window.
 - **Debounce.** Stale-TS/metadata fire only once the latest invalidating edit is
   older than `guard_minutes` (via `ts_stale_info.last_edit_at`), so consecutive
   edits coalesce into one regen and we never regenerate mid-edit.

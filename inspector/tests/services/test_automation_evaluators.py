@@ -16,6 +16,7 @@ from qua_shared.schemas import (
     AutomationConfig,
     GhCutConfig,
     HfPublishConfig,
+    StaleTsRegenConfig,
 )
 from services.admin.automation import config as automation_config
 from services.admin.automation import evaluators
@@ -182,3 +183,75 @@ def test_hf_publish_skips_when_no_candidates(monkeypatch):
     st = repo_automation.get_state("hf_publish")
     assert st is not None
     assert st["last_status"] == "skipped"
+
+
+# --- stale-TS regen: relaunch watermark (the infinite-jobs guard) ------------
+
+
+def _seed_stale_slug(monkeypatch, *, last_edit: str, watermark: dict[str, datetime]):
+    """Wire stale_ts_regen's reads so 'rec_a' is past-guard stale, with a given
+    last_edit watermark + per-slug newest-job start map."""
+    monkeypatch.setattr(evaluators, "_delivery_slugs", lambda: ["rec_a"])
+    monkeypatch.setattr(evaluators, "_in_flight_slugs", lambda kinds: set())
+    monkeypatch.setattr(evaluators.timestamps_jobs, "latest_terminal_failed_slugs", lambda: set())
+    monkeypatch.setattr(
+        evaluators.timestamps_jobs, "latest_job_started_by_slug", lambda: watermark
+    )
+    monkeypatch.setattr(
+        evaluators.repo_releases,
+        "current_release",
+        lambda track, slug: {"produced_at": "2026-06-09T08:00:00Z"},
+    )
+    monkeypatch.setattr(
+        evaluators.ts_staleness,
+        "ts_stale_info",
+        lambda slug, produced_at: {
+            "stale_since": last_edit,
+            "last_edit_at": last_edit,
+            "edits_since": 1,
+            "affected_chapters": [2],
+        },
+    )
+
+
+def test_stale_ts_regen_skips_when_a_job_already_covers_these_edits(monkeypatch):
+    """The infinite-loop guard: a regen whose newest job started AFTER the last
+    edit is already pending — staleness clears only when its async completion
+    lands — so the tick must NOT re-fire."""
+    launched: list[str] = []
+    _seed_stale_slug(
+        monkeypatch,
+        last_edit="2026-06-09T10:00:00Z",
+        watermark={"rec_a": datetime(2026, 6, 9, 11, 0, tzinfo=UTC)},  # job AFTER the edit
+    )
+    monkeypatch.setattr(
+        evaluators.timestamps_jobs, "launch", lambda slug, **k: launched.append(slug)
+    )
+
+    evaluators.eval_stale_ts_regen(
+        AutomationConfig(stale_ts_regen=StaleTsRegenConfig(enabled=True)), _now()
+    )
+
+    assert launched == []  # no duplicate job while completion settles
+    assert repo_automation.get_state("stale_ts_regen") is None  # nothing acted → no write
+
+
+def test_stale_ts_regen_launches_when_edits_are_newer_than_last_job(monkeypatch):
+    """A genuinely newer edit (after the last job started) is real new staleness
+    → regen fires exactly once."""
+    launched: list[str] = []
+    _seed_stale_slug(
+        monkeypatch,
+        last_edit="2026-06-09T10:00:00Z",
+        watermark={"rec_a": datetime(2026, 6, 9, 9, 0, tzinfo=UTC)},  # last job BEFORE the edit
+    )
+    monkeypatch.setattr(
+        evaluators.timestamps_jobs, "launch", lambda slug, **k: launched.append(slug)
+    )
+
+    evaluators.eval_stale_ts_regen(
+        AutomationConfig(stale_ts_regen=StaleTsRegenConfig(enabled=True)), _now()
+    )
+
+    assert launched == ["rec_a"]
+    assert repo_automation.get_state("stale_ts_regen")["last_status"] == "launched"

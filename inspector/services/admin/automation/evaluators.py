@@ -79,6 +79,27 @@ def _in_flight_slugs(kinds: tuple[str, ...]) -> set[str]:
     return {j["slug"] for j in jobs_base.list_in_flight_jobs(kinds) if j.get("slug")}
 
 
+def _claim_val(claim, key: str):
+    """Read a column from a claim that may be a sqlite3.Row or a dict; None if absent."""
+    try:
+        return claim[key]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
+def _already_launched_since(
+    watermarks: dict[str, datetime], slug: str, since: datetime | None
+) -> bool:
+    """True iff a timestamps job for ``slug`` was already launched at/after
+    ``since`` — i.e. a regen covering this staleness/readiness watermark is
+    already pending. Guards against re-firing while completion (webhook / 120 s
+    poll) lags the 60 s tick. ``since`` None (no watermark) → never skip on this."""
+    if since is None:
+        return False
+    started = watermarks.get(slug)
+    return started is not None and started >= since
+
+
 def _delivery_slugs() -> list[str]:
     return [
         r[0] for r in get_conn().execute("SELECT slug FROM deliveries ORDER BY slug").fetchall()
@@ -109,6 +130,7 @@ def eval_auto_gen_ts(cfg: AutomationConfig, now: datetime) -> None:
         return
     failed = timestamps_jobs.latest_terminal_failed_slugs()
     in_flight = _in_flight_slugs(("timestamps",))
+    watermarks = timestamps_jobs.latest_job_started_by_slug()
     launched: list[str] = []
     for r in rows:
         slug = r[0]
@@ -118,6 +140,11 @@ def eval_auto_gen_ts(cfg: AutomationConfig, now: datetime) -> None:
             continue  # last gen failed (manual retry) or already running
         claim = repo_claims.get_open_claim(slug)
         if claim is None or _auto_gen_gated(c, slug, claim):
+            continue
+        # Already kicked a gen for this mark-ready? Wait for it — the ts release
+        # (which stops this loop) lands only when completion settles, lagging the
+        # tick. Without this, a succeeded-but-not-completed job re-fires every tick.
+        if _already_launched_since(watermarks, slug, _serde.from_iso(_claim_val(claim, "marked_ready_at"))):
             continue
         try:
             timestamps_jobs.launch(
@@ -292,6 +319,7 @@ def eval_stale_ts_regen(cfg: AutomationConfig, now: datetime) -> None:
     guard = timedelta(minutes=c.guard_minutes)
     failed = timestamps_jobs.latest_terminal_failed_slugs()
     in_flight = _in_flight_slugs(("timestamps",))
+    watermarks = timestamps_jobs.latest_job_started_by_slug()
     launched: list[str] = []
     for slug in _delivery_slugs():
         if slug in failed or slug in in_flight:
@@ -305,6 +333,12 @@ def eval_stale_ts_regen(cfg: AutomationConfig, now: datetime) -> None:
         last_edit = _serde.from_iso(info.get("last_edit_at"))
         if last_edit is None or (now - last_edit) < guard:
             continue  # edits still settling — debounce
+        # Idempotency key: a regen we already launched for these edits clears
+        # staleness only once its async completion lands (webhook / 120 s poll),
+        # which lags the tick. Without this we re-fire every tick in that window —
+        # and forever if completion never clears it. One job per edit-burst.
+        if _already_launched_since(watermarks, slug, last_edit):
+            continue
         chapters = info.get("affected_chapters") if c.scope == "affected" else None
         try:
             timestamps_jobs.launch(
