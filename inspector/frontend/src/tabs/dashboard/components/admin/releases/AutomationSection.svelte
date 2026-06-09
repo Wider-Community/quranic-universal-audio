@@ -502,7 +502,7 @@
         grid-template-rows: 0fr;
         transition: grid-template-rows var(--t-base) var(--ease-out-expo);
     }
-    .body-wrap.open { grid-template-rows: 1fr; }
+    .body-wrap.open { grid-template-rows: 1fr; max-height: 60vh; overflow-y: auto; }
     .body-inner { overflow: hidden; }
 
     .row {
