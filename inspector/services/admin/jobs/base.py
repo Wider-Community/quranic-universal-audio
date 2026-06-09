@@ -96,6 +96,34 @@ def hf_status_str(info) -> str:
     return str(stage if stage is not None else status or "").lower()
 
 
+_hf_namespace: str | None = None
+_hf_namespace_resolved = False
+
+
+def hf_job_url(job_id: str) -> str | None:
+    """Best-effort HF job page URL ``https://huggingface.co/jobs/<ns>/<id>``.
+
+    Used to backfill ``url`` for records sourced from the DB / a backfill (which
+    never captured the live job object's ``.url``). The namespace is the account
+    the HF token runs jobs under — resolved once via ``whoami()`` and cached.
+    Returns None when the namespace can't be resolved (link is then hidden)."""
+    global _hf_namespace, _hf_namespace_resolved
+    if not job_id:
+        return None
+    if not _hf_namespace_resolved:
+        _hf_namespace_resolved = True
+        try:
+            from huggingface_hub import whoami
+
+            _hf_namespace = (whoami() or {}).get("name")
+        except Exception as exc:
+            log.warning("hf_job_url: whoami() failed: %s", exc)
+            _hf_namespace = None
+    if not _hf_namespace:
+        return None
+    return f"https://huggingface.co/jobs/{_hf_namespace}/{job_id}"
+
+
 # ---------------------------------------------------------------------------
 # Job-record paths: ``reciters/<slug>/jobs/<kind>/<job_id>.json`` for per-slug
 # kinds, ``jobs/_global/<kind>/<job_id>.json`` for global kinds (cut_release).
@@ -161,6 +189,25 @@ def kind_for_job(job_id: str) -> str | None:
     except Exception as exc:
         log.warning("kind_for_job(%s) failed: %s", job_id, exc)
     return None
+
+
+def kind_and_slug_for_job(job_id: str) -> tuple[str | None, str | None]:
+    """Return ``(kind, slug)`` from an HF job's labels, ``(None, None)`` if not
+    found. ``slug`` is None for global kinds (``_global`` / ``_batch``). Used by
+    the cancel route to stamp the right job record terminal."""
+    from huggingface_hub import list_jobs
+
+    try:
+        for job in list_jobs():
+            if (hf_job_id(job) or "") == job_id:
+                labels = getattr(job, "labels", {}) or {}
+                slug = labels.get("reciter")
+                if slug in ("_global", "_batch"):
+                    slug = None
+                return labels.get("task"), slug
+    except Exception as exc:
+        log.warning("kind_and_slug_for_job(%s) failed: %s", job_id, exc)
+    return None, None
 
 
 def list_in_flight_jobs(kinds: tuple[str, ...]) -> list[dict]:

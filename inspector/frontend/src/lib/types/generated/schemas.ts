@@ -896,6 +896,76 @@ export interface IntakeValidation {
   [k: string]: unknown;
 }
 /**
+ * One recitation's outcome inside a batch publish or a GH cut.
+ *
+ * Kept slim — the heavy cut membership (catalog snapshot, zip bytes) stays in
+ * the DB; only what the Jobs drawer renders is recorded here.
+ */
+export interface JobMember {
+  slug?: string | null;
+  status?: string | null;
+  version?: string | null;
+  external_uri?: string | null;
+  change_kind?: string | null;
+  error?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * One job run's durable record — uniform across every kind.
+ *
+ * ``status`` is normalized to ``running`` / ``succeeded`` / ``failed`` at the
+ * write site. Kind-specific extras: ``settings`` + ``logs`` for timestamps;
+ * ``members`` for batch / cut; ``version`` + ``external_uri`` for the release
+ * tracks.
+ */
+export interface JobRecord {
+  schema_version?: number;
+  job_id: string;
+  kind?: "timestamps" | "hf_publish" | "hf_publish_batch" | "cut_release" | "refresh_catalog";
+  slug?: string | null;
+  status?: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  url?: string | null;
+  launched_by?: string | null;
+  version?: string | null;
+  external_uri?: string | null;
+  validation_summary?: {
+    [k: string]: unknown;
+  } | null;
+  members?: JobMember[];
+  member_count?: number | null;
+  settings?: TsJobSettings | null;
+  chapters_refreshed?: number[] | null;
+  logs?: string[];
+  log_truncated?: boolean;
+  error?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * Job parameters chosen by the admin in the launch form.
+ *
+ * ``beams`` is the resolved list passed to ``align_batch_multi_beam`` —
+ * ``[alignment_beam, *probe_beams]`` (deduped). Canonical beam = ``max(beams)``.
+ */
+export interface TsJobSettings {
+  beams?: number[];
+  chapters?: number[] | null;
+  workers?: number | null;
+  flavor?: string | null;
+  timeout?: string | null;
+  batch_size?: number | null;
+  download_workers?: number | null;
+}
+/**
+ * Payload for ``GET /api/admin/jobs`` — the unified list + a running tally.
+ */
+export interface JobsListResponse {
+  jobs?: JobRecord[];
+  running_count?: number;
+  [k: string]: unknown;
+}
+/**
  * Request body for ``POST /api/mark-ready/<slug>``.
  *
  * Comment fields are optional and default to empty strings (not None) so
@@ -975,21 +1045,6 @@ export interface TsJobRecord {
   logs?: string[];
   log_truncated?: boolean;
   error?: string | null;
-}
-/**
- * Job parameters chosen by the admin in the launch form.
- *
- * ``beams`` is the resolved list passed to ``align_batch_multi_beam`` —
- * ``[alignment_beam, *probe_beams]`` (deduped). Canonical beam = ``max(beams)``.
- */
-export interface TsJobSettings {
-  beams?: number[];
-  chapters?: number[] | null;
-  workers?: number | null;
-  flavor?: string | null;
-  timeout?: string | null;
-  batch_size?: number | null;
-  download_workers?: number | null;
 }
 /**
  * The ``ts_validation.json`` document — meta + verse-keyed flags.

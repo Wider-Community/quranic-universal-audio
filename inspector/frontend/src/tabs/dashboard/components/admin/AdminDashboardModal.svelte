@@ -5,6 +5,7 @@
     import Modal from '../../../../lib/components/Modal.svelte';
     import { isOwner } from '../../../../lib/stores/current-user';
     import { adminDashboard, type AdminTab } from '../../stores/admin-dashboard.svelte';
+    import JobsCompartment from './jobs/JobsCompartment.svelte';
     import PermissionsCompartment from './PermissionsCompartment.svelte';
     import ReleasesCompartment from './releases/ReleasesCompartment.svelte';
     import RequestsCompartment from './RequestsCompartment.svelte';
@@ -18,6 +19,7 @@
         { id: 'requests', label: 'Requests', enabled: true },
         { id: 'reviews', label: 'Reviews', enabled: true },
         { id: 'releases', label: 'Releases', enabled: true },
+        { id: 'jobs', label: 'Jobs', enabled: true },
         { id: 'permissions', label: 'Permissions', enabled: true, ownerOnly: true },
     ];
 
@@ -67,6 +69,8 @@
         <ReviewsCompartment />
     {:else if adminDashboard.activeTab === 'releases'}
         <ReleasesCompartment />
+    {:else if adminDashboard.activeTab === 'jobs'}
+        <JobsCompartment />
     {:else if adminDashboard.activeTab === 'permissions' && $isOwner}
         <PermissionsCompartment />
     {/if}

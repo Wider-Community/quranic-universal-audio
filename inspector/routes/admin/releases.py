@@ -251,7 +251,7 @@ def cancel_release_job(user, job_id):
     ``{job_id, canceled}``; 404 if the job isn't found, 502 on HF error."""
     from huggingface_hub import cancel_job as hf_cancel_job
 
-    kind = jobs_base.kind_for_job(job_id)
+    kind, slug = jobs_base.kind_and_slug_for_job(job_id)
     if kind is None:
         return jsonify({"error": "job not found"}), 404
     cap = _CANCEL_CAPS.get(kind)
@@ -264,9 +264,15 @@ def cancel_release_job(user, job_id):
     except Exception as exc:
         log.warning("cancel release job %s (%s) failed: %s", job_id, kind, exc)
         return jsonify({"error": str(exc)}), 502
+    # Stamp the job record terminal so the Jobs tab reflects the cancel (the
+    # poll worker only completes successes; a canceled job has no other path).
+    from services.admin.jobs import records as _records
+
+    _records.record_terminal(kind, slug, job_id, status="failed", error="canceled")
     from services.storage import cache as _cache
 
     _cache.invalidate_in_flight_jobs_cache()
+    _cache.invalidate_all_jobs_cache()
     return jsonify({"job_id": job_id, "canceled": True})
 
 
