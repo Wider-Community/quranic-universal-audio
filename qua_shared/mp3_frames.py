@@ -241,11 +241,7 @@ def classify_bitrate_mode(
     """Return ``"cbr"`` iff *data*'s whole-file byte<->time map is linear within
     *tolerance_ms*, else ``"vbr"``. The canonical encoding verdict — use this
     everywhere a chapter's ``bitrate_mode`` is determined."""
-    return (
-        "cbr"
-        if max_linear_seek_error_ms(build_frame_index(data)) <= tolerance_ms
-        else "vbr"
-    )
+    return "cbr" if max_linear_seek_error_ms(build_frame_index(data)) <= tolerance_ms else "vbr"
 
 
 @dataclass(frozen=True)
