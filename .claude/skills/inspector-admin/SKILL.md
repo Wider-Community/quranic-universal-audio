@@ -35,6 +35,7 @@ Every script:
 - mutating ops against prod additionally require `--yes-prod` on the command line (no env opt-in)
 - `--dry-run` runs the handler up to (but not through) `durable_transaction`
 - writes audit entries as the real `INSPECTOR_DEV_OWNER_HF_ID`/`_LOGIN` from `.env` so prod audit doesn't show `dev-owner`
+- **post-write health gate** — after the prod pause→write→resume, `prod_safe_setup` doesn't stop at `stage == RUNNING` (container up). It polls `/healthz` until the app answers, then renders the catalog endpoints (`/api/public/reciters`, `/api/public/stats`) which read the `deliveries`/catalog rows through the Pydantic models. A write that creates a row failing model validation leaves the Space RUNNING but every catalog read 500s — the gate catches exactly that, prints a loud `POST-WRITE HEALTH CHECK FAILED` banner, and exits non-zero. **A raw `admin_db.py exec --write` bypasses the repo/model layer, so this gate is the only validation safety net — heed it.** (Origin: a raw `UPDATE deliveries SET bitrate_mode='mixed'` that left `bitrate_kbps_nominal` non-null, which the `Delivery` validator forbids → catalog 500s.)
 
 | Script | What it does |
 |---|---|

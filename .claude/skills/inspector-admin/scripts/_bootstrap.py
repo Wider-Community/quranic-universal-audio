@@ -253,6 +253,67 @@ def _wait_space_stage(api: object, target: str, *, timeout_s: int = 180) -> str:
     return last or "?"
 
 
+def _space_base_url() -> str:
+    """Public URL of the prod Space (HF convention: owner-name.hf.space)."""
+    return f"https://{PROD_SPACE_ID.replace('/', '-').lower()}.hf.space"
+
+
+def _http_status(url: str, timeout: float = 15.0) -> int:
+    """GET *url*, return HTTP status (0 on connection error)."""
+    import urllib.error
+    import urllib.request
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "inspector-admin-health"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+    except Exception:  # noqa: BLE001 — connection refused / timeout / DNS
+        return 0
+
+
+# Endpoints hit after every safe write. /healthz proves the app booted; the
+# catalog endpoints read the deliveries table through the Pydantic models, so
+# they 500 on a row that fails validation — the failure mode that a bare
+# "stage == RUNNING" check misses entirely (an invalid write leaves the
+# container RUNNING but every catalog read broken).
+_HEALTH_RENDER_PATHS = ("/api/public/reciters?limit=1", "/api/public/stats")
+
+
+def verify_post_write_health(*, healthz_timeout_s: int = 180) -> bool:
+    """Confirm a post-restart Space is actually SERVING VALID DATA, not just up.
+
+    Polls ``/healthz`` until the app answers 200 (container RUNNING != app
+    ready, since boot re-pulls + migrates the DB), then renders the
+    catalog/deliveries endpoints. Prints a PASS line or a loud FAIL banner;
+    returns ``False`` on any failure so the caller can exit non-zero.
+    """
+    base = _space_base_url()
+    deadline = time.time() + healthz_timeout_s
+    hz = 0
+    while time.time() < deadline:
+        hz = _http_status(f"{base}/healthz")
+        if hz == 200:
+            break
+        time.sleep(4)
+
+    checks = [("/healthz", hz)]
+    checks += [(p, _http_status(f"{base}{p}")) for p in _HEALTH_RENDER_PATHS]
+    failed = [(p, c) for p, c in checks if c != 200]
+    if not failed:
+        print(f"  post-write health OK — {base} /healthz + catalog endpoints all 200", flush=True)
+        return True
+    print("\n" + "!" * 76, flush=True)
+    print("POST-WRITE HEALTH CHECK FAILED — the write may have left prod broken.", flush=True)
+    for p, c in failed:
+        print(f"  FAIL  {p}  ->  HTTP {c or 'no-response'}", flush=True)
+    print(f"  The Space is RUNNING but not serving valid data. Check {base}/?logs=container", flush=True)
+    print("  A 500 on the catalog endpoints usually means the last write created a row that", flush=True)
+    print("  fails model validation — revert it (e.g. admin_db.py exec ... --write).", flush=True)
+    print("!" * 76 + "\n", flush=True)
+    return False
+
+
 @contextmanager
 def prod_safe_setup(args: argparse.Namespace, **setup_kw) -> Iterator[BootstrapCtx]:
     """Single-writer guard for prod-mutating admin ops — yields a ``BootstrapCtx``.
@@ -323,6 +384,15 @@ def prod_safe_setup(args: argparse.Namespace, **setup_kw) -> Iterator[BootstrapC
             print(f"resuming {PROD_SPACE_ID} ...", flush=True)
             restart_space(PROD_SPACE_ID)
             _wait_space_stage(api, "RUNNING", timeout_s=180)
+            # Confirm the Space is serving valid data, not merely RUNNING. If the
+            # write left a row that fails model validation the container is up but
+            # every catalog read 500s — surface that loudly. Only raise when the
+            # handler itself didn't already fail (don't mask the primary error).
+            if not verify_post_write_health() and sys.exc_info()[0] is None:
+                raise RuntimeError(
+                    "post-write health check failed — prod is RUNNING but not "
+                    "serving valid data (see banner above)"
+                )
     finally:
         _SAFE_WINDOW = False
         _release_admin_lock(backend, nonce)
