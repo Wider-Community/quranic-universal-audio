@@ -89,6 +89,7 @@ def _peaks_duration_ms(mount: str, fs, bucket: str, slug: str, ch: str) -> int |
 def _decode_bucket_mp3(data: bytes) -> dict | None:
     """Decoded duration + bitrate + cbr/vbr from bucket mp3 bytes."""
     from remux_bucket_audio import probe
+
     from qua_shared.mp3_frames import classify_bitrate_mode
 
     pr = probe(data)
