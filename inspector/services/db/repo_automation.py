@@ -1,6 +1,6 @@
 """Repository for the release-automation config + runtime state.
 
-Two tables (migration ``0019_automation.sql``):
+Two tables (migration ``0020_automation.sql``):
 
 - ``automation_config`` — a single-row JSON blob holding the owner's
   ``AutomationConfig``. ``get_config_json`` / ``set_config_json`` are the only
@@ -32,7 +32,7 @@ _CONFIG_ID = 1
 
 def _table_missing(exc: sqlite3.OperationalError) -> bool:
     """True iff the error is a missing automation table — tolerated on read so a
-    DB whose ``0019`` migration hasn't applied yet degrades to defaults instead of
+    DB whose ``0020`` migration hasn't applied yet degrades to defaults instead of
     500-ing the Releases tab / crashing the reconciler tick. Other OperationalErrors
     re-raise."""
     return "no such table: automation_" in str(exc)
@@ -49,7 +49,7 @@ def get_config_json() -> str | None:
         )
     except sqlite3.OperationalError as exc:
         if _table_missing(exc):
-            logger.warning("automation_config table missing — using defaults until 0019 applies")
+            logger.warning("automation_config table missing — using defaults until 0020 applies")
             return None
         raise
     return row[0] if row is not None else None

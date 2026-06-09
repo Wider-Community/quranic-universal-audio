@@ -35,7 +35,7 @@ Dockerfile sets it; off in dev). One daemon thread in the single gunicorn worker
 
 ## Persistence
 
-Migration `0019_automation.sql`, repo `services/db/repo_automation.py`:
+Migration `0020_automation.sql`, repo `services/db/repo_automation.py`:
 
 - `automation_config` — single-row JSON blob (`id=1`) holding the
   `AutomationConfig` (`qua_shared/schemas/automation.py`). db_seq-keyed cache in

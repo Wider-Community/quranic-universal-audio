@@ -22,12 +22,25 @@ _NAME_RE = re.compile(r"^(\d{4})_.*\.sql$")
 
 def _discover() -> list[tuple[int, Path]]:
     out: list[tuple[int, Path]] = []
+    seen: dict[int, Path] = {}
     for p in sorted(_MIGRATIONS_DIR.glob("*.sql")):
         m = _NAME_RE.match(p.name)
         if not m:
             logger.warning("ignoring non-conforming migration file: %s", p.name)
             continue
-        out.append((int(m.group(1)), p))
+        number = int(m.group(1))
+        # Duplicate numbers silently break the version-gated runner: once any DB
+        # records ``user_version=N``, EVERY ``NNNN_*`` at that number is skipped
+        # (``n > version`` is false), so a reused number never applies on a live
+        # DB. Fail loudly here instead of shipping a migration that never runs.
+        if number in seen:
+            raise RuntimeError(
+                f"duplicate migration number {number:04d}: {seen[number].name} and "
+                f"{p.name} — renumber one (live DBs gate on user_version, so a reused "
+                f"number is silently skipped)"
+            )
+        seen[number] = p
+        out.append((number, p))
     out.sort(key=lambda t: t[0])
     return out
 

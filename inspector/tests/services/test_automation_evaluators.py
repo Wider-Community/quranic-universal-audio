@@ -58,7 +58,7 @@ def test_unparseable_stored_blob_degrades_to_defaults():
 
 
 def test_reads_tolerate_missing_tables():
-    """A DB whose 0019 migration hasn't applied must degrade to defaults — not
+    """A DB whose 0020 migration hasn't applied must degrade to defaults — not
     500 the Releases tab / crash the reconciler tick."""
     from services.db import transaction
 
