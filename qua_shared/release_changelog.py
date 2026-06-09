@@ -107,12 +107,13 @@ def _render_template(blocks: Mapping[str, str]) -> str:
 
 
 def _recitation_changes(
-    *, previous_version: str | None, added: list[dict], refreshed: list[dict], carried: int
+    *, previous_version: str | None, added: list[dict], refreshed: list[dict], carried: list[dict]
 ) -> str:
+    n_carried = len(carried)
     out: list[str] = [
         "## Recitations",
         "",
-        _summary_sentence(previous_version, len(added), len(refreshed), carried),
+        _summary_sentence(previous_version, len(added), len(refreshed), n_carried),
         "",
     ]
     if added:
@@ -132,7 +133,12 @@ def _recitation_changes(
         )
         out.append("")
     if carried:
-        out.append(f"{carried} carried / unchanged.")
+        out.extend(
+            _accordion(
+                f"Carried recitations - {n_carried}",
+                _member_table(carried),
+            )
+        )
     return "\n".join(out).rstrip()
 
 
@@ -160,7 +166,7 @@ def render_changelog(
     """Return the full release body markdown."""
     added = [m for m in members if m.get("change_kind") == "added"]
     refreshed = [m for m in members if m.get("change_kind") == "refresh"]
-    carried = sum(1 for m in members if m.get("change_kind") == "unchanged")
+    carried = [m for m in members if m.get("change_kind") == "unchanged"]
     return _render_template(
         {
             "release_title": f"# {release_date}",
