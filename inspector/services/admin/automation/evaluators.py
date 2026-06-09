@@ -168,9 +168,12 @@ def eval_auto_gen_ts(cfg: AutomationConfig, now: datetime) -> None:
 
 
 def _auto_gen_gated(c, slug: str, claim) -> bool:
-    """True → skip auto-gen for ``slug`` (a human should look first)."""
-    if claim["mark_ready_bypass_used"]:
-        return True  # reviewer overrode the checklist
+    """True → skip auto-gen for ``slug`` (a human should look first).
+
+    Mark-ready bypass is owner-only and means "I've vetted this, no checklist
+    needed" — it does NOT gate auto-gen. Only the owner-configured comment/flag
+    gates do.
+    """
     if c.gate_by_comments:
         if (claim["mark_ready_comment_checks"] or "").strip():
             return True
