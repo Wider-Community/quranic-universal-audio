@@ -32,6 +32,7 @@
     import { dashPort } from '../../playback/dash-port';
     import { exitLoop, loopTarget } from '../../playback/loop';
     import { recycleAsShadow } from '../../playback/shadow-audio';
+    import { vbrCoveringRangeFor } from '../../playback/vbr-covering';
     import {
         recitationAyahAt,
         recitationAyahs,
@@ -424,18 +425,7 @@
 
     function coveringRangeFor(targetMs: number): [number, number] {
         if (!dashPort.source?.vbr) return [0, Number.POSITIVE_INFINITY];
-        const ayah = ayahCovering(targetMs);
-        if (ayah) return [ayah.startMs, ayah.endMs];
-        const start = Math.max(0, targetMs);
-        return [start, start + 30_000];
-    }
-
-    function ayahCovering(targetMs: number) {
-        const ayahs = $recitationAyahs;
-        if (!ayahs.length) return null;
-        const hit = ayahs.find((a) => targetMs >= a.startMs && targetMs < a.endMs);
-        if (hit) return hit;
-        return [...ayahs].reverse().find((a) => a.startMs <= targetMs) ?? ayahs[0] ?? null;
+        return vbrCoveringRangeFor(targetMs, $recitationAyahs);
     }
 
     function setSurahAndResume(surahNum: number): void {
