@@ -88,26 +88,18 @@ def _peaks_duration_ms(mount: str, fs, bucket: str, slug: str, ch: str) -> int |
 
 def _decode_bucket_mp3(data: bytes) -> dict | None:
     """Decoded duration + bitrate + cbr/vbr from bucket mp3 bytes."""
-    from remux_bucket_audio import parse_frame_header, probe, skip_id3v2
+    from remux_bucket_audio import probe
+    from qua_shared.mp3_frames import classify_bitrate_mode
 
     pr = probe(data)
     if pr.error or pr.declared_kbps is None or pr.real_dur_s <= 0:
         return None
-    pos = skip_id3v2(data)
-    rates: set[int] = set()
-    n = len(data)
-    while pos + 4 <= n:
-        h = parse_frame_header(data[pos : pos + 4])
-        if h is None:
-            pos += 1
-            continue
-        rates.add(h["kbps"])
-        pos += h["frame_size"]
-    mode = "cbr" if len(rates) <= 1 else "vbr"
+    # Canonical verdict: whole-file linear-seek error (NOT len(set(bitrates))==1,
+    # which a single stray frame in otherwise-CBR audio flips to a false 'vbr').
     return {
         "duration_sec": pr.real_dur_s,
         "bitrate_kbps": int(pr.declared_kbps),
-        "bitrate_mode": mode,
+        "bitrate_mode": classify_bitrate_mode(data),
         "sample_rate": pr.sr,
     }
 

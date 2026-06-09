@@ -194,6 +194,60 @@ def build_frame_index(data: bytes) -> FrameIndex:
     return FrameIndex(offsets=offsets, starts_ms=starts_ms)
 
 
+# ── CBR/VBR classification ───────────────────────────────────────────────────
+
+# Worst-case error (ms) a browser's linear byte->time seek may incur for a file
+# to still count as CBR (natively, accurately seekable by `<audio>.currentTime`).
+# Genuinely-CBR streams — including ones with a stray odd-bitrate frame — measure
+# well under this; VBR measures seconds. ~2 MPEG-1 frames of slack at 44.1 kHz.
+CBR_LINEAR_SEEK_TOLERANCE_MS = 200
+
+
+def max_linear_seek_error_ms(index: FrameIndex) -> float:
+    """Worst-case error (ms) a *linear* byte->time map incurs vs each frame's
+    true playback time.
+
+    This is the only reliable CBR/VBR discriminator. A browser seeking a file
+    with no usable VBR index maps ``time -> byte`` linearly; that lands frame-
+    accurately only when bytes accrue at a constant rate (CBR). For VBR the byte
+    rate varies, so the linear estimate drifts — by seconds. Both shortcuts the
+    legacy probes used are unreliable: head-only bitrate uniformity misses VBR
+    whose variation starts past the head, and ``len(set(bitrates)) == 1`` is
+    fooled by a single stray frame in otherwise-CBR audio. Walking the whole
+    grid once and measuring the actual linear-seek error sidesteps both.
+    """
+    n = index.n_frames
+    if n < 20:
+        return 0.0
+    offs = index.offsets
+    starts = index.starts_ms
+    audio_first = offs[0]
+    audio_bytes = (offs[n] - audio_first) or 1  # offs[n] is the audio-EOF sentinel
+    dur = starts[n]
+    max_err = 0.0
+    for i in range(n):
+        lin = (offs[i] - audio_first) / audio_bytes * dur
+        err = lin - starts[i]
+        if err < 0:
+            err = -err
+        if err > max_err:
+            max_err = err
+    return max_err
+
+
+def classify_bitrate_mode(
+    data: bytes, *, tolerance_ms: float = CBR_LINEAR_SEEK_TOLERANCE_MS
+) -> str:
+    """Return ``"cbr"`` iff *data*'s whole-file byte<->time map is linear within
+    *tolerance_ms*, else ``"vbr"``. The canonical encoding verdict — use this
+    everywhere a chapter's ``bitrate_mode`` is determined."""
+    return (
+        "cbr"
+        if max_linear_seek_error_ms(build_frame_index(data)) <= tolerance_ms
+        else "vbr"
+    )
+
+
 @dataclass(frozen=True)
 class FrameSlice:
     """One sliced clip: raw frame bytes + the snapped source window it covers.

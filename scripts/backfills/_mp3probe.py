@@ -1,14 +1,19 @@
 """Pure-Python MP3 source-URL prober for catalog metadata backfill.
 
-Returns decoded duration + bitrate + cbr/vbr for an mp3 reachable by URL,
-without mutagen and (where possible) without downloading the whole file.
+Returns decoded duration + bitrate + a cbr/vbr verdict for an mp3 reachable by
+URL, without mutagen.
 
-Decoded duration — never bitrate-estimated on the wrong file size — comes from,
-in order of preference:
-  1. Xing/Info header frame count → frames × samples_per_frame / sample_rate.
-  2. CBR (uniform frame bitrate in the head) + total size → size×8 / bitrate.
-  3. Fallback: full download, walk every frame (the only correct path for a
-     headerless VBR file — the maher-ch76 phantom-tail failure mode).
+The cbr/vbr verdict comes from the whole-file linear-seek metric
+(``qua_shared.mp3_frames.classify_bitrate_mode``) — the only reliable signal.
+Head-only bitrate uniformity misses VBR whose variation starts past the head,
+and ``len(set(bitrates)) == 1`` is fooled by a stray frame in CBR audio. That
+metric needs the full file, so ``probe_source(allow_full=True)`` downloads and
+walks every frame; ``allow_full=False`` returns a head duration estimate with
+the mode left unset (``needs_full``).
+
+Duration is read off the frame grid (frames × samples_per_frame / sample_rate),
+never bitrate-estimated on the wrong file size (the maher-ch76 phantom-tail
+failure mode).
 
 Handles MPEG-1/2/2.5 Layer III (archive.org / tvquran / mp3quran all differ).
 """
@@ -151,89 +156,48 @@ class SourceProbe:
 
 
 def probe_source(url: str, *, allow_full: bool = True) -> SourceProbe:
+    """Probe a source-URL mp3 for duration + bitrate + a cbr/vbr verdict.
+
+    The cbr/vbr verdict is ALWAYS from the whole-file linear-seek metric
+    (``qua_shared.mp3_frames.classify_bitrate_mode``) — head bitrate-uniformity
+    misses VBR whose variation starts past the head, and ``len(set(bitrates))``
+    is fooled by a single stray frame in otherwise-CBR audio. That metric needs
+    the whole file, so a trustworthy verdict requires ``allow_full=True``. With
+    ``allow_full=False`` the head still yields a duration estimate but the mode
+    is left unset (``needs_full``) for the caller to resolve later.
+    """
     fetch_url = canonical_archive_url(url)
     rewritten = fetch_url if fetch_url != url else None
-    try:
-        buf, total, tag = _fetch(fetch_url, PROBE_BYTES)
-    except Exception as e:  # noqa: BLE001
-        return SourceProbe(resolved_url=rewritten, error=f"fetch:{type(e).__name__}:{e}")
-    url = fetch_url
 
-    off = _skip_id3(buf)
-    foff, h = _first_frame(buf, off)
-    if h is None:
-        return SourceProbe(resolved_url=rewritten, error="no_frame_in_head")
-    sr = h["sr"]
-    spf = h["spf"]
-
-    # Bitrate uniformity over the head → cbr/vbr verdict.
-    rates: set[int] = set()
-    pos = foff
-    scanned = 0
-    n = len(buf)
-    while pos + 4 <= n and scanned < 4000:
-        fh = _frame(buf[pos : pos + 4])
-        if fh is None:
-            nxt = buf.find(b"\xff", pos + 1)
-            if nxt < 0:
-                break
-            pos = nxt
-            continue
-        rates.add(fh["kbps"])
-        pos += fh["fsize"]
-        scanned += 1
-    uniform = len(rates) <= 1
-    nominal_kbps = h["kbps"]
-
-    xf = _xing_frames(buf, foff, h)
-    if xf:
-        dur = xf * spf / sr
-        # Xing implies the file was VBR-aware; trust uniformity for the label.
-        mode = "cbr" if uniform else "vbr"
-        return SourceProbe(int(round(dur)), nominal_kbps, mode, sr, "xing", rewritten)
-
-    if uniform and total:
-        audio_bytes = total - tag - foff
-        dur = audio_bytes * 8 / (nominal_kbps * 1000)
-        return SourceProbe(int(round(dur)), nominal_kbps, "cbr", sr, "cbr_size", rewritten)
-
-    # Headerless VBR (or unknown total): only a full walk gives a correct length.
     if not allow_full:
-        return SourceProbe(None, nominal_kbps, "vbr", sr, "needs_full", rewritten)
+        try:
+            buf, _total, _tag = _fetch(fetch_url, PROBE_BYTES)
+        except Exception as e:  # noqa: BLE001
+            return SourceProbe(resolved_url=rewritten, error=f"fetch:{type(e).__name__}:{e}")
+        off = _skip_id3(buf)
+        foff, h = _first_frame(buf, off)
+        if h is None:
+            return SourceProbe(resolved_url=rewritten, error="no_frame_in_head")
+        xf = _xing_frames(buf, foff, h)
+        dur = int(round(xf * h["spf"] / h["sr"])) if xf else None
+        return SourceProbe(dur, h["kbps"], None, h["sr"], "needs_full", rewritten)
+
+    # Full download → authoritative verdict via the canonical whole-file metric
+    # (shared with the extraction bitrate audit).
+    from qua_shared.mp3_frames import build_frame_index, classify_bitrate_mode
+
     try:
-        data = _fetch_full(url)
+        data = _fetch_full(fetch_url)
     except Exception as e:  # noqa: BLE001
-        return SourceProbe(
-            None,
-            nominal_kbps,
-            "vbr",
-            sr,
-            resolved_url=rewritten,
-            error=f"full:{type(e).__name__}:{e}",
-        )
-    off = _skip_id3(data)
-    pos, h = _first_frame(data, off)
-    if h is None:
-        return SourceProbe(resolved_url=rewritten, error="no_frame_full")
-    frames = 0
-    samples = 0
-    rates = set()
-    nn = len(data)
-    while pos + 4 <= nn:
-        fh = _frame(data[pos : pos + 4])
-        if fh is None:
-            nxt = data.find(b"\xff", pos + 1)
-            if nxt < 0:
-                break
-            pos = nxt
-            continue
-        frames += 1
-        samples += fh["spf"]
-        rates.add(fh["kbps"])
-        pos += fh["fsize"]
-    if frames == 0:
+        return SourceProbe(resolved_url=rewritten, error=f"full:{type(e).__name__}:{e}")
+    idx = build_frame_index(data)
+    if idx.n_frames <= 0:
         return SourceProbe(resolved_url=rewritten, error="no_frames_full")
-    dur = samples / h["sr"]
-    mode = "cbr" if len(rates) <= 1 else "vbr"
-    avg_kbps = int(round((len(data) - off) * 8 / dur / 1000)) if dur else nominal_kbps
-    return SourceProbe(int(round(dur)), avg_kbps, mode, h["sr"], "full_walk", rewritten)
+    off = _skip_id3(data)
+    _foff, h = _first_frame(data, off)
+    sr = h["sr"] if h else None
+    dur = idx.duration_ms / 1000.0
+    audio_bytes = idx.offsets[idx.n_frames] - idx.offsets[0]
+    avg_kbps = int(round(audio_bytes * 8 / dur / 1000)) if dur else (h["kbps"] if h else None)
+    mode = classify_bitrate_mode(data)
+    return SourceProbe(int(round(dur)), avg_kbps, mode, sr, "full_walk", rewritten)
