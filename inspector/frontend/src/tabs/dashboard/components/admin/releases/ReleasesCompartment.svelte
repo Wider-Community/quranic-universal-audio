@@ -485,10 +485,6 @@
             onRefreshCatalog={onRefreshCatalog}
         />
 
-        {#if $canManageAutomation}
-            <AutomationSection />
-        {/if}
-
         {#if showBanner && lastBatch}
             <div class="batch-banner" class:has-failures={lastBatch.failed_count > 0} role="status">
                 <span class="banner-text">
@@ -506,18 +502,23 @@
         {/if}
 
         {#if allRows.length === 0}
-            <div class="zero-state">
-                <h3>No reciters in the release pipeline yet</h3>
-                <p>
-                    Reciters land here once they finish review and timestamp
-                    generation. Open the <strong>Reviews</strong> tab to
-                    claim a reciter, mark it ready, and run
-                    <em>Generate timestamps</em> — successful runs auto-release
-                    the reciter and surface them here as ready to publish.
-                </p>
+            <div class="list-area" bind:this={listAreaEl}>
+                {#if $canManageAutomation}<AutomationSection />{/if}
+                <div class="zero-state">
+                    <h3>No reciters in the release pipeline yet</h3>
+                    <p>
+                        Reciters land here once they finish review and timestamp
+                        generation. Open the <strong>Reviews</strong> tab to
+                        claim a reciter, mark it ready, and run
+                        <em>Generate timestamps</em> — successful runs auto-release
+                        the reciter and surface them here as ready to publish.
+                    </p>
+                </div>
             </div>
         {:else}
-            <!-- Sticky filter bar — mirrors Reviews. -->
+        <div class="list-area" bind:this={listAreaEl}>
+            {#if $canManageAutomation}<AutomationSection />{/if}
+            <!-- Filter bar -->
         <div class="filter-bar">
             <span class="search">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
@@ -582,7 +583,6 @@
             </div>
         </div>
 
-        <div class="list-area" bind:this={listAreaEl}>
             {#if narrowedToZero}
                 <div class="narrowed">
                     <span>No recitations match the active filter.</span>
