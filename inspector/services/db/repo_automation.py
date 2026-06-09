@@ -18,21 +18,40 @@ read connection.
 
 from __future__ import annotations
 
+import logging
+import sqlite3
 from datetime import datetime
 
 from . import _serde
 from .connection import get_conn
 
+logger = logging.getLogger(__name__)
+
 _CONFIG_ID = 1
 
 
+def _table_missing(exc: sqlite3.OperationalError) -> bool:
+    """True iff the error is a missing automation table — tolerated on read so a
+    DB whose ``0019`` migration hasn't applied yet degrades to defaults instead of
+    500-ing the Releases tab / crashing the reconciler tick. Other OperationalErrors
+    re-raise."""
+    return "no such table: automation_" in str(exc)
+
+
 def get_config_json() -> str | None:
-    """The persisted ``AutomationConfig`` JSON blob, or None when never set."""
-    row = (
-        get_conn()
-        .execute("SELECT config_json FROM automation_config WHERE id = ?", (_CONFIG_ID,))
-        .fetchone()
-    )
+    """The persisted ``AutomationConfig`` JSON blob, or None when never set
+    (or the table doesn't exist yet — engine/route then use defaults)."""
+    try:
+        row = (
+            get_conn()
+            .execute("SELECT config_json FROM automation_config WHERE id = ?", (_CONFIG_ID,))
+            .fetchone()
+        )
+    except sqlite3.OperationalError as exc:
+        if _table_missing(exc):
+            logger.warning("automation_config table missing — using defaults until 0019 applies")
+            return None
+        raise
     return row[0] if row is not None else None
 
 
@@ -50,15 +69,21 @@ def set_config_json(config_json: str, *, updated_by: str, now: datetime | None =
 
 
 def all_state() -> list[dict]:
-    """Every per-automation runtime row, for the FE status line."""
-    rows = (
-        get_conn()
-        .execute(
-            "SELECT automation_id, last_run_at, last_status, last_detail "
-            "FROM automation_state ORDER BY automation_id"
+    """Every per-automation runtime row, for the FE status line (empty when the
+    table doesn't exist yet)."""
+    try:
+        rows = (
+            get_conn()
+            .execute(
+                "SELECT automation_id, last_run_at, last_status, last_detail "
+                "FROM automation_state ORDER BY automation_id"
+            )
+            .fetchall()
         )
-        .fetchall()
-    )
+    except sqlite3.OperationalError as exc:
+        if _table_missing(exc):
+            return []
+        raise
     return [
         {"automation_id": r[0], "last_run_at": r[1], "last_status": r[2], "last_detail": r[3]}
         for r in rows
@@ -66,16 +91,22 @@ def all_state() -> list[dict]:
 
 
 def get_state(automation_id: str) -> dict | None:
-    """One automation's runtime row, or None when it has never run."""
-    r = (
-        get_conn()
-        .execute(
-            "SELECT automation_id, last_run_at, last_status, last_detail "
-            "FROM automation_state WHERE automation_id = ?",
-            (automation_id,),
+    """One automation's runtime row, or None when it has never run (or the table
+    doesn't exist yet)."""
+    try:
+        r = (
+            get_conn()
+            .execute(
+                "SELECT automation_id, last_run_at, last_status, last_detail "
+                "FROM automation_state WHERE automation_id = ?",
+                (automation_id,),
+            )
+            .fetchone()
         )
-        .fetchone()
-    )
+    except sqlite3.OperationalError as exc:
+        if _table_missing(exc):
+            return None
+        raise
     if r is None:
         return None
     return {"automation_id": r[0], "last_run_at": r[1], "last_status": r[2], "last_detail": r[3]}

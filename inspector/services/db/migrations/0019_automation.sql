@@ -9,14 +9,14 @@
 --   next_run_at is NOT stored — the route computes it live from config so idle
 --   ticks stay write-free.
 
-CREATE TABLE automation_config (
+CREATE TABLE IF NOT EXISTS automation_config (
     id          INTEGER PRIMARY KEY CHECK (id = 1),
     config_json TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
     updated_by  TEXT NOT NULL
 );
 
-CREATE TABLE automation_state (
+CREATE TABLE IF NOT EXISTS automation_state (
     automation_id TEXT PRIMARY KEY,
     last_run_at   TEXT,
     last_status   TEXT,

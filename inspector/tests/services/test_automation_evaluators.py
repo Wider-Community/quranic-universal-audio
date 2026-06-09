@@ -57,6 +57,22 @@ def test_unparseable_stored_blob_degrades_to_defaults():
     assert cfg.gh_cut.enabled is False  # defaults, no crash
 
 
+def test_reads_tolerate_missing_tables():
+    """A DB whose 0019 migration hasn't applied must degrade to defaults — not
+    500 the Releases tab / crash the reconciler tick."""
+    from services.db import transaction
+
+    with transaction() as conn:
+        conn.execute("DROP TABLE automation_config")
+        conn.execute("DROP TABLE automation_state")
+    cache.invalidate_automation_config_cache()
+
+    assert repo_automation.get_config_json() is None
+    assert repo_automation.all_state() == []
+    assert repo_automation.get_state("gh_cut") is None
+    assert automation_config.load_config().gh_cut.enabled is False  # defaults, no raise
+
+
 # --- auto-gen gates ----------------------------------------------------------
 
 
