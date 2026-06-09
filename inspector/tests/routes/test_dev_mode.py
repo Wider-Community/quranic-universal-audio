@@ -62,6 +62,7 @@ def test_dev_mode_default_owner_when_cookie_missing(dev_mode_client):
         "active_claims": [],
         "dev_mode": True,
         "guides_read": [],
+        "notifications_unread": 0,
     }
     # Owner is a superuser → holds every registered capability.
     from qua_shared.schemas import CAPABILITIES
@@ -96,6 +97,7 @@ def test_dev_mode_anonymous_cookie_yields_null_user(dev_mode_client):
         "dev_mode": True,
         "capabilities": ["view.catalog", "view.public_activity"],
         "guides_read": [],
+        "notifications_unread": 0,
     }
 
 

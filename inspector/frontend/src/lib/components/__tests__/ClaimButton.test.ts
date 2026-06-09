@@ -44,6 +44,7 @@ describe('ClaimButton', () => {
             dev_mode: false,
             capabilities: [],
             guides_read: [],
+            notifications_unread: 0,
         });
 
         const { container } = render(ClaimButton, {
@@ -68,6 +69,7 @@ describe('ClaimButton', () => {
             dev_mode: false,
             capabilities: [],
             guides_read: [],
+            notifications_unread: 0,
         });
 
         const { container } = render(ClaimButton, {
@@ -91,6 +93,7 @@ describe('ClaimButton', () => {
             dev_mode: false,
             capabilities: [],
             guides_read: [],
+            notifications_unread: 0,
         });
 
         const { container } = render(ClaimButton, {
@@ -121,6 +124,7 @@ describe('ClaimButton', () => {
             dev_mode: false,
             capabilities: [],
             guides_read: [],
+            notifications_unread: 0,
         });
 
         const { container } = render(ClaimButton, {
@@ -141,6 +145,7 @@ describe('ClaimButton', () => {
             dev_mode: false,
             capabilities: [],
             guides_read: [],
+            notifications_unread: 0,
         });
 
         const { container } = render(ClaimButton, {

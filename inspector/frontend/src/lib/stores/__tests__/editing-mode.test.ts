@@ -21,6 +21,7 @@ function _user(overrides: Partial<CurrentUser> = {}): CurrentUser {
         dev_mode: false,
         capabilities: [],
         guides_read: [],
+        notifications_unread: 0,
         ...overrides,
     };
 }
@@ -196,6 +197,7 @@ describe('syncEditingMode', () => {
             dev_mode: false,
             capabilities: [],
             guides_read: [],
+            notifications_unread: 0,
         };
         expect(syncEditingMode(anon, _task())).toEqual({
             kind: 'view',

@@ -48,6 +48,12 @@ export interface CurrentUser {
      * write-once. Empty for anonymous.
      */
     guides_read: string[];
+    /**
+     * Count of active, unseen per-user notifications — drives the "My
+     * Notifications" rail badge on first load (the rail itself refetches and
+     * marks-seen on open). 0 for anonymous.
+     */
+    notifications_unread: number;
 }
 
 const _ANON: CurrentUser = {
@@ -59,6 +65,7 @@ const _ANON: CurrentUser = {
     dev_mode: false,
     capabilities: [],
     guides_read: [],
+    notifications_unread: 0,
 };
 
 export const currentUser = writable<CurrentUser>(_ANON);

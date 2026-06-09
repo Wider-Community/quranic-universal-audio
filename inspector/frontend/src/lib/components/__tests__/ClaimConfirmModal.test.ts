@@ -37,6 +37,7 @@ beforeEach(() => {
         dev_mode: false,
         capabilities: [],
         guides_read: [],
+        notifications_unread: 0,
     });
 });
 

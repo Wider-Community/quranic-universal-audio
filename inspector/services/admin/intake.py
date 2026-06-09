@@ -488,7 +488,13 @@ def resolve(request_id: str, *, status: str, reason: str, actor: Actor) -> None:
     no state-machine transition fires (unlike edit-request rejects)."""
     if status not in ("returned", "discarded"):
         raise IntakeError(f"invalid resolve status: {status!r}")
-    _require_pending_intake(request_id)
+    row = _require_pending_intake(request_id)
+    # Capture the requester + proposed name for the notification — slugless
+    # rows have no catalog entry, so the name comes off the request payload.
+    requester_id = row["requester_id"]
+    req_payload = _serde.json_loads(row["payload"]) or {}
+    edits = req_payload.get("proposed_edits") or {}
+    reciter_name = edits.get("name_en") or req_payload.get("reciter_id") or "your submission"
     with _sync.durable_transaction():
         repo_requests.resolve_by_id(
             request_id=request_id,
@@ -498,11 +504,19 @@ def resolve(request_id: str, *, status: str, reason: str, actor: Actor) -> None:
         )
         from services.state import audit
 
-        audit.append(
+        rec = audit.append(
             event=f"request.intake_{status}",
             actor=actor,
             payload={"request_id": request_id},
             reason=reason,
+        )
+        from services.db.connection import get_conn
+        from services.notifications import emit as _notify
+
+        _notify.emit_for_event(
+            get_conn(),
+            rec,
+            extra={"requester_id": requester_id, "reciter_name": reciter_name},
         )
     _invalidate()
 

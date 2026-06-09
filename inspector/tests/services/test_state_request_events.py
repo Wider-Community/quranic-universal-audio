@@ -380,6 +380,26 @@ def test_reject_soft_happy_path(state_env, monkeypatch):
     assert archived[0].transitioned_by.role == "owner"
 
 
+def test_reject_soft_notifies_requester(state_env, monkeypatch):
+    """End-to-end wiring: an owner sending a request back materializes a
+    per-user notification for the original requester (captured pre-handler,
+    before the pending entry is archived). Guards the state.py emit hook."""
+    state_service, _ = _seed_awaiting_alignment_with_pending(state_env, monkeypatch)
+    from services.db import repo_notifications
+
+    state_service.transition(
+        "test_reciter",
+        "reciter.request_rejected_soft",
+        actor=_actor(role="owner", hf_user_id="owner-x"),
+        reason="not a priority right now",
+    )
+
+    rows = repo_notifications.list_active("u-1")  # the requester (default _actor)
+    assert len(rows) == 1
+    assert "was sent back" in rows[0]["title"]
+    assert rows[0]["body"] == "not a priority right now"
+
+
 def test_reject_soft_rejects_non_owner(state_env, monkeypatch):
     """Send-back is owner-only — both contributors and maintainers are denied."""
     state_service, _ = _seed_awaiting_alignment_with_pending(state_env, monkeypatch)
