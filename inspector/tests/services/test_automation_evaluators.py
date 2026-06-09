@@ -92,11 +92,13 @@ def test_auto_gen_not_gated_when_clean(monkeypatch):
     assert evaluators._auto_gen_gated(c, "slug", _clean_claim()) is False
 
 
-def test_auto_gen_gated_on_checklist_bypass(monkeypatch):
+def test_auto_gen_not_gated_on_owner_checklist_bypass(monkeypatch):
+    # Bypass is owner-only ("vetted, no checklist needed") → it must NOT block
+    # auto-gen. Only the owner-configured comment/flag gates do.
     monkeypatch.setattr(evaluators, "load_detailed", lambda slug: [])
     monkeypatch.setattr(evaluators, "count_flagged", lambda entries: 0)
     claim = _clean_claim() | {"mark_ready_bypass_used": 1}
-    assert evaluators._auto_gen_gated(AutoGenTsConfig(enabled=True), "slug", claim) is True
+    assert evaluators._auto_gen_gated(AutoGenTsConfig(enabled=True), "slug", claim) is False
 
 
 def test_auto_gen_gated_on_reviewer_comment(monkeypatch):
