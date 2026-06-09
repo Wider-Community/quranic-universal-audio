@@ -190,6 +190,7 @@ def test_audio_urls_come_from_sidecar_chapters():
                 "url": "https://cdn.example/100.mp3",
                 "duration_sec": 60,
                 "bitrate_mode": "cbr",
+                "max_linear_seek_err_ms": 26,
             }
         },
     }

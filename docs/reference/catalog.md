@@ -191,12 +191,12 @@ Editable columns: `_DELIVERY_WRITABLE` (`repo_catalog.py`) covers riwayah/style/
     "category": "by_surah"
   },
   "chapters": {                              // dict[str, ChapterEntry]
-    "1": { "url": "https://...", "size_bytes": 803456, "duration_sec": 50, "bitrate_kbps": 128, "bitrate_mode": "cbr" }
+    "1": { "url": "https://...", "size_bytes": 803456, "duration_sec": 50, "bitrate_kbps": 128, "bitrate_mode": "cbr", "max_linear_seek_err_ms": 26 }
   }
 }
 ```
 
-Chapter keys: `"1"`–`"114"` (by_surah) or `"<surah>:<ayah>"` (by_ayah). Per-chapter metric fields nullable until probed. `ChapterEntry` fields: `url` (required), `size_bytes`, `duration_sec`, `bitrate_kbps`, `bitrate_mode` (`cbr`/`vbr` per chapter).
+Chapter keys: `"1"`–`"114"` (by_surah) or `"<surah>:<ayah>"` (by_ayah). Per-chapter metric fields nullable until probed. `ChapterEntry` fields: `url` (required), `size_bytes`, `duration_sec`, `bitrate_kbps`, `bitrate_mode` (`cbr`/`vbr` per chapter), and `max_linear_seek_err_ms` (probe verdict evidence).
 
 **Checksum** (`_meta.checksum`): `sha256(normalized_urls_sorted.joined_by_newline)` at build time. Normalization: lowercase hostname, strip trailing slashes, drop fragment; query order + path case preserved (CDN-sensitive). Lives only in the sidecar; re-probe jobs compute + compare.
 
