@@ -122,3 +122,27 @@ def test_stage_job_code_raises_when_entrypoint_missing(stub_batch, monkeypatch, 
     assert "qua_jobs/publish_hf.py" in msg
     assert "Dockerfile" in msg
     assert stub_batch == [], "must not upload when contract is broken"
+
+
+# --- poll-handler registration (the auto-regen completion path) --------------
+
+
+def test_register_poll_handlers_includes_ts(monkeypatch):
+    """Every poll-completable kind — crucially ``ts`` — must be registered.
+
+    ``ts`` being dropped from boot wiring left automated TS regens with no
+    completion path (no webhook, no open drawer, poll skips an unregistered
+    kind), freezing ``produced_at`` and looping the auto-regen automation. The
+    handler set is asserted against the single source of truth so any future
+    omission fails here instead of in prod."""
+    saved = dict(base._HANDLERS)
+    base._HANDLERS.clear()
+    try:
+        base.register_poll_handlers()
+        assert set(base._HANDLERS) == set(base.POLL_COMPLETABLE_KINDS)
+        assert "ts" in base._HANDLERS
+        # cut_release is webhook-only — it must NOT be on the poll path.
+        assert "cut_release" not in base._HANDLERS
+    finally:
+        base._HANDLERS.clear()
+        base._HANDLERS.update(saved)
