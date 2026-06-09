@@ -33,7 +33,9 @@
         type ReleasesStatusResponse,
     } from '../../../../../lib/api/admin-releases';
     import { sendBackToUnderReview } from '../../../../../lib/api/admin-reviews';
+    import { can } from '../../../../../lib/stores/capabilities';
     import { releasesStore } from '../../../../../lib/stores/releases.svelte';
+    import AutomationSection from './AutomationSection.svelte';
     import CutReleaseModal from './CutReleaseModal.svelte';
     import ReleasesActionBar from './ReleasesActionBar.svelte';
     import ReleasesRow, { type ReleasesBucket } from './ReleasesRow.svelte';
@@ -460,6 +462,7 @@
         });
     }
     const scrollToInFlight = () => jumpToSection('in_flight');
+    const canManageAutomation = can('release.manage_automation');
 </script>
 
 <div class="releases">
@@ -481,6 +484,10 @@
             catalogDriftCount={resp?.catalog_drift_count ?? 0}
             onRefreshCatalog={onRefreshCatalog}
         />
+
+        {#if $canManageAutomation}
+            <AutomationSection />
+        {/if}
 
         {#if showBanner && lastBatch}
             <div class="batch-banner" class:has-failures={lastBatch.failed_count > 0} role="status">

@@ -37,6 +37,7 @@ def test_structural_edit_after_generation_is_stale(monkeypatch):
     info = ts_staleness.ts_stale_info("slug", produced_at=_GEN_AT)
     assert info == {
         "stale_since": "2026-03-02T09:00:00Z",
+        "last_edit_at": "2026-03-03T09:00:00Z",
         "edits_since": 2,
         "affected_chapters": [5, 12],
     }
@@ -90,6 +91,7 @@ def test_mixed_batch_counts_only_affecting_and_keeps_earliest(monkeypatch):
     info = ts_staleness.ts_stale_info("slug", produced_at=_GEN_AT)
     assert info == {
         "stale_since": "2026-03-02T09:00:00Z",
+        "last_edit_at": "2026-03-05T09:00:00Z",
         "edits_since": 2,
         "affected_chapters": [2],  # chapter 9 (ignore_issue) excluded
     }

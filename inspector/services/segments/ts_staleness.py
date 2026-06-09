@@ -28,9 +28,11 @@ def ts_stale_info(slug: str, *, produced_at: str) -> dict | None:
     ``produced_at`` is the current ``per_recitation_releases(track='ts')`` row's
     generation time (ISO-8601 UTC). Walks the reciter's edit-history batches and
     collects those saved after it that carry a timestamp-affecting op. Returns
-    ``{"stale_since": <earliest such saved_at_utc>, "edits_since": <count>,
-    "affected_chapters": <sorted chapter list>}`` when any exist, else ``None``
-    (nothing generated, or only annotation edits since).
+    ``{"stale_since": <earliest such saved_at_utc>, "last_edit_at": <latest such
+    saved_at_utc>, "edits_since": <count>, "affected_chapters": <sorted chapter
+    list>}`` when any exist, else ``None`` (nothing generated, or only annotation
+    edits since). ``last_edit_at`` lets the auto-regen automation debounce until
+    a burst of consecutive edits settles.
 
     ``affected_chapters`` is the set of chapters touched by those edits — the
     union of each batch's ``chapter`` (Inspector save) / ``chapters`` (pipeline
@@ -47,6 +49,7 @@ def ts_stale_info(slug: str, *, produced_at: str) -> dict | None:
         logger.warning("ts_stale_info(%s): edit-history read failed; treating as not stale", slug)
         return None
     stale_since: str | None = None
+    last_edit_at: str | None = None
     count = 0
     affected: set[int] = set()
     for batch in batches:
@@ -58,6 +61,8 @@ def ts_stale_info(slug: str, *, produced_at: str) -> dict | None:
         count += 1
         if stale_since is None or saved_at < stale_since:
             stale_since = saved_at
+        if last_edit_at is None or saved_at > last_edit_at:
+            last_edit_at = saved_at
         ch = batch.get("chapter")
         if isinstance(ch, int):
             affected.add(ch)
@@ -68,6 +73,7 @@ def ts_stale_info(slug: str, *, produced_at: str) -> dict | None:
         return None
     return {
         "stale_since": stale_since,
+        "last_edit_at": last_edit_at,
         "edits_since": count,
         "affected_chapters": sorted(affected),
     }

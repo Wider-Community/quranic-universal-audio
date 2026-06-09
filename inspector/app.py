@@ -410,6 +410,19 @@ def _boot_substrate() -> None:
         except Exception as e:  # noqa: BLE001
             logger.warning("release-job poll wiring failed: %s", e)
 
+    # Release-automation reconciler: a ~60 s loop that fires the release jobs on
+    # the owner's schedule/rules (see services/admin/automation/). Opt-in via
+    # ``INSPECTOR_AUTOMATIONS=1`` (prod Dockerfile sets it; off in dev) so a local
+    # checkout never spends HF Job compute on its own.
+    if os.environ.get("INSPECTOR_AUTOMATIONS") == "1":
+        try:
+            from services.admin.automation import engine as _automation_engine
+
+            _automation_engine.start_background_loop()
+            logger.info("automation reconciler started")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("automation reconciler wiring failed: %s", e)
+
 
 _boot_substrate()
 

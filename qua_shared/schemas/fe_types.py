@@ -54,6 +54,16 @@ from .admin_users import (
     AdminVisitorStats,
     VisitorDayStat,
 )
+from .automation import (
+    AutoGenTsConfig,
+    AutomationConfig,
+    AutomationResponse,
+    AutomationStateRow,
+    GhCutConfig,
+    HfPublishConfig,
+    StaleMetadataConfig,
+    StaleTsRegenConfig,
+)
 from .edit_history import EditHistoryBatch, EditOperation
 from .intake_requests import (
     IntakeAttestations,
@@ -103,6 +113,14 @@ from .ts_job_record import TsJobRecord, TsJobSettings
 from .ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 
 __all__ = [
+    "AutoGenTsConfig",
+    "AutomationConfig",
+    "AutomationResponse",
+    "AutomationStateRow",
+    "GhCutConfig",
+    "HfPublishConfig",
+    "StaleMetadataConfig",
+    "StaleTsRegenConfig",
     "AdminActiveClaim",
     "AdminActivityEvent",
     "AdminCapabilityRow",

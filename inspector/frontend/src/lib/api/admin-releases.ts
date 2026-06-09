@@ -24,6 +24,9 @@ import type {
     AdminReleaseStatusRow,
     AdminReleasesStatusResponse,
     AdminReleasesSummary,
+    AutomationConfig,
+    AutomationResponse,
+    AutomationStateRow,
     SuggestedAction,
 } from '../types/generated/schemas';
 
@@ -41,6 +44,9 @@ export type ReleasePreviewResponse = AdminReleasePreviewResponse;
 export type LaunchResponse = AdminLaunchResponse;
 export type CutReleaseBody = AdminCutReleaseRequest;
 export type StaleSuggestion = SuggestedAction;
+export type AutomationConfigBody = AutomationConfig;
+export type AutomationPayload = AutomationResponse;
+export type AutomationState = AutomationStateRow;
 
 async function _unwrap<T>(resp: Response): Promise<T> {
     if (resp.ok) return (await resp.json()) as T;
@@ -118,3 +124,22 @@ export async function refreshHfCatalog(): Promise<LaunchResponse> {
 export const SUGGESTION_LAUNCHERS: Record<string, () => Promise<LaunchResponse>> = {
     refresh_hf_catalog: refreshHfCatalog,
 };
+
+/** Owner-only: the automation config + per-automation runtime state + the
+ *  auto-computed next GH version. Gated by ``release.manage_automation`` (403
+ *  for non-owners — the FE only mounts the section for owners). */
+export async function fetchAutomation(signal?: AbortSignal): Promise<AutomationPayload> {
+    const resp = await fetch('/api/admin/releases/automation', { signal });
+    return _unwrap<AutomationPayload>(resp);
+}
+
+/** Owner-only: replace the whole automation config. Returns the fresh payload
+ *  (config + state + next_version) so the caller re-renders from the server. */
+export async function saveAutomation(config: AutomationConfigBody): Promise<AutomationPayload> {
+    const resp = await fetch('/api/admin/releases/automation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+    });
+    return _unwrap<AutomationPayload>(resp);
+}

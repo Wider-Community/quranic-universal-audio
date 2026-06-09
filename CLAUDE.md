@@ -113,6 +113,7 @@ Deep, agent-facing reference docs live in `docs/reference/` (flat). **Read the o
 | [`frontend.md`](docs/reference/frontend.md) | Svelte 5 SPA — dashboard/timestamps/segments tabs, lib, stores, charts |
 | [`accordion-guides.md`](docs/reference/accordion-guides.md) | validation accordion help-modal guide templates |
 | [`dataset-and-releases.md`](docs/reference/dataset-and-releases.md) | dataset releasing — bucket-as-canonical + 3 adapter formats (HF, GH release tiers, future API), `releases` table, publish state model, schema |
+| [`automation.md`](docs/reference/automation.md) | owner-configurable release automations — the opt-in reconciler daemon (auto-gen TS / GH cut / HF batch-publish / stale-TS regen / stale-metadata refresh), config blob + state tables, `release.manage_automation` gate, Releases-tab Automation card |
 | [`config-deploy.md`](docs/reference/config-deploy.md) | env vars, secrets, image build, deploy, healthz |
 | [`data-migrations.md`](docs/reference/data-migrations.md) | one-shot migration/backfill scripts |
 | [`api-roadmap.md`](docs/reference/api-roadmap.md) | **roadmap (not built)** — planned public data API: typed pip/npm SDKs over static CDN data + optional HF-Space compute layer; caching/versioning model + build sequence |

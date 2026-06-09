@@ -83,6 +83,8 @@ Force-claim columns (`force_assignee_*`, leases) do **not** exist — force-clai
 | `claim.reassigned` | `under_review` | (same) | reassigns claim: new `assignee_*`, `marked_ready=0` (requires payload `new_assignee_hf_id`+`new_assignee_login`) | owner, reason optional |
 | `admin.unlocked_for_revision` | `released` | `awaiting_review` | `revision_in_progress={unlocked_from_state, unlocked_at, unlocked_by_hf_id, original_assignee_hf_id=None}` | maintainer+ |
 
+> **Automated launches.** The release-automation reconciler ([automation.md](automation.md)) is an alternate *launcher* of these same job paths (generate-timestamps, cut, publish, refresh) on the owner's schedule/rules. The job-completion transition still fires with `SYSTEM_ACTOR` as above; the automation records `SYSTEM_AUTOMATION` as the job's `launched_by` + on its config-change audit, so the rail distinguishes an owner-configured automation from a manual action.
+
 **Folded / audit-only events** (not in `_HANDLERS`, emitted directly via `repo_transitions.append`):
 - `reciter.ts_regenerated` — written by `complete_timestamps_job` when a timestamps job succeeds on an already-`released` reciter (regen). No state change (`from_state=to_state=released`); payload `{job_id}`. Classified `hidden` in `activity_classification`. Visibly distinct from the first publish's `reciter.published`.
 - `reciter.auto_claim_skipped` — written inside the alignment txn when a non-owner auto-claim requester already holds another claim (`_maybe_auto_claim`).

@@ -831,6 +831,36 @@ def invalidate_capability_matrix_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Automation config — the owner's AutomationConfig parsed from the single-row
+# blob. Keyed on db_seq like the capability matrix: any committed config write
+# bumps db_seq and this invalidates transparently on the next read.
+# ---------------------------------------------------------------------------
+
+_automation_config_lock = _threading.Lock()
+_automation_config: "tuple[int, object] | None" = None
+
+
+def get_automation_config_cache(db_seq: int):
+    """Return the cached AutomationConfig iff parsed at ``db_seq``, else None."""
+    with _automation_config_lock:
+        if _automation_config is not None and _automation_config[0] == db_seq:
+            return _automation_config[1]
+    return None
+
+
+def set_automation_config_cache(db_seq: int, value: object) -> None:
+    global _automation_config
+    with _automation_config_lock:
+        _automation_config = (db_seq, value)
+
+
+def invalidate_automation_config_cache() -> None:
+    global _automation_config
+    with _automation_config_lock:
+        _automation_config = None
+
+
+# ---------------------------------------------------------------------------
 # In-flight HF Jobs — short TTL wrapper around ``huggingface_hub.list_jobs()``.
 #
 # The Releases tab polls in-flight state every 30 s; ``list_jobs()`` is

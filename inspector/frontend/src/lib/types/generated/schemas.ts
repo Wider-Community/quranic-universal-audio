@@ -503,6 +503,112 @@ export interface VisitorDayStat {
   [k: string]: unknown;
 }
 /**
+ * Auto-generate timestamps when a recitation is marked ready.
+ *
+ * Acts on the ``ready_to_generate`` bucket (marked-ready, no TS yet). The two
+ * gates mirror the reviewer's mark-ready submission: skip when they left a
+ * written comment (``gate_by_comments``) or flagged any segment
+ * (``gate_by_flags``). A checklist-bypass submission is always skipped.
+ */
+export interface AutoGenTsConfig {
+  enabled?: boolean;
+  gate_by_comments?: boolean;
+  gate_by_flags?: boolean;
+  beam?: number;
+  probe_beams?: number;
+}
+/**
+ * The owner's full automation configuration (one persisted blob).
+ *
+ * ``extra="allow"`` keeps an unknown automation key written by a newer FE from
+ * being dropped when an older server re-serializes the blob (forward-compat).
+ */
+export interface AutomationConfig {
+  auto_gen_ts?: AutoGenTsConfig;
+  gh_cut?: GhCutConfig;
+  hf_publish?: HfPublishConfig;
+  stale_ts_regen?: StaleTsRegenConfig;
+  stale_metadata?: StaleMetadataConfig;
+  [k: string]: unknown;
+}
+/**
+ * Cut a global GH release on a fixed cadence (owner timezone).
+ *
+ * Fires every ``interval_days`` at ``time_of_day`` in ``timezone``, but only
+ * when the preview shows real change (added or refreshed recitations).
+ * ``next_version_override`` is a one-shot: applied to the next auto cut, then
+ * cleared on success so the cadence reverts to auto-computed versions.
+ */
+export interface GhCutConfig {
+  enabled?: boolean;
+  interval_days?: number;
+  time_of_day?: string;
+  timezone?: string;
+  next_version_override?: string | null;
+}
+/**
+ * Batch-publish the HF dataset on a fixed cadence (owner timezone).
+ *
+ * Fires every ``interval_days`` at ``time_of_day`` in ``timezone``, collecting
+ * every fresh (``publish_hf``) and stale (``republish_hf``) candidate into ONE
+ * batch job. Skips the window when there are no candidates.
+ */
+export interface HfPublishConfig {
+  enabled?: boolean;
+  interval_days?: number;
+  time_of_day?: string;
+  timezone?: string;
+}
+/**
+ * Regenerate timestamps once segment edits have settled.
+ *
+ * Acts on the ``behind_edits`` bucket. ``guard_minutes`` is the debounce: fire
+ * only when the latest timestamp-affecting edit is older than the guard, so
+ * consecutive edits coalesce into one regen. ``scope`` picks full-reciter vs
+ * just the affected chapters.
+ */
+export interface StaleTsRegenConfig {
+  enabled?: boolean;
+  guard_minutes?: number;
+  scope?: "full" | "affected";
+  beam?: number;
+  probe_beams?: number;
+}
+/**
+ * Refresh the HF catalog once a catalog-metadata edit has settled.
+ *
+ * Acts on HF rows stale for ``catalog_edit``. ``guard_minutes`` debounces the
+ * same way as ``stale_ts_regen``; the cheap ``refresh_catalog`` job clears the
+ * stamp without a full republish.
+ */
+export interface StaleMetadataConfig {
+  enabled?: boolean;
+  guard_minutes?: number;
+}
+/**
+ * ``GET /api/admin/releases/automation`` payload: config + state + preview.
+ */
+export interface AutomationResponse {
+  config: AutomationConfig;
+  state?: AutomationStateRow[];
+  next_version?: string | null;
+}
+/**
+ * Per-automation runtime state for the FE status line (read-only to it).
+ *
+ * ``last_status`` is ``launched`` / ``skipped`` / ``error``; ``last_detail`` is
+ * a short human note (e.g. ``"launched ts job for foo-bar"`` or
+ * ``"no candidates"``). ``next_run_at`` is the engine's computed next fire for
+ * the scheduled automations (ISO-8601 UTC), null for the event-driven ones.
+ */
+export interface AutomationStateRow {
+  automation_id: string;
+  last_run_at?: string | null;
+  last_status?: string | null;
+  last_detail?: string | null;
+  next_run_at?: string | null;
+}
+/**
  * Whole ``detailed.json`` document.
  *
  * Note: the on-disk JSON key is ``_meta`` (with leading underscore) for

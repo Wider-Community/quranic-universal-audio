@@ -190,6 +190,36 @@ def _status_str(info) -> str:
     return str(stage if stage is not None else status or "").lower()
 
 
+def latest_terminal_failed_slugs() -> set[str]:
+    """Slugs whose MOST-RECENT timestamps job ended in a non-success terminal
+    stage (failed / error / timed-out / stopped / …).
+
+    The automation auto-gen guard reads this so it never re-launches a job that
+    just failed — the reciter stays in "ready to generate" for a manual retry,
+    exactly as today. ``list_jobs`` yields oldest→newest, so a later entry for a
+    slug overwrites an earlier one (newest wins). Best-effort: a list failure
+    yields an empty set (no guard rather than a crash)."""
+    from huggingface_hub import list_jobs
+
+    latest_stage: dict[str, str] = {}
+    try:
+        for job in list_jobs():
+            labels = getattr(job, "labels", {}) or {}
+            if labels.get("task") != "timestamps":
+                continue
+            slug = labels.get("reciter")
+            if slug:
+                latest_stage[slug] = _status_str(job)
+    except Exception as exc:  # never crash the reconciler on a list failure
+        log.warning("latest_terminal_failed_slugs() failed: %s", exc)
+        return set()
+    return {
+        slug
+        for slug, stage in latest_stage.items()
+        if stage in _TERMINAL and stage not in _TERMINAL_SUCCESS
+    }
+
+
 def _resolve_launched_job_id(slug: str) -> str | None:
     """Return the canonical HF job id for the most recently launched job for
     ``slug``. ``run_job()``'s returned id is transient and does not match the

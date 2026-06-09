@@ -7,7 +7,9 @@ and an **HF dataset** (parquet, ML-first). A third interactive format (HTTP API)
 Audio (peaks, proxy, VBR/Xing) lives in the `inspector-audio` skill. Catalog model:
 [catalog.md](catalog.md). Lifecycle: [state-machine.md](state-machine.md). TS-tab read path:
 [timestamps-job.md](timestamps-job.md). DB substrate + migrations:
-[database.md](database.md), [data-migrations.md](data-migrations.md).
+[database.md](database.md), [data-migrations.md](data-migrations.md). Firing these
+release actions (cut / publish / regen) on a schedule or rule instead of by hand:
+[automation.md](automation.md).
 
 > **As-built note.** Releases ship as **one global GitHub release per version** containing every
 > currently-eligible reciter as a `<slug>.zip` asset — NOT a per-reciter release tag. The release

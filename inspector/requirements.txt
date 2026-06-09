@@ -23,3 +23,7 @@ itsdangerous>=2.2
 # Authlib's Flask integration imports requests_client which depends on
 # requests; not pulled transitively by `pip install authlib` so we list it.
 requests>=2.31
+# IANA timezone database for zoneinfo — the release-automation scheduler resolves
+# the owner's timezone (e.g. Australia/Sydney). The alpine runtime image has no
+# system tz database, so zoneinfo needs this wheel.
+tzdata

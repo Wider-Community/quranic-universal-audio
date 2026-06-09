@@ -469,6 +469,17 @@ CAPABILITIES: tuple[Capability, ...] = (
         contributor=False,
         maintainer=False,
     ),
+    _c(
+        "release.manage_automation",
+        G_RELEASES,
+        "Manage release automations",
+        "See and change the Releases-tab Automation section — the owner-set "
+        "rules that auto-generate timestamps, cut GH releases, publish the HF "
+        "dataset, and regenerate stale timestamps/metadata. Owner-only by "
+        "default: these rules spend HF Job compute on their own schedule.",
+        contributor=False,
+        maintainer=False,
+    ),
     # --- I. Identity disclosure ---
     _c(
         "identity.see_actor",

@@ -46,6 +46,16 @@ from .admin_users import (
     VisitorDayStat,
 )
 from .audit import Actor, AuditRecord
+from .automation import (
+    AutoGenTsConfig,
+    AutomationConfig,
+    AutomationResponse,
+    AutomationStateRow,
+    GhCutConfig,
+    HfPublishConfig,
+    StaleMetadataConfig,
+    StaleTsRegenConfig,
+)
 from .capabilities import (
     CAPABILITIES,
     CAPABILITIES_BY_ID,
@@ -152,6 +162,14 @@ from .ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 __all__ = [
     "ActivityState",
     "Actor",
+    "AutoGenTsConfig",
+    "AutomationConfig",
+    "AutomationResponse",
+    "AutomationStateRow",
+    "GhCutConfig",
+    "HfPublishConfig",
+    "StaleMetadataConfig",
+    "StaleTsRegenConfig",
     "AdminCapabilityRow",
     "AdminCapabilityTierState",
     "AdminCutReleaseRequest",
