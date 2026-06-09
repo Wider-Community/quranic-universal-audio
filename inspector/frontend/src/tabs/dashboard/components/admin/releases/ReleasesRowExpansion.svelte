@@ -38,14 +38,20 @@
 
     const needsDetail = $derived(mode === 'timeline' || mode === 'reviewers');
 
-    // Lazy-fetch the review detail the first time a detail view opens for this
-    // slug; cache it for the expansion's lifetime.
+    // Lazy-fetch the review detail when a detail view (timeline/reviewers) is
+    // open. Key the effect ONLY on the stable inputs (needsDetail + row.slug) —
+    // mirroring the Reviews drawer. Reading the mutable detail/detailLoading
+    // flags here would make the effect's own `detailLoading = true` write
+    // invalidate it; the re-run's cleanup then aborts the in-flight fetch, whose
+    // aborted .then/.catch never clear detailLoading → stuck "Loading…" forever.
     $effect(() => {
-        if (!needsDetail || detail !== null || detailLoading) return;
+        if (!needsDetail) return;
+        const slug = row.slug;
         const ac = new AbortController();
+        detail = null;
         detailLoading = true;
         detailError = null;
-        fetchAdminReviewDetail(row.slug, ac.signal)
+        fetchAdminReviewDetail(slug, ac.signal)
             .then((d) => {
                 if (ac.signal.aborted) return;
                 if (d === null) detailError = 'unknown slug';
