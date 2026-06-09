@@ -24,6 +24,7 @@
     import { fetchSurahsForDelivery } from '../../lib/api/audio-surahs';
     import { setAdoptedSource } from '../../lib/playback/adopt-signal';
     import { adjacentAyahStartMs } from '../../lib/playback/ayah-seek';
+    import { ensureDashCovering, ensureDashCoveringRange } from '../../lib/playback/dash-covering';
     import { dashPort } from '../../lib/playback/dash-port';
     import { recycleAsShadow } from '../../lib/playback/shadow-audio';
     import {
@@ -60,6 +61,7 @@
         loadManifest,
         loadQpc,
         loadTsValidation,
+        loadVbrChapters,
         loadVerseTranslations,
         reciterAudioFromManifest,
     } from './services/ts_client';
@@ -336,6 +338,7 @@
                 pendingSeekRef = null;
                 if (v) {
                     setFocus(v);
+                    ensureDashCoveringRange(v.startMs, v.endMs);
                     dashPort.seek(v.startMs);
                     if (_autoplayPending) {
                         _autoplayPending = false;
@@ -414,6 +417,7 @@
             const startAbs = (loop.startSec + offsetSec) * 1000;
             const endAbs = (loop.endSec + offsetSec) * 1000;
             if (ms >= endAbs) {
+                ensureDashCovering(startAbs);
                 dashPort.seek(startAbs);
             }
             // Keep focus on the loop's verse regardless of where the playhead
@@ -553,6 +557,8 @@
         }
         const u = urls[String(target.chapter)];
         if (!u) return;
+        const vbrChapters = await loadVbrChapters(target.reciter);
+        if (vbrChapters.includes(target.chapter)) return;
         const rawUrl = u.url;
         const proxyUrl = rawUrl.startsWith('/api/')
             ? rawUrl
@@ -609,12 +615,14 @@
     function seekFocus(v: ChapVerse, autoplay = true): void {
         const wasPlaying = !dashPort.paused;
         setFocus(v);
+        ensureDashCoveringRange(v.startMs, v.endMs);
         dashPort.seek(v.startMs);
         if (autoplay || wasPlaying) tryPlay();
         refreshDisplays();
     }
 
     function seekMsAndResume(targetMs: number): void {
+        ensureDashCovering(targetMs);
         dashPort.seek(targetMs);
         tryPlay();
         focusAt(targetMs);
