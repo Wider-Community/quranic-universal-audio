@@ -35,15 +35,20 @@ from qua_shared.schemas import (
     AdminLaunchResponse,
     AdminPublishBatchRequest,
     AdminReleasesStatusResponse,
+    AutomationConfig,
+    AutomationResponse,
 )
-from routes._admin_helpers import require_capability_or_403
+from routes._admin_helpers import actor_for, require_capability_or_403
+from services.admin import release_readiness
+from services.admin.automation import config as automation_config
+from services.admin.automation import schedule as automation_schedule
 from services.admin.jobs import base as jobs_base
 from services.admin.jobs import cut_release as cut_release_jobs
 from services.admin.jobs import hf_publish as hf_publish_jobs
 from services.admin.jobs import hf_publish_batch as hf_publish_batch_jobs
 from services.admin.jobs import refresh_catalog as refresh_catalog_jobs
 from services.admin.release_preview import build_release_preview, current_auto_version
-from services.db import get_conn, repo_releases
+from services.db import _serde, get_conn, repo_automation, repo_releases
 from services.segments import ts_staleness
 from services.state import state as state_service
 from utils.decorators import require_capability, require_same_origin
@@ -378,13 +383,15 @@ def releases_status(user):
         "recitations": [{
           slug, name_en, name_ar, state,
           riwayah, style, channel,
-          gh_release_eligible: bool,
+          marked_ready: bool,                   # under_review + marked, no ts yet
           ts: {version, produced_at,            # stale_* set when segments were
                stale_since?, stale_reason?,     # edited after generation
                suggested_action?, edits_since?,
                affected_chapters?} | null,
           hf: {version, produced_at, stale_since} | null,
           gh: {change_kind, stale_since, release_id, ts_version} | null,
+          readiness: {audio_missing, peaks_missing,   # non-blocking warn pill
+               audio_missing_chapters, peaks_missing_chapters} | null,
         }, ...]
       }
 
@@ -476,10 +483,12 @@ def releases_status(user):
     deliveries = conn.execute("""
         SELECT d.slug, d.riwayah, d.style, d.channel,
                r.name_en, r.name_ar,
-               ds.state
+               ds.state,
+               c.marked_ready_at, c.assignee_login_snapshot
         FROM deliveries d
         JOIN reciters        r  ON r.reciter_id = d.reciter_id
         LEFT JOIN delivery_states ds ON ds.slug = d.slug
+        LEFT JOIN claims c ON c.slug = d.slug AND c.released_at IS NULL
         ORDER BY d.slug
     """).fetchall()
 
@@ -517,6 +526,9 @@ def releases_status(user):
                 ts_slim["edits_since"] = info["edits_since"]
                 ts_slim["affected_chapters"] = info.get("affected_chapters")
                 ts_slim = _with_suggestion(ts_slim, track="ts")
+        # Marked-ready, not-yet-timestamped reciters feed the "Ready to generate"
+        # bucket (claim is marked ready while still ``under_review``, no ts row).
+        marked_ready = d["state"] == "under_review" and d["marked_ready_at"] is not None
         row = {
             "slug": slug,
             "name_en": d["name_en"],
@@ -525,12 +537,17 @@ def releases_status(user):
             "riwayah": d["riwayah"],
             "style": d["style"],
             "channel": d["channel"],
+            "marked_ready": marked_ready,
+            "reviewer_login": d["assignee_login_snapshot"] if marked_ready else None,
             "ts": ts_slim,
             "hf": hf_slim,
             "gh": gh_slim,
             "publish_error": batch_failures.get(slug),
         }
         if _is_bucketable(row, in_flight_slugs) or slug in batch_failures:
+            # Audio/peaks readiness is a non-blocking warn — compute only for
+            # rows the FE will actually render (TTL-cached, never gates).
+            row["readiness"] = release_readiness.reciter_bucket_readiness(slug)
             out.append(row)
     payload = AdminReleasesStatusResponse.model_validate(
         {
@@ -546,6 +563,79 @@ def releases_status(user):
         }
     )
     return jsonify(payload.model_dump(mode="json"))
+
+
+# ---------------------------------------------------------------------------
+# GET / POST /api/admin/releases/automation
+# ---------------------------------------------------------------------------
+
+#: Display order of the automations in the FE status list.
+_AUTOMATION_IDS = ("auto_gen_ts", "gh_cut", "hf_publish", "stale_ts_regen", "stale_metadata")
+
+
+def _automation_payload() -> dict:
+    """Config + per-automation state (with a live-computed ``next_run_at`` for the
+    scheduled ones) + the auto-computed next GH version, for the Automation card."""
+    cfg = automation_config.load_config()
+    by_id = {s["automation_id"]: s for s in repo_automation.all_state()}
+    now = datetime.now(UTC)
+    rows = []
+    for aid in _AUTOMATION_IDS:
+        st = by_id.get(aid, {})
+        rows.append(
+            {
+                "automation_id": aid,
+                "last_run_at": st.get("last_run_at"),
+                "last_status": st.get("last_status"),
+                "last_detail": st.get("last_detail"),
+                "next_run_at": _next_run_at(aid, cfg, st.get("last_run_at"), now),
+            }
+        )
+    next_version, _ = current_auto_version()
+    payload = AutomationResponse.model_validate(
+        {"config": cfg, "state": rows, "next_version": next_version}
+    )
+    return payload.model_dump(mode="json")
+
+
+def _next_run_at(aid: str, cfg, last_run_iso: str | None, now: datetime) -> str | None:
+    """Computed next fire (ISO-8601 UTC) for the scheduled automations, else None
+    (event-driven automations have no schedule)."""
+    sched = {"gh_cut": cfg.gh_cut, "hf_publish": cfg.hf_publish}.get(aid)
+    if sched is None or not sched.enabled:
+        return None
+    last_run = _serde.from_iso(last_run_iso) if last_run_iso else None
+    return _serde.to_iso(
+        automation_schedule.next_fire_at(
+            last_run_at=last_run,
+            interval_days=sched.interval_days,
+            time_of_day=sched.time_of_day,
+            timezone=sched.timezone,
+            now_utc=now,
+        )
+    )
+
+
+@admin_releases_bp.route("/releases/automation", methods=["GET"])
+@require_capability("release.manage_automation")
+def get_automation(user):
+    """Owner-only: the automation config + runtime state + next-version preview."""
+    return jsonify(_automation_payload())
+
+
+@admin_releases_bp.route("/releases/automation", methods=["POST"])
+@require_same_origin
+@require_capability("release.manage_automation")
+def save_automation(user):
+    """Owner-only: replace the automation config (validated + audited)."""
+    try:
+        cfg = AutomationConfig.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as exc:
+        return jsonify({"error": "invalid automation config", "details": exc.errors()}), 400
+    automation_config.save_config(
+        cfg, updated_by=getattr(user, "hf_user_id", "") or "owner", actor=actor_for(user)
+    )
+    return jsonify(_automation_payload())
 
 
 def _with_suggestion(row: dict | None, *, track: str) -> dict | None:
@@ -571,6 +661,10 @@ def _is_bucketable(row: dict, in_flight_slugs: set[str]) -> bool:
     activity. Priority-first like the FE — any single match returns True.
     """
     if row["slug"] in in_flight_slugs:
+        return True
+    # Marked-ready but not yet timestamped → "Ready to generate". Ordered after
+    # the in-flight check so a running first-gen reads as "In progress".
+    if row.get("marked_ready") and row["ts"] is None:
         return True
     if row["hf"] is not None:
         return True

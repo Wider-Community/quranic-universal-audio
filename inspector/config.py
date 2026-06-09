@@ -205,6 +205,17 @@ VISITOR_FLUSH_INTERVAL_SECONDS = int(os.getenv("INSPECTOR_VISITOR_FLUSH_INTERVAL
 ANON_COOKIE_NAME = "inspector_anon"
 ANON_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
+# Release automations (services/admin/automation/) — opt-in reconciler daemon.
+# The daemon is gated by INSPECTOR_AUTOMATIONS=1 (set in the prod Dockerfile);
+# this is just its tick cadence. Per-automation enable/schedule/guard live in the
+# owner's AutomationConfig blob, not here.
+AUTOMATION_INTERVAL_SECONDS = int(os.getenv("INSPECTOR_AUTOMATIONS_INTERVAL_S", "60"))
+# Public https root the daemon threads into job completion webhooks (it has no
+# request context for request.url_root). Required for automated GH cuts — the
+# cut job is webhook-only (no poll fallback). Empty in dev → automated cuts can't
+# complete cleanly, which is fine since automations are off in dev.
+AUTOMATION_PUBLIC_BASE_URL = os.environ.get("INSPECTOR_PUBLIC_BASE_URL", "").strip()
+
 # Audio MIME types (shared between app.py and audio_proxy)
 AUDIO_MIME_TYPES = {
     ".flac": "audio/flac",

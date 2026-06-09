@@ -1,12 +1,10 @@
 """Admin Reviews-tab read model (Flask-free).
 
 Single whole-table JOIN over ``delivery_states`` + ``deliveries`` + ``reciters``
-+ open ``claims``, filtered to the three states the Reviews tab covers
-(``awaiting_review``, ``under_review``, ``released``).
-
-The FE further splits ``under_review`` into "Marked ready" vs "Under review"
-on ``open_claim.marked_ready_at``; ``released`` is the "Published" bucket. The
-wire stays canonical.
++ open ``claims``, filtered to the two states the slimmed Reviews tab covers
+(``awaiting_review``, ``under_review``). The FE renders "Under review" (claimed,
+not yet marked ready) + "Available for review". Marked-ready + released
+recitations moved to the Releases tab.
 
 No caching today — the row count is small (a few hundred), the query is one
 JOIN, and the data refreshes after every admin action. If profiling shows we
@@ -26,21 +24,19 @@ from qua_shared.schemas import (
     MarkReadySubmission,
     ReciterState,
 )
-from services.db import _serde, repo_review_views
-from services.db import sync as _sync
+from services.db import _serde
 from services.db.connection import get_conn
 
-# States the Reviews tab covers.
+# States the slimmed Reviews tab covers.
 _BUCKET_STATES: tuple[str, ...] = (
     ReciterState.AWAITING_REVIEW.value,
     ReciterState.UNDER_REVIEW.value,
-    ReciterState.RELEASED.value,
 )
 
 
 _SQL = (
     "SELECT "
-    "  ds.slug, ds.state, ds.state_since, ds.last_job_finished_at, "
+    "  ds.slug, ds.state, ds.state_since, "
     "  d.reciter_id, d.riwayah, d.style, d.channel, "
     "  r.name_ar, r.name_en, "
     "  c.assignee_id, c.assignee_login_snapshot, c.claimed_at, c.marked_ready_at "
@@ -82,16 +78,8 @@ def _build_submission(row) -> MarkReadySubmission | None:
     )
 
 
-def list_reviews(*, caller_hf_id: str) -> dict:
-    """Assembled Reviews-tab payload (``AdminReviewsResponse`` dump).
-
-    Per-caller: each row carries an ``unread`` boolean (true only for
-    marked-ready entries whose ``marked_ready_at`` is later than this
-    admin's recorded view), and the response carries an aggregate
-    ``unviewed_marked_ready`` count used by the entry-button dot / tab pill.
-    """
-    viewed = repo_review_views.viewed_at_for_user(caller_hf_id)
-
+def list_reviews() -> dict:
+    """Assembled Reviews-tab payload (``AdminReviewsResponse`` dump)."""
     rows: list[AdminReviewRow] = []
     for r in get_conn().execute(_SQL, _BUCKET_STATES).fetchall():
         open_claim: AdminReviewOpenClaim | None = None
@@ -102,23 +90,6 @@ def list_reviews(*, caller_hf_id: str) -> dict:
                 claimed_at=r["claimed_at"],
                 marked_ready_at=r["marked_ready_at"],
             )
-
-        # ``unread`` = the latest actionable event for this row is newer than
-        # this admin's last view of the slug. Two signals share one viewed_at
-        # cutoff: a marked-ready submission (under_review only) and a finished
-        # timestamps job (``last_job_finished_at`` — success→released/Published,
-        # failure→under_review/Marked-ready). ISO strings sort lexically. Mirrors
-        # repo_review_views.count_unviewed_for_user so the per-row dot and the
-        # polled aggregate agree.
-        events: list[str] = []
-        if r["state"] == ReciterState.UNDER_REVIEW.value and r["marked_ready_at"] is not None:
-            events.append(r["marked_ready_at"])
-        if r["last_job_finished_at"] is not None:
-            events.append(r["last_job_finished_at"])
-        unread = False
-        if events:
-            seen_at = viewed.get(r["slug"])
-            unread = seen_at is None or seen_at < max(events)
 
         rows.append(
             AdminReviewRow(
@@ -132,35 +103,10 @@ def list_reviews(*, caller_hf_id: str) -> dict:
                 style=r["style"],
                 channel=r["channel"],
                 open_claim=open_claim,
-                unread=unread,
             )
         )
 
-    unviewed_count = sum(1 for row in rows if row.unread)
-    return AdminReviewsResponse(
-        rows=rows,
-        unviewed_marked_ready=unviewed_count,
-    ).model_dump(mode="json")
-
-
-def unviewed_marked_ready_count(*, caller_hf_id: str) -> int:
-    """Reviews rows the caller hasn't viewed — marked-ready submissions AND
-    finished timestamps jobs (success→published / failure→marked-ready). Drives
-    the entry-button dot poller. Cheap COUNT — never cached (per-caller +
-    polled). (Name kept for call-site stability; semantics now cover both.)"""
-    return repo_review_views.count_unviewed_for_user(caller_hf_id)
-
-
-def mark_viewed(slug: str, *, caller_hf_id: str) -> bool:
-    """Advance the caller's ``viewed_at`` for ``slug``. Returns False if the
-    slug isn't in ``delivery_states`` (caller maps to 404). Durable write —
-    same sync envelope the request-view path uses."""
-    base = get_conn().execute("SELECT 1 FROM delivery_states WHERE slug = ?", (slug,)).fetchone()
-    if base is None:
-        return False
-    with _sync.durable_transaction():
-        repo_review_views.mark_viewed(slug, caller_hf_id)
-    return True
+    return AdminReviewsResponse(rows=rows).model_dump(mode="json")
 
 
 # ---- detail drawer ----

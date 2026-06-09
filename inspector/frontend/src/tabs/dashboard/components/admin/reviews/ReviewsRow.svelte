@@ -1,20 +1,19 @@
 <script lang="ts">
     /**
-     * One recitation row in the Reviews tab landing list.
+     * One recitation row in the Reviews tab landing list (read-only oversight).
      *
      * Two-zone flex row (mirrors the Requests-tab ``.req-head``): a growing
      * identity block on the left, an intrinsic-width meta cluster on the
      * right, vertically centered against the two identity lines.
-     *   Line 1 — unread dot + Latin name (primary, first) + Arabic name
-     *            (muted, trailing) + reviewer (initials avatar + login).
+     *   Line 1 — Latin name (primary, first) + Arabic name (muted, trailing)
+     *            + reviewer (initials avatar + login).
      *   Line 2 — riwayah · style · channel as muted dotted text.
      *   Right  — age (relative, mono; stale ⚠ when a claim is > 7d old) +
-     *            actions (Segments, plus Generate TS on marked-ready rows).
+     *            Segments redirect.
      *
-     * Row body click → General drawer. Segments button switches to the
-     * top-level Segments tab with this slug pre-selected. Generate TS
-     * launches the MFA timestamps job — shown only on marked-ready rows
-     * because generating timestamps publishes the reciter on success.
+     * Row body click → General drawer (reviewer history + owner claim
+     * controls). Segments switches to the Segments tab with this slug
+     * pre-selected. Marked-ready / generation / publishing live in Releases.
      */
     import { reviewsStore } from '../../../../../lib/stores/reviews.svelte';
     import type { AdminReviewRow } from '../../../../../lib/types/generated/schemas';
@@ -27,12 +26,6 @@
     let { row }: { row: AdminReviewRow } = $props();
 
     const isActive = $derived(reviewsStore.selectedSlug === row.slug);
-    // Generate TS publishes on success, so it's offered only once the reviewer
-    // has marked the reciter ready — not on every under_review row.
-    const isMarkedReady = $derived(
-        row.state === 'under_review' && !!row.open_claim?.marked_ready_at,
-    );
-    const isTsActive = $derived(isActive && reviewsStore.openDrawer === 'timestamps');
 
     function relativeAge(iso: string | null | undefined): string {
         if (!iso) return '';
@@ -79,26 +72,8 @@
     const reviewerLogin = $derived(row.open_claim?.login ?? null);
     const hasReviewer = $derived(reviewerLogin !== null);
 
-    // Marked-ready unread dot — server-authoritative ``row.unread``, AND
-    // suppressed locally the moment any drawer for this slug opens (the
-    // session-set drop hides the dot before the optimistic POST returns).
-    const showUnread = $derived(
-        !!row.unread && !reviewsStore.isViewedThisSession(row.slug),
-    );
-
-    /** Open a drawer and, on the first open for this slug, optimistically
-     * decrement the dashboard counter so the entry-button dot / tab pill
-     * also drop in sync. The compartment's next fetch reconciles. */
-    function openDrawer(kind: 'general'): void {
-        const wasUnread = showUnread;
-        reviewsStore.open(row.slug, kind);
-        if (wasUnread) {
-            adminDashboard.setUnviewedReviews(adminDashboard.unviewedReviews - 1);
-        }
-    }
-
     function onRowClick(): void {
-        openDrawer('general');
+        reviewsStore.open(row.slug, 'general');
     }
 
     function onSegments(e: MouseEvent): void {
@@ -111,11 +86,6 @@
         selectedReciter.set(row.slug);
         setActiveTab(TAB_NAMES.SEGMENTS);
         adminDashboard.close();
-    }
-
-    function onGenerateTimestamps(e: MouseEvent): void {
-        e.stopPropagation();
-        reviewsStore.open(row.slug, 'timestamps');
     }
 </script>
 
@@ -134,9 +104,6 @@
 >
     <div class="identity">
         <div class="id-name">
-            {#if showUnread}
-                <span class="unread" aria-label="needs attention" title="New since you last viewed — marked ready or a finished timestamps job"></span>
-            {/if}
             {#if row.name_en}
                 <span class="name-en">{row.name_en}</span>
             {/if}
@@ -171,15 +138,6 @@
         </span>
         <div class="actions">
             <button class="btn" type="button" onclick={onSegments}>Segments</button>
-            {#if isMarkedReady}
-                <button
-                    class="btn"
-                    class:armed={isTsActive}
-                    type="button"
-                    onclick={onGenerateTimestamps}
-                    title="Generate timestamps & publish — settings, logs & history"
-                >Generate TS</button>
-            {/if}
         </div>
     </div>
 </div>
@@ -223,16 +181,6 @@
         align-items: baseline;
         gap: var(--s-2);
         min-width: 0;
-    }
-    /* Unread mark — mirrors the Requests-tab .unread dot. Centered against
-     * the text baseline (baseline alignment would push it under the text). */
-    .unread {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--accent);
-        flex-shrink: 0;
-        align-self: center;
     }
     .name-en {
         font-size: 14px;
@@ -343,10 +291,5 @@
     .actions .btn:hover {
         border-color: var(--border-default);
         color: var(--text-primary);
-    }
-    .actions .btn.armed {
-        border-color: var(--accent);
-        color: var(--accent-strong);
-        background: var(--accent-tint-soft);
     }
 </style>

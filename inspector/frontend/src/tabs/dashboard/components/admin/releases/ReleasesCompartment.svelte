@@ -1,58 +1,96 @@
 <script lang="ts">
     /**
-     * Admin Releases compartment.
+     * Admin Releases compartment — the single operator lifecycle home.
      *
      * Three zones (mirrors the Reviews compartment for visual + interaction
      * parity):
-     *   1. ``ReleasesSummaryCard`` — current GH release + Cut button + in-
-     *      flight alert strip.
-     *   2. Sticky filter bar — search (Arabic + Latin name) + facet chips
-     *      (Riwayah / Style / Channel) + sort toggle (stalest / name) + clear.
-     *   3. Five collapsible state sections — In progress / Failed to publish /
-     *      Stale on HF / Waiting to publish / Published & current.
-     *      Priority-first bucketing: in_flight → failed → stale_hf → waiting →
-     *      published. A row belongs to exactly one bucket.
+     *   1. ``ReleasesSummaryCard`` — current GH release + "what's next" cut
+     *      preview + Cut button + in-flight alert strip.
+     *   2. Sticky filter bar — search + facet chips + sort + clear.
+     *   3. Seven action-needed sections (priority order): In progress /
+     *      Failed to publish / Ready to generate / Behind edits /
+     *      Republish to HF / Publish to HF / Published & current. A row
+     *      belongs to exactly one bucket.
      *
-     * Single bulk fetch via ``/api/admin/releases/status`` + FE-side bucketing
-     * (same pattern as ReviewsCompartment). 30 s poll picks up new in-flight
-     * state; the launch path also invalidates the server-side 5 s cache so
-     * the next poll reflects the new state immediately.
+     * Each row carries a single in-row expansion (button-switched: TS settings,
+     * Timeline, Reviewers, Past jobs). Only ONE expansion is open across the
+     * whole list at a time (``expanded`` is compartment-level state).
      *
-     * The backend filters rows server-side to "bucketable" only — inert
-     * catalog entries (no TS, no HF, no GH, not released, eligible channel)
-     * never reach the wire. So ``allRows.length === 0`` is the canonical
-     * "no release activity yet" signal — we render an explicit empty state
-     * and hide the filter bar in that case (chip counts over an empty set
-     * are noise).
+     * Single bulk fetch via ``/api/admin/releases/status`` + FE-side bucketing.
+     * 30 s poll picks up new in-flight state; launches invalidate the server
+     * cache so the next poll reflects new state immediately.
      */
     import { untrack } from 'svelte';
     import {
         cancelReleaseJob,
+        fetchReleasePreview,
         fetchReleasesStatus,
         publishHfBatch,
         refreshHfCatalog,
-        regenerateTs,
         type InFlightJob,
+        type ReleasePreviewResponse,
         type ReleaseStatusRow,
         type ReleasesStatusResponse,
     } from '../../../../../lib/api/admin-releases';
+    import { sendBackToUnderReview } from '../../../../../lib/api/admin-reviews';
+    import { can } from '../../../../../lib/stores/capabilities';
     import { releasesStore } from '../../../../../lib/stores/releases.svelte';
+    import AutomationSection from './AutomationSection.svelte';
     import CutReleaseModal from './CutReleaseModal.svelte';
-    import RegenerateScopeDialog from './RegenerateScopeDialog.svelte';
     import ReleasesActionBar from './ReleasesActionBar.svelte';
     import ReleasesRow, { type ReleasesBucket } from './ReleasesRow.svelte';
+    import type { RowExpandMode } from './ReleasesRowExpansion.svelte';
     import ReleasesSummaryCard from './ReleasesSummaryCard.svelte';
 
     let resp = $state<ReleasesStatusResponse | null>(null);
     let loading = $state(true);
     let error = $state<string | null>(null);
+    let preview = $state<ReleasePreviewResponse | null>(null);
 
     let cutModalOpen = $state(false);
-    let busyRegenSlug = $state<string | null>(null);
-    // Row awaiting a Full-vs-Affected scope choice (only when it has affected
-    // chapters); null = no dialog open.
-    let regenScopeRow = $state<ReleaseStatusRow | null>(null);
     let rowError = $state<{ slug: string; message: string } | null>(null);
+    let sendBackBusySlug = $state<string | null>(null);
+
+    // Single in-row expansion across the whole list + the job id to poll live
+    // in a row's Past-jobs view after a launch.
+    let expanded = $state<{ slug: string; mode: RowExpandMode } | null>(null);
+    let activeJobBySlug = $state<Record<string, string>>({});
+
+    function toggleMode(slug: string, mode: RowExpandMode): void {
+        if (expanded && expanded.slug === slug && expanded.mode === mode) {
+            expanded = null;
+        } else {
+            expanded = { slug, mode };
+        }
+    }
+    /** After a gen/regen launch: pin the job for live polling + switch the
+     *  row's expansion to Past jobs, then refetch so it re-buckets. */
+    function onLaunched(slug: string, jobId: string): void {
+        activeJobBySlug = { ...activeJobBySlug, [slug]: jobId };
+        expanded = { slug, mode: 'jobs' };
+        refetch();
+    }
+
+    async function onSendBack(slug: string): Promise<void> {
+        if (sendBackBusySlug !== null) return;
+        const reason = window.prompt('Reason for sending back to Under review (≥10 chars):');
+        if (reason === null) return;
+        if (reason.trim().length < 10) {
+            rowError = { slug, message: 'Reason must be at least 10 characters' };
+            return;
+        }
+        sendBackBusySlug = slug;
+        rowError = null;
+        try {
+            await sendBackToUnderReview(slug, reason.trim());
+            if (expanded?.slug === slug) expanded = null;
+            refetch();
+        } catch (e) {
+            rowError = { slug, message: (e as Error).message ?? 'Send back failed' };
+        } finally {
+            sendBackBusySlug = null;
+        }
+    }
 
     // Batch-publish selection + action state.
     let selected = $state<Set<string>>(new Set());
@@ -107,6 +145,20 @@
         return () => window.clearInterval(id);
     });
 
+    // Header "what's next" preview — same cadence as the status fetch (no
+    // faster than 30 s). Best-effort: a failure just hides the preview cluster,
+    // never the current-release line. ``release.cut_gh``-gated server-side; a
+    // 403 for a maintainer leaves preview null (the cluster simply omits).
+    $effect(() => {
+        refetchSeq;
+        releasesStore.refreshSeq;
+        const ac = new AbortController();
+        fetchReleasePreview(ac.signal)
+            .then((p) => { if (!ac.signal.aborted) preview = p; })
+            .catch(() => { if (!ac.signal.aborted) preview = null; });
+        return () => ac.abort();
+    });
+
     function refetch(): void { refetchSeq += 1; }
 
     const allRows = $derived(resp?.recitations ?? []);
@@ -121,41 +173,23 @@
         return inFlight.find((j) => j.slug === slug) ?? null;
     }
 
-    function isInFlight(r: ReleaseStatusRow): boolean {
-        return inFlightSlugs.has(r.slug);
-    }
-    function isFailed(r: ReleaseStatusRow): boolean {
-        return !!r.publish_error;
-    }
-    function isStaleHf(r: ReleaseStatusRow): boolean {
-        return !!r.hf?.stale_since;
-    }
-    // Generated timestamps are behind the segments (segments edited after the
-    // last generation). Upstream of an HF republish — regenerating re-stamps HF
-    // stale anyway — so this takes priority over stale_hf in the bucketing.
-    function isStaleTs(r: ReleaseStatusRow): boolean {
-        return !!r.ts?.stale_since;
-    }
-    function isWaiting(r: ReleaseStatusRow): boolean {
-        return r.state === 'released' && r.hf === null && r.ts !== null;
-    }
-    function isPublishedCurrent(r: ReleaseStatusRow): boolean {
-        return r.hf !== null && !r.hf.stale_since;
-    }
-
+    // Bucketing — priority-first; a row lands in exactly one. Mirrors
+    // ``_is_bucketable`` server-side. "Publish to HF" (first publish) and
+    // "Republish to HF" (stale) are deliberately distinct sections.
     function bucketOf(r: ReleaseStatusRow): ReleasesBucket | null {
-        if (isInFlight(r)) return 'in_flight';
-        if (isFailed(r)) return 'failed';
-        if (isStaleTs(r)) return 'stale_ts';
-        if (isStaleHf(r)) return 'stale_hf';
-        if (isWaiting(r)) return 'waiting';
-        if (isPublishedCurrent(r)) return 'published_current';
+        if (inFlightSlugs.has(r.slug)) return 'in_flight';
+        if (r.publish_error) return 'failed';
+        if (r.marked_ready && r.ts === null) return 'ready_to_generate';
+        if (r.ts?.stale_since) return 'behind_edits';
+        if (r.hf?.stale_since) return 'republish_hf';
+        if (r.state === 'released' && r.hf === null && r.ts !== null) return 'publish_hf';
+        if (r.hf !== null && !r.hf.stale_since) return 'published_current';
         return null;   // fresh / inert — hide
     }
 
-    // Buckets whose rows can be selected for a batch publish.
+    // Buckets whose rows can be selected for a batch (re)publish.
     const SELECTABLE_BUCKETS: ReadonlySet<ReleasesBucket> = new Set<ReleasesBucket>([
-        'waiting', 'stale_hf', 'failed', 'published_current',
+        'publish_hf', 'republish_hf', 'failed', 'published_current',
     ]);
     function isSelectable(r: ReleaseStatusRow): boolean {
         const b = bucketOf(r);
@@ -222,16 +256,17 @@
     const SECTIONS: Section[] = [
         { key: 'in_flight',         label: 'In progress',         mark: 'inflight',  defaultCollapsed: false, hideWhenEmpty: true },
         { key: 'failed',            label: 'Failed to publish',   mark: 'failed',    defaultCollapsed: false, hideWhenEmpty: true },
-        { key: 'stale_ts',          label: 'Timestamps behind edits', mark: 'edited', defaultCollapsed: false, hideWhenEmpty: true },
-        { key: 'stale_hf',          label: 'Stale on HF',         mark: 'stale',     defaultCollapsed: false, hideWhenEmpty: false },
-        { key: 'waiting',           label: 'Waiting to publish',  mark: 'waiting',   defaultCollapsed: false, hideWhenEmpty: false },
+        { key: 'ready_to_generate', label: 'Ready to generate',   mark: 'ready',     defaultCollapsed: false, hideWhenEmpty: true },
+        { key: 'behind_edits',      label: 'Behind edits',        mark: 'edited',    defaultCollapsed: false, hideWhenEmpty: true },
+        { key: 'republish_hf',      label: 'Republish to HF',     mark: 'stale',     defaultCollapsed: false, hideWhenEmpty: false },
+        { key: 'publish_hf',        label: 'Publish to HF',       mark: 'waiting',   defaultCollapsed: false, hideWhenEmpty: false },
         { key: 'published_current', label: 'Published & current', mark: 'published', defaultCollapsed: true,  hideWhenEmpty: false },
     ];
 
     const bucketed = $derived.by(() => {
         const out: Record<ReleasesBucket, ReleaseStatusRow[]> = {
-            in_flight: [], failed: [], stale_ts: [], stale_hf: [], waiting: [],
-            published_current: [],
+            in_flight: [], failed: [], ready_to_generate: [], behind_edits: [],
+            republish_hf: [], publish_hf: [], published_current: [],
         };
         for (const r of filteredRows) {
             const b = bucketOf(r);
@@ -284,7 +319,8 @@
     const COLLAPSE_LS_KEY = 'insp_releases_collapsed';
     function loadCollapsed(): Record<ReleasesBucket, boolean> {
         const fallback: Record<ReleasesBucket, boolean> = {
-            in_flight: false, failed: false, stale_ts: false, stale_hf: false, waiting: false,
+            in_flight: false, failed: false, ready_to_generate: false,
+            behind_edits: false, republish_hf: false, publish_hf: false,
             published_current: true,
         };
         try {
@@ -294,9 +330,10 @@
             return {
                 in_flight: parsed.in_flight ?? fallback.in_flight,
                 failed: parsed.failed ?? fallback.failed,
-                stale_ts: parsed.stale_ts ?? fallback.stale_ts,
-                stale_hf: parsed.stale_hf ?? fallback.stale_hf,
-                waiting: parsed.waiting ?? fallback.waiting,
+                ready_to_generate: parsed.ready_to_generate ?? fallback.ready_to_generate,
+                behind_edits: parsed.behind_edits ?? fallback.behind_edits,
+                republish_hf: parsed.republish_hf ?? fallback.republish_hf,
+                publish_hf: parsed.publish_hf ?? fallback.publish_hf,
                 published_current: parsed.published_current ?? fallback.published_current,
             };
         } catch {
@@ -405,39 +442,6 @@
         catch { /* ignore */ }
     }
 
-    /** Re-run MFA alignment for a published reciter. The launch invalidates the
-     *  server in-flight cache, so the refetch surfaces the row in "In progress";
-     *  on completion the HF release is stale-stamped → it lands in "Stale on HF". */
-    /** Entry point from the row's Regenerate button. When the row's timestamps
-     *  are behind specific chapters, open the Full-vs-Affected dialog; otherwise
-     *  (a plain published-current regen) launch a full regen directly. */
-    function onRegenerate(slug: string): void {
-        if (busyRegenSlug !== null) return;
-        const row = allRows.find((r) => r.slug === slug) ?? null;
-        if (row?.ts?.affected_chapters && row.ts.affected_chapters.length > 0) {
-            regenScopeRow = row;
-            return;
-        }
-        void doRegenerate(slug);
-    }
-
-    /** Launch the regen job. ``chapters`` scopes it to affected chapters; omit
-     *  for a full reciter regen. */
-    async function doRegenerate(slug: string, chapters?: number[]): Promise<void> {
-        if (busyRegenSlug !== null) return;
-        busyRegenSlug = slug;
-        rowError = null;
-        regenScopeRow = null;
-        try {
-            await regenerateTs(slug, chapters);
-            refetch();
-        } catch (e) {
-            rowError = { slug, message: (e as Error).message ?? 'Regenerate failed' };
-        } finally {
-            busyRegenSlug = null;
-        }
-    }
-
     function onCutComplete(): void {
         cutModalOpen = false;
         refetch();
@@ -458,6 +462,7 @@
         });
     }
     const scrollToInFlight = () => jumpToSection('in_flight');
+    const canManageAutomation = can('release.manage_automation');
 </script>
 
 <div class="releases">
@@ -468,6 +473,7 @@
     {:else}
         <ReleasesSummaryCard
             summary={summary}
+            preview={preview}
             inFlight={inFlight}
             readyCount={readyCount}
             onCut={() => (cutModalOpen = true)}
@@ -478,6 +484,10 @@
             catalogDriftCount={resp?.catalog_drift_count ?? 0}
             onRefreshCatalog={onRefreshCatalog}
         />
+
+        {#if $canManageAutomation}
+            <AutomationSection />
+        {/if}
 
         {#if showBanner && lastBatch}
             <div class="batch-banner" class:has-failures={lastBatch.failed_count > 0} role="status">
@@ -629,12 +639,16 @@
                                                 inFlightJob={section.key === 'in_flight' ? jobForSlug(row.slug) : null}
                                                 selectable={sectionSelectable}
                                                 selected={selected.has(row.slug)}
-                                                regenBusy={busyRegenSlug === row.slug}
+                                                expandedMode={expanded?.slug === row.slug ? expanded.mode : null}
+                                                activeJobId={activeJobBySlug[row.slug] ?? null}
                                                 canceling={cancelingJob === jobForSlug(row.slug)?.job_id}
+                                                sendBackBusy={sendBackBusySlug === row.slug}
                                                 errorMessage={rowError?.slug === row.slug ? rowError.message : null}
                                                 onToggleSelect={toggleSelect}
-                                                onRegenerate={onRegenerate}
+                                                onToggleMode={toggleMode}
+                                                onLaunched={onLaunched}
                                                 onCancel={onCancelJob}
+                                                onSendBack={onSendBack}
                                             />
                                         {/each}
                                     </div>
@@ -656,16 +670,6 @@
             onClear={clearSelection}
         />
         {/if}
-    {/if}
-
-    {#if regenScopeRow}
-        <RegenerateScopeDialog
-            name={regenScopeRow.name_en || regenScopeRow.slug}
-            affectedChapters={regenScopeRow.ts?.affected_chapters ?? []}
-            busy={busyRegenSlug === regenScopeRow.slug}
-            onclose={() => (regenScopeRow = null)}
-            onlaunch={(chapters) => doRegenerate(regenScopeRow!.slug, chapters)}
-        />
     {/if}
 
     {#if cutModalOpen}
@@ -784,6 +788,7 @@
     /* Section mark colours — reuse Reviews palette to keep the visual family
      * coherent across compartments. */
     .mark-inflight  { background: var(--state-under-review-fg); }
+    .mark-ready     { background: var(--state-under-review-fg); }
     .mark-stale     { background: var(--state-error-fg); }
     .mark-edited    { background: var(--state-error-fg); }
     .mark-failed    { background: var(--state-error-fg); }

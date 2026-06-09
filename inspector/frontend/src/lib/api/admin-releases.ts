@@ -5,7 +5,6 @@
  * - fetchReleasePreview    dry-run diff + auto-version + CHANGELOG preview
  * - publishHfBatch         launch ONE job publishing a batch of slugs
  * - cancelReleaseJob       cancel an in-flight release job by id
- * - regenerateTs           re-run MFA alignment for a published slug
  * - cutRelease             launch the global GH release cut job
  * - refreshHfCatalog       rebuild only the HF dataset ``mushafs`` catalog
  *
@@ -25,6 +24,9 @@ import type {
     AdminReleaseStatusRow,
     AdminReleasesStatusResponse,
     AdminReleasesSummary,
+    AutomationConfig,
+    AutomationResponse,
+    AutomationStateRow,
     SuggestedAction,
 } from '../types/generated/schemas';
 
@@ -42,6 +44,9 @@ export type ReleasePreviewResponse = AdminReleasePreviewResponse;
 export type LaunchResponse = AdminLaunchResponse;
 export type CutReleaseBody = AdminCutReleaseRequest;
 export type StaleSuggestion = SuggestedAction;
+export type AutomationConfigBody = AutomationConfig;
+export type AutomationPayload = AutomationResponse;
+export type AutomationState = AutomationStateRow;
 
 async function _unwrap<T>(resp: Response): Promise<T> {
     if (resp.ok) return (await resp.json()) as T;
@@ -87,24 +92,6 @@ export async function cancelReleaseJob(jobId: string): Promise<{ job_id: string;
     return _unwrap<{ job_id: string; canceled: boolean }>(resp);
 }
 
-/** Launch an MFA timestamps-regeneration job for an already-released slug.
- *  POSTs to the existing generate-timestamps route. ``chapters`` scopes the run
- *  to those surah numbers (affected-only regen); omit for a full reciter. On
- *  success the reciter stays released but its HF/GH releases are stamped stale,
- *  moving the row to "Stale on HF" so the operator re-publishes. Throws the
- *  server error verbatim (e.g. the 409 "a timestamps job is already running"). */
-export async function regenerateTs(slug: string, chapters?: number[]): Promise<LaunchResponse> {
-    const resp = await fetch(
-        `/api/admin/generate-timestamps/${encodeURIComponent(slug)}`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(chapters && chapters.length ? { chapters } : {}),
-        },
-    );
-    return _unwrap<LaunchResponse>(resp);
-}
-
 /** Launch the global GH cut job. Owner-only via ``release.cut_gh``.
  *  ``expected_version_at_preview`` carries the version the preview computed;
  *  the server 409s if it drifted (forces a re-preview). */
@@ -137,3 +124,22 @@ export async function refreshHfCatalog(): Promise<LaunchResponse> {
 export const SUGGESTION_LAUNCHERS: Record<string, () => Promise<LaunchResponse>> = {
     refresh_hf_catalog: refreshHfCatalog,
 };
+
+/** Owner-only: the automation config + per-automation runtime state + the
+ *  auto-computed next GH version. Gated by ``release.manage_automation`` (403
+ *  for non-owners — the FE only mounts the section for owners). */
+export async function fetchAutomation(signal?: AbortSignal): Promise<AutomationPayload> {
+    const resp = await fetch('/api/admin/releases/automation', { signal });
+    return _unwrap<AutomationPayload>(resp);
+}
+
+/** Owner-only: replace the whole automation config. Returns the fresh payload
+ *  (config + state + next_version) so the caller re-renders from the server. */
+export async function saveAutomation(config: AutomationConfigBody): Promise<AutomationPayload> {
+    const resp = await fetch('/api/admin/releases/automation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+    });
+    return _unwrap<AutomationPayload>(resp);
+}

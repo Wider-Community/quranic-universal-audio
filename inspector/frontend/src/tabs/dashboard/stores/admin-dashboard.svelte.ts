@@ -7,6 +7,29 @@
 
 export type AdminTab = 'users' | 'requests' | 'reviews' | 'releases' | 'permissions';
 
+const ALL_TABS: readonly AdminTab[] = ['users', 'requests', 'reviews', 'releases', 'permissions'];
+const LS_TAB_KEY = 'insp_admin_active_tab';
+
+/** Last admin tab the caller used, validated against the live union. Falls back
+ * to ``users`` for an unknown/removed/renamed tab or when storage is blocked. */
+function loadLastTab(): AdminTab {
+    try {
+        const raw = localStorage.getItem(LS_TAB_KEY);
+        if (raw && (ALL_TABS as readonly string[]).includes(raw)) return raw as AdminTab;
+    } catch {
+        /* storage unavailable — fall through */
+    }
+    return 'users';
+}
+
+function persistTab(tab: AdminTab): void {
+    try {
+        localStorage.setItem(LS_TAB_KEY, tab);
+    } catch {
+        /* best-effort */
+    }
+}
+
 /** Sortable columns in the Users table (clicking a header sorts by these). */
 export type UsersSortKey =
     | 'role'
@@ -18,19 +41,19 @@ export type UsersSortKey =
 
 class AdminDashboardStore {
     open = $state(false);
-    activeTab = $state<AdminTab>('users');
+    /** Active compartment, restored from localStorage so the modal reopens to
+     * the last tab used. ``AdminDashboardModal``'s demotion effect guards the
+     * live case (owner→maintainer hides Permissions); ``loadLastTab`` guards
+     * the cold-start case. */
+    activeTab = $state<AdminTab>(loadLastTab());
     /** Caller's unviewed-open request count. Drives the Requests tab pill +
      * the dot on the entry button. Polled by the button; refreshed by the
      * Requests compartment on load/view/resolve so both surfaces agree. */
     unviewedRequests = $state(0);
-    /** Caller's unviewed marked-ready review count. Drives the Reviews tab
-     * pill + (combined with ``unviewedRequests``) the entry-button dot.
-     * Polled by the button; refreshed by ReviewsCompartment on fetch + by
-     * the reviews store on optimistic drawer-open. */
-    unviewedReviews = $state(0);
 
-    openModal(tab: AdminTab = 'users'): void {
-        this.activeTab = tab;
+    /** Reopen to the caller's last tab unless an explicit tab is given. */
+    openModal(tab: AdminTab = this.activeTab): void {
+        this.setTab(tab);
         this.open = true;
     }
 
@@ -40,14 +63,11 @@ class AdminDashboardStore {
 
     setTab(tab: AdminTab): void {
         this.activeTab = tab;
+        persistTab(tab);
     }
 
     setUnviewedRequests(n: number): void {
         this.unviewedRequests = Math.max(0, n);
-    }
-
-    setUnviewedReviews(n: number): void {
-        this.unviewedReviews = Math.max(0, n);
     }
 }
 

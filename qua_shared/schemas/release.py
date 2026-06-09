@@ -307,6 +307,22 @@ class AdminPublishError(BaseModel):
     at: str | None = None
 
 
+class AdminReciterReadiness(BaseModel):
+    """By-surah chapters still missing bucket audio / peaks for a reciter.
+
+    Audio + peaks are populated offline (katana extraction); the timestamps job
+    no longer writes them. Purely a non-blocking warn signal — drives the
+    Releases-row "audio N · peaks N missing" pill, never gates an action.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    audio_missing: int = 0
+    peaks_missing: int = 0
+    audio_missing_chapters: list[int] = Field(default_factory=list)
+    peaks_missing_chapters: list[int] = Field(default_factory=list)
+
+
 class AdminReleaseStatusRow(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -317,10 +333,18 @@ class AdminReleaseStatusRow(BaseModel):
     riwayah: str
     style: str
     channel: str
+    #: True when the open claim is marked-ready but no TS has been generated yet
+    #: (``state == under_review`` + ``marked_ready_at`` set). Drives the
+    #: "Ready to generate" bucket.
+    marked_ready: bool = False
+    #: Login of the reviewer who marked it ready — shown on Ready-to-generate
+    #: rows (null otherwise).
+    reviewer_login: str | None = None
     ts: AdminReleaseRow | None
     hf: AdminReleaseRow | None
     gh: AdminGhReleaseMember | None
     publish_error: AdminPublishError | None = None
+    readiness: AdminReciterReadiness | None = None
 
 
 class AdminLatestGhRelease(BaseModel):

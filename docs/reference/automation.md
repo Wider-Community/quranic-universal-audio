@@ -1,0 +1,91 @@
+# Release automations
+
+Owner-configurable automations that watch live release state and fire the
+existing release jobs on their own — surfaced as the **Automation** card atop the
+admin Releases tab. The engine is a single opt-in reconciler daemon; it reacts to
+*state*, not events, so it is idempotent + restart-safe.
+
+## The five automations
+
+| id | What it does | Trigger | Owner settings |
+|---|---|---|---|
+| `auto_gen_ts` | Launch the timestamps job for a marked-ready recitation that clears the gates | A `ready_to_generate` row (marked-ready, no TS) | gate-by-comments, gate-by-flags, beam, probe |
+| `stale_ts_regen` | Regenerate timestamps once segment edits settle | A `behind_edits` row past the guard | guard-minutes, scope (full \| affected), beam, probe |
+| `stale_metadata` | Refresh the HF catalog once a metadata edit settles | An HF row stale for `catalog_edit` past the guard | guard-minutes |
+| `hf_publish` | Batch-publish every fresh + stale HF candidate | Scheduled: every N days at HH:MM (owner tz) | interval-days, time-of-day, timezone |
+| `gh_cut` | Cut a global GH release when there are changes | Scheduled: every N days at HH:MM (owner tz) | interval-days, time-of-day, timezone, next-version override |
+
+All default **disabled**. The engine reuses the manual job entrypoints verbatim
+(`timestamps_jobs.launch`, `cut_release.launch`, `hf_publish_batch.launch`,
+`refresh_catalog.launch`) — automation is a *decider*, not new job code.
+
+## Engine
+
+| Piece | File | Role |
+|---|---|---|
+| daemon | `services/admin/automation/engine.py` | `tick()` runs all evaluators; `start_background_loop()` (the ~60 s loop) |
+| evaluators | `services/admin/automation/evaluators.py` | one function per automation; `run_all(now)` isolates each in try/except |
+| schedule | `services/admin/automation/schedule.py` | `is_due` / `next_fire_at` — `zoneinfo` interval math, catch-up-once, DST-safe |
+| config | `services/admin/automation/config.py` | `load_config` (db_seq-cached) / `save_config` (durable + audit) |
+| actor | `services/admin/automation/actor.py` | `SYSTEM_AUTOMATION` audit actor on every automated launch |
+
+Wired in `app.py::_boot_substrate()` behind `INSPECTOR_AUTOMATIONS=1` (prod
+Dockerfile sets it; off in dev). One daemon thread in the single gunicorn worker
+— no change to the single-worker invariant.
+
+## Persistence
+
+Migration `0019_automation.sql`, repo `services/db/repo_automation.py`:
+
+- `automation_config` — single-row JSON blob (`id=1`) holding the
+  `AutomationConfig` (`qua_shared/schemas/automation.py`). db_seq-keyed cache in
+  `services/storage/cache.py`; any committed config write invalidates it.
+- `automation_state` — per-automation `last_run_at` / `last_status` /
+  `last_detail`. Written **only when an automation acts** — an idle tick writes
+  nothing (no bucket upload). `next_run_at` is **not** stored; the route computes
+  it live so idle ticks stay write-free.
+
+## Route + capability
+
+`GET|POST /api/admin/releases/automation` (`routes/admin/releases.py`), gated by
+`release.manage_automation` (owner-only by default, in the capability registry).
+GET returns `{config, state[], next_version}` where `next_version` is the
+auto-computed next GH tag (reuses the summary card's what's-next computation) and
+each scheduled `state` row carries a live-computed `next_run_at`. POST validates
++ saves the whole `AutomationConfig` with an audit append.
+
+FE: `tabs/dashboard/components/admin/releases/AutomationSection.svelte` (mounted
+owner-only under `ReleasesSummaryCard`); API in `lib/api/admin-releases.ts`.
+
+## Invariants / edge cases
+
+- **State-driven, trigger-agnostic chaining.** *Any* completed TS regen — manual
+  or automated — stamps the HF row `republish_hf`-stale, so auto-publish (when
+  on) picks it up at its next window and the cut sees it at its window. The
+  interval cadence (not instant) is the buffer; pause auto-publish to stop a
+  manual regen propagating.
+- **Failed jobs are not retried.** `auto_gen_ts` + `stale_ts_regen` skip any slug
+  whose most-recent timestamps job ended non-success
+  (`timestamps_jobs.latest_terminal_failed_slugs`) — it stays in
+  `ready_to_generate` / `behind_edits` for a manual retry, exactly as today.
+- **Single-flight.** Every launch already enforces per-slug + global single-flight
+  (`running_job_for`); evaluators also pre-skip in-flight slugs and the
+  cut/batch/refresh globals.
+- **Debounce.** Stale-TS/metadata fire only once the latest invalidating edit is
+  older than `guard_minutes` (via `ts_stale_info.last_edit_at`), so consecutive
+  edits coalesce into one regen and we never regenerate mid-edit.
+- **Empty windows.** GH cut skips when the preview shows no adds/refreshes; batch
+  publish skips when there are no candidates (both advance the cadence so they
+  don't re-check every tick).
+- **GH cut webhook.** The cut job is webhook-only (no poll fallback), so automated
+  cuts need `INSPECTOR_PUBLIC_BASE_URL` set (the daemon has no `request.url_root`).
+- **Actor.** Automated launches/transitions carry the `SYSTEM_AUTOMATION` actor so
+  the audit rail reads "automation" and the actor-on-every-edit invariant holds.
+
+## Env
+
+| Var | Default | Effect |
+|---|---|---|
+| `INSPECTOR_AUTOMATIONS` | unset (on in prod Dockerfile) | `=1` starts the reconciler daemon |
+| `INSPECTOR_AUTOMATIONS_INTERVAL_S` | `60` | tick cadence |
+| `INSPECTOR_PUBLIC_BASE_URL` | empty | public https root for job completion webhooks (required for automated cuts) |

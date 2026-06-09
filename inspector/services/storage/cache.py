@@ -831,6 +831,36 @@ def invalidate_capability_matrix_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Automation config — the owner's AutomationConfig parsed from the single-row
+# blob. Keyed on db_seq like the capability matrix: any committed config write
+# bumps db_seq and this invalidates transparently on the next read.
+# ---------------------------------------------------------------------------
+
+_automation_config_lock = _threading.Lock()
+_automation_config: "tuple[int, object] | None" = None
+
+
+def get_automation_config_cache(db_seq: int):
+    """Return the cached AutomationConfig iff parsed at ``db_seq``, else None."""
+    with _automation_config_lock:
+        if _automation_config is not None and _automation_config[0] == db_seq:
+            return _automation_config[1]
+    return None
+
+
+def set_automation_config_cache(db_seq: int, value: object) -> None:
+    global _automation_config
+    with _automation_config_lock:
+        _automation_config = (db_seq, value)
+
+
+def invalidate_automation_config_cache() -> None:
+    global _automation_config
+    with _automation_config_lock:
+        _automation_config = None
+
+
+# ---------------------------------------------------------------------------
 # In-flight HF Jobs — short TTL wrapper around ``huggingface_hub.list_jobs()``.
 #
 # The Releases tab polls in-flight state every 30 s; ``list_jobs()`` is
@@ -878,3 +908,34 @@ def invalidate_in_flight_jobs_cache() -> None:
     global _jobs_in_flight
     with _jobs_in_flight_lock:
         _jobs_in_flight = None
+
+
+# ---------------------------------------------------------------------------
+# Per-reciter bucket readiness (audio/ + peaks/ presence) — TTL cache.
+#
+# Audio + peaks land OFFLINE (katana extraction), with no DB write, so this
+# can't key on ``db_seq`` like the catalog caches. A short wall-clock TTL keeps
+# the 30 s Releases-tab poll from re-listing every reciter's bucket dirs while
+# still picking up a fresh offline upload within a minute. Keyed by slug.
+# ---------------------------------------------------------------------------
+
+_readiness_lock = _threading.Lock()
+_readiness: "dict[str, tuple[float, dict | None]]" = {}
+_READINESS_TTL_S = 60.0
+
+
+def get_reciter_readiness_cache(slug: str) -> "tuple[bool, dict | None]":
+    """Return ``(hit, value)`` — ``hit`` False when absent/expired."""
+    with _readiness_lock:
+        entry = _readiness.get(slug)
+        if entry is None:
+            return (False, None)
+        stamped_at, value = entry
+        if _time.time() - stamped_at > _READINESS_TTL_S:
+            return (False, None)
+        return (True, value)
+
+
+def set_reciter_readiness_cache(slug: str, value: dict | None) -> None:
+    with _readiness_lock:
+        _readiness[slug] = (_time.time(), value)

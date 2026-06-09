@@ -18,26 +18,6 @@ export async function fetchAdminReviews(signal?: AbortSignal): Promise<AdminRevi
     return (await resp.json()) as AdminReviewsResponse;
 }
 
-/** Marked-ready entries the calling admin hasn't viewed yet. Polled by the
- * admin entry-button dot; mirrors fetchUnviewedRequestCount. */
-export async function fetchUnviewedReviewCount(signal?: AbortSignal): Promise<number> {
-    const resp = await fetch('/api/admin/reviews/unviewed-count', { signal });
-    if (!resp.ok) throw new Error(`unviewed-review-count: HTTP ${resp.status}`);
-    const body = (await resp.json()) as { count?: number };
-    return body.count ?? 0;
-}
-
-/** Advance the caller's ``viewed_at`` for ``slug`` (fires on first drawer
- * open). Best-effort — the FE optimistically drops the dot, the next list
- * fetch reconciles. */
-export async function markReviewViewed(slug: string): Promise<void> {
-    const resp = await fetch(`/api/admin/reviews/${encodeURIComponent(slug)}/view`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-    });
-    if (!resp.ok) throw new Error(`markReviewViewed: HTTP ${resp.status}`);
-}
-
 /** Returns null on 404 (unknown slug), throws on other errors. */
 export async function fetchAdminReviewDetail(
     slug: string,
@@ -167,12 +147,13 @@ export interface TimestampsJobLaunch {
     url: string | null;
 }
 
-/** Launch-form settings (maps to the backend ``_parse_ts_settings`` body). */
+/** Launch-form settings (maps to the backend ``_parse_ts_settings`` body).
+ * The job is alignment-only — it no longer persists audio nor bakes peaks. */
 export interface TimestampsJobSettings {
     beam: number;
     probe_beams: number[];
-    persist_audio: boolean;
-    gen_peaks: boolean;
+    // Affected-only regen scope (omitted → full reciter).
+    chapters?: number[] | null;
     // Advanced (omitted → server defaults).
     workers?: number | null;
     flavor?: string | null;

@@ -64,6 +64,9 @@ The image bakes the **dev** bucket as default (`INSPECTOR_BUCKET_REPO=hetchyy/qu
 |---|---|---|
 | `INSPECTOR_AUTO_DETECT` | off; `1` (image) | Background loop that scans the bucket for newly-aligned reciters and folds them into state. |
 | `INSPECTOR_AUTO_DETECT_INTERVAL_S` | (see `app.py`) | Tick interval for the auto-detect loop. |
+| `INSPECTOR_AUTOMATIONS` | off; `1` (image) | Release-automation reconciler daemon (per-automation enable lives in the owner's config blob; the daemon no-ops while all are off). See [automation.md](automation.md). |
+| `INSPECTOR_AUTOMATIONS_INTERVAL_S` | `60` | Tick cadence for the automation reconciler. |
+| `INSPECTOR_PUBLIC_BASE_URL` | empty | Public https root the daemon threads into job completion webhooks (no `request.url_root` in a thread). Required for automated GH cuts — the cut job is webhook-only. Set as a Space variable per environment. |
 
 ### Auth / identity / secrets
 
