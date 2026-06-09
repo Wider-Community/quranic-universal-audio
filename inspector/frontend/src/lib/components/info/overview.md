@@ -27,7 +27,7 @@ Every recitation carries a status that shows where it is on that path:
 ::lifecycle
 - available_for_request: We have the audio ready, but no one has requested alignment yet.
 - requested: Alignment has been requested; the pipeline is processing the audio.
-- available_for_review: Initial alignment completed; awaiting someone to review the errors.
+- available_for_review: Initial alignment completed; awaiting someone to review the errors. You can start a review by clicking the 'Claim Review' button
 - under_review: A reviewer has claimed it and is correcting the segments.
 - published: Reviewed, timestamped, and live for anyone to use the data.
 
@@ -57,12 +57,12 @@ Anyone is welcome to contribute — you just need to login with an account. The 
 
 ## Data Access
 
-The verse-, word- and letter-level timestamps are published in two open formats, pick by your use case:
+Audio and timestamps are published in two open formats, pick by your use case:
 
-- **[GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases)** — JSON files per recitation, in verse, word and letter tiers, paired with the original chapter audio by URL; best for apps and offline use. Audio isn't bundled — you stream it from the source links. Released shortly after timestamps are generated or refreshed.
-- **[Hugging Face Dataset](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs)** — the same timestamps in parquet, one row per ayah with the ayah's audio embedded. Best for ML and analysis: query and filter rows, and get audio plus timestamps together.
+- [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases) — JSON files per recitation, in verse, word and letter tiers, paired with the original chapter audio by URL; best for apps and offline use. Audio isn't bundled — you stream it from the source links. Released shortly after timestamps are generated or refreshed.
+- [Hugging Face Dataset](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs) — the same timestamps in parquet, one row per ayah with the ayah's audio embedded. Best for ML and analysis: query and filter rows, and get audio plus timestamps together.
 
-Both formats support both gapless surah and ayah-by-ayah playback. Both ship a single take per ayah (the first occurrence), so in rare cases where a reciter repeats an ayah fully or partially, follow-along highlighting may pause until they move past the repetition (within-ayah repetitions are still preserved). This only applies to gapless playback; ayah-by-ayah playback is unaffected. A unified API — which also exposes the full, unfiltered duplicates — is on the roadmap.
+Both formats support both gapless surah and ayah-by-ayah playback. Both ship a single take per ayah (the first occurrence), so in rare cases where a reciter repeats an ayah fully or partially at the ayah start/end, follow-along highlighting may pause until they move past the repetition (within-ayah repetitions are still preserved). A unified API — which also exposes the full, unfiltered duplicates — is on the roadmap.
 
 ## Privacy
 

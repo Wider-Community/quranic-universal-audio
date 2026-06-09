@@ -20,11 +20,13 @@
 
 <p align="center">
   <a href="#key-highlights">Highlights</a> ·
+  <a href="#use-cases">Use Cases</a> ·
   <a href="#data-access">Data Access</a> ·
   <a href="#technical-overview">How it works</a> ·
   <a href="#contributing">Contribute</a> ·
   <a href="#roadmap">Roadmap</a> ·
-  <a href="#acknowledgements">Acknowledgments/License</a>
+  <a href="#acknowledgements">Acknowledgments</a> ·
+  <a href="#license">License</a>
 </p>
 
 ## Highlights
@@ -43,19 +45,27 @@
 
 - **Metadata and versioning:** Each recitation is governed by consistent schemas and metadata and versioned with a full history to track segment updates and timestamp corrections over time.
 
+## Use Cases
+
+- **Verse playback** — play or seek any ayah or ayah range straight from the original surah audio.
+- **Follow-along** — word-by-word highlighting synced to the recitation.
+- **Word study** — replay the sound of individual words for learners.
+- **Tajweed research** — measure ghunnah and madd durations from letter timestamps, study cross-word effects and silent-letter interactions, and support tajweed teaching.
+- **ML research** — a large, diverse corpus (reciters, paces, styles, riwayat) for speech recognition, tajweed, recitation start/stop detection, and reciter identification.
+
 ## Data Access
 
-Timestamps and metadata ship in two open formats — pick by your use case.
+Audio, timestamps and metadata ship in two open formats — pick by your use case.
 
 | | [GitHub Releases](https://github.com/Wider-Community/quranic-universal-audio/releases) | [Hugging Face Dataset](https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs) |
 |---|---|---|
 | **Best for** | Apps, offline use, archives | ML research, analysis, direct audio access |
 | **Shape** | JSON per recitation, in ayah / word / letter tiers | Parquet, one row per ayah |
-| **Audio** | Not bundled — original surah URLs in `catalog.json` | Embedded per-ayah clip in every row |
-| **Versioning** | Version-pinned snapshots (`vX.Y.Z`), reproducible | Rolling — always the latest |
-| **Fetch what you need** | Full release or specific reciters | Query and filter rows; load one riwayah or reciter |
+| **Audio** | Not bundled — original surah URLs in `catalog.json` | Embedded per-ayah clip in every row + original URLs |
+| **Versioning** | Version-pinned snapshots, reproducible | Rolling — always the latest |
+| **Fetch what you need** | Full release or specific reciters | Full dataset or specific reciters, Hugging Face supported live viewer, filtering and querying |
 
-Both formats support both gapless surah and ayah-by-ayah playback. Both ship a single take per full ayah (the first occurrence), so in rare cases where a reciter repeats an ayah fully or partially, follow-along highlighting may pause until they move past the repetition (within-ayah repetitions are still preserved). This only applies to gapless playback; ayah-by-ayah playback is unaffected. A unified API — which also exposes the full, unfiltered duplicates — is on the [roadmap](#roadmap).
+Both formats support both gapless surah and ayah-by-ayah playback. Both ship a single take per full ayah (the first occurrence), so in rare cases where a reciter repeats an ayah fully or partially at the ayah start/end, follow-along highlighting may pause until they move past the repetition (within-ayah repetitions are still preserved). A unified API — which also exposes the full, unfiltered duplicates — is on the [roadmap](#roadmap).
 
 ## Technical Overview
 
@@ -81,7 +91,7 @@ To contribute code to the repo directly, fork the repo and see [inspector/README
 
 **Access**
 
-- [ ] **Unified API/SDKs** — typed Python/JS client (`pip`/`npm`) over the published QUA artifacts: fetches and caches only requested data, defaults to latest with optional pinning and offline vendoring, and exposes the schemas for type consistency.
+- [ ] **Unified API/SDKs** — typed Python/JS client (`pip`/`npm`) over the published QUA artifacts: fetches and caches only requested data, defaults to latest with optional pinning and offline vendoring, and exposes the schemas for type consistency. Complements the Releases + HF dataset.
 - [ ] **Global CDN** — mirror all recitations and audio across regions, prewarmed with demand-based routing for low-latency delivery everywhere.
 
 **Coverage + Quality**
@@ -92,7 +102,7 @@ To contribute code to the repo directly, fork the repo and see [inspector/README
 **Generalisation**
 
 - [ ] **Orthography** — letter-level timestamps are currently tuned for Uthmani script (DigitalKhatt). Generalise to other scripts where symbols and letter conventions differ, e.g. IndoPak.
-- [ ] **Riwayah** — extend beyond Hafs. Each riwayah has its own pronunciation rules, tajweed, unique sounds, and ayah orderings, with fewer and less reliable digital assets than Hafs.
+- [ ] **Riwayah** — extend beyond Hafs. Each riwayah has its own unique sounds, tajweed, symbols, and ayah orderings, with fewer and less reliable digital assets than Hafs.
 
 ## Acknowledgements
 
