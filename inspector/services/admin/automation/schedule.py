@@ -36,6 +36,11 @@ def _parse_hhmm(s: str) -> tuple[int, int]:
         return _DEFAULT_HOUR, 0
 
 
+def _today_fire(now_local: datetime, hh: int, mm: int) -> datetime:
+    """The ``HH:MM`` instant on ``now_local``'s own local date."""
+    return now_local.replace(hour=hh, minute=mm, second=0, microsecond=0)
+
+
 def next_fire_at(
     *,
     last_run_at: datetime | None,
@@ -55,7 +60,7 @@ def next_fire_at(
     hh, mm = _parse_hhmm(time_of_day)
     if last_run_at is None:
         now_local = now_utc.astimezone(tz)
-        candidate = now_local.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        candidate = _today_fire(now_local, hh, mm)
         if candidate <= now_local:
             candidate += timedelta(days=1)
     else:
@@ -73,7 +78,19 @@ def is_due(
     timezone: str,
     now_utc: datetime,
 ) -> bool:
-    """Whether ``now`` has reached the next scheduled fire."""
+    """Whether ``now`` has reached the next scheduled fire.
+
+    Never run yet → due once the local clock reaches today's ``HH:MM`` (firing
+    seeds ``last_run_at``, so every later fire uses the interval branch). This
+    case can't delegate to ``next_fire_at``: that returns the *upcoming* fire
+    (strictly future when the time has already passed today), so ``now >= it``
+    would never hold and the schedule could never bootstrap its first run.
+    """
+    if last_run_at is None:
+        tz = _safe_zone(timezone)
+        hh, mm = _parse_hhmm(time_of_day)
+        now_local = now_utc.astimezone(tz)
+        return now_local >= _today_fire(now_local, hh, mm)
     return now_utc >= next_fire_at(
         last_run_at=last_run_at,
         interval_days=interval_days,

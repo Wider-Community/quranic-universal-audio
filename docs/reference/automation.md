@@ -85,6 +85,15 @@ owner-only under `ReleasesSummaryCard`); API in `lib/api/admin-releases.ts`.
 - **Debounce.** Stale-TS/metadata fire only once the latest invalidating edit is
   older than `guard_minutes` (via `ts_stale_info.last_edit_at`), so consecutive
   edits coalesce into one regen and we never regenerate mid-edit.
+- **First fire bootstraps from the clock, not from `last_run_at`.** A scheduled
+  automation (`gh_cut` / `hf_publish`) has no `last_run_at` until it fires, and
+  firing is what writes it — so `is_due` must not gate the first run on a stored
+  anchor. When `last_run_at` is null it fires once the local clock reaches *today's*
+  `HH:MM` (enabled before the window → fires at it; enabled after → catches up on
+  the next tick), which seeds `last_run_at` and hands every later fire to the
+  interval branch. `next_fire_at` still reports the strictly-future *upcoming*
+  occurrence (for the FE's "next run"); `is_due` deliberately does **not** delegate
+  to it for the null case, or the schedule could never bootstrap.
 - **Empty windows.** GH cut skips when the preview shows no adds/refreshes; batch
   publish skips when there are no candidates (both advance the cadence so they
   don't re-check every tick).
