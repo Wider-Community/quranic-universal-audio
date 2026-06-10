@@ -28,7 +28,7 @@ The Segments tab is the full WIP editor: trim / split / merge / re-reference / d
 | Adapters | `inspector/adapters/{save_payload,segments_json,detailed_json}.py` |
 | Routes (mutations) | `inspector/routes/segments/edit.py` |
 | Routes (read history) | `inspector/routes/segments/validation.py` |
-| On-disk schemas | `qua_shared/schemas/{segment,edit_history}.py` |
+| On-disk schemas | `qua_shared/schemas/bucket/{segment,edit_history}.py` |
 
 ### Service-module import contract
 
@@ -164,24 +164,24 @@ Client → server, ordered. Mutating routes require `@require_same_origin` → `
 
 Cache invalidation (`services/storage/cache.py`): `pop_seg_caches_affected_by_segment_edit`, `append_history_batch` (extends cached parsed list in place — no re-parse), `_refresh_split_group_index_on_save` (pops split-group index only when batch has split ops), `pop_seg_auto_split` only when `batch_changes_segment_set`.
 
-### detailed.json segment shape — `qua_shared/schemas/segment.py`
+### detailed.json segment shape — `qua_shared/schemas/bucket/segment.py`
 
 `DetailedSegment` (`extra="forbid"`): required `time_start`/`time_end`/`matched_ref`; `qalqala_letter`, `is_boundary_adj`, `confidence`, `wrap_word_ranges`, `segment_uid`, `ignored_categories`, `ignored` (legacy wildcard), `is_wasl`, `flag` (`SegmentFlag | None`, see [Flagged issues](#flagged-issues)). Writers emit via `model_dump(exclude_none=True)`. Migration #5 dead fields stripped on read with INFO log: `matched_text`, `phonemes_asr`, `has_repeated_words`, plus snapshot-only `audio_url`/`chapter`/`entry_ref`/`index_at_save`/`display_text`. Unknown keys → WARNING + strip (writer-drift signal). `DetailedEntry` strips legacy `audio`. Both extraction (`.local/extraction/segments/outputs.py`) and Inspector save MUST round-trip through these models.
 
 ## edit_history.jsonl
 
-Append-only JSONL at the reciter's storage root (`<storage>/<slug>/edit_history.jsonl`, routed by `services/storage/data_dir.py`). Schema: `qua_shared/schemas/edit_history.py`.
+Append-only JSONL at the reciter's storage root (`<storage>/<slug>/edit_history.jsonl`, routed by `services/storage/data_dir.py`). Schema: `qua_shared/schemas/bucket/edit_history.py`.
 
 | Record kind | Written by | Distinguishing field |
 |---|---|---|
-| Batch | `save.py::_persist_and_record` (one per save) | `operations[]`, `save_mode`, no `reverts_*` |
+| Batch | `save.py::_persist_and_record` (one per save) | `operations[]`, no `reverts_*` |
 | Revert | `undo.py::_append_revert_record` (one per undo) | `reverts_batch_id` (+ `reverts_op_ids` for per-op undo); empty `operations` |
 
-`EditHistoryBatch` fields: `schema_version` (default `1`), `batch_id`, `saved_at_utc`, `actor:{hf_user_id, login_at_time, role}`, `operations`, `chapter` (Inspector save) **or** `chapters` (pipeline multi-chapter), `batch_type` (pipeline only), `reverts_batch_id`/`reverts_op_ids`. `EditOperation`: `op_id`, `kind` (user) **or** `op_type` (pipeline), `fix_kind`, `targets_before`/`targets_after`.
+`EditHistoryBatch` fields: `schema_version` (default `1`), `batch_id`, `saved_at_utc`, `actor:{hf_user_id, login_at_time, role}`, `operations`, `chapter` (Inspector save) **or** `chapters` (pipeline multi-chapter), `batch_type` (pipeline only), `reverts_batch_id`/`reverts_op_ids`. `EditOperation`: `op_id`, `kind` (user) **or** `op_type` (pipeline), `fix_kind`, `op_context_category`, `patch` (typed `EditOpPatch`), `targets_before`/`targets_after`. `op_context_category` (the validation category the edit was launched from — read by `build_resolved_by_edit_index`) and `patch` (the forward-change envelope the undo path reverses) are **declared live fields**, not extras. `save_mode` is **no longer persisted** on a batch — it's derived wire-side from the batch's op shape in `history_query.py::_derive_save_mode` (legacy records that still carry it win).
 
 Read endpoint: `GET /api/seg/edit-history/<reciter>` (`routes/segments/validation.py::seg_edit_history` → `services/activity/history_query.py::load_edit_history`). The query filters fully-reverted batches, strips per-op-reverted ops, merges batches sharing a `batch_id` (multi-chapter saves), enriches snapshot `audio_url` from the audio manifest, and aggregates summary stats. Clients see only the effective history.
 
-**Integrity / tolerance.** There is no standalone `validators/validate_edit_history.py` and no CI integrity job — the v1 file-hash chain and genesis record were dropped in v2. Integrity is enforced structurally by the schema: every model is `extra="forbid"` with a `strip_and_warn` pre-validator. Known-legacy v0/v1 keys (`file_hash_after`, `record_type`, `save_mode`, per-op `applied_at_utc`/`patch`/`snapshots`/`command`, etc.) → INFO + strip; unknown keys → WARNING + strip. `parse_edit_history_line` tolerates mixed v1/v2 files and returns `None` for genesis-style / `batch_id`-less lines.
+**Integrity / tolerance.** There is no standalone `validators/validate_edit_history.py` and no CI integrity job — the v1 file-hash chain and genesis record were dropped in v2. Integrity is enforced structurally by the schema: every model is `extra="forbid"` with a `strip_and_warn` pre-validator. Known-legacy batch keys (`file_hash_after`, `record_type`, `save_mode`, `reciter`, …) and op keys (`applied_at_utc`, `snapshots`, `command`, …) → INFO + strip; unknown keys → WARNING + strip (the per-model dead sets are `_BATCH_DEAD_FIELDS` / `_OP_DEAD_FIELDS` in `bucket/edit_history.py`). Note `patch` and `op_context_category` were **removed from the op dead-set** — they are declared live fields now. `parse_edit_history_line` tolerates mixed v1/v2 files and returns `None` for genesis-style / `batch_id`-less lines.
 
 Schema slim-down (Migration #5): snapshots no longer carry `matched_text` (derived via `services/reference/quran_refs.py::dk_text_for_ref` when needed — see `apply_inverse_patch::_hydrate`); per-op timestamps banned; `phonemes_asr`/`has_repeated_words` retired. New records are the slim shape; legacy records read through unchanged via `extra` tolerance.
 
@@ -218,7 +218,7 @@ The edit-history response also carries `generations` — the ascending TS-genera
 
 A manual "needs a second look" annotation any editor can attach to a segment — a required root comment plus an append-only reply thread. **Not a validation category**: it never appears in the filter dropdown or issue types, and produces no history category pill.
 
-- **Persistence.** `DetailedSegment.flag: SegmentFlag | None` (`qua_shared/schemas/segment.py`). `SegmentFlag = {comment, actor:{hf_user_id, login_at_time, role}, flagged_at_utc, follow_ups:[{comment, actor, at_utc}]}`. Absent on unflagged segs (`exclude_none`). The flag is **backend-owned** — mutated only by `save.py::_apply_flag_ops`; `make_seg` preserves it across a full_replace, and `apply_inverse_patch` preserves the live value across an unrelated undo (it is never carried in `snapshotSeg`, so an FE snapshot can't corrupt it).
+- **Persistence.** `DetailedSegment.flag: SegmentFlag | None` (`qua_shared/schemas/bucket/segment.py`). `SegmentFlag = {comment, actor:{hf_user_id, login_at_time, role}, flagged_at_utc, follow_ups:[{comment, actor, at_utc}]}`. Absent on unflagged segs (`exclude_none`). The flag is **backend-owned** — mutated only by `save.py::_apply_flag_ops`; `make_seg` preserves it across a full_replace, and `apply_inverse_patch` preserves the live value across an unrelated undo (it is never carried in `snapshotSeg`, so an FE snapshot can't corrupt it).
 - **Command + save.** `flagSegment` command (`domain/command.ts`, op_type `flag_segment`, `op_context_category=null`, single-index patch). `_apply_flag_ops` resolves the target by `segment_uid` and rebuilds the flag through the `SegmentFlag` model with a **server-authoritative** actor + timestamp (the client never supplies identity). Three intents: `set` (create, comment required), `edit` (replace root comment, flagger-only — an **empty comment removes the flag**, the unflag mechanism), `followup` (append a reply, any editor). The FE dispatch is `utils/edit/flag.ts::flagSegment`; it rides the normal op-log + autosave path.
 - **Read / redaction.** `GET /api/seg/all` (`routes/segments/data.py`) reduces the persisted flag to the FE shape via `services/segments/flags.py::flag_view`: author identity is shown as **role only** unless the caller holds `segments.see_flagger_identity` (owner + maintainer), and each comment carries a non-identifying `mine` so the flagger can find their own to edit. `count_flagged` powers the admin Review-drawer `flagged_issues_count`.
 - **UI.** A non-registry **Flagged Issues** accordion renders at the top of `ValidationPanel.svelte` only when `segAllData.segments` has flagged segs; each row is a `FlaggedCard.svelte` (live `SegmentRow` + comment thread). Every card gets a flag button + inline comment editor + hover tooltip on `SegmentRow.svelte`. History shows the op as **Flag comment** (`EDIT_OP_LABELS`). Guide: the `flagging` accordion guide (last in `REQUIRED_GUIDE_KEYS`).

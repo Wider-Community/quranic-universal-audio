@@ -1,6 +1,6 @@
 # Catalog Reference
 
-> **Storage**: the catalog is **SQLite** (`inspector.db`, tables read/written via `inspector/services/db/repo_catalog.py`), uploaded whole-file to the bucket after each committed write (`services/db/sync.py`). It was `catalog/reciter_catalog.json` pre-migration; that JSON path (`storage_paths.catalog_path()`) is now a READ-ONLY backup. **Audio metadata sidecars stay JSON on the bucket** at `catalog/audio_manifest/<slug>.json` (`storage_paths.audio_manifest_path`), read via `services/audio/audio_meta.py`.
+> **Storage**: the catalog is **SQLite** (`inspector.db`, tables read/written via `inspector/services/db/repo_catalog.py`), uploaded whole-file to the bucket after each committed write (`services/db/sync.py`). It was `catalog/reciter_catalog.json` pre-migration; that JSON backup (`storage_paths.catalog_path()`) is now **dead — no app reads it** (the DB is the catalog source of truth; the whole-bucket validator deliberately skips it) and is **slated for removal**. **Audio metadata sidecars stay JSON on the bucket** at `catalog/audio_manifest/<slug>.json` (`storage_paths.audio_manifest_path`), read via `services/audio/audio_meta.py`.
 
 Layers, slug convention, schema, audio-metadata split, naming guide, and add/probe/maintain procedures.
 
@@ -10,7 +10,7 @@ Layers, slug convention, schema, audio-metadata split, naming guide, and add/pro
 |---|---|---|
 | vocab / reciters / deliveries / aliases / derived | SQLite tables (see §4 col map) | `repo_catalog.py` (via `services/state/catalog.py`) |
 | Read model (`ReciterCatalog`) | `repo_catalog.snapshot()` → cached on `db_seq` by `services/state/catalog.py::snapshot()` | — |
-| Pydantic shapes (runtime authority) | `qua_shared/schemas/catalog.py` | — |
+| Pydantic shapes (runtime authority) | `qua_shared/schemas/bucket/catalog.py` | — |
 | Per-delivery audio sidecar | `catalog/audio_manifest/<slug>.json` (bucket JSON) | offline probe `scripts/audio/probe_audio_meta.py` |
 | Public read endpoint | `/api/static/catalog.json` (`routes/public/static.py`) — serializes `snapshot()` | — |
 
@@ -61,7 +61,7 @@ Download-only deliveries are **bucket-served only**: their per-chapter `audio/<c
 
 Fixed ordering (left to right): reciter, riwayah, style, year, channel, disambiguator.
 
-**Regex:** `SLUG_RE` = `^[a-z][a-z0-9_]{1,79}$` (`qua_shared/schemas/state.py`). ASCII lowercase, single underscores. No code parses the slug — opaque human-readable ID. `reciter_id` and delivery `slug` both use this regex (`ReciterEntry`, `Delivery` validators). Source slug is the exception: `SOURCE_SLUG_RE` = `^[a-z][a-z0-9_-]{1,79}$` allows hyphens (`surah-quran`).
+**Regex:** `SLUG_RE` = `^[a-z][a-z0-9_]{1,79}$` (`qua_shared/schemas/config/state.py`). ASCII lowercase, single underscores. No code parses the slug — opaque human-readable ID. `reciter_id` and delivery `slug` both use this regex (`ReciterEntry`, `Delivery` validators). Source slug is the exception: `SOURCE_SLUG_RE` = `^[a-z][a-z0-9_-]{1,79}$` allows hyphens (`surah-quran`).
 
 **Suffix rules:**
 
@@ -94,7 +94,7 @@ Renames are free for a bare catalog row — URLs are preserved per-delivery in t
 
 ## 4. Schema
 
-> **Authority**: the pydantic models at `qua_shared/schemas/catalog.py` are the runtime authority (cross-consumer: Inspector, training pipeline, dataset builder, GH Actions). FE types are codegen'd from them — never hand-edit `inspector/frontend/src/lib/types/generated/schemas.ts`. The tables below map pydantic field ↔ SQLite column.
+> **Authority**: the pydantic models at `qua_shared/schemas/bucket/catalog.py` are the runtime authority (cross-consumer: Inspector, training pipeline, dataset builder, GH Actions). FE types are codegen'd from them — never hand-edit `inspector/frontend/src/lib/types/generated/schemas.ts`. The tables below map pydantic field ↔ SQLite column.
 
 > **Null convention**: any `<type> | null` field accepts `null` = "missing / not yet identified". Never `""` or `"unknown"` sentinels. Applies to `name_ar`, `country`, `recording_context`, `recording_year`, `variant_label`, and all audio-metadata fields.
 
@@ -197,6 +197,8 @@ Editable columns: `_DELIVERY_WRITABLE` (`repo_catalog.py`) covers riwayah/style/
 ```
 
 Chapter keys: `"1"`–`"114"` (by_surah) or `"<surah>:<ayah>"` (by_ayah). Per-chapter metric fields nullable until probed. `ChapterEntry` fields: `url` (required), `size_bytes`, `duration_sec`, `bitrate_kbps`, `bitrate_mode` (`cbr`/`vbr` per chapter), and `max_linear_seek_err_ms` (probe verdict evidence).
+
+`AudioManifestSidecar` (`qua_shared/schemas/bucket/catalog.py`) is a bucket artefact: `extra="forbid"` + a `strip_and_warn` pre-validator, so legacy sidecar fields are dropped with an INFO log and unknown fields raise a WARNING (writer-drift signal) on parse — the same external-file tolerance the bucket-validation harness surfaces.
 
 **Checksum** (`_meta.checksum`): `sha256(normalized_urls_sorted.joined_by_newline)` at build time. Normalization: lowercase hostname, strip trailing slashes, drop fragment; query order + path case preserved (CDN-sensitive). Lives only in the sidecar; re-probe jobs compute + compare.
 
