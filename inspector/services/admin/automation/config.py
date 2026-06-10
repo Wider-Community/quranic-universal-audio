@@ -72,4 +72,5 @@ def _enabled_summary(cfg: AutomationConfig) -> dict[str, bool]:
         "hf_publish": cfg.hf_publish.enabled,
         "stale_ts_regen": cfg.stale_ts_regen.enabled,
         "stale_metadata": cfg.stale_metadata.enabled,
+        "auto_release_inactive": cfg.auto_release_inactive.enabled,
     }
