@@ -141,7 +141,8 @@ Recitation-animation (`lib/recitation-animation/`, mounted by `NowReciting` abov
 | `waveform-cache.ts` | Normalized-URL → peaks Map (non-reactive) |
 | `waveform-draw.ts` | Peaks → canvas draw (`drawWaveformPeaks`) |
 | `arabic-text.ts` | `stripTashkeel`, combining-mark helpers |
-| `fuzzy-match.ts` | Arabic-normalizing substring matcher (SearchableSelect, picker) |
+| `fuzzy-match.ts` | Arabic-normalizing search: memoized `normalizeArabic`, `match`, and `filterByFields` (the shared multi-field filter behind every reciter/option search bar) |
+| `list-virtualization.ts` | Pure prefix-sum windowing helpers for variable-height virtual lists (CatalogTable + SegmentsList) |
 | `surah-info.ts` | `surahInfo` data + ready promise + `surahOptionText` |
 | `grouped-reciters.ts` | Grouped reciter dropdown options |
 | `keyboard-guard.ts` | `shouldHandleKey(e, tab)` |
@@ -169,10 +170,11 @@ Entry view: public catalog browse/search/filter/play + admin controls.
 | `DashboardTab.svelte` | Root — `CatalogList` + `ReciterDetail` modal + `BottomPlayer` |
 | `views/CatalogList.svelte` | List view; filters on combinations, grouped back by reciter |
 | `views/ReciterDetail.svelte` | Reciter detail modal (flat combination table, status-priority sort) |
-| `components/CatalogTable.svelte`, `DetailHeader.svelte`, `FactsList.svelte`, `StateTimeline.svelte` | Detail/table pieces |
+| `components/CatalogTable.svelte` | Virtualized reciter list (own scroll container; windowing via `lib/utils/list-virtualization.ts`) |
+| `components/DetailHeader.svelte`, `FactsList.svelte`, `StateTimeline.svelte` | Detail/table pieces |
 | `components/ActivityRail.svelte` | Public activity feed (owner-visible delete affordance on each card) |
 | `components/RequestForm.svelte`, `submit/{SubmitWizard,StepReciter,StepSource,StepDetails}.svelte` | Request/submit flow |
-| `stores/catalog-data.ts` | Public reciter list + stats, fetched once, cached in-memory |
+| `stores/catalog-data.ts` | Full public reciter roster (paginated) + stats, cached in-memory; visibility-aware poll skips no-op refreshes |
 | `stores/dashboard-state.ts` | Filter/sort/search + detail-modal flag (mounted at root, survives modal) |
 | `stores/submit-wizard.ts` | Submit-recitation wizard FE state (3-step) |
 
@@ -196,7 +198,7 @@ Full WIP editor — trim/split/merge/re-reference, auto-validation on save.
 | Path | Role |
 |---|---|
 | `SegmentsTab.svelte` + `ShortcutsGuide.svelte` | Shell — dropdowns, filter bar, nav banner, list, CSS-var config, keyboard |
-| `components/list/` | `SegmentsList`, `SegmentWaveformCanvas` (exempt), `Navigation`, `TimeEdit`, `TimeRange`, `virtualization.ts` |
+| `components/list/` | `SegmentsList`, `SegmentWaveformCanvas` (exempt), `Navigation`, `TimeEdit`, `TimeRange` (windowing math in shared `lib/utils/list-virtualization.ts`) |
 | `components/filters/` | `FiltersBar`, `FilterCondition` |
 | `components/edit/` | `EditOverlay`, `MergePanel`, `DeletePanel` |
 | `components/history/` | `HistoryBatch`, `HistoryOp`, `HistoryArrows`, `EditChainRow` |
