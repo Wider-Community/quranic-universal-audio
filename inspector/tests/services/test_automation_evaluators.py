@@ -7,20 +7,23 @@ back rather than trusting the spy.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from qua_shared.schemas import (
     AutoGenTsConfig,
     AutomationConfig,
+    AutoReleaseInactiveConfig,
     GhCutConfig,
     HfPublishConfig,
     StaleTsRegenConfig,
 )
+from services import db
 from services.admin.automation import config as automation_config
 from services.admin.automation import evaluators
-from services.db import repo_automation
+from services.db import repo_access, repo_automation, repo_claims, repo_notifications
+from services.state import state as state_service
 from services.storage import cache
 
 
@@ -92,11 +95,13 @@ def test_auto_gen_not_gated_when_clean(monkeypatch):
     assert evaluators._auto_gen_gated(c, "slug", _clean_claim()) is False
 
 
-def test_auto_gen_gated_on_checklist_bypass(monkeypatch):
+def test_auto_gen_not_gated_on_owner_checklist_bypass(monkeypatch):
+    # Bypass is owner-only ("vetted, no checklist needed") → it must NOT block
+    # auto-gen. Only the owner-configured comment/flag gates do.
     monkeypatch.setattr(evaluators, "load_detailed", lambda slug: [])
     monkeypatch.setattr(evaluators, "count_flagged", lambda entries: 0)
     claim = _clean_claim() | {"mark_ready_bypass_used": 1}
-    assert evaluators._auto_gen_gated(AutoGenTsConfig(enabled=True), "slug", claim) is True
+    assert evaluators._auto_gen_gated(AutoGenTsConfig(enabled=True), "slug", claim) is False
 
 
 def test_auto_gen_gated_on_reviewer_comment(monkeypatch):
@@ -253,3 +258,114 @@ def test_stale_ts_regen_launches_when_edits_are_newer_than_last_job(monkeypatch)
 
     assert launched == ["rec_a"]
     assert repo_automation.get_state("stale_ts_regen")["last_status"] == "launched"
+
+
+# --- auto-release inactive claims -------------------------------------------
+
+
+def _release_cfg(*, days: int = 14) -> AutomationConfig:
+    return AutomationConfig(
+        auto_release_inactive=AutoReleaseInactiveConfig(enabled=True, inactive_days=days)
+    )
+
+
+def test_auto_release_inactive_disabled_records_nothing():
+    evaluators.eval_auto_release_inactive(AutomationConfig(), _now())
+    assert repo_automation.get_state(evaluators.AUTO_RELEASE_INACTIVE) is None
+
+
+def test_auto_release_inactive_fires_force_release_for_idle_claim(monkeypatch):
+    """Claimed long ago, no segment edits → reviewer is idle → release fires once."""
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        evaluators, "_inactive_claim_candidates", lambda: [("rec_a", "2026-04-01T00:00:00Z")]
+    )
+    monkeypatch.setattr(evaluators, "_slug_last_edit_at", lambda s: None)
+    monkeypatch.setattr(
+        state_service, "transition", lambda slug, event, **k: calls.append((slug, event))
+    )
+
+    evaluators.eval_auto_release_inactive(_release_cfg(), _now())
+
+    assert calls == [("rec_a", "claim.force_released")]
+    assert repo_automation.get_state(evaluators.AUTO_RELEASE_INACTIVE)["last_status"] == "launched"
+
+
+def test_auto_release_inactive_keeps_claim_with_recent_edit(monkeypatch):
+    """A reviewer editing within the window is active even if they claimed long
+    ago — the latest edit, not the claim time, decides."""
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        evaluators, "_inactive_claim_candidates", lambda: [("rec_a", "2026-04-01T00:00:00Z")]
+    )
+    monkeypatch.setattr(
+        evaluators, "_slug_last_edit_at", lambda s: datetime(2026, 6, 8, tzinfo=UTC)
+    )
+    monkeypatch.setattr(state_service, "transition", lambda *a, **k: calls.append(a))
+
+    evaluators.eval_auto_release_inactive(_release_cfg(), _now())
+
+    assert calls == []  # active within the window → not released
+    assert repo_automation.get_state(evaluators.AUTO_RELEASE_INACTIVE) is None
+
+
+def test_inactive_candidates_exclude_marked_ready_and_unclaimed(seed_state):
+    """Only open, not-yet-marked-ready under-review claims are eligible."""
+    seed_state("idle1", state="under_review", assignee_hf_id="u1", assignee_login="rev1")
+    seed_state(
+        "ready1",
+        state="under_review",
+        assignee_hf_id="u2",
+        assignee_login="rev2",
+        marked_ready=True,
+    )
+    seed_state("awaiting1", state="awaiting_review")  # no open claim
+
+    cands = {slug for slug, _ in evaluators._inactive_claim_candidates()}
+
+    assert cands == {"idle1"}
+
+
+def test_auto_release_inactive_releases_real_claim_and_notifies(seed_state, monkeypatch):
+    """End-to-end: an idle claim is force-released through the real transition,
+    returns to the pool, and the reviewer gets the same notification the manual
+    release path emits."""
+    slug = "idle_rec"
+    seed_state(slug, state="under_review")  # state + FK chain, claim opened next
+    with db.transaction():
+        repo_access.ensure_user("rev1", login="reviewer_one")
+        repo_claims.open_claim(
+            slug=slug,
+            assignee_id="rev1",
+            assignee_login="reviewer_one",
+            claimed_at=datetime(2026, 5, 10, tzinfo=UTC),  # ~30d before _now()
+        )
+    monkeypatch.setattr(evaluators, "_slug_last_edit_at", lambda s: None)  # no edits
+
+    evaluators.eval_auto_release_inactive(_release_cfg(days=14), _now())
+
+    assert repo_claims.get_open_claim(slug) is None  # claim released
+    assert state_service.get_row(slug).state.value == "awaiting_review"
+    events = {n["event"] for n in repo_notifications.list_active("rev1")}
+    assert "claim.force_released" in events
+    assert repo_automation.get_state(evaluators.AUTO_RELEASE_INACTIVE)["last_status"] == "launched"
+
+
+def test_auto_release_inactive_keeps_recently_claimed_real_row(seed_state, monkeypatch):
+    """A freshly-claimed row stays put — the durable claim is untouched."""
+    slug = "fresh_rec"
+    seed_state(slug, state="under_review")
+    with db.transaction():
+        repo_access.ensure_user("rev2", login="reviewer_two")
+        repo_claims.open_claim(
+            slug=slug,
+            assignee_id="rev2",
+            assignee_login="reviewer_two",
+            claimed_at=_now() - timedelta(days=2),  # well within the window
+        )
+    monkeypatch.setattr(evaluators, "_slug_last_edit_at", lambda s: None)
+
+    evaluators.eval_auto_release_inactive(_release_cfg(days=14), _now())
+
+    assert repo_claims.get_open_claim(slug) is not None  # still claimed
+    assert state_service.get_row(slug).state.value == "under_review"

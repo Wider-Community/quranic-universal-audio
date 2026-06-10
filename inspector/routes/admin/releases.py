@@ -582,7 +582,14 @@ def releases_status(user):
 # ---------------------------------------------------------------------------
 
 #: Display order of the automations in the FE status list.
-_AUTOMATION_IDS = ("auto_gen_ts", "gh_cut", "hf_publish", "stale_ts_regen", "stale_metadata")
+_AUTOMATION_IDS = (
+    "auto_gen_ts",
+    "gh_cut",
+    "hf_publish",
+    "stale_ts_regen",
+    "stale_metadata",
+    "auto_release_inactive",
+)
 
 
 def _automation_payload() -> dict:

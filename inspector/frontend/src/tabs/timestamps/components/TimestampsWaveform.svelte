@@ -27,6 +27,7 @@
 
     import WaveformCanvas from '../../../lib/components/WaveformCanvas.svelte';
     import { dashPort } from '../../../lib/playback/dash-port';
+    import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { recitationConfigStore } from '../../../lib/recitation-animation/recitation-settings';
     import type { AudioPeaks, PeakBucket, SegmentPeaks } from '../../../lib/types/domain';
     import { analogousTriad } from '../../../lib/utils/color-derive';
@@ -771,14 +772,18 @@
             const wi = words.indexOf(w);
             if (cur.kind === 'word' && cur.wordIndex === wi) return;
             loopTarget.set({ kind: 'word', startSec: w.start, endSec: w.end, wordIndex: wi });
-            dashPort.seek((w.start + lv.tsSegOffset) * 1000);
+            const targetMs = (w.start + lv.tsSegOffset) * 1000;
+            ensureDashCovering(targetMs);
+            dashPort.seek(targetMs);
             if (dashPort.paused) dashPort.play();
             drawOverlays();
             return;
         }
 
         // Snap to enclosing word's start.
-        dashPort.seek((w.start + lv.tsSegOffset) * 1000);
+        const targetMs = (w.start + lv.tsSegOffset) * 1000;
+        ensureDashCovering(targetMs);
+        dashPort.seek(targetMs);
         // Start playback if paused — matches block-click behavior.
         if (dashPort.paused) dashPort.play();
         drawOverlays();

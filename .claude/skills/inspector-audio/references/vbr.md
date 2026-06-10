@@ -17,15 +17,19 @@ The subsystem fights VBR on two fronts:
 
 Both exist because (1) only covers chapters Katana has extracted + uploaded to the bucket; (2) covers the gap (anonymous browsing, pre-extraction onboarding, by_ayah deliveries served straight from the CDN).
 
-## Xing TOC injection
+## Xing/Info header injection
 
-`.local/extraction/segments/audio_persist.py::_ensure_xing` (`audio_persist.py:85-119`). Runs **offline on Katana**, not in the Space — there is no in-Flask remux anymore. Applied to every by_surah chapter (no `is_vbr` gate at this layer — it's a no-op for already-seekable CBR):
+`.local/extraction/segments/audio_persist.py::_ensure_xing` (+ `_force_info_if_cbr`). Runs **offline on Katana**, not in the Space — there is no in-Flask remux anymore. Applied to every by_surah chapter:
 
 ```
-ffmpeg -y -i <src> -c:a copy -f mp3 -v error <dest>
+ffmpeg -y -i <src> -c:a copy -f mp3 -v error <dest>   # then: Xing -> Info if CBR
 ```
 
-`-c:a copy` means no re-encode. The trick is `-f mp3`: ffmpeg's mp3 **muxer** writes a Xing/Info header (Frames count + TOC + bytes) at file start whenever the output is seekable. No `-bsf:a mp3_to_xing` bitstream filter — that filter is non-existent in ffmpeg and was the reason the old in-Space worker silently shipped raw bytes (see `prefetch.md` "what's gone"). The browser uses the frame count for `<audio>.duration` and the TOC for byte-offset seeks. Fixes both true VBR and CBR-with-unset-padding-bit drift.
+`-c:a copy` means no re-encode. The trick is `-f mp3`: ffmpeg's mp3 **muxer** writes a Xing/Info header (Frames count + TOC + bytes) at file start whenever the output is seekable. No `-bsf:a mp3_to_xing` bitstream filter — that filter is non-existent in ffmpeg and was the reason the old in-Space worker silently shipped raw bytes (see `prefetch.md` "what's gone"). The browser uses the frame count for `<audio>.duration`.
+
+**`Xing` vs `Info` is load-bearing for CBR seeks.** ffmpeg always labels the tag **`Xing`** (the VBR marker) on `-c copy` when it sees *any* bitrate variation — including a single stray frame in otherwise-CBR audio (common: one 32 kbps frame at the head/tail). A `Xing` marker on a **CBR** file is poison for the browser-seek path that every CBR chapter uses: Chromium treats it as VBR and resolves `currentTime -> byte` through the coarse 100-entry TOC instead of exact linear math. Measured in headless Chromium against a real bucket file: **every seek stalls ~1 s then stutters in and lands up to ~0.8 s off**; linear play from the start is unaffected (no TOC used), so it only bites the per-segment click-to-seek path. This was the "segment audio merges / boundaries off / plays a different thing on seek" report on `abdur_rashid_sufi_qdc`.
+
+The fix (`_force_info_if_cbr`): when a linear byte↔time map is accurate within `_CBR_LINEAR_SEEK_TOLERANCE_S` (0.2 s — separates stray-frame-CBR ≤0.16 s from genuine VBR ≥0.5 s), rewrite the 4-byte magic `Xing`→`Info` in place. Lossless: frame count, TOC and every audio frame are preserved; only the marker changes, flipping Chromium back to exact linear CBR seeking. Genuine VBR keeps its `Xing` TOC and routes through the server-side clip endpoint. Backfill existing bucket audio with `.local/extraction/backfill_xing_to_info.py`.
 
 **Failure mode:** if ffmpeg returns non-zero / output is empty, `_ensure_xing` returns `False`; `_process_one` falls back to copying the source as-is. That chapter then has the legacy mis-seek issue — playback works, seek drifts. There is **no Space-side remux to retrigger** — re-run Katana extraction for the chapter. (No `ffmpeg_remuxed` audit field exists post-worker-removal.)
 
@@ -35,7 +39,9 @@ ffmpeg -y -i <src> -c:a copy -f mp3 -v error <dest>
 ffmpeg -i reciters/<slug>/audio/<chapter>.mp3 2>&1 | grep -iE 'xing|vbri|info'
 ```
 
-Presence of `Xing`, `VBRI`, or `Info` tags ⇒ seekable. Absence with `bitrate_mode == "vbr"` in the sidecar ⇒ remux failed.
+`Info` ⇒ CBR, linear seek (best). `Xing`/`VBRI` ⇒ VBR seek path (TOC). A `Xing` tag on a **CBR** chapter is the bug above — it should be `Info`; run `backfill_xing_to_info.py`. Absence with `bitrate_mode == "vbr"` in the sidecar ⇒ remux failed.
+
+**Duration oracle for no-Xing VBR is the frame-walk, not ffprobe `format=duration`.** ffprobe's `format=duration` back-estimates from nominal bitrate ÷ size on a no-Xing VBR file → wildly wrong (the phantom-tail failure mode). Use the frame-walk (`_mp3probe` full path / `qua_shared.mp3_frames.build_frame_index`), which counts real frames. Evidence: mahmoud-ali-al-banna-mujawad ch27 — frame-walk 134,535 frames (matches ffprobe `-count_frames` authoritative 134,534 within one frame) vs ffprobe `format=duration` reporting 3523 s.
 
 ## Segment-clip route
 
@@ -103,6 +109,7 @@ Non-integer keys (by_ayah `"<s>:<a>"`) are skipped — only by_surah deliveries 
 
 | Symptom | Root | First probe |
 |---|---|---|
+| Seek stalls ~1s + lands <1s off + stutters, on a **CBR** chapter; linear play is fine | `Xing` (VBR) marker on CBR audio → browser uses coarse TOC instead of linear seek | tag must be `Info` not `Xing`: `ffmpeg -i <ch>.mp3 2>&1 \| grep -iE 'xing\|info'`. Fix: `backfill_xing_to_info.py` |
 | Seek lands seconds off, only on Adjust mode | `_window` not yet updated when split-click fires; pending-promise reuse logic skipped | check `audio-port.ts:342-349` is not bypassed by a custom load path |
 | Seek lands seconds off, all modes | Xing remux failed → raw VBR shipped | `ffmpeg -i reciters/<slug>/audio/<ch>.mp3` look for Xing tag |
 | Clip URL works in dev but 500s in deployed | upstream URL fetch failed inside ffmpeg — usually network egress block, not the binary | check Space outbound rules; confirm `curl -I <url>` works from inside the container |

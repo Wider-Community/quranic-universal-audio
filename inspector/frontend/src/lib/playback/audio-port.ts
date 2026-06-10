@@ -134,6 +134,7 @@ export class AudioPort {
     private _window: LoadedWindow | null = null;
     private readonly defaultPadMs: number;
     private readonly killSwitchEnabled: boolean;
+    private desiredPlaybackRate = 1;
 
     /** Bumped on every src swap. Pending canplay handlers compare this
      *  against the gen they captured at attach-time; mismatched gens are
@@ -186,7 +187,10 @@ export class AudioPort {
             this._window = null;
         }
         this.el = el;
-        if (el) this._attachDomListeners(el);
+        if (el) {
+            el.playbackRate = this.desiredPlaybackRate;
+            this._attachDomListeners(el);
+        }
     }
 
     /** Adopt a warm element that already has its `src` loaded — typically
@@ -206,6 +210,7 @@ export class AudioPort {
      *  element pool only stores CBR full-chapter URLs. */
     adoptElement(el: HTMLAudioElement, srcUrl: string): void {
         this.attachElement(el);
+        el.playbackRate = this.desiredPlaybackRate;
         this._window = {
             startMs: 0,
             endMs: Number.POSITIVE_INFINITY,
@@ -488,6 +493,7 @@ export class AudioPort {
     seekAndPlay(fileMs: number): void {
         if (!this.el) return;
         this.seek(fileMs);
+        this.el.playbackRate = this.desiredPlaybackRate;
         // Restore gain ramp before playing; matches the legacy
         // `_seekAndPlay` ordering in `audio-range.ts`.
         if (this.killSwitchEnabled) uncutAudio(this.el);
@@ -499,6 +505,7 @@ export class AudioPort {
      *  no seek needed. */
     play(): void {
         if (!this.el) return;
+        this.el.playbackRate = this.desiredPlaybackRate;
         if (this.killSwitchEnabled) uncutAudio(this.el);
         safePlay(this.el);
     }
@@ -525,10 +532,11 @@ export class AudioPort {
     }
 
     get playbackRate(): number {
-        return this.el?.playbackRate ?? 1;
+        return this.el?.playbackRate ?? this.desiredPlaybackRate;
     }
 
     setPlaybackRate(rate: number): void {
+        this.desiredPlaybackRate = rate;
         if (this.el) this.el.playbackRate = rate;
     }
 
@@ -624,6 +632,7 @@ export class AudioPort {
         // external `await ready` still sees the rejection.
         promise.catch(() => {});
         this.pendingPromise = promise;
+        this.el.playbackRate = this.desiredPlaybackRate;
         this.el.src = url;
         this.el.load();
         return { ready: promise, swapped: true, window: win };

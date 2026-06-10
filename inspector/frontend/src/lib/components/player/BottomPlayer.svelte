@@ -32,11 +32,13 @@
     import { dashPort } from '../../playback/dash-port';
     import { exitLoop, loopTarget } from '../../playback/loop';
     import { recycleAsShadow } from '../../playback/shadow-audio';
+    import { vbrCoveringRangeFor } from '../../playback/vbr-covering';
     import {
         recitationAyahAt,
         recitationAyahs,
         recitationAyahStarts,
     } from '../../recitation-animation/recitation-settings';
+    import { loadVbrChapters } from '../../recitation-data/ts-source';
     import {
         loadPersistedSlice,
         persistSlice,
@@ -61,6 +63,7 @@
     let urls: Record<string, SurahEntry> = {};
     let lastDeliverySlug: string | null = null;
     let lastSurahNum: number | null = null;
+    let vbrChapters = new Set<number>();
     let surahPopoverOpen = false;
     // WS6 intent-prewarm state (helpers + constants below reactToContext).
     let _warmDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -79,6 +82,11 @@
             // shuffle adopt swaps `dashPort.element` to a prewarmed element,
             // leaving the template-bound `audioEl` stale.
             const dur = dashPort.element?.duration ?? 0;
+            const win = dashPort.window;
+            if (win?.isClip) {
+                setPosition(win.startMs);
+                return;
+            }
             setPosition(0, Number.isFinite(dur) ? dur * 1000 : 0);
             // NOTE: canplay (readyState 3) is NOT audible — clearing the ring
             // here stops it 1-3s before sound. `onPlaying` is the single
@@ -86,7 +94,7 @@
         });
         const unsubTime = dashPort.onTimeUpdate((fileMs) => {
             const dur = dashPort.element?.duration;
-            setPosition(fileMs, dur ? dur * 1000 : undefined);
+            setPosition(fileMs, dashPort.window?.isClip ? undefined : dur ? dur * 1000 : undefined);
             maybeWarmNext(fileMs, dur ? dur * 1000 : 0);
         });
         const unsubWaiting = dashPort.onWaiting(() => setIsLoading(true));
@@ -146,9 +154,15 @@
 
         if (deliverySwitched) {
             try {
-                urls = await fetchSurahsForDelivery(delivery.source, delivery.slug);
+                const [nextUrls, nextVbrChapters] = await Promise.all([
+                    fetchSurahsForDelivery(delivery.source, delivery.slug),
+                    loadVbrChapters(delivery.slug),
+                ]);
+                urls = nextUrls;
+                vbrChapters = new Set(nextVbrChapters);
             } catch {
                 urls = {};
+                vbrChapters = new Set();
             }
             lastDeliverySlug = delivery.slug;
             persistSlice({
@@ -224,7 +238,12 @@
                 const cbrSrc = url.startsWith('/api/')
                     ? url
                     : `/api/seg/audio-proxy/${delivery.slug}?url=${encodeURIComponent(url)}`;
-                dashPort.setSource({ audioUrl: url, cbrSrc, reciter: delivery.slug, vbr: false });
+                dashPort.setSource({
+                    audioUrl: url,
+                    cbrSrc,
+                    reciter: delivery.slug,
+                    vbr: vbrChapters.has(surahNum),
+                });
                 // Seed duration from the manifest so the progress bar shows
                 // total length before <audio> fetches MP3 headers (which
                 // doesn't happen until play with preload="none").
@@ -234,7 +253,7 @@
                 if (wasPlaying || isActiveCombinationSwitch) {
                     setIsLoading(true);
                     await ensureAudioContextRunning();
-                    dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
+                    dashPort.loadCovering(...coveringRangeFor(0));
                     dashPort.play();
                 } else {
                     // Paused chapter-select: warm the decoder + canplay off the
@@ -355,7 +374,7 @@
             // setSource is a guaranteed no-op alongside the adopt signal.
             dashPort.setSource({
                 audioUrl: consumed.rawUrl, cbrSrc: consumed.proxyUrl,
-                reciter: delivery.slug, vbr: false,
+                reciter: delivery.slug, vbr: vbrChapters.has(nextN),
             });
             setAdoptedSource({ deliverySlug: delivery.slug, surahNum: nextN, srcUrl: proxyUrl });
             const oldEl = dashPort.element;
@@ -384,7 +403,7 @@
     async function resumePlayback(): Promise<void> {
         await ensureAudioContextRunning();
         if (dashPort.source) {
-            dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
+            dashPort.loadCovering(...coveringRangeFor(dashPort.currentTimeMs()));
         }
         if (audioEl && audioEl.readyState < 3) {
             setIsLoading(true);
@@ -395,13 +414,18 @@
     async function seekAndResume(targetMs: number): Promise<void> {
         await ensureAudioContextRunning();
         if (dashPort.source) {
-            dashPort.loadCovering(0, Number.POSITIVE_INFINITY);
+            dashPort.loadCovering(...coveringRangeFor(targetMs));
         }
         dashPort.seek(targetMs);
         if (audioEl && audioEl.readyState < 3) {
             setIsLoading(true);
         }
         dashPort.play();
+    }
+
+    function coveringRangeFor(targetMs: number): [number, number] {
+        if (!dashPort.source?.vbr) return [0, Number.POSITIVE_INFINITY];
+        return vbrCoveringRangeFor(targetMs, $recitationAyahs);
     }
 
     function setSurahAndResume(surahNum: number): void {

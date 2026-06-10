@@ -191,12 +191,12 @@ Editable columns: `_DELIVERY_WRITABLE` (`repo_catalog.py`) covers riwayah/style/
     "category": "by_surah"
   },
   "chapters": {                              // dict[str, ChapterEntry]
-    "1": { "url": "https://...", "size_bytes": 803456, "duration_sec": 50, "bitrate_kbps": 128, "bitrate_mode": "cbr" }
+    "1": { "url": "https://...", "size_bytes": 803456, "duration_sec": 50, "bitrate_kbps": 128, "bitrate_mode": "cbr", "max_linear_seek_err_ms": 26 }
   }
 }
 ```
 
-Chapter keys: `"1"`–`"114"` (by_surah) or `"<surah>:<ayah>"` (by_ayah). Per-chapter metric fields nullable until probed. `ChapterEntry` fields: `url` (required), `size_bytes`, `duration_sec`, `bitrate_kbps`, `bitrate_mode` (`cbr`/`vbr` per chapter).
+Chapter keys: `"1"`–`"114"` (by_surah) or `"<surah>:<ayah>"` (by_ayah). Per-chapter metric fields nullable until probed. `ChapterEntry` fields: `url` (required), `size_bytes`, `duration_sec`, `bitrate_kbps`, `bitrate_mode` (`cbr`/`vbr` per chapter), and `max_linear_seek_err_ms` (probe verdict evidence).
 
 **Checksum** (`_meta.checksum`): `sha256(normalized_urls_sorted.joined_by_newline)` at build time. Normalization: lowercase hostname, strip trailing slashes, drop fragment; query order + path case preserved (CDN-sensitive). Lives only in the sidecar; re-probe jobs compute + compare.
 
@@ -233,7 +233,7 @@ Row-level `bitrate_mode` (`BitrateMode` enum) derived from per-chapter probe dat
 | `mixed` | Chapters disagree (CBR + VBR/ABR, or all-CBR at different rates). Use sidecar for per-chapter truth. **`bitrate_kbps_nominal` is null** (model validator enforces). |
 | `unknown` | No chapters probed yet (default for by_ayah). |
 
-Detection: `mutagen.mp3.MP3.info.bitrate_mode` (Xing/Info/VBRI/LAME header) authoritative; frame scan over first 256 KB as fallback. Both run; per-chapter results land in the sidecar, rolled up to the row at build.
+Detection — **whole-file linear byte→time seek error** (`qua_shared/mp3_frames.py::classify_bitrate_mode`, mirrored inline in `probe_audio_meta.py`): walk every audio frame, measure how far a browser's linear `time→byte` seek would land from each frame's true time; `≤ 200 ms` ⇒ `cbr`, else `vbr`. This is the only reliable signal — it is exactly what the playback transport needs to know (can the browser seek this natively?). The two shortcuts this replaced both produced systematic mislabels: mutagen's header `bitrate_mode` calls every Xing-tagged file VBR (incl. CBR audio our pipeline tagged Xing) and `len(set(bitrates))==1` / head-only uniformity is fooled by a stray frame or by VBR whose variation starts past the head (whole tvquran/archive reciters slipped through as CBR and stalled on seek). Because the metric needs every frame, source probing (`probe_audio_meta.classify`, `_mp3probe.probe_source(allow_full=True)`) downloads the full file. Per-chapter results land in the sidecar, rolled up to the row at build.
 
 **Download-only sources create their own encode.** Unlike CDN audio (publisher mp3 bytes preserved verbatim, with only a Xing seek header injected via `-c:a copy`), a YouTube/yt-dlp source is opus/m4a — so extraction produces the canonical mp3 once: **192 kbps CBR, 44.1 kHz, mono**, cover-art stripped (`segments/audio_io.py::_download_via_ytdlp`). Because the watch URL can't be HTTP-frame-probed, the row + sidecar audio fields come from a **post-align reprobe** of the produced files (`ingest_intake.py::reprobe_persisted_audio`). Forced-CBR ⇒ these deliveries never hit the VBR playback path.
 

@@ -107,8 +107,9 @@ The same predicate drives the Releases-tab buckets and the cut job's member disc
    → builds the three
    tier files (verse/word/letter, top-down), `catalog.json`, a per-recitation `manifest.json`; packs
    a deterministic `<slug>.zip`; computes `content_hash = SHA-256(letter_tier.gz || catalog.json)`.
-   `catalog.json` is built from `catalog/audio_manifest/<slug>.json::chapters`; a GH-eligible
-   recitation with no usable audio URLs is fatal.
+   `catalog.json` is built from `catalog/audio_manifest/<slug>.json::chapters[*].url`; legacy
+   sidecar metadata is tolerated here because the GH adapter only needs consumer audio URLs. A
+   GH-eligible recitation with no usable audio URLs is fatal.
 3. Classifies each reciter `added` / `refresh` / `unchanged` (vs prior `content_hash`) and computes
    the version (below).
 4. Builds the dataset-level `manifest.json`, `catalog.json`, and `CHANGELOG.md` (the release body — see

@@ -90,7 +90,9 @@ def test_added_refreshed_and_carried():
     )
     assert "<details><summary>Added recitations - 1</summary>" in md
     assert "<details><summary>Refreshed recitations - 1</summary>" in md
-    assert "2 carried / unchanged." in md
+    assert "<details><summary>Unchanged recitations - 2</summary>" in md
+    assert "| Stable One - " in md
+    assert "| Stable Two - " in md
     assert "Adds 1, refreshes 1 (2 carried) over v0.1.0." in md
 
 

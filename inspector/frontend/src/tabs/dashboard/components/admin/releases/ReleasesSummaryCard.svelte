@@ -201,7 +201,7 @@
                 <div class="next-line" title="What the next cut would ship">
                     <span class="next-tag added">Adds {nextChanges.added}</span>
                     <span class="next-tag refresh">refreshes {nextChanges.refresh}</span>
-                    <span class="next-tag carried">({nextChanges.unchanged} carried)</span>
+                    <span class="next-tag carried">({nextChanges.unchanged} unchanged)</span>
                     {#if nextChanges.version}
                         <span class="next-ver">→ {nextChanges.version}</span>
                     {:else if nextChanges.previous}

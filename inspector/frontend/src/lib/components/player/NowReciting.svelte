@@ -15,6 +15,7 @@
      */
     import { tick } from 'svelte';
 
+    import { ensureDashCovering } from '../../playback/dash-covering';
     import { dashPort } from '../../playback/dash-port';
     import { exitLoop } from '../../playback/loop';
     import {
@@ -133,6 +134,7 @@
 
     function seek(ms: number): void {
         exitLoop(); // filmstrip / line click is deliberate navigation → drop loop
+        ensureDashCovering(ms);
         dashPort.seek(ms);
         dashPort.play();
         if (!playing) {

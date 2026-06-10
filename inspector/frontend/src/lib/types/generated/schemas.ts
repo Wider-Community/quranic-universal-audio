@@ -530,6 +530,7 @@ export interface AutomationConfig {
   hf_publish?: HfPublishConfig;
   stale_ts_regen?: StaleTsRegenConfig;
   stale_metadata?: StaleMetadataConfig;
+  auto_release_inactive?: AutoReleaseInactiveConfig;
   [k: string]: unknown;
 }
 /**
@@ -585,6 +586,22 @@ export interface StaleTsRegenConfig {
 export interface StaleMetadataConfig {
   enabled?: boolean;
   guard_minutes?: number;
+}
+/**
+ * Release a reviewer's claim after a period of inactivity.
+ *
+ * Acts on open claims that are under review and NOT yet marked ready (a
+ * marked-ready claim is complete and awaiting the pipeline, not idle). A claim
+ * is "inactive" when the reviewer's last activity — the later of the claim time
+ * and their most recent segment edit — is older than ``inactive_days``. Release
+ * routes through the same ``claim.force_released`` transition the manual path
+ * uses, so the reviewer gets the identical "your review was released" notice and
+ * the recitation returns to the awaiting-review pool.
+ */
+export interface AutoReleaseInactiveConfig {
+  enabled?: boolean;
+  inactive_days?: number;
+  [k: string]: unknown;
 }
 /**
  * ``GET /api/admin/releases/automation`` payload: config + state + preview.
@@ -818,14 +835,19 @@ export interface EditOperation {
 /**
  * Contributor confirmations recorded with the submission (audit trail).
  *
- * All three must be true to submit — gated client-side and re-checked server-
- * side. Rights to *share* (distribution / reciter permission) and rights to
- * *store* (QUA download + permanent retention) are deliberately separate.
+ * The first three are always required to submit — gated client-side and
+ * re-checked server-side. Rights to *share* (distribution / reciter
+ * permission) and rights to *store* (QUA download + permanent retention) are
+ * deliberately separate. ``playlist_public`` is an extra gate that only
+ * applies to a ``playlist`` source: the contributor agreeing to keep their
+ * own playlist public so the community can benefit from the audio + derived
+ * timings (enforced in ``intake_validation`` only for the playlist method).
  */
 export interface IntakeAttestations {
   distribution_rights?: boolean;
   links_verified?: boolean;
   storage_rights?: boolean;
+  playlist_public?: boolean;
   [k: string]: unknown;
 }
 /**

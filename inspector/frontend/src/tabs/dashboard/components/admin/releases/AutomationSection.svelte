@@ -40,6 +40,7 @@
         stale_metadata: { enabled: boolean; guard_minutes: number };
         hf_publish: SchedCfg;
         gh_cut: SchedCfg & { next_version_override: string | null };
+        auto_release_inactive: { enabled: boolean; inactive_days: number };
     }
 
     function normalize(c: AutomationConfigBody): Draft {
@@ -48,6 +49,7 @@
         const m = c.stale_metadata ?? {};
         const h = c.hf_publish ?? {};
         const g = c.gh_cut ?? {};
+        const ri = c.auto_release_inactive ?? {};
         return {
             auto_gen_ts: {
                 enabled: a.enabled ?? false,
@@ -77,6 +79,10 @@
                 timezone: g.timezone ?? 'Australia/Sydney',
                 next_version_override: g.next_version_override ?? null,
             },
+            auto_release_inactive: {
+                enabled: ri.enabled ?? false,
+                inactive_days: ri.inactive_days ?? 14,
+            },
         };
     }
 
@@ -100,6 +106,7 @@
             draft.stale_metadata,
             draft.hf_publish,
             draft.gh_cut,
+            draft.auto_release_inactive,
         ].filter((a) => a.enabled).length;
     });
 
@@ -210,7 +217,7 @@
             </svg>
             <span class="title">Automation</span>
             <span class="count" class:none={enabledCount === 0}>
-                {enabledCount} of 5 on
+                {enabledCount} of 6 on
             </span>
             {#if dirty}<span class="dirty-dot" title="Unsaved changes" aria-label="Unsaved changes"></span>{/if}
             <span class="spacer"></span>
@@ -337,6 +344,31 @@
                                     />
                                 </label>
                             </div>
+                        </div>
+                    {/if}
+                </div>
+
+                <!-- 6. Auto-release inactive reviewer claims -->
+                <div class="row">
+                    {@render head(
+                        draft.auto_release_inactive.enabled,
+                        () =>
+                            (draft!.auto_release_inactive.enabled =
+                                !draft!.auto_release_inactive.enabled),
+                        'Release inactive claims',
+                        'When a reviewer hasn’t touched their claimed recitation for a while, release it back to the pool and notify them. Skips work already marked ready.',
+                        'auto_release_inactive',
+                    )}
+                    {#if draft.auto_release_inactive.enabled}
+                        <div class="settings">
+                            <label class="field">
+                                <span class="lbl">inactive (days)</span>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    bind:value={draft.auto_release_inactive.inactive_days}
+                                />
+                            </label>
                         </div>
                     {/if}
                 </div>

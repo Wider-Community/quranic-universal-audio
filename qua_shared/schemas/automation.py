@@ -3,14 +3,18 @@
 One ``AutomationConfig`` (a single JSON blob in ``automation_config``) drives the
 release-automation reconciler (``inspector/services/admin/automation/``): a 60 s
 daemon that watches live release state and fires the existing jobs on the
-owner's behalf. Five independent automations, each enable/disable:
+owner's behalf. Six independent automations, each enable/disable:
 
-- ``auto_gen_ts``    — generate timestamps for a marked-ready recitation that
-                       passes the comment/flag gates.
-- ``gh_cut``         — cut a global GH release on a schedule (owner timezone).
-- ``hf_publish``     — batch-publish fresh + stale HF candidates on a schedule.
-- ``stale_ts_regen`` — regenerate timestamps once segment edits settle.
-- ``stale_metadata`` — refresh the HF catalog once a metadata edit settles.
+- ``auto_gen_ts``          — generate timestamps for a marked-ready recitation
+                             that passes the comment/flag gates.
+- ``gh_cut``               — cut a global GH release on a schedule (owner tz).
+- ``hf_publish``           — batch-publish fresh + stale HF candidates on a
+                             schedule.
+- ``stale_ts_regen``       — regenerate timestamps once segment edits settle.
+- ``stale_metadata``       — refresh the HF catalog once a metadata edit settles.
+- ``auto_release_inactive``— release a reviewer's claim once they've been
+                             inactive for N days (frees the recitation to be
+                             re-claimed; notifies the reviewer).
 
 This is the owner *config*; per-automation runtime state (last run / result)
 lives in the ``automation_state`` table, not here. The FE consumes the
@@ -29,6 +33,8 @@ _DEFAULT_TIME_OF_DAY = "09:00"
 _DEFAULT_TIMEZONE = "Australia/Sydney"
 #: Default debounce before acting on a settled edit (one hour).
 _DEFAULT_GUARD_MINUTES = 60
+#: Default reviewer-inactivity window before a claim is auto-released.
+_DEFAULT_INACTIVE_DAYS = 14
 #: Beam defaults shared with the manual TS launch form.
 _DEFAULT_BEAM = 50
 _DEFAULT_PROBE_BEAMS = 2
@@ -110,6 +116,22 @@ class StaleMetadataConfig(BaseModel):
     guard_minutes: int = Field(default=_DEFAULT_GUARD_MINUTES, ge=0)
 
 
+class AutoReleaseInactiveConfig(BaseModel):
+    """Release a reviewer's claim after a period of inactivity.
+
+    Acts on open claims that are under review and NOT yet marked ready (a
+    marked-ready claim is complete and awaiting the pipeline, not idle). A claim
+    is "inactive" when the reviewer's last activity — the later of the claim time
+    and their most recent segment edit — is older than ``inactive_days``. Release
+    routes through the same ``claim.force_released`` transition the manual path
+    uses, so the reviewer gets the identical "your review was released" notice and
+    the recitation returns to the awaiting-review pool.
+    """
+
+    enabled: bool = False
+    inactive_days: int = Field(default=_DEFAULT_INACTIVE_DAYS, ge=1)
+
+
 class AutomationConfig(BaseModel):
     """The owner's full automation configuration (one persisted blob).
 
@@ -124,6 +146,9 @@ class AutomationConfig(BaseModel):
     hf_publish: HfPublishConfig = Field(default_factory=HfPublishConfig)
     stale_ts_regen: StaleTsRegenConfig = Field(default_factory=StaleTsRegenConfig)
     stale_metadata: StaleMetadataConfig = Field(default_factory=StaleMetadataConfig)
+    auto_release_inactive: AutoReleaseInactiveConfig = Field(
+        default_factory=AutoReleaseInactiveConfig
+    )
 
     @field_validator("gh_cut")
     @classmethod

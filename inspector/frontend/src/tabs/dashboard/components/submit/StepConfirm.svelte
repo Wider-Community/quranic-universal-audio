@@ -2,45 +2,56 @@
     /**
      * Wizard step 4 — contributor confirmations.
      *
-     * Three required consent gates recorded with the submission (audit trail):
-     * the right to *share* (distribution / reciter permission), accuracy
-     * (links verified), and the right to *store* (QUA download + permanent
-     * retention). All three must be checked before Submit enables.
+     * Required consent gates recorded with the submission (audit trail): the
+     * right to *share* (distribution / reciter permission), accuracy (links
+     * verified), and the right to *store* (QUA download + permanent retention).
+     * When the source is a playlist, a fourth gate is shown — the contributor
+     * agreeing to keep their own playlist public. Every visible gate must be
+     * checked before Submit enables.
      */
     import { fade } from 'svelte/transition';
 
-    import { submitWizard } from '../../stores/submit-wizard';
+    import { submitWizard, type Attestations } from '../../stores/submit-wizard';
+
+    type Item = { key: keyof Attestations; text: string };
 
     $: a = $submitWizard.attestations;
+    $: isPlaylist = $submitWizard.sourceMethod === 'playlist';
 
-    function toggle(key: keyof typeof a): void {
+    function toggle(key: keyof Attestations): void {
         submitWizard.update((s) => ({
             ...s,
             attestations: { ...s.attestations, [key]: !s.attestations[key] },
         }));
     }
 
-    const ITEMS: { key: keyof typeof a; text: string }[] = [
+    const BASE_ITEMS: Item[] = [
         {
             key: 'distribution_rights',
             text: 'To the best of my knowledge, I have the reciter’s permission or the distribution rights to share these recordings publicly.',
         },
         {
             key: 'links_verified',
-            text: 'I have verified that every link opens and plays the correct chapter, and that the metadata is accurate.',
+            text: 'I have verified that links work and play the correct chapters, and that the metadata is accurate.',
         },
         {
             key: 'storage_rights',
-            text: 'I grant Quranic Universal Audio the right to download, process, distribute, and store this audio permanently.',
+            text: 'I grant Quranic Universal Audio the right to download, process, distribute, and store this audio permanently, under CC By 4.0 license',
         },
     ];
+    const PLAYLIST_ITEM: Item = {
+        key: 'playlist_public',
+        text: 'If this is my own playlist, I agree to keep it public so everyone can benefit from the audio and timings.',
+    };
+
+    $: items = isPlaylist ? [...BASE_ITEMS, PLAYLIST_ITEM] : BASE_ITEMS;
 </script>
 
 <div class="step" in:fade={{ duration: 180 }}>
     <p class="lede">A few confirmations before we queue this for review.</p>
 
     <ul class="checks">
-        {#each ITEMS as item (item.key)}
+        {#each items as item (item.key)}
             <li>
                 <label class="check" class:checked={a[item.key]}>
                     <input

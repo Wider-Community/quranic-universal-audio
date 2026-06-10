@@ -1,5 +1,7 @@
 {{ release_title }}
 
+Every release contains all reciters aligned up to date, not just new ones from the previous release. 
+
 ## What to download
 
 | Asset | What it gives you |
@@ -203,7 +205,7 @@ type ReciterCatalog = {
 
 ## Staying up to date
 
-Every release contains all reciters aligned up to date, not just new ones from the previous release. We occasionally fix issues or batch-refresh a reciter's timestamps with an improved alignment model, so a reciter you already use can change in a later release. Two ways to keep track:
+We occasionally fix issues or batch-refresh a reciter's timestamps with an improved alignment model, so a reciter you already use can change in a later release. Two ways to keep track:
 
 - **All releases** - click **Watch -> Custom -> Releases** at the top of the GitHub repository. GitHub emails you on every release, and the notes above always list which reciters were added or refreshed.
 - **Only the reciters you use** - run `check_updates.py` against the `manifest.json` you downloaded. It exits non-zero when any of your reciters changed, so a scheduled GitHub Action or CI job notifies you automatically; add `--sync` to also re-download the changed zips.

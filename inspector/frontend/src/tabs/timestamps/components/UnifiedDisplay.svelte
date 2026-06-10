@@ -16,6 +16,7 @@
     import { onDestroy, untrack } from 'svelte';
     import { get } from 'svelte/store';
 
+    import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { dashPort } from '../../../lib/playback/dash-port';
     import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
     import {
@@ -368,7 +369,9 @@
 
     function seekToTime(absTime: number): void {
         if (!dashPort.element) return;
-        dashPort.seek(absTime * 1000);
+        const targetMs = absTime * 1000;
+        ensureDashCovering(targetMs);
+        dashPort.seek(targetMs);
         // Clicking a block always starts playback — resumes if paused.
         if (dashPort.paused) dashPort.play();
         // Force a repaint immediately after user seek (not waiting on timeupdate)
@@ -418,7 +421,9 @@
             if (same) return;
             loopTarget.set(target);
             if (dashPort.element) {
-                dashPort.seek(absSeek * 1000);
+                const targetMs = absSeek * 1000;
+                ensureDashCovering(targetMs);
+                dashPort.seek(targetMs);
                 if (dashPort.paused) dashPort.play();
             }
             updateHighlights();
@@ -426,7 +431,9 @@
         }
         // No loop active → pure seek.
         if (!dashPort.element) return;
-        dashPort.seek(absSeek * 1000);
+        const targetMs = absSeek * 1000;
+        ensureDashCovering(targetMs);
+        dashPort.seek(targetMs);
         if (dashPort.paused) dashPort.play();
         updateHighlights();
     }

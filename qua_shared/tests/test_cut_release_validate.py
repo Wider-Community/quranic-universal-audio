@@ -190,12 +190,30 @@ def test_audio_urls_come_from_sidecar_chapters():
                 "url": "https://cdn.example/100.mp3",
                 "duration_sec": 60,
                 "bitrate_mode": "cbr",
+                "max_linear_seek_err_ms": 26,
             }
         },
     }
 
     assert cut_release._audio_urls_from_manifest("example_reciter", sidecar) == {
         "100": "https://cdn.example/100.mp3"
+    }
+
+
+def test_audio_urls_tolerate_legacy_sidecar_metadata():
+    sidecar = {
+        "_meta": {"source": "intake_ingest_manual", "chapter_count": 1},
+        "chapters": {
+            "2": {
+                "url": "https://cdn.example/2.mp3",
+                "duration_sec": 8848.826,
+                "max_linear_seek_err_ms": 26,
+            }
+        },
+    }
+
+    assert cut_release._audio_urls_from_manifest("legacy_reciter", sidecar) == {
+        "2": "https://cdn.example/2.mp3"
     }
 
 

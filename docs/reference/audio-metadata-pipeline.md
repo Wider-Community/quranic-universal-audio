@@ -33,7 +33,7 @@ The authoritative writer path, in `.local/extraction/`:
 | Step | File | What |
 |---|---|---|
 | decoded probe | `remux_bucket_audio.py::probe(bytes)` | walks every MPEG-1 L3 frame → `real_dur_s = frames·1152/sr`, declared kbps, Xing tag, drift% |
-| source probe | `.local/audio-scripts/probe_audio_meta.py::classify(url)` | range-fetch 256 KB → bitrate/mode (mutagen header + frame scan); `walk_all_frames` for headerless duration |
+| source probe | `.local/audio-scripts/probe_audio_meta.py::classify(url)` | full-download → cbr/vbr via **whole-file linear-seek error** (`max_linear_seek_error_ms`, mirrors `qua_shared/mp3_frames.py`); duration/kbps off the frame grid. (Was: 256 KB head + mutagen header — both mislabelled; see §CBR/VBR detection.) |
 | reprobe persisted | `ingest_intake.py::reprobe_{persisted,bucket}_audio` | re-probe the *extracted* mp3s → per-chapter `{duration_sec, bitrate_kbps, bitrate_mode, sample_rate}` shaped for the manifest builder |
 | manifest assembly | `intake/manifest_builder.py::build_audio_manifest` | writes the per-chapter sidecar fields |
 | delivery rollup | `ingest_intake.py::_rollup_bitrate_mode` / `_sum_duration_sec` | folds per-chapter probes into the row rollup |
@@ -77,6 +77,39 @@ Failure modes:
   walk frames. The backfill flags these `needs_full` unless `--allow-full` is set.
 - **`mixed` bitrate_mode**: chapters disagree → row `bitrate_kbps_nominal` MUST be null (model
   validator enforces). Per-chapter sidecar is the truth.
+
+## CBR/VBR detection (the routing-correctness core)
+
+The `bitrate_mode` verdict decides playback transport: a `cbr` chapter is seeked
+natively by the browser (`<audio>.currentTime`); anything else routes through the
+server-side clip endpoint. So the verdict must answer exactly one question —
+**can the browser seek this file natively and land accurately?** — and the only
+reliable measure of that is the **whole-file linear byte→time seek error**:
+walk every audio frame, and for each compute how far a linear `time→byte` map
+lands from the frame's true time; the max over all frames is the error. `≤ 200 ms`
+⇒ `cbr`, else `vbr`. Canonical impl: `qua_shared/mp3_frames.py::classify_bitrate_mode`
+(+ `max_linear_seek_error_ms`); `probe_audio_meta.py` mirrors it inline (it runs
+where `qua_shared` may be unimportable). The extraction-side bitrate audit and
+the pipeline's `_force_info_if_cbr` use the same metric.
+
+Two shortcuts were tried and **both produced systematic mislabels** — do not
+reintroduce them:
+- **mutagen header `bitrate_mode`** (Xing/Info/VBRI/LAME): reports the file's
+  self-declared marker. Our own extraction stamps `Xing` on CBR audio, so this
+  calls genuinely-CBR files VBR; and it says nothing about whether the seek is
+  actually linear.
+- **head-only / `len(set(bitrates))==1`**: misses VBR whose bitrate variation
+  starts past the scanned head (whole tvquran/archive reciters read as CBR and
+  stalled on seek), and a single stray odd-bitrate frame flips otherwise-CBR
+  audio to a false `vbr`. The TOC's own quantization also swamps any
+  Xing-TOC-linearity check.
+
+Because the metric needs every frame, source probing downloads the **full file**
+(`probe_audio_meta.classify`, `_mp3probe.probe_source(allow_full=True)`);
+`allow_full=False` returns a head duration estimate with `bitrate_mode` left
+unset (`needs_full`). A one-shot catalog correction (manifest labels + delivery
+rollup + bucket `Xing→Info` tag reconcile) runs from the extraction bitrate
+audit; this detection fix stops intake from regenerating the mislabels.
 
 ## Probing pitfalls (hit these when adding a source/channel)
 
@@ -128,7 +161,7 @@ dry-run:
 |---|---|
 | `diagnostics/audio_metadata_sweep.py` | scan all manifests for null metadata; `--peaks` flags **duration drift** (manifest vs decoded peaks → phantom tails) |
 | `diagnostics/audio_url_audit.py` | classify every source url **ok / fixable (canonical) / dead**; per-reciter valid-after-fix; cross-channel duplicate/keep-remove signal |
-| `backfills/_mp3probe.py` | pure-python multi-version mp3 source prober (decoded duration via xing/cbr-size/full-walk, ID3v2 skip, archive canonicalization) |
+| `backfills/_mp3probe.py` | pure-python multi-version mp3 source prober: cbr/vbr via whole-file linear-seek metric (`qua_shared/mp3_frames`), decoded duration off the frame grid, ID3v2 skip, archive canonicalization. `allow_full=True` downloads the file; `allow_full=False` → head duration only, mode `needs_full` |
 | `backfills/backfill_audio_manifest_meta.py` | fill null meta from bucket-decode / peaks / source-probe; `--fix-drift` corrects phantom tails from peaks; `--rewrite-urls` repairs stale archive urls; `--remove-dead <audit.json>` drops dead chapters; emits delivery-row rollup `UPDATE`s via `--sql-out` |
 
 ### Runbook — onboard a new source/channel, or re-audit the catalog

@@ -71,22 +71,24 @@ from qua_shared.timestamps_pipeline import (
     is_compound_cross_verse as _is_compound_cross_verse,
 )
 
-# Reuse the inspector's pure parsing helpers — same code path so the offline
-# pre-compute and the (now sidecar-only) runtime fallback agree byte-for-byte
-# on sections/refs shape.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _INSPECTOR_DIR = _REPO_ROOT / "inspector"
-if str(_INSPECTOR_DIR) not in sys.path:
-    sys.path.insert(0, str(_INSPECTOR_DIR))
 
-# The order matters: `utils.references` is imported before `services.*` so
-# inspector's runtime-only deps (Flask, audio_source, etc.) don't leak in.
-from utils.references import chapter_from_ref, cross_verse_sections  # noqa: E402
-from utils.repetitions import (  # noqa: E402
-    compute_reading_sequence,
-    count_words_in_section,
-    section_refs_canonical,
-)
+
+def _ensure_inspector_helpers() -> None:
+    """Put ``inspector/`` on ``sys.path`` so the pure parsing helpers under
+    ``utils.*`` resolve.
+
+    Done lazily (inside the functions that use them), NOT at module import:
+    ``qua_shared`` ships in the qua_jobs image WITHOUT the ``inspector/`` tree,
+    and jobs that only need a pure helper here (cut_release imports
+    ``word_counts_from_surah_info``) must be able to import this module there.
+    ``run_precompute`` — the only caller of the ``utils.*`` helpers — runs solely
+    in the extraction context, where ``inspector/`` is present.
+    """
+    if str(_INSPECTOR_DIR) not in sys.path:
+        sys.path.insert(0, str(_INSPECTOR_DIR))
+
 
 log = logging.getLogger(__name__)
 
@@ -232,6 +234,14 @@ def _build_seg_candidate(
     Decision tree matches ``compute_auto_split`` in inspector exactly:
     wrap → repetition; else compound multi-verse → cross-verse.
     """
+    _ensure_inspector_helpers()
+    from utils.references import cross_verse_sections
+    from utils.repetitions import (
+        compute_reading_sequence,
+        count_words_in_section,
+        section_refs_canonical,
+    )
+
     matched_ref = seg.get("matched_ref", "")
     if not matched_ref:
         return None
@@ -348,6 +358,9 @@ def run_precompute(
     seg_queue: queue.Queue[_QueueItem | None] = queue.Queue(maxsize=batch_size * 2)
     by_uid: dict[str, dict] = {}
     candidate_count = 0
+
+    _ensure_inspector_helpers()
+    from utils.references import chapter_from_ref
 
     def _process_chapter(entry: dict) -> int:
         ref = entry.get("ref", "")

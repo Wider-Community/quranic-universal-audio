@@ -5,17 +5,14 @@ existing release jobs on their own — surfaced as the **Automation** card atop 
 admin Releases tab. The engine is a single opt-in reconciler daemon; it reacts to
 *state*, not events, so it is idempotent + restart-safe.
 
-> Every job an automation launches now writes a uniform `JobRecord` (launch +
-> terminal) to the shared store, browsable in the admin **Jobs** tab — see the
-> Jobs compartment in [admin-dashboard.md](admin-dashboard.md).
-
-## The five automations
+## The six automations
 
 | id | What it does | Trigger | Owner settings |
 |---|---|---|---|
 | `auto_gen_ts` | Launch the timestamps job for a marked-ready recitation that clears the gates | A `ready_to_generate` row (marked-ready, no TS) | gate-by-comments, gate-by-flags, beam, probe |
 | `stale_ts_regen` | Regenerate timestamps once segment edits settle | A `behind_edits` row past the guard | guard-minutes, scope (full \| affected), beam, probe |
 | `stale_metadata` | Refresh the HF catalog once a metadata edit settles | An HF row stale for `catalog_edit` past the guard | guard-minutes |
+| `auto_release_inactive` | Force-release a reviewer's claim after prolonged inactivity (back to the awaiting-review pool; reviewer notified) | An open, not-yet-marked-ready under-review claim whose reviewer has been idle ≥ N days | inactive-days |
 | `hf_publish` | Batch-publish every fresh + stale HF candidate | Scheduled: every N days at HH:MM (owner tz) | interval-days, time-of-day, timezone |
 | `gh_cut` | Cut a global GH release when there are changes | Scheduled: every N days at HH:MM (owner tz) | interval-days, time-of-day, timezone, next-version override |
 
@@ -24,6 +21,8 @@ All default **disabled**. The engine reuses the manual job entrypoints verbatim
 `refresh_catalog.launch`) — automation is a *decider*, not new job code. Automated
 launches therefore record into the same uniform `JobRecord` store as manual ones,
 so every automated run is visible in the admin **Jobs** tab ([admin-dashboard.md](admin-dashboard.md) § Jobs compartment).
+`refresh_catalog.launch`) — and the manual `claim.force_released` transition for
+`auto_release_inactive`. Automation is a *decider*, not new job code.
 
 ## Engine
 
@@ -91,6 +90,15 @@ owner-only under `ReleasesSummaryCard`); API in `lib/api/admin-releases.ts`.
 - **Debounce.** Stale-TS/metadata fire only once the latest invalidating edit is
   older than `guard_minutes` (via `ts_stale_info.last_edit_at`), so consecutive
   edits coalesce into one regen and we never regenerate mid-edit.
+- **First fire bootstraps from the clock, not from `last_run_at`.** A scheduled
+  automation (`gh_cut` / `hf_publish`) has no `last_run_at` until it fires, and
+  firing is what writes it — so `is_due` must not gate the first run on a stored
+  anchor. When `last_run_at` is null it fires once the local clock reaches *today's*
+  `HH:MM` (enabled before the window → fires at it; enabled after → catches up on
+  the next tick), which seeds `last_run_at` and hands every later fire to the
+  interval branch. `next_fire_at` still reports the strictly-future *upcoming*
+  occurrence (for the FE's "next run"); `is_due` deliberately does **not** delegate
+  to it for the null case, or the schedule could never bootstrap.
 - **Empty windows.** GH cut skips when the preview shows no adds/refreshes; batch
   publish skips when there are no candidates (both advance the cadence so they
   don't re-check every tick).
@@ -98,6 +106,15 @@ owner-only under `ReleasesSummaryCard`); API in `lib/api/admin-releases.ts`.
   cuts need `INSPECTOR_PUBLIC_BASE_URL` set (the daemon has no `request.url_root`).
 - **Actor.** Automated launches/transitions carry the `SYSTEM_AUTOMATION` actor so
   the audit rail reads "automation" and the actor-on-every-edit invariant holds.
+- **Inactivity = last review activity, not just claim age.** `auto_release_inactive`
+  measures idleness as the *later* of the claim time and the reviewer's most recent
+  segment edit (`saved_at_utc` from the slug's edit history) — so a reviewer who's
+  actively editing isn't released even if they claimed long ago. When that signal
+  can't be read it fails safe (keeps the claim). It only ever touches open,
+  not-yet-marked-ready under-review claims (a marked-ready claim is complete and
+  awaiting the pipeline, not idle), and routes through the same
+  `claim.force_released` transition as the manual path, so the reviewer gets the
+  identical "your review was released" notification.
 
 ## Env
 

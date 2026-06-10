@@ -311,6 +311,7 @@ class ChapterEntry(BaseModel):
     duration_sec: int | None = Field(default=None, ge=0)
     bitrate_kbps: int | None = Field(default=None, ge=0)
     bitrate_mode: ChapterBitrateMode | None = None
+    max_linear_seek_err_ms: int | None = Field(default=None, ge=0)
 
 
 class AudioManifestSidecar(BaseModel):
