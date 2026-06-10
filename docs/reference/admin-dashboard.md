@@ -1,6 +1,6 @@
 # Admin dashboard
 
-Owner/maintainer control surface launched from the Dashboard activity rail. A wide modal with a top tab strip; **Users**, **Requests**, **Reviews**, **Releases**, and **Permissions** ship. The modal reopens to the **last active tab** (localStorage `insp_admin_active_tab`, validated against the live tab set; `openModal()` defaults to it). The **Permissions** tab is **owner-only** — it's filtered out of the tab strip for non-owners (`tabs = ALL_TABS.filter(t => !t.ownerOnly || $isOwner)` in `AdminDashboardModal.svelte`), and an active-tab guard snaps back to Users on a live owner→maintainer demotion.
+Owner/maintainer control surface launched from the Dashboard activity rail. A wide modal with a top tab strip; **Users**, **Requests**, **Reviews**, **Releases**, **Jobs**, and **Permissions** ship. The modal reopens to the **last active tab** (localStorage `insp_admin_active_tab`, validated against the live tab set; `openModal()` defaults to it). The **Permissions** tab is **owner-only** — it's filtered out of the tab strip for non-owners (`tabs = ALL_TABS.filter(t => !t.ownerOnly || $isOwner)` in `AdminDashboardModal.svelte`), and an active-tab guard snaps back to Users on a live owner→maintainer demotion.
 
 ## Permissions compartment (owner-only)
 
@@ -17,7 +17,7 @@ The entry button (`AdminDashboardButton`) shows a single quiet **dot** (no numbe
 | File | Role |
 |---|---|
 | `AdminDashboardButton.svelte` | Entry button above the activity rail; rendered only when `$isAdmin`. Opens the modal via the store. Runs the requests unviewed-count poller — quiet dot when > 0. |
-| `AdminDashboardModal.svelte` | `Modal size="wide"` + tab strip (`adminDashboard.activeTab`, persisted to localStorage). Renders `UsersCompartment` / `RequestsCompartment` / `reviews/ReviewsCompartment` / `releases/ReleasesCompartment` / `PermissionsCompartment`; the Requests tab carries the `am-tab-count` pill. |
+| `AdminDashboardModal.svelte` | `Modal size="wide"` + tab strip (`adminDashboard.activeTab`, persisted to localStorage). Renders `UsersCompartment` / `RequestsCompartment` / `reviews/ReviewsCompartment` / `releases/ReleasesCompartment` / `jobs/JobsCompartment` / `PermissionsCompartment`; the Requests tab carries the `am-tab-count` pill. |
 | `RequestsCompartment.svelte` | Status facets (open / accepted / sent back / discarded + counts) over a review queue. Clicking a pending row expands an inline review (proposed-changes diff over `ProposedEdits` fields, requester note, conflict notice). Expanding a pending request marks it viewed (clears the unviewed dot/pill, decrements the badge). **Owner-only** inline reason + Send back / Discard; maintainers are read-only. Archived rows show a read-only resolution footer. Lazy-fetched on first activation + light `visiblePoll` while open. |
 | `reviews/ReviewsCompartment.svelte` | Slimmed read-only oversight surface — two collapsible buckets (**Under review** [claimed, not yet marked ready] / **Available for review**) split FE-side from one `/api/admin/reviews/list` fetch. Available collapsed by default (localStorage-persisted). Filter bar (Arabic + Latin search · riwayah/style/channel facets · `stalled`/`name` sort). Marked-ready / published / staleness moved to the Releases tab. |
 | `reviews/ReviewsRow.svelte` | One recitation row — Latin primary + Arabic muted trailing + reviewer chip; age (stale ⚠ when a claim is > 7d old) + a `Segments` deep-link (`selectedReciter` + `setActiveTab('segments')` + `adminDashboard.close()`). Row body click opens the General drawer. No Generate-TS / unread dot (retired with the restructure). |
@@ -44,6 +44,25 @@ The entry button (`AdminDashboardButton`) shows a single quiet **dot** (no numbe
 | `CutReleaseModal.svelte` · `ReleasesActionBar.svelte` | Cut dry-run document; sticky batch-publish bar. |
 
 Full release model: [dataset-and-releases.md](dataset-and-releases.md). TS gen/regen subsystem: [timestamps-job.md](timestamps-job.md).
+
+### Jobs compartment (FE)
+
+`tabs/dashboard/components/admin/jobs/` — the **one** place to see every job kind (`timestamps` · `hf_publish` · `hf_publish_batch` · `cut_release` · `refresh_catalog`), running **and** historical, across all reciters. Replaces the scatter where TS history hid in a per-reciter Past-jobs expand and release/cut/publish jobs only flashed in the Releases in-flight strip.
+
+| File | Role |
+|---|---|
+| `JobsCompartment.svelte` | `visiblePoll` (~10 s) over `GET /api/admin/jobs`; filter chips (kind / status / reciter+id search); running pinned on top; row click opens the drawer. Gated `reviews.view`. |
+| `JobDetailDrawer.svelte` | `GET /api/admin/jobs/detail` → summary + per-kind extras (TS settings + log tail; batch/cut `members` table; `version`/`external_uri`); **Open on HF ↗** (the job page `url`) + **Cancel** when running (reuses `cancelReleaseJob`). |
+
+API client `lib/api/admin-jobs.ts` (`fetchJobs`, `fetchJobDetail`; re-exports `cancelReleaseJob`).
+
+### Shared job-record store (backend) — the single source the Jobs tab reads
+
+`services/admin/jobs/records.py` is the **one writer/reader** of job records. Every kind's server-side `launch()` writes a `running` `JobRecord`; every `complete()` and every failure path (webhook non-success branches, the generic cancel route, the TS backstop) writes the terminal outcome via read-merge-write (launch fields survive). Paths reuse `base.job_record_path` — `reciters/<slug>/jobs/<kind>/<id>.json` per-slug, `jobs/_global/<kind>/<id>.json` global. The DB stays source-of-truth for *releases*; these records are the uniform observability trail (the `JobRecord` schema is a superset of the legacy `TsJobRecord`, which the TS HF-Job container still self-writes unchanged).
+
+`services/admin/jobs/registry.py` aggregates: `records.list_all()` ∪ live `base.list_in_flight_jobs(ALL_KINDS)`, deduped by `job_id` (live `running` wins), newest-first, TTL-cached (`cache.{get,set,invalidate}_all_jobs_cache`). `job_detail()` enriches a running TS job with its live log tail. Endpoints (gate `reviews.view`): `GET /api/admin/jobs`, `GET /api/admin/jobs/detail?kind=&job_id=&slug=`. Cancel reuses `POST /api/admin/release-jobs/<job_id>/cancel`.
+
+Pre-store history (cut/hf_publish that predate the store) is one-shot synthesized into records by `scripts/backfills/backfill_job_records.py` (from `gh_releases` + `per_recitation_releases(track='hf')`), so the tab reads complete history from one store.
 
 State:
 - `tabs/dashboard/stores/admin-dashboard.svelte.ts` (`adminDashboard`: `open`, `activeTab` [localStorage-persisted], `unviewedRequests`, `openModal/close/setTab/setUnviewedRequests`).
@@ -117,6 +136,22 @@ Reviewer-management mutations reuse existing per-slug routes:
 - Publish / unpublish / unlock-for-revision are listed but **disabled** (see `docs/planning/reviews-tab-deferred.md`).
 
 The owner-only tightening on force-release + reassign was a deliberate split: **owners manage who reviews; maintainers gate what ships**. Maintainers retain Send-back-to-UR but cannot eject or transfer claims.
+
+### Jobs compartment (unified job view)
+
+The **Jobs** tab is one place for every HF-Job kind — `timestamps`, `hf_publish`, `hf_publish_batch`, `cut_release`, `refresh_catalog` — running *and* historical, across all reciters. Clicking any row opens an in-app drawer (record + settings/logs, batch/cut members, "Open on HF", Cancel-if-running).
+
+**Shared job-record store** (`services/admin/jobs/records.py`) — the single source the tab reads. Every kind's **server-side** `launch()` writes a `running` `JobRecord` and every terminal point (`complete()`, the webhook non-success branches, the cancel route) writes the `succeeded`/`failed` outcome via `record_terminal` (read-merge-write, so launch fields survive). The DB stays the source-of-truth for *releases*; these records are the uniform observability trail. Paths reuse `base.job_record_path` — `reciters/<slug>/jobs/<kind>/` (per-slug) and `jobs/_global/<kind>/` (global). `JobRecord` (`qua_shared/schemas/jobs.py`) is a superset of the legacy `TsJobRecord` the timestamps HF-Job container still self-writes, so old TS records parse uniformly (`records.read` injects `kind` from the path + normalizes status).
+
+**Aggregator** (`services/admin/jobs/registry.py`) — `list_all_jobs()` unions `records.list_all()` with the live HF list (`base.list_in_flight_jobs`), dedups by `job_id` (live `running` wins), sorts newest-first, TTL-cached (`cache.{get,set,invalidate}_all_jobs_cache`, invalidated at every launch/complete/cancel). `job_detail()` enriches a running TS job with its live log tail.
+
+| Endpoint | What |
+|---|---|
+| `GET /api/admin/jobs` | `JobsListResponse` — unified list + `running_count` (`reviews.view`). |
+| `GET /api/admin/jobs/detail?kind=&job_id=&slug=` | One job's full `JobRecord` for the drawer (`reviews.view`). 404 if absent. |
+| `POST /api/admin/release-jobs/<job_id>/cancel` | Cancel — reused (kind-generic, per-kind cap gates). |
+
+> History caveat: `hf_publish` rows that predate the store, plus `cut_release`, are synthesized from the DB by the one-shot `scripts/backfills/backfill_job_records.py` (idempotent); going forward every kind records natively, including failures.
 
 ### Role change (`services/admin/users.py::set_role`)
 

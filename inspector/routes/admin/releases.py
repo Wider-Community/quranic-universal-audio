@@ -251,7 +251,7 @@ def cancel_release_job(user, job_id):
     ``{job_id, canceled}``; 404 if the job isn't found, 502 on HF error."""
     from huggingface_hub import cancel_job as hf_cancel_job
 
-    kind = jobs_base.kind_for_job(job_id)
+    kind, slug = jobs_base.kind_and_slug_for_job(job_id)
     if kind is None:
         return jsonify({"error": "job not found"}), 404
     cap = _CANCEL_CAPS.get(kind)
@@ -264,9 +264,15 @@ def cancel_release_job(user, job_id):
     except Exception as exc:
         log.warning("cancel release job %s (%s) failed: %s", job_id, kind, exc)
         return jsonify({"error": str(exc)}), 502
+    # Stamp the job record terminal so the Jobs tab reflects the cancel (the
+    # poll worker only completes successes; a canceled job has no other path).
+    from services.admin.jobs import records as _records
+
+    _records.record_terminal(kind, slug, job_id, status="failed", error="canceled")
     from services.storage import cache as _cache
 
     _cache.invalidate_in_flight_jobs_cache()
+    _cache.invalidate_all_jobs_cache()
     return jsonify({"job_id": job_id, "canceled": True})
 
 
@@ -548,6 +554,12 @@ def releases_status(user):
             # Audio/peaks readiness is a non-blocking warn — compute only for
             # rows the FE will actually render (TTL-cached, never gates).
             row["readiness"] = release_readiness.reciter_bucket_readiness(slug)
+            # Flagged-segment count — ONLY for Ready-to-generate rows (marked
+            # ready, no TS yet), so the admin sees outstanding flags before
+            # generating. Same best-effort read as the reviews-detail builder;
+            # every other bucket leaves it None (no extra bucket I/O).
+            if marked_ready and ts is None:
+                row["flagged_issues_count"] = _flagged_count(slug)
             out.append(row)
     payload = AdminReleasesStatusResponse.model_validate(
         {
@@ -690,3 +702,18 @@ def _slim_release_row(row: dict | None, *, fields: tuple[str, ...]) -> dict | No
     if row is None:
         return None
     return {k: row.get(k) for k in fields if k in row}
+
+
+def _flagged_count(slug: str) -> int:
+    """Count of flagged segments in ``slug``'s detailed.json (best-effort → 0).
+
+    Mirrors the reviews-detail builder (``services/admin/reviews.py``) — one
+    cached ``load_detailed`` read; a bucket failure must never break the grid."""
+    from services.segments.flags import count_flagged
+    from services.storage.data_loader import load_detailed
+
+    try:
+        return count_flagged(load_detailed(slug) or [])
+    except Exception:  # noqa: BLE001 — count is non-critical metadata
+        log.warning("[%s] flagged-issue count read failed; defaulting to 0", slug, exc_info=True)
+        return 0

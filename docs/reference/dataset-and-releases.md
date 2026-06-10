@@ -9,7 +9,8 @@ Audio (peaks, proxy, VBR/Xing) lives in the `inspector-audio` skill. Catalog mod
 [timestamps-job.md](timestamps-job.md). DB substrate + migrations:
 [database.md](database.md), [data-migrations.md](data-migrations.md). Firing these
 release actions (cut / publish / regen) on a schedule or rule instead of by hand:
-[automation.md](automation.md).
+[automation.md](automation.md). Watching those jobs (cut / publish / batch / regen),
+running + historical, in one place: the **Jobs** tab — [admin-dashboard.md](admin-dashboard.md).
 
 > **As-built note.** Releases ship as **one global GitHub release per version** containing every
 > currently-eligible reciter as a `<slug>.zip` asset — NOT a per-reciter release tag. The release
@@ -245,7 +246,9 @@ come from the `riwayahs` / `styles` / `channels` vocab tables — `catalog.json`
 | `POST /api/admin/publish-hf/<slug>` | Launch per-reciter HF dataset publish (single). `release.publish_hf`. |
 | `POST /api/admin/publish-hf-batch` | Launch ONE job publishing a batch of slugs. Body `{slugs: [...]}`. `release.publish_hf`. |
 | `POST /api/admin/refresh-hf-catalog` | Launch the global catalog-only refresh (`mushafs` config + card, no audio re-slice). Reuses `release.publish_hf`. Single-flight against publish / batch / refresh. The cheap remediation for `catalog_edit` HF drift; clears those stamps on completion. |
-| `POST /api/admin/release-jobs/<job_id>/cancel` | Cancel any in-flight release job (publish / batch / cut / timestamps). Outer gate `reviews.view`; the cancel itself is re-gated per kind. |
+| `POST /api/admin/release-jobs/<job_id>/cancel` | Cancel any in-flight release job (publish / batch / cut / timestamps). Outer gate `reviews.view`; the cancel itself is re-gated per kind. Also stamps the job record terminal. |
+
+Every kind now writes a uniform `JobRecord` to a single bucket store at launch + every terminal point (`services/admin/jobs/records.py`); the admin **Jobs** tab reads that one store (+ live HF jobs) for a unified running/historical view across all kinds. See [admin-dashboard.md](admin-dashboard.md) § Jobs compartment.
 
 ### Batch publish (the `hf_publish_batch` kind)
 

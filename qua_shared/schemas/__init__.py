@@ -90,6 +90,7 @@ from .intake_requests import (
     ProbeResult,
     SourceLink,
 )
+from .jobs import JobKind, JobMember, JobRecord, JobsListResponse, JobStatus
 from .mark_ready import (
     BLOCKING_COUNT_KEYS,
     ChecklistKey,
@@ -243,6 +244,11 @@ __all__ = [
     "IntakeSource",
     "IntakeSubmission",
     "IntakeValidation",
+    "JobKind",
+    "JobMember",
+    "JobRecord",
+    "JobStatus",
+    "JobsListResponse",
     "MarkReadyChecklist",
     "MarkReadyRequest",
     "MarkReadySubmission",

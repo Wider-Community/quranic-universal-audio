@@ -74,6 +74,7 @@ from .intake_requests import (
     ProbeResult,
     SourceLink,
 )
+from .jobs import JobMember, JobRecord, JobsListResponse
 from .mark_ready import (
     MarkReadyChecklist,
     MarkReadyRequest,
@@ -173,6 +174,9 @@ __all__ = [
     "IntakeSource",
     "IntakeSubmission",
     "IntakeValidation",
+    "JobMember",
+    "JobRecord",
+    "JobsListResponse",
     "MarkReadyChecklist",
     "MarkReadyRequest",
     "MarkReadySubmission",

@@ -25,7 +25,7 @@ from services.db.sync import durable_transaction
 from services.state import audit
 from services.storage.hf_bucket import resolve_bucket_repo
 
-from . import base
+from . import base, records
 
 log = logging.getLogger("inspector")
 
@@ -95,6 +95,7 @@ def launch(*, webhook_base: str | None = None) -> dict:
     )
     job_id = base.hf_job_id(job) or ""
     url = getattr(job, "url", None)
+    records.record_launch(KIND, None, job_id, url=url)
     log.info("launched refresh_catalog job %s", job_id)
     from services.storage import cache as _cache
 
@@ -121,6 +122,7 @@ def complete(slug: str | None, job_id: str) -> dict:
                 payload={"cleared_stale_hf": cleared, "job_id": job_id},
                 reason="refresh_catalog",
             )
+    records.record_terminal(KIND, None, job_id, status="succeeded")
     log.info("refresh_catalog.complete(%s): cleared %d catalog-stale hf rows", job_id, cleared)
     from services.storage import cache as _cache
 

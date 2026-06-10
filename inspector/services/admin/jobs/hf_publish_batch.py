@@ -22,7 +22,7 @@ import json
 import logging
 import os
 
-from . import base, hf_publish
+from . import base, hf_publish, records
 
 log = logging.getLogger("inspector")
 
@@ -100,6 +100,7 @@ def launch(slugs: list[str], *, webhook_base: str | None = None) -> dict:
     )
     job_id = base.hf_job_id(job) or ""
     url = getattr(job, "url", None)
+    records.record_launch(KIND, None, job_id, url=url)
     log.info("launched hf_publish_batch job %s for %d slugs", job_id, len(slugs))
     from services.storage import cache as _cache
 
@@ -161,6 +162,25 @@ def complete(
                 failed += 1
         else:
             failed += 1
+    slim_members = [
+        {
+            "slug": (m.get("slug") or "").strip() or None,
+            "status": "succeeded" if m.get("status") == "succeeded" else "failed",
+            "version": m.get("version") or None,
+            "external_uri": m.get("external_uri") or None,
+            "error": m.get("error") or None,
+        }
+        for m in members
+        if (m.get("slug") or "").strip()
+    ]
+    records.record_terminal(
+        KIND,
+        None,
+        job_id,
+        status="succeeded",
+        members=slim_members,
+        launched_by=launched_by,
+    )
     log.info("hf_publish_batch.complete(%s): %d published, %d failed", job_id, published, failed)
     from services.storage import cache as _cache
 

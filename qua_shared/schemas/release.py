@@ -345,6 +345,10 @@ class AdminReleaseStatusRow(BaseModel):
     gh: AdminGhReleaseMember | None
     publish_error: AdminPublishError | None = None
     readiness: AdminReciterReadiness | None = None
+    #: Count of segments carrying a flag (from detailed.json) — computed ONLY for
+    #: Ready-to-generate rows so the admin sees outstanding flags before
+    #: generating. None on every other bucket (no extra bucket read).
+    flagged_issues_count: int | None = None
 
 
 class AdminLatestGhRelease(BaseModel):

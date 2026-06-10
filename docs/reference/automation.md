@@ -18,6 +18,9 @@ admin Releases tab. The engine is a single opt-in reconciler daemon; it reacts t
 
 All default **disabled**. The engine reuses the manual job entrypoints verbatim
 (`timestamps_jobs.launch`, `cut_release.launch`, `hf_publish_batch.launch`,
+`refresh_catalog.launch`) — automation is a *decider*, not new job code. Automated
+launches therefore record into the same uniform `JobRecord` store as manual ones,
+so every automated run is visible in the admin **Jobs** tab ([admin-dashboard.md](admin-dashboard.md) § Jobs compartment).
 `refresh_catalog.launch`) — and the manual `claim.force_released` transition for
 `auto_release_inactive`. Automation is a *decider*, not new job code.
 

@@ -911,6 +911,45 @@ def invalidate_in_flight_jobs_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Unified all-jobs aggregation (admin Jobs tab) — TTL cache.
+#
+# ``jobs.registry.list_all_jobs()`` walks the bucket job-record store (every
+# kind, every reciter) + merges live HF jobs. That's many small reads, and the
+# Jobs tab polls ~every 10 s, so a short wall-clock TTL absorbs the poll + page
+# re-renders. Invalidated alongside the in-flight cache at every launch /
+# complete / cancel so a freshly recorded job shows up immediately.
+# ---------------------------------------------------------------------------
+
+_all_jobs_lock = _threading.Lock()
+_all_jobs: "tuple[float, list[dict]] | None" = None
+_ALL_JOBS_TTL_S = 8.0
+
+
+def get_all_jobs_cache() -> list[dict] | None:
+    """Return the cached unified job list iff stamped < TTL ago."""
+    with _all_jobs_lock:
+        if _all_jobs is None:
+            return None
+        stamped_at, value = _all_jobs
+        if _time.time() - stamped_at > _ALL_JOBS_TTL_S:
+            return None
+        return value
+
+
+def set_all_jobs_cache(value: list[dict]) -> None:
+    global _all_jobs
+    with _all_jobs_lock:
+        _all_jobs = (_time.time(), value)
+
+
+def invalidate_all_jobs_cache() -> None:
+    """Drop the cached unified job list (launch / complete / cancel sites)."""
+    global _all_jobs
+    with _all_jobs_lock:
+        _all_jobs = None
+
+
+# ---------------------------------------------------------------------------
 # Per-reciter bucket readiness (audio/ + peaks/ presence) — TTL cache.
 #
 # Audio + peaks land OFFLINE (katana extraction), with no DB write, so this

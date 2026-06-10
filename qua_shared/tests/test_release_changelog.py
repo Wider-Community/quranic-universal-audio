@@ -44,7 +44,11 @@ def test_first_release_added_only():
         repo="quranic-universal-audio",
         hf_dataset="hetchyy/quranic-universal-ayahs",
     )
-    assert md.startswith("# 2026-06-03\n\n## What to download")
+    # Title first, then the asset section. Tolerant of the template's optional
+    # standing intro paragraph between them (present on some release bodies) —
+    # assert the invariants, not an exact byte prefix.
+    assert md.startswith("# 2026-06-03\n")
+    assert "## What to download" in md
     assert "This release publishes" not in md
     assert (
         "| `catalog.json` | Release-level catalog: reciter names, riwayah, style, coverage, "
