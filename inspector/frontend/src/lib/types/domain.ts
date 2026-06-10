@@ -1,13 +1,28 @@
 /**
  * Core domain types shared across tabs.
  *
- * These mirror the shapes constructed by `inspector/services/**` and
- * returned via `inspector/routes/**`. Keep them in sync with the Python
- * side — every mismatch is an API-drift bug-log row.
+ * Data-contract shapes here are RE-EXPORT SHIMS over the codegen'd wire types
+ * in `./generated/schemas` (the source of truth — never hand-edit those).
+ * Each `export ... as` aliases an old hand-mirror name to its generated
+ * equivalent so existing `from './domain'` imports keep resolving. Genuinely
+ * FE-only types (UI/view-model, the peaks Int8Array transport branch, the
+ * client-side timestamps verse model, ref-string aliases) stay real
+ * definitions below.
  */
+
+import type {
+    Actor as GenActor,
+    ErrorEnvelope as GenErrorEnvelope,
+    FlagAuthor as GenFlagAuthor,
+    FlagComment as GenFlagComment,
+    SegmentFlagView as GenSegmentFlagView,
+    SegmentsChapterSummary as GenSegmentsChapterSummary,
+    SegReciter as GenSegReciter,
+} from './generated/schemas';
 
 // ---------------------------------------------------------------------------
 // Reference strings: "surah:ayah[:word]" or compound "S:A:W-S:A:W"
+// FE-only aliases — the wire carries these as bare `string`.
 // ---------------------------------------------------------------------------
 
 /** Word reference "surah:ayah:word" or word-range "S:A:W-S:A:W". */
@@ -17,97 +32,74 @@ export type Ref = string;
 export type VerseRef = string;
 
 // ---------------------------------------------------------------------------
-// Segments
+// Segments — re-export shims over generated wire types
 // ---------------------------------------------------------------------------
 
-/** Author of a flag comment, as served by /api/seg/all. The role is always
- *  present; ``login``/``id`` only when the viewer holds
- *  ``segments.see_flagger_identity`` (otherwise identity is redacted to the
- *  role). ``mine`` lets the flagger find their own comment without identities
- *  leaking. */
-export interface FlagAuthor {
-    role: string | null;
-    login?: string | null;
-    id?: string | null;
-}
+/** Author of a flag comment, as served by /api/seg/all. */
+export type FlagAuthor = GenFlagAuthor;
 
 /** One comment in a flag thread (root or follow-up), FE-facing shape. */
-export interface FlagComment {
-    comment: string;
-    at: string | null;
-    author: FlagAuthor;
-    mine: boolean;
-}
+export type FlagComment = GenFlagComment;
 
-/** A segment's flag thread: a root comment plus append-only follow-up replies.
- *  Redacted/`mine`-stamped server-side; never the canonical persisted shape. */
-export interface SegmentFlagView extends FlagComment {
-    follow_ups: FlagComment[];
-}
+/** A segment's flag thread: a root comment plus append-only follow-up replies. */
+export type SegmentFlagView = GenSegmentFlagView;
 
-/** A single segment row as returned by /api/seg/data (chapter-scoped). */
+/**
+ * The Segments-tab working segment — a FE-only view-model, not a wire row.
+ *
+ * The wire has TWO distinct shapes (`SegDataSegment` from `/data`, with a flat
+ * `audio_url`; `SegAllSegment` from `/all`, with `chapter`/`segment_uid`/
+ * `entry_ref`). The editor merges them into ONE mutable object and injects
+ * client-only working fields (`matched_text`, `silence_after_ms`, `_derived`,
+ * …) at load time, then mutates it in place through the edit pipeline. That
+ * merged object is genuinely FE-only — no single generated row models it — so
+ * it stays a real definition here, built as the superset of both wire rows
+ * plus the client-only fields. The strict generated rows remain the element
+ * types of `SegAllResponse.segments` / `SegDataResponse.segments`.
+ */
 export interface Segment {
+    // Wire fields common to both rows
     index: number;
     entry_idx: number;
     time_start: number; // milliseconds
     time_end: number; // milliseconds
     matched_ref: Ref;
-    matched_text: string;
     confidence: number; // 0..1
-    audio_url: string;
-    ignored_categories?: string[];
-    /** Back-compat legacy boolean from pre-categories ignore flag. Drift: absent from types/api.ts. */
-    ignored?: boolean;
-    wrap_word_ranges?: unknown; // opaque — used by repetition detection
-    /** Boundary annotation: this segment is wasl-connected to the next adjacent
-     *  segment (the reciter recited continuously across the boundary). Owned
-     *  by the left side of the connection. Omitted from save payloads when
-     *  false to keep on-disk JSON byte-clean. */
-    is_wasl?: boolean;
-    /** Chapter number; present on /api/seg/all responses, derived client-side on /data. */
+    ignored_categories?: string[] | null;
+    is_wasl?: boolean | null;
+    /** Opaque — used by repetition detection. */
+    wrap_word_ranges?: unknown;
+    // From SegDataSegment (`/data`) — injected onto `/all` rows by the editor
+    audio_url?: string;
+    // From SegAllSegment (`/all`)
     chapter?: number;
-    /** Stable UID assigned on first server load; present on /api/seg/all. */
     segment_uid?: string;
     entry_ref?: string;
     /** Manual "needs a second look" flag thread. Present (on /api/seg/all)
-     *  only when the segment is flagged. Redacted display shape — kept out of
-     *  edit-history snapshots; the persisted canonical flag is backend-owned. */
-    flag?: SegmentFlagView | null;
-    /**
-     * Client-computed: (next.time_start - this.time_end) + pad_left_ms + pad_right_ms
-     * for the next segment in the same entry. `null` when there is no
-     * downstream neighbour (end of chapter/entry); callers use `!= null` to gate.
-     */
+     *  only when the segment is flagged. */
+    flag?: GenSegmentFlagView | null;
+    // ---- Client-only working fields (no wire producer) ----
+    /** Reference text, populated client-side for display/edit. */
+    matched_text?: string;
+    /** Back-compat legacy boolean from pre-categories ignore flag. */
+    ignored?: boolean;
+    /** Client-computed silence gap to the next same-entry neighbour (ms);
+     *  `null` when there is no downstream neighbour. */
     silence_after_ms?: number | null;
     silence_after_raw_ms?: number | null;
     /** Client-only flag for filter "neighbour" highlighting. */
     _isNeighbour?: boolean;
-    /** Client-only cached derived reference info (parsed surah/ayah/word). Cleared on ref edit. */
+    /** Client-only cached derived reference info; cleared on ref edit. */
     _derived?: unknown;
 }
 
 /** Summary stats per-chapter, from /api/seg/data. */
-export interface SegmentsChapterSummary {
-    total_segments: number;
-    matched_segments: number;
-    failed_segments: number;
-    conf_min: number;
-    conf_median: number;
-    conf_mean: number;
-    conf_max: number;
-    below_60: number;
-    below_80: number;
-    total_speech_ms: number;
-    avg_segment_ms: number;
-    total_silence_ms: number;
-    avg_silence_ms: number;
-    issue_indices: number[];
-    missing_verses: VerseRef[];
-}
+export type SegmentsChapterSummary = GenSegmentsChapterSummary;
 
 /** Forward-change patch envelope produced by `applyCommand` and consumed by
- *  inverse-patch logic on both sides of the wire. Structural mirror of the
- *  Python `SegmentPatch` dataclass in `inspector/domain/command.py`. */
+ *  inverse-patch logic. FE working shape — `applyCommand` always builds every
+ *  field, so all are required here (the persisted `EditOpPatch` schema tolerates
+ *  partials). Structural mirror of the Python `SegmentPatch` dataclass. */
 export interface EditOpPatch {
     before: Array<Record<string, unknown>>;
     after: Array<Record<string, unknown>>;
@@ -116,7 +108,12 @@ export interface EditOpPatch {
     affectedChapterIds: number[];
 }
 
-/** Edit operation record (client builds via createOp; server echoes back in history). */
+/** Edit operation record — the FE working/derived op shape. Built client-side
+ *  by `applyCommand` and echoed back in the `/api/seg/edit-history` derived
+ *  presentation read (which has no Pydantic producer). The persisted on-disk op
+ *  is modelled separately by `EditOperation` in `qua_shared`; this is the FE's
+ *  view-model and carries the client-only `merge_direction` tag (set on merge
+ *  ops, stripped before persisting) plus a finalize-time forward `patch`. */
 export interface EditOp {
     op_id: string;
     op_type: string;
@@ -124,15 +121,16 @@ export interface EditOp {
     fix_kind: string | null;
     targets_before: Array<Record<string, unknown>>;
     targets_after: Array<Record<string, unknown>>;
-    /** Set on merge ops — `'prev'` or `'next'`. */
+    /** Set on merge ops — `'prev'` or `'next'`. Client-only. */
     merge_direction?: 'prev' | 'next';
-    /** Forward-change patch attached at finalize time. Used by the pending-discard
-     *  path (which inverts it client-side) and by the save payload (server records
-     *  it on the history entry for batch undo). */
+    /** Forward-change patch attached at finalize time; reversed on undo/discard. */
     patch?: EditOpPatch;
 }
 
-/** Edit history batch as returned by /api/seg/edit-history. */
+/** Edit history batch as returned by /api/seg/edit-history. FE-only read shape:
+ *  the route derives a presentation form (`save_mode`/`is_revert`/
+ *  `reverted_op_ids`, nullable `batch_id` for pending) that no Pydantic schema
+ *  models — the persisted batch is `EditHistoryBatch` in `qua_shared`. */
 export interface HistoryBatch {
     batch_id: string | null;
     batch_type: string | null;
@@ -144,6 +142,13 @@ export interface HistoryBatch {
     operations: EditOp[];
     reverted_op_ids?: string[];
 }
+
+/** Actor identity stamped on flags / edit batches. */
+export type Actor = GenActor;
+
+// ---------------------------------------------------------------------------
+// Edit-history rollups — FE-only (no generated producer modelled)
+// ---------------------------------------------------------------------------
 
 /** One TS-generation boundary in the edit-history timeline (ascending). The
  *  FE partitions edit batches into tiers split by these `produced_at` times.
@@ -166,7 +171,7 @@ export interface HistorySummary {
 }
 
 // ---------------------------------------------------------------------------
-// Peaks / Waveform
+// Peaks / Waveform — FE-only transport (Int8Array branch has no wire model)
 // ---------------------------------------------------------------------------
 
 /** A single peak bucket: [min, max] pair. Server rounds to 4 decimal places. */
@@ -202,6 +207,8 @@ export interface SegmentPeaks {
 // Reciters
 // ---------------------------------------------------------------------------
 
+/** Timestamps-tab reciter row. FE-only — derived client-side from the
+ *  manifest, no dedicated wire model. */
 export interface TsReciter {
     slug: string;
     name: string;
@@ -210,19 +217,12 @@ export interface TsReciter {
     has_data?: boolean;
 }
 
-export interface SegReciter {
-    slug: string;
-    name: string;
-    /** Channel — `mp3quran`, `qul`, `everyayah`, etc. NOT a by_surah/by_ayah
-     *  signal (that's `audio_category`). */
-    audio_source: string;
-    /** by_surah → one MP3 per chapter; by_ayah → one MP3 per verse. Drives
-     *  per-row playback routing (clip-vs-chapter URL, proxy wrap). */
-    audio_category: 'by_surah' | 'by_ayah';
-}
+/** GET /api/seg/reciters row. Re-export shim over the generated wire type
+ *  (now carries `state` + `visibility` that the hand-mirror omitted). */
+export type SegReciter = GenSegReciter;
 
 // ---------------------------------------------------------------------------
-// Timestamps
+// Timestamps — FE-only client verse model (assembled by ts_client)
 // ---------------------------------------------------------------------------
 
 /** Single phoneme interval as returned by /api/ts/data.intervals. */
@@ -273,7 +273,7 @@ export interface TsVerseData {
 }
 
 // ---------------------------------------------------------------------------
-// Surah info (cross-tab)
+// Surah info (cross-tab) — FE-only (route emits a bare map, no wire model)
 // ---------------------------------------------------------------------------
 
 export interface SurahInfo {
@@ -288,6 +288,6 @@ export type SurahInfoMap = Record<string, SurahInfo>;
 // Generic error envelope (most 4xx/5xx responses)
 // ---------------------------------------------------------------------------
 
-export interface ApiErrorBody {
-    error: string;
-}
+/** Re-export shim over the generated `ErrorEnvelope` (adds optional
+ *  `code`/`detail` the hand-mirror lacked; `error` stays required). */
+export type ApiErrorBody = GenErrorEnvelope;

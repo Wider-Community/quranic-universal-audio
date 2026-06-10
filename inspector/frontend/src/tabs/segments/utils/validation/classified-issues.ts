@@ -43,7 +43,7 @@ export function classifiedIssuesOf(snap: ClassifiableSnap | null | undefined): s
  *  boolean for snapshots that predate the array shape.
  */
 export function isIgnoredFor(
-    seg: { ignored_categories?: string[]; ignored?: boolean } | null | undefined,
+    seg: { ignored_categories?: string[] | null; ignored?: boolean } | null | undefined,
     category: string,
 ): boolean {
     if (!seg) return false;

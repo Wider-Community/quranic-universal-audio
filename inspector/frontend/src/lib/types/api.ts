@@ -1,85 +1,86 @@
 /**
- * API response shapes — hand-mirrored from `inspector/routes/**`.
+ * API response shapes.
  *
- * One request/response pair per endpoint, grouped by blueprint.
- * Drift findings logged in `.refactor/stage1-bugs.md` §Section 3.
+ * Data-contract shapes here are RE-EXPORT SHIMS over the codegen'd wire types
+ * in `./generated/schemas` (the source of truth — never hand-edit those).
+ * Endpoints whose wire shape has no generated model yet (catalog projection,
+ * the FE-assembled TS verse payload, deprecated legacy routes, stats/chart/
+ * edit-history reads) keep real definitions and are flagged FE-only below.
  */
 
 import type {
-    ApiErrorBody,
     AudioPeaks,
-    EditOp,
     GenerationBoundary,
     HistoryBatch,
     HistorySummary,
-    Ref,
-    Segment,
     SegmentPeaks,
-    SegmentsChapterSummary,
-    SegReciter,
     SurahInfoMap,
     TsReciter,
     TsVerseData,
     VerseRef,
 } from './domain';
 
+import type {
+    AudioSurahEntry as GenAudioSurahEntry,
+    AudioSurahsResponse as GenAudioSurahsResponse,
+    ErrorEnvelope as GenErrorEnvelope,
+    SegAllResponse as GenSegAllResponse,
+    SegConfigResponse as GenSegConfigResponse,
+    SegDataResponse as GenSegDataResponse,
+    SegPeaksResponse as GenSegPeaksResponse,
+    SegRecitersResponse as GenSegRecitersResponse,
+    SegSaveRequest as GenSegSaveRequest,
+    SegSaveResponse as GenSegSaveResponse,
+    SegSegmentPeaksRequest as GenSegSegmentPeaksRequest,
+    SegSegmentPeaksResponse as GenSegSegmentPeaksResponse,
+    SegUndoBatchRequest as GenSegUndoBatchRequest,
+    SegUndoOpsRequest as GenSegUndoOpsRequest,
+    SegUndoResponse as GenSegUndoResponse,
+    SegValAnyItem as GenSegValAnyItem,
+    SegValAudioBleedingItem as GenSegValAudioBleedingItem,
+    SegValAutoFix as GenSegValAutoFix,
+    SegValBasmalaAminItem as GenSegValBasmalaAminItem,
+    SegValBoundaryAdjItem as GenSegValBoundaryAdjItem,
+    SegValCrossVerseItem as GenSegValCrossVerseItem,
+    SegValFailedItem as GenSegValFailedItem,
+    SegValidateResponse as GenSegValidateResponse,
+    SegValLowConfidenceItem as GenSegValLowConfidenceItem,
+    SegValLowConfidenceV2Item as GenSegValLowConfidenceV2Item,
+    SegValMissingVerseItem as GenSegValMissingVerseItem,
+    SegValMissingWordsItem as GenSegValMissingWordsItem,
+    SegValMuqattaatItem as GenSegValMuqattaatItem,
+    SegValQalqalaItem as GenSegValQalqalaItem,
+    SegValRepetitionItem as GenSegValRepetitionItem,
+    SegValStructuralErrorItem as GenSegValStructuralErrorItem,
+    TsConfigResponse as GenTsConfigResponse,
+    TsManifestReciter as GenTsManifestReciter,
+    TsManifestResponse as GenTsManifestResponse,
+    TsShardMeta as GenTsShardMeta,
+} from './generated/schemas';
+
 // ===========================================================================
 // Cross-tab
 // ===========================================================================
 
-/** GET /api/surah-info */
+/** GET /api/surah-info — FE-only (route emits a bare map). */
 export type SurahInfoResponse = SurahInfoMap;
 
 // ===========================================================================
 // /api/ts/* — Timestamps
 // ===========================================================================
 
-/** GET /api/ts/config — display constants + read-path URLs. */
-export interface TsConfigResponse {
-    /** "local"  — Flask serves shards from on-disk timestamps tree.
-     *  "bucket" — Flask serves shards from <bucket>/reciters/<slug>/timestamps/. */
-    mode: 'local' | 'bucket';
-    /** Full URL the frontend fetches once to populate the in-memory manifest. */
-    manifest_url: string;
-    /** URL template with `{reciter}` + `{chapter}` placeholders. */
-    shard_url_template: string;
-    /** D20 Track B: optional URL of the v2 catalog JSON. When present, the
-     *  frontend prefers this over `manifest.reciters[]` for the dropdown. */
-    catalog_url?: string;
-    unified_display_max_height: number;
-    anim_highlight_color: string;
-    anim_word_transition_duration: number;
-    anim_char_transition_duration: number;
-    anim_transition_easing: string;
-    anim_word_spacing: number;
-    anim_line_height: number;
-    anim_font_size: number;
-    analysis_word_font_size: number;
-    analysis_letter_font_size: number;
-}
+/** GET /api/ts/config — display constants + read-path URLs. Re-export shim
+ *  (drops the phantom `mode`; `catalog_url` now required; anim/analysis
+ *  font/spacing fields are CSS strings, not numbers). */
+export type TsConfigResponse = GenTsConfigResponse;
 
-/** Per-reciter block inside `manifest.json.gz`. */
-export interface TsManifestReciter {
-    name_en: string;
-    name_ar?: string | null;
-    riwayah: string;
-    style: string;
-    source?: string;
-    /** "by_surah" or "by_ayah" — shard-internal short form, not "*_audio".
-     *  Per-chapter audio URLs are NOT in the manifest — resolve them from the
-     *  canonical `/api/audio/surahs` endpoint (the audio-manifest sidecar). */
-    audio_category: 'by_surah' | 'by_ayah';
-    /** Sorted list of chapter numbers the reciter has shards for. */
-    ts_chapters: number[];
-    /** Sorted list of chapters whose audio is known VBR. Optional for older HF manifests. */
-    vbr_chapters?: number[];
-    /** Build-internal payload — not relied on by the read path. */
-    _build?: { shard_hashes?: Record<string, string> };
-}
+/** Per-reciter block inside `manifest.json.gz`. Re-export shim (the
+ *  build-internal `_build` block is no longer typed). */
+export type TsManifestReciter = GenTsManifestReciter;
 
-/** Reciter entry in the v2 catalog (`<bucket>/catalog/reciter_catalog.json`).
- *  Mirrors `qua_shared.schemas.ReciterEntry` — fields the Timestamps tab
- *  dropdown uses; full schema carries optional `country`, `notes`. */
+/** GET /api/static/catalog.json — slim catalog projection. FE-only: the route
+ *  serves the full ReciterCatalog; only the Timestamps-tab fields are modelled.
+ *  No generated equivalent (the catalog schema is not codegen'd to the FE). */
 export interface TsCatalogReciter {
     reciter_id: string;
     name_en: string;
@@ -88,10 +89,7 @@ export interface TsCatalogReciter {
     notes?: string | null;
 }
 
-/** Delivery entry in the v2 catalog. Slug uniquely identifies a delivery
- *  (= what the legacy manifest called a "reciter slug"). Mirrors
- *  `qua_shared.schemas.Delivery` — only the fields the Timestamps tab
- *  needs are typed here; pass-through fields ignored. */
+/** Delivery entry in the v2 catalog. FE-only (see TsCatalogReciter). */
 export interface TsCatalogDelivery {
     slug: string;
     reciter_id: string;
@@ -101,41 +99,23 @@ export interface TsCatalogDelivery {
     audio_category: 'by_surah' | 'by_ayah';
 }
 
-/** GET /api/static/catalog.json — slim projection of `ReciterCatalog` carrying
- *  the fields the Timestamps tab uses. The route serves the full catalog; we
- *  only model what's read here. */
+/** GET /api/static/catalog.json — slim projection. FE-only (see above). */
 export interface TsCatalogResponse {
     schema_version: number;
     reciters: TsCatalogReciter[];
     deliveries: TsCatalogDelivery[];
 }
 
-/** Body of `manifest.json.gz` (decompressed). */
-export interface TsManifestResponse {
-    schema_version: number;
-    generated_at: string;
-    commit?: string;
-    /** "" in local mode (resources are absolute Flask paths); full URL in HF mode. */
-    dataset_base_url: string;
-    shard_url_template: string;
-    /** Filenames keyed by purpose; resolved against `dataset_base_url` in HF
-     *  mode and used as absolute paths in local mode (where `dataset_base_url=""`). */
-    resources: Record<'qpc_hafs' | 'digital_khatt' | string, string>;
-    reciters: Record<string, TsManifestReciter>;
-}
+/** Body of `manifest.json.gz` (decompressed). Re-export shim. */
+export type TsManifestResponse = GenTsManifestResponse;
 
-/** Slim per-shard `_meta` block. Aligner provenance (padding, beam, method,
- *  aligner_model, shared_cmvn, audio_source, created_at) passes through when
- *  present. Audio routing (reciter / url_template / audio_urls) is NOT carried
- *  here — the audio-manifest sidecar is the source of truth. */
-export interface TsShardMeta {
-    schema_version: number;
-    chapter: number;
-    audio_category: 'by_surah' | 'by_ayah';
-    [k: string]: unknown;
-}
+/** Slim per-shard `_meta` block. Re-export shim. */
+export type TsShardMeta = GenTsShardMeta;
 
-/** Encoded word inside a segment. Flat tuples to keep gzipped payload small. */
+/** Encoded word inside a segment. FE-typed positional projection of the
+ *  codegen'd `TsShardWord` (which is the opaque `[unknown × 5]` json2ts emits
+ *  for the `list`-typed Pydantic field). The wire really carries these precise
+ *  element types — the shard decoder (`ts-source.ts`) reads them positionally. */
 export type TsShardWord = [
     /** word_idx (1-based) */ number,
     /** start_ms */ number,
@@ -144,10 +124,10 @@ export type TsShardWord = [
     /** phones: [phone, start_ms, end_ms, ...optional flags][] */ Array<(string | number | boolean)[]>,
 ];
 
-/** One recited segment in a chapter's temporal `segments[]` array. `ref` is
- *  always a single verse `"surah:ayah"`; `t` is the segment's `[start_ms,
- *  end_ms]` span. A verse may recur across several entries (loopbacks / re-dos)
- *  — every accepted occurrence is one entry, in recitation order. */
+/** One recited segment in a chapter's temporal `segments[]` array. FE-typed
+ *  projection of the codegen'd `TsShardSegment` (`t` is `[unknown, unknown]`
+ *  and `words` is opaque there). `ref` is always a single verse `"surah:ayah"`;
+ *  `t` is the `[start_ms, end_ms]` span; a verse may recur across entries. */
 export interface SegmentEntry {
     ref: string;
     t: [number, number];
@@ -155,17 +135,18 @@ export interface SegmentEntry {
 }
 
 /** Body of one chapter shard (decompressed): slim `_meta` + a flat
- *  recitation-ordered `segments[]` array. */
+ *  recitation-ordered `segments[]` array. FE-typed projection of `TsShardDoc`
+ *  (segments required + richly-typed via `SegmentEntry`). */
 export interface TsShardResponse {
     _meta: TsShardMeta;
     segments: SegmentEntry[];
 }
 
-/** Verse payload assembled by the frontend ts_client — same shape as the legacy
- *  ``/api/ts/data`` response so consumer components stay unchanged. */
+/** Verse payload assembled by the frontend ts_client. FE-only — built
+ *  client-side, no wire producer (mirrors the legacy `/api/ts/data` shape). */
 export type TsDataResponse = TsVerseData;
 
-/** GET /api/ts/vbr/:reciter — fallback for older HF manifests. */
+/** GET /api/ts/vbr/:reciter — fallback for older HF manifests. FE-only. */
 export interface TsVbrResponse {
     vbr_chapters: number[];
     error?: string;
@@ -186,273 +167,80 @@ export interface TsVersesResponse {
 // /api/seg/* — Segments tab (data)
 // ===========================================================================
 
-/** GET /api/seg/config */
-export interface SegConfigResponse {
-    seg_font_size: number;
-    seg_word_spacing: number;
-    trim_pad_left: number;
-    trim_pad_right: number;
-    trim_dim_alpha: number;
-    low_conf_default_threshold: number;
-    validation_categories: string[];
-    muqattaat_verses: Array<[number, number]>;
-    qalqala_letters: string[];
-    standalone_refs: Array<[number, number, number]>;
-    standalone_words: string[];
-    accordion_context: Record<string, string>;
-}
+/** GET /api/seg/config. Re-export shim (font/spacing are STRINGS; adds
+ *  `seg_scroll_anim_mode`). */
+export type SegConfigResponse = GenSegConfigResponse;
 
-/** GET /api/seg/reciters */
-export type SegRecitersResponse = SegReciter[];
+/** GET /api/seg/reciters. Re-export shim. */
+export type SegRecitersResponse = GenSegRecitersResponse;
 
-/** GET /api/seg/chapters/:reciter */
+/** GET /api/seg/chapters/:reciter — 404 returns {error}. FE-only union. */
 export type SegChaptersResponse = number[] | ApiErrorBody;
 
-/** GET /api/seg/data/:reciter/:chapter[?verse=:n] — 404 returns {error}. */
-export interface SegDataResponse {
-    audio_url: string;
-    /** True when the chapter audio is VBR (per data/.audio_meta.json).
-     *  Frontend routes playback through the segment-clip endpoint instead of
-     *  HTML5 `<audio>.currentTime` (which mis-seeks Xing-less VBR files).
-     *  Defaults to false for unknown / unprobed chapters. */
-    vbr: boolean;
-    /** All chapters of this reciter known VBR. Populated from the same
-     *  `data/.audio_meta.json` source as `vbr`, but covers the full reciter
-     *  rather than just the active chapter — needed for cross-chapter
-     *  accordion prefetch to pick the clip endpoint vs chapter URL based on
-     *  the next sibling's chapter. */
-    reciter_vbr_chapters: number[];
-    /** Sparse {chapter -> kbps} for chapters that are CBR with a positive
-     *  bitrate. Consumed by the segments-tab audio-warmup util to compute
-     *  the byte offset of a seg's `time_start`. Absence ⇒ "don't warm"
-     *  (VBR, missing kbps, or unknown mode). Reciter-wide so cross-chapter
-     *  accordion siblings can resolve their own chapter's kbps. */
-    chapter_bitrate_kbps?: Record<number, number>;
-    segments: Segment[];
-    summary: SegmentsChapterSummary;
-    /** Present when the route returns 404 (reciter/chapter not found). */
-    error?: string;
-}
+/** GET /api/seg/data/:reciter/:chapter[?verse=:n]. Re-export shim (segments are
+ *  `SegDataSegment[]`; `reciter_vbr_chapters` is required). */
+export type SegDataResponse = GenSegDataResponse;
 
-/** GET /api/seg/all/:reciter */
-export interface SegAllResponse {
-    segments: Segment[];
-    audio_by_chapter: Record<string, string>;
-    /** Chapter → total audio duration in ms, sourced from the audio_manifest
-     *  sidecar. Used by the trim/adjust pad clamp on the last verse of a
-     *  chapter so the right-pad doesn't extend past EOF. */
-    chapter_duration_ms_by_chapter?: Record<string, number>;
-    /** Audio URL → total audio duration in ms, sourced from the audio_manifest
-     *  sidecar. URL-keyed for by_ayah deliveries where each ayah is its own
-     *  audio file. Prefer this over `chapter_duration_ms_by_chapter` when the
-     *  caller has a seg's audio_url. */
-    duration_ms_by_url?: Record<string, number>;
-    /** All chapters of this reciter known VBR. Reciter-level mirror of
-     *  SegDataResponse.reciter_vbr_chapters so global accordions can route
-     *  cross-chapter playback before/independent of a chapter-data refresh. */
-    reciter_vbr_chapters?: number[];
-    /** Legacy symmetric shim: ``(pad_left_ms + pad_right_ms) / 2``. Prefer the L/R fields. */
-    pad_ms: number;
-    pad_left_ms: number;
-    pad_right_ms: number;
-    min_silence_floor_ms: number;
-}
+/** GET /api/seg/all/:reciter. Re-export shim (segments are `SegAllSegment[]`). */
+export type SegAllResponse = GenSegAllResponse;
 
 // ===========================================================================
 // /api/seg/* — Segments tab (edit)
 // ===========================================================================
 
-/** POST /api/seg/save/:reciter/:chapter — request body (subset — all that JS sends). */
-export interface SegSaveRequest {
-    segments: Array<Partial<Segment> & { chapter?: number }>;
-    ops?: EditOp[];
-    [k: string]: unknown;
-}
+/** POST /api/seg/save/:reciter/:chapter — request body. Re-export shim (the
+ *  route reads `operations`, NOT `ops`; segments are loose dicts). */
+export type SegSaveRequest = GenSegSaveRequest;
 
-/** POST /api/seg/save — response (success variant). */
-export interface SegSaveResponse {
-    ok?: boolean;
-    batch_id?: string;
-    saved_at_utc?: string;
-    edit_history?: HistoryBatch[];
-    [k: string]: unknown;
-}
+/** POST /api/seg/save — success body. Re-export shim ({ ok: true } only —
+ *  the invented batch_id/saved_at_utc/edit_history keys are gone). */
+export type SegSaveResponse = GenSegSaveResponse;
 
-/** POST /api/seg/undo-batch/:reciter */
-export interface SegUndoBatchRequest {
-    batch_id: string;
-}
+/** POST /api/seg/undo-batch/:reciter — request body. Re-export shim. */
+export type SegUndoBatchRequest = GenSegUndoBatchRequest;
 
-export interface SegUndoBatchResponse {
-    ok?: boolean;
-    [k: string]: unknown;
-}
+/** POST /api/seg/undo-batch — success body. Re-export shim over the shared
+ *  undo response ({ ok, operations_reversed }). */
+export type SegUndoBatchResponse = GenSegUndoResponse;
 
-/** POST /api/seg/undo-ops/:reciter */
-export interface SegUndoOpsRequest {
-    batch_id: string;
-    op_ids: string[];
-}
+/** POST /api/seg/undo-ops/:reciter — request body. Re-export shim. */
+export type SegUndoOpsRequest = GenSegUndoOpsRequest;
 
-export type SegUndoOpsResponse = SegUndoBatchResponse;
+/** POST /api/seg/undo-ops — success body. Re-export shim (shared). */
+export type SegUndoOpsResponse = GenSegUndoResponse;
 
 // ===========================================================================
 // /api/seg/* — Segments tab (validation, stats, history)
 // ===========================================================================
 
-// ---------------------------------------------------------------------------
-// /api/seg/validate — per-category item shapes
-// ---------------------------------------------------------------------------
+/** Auto-fix descriptor attached to some `missing_words` entries. Re-export shim. */
+export type SegValAutoFix = GenSegValAutoFix;
 
-/**
- * Auto-fix descriptor attached to some `missing_words` entries.
- * `target_seg_index` is the chapter-local index of the segment to adjust.
- */
-export interface SegValAutoFix {
-    target_seg_index: number;
-    new_ref_start: string;
-    new_ref_end: string;
-}
+// Per-category validation item rows — re-export shims. The generated items are
+// flat (no shared `SegValItemBase`) and each carries `classified_issues`.
+export type SegValFailedItem = GenSegValFailedItem;
+export type SegValMissingVerseItem = GenSegValMissingVerseItem;
+export type SegValMissingWordsItem = GenSegValMissingWordsItem;
+export type SegValStructuralErrorItem = GenSegValStructuralErrorItem;
+export type SegValLowConfidenceItem = GenSegValLowConfidenceItem;
+export type SegValLowConfidenceV2Item = GenSegValLowConfidenceV2Item;
+export type SegValBoundaryAdjItem = GenSegValBoundaryAdjItem;
+export type SegValCrossVerseItem = GenSegValCrossVerseItem;
+export type SegValAudioBleedingItem = GenSegValAudioBleedingItem;
+export type SegValRepetitionItem = GenSegValRepetitionItem;
+export type SegValMuqattaatItem = GenSegValMuqattaatItem;
+export type SegValQalqalaItem = GenSegValQalqalaItem;
+export type SegValBasmalaAminItem = GenSegValBasmalaAminItem;
 
-/** Common fields present on every validation item row. */
-export interface SegValItemBase {
-    chapter: number;
-    /** Server-emitted positional index; legacy fallback when segment_uid is absent. */
-    seg_index?: number;
-    /** Stable segment identity (IS-10). Present on per-segment items; null on chapter-level items. */
-    segment_uid?: string | null;
-}
+/** Union of every validation item variant. Re-export shim. */
+export type SegValAnyItem = GenSegValAnyItem;
 
-export interface SegValFailedItem extends SegValItemBase {
-    seg_index: number;
-    time: string;
-}
+/** GET /api/seg/validate/:reciter. Re-export shim (items carry
+ *  `classified_issues`; adds `category_counts`/`stats`/`low_confidence_v2_meta`). */
+export type SegValidateResponse = GenSegValidateResponse;
 
-export interface SegValMissingVerseItem extends SegValItemBase {
-    verse_key: VerseRef;
-    msg: string;
-}
-
-export interface SegValMissingWordsItem extends SegValItemBase {
-    verse_key: VerseRef;
-    msg?: string;
-    missing_words?: number[];
-    sequence_gap?: boolean;
-    /** Client mutates entries during index-fixup. */
-    seg_indices?: number[];
-    auto_fix?: SegValAutoFix;
-    auto_fix_up?: SegValAutoFix;
-    auto_fix_down?: SegValAutoFix;
-}
-
-export interface SegValStructuralErrorItem extends SegValItemBase {
-    verse_key: VerseRef;
-    msg: string;
-}
-
-export interface SegValLowConfidenceItem extends SegValItemBase {
-    seg_index: number;
-    ref: Ref;
-    confidence: number; // 0..1
-}
-
-/** Item for the *Low Confidence v2* category — segments flagged by the
- *  extraction-time MFA tight-beam probe. No confidence score; the signal is
- *  binary (probe pass/fail). */
-export interface SegValLowConfidenceV2Item extends SegValItemBase {
-    seg_index: number;
-    ref: Ref;
-}
-
-export interface SegValBoundaryAdjItem extends SegValItemBase {
-    seg_index: number;
-    ref: Ref;
-    verse_key: VerseRef;
-}
-
-export interface SegValCrossVerseItem extends SegValItemBase {
-    seg_index: number;
-    ref: Ref;
-}
-
-export interface SegValAudioBleedingItem extends SegValItemBase {
-    seg_index: number;
-    entry_ref: string;
-    matched_verse: string;
-    ref: Ref;
-    confidence: number;
-    time: string;
-    msg: string;
-}
-
-export interface SegValRepetitionItem extends SegValItemBase {
-    seg_index: number;
-    ref: Ref;
-    display_ref?: Ref;
-    confidence: number;
-    time: string;
-    text: string;
-}
-
-export interface SegValMuqattaatItem extends SegValItemBase {
-    seg_index: number;
-    ref: Ref;
-}
-
-export interface SegValQalqalaItem extends SegValItemBase {
-    seg_index: number;
-    ref: Ref;
-    qalqala_letter: string;
-    end_of_verse: boolean;
-}
-
-export interface SegValBasmalaAminItem extends SegValItemBase {
-    seg_index: number;
-    ref: Ref;
-}
-
-/** Union of every validation item variant the panel renders. */
-export type SegValAnyItem =
-    | SegValFailedItem
-    | SegValMissingVerseItem
-    | SegValMissingWordsItem
-    | SegValStructuralErrorItem
-    | SegValLowConfidenceItem
-    | SegValLowConfidenceV2Item
-    | SegValBoundaryAdjItem
-    | SegValCrossVerseItem
-    | SegValAudioBleedingItem
-    | SegValRepetitionItem
-    | SegValMuqattaatItem
-    | SegValQalqalaItem
-    | SegValBasmalaAminItem;
-
-/** GET /api/seg/validate/:reciter */
-export interface SegValidateResponse {
-    /** Structural validation issues — the server actually emits this key. */
-    errors?: SegValStructuralErrorItem[];
-    failed?: SegValFailedItem[];
-    missing_verses?: SegValMissingVerseItem[];
-    missing_words?: SegValMissingWordsItem[];
-    /** Live alias of {@link errors} — both keys are emitted by the server (additive, MUST-1 compliant). */
-    structural_errors?: SegValStructuralErrorItem[];
-    low_confidence?: SegValLowConfidenceItem[];
-    low_confidence_v2?: SegValLowConfidenceV2Item[];
-    boundary_adj?: SegValBoundaryAdjItem[];
-    cross_verse?: SegValCrossVerseItem[];
-    audio_bleeding?: SegValAudioBleedingItem[];
-    repetitions?: SegValRepetitionItem[];
-    muqattaat?: SegValMuqattaatItem[];
-    qalqala?: SegValQalqalaItem[];
-    basmala_amin?: SegValBasmalaAminItem[];
-    /** Precomputed split-group closures keyed by root uid. Lets accordion
-     *  cards expand to show the full split chain without subscribing to
-     *  the (lazily-fetched) edit-history store. */
-    split_group_index?: Record<string, string[]>;
-    [k: string]: unknown;
-}
-
-/** GET /api/seg/stats/:reciter — distributions + percentiles. Shape varies. */
+/** GET /api/seg/stats/:reciter — distributions + percentiles. FE-only (shape
+ *  varies; no generated model). */
 export interface SegStatsResponse {
     distributions?: Record<string, { bins: number[]; counts: number[]; percentiles?: Record<string, number> }>;
     vad_params?: {
@@ -466,14 +254,15 @@ export interface SegStatsResponse {
     [k: string]: unknown;
 }
 
-/** POST /api/seg/stats/:reciter/save-chart (multipart). */
+/** POST /api/seg/stats/:reciter/save-chart (multipart). FE-only. */
 export interface SegSaveChartResponse {
     ok?: boolean;
     path?: string;
     error?: string;
 }
 
-/** GET /api/seg/edit-history/:reciter */
+/** GET /api/seg/edit-history/:reciter. FE-only — the FE-shaped history read
+ *  (HistoryBatch/HistorySummary/GenerationBoundary are FE rollups). */
 export interface SegEditHistoryResponse {
     batches: HistoryBatch[];
     summary: HistorySummary | null;
@@ -486,45 +275,33 @@ export interface SegEditHistoryResponse {
 // /api/seg/* — Segments tab (peaks)
 // ===========================================================================
 
-/** GET /api/seg/peaks/:reciter?chapters=1,2,3
- *
- * Returns slim-int8 chapter-overview peaks per audio URL:
- * `{ peaks: { [url]: { q:'int8', n, peaks_b64, bps, duration_ms } } }`.
- * `complete` is always true — the route has no background-compute path.
- * See `the inspector-audio skill`. */
-export interface SegPeaksResponse {
-    peaks: Record<string, AudioPeaks>;
-    complete: boolean;
-}
+/** GET /api/seg/peaks/:reciter?chapters=1,2,3. Re-export shim (slim int8
+ *  envelope per URL — `SegSlimPeaks`, NOT the nested-float `AudioPeaks`). */
+export type SegPeaksResponse = GenSegPeaksResponse;
 
-/** POST /api/seg/segment-peaks/:reciter
- *
- * Single-tier fallback for when chapter peaks aren't loaded: ffmpeg + HTTP
- * Range decode per segment, returns HD float ``PeakBucket[]`` at 30 bps. */
-export interface SegSegmentPeaksRequest {
-    segments: Array<{ url: string; start_ms: number; end_ms: number; chapter?: number; pad_ms?: number; bps?: number }>;
-}
+/** POST /api/seg/segment-peaks/:reciter — request body. Re-export shim. */
+export type SegSegmentPeaksRequest = GenSegSegmentPeaksRequest;
 
-export interface SegSegmentPeaksResponse {
-    /** Keyed by `${url}:${start_ms}:${end_ms}` — colon-delimited string. */
-    peaks: Record<string, SegmentPeaks>;
-}
+/** POST /api/seg/segment-peaks/:reciter — response. Re-export shim. */
+export type SegSegmentPeaksResponse = GenSegSegmentPeaksResponse;
 
 // ===========================================================================
 // /api/audio/* — Audio tab
 // ===========================================================================
 
-/** GET /api/audio/surahs/:category/:source/:slug */
-export interface AudioSurahEntry {
-    url: string;
-    duration_ms: number | null;
-    /** Set when the URL was routed through the Quran.Foundation Content API
-     * (``qf_api``) or an attempt fell back to our own CDN link
-     * (``qf_fallback``). Absent for normal, un-routed deliveries. */
-    via?: 'qf_api' | 'qf_fallback';
-    /** Our original CDN link, present only when ``via === 'qf_api'``. */
-    origin_url?: string;
-}
-export interface AudioSurahsResponse {
-    surahs: Record<string, AudioSurahEntry>;
-}
+/** GET /api/audio/surahs/:category/:source/:slug — one entry. Re-export shim
+ *  (generated entry is an open `{ [k]: unknown }` map). */
+export type AudioSurahEntry = GenAudioSurahEntry;
+
+/** GET /api/audio/surahs/:category/:source/:slug. Re-export shim. */
+export type AudioSurahsResponse = GenAudioSurahsResponse;
+
+// ===========================================================================
+// Error envelope re-export (kept here for the legacy `from './api'` imports)
+// ===========================================================================
+
+/** Re-export shim over the generated `ErrorEnvelope`. */
+export type ApiErrorBody = GenErrorEnvelope;
+
+// Re-export domain types referenced by callers that import them from `./api`.
+export type { AudioPeaks, SegmentPeaks };

@@ -2,7 +2,8 @@ import { get } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
 import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../../../lib/types/api';
-import type { Segment, SegmentPeaks } from '../../../../lib/types/domain';
+import type { SegSegmentPeaks } from '../../../../lib/types/generated/schemas';
+import type { PeakBucket, Segment, SegmentPeaks } from '../../../../lib/types/domain';
 import { b64ToInt8 } from '../../../../lib/utils/peaks-decode';
 import { getWaveformPeaks, setWaveformPeaks } from '../../../../lib/utils/waveform-cache';
 import {
@@ -44,7 +45,9 @@ export function resetWaveformState(): void {
 // Peaks: bulk indexing of segment-level peaks
 // ---------------------------------------------------------------------------
 
-export function indexSegPeaksBulk(peaksMap: Record<string, SegmentPeaks> | null | undefined): void {
+export function indexSegPeaksBulk(
+    peaksMap: Record<string, SegmentPeaks | SegSegmentPeaks> | null | undefined,
+): void {
     if (!peaksMap) return;
     for (const [key, data] of Object.entries(peaksMap)) {
         if (!data?.peaks?.length || data.start_ms == null || data.end_ms == null || data.duration_ms == null) continue;
@@ -52,7 +55,9 @@ export function indexSegPeaksBulk(peaksMap: Record<string, SegmentPeaks> | null 
         pushSegPeaksEntry(url, {
             startMs: data.start_ms,
             endMs: data.end_ms,
-            peaks: data.peaks,
+            // Wire `SegSegmentPeaks` types the bucket element opaquely
+            // (`[unknown, unknown][]`); the route emits `[min, max]` floats.
+            peaks: data.peaks as PeakBucket[],
             durationMs: data.duration_ms,
         });
     }

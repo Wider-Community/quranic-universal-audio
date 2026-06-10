@@ -12,7 +12,7 @@
 
 import { fetchJson } from '../api';
 import type { SegPeaksResponse, SegSegmentPeaksRequest, SegSegmentPeaksResponse } from '../types/api';
-import type { AudioPeaks, SegmentPeaks } from '../types/domain';
+import type { AudioPeaks, PeakBucket, SegmentPeaks } from '../types/domain';
 import { b64ToInt8 } from './peaks-decode';
 import { normalizeAudioUrl, setWaveformPeaks } from './waveform-cache';
 
@@ -52,7 +52,16 @@ export async function fetchSegmentPeaks(
         },
     );
     const key = `${url}:${startMs}:${endMs}`;
-    return data.peaks?.[key] ?? null;
+    const item = data.peaks?.[key];
+    if (!item) return null;
+    // The wire `peaks` are `[min, max]` float pairs (codegen types the tuple
+    // element opaquely as `[unknown, unknown][]`).
+    return {
+        peaks: (item.peaks ?? []) as PeakBucket[],
+        start_ms: item.start_ms,
+        end_ms: item.end_ms,
+        duration_ms: item.duration_ms,
+    };
 }
 
 // ---------------------------------------------------------------------------

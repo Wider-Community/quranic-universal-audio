@@ -12,8 +12,14 @@ import type {
 import type { Segment,SegReciter } from '../../../lib/types/domain';
 import { playingSegmentIndex } from './playback';
 
-/** Alias for clarity — `SegDataResponse` may be mutated with a proxy URL. */
-export type SegDataState = SegDataResponse;
+/** Chapter-data store shape: the `/data` wire body, but with `segments` widened
+ *  to the FE working `Segment` (the editor injects working fields + mutates the
+ *  rows in place). The audio URL may also be rewritten to a proxy URL. */
+export type SegDataState = Omit<SegDataResponse, 'segments'> & { segments: Segment[] };
+
+/** Reciter-corpus store shape: the `/all` wire body with `segments` widened to
+ *  the FE working `Segment` (same rationale as `SegDataState`). */
+export type SegAllState = Omit<SegAllResponse, 'segments'> & { segments: Segment[] };
 
 // ---------------------------------------------------------------------------
 // Writable stores
@@ -43,7 +49,7 @@ export const pickerDisplayChapter = writable<number | null>(null);
 export const selectedVerse = writable<string>('');
 
 /** Full reciter corpus (segments across all chapters). */
-export const segAllData = writable<SegAllResponse | null>(null);
+export const segAllData = writable<SegAllState | null>(null);
 
 /** Per-chapter loaded data (audio_url, pad fields, segments). */
 export const segData = writable<SegDataState | null>(null);

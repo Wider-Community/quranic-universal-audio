@@ -50,7 +50,7 @@ const PICKER_ORDER: readonly PublicBucket[] = [
 
 const STATUS_LABELS = PUBLIC_BUCKET_LABELS;
 
-function countBy(values: Iterable<string | null>): Map<string, number> {
+function countBy(values: Iterable<string | null | undefined>): Map<string, number> {
     const out = new Map<string, number>();
     for (const v of values) {
         if (!v) continue;

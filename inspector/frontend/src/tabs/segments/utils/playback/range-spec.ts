@@ -54,5 +54,5 @@ export function buildClipUrl(reciter: string, audioUrl: string, startMs: number,
  *  existing tests (and any future callers needing a Segment-shaped input)
  *  still want a per-segment helper. */
 export function buildSegmentClipUrl(reciter: string, seg: Segment): string {
-    return buildClipUrl(reciter, seg.audio_url, seg.time_start, seg.time_end);
+    return buildClipUrl(reciter, seg.audio_url ?? '', seg.time_start, seg.time_end);
 }

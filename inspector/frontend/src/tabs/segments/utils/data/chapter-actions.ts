@@ -12,6 +12,7 @@ import { fetchJson } from '../../../../lib/api';
 import type { SegDataResponse } from '../../../../lib/types/api';
 import type { Segment } from '../../../../lib/types/domain';
 import { preconnectOrigins } from '../../../../lib/utils/preconnect';
+import type { SegDataState } from '../../stores/chapter';
 import {
     reciterVbrChapters,
     segAllData,
@@ -96,8 +97,8 @@ export async function loadChapterData(reciter: string, chapter: string): Promise
         const chapterSegs: Segment[] = all
             ? all.segments.filter((s) => s.chapter === chNum)
             : [];
-        chData.segments = chapterSegs;
-        segData.set(chData);
+        const chState: SegDataState = { ...chData, segments: chapterSegs };
+        segData.set(chState);
         reciterVbrChapters.set(new Set(chData.reciter_vbr_chapters ?? []));
         chapterCbrKbps.set(new Map(
             Object.entries(chData.chapter_bitrate_kbps ?? {})

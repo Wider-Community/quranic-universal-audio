@@ -151,7 +151,7 @@
     }
 
     // ---- Auto-fix handler ----
-    function handleAutoFix(autoFix: SegValAutoFix | undefined): void {
+    function handleAutoFix(autoFix: SegValAutoFix | null | undefined): void {
         if (!autoFix) return;
         const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
         if (!targetSeg) return;

@@ -41,7 +41,7 @@
 
     onMount(() => {
         void loadManifest()
-            .then((m) => { manifestSlugs = new Set(Object.keys(m.reciters)); })
+            .then((m) => { manifestSlugs = new Set(Object.keys(m.reciters ?? {})); })
             .catch(() => {});
     });
 

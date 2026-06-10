@@ -1,12 +1,26 @@
 /**
- * Public-state types — mirror of ``inspector/services/public_state.py``.
+ * Public-state types — the wire shape from ``/api/public/*`` endpoints.
  *
- * The wire shape from ``/api/public/*`` endpoints. Frontend never sees
- * assignee identity or internal state machine names; this module is the
- * single source of truth for ``PublicBucket`` literals.
+ * The data-contract interfaces (``PublicReciter`` / ``PublicDelivery`` /
+ * ``PublicReciterPage`` / ``AdminViewReciter`` / ``AdminDiscardedDelivery`` /
+ * ``BucketCounts``) are RE-EXPORT SHIMS over the codegen'd wire types in
+ * ``./generated/schemas`` (source of truth — never hand-edit those).
  *
- * Slice B (backend) and Slice D (frontend primitives) of phase 6.
+ * The ``PublicBucket`` literal union, ``AdminBucket``, the label / priority /
+ * rank tables, ``bucketRank`` and ``CoverageKind`` are FE-only value-level
+ * helpers (no wire producer — they encode FE display ordering + copy) and stay
+ * real definitions. ``PublicBucket`` remains the single source of truth for the
+ * bucket literals.
  */
+
+import type {
+    AdminDiscardedDelivery as GenAdminDiscardedDelivery,
+    AdminViewReciter as GenAdminViewReciter,
+    BucketCounts as GenBucketCounts,
+    PublicDelivery as GenPublicDelivery,
+    PublicReciter as GenPublicReciter,
+    PublicReciterPage as GenPublicReciterPage,
+} from './generated/schemas';
 
 export type PublicBucket =
     | 'available_for_request'
@@ -68,86 +82,28 @@ export function bucketRank(b: PublicBucket): number {
 
 export type CoverageKind = 'full' | 'partial' | 'mixed';
 
-export interface PublicDelivery {
-    slug: string;                       // internal-only; never rendered to users
-    riwayah: string;
-    style: string;
-    recording_context: string | null;
-    recording_year: number | null;
-    source: string;
-    channel: string;
-    channel_name: string;
-    source_url: string | null;          // originating playlist URL (download-only sources); channel hyperlink target
-    audio_category: string;
-    chapter_count: number;
-    coverage_kind: 'full' | 'partial';
-    state_since: string | null;
-    bitrate_kbps_nominal: number | null;
-    bitrate_mode: string; // cbr | vbr | mixed | unknown
-    total_duration_sec: number | null;
-    bucket: PublicBucket;
-    /**
-     * Per-bucket entry timestamps: ``{ bucket: [iso, ...] }`` chronological,
-     * one entry per distinct visit to that bucket. Present only on the modal
-     * (detail / admin-view) payloads — absent on the cached list. Drives the
-     * dated lifecycle timeline; the first entry is the milestone's first-reached
-     * date, the full list is the per-node tooltip history.
-     */
-    bucket_dates?: Record<string, string[]>;
-    /**
-     * Timestamp-regeneration dates (every TS generation after the first), ISO
-     * ascending. Present only on modal payloads; empty/absent when the
-     * timestamps were never regenerated. Drives the conditional "Timestamps
-     * refreshed" timeline node (latest date + ×N).
-     */
-    ts_refresh_dates?: string[];
-}
+/** One reciter delivery (riwayah × style × source × channel combo). Re-export
+ *  shim over the generated wire type. */
+export type PublicDelivery = GenPublicDelivery;
 
-export interface PublicReciter {
-    reciter_id: string;                 // internal lookup key; never rendered
-    name: string;
-    name_ar: string | null;
-    country: string | null;
-    primary_bucket: PublicBucket;
-    buckets: PublicBucket[];
-    deliveries: PublicDelivery[];
-    riwayat: string[];
-    styles: string[];
-    recording_contexts: string[];
-    sources: string[];
-    channels: string[];
-    deliveries_count: number;
-    chapter_count_total: number;
-    coverage_kind: CoverageKind;
-    last_activity: string | null;
-}
+/** One reciter aggregated for the public dashboard. Re-export shim. */
+export type PublicReciter = GenPublicReciter;
 
 /**
- * Discarded delivery surface. Mirrors ``services.public_state.AdminViewDelivery``
- * — same fields as ``PublicDelivery`` plus ``visibility`` + ``visibility_reason``
- * so the modal can label why a combo was discarded.
+ * Discarded delivery surface. Re-export shim over the generated wire type
+ * (``PublicDelivery`` fields plus ``visibility`` + ``visibility_reason``).
  */
-export interface AdminDiscardedDelivery extends PublicDelivery {
-    visibility: 'public' | 'discarded';
-    visibility_reason: string | null;
-}
+export type AdminDiscardedDelivery = GenAdminDiscardedDelivery;
 
 /**
- * Admin-view reciter payload. Returned by ``/api/public/reciter/<id>`` when
- * the caller is signed in as maintainer or owner. ``deliveries`` still
- * contains only public combos (same as the anonymous shape) so the existing
- * counts + sorts stay consistent; discarded combos move into a dedicated
- * array for the maintainer-only section of the modal.
+ * Admin-view reciter payload (maintainer / owner shape of
+ * ``/api/public/reciter/<id>``). Re-export shim.
  */
-export interface AdminViewReciter extends PublicReciter {
-    discarded_deliveries: AdminDiscardedDelivery[];
-    fully_discarded: boolean;
-}
+export type AdminViewReciter = GenAdminViewReciter;
 
-export interface PublicReciterPage {
-    reciters: PublicReciter[];
-    total: number;
-    next_cursor: number | null;
-}
+/** Paginated envelope of ``GET /api/public/reciters``. Re-export shim. */
+export type PublicReciterPage = GenPublicReciterPage;
 
-export type BucketCounts = Record<PublicBucket, number>;
+/** Per-bucket reciter tally of ``GET /api/public/stats``. Re-export shim
+ *  (generated form is an open ``{ [k: string]: number }`` map). */
+export type BucketCounts = GenBucketCounts;

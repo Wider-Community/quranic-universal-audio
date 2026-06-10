@@ -644,7 +644,7 @@ function _reduceFlagSegment(
     } else if (next.flag) {
         next.flag = {
             ...next.flag,
-            follow_ups: [...next.flag.follow_ups, { comment, at: now, author, mine: true }],
+            follow_ups: [...(next.flag.follow_ups ?? []), { comment, at: now, author, mine: true }],
         };
     }
 

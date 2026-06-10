@@ -168,7 +168,7 @@
 
         try {
             const [, manifest] = await Promise.all([loadPublicCatalog(), loadManifest()]);
-            manifestSlugs = new Set(Object.keys(manifest.reciters));
+            manifestSlugs = new Set(Object.keys(manifest.reciters ?? {}));
         } catch (e) {
             console.error('TS: catalog/manifest load failed', e);
         }
@@ -274,10 +274,11 @@
         // Correct the shared surah to a valid chapter — that also re-points the
         // audio and re-runs this reactive. Cheap: manifest is a warm singleton.
         const manifest = await loadManifest();
-        const block = manifest.reciters[slug];
+        const block = manifest.reciters?.[slug];
         if (!block) return;
-        if (!block.ts_chapters.includes(chapter)) {
-            const valid = block.ts_chapters[0];
+        const blockChapters = block.ts_chapters ?? [];
+        if (!blockChapters.includes(chapter)) {
+            const valid = blockChapters[0];
             if (valid && valid !== chapter) {
                 pendingSeekRef = null;
                 playerContext.update((s) => ({ ...s, surahNum: valid, positionMs: 0 }));
