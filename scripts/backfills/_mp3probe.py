@@ -150,6 +150,7 @@ class SourceProbe:
     bitrate_kbps: int | None = None
     bitrate_mode: str | None = None  # 'cbr' | 'vbr'
     sample_rate: int | None = None
+    channels: int | None = None  # 1=mono | 2=stereo (frame channel-mode 3=mono, else stereo)
     method: str = ""  # 'needs_full' (head path) | 'full_walk' (full path)
     resolved_url: str | None = None  # canonical url actually fetched (may differ from input)
     error: str | None = None
@@ -180,7 +181,8 @@ def probe_source(url: str, *, allow_full: bool = True) -> SourceProbe:
             return SourceProbe(resolved_url=rewritten, error="no_frame_in_head")
         xf = _xing_frames(buf, foff, h)
         dur = int(round(xf * h["spf"] / h["sr"])) if xf else None
-        return SourceProbe(dur, h["kbps"], None, h["sr"], "needs_full", rewritten)
+        chans = 1 if h["chan"] == 3 else 2
+        return SourceProbe(dur, h["kbps"], None, h["sr"], chans, "needs_full", rewritten)
 
     # Full download → authoritative verdict via the canonical whole-file metric
     # (shared with the extraction bitrate audit).
@@ -196,8 +198,9 @@ def probe_source(url: str, *, allow_full: bool = True) -> SourceProbe:
     off = _skip_id3(data)
     _foff, h = _first_frame(data, off)
     sr = h["sr"] if h else None
+    chans = (1 if h["chan"] == 3 else 2) if h else None
     dur = idx.duration_ms / 1000.0
     audio_bytes = idx.offsets[idx.n_frames] - idx.offsets[0]
     avg_kbps = int(round(audio_bytes * 8 / dur / 1000)) if dur else (h["kbps"] if h else None)
     mode = classify_bitrate_mode(data)
-    return SourceProbe(int(round(dur)), avg_kbps, mode, sr, "full_walk", rewritten)
+    return SourceProbe(int(round(dur)), avg_kbps, mode, sr, chans, "full_walk", rewritten)

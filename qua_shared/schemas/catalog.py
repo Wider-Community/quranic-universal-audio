@@ -312,6 +312,14 @@ class ChapterEntry(BaseModel):
     bitrate_kbps: int | None = Field(default=None, ge=0)
     bitrate_mode: ChapterBitrateMode | None = None
     max_linear_seek_err_ms: int | None = Field(default=None, ge=0)
+    # Provenance for combined-file intakes (one source mp3 → several chapters).
+    # ``url`` is then a unique per-chapter bucket path (so the inverse
+    # URL→chapter index doesn't collapse); ``source_url`` keeps the original
+    # source (e.g. the Drive/YouTube link) and ``source_offset_ms`` is where the
+    # chapter begins inside that source. Both null for normal single-file
+    # chapters whose ``url`` is already the source.
+    source_url: str | None = Field(default=None, min_length=1)
+    source_offset_ms: int | None = Field(default=None, ge=0)
 
 
 class AudioManifestSidecar(BaseModel):
