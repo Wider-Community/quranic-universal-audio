@@ -91,6 +91,9 @@ def healthz():
     # Opt-in deep probe: validate the DB catalog + a small reciter-folder
     # sample so external-bucket drift surfaces here, not mid-request. Off the
     # default path entirely — only ``?deep=1`` pays the bucket walk.
+    # NEVER wire ``?deep=1`` into the load-balancer / automated liveness probe:
+    # it does bucket I/O on the single worker and a sampled drift flips the
+    # response to 503. The LB must hit plain ``/healthz`` (or ``/livez``).
     if request.args.get("deep") == "1":
         from services.storage import bucket_audit
 

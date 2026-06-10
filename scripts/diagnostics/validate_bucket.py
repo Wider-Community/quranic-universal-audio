@@ -43,6 +43,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -57,7 +58,12 @@ _AUDIO_MANIFEST_PREFIX = "catalog/audio_manifest"
 
 
 def _setup_paths_and_env(bucket: str | None) -> None:
-    """Insert repo root + inspector/ onto sys.path; pin the bucket env."""
+    """Insert repo root + inspector/ onto sys.path; pin the bucket env.
+
+    Pins ``INSPECTOR_DB_PATH`` to an isolated per-bucket temp file so the
+    catalog pass can pull the bucket DB into it (see ``validate_catalog``)
+    without ever clobbering a working ``inspector.db`` on a manual run.
+    """
     here = Path(__file__).resolve()
     repo = here.parents[2]
     inspector = repo / "inspector"
@@ -67,6 +73,9 @@ def _setup_paths_and_env(bucket: str | None) -> None:
     sys.path.insert(0, str(repo))
     if bucket is not None:
         os.environ["INSPECTOR_BUCKET_REPO"] = _BUCKETS[bucket]
+        os.environ["INSPECTOR_DB_PATH"] = str(
+            Path(tempfile.gettempdir()) / f"validate_bucket_{bucket}.db"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +163,24 @@ def validate_reciters(backend, bucket_id: str, slugs: list[str]) -> list[Reciter
 
     reports: list[ReciterReport] = []
     for slug in slugs:
-        result = audit(backend, bucket_id, slug)
+        try:
+            result = audit(backend, bucket_id, slug)
+        except Exception as e:  # noqa: BLE001 — one bad folder must not abort the whole sweep
+            # e.g. a non-UTF8 edit_history.jsonl raises UnicodeDecodeError out
+            # of audit(); record it as a hard error for THIS slug and keep
+            # going so the remaining reciters are still reported.
+            reports.append(
+                ReciterReport(
+                    slug=slug,
+                    found=True,
+                    n_errors=1,
+                    n_missing=0,
+                    n_legacy=0,
+                    n_warnings=0,
+                    error_details=[f"audit raised {type(e).__name__}: {e}"],
+                )
+            )
+            continue
         errs = [f"{f.path}: {f.detail}" for f in result.files if f.status == "error"]
         reports.append(
             ReciterReport(
@@ -210,35 +236,47 @@ def validate_sidecars(backend) -> list[SidecarReport]:
     return reports
 
 
-def validate_catalog() -> tuple[bool, str]:
+def validate_catalog(*, pull: bool = False) -> tuple[bool, str]:
     """Rebuild + validate the DB ``ReciterCatalog`` via ``snapshot()``.
 
-    Returns ``(ok, detail)``. A pydantic ``ValidationError`` on any DB row —
-    or a failure to open the DB at all — is a hard error. Requires the local
-    ``inspector.db`` (app boot pulls it; the nightly CLI pulls it before
-    invoking this).
+    With ``pull=True`` (the nightly CLI path) it first pulls ``db/inspector.db``
+    from the configured bucket into the isolated ``INSPECTOR_DB_PATH`` (pinned
+    by ``_setup_paths_and_env``) and runs migrations, mirroring app boot —
+    there is no pre-pulled ``inspector.db`` in CI. With ``pull=False`` (the
+    default; library + test callers seed their own DB) it snapshots whatever
+    DB is at the configured path. Returns ``(ok, detail)``. A pydantic
+    ``ValidationError`` on any DB row, a bucket with no DB (when pulling), or
+    an open/query failure is a hard error.
     """
     from pydantic import ValidationError
 
-    from services.db import repo_catalog
+    from services.db import init_db, repo_catalog
+    from services.db import sync as db_sync
 
     try:
+        if pull:
+            if not db_sync.pull():
+                return False, "no db/inspector.db in bucket"
+            init_db()  # open writer + run migrations (fail-fast), as at boot
         catalog = repo_catalog.snapshot()
     except ValidationError as e:
         return False, f"catalog schema fail: {e}"
-    except Exception as e:  # noqa: BLE001 — DB open / query failure
+    except Exception as e:  # noqa: BLE001 — DB pull / open / query failure
         return False, f"catalog snapshot failed: {type(e).__name__}: {e}"
     return True, f"{len(catalog.reciters)} reciters, {len(catalog.deliveries)} deliveries"
 
 
-def validate_bucket(backend, bucket_id: str, *, check_catalog: bool = True) -> BucketReport:
+def validate_bucket(
+    backend, bucket_id: str, *, check_catalog: bool = True, pull_db: bool = False
+) -> BucketReport:
     """Run all three validation passes against ``backend`` and roll up.
 
     ``backend`` is any object exposing ``read_bytes(path) -> bytes`` (raising
     on missing) and ``list_dir(prefix) -> list[str]`` — the bucket backend in
     production, a ``FilesystemBackend`` in tests. ``check_catalog`` validates
     the DB catalog (needs a local DB); tests that only exercise the bucket
-    files pass ``False``.
+    files pass ``False``. ``pull_db`` (CLI only) pulls + migrates the bucket DB
+    first; library/test callers seed their own DB and leave it ``False``.
     """
     from services.storage import data_dir
 
@@ -247,7 +285,7 @@ def validate_bucket(backend, bucket_id: str, *, check_catalog: bool = True) -> B
     report.reciters = validate_reciters(backend, bucket_id, slugs)
     report.sidecars = validate_sidecars(backend)
     if check_catalog:
-        report.catalog_ok, report.catalog_detail = validate_catalog()
+        report.catalog_ok, report.catalog_detail = validate_catalog(pull=pull_db)
     else:
         report.catalog_checked = False
     return report
@@ -381,7 +419,9 @@ def main() -> int:
 
     backend = get_backend()
     bucket_id = _BUCKETS[args.bucket]
-    report = validate_bucket(backend, bucket_id, check_catalog=not args.no_catalog)
+    report = validate_bucket(
+        backend, bucket_id, check_catalog=not args.no_catalog, pull_db=not args.no_catalog
+    )
 
     if args.json:
         print(json.dumps(_to_json(report, strict=args.strict), indent=2, ensure_ascii=False))

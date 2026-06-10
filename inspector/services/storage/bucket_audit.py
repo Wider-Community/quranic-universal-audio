@@ -492,12 +492,26 @@ def _audit_done_sentinel(backend, path: str) -> FileResult:
 def _audit_mp3(backend, path: str) -> FileResult:
     """Audio file — existence + non-empty. No format validation (would need
     ffprobe). The Xing-remux is verified at write time by extraction's
-    audio_persist; in-bucket bytes are trusted."""
+    audio_persist; in-bucket bytes are trusted.
+
+    Sizes via a ``stat`` on the mount-backed local path so a deep audit /
+    ``/healthz?deep=1`` never slurps a multi-MB audio file just to count
+    bytes; only an unmounted (hffs) backend falls back to ``read_bytes``."""
+    local = None
     try:
-        raw = backend.read_bytes(path)
-    except Exception as e:
-        return FileResult(path, "missing", str(e))
-    size = len(raw)
+        local = backend.local_path(path)
+    except Exception:  # noqa: BLE001 — treat any local-path failure as "no mount"
+        local = None
+    if local is not None:
+        try:
+            size = local.stat().st_size
+        except OSError as e:
+            return FileResult(path, "missing", str(e))
+    else:
+        try:
+            size = len(backend.read_bytes(path))
+        except Exception as e:  # noqa: BLE001 — missing/unreadable object
+            return FileResult(path, "missing", str(e))
     if size < 1024:  # heuristic: even silence < 1 KB is suspicious
         return FileResult(path, "error", f"suspiciously small ({size}B)", size=size)
     return FileResult(path, "ok", f"{size:,}B", size=size)

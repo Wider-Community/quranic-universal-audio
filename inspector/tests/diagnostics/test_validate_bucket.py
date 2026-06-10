@@ -29,7 +29,7 @@ import pytest
 
 # The script lives under scripts/diagnostics; the inspector test bootstrap puts
 # the repo root on sys.path, so this imports cleanly without a path shim.
-from scripts.diagnostics.validate_bucket import validate_bucket
+from scripts.diagnostics.validate_bucket import validate_bucket, validate_catalog
 from services.storage import hf_bucket as _hf_bucket
 from services.storage.hf_bucket import FilesystemBackend
 
@@ -211,3 +211,50 @@ def test_unknown_field_is_a_hard_error(bucket_backend, load_fixture):
     assert report.n_hard_errors >= 1
     assert report.exit_code(strict=False) == 1
     assert report.exit_code(strict=True) == 1
+
+
+def test_one_failing_reciter_does_not_abort_the_sweep(bucket_backend, load_fixture):
+    """A reciter whose ``audit()`` raises (e.g. a non-UTF8 ``edit_history.jsonl``
+    whose unguarded ``raw.decode('utf-8')`` throws) is recorded as a hard error
+    for that slug only — the whole-bucket sweep keeps going and still reports
+    every other reciter instead of aborting mid-loop."""
+    _seed_clean_bucket(bucket_backend, load_fixture)
+    bucket_backend.write_bytes_atomic(
+        f"reciters/{SLUG_B}/edit_history.jsonl", b"\xff\xfe not valid utf-8 \xff"
+    )
+
+    report = validate_bucket(bucket_backend, "test-bucket", check_catalog=False)
+
+    # Both reciters still reported — the bad folder did not kill the sweep.
+    assert {r.slug for r in report.reciters} == {SLUG_A, SLUG_B}
+    bad = next(r for r in report.reciters if r.slug == SLUG_B)
+    assert bad.n_errors == 1
+    assert any("UnicodeDecodeError" in d for d in bad.error_details)
+    good = next(r for r in report.reciters if r.slug == SLUG_A)
+    assert good.n_errors == 0
+    assert report.exit_code(strict=False) == 1
+
+
+def test_catalog_pull_missing_db_is_hard_error(monkeypatch):
+    """With ``pull=True`` (the nightly CLI path) a bucket that has no
+    ``db/inspector.db`` is a hard catalog error, not a silently-empty pass."""
+    from services.db import sync as db_sync
+
+    monkeypatch.setattr(db_sync, "pull", lambda *a, **k: False)
+    ok, detail = validate_catalog(pull=True)
+    assert ok is False
+    assert "no db/inspector.db" in detail
+
+
+def test_catalog_pull_present_db_snapshots(monkeypatch):
+    """With ``pull=True`` and a DB present, the catalog pass migrates +
+    snapshots the local DB. The autouse migrated substrate DB yields a valid
+    zero-reciter catalog (``ok=True``)."""
+    import services.db as db_pkg
+    from services.db import sync as db_sync
+
+    monkeypatch.setattr(db_sync, "pull", lambda *a, **k: True)
+    monkeypatch.setattr(db_pkg, "init_db", lambda *a, **k: 0)  # DB already migrated by fixture
+    ok, detail = validate_catalog(pull=True)
+    assert ok is True
+    assert "reciters" in detail
