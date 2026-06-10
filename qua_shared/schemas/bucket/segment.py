@@ -35,8 +35,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ._extras import strip_and_warn
-from .audit import Actor
+from .._extras import strip_and_warn
+from ..config.audit import Actor
 
 # Fields actively stripped on read with INFO-level "legacy" warning. Writers
 # must never emit these. The set covers every legacy attribute we've seen

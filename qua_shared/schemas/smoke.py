@@ -11,9 +11,7 @@ import json
 import sys
 from datetime import UTC, datetime
 
-from .access import Member, Role, RolesFile
-from .audit import Actor, AuditRecord
-from .catalog import (
+from .bucket.catalog import (
     AudioCategory,
     BitrateMode,
     Channel,
@@ -26,10 +24,12 @@ from .catalog import (
     Style,
     Vocab,
 )
-from .edit_history import EditHistoryBatch, EditOperation, parse_edit_history_line
-from .pipeline_meta import PipelineMeta
-from .segment import DetailedSegment
-from .state import (
+from .bucket.edit_history import EditHistoryBatch, EditOperation, parse_edit_history_line
+from .bucket.pipeline_meta import PipelineMeta
+from .bucket.segment import DetailedSegment
+from .config.access import Member, Role, RolesFile
+from .config.audit import Actor, AuditRecord
+from .config.state import (
     ReciterRow,
     ReciterState,
     ReciterStateFile,

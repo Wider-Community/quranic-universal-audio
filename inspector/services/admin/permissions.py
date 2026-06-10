@@ -25,7 +25,7 @@ from qua_shared.schemas import (
     AdminPermissionGroup,
     AdminPermissionsResponse,
 )
-from qua_shared.schemas.capabilities import ANONYMOUS
+from qua_shared.schemas.config.capabilities import ANONYMOUS
 from services.auth import capabilities as _resolver
 from services.db import repo_access, repo_permissions
 from services.db import sync as _sync

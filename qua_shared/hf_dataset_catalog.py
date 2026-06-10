@@ -16,7 +16,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from qua_shared.schemas.catalog import ReciterCatalog
+from qua_shared.schemas.bucket.catalog import ReciterCatalog
 
 CATALOG_CONFIG_NAME = "mushafs"
 CATALOG_SPLIT_NAME = "all"

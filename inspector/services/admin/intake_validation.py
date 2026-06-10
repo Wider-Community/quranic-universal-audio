@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 from pydantic import HttpUrl, TypeAdapter, ValidationError
 
 from qua_shared.schemas import IntakeSubmission, IntakeValidation
-from qua_shared.schemas.intake_requests import SourceLink, normalize_url
+from qua_shared.schemas.wire.intake_requests import SourceLink, normalize_url
 from services.state import catalog as catalog_service
 
 TOTAL_CHAPTERS = 114

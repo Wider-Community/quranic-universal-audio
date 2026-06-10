@@ -1,4 +1,4 @@
-"""Schema tests for ``qua_shared.schemas.pending_requests``.
+"""Schema tests for ``qua_shared.schemas.config.pending_requests``.
 
 These run with no Inspector services touched — pure pydantic validation.
 """

@@ -25,8 +25,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ._extras import strip_and_warn
-from .audit import Actor
+from .._extras import strip_and_warn
+from ..config.audit import Actor
 
 # Legacy op-level fields we've seen on real prod buckets (audit survey,
 # May 2026). Stripped on read with an INFO log; writers must never emit.

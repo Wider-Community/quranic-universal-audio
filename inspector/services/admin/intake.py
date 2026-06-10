@@ -40,8 +40,8 @@ from qua_shared.schemas import (
     ProbeResponse,
     Source,
 )
-from qua_shared.schemas.intake_requests import IntakeSource
-from qua_shared.schemas.state import SLUG_RE
+from qua_shared.schemas.wire.intake_requests import IntakeSource
+from qua_shared.schemas.config.state import SLUG_RE
 from services.db import _serde, repo_requests
 from services.db import sync as _sync
 from services.storage import storage_paths

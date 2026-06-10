@@ -26,7 +26,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ._extras import strip_and_warn
+from .._extras import strip_and_warn
 
 
 class PipelineMeta(BaseModel):

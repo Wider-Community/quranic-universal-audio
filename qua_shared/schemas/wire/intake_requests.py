@@ -24,7 +24,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .pending_requests import ProposedEdits
+from ..config.pending_requests import ProposedEdits
 
 IntakeKind = Literal["existing_reciter_new_combo", "new_reciter"]
 SourceMethod = Literal["links", "playlist"]

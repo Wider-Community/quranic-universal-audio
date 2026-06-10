@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timezone
 import pytest
 
 from qua_shared.schemas import Actor, Delivery, ReciterEntry, Role
-from qua_shared.schemas.catalog import Channel, Riwayah, Source, Style, Vocab
+from qua_shared.schemas.bucket.catalog import Channel, Riwayah, Source, Style, Vocab
 from services import db
 from services.db import (
     _serde,

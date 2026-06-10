@@ -21,7 +21,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .state import SLUG_RE
+from ..config.state import SLUG_RE
 
 # Source slugs allow hyphens (e.g. ``surah-quran``); everything else uses
 # the standard slug regex.

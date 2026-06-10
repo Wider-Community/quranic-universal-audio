@@ -20,19 +20,41 @@ committed to git so CI can ``git diff --exit-code`` it.
 
 from __future__ import annotations
 
-from .admin_permissions import (
+from .bucket.edit_history import EditHistoryBatch, EditOperation
+from .bucket.peaks_history import PeaksRecord
+from .bucket.segment import (
+    DetailedDocument,
+    DetailedEntry,
+    DetailedMeta,
+    DetailedSegment,
+    FlagFollowUp,
+    SegmentFlag,
+)
+from .bucket.ts_job_record import TsJobRecord, TsJobSettings
+from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
+from .config.automation import (
+    AutoGenTsConfig,
+    AutomationConfig,
+    AutomationResponse,
+    AutomationStateRow,
+    GhCutConfig,
+    HfPublishConfig,
+    StaleMetadataConfig,
+    StaleTsRegenConfig,
+)
+from .wire.admin_permissions import (
     AdminCapabilityRow,
     AdminCapabilityTierState,
     AdminPermissionGroup,
     AdminPermissionsResponse,
 )
-from .admin_requests import (
+from .wire.admin_requests import (
     AdminRequestCounts,
     AdminRequestRow,
     AdminRequestsResponse,
     RequestChange,
 )
-from .admin_reviews import (
+from .wire.admin_reviews import (
     AdminReviewClaimHistoryEntry,
     AdminReviewDetail,
     AdminReviewOpenClaim,
@@ -40,7 +62,7 @@ from .admin_reviews import (
     AdminReviewsResponse,
     AdminReviewTransition,
 )
-from .admin_users import (
+from .wire.admin_users import (
     AdminActiveClaim,
     AdminActivityEvent,
     AdminClaimEvent,
@@ -54,18 +76,7 @@ from .admin_users import (
     AdminVisitorStats,
     VisitorDayStat,
 )
-from .automation import (
-    AutoGenTsConfig,
-    AutomationConfig,
-    AutomationResponse,
-    AutomationStateRow,
-    GhCutConfig,
-    HfPublishConfig,
-    StaleMetadataConfig,
-    StaleTsRegenConfig,
-)
-from .edit_history import EditHistoryBatch, EditOperation
-from .intake_requests import (
+from .wire.intake_requests import (
     IntakeAttestations,
     IntakeSource,
     IntakeSubmission,
@@ -74,13 +85,12 @@ from .intake_requests import (
     ProbeResult,
     SourceLink,
 )
-from .mark_ready import (
+from .wire.mark_ready import (
     MarkReadyChecklist,
     MarkReadyRequest,
     MarkReadySubmission,
 )
-from .peaks_history import PeaksRecord
-from .release import (
+from .wire.release import (
     AdminCutReleaseRequest,
     AdminGhReleaseMember,
     AdminInFlightJob,
@@ -101,16 +111,6 @@ from .release import (
     StaleReason,
     SuggestedAction,
 )
-from .segment import (
-    DetailedDocument,
-    DetailedEntry,
-    DetailedMeta,
-    DetailedSegment,
-    FlagFollowUp,
-    SegmentFlag,
-)
-from .ts_job_record import TsJobRecord, TsJobSettings
-from .ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 
 __all__ = [
     "AutoGenTsConfig",
