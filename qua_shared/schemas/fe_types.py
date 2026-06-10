@@ -78,6 +78,7 @@ from .wire.admin_users import (
     AdminVisitorStats,
     VisitorDayStat,
 )
+from .wire.audio import AudioSurahEntry, AudioSurahsResponse
 from .wire.intake_requests import (
     IntakeAttestations,
     IntakeSource,
@@ -91,6 +92,14 @@ from .wire.mark_ready import (
     MarkReadyChecklist,
     MarkReadyRequest,
     MarkReadySubmission,
+)
+from .wire.public import (
+    AdminDiscardedDelivery,
+    AdminViewReciter,
+    BucketCounts,
+    PublicDelivery,
+    PublicReciter,
+    PublicReciterPage,
 )
 from .wire.release import (
     AdminCutReleaseRequest,
@@ -113,8 +122,55 @@ from .wire.release import (
     StaleReason,
     SuggestedAction,
 )
+from .wire.seg import (
+    SegAllResponse,
+    SegConfigResponse,
+    SegDataResponse,
+    SegmentFlagView,
+    SegmentsChapterSummary,
+    SegPeaksResponse,
+    SegReciter,
+    SegRecitersResponse,
+    SegSaveRequest,
+    SegSaveResponse,
+    SegSegmentPeaksRequest,
+    SegSegmentPeaksResponse,
+    SegUndoBatchRequest,
+    SegUndoOpsRequest,
+    SegUndoResponse,
+    SegValAnyItem,
+    SegValidateResponse,
+)
+from .wire.timestamps import TsConfigResponse, TsManifestResponse
 
 __all__ = [
+    "AdminDiscardedDelivery",
+    "AdminViewReciter",
+    "AudioSurahEntry",
+    "AudioSurahsResponse",
+    "BucketCounts",
+    "PublicDelivery",
+    "PublicReciter",
+    "PublicReciterPage",
+    "SegAllResponse",
+    "SegConfigResponse",
+    "SegDataResponse",
+    "SegPeaksResponse",
+    "SegReciter",
+    "SegRecitersResponse",
+    "SegSaveRequest",
+    "SegSaveResponse",
+    "SegSegmentPeaksRequest",
+    "SegSegmentPeaksResponse",
+    "SegUndoBatchRequest",
+    "SegUndoOpsRequest",
+    "SegUndoResponse",
+    "SegValAnyItem",
+    "SegValidateResponse",
+    "SegmentFlagView",
+    "SegmentsChapterSummary",
+    "TsConfigResponse",
+    "TsManifestResponse",
     "AutoGenTsConfig",
     "AutomationConfig",
     "AutomationResponse",
