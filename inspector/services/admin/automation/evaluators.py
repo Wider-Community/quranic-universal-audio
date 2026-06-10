@@ -29,7 +29,7 @@ from services.segments import ts_staleness
 from services.segments.flags import count_flagged
 from services.storage.data_loader import load_detailed
 
-from .actor import SYSTEM_AUTOMATION_ID
+from .actor import SYSTEM_AUTOMATION_ID, system_actor
 from .config import load_config
 from .schedule import is_due
 
@@ -41,6 +41,7 @@ GH_CUT = "gh_cut"
 HF_PUBLISH = "hf_publish"
 STALE_TS_REGEN = "stale_ts_regen"
 STALE_METADATA = "stale_metadata"
+AUTO_RELEASE_INACTIVE = "auto_release_inactive"
 
 #: Every release-job kind — used to exclude any slug with a job already running.
 _ALL_JOB_KINDS = (
@@ -407,11 +408,95 @@ def eval_stale_metadata(cfg: AutomationConfig, now: datetime) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# 6. Auto-release a reviewer's claim after prolonged inactivity.
+# ---------------------------------------------------------------------------
+
+
+def _inactive_claim_candidates() -> list[tuple[str, str]]:
+    """``(slug, claimed_at)`` for every open, not-yet-marked-ready claim whose
+    reciter is under review — the rows eligible for inactivity release.
+
+    Marked-ready claims are excluded: those are complete and awaiting the
+    pipeline (gen TS / publish), not an idle reviewer.
+    """
+    return [
+        (r[0], r[1])
+        for r in get_conn()
+        .execute(
+            "SELECT cl.slug, cl.claimed_at FROM claims cl "
+            "JOIN delivery_states ds ON ds.slug = cl.slug "
+            "WHERE cl.released_at IS NULL AND cl.marked_ready_at IS NULL "
+            "AND ds.state = 'under_review' ORDER BY cl.slug"
+        )
+        .fetchall()
+    ]
+
+
+def _slug_last_edit_at(slug: str) -> datetime | None:
+    """Latest edit-history save time for ``slug`` (reviewer-activity proxy).
+
+    None when the reciter has no edit history (or it can't be read) — the caller
+    then falls back to the claim time. An open claim is single-assignee under the
+    edit-lock, so the newest save is effectively the reviewer's last action.
+    """
+    from services.activity.history_query import parse_history_for_reciter
+
+    latest: datetime | None = None
+    try:
+        for batch in parse_history_for_reciter(slug):
+            ts = _serde.from_iso(batch.get("saved_at_utc"))
+            if ts is not None and (latest is None or ts > latest):
+                latest = ts
+    except Exception:  # noqa: BLE001 — missing/garbled history must not block the tick
+        logger.warning("auto_release_inactive: edit-history read for %s failed", slug)
+        return None
+    return latest
+
+
+def eval_auto_release_inactive(cfg: AutomationConfig, now: datetime) -> None:
+    c = cfg.auto_release_inactive
+    if not c.enabled:
+        return
+    from services.state import state as state_service
+
+    cutoff = now - timedelta(days=c.inactive_days)
+    released: list[str] = []
+    for slug, claimed_at in _inactive_claim_candidates():
+        last_active = _serde.from_iso(claimed_at)
+        edit_at = _slug_last_edit_at(slug)
+        if edit_at is not None and (last_active is None or edit_at > last_active):
+            last_active = edit_at
+        # Unknown activity → keep the claim (fail-safe). Active within the
+        # window → not idle yet.
+        if last_active is None or last_active >= cutoff:
+            continue
+        try:
+            state_service.transition(
+                slug,
+                "claim.force_released",
+                actor=system_actor(),
+                reason=f"auto-released: reviewer inactive for {c.inactive_days}+ days",
+            )
+            released.append(slug)
+        except Exception as exc:  # noqa: BLE001 — one slug's failure never blocks the rest
+            logger.warning("auto_release_inactive: release for %s failed: %s", slug, exc)
+    if released:
+        _record(
+            AUTO_RELEASE_INACTIVE,
+            status="launched",
+            detail="released inactive claim(s): " + ", ".join(released),
+            last_run_at=now,
+            now=now,
+        )
+
+
 #: The evaluators in execution order (cheap event-driven first, scheduled next).
 EVALUATORS = (
     eval_auto_gen_ts,
     eval_stale_ts_regen,
     eval_stale_metadata,
+    eval_auto_release_inactive,
     eval_hf_publish,
     eval_gh_cut,
 )

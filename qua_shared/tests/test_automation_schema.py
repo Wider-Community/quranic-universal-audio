@@ -15,6 +15,7 @@ def test_defaults_are_all_disabled_with_shared_beam_defaults():
     assert cfg.hf_publish.enabled is False
     assert cfg.stale_ts_regen.enabled is False
     assert cfg.stale_metadata.enabled is False
+    assert cfg.auto_release_inactive.enabled is False
     # Beam defaults mirror the manual TS launch form (50 main + 2 probe).
     assert cfg.auto_gen_ts.beam == 50
     assert cfg.auto_gen_ts.probe_beams == 2
@@ -22,6 +23,14 @@ def test_defaults_are_all_disabled_with_shared_beam_defaults():
     assert cfg.gh_cut.time_of_day == "09:00"
     assert cfg.gh_cut.timezone == "Australia/Sydney"
     assert cfg.stale_ts_regen.scope == "affected"
+    assert cfg.auto_release_inactive.inactive_days == 14
+
+
+def test_auto_release_inactive_days_must_be_positive():
+    from qua_shared.schemas import AutoReleaseInactiveConfig
+
+    with pytest.raises(ValidationError):
+        AutoReleaseInactiveConfig(inactive_days=0)
 
 
 def test_unknown_top_level_key_round_trips_for_forward_compat():
