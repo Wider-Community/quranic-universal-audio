@@ -150,7 +150,7 @@ class SourceProbe:
     bitrate_kbps: int | None = None
     bitrate_mode: str | None = None  # 'cbr' | 'vbr'
     sample_rate: int | None = None
-    method: str = ""  # xing | cbr_size | full_walk
+    method: str = ""  # 'needs_full' (head path) | 'full_walk' (full path)
     resolved_url: str | None = None  # canonical url actually fetched (may differ from input)
     error: str | None = None
 
