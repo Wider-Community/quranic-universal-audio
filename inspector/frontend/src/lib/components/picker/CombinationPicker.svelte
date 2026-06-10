@@ -71,7 +71,6 @@
     // state — claiming Husary while the picker was open left it filtered
     // out by `allowedBuckets` until the user closed and reopened.
     $: reciters = $catalogData.reciters;
-    $: stats = $catalogData.stats;
     let descriptor: SchemaDescriptor | null = null;
     let loading = true;
     let error: string | null = null;
@@ -208,9 +207,15 @@
         ? [...mineRows, ...groupedRest.flatMap((g) => g.rows)]
         : groupedRest.flatMap((g) => g.rows);
 
-    // Reactive so the tabs re-render the moment `stats` resolves — calling
-    // a helper inline can fail to track `stats` as a dependency.
-    $: tabCounts = (stats ?? {}) as Partial<BucketCounts>;
+    // Tab pills count deliveries (combos), so they agree with the per-bucket
+    // section head-counts and the SearchInput total. `/api/public/stats` counts
+    // reciters by primary_bucket (one per reciter); a reciter with deliveries in
+    // several buckets would make those pills disagree with the rows the picker
+    // actually lists. Derive from allCombos so every count surface matches.
+    $: tabCounts = allCombos.reduce<Partial<BucketCounts>>((acc, c) => {
+        acc[c.delivery.bucket] = (acc[c.delivery.bucket] ?? 0) + 1;
+        return acc;
+    }, {});
 
     function toggleFacet(detail: { axis: string; tag: string }): void {
         const set = new Set(activeFilters[detail.axis] ?? []);
