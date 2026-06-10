@@ -71,11 +71,7 @@
     const showTs = $derived(bucket !== 'in_flight');
     const tsLabel = $derived(row.ts === null ? 'Generate' : 'Regenerate');
 
-    const audioMissing = $derived(row.readiness?.audio_missing ?? 0);
-    const peaksMissing = $derived(row.readiness?.peaks_missing ?? 0);
-    const audioMissingChapters = $derived(row.readiness?.audio_missing_chapters ?? []);
-    const peaksMissingChapters = $derived(row.readiness?.peaks_missing_chapters ?? []);
-    const hasMissing = $derived(audioMissing > 0 || peaksMissing > 0);
+    const flaggedCount = $derived(row.flagged_issues_count ?? 0);
 
     function fmtRelative(iso: string | null | undefined): string {
         if (!iso) return '';
@@ -130,13 +126,6 @@
     }
     const ghChip = $derived(ghChipLabel());
 
-    function readinessTitle(): string {
-        const parts: string[] = [];
-        if (audioMissing > 0) parts.push(`audio: ${audioMissingChapters.join(', ')}`);
-        if (peaksMissing > 0) parts.push(`peaks: ${peaksMissingChapters.join(', ')}`);
-        return `Missing in bucket (populated offline) — ${parts.join(' · ')}`;
-    }
-
     function onSegments(): void {
         try {
             localStorage.setItem(LS_KEYS.SEG_RECITER, row.slug);
@@ -150,7 +139,7 @@
 
     const INFO_MODES: { mode: RowExpandMode; label: string }[] = [
         { mode: 'timeline', label: 'Timeline' },
-        { mode: 'reviewers', label: 'Reviewers' },
+        { mode: 'reviewers', label: 'Review' },
         { mode: 'jobs', label: 'Jobs' },
     ];
 </script>
@@ -180,12 +169,10 @@
                 <span class="combo">{row.riwayah}</span><span class="sep">·</span>
                 <span class="combo">{row.style}</span><span class="sep">·</span>
                 <span class="combo channel">{row.channel}</span>
-                {#if hasMissing}
-                    <span class="readiness-pill" title={readinessTitle()}>
-                        {#if audioMissing > 0}audio {audioMissing}{/if}
-                        {#if audioMissing > 0 && peaksMissing > 0} · {/if}
-                        {#if peaksMissing > 0}peaks {peaksMissing}{/if}
-                        missing
+                {#if bucket === 'ready_to_generate' && flaggedCount > 0}
+                    <span class="flagged-pill"
+                        title={`${flaggedCount} segment${flaggedCount === 1 ? '' : 's'} flagged for a second look in the Segments editor`}>
+                        {flaggedCount} flagged
                     </span>
                 {/if}
             </div>
@@ -300,10 +287,12 @@
     .id-meta .combo { color: var(--text-secondary); white-space: nowrap; }
     .id-meta .combo.channel { color: var(--text-muted); }
     .id-meta .sep { color: var(--text-faint); }
-    /* Non-blocking warn — amber pill, hue + word, never gates an action. */
-    .readiness-pill {
+    /* Outstanding flagged segments on a Ready-to-generate row — non-blocking
+       amber pill, never gates an action. */
+    .flagged-pill {
         font-family: var(--font-mono);
         font-size: 10px;
+        font-weight: 600;
         color: var(--state-error-fg);
         background: var(--state-error-bg);
         border: 1px solid oklch(0.86 0.130 75 / 0.4);

@@ -24,7 +24,7 @@ import os
 from flask import Blueprint, jsonify, request
 
 from services.admin import timestamps_jobs as ts_jobs
-from services.admin.jobs import cut_release, hf_publish, hf_publish_batch, refresh_catalog
+from services.admin.jobs import cut_release, hf_publish, hf_publish_batch, records, refresh_catalog
 
 log = logging.getLogger("inspector")
 
@@ -67,6 +67,7 @@ def ts_job_complete():
         else:
             # Failed/cancelled/etc. — no publish, just light the Marked-ready
             # dot so the admin knows the run finished and needs attention.
+            records.record_terminal("timestamps", slug, job_id, status="failed")
             result = ts_jobs.note_timestamps_job_failed(slug)
     except Exception as exc:  # noqa: BLE001 — surface as 502, the job may retry
         log.warning("ts-job-complete webhook for %s failed: %s", slug, exc)
@@ -107,6 +108,7 @@ def hf_publish_complete():
     if not slug or not job_id:
         return jsonify({"error": "slug and job_id are required"}), 400
     if status not in _SUCCESS:
+        records.record_terminal("hf_publish", slug, job_id, status="failed")
         return jsonify({"ok": True, "skipped": "non-success status"})
     try:
         result = hf_publish.complete(
@@ -142,6 +144,7 @@ def hf_publish_batch_complete():
     if not job_id:
         return jsonify({"error": "job_id is required"}), 400
     if status not in _SUCCESS:
+        records.record_terminal("hf_publish_batch", None, job_id, status="failed")
         return jsonify({"ok": True, "skipped": "non-success status"})
     try:
         result = hf_publish_batch.complete(
@@ -172,6 +175,7 @@ def hf_catalog_refresh_complete():
     if not job_id:
         return jsonify({"error": "job_id is required"}), 400
     if status not in _SUCCESS:
+        records.record_terminal("refresh_catalog", None, job_id, status="failed")
         return jsonify({"ok": True, "skipped": "non-success status"})
     try:
         result = refresh_catalog.complete(None, job_id)
@@ -199,9 +203,10 @@ def release_cut_complete():
     if not job_id:
         return jsonify({"error": "job_id is required"}), 400
     if status not in _SUCCESS:
-        # A failed/aborted cut posts here for observability only — there's
-        # nothing to record (only successful cuts insert rows) and the version
-        # may be absent (e.g. aborted before it was computed). Don't 400.
+        # A failed/aborted cut posts here for observability only — no DB row
+        # (only successful cuts insert) and the version may be absent. Still
+        # stamp the job record failed so the Jobs tab reflects it. Don't 400.
+        records.record_terminal("cut_release", None, job_id, status="failed")
         return jsonify({"ok": True, "skipped": "non-success status"})
     if not version:
         return jsonify({"error": "version is required"}), 400

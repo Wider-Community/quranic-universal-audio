@@ -220,20 +220,6 @@ export interface AdminPublishError {
   at?: string | null;
   [k: string]: unknown;
 }
-/**
- * By-surah chapters still missing bucket audio / peaks for a reciter.
- *
- * Audio + peaks are populated offline (katana extraction); the timestamps job
- * no longer writes them. Purely a non-blocking warn signal — drives the
- * Releases-row "audio N · peaks N missing" pill, never gates an action.
- */
-export interface AdminReciterReadiness {
-  audio_missing?: number;
-  peaks_missing?: number;
-  audio_missing_chapters?: number[];
-  peaks_missing_chapters?: number[];
-  [k: string]: unknown;
-}
 export interface AdminReleaseLinks {
   repo: string;
   hf_dataset: string;
@@ -295,7 +281,7 @@ export interface AdminReleaseStatusRow {
   hf: AdminReleaseRow | null;
   gh: AdminGhReleaseMember | null;
   publish_error?: AdminPublishError | null;
-  readiness?: AdminReciterReadiness | null;
+  flagged_issues_count?: number | null;
   [k: string]: unknown;
 }
 export interface AdminReleasesStatusResponse {
@@ -671,6 +657,7 @@ export interface AutomationConfig {
   hf_publish?: HfPublishConfig;
   stale_ts_regen?: StaleTsRegenConfig;
   stale_metadata?: StaleMetadataConfig;
+  auto_release_inactive?: AutoReleaseInactiveConfig;
   [k: string]: unknown;
 }
 /**
@@ -726,6 +713,22 @@ export interface StaleTsRegenConfig {
 export interface StaleMetadataConfig {
   enabled?: boolean;
   guard_minutes?: number;
+}
+/**
+ * Release a reviewer's claim after a period of inactivity.
+ *
+ * Acts on open claims that are under review and NOT yet marked ready (a
+ * marked-ready claim is complete and awaiting the pipeline, not idle). A claim
+ * is "inactive" when the reviewer's last activity — the later of the claim time
+ * and their most recent segment edit — is older than ``inactive_days``. Release
+ * routes through the same ``claim.force_released`` transition the manual path
+ * uses, so the reviewer gets the identical "your review was released" notice and
+ * the recitation returns to the awaiting-review pool.
+ */
+export interface AutoReleaseInactiveConfig {
+  enabled?: boolean;
+  inactive_days?: number;
+  [k: string]: unknown;
 }
 /**
  * ``GET /api/admin/releases/automation`` payload: config + state + preview.
@@ -1017,14 +1020,19 @@ export interface ErrorEnvelope {
 /**
  * Contributor confirmations recorded with the submission (audit trail).
  *
- * All three must be true to submit — gated client-side and re-checked server-
- * side. Rights to *share* (distribution / reciter permission) and rights to
- * *store* (QUA download + permanent retention) are deliberately separate.
+ * The first three are always required to submit — gated client-side and
+ * re-checked server-side. Rights to *share* (distribution / reciter
+ * permission) and rights to *store* (QUA download + permanent retention) are
+ * deliberately separate. ``playlist_public`` is an extra gate that only
+ * applies to a ``playlist`` source: the contributor agreeing to keep their
+ * own playlist public so the community can benefit from the audio + derived
+ * timings (enforced in ``intake_validation`` only for the playlist method).
  */
 export interface IntakeAttestations {
   distribution_rights?: boolean;
   links_verified?: boolean;
   storage_rights?: boolean;
+  playlist_public?: boolean;
   [k: string]: unknown;
 }
 /**
@@ -1093,6 +1101,76 @@ export interface ProposedEdits {
 export interface IntakeValidation {
   errors?: string[];
   warnings?: string[];
+  [k: string]: unknown;
+}
+/**
+ * One recitation's outcome inside a batch publish or a GH cut.
+ *
+ * Kept slim — the heavy cut membership (catalog snapshot, zip bytes) stays in
+ * the DB; only what the Jobs drawer renders is recorded here.
+ */
+export interface JobMember {
+  slug?: string | null;
+  status?: string | null;
+  version?: string | null;
+  external_uri?: string | null;
+  change_kind?: string | null;
+  error?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * One job run's durable record — uniform across every kind.
+ *
+ * ``status`` is normalized to ``running`` / ``succeeded`` / ``failed`` at the
+ * write site. Kind-specific extras: ``settings`` + ``logs`` for timestamps;
+ * ``members`` for batch / cut; ``version`` + ``external_uri`` for the release
+ * tracks.
+ */
+export interface JobRecord {
+  schema_version?: number;
+  job_id: string;
+  kind?: "timestamps" | "hf_publish" | "hf_publish_batch" | "cut_release" | "refresh_catalog";
+  slug?: string | null;
+  status?: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  url?: string | null;
+  launched_by?: string | null;
+  version?: string | null;
+  external_uri?: string | null;
+  validation_summary?: {
+    [k: string]: unknown;
+  } | null;
+  members?: JobMember[];
+  member_count?: number | null;
+  settings?: TsJobSettings | null;
+  chapters_refreshed?: number[] | null;
+  logs?: string[];
+  log_truncated?: boolean;
+  error?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * Job parameters chosen by the admin in the launch form.
+ *
+ * ``beams`` is the resolved list passed to ``align_batch_multi_beam`` —
+ * ``[alignment_beam, *probe_beams]`` (deduped). Canonical beam = ``max(beams)``.
+ */
+export interface TsJobSettings {
+  beams?: number[];
+  chapters?: number[] | null;
+  workers?: number | null;
+  flavor?: string | null;
+  timeout?: string | null;
+  batch_size?: number | null;
+  download_workers?: number | null;
+}
+/**
+ * Payload for ``GET /api/admin/jobs`` — the unified list + a running tally.
+ */
+export interface JobsListResponse {
+  jobs?: JobRecord[];
+  running_count?: number;
   [k: string]: unknown;
 }
 /**
@@ -1760,21 +1838,6 @@ export interface TsJobRecord {
   logs?: string[];
   log_truncated?: boolean;
   error?: string | null;
-}
-/**
- * Job parameters chosen by the admin in the launch form.
- *
- * ``beams`` is the resolved list passed to ``align_batch_multi_beam`` —
- * ``[alignment_beam, *probe_beams]`` (deduped). Canonical beam = ``max(beams)``.
- */
-export interface TsJobSettings {
-  beams?: number[];
-  chapters?: number[] | null;
-  workers?: number | null;
-  flavor?: string | null;
-  timeout?: string | null;
-  batch_size?: number | null;
-  download_workers?: number | null;
 }
 /**
  * Decompressed body of ``GET /api/ts/manifest``.

@@ -96,21 +96,62 @@ def hf_status_str(info) -> str:
     return str(stage if stage is not None else status or "").lower()
 
 
+_hf_namespace: str | None = None
+_hf_namespace_resolved = False
+
+
+def hf_job_url(job_id: str) -> str | None:
+    """Best-effort HF job page URL ``https://huggingface.co/jobs/<ns>/<id>``.
+
+    Used to backfill ``url`` for records sourced from the DB / a backfill (which
+    never captured the live job object's ``.url``). The namespace is the account
+    the HF token runs jobs under — resolved once via ``whoami()`` and cached.
+    Returns None when the namespace can't be resolved (link is then hidden)."""
+    global _hf_namespace, _hf_namespace_resolved
+    if not job_id:
+        return None
+    if not _hf_namespace_resolved:
+        _hf_namespace_resolved = True
+        try:
+            from huggingface_hub import whoami
+
+            _hf_namespace = (whoami() or {}).get("name")
+        except Exception as exc:
+            log.warning("hf_job_url: whoami() failed: %s", exc)
+            _hf_namespace = None
+    if not _hf_namespace:
+        return None
+    return f"https://huggingface.co/jobs/{_hf_namespace}/{job_id}"
+
+
 # ---------------------------------------------------------------------------
 # Job-record paths: ``reciters/<slug>/jobs/<kind>/<job_id>.json`` for per-slug
 # kinds, ``jobs/_global/<kind>/<job_id>.json`` for global kinds (cut_release).
+#
+# The on-disk DIRECTORY can differ from the kind label: ``timestamps`` records
+# (written by the TS HF-Job + the legacy ``timestamps_jobs`` writer) live under
+# ``jobs/ts/`` — so the unified store reads/writes them there, not under
+# ``jobs/timestamps/``. Every other kind's dir == its label.
 # ---------------------------------------------------------------------------
+
+_KIND_DIR = {"timestamps": "ts"}
+
+
+def kind_dir(kind: str) -> str:
+    """Bucket sub-directory for a job kind (``timestamps`` → ``ts``)."""
+    return _KIND_DIR.get(kind, kind)
 
 
 def job_record_path(kind: str, slug: str | None, job_id: str) -> str:
+    d = kind_dir(kind)
     if slug is None:
-        return f"jobs/_global/{kind}/{job_id}.json"
-    return f"reciters/{slug}/jobs/{kind}/{job_id}.json"
+        return f"jobs/_global/{d}/{job_id}.json"
+    return f"reciters/{slug}/jobs/{d}/{job_id}.json"
 
 
 def legacy_job_record_path(kind: str, job_id: str) -> str:
     """Pre-2026-05 top-level path (kept for back-compat reads, never written)."""
-    return f"jobs/{kind}/{job_id}.json"
+    return f"jobs/{kind_dir(kind)}/{job_id}.json"
 
 
 # ---------------------------------------------------------------------------
@@ -163,25 +204,34 @@ def kind_for_job(job_id: str) -> str | None:
     return None
 
 
-def list_in_flight_jobs(kinds: tuple[str, ...]) -> list[dict]:
-    """Return ``[{kind, slug, job_id, started_at}, ...]`` for live jobs whose
-    ``labels.task`` is in ``kinds``. ``slug`` is None for global kinds.
+def kind_and_slug_for_job(job_id: str) -> tuple[str | None, str | None]:
+    """Return ``(kind, slug)`` from an HF job's labels, ``(None, None)`` if not
+    found. ``slug`` is None for global kinds (``_global`` / ``_batch``). Used by
+    the cancel route to stamp the right job record terminal."""
+    from huggingface_hub import list_jobs
 
-    Used by the Releases-tab status endpoint to surface "what's running right
-    now" to the operator. Wrapped in a 5 s TTL cache
-    (``services/storage/cache.py``) — ``list_jobs()`` is rate-limited at the
-    HF side and the FE polls every 30 s; the cache absorbs the poll + same-
-    page re-renders cheaply. ``hf_publish.launch`` / ``cut_release.launch``
-    and their ``complete()`` handlers explicitly invalidate so a freshly
-    launched job (or a just-terminated one) shows up immediately.
-    """
+    try:
+        for job in list_jobs():
+            if (hf_job_id(job) or "") == job_id:
+                labels = getattr(job, "labels", {}) or {}
+                slug = labels.get("reciter")
+                if slug in ("_global", "_batch"):
+                    slug = None
+                return labels.get("task"), slug
+    except Exception as exc:
+        log.warning("kind_and_slug_for_job(%s) failed: %s", job_id, exc)
+    return None, None
+
+
+def _fetch_in_flight(kinds: tuple[str, ...]) -> list[dict]:
+    """Network walk: live HF jobs filtered to running ``kinds``, cache + return.
+
+    On any failure returns ``[]`` WITHOUT caching so the next call retries the
+    HF API. Shared by the blocking read and the background SWR refresh."""
     from huggingface_hub import list_jobs
 
     from services.storage import cache as _cache
 
-    cached = _cache.get_in_flight_jobs_cache(kinds)
-    if cached is not None:
-        return cached
     out: list[dict] = []
     try:
         for job in list_jobs():
@@ -217,10 +267,64 @@ def list_in_flight_jobs(kinds: tuple[str, ...]) -> list[dict]:
             )
     except Exception as exc:
         log.warning("list_in_flight_jobs(%s) failed: %s", kinds, exc)
-        # Don't cache failures — the next call should retry the HF API.
         return []
     _cache.set_in_flight_jobs_cache(kinds, out)
     return out
+
+
+_inflight_refresh_lock = threading.Lock()
+_inflight_refreshing: set[tuple[str, ...]] = set()
+
+
+def _spawn_in_flight_refresh(kinds: tuple[str, ...]) -> None:
+    """Kick one background refresh for ``kinds`` (deduped across concurrent polls).
+
+    The refresh touches only cache globals + the HF SDK — no Flask/app context —
+    so a bare daemon thread is safe on the gthread worker (the network wait
+    releases the GIL)."""
+    with _inflight_refresh_lock:
+        if kinds in _inflight_refreshing:
+            return
+        _inflight_refreshing.add(kinds)
+
+    def _run() -> None:
+        try:
+            _fetch_in_flight(kinds)
+        finally:
+            with _inflight_refresh_lock:
+                _inflight_refreshing.discard(kinds)
+
+    threading.Thread(target=_run, name="in-flight-jobs-refresh", daemon=True).start()
+
+
+def list_in_flight_jobs(kinds: tuple[str, ...], *, block: bool = True) -> list[dict]:
+    """Return ``[{kind, slug, job_id, started_at}, ...]`` for live jobs whose
+    ``labels.task`` is in ``kinds``. ``slug`` is None for global kinds.
+
+    Surfaces "what's running right now" to the operator. Wrapped in a 5 s TTL
+    cache (``services/storage/cache.py``) — ``list_jobs()`` is rate-limited at
+    the HF side and the FE polls every 30 s; the cache absorbs the poll +
+    same-page re-renders cheaply. ``hf_publish.launch`` / ``cut_release.launch``
+    and their ``complete()`` handlers invalidate so a freshly launched (or
+    just-terminated) job shows up promptly.
+
+    ``block`` (default True) does the synchronous network fetch on a cache miss
+    — required by the automation reconciler, which must see accurate live state
+    to avoid double-launching. ``block=False`` is stale-while-revalidate for the
+    user-facing releases-status route: a cache miss kicks a background refresh
+    and returns the last-known value (or ``[]``) immediately, so the page never
+    blocks on the network call.
+    """
+    from services.storage import cache as _cache
+
+    cached = _cache.get_in_flight_jobs_cache(kinds)
+    if cached is not None:
+        return cached
+    if block:
+        return _fetch_in_flight(kinds)
+    _spawn_in_flight_refresh(kinds)
+    stale = _cache.get_in_flight_jobs_cache_stale(kinds)
+    return stale if stale is not None else []
 
 
 # ---------------------------------------------------------------------------

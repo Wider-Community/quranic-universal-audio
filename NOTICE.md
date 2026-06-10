@@ -18,6 +18,7 @@ Recitations are sourced from the sites below. Each recording remains the propert
 - [Qur'anic Universal Library (QUL) / Tarteel](https://qul.tarteel.ai)
 - [TVQuran](https://tvquran.com)
 - [SurahQuran](https://surahquran.com)
+- [Way2Quran](https://way2quran.com)
 
 ## Text, metadata, and fonts
 

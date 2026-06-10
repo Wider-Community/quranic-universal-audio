@@ -30,6 +30,7 @@ from .bucket.edit_history import (
     EditOpPatch,
     parse_edit_history_line,
 )
+from .bucket.jobs import JobKind, JobMember, JobRecord, JobsListResponse, JobStatus
 from .bucket.peaks_history import PeaksRecord, parse_peaks_record
 from .bucket.pipeline_meta import PipelineMeta
 from .bucket.playlist_map import MatchConfidence, PlaylistChapterEntry, PlaylistChapterMap
@@ -54,6 +55,7 @@ from .config.automation import (
     AutomationConfig,
     AutomationResponse,
     AutomationStateRow,
+    AutoReleaseInactiveConfig,
     GhCutConfig,
     HfPublishConfig,
     StaleMetadataConfig,
@@ -150,7 +152,6 @@ from .wire.release import (
     AdminLaunchResponse,
     AdminPublishBatchRequest,
     AdminPublishError,
-    AdminReciterReadiness,
     AdminReleaseLinks,
     AdminReleasePreviewCounts,
     AdminReleasePreviewResponse,
@@ -284,6 +285,7 @@ __all__ = [
     "AutomationConfig",
     "AutomationResponse",
     "AutomationStateRow",
+    "AutoReleaseInactiveConfig",
     "GhCutConfig",
     "HfPublishConfig",
     "StaleMetadataConfig",
@@ -298,7 +300,6 @@ __all__ = [
     "AdminLaunchResponse",
     "AdminPublishBatchRequest",
     "AdminPublishError",
-    "AdminReciterReadiness",
     "AdminReleaseLinks",
     "AdminReleasePreviewCounts",
     "AdminReleasePreviewResponse",
@@ -365,6 +366,11 @@ __all__ = [
     "IntakeSource",
     "IntakeSubmission",
     "IntakeValidation",
+    "JobKind",
+    "JobMember",
+    "JobRecord",
+    "JobStatus",
+    "JobsListResponse",
     "MarkReadyChecklist",
     "MarkReadyRequest",
     "MarkReadySubmission",

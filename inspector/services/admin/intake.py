@@ -40,8 +40,8 @@ from qua_shared.schemas import (
     ProbeResponse,
     Source,
 )
-from qua_shared.schemas.wire.intake_requests import IntakeSource
 from qua_shared.schemas.config.state import SLUG_RE
+from qua_shared.schemas.wire.intake_requests import IntakeSource
 from services.db import _serde, repo_requests
 from services.db import sync as _sync
 from services.storage import storage_paths
@@ -460,6 +460,15 @@ def _build_manifest(
             ),
             "bitrate_kbps": entry.get("bitrate_kbps"),
             "bitrate_mode": entry.get("bitrate_mode"),
+            # Combined-file provenance: original source URL + the chapter's
+            # offset within it, preserved when ``url`` was swapped for a
+            # per-chapter bucket path. Both null for normal chapters.
+            "source_url": entry.get("source_url"),
+            "source_offset_ms": (
+                int(round(entry["source_offset_ms"]))
+                if isinstance(entry.get("source_offset_ms"), (int, float))
+                else None
+            ),
         }
     digest_src = "".join(f"{k}={chapters[k]['url']};" for k in sorted(chapters)).encode("utf-8")
     checksum = hashlib.sha256(digest_src).hexdigest()[:16]

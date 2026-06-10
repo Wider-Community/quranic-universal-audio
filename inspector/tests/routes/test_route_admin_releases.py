@@ -42,7 +42,9 @@ def _stub_jobs_api(monkeypatch, *, in_flight=(), batch_outcome=None):
     from services.admin.jobs import base as jobs_base
     from services.admin.jobs import hf_publish_batch as batch_jobs
 
-    monkeypatch.setattr(jobs_base, "list_in_flight_jobs", lambda kinds: list(in_flight))
+    monkeypatch.setattr(
+        jobs_base, "list_in_flight_jobs", lambda kinds, *, block=True: list(in_flight)
+    )
     monkeypatch.setattr(jobs_base, "running_job_for", lambda **_: None)
     monkeypatch.setattr(batch_jobs, "latest_batch_outcome", lambda: batch_outcome)
 
@@ -281,6 +283,38 @@ def test_status_surfaces_ts_segments_edited_staleness(signed_in_client, monkeypa
     assert row["ts"]["suggested_action"]["action"] == "regenerate_ts"
     assert row["ts"]["suggested_action"]["capability"] == "reviews.generate_timestamps"
     assert row["hf"] is None  # purely TS-track staleness
+
+
+def test_status_flagged_count_only_on_ready_to_generate(signed_in_client, monkeypatch, seed_state):
+    """``flagged_issues_count`` is computed ONLY for Ready-to-generate rows
+    (marked-ready, no TS yet); every other bucketable row leaves it None."""
+    from routes.admin import releases as releases_route
+
+    client, _user = signed_in_client(role="maintainer")
+    _stub_jobs_api(monkeypatch)
+
+    # Ready-to-generate: under_review + marked-ready, no ts ledger row.
+    _seed_eligible_channel("mp3quran")
+    _seed_delivery_on_channel("ar.rtg", channel="mp3quran", reciter_id="r7")
+    seed_state("ar.rtg", state="under_review", assignee_hf_id="u1", marked_ready=True)
+
+    # Released + has a ts ledger row → bucketable but NOT ready-to-generate.
+    _seed_released("ar.done", channel="mp3quran", reciter_id="r8")
+    _seed_ledger_ts("ar.done")
+
+    # Sentinel: 99 must never surface (ar.done is not ready-to-generate, so the
+    # count is never read for it).
+    monkeypatch.setattr(
+        releases_route, "_flagged_count", lambda slug: 3 if slug == "ar.rtg" else 99
+    )
+
+    resp = client.get("/api/admin/releases/status")
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    body = resp.get_json()
+    rtg = next(r for r in body["recitations"] if r["slug"] == "ar.rtg")
+    done = next(r for r in body["recitations"] if r["slug"] == "ar.done")
+    assert rtg["flagged_issues_count"] == 3
+    assert done.get("flagged_issues_count") is None
 
 
 def test_refresh_hf_catalog_launches(signed_in_client, monkeypatch):

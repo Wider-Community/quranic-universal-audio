@@ -326,16 +326,23 @@ def build_rows(
     surah_info: dict,
     dk_words: dict,
     chapter_urls: dict[str, str] | None = None,
+    *,
+    chapter_offsets: dict[str, int] | None = None,
 ) -> list[dict]:
     """Build dataset row metadata in canonical verse order.
 
     Each row has the same column shape as v1 + ``clip_start`` (source-ms
     boundary the audio slice starts at; consumed by the slicer + persisted
-    as ``source_offset_ms``). ``chapter_urls`` maps ``str(chapter) -> audio URL``
+    as ``source_offset_ms``). ``chapter_urls`` maps ``str(chapter) -> source URL``
     (from the audio manifest) — detailed.json no longer carries a per-entry
-    ``audio`` field, so ``source_url`` is resolved from here.
+    ``audio`` field, so ``source_url`` is resolved from here. ``chapter_offsets``
+    maps ``str(chapter) -> source_offset_ms`` (the chapter's start inside its
+    source file for combined-file intakes, else 0); it is added to each clip's
+    in-chapter offset so the persisted ``source_offset_ms`` is absolute within
+    the original source.
     """
     chapter_urls = chapter_urls or {}
+    chapter_offsets = chapter_offsets or {}
     rows: list[dict] = []
     for surah_num in sorted(surah_info, key=int):
         surah = surah_info[surah_num]
@@ -492,6 +499,7 @@ def build_rows(
                     "clip_start": clip_start,
                     "clip_end": clip_end,
                     "keep_runs": keep_runs,
+                    "source_offset_base_ms": chapter_offsets.get(str(chapter), 0),
                 }
             )
     return rows
@@ -726,7 +734,10 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[byt
                 src_url = src_url[len(prefix) :]
                 break
         data["source_url"].append(src_url)
-        data["source_offset_ms"].append(_i(row["clip_start"]))
+        # Add the chapter's offset within its source file (combined-file
+        # intakes) so the persisted offset is absolute within the original
+        # source; 0 for normal chapters whose audio == the whole source.
+        data["source_offset_ms"].append(_i(row["clip_start"] + row.get("source_offset_base_ms", 0)))
 
     # Audio(decode=True) matches the existing splits on the hub (consumers
     # expect ``ds[i]["audio"]["array"]``). Torch + torchcodec are installed
@@ -1007,13 +1018,29 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
         )
 
     # 3. Build rows. source_url comes from the audio manifest's chapter URLs
-    # (detailed.json carries no per-entry audio field).
+    # (detailed.json carries no per-entry audio field). Prefer the manifest's
+    # ``source_url`` (the original source, preserved when ``url`` was swapped
+    # for a per-chapter bucket path on combined files) so the dataset keeps
+    # provenance, not the internal bucket URL. ``source_offset_ms`` is where the
+    # chapter begins inside that source — added to each clip's in-chapter start.
     detailed_by_ref = _detailed_by_ref(detailed)
+    _manifest_chapters = (audio_manifest or {}).get("chapters") or {}
     chapter_urls = {
-        str(ch): (entry or {}).get("url", "")
-        for ch, entry in ((audio_manifest or {}).get("chapters") or {}).items()
+        str(ch): ((entry or {}).get("source_url") or (entry or {}).get("url", ""))
+        for ch, entry in _manifest_chapters.items()
     }
-    rows = build_rows(timestamps, detailed_by_ref, surah_info, dk_words, chapter_urls)
+    chapter_offsets = {
+        str(ch): int((entry or {}).get("source_offset_ms") or 0)
+        for ch, entry in _manifest_chapters.items()
+    }
+    rows = build_rows(
+        timestamps,
+        detailed_by_ref,
+        surah_info,
+        dk_words,
+        chapter_urls,
+        chapter_offsets=chapter_offsets,
+    )
     log.info("built %d rows for %s", len(rows), slug)
     if not rows:
         log.error("no rows built — detailed.json + timestamps disagreement?")

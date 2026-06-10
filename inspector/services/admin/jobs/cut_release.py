@@ -34,7 +34,7 @@ from services.db.sync import durable_transaction
 from services.state import audit
 from services.storage.hf_bucket import resolve_bucket_repo
 
-from . import base
+from . import base, records
 
 log = logging.getLogger("inspector")
 
@@ -117,6 +117,7 @@ def launch(
     )
     job_id = base.hf_job_id(job) or ""
     url = getattr(job, "url", None)
+    records.record_launch(KIND, None, job_id, url=url, launched_by=launched_by)
     log.info("launched cut_release job %s (version=%s)", job_id, version)
     # Same rationale as hf_publish.launch — drop the in-flight cache so the
     # next /releases/status reflects the new job without TTL latency.
@@ -205,6 +206,27 @@ def complete(
             },
             reason="cut_release",
         )
+    slim_members = [
+        {
+            "slug": m.get("slug"),
+            "status": "succeeded",
+            "version": m.get("ts_version"),
+            "change_kind": m.get("change_kind"),
+        }
+        for m in members
+        if m.get("slug")
+    ]
+    records.record_terminal(
+        KIND,
+        None,
+        job_id,
+        status="succeeded",
+        version=version,
+        external_uri=external_uri,
+        members=slim_members,
+        validation_summary=validation_summary,
+        launched_by=launched_by,
+    )
     log.info("cut_release.complete(%s): recorded %d recitations", version, len(members))
     # Terminal transition — drop the in-flight cache so the FE removes the
     # cut row from "In progress" on the next fetch.

@@ -39,7 +39,6 @@ from qua_shared.schemas import (
     AutomationResponse,
 )
 from routes._admin_helpers import actor_for, require_capability_or_403
-from services.admin import release_readiness
 from services.admin.automation import config as automation_config
 from services.admin.automation import schedule as automation_schedule
 from services.admin.jobs import base as jobs_base
@@ -251,7 +250,7 @@ def cancel_release_job(user, job_id):
     ``{job_id, canceled}``; 404 if the job isn't found, 502 on HF error."""
     from huggingface_hub import cancel_job as hf_cancel_job
 
-    kind = jobs_base.kind_for_job(job_id)
+    kind, slug = jobs_base.kind_and_slug_for_job(job_id)
     if kind is None:
         return jsonify({"error": "job not found"}), 404
     cap = _CANCEL_CAPS.get(kind)
@@ -264,9 +263,15 @@ def cancel_release_job(user, job_id):
     except Exception as exc:
         log.warning("cancel release job %s (%s) failed: %s", job_id, kind, exc)
         return jsonify({"error": str(exc)}), 502
+    # Stamp the job record terminal so the Jobs tab reflects the cancel (the
+    # poll worker only completes successes; a canceled job has no other path).
+    from services.admin.jobs import records as _records
+
+    _records.record_terminal(kind, slug, job_id, status="failed", error="canceled")
     from services.storage import cache as _cache
 
     _cache.invalidate_in_flight_jobs_cache()
+    _cache.invalidate_all_jobs_cache()
     return jsonify({"job_id": job_id, "canceled": True})
 
 
@@ -390,8 +395,6 @@ def releases_status(user):
                affected_chapters?} | null,
           hf: {version, produced_at, stale_since} | null,
           gh: {change_kind, stale_since, release_id, ts_version} | null,
-          readiness: {audio_missing, peaks_missing,   # non-blocking warn pill
-               audio_missing_chapters, peaks_missing_chapters} | null,
         }, ...]
       }
 
@@ -435,8 +438,12 @@ def releases_status(user):
     # surfaces in the "In progress" bucket (a regen on a released row has no
     # other in-flight signal — there's no state change). hf_publish + cut_release
     # are the dataset/GH tracks.
+    # ``block=False``: stale-while-revalidate so the grid never waits on the
+    # rate-limited HF ``list_jobs()`` network call (refreshed in the background;
+    # the 30 s FE poll catches up). The reconciler keeps the blocking read.
     in_flight = jobs_base.list_in_flight_jobs(
-        ("hf_publish", "hf_publish_batch", "cut_release", "timestamps", "refresh_catalog")
+        ("hf_publish", "hf_publish_batch", "cut_release", "timestamps", "refresh_catalog"),
+        block=False,
     )
 
     # Most-recent batch publish outcome — drives the "Failed to publish" bucket
@@ -545,9 +552,12 @@ def releases_status(user):
             "publish_error": batch_failures.get(slug),
         }
         if _is_bucketable(row, in_flight_slugs) or slug in batch_failures:
-            # Audio/peaks readiness is a non-blocking warn — compute only for
-            # rows the FE will actually render (TTL-cached, never gates).
-            row["readiness"] = release_readiness.reciter_bucket_readiness(slug)
+            # Flagged-segment count — ONLY for Ready-to-generate rows (marked
+            # ready, no TS yet), so the admin sees outstanding flags before
+            # generating. Same best-effort read as the reviews-detail builder;
+            # every other bucket leaves it None (no extra bucket I/O).
+            if marked_ready and ts is None:
+                row["flagged_issues_count"] = _flagged_count(slug)
             out.append(row)
     payload = AdminReleasesStatusResponse.model_validate(
         {
@@ -570,7 +580,14 @@ def releases_status(user):
 # ---------------------------------------------------------------------------
 
 #: Display order of the automations in the FE status list.
-_AUTOMATION_IDS = ("auto_gen_ts", "gh_cut", "hf_publish", "stale_ts_regen", "stale_metadata")
+_AUTOMATION_IDS = (
+    "auto_gen_ts",
+    "gh_cut",
+    "hf_publish",
+    "stale_ts_regen",
+    "stale_metadata",
+    "auto_release_inactive",
+)
 
 
 def _automation_payload() -> dict:
@@ -683,3 +700,18 @@ def _slim_release_row(row: dict | None, *, fields: tuple[str, ...]) -> dict | No
     if row is None:
         return None
     return {k: row.get(k) for k in fields if k in row}
+
+
+def _flagged_count(slug: str) -> int:
+    """Count of flagged segments in ``slug``'s detailed.json (best-effort → 0).
+
+    Mirrors the reviews-detail builder (``services/admin/reviews.py``) — one
+    cached ``load_detailed`` read; a bucket failure must never break the grid."""
+    from services.segments.flags import count_flagged
+    from services.storage.data_loader import load_detailed
+
+    try:
+        return count_flagged(load_detailed(slug) or [])
+    except Exception:  # noqa: BLE001 — count is non-critical metadata
+        log.warning("[%s] flagged-issue count read failed; defaulting to 0", slug, exc_info=True)
+        return 0

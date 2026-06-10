@@ -81,6 +81,8 @@ def validate_submission(sub: IntakeSubmission) -> IntakeValidation:
         errors += e
         warnings += w
     else:  # playlist
+        if not sub.attestations.playlist_public:
+            errors.append("You must agree to keep the playlist public to submit.")
         url = (src.playlist_url or "").strip()
         if not url:
             errors.append("A playlist URL is required.")

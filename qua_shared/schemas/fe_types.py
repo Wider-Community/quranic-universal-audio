@@ -21,6 +21,7 @@ committed to git so CI can ``git diff --exit-code`` it.
 from __future__ import annotations
 
 from .bucket.edit_history import EditHistoryBatch, EditOperation, EditOpPatch
+from .bucket.jobs import JobMember, JobRecord, JobsListResponse
 from .bucket.peaks_history import PeaksRecord
 from .bucket.segment import (
     DetailedDocument,
@@ -110,7 +111,6 @@ from .wire.release import (
     AdminLaunchResponse,
     AdminPublishBatchRequest,
     AdminPublishError,
-    AdminReciterReadiness,
     AdminReleaseLinks,
     AdminReleasePreviewCounts,
     AdminReleasePreviewResponse,
@@ -192,7 +192,6 @@ __all__ = [
     "AdminLaunchResponse",
     "AdminPublishBatchRequest",
     "AdminPublishError",
-    "AdminReciterReadiness",
     "AdminReleaseLinks",
     "AdminReleasePreviewCounts",
     "AdminReleasePreviewResponse",
@@ -233,6 +232,9 @@ __all__ = [
     "IntakeSource",
     "IntakeSubmission",
     "IntakeValidation",
+    "JobMember",
+    "JobRecord",
+    "JobsListResponse",
     "MarkReadyChecklist",
     "MarkReadyRequest",
     "MarkReadySubmission",

@@ -49,11 +49,16 @@
 </div>
 
 <style>
-    .dash {
-        min-height: 60vh;
-        /* Reserve the footer height plus the now-reciting section (0 when it's
-         *  hidden — NowReciting sets the var) so content never hides behind the
-         *  shell-owned footer. */
-        padding-bottom: calc(var(--player-h, 72px) + var(--now-reciting-h, 0px));
+    /* Desktop: CatalogList bounds its own columns to fit above the fixed
+       player, so the page itself doesn't scroll — no footer reservation here. */
+    .dash { padding-bottom: 0; }
+    /* Single-column: the page scrolls normally, so reserve the footer height
+       plus the now-reciting section (0 when hidden — NowReciting sets the var)
+       so content never hides behind the shell-owned footer. */
+    @media (max-width: 900px) {
+        .dash {
+            min-height: 60vh;
+            padding-bottom: calc(var(--player-h, 72px) + var(--now-reciting-h, 0px));
+        }
     }
 </style>

@@ -5,9 +5,16 @@
  * permissions; reviews replaced the disabled `to_publish` placeholder).
  */
 
-export type AdminTab = 'users' | 'requests' | 'reviews' | 'releases' | 'permissions';
+export type AdminTab = 'users' | 'requests' | 'reviews' | 'releases' | 'jobs' | 'permissions';
 
-const ALL_TABS: readonly AdminTab[] = ['users', 'requests', 'reviews', 'releases', 'permissions'];
+const ALL_TABS: readonly AdminTab[] = [
+    'users',
+    'requests',
+    'reviews',
+    'releases',
+    'jobs',
+    'permissions',
+];
 const LS_TAB_KEY = 'insp_admin_active_tab';
 
 /** Last admin tab the caller used, validated against the live union. Falls back

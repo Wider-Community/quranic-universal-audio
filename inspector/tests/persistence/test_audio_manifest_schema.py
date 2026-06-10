@@ -38,6 +38,8 @@ def _canonical_sidecar() -> dict:
                 "bitrate_kbps": 96,
                 "bitrate_mode": "cbr",
                 "max_linear_seek_err_ms": 12,
+                "source_url": None,
+                "source_offset_ms": None,
             },
             "112": {
                 "url": "https://audio-cdn.tarteel.ai/quran/surah/abdulBasit/murattal/mp3/112.mp3",
@@ -46,6 +48,8 @@ def _canonical_sidecar() -> dict:
                 "bitrate_kbps": 96,
                 "bitrate_mode": "vbr",
                 "max_linear_seek_err_ms": 8,
+                "source_url": None,
+                "source_offset_ms": None,
             },
         },
     }
@@ -115,6 +119,20 @@ def test_round_trip_byte_shape_equal():
 
     assert "_meta" in out and "meta" not in out
     assert out == raw
+
+
+def test_combined_file_source_provenance_round_trips():
+    """A combined-file intake (one source mp3 → several chapters) carries
+    ``source_url`` + ``source_offset_ms`` per chapter; both survive the
+    round-trip and the validators (``min_length``, ``ge=0``) accept them."""
+    raw = _canonical_sidecar()
+    raw["chapters"]["1"]["source_url"] = "https://drive.google.com/uc?id=abc123"
+    raw["chapters"]["1"]["source_offset_ms"] = 0
+    raw["chapters"]["112"]["source_url"] = "https://drive.google.com/uc?id=abc123"
+    raw["chapters"]["112"]["source_offset_ms"] = 41_000
+    m = AudioManifestSidecar.model_validate(raw)
+    assert m.chapters["112"].source_offset_ms == 41_000
+    assert m.model_dump(by_alias=True, mode="json") == raw
 
 
 def test_chapters_default_empty():

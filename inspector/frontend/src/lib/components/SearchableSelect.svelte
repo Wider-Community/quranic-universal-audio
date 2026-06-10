@@ -8,7 +8,7 @@
     import { createEventDispatcher, onMount } from 'svelte';
 
     import type { SelectOption } from '../types/ui';
-    import { match } from '../utils/fuzzy-match';
+    import { filterByFields } from '../utils/fuzzy-match';
 
     export let options: SelectOption[] = [];
     export let value = '';
@@ -34,9 +34,7 @@
     $: if (options) filter(inputValue);
 
     function filter(q: string): void {
-        filtered = q
-            ? options.filter(o => match(o.label, q) || match(o.group ?? '', q))
-            : [...options];
+        filtered = filterByFields(options, q, o => [o.label, o.group]);
         highlightIdx = -1;
     }
 

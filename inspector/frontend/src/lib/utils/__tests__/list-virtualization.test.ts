@@ -7,7 +7,7 @@ import {
     rebuildCumHeights,
     topOfRow,
     topSpacerValue,
-} from '../virtualization';
+} from '../list-virtualization';
 
 type FakeSeg = { uid: string; index: number };
 const rowKey = (s: FakeSeg): string => s.uid;

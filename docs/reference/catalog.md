@@ -226,14 +226,16 @@ Single row `id=1`: `schema_version` (2), `generated_at`, `derived` (TEXT JSON). 
 
 Row-level `bitrate_mode` (`BitrateMode` enum) derived from per-chapter probe data:
 
+Enum collapsed to four values by migration 0014 (legacy `mostly_cbr`/`mostly_vbr`/`abr` folded into `mixed`):
+
 | Value | Meaning |
 |---|---|
-| `cbr` | All probed chapters CBR, same rate. `bitrate_kbps_nominal` = exact. |
+| `cbr` | All probed chapters CBR. `bitrate_kbps_nominal` = exact. |
 | `vbr` | All probed VBR. `bitrate_kbps_nominal` = target / observed average. |
-| `abr` | All probed ABR. `bitrate_kbps_nominal` = ABR target rate. |
-| `mostly_cbr` / `mostly_vbr` | Majority one mode with a minority outlier (probe-rollup tolerance). |
-| `mixed` | Chapters disagree (CBR + VBR/ABR, or all-CBR at different rates). Use sidecar for per-chapter truth. **`bitrate_kbps_nominal` is null** (model validator enforces). |
+| `mixed` | Chapters disagree (any CBR+VBR within the delivery, or differing CBR rates). Use sidecar for per-chapter truth. **`bitrate_kbps_nominal` is null** (model validator enforces). |
 | `unknown` | No chapters probed yet (default for by_ayah). |
+
+Per-chapter `ChapterEntry.bitrate_mode` (sidecar) is `cbr`/`vbr` only — the `mixed` collapse is a row-level rollup over chapters that individually are one or the other.
 
 Detection — **whole-file linear byte→time seek error** (`qua_shared/mp3_frames.py::classify_bitrate_mode`, mirrored inline in `probe_audio_meta.py`): walk every audio frame, measure how far a browser's linear `time→byte` seek would land from each frame's true time; `≤ 200 ms` ⇒ `cbr`, else `vbr`. This is the only reliable signal — it is exactly what the playback transport needs to know (can the browser seek this natively?). The two shortcuts this replaced both produced systematic mislabels: mutagen's header `bitrate_mode` calls every Xing-tagged file VBR (incl. CBR audio our pipeline tagged Xing) and `len(set(bitrates))==1` / head-only uniformity is fooled by a stray frame or by VBR whose variation starts past the head (whole tvquran/archive reciters slipped through as CBR and stalled on seek). Because the metric needs every frame, source probing (`probe_audio_meta.classify`, `_mp3probe.probe_source(allow_full=True)`) downloads the full file. Per-chapter results land in the sidecar, rolled up to the row at build.
 

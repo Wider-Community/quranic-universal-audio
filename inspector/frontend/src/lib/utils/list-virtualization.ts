@@ -1,14 +1,15 @@
 /**
- * Pure helpers for SegmentsList virtualization.
+ * Pure, DOM-free helpers for variable-height list virtualization.
  *
- * `SegmentsList.svelte` owns the `heights: Map<rowKey, px>` cache (populated
- * by a ResizeObserver on row-group wrappers). These helpers turn that cache
- * plus `$displayedSegments` into prefix sums, window math, and spacer sizes —
- * without touching the DOM or Svelte. Tested directly in
- * `__tests__/virtualization.test.ts`.
+ * Generic over the row type: a consumer owns a `heights: Map<rowKey, px>` cache
+ * (populated by a ResizeObserver on row wrappers) and feeds it plus its row
+ * array here to get prefix sums, window math, and spacer sizes. Used by the
+ * Segments list (`SegmentsList.svelte`) and the Dashboard catalog
+ * (`CatalogTable.svelte`). Tested directly in
+ * `__tests__/list-virtualization.test.ts`.
  *
  * Why prefix sums instead of a rolling-average row height: any row's height
- * change only moves rows *after* it in the prefix sum, so a single card
+ * change only moves rows *after* it in the prefix sum, so a single row
  * changing size never translates rows above it. The rolling-average approach
  * did — that was the "segment card shakes vertically" bug.
  */

@@ -27,7 +27,7 @@ from services.db.sync import durable_transaction
 from services.state import audit
 from services.storage.hf_bucket import resolve_bucket_repo
 
-from . import base
+from . import base, records
 
 log = logging.getLogger("inspector")
 
@@ -100,6 +100,7 @@ def launch(slug: str, *, webhook_base: str | None = None) -> dict:
     )
     job_id = base.hf_job_id(job) or ""
     url = getattr(job, "url", None)
+    records.record_launch(KIND, slug, job_id, url=url)
     log.info("launched hf_publish job %s for %s", job_id, slug)
     # Bust the in-flight cache so the next /releases/status fetch reflects
     # the new job without waiting for the 5 s TTL.
@@ -172,6 +173,16 @@ def complete(
             payload={"track": "hf", "version": version, "job_id": job_id},
             reason="hf_publish",
         )
+    records.record_terminal(
+        KIND,
+        slug,
+        job_id,
+        status="succeeded",
+        version=version,
+        external_uri=external_uri,
+        validation_summary=validation_summary,
+        launched_by=launched_by,
+    )
     log.info("hf_publish.complete(%s, %s): recorded", slug, version)
     # Terminal transition — invalidate the in-flight cache so the FE drops
     # the row from "In progress" on the next fetch instead of waiting up to

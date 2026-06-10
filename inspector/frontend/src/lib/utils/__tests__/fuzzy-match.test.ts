@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { match, normalizeArabic } from '../fuzzy-match';
+import { filterByFields, match, normalizeArabic } from '../fuzzy-match';
 
 describe('normalizeArabic', () => {
     // Each assertion now pins the EXPECTED canonical form rather than just
@@ -58,5 +58,42 @@ describe('match', () => {
 
     it('returns false when the substring is absent', () => {
         expect(match('Husary', 'afasy')).toBe(false);
+    });
+});
+
+describe('filterByFields', () => {
+    interface Reciter { name: string; nameAr: string | null }
+    const reciters: Reciter[] = [
+        { name: 'Mishary Al-Afasy', nameAr: 'مشاري العفاسي' },
+        { name: 'Mahmoud Al-Husary', nameAr: null },
+        { name: 'Abdul Basit', nameAr: 'عبد الباسط' },
+    ];
+    const fields = (r: Reciter) => [r.name, r.nameAr];
+
+    it('matches on the Latin field', () => {
+        expect(filterByFields(reciters, 'husary', fields)).toEqual([reciters[1]]);
+    });
+
+    it('matches on the Arabic field via normalization', () => {
+        // Query carries tashkeel + an alif variant the data lacks.
+        expect(filterByFields(reciters, 'العفاسي', fields)).toEqual([reciters[0]]);
+    });
+
+    it('returns every item for a blank query', () => {
+        expect(filterByFields(reciters, '', fields)).toHaveLength(reciters.length);
+    });
+
+    it('returns a fresh array, not the input reference', () => {
+        const out = filterByFields(reciters, '', fields);
+        expect(out).not.toBe(reciters);
+    });
+
+    it('skips nullish fields without matching them', () => {
+        // 'Husary' has a null Arabic field — an Arabic query must not match it.
+        expect(filterByFields(reciters, 'عبد', fields)).toEqual([reciters[2]]);
+    });
+
+    it('returns an empty array when nothing matches', () => {
+        expect(filterByFields(reciters, 'zzzznope', fields)).toEqual([]);
     });
 });
