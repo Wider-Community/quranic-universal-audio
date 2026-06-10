@@ -32,7 +32,7 @@
     import { tagLabel } from '../../utils/axis-labels';
     import { compactCoverageLabel, compactHoursLabel } from '../../utils/delivery-label';
     import { type FacetSpec, recomputeFacets } from '../../utils/facets';
-    import { match } from '../../utils/fuzzy-match';
+    import { filterByFields } from '../../utils/fuzzy-match';
     import Modal from '../Modal.svelte';
     import ReciterChip from '../ReciterChip.svelte';
     import SearchInput from '../SearchInput.svelte';
@@ -179,12 +179,11 @@
 
     $: facetResult = recomputeFacets(bucketScoped, activeFilters, facetSpecs);
     $: facetVisible = bucketScoped.filter((_, i) => facetResult.rowVisibility[i]);
-    $: visible = search
-        ? facetVisible.filter(
-              (c) => match(c.reciter.name, search)
-                  || (c.reciter.name_ar ? match(c.reciter.name_ar, search) : false),
-          )
-        : facetVisible;
+    $: visible = filterByFields(
+        facetVisible,
+        search,
+        (c) => [c.reciter.name, c.reciter.name_ar],
+    );
 
     // Split into pinned (active claims) + groups by bucket.
     // Owners can hold multiple simultaneous claims — pin all of them.

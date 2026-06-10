@@ -4,29 +4,61 @@
      * inline "X of Y" count on the right. Layout (width, container) is the
      * caller's job; this component owns input chrome only.
      *
-     * Used by CombinationPicker (modal search) and CatalogList (dashboard).
-     * Add `debounceMs` if a consumer ever needs throttled input.
+     * Used by CombinationPicker (modal search), CatalogList (dashboard), and
+     * the Timestamps reciter picker. Pass `debounceMs` to coalesce keystrokes
+     * for an expensive consumer (e.g. the multi-thousand-row catalog) — the
+     * field stays responsive while the outward `input` event is throttled.
      */
     export interface SearchInputEvents { input: string; }
 </script>
 
 <script lang="ts">
-    import { createEventDispatcher } from 'svelte';
+    import { createEventDispatcher, onDestroy } from 'svelte';
 
     export let value = '';
     export let placeholder = 'Search';
     export let count: number | null = null;
     export let total: number | null = null;
     export let ariaLabel: string | undefined = undefined;
+    export let debounceMs = 0;
 
     let inputEl: HTMLInputElement | null = null;
     export function focus(): void { inputEl?.focus(); }
 
     const dispatch = createEventDispatcher<SearchInputEvents>();
 
-    function onInput(e: Event): void {
-        dispatch('input', (e.target as HTMLInputElement).value);
+    // The input shows `display` (instant on keystroke); the outward `input`
+    // event is what we debounce. `lastDispatched` tracks the value we last sent
+    // up so we can tell our own echo from an external reset of `value`.
+    let display = value;
+    let lastDispatched = value;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    // Parent changed `value` from the outside (e.g. "Clear all") — adopt it and
+    // drop any pending debounced dispatch so the stale value can't resurrect it.
+    $: if (value !== lastDispatched) {
+        display = value;
+        lastDispatched = value;
+        if (timer) { clearTimeout(timer); timer = null; }
     }
+
+    function fire(v: string): void {
+        lastDispatched = v;
+        dispatch('input', v);
+    }
+
+    function onInput(e: Event): void {
+        const v = (e.target as HTMLInputElement).value;
+        display = v;
+        if (debounceMs > 0) {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => { timer = null; fire(v); }, debounceMs);
+        } else {
+            fire(v);
+        }
+    }
+
+    onDestroy(() => { if (timer) clearTimeout(timer); });
 
     $: countLabel = count !== null && total !== null ? `${count} of ${total}` : null;
 </script>
@@ -44,7 +76,7 @@
         autocomplete="off"
         {placeholder}
         aria-label={ariaLabel ?? placeholder}
-        {value}
+        value={display}
         on:input={onInput}
     />
     {#if countLabel}<span class="count">{countLabel}</span>{/if}

@@ -19,7 +19,7 @@
     import { playerContext } from '../../../lib/stores/player-context';
     import { LS_KEYS } from '../../../lib/utils/constants';
     import { combinationCompact } from '../../../lib/utils/delivery-label';
-    import { match } from '../../../lib/utils/fuzzy-match';
+    import { filterByFields } from '../../../lib/utils/fuzzy-match';
     import { catalogData } from '../../dashboard/stores/catalog-data';
     import { loadManifest } from '../services/ts_client';
     import {
@@ -47,13 +47,7 @@
 
     const entries = $derived(resolveTsDeliveries($catalogData.reciters, manifestSlugs));
     const filteredEntries = $derived(
-        pickerSearch
-            ? entries.filter(
-                  (e) =>
-                      match(e.reciter.name, pickerSearch)
-                      || (e.reciter.name_ar ? match(e.reciter.name_ar, pickerSearch) : false),
-              )
-            : entries,
+        filterByFields(entries, pickerSearch, (e) => [e.reciter.name, e.reciter.name_ar]),
     );
     const curSlug = $derived($playerContext.delivery?.slug ?? '');
     const curEntry = $derived(findTsEntryBySlug($catalogData.reciters, manifestSlugs, curSlug));

@@ -3,7 +3,7 @@
      * Dashboard list view. Filters operate on combinations (deliveries),
      * then visible combinations are grouped back by reciter for display.
      */
-    import { onMount } from 'svelte';
+    import { onDestroy, onMount } from 'svelte';
 
     import {
         type Axis,
@@ -18,7 +18,7 @@
     import { axisLabel as axisLabelOf, tagLabel as tagLabelOf } from '../../../lib/utils/axis-labels';
     import { compareDeliveries } from '../../../lib/utils/delivery-sort';
     import { type FacetSpec, recomputeFacets } from '../../../lib/utils/facets';
-    import { match } from '../../../lib/utils/fuzzy-match';
+    import { filterByFields } from '../../../lib/utils/fuzzy-match';
     import ActivityRail from '../components/ActivityRail.svelte';
     import type { RowEntry } from '../components/CatalogTable.svelte';
     import CatalogTable from '../components/CatalogTable.svelte';
@@ -35,7 +35,43 @@
     } from '../stores/dashboard-state';
     import { openSubmitWizard } from '../stores/submit-wizard';
 
-    onMount(() => startCatalogPolling());
+    // ---- Shared-height layout --------------------------------------------
+    // The list scrolls inside its own container whose height tracks the filter
+    // rail (capped to the viewport), and the right rail matches it — so the
+    // three columns end on the same bottom line. `--catalog-h` is recomputed
+    // when the rail's natural height or the window changes.
+    const MIN_CATALOG_H = 280;
+    let gridEl: HTMLDivElement | undefined;
+    let railMeasureEl: HTMLDivElement | undefined;
+    let catalogH = 600;
+    let railObserver: ResizeObserver | null = null;
+
+    function recomputeCatalogHeight(): void {
+        if (!gridEl || !railMeasureEl) return;
+        const railH = railMeasureEl.offsetHeight;
+        const top = gridEl.getBoundingClientRect().top;
+        const cs = getComputedStyle(document.documentElement);
+        const playerH = parseFloat(cs.getPropertyValue('--player-h')) || 72;
+        const nowH = parseFloat(cs.getPropertyValue('--now-reciting-h')) || 0;
+        const budget = window.innerHeight - top - playerH - nowH - 16;
+        catalogH = Math.max(MIN_CATALOG_H, Math.min(railH || budget, budget));
+    }
+
+    onMount(() => {
+        const stopPolling = startCatalogPolling();
+        recomputeCatalogHeight();
+        window.addEventListener('resize', recomputeCatalogHeight);
+        if (railMeasureEl && typeof ResizeObserver !== 'undefined') {
+            railObserver = new ResizeObserver(recomputeCatalogHeight);
+            railObserver.observe(railMeasureEl);
+        }
+        return () => {
+            stopPolling();
+            window.removeEventListener('resize', recomputeCatalogHeight);
+            railObserver?.disconnect();
+        };
+    });
+    onDestroy(() => railObserver?.disconnect());
 
     let descriptor: SchemaDescriptor | null = null;
     $: allDeliveries = $catalogData.reciters.flatMap((r) => r.deliveries);
@@ -55,15 +91,32 @@
     // Group visible combinations back under their reciter.
     $: rowEntries = groupByReciter($catalogData.reciters, visibleDeliveries);
 
-    $: searched = $dashboardState.search
-        ? rowEntries.filter((e) => match(e.reciter.name, $dashboardState.search)
-            || (e.reciter.name_ar && match(e.reciter.name_ar, $dashboardState.search)))
-        : rowEntries;
+    $: searched = filterByFields(
+        rowEntries,
+        $dashboardState.search,
+        (e) => [e.reciter.name, e.reciter.name_ar],
+    );
 
     $: sorted = sortRows(searched, $dashboardState.sort);
 
     // Total reciters in the catalog (search-bar denominator).
     $: totalReciters = $catalogData.reciters.length;
+
+    // Signature of the active query — changes only when the user re-filters,
+    // so CatalogTable can reset its scroll to the top without snapping back on
+    // a background catalog poll.
+    $: filterKey = [
+        $dashboardState.search,
+        $dashboardState.sort,
+        Object.entries($dashboardState.activeFilters)
+            .map(([k, v]) => `${k}:${[...v].sort().join(',')}`)
+            .sort()
+            .join('|'),
+    ].join('§');
+
+    // One collator for every name compare below — far cheaper than letting each
+    // `localeCompare` spin up its own Intl collation on every sort.
+    const collator = new Intl.Collator();
 
     function groupByReciter(
         reciters: PublicReciter[],
@@ -82,7 +135,7 @@
     function sortRows(rs: RowEntry[], sort: DashboardSort): RowEntry[] {
         const copy = [...rs];
         if (sort === 'alphabetical') {
-            copy.sort((a, b) => a.reciter.name.localeCompare(b.reciter.name));
+            copy.sort((a, b) => collator.compare(a.reciter.name, b.reciter.name));
         } else if (sort === 'combinations') {
             copy.sort((a, b) => b.visibleDeliveries.length - a.visibleDeliveries.length);
         } else if (sort === 'status') {
@@ -100,7 +153,7 @@
     function compareRecency(a: RowEntry, b: RowEntry): number {
         const ax = a.reciter.last_activity ?? '';
         const bx = b.reciter.last_activity ?? '';
-        if (ax === bx) return a.reciter.name.localeCompare(b.reciter.name);
+        if (ax === bx) return collator.compare(a.reciter.name, b.reciter.name);
         return ax < bx ? 1 : -1;
     }
 
@@ -143,16 +196,18 @@
     const axisLabel = (axisKey: string): string => axisLabelOf(descriptor, axisKey);
 </script>
 
-<div class="grid">
+<div class="grid" bind:this={gridEl} style="--catalog-h: {catalogH}px">
     <aside class="rail">
-        {#if descriptor}
-            <PickerFilterRail
-                axes={descriptor.axes}
-                activeFilters={$dashboardState.activeFilters}
-                perFacetCounts={facetResult.perFacetCounts}
-                on:toggle={(e) => toggleFacet(e.detail.axis, e.detail.tag)}
-            />
-        {/if}
+        <div class="rail-inner" bind:this={railMeasureEl}>
+            {#if descriptor}
+                <PickerFilterRail
+                    axes={descriptor.axes}
+                    activeFilters={$dashboardState.activeFilters}
+                    perFacetCounts={facetResult.perFacetCounts}
+                    on:toggle={(e) => toggleFacet(e.detail.axis, e.detail.tag)}
+                />
+            {/if}
+        </div>
     </aside>
 
     <section class="body">
@@ -164,6 +219,7 @@
                         placeholder="Search reciters"
                         count={sorted.length}
                         total={totalReciters}
+                        debounceMs={120}
                         on:input={(e) => setSearch(e.detail)}
                     />
                 </div>
@@ -233,6 +289,7 @@
 
             <CatalogTable
                 rows={sorted}
+                resetKey={filterKey}
                 on:open={(e) => openDetail(e.detail.reciter_id)}
                 on:play={(e) => onPlay(e.detail)}
             />
@@ -365,14 +422,29 @@
     }
     @media (max-width: 900px) {
         .grid { grid-template-columns: 1fr; }
+        /* Single column: drop the shared-height envelope and let the page flow;
+           the list keeps its own viewport-tall scroll box (see CatalogTable). */
+        .rail { max-height: none; overflow: visible; }
+        .body { height: auto; }
     }
     .rail {
+        max-height: var(--catalog-h);
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+    .rail-inner {
         display: flex;
         flex-direction: column;
         gap: var(--s-5);
         padding-top: var(--s-3);
     }
-    .body { min-width: 0; }
+    .body {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        height: var(--catalog-h);
+        min-height: 0;
+    }
     .state {
         padding: var(--s-12) 0;
         text-align: center;
