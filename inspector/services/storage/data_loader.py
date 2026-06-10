@@ -208,7 +208,20 @@ def load_pipeline_meta(reciter: str) -> dict | None:
     doc = data_dir.read_pipeline_meta_doc(reciter)
     if doc is None:
         return None
-    validated = PipelineMeta.model_validate(doc).model_dump(mode="json")
+    try:
+        validated = PipelineMeta.model_validate(doc).model_dump(mode="json")
+    except Exception:  # noqa: BLE001 — a malformed/forward sidecar must not 500 the validation panel
+        # The sidecar is a hot read on /api/seg/validate; a single un-migrated
+        # or forward-compat field would otherwise raise ValidationError →
+        # HTTP 500 for the reciter's entire validation view. Degrade to the
+        # raw doc (consumers read declared keys like deleted_basmala_chapters)
+        # and surface the drift to the nightly bucket validator instead.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "[%s] pipeline_meta failed PipelineMeta validation; serving raw doc", reciter
+        )
+        validated = doc
     cache.set_seg_pipeline_meta(reciter, validated)
     return validated
 

@@ -7,11 +7,8 @@
  * Slice E of phase 6.
  */
 
-import type {
-    BucketCounts,
-    PublicBucket,
-    PublicReciterPage,
-} from '../types/public-state';
+import type { BucketCounts, PublicReciterPage } from '../types/generated/schemas';
+import type { PublicBucket } from '../types/public-bucket';
 
 export interface FetchRecitersOpts {
     bucket?: readonly PublicBucket[];

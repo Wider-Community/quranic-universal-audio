@@ -18,7 +18,7 @@
      * column for the narrower follow-up cards.
      */
     import WaveformCanvas from '../../../../lib/components/WaveformCanvas.svelte';
-    import type { PeakBucket } from '../../../../lib/types/domain';
+    import type { PeakBucket } from '../../../../lib/types/peaks-transport';
 
     type Mode = 'default' | 'adjust' | 'split' | 'reference';
 

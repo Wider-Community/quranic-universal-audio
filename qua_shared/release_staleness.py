@@ -13,7 +13,7 @@ here) and one ``_SUGGESTIONS`` row. The status route serializes the resolved
 
 from __future__ import annotations
 
-from .schemas.release import StaleReason, SuggestedAction
+from .schemas.wire.release import StaleReason, SuggestedAction
 
 # Higher wins when a row qualifies under multiple reasons. A ``ts_regen`` needs
 # a full republish (which also refreshes the catalog), so it dominates a

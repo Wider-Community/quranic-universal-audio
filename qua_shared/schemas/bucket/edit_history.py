@@ -5,14 +5,10 @@ Per-batch ledger for in-app History panel browsing. v2 changes from v1:
 - drops the file-hash chain (``file_hash_after``)
 - drops the genesis record
 
-The parser tolerates both schemas: ``parse_edit_history_line`` silently
-ignores legacy ``file_hash_after`` / genesis fields so mixed v1/v2 files
-read without a migration script.
-
-Extras handling (Migration #5 single-source-of-truth):
-- ``extra="forbid"`` + ``strip_and_warn`` pre-validator.
-- Known-legacy keys (v0 + v1 record shapes) → INFO + strip.
-- Unknown keys → WARNING + strip (surfaces writer/schema drift).
+The parser still detects + skips v0/v1 genesis records so mixed files read
+without a migration script (``parse_edit_history_line`` returns ``None`` for
+them), but every non-genesis batch is validated under pure ``extra="forbid"``:
+an unexpected field raises ``ValidationError`` rather than being stripped.
 
 Spec: docs/planning/inspector-deploy/v2/inspector-deployment-plan.md §7 +
 inspector-data-storage.md §8.
@@ -23,59 +19,41 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
-from ._extras import strip_and_warn
-from .audit import Actor
+from ..config.audit import Actor
 
-# Legacy op-level fields we've seen on real prod buckets (audit survey,
-# May 2026). Stripped on read with an INFO log; writers must never emit.
-_OP_DEAD_FIELDS: set[str] = {
-    # Migration #5 — per-op timestamps explicitly banned
-    "applied_at_utc",
-    "ready_at_utc",
-    "started_at_utc",
-    # v1 pipeline shape (replaced by op_type + targets_before/after)
-    "affected_chapters",
-    "command",
-    "merge_direction",
-    "op_context_category",
-    "patch",
-    "snapshots",
-    "targetSegmentIndex",
-    # v0 user-edit op aliases (replaced by kind/op_type)
-    "type",
-    "value",
-    "field",
-    "op",
-}
 
-# Legacy batch-level fields. The v1 genesis shape used a different vocab
-# (``record_type=genesis`` + ``audio_source`` + ``extraction_params``);
-# v0 used ``save_mode`` + ``chapter`` per-save. Both are stripped on read.
-_BATCH_DEAD_FIELDS: set[str] = {
-    "audio_source",
-    "record_type",
-    "created_at_utc",
-    "extraction_params",
-    "file_hash_after",
-    "reciter",
-    # short-lived FE-only metadata that leaked into save payloads
-    "batch_pill",
-    "batch_title",
-    "child_edits",
-    "parent_label",
-    # v0 save_mode (replaced by batch_type)
-    "save_mode",
-}
+class EditOpPatch(BaseModel):
+    """Forward-change patch envelope attached to an op at finalize time.
+
+    Structural mirror of the ``SegmentPatch`` dataclass in
+    ``inspector/domain/command.py`` and the FE ``EditOpPatch`` interface in
+    ``inspector/frontend/src/lib/types/view-models.ts``. Produced by the FE
+    ``applyCommand`` round-trip; consumed by the undo path
+    (``apply_inverse_patch`` reads ``op["patch"]``).
+
+    ``before`` / ``after`` are full segment-dict snapshots; ``removedIds`` /
+    ``insertedIds`` carry the segment UIDs the command removed/inserted;
+    ``affectedChapterIds`` is the set of chapter numbers whose id ordering
+    changed (ints — what the FE sends and the undo path compares against the
+    batch chapter set).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    before: list[dict[str, Any]] = Field(default_factory=list)
+    after: list[dict[str, Any]] = Field(default_factory=list)
+    removedIds: list[str] = Field(default_factory=list)
+    insertedIds: list[str] = Field(default_factory=list)
+    affectedChapterIds: list[int] = Field(default_factory=list)
 
 
 class EditOperation(BaseModel):
-    """One operation in a batch. Shape is intentionally permissive — the
-    save flow owns the operation vocabulary (trim, split, merge, delete,
-    etc.) and stores per-op payloads keyed by ``kind`` (user-driven) or
-    ``op_type`` (pipeline-driven, written by ``.local/extraction/segments/
-    post_passes.py``).
+    """One operation in a batch. The save flow owns the operation vocabulary
+    (trim, split, merge, delete, etc.) and stores per-op payloads keyed by
+    ``kind`` (user-driven) or ``op_type`` (pipeline-driven, written by
+    ``.local/extraction/segments/post_passes.py``).
 
     Migration #5: pipeline ops carry ``op_type`` + ``fix_kind`` (no
     ``kind`` — that's a user-edit-only field set by the FE command store).
@@ -86,6 +64,25 @@ class EditOperation(BaseModel):
     dicts, not validated against ``DetailedSegment`` because snapshots
     intentionally carry extra fields (``chapter``, ``audio_url``,
     ``index_at_save``) that don't live on persisted segs.
+
+    ``patch`` is the forward-change envelope the save flow persists on every
+    op (``_ensure_patch_on_ops``) and the undo path reverses.
+    ``op_context_category`` is the validation category the edit was launched
+    from; ``build_resolved_by_edit_index`` reads it to suppress re-flagging.
+    Both are live fields, written and read by the app — NOT dead.
+
+    The user-edit save flow (``apply-command.ts::_baseOperation``) also stamps a
+    handful of FE working/presentation fields that the Inspector save path
+    persists verbatim and the History panel reads back: ``merge_direction``
+    (``'prev'``/``'next'`` — drives the merge-highlight point in
+    ``EditChainRow``/``HistoryOp``), ``snapshots`` (the ``{before, after}``
+    mirror of ``targets_*`` that ``utils/history/items.ts`` reads for the
+    ``is_wasl`` waqf pill), plus the ``type`` op alias, the ``command`` payload
+    and the ``targetSegmentIndex`` locator. They are declared optional so a
+    real user-edit op round-trips under pure ``extra="forbid"`` (only the
+    pipeline writer in ``post_passes.py`` round-trips through this model at
+    write time; the Inspector save persists the raw op). Pipeline ops leave
+    them ``None``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -94,20 +91,19 @@ class EditOperation(BaseModel):
     kind: str | None = None  # user-driven; absent for pipeline ops
     op_type: str | None = None  # pipeline-driven; absent for user ops
 
-    # Migration #5 live fields, declared here instead of absorbed via extras.
     fix_kind: str | None = None  # only set by pipeline auto-fix ops
+    op_context_category: str | None = None  # validation category the edit came from
+    patch: EditOpPatch | None = None  # forward-change envelope for undo
     targets_before: list[dict[str, Any]] = Field(default_factory=list)
     targets_after: list[dict[str, Any]] = Field(default_factory=list)
 
-    @model_validator(mode="before")
-    @classmethod
-    def _surface_extras(cls, data: Any) -> Any:
-        return strip_and_warn(
-            data,
-            declared=set(cls.model_fields),
-            dead=_OP_DEAD_FIELDS,
-            model_name="EditOperation",
-        )
+    # FE user-edit working/presentation fields, persisted verbatim by the
+    # Inspector save flow and read back by the History panel (see class doc).
+    type: str | None = None  # user-edit op alias (split/merge/delete/…)
+    merge_direction: str | None = None  # 'prev'/'next' on merge ops
+    snapshots: dict[str, Any] | None = None  # {before, after} mirror of targets_*
+    targetSegmentIndex: dict[str, Any] | None = None  # {chapter, index} locator
+    command: dict[str, Any] | None = None  # raw FE command payload
 
 
 class EditHistoryBatch(BaseModel):
@@ -157,16 +153,6 @@ class EditHistoryBatch(BaseModel):
     # so on-disk legacy batches parse.
     validation_summary_before: dict[str, Any] = Field(default_factory=dict)
     validation_summary_after: dict[str, Any] = Field(default_factory=dict)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _surface_extras(cls, data: Any) -> Any:
-        return strip_and_warn(
-            data,
-            declared=set(cls.model_fields),
-            dead=_BATCH_DEAD_FIELDS,
-            model_name="EditHistoryBatch",
-        )
 
 
 def parse_edit_history_line(raw: str | bytes) -> EditHistoryBatch | None:

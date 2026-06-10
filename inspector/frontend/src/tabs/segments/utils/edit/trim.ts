@@ -4,7 +4,7 @@
 
 import { get } from 'svelte/store';
 
-import type { Segment } from '../../../../lib/types/domain';
+import type { Segment } from '../../../../lib/types/view-models';
 import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
 import { applyCommand } from '../../domain/apply-command';
 import {

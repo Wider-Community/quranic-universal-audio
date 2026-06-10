@@ -17,7 +17,7 @@
     import { currentUser, loadCurrentUser } from '../../lib/stores/current-user';
     import { setEditingMode, syncEditingMode } from '../../lib/stores/editing-mode';
     import { openGuidesGate } from '../../lib/stores/guides-gate';
-    import type { SegReciter } from '../../lib/types/domain';
+    import type { SegReciter } from '../../lib/types/generated/schemas';
     import { LS_KEYS } from '../../lib/utils/constants';
     import { surahInfoReady } from '../../lib/utils/surah-info';
     import { catalogData, loadCatalog, startCatalogPolling } from '../dashboard/stores/catalog-data';
@@ -205,7 +205,7 @@
             name: string;
             nameAr: string | null;
             country: string | null;
-            bucket: import('../../lib/types/public-state').PublicBucket;
+            bucket: import('../../lib/types/public-bucket').PublicBucket;
             riwayah: string;
             style: string;
         }>,

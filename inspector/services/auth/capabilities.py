@@ -25,7 +25,7 @@ from __future__ import annotations
 from typing import Any
 
 from qua_shared.schemas import CAPABILITIES, CAPABILITIES_BY_ID, TIERS
-from qua_shared.schemas.capabilities import ANONYMOUS
+from qua_shared.schemas.config.capabilities import ANONYMOUS
 from services.db import current_db_seq, repo_permissions
 from services.storage import cache
 

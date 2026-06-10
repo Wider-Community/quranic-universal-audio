@@ -50,7 +50,7 @@
         setSpeed,
     } from '../../stores/player-context';
     import { progressHoverMs, progressScrubMs } from '../../stores/progress-hover';
-    import type { PublicDelivery } from '../../types/public-state';
+    import type { PublicDelivery } from '../../types/generated/schemas';
     import { getActiveTab } from '../../utils/active-tab';
     import { TAB_NAMES } from '../../utils/constants';
     import { DASHBOARD_SPEEDS } from '../../utils/speed-control';

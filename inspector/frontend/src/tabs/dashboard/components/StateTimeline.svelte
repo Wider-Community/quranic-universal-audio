@@ -19,7 +19,8 @@
      * previously reached (a regressed delivery — e.g. un-published back to
      * under-review — only shows dates for its current position and below).
      */
-    import { PUBLIC_BUCKET_LABELS, type PublicBucket, type PublicDelivery } from '../../../lib/types/public-state';
+    import type { PublicDelivery } from '../../../lib/types/generated/schemas';
+    import { PUBLIC_BUCKET_LABELS, type PublicBucket } from '../../../lib/types/public-bucket';
 
     let { delivery = null }: { delivery?: PublicDelivery | null } = $props();
 

@@ -22,7 +22,7 @@ from qua_shared.schemas import (
     Style,
     Vocab,
 )
-from qua_shared.schemas.catalog import Alias, Derived
+from qua_shared.schemas.bucket.catalog import Alias, Derived
 
 from . import _serde
 from .connection import get_conn

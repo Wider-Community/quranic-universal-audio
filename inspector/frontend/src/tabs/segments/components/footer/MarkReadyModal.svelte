@@ -13,11 +13,7 @@
      * inline strings here.
      */
     import { markReady } from '../../../../lib/api/claims-client';
-    import type {
-        SegValAnyItem,
-        SegValidateResponse,
-        SegValLowConfidenceItem,
-    } from '../../../../lib/types/api';
+    import type { SegValAnyItem, SegValLowConfidenceItem, SegValidateResponse } from '../../../../lib/types/generated/schemas';
     import type { MarkReadyChecklist } from '../../../../lib/types/generated/schemas';
     import {
         BLOCKING_COUNT_KEYS,

@@ -8,8 +8,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { SegAllResponse } from '../../../../../lib/types/api';
-import type { Segment } from '../../../../../lib/types/domain';
+import type { SegAllResponse } from '../../../../../lib/types/generated/schemas';
+import type { Segment } from '../../../../../lib/types/view-models';
 import { segAllData } from '../../../stores/chapter';
 import { chapterCbrKbps } from '../../../stores/chapter-meta';
 import { _resetWarmedRecentlyForTest, warmChapterStart, warmSeg } from '../warmup';

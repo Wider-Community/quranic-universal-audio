@@ -19,7 +19,7 @@
 import { get } from 'svelte/store';
 
 import type { AudioSource } from '../../../../lib/playback/audio-port';
-import type { Segment } from '../../../../lib/types/domain';
+import type { Segment } from '../../../../lib/types/view-models';
 import { reciterVbrChapters, selectedReciter } from '../../stores/chapter';
 
 /** Wrap a cross-origin chapter MP3 URL in the same-origin audio-proxy.

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchJson } from '../../../../lib/api';
-import type { SegmentEntry, TsShardResponse, TsShardWord } from '../../../../lib/types/api';
+import type { SegmentEntry, TsShardResponse, TsShardWord } from '../../../../lib/types/ts-client';
 import {
     assembleVerseFromShard,
     chapterVerseRefs,

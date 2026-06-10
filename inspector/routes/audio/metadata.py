@@ -4,6 +4,7 @@ import logging
 
 from flask import Blueprint, jsonify
 
+from qua_shared.schemas import AudioSurahsResponse, ErrorEnvelope
 from services import audio_fetch, cache, storage_paths
 from services.hf_bucket import StorageNotFound, get_backend
 from services.quran_foundation import config as qf_config
@@ -71,13 +72,18 @@ def audio_surahs(category, source, slug):
     key = f"{category}/{source}/{slug}"
     cached = cache.get_audio_url_cache(key)
     if cached is not None:
-        return jsonify({"surahs": cached})
+        return jsonify(_serialize_surahs(cached))
     try:
         doc = get_backend().read_json(storage_paths.audio_manifest_path(slug))
     except StorageNotFound:
-        return jsonify({"error": "Reciter not found"}), 404
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     if not isinstance(doc, dict):
-        return jsonify({"error": "invalid audio_manifest sidecar"}), 500
+        return (
+            jsonify(
+                ErrorEnvelope(error="invalid audio_manifest sidecar").model_dump(exclude_none=True)
+            ),
+            500,
+        )
     chapters = doc.get("chapters") or {}
     surahs: dict[str, dict] = {}
     for k, v in chapters.items():
@@ -101,4 +107,14 @@ def audio_surahs(category, source, slug):
         surahs[k] = {"url": url, "duration_ms": duration_ms}
     _apply_qf_routing(source, slug, surahs)
     cache.set_audio_url_cache(key, surahs)
-    return jsonify({"surahs": surahs})
+    return jsonify(_serialize_surahs(surahs))
+
+
+def _serialize_surahs(surahs: dict[str, dict]) -> dict:
+    """Serialize the per-chapter ``surahs`` map through the wire model.
+
+    Dumps with ``by_alias`` and no ``exclude_none``: ``AudioSurahEntry`` carries
+    a serializer that drops only the optional QF keys (``via``/``origin_url``)
+    when unset and always keeps the required-nullable ``duration_ms``.
+    """
+    return AudioSurahsResponse.model_validate({"surahs": surahs}).model_dump(by_alias=True)

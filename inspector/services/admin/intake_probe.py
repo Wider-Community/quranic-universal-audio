@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 from qua_shared.schemas import ProbeResponse, ProbeResult
-from qua_shared.schemas.intake_requests import IntakeSource
+from qua_shared.schemas.wire.intake_requests import IntakeSource
 from services.db import _serde
 
 logger = logging.getLogger(__name__)

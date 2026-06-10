@@ -14,7 +14,8 @@
      * identity — decides whose comment carries the edit affordance.
      */
     import { currentUser } from '../../../../lib/stores/current-user';
-    import type { FlagAuthor, FlagComment, Segment, SegmentFlagView } from '../../../../lib/types/domain';
+    import type { FlagAuthor, FlagComment, SegmentFlagView } from '../../../../lib/types/generated/schemas';
+import type { Segment } from '../../../../lib/types/view-models';
     import { relativeTime } from '../../../../lib/utils/relative-time';
     import { segAllData } from '../../stores/chapter';
     import { flagSegment } from '../../utils/edit/flag';
@@ -45,7 +46,7 @@
     });
 
     /** Indefinite role phrase, e.g. "a contributor", "a maintainer", "the owner". */
-    function roleLabel(role: string | null): string {
+    function roleLabel(role: string | null | undefined): string {
         if (role === 'owner') return 'the owner';
         if (role === 'maintainer') return 'a maintainer';
         if (role === 'contributor') return 'a contributor';
@@ -58,7 +59,7 @@
         return { role: roleLabel(a.role), login };
     }
 
-    function when(at: string | null): string {
+    function when(at: string | null | undefined): string {
         return at ? relativeTime(at) : 'just now';
     }
 

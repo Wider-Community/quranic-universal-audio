@@ -9,63 +9,7 @@ authoritative spec.
 
 from __future__ import annotations
 
-from .access import Member, Role, RolesFile
-from .activity_state import ActivityState
-from .admin_permissions import (
-    AdminCapabilityRow,
-    AdminCapabilityTierState,
-    AdminPermissionGroup,
-    AdminPermissionsResponse,
-)
-from .admin_requests import (
-    AdminRequestCounts,
-    AdminRequestRow,
-    AdminRequestsResponse,
-    RequestChange,
-)
-from .admin_reviews import (
-    AdminReviewClaimHistoryEntry,
-    AdminReviewDetail,
-    AdminReviewOpenClaim,
-    AdminReviewRow,
-    AdminReviewsResponse,
-    AdminReviewTransition,
-)
-from .admin_users import (
-    AdminActiveClaim,
-    AdminActivityEvent,
-    AdminClaimEvent,
-    AdminRequestEvent,
-    AdminRoleEvent,
-    AdminUserDetail,
-    AdminUserRow,
-    AdminUsersResponse,
-    AdminUsersSummary,
-    AdminUserStats,
-    AdminVisitorStats,
-    VisitorDayStat,
-)
-from .audit import Actor, AuditRecord
-from .automation import (
-    AutoGenTsConfig,
-    AutomationConfig,
-    AutomationResponse,
-    AutomationStateRow,
-    AutoReleaseInactiveConfig,
-    GhCutConfig,
-    HfPublishConfig,
-    StaleMetadataConfig,
-    StaleTsRegenConfig,
-)
-from .capabilities import (
-    CAPABILITIES,
-    CAPABILITIES_BY_ID,
-    GROUP_ORDER,
-    MANAGE_PERMISSIONS,
-    TIERS,
-    Capability,
-)
-from .catalog import (
+from .bucket.catalog import (
     AudioCategory,
     AudioManifestSidecar,
     Channel,
@@ -80,8 +24,102 @@ from .catalog import (
     Style,
     Vocab,
 )
-from .edit_history import EditHistoryBatch, EditOperation, parse_edit_history_line
-from .intake_requests import (
+from .bucket.edit_history import (
+    EditHistoryBatch,
+    EditOperation,
+    EditOpPatch,
+    parse_edit_history_line,
+)
+from .bucket.jobs import JobKind, JobMember, JobRecord, JobsListResponse, JobStatus
+from .bucket.peaks_history import PeaksRecord, parse_peaks_record
+from .bucket.pipeline_meta import PipelineMeta
+from .bucket.playlist_map import MatchConfidence, PlaylistChapterEntry, PlaylistChapterMap
+from .bucket.segment import (
+    DetailedDocument,
+    DetailedEntry,
+    DetailedMeta,
+    DetailedSegment,
+    FlagFollowUp,
+    SegmentFlag,
+    parse_detailed_segment,
+)
+from .bucket.segments_doc import SegmentsDoc
+from .bucket.ts_job_record import TsJobRecord, TsJobSettings
+from .bucket.ts_shard import TsShardDoc, TsShardMeta, TsShardSegment, TsShardWord
+from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
+from .config.access import Member, Role, RolesFile
+from .config.activity_state import ActivityState
+from .config.audit import Actor, AuditRecord
+from .config.automation import (
+    AutoGenTsConfig,
+    AutomationConfig,
+    AutomationResponse,
+    AutomationStateRow,
+    AutoReleaseInactiveConfig,
+    GhCutConfig,
+    HfPublishConfig,
+    StaleMetadataConfig,
+    StaleTsRegenConfig,
+)
+from .config.capabilities import (
+    CAPABILITIES,
+    CAPABILITIES_BY_ID,
+    GROUP_ORDER,
+    MANAGE_PERMISSIONS,
+    TIERS,
+    Capability,
+)
+from .config.pending_requests import (
+    ArchivedRequest,
+    ArchivedRequestsFile,
+    PendingRequest,
+    PendingRequestsFile,
+    ProposedEdits,
+)
+from .config.state import (
+    ReciterRow,
+    ReciterState,
+    ReciterStateFile,
+    RevisionContext,
+    Visibility,
+)
+from .wire._envelopes import ErrorEnvelope, OkAck
+from .wire.admin_permissions import (
+    AdminCapabilityRow,
+    AdminCapabilityTierState,
+    AdminPermissionGroup,
+    AdminPermissionsResponse,
+)
+from .wire.admin_requests import (
+    AdminRequestCounts,
+    AdminRequestRow,
+    AdminRequestsResponse,
+    RequestChange,
+)
+from .wire.admin_reviews import (
+    AdminReviewClaimHistoryEntry,
+    AdminReviewDetail,
+    AdminReviewOpenClaim,
+    AdminReviewRow,
+    AdminReviewsResponse,
+    AdminReviewTransition,
+)
+from .wire.admin_users import (
+    AdminActiveClaim,
+    AdminActivityEvent,
+    AdminClaimEvent,
+    AdminRequestEvent,
+    AdminRoleEvent,
+    AdminUserDetail,
+    AdminUserRow,
+    AdminUsersResponse,
+    AdminUsersSummary,
+    AdminUserStats,
+    AdminVisitorStats,
+    VisitorDayStat,
+)
+from .wire.audio import AudioSurahEntry, AudioSurahsResponse, AudioVia
+from .wire.intake_requests import (
     IntakeAttestations,
     IntakeSource,
     IntakeSubmission,
@@ -90,25 +128,22 @@ from .intake_requests import (
     ProbeResult,
     SourceLink,
 )
-from .jobs import JobKind, JobMember, JobRecord, JobsListResponse, JobStatus
-from .mark_ready import (
+from .wire.mark_ready import (
     BLOCKING_COUNT_KEYS,
     ChecklistKey,
     MarkReadyChecklist,
     MarkReadyRequest,
     MarkReadySubmission,
 )
-from .peaks_history import PeaksRecord, parse_peaks_record
-from .pending_requests import (
-    ArchivedRequest,
-    ArchivedRequestsFile,
-    PendingRequest,
-    PendingRequestsFile,
-    ProposedEdits,
+from .wire.public import (
+    AdminDiscardedDelivery,
+    AdminViewReciter,
+    BucketCounts,
+    PublicDelivery,
+    PublicReciter,
+    PublicReciterPage,
 )
-from .pipeline_meta import PipelineMeta
-from .playlist_map import MatchConfidence, PlaylistChapterEntry, PlaylistChapterMap
-from .release import (
+from .wire.release import (
     AdminCutReleaseRequest,
     AdminGhReleaseMember,
     AdminInFlightJob,
@@ -141,26 +176,109 @@ from .release import (
     VerseTimestampsDoc,
     WordTimestampsDoc,
 )
-from .segment import (
-    DetailedDocument,
-    DetailedEntry,
-    DetailedMeta,
-    DetailedSegment,
-    FlagFollowUp,
-    SegmentFlag,
-    parse_detailed_segment,
+from .wire.seg import (
+    FlagAuthor,
+    FlagComment,
+    SegAllResponse,
+    SegAllSegment,
+    SegConfigResponse,
+    SegDataResponse,
+    SegDataSegment,
+    SegmentFlagView,
+    SegmentsChapterSummary,
+    SegPeaksResponse,
+    SegReciter,
+    SegRecitersResponse,
+    SegSaveFullSegment,
+    SegSavePatchSegment,
+    SegSaveRequest,
+    SegSaveResponse,
+    SegSegmentPeaks,
+    SegSegmentPeaksRequest,
+    SegSegmentPeaksRequestItem,
+    SegSegmentPeaksResponse,
+    SegSlimPeaks,
+    SegUndoBatchRequest,
+    SegUndoOpsRequest,
+    SegUndoResponse,
+    SegValAnyItem,
+    SegValAudioBleedingItem,
+    SegValAutoFix,
+    SegValBasmalaAminItem,
+    SegValBoundaryAdjItem,
+    SegValCrossVerseItem,
+    SegValFailedItem,
+    SegValidateResponse,
+    SegValLowConfidenceItem,
+    SegValLowConfidenceV2Item,
+    SegValMissingVerseItem,
+    SegValMissingWordsItem,
+    SegValMuqattaatItem,
+    SegValProbeMeta,
+    SegValQalqalaItem,
+    SegValRepetitionItem,
+    SegValStats,
+    SegValStructuralErrorItem,
 )
-from .state import (
-    ReciterRow,
-    ReciterState,
-    ReciterStateFile,
-    RevisionContext,
-    Visibility,
+from .wire.timestamps import (
+    Letter,
+    PhonemeInterval,
+    TsCatalogDelivery,
+    TsCatalogReciter,
+    TsCatalogResponse,
+    TsConfigResponse,
+    TsManifestReciter,
+    TsManifestResponse,
+    TsReciter,
+    TsRecitersResponse,
+    TsVbrResponse,
+    TsVerseData,
+    TsWord,
 )
-from .ts_job_record import TsJobRecord, TsJobSettings
-from .ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 
 __all__ = [
+    "FlagAuthor",
+    "FlagComment",
+    "SegAllResponse",
+    "SegAllSegment",
+    "SegConfigResponse",
+    "SegDataResponse",
+    "SegDataSegment",
+    "SegmentFlagView",
+    "SegmentsChapterSummary",
+    "SegPeaksResponse",
+    "SegReciter",
+    "SegRecitersResponse",
+    "SegSaveFullSegment",
+    "SegSavePatchSegment",
+    "SegSaveRequest",
+    "SegSaveResponse",
+    "SegSegmentPeaks",
+    "SegSegmentPeaksRequest",
+    "SegSegmentPeaksRequestItem",
+    "SegSegmentPeaksResponse",
+    "SegSlimPeaks",
+    "SegUndoBatchRequest",
+    "SegUndoOpsRequest",
+    "SegUndoResponse",
+    "SegValAnyItem",
+    "SegValAudioBleedingItem",
+    "SegValAutoFix",
+    "SegValBasmalaAminItem",
+    "SegValBoundaryAdjItem",
+    "SegValCrossVerseItem",
+    "SegValFailedItem",
+    "SegValidateResponse",
+    "SegValLowConfidenceItem",
+    "SegValLowConfidenceV2Item",
+    "SegValMissingVerseItem",
+    "SegValMissingWordsItem",
+    "SegValMuqattaatItem",
+    "SegValProbeMeta",
+    "SegValQalqalaItem",
+    "SegValRepetitionItem",
+    "SegValStats",
+    "SegValStructuralErrorItem",
     "ActivityState",
     "Actor",
     "AutoGenTsConfig",
@@ -217,6 +335,9 @@ __all__ = [
     "ArchivedRequestsFile",
     "AudioCategory",
     "AudioManifestSidecar",
+    "AudioSurahEntry",
+    "AudioSurahsResponse",
+    "AudioVia",
     "AuditRecord",
     "CAPABILITIES",
     "CAPABILITIES_BY_ID",
@@ -232,10 +353,13 @@ __all__ = [
     "DetailedMeta",
     "DetailedSegment",
     "EditHistoryBatch",
+    "EditOpPatch",
     "EditOperation",
+    "ErrorEnvelope",
     "FileDigest",
     "FlagFollowUp",
     "SegmentFlag",
+    "SegmentsDoc",
     "BLOCKING_COUNT_KEYS",
     "ChecklistKey",
     "IntakeAttestations",
@@ -252,12 +376,19 @@ __all__ = [
     "MarkReadySubmission",
     "MatchConfidence",
     "Member",
+    "OkAck",
     "PeaksRecord",
     "PlaylistChapterEntry",
     "PlaylistChapterMap",
     "PendingRequest",
     "PendingRequestsFile",
     "PipelineMeta",
+    "AdminDiscardedDelivery",
+    "AdminViewReciter",
+    "BucketCounts",
+    "PublicDelivery",
+    "PublicReciter",
+    "PublicReciterPage",
     "ProbeResponse",
     "ProbeResult",
     "ProposedEdits",
@@ -288,6 +419,23 @@ __all__ = [
     "TimestampMeta",
     "TsJobRecord",
     "TsJobSettings",
+    "TsShardDoc",
+    "TsShardMeta",
+    "TsShardSegment",
+    "TsShardWord",
+    "TsConfigResponse",
+    "TsManifestReciter",
+    "TsManifestResponse",
+    "TsCatalogReciter",
+    "TsCatalogDelivery",
+    "TsCatalogResponse",
+    "TsVbrResponse",
+    "TsReciter",
+    "TsRecitersResponse",
+    "Letter",
+    "PhonemeInterval",
+    "TsWord",
+    "TsVerseData",
     "TsValidationDoc",
     "TsValidationMeta",
     "TsValidationVerse",

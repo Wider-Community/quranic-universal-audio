@@ -1,4 +1,4 @@
-import type { Segment } from '../../../../lib/types/domain';
+import type { Segment } from '../../../../lib/types/view-models';
 import { CONF_HIGH_THRESHOLD, CONF_MID_THRESHOLD } from '../constants';
 
 export function getConfClass(seg: Segment | { matched_ref?: string; confidence?: number }): string {

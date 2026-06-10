@@ -1,5 +1,5 @@
 <script context="module" lang="ts">
-    import type { PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
+    import type { PublicDelivery, PublicReciter } from '../../../lib/types/generated/schemas';
 
     export interface RowEntry {
         reciter: PublicReciter;

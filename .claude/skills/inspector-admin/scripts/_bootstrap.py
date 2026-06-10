@@ -106,7 +106,7 @@ def add_common_args(parser: argparse.ArgumentParser, *, mutating: bool = True) -
 class BootstrapCtx:
     repo_root: Path
     bucket_id: str           # hetchyy/quranic-inspector-bucket{,-dev}
-    actor: Optional[object]  # qua_shared.schemas.audit.Actor when need_actor=True
+    actor: Optional[object]  # qua_shared.schemas.config.audit.Actor when need_actor=True
     db_path: Path
     db_synced: bool
 
@@ -165,7 +165,7 @@ def setup(args: argparse.Namespace, *, need_db: bool = True,
     actor = None
     if need_actor:
         from qua_shared.schemas import Actor  # noqa: E402
-        from qua_shared.schemas.access import Role  # noqa: E402
+        from qua_shared.schemas.config.access import Role  # noqa: E402
         hf_id = os.environ.get("INSPECTOR_DEV_OWNER_HF_ID", "").strip()
         login = os.environ.get("INSPECTOR_DEV_OWNER_LOGIN", "").strip()
         if not hf_id or not login:

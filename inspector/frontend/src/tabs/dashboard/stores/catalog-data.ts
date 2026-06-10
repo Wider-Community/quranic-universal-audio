@@ -20,7 +20,7 @@
 import { get, writable } from 'svelte/store';
 
 import { fetchPublicReciters, fetchPublicStats } from '../../../lib/api/public-reciters';
-import type { BucketCounts, PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
+import type { BucketCounts, PublicDelivery, PublicReciter } from '../../../lib/types/generated/schemas';
 import { visiblePoll } from '../../../lib/utils/visible-poll';
 
 export interface CatalogSnapshot {

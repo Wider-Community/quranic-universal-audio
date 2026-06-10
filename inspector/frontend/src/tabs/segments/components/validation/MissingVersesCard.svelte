@@ -1,8 +1,8 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
 
-    import type { SegValMissingVerseItem } from '../../../../lib/types/api';
-    import type { Segment } from '../../../../lib/types/domain';
+    import type { SegValMissingVerseItem } from '../../../../lib/types/generated/schemas';
+    import type { Segment } from '../../../../lib/types/view-models';
     import { getAdjacentSegments, segAllData } from '../../stores/chapter';
     import { findMissingVerseBoundarySegments } from '../../utils/validation/missing-verse-context';
     import SegmentRow from '../list/SegmentRow.svelte';

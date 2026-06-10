@@ -22,7 +22,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .intake_requests import normalize_url
+from ..wire.intake_requests import normalize_url
 
 #: How the chapter was assigned. ``exact``/``high`` come from title matching;
 #: ``low`` flags an entry the reviewer should eyeball; ``manual`` is a

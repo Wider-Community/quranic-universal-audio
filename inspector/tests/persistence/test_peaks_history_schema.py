@@ -129,22 +129,17 @@ def test_slim_record_emits_canonical_shape():
         assert banned not in out, f"{banned} leaked into canonical emission"
 
 
-def test_record_with_legacy_fields_strips_them_on_read(caplog):
-    """A record that carries the canonical payload AND extra legacy
-    fields (mid-migration partially-rewritten record) validates cleanly:
-    the schema's ``strip_and_warn`` pre-validator drops the legacy keys
-    with a warning and ``model_extra`` stays empty so writers can't
-    accidentally round-trip them back to disk."""
-    import logging
-
-    caplog.set_level(logging.INFO, logger="qua_shared.schemas._extras")
+def test_record_with_legacy_fields_rejected():
+    """A record that carries the canonical payload AND extra legacy fields
+    (``batch_id`` / ``duration_ms``) is REJECTED under pure
+    ``extra="forbid"`` — the legacy keys no longer strip silently, so a
+    partially-rewritten record raises ``ValidationError`` instead of riding
+    through and round-tripping back to disk."""
     rec = _slim_record()
     rec["batch_id"] = "legacy-batch"
     rec["duration_ms"] = 4090
-    m = PeaksRecord.model_validate(rec)
-    assert (m.model_extra or {}) == {}
-    msgs = " ".join(r.getMessage() for r in caplog.records)
-    assert "batch_id" in msgs and "duration_ms" in msgs
+    with pytest.raises(ValueError):
+        PeaksRecord.model_validate(rec)
 
 
 def test_parse_peaks_record_helper():

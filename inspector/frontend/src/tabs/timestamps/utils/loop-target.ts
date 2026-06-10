@@ -6,7 +6,7 @@
  * engaging the loop).
  */
 
-import type { TsWord } from '../../../lib/types/domain';
+import type { TsWord } from '../../../lib/types/ts-client';
 
 /**
  * Find the word covering `time`. When `clamp` is true (click / toggle path),

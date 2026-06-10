@@ -32,7 +32,7 @@
     import { tick } from 'svelte';
 
     import { editGate } from '../../../../lib/actions/editGate';
-    import type { EditOp, Segment } from '../../../../lib/types/domain';
+    import type { EditOp, Segment } from '../../../../lib/types/view-models';
     import { refreshSegInStore } from '../../stores/chapter';
     import {
         amendSegInOp,

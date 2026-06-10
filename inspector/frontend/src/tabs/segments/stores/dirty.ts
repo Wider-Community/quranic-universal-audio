@@ -16,7 +16,7 @@
 
 import { derived, writable } from 'svelte/store';
 
-import type { EditOp, Segment } from '../../../lib/types/domain';
+import type { EditOp, Segment } from '../../../lib/types/view-models';
 
 // ---------------------------------------------------------------------------
 // Types

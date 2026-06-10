@@ -16,7 +16,7 @@
  * "no signal" and rely on the post-save delta instead.
  */
 
-import type { EditOp } from '../../../../lib/types/domain';
+import type { EditOp } from '../../../../lib/types/view-models';
 
 // Categories that exist in the accordion for review/awareness but should
 // NOT surface as history-delta pills (`+cat` / `−cat`) on edit cards. They
@@ -43,7 +43,7 @@ export function classifiedIssuesOf(snap: ClassifiableSnap | null | undefined): s
  *  boolean for snapshots that predate the array shape.
  */
 export function isIgnoredFor(
-    seg: { ignored_categories?: string[]; ignored?: boolean } | null | undefined,
+    seg: { ignored_categories?: string[] | null; ignored?: boolean } | null | undefined,
     category: string,
 ): boolean {
     if (!seg) return false;

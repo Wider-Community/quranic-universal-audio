@@ -28,6 +28,7 @@ Where a reference doc here touches those domains (e.g. the route map in `archite
 | [accordion-guides.md](accordion-guides.md) | Validation accordion help-modal guide templates (`tabs/segments/guides/`). |
 | [config-deploy.md](config-deploy.md) | Env vars, Space secrets, image build, deploy workflow, healthz, single-worker invariant. |
 | [data-migrations.md](data-migrations.md) | One-shot migration / backfill scripts (`scripts/migrations/`, `scripts/backfills/`) — detection, apply CLI, rollback. |
+| [schemas.md](schemas.md) | The shared `qua_shared/schemas/` Pydantic layer — `bucket/`+`wire/`+`config/` folder convention + `extra=` policy, the FE-types codegen pipeline (`fe_types.py` → `regen_fe_types.py` → `schemas.ts` → CI), the wire-model route contract (`ErrorEnvelope`/`OkAck`, response snapshots), the tricky-shape cookbook, round-trip tests, and the external-file validation harness. |
 | [api-roadmap.md](api-roadmap.md) | **Roadmap / vision (not built yet).** The planned public data API — typed pip/npm SDKs over static CDN-hosted data + an optional HF-Space compute layer; the why, the caching/versioning model, and the build sequence. |
 | [testing.md](testing.md) | Test suites — pytest (BE + qua_shared) and vitest (FE), conftest fixtures (`signed_in_client`, `tmp_reciter_dir`, `seed_state`, `state_persistence`), mocking boundaries, schema-parity policy, coverage, phase-gates. |
 

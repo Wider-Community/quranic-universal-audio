@@ -21,7 +21,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .state import SLUG_RE
+from ..config.state import SLUG_RE
 
 # Source slugs allow hyphens (e.g. ``surah-quran``); everything else uses
 # the standard slug regex.
@@ -329,6 +329,10 @@ class AudioManifestSidecar(BaseModel):
     bitrate) when probed. Keys in ``chapters`` are stringified surah numbers
     (``"1"``–``"114"``) for ``by_surah``, or ``"<surah>:<ayah>"`` for
     ``by_ayah``.
+
+    Extras handling: pure ``extra="forbid"`` — any unknown field raises a
+    ``ValidationError``. ``_meta`` is the on-disk key for ``meta``; resolved
+    via ``alias`` + ``populate_by_name``.
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)

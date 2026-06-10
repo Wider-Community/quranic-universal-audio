@@ -9,8 +9,8 @@ import { type ApiErrorBody,friendlyError } from '../../../../lib/errors/friendly
 import { SIGN_IN_MESSAGES } from '../../../../lib/sign-in-messages';
 import { openSignInModal } from '../../../../lib/stores/sign-in-modal';
 import { pushToast } from '../../../../lib/stores/toast';
-import type { SegSaveResponse } from '../../../../lib/types/api';
-import type { EditOp, Segment } from '../../../../lib/types/domain';
+import type { SegSaveResponse } from '../../../../lib/types/generated/schemas';
+import type { EditOp, Segment } from '../../../../lib/types/view-models';
 import {
     getChapterSegments,
     selectedReciter,

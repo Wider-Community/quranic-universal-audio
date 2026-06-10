@@ -13,7 +13,14 @@ Decorator chain on every mutating route:
 
 from flask import Blueprint, g, jsonify, request
 
-from qua_shared.schemas import Actor
+from qua_shared.schemas import Actor, ErrorEnvelope
+from qua_shared.schemas.wire.seg import (
+    SegSaveRequest,
+    SegSaveResponse,
+    SegUndoBatchRequest,
+    SegUndoOpsRequest,
+    SegUndoResponse,
+)
 from services.auto_split import compute_auto_split as _compute_auto_split
 from services.save import save_seg_data as _save_seg_data
 from services.undo import undo_batch as _undo_batch
@@ -34,6 +41,26 @@ def _actor_from_g() -> Actor:
     )
 
 
+def _error(envelope: ErrorEnvelope, status: int):
+    """JSON-serialize an ``ErrorEnvelope`` with its HTTP status."""
+    return jsonify(envelope.model_dump(exclude_none=True)), status
+
+
+def _serialize_result(result, response_cls):
+    """Serialize a save/undo service result through the wire models.
+
+    The service returns either a success dict (``{"ok": True[, ...]}``) or an
+    ``(error_dict, http_status)`` tuple. Success dicts are dumped through
+    ``response_cls``; error tuples are re-emitted as ``ErrorEnvelope`` so every
+    branch leaves through a modelled shape (byte-identical to the hand-built
+    dicts they replace).
+    """
+    if isinstance(result, tuple):
+        body, status = result
+        return _error(ErrorEnvelope.model_validate(body), status)
+    return jsonify(response_cls.model_validate(result).model_dump())
+
+
 @seg_edit_bp.route("/save/<reciter>/<int:chapter>", methods=["POST"])
 @require_same_origin
 @require_edit_lock(reciter_param="reciter", admin_bypass=True)
@@ -41,11 +68,16 @@ def seg_save(reciter, chapter):
     """Save edited segments back to detailed.json and segments.json."""
     updates = request.get_json()
     if not updates or "segments" not in updates:
-        return jsonify({"error": "Missing segments in request body"}), 400
+        return _error(ErrorEnvelope(error="Missing segments in request body"), 400)
+    # Validate the recognized fields through the request model (tolerantly —
+    # the FE payload carries an extra ``affected_chapters`` key the route has
+    # always ignored, so only the modelled subset is parsed). The full dict is
+    # still handed to the service, preserving its exact tolerant read surface.
+    SegSaveRequest.model_validate(
+        {k: updates[k] for k in ("segments", "operations", "full_replace") if k in updates}
+    )
     result = _save_seg_data(reciter, chapter, updates, actor=_actor_from_g())
-    if isinstance(result, tuple):
-        return jsonify(result[0]), result[1]
-    return jsonify(result)
+    return _serialize_result(result, SegSaveResponse)
 
 
 @seg_edit_bp.route("/undo-batch/<reciter>", methods=["POST"])
@@ -55,11 +87,10 @@ def seg_undo_batch(reciter):
     """Undo a specific saved batch by reversing its operations."""
     body = request.get_json()
     if not body or not body.get("batch_id"):
-        return jsonify({"error": "Missing batch_id"}), 400
-    result = _undo_batch(reciter, body["batch_id"], actor=_actor_from_g())
-    if isinstance(result, tuple):
-        return jsonify(result[0]), result[1]
-    return jsonify(result)
+        return _error(ErrorEnvelope(error="Missing batch_id"), 400)
+    req = SegUndoBatchRequest.model_validate(body)
+    result = _undo_batch(reciter, req.batch_id, actor=_actor_from_g())
+    return _serialize_result(result, SegUndoResponse)
 
 
 @seg_edit_bp.route("/auto-split/<reciter>", methods=["POST"])
@@ -96,13 +127,12 @@ def seg_undo_ops(reciter):
     """Undo specific operations within a saved batch."""
     body = request.get_json()
     if not body or not body.get("batch_id") or not body.get("op_ids"):
-        return jsonify({"error": "Missing batch_id or op_ids"}), 400
+        return _error(ErrorEnvelope(error="Missing batch_id or op_ids"), 400)
+    req = SegUndoOpsRequest.model_validate(body)
     result = _undo_ops(
         reciter,
-        body["batch_id"],
-        set(body["op_ids"]),
+        req.batch_id,
+        set(req.op_ids),
         actor=_actor_from_g(),
     )
-    if isinstance(result, tuple):
-        return jsonify(result[0]), result[1]
-    return jsonify(result)
+    return _serialize_result(result, SegUndoResponse)

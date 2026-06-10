@@ -11,11 +11,9 @@ import { get } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
 import { loadQuranRefs, quranRefs } from '../../../../lib/refs/quran-refs';
-import type {
-    SegAllResponse,
-    SegValidateResponse,
-} from '../../../../lib/types/api';
+import type { SegAllResponse, SegValidateResponse } from '../../../../lib/types/generated/schemas';
 import { preconnectOrigins } from '../../../../lib/utils/preconnect';
+import type { SegAllState } from '../../stores/chapter';
 import {
     reciterVbrChapters,
     segAllData,
@@ -42,12 +40,13 @@ import { dkTextForRef } from './references';
  *     composition. If `quranRefs` is still null (offline / fetch failed),
  *     consumers tolerate empty `matched_text` via `|| ''` fallbacks.
  */
-function _hydrateSegAll(all: SegAllResponse): SegAllResponse {
+function _hydrateSegAll(all: SegAllResponse): SegAllState {
     const audioByChapter = all.audio_by_chapter ?? {};
     const refs = get(quranRefs);
     const dkWords = refs?.dk_words;
     const vwc = refs?.verse_word_counts;
-    for (const seg of all.segments) {
+    const hydrated = all as unknown as SegAllState;
+    for (const seg of hydrated.segments) {
         if (!seg.audio_url) {
             seg.audio_url = audioByChapter[String(seg.chapter)] ?? '';
         }
@@ -55,7 +54,7 @@ function _hydrateSegAll(all: SegAllResponse): SegAllResponse {
             seg.matched_text = dkTextForRef(seg.matched_ref, dkWords, vwc);
         }
     }
-    return all;
+    return hydrated;
 }
 
 /**

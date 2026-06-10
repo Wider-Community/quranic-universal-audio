@@ -7,7 +7,7 @@
  * fetch MP3 headers until the user hits play).
  */
 
-import type { AudioSurahsResponse } from '../types/api';
+import type { AudioSurahsResponse } from '../types/generated/schemas';
 
 export interface SurahEntry {
     url: string;
@@ -37,7 +37,15 @@ export async function fetchSurahsForDelivery(
     const data = (await resp.json()) as AudioSurahsResponse;
     const raw = data.surahs ?? {};
     const out: Record<string, SurahEntry> = {};
-    for (const [k, v] of Object.entries(raw)) {
+    for (const [k, entry] of Object.entries(raw)) {
+        // `AudioSurahEntry` is an open `{ [k]: unknown }` map server-side; the
+        // route emits these typed fields per chapter.
+        const v = entry as {
+            url: string;
+            duration_ms: number | null;
+            via?: 'qf_api' | 'qf_fallback';
+            origin_url?: string;
+        };
         out[k] = { url: v.url, durationMs: v.duration_ms, via: v.via, originUrl: v.origin_url };
     }
     _cache.set(key, out);

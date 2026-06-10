@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { PublicDelivery } from '../../types/public-state';
+import type { PublicDelivery } from '../../types/generated/schemas';
 import { buildSchemaDescriptor } from '../schema-descriptor';
 
 function delivery(overrides: Partial<PublicDelivery> = {}): PublicDelivery {

@@ -22,7 +22,7 @@ from collections import OrderedDict
 from datetime import UTC, datetime
 
 from config import DK_SCRIPT_PATH
-from qua_shared.schemas import ReciterCatalog
+from qua_shared.schemas import ReciterCatalog, TsManifestResponse
 from qua_shared.timestamps_shards import SCHEMA_VERSION
 from services.audio.audio_meta import chapter_numbers, vbr_chapters_for_reciter
 from services.state import catalog as catalog_service
@@ -62,15 +62,25 @@ _shard_lru: OrderedDict[tuple[str, int], bytes] = OrderedDict()
 
 
 def _build_manifest_dict(reciters_block: dict[str, dict]) -> dict:
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "commit": "",
-        "dataset_base_url": "",
-        "shard_url_template": "/api/ts/shard/{reciter}/{chapter}",
-        "resources": {key: f"/api/ts/resource/{key}" for key in _RESOURCE_KEYS},
-        "reciters": reciters_block,
-    }
+    """Assemble + serialize the decompressed manifest body through the wire model.
+
+    ``reciters_block`` carries one ``_bucket_reciter_block`` dict per advertised
+    slug. The whole body round-trips through :class:`TsManifestResponse` so the
+    shape stays in lockstep with the codegen'd FE type. Dumped WITHOUT
+    ``exclude_none`` so a reciter's ``name_ar`` stays emitted as ``null`` when the
+    catalog has no Arabic name (the FE distinguishes "no Arabic name" from
+    "field absent").
+    """
+    manifest = TsManifestResponse(
+        schema_version=SCHEMA_VERSION,
+        generated_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        commit="",
+        dataset_base_url="",
+        shard_url_template="/api/ts/shard/{reciter}/{chapter}",
+        resources={key: f"/api/ts/resource/{key}" for key in _RESOURCE_KEYS},
+        reciters=reciters_block,
+    )
+    return manifest.model_dump(mode="json", by_alias=True)
 
 
 def _build_resource_bytes() -> dict[str, bytes]:

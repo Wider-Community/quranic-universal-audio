@@ -25,7 +25,7 @@
         type AdminViewReciter,
         type PublicDelivery,
         type PublicReciter,
-    } from '../../../lib/types/public-state';
+    } from '../../../lib/types/generated/schemas';
     import {
         bitrateLabel,
         categoryLabel,

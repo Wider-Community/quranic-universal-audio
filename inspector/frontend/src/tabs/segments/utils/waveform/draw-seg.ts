@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 
-import type { AudioPeaks, PeakBucket, Segment } from '../../../../lib/types/domain';
+import type { AudioPeaks, PeakBucket } from '../../../../lib/types/peaks-transport';
+import type { Segment } from '../../../../lib/types/view-models';
 import {
     PREVIEW_PLAYHEAD_COLOR,
     WAVEFORM_BG_COLOR,

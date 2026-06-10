@@ -2,8 +2,8 @@
     import { createEventDispatcher } from 'svelte';
 
     import { editGate } from '../../../../lib/actions/editGate';
-    import type { SegValAutoFix,SegValMissingWordsItem } from '../../../../lib/types/api';
-    import type { Segment } from '../../../../lib/types/domain';
+    import type { SegValAutoFix, SegValMissingWordsItem } from '../../../../lib/types/generated/schemas';
+    import type { Segment } from '../../../../lib/types/view-models';
     import {
         getAdjacentSegments,
         getChapterSegments,
@@ -151,7 +151,7 @@
     }
 
     // ---- Auto-fix handler ----
-    function handleAutoFix(autoFix: SegValAutoFix | undefined): void {
+    function handleAutoFix(autoFix: SegValAutoFix | null | undefined): void {
         if (!autoFix) return;
         const targetSeg = getSegByChapterIndex(item.chapter, autoFix.target_seg_index);
         if (!targetSeg) return;

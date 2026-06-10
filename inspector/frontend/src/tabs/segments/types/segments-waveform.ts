@@ -9,7 +9,7 @@
  * Keep this type-only — no logic belongs here.
  */
 
-import type { Segment } from '../../../lib/types/domain';
+import type { Segment } from '../../../lib/types/view-models';
 
 /** Highlight descriptor for a trim-history card (red for removed, green for kept). */
 export interface TrimHighlight {

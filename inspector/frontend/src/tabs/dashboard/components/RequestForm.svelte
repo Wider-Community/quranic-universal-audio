@@ -30,7 +30,7 @@
     import type {
         PublicDelivery,
         PublicReciter,
-    } from '../../../lib/types/public-state';
+    } from '../../../lib/types/generated/schemas';
     import {
         COUNTRIES,
         countryByCode,

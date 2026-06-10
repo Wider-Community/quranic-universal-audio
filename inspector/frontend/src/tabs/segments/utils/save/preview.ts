@@ -3,7 +3,7 @@
  * Pure function — no DOM side effects.
  */
 
-import type { HistoryBatch } from '../../../../lib/types/domain';
+import type { HistoryBatch } from '../../../../lib/types/view-models';
 import {
     getChapterOps,
     getDirtyMap,

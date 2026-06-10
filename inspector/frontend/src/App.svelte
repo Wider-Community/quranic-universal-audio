@@ -16,7 +16,7 @@
     import { dashPort } from './lib/playback/dash-port';
     import { currentUser, isSignedIn, loadCurrentUser } from './lib/stores/current-user';
     import { playerContext } from './lib/stores/player-context';
-    import type { PublicDelivery } from './lib/types/public-state';
+    import type { PublicDelivery } from './lib/types/generated/schemas';
     import { activeTab as activeTabStore, getActiveTab, setActiveTab } from './lib/utils/active-tab';
     import { LS_KEYS, TAB_NAMES } from './lib/utils/constants';
     import DashboardTab from './tabs/dashboard/DashboardTab.svelte';

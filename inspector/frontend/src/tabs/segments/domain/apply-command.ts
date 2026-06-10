@@ -18,7 +18,7 @@
  * dispatcher's job.
  */
 
-import type { EditOp, Segment } from '../../../lib/types/domain';
+import type { EditOp, Segment } from '../../../lib/types/view-models';
 import type { SegSnapshot } from '../stores/dirty';
 import { snapshotSeg } from '../stores/dirty';
 import type { SegmentState } from '../stores/segments';
@@ -644,7 +644,7 @@ function _reduceFlagSegment(
     } else if (next.flag) {
         next.flag = {
             ...next.flag,
-            follow_ups: [...next.flag.follow_ups, { comment, at: now, author, mine: true }],
+            follow_ups: [...(next.flag.follow_ups ?? []), { comment, at: now, author, mine: true }],
         };
     }
 

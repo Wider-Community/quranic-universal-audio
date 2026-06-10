@@ -1,7 +1,8 @@
 import { get } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
-import type { SegStatsResponse, SegValidateResponse } from '../../../../lib/types/api';
+import type { SegValidateResponse } from '../../../../lib/types/generated/schemas';
+import type { SegStatsResponse } from '../../../../lib/types/view-models';
 import { selectedReciter } from '../../stores/chapter';
 import { segListElement } from '../../stores/playback';
 import { savedPreviewScroll } from '../../stores/save';

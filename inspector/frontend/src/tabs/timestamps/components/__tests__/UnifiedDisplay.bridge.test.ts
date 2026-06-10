@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { dashPort } from '../../../../lib/playback/dash-port';
 import { makeAudioStub as makePortAudioStub } from '../../../../lib/playback/__tests__/raf-harness';
-import type { Letter, PhonemeInterval, TsVerseData, TsWord } from '../../../../lib/types/domain';
+import type { Letter, PhonemeInterval, TsVerseData, TsWord } from '../../../../lib/types/ts-client';
 import { loadedVerse } from '../../stores/verse';
 
 import UnifiedDisplay from '../UnifiedDisplay.svelte';

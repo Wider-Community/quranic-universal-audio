@@ -300,7 +300,7 @@ Persistence schemas (`DetailedSegment`, `EditHistoryBatch`, `EditOperation`, `Pe
 - The reader (`history_query.parse_edit_history_line`, `peaks_history`, `audio_meta`) parses via Pydantic.
 - A round-trip test under `inspector/tests/persistence/test_<schema>_schema.py` pins the contract.
 
-For the slim FE-facing subset, the `_extras.strip_and_warn` helper strips unknown fields with a logged warning — `extra='forbid'` plus a strip layer, not `extra='allow'`. Don't add tolerance via `extra='allow'`; add it via `strip_and_warn`.
+These bucket persistence models are pure `extra='forbid'` (no strip layer): an unknown/legacy field raises `ValidationError` rather than being silently dropped, so writer drift fails loudly. Don't loosen them to `extra='allow'` or add a `strip_and_warn` tolerance — the prod-data migration already rewrote on-disk artefacts to the canonical shape, so forbid is safe. `strip_and_warn` survives only for the `ts_shard` `_meta` forward-compat exception.
 
 See [`data-migrations.md`](data-migrations.md) for the writer/reader-drift rationale.
 

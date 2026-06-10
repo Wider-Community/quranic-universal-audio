@@ -13,7 +13,7 @@
 
 import { writable } from 'svelte/store';
 
-import type { SegValAnyItem } from '../../../lib/types/api';
+import type { SegValAnyItem } from '../../../lib/types/generated/schemas';
 
 export interface AccordionPin {
     /** Category type currently pinned (e.g. 'missing_words', 'repetitions'). */

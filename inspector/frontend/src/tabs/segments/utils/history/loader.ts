@@ -9,7 +9,7 @@
 import { get } from 'svelte/store';
 
 import { fetchJsonOrNull } from '../../../../lib/api';
-import type { SegEditHistoryResponse } from '../../../../lib/types/api';
+import type { SegEditHistoryResponse } from '../../../../lib/types/view-models';
 import { selectedReciter } from '../../stores/chapter';
 import {
     historyLoadState,

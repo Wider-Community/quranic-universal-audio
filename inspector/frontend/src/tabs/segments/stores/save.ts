@@ -7,7 +7,7 @@
 
 import { writable } from 'svelte/store';
 
-import type { EditOp, HistoryBatch } from '../../../lib/types/domain';
+import type { EditOp, HistoryBatch } from '../../../lib/types/view-models';
 import type { SavedChainsSnapshot } from '../types/segments';
 
 // ---------------------------------------------------------------------------
@@ -83,5 +83,5 @@ export function clearSavePreviewData(): void {
     savePreviewData.set(null);
 }
 
-// Type re-export so callers don't need to import from domain.ts separately.
+// Type re-export so callers don't need to import from view-models.ts separately.
 export type { HistoryBatch };

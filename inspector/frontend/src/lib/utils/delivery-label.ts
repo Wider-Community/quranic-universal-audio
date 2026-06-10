@@ -2,7 +2,7 @@
  * Display-name helpers for catalog vocab slugs.
  * Centralized so slugs never leak to the UI.
  */
-import type { PublicDelivery } from '../types/public-state';
+import type { PublicDelivery } from '../types/generated/schemas';
 
 const TITLE_CASE_OVERRIDES: Record<string, string> = {
     mp3quran: 'mp3quran',

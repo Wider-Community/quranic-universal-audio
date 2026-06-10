@@ -32,12 +32,7 @@
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import { can } from '../../../../lib/stores/capabilities';
     import { currentUser } from '../../../../lib/stores/current-user';
-    import type {
-        SegValAnyItem,
-        SegValidateResponse,
-        SegValLowConfidenceItem,
-        SegValQalqalaItem,
-    } from '../../../../lib/types/api';
+    import type { SegValAnyItem, SegValLowConfidenceItem, SegValQalqalaItem, SegValidateResponse } from '../../../../lib/types/generated/schemas';
     import { activeTab } from '../../../../lib/utils/active-tab';
     import { TAB_NAMES } from '../../../../lib/utils/constants';
     import { pendingSegmentsDeepLink, type SegmentsDeepLink } from '../../../../lib/utils/goto-segments';

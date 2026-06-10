@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { dashPort } from '../../../../lib/playback/dash-port';
 import { makeAudioStub as makePortAudioStub } from '../../../../lib/playback/__tests__/raf-harness';
-import type { TsVerseData, TsWord } from '../../../../lib/types/domain';
+import type { TsVerseData, TsWord } from '../../../../lib/types/ts-client';
 import { loopTarget } from '../../stores/playback';
 import type { TsLoadedVerse } from '../../stores/verse';
 import { loadedVerse } from '../../stores/verse';

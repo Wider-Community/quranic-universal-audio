@@ -14,7 +14,7 @@
 import { derived, get, writable } from 'svelte/store';
 
 import { quranRefs } from '../../../lib/refs/quran-refs';
-import type { Segment } from '../../../lib/types/domain';
+import type { Segment } from '../../../lib/types/view-models';
 import { SEG_FILTER_FIELDS } from '../utils/data/filter-fields';
 import { countSegWords, parseSegRef } from '../utils/data/references';
 import {

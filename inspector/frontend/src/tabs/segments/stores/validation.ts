@@ -10,7 +10,7 @@
 
 import { derived, writable } from 'svelte/store';
 
-import type { SegValidateResponse } from '../../../lib/types/api';
+import type { SegValidateResponse } from '../../../lib/types/generated/schemas';
 
 /** Validation data for the currently-loaded reciter, or null if none loaded. */
 export const segValidation = writable<SegValidateResponse | null>(null);

@@ -11,12 +11,8 @@
      */
     import { createEventDispatcher } from 'svelte';
 
-    import {
-        BUCKET_PRIORITY,
-        type PublicBucket,
-        type PublicDelivery,
-        type PublicReciter,
-    } from '../types/public-state';
+    import type { PublicDelivery, PublicReciter } from '../types/generated/schemas';
+    import { BUCKET_PRIORITY, type PublicBucket } from '../types/public-bucket';
     import { countryName } from '../utils/delivery-label';
     import StatePill from './StatePill.svelte';
 

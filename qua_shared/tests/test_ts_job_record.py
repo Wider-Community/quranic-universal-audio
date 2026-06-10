@@ -1,37 +1,51 @@
 """TsJobSettings / TsJobRecord schema tests.
 
-Focus: forward-compat for the retired ``persist_audio`` / ``gen_peaks`` knobs.
-The timestamps job is now alignment-only (audio + peaks land offline), but old
-on-disk records at ``reciters/<slug>/jobs/ts/<id>.json`` still nest those keys.
-They must strip-with-warn on read, not fail ``extra="forbid"`` validation.
+Pure ``extra="forbid"``: the retired ``persist_audio`` / ``gen_peaks`` knobs
+(the timestamps job is alignment-only now — audio + peaks land offline) are
+REJECTED on read rather than stripped. A clean settings/record round-trips.
 """
 
 from __future__ import annotations
 
+import pytest
+
 from qua_shared.schemas import TsJobRecord, TsJobSettings
 
 
-def test_settings_strips_retired_persist_and_peaks_keys():
-    s = TsJobSettings.model_validate(
-        {"beams": [50, 2], "persist_audio": True, "gen_peaks": False, "workers": 8}
-    )
+def test_settings_with_retired_persist_or_peaks_key_rejected():
+    for retired in ("persist_audio", "gen_peaks"):
+        with pytest.raises(ValueError):
+            TsJobSettings.model_validate({"beams": [50, 2], "workers": 8, retired: True})
+
+
+def test_clean_settings_validates():
+    s = TsJobSettings.model_validate({"beams": [50, 2], "workers": 8})
     assert s.beams == [50, 2]
     assert s.workers == 8
-    assert not hasattr(s, "persist_audio")
-    assert not hasattr(s, "gen_peaks")
 
 
-def test_record_with_legacy_settings_still_parses():
+def test_record_with_retired_settings_rejected():
+    with pytest.raises(ValueError):
+        TsJobRecord.model_validate(
+            {
+                "job_id": "j1",
+                "slug": "minshawy_murattal",
+                "settings": {"beams": [50], "persist_audio": True, "gen_peaks": True},
+                "status": "succeeded",
+            }
+        )
+
+
+def test_clean_record_validates():
     rec = TsJobRecord.model_validate(
         {
             "job_id": "j1",
             "slug": "minshawy_murattal",
-            "settings": {"beams": [50], "persist_audio": True, "gen_peaks": True},
+            "settings": {"beams": [50]},
             "status": "succeeded",
         }
     )
     assert rec.settings.beams == [50]
-    assert "persist_audio" not in rec.settings.model_dump()
 
 
 def test_settings_default_beams_is_single_50():

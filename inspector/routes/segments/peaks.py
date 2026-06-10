@@ -26,7 +26,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 import orjson
 from flask import Blueprint, Response, jsonify, request
+from pydantic import ValidationError
 
+from qua_shared.schemas.wire._envelopes import ErrorEnvelope
+from qua_shared.schemas.wire.seg import (
+    SegPeaksResponse,
+    SegSegmentPeaksRequestItem,
+    SegSegmentPeaksResponse,
+)
 from services import audio_fetch, cache
 from services.audio.audio_meta import chapter_urls
 from services.data_loader import load_detailed
@@ -66,7 +73,7 @@ def seg_peaks(reciter):
     """
     entries = load_detailed(reciter)
     if not entries:
-        return jsonify({"error": "Reciter not found"}), 404
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
 
     chapters_param = request.args.get("chapters", "")
     chapter_filter: set[int] | None = None
@@ -128,7 +135,9 @@ def seg_peaks(reciter):
                     result[url] = peaks
                     cache.set_peaks_for_url(reciter, url, peaks)
 
-    body = {"peaks": result, "complete": True}
+    body = SegPeaksResponse(peaks=result, complete=True).model_dump(
+        mode="json", exclude_none=True, by_alias=True
+    )
     # Serialize once via orjson (~3× faster than stdlib on big payloads) and
     # cache the bytes so warm requests skip both jsonify and orjson encode.
     body_bytes = orjson.dumps(body)
@@ -156,17 +165,24 @@ def seg_segment_peaks(reciter):
     with nested ``PeakBucket[]`` floats at HD 30 bps. ``pad_ms`` widens the
     decoded range symmetrically for split/scrubber UIs.
     """
-    body = request.get_json(silent=True) or {}
-    segments = body.get("segments", [])
-    results: dict[str, dict] = {}
+    # Validate per-item so one malformed slice is skipped, not the whole
+    # batch — a bad item shouldn't drop the fallback render for its siblings.
+    raw = request.get_json(silent=True) or {}
+    raw_items = raw.get("segments", []) if isinstance(raw, dict) else []
+    segments = []
+    for item in raw_items if isinstance(raw_items, list) else []:
+        try:
+            segments.append(SegSegmentPeaksRequestItem.model_validate(item))
+        except ValidationError:
+            continue
 
+    results: dict[str, dict] = {}
     for seg in segments:
-        url = seg.get("url", "")
-        start_ms = seg.get("start_ms", 0)
-        end_ms = seg.get("end_ms", 0)
-        chapter = seg.get("chapter")
-        pad_ms = int(seg.get("pad_ms", 0) or 0)
-        bps = seg.get("bps")  # History passes 10; default (None) → HD 30 bps
+        url = seg.url
+        start_ms = seg.start_ms
+        end_ms = seg.end_ms
+        pad_ms = int(seg.pad_ms or 0)
+        bps = seg.bps  # History passes 10; default (None) → HD 30 bps
         if not url or end_ms <= start_ms:
             continue
         key = f"{url}:{start_ms}:{end_ms}:{pad_ms}" if pad_ms else f"{url}:{start_ms}:{end_ms}"
@@ -175,12 +191,16 @@ def seg_segment_peaks(reciter):
             max(0, start_ms - pad_ms),
             end_ms + pad_ms,
             reciter,
-            chapter=chapter,
-            bps=int(bps) if isinstance(bps, int) else None,
+            chapter=seg.chapter,
+            bps=bps if isinstance(bps, int) else None,
         )
         if data:
             results[key] = data
-    return jsonify({"peaks": results})
+
+    body = SegSegmentPeaksResponse(peaks=results).model_dump(
+        mode="json", exclude_none=True, by_alias=True
+    )
+    return jsonify(body)
 
 
 # Caps for the on-play write-back POST (any same-origin viewer can call it).
@@ -231,9 +251,11 @@ def seg_history_peaks_post(reciter):
     body = request.get_json(silent=True) or {}
     records = body.get("records", [])
     if not isinstance(records, list):
-        return jsonify({"error": "records must be a list"}), 400
+        return jsonify(
+            ErrorEnvelope(error="records must be a list").model_dump(exclude_none=True)
+        ), 400
     if len(records) > _HISTORY_POST_MAX_RECORDS:
-        return jsonify({"error": "too many records"}), 413
+        return jsonify(ErrorEnvelope(error="too many records").model_dump(exclude_none=True)), 413
 
     valid_op_ids = edit_history_op_ids(reciter)
     accepted: list[dict] = []

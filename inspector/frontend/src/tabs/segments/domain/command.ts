@@ -16,7 +16,8 @@
  * dispatcher's convenience and never leaks into the operation log.
  */
 
-import type { EditOp, FlagAuthor, Segment } from '../../../lib/types/domain';
+import type { FlagAuthor } from '../../../lib/types/generated/schemas';
+import type { EditOp, Segment } from '../../../lib/types/view-models';
 import type { SegSnapshot } from '../stores/dirty';
 
 // ---------------------------------------------------------------------------

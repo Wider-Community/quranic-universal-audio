@@ -15,7 +15,7 @@ from qua_shared.schemas import (
     Style,
     Vocab,
 )
-from qua_shared.schemas.catalog import Alias, Derived, SourceChannelPair
+from qua_shared.schemas.bucket.catalog import Alias, Derived, SourceChannelPair
 from services import db
 from services.db import repo_catalog
 

@@ -1,0 +1,15 @@
+{
+  "analysis_letter_font_size": "1.75rem",
+  "analysis_word_font_size": "1.5rem",
+  "anim_char_transition_duration": 0.02,
+  "anim_font_size": "44px",
+  "anim_highlight_color": "#f0a500",
+  "anim_line_height": 2.0,
+  "anim_transition_easing": "ease",
+  "anim_word_spacing": "0.2em",
+  "anim_word_transition_duration": 0.15,
+  "catalog_url": "/api/static/catalog.json",
+  "manifest_url": "/api/ts/manifest",
+  "shard_url_template": "/api/ts/shard/{reciter}/{chapter}",
+  "unified_display_max_height": 800
+}

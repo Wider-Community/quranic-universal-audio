@@ -1,4 +1,4 @@
-import type { HistoryBatch, Segment } from '../../../../lib/types/domain';
+import type { HistoryBatch, Segment } from '../../../../lib/types/view-models';
 import type {
     EditChain,
     EditChainOp,

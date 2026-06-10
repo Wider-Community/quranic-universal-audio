@@ -29,7 +29,8 @@
     import { shadowPrewarm } from '../../../../lib/playback/shadow-audio';
     import { quranRefs } from '../../../../lib/refs/quran-refs';
     import { currentUser } from '../../../../lib/stores/current-user';
-    import type { FlagAuthor, Segment } from '../../../../lib/types/domain';
+    import type { FlagAuthor } from '../../../../lib/types/generated/schemas';
+import type { Segment } from '../../../../lib/types/view-models';
     import { clearAccordionPin } from '../../stores/accordion-pin';
     import { ensureAutoSplitMap } from '../../stores/auto-split';
     import {

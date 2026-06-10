@@ -1,4 +1,4 @@
-import type { EditOp } from '../../../../lib/types/domain';
+import type { EditOp } from '../../../../lib/types/view-models';
 
 interface SaveSegmentPayloadPatch {
     index: number;

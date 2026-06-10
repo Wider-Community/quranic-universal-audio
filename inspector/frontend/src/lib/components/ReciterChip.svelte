@@ -17,7 +17,7 @@
      * Consumers wrap the chip in their own <button> or <div> depending
      * on whether the chip itself is the click target.
      */
-    import type { PublicBucket } from '../types/public-state';
+    import type { PublicBucket } from '../types/public-bucket';
     import { normalizeCountry } from '../utils/countries';
     import { countryFlag, countryName } from '../utils/delivery-label';
     import StatePill from './StatePill.svelte';

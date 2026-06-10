@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { GenerationBoundary } from '../../../../lib/types/domain';
+import type { GenerationBoundary } from '../../../../lib/types/view-models';
 import {
     entryAffectsTimestamps,
     tierOf,

@@ -82,11 +82,11 @@ Blueprint `admin_users_bp` at `/api/admin` (`routes/admin/users.py`), all `@requ
 | `GET /visitor-stats` | Today's traffic rollup. Gated on env `INSPECTOR_VISITOR_ANALYTICS`; the compartment swallows failure. |
 | `POST /users/<hf_user_id>/role` | **Owner-only** role change (`@require_role(Role.OWNER)` + `@require_same_origin`). |
 
-Aggregation/reads: `services/db/repo_admin_users.py`, `repo_visitors.py`; visitor counting in `services/admin/visitors.py`. Schemas: `qua_shared/schemas/admin_users.py` (codegen'd to FE types).
+Aggregation/reads: `services/db/repo_admin_users.py`, `repo_visitors.py`; visitor counting in `services/admin/visitors.py`. Schemas: `qua_shared/schemas/wire/admin_users.py` (codegen'd to FE types).
 
 ### Requests compartment
 
-Routes live in `requests_bp` (`routes/claims/requests.py`); reads in `services/admin/requests.py`; schema `qua_shared/schemas/admin_requests.py` (codegen'd).
+Routes live in `requests_bp` (`routes/claims/requests.py`); reads in `services/admin/requests.py`; schema `qua_shared/schemas/wire/admin_requests.py` (codegen'd).
 
 | Route | Purpose |
 |---|---|
@@ -98,7 +98,7 @@ Resolution of **slug-based edit requests** stays on the existing per-slug routes
 
 #### Intake requests (new combination / new reciter)
 
-The Submit-recitation wizard's two **slugless** types — `existing_reciter_new_combo` and `new_reciter` — carry an audio **source** (direct links / playlist; a dropped CSV/JSON file is normalised into `links[]` client-side). They land in the unified `requests` table with `slug = NULL`, everything parked in `payload` (`reciter_id`, `proposed_edits` (ProposedEdits-shaped), `source`, three required `attestations` (distribution/links-verified/storage rights — recorded for audit), cached `probe`). Service: `services/admin/intake.py`; validation `intake_validation.py`; probe `intake_probe.py`; schemas `qua_shared/schemas/intake_requests.py` (codegen'd).
+The Submit-recitation wizard's two **slugless** types — `existing_reciter_new_combo` and `new_reciter` — carry an audio **source** (direct links / playlist; a dropped CSV/JSON file is normalised into `links[]` client-side). They land in the unified `requests` table with `slug = NULL`, everything parked in `payload` (`reciter_id`, `proposed_edits` (ProposedEdits-shaped), `source`, three required `attestations` (distribution/links-verified/storage rights — recorded for audit), cached `probe`). Service: `services/admin/intake.py`; validation `intake_validation.py`; probe `intake_probe.py`; schemas `qua_shared/schemas/wire/intake_requests.py` (codegen'd).
 
 | Route | Purpose |
 |---|---|
@@ -113,7 +113,7 @@ Request review is **no longer a notification**: `reciter.request_rejected_{soft,
 
 ### Reviews compartment
 
-Routes live in `admin_reviews_bp` (`routes/admin/reviews.py`); reads + per-admin view marks in `services/admin/reviews.py`; schema `qua_shared/schemas/admin_reviews.py` (codegen'd). All endpoints `@require_role(Role.MAINTAINER, Role.OWNER)`.
+Routes live in `admin_reviews_bp` (`routes/admin/reviews.py`); reads + per-admin view marks in `services/admin/reviews.py`; schema `qua_shared/schemas/wire/admin_reviews.py` (codegen'd). All endpoints `@require_role(Role.MAINTAINER, Role.OWNER)`.
 
 | Route | Purpose |
 |---|---|
@@ -141,7 +141,7 @@ The owner-only tightening on force-release + reassign was a deliberate split: **
 
 The **Jobs** tab is one place for every HF-Job kind — `timestamps`, `hf_publish`, `hf_publish_batch`, `cut_release`, `refresh_catalog` — running *and* historical, across all reciters. Clicking any row opens an in-app drawer (record + settings/logs, batch/cut members, "Open on HF", Cancel-if-running).
 
-**Shared job-record store** (`services/admin/jobs/records.py`) — the single source the tab reads. Every kind's **server-side** `launch()` writes a `running` `JobRecord` and every terminal point (`complete()`, the webhook non-success branches, the cancel route) writes the `succeeded`/`failed` outcome via `record_terminal` (read-merge-write, so launch fields survive). The DB stays the source-of-truth for *releases*; these records are the uniform observability trail. Paths reuse `base.job_record_path` — `reciters/<slug>/jobs/<kind>/` (per-slug) and `jobs/_global/<kind>/` (global). `JobRecord` (`qua_shared/schemas/jobs.py`) is a superset of the legacy `TsJobRecord` the timestamps HF-Job container still self-writes, so old TS records parse uniformly (`records.read` injects `kind` from the path + normalizes status).
+**Shared job-record store** (`services/admin/jobs/records.py`) — the single source the tab reads. Every kind's **server-side** `launch()` writes a `running` `JobRecord` and every terminal point (`complete()`, the webhook non-success branches, the cancel route) writes the `succeeded`/`failed` outcome via `record_terminal` (read-merge-write, so launch fields survive). The DB stays the source-of-truth for *releases*; these records are the uniform observability trail. Paths reuse `base.job_record_path` — `reciters/<slug>/jobs/<kind>/` (per-slug) and `jobs/_global/<kind>/` (global). `JobRecord` (`qua_shared/schemas/bucket/jobs.py`) is a superset of the legacy `TsJobRecord` the timestamps HF-Job container still self-writes, so old TS records parse uniformly (`records.read` injects `kind` from the path + normalizes status).
 
 **Aggregator** (`services/admin/jobs/registry.py`) — `list_all_jobs()` unions `records.list_all()` with the live HF list (`base.list_in_flight_jobs`), dedups by `job_id` (live `running` wins), sorts newest-first, TTL-cached (`cache.{get,set,invalidate}_all_jobs_cache`, invalidated at every launch/complete/cancel). `job_detail()` enriches a running TS job with its live log tail.
 

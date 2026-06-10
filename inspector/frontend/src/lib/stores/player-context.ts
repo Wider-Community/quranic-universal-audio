@@ -13,7 +13,7 @@
  */
 import { writable } from 'svelte/store';
 
-import type { PublicDelivery, PublicReciter } from '../types/public-state';
+import type { PublicDelivery, PublicReciter } from '../types/generated/schemas';
 import { LS_KEYS } from '../utils/constants';
 
 export interface PlayerContext {

@@ -31,7 +31,7 @@
     import Icon from '../../../../lib/icons/Icon.svelte';
     import type { IconName } from '../../../../lib/icons/index';
     import { editingMode } from '../../../../lib/stores/editing-mode';
-    import type { PublicBucket } from '../../../../lib/types/public-state';
+    import type { PublicBucket } from '../../../../lib/types/public-bucket';
     import { LS_KEYS } from '../../../../lib/utils/constants';
     import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
     import { SPEEDS } from '../../../../lib/utils/speed-control';

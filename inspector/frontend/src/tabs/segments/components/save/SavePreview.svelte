@@ -29,7 +29,7 @@
     import HistoryBatch from '../history/HistoryBatch.svelte';
 
     // Derive display entries from the preview data --------------------------
-    $: previewBatches = ($savePreviewData?.batches ?? []) as import('../../../../lib/types/domain').HistoryBatch[];
+    $: previewBatches = ($savePreviewData?.batches ?? []) as import('../../../../lib/types/view-models').HistoryBatch[];
 
     // Filter chained ops out of the flat list so they only render via
     // <SplitChainRow>. Without this, ops belonging to a split chain would

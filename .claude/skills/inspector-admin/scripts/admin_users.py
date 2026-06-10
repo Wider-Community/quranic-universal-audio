@@ -42,7 +42,7 @@ def _show(a, ctx) -> int:
 
 
 def _set_role(a, ctx) -> int:
-    from qua_shared.schemas.access import Role  # noqa: E402
+    from qua_shared.schemas.config.access import Role  # noqa: E402
     from services.admin import users  # noqa: E402
     target = Role(a.role)
     if a.dry_run:

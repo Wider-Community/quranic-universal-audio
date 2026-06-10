@@ -9,7 +9,7 @@
  * and the segments first-edit gate (via AccordionGuideModal's `::component`)
  * both render it. Edit the wording in `overview.md`, never here.
  */
-import { PUBLIC_BUCKETS, type PublicBucket } from '../../types/public-state';
+import { PUBLIC_BUCKETS, type PublicBucket } from '../../types/public-bucket';
 
 export interface InlineToken {
     bold: boolean;

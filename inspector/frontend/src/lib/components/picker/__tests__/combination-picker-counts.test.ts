@@ -1,7 +1,8 @@
 import { render, waitFor } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { PublicBucket, PublicDelivery, PublicReciter } from '../../../types/public-state';
+import type { PublicDelivery, PublicReciter } from '../../../types/generated/schemas';
+import type { PublicBucket } from '../../../types/public-bucket';
 import CombinationPicker from '../CombinationPicker.svelte';
 
 function makeDelivery(slug: string, bucket: PublicBucket): PublicDelivery {

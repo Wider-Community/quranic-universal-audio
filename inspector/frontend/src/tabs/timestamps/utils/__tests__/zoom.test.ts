@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 import { afterEach,beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TsVerseData, TsWord } from '../../../../lib/types/domain';
+import type { TsVerseData, TsWord } from '../../../../lib/types/ts-client';
 import { TS_VIEW_MODES,viewMode } from '../../stores/display';
 import { loopTarget } from '../../stores/playback';
 import type { TsLoadedVerse } from '../../stores/verse';

@@ -319,7 +319,7 @@ def _validate(sidecar) -> str | None:
         repo = str(Path(__file__).resolve().parents[2])
         if repo not in sys.path:
             sys.path.insert(0, repo)
-        from qua_shared.schemas.catalog import AudioManifestSidecar
+        from qua_shared.schemas.bucket.catalog import AudioManifestSidecar
 
         AudioManifestSidecar.model_validate(sidecar)
         return None

@@ -12,7 +12,7 @@
  * the single resolvedSeg.
  */
 
-import type { EditOp, Segment } from '../../../../lib/types/domain';
+import type { EditOp, Segment } from '../../../../lib/types/view-models';
 import { SPLIT_GROUP_MAX_PASSES } from '../constants';
 
 interface SnapWithUid {

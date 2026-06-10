@@ -20,6 +20,7 @@ from config import (
     ANIM_WORD_TRANSITION_DURATION,
     UNIFIED_DISPLAY_MAX_HEIGHT,
 )
+from qua_shared.schemas import ErrorEnvelope, TsConfigResponse, TsVbrResponse
 from services import auth as auth_service
 from services import timestamps as ts_serve
 from services.audio_meta import vbr_chapters_for_reciter
@@ -33,26 +34,27 @@ ts_bp = Blueprint("ts", __name__, url_prefix="/api/ts")
 @ts_bp.route("/config")
 def ts_config():
     """Return display configuration + read-path URLs for Timestamps tab."""
+    config = TsConfigResponse(
+        manifest_url="/api/ts/manifest",
+        shard_url_template="/api/ts/shard/{reciter}/{chapter}",
+        # D20 Track B: reciter dropdown migrates off ``manifest.json.gz`` to the
+        # v2 catalog served by the Inspector backend. Frontend prefers this
+        # when present; ``manifest_url`` stays as the fallback feeding
+        # ts_chapters / vbr_chapters / validation / resources.
+        catalog_url="/api/static/catalog.json",
+        unified_display_max_height=UNIFIED_DISPLAY_MAX_HEIGHT,
+        anim_highlight_color=ANIM_HIGHLIGHT_COLOR,
+        anim_word_transition_duration=ANIM_WORD_TRANSITION_DURATION,
+        anim_char_transition_duration=ANIM_CHAR_TRANSITION_DURATION,
+        anim_transition_easing=ANIM_TRANSITION_EASING,
+        anim_word_spacing=ANIM_WORD_SPACING,
+        anim_line_height=ANIM_LINE_HEIGHT,
+        anim_font_size=ANIM_FONT_SIZE,
+        analysis_word_font_size=ANALYSIS_WORD_FONT_SIZE,
+        analysis_letter_font_size=ANALYSIS_LETTER_FONT_SIZE,
+    )
     return orjson_response(
-        {
-            "manifest_url": "/api/ts/manifest",
-            "shard_url_template": "/api/ts/shard/{reciter}/{chapter}",
-            # D20 Track B: reciter dropdown migrates off ``manifest.json.gz`` to the
-            # v2 catalog served by the Inspector backend. Frontend prefers this
-            # when present; ``manifest_url`` stays as the fallback feeding
-            # ts_chapters / vbr_chapters / validation / resources.
-            "catalog_url": "/api/static/catalog.json",
-            "unified_display_max_height": UNIFIED_DISPLAY_MAX_HEIGHT,
-            "anim_highlight_color": ANIM_HIGHLIGHT_COLOR,
-            "anim_word_transition_duration": ANIM_WORD_TRANSITION_DURATION,
-            "anim_char_transition_duration": ANIM_CHAR_TRANSITION_DURATION,
-            "anim_transition_easing": ANIM_TRANSITION_EASING,
-            "anim_word_spacing": ANIM_WORD_SPACING,
-            "anim_line_height": ANIM_LINE_HEIGHT,
-            "anim_font_size": ANIM_FONT_SIZE,
-            "analysis_word_font_size": ANALYSIS_WORD_FONT_SIZE,
-            "analysis_letter_font_size": ANALYSIS_LETTER_FONT_SIZE,
-        },
+        config.model_dump(mode="json", exclude_none=True, by_alias=True),
         # Pure constants; changing them needs a server restart.
         headers={"Cache-Control": "public, max-age=300"},
     )
@@ -90,7 +92,7 @@ def ts_shard(reciter, chapter):
     allow_unreleased = _capabilities.can(auth_service.current_user(), "timestamps.view_unreleased")
     body = ts_serve.shard_bytes(reciter, chapter, allow_unreleased=allow_unreleased)
     if body is None:
-        return jsonify({"error": "Shard not found"}), 404
+        return jsonify(ErrorEnvelope(error="Shard not found").model_dump(exclude_none=True)), 404
     return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)
 
 
@@ -112,7 +114,7 @@ def ts_validation(user, reciter):
     allow_unreleased = _capabilities.can(user, "timestamps.view_unreleased")
     doc = ts_serve.ts_validation_doc(reciter, allow_unreleased=allow_unreleased)
     if doc is None:
-        return jsonify({"error": "Not found"}), 404
+        return jsonify(ErrorEnvelope(error="Not found").model_dump(exclude_none=True)), 404
     return orjson_response(doc)
 
 
@@ -121,11 +123,12 @@ def ts_resource(name):
     """Serve gzipped reference data referenced by the manifest's `resources` block."""
     body = ts_serve.resource_bytes(name)
     if body is None:
-        return jsonify({"error": "Resource not found"}), 404
+        return jsonify(ErrorEnvelope(error="Resource not found").model_dump(exclude_none=True)), 404
     return Response(body, mimetype="application/octet-stream", headers=_GZIP_HEADERS)
 
 
 @ts_bp.route("/vbr/<reciter>")
 def ts_vbr(reciter):
     """Return VBR chapters for timestamp clients reading older HF manifests."""
-    return jsonify({"vbr_chapters": vbr_chapters_for_reciter(reciter)})
+    vbr = TsVbrResponse(vbr_chapters=vbr_chapters_for_reciter(reciter))
+    return jsonify(vbr.model_dump(mode="json", exclude_none=True, by_alias=True))

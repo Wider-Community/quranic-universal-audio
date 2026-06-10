@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 
-from qua_shared.schemas.segment import SegmentFlag, parse_detailed_segment
+from qua_shared.schemas.bucket.segment import SegmentFlag, parse_detailed_segment
 
 _HEADERS = {"Content-Type": "application/json", "Origin": "http://localhost"}
 

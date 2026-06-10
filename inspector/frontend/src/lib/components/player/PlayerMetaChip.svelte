@@ -9,7 +9,7 @@
 
     import { catalogData } from '../../../tabs/dashboard/stores/catalog-data';
     import { clickOutside } from '../../actions/click-outside';
-    import type { PublicDelivery, PublicReciter } from '../../types/public-state';
+    import type { PublicDelivery, PublicReciter } from '../../types/generated/schemas';
     import { combinationCompact } from '../../utils/delivery-label';
     import { compareDeliveries } from '../../utils/delivery-sort';
     import ReciterChip from '../ReciterChip.svelte';

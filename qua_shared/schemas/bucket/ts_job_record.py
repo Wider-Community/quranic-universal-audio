@@ -17,11 +17,7 @@ approved side-panel plan.
 
 from __future__ import annotations
 
-from typing import Any
-
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from ._extras import strip_and_warn
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TsJobSettings(BaseModel):
@@ -44,20 +40,6 @@ class TsJobSettings(BaseModel):
     timeout: str | None = None
     batch_size: int | None = None
     download_workers: int | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _surface_extras(cls, data: Any) -> Any:
-        # ``persist_audio`` / ``gen_peaks`` are retired knobs that older on-disk
-        # job records still nest under ``settings``. The job no longer persists
-        # audio nor bakes peaks (both are populated offline); strip-with-warn so
-        # legacy records still parse instead of failing extra="forbid".
-        return strip_and_warn(
-            data,
-            declared=set(cls.model_fields),
-            dead={"persist_audio", "gen_peaks"},
-            model_name="TsJobSettings",
-        )
 
 
 class TsJobRecord(BaseModel):
@@ -85,13 +67,3 @@ class TsJobRecord(BaseModel):
     logs: list[str] = Field(default_factory=list)
     log_truncated: bool = False
     error: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _surface_extras(cls, data: Any) -> Any:
-        return strip_and_warn(
-            data,
-            declared=set(cls.model_fields),
-            dead=set(),
-            model_name="TsJobRecord",
-        )

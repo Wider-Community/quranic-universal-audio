@@ -29,3 +29,24 @@ def test_healthz_reports_db_section(client):
     # Test fixture does not set INSPECTOR_BUCKET_MOUNT, so bucket_ok is False
     # and the route deterministically reports the degraded branch. Pin it.
     assert body["status"] == "degraded"
+
+
+def test_default_healthz_omits_sample_validation(client):
+    # The deep probe is opt-in: without ?deep=1 the route must never walk the
+    # bucket, so the field is absent on the default path.
+    body = client.get("/healthz").get_json()
+    assert "sample_validation" not in body
+
+
+def test_deep_healthz_adds_sample_validation_block(client, state_persistence):
+    # state_persistence installs a FilesystemBackend singleton, so the deep
+    # probe stays offline. No reciters under reciters/ → empty sample, and the
+    # autouse DB has a clean (reciter-less) catalog → catalog_ok True.
+    body = client.get("/healthz?deep=1").get_json()
+
+    sv = body["sample_validation"]
+    assert sv["catalog_ok"] is True
+    assert sv["sampled"] == []
+    assert sv["n_reciters"] == 0
+    assert sv["ok"] is True
+    assert sv["errors"] == []

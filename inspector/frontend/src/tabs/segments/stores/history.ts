@@ -10,7 +10,7 @@
 
 import { derived, get, writable } from 'svelte/store';
 
-import type { SegEditHistoryResponse } from '../../../lib/types/api';
+import type { SegEditHistoryResponse } from '../../../lib/types/view-models';
 import type { EditChain } from '../types/segments';
 import {
     buildEditChains,

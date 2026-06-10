@@ -1,7 +1,7 @@
 <script lang="ts">
     /** Detail-page header — name + state pill + meta strip. */
     import StatePill from '../../../lib/components/StatePill.svelte';
-    import type { PublicReciter } from '../../../lib/types/public-state';
+    import type { PublicReciter } from '../../../lib/types/generated/schemas';
 
     export let reciter: PublicReciter;
 </script>

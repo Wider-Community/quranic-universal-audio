@@ -10,7 +10,7 @@
  * `routes/public/static.py`).
  */
 import { fetchJson } from '../api';
-import type { TsCatalogResponse } from '../types/api';
+import type { TsCatalogResponse } from '../types/ts-client';
 
 /** A vocab row from catalog.json (`vocab.{riwayat,styles,recording_contexts}`). */
 export interface CatalogVocabRow {

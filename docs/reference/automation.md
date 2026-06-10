@@ -43,7 +43,7 @@ Dockerfile sets it; off in dev). One daemon thread in the single gunicorn worker
 Migration `0020_automation.sql`, repo `services/db/repo_automation.py`:
 
 - `automation_config` — single-row JSON blob (`id=1`) holding the
-  `AutomationConfig` (`qua_shared/schemas/automation.py`). db_seq-keyed cache in
+  `AutomationConfig` (`qua_shared/schemas/config/automation.py`). db_seq-keyed cache in
   `services/storage/cache.py`; any committed config write invalidates it.
 - `automation_state` — per-automation `last_run_at` / `last_status` /
   `last_detail`. Written **only when an automation acts** — an idle tick writes

@@ -28,6 +28,42 @@
  */
 export type StaleReason = "ts_regen" | "catalog_edit" | "segments_edited";
 export type Role = "contributor" | "maintainer" | "owner" | "pipeline";
+/**
+ * ``GET /api/seg/reciters`` — a bare JSON array of reciter rows.
+ */
+export type SegRecitersResponse = SegReciter[];
+/**
+ * Any one validation item, as a named union of every per-category variant.
+ *
+ * The category is determined by the enclosing response key, not by a field
+ * on the item — there is no on-wire discriminator (see the module note).
+ */
+export type SegValAnyItem =
+  | SegValFailedItem
+  | SegValMissingVerseItem
+  | SegValMissingWordsItem
+  | SegValStructuralErrorItem
+  | SegValLowConfidenceItem
+  | SegValLowConfidenceV2Item
+  | SegValBoundaryAdjItem
+  | SegValCrossVerseItem
+  | SegValAudioBleedingItem
+  | SegValRepetitionItem
+  | SegValMuqattaatItem
+  | SegValQalqalaItem
+  | SegValBasmalaAminItem;
+export type AudioCategory = "by_surah" | "by_ayah";
+/**
+ * One encoded word inside a segment — a flat positional tuple.
+ *
+ * Slots: ``[word_idx, start_ms, end_ms, letters, phones]``. Modelled as a
+ * ``RootModel`` over a 5-tuple so the FE codegen emits a positional TS tuple
+ * (mirrors ``TsShardWord`` in ``ts-client.ts``) rather than an object.
+ *
+ * @minItems 5
+ * @maxItems 5
+ */
+export type TsShardWord = [unknown, unknown, unknown, unknown, unknown];
 
 export interface AdminActiveClaim {
   slug: string;
@@ -72,6 +108,38 @@ export interface AdminClaimEvent {
 export interface AdminCutReleaseRequest {
   version?: string | null;
   expected_version_at_preview?: string | null;
+}
+/**
+ * A discarded combo surfaced in the admin reciter view.
+ *
+ * Same fields as ``PublicDelivery`` plus the visibility metadata so the modal
+ * can label why the combo was hidden. Mirrors
+ * ``services.reference.public_state.AdminViewDelivery``.
+ */
+export interface AdminDiscardedDelivery {
+  slug: string;
+  bucket: "available_for_request" | "requested" | "available_for_review" | "under_review" | "published";
+  state_since?: string | null;
+  riwayah: string;
+  style: string;
+  recording_context?: string | null;
+  recording_year?: number | null;
+  source: string;
+  channel: string;
+  channel_name: string;
+  source_url?: string | null;
+  audio_category: string;
+  chapter_count: number;
+  coverage_kind: "full" | "partial";
+  bitrate_kbps_nominal?: number | null;
+  bitrate_mode: string;
+  total_duration_sec?: number | null;
+  bucket_dates?: {
+    [k: string]: string[];
+  } | null;
+  ts_refresh_dates?: string[] | null;
+  visibility: "public" | "discarded";
+  visibility_reason?: string | null;
 }
 export interface AdminGhReleaseMember {
   change_kind: "added" | "refresh" | "unchanged";
@@ -475,6 +543,66 @@ export interface AdminUsersSummary {
   active_this_week?: number;
   [k: string]: unknown;
 }
+/**
+ * Maintainer / owner shape of ``GET /api/public/reciter/<id>``.
+ *
+ * Extends ``PublicReciter`` with the hidden combos pulled into a dedicated
+ * ``discarded_deliveries`` array (so ``deliveries`` + the rollups stay
+ * identical to what end-users see) and a ``fully_discarded`` flag derived at
+ * read time. Mirrors ``services.reference.public_state.AdminViewReciter``.
+ */
+export interface AdminViewReciter {
+  reciter_id: string;
+  name: string;
+  name_ar?: string | null;
+  country?: string | null;
+  primary_bucket: "available_for_request" | "requested" | "available_for_review" | "under_review" | "published";
+  buckets: ("available_for_request" | "requested" | "available_for_review" | "under_review" | "published")[];
+  deliveries: PublicDelivery[];
+  riwayat: string[];
+  styles: string[];
+  recording_contexts: string[];
+  sources: string[];
+  channels: string[];
+  chapter_count_total: number;
+  deliveries_count: number;
+  coverage_kind: "full" | "partial" | "mixed";
+  last_activity?: string | null;
+  discarded_deliveries: AdminDiscardedDelivery[];
+  fully_discarded: boolean;
+}
+/**
+ * One reciter delivery (riwayah × style × source × channel combo).
+ *
+ * Mirrors ``_to_public_delivery`` in ``services/reference/public_state.py``.
+ * ``slug`` is an internal grouping ID only — never rendered to users.
+ * ``bucket_dates`` / ``ts_refresh_dates`` are attached only by the detail /
+ * admin-view paths (``_attach_bucket_dates``), so they are absent on the
+ * cached list payload — dump with ``exclude_none=True``.
+ */
+export interface PublicDelivery {
+  slug: string;
+  bucket: "available_for_request" | "requested" | "available_for_review" | "under_review" | "published";
+  state_since?: string | null;
+  riwayah: string;
+  style: string;
+  recording_context?: string | null;
+  recording_year?: number | null;
+  source: string;
+  channel: string;
+  channel_name: string;
+  source_url?: string | null;
+  audio_category: string;
+  chapter_count: number;
+  coverage_kind: "full" | "partial";
+  bitrate_kbps_nominal?: number | null;
+  bitrate_mode: string;
+  total_duration_sec?: number | null;
+  bucket_dates?: {
+    [k: string]: string[];
+  } | null;
+  ts_refresh_dates?: string[] | null;
+}
 export interface AdminVisitorStats {
   today: VisitorDayStat;
   recent?: VisitorDayStat[];
@@ -487,6 +615,20 @@ export interface VisitorDayStat {
   unique_signed_in?: number;
   unique_anon?: number;
   [k: string]: unknown;
+}
+export interface AudioSurahEntry {
+  [k: string]: unknown;
+}
+/**
+ * ``GET /api/audio/surahs/<category>/<source>/<slug>`` success body.
+ *
+ * ``surahs`` is keyed by chapter number as a string (the manifest sidecar's
+ * ``chapters`` keys pass through verbatim).
+ */
+export interface AudioSurahsResponse {
+  surahs: {
+    [k: string]: AudioSurahEntry;
+  };
 }
 /**
  * Auto-generate timestamps when a recitation is marked ready.
@@ -612,6 +754,17 @@ export interface AutomationStateRow {
   next_run_at?: string | null;
 }
 /**
+ * Per-bucket reciter tally of ``GET /api/public/stats``.
+ *
+ * A ``Record<PublicBucket, int>`` — every public bucket key is present (count
+ * 0 when empty), and the counts sum to the total public reciter count
+ * (primary_bucket is mutually exclusive at the reciter level). Mirrors
+ * ``services.reference.public_state.stats``.
+ */
+export interface BucketCounts {
+  [k: string]: number;
+}
+/**
  * Whole ``detailed.json`` document.
  *
  * Note: the on-disk JSON key is ``_meta`` (with leading underscore) for
@@ -650,8 +803,7 @@ export interface DetailedMeta {
  *
  * ``audio`` (per-chapter URL) was a duplicated source of truth with
  * ``catalog/audio_manifest/<slug>.json::chapters[ch].url`` and was
- * dropped in migration #5. Legacy on-disk data still has it; the
- * pre-validator strips it with an INFO-level warning.
+ * dropped in migration #5 — it is no longer accepted here.
  */
 export interface DetailedEntry {
   ref: string;
@@ -789,11 +941,10 @@ export interface EditHistoryBatch {
   };
 }
 /**
- * One operation in a batch. Shape is intentionally permissive — the
- * save flow owns the operation vocabulary (trim, split, merge, delete,
- * etc.) and stores per-op payloads keyed by ``kind`` (user-driven) or
- * ``op_type`` (pipeline-driven, written by ``.local/extraction/segments/
- * post_passes.py``).
+ * One operation in a batch. The save flow owns the operation vocabulary
+ * (trim, split, merge, delete, etc.) and stores per-op payloads keyed by
+ * ``kind`` (user-driven) or ``op_type`` (pipeline-driven, written by
+ * ``.local/extraction/segments/post_passes.py``).
  *
  * Migration #5: pipeline ops carry ``op_type`` + ``fix_kind`` (no
  * ``kind`` — that's a user-edit-only field set by the FE command store).
@@ -804,18 +955,91 @@ export interface EditHistoryBatch {
  * dicts, not validated against ``DetailedSegment`` because snapshots
  * intentionally carry extra fields (``chapter``, ``audio_url``,
  * ``index_at_save``) that don't live on persisted segs.
+ *
+ * ``patch`` is the forward-change envelope the save flow persists on every
+ * op (``_ensure_patch_on_ops``) and the undo path reverses.
+ * ``op_context_category`` is the validation category the edit was launched
+ * from; ``build_resolved_by_edit_index`` reads it to suppress re-flagging.
+ * Both are live fields, written and read by the app — NOT dead.
+ *
+ * The user-edit save flow (``apply-command.ts::_baseOperation``) also stamps a
+ * handful of FE working/presentation fields that the Inspector save path
+ * persists verbatim and the History panel reads back: ``merge_direction``
+ * (``'prev'``/``'next'`` — drives the merge-highlight point in
+ * ``EditChainRow``/``HistoryOp``), ``snapshots`` (the ``{before, after}``
+ * mirror of ``targets_*`` that ``utils/history/items.ts`` reads for the
+ * ``is_wasl`` waqf pill), plus the ``type`` op alias, the ``command`` payload
+ * and the ``targetSegmentIndex`` locator. They are declared optional so a
+ * real user-edit op round-trips under pure ``extra="forbid"`` (only the
+ * pipeline writer in ``post_passes.py`` round-trips through this model at
+ * write time; the Inspector save persists the raw op). Pipeline ops leave
+ * them ``None``.
  */
 export interface EditOperation {
   op_id: string;
   kind?: string | null;
   op_type?: string | null;
   fix_kind?: string | null;
+  op_context_category?: string | null;
+  patch?: EditOpPatch | null;
   targets_before?: {
     [k: string]: unknown;
   }[];
   targets_after?: {
     [k: string]: unknown;
   }[];
+  type?: string | null;
+  merge_direction?: string | null;
+  snapshots?: {
+    [k: string]: unknown;
+  } | null;
+  targetSegmentIndex?: {
+    [k: string]: unknown;
+  } | null;
+  command?: {
+    [k: string]: unknown;
+  } | null;
+}
+/**
+ * Forward-change patch envelope attached to an op at finalize time.
+ *
+ * Structural mirror of the ``SegmentPatch`` dataclass in
+ * ``inspector/domain/command.py`` and the FE ``EditOpPatch`` interface in
+ * ``inspector/frontend/src/lib/types/view-models.ts``. Produced by the FE
+ * ``applyCommand`` round-trip; consumed by the undo path
+ * (``apply_inverse_patch`` reads ``op["patch"]``).
+ *
+ * ``before`` / ``after`` are full segment-dict snapshots; ``removedIds`` /
+ * ``insertedIds`` carry the segment UIDs the command removed/inserted;
+ * ``affectedChapterIds`` is the set of chapter numbers whose id ordering
+ * changed (ints — what the FE sends and the undo path compares against the
+ * batch chapter set).
+ */
+export interface EditOpPatch {
+  before?: {
+    [k: string]: unknown;
+  }[];
+  after?: {
+    [k: string]: unknown;
+  }[];
+  removedIds?: string[];
+  insertedIds?: string[];
+  affectedChapterIds?: number[];
+}
+/**
+ * Flat error body returned on a failed request.
+ *
+ * ``error`` is the always-present human-readable message. ``code`` is the
+ * optional stable machine constant (see ``services/errors.py::Codes``) the FE
+ * maps to friendly copy. ``detail`` is optional free-text elaboration.
+ *
+ * Dump with ``exclude_none=True`` (or ``model_dump(exclude_none=True)``) so the
+ * optional fields vanish when unset, matching the bare-dict shape routes emit.
+ */
+export interface ErrorEnvelope {
+  error: string;
+  detail?: string | null;
+  code?: string | null;
 }
 /**
  * Contributor confirmations recorded with the submission (audit trail).
@@ -985,6 +1209,12 @@ export interface MarkReadyRequest {
   comment_issues?: string;
 }
 /**
+ * The trivial ``{"ok": true}`` success acknowledgement.
+ */
+export interface OkAck {
+  ok?: true;
+}
+/**
  * One pipeline-op waveform slice. Migration #5 canonical shape.
  *
  * All fields required:
@@ -1033,6 +1263,586 @@ export interface ProbeResult {
   [k: string]: unknown;
 }
 /**
+ * One reciter aggregated for the public dashboard.
+ *
+ * Mirrors ``to_public_reciter`` in ``services/reference/public_state.py``.
+ * ``reciter_id`` is an internal lookup key — never rendered. ``deliveries``
+ * carries only PUBLIC-visible combos; the rolled-up facet lists
+ * (``riwayat`` / ``styles`` / …) are order-preserving dedupes across them.
+ */
+export interface PublicReciter {
+  reciter_id: string;
+  name: string;
+  name_ar?: string | null;
+  country?: string | null;
+  primary_bucket: "available_for_request" | "requested" | "available_for_review" | "under_review" | "published";
+  buckets: ("available_for_request" | "requested" | "available_for_review" | "under_review" | "published")[];
+  deliveries: PublicDelivery[];
+  riwayat: string[];
+  styles: string[];
+  recording_contexts: string[];
+  sources: string[];
+  channels: string[];
+  chapter_count_total: number;
+  deliveries_count: number;
+  coverage_kind: "full" | "partial" | "mixed";
+  last_activity?: string | null;
+}
+/**
+ * Paginated envelope of ``GET /api/public/reciters``.
+ *
+ * ``next_cursor`` is the integer offset of the next page, ``None`` on the
+ * last page.
+ */
+export interface PublicReciterPage {
+  reciters: PublicReciter[];
+  total: number;
+  next_cursor?: number | null;
+}
+/**
+ * ``GET /api/seg/all/<reciter>`` success body.
+ *
+ * ``audio_by_chapter`` / ``chapter_duration_ms_by_chapter`` are chapter-keyed
+ * string maps; ``duration_ms_by_url`` is URL-keyed. ``pad_ms`` is the legacy
+ * symmetric shim ``(pad_left_ms + pad_right_ms) // 2``.
+ */
+export interface SegAllResponse {
+  segments: SegAllSegment[];
+  audio_by_chapter?: {
+    [k: string]: string;
+  };
+  chapter_duration_ms_by_chapter?: {
+    [k: string]: number;
+  };
+  duration_ms_by_url?: {
+    [k: string]: number;
+  };
+  reciter_vbr_chapters?: number[];
+  pad_ms: number;
+  pad_left_ms: number;
+  pad_right_ms: number;
+  min_silence_floor_ms: number;
+}
+/**
+ * A segment row as emitted by ``GET /api/seg/all`` (all-chapter scope).
+ *
+ * Differs from the ``/data`` row: carries ``chapter`` + ``segment_uid`` +
+ * ``entry_ref`` and OMITS ``audio_url`` (redundant with the top-level
+ * ``audio_by_chapter`` map). ``wrap_word_ranges`` / ``ignored_categories`` /
+ * ``is_wasl`` / ``flag`` are emitted only when present on the seg.
+ */
+export interface SegAllSegment {
+  chapter: number;
+  entry_idx: number;
+  index: number;
+  segment_uid: string;
+  time_start: number;
+  time_end: number;
+  matched_ref: string;
+  confidence: number;
+  entry_ref: string;
+  wrap_word_ranges?: unknown[] | null;
+  ignored_categories?: string[] | null;
+  is_wasl?: boolean | null;
+  flag?: SegmentFlagView | null;
+}
+/**
+ * A segment's flag thread: a root comment plus follow-up replies.
+ *
+ * Redacted + ``mine``-stamped server-side by ``services/segments/flags.py``;
+ * never the canonical persisted shape.
+ */
+export interface SegmentFlagView {
+  comment: string;
+  at?: string | null;
+  author: FlagAuthor;
+  mine: boolean;
+  follow_ups?: FlagComment[];
+}
+/**
+ * Author of a flag comment. ``role`` is always present; ``login`` / ``id``
+ * only when the viewer holds ``segments.see_flagger_identity`` (otherwise
+ * identity is redacted to the role).
+ */
+export interface FlagAuthor {
+  role?: string | null;
+  login?: string | null;
+  id?: string | null;
+}
+/**
+ * One comment in a flag thread (root or follow-up), redacted FE shape.
+ */
+export interface FlagComment {
+  comment: string;
+  at?: string | null;
+  author: FlagAuthor;
+  mine: boolean;
+}
+/**
+ * ``GET /api/seg/config`` — display constants + validation vocab.
+ *
+ * ``seg_font_size`` / ``seg_word_spacing`` are CSS dimension STRINGS
+ * (``"1.8rem"`` / ``"0.2em"``), not numbers. ``accordion_context`` maps a
+ * validation category to a default reveal state (``"shown"`` / ``"hidden"``).
+ */
+export interface SegConfigResponse {
+  seg_font_size: string;
+  seg_word_spacing: string;
+  seg_scroll_anim_mode: string;
+  trim_pad_left: number;
+  trim_pad_right: number;
+  trim_dim_alpha: number;
+  low_conf_default_threshold: number;
+  validation_categories: string[];
+  muqattaat_verses: [unknown, unknown][];
+  qalqala_letters: string[];
+  standalone_refs: [unknown, unknown, unknown][];
+  standalone_words: string[];
+  accordion_context: {
+    [k: string]: string;
+  };
+}
+/**
+ * ``GET /api/seg/data/<reciter>/<chapter>[?verse=:n]`` success body.
+ *
+ * ``chapter_bitrate_kbps`` is a sparse ``{chapter -> kbps}`` map (JSON object
+ * keys are strings on the wire). ``error`` is emitted on the 404 variant
+ * (reciter/chapter not found) — the success and error bodies are
+ * structurally distinct, so ``error`` stays optional here.
+ */
+export interface SegDataResponse {
+  audio_url: string;
+  vbr: boolean;
+  reciter_vbr_chapters: number[];
+  chapter_bitrate_kbps?: {
+    [k: string]: number;
+  };
+  segments: SegDataSegment[];
+  summary: SegmentsChapterSummary;
+  error?: string | null;
+}
+/**
+ * A segment row as emitted by ``GET /api/seg/data`` (chapter-scoped).
+ *
+ * The route injects ``index`` (chapter-local), ``entry_idx``, and a flat
+ * ``audio_url`` onto each seg. ``ignored_categories`` / ``is_wasl`` are
+ * emitted only when truthy on the underlying seg (so they are optional on
+ * the wire — ``exclude_none`` / default-drop reproduces the key set).
+ */
+export interface SegDataSegment {
+  index: number;
+  entry_idx: number;
+  time_start: number;
+  time_end: number;
+  matched_ref: string;
+  confidence: number;
+  audio_url: string;
+  ignored_categories?: string[] | null;
+  is_wasl?: boolean | null;
+}
+/**
+ * Per-chapter summary stats block inside ``GET /api/seg/data``.
+ */
+export interface SegmentsChapterSummary {
+  total_segments: number;
+  matched_segments: number;
+  failed_segments: number;
+  conf_min: number;
+  conf_median: number;
+  conf_mean: number;
+  conf_max: number;
+  below_60: number;
+  below_80: number;
+  total_speech_ms: number;
+  avg_segment_ms: number;
+  total_silence_ms: number;
+  avg_silence_ms: number;
+  issue_indices: number[];
+  missing_verses: string[];
+}
+/**
+ * ``GET /api/seg/peaks/<reciter>?chapters=<csv>`` — slim int8 peaks per URL.
+ *
+ * ``complete`` is always ``true`` (no background-compute path). Missing
+ * chapter files drop out of ``peaks`` silently.
+ */
+export interface SegPeaksResponse {
+  peaks?: {
+    [k: string]: SegSlimPeaks;
+  };
+  complete: boolean;
+}
+/**
+ * Chapter-overview peaks in the slim int8 envelope, keyed by audio URL.
+ *
+ * The ``/peaks`` route emits ``read_prefetched_peaks`` verbatim: the int8
+ * quantized payload (``peaks_b64`` is base64 of ``n * 2`` interleaved
+ * min/max int8 bytes). The FE inflates ``peaks_b64`` → ``Int8Array`` once on
+ * receive — it does NOT receive nested ``[min, max]`` float pairs here.
+ */
+export interface SegSlimPeaks {
+  schema_version: number;
+  duration_ms: number;
+  bps: number;
+  q: "int8";
+  n: number;
+  peaks_b64: string;
+}
+/**
+ * One row of ``GET /api/seg/reciters``.
+ *
+ * ``audio_source`` is the delivery channel (``mp3quran`` / ``qul`` / ...),
+ * NOT a by_surah/by_ayah signal. ``state`` + ``visibility`` are the live
+ * lifecycle fields the route emits from the SQLite state row.
+ */
+export interface SegReciter {
+  slug: string;
+  name: string;
+  audio_source: string;
+  audio_category: "by_surah" | "by_ayah";
+  state: "catalogued" | "awaiting_alignment" | "awaiting_review" | "under_review" | "released";
+  visibility: "public" | "discarded";
+}
+/**
+ * ``POST /api/seg/save/<reciter>/<chapter>`` request body.
+ *
+ * ``full_replace`` flags a structural save (segments are
+ * ``SegSaveFullSegment``); its absence is a field-level patch save (segments
+ * are ``SegSavePatchSegment``). The route reads ``operations`` (NOT ``ops``);
+ * each op is the loose FE edit-op envelope persisted verbatim into
+ * ``edit_history.jsonl`` (modelled permissively as dicts here — the canonical
+ * op vocabulary lives in ``EditOperation`` in ``bucket/edit_history.py``).
+ */
+export interface SegSaveRequest {
+  segments: {
+    [k: string]: unknown;
+  }[];
+  operations?: {
+    [k: string]: unknown;
+  }[];
+  full_replace?: boolean | null;
+}
+/**
+ * ``POST /api/seg/save`` success body — the route returns ``{"ok": true}``.
+ */
+export interface SegSaveResponse {
+  ok?: true;
+}
+/**
+ * ``POST /api/seg/segment-peaks/<reciter>`` request body.
+ */
+export interface SegSegmentPeaksRequest {
+  segments?: SegSegmentPeaksRequestItem[];
+}
+/**
+ * One requested segment range in a ``/segment-peaks`` POST body.
+ */
+export interface SegSegmentPeaksRequestItem {
+  url: string;
+  start_ms: number;
+  end_ms: number;
+  chapter?: number | null;
+  pad_ms?: number | null;
+  bps?: number | null;
+}
+/**
+ * ``POST /api/seg/segment-peaks/<reciter>`` — HD peaks keyed by range string.
+ */
+export interface SegSegmentPeaksResponse {
+  peaks?: {
+    [k: string]: SegSegmentPeaks;
+  };
+}
+/**
+ * HD per-segment peaks computed via ffmpeg, keyed by ``"<url>:<start>:<end>"``
+ * (a ``:<pad>`` suffix is appended when ``pad_ms`` was requested).
+ *
+ * ``peaks`` are nested ``[min, max]`` float pairs (rounded).
+ */
+export interface SegSegmentPeaks {
+  schema_version: number;
+  start_ms: number;
+  end_ms: number;
+  duration_ms: number;
+  peaks?: [unknown, unknown][];
+}
+/**
+ * ``POST /api/seg/undo-batch/<reciter>`` request body.
+ */
+export interface SegUndoBatchRequest {
+  batch_id: string;
+}
+/**
+ * ``POST /api/seg/undo-ops/<reciter>`` request body.
+ */
+export interface SegUndoOpsRequest {
+  batch_id: string;
+  op_ids: string[];
+}
+/**
+ * Success body for both undo routes — ``{"ok": true, "operations_reversed": N}``.
+ */
+export interface SegUndoResponse {
+  ok?: true;
+  operations_reversed: number;
+}
+/**
+ * ``failed`` — a segment that did not align to any verse.
+ */
+export interface SegValFailedItem {
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  time: string;
+  classified_issues?: string[];
+}
+/**
+ * ``missing_verses`` — a verse with zero covering segments (chapter-level).
+ */
+export interface SegValMissingVerseItem {
+  verse_key: string;
+  chapter: number;
+  segment_uid?: string | null;
+  msg: string;
+}
+/**
+ * ``missing_words`` — a verse missing some words (chapter-level).
+ *
+ * ``segment_uid`` is always ``null`` on these (verse-scoped, not per-segment).
+ * ``auto_fix`` / ``auto_fix_up`` / ``auto_fix_down`` and ``sequence_gap``
+ * appear conditionally.
+ */
+export interface SegValMissingWordsItem {
+  verse_key: string;
+  chapter: number;
+  segment_uid?: string | null;
+  msg: string;
+  missing_words?: number[];
+  seg_indices?: number[];
+  sequence_gap?: boolean | null;
+  auto_fix?: SegValAutoFix | null;
+  auto_fix_up?: SegValAutoFix | null;
+  auto_fix_down?: SegValAutoFix | null;
+}
+/**
+ * Auto-fix descriptor attached to some ``missing_words`` entries.
+ */
+export interface SegValAutoFix {
+  target_seg_index: number;
+  new_ref_start: string;
+  new_ref_end: string;
+}
+/**
+ * ``errors`` / ``structural_errors`` — a structural integrity violation.
+ */
+export interface SegValStructuralErrorItem {
+  verse_key: string;
+  chapter: number;
+  segment_uid?: string | null;
+  msg: string;
+}
+/**
+ * ``low_confidence`` — a segment below the confidence threshold.
+ */
+export interface SegValLowConfidenceItem {
+  ref: string;
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  confidence: number;
+  classified_issues?: string[];
+}
+/**
+ * ``low_confidence_v2`` — a segment flagged by the extraction-time MFA
+ * tight-beam probe. No confidence score; the signal is binary.
+ */
+export interface SegValLowConfidenceV2Item {
+  ref: string;
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  classified_issues?: string[];
+}
+/**
+ * ``boundary_adj`` — a segment whose boundary may need adjustment.
+ */
+export interface SegValBoundaryAdjItem {
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  ref: string;
+  verse_key: string;
+  classified_issues?: string[];
+}
+/**
+ * ``cross_verse`` — a segment spanning a verse boundary.
+ */
+export interface SegValCrossVerseItem {
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  ref: string;
+  classified_issues?: string[];
+}
+/**
+ * ``audio_bleeding`` — a by_ayah segment matching a verse outside its
+ * own audio file's entry.
+ */
+export interface SegValAudioBleedingItem {
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  entry_ref: string;
+  matched_verse: string;
+  ref: string;
+  confidence: number;
+  time: string;
+  msg: string;
+  classified_issues?: string[];
+}
+/**
+ * ``repetitions`` — a segment carrying repeated (loopback) word ranges.
+ */
+export interface SegValRepetitionItem {
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  ref: string;
+  display_ref: string;
+  confidence: number;
+  time: string;
+  text: string;
+  classified_issues?: string[];
+}
+/**
+ * ``muqattaat`` — a segment opening on huruf muqatta'at (display-only).
+ */
+export interface SegValMuqattaatItem {
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  ref: string;
+  classified_issues?: string[];
+}
+/**
+ * ``qalqala`` — a segment ending on a qalqala letter (display-only).
+ */
+export interface SegValQalqalaItem {
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  ref: string;
+  qalqala_letter: string;
+  end_of_verse: boolean;
+  classified_issues?: string[];
+}
+/**
+ * ``basmala_amin`` — a basmala/amin verse-boundary convention candidate.
+ *
+ * ``missed_basmala`` is stamped ``true`` on the augmented "possibly missed
+ * Basmala" candidates (first seg of a chapter whose Basmala was not stripped);
+ * absent on the canonical 1:1 / 1:7 candidates.
+ */
+export interface SegValBasmalaAminItem {
+  chapter: number;
+  seg_index: number;
+  segment_uid?: string | null;
+  ref: string;
+  time?: string | null;
+  missed_basmala?: boolean | null;
+  classified_issues?: string[];
+}
+/**
+ * ``GET /api/seg/validate/<reciter>`` — issues grouped by category.
+ *
+ * ``errors`` and ``structural_errors`` are the SAME list under two keys
+ * (additive alias). ``category_counts`` mirrors the per-category lengths in
+ * registry-declared order. ``split_group_index`` maps a root segment uid to
+ * its transitive split-descendant uids. ``low_confidence_v2_meta`` is present
+ * only when the probe sidecar carried a ``_meta`` block. Each item carries a
+ * ``classified_issues`` field.
+ */
+export interface SegValidateResponse {
+  errors?: SegValStructuralErrorItem[];
+  structural_errors?: SegValStructuralErrorItem[];
+  missing_verses?: SegValMissingVerseItem[];
+  missing_words?: SegValMissingWordsItem[];
+  failed?: SegValFailedItem[];
+  low_confidence?: SegValLowConfidenceItem[];
+  low_confidence_v2?: SegValLowConfidenceV2Item[];
+  boundary_adj?: SegValBoundaryAdjItem[];
+  cross_verse?: SegValCrossVerseItem[];
+  audio_bleeding?: SegValAudioBleedingItem[];
+  repetitions?: SegValRepetitionItem[];
+  muqattaat?: SegValMuqattaatItem[];
+  qalqala?: SegValQalqalaItem[];
+  basmala_amin?: SegValBasmalaAminItem[];
+  category_counts?: {
+    [k: string]: number;
+  };
+  stats?: SegValStats | null;
+  split_group_index?: {
+    [k: string]: string[];
+  };
+  low_confidence_v2_meta?: SegValProbeMeta | null;
+}
+/**
+ * ``stats`` — per-reciter structural segmentation statistics.
+ */
+export interface SegValStats {
+  segments: number;
+  single: number;
+  multi_verses: number;
+  multi_segs: number;
+  cross_verse: number;
+  max_segs: number;
+  seg_dur_min: number;
+  seg_dur_med: number;
+  seg_dur_mean: number;
+  seg_dur_max: number;
+  pause_dur_min: number;
+  pause_dur_med: number;
+  pause_dur_mean: number;
+  pause_dur_max: number;
+}
+/**
+ * ``low_confidence_v2_meta`` — provenance of the MFA tight-beam probe
+ * sidecar. Open shape: the ``_meta`` block of ``low_confidence_v2.json`` is
+ * passed through verbatim from the extraction stage.
+ */
+export interface SegValProbeMeta {
+  [k: string]: unknown;
+}
+/**
+ * ``GET /api/ts/config`` — display constants + read-path URLs.
+ *
+ * Built by ``routes/timestamps/timestamps.py::ts_config`` from ``config.py``
+ * tunables. Pure constants; the route caches it for 5 min.
+ *
+ * The route always emits ``catalog_url`` (``"/api/static/catalog.json"``) and
+ * does NOT emit a ``mode`` field. ``anim_word_spacing`` / ``anim_font_size`` /
+ * ``analysis_word_font_size`` / ``analysis_letter_font_size`` are **CSS
+ * strings** (``"0.2em"`` / ``"44px"`` / ``"1.5rem"`` / ``"1.75rem"`` — they go
+ * straight into a ``style``), not numbers. The genuinely-numeric tunables
+ * (``anim_word_transition_duration`` / ``anim_char_transition_duration`` /
+ * ``anim_line_height`` / ``unified_display_max_height``) stay numbers.
+ */
+export interface TsConfigResponse {
+  manifest_url: string;
+  shard_url_template: string;
+  catalog_url: string;
+  unified_display_max_height: number;
+  anim_highlight_color: string;
+  anim_word_transition_duration: number;
+  anim_char_transition_duration: number;
+  anim_transition_easing: string;
+  anim_word_spacing: string;
+  anim_line_height: number;
+  anim_font_size: string;
+  analysis_word_font_size: string;
+  analysis_letter_font_size: string;
+}
+/**
  * One job run's durable record (settings + status + logs).
  *
  * ``status`` mirrors HF's lowercased stage (``running`` / ``succeeded`` /
@@ -1053,6 +1863,92 @@ export interface TsJobRecord {
   logs?: string[];
   log_truncated?: boolean;
   error?: string | null;
+}
+/**
+ * Decompressed body of ``GET /api/ts/manifest``.
+ *
+ * Built by ``_build_manifest_dict``. ``dataset_base_url`` is ``""`` in the
+ * Inspector (resources resolve as absolute Flask paths); ``commit`` is ``""``.
+ * ``resources`` maps a purpose key (``qpc_hafs`` / ``digital_khatt`` / …) to
+ * a ``/api/ts/resource/<key>`` URL. ``reciters`` is keyed by delivery slug.
+ */
+export interface TsManifestResponse {
+  schema_version: number;
+  generated_at: string;
+  commit?: string;
+  dataset_base_url: string;
+  shard_url_template: string;
+  resources?: {
+    [k: string]: string;
+  };
+  reciters?: {
+    [k: string]: TsManifestReciter;
+  };
+}
+/**
+ * One reciter block inside the decompressed ``manifest`` body.
+ *
+ * Composed by ``services/reference/timestamps.py::_bucket_reciter_block``.
+ * Per-chapter audio URLs are deliberately NOT here — the FE resolves them
+ * from ``/api/audio/surahs`` (the audio-manifest sidecar).
+ *
+ * The route never emits a build-internal ``_build`` block on this read path.
+ * ``name_ar`` is emitted as ``null`` when the catalog has no Arabic name,
+ * ``source`` is emitted as ``""`` when unknown.
+ */
+export interface TsManifestReciter {
+  name_en: string;
+  name_ar?: string | null;
+  riwayah: string;
+  style: string;
+  source: string;
+  audio_category: AudioCategory;
+  ts_chapters?: number[];
+  vbr_chapters?: number[];
+}
+/**
+ * The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.
+ *
+ * The on-disk JSON key is ``_meta`` (leading underscore); pydantic disallows
+ * leading-underscore field names, so it is exposed as ``meta`` Python-side
+ * with ``alias="_meta"``. Serialise with ``model_dump(by_alias=True)``.
+ */
+export interface TsShardDoc {
+  _meta: TsShardMeta;
+  segments?: TsShardSegment[];
+}
+/**
+ * Slim per-shard ``_meta`` block.
+ *
+ * Aligner provenance (``padding``, ``beam``, ``method``, ``aligner_model``,
+ * ``shared_cmvn``, ``audio_source``, ``created_at``) passes through when the
+ * source ``_meta`` carried it. Audio routing (reciter / url_template /
+ * audio_urls) is deliberately NOT here — the audio-manifest sidecar is the
+ * source of truth. ``extra="allow"`` so the optional provenance fields the
+ * writer copies through stay typed-open for the FE.
+ */
+export interface TsShardMeta {
+  schema_version: number;
+  chapter: number;
+  audio_category: string;
+  [k: string]: unknown;
+}
+/**
+ * One recited segment in a chapter's temporal ``segments[]`` array.
+ *
+ * ``ref`` is always a single verse ``"surah:ayah"``; ``t`` is the segment's
+ * ``[start_ms, end_ms]`` span. A verse may recur across several entries
+ * (loopbacks / re-dos) — every accepted occurrence is one entry, emitted in
+ * recitation order.
+ */
+export interface TsShardSegment {
+  ref: string;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  t: [unknown, unknown];
+  words?: TsShardWord[];
 }
 /**
  * The ``ts_validation.json`` document — meta + verse-keyed flags.

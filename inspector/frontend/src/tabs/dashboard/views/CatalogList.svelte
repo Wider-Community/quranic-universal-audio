@@ -14,7 +14,8 @@
     import SearchInput from '../../../lib/components/SearchInput.svelte';
     import { openInfoModal } from '../../../lib/stores/info-modal';
     import { playerContext } from '../../../lib/stores/player-context';
-    import { bucketRank, type PublicDelivery, type PublicReciter } from '../../../lib/types/public-state';
+    import type { PublicDelivery, PublicReciter } from '../../../lib/types/generated/schemas';
+    import { bucketRank } from '../../../lib/types/public-bucket';
     import { axisLabel as axisLabelOf, tagLabel as tagLabelOf } from '../../../lib/utils/axis-labels';
     import { compareDeliveries } from '../../../lib/utils/delivery-sort';
     import { type FacetSpec, recomputeFacets } from '../../../lib/utils/facets';

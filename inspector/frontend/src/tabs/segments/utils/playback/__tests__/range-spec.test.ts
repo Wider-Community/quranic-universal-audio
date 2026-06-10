@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Segment } from '../../../../../lib/types/domain';
+import type { Segment } from '../../../../../lib/types/view-models';
 import { buildSegmentClipUrl } from '../range-spec';
 
 function makeSegment(overrides: Partial<Segment> = {}): Segment {

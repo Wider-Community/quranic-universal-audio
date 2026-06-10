@@ -20,19 +20,44 @@ committed to git so CI can ``git diff --exit-code`` it.
 
 from __future__ import annotations
 
-from .admin_permissions import (
+from .bucket.edit_history import EditHistoryBatch, EditOperation, EditOpPatch
+from .bucket.jobs import JobMember, JobRecord, JobsListResponse
+from .bucket.peaks_history import PeaksRecord
+from .bucket.segment import (
+    DetailedDocument,
+    DetailedEntry,
+    DetailedMeta,
+    DetailedSegment,
+    FlagFollowUp,
+    SegmentFlag,
+)
+from .bucket.ts_job_record import TsJobRecord, TsJobSettings
+from .bucket.ts_shard import TsShardDoc, TsShardMeta, TsShardSegment, TsShardWord
+from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
+from .config.automation import (
+    AutoGenTsConfig,
+    AutomationConfig,
+    AutomationResponse,
+    AutomationStateRow,
+    GhCutConfig,
+    HfPublishConfig,
+    StaleMetadataConfig,
+    StaleTsRegenConfig,
+)
+from .wire._envelopes import ErrorEnvelope, OkAck
+from .wire.admin_permissions import (
     AdminCapabilityRow,
     AdminCapabilityTierState,
     AdminPermissionGroup,
     AdminPermissionsResponse,
 )
-from .admin_requests import (
+from .wire.admin_requests import (
     AdminRequestCounts,
     AdminRequestRow,
     AdminRequestsResponse,
     RequestChange,
 )
-from .admin_reviews import (
+from .wire.admin_reviews import (
     AdminReviewClaimHistoryEntry,
     AdminReviewDetail,
     AdminReviewOpenClaim,
@@ -40,7 +65,7 @@ from .admin_reviews import (
     AdminReviewsResponse,
     AdminReviewTransition,
 )
-from .admin_users import (
+from .wire.admin_users import (
     AdminActiveClaim,
     AdminActivityEvent,
     AdminClaimEvent,
@@ -54,18 +79,8 @@ from .admin_users import (
     AdminVisitorStats,
     VisitorDayStat,
 )
-from .automation import (
-    AutoGenTsConfig,
-    AutomationConfig,
-    AutomationResponse,
-    AutomationStateRow,
-    GhCutConfig,
-    HfPublishConfig,
-    StaleMetadataConfig,
-    StaleTsRegenConfig,
-)
-from .edit_history import EditHistoryBatch, EditOperation
-from .intake_requests import (
+from .wire.audio import AudioSurahEntry, AudioSurahsResponse
+from .wire.intake_requests import (
     IntakeAttestations,
     IntakeSource,
     IntakeSubmission,
@@ -74,14 +89,20 @@ from .intake_requests import (
     ProbeResult,
     SourceLink,
 )
-from .jobs import JobMember, JobRecord, JobsListResponse
-from .mark_ready import (
+from .wire.mark_ready import (
     MarkReadyChecklist,
     MarkReadyRequest,
     MarkReadySubmission,
 )
-from .peaks_history import PeaksRecord
-from .release import (
+from .wire.public import (
+    AdminDiscardedDelivery,
+    AdminViewReciter,
+    BucketCounts,
+    PublicDelivery,
+    PublicReciter,
+    PublicReciterPage,
+)
+from .wire.release import (
     AdminCutReleaseRequest,
     AdminGhReleaseMember,
     AdminInFlightJob,
@@ -101,18 +122,55 @@ from .release import (
     StaleReason,
     SuggestedAction,
 )
-from .segment import (
-    DetailedDocument,
-    DetailedEntry,
-    DetailedMeta,
-    DetailedSegment,
-    FlagFollowUp,
-    SegmentFlag,
+from .wire.seg import (
+    SegAllResponse,
+    SegConfigResponse,
+    SegDataResponse,
+    SegmentFlagView,
+    SegmentsChapterSummary,
+    SegPeaksResponse,
+    SegReciter,
+    SegRecitersResponse,
+    SegSaveRequest,
+    SegSaveResponse,
+    SegSegmentPeaksRequest,
+    SegSegmentPeaksResponse,
+    SegUndoBatchRequest,
+    SegUndoOpsRequest,
+    SegUndoResponse,
+    SegValAnyItem,
+    SegValidateResponse,
 )
-from .ts_job_record import TsJobRecord, TsJobSettings
-from .ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
+from .wire.timestamps import TsConfigResponse, TsManifestResponse
 
 __all__ = [
+    "AdminDiscardedDelivery",
+    "AdminViewReciter",
+    "AudioSurahEntry",
+    "AudioSurahsResponse",
+    "BucketCounts",
+    "PublicDelivery",
+    "PublicReciter",
+    "PublicReciterPage",
+    "SegAllResponse",
+    "SegConfigResponse",
+    "SegDataResponse",
+    "SegPeaksResponse",
+    "SegReciter",
+    "SegRecitersResponse",
+    "SegSaveRequest",
+    "SegSaveResponse",
+    "SegSegmentPeaksRequest",
+    "SegSegmentPeaksResponse",
+    "SegUndoBatchRequest",
+    "SegUndoOpsRequest",
+    "SegUndoResponse",
+    "SegValAnyItem",
+    "SegValidateResponse",
+    "SegmentFlagView",
+    "SegmentsChapterSummary",
+    "TsConfigResponse",
+    "TsManifestResponse",
     "AutoGenTsConfig",
     "AutomationConfig",
     "AutomationResponse",
@@ -167,6 +225,8 @@ __all__ = [
     "DetailedSegment",
     "EditHistoryBatch",
     "EditOperation",
+    "EditOpPatch",
+    "ErrorEnvelope",
     "FlagFollowUp",
     "IntakeAttestations",
     "IntakeSource",
@@ -178,6 +238,7 @@ __all__ = [
     "MarkReadyChecklist",
     "MarkReadyRequest",
     "MarkReadySubmission",
+    "OkAck",
     "PeaksRecord",
     "ProbeResponse",
     "ProbeResult",
@@ -188,6 +249,10 @@ __all__ = [
     "SuggestedAction",
     "TsJobRecord",
     "TsJobSettings",
+    "TsShardDoc",
+    "TsShardMeta",
+    "TsShardSegment",
+    "TsShardWord",
     "TsValidationDoc",
     "TsValidationMeta",
     "TsValidationVerse",

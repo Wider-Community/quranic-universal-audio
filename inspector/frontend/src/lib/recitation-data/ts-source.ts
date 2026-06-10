@@ -24,14 +24,15 @@
  */
 
 import { ApiError, fetchArrayBuffer, fetchJson } from '../api';
+import type { TsConfigResponse, TsManifestResponse, TsValidationDoc } from '../types/generated/schemas';
 import type {
-    TsConfigResponse,
-    TsManifestResponse,
+    Letter,
+    PhonemeInterval,
     TsShardResponse,
     TsVbrResponse,
-} from '../types/api';
-import type { Letter, PhonemeInterval, TsVerseData, TsWord } from '../types/domain';
-import type { TsValidationDoc } from '../types/generated/schemas';
+    TsVerseData,
+    TsWord,
+} from '../types/ts-client';
 
 import {
     type VerseOccasions,
@@ -631,12 +632,14 @@ const RANDOM_TARGET_MAX_TRIES = 5;
 
 export async function getRandomTarget(opts: { reciter?: string } = {}): Promise<TsRandomTarget | null> {
     const m = await loadManifest();
-    const slugs = Object.keys(m.reciters);
+    const reciters = m.reciters ?? {};
+    const slugs = Object.keys(reciters);
     if (slugs.length === 0) return null;
 
     const reciter = opts.reciter ?? slugs[Math.floor(Math.random() * slugs.length)]!;
-    const block = m.reciters[reciter];
-    if (!block || block.ts_chapters.length === 0) return null;
+    const block = reciters[reciter];
+    const blockChapters = block?.ts_chapters ?? [];
+    if (!block || blockChapters.length === 0) return null;
 
     // Retry on shard 404 / empty-shard so a single stale manifest entry (e.g.
     // a chapter listed in `ts_chapters` whose shard file vanished from the
@@ -644,7 +647,7 @@ export async function getRandomTarget(opts: { reciter?: string } = {}): Promise<
     // button. Each retry picks a different unseen chapter.
     const tried = new Set<number>();
     for (let i = 0; i < RANDOM_TARGET_MAX_TRIES; i++) {
-        const remaining = block.ts_chapters.filter((c) => !tried.has(c));
+        const remaining = blockChapters.filter((c) => !tried.has(c));
         if (remaining.length === 0) return null;
         const chapter = remaining[Math.floor(Math.random() * remaining.length)]!;
         tried.add(chapter);

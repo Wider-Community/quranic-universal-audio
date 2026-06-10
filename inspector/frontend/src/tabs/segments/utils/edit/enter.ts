@@ -9,7 +9,7 @@
 import { get } from 'svelte/store';
 
 import { EDIT_LOAD_PAD_MS } from '../../../../lib/playback/constants';
-import type { Segment } from '../../../../lib/types/domain';
+import type { Segment } from '../../../../lib/types/view-models';
 import { createOp, setPendingOp, snapshotSeg } from '../../stores/dirty';
 import { clearEdit, editMode } from '../../stores/edit';
 import { segPort } from '../../stores/playback';

@@ -3,7 +3,7 @@
  * tab modules. Shared by all waveform canvas contexts.
  */
 
-import type { PeakBucket } from '../types/domain';
+import type { PeakBucket } from '../types/peaks-transport';
 import { WAVEFORM_BG_COLOR, WAVEFORM_FILL_COLOR, WAVEFORM_SILENCE_THRESHOLD, WAVEFORM_STROKE_COLOR } from './constants';
 import { viewPeaks } from './peaks-view';
 

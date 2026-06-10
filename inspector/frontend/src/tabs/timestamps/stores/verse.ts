@@ -8,7 +8,7 @@
 
 import { derived, writable } from 'svelte/store';
 
-import type { TsReciter, TsVerseData } from '../../../lib/types/domain';
+import type { TsReciter, TsVerseData } from '../../../lib/types/ts-client';
 import type { SelectOption } from '../../../lib/types/ui';
 import { surahOptionText } from '../../../lib/utils/surah-info';
 

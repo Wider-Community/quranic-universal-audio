@@ -10,8 +10,8 @@
  *   5. Style (alphabetical)
  *   6. Bitrate (higher first)
  */
-import type { PublicDelivery } from '../types/public-state';
-import { bucketRank } from '../types/public-state';
+import type { PublicDelivery } from '../types/generated/schemas';
+import { bucketRank } from '../types/public-bucket';
 
 function catRank(cat: string): number {
     if (cat === 'by_surah') return 0;
