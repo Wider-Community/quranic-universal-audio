@@ -70,6 +70,19 @@ class EditOperation(BaseModel):
     ``op_context_category`` is the validation category the edit was launched
     from; ``build_resolved_by_edit_index`` reads it to suppress re-flagging.
     Both are live fields, written and read by the app — NOT dead.
+
+    The user-edit save flow (``apply-command.ts::_baseOperation``) also stamps a
+    handful of FE working/presentation fields that the Inspector save path
+    persists verbatim and the History panel reads back: ``merge_direction``
+    (``'prev'``/``'next'`` — drives the merge-highlight point in
+    ``EditChainRow``/``HistoryOp``), ``snapshots`` (the ``{before, after}``
+    mirror of ``targets_*`` that ``utils/history/items.ts`` reads for the
+    ``is_wasl`` waqf pill), plus the ``type`` op alias, the ``command`` payload
+    and the ``targetSegmentIndex`` locator. They are declared optional so a
+    real user-edit op round-trips under pure ``extra="forbid"`` (only the
+    pipeline writer in ``post_passes.py`` round-trips through this model at
+    write time; the Inspector save persists the raw op). Pipeline ops leave
+    them ``None``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -83,6 +96,14 @@ class EditOperation(BaseModel):
     patch: EditOpPatch | None = None  # forward-change envelope for undo
     targets_before: list[dict[str, Any]] = Field(default_factory=list)
     targets_after: list[dict[str, Any]] = Field(default_factory=list)
+
+    # FE user-edit working/presentation fields, persisted verbatim by the
+    # Inspector save flow and read back by the History panel (see class doc).
+    type: str | None = None  # user-edit op alias (split/merge/delete/…)
+    merge_direction: str | None = None  # 'prev'/'next' on merge ops
+    snapshots: dict[str, Any] | None = None  # {before, after} mirror of targets_*
+    targetSegmentIndex: dict[str, Any] | None = None  # {chapter, index} locator
+    command: dict[str, Any] | None = None  # raw FE command payload
 
 
 class EditHistoryBatch(BaseModel):

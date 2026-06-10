@@ -961,6 +961,19 @@ export interface EditHistoryBatch {
  * ``op_context_category`` is the validation category the edit was launched
  * from; ``build_resolved_by_edit_index`` reads it to suppress re-flagging.
  * Both are live fields, written and read by the app — NOT dead.
+ *
+ * The user-edit save flow (``apply-command.ts::_baseOperation``) also stamps a
+ * handful of FE working/presentation fields that the Inspector save path
+ * persists verbatim and the History panel reads back: ``merge_direction``
+ * (``'prev'``/``'next'`` — drives the merge-highlight point in
+ * ``EditChainRow``/``HistoryOp``), ``snapshots`` (the ``{before, after}``
+ * mirror of ``targets_*`` that ``utils/history/items.ts`` reads for the
+ * ``is_wasl`` waqf pill), plus the ``type`` op alias, the ``command`` payload
+ * and the ``targetSegmentIndex`` locator. They are declared optional so a
+ * real user-edit op round-trips under pure ``extra="forbid"`` (only the
+ * pipeline writer in ``post_passes.py`` round-trips through this model at
+ * write time; the Inspector save persists the raw op). Pipeline ops leave
+ * them ``None``.
  */
 export interface EditOperation {
   op_id: string;
@@ -975,6 +988,17 @@ export interface EditOperation {
   targets_after?: {
     [k: string]: unknown;
   }[];
+  type?: string | null;
+  merge_direction?: string | null;
+  snapshots?: {
+    [k: string]: unknown;
+  } | null;
+  targetSegmentIndex?: {
+    [k: string]: unknown;
+  } | null;
+  command?: {
+    [k: string]: unknown;
+  } | null;
 }
 /**
  * Forward-change patch envelope attached to an op at finalize time.

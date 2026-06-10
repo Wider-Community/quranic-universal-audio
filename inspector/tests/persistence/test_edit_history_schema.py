@@ -7,9 +7,13 @@ paths READ — ``patch`` and ``op_context_category`` — are declared fields
 
 There is no longer a legacy-tolerance layer: ``save_mode`` (a wire-only
 presentation hint the save flow no longer persists), the file-hash chain,
-and the genuinely-dead op fields (``command`` / ``snapshots`` / ``type`` / …)
-are all REJECTED on read — any unexpected key raises ``ValidationError``.
-The History-panel wire shape still re-derives ``save_mode`` for display.
+and the genuinely-dead v0 op fields (per-op timestamps, ``affected_chapters``,
+``value`` / ``field`` / ``op``) are all REJECTED on read — any unexpected key
+raises ``ValidationError``. The FE user-edit working fields (``type`` /
+``command`` / ``snapshots`` / ``targetSegmentIndex`` / ``merge_direction``)
+ARE declared and round-trip, because the Inspector save flow persists them
+verbatim. The History-panel wire shape still re-derives ``save_mode`` for
+display.
 
 The committed ``112-ikhlas.edit_history.jsonl`` fixture deliberately carries
 legacy keys; it is read raw by the save-flow tests and used here only as a
@@ -96,9 +100,10 @@ def test_clean_batch_patch_and_context_survive_round_trip():
 
 def test_committed_legacy_fixture_rejected():
     """The committed fixture carries retired batch + op keys (``save_mode``,
-    ``file_hash_after``, ``type``, ``applied_at_utc``, …). Under pure
-    ``extra="forbid"`` ``parse_edit_history_line`` now raises ``ValidationError``
-    instead of stripping them."""
+    ``file_hash_after``, ``reciter`` at batch level; ``applied_at_utc`` /
+    ``ready_at_utc`` / ``started_at_utc`` per op). Under pure ``extra="forbid"``
+    ``parse_edit_history_line`` now raises ``ValidationError`` instead of
+    stripping them."""
     [line] = _fixture_lines()
     with pytest.raises(ValueError):
         parse_edit_history_line(line)
@@ -182,10 +187,20 @@ def test_genesis_lines_parse_to_none():
 
 
 def test_dead_op_field_rejected():
-    """A retired op field (``type`` / ``command`` / ``snapshots`` /
-    ``merge_direction`` / ``applied_at_utc``) on its own raises under pure
-    ``extra="forbid"`` — none of them are tolerated anymore."""
-    for dead in ("type", "command", "snapshots", "merge_direction", "applied_at_utc"):
+    """Genuinely-dead v0 op fields the live writers NEVER emit (per-op
+    timestamps + the v1 pipeline vocab) still raise under pure
+    ``extra="forbid"``. The FE working fields (``type`` / ``command`` /
+    ``snapshots`` / ``targetSegmentIndex`` / ``merge_direction``) are NOT in
+    this set — they are declared (see ``test_user_edit_op_round_trips``)."""
+    for dead in (
+        "applied_at_utc",
+        "ready_at_utc",
+        "started_at_utc",
+        "affected_chapters",
+        "value",
+        "field",
+        "op",
+    ):
         with pytest.raises(ValueError):
             EditOperation.model_validate(
                 {
@@ -197,6 +212,60 @@ def test_dead_op_field_rejected():
                     dead: "x",
                 }
             )
+
+
+def test_user_edit_op_round_trips():
+    """A user-edit op shaped exactly as the FE ``apply-command.ts::
+    _baseOperation`` emits it — and persisted verbatim by the Inspector save
+    flow — round-trips under pure ``extra="forbid"``. This guards the
+    writer/schema drift class: the FE stamps ``type`` / ``kind`` /
+    ``snapshots`` / ``targetSegmentIndex`` / ``command`` (+ ``merge_direction``
+    on merges) on every op, and the save path appends them as-is, so the
+    schema MUST declare them or the bucket validator / ``/healthz?deep=1``
+    reject every freshly-saved reciter."""
+    op = EditOperation.model_validate(
+        {
+            "op_id": "user-merge-1",
+            "op_type": "merge_segments",
+            "kind": "structural",
+            "op_context_category": "audio_bleeding",
+            "fix_kind": "manual",
+            "type": "merge",
+            "merge_direction": "prev",
+            "snapshots": {
+                "before": [{"segment_uid": "a"}, {"segment_uid": "b"}],
+                "after": [{"segment_uid": "a"}],
+            },
+            "targetSegmentIndex": {"chapter": 112, "index": 1},
+            "command": {"type": "merge", "segmentUid": "b", "direction": "prev"},
+            "targets_before": [{"segment_uid": "a"}, {"segment_uid": "b"}],
+            "targets_after": [{"segment_uid": "a"}],
+            "patch": {
+                "before": [],
+                "after": [],
+                "removedIds": ["b"],
+                "insertedIds": [],
+                "affectedChapterIds": [112],
+            },
+        }
+    )
+    assert op.merge_direction == "prev"
+    assert op.snapshots is not None and op.command is not None
+    assert (op.model_extra or {}) == {}  # nothing landed in extras
+    # And it survives a full JSONL batch round-trip through the reader.
+    batch = parse_edit_history_line(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "batch_id": "user-batch-1",
+                "chapter": 112,
+                "saved_at_utc": "2026-06-10T00:00:00.000Z",
+                "operations": [op.model_dump(exclude_none=True)],
+            }
+        )
+    )
+    assert batch is not None
+    assert batch.operations[0].merge_direction == "prev"
 
 
 def test_clean_op_validates_with_promoted_fields():
