@@ -307,22 +307,6 @@ class AdminPublishError(BaseModel):
     at: str | None = None
 
 
-class AdminReciterReadiness(BaseModel):
-    """By-surah chapters still missing bucket audio / peaks for a reciter.
-
-    Audio + peaks are populated offline (katana extraction); the timestamps job
-    no longer writes them. Purely a non-blocking warn signal — drives the
-    Releases-row "audio N · peaks N missing" pill, never gates an action.
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    audio_missing: int = 0
-    peaks_missing: int = 0
-    audio_missing_chapters: list[int] = Field(default_factory=list)
-    peaks_missing_chapters: list[int] = Field(default_factory=list)
-
-
 class AdminReleaseStatusRow(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -344,7 +328,6 @@ class AdminReleaseStatusRow(BaseModel):
     hf: AdminReleaseRow | None
     gh: AdminGhReleaseMember | None
     publish_error: AdminPublishError | None = None
-    readiness: AdminReciterReadiness | None = None
     #: Count of segments carrying a flag (from detailed.json) — computed ONLY for
     #: Ready-to-generate rows so the admin sees outstanding flags before
     #: generating. None on every other bucket (no extra bucket read).

@@ -15,11 +15,35 @@ matching per-reciter history "tier" view lives in ``history_tiers.py``.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from qua_shared.segment_edit_ops import batch_affects_timestamps
 from services.activity import history_query
+from services.storage import data_dir
+from services.storage.hf_bucket import get_backend
 
 logger = logging.getLogger(__name__)
+
+
+def _provably_not_stale_by_mtime(slug: str, produced_at: str) -> bool:
+    """True iff the edit-history file's mtime proves nothing changed since gen.
+
+    Cheap mounted-path short-circuit: a stale TS-affecting edit has
+    ``saved_at_utc > produced_at`` and the file's mtime is ``>=`` that append,
+    so ``mtime(edit_history.jsonl) <= produced_at`` means no edit landed after
+    generation — the reciter is provably not stale and the full JSONL parse can
+    be skipped. Returns False (→ caller parses) when the mount isn't available
+    (local dev), the file is missing, or the timestamps can't be compared.
+    """
+    lp = get_backend().local_path(data_dir.edit_history_path(slug))
+    if lp is None:
+        return False
+    try:
+        mtime = datetime.fromtimestamp(lp.stat().st_mtime, tz=UTC)
+        produced = datetime.fromisoformat(produced_at.replace("Z", "+00:00"))
+        return mtime <= produced
+    except (OSError, ValueError, TypeError):
+        return False
 
 
 def ts_stale_info(slug: str, *, produced_at: str) -> dict | None:
@@ -42,7 +66,14 @@ def ts_stale_info(slug: str, *, produced_at: str) -> dict | None:
     Best-effort: a failed edit-history read (e.g. bucket unavailable) yields
     ``None`` rather than propagating — this feeds the releases-status grid for
     every reciter, so one unreadable history must not 500 the whole page.
+
+    Fast path: on the mounted bucket, an mtime check on the edit-history file
+    skips the JSONL read entirely for the (common) not-edited-since case — the
+    releases-status grid calls this per reciter, so the avoided cold reads are
+    the bulk of that endpoint's latency.
     """
+    if _provably_not_stale_by_mtime(slug, produced_at):
+        return None
     try:
         batches = history_query.parse_history_for_reciter(slug)
     except Exception:  # noqa: BLE001 — best-effort; bucket/read failure → not stale

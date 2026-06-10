@@ -39,7 +39,6 @@ from qua_shared.schemas import (
     AutomationResponse,
 )
 from routes._admin_helpers import actor_for, require_capability_or_403
-from services.admin import release_readiness
 from services.admin.automation import config as automation_config
 from services.admin.automation import schedule as automation_schedule
 from services.admin.jobs import base as jobs_base
@@ -396,8 +395,6 @@ def releases_status(user):
                affected_chapters?} | null,
           hf: {version, produced_at, stale_since} | null,
           gh: {change_kind, stale_since, release_id, ts_version} | null,
-          readiness: {audio_missing, peaks_missing,   # non-blocking warn pill
-               audio_missing_chapters, peaks_missing_chapters} | null,
         }, ...]
       }
 
@@ -441,8 +438,12 @@ def releases_status(user):
     # surfaces in the "In progress" bucket (a regen on a released row has no
     # other in-flight signal — there's no state change). hf_publish + cut_release
     # are the dataset/GH tracks.
+    # ``block=False``: stale-while-revalidate so the grid never waits on the
+    # rate-limited HF ``list_jobs()`` network call (refreshed in the background;
+    # the 30 s FE poll catches up). The reconciler keeps the blocking read.
     in_flight = jobs_base.list_in_flight_jobs(
-        ("hf_publish", "hf_publish_batch", "cut_release", "timestamps", "refresh_catalog")
+        ("hf_publish", "hf_publish_batch", "cut_release", "timestamps", "refresh_catalog"),
+        block=False,
     )
 
     # Most-recent batch publish outcome — drives the "Failed to publish" bucket
@@ -551,9 +552,6 @@ def releases_status(user):
             "publish_error": batch_failures.get(slug),
         }
         if _is_bucketable(row, in_flight_slugs) or slug in batch_failures:
-            # Audio/peaks readiness is a non-blocking warn — compute only for
-            # rows the FE will actually render (TTL-cached, never gates).
-            row["readiness"] = release_readiness.reciter_bucket_readiness(slug)
             # Flagged-segment count — ONLY for Ready-to-generate rows (marked
             # ready, no TS yet), so the admin sees outstanding flags before
             # generating. Same best-effort read as the reviews-detail builder;

@@ -81,7 +81,7 @@ Env-driven. **Alignment-only** — the job never persists audio nor bakes peaks 
 | `CHAPTERS=5,12` | **Affected-only regen.** Scopes the run to those surah numbers (`process(refresh_chapters=…)`) — only those chapters download + align + re-emit shards; untouched shards stay on the bucket. The whole-reciter `ts_validation.json` is **merged** (`_merge_ts_validation`), keeping non-refreshed chapters' flags. Absent = full reciter. Set by `launch` from `TsJobSettings.chapters`; the Releases-tab Regenerate expand defaults to the chapters edited since the last generation (`ts_staleness.ts_stale_info`). |
 | `JOB_ID` (HF-injected) | Self-writes the durable record at completion/failure (§3a). |
 
-**Audio + peaks are out of scope for this job.** Chapter audio (`reciters/<slug>/audio/`) and waveform peaks (`reciters/<slug>/peaks/`) are written offline by katana extraction (`upload_to_bucket.py`). The Releases tab surfaces a non-blocking **readiness warn** pill when either is incomplete (`services/admin/release_readiness.py` → `AdminReciterReadiness` on the status row) — it never gates generation or publishing.
+**Audio + peaks are out of scope for this job.** Chapter audio (`reciters/<slug>/audio/`) and waveform peaks (`reciters/<slug>/peaks/`) are written offline by katana extraction (`upload_to_bucket.py`). Their completeness is verified offline, not surfaced in-app — the Releases status route no longer probes bucket dirs per reciter (that per-row `list_dir` cost was removed; it never gated generation or publishing).
 
 ### 3a. Durable job record — `reciters/<slug>/jobs/ts/<job_id>.json`
 

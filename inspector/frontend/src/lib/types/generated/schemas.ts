@@ -152,20 +152,6 @@ export interface AdminPublishError {
   at?: string | null;
   [k: string]: unknown;
 }
-/**
- * By-surah chapters still missing bucket audio / peaks for a reciter.
- *
- * Audio + peaks are populated offline (katana extraction); the timestamps job
- * no longer writes them. Purely a non-blocking warn signal — drives the
- * Releases-row "audio N · peaks N missing" pill, never gates an action.
- */
-export interface AdminReciterReadiness {
-  audio_missing?: number;
-  peaks_missing?: number;
-  audio_missing_chapters?: number[];
-  peaks_missing_chapters?: number[];
-  [k: string]: unknown;
-}
 export interface AdminReleaseLinks {
   repo: string;
   hf_dataset: string;
@@ -227,7 +213,6 @@ export interface AdminReleaseStatusRow {
   hf: AdminReleaseRow | null;
   gh: AdminGhReleaseMember | null;
   publish_error?: AdminPublishError | null;
-  readiness?: AdminReciterReadiness | null;
   flagged_issues_count?: number | null;
   [k: string]: unknown;
 }

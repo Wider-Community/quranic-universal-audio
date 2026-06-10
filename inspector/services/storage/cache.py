@@ -871,6 +871,12 @@ def invalidate_automation_config_cache() -> None:
 # the ``complete()`` handlers so a just-launched job (or a just-terminated
 # one) shows up in the next call regardless of TTL.
 #
+# The user-facing status route reads via ``list_in_flight_jobs(block=False)``
+# (stale-while-revalidate): a lapsed TTL serves the last-known value through
+# ``get_in_flight_jobs_cache_stale`` and refreshes in the background, so the
+# page never blocks on the network call. The automation reconciler keeps the
+# blocking ``block=True`` read — it must see accurate live state.
+#
 # Keyed by the ``kinds`` tuple so a call for ``("hf_publish", "cut_release")``
 # doesn't collide with a future call filtered to a single kind.
 # ---------------------------------------------------------------------------
@@ -891,6 +897,23 @@ def get_in_flight_jobs_cache(kinds: tuple[str, ...]) -> list[dict] | None:
         if cached_kinds != kinds:
             return None
         if _time.time() - stamped_at > _JOBS_IN_FLIGHT_TTL_S:
+            return None
+        return value
+
+
+def get_in_flight_jobs_cache_stale(kinds: tuple[str, ...]) -> list[dict] | None:
+    """Return the kinds-matched cached list ignoring the TTL, else None.
+
+    Backs the stale-while-revalidate read on the user-facing releases-status
+    route: when the TTL has lapsed we still serve the last-known value
+    immediately and refresh in the background, rather than blocking on the HF
+    ``list_jobs()`` network call. Returns None only when nothing has ever been
+    cached for these ``kinds``."""
+    with _jobs_in_flight_lock:
+        if _jobs_in_flight is None:
+            return None
+        _stamped_at, cached_kinds, value = _jobs_in_flight
+        if cached_kinds != kinds:
             return None
         return value
 
@@ -947,34 +970,3 @@ def invalidate_all_jobs_cache() -> None:
     global _all_jobs
     with _all_jobs_lock:
         _all_jobs = None
-
-
-# ---------------------------------------------------------------------------
-# Per-reciter bucket readiness (audio/ + peaks/ presence) — TTL cache.
-#
-# Audio + peaks land OFFLINE (katana extraction), with no DB write, so this
-# can't key on ``db_seq`` like the catalog caches. A short wall-clock TTL keeps
-# the 30 s Releases-tab poll from re-listing every reciter's bucket dirs while
-# still picking up a fresh offline upload within a minute. Keyed by slug.
-# ---------------------------------------------------------------------------
-
-_readiness_lock = _threading.Lock()
-_readiness: "dict[str, tuple[float, dict | None]]" = {}
-_READINESS_TTL_S = 60.0
-
-
-def get_reciter_readiness_cache(slug: str) -> "tuple[bool, dict | None]":
-    """Return ``(hit, value)`` — ``hit`` False when absent/expired."""
-    with _readiness_lock:
-        entry = _readiness.get(slug)
-        if entry is None:
-            return (False, None)
-        stamped_at, value = entry
-        if _time.time() - stamped_at > _READINESS_TTL_S:
-            return (False, None)
-        return (True, value)
-
-
-def set_reciter_readiness_cache(slug: str, value: dict | None) -> None:
-    with _readiness_lock:
-        _readiness[slug] = (_time.time(), value)

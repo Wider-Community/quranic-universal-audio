@@ -42,7 +42,9 @@ def _stub_jobs_api(monkeypatch, *, in_flight=(), batch_outcome=None):
     from services.admin.jobs import base as jobs_base
     from services.admin.jobs import hf_publish_batch as batch_jobs
 
-    monkeypatch.setattr(jobs_base, "list_in_flight_jobs", lambda kinds: list(in_flight))
+    monkeypatch.setattr(
+        jobs_base, "list_in_flight_jobs", lambda kinds, *, block=True: list(in_flight)
+    )
     monkeypatch.setattr(jobs_base, "running_job_for", lambda **_: None)
     monkeypatch.setattr(batch_jobs, "latest_batch_outcome", lambda: batch_outcome)
 

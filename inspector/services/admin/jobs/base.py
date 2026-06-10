@@ -223,25 +223,15 @@ def kind_and_slug_for_job(job_id: str) -> tuple[str | None, str | None]:
     return None, None
 
 
-def list_in_flight_jobs(kinds: tuple[str, ...]) -> list[dict]:
-    """Return ``[{kind, slug, job_id, started_at}, ...]`` for live jobs whose
-    ``labels.task`` is in ``kinds``. ``slug`` is None for global kinds.
+def _fetch_in_flight(kinds: tuple[str, ...]) -> list[dict]:
+    """Network walk: live HF jobs filtered to running ``kinds``, cache + return.
 
-    Used by the Releases-tab status endpoint to surface "what's running right
-    now" to the operator. Wrapped in a 5 s TTL cache
-    (``services/storage/cache.py``) — ``list_jobs()`` is rate-limited at the
-    HF side and the FE polls every 30 s; the cache absorbs the poll + same-
-    page re-renders cheaply. ``hf_publish.launch`` / ``cut_release.launch``
-    and their ``complete()`` handlers explicitly invalidate so a freshly
-    launched job (or a just-terminated one) shows up immediately.
-    """
+    On any failure returns ``[]`` WITHOUT caching so the next call retries the
+    HF API. Shared by the blocking read and the background SWR refresh."""
     from huggingface_hub import list_jobs
 
     from services.storage import cache as _cache
 
-    cached = _cache.get_in_flight_jobs_cache(kinds)
-    if cached is not None:
-        return cached
     out: list[dict] = []
     try:
         for job in list_jobs():
@@ -277,10 +267,64 @@ def list_in_flight_jobs(kinds: tuple[str, ...]) -> list[dict]:
             )
     except Exception as exc:
         log.warning("list_in_flight_jobs(%s) failed: %s", kinds, exc)
-        # Don't cache failures — the next call should retry the HF API.
         return []
     _cache.set_in_flight_jobs_cache(kinds, out)
     return out
+
+
+_inflight_refresh_lock = threading.Lock()
+_inflight_refreshing: set[tuple[str, ...]] = set()
+
+
+def _spawn_in_flight_refresh(kinds: tuple[str, ...]) -> None:
+    """Kick one background refresh for ``kinds`` (deduped across concurrent polls).
+
+    The refresh touches only cache globals + the HF SDK — no Flask/app context —
+    so a bare daemon thread is safe on the gthread worker (the network wait
+    releases the GIL)."""
+    with _inflight_refresh_lock:
+        if kinds in _inflight_refreshing:
+            return
+        _inflight_refreshing.add(kinds)
+
+    def _run() -> None:
+        try:
+            _fetch_in_flight(kinds)
+        finally:
+            with _inflight_refresh_lock:
+                _inflight_refreshing.discard(kinds)
+
+    threading.Thread(target=_run, name="in-flight-jobs-refresh", daemon=True).start()
+
+
+def list_in_flight_jobs(kinds: tuple[str, ...], *, block: bool = True) -> list[dict]:
+    """Return ``[{kind, slug, job_id, started_at}, ...]`` for live jobs whose
+    ``labels.task`` is in ``kinds``. ``slug`` is None for global kinds.
+
+    Surfaces "what's running right now" to the operator. Wrapped in a 5 s TTL
+    cache (``services/storage/cache.py``) — ``list_jobs()`` is rate-limited at
+    the HF side and the FE polls every 30 s; the cache absorbs the poll +
+    same-page re-renders cheaply. ``hf_publish.launch`` / ``cut_release.launch``
+    and their ``complete()`` handlers invalidate so a freshly launched (or
+    just-terminated) job shows up promptly.
+
+    ``block`` (default True) does the synchronous network fetch on a cache miss
+    — required by the automation reconciler, which must see accurate live state
+    to avoid double-launching. ``block=False`` is stale-while-revalidate for the
+    user-facing releases-status route: a cache miss kicks a background refresh
+    and returns the last-known value (or ``[]``) immediately, so the page never
+    blocks on the network call.
+    """
+    from services.storage import cache as _cache
+
+    cached = _cache.get_in_flight_jobs_cache(kinds)
+    if cached is not None:
+        return cached
+    if block:
+        return _fetch_in_flight(kinds)
+    _spawn_in_flight_refresh(kinds)
+    stale = _cache.get_in_flight_jobs_cache_stale(kinds)
+    return stale if stale is not None else []
 
 
 # ---------------------------------------------------------------------------
