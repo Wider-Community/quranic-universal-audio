@@ -9,7 +9,8 @@ Audio (peaks, proxy, VBR/Xing) lives in the `inspector-audio` skill. Catalog mod
 [timestamps-job.md](timestamps-job.md). DB substrate + migrations:
 [database.md](database.md), [data-migrations.md](data-migrations.md). Firing these
 release actions (cut / publish / regen) on a schedule or rule instead of by hand:
-[automation.md](automation.md).
+[automation.md](automation.md). Watching those jobs (cut / publish / batch / regen),
+running + historical, in one place: the **Jobs** tab — [admin-dashboard.md](admin-dashboard.md).
 
 > **As-built note.** Releases ship as **one global GitHub release per version** containing every
 > currently-eligible reciter as a `<slug>.zip` asset — NOT a per-reciter release tag. The release

@@ -5,6 +5,10 @@ existing release jobs on their own — surfaced as the **Automation** card atop 
 admin Releases tab. The engine is a single opt-in reconciler daemon; it reacts to
 *state*, not events, so it is idempotent + restart-safe.
 
+> Every job an automation launches now writes a uniform `JobRecord` (launch +
+> terminal) to the shared store, browsable in the admin **Jobs** tab — see the
+> Jobs compartment in [admin-dashboard.md](admin-dashboard.md).
+
 ## The five automations
 
 | id | What it does | Trigger | Owner settings |

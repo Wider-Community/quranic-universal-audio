@@ -137,6 +137,22 @@ Reviewer-management mutations reuse existing per-slug routes:
 
 The owner-only tightening on force-release + reassign was a deliberate split: **owners manage who reviews; maintainers gate what ships**. Maintainers retain Send-back-to-UR but cannot eject or transfer claims.
 
+### Jobs compartment (unified job view)
+
+The **Jobs** tab is one place for every HF-Job kind — `timestamps`, `hf_publish`, `hf_publish_batch`, `cut_release`, `refresh_catalog` — running *and* historical, across all reciters. Clicking any row opens an in-app drawer (record + settings/logs, batch/cut members, "Open on HF", Cancel-if-running).
+
+**Shared job-record store** (`services/admin/jobs/records.py`) — the single source the tab reads. Every kind's **server-side** `launch()` writes a `running` `JobRecord` and every terminal point (`complete()`, the webhook non-success branches, the cancel route) writes the `succeeded`/`failed` outcome via `record_terminal` (read-merge-write, so launch fields survive). The DB stays the source-of-truth for *releases*; these records are the uniform observability trail. Paths reuse `base.job_record_path` — `reciters/<slug>/jobs/<kind>/` (per-slug) and `jobs/_global/<kind>/` (global). `JobRecord` (`qua_shared/schemas/jobs.py`) is a superset of the legacy `TsJobRecord` the timestamps HF-Job container still self-writes, so old TS records parse uniformly (`records.read` injects `kind` from the path + normalizes status).
+
+**Aggregator** (`services/admin/jobs/registry.py`) — `list_all_jobs()` unions `records.list_all()` with the live HF list (`base.list_in_flight_jobs`), dedups by `job_id` (live `running` wins), sorts newest-first, TTL-cached (`cache.{get,set,invalidate}_all_jobs_cache`, invalidated at every launch/complete/cancel). `job_detail()` enriches a running TS job with its live log tail.
+
+| Endpoint | What |
+|---|---|
+| `GET /api/admin/jobs` | `JobsListResponse` — unified list + `running_count` (`reviews.view`). |
+| `GET /api/admin/jobs/detail?kind=&job_id=&slug=` | One job's full `JobRecord` for the drawer (`reviews.view`). 404 if absent. |
+| `POST /api/admin/release-jobs/<job_id>/cancel` | Cancel — reused (kind-generic, per-kind cap gates). |
+
+> History caveat: `hf_publish` rows that predate the store, plus `cut_release`, are synthesized from the DB by the one-shot `scripts/backfills/backfill_job_records.py` (idempotent); going forward every kind records natively, including failures.
+
 ### Role change (`services/admin/users.py::set_role`)
 
 Roles are tri-state with contributor **implicit** (no `role_assignments` row). `set_role` reads the current role and dispatches to the existing `services/auth/access.py` mutations so authz + audit + `durable_transaction` stay centralized:
