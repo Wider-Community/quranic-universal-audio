@@ -21,7 +21,7 @@
 
     import { COUNTRIES, countryByName } from '../../../../lib/utils/countries';
     import { channelDisplay, titleCaseSlug } from '../../../../lib/utils/delivery-label';
-    import { match } from '../../../../lib/utils/fuzzy-match';
+    import { filterByFields, match } from '../../../../lib/utils/fuzzy-match';
     import { catalogData } from '../../stores/catalog-data';
     import { openDetail } from '../../stores/dashboard-state';
     import { closeSubmitWizard, submitWizard } from '../../stores/submit-wizard';
@@ -36,10 +36,7 @@
         : null;
 
     function computeFiltered(rs: typeof reciters, q: string): typeof reciters {
-        if (!q) return rs.slice(0, 80);
-        return rs
-            .filter((r) => match(r.name, q) || (r.name_ar && match(r.name_ar, q)))
-            .slice(0, 80);
+        return filterByFields(rs, q, (r) => [r.name, r.name_ar]).slice(0, 80);
     }
     $: filtered = computeFiltered(reciters, $queryStore);
 

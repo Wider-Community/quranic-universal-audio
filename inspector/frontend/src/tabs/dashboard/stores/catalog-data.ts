@@ -1,20 +1,21 @@
 /**
- * Dashboard catalog data store — fetches the public reciter list +
+ * Dashboard catalog data store — fetches the full public reciter list +
  * stats once on first read and caches in-memory. Subsequent subscribers
  * receive the cached snapshot.
  *
- * Data is small (a few hundred reciters), so we fetch everything once
- * with limit=500 and filter client-side. The endpoint already supports
- * server-side filter+search; we choose client-side for responsiveness
- * and to keep the picker, dashboard, and detail page consistent.
+ * The whole roster (paged via `next_cursor`) is held client-side and
+ * filtered/searched in the browser: the endpoint supports server-side
+ * filter+search, but client-side keeps the dashboard, picker, and detail
+ * page consistent and lets facet counts reflect the complete catalog.
  *
  * Freshness: `startCatalogPolling()` drives a visibility-aware refresh so
  * the store tracks lifecycle transitions (e.g. a reciter flipping to
  * "available for review") without a manual reload — keeping every
  * catalog-fed surface (table, pickers, footer chip) in sync with the
  * activity rail, which polls on the same cadence. Backend
- * `/api/public/reciters` is `db_seq`-cached, so steady-state polls that
- * hit an unchanged catalog are near-free.
+ * `/api/public/reciters` is `db_seq`-cached, so steady-state polls hit an
+ * unchanged catalog; `applyPage` then skips the store write entirely so the
+ * (now-virtualized) list isn't re-reconciled for nothing.
  */
 import { get, writable } from 'svelte/store';
 
@@ -77,6 +78,7 @@ export async function loadCatalog(force = false): Promise<void> {
                 reciters,
                 stats,
             });
+            lastSnapshotSig = snapshotSig(reciters, stats);
         } catch (e) {
             catalogData.update((s) => ({
                 ...s,
@@ -95,7 +97,25 @@ const CATALOG_POLL_MS = 30_000;
 let pollTeardown: (() => void) | null = null;
 let pollRefs = 0;
 
+/** Signature of the last applied snapshot, so a poll that returns an unchanged
+ *  catalog skips the store write (and the list re-reconcile it would trigger). */
+let lastSnapshotSig: string | null = null;
+
+/** Cheap structural fingerprint: roster size + each reciter's volatile fields
+ *  (state/activity/delivery count) + the bucket stat counts. Catches every
+ *  change the UI renders without deep-comparing the full objects. */
+function snapshotSig(reciters: PublicReciter[], stats: BucketCounts): string {
+    let s = `${reciters.length}|`;
+    for (const r of reciters) {
+        s += `${r.reciter_id}:${r.last_activity ?? ''}:${r.primary_bucket}:${r.deliveries_count};`;
+    }
+    return `${s}|${JSON.stringify(stats)}`;
+}
+
 function applyPage(page: { reciters: PublicReciter[] }, stats: BucketCounts): void {
+    const sig = snapshotSig(page.reciters, stats);
+    if (sig === lastSnapshotSig) return;
+    lastSnapshotSig = sig;
     catalogData.set({ loading: false, error: null, reciters: page.reciters, stats });
 }
 

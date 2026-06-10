@@ -55,7 +55,7 @@
         findIdxAtOffset,
         rebuildCumHeights,
         topSpacerValue,
-    } from '../list/virtualization';
+    } from '../../../../lib/utils/list-virtualization';
     import EditChainRow from './EditChainRow.svelte';
     import HistoryBatch from './HistoryBatch.svelte';
     import HistoryFilters from './HistoryFilters.svelte';

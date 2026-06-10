@@ -48,7 +48,7 @@
         rebuildCumHeights,
         topOfRow,
         topSpacerValue,
-    } from './virtualization';
+    } from '../../../../lib/utils/list-virtualization';
 
     export let onRestore: (() => void) | null = null;
 
