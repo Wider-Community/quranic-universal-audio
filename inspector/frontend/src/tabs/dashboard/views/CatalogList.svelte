@@ -36,38 +36,39 @@
     import { openSubmitWizard } from '../stores/submit-wizard';
 
     // ---- Shared-height layout --------------------------------------------
-    // The list scrolls inside its own container whose height tracks the filter
-    // rail (capped to the viewport), and the right rail matches it — so the
-    // three columns end on the same bottom line. `--catalog-h` is recomputed
-    // when the rail's natural height or the window changes.
-    const MIN_CATALOG_H = 280;
+    // The page itself never scrolls: the three columns scroll internally inside
+    // a shared height (`--catalog-h`) so they end on the same bottom line, just
+    // above the fixed player + now-reciting bar. The height is a pure CSS calc
+    // (see the style block) off the live `--player-h`/`--now-reciting-h` vars the shell
+    // maintains, so the columns reflow automatically as the now-reciting bar
+    // grows/shrinks — no JS observation of that dynamic bar. JS only feeds in the
+    // two measured inputs: the grid's top offset (header) and the filter rail's
+    // natural height (so short rails stay tight rather than filling the viewport).
     let gridEl: HTMLDivElement | undefined;
     let railMeasureEl: HTMLDivElement | undefined;
-    let catalogH = 600;
     let railObserver: ResizeObserver | null = null;
 
-    function recomputeCatalogHeight(): void {
-        if (!gridEl || !railMeasureEl) return;
-        const railH = railMeasureEl.offsetHeight;
+    function syncLayoutVars(): void {
+        if (!gridEl) return;
         const top = gridEl.getBoundingClientRect().top;
-        const cs = getComputedStyle(document.documentElement);
-        const playerH = parseFloat(cs.getPropertyValue('--player-h')) || 72;
-        const nowH = parseFloat(cs.getPropertyValue('--now-reciting-h')) || 0;
-        const budget = window.innerHeight - top - playerH - nowH - 16;
-        catalogH = Math.max(MIN_CATALOG_H, Math.min(railH || budget, budget));
+        if (top > 0) gridEl.style.setProperty('--cat-grid-top', `${top}px`);
+        if (railMeasureEl) {
+            gridEl.style.setProperty('--cat-rail-h', `${railMeasureEl.offsetHeight}px`);
+        }
     }
 
     onMount(() => {
         const stopPolling = startCatalogPolling();
-        recomputeCatalogHeight();
-        window.addEventListener('resize', recomputeCatalogHeight);
+        syncLayoutVars();
+        requestAnimationFrame(syncLayoutVars); // second pass once laid out
+        window.addEventListener('resize', syncLayoutVars);
         if (railMeasureEl && typeof ResizeObserver !== 'undefined') {
-            railObserver = new ResizeObserver(recomputeCatalogHeight);
+            railObserver = new ResizeObserver(syncLayoutVars);
             railObserver.observe(railMeasureEl);
         }
         return () => {
             stopPolling();
-            window.removeEventListener('resize', recomputeCatalogHeight);
+            window.removeEventListener('resize', syncLayoutVars);
             railObserver?.disconnect();
         };
     });
@@ -196,7 +197,7 @@
     const axisLabel = (axisKey: string): string => axisLabelOf(descriptor, axisKey);
 </script>
 
-<div class="grid" bind:this={gridEl} style="--catalog-h: {catalogH}px">
+<div class="grid" bind:this={gridEl}>
     <aside class="rail">
         <div class="rail-inner" bind:this={railMeasureEl}>
             {#if descriptor}
@@ -415,6 +416,16 @@
         grid-template-columns: 320px minmax(0, 1fr) 320px;
         gap: var(--s-6);
         padding: 0 var(--gutter) var(--s-12);
+        /* Shared column height: the smaller of the filter rail's natural height
+           and the space left between the grid top and the fixed player stack.
+           Built from the live shell vars so it reflows as the now-reciting bar
+           resizes; `--cat-grid-top` / `--cat-rail-h` are fed by JS. The trailing
+           subtractions reserve the grid's own bottom padding + a small gap. */
+        --catalog-h: max(280px, min(
+            var(--cat-rail-h, 200vh),
+            calc(100dvh - var(--cat-grid-top, 120px) - var(--player-h, 72px)
+                 - var(--now-reciting-h, 0px) - var(--s-12) - 8px)
+        ));
     }
     @media (max-width: 1280px) {
         .grid { grid-template-columns: 330px minmax(0, 1fr); }
