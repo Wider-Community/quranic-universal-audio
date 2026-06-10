@@ -73,7 +73,7 @@ class EditOpPatch(BaseModel):
 
     Structural mirror of the ``SegmentPatch`` dataclass in
     ``inspector/domain/command.py`` and the FE ``EditOpPatch`` interface in
-    ``inspector/frontend/src/lib/types/domain.ts``. Produced by the FE
+    ``inspector/frontend/src/lib/types/view-models.ts``. Produced by the FE
     ``applyCommand`` round-trip; consumed by the undo path
     (``apply_inverse_patch`` reads ``op["patch"]``).
 

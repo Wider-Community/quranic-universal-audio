@@ -72,9 +72,7 @@ def test_reciters_model_matches_live_response(installed):
     # Each row reproduces its key set (state + visibility are route-emitted).
     for row in rows:
         _assert_roundtrip(wire.SegReciter, row)
-    assert {"state", "visibility"} <= _keys(rows[0]), (
-        "route must emit state + visibility (drift vs api.ts)"
-    )
+    assert {"state", "visibility"} <= _keys(rows[0]), "route must emit state + visibility"
 
 
 def test_data_model_matches_live_response(installed):
@@ -109,14 +107,13 @@ def test_validate_model_matches_live_response(installed):
     assert res.status_code == 200, res.get_data(as_text=True)
     body = res.get_json()
     _assert_roundtrip(wire.SegValidateResponse, body)
-    # The route emits category_counts + stats + split_group_index — all of
-    # which were missing from the api.ts hand-mirror.
+    # The route emits category_counts + stats + split_group_index.
     assert {"category_counts", "stats", "split_group_index"} <= _keys(body)
 
 
 def test_validate_items_carry_classified_issues(installed):
     """The per-item ``classified_issues`` field is emitted on every detail item
-    and round-trips through the variant models (it was absent from api.ts)."""
+    and round-trips through the variant models."""
     client, reciter = installed
     body = client.get(f"/api/seg/validate/{reciter}").get_json()
 
@@ -202,8 +199,8 @@ def test_save_response_model_matches_live_response(signed_in_client, tmp_reciter
 
 
 def test_undo_response_model_carries_operations_reversed(signed_in_client, tmp_reciter_dir):
-    """Undo returns ``{ok, operations_reversed}`` — the hand-mirror missed the
-    second key. Drive a real save first to produce a batch, then undo it."""
+    """Undo returns ``{ok, operations_reversed}``. Drive a real save first to
+    produce a batch, then undo it."""
     reciter = "fixture_reciter"
     client, user = signed_in_client(role="contributor")
     tmp_reciter_dir.install(reciter, "112-ikhlas", under_review_for=user["hf_user_id"])

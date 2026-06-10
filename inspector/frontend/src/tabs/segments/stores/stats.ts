@@ -7,7 +7,7 @@
 
 import { writable } from 'svelte/store';
 
-import type { SegStatsResponse } from '../../../lib/types/api';
+import type { SegStatsResponse } from '../../../lib/types/view-models';
 
 /** Stats data for the currently-loaded reciter, or null if none loaded. */
 export const segStats = writable<SegStatsResponse | null>(null);

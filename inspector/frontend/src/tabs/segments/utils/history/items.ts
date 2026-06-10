@@ -1,4 +1,4 @@
-import type { EditOp, GenerationBoundary, HistoryBatch } from '../../../../lib/types/domain';
+import type { EditOp, GenerationBoundary, HistoryBatch } from '../../../../lib/types/view-models';
 import type {
     EditChain,
     EditChainOp,

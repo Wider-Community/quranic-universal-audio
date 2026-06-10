@@ -1,22 +1,18 @@
 """Timestamps-tab HTTP wire schemas (``/api/ts/*`` + the verse payload the
 FE assembles from a shard).
 
-Mirrors the hand-written FE types in
-``inspector/frontend/src/lib/types/{api.ts,domain.ts}``; these models replace
-those hand-mirrors in a later phase, so they track the shape the route
-**actually emits**, not just the TS. Where the two disagree the route wins and
-the divergence is noted inline.
+Models the shape the ``/api/ts/*`` routes **actually emit** (the producer is
+the source of truth).
 
 What is modelled here, by source route/service:
 
 - ``GET /api/ts/config`` → :class:`TsConfigResponse`. Built by
-  ``routes/timestamps/timestamps.py::ts_config``. The hand-mirror declares a
-  required ``mode`` field; the route does NOT emit it (a phantom — see the
-  field comment). The route DOES always emit ``catalog_url`` (the TS marks it
-  optional).
+  ``routes/timestamps/timestamps.py::ts_config``. The route always emits
+  ``catalog_url`` and does NOT emit a ``mode`` field.
 - ``GET /api/ts/manifest`` (decompressed) → :class:`TsManifestResponse` +
   :class:`TsManifestReciter`. Built by ``services/reference/timestamps.py``.
-  The route never emits the TS-only ``_build`` block (see the model docstring).
+  The route never emits a build-internal ``_build`` block (see the model
+  docstring).
 - ``GET /api/static/catalog.json`` → the Timestamps tab reads it as the slim
   projection :class:`TsCatalogResponse` (+ :class:`TsCatalogReciter` /
   :class:`TsCatalogDelivery`). The route actually serves the FULL
@@ -33,16 +29,15 @@ What is modelled here, by source route/service:
   :class:`TsWord` / :class:`Letter` / :class:`PhonemeInterval`.
 - ``TsRecitersResponse`` = ``list[TsReciter]`` (deprecated reciter list).
 
-FE-facing: re-exported from ``fe_types.py`` (by a later codegen agent) and
-code-generated into ``inspector/frontend/src/lib/types/generated/schemas.ts``.
+FE-facing: re-exported from ``fe_types.py`` and code-generated into
+``inspector/frontend/src/lib/types/generated/schemas.ts``.
 
 json2ts caveat (the typed-tuple limitation): ``TsShardWord`` and the ``t``
 spans here are positional tuples. Pydantic v2 emits JSON-Schema-2020-12
 ``prefixItems`` for them (correctly typed), but the pinned json2ts (15.0.4)
 only understands the Draft-07 ``items: [...]`` tuple form and renders
-``prefixItems`` as ``[unknown, ...]``. The models below are correct; making the
-FE types typed is a codegen-pipeline fix (down-convert ``prefixItems`` → ``items``
-before json2ts), out of scope for this phase.
+``prefixItems`` as ``[unknown, ...]``. The models below are correct; the FE
+narrows them with positional projections in ``ts-client.ts``.
 """
 
 from __future__ import annotations
@@ -86,41 +81,33 @@ class TsConfigResponse(BaseModel):
     Built by ``routes/timestamps/timestamps.py::ts_config`` from ``config.py``
     tunables. Pure constants; the route caches it for 5 min.
 
-    Route-vs-``api.ts`` drift:
-
-    - ``mode`` (``'local' | 'bucket'``) is declared **required** in the
-      hand-mirror but the route NEVER emits it — a phantom. It is intentionally
-      absent here.
-    - ``catalog_url`` is **optional** in the hand-mirror but the route ALWAYS
-      emits it (``"/api/static/catalog.json"``), so it is required here.
-    - ``anim_word_spacing`` / ``anim_font_size`` / ``analysis_word_font_size`` /
-      ``analysis_letter_font_size`` are declared ``number`` in the hand-mirror
-      but the route emits **CSS strings** (``"0.2em"`` / ``"44px"`` /
-      ``"1.5rem"`` / ``"1.75rem"`` — they go straight into a ``style``), so they
-      are ``str`` here. The genuinely-numeric tunables
-      (``anim_word_transition_duration`` / ``anim_char_transition_duration`` /
-      ``anim_line_height`` / ``unified_display_max_height``) stay numbers.
+    The route always emits ``catalog_url`` (``"/api/static/catalog.json"``) and
+    does NOT emit a ``mode`` field. ``anim_word_spacing`` / ``anim_font_size`` /
+    ``analysis_word_font_size`` / ``analysis_letter_font_size`` are **CSS
+    strings** (``"0.2em"`` / ``"44px"`` / ``"1.5rem"`` / ``"1.75rem"`` — they go
+    straight into a ``style``), not numbers. The genuinely-numeric tunables
+    (``anim_word_transition_duration`` / ``anim_char_transition_duration`` /
+    ``anim_line_height`` / ``unified_display_max_height``) stay numbers.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     manifest_url: str
     shard_url_template: str
-    #: Always emitted by the route (the TS marks it optional — drift).
     catalog_url: str
     unified_display_max_height: int
     anim_highlight_color: str
     anim_word_transition_duration: float
     anim_char_transition_duration: float
     anim_transition_easing: str
-    #: CSS length string (``"0.2em"``) — NOT a number (api.ts drift).
+    #: CSS length string (``"0.2em"``) — NOT a number.
     anim_word_spacing: str
     anim_line_height: float
-    #: CSS length string (``"44px"``) — NOT a number (api.ts drift).
+    #: CSS length string (``"44px"``) — NOT a number.
     anim_font_size: str
-    #: CSS length string (``"1.5rem"``) — NOT a number (api.ts drift).
+    #: CSS length string (``"1.5rem"``) — NOT a number.
     analysis_word_font_size: str
-    #: CSS length string (``"1.75rem"``) — NOT a number (api.ts drift).
+    #: CSS length string (``"1.75rem"``) — NOT a number.
     analysis_letter_font_size: str
 
 
@@ -136,11 +123,9 @@ class TsManifestReciter(BaseModel):
     Per-chapter audio URLs are deliberately NOT here — the FE resolves them
     from ``/api/audio/surahs`` (the audio-manifest sidecar).
 
-    Route-vs-``api.ts`` drift: the hand-mirror carries an optional ``_build``
-    block (``{shard_hashes?}``); the route NEVER emits it (it was a
-    build-internal field that never reached this read path), so it is omitted
-    here. ``name_ar`` is emitted as ``null`` when the catalog has no Arabic
-    name, ``source`` is emitted as ``""`` when unknown.
+    The route never emits a build-internal ``_build`` block on this read path.
+    ``name_ar`` is emitted as ``null`` when the catalog has no Arabic name,
+    ``source`` is emitted as ``""`` when unknown.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -243,8 +228,8 @@ class TsVbrResponse(BaseModel):
     """``GET /api/ts/vbr/<reciter>`` — VBR-chapter fallback for older HF manifests.
 
     Built inline by ``ts_vbr`` as ``{"vbr_chapters": [...]}``. The route never
-    populates ``error`` on this path (it is a 200-only endpoint), but the
-    hand-mirror keeps it optional for parity with the generic error envelope.
+    populates ``error`` on this path (it is a 200-only endpoint); the field
+    stays optional for parity with the generic error envelope.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -261,7 +246,7 @@ class TsVbrResponse(BaseModel):
 class TsReciter(BaseModel):
     """One reciter in the (deprecated) ``TsRecitersResponse`` list.
 
-    Mirrors ``TsReciter`` in ``domain.ts``. The reciter list is now read from
+    Mirrors ``TsReciter`` in ``ts-client.ts``. The reciter list is read from
     the manifest / catalog; this remains for the legacy list endpoint shape.
     """
 
@@ -286,7 +271,7 @@ TsRecitersResponse = list[TsReciter]
 
 class Letter(BaseModel):
     """One letter with optional per-letter timing (seconds). Mirrors ``Letter``
-    in ``domain.ts``. ``start``/``end`` are ``null`` when the aligner couldn't
+    in ``ts-client.ts``. ``start``/``end`` are ``null`` when the aligner couldn't
     place the letter."""
 
     model_config = ConfigDict(extra="forbid")
@@ -299,7 +284,7 @@ class Letter(BaseModel):
 class PhonemeInterval(BaseModel):
     """One phoneme interval in a verse's flat ``intervals`` list (seconds).
 
-    Mirrors ``PhonemeInterval`` in ``domain.ts``. ``geminate_*`` mark the two
+    Mirrors ``PhonemeInterval`` in ``ts-client.ts``. ``geminate_*`` mark the two
     halves of an MFA-split geminate; ``bridge`` carries a cross-word tajweed
     bridge rule (idgham) when this phone fuses with the previous word.
     """
@@ -317,7 +302,7 @@ class PhonemeInterval(BaseModel):
 class TsWord(BaseModel):
     """One word with text + timing (seconds) + letters + phoneme indices.
 
-    Mirrors ``TsWord`` in ``domain.ts``. ``start`` may be negative for
+    Mirrors ``TsWord`` in ``ts-client.ts``. ``start`` may be negative for
     ``by_surah`` mode after the chapter-offset subtraction. ``phoneme_indices``
     index into the verse's flat ``intervals`` list.
     """
@@ -336,10 +321,10 @@ class TsWord(BaseModel):
 class TsVerseData(BaseModel):
     """Full verse payload for the Timestamps tab (legacy ``/api/ts/data`` shape).
 
-    Mirrors ``TsVerseData`` in ``domain.ts``. Assembled client-side from a
-    chapter shard today (no live route). ``audio_category`` here is the
-    ``*_audio`` long form (drives URL-rewrite + offset handling), distinct from
-    the shard/manifest short form.
+    Mirrors ``TsVerseData`` in ``ts-client.ts``. Assembled client-side from a
+    chapter shard (no live route). ``audio_category`` here is the ``*_audio``
+    long form (drives URL-rewrite + offset handling), distinct from the
+    shard/manifest short form.
 
     ``time_start_ms`` deliberately has NO ``ge=0`` bound: in ``by_surah`` mode
     the per-verse start is offset relative to the chapter audio and can be

@@ -1,4 +1,4 @@
-import type { AudioPeaks } from '../../../../lib/types/domain';
+import type { AudioPeaks } from '../../../../lib/types/peaks-transport';
 import { getWaveformPeaks, normalizeAudioUrl } from '../../../../lib/utils/waveform-cache';
 import type { SegPeaksRangeEntry } from '../../types/segments';
 

@@ -28,7 +28,7 @@
 
 import { get } from 'svelte/store';
 
-import type { Segment } from '../../../../lib/types/domain';
+import type { Segment } from '../../../../lib/types/view-models';
 import { segAllData } from '../../stores/chapter';
 import { cbrKbpsForChapter } from '../../stores/chapter-meta';
 

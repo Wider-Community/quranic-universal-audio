@@ -25,7 +25,7 @@
     import { afterUpdate, onDestroy, onMount } from 'svelte';
     import { get } from 'svelte/store';
 
-    import type { Segment } from '../../../../lib/types/domain';
+    import type { Segment } from '../../../../lib/types/view-models';
     import { SCROLL_ANIM_MODES } from '../../../../lib/utils/constants';
     import { selectedChapter } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';

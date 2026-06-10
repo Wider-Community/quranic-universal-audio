@@ -58,7 +58,7 @@ export type AudioCategory = "by_surah" | "by_ayah";
  *
  * Slots: ``[word_idx, start_ms, end_ms, letters, phones]``. Modelled as a
  * ``RootModel`` over a 5-tuple so the FE codegen emits a positional TS tuple
- * (mirrors ``TsShardWord`` in ``api.ts``) rather than an object.
+ * (mirrors ``TsShardWord`` in ``ts-client.ts``) rather than an object.
  *
  * @minItems 5
  * @maxItems 5
@@ -980,7 +980,7 @@ export interface EditOperation {
  *
  * Structural mirror of the ``SegmentPatch`` dataclass in
  * ``inspector/domain/command.py`` and the FE ``EditOpPatch`` interface in
- * ``inspector/frontend/src/lib/types/domain.ts``. Produced by the FE
+ * ``inspector/frontend/src/lib/types/view-models.ts``. Produced by the FE
  * ``applyCommand`` round-trip; consumed by the undo path
  * (``apply_inverse_patch`` reads ``op["patch"]``).
  *
@@ -1282,10 +1282,8 @@ export interface FlagComment {
  * ``GET /api/seg/config`` — display constants + validation vocab.
  *
  * ``seg_font_size`` / ``seg_word_spacing`` are CSS dimension STRINGS
- * (``"1.8rem"`` / ``"0.2em"``), not numbers. ``seg_scroll_anim_mode`` is
- * emitted by the route but was absent from the ``api.ts`` hand-mirror.
- * ``accordion_context`` maps a validation category to a default reveal
- * state (``"shown"`` / ``"hidden"``).
+ * (``"1.8rem"`` / ``"0.2em"``), not numbers. ``accordion_context`` maps a
+ * validation category to a default reveal state (``"shown"`` / ``"hidden"``).
  */
 export interface SegConfigResponse {
   seg_font_size: string;
@@ -1381,10 +1379,6 @@ export interface SegPeaksResponse {
  * quantized payload (``peaks_b64`` is base64 of ``n * 2`` interleaved
  * min/max int8 bytes). The FE inflates ``peaks_b64`` → ``Int8Array`` once on
  * receive — it does NOT receive nested ``[min, max]`` float pairs here.
- *
- * Drift note: the ``api.ts`` hand-mirror typed ``SegPeaksResponse.peaks`` as
- * ``Record<string, AudioPeaks>`` (nested float buckets) — that is NOT what
- * this route emits.
  */
 export interface SegSlimPeaks {
   schema_version: number;
@@ -1399,8 +1393,7 @@ export interface SegSlimPeaks {
  *
  * ``audio_source`` is the delivery channel (``mp3quran`` / ``qul`` / ...),
  * NOT a by_surah/by_ayah signal. ``state`` + ``visibility`` are the live
- * lifecycle fields the route emits from the SQLite state row — both were
- * omitted from the ``domain.ts`` hand-mirror.
+ * lifecycle fields the route emits from the SQLite state row.
  */
 export interface SegReciter {
   slug: string;
@@ -1431,10 +1424,6 @@ export interface SegSaveRequest {
 }
 /**
  * ``POST /api/seg/save`` success body — the route returns ``{"ok": true}``.
- *
- * Drift note: the ``api.ts`` hand-mirror invented ``batch_id`` /
- * ``saved_at_utc`` / ``edit_history`` keys the route never emits; those are
- * NOT modelled here.
  */
 export interface SegSaveResponse {
   ok?: true;
@@ -1468,8 +1457,7 @@ export interface SegSegmentPeaksResponse {
  * HD per-segment peaks computed via ffmpeg, keyed by ``"<url>:<start>:<end>"``
  * (a ``:<pad>`` suffix is appended when ``pad_ms`` was requested).
  *
- * ``peaks`` are nested ``[min, max]`` float pairs (rounded). Drift note: the
- * ``api.ts`` ``SegmentPeaks`` mirror omitted ``schema_version``.
+ * ``peaks`` are nested ``[min, max]`` float pairs (rounded).
  */
 export interface SegSegmentPeaks {
   schema_version: number;
@@ -1493,9 +1481,6 @@ export interface SegUndoOpsRequest {
 }
 /**
  * Success body for both undo routes — ``{"ok": true, "operations_reversed": N}``.
- *
- * Drift note: the ``api.ts`` hand-mirror (``SegUndoBatchResponse``) modelled
- * only ``ok`` and missed ``operations_reversed``.
  */
 export interface SegUndoResponse {
   ok?: true;
@@ -1673,11 +1658,8 @@ export interface SegValBasmalaAminItem {
  * (additive alias). ``category_counts`` mirrors the per-category lengths in
  * registry-declared order. ``split_group_index`` maps a root segment uid to
  * its transitive split-descendant uids. ``low_confidence_v2_meta`` is present
- * only when the probe sidecar carried a ``_meta`` block.
- *
- * Drift note: ``category_counts`` / ``stats`` / ``low_confidence_v2_meta`` and
- * the per-item ``classified_issues`` field were all absent from the ``api.ts``
- * hand-mirror.
+ * only when the probe sidecar carried a ``_meta`` block. Each item carries a
+ * ``classified_issues`` field.
  */
 export interface SegValidateResponse {
   errors?: SegValStructuralErrorItem[];
@@ -1736,20 +1718,13 @@ export interface SegValProbeMeta {
  * Built by ``routes/timestamps/timestamps.py::ts_config`` from ``config.py``
  * tunables. Pure constants; the route caches it for 5 min.
  *
- * Route-vs-``api.ts`` drift:
- *
- * - ``mode`` (``'local' | 'bucket'``) is declared **required** in the
- *   hand-mirror but the route NEVER emits it — a phantom. It is intentionally
- *   absent here.
- * - ``catalog_url`` is **optional** in the hand-mirror but the route ALWAYS
- *   emits it (``"/api/static/catalog.json"``), so it is required here.
- * - ``anim_word_spacing`` / ``anim_font_size`` / ``analysis_word_font_size`` /
- *   ``analysis_letter_font_size`` are declared ``number`` in the hand-mirror
- *   but the route emits **CSS strings** (``"0.2em"`` / ``"44px"`` /
- *   ``"1.5rem"`` / ``"1.75rem"`` — they go straight into a ``style``), so they
- *   are ``str`` here. The genuinely-numeric tunables
- *   (``anim_word_transition_duration`` / ``anim_char_transition_duration`` /
- *   ``anim_line_height`` / ``unified_display_max_height``) stay numbers.
+ * The route always emits ``catalog_url`` (``"/api/static/catalog.json"``) and
+ * does NOT emit a ``mode`` field. ``anim_word_spacing`` / ``anim_font_size`` /
+ * ``analysis_word_font_size`` / ``analysis_letter_font_size`` are **CSS
+ * strings** (``"0.2em"`` / ``"44px"`` / ``"1.5rem"`` / ``"1.75rem"`` — they go
+ * straight into a ``style``), not numbers. The genuinely-numeric tunables
+ * (``anim_word_transition_duration`` / ``anim_char_transition_duration`` /
+ * ``anim_line_height`` / ``unified_display_max_height``) stay numbers.
  */
 export interface TsConfigResponse {
   manifest_url: string;
@@ -1831,11 +1806,9 @@ export interface TsManifestResponse {
  * Per-chapter audio URLs are deliberately NOT here — the FE resolves them
  * from ``/api/audio/surahs`` (the audio-manifest sidecar).
  *
- * Route-vs-``api.ts`` drift: the hand-mirror carries an optional ``_build``
- * block (``{shard_hashes?}``); the route NEVER emits it (it was a
- * build-internal field that never reached this read path), so it is omitted
- * here. ``name_ar`` is emitted as ``null`` when the catalog has no Arabic
- * name, ``source`` is emitted as ``""`` when unknown.
+ * The route never emits a build-internal ``_build`` block on this read path.
+ * ``name_ar`` is emitted as ``null`` when the catalog has no Arabic name,
+ * ``source`` is emitted as ``""`` when unknown.
  */
 export interface TsManifestReciter {
   name_en: string;

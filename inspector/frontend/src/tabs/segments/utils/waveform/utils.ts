@@ -1,9 +1,10 @@
 import { get } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
-import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../../../lib/types/api';
+import type { SegPeaksResponse, SegSegmentPeaksResponse } from '../../../../lib/types/generated/schemas';
 import type { SegSegmentPeaks } from '../../../../lib/types/generated/schemas';
-import type { PeakBucket, Segment, SegmentPeaks } from '../../../../lib/types/domain';
+import type { PeakBucket, SegmentPeaks } from '../../../../lib/types/peaks-transport';
+import type { Segment } from '../../../../lib/types/view-models';
 import { b64ToInt8 } from '../../../../lib/utils/peaks-decode';
 import { getWaveformPeaks, setWaveformPeaks } from '../../../../lib/utils/waveform-cache';
 import {

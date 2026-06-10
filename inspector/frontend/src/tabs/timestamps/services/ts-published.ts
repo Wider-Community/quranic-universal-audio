@@ -5,7 +5,7 @@
  * public catalog snapshot + the TS manifest slug set — shared by the footer
  * reciter picker and the tab's entry/continuity resolution.
  */
-import type { PublicDelivery, PublicReciter } from '../../../lib/types/public-state';
+import type { PublicDelivery, PublicReciter } from '../../../lib/types/generated/schemas';
 
 export interface TsPublishedEntry {
     reciter: PublicReciter;

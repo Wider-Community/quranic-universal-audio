@@ -7,8 +7,8 @@ gzip verbatim, the FE decompresses and renders it).
 
 The FE consumes this document, so it MUST codegen cleanly. The word payload is
 a flat positional tuple (``TsShardWord``) modelled as a ``RootModel[tuple[...]]``
-so ``pydantic-to-typescript`` emits a positional TS tuple matching the
-hand-written ``TsShardWord`` in ``inspector/frontend/src/lib/types/api.ts``.
+so ``pydantic-to-typescript`` emits a positional TS tuple matching the FE-typed
+``TsShardWord`` projection in ``inspector/frontend/src/lib/types/ts-client.ts``.
 
 Document shape (decompressed)::
 
@@ -53,7 +53,7 @@ class TsShardWord(RootModel[tuple[int, int, int, list[LetterTiming], list[PhoneT
 
     Slots: ``[word_idx, start_ms, end_ms, letters, phones]``. Modelled as a
     ``RootModel`` over a 5-tuple so the FE codegen emits a positional TS tuple
-    (mirrors ``TsShardWord`` in ``api.ts``) rather than an object.
+    (mirrors ``TsShardWord`` in ``ts-client.ts``) rather than an object.
     """
 
 

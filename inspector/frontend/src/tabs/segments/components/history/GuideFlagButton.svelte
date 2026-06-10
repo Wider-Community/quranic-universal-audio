@@ -18,7 +18,7 @@
 
     import { flagGuideExample, type GuideFlagPayload } from '../../../../lib/api/guide-flags';
     import { currentUser } from '../../../../lib/stores/current-user';
-    import type { EditOp } from '../../../../lib/types/domain';
+    import type { EditOp } from '../../../../lib/types/view-models';
     import { ALL_CATEGORIES, IssueRegistry } from '../../domain/registry';
     import { selectedReciter } from '../../stores/chapter';
 

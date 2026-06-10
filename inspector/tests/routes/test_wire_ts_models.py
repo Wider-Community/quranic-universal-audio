@@ -49,8 +49,7 @@ from qua_shared.schemas.wire.timestamps import TsRecitersResponse
 
 def test_ts_config_model_validates_live_response(flask_client):
     """The model parses the live ``/api/ts/config`` body and round-trips its
-    exact key set — proving the phantom ``mode`` is absent and ``catalog_url``
-    is present (the two route-vs-api.ts drifts the model encodes)."""
+    exact key set — proving ``mode`` is absent and ``catalog_url`` is present."""
     res = flask_client.get("/api/ts/config")
     assert res.status_code == 200, res.get_data(as_text=True)
     body = res.get_json()
@@ -59,8 +58,8 @@ def test_ts_config_model_validates_live_response(flask_client):
     dumped = model.model_dump(exclude_none=True)
     assert set(dumped.keys()) == set(body.keys())
 
-    # The route does NOT emit ``mode`` (phantom in api.ts) and DOES emit
-    # ``catalog_url`` (optional in api.ts) — pin both so a regression is loud.
+    # The route does NOT emit ``mode`` and DOES emit ``catalog_url`` — pin both
+    # so a regression is loud.
     assert "mode" not in body
     assert body["catalog_url"] == "/api/static/catalog.json"
 
@@ -119,7 +118,7 @@ def test_ts_manifest_model_validates_live_response(flask_client, tmp_reciter_dir
     rec_dumped = model.reciters["rec_ts"].model_dump()
     assert set(rec_dumped.keys()) == set(rec_body.keys())
     assert rec_body["name_ar"] is None
-    # Route never emits the api.ts-only ``_build`` block.
+    # Route never emits a build-internal ``_build`` block on this read path.
     assert "_build" not in rec_body
     # Complete by_surah → derived 1..114.
     assert rec_body["ts_chapters"] == list(range(1, 115))

@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 
 import { quranRefs } from '../../../../lib/refs/quran-refs';
-import type { Ref, VerseRef } from '../../../../lib/types/domain';
+import type { Ref, VerseRef } from '../../../../lib/types/view-models';
 import { _ARABIC_DIGITS } from '../constants';
 
 /** Parsed canonical segment ref. */

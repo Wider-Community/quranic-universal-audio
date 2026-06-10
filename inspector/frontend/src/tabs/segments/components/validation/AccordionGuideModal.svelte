@@ -6,7 +6,7 @@
     import AudioElement from '../../../../lib/components/AudioElement.svelte';
     import OverviewContent from '../../../../lib/components/info/OverviewContent.svelte';
     import { currentUser, loadCurrentUser, markGuideReadLocally } from '../../../../lib/stores/current-user';
-    import type { HistoryBatch } from '../../../../lib/types/domain';
+    import type { HistoryBatch } from '../../../../lib/types/view-models';
     import EditingGuideContent from '../../guides/editing/EditingGuideContent.svelte';
     import FlaggingGuideContent from '../../guides/editing/FlaggingGuideContent.svelte';
     import { getGuideExample } from '../../guides/examples';

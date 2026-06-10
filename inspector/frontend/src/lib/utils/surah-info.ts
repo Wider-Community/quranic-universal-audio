@@ -3,7 +3,7 @@
  */
 
 import { fetchJson } from '../api';
-import type { SurahInfoResponse } from '../types/api';
+import type { SurahInfoResponse } from '../types/ts-client';
 
 let _surahInfo: SurahInfoResponse = {};
 

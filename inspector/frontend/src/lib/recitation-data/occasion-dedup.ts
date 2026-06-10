@@ -14,7 +14,7 @@
  * and trailing post-completion redundancy. Same shape as the backend.
  */
 
-import type { SegmentEntry } from '../types/api';
+import type { SegmentEntry } from '../types/ts-client';
 
 /** A verse's segments grouped into one recitation occasion. */
 export type Occasion = SegmentEntry[];

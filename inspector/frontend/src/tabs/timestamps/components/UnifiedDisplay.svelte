@@ -18,7 +18,7 @@
 
     import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { dashPort } from '../../../lib/playback/dash-port';
-    import type { PhonemeInterval, TsWord } from '../../../lib/types/domain';
+    import type { PhonemeInterval, TsWord } from '../../../lib/types/ts-client';
     import {
         showLetters,
         showPhonemes,

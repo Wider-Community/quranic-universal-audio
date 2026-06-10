@@ -17,7 +17,7 @@
     import { get } from 'svelte/store';
 
     import { quranRefs } from '../../../../lib/refs/quran-refs';
-    import type { Segment } from '../../../../lib/types/domain';
+    import type { Segment } from '../../../../lib/types/view-models';
     import { setPendingOp } from '../../stores/dirty';
     import {
         clearEdit,

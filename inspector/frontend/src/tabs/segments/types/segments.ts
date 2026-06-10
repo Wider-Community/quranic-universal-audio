@@ -1,5 +1,6 @@
-import type { SegDataResponse } from '../../../lib/types/api';
-import type { EditOp, HistoryBatch, PeakBucket } from '../../../lib/types/domain';
+import type { SegDataResponse } from '../../../lib/types/generated/schemas';
+import type { PeakBucket } from '../../../lib/types/peaks-transport';
+import type { EditOp, HistoryBatch } from '../../../lib/types/view-models';
 
 // ---------------------------------------------------------------------------
 // Split chain + history types

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { PeakBucket } from '../../types/domain';
+import type { PeakBucket } from '../../types/peaks-transport';
 import { packPeaksB64, viewPeaks } from '../peaks-view';
 
 /** Decode a base64 string to an Int8Array (mirror of peaks-decode.ts::b64ToInt8). */

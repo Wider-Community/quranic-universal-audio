@@ -14,7 +14,8 @@
      * identity — decides whose comment carries the edit affordance.
      */
     import { currentUser } from '../../../../lib/stores/current-user';
-    import type { FlagAuthor, FlagComment, Segment, SegmentFlagView } from '../../../../lib/types/domain';
+    import type { FlagAuthor, FlagComment, SegmentFlagView } from '../../../../lib/types/generated/schemas';
+import type { Segment } from '../../../../lib/types/view-models';
     import { relativeTime } from '../../../../lib/utils/relative-time';
     import { segAllData } from '../../stores/chapter';
     import { flagSegment } from '../../utils/edit/flag';

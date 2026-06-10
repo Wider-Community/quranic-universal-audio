@@ -16,7 +16,7 @@
  * "no signal" and rely on the post-save delta instead.
  */
 
-import type { EditOp } from '../../../../lib/types/domain';
+import type { EditOp } from '../../../../lib/types/view-models';
 
 // Categories that exist in the accordion for review/awareness but should
 // NOT surface as history-delta pills (`+cat` / `−cat`) on edit cards. They

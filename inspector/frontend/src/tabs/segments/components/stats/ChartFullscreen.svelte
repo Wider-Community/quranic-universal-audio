@@ -14,7 +14,7 @@
     import { onDestroy } from 'svelte';
 
     import { fetchJson } from '../../../../lib/api';
-    import type { SegSaveChartResponse } from '../../../../lib/types/api';
+    import type { SegSaveChartResponse } from '../../../../lib/types/view-models';
     import type { Chart } from '../../../../lib/utils/chart';
     import type { ChartCfg, Distribution } from '../../types/stats';
     import { drawBarChart } from '../../utils/stats-chart-draw';

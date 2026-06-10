@@ -1,4 +1,4 @@
-import type { EditOp } from '../../../lib/types/domain';
+import type { EditOp } from '../../../lib/types/view-models';
 
 /**
  * Canonical history-peaks record — the SAME shape the inspector uses

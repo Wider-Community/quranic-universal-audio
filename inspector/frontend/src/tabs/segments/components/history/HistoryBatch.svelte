@@ -18,7 +18,7 @@
 
     import { editGate } from '../../../../lib/actions/editGate';
     import { editingMode } from '../../../../lib/stores/editing-mode';
-    import type { EditOp } from '../../../../lib/types/domain';
+    import type { EditOp } from '../../../../lib/types/view-models';
     import { surahOptionText } from '../../../../lib/utils/surah-info';
     import {
         formatHistDate,

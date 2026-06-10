@@ -13,7 +13,8 @@
     import { onMount } from 'svelte';
 
     import WaveformCanvas from '../../../../lib/components/WaveformCanvas.svelte';
-    import type { AudioPeaks, Segment } from '../../../../lib/types/domain';
+    import type { AudioPeaks } from '../../../../lib/types/peaks-transport';
+import type { Segment } from '../../../../lib/types/view-models';
     import type { SegCanvas } from '../../types/segments-waveform';
 
     // ---------------------------------------------------------------------------

@@ -9,8 +9,8 @@
 import { get } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
-import type { SegDataResponse } from '../../../../lib/types/api';
-import type { Segment } from '../../../../lib/types/domain';
+import type { SegDataResponse } from '../../../../lib/types/generated/schemas';
+import type { Segment } from '../../../../lib/types/view-models';
 import { preconnectOrigins } from '../../../../lib/utils/preconnect';
 import type { SegDataState } from '../../stores/chapter';
 import {

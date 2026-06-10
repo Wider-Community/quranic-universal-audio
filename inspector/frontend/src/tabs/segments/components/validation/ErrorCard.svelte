@@ -16,11 +16,7 @@
 
     import { createEventDispatcher, onMount } from 'svelte';
 
-    import type {
-        SegValAnyItem,
-        SegValMissingVerseItem,
-        SegValMissingWordsItem,
-    } from '../../../../lib/types/api';
+    import type { SegValAnyItem, SegValMissingVerseItem, SegValMissingWordsItem } from '../../../../lib/types/generated/schemas';
     import { IssueRegistry } from '../../domain/registry';
     import GenericIssueCard from './GenericIssueCard.svelte';
     import MissingVersesCard from './MissingVersesCard.svelte';

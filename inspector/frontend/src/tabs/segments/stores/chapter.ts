@@ -5,11 +5,9 @@
 
 import { derived, get,writable } from 'svelte/store';
 
-import type {
-    SegAllResponse,
-    SegDataResponse,
-} from '../../../lib/types/api';
-import type { Segment,SegReciter } from '../../../lib/types/domain';
+import type { SegAllResponse, SegDataResponse } from '../../../lib/types/generated/schemas';
+import type { SegReciter } from '../../../lib/types/generated/schemas';
+import type { Segment } from '../../../lib/types/view-models';
 import { playingSegmentIndex } from './playback';
 
 /** Chapter-data store shape: the `/data` wire body, but with `segments` widened

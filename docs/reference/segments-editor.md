@@ -24,7 +24,6 @@ The Segments tab is the full WIP editor: trim / split / merge / re-reference / d
 | BE history query | `inspector/services/activity/history_query.py` |
 | BE patch domain | `inspector/domain/command.py` (`SegmentPatch`, `apply_inverse_patch`) |
 | BE identity | `inspector/domain/identity.py` |
-| BE segment dataclass | `inspector/domain/segment.py` |
 | Adapters | `inspector/adapters/{save_payload,segments_json,detailed_json}.py` |
 | Routes (mutations) | `inspector/routes/segments/edit.py` |
 | Routes (read history) | `inspector/routes/segments/validation.py` |

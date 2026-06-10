@@ -4,7 +4,7 @@
  * reactively from `$historyData`.
  */
 
-import type { SegEditHistoryResponse } from '../../../../lib/types/api';
+import type { SegEditHistoryResponse } from '../../../../lib/types/view-models';
 import { setHistoryData } from '../../stores/history';
 
 export function renderEditHistoryPanel(data: SegEditHistoryResponse | null | undefined): void {

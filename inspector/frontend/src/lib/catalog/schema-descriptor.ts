@@ -14,7 +14,8 @@
  * lifecycle), independent of counts.
  */
 
-import { BUCKET_PRIORITY, PUBLIC_BUCKET_LABELS, type PublicBucket, type PublicDelivery } from '../types/public-state';
+import type { PublicDelivery } from '../types/generated/schemas';
+import { BUCKET_PRIORITY, PUBLIC_BUCKET_LABELS, type PublicBucket } from '../types/public-bucket';
 import { titleCaseSlug } from '../utils/delivery-label';
 
 export interface AxisOption {

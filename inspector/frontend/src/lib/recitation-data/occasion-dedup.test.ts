@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { canonicalClip, groupVerseOccasions, maxWordIndex } from './occasion-dedup';
-import type { SegmentEntry } from '../types/api';
+import type { SegmentEntry } from '../types/ts-client';
 
 function seg(ref: string, s: number, e: number, widxs: number[]): SegmentEntry {
     const span = e - s;

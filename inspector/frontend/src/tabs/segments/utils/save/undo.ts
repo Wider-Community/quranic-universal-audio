@@ -1,11 +1,8 @@
 import { get as storeGet } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
-import type {
-    SegUndoBatchResponse,
-    SegUndoOpsResponse,
-} from '../../../../lib/types/api';
-import type { EditOp, HistoryBatch } from '../../../../lib/types/domain';
+import type { SegUndoResponse as SegUndoBatchResponse, SegUndoResponse as SegUndoOpsResponse } from '../../../../lib/types/generated/schemas';
+import type { EditOp, HistoryBatch } from '../../../../lib/types/view-models';
 import { surahOptionText } from '../../../../lib/utils/surah-info';
 import { applyInversePatchToSegments } from '../../domain/inverse-patch';
 import { segAllData, selectedReciter } from '../../stores/chapter';

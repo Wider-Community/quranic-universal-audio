@@ -3,8 +3,8 @@
     import { get } from 'svelte/store';
 
     import { editGate } from '../../../../lib/actions/editGate';
-    import type { SegValAnyItem } from '../../../../lib/types/api';
-    import type { Segment } from '../../../../lib/types/domain';
+    import type { SegValAnyItem } from '../../../../lib/types/generated/schemas';
+    import type { Segment } from '../../../../lib/types/view-models';
     import { IssueRegistry } from '../../domain/registry';
     import {
         getAdjacentSegments,

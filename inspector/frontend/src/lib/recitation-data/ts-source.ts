@@ -24,14 +24,15 @@
  */
 
 import { ApiError, fetchArrayBuffer, fetchJson } from '../api';
+import type { TsConfigResponse, TsManifestResponse, TsValidationDoc } from '../types/generated/schemas';
 import type {
-    TsConfigResponse,
-    TsManifestResponse,
+    Letter,
+    PhonemeInterval,
     TsShardResponse,
     TsVbrResponse,
-} from '../types/api';
-import type { Letter, PhonemeInterval, TsVerseData, TsWord } from '../types/domain';
-import type { TsValidationDoc } from '../types/generated/schemas';
+    TsVerseData,
+    TsWord,
+} from '../types/ts-client';
 
 import {
     type VerseOccasions,

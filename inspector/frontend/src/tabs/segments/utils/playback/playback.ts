@@ -35,7 +35,7 @@
 import { get } from 'svelte/store';
 
 import { AudioRange } from '../../../../lib/playback/audio-range';
-import type { Segment } from '../../../../lib/types/domain';
+import type { Segment } from '../../../../lib/types/view-models';
 import { type AnimationLoop,createAnimationLoop } from '../../../../lib/utils/animation';
 import { audioSrcMatches } from '../../../../lib/utils/audio';
 import {

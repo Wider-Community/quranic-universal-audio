@@ -18,7 +18,7 @@
  * dispatcher's job.
  */
 
-import type { EditOp, Segment } from '../../../lib/types/domain';
+import type { EditOp, Segment } from '../../../lib/types/view-models';
 import type { SegSnapshot } from '../stores/dirty';
 import { snapshotSeg } from '../stores/dirty';
 import type { SegmentState } from '../stores/segments';

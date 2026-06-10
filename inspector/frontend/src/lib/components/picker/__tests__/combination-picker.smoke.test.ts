@@ -3,11 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchAdminReviews } from '../../../api/admin-reviews';
 import { currentUser, resetCurrentUser } from '../../../stores/current-user';
-import type {
-    PublicBucket,
-    PublicDelivery,
-    PublicReciter,
-} from '../../../types/public-state';
+import type { PublicDelivery, PublicReciter } from '../../../types/generated/schemas';
+import type { PublicBucket } from '../../../types/public-bucket';
 import type { CombinationSelection } from '../combination-picker-types';
 import CombinationPicker from '../CombinationPicker.svelte';
 

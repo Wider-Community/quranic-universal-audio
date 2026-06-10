@@ -3,9 +3,7 @@
 Response models for the read-only public catalog surface served by
 ``inspector/routes/public/public.py`` and built in
 ``inspector/services/reference/public_state.py``. They model the exact dict
-shape the routes emit (the source of truth), replacing the hand-mirrored
-TypedDicts in ``public_state.py`` and the TS interfaces in
-``inspector/frontend/src/lib/types/public-state.ts``.
+shape the routes emit (the source of truth).
 
 Shapes
 ------

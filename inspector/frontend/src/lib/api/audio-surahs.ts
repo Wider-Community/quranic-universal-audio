@@ -7,7 +7,7 @@
  * fetch MP3 headers until the user hits play).
  */
 
-import type { AudioSurahsResponse } from '../types/api';
+import type { AudioSurahsResponse } from '../types/generated/schemas';
 
 export interface SurahEntry {
     url: string;

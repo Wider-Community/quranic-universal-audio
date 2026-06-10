@@ -1,4 +1,4 @@
-import type { PeakBucket } from '../../../../lib/types/domain';
+import type { PeakBucket } from '../../../../lib/types/peaks-transport';
 
 /**
  * A synthetic, speech-like waveform for the editing guide's mock cards. No

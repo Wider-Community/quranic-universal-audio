@@ -110,7 +110,10 @@ Recitation-animation (`lib/recitation-animation/`, mounted by `NowReciting` abov
 | File | Role |
 |---|---|
 | `generated/schemas.ts` | **Codegen'd FE data contracts** — `scripts/codegen/regen_fe_types.py` over `qua_shared/schemas/fe_types.py` (Pydantic → JSON Schema → TS). Never hand-edit; CI `schema-codegen-check` gates it. The `bucket/` artefact shapes (`Segment`, `EditOp`, `PeakBucket`, `HistoryBatch`, `PhonemeInterval`, …) **and** the `wire/` `seg`/`ts`/`public`/`audio` request/response shapes are now modeled there and codegen'd. |
-| `domain.ts`, `api.ts`, `public-state.ts` | **Legacy hand-mirrors** of `qua_shared/schemas` shapes (`domain.ts` = segment/history/peaks; `public-state.ts` = `/api/public/*` + `PublicBucket` literals; `api.ts` = misc wire). Superseded by `generated/schemas.ts` and **pending deletion** — do not extend them; consume the generated types instead. |
+| `view-models.ts` | **FE-only** view-models + derived reads with no single wire producer: the editor's working `Segment` superset, the `EditOp`/`EditOpPatch`/`HistoryBatch` history views, `GenerationBoundary`/`HistorySummary` rollups, `Actor`, the `Ref`/`VerseRef` string aliases, and the derived `/api/seg/*` reads (`SegEditHistoryResponse`, `SegStatsResponse`, …). |
+| `peaks-transport.ts` | **FE-only** waveform transport — `PeakBucket`/`AudioPeaks`/`SegmentPeaks`, including the flag-gated `Int8Array` drawer branch (no wire model). |
+| `ts-client.ts` | **FE-only** Timestamps-tab client types — the `TsVerseData` verse model, slim `TsCatalog*` projection, positional shard reads (`TsShardWord`/`SegmentEntry`/`TsShardResponse`), `SurahInfo*`, and the deprecated legacy `Ts*Response` shapes. |
+| `public-bucket.ts` | **FE-only** public-bucket display vocabulary — `PublicBucket`/`AdminBucket`, the `PUBLIC_BUCKET_LABELS`/`PUBLIC_BUCKETS`/`BUCKET_PRIORITY` tables, `bucketRank`, and `CoverageKind`. |
 | `ui.ts` | Shared UI types for components |
 
 ### `lib/stores/` (cross-tab)

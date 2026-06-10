@@ -27,8 +27,8 @@
     } from '../../catalog/schema-descriptor';
     import { hasCapability } from '../../stores/capabilities';
     import { currentUser } from '../../stores/current-user';
-    import type { PublicBucket, PublicDelivery, PublicReciter } from '../../types/public-state';
-    import type { BucketCounts } from '../../types/public-state';
+    import type { BucketCounts, PublicDelivery, PublicReciter } from '../../types/generated/schemas';
+    import type { PublicBucket } from '../../types/public-bucket';
     import { tagLabel } from '../../utils/axis-labels';
     import { compactCoverageLabel, compactHoursLabel } from '../../utils/delivery-label';
     import { type FacetSpec, recomputeFacets } from '../../utils/facets';

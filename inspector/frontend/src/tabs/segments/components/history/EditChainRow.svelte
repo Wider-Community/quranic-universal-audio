@@ -13,7 +13,7 @@
      */
 
     import { editGate } from '../../../../lib/actions/editGate';
-    import type { Segment } from '../../../../lib/types/domain';
+    import type { Segment } from '../../../../lib/types/view-models';
     import { surahOptionText } from '../../../../lib/utils/surah-info';
     import {
         computeChainLeafSnaps,

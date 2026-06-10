@@ -30,7 +30,7 @@
 
 import { writable } from 'svelte/store';
 
-import type { Segment } from '../../../lib/types/domain';
+import type { Segment } from '../../../lib/types/view-models';
 import { derivedEq } from '../../../lib/utils/derived-eq';
 import type { SegCanvas, SplitData, TrimWindow } from '../types/segments-waveform';
 

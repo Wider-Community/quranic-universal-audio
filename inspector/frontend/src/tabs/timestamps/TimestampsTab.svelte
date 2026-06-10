@@ -41,7 +41,7 @@
     import { currentUser } from '../../lib/stores/current-user';
     import { pendingTsNavigation } from '../../lib/stores/navigation';
     import { playerContext, setIsLoading, setIsPlaying } from '../../lib/stores/player-context';
-    import type { TsConfigResponse } from '../../lib/types/api';
+    import type { TsConfigResponse } from '../../lib/types/generated/schemas';
     import { getActiveTab, activeTab as activeTabStore } from '../../lib/utils/active-tab';
     import { analogousTriad } from '../../lib/utils/color-derive';
     import { LS_KEYS, TAB_NAMES } from '../../lib/utils/constants';
@@ -237,8 +237,8 @@
     /** Point the shared player at a TS reciter+chapter and (optionally) queue a
      *  seek to a specific verse once its data lands. */
     async function startEntry(
-        reciter: import('../../lib/types/public-state').PublicReciter,
-        delivery: import('../../lib/types/public-state').PublicDelivery,
+        reciter: import('../../lib/types/generated/schemas').PublicReciter,
+        delivery: import('../../lib/types/generated/schemas').PublicDelivery,
         target: { chapter: number; verseRef: string } | null,
         autoplay: boolean,
     ): Promise<void> {

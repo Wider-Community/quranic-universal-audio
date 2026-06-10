@@ -4,7 +4,7 @@
  * Resolves to ``null`` on 404 so consumers can render a "not found"
  * state without try/catch ergonomics.
  */
-import type { AdminViewReciter, PublicReciter } from '../types/public-state';
+import type { AdminViewReciter, PublicReciter } from '../types/generated/schemas';
 
 /**
  * For anonymous / contributor callers the response matches `PublicReciter`.

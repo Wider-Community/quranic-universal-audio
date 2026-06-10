@@ -14,7 +14,7 @@
 import { get } from 'svelte/store';
 
 import { quranRefs } from '../../../../lib/refs/quran-refs';
-import type { Segment } from '../../../../lib/types/domain';
+import type { Segment } from '../../../../lib/types/view-models';
 import { applyCommand } from '../../domain/apply-command';
 import {
     refreshSegInStore,

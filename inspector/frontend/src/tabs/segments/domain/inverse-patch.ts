@@ -21,7 +21,7 @@
  *    `time_start`. Other chapters keep their existing relative order.
  */
 
-import type { EditOpPatch, Segment } from '../../../lib/types/domain';
+import type { EditOpPatch, Segment } from '../../../lib/types/view-models';
 
 /** Snapshot keys we mirror onto a Segment. The snapshot was produced by
  *  `snapshotSeg` (stores/dirty.ts) which writes `index_at_save` rather

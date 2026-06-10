@@ -4,12 +4,11 @@ Two tiny shapes that routes otherwise hand-build as bare dict literals:
 
 - ``ErrorEnvelope`` — the flat error body the API returns on a failed
   request (``{"error": ...}`` plus optional ``code``/``detail``). It mirrors
-  the builder in ``inspector/services/errors.py`` and the FE-side
-  ``ApiErrorBody`` interface (``inspector/frontend/src/lib/types/domain.ts``):
-  ``error`` is always present (human-readable prose), ``code`` is the stable
-  machine constant the FE maps to friendly copy, and ``detail`` is an optional
-  free-text elaboration. ``None`` fields are dropped on dump via
-  ``exclude_none`` so the on-the-wire body stays minimal.
+  the builder in ``inspector/services/errors.py``: ``error`` is always present
+  (human-readable prose), ``code`` is the stable machine constant the FE maps
+  to friendly copy, and ``detail`` is an optional free-text elaboration.
+  ``None`` fields are dropped on dump via ``exclude_none`` so the on-the-wire
+  body stays minimal.
 - ``OkAck`` — the trivial ``{"ok": true}`` acknowledgement routes return when
   a mutation succeeds but there is no payload to hand back.
 

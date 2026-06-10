@@ -22,10 +22,10 @@
  * so the panel never renders during the gap; if lazy chapter loading
  * (per-chapter ``segAllData`` instead of full corpus) is added later,
  * this filter would need to wait for the relevant chapter's uids
- * before deciding. Tracked as B-5 in ``.refactor/bug-log.md``.
+ * before deciding.
  */
 
-import type { SegValAnyItem } from '../../../../lib/types/api';
+import type { SegValAnyItem } from '../../../../lib/types/generated/schemas';
 import { hasMergeRedirect,resolveMergeRedirect } from '../../stores/merge-redirect';
 
 /**

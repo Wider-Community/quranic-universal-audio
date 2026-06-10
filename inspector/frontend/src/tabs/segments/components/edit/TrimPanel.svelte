@@ -22,7 +22,7 @@
      */
 
     import Icon from '../../../../lib/icons/Icon.svelte';
-    import type { Segment } from '../../../../lib/types/domain';
+    import type { Segment } from '../../../../lib/types/view-models';
     import { editStatusText, trimWindow } from '../../stores/edit';
     import type { SegCanvas } from '../../types/segments-waveform';
     import { EDIT_MIN_DURATION_MS, EDIT_NUDGE_MS } from '../../utils/constants';

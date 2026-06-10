@@ -18,8 +18,8 @@
  *     which returns the issue seg itself.
  */
 
-import type { SegValAnyItem, SegValMissingVerseItem, SegValMissingWordsItem } from '../../../../lib/types/api';
-import type { Segment } from '../../../../lib/types/domain';
+import type { SegValAnyItem, SegValMissingVerseItem, SegValMissingWordsItem } from '../../../../lib/types/generated/schemas';
+import type { Segment } from '../../../../lib/types/view-models';
 import { getSegByChapterIndex } from '../../stores/chapter';
 import { findMissingVerseBoundarySegments } from './missing-verse-context';
 import { resolveIssueSeg } from './resolve-issue';

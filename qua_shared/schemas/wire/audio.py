@@ -7,10 +7,7 @@ ever return JSON on failure (the canonical ``ErrorEnvelope`` in
 chapter metadata map returned by ``GET /api/audio/surahs/<category>/<source>/<slug>``
 (see ``inspector/routes/audio/metadata.py``).
 
-Mirrors the hand-written FE types ``AudioSurahEntry`` / ``AudioSurahsResponse``
-in ``inspector/frontend/src/lib/types/api.ts``; these models replace those
-hand-mirrors in a later phase, so they track the shape the route actually
-emits exactly:
+Tracks the shape the route actually emits exactly:
 
 - every entry always carries ``url`` and ``duration_ms`` (the latter is
   ``None`` when neither the manifest nor the slim-peaks header yields a length);

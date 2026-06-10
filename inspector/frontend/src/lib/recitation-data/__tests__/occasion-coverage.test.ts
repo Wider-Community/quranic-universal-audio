@@ -6,7 +6,7 @@ import {
 } from '../../recitation-animation/chapter-words';
 import { buildSortedIntervals, findActiveAt } from '../../recitation-animation/recitation-active';
 import type { AnimUnit } from '../../recitation-animation/types';
-import type { SegmentEntry, TsShardResponse } from '../../types/api';
+import type { SegmentEntry, TsShardResponse } from '../../types/ts-client';
 import {
     assembleVerseFromShard,
     chapterOccasionIntervals,

@@ -1,11 +1,8 @@
 """Segments-tab HTTP wire schemas — every ``/api/seg/*`` request + response.
 
 Models the shapes the segments routes ACTUALLY emit (the producer is the
-source of truth), replacing the hand-mirrored TypeScript in
-``inspector/frontend/src/lib/types/{api.ts,domain.ts}``. These are authored
-ahead of the route-integration phase, so they are pinned to the *current*
-wire shape and verified against the live route response in
-``inspector/tests/routes/test_wire_seg_models.py``.
+source of truth). Pinned to the live wire shape and verified against the
+real route response in ``inspector/tests/routes/test_wire_seg_models.py``.
 
 Routes covered (blueprint → file):
 
@@ -28,10 +25,8 @@ Conventions:
 * Optional fields default to ``None`` / empty so ``model_dump(exclude_none=True,
   by_alias=True)`` reproduces the on-wire key set exactly.
 
-FE-facing: a later phase re-exports the subset the FE consumes from
-``fe_types.py`` and codegens it into
-``inspector/frontend/src/lib/types/generated/schemas.ts``. This module does
-NOT touch ``fe_types.py`` — codegen is owned by a separate agent.
+FE-facing: the subset the FE consumes is re-exported from ``fe_types.py`` and
+codegen'd into ``inspector/frontend/src/lib/types/generated/schemas.ts``.
 """
 
 from __future__ import annotations
@@ -70,10 +65,8 @@ class SegConfigResponse(BaseModel):
     """``GET /api/seg/config`` — display constants + validation vocab.
 
     ``seg_font_size`` / ``seg_word_spacing`` are CSS dimension STRINGS
-    (``"1.8rem"`` / ``"0.2em"``), not numbers. ``seg_scroll_anim_mode`` is
-    emitted by the route but was absent from the ``api.ts`` hand-mirror.
-    ``accordion_context`` maps a validation category to a default reveal
-    state (``"shown"`` / ``"hidden"``).
+    (``"1.8rem"`` / ``"0.2em"``), not numbers. ``accordion_context`` maps a
+    validation category to a default reveal state (``"shown"`` / ``"hidden"``).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -103,8 +96,7 @@ class SegReciter(BaseModel):
 
     ``audio_source`` is the delivery channel (``mp3quran`` / ``qul`` / ...),
     NOT a by_surah/by_ayah signal. ``state`` + ``visibility`` are the live
-    lifecycle fields the route emits from the SQLite state row — both were
-    omitted from the ``domain.ts`` hand-mirror.
+    lifecycle fields the route emits from the SQLite state row.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -326,12 +318,7 @@ class SegSaveRequest(BaseModel):
 
 
 class SegSaveResponse(BaseModel):
-    """``POST /api/seg/save`` success body — the route returns ``{"ok": true}``.
-
-    Drift note: the ``api.ts`` hand-mirror invented ``batch_id`` /
-    ``saved_at_utc`` / ``edit_history`` keys the route never emits; those are
-    NOT modelled here.
-    """
+    """``POST /api/seg/save`` success body — the route returns ``{"ok": true}``."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -356,11 +343,7 @@ class SegUndoOpsRequest(BaseModel):
 
 
 class SegUndoResponse(BaseModel):
-    """Success body for both undo routes — ``{"ok": true, "operations_reversed": N}``.
-
-    Drift note: the ``api.ts`` hand-mirror (``SegUndoBatchResponse``) modelled
-    only ``ok`` and missed ``operations_reversed``.
-    """
+    """Success body for both undo routes — ``{"ok": true, "operations_reversed": N}``."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -644,11 +627,8 @@ class SegValidateResponse(BaseModel):
     (additive alias). ``category_counts`` mirrors the per-category lengths in
     registry-declared order. ``split_group_index`` maps a root segment uid to
     its transitive split-descendant uids. ``low_confidence_v2_meta`` is present
-    only when the probe sidecar carried a ``_meta`` block.
-
-    Drift note: ``category_counts`` / ``stats`` / ``low_confidence_v2_meta`` and
-    the per-item ``classified_issues`` field were all absent from the ``api.ts``
-    hand-mirror.
+    only when the probe sidecar carried a ``_meta`` block. Each item carries a
+    ``classified_issues`` field.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -685,10 +665,6 @@ class SegSlimPeaks(BaseModel):
     quantized payload (``peaks_b64`` is base64 of ``n * 2`` interleaved
     min/max int8 bytes). The FE inflates ``peaks_b64`` → ``Int8Array`` once on
     receive — it does NOT receive nested ``[min, max]`` float pairs here.
-
-    Drift note: the ``api.ts`` hand-mirror typed ``SegPeaksResponse.peaks`` as
-    ``Record<string, AudioPeaks>`` (nested float buckets) — that is NOT what
-    this route emits.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -739,8 +715,7 @@ class SegSegmentPeaks(BaseModel):
     """HD per-segment peaks computed via ffmpeg, keyed by ``"<url>:<start>:<end>"``
     (a ``:<pad>`` suffix is appended when ``pad_ms`` was requested).
 
-    ``peaks`` are nested ``[min, max]`` float pairs (rounded). Drift note: the
-    ``api.ts`` ``SegmentPeaks`` mirror omitted ``schema_version``.
+    ``peaks`` are nested ``[min, max]`` float pairs (rounded).
     """
 
     model_config = ConfigDict(extra="forbid")

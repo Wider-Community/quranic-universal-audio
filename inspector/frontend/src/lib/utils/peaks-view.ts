@@ -21,7 +21,7 @@
  * chapter overviews + history rows use the int8 shape; the per-segment ffmpeg
  * fallback uses the nested float shape).
  */
-import type { PeakBucket } from '../types/domain';
+import type { PeakBucket } from '../types/peaks-transport';
 
 /** Read-only random-access view over a peaks array, indexed in BUCKETS not bytes. */
 export interface PeaksView {

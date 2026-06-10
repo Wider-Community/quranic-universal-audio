@@ -19,7 +19,7 @@
  */
 
 import type { OccasionInterval } from '../recitation-data/ts-source';
-import type { TsVerseData } from '../types/domain';
+import type { TsVerseData } from '../types/ts-client';
 import type { AnimUnit, AyahBoundary, ChapterRecitation } from './types';
 
 export interface AssembledVerse {

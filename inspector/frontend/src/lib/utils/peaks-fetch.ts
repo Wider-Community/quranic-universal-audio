@@ -11,8 +11,8 @@
  */
 
 import { fetchJson } from '../api';
-import type { SegPeaksResponse, SegSegmentPeaksRequest, SegSegmentPeaksResponse } from '../types/api';
-import type { AudioPeaks, PeakBucket, SegmentPeaks } from '../types/domain';
+import type { SegPeaksResponse, SegSegmentPeaksRequest, SegSegmentPeaksResponse } from '../types/generated/schemas';
+import type { AudioPeaks, PeakBucket, SegmentPeaks } from '../types/peaks-transport';
 import { b64ToInt8 } from './peaks-decode';
 import { normalizeAudioUrl, setWaveformPeaks } from './waveform-cache';
 

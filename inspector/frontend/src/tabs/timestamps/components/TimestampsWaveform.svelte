@@ -29,7 +29,7 @@
     import { dashPort } from '../../../lib/playback/dash-port';
     import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { recitationConfigStore } from '../../../lib/recitation-animation/recitation-settings';
-    import type { AudioPeaks, PeakBucket, SegmentPeaks } from '../../../lib/types/domain';
+    import type { AudioPeaks, PeakBucket, SegmentPeaks } from '../../../lib/types/peaks-transport';
     import { analogousTriad } from '../../../lib/utils/color-derive';
     import {
         PREVIEW_PLAYHEAD_COLOR,

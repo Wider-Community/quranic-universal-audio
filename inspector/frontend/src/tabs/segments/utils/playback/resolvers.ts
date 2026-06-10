@@ -8,7 +8,7 @@
  * from `range-spec`. Splitting the resolvers out lets both import from a leaf.
  */
 
-import type { Segment } from '../../../../lib/types/domain';
+import type { Segment } from '../../../../lib/types/view-models';
 
 /**
  * Find the next displayed segment after the given index.

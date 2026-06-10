@@ -6,7 +6,7 @@
 import { get as storeGet } from 'svelte/store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { EditOp, EditOpPatch, Segment } from '../../../../lib/types/domain';
+import type { EditOp, EditOpPatch, Segment } from '../../../../lib/types/view-models';
 import { segAllData } from '../../stores/chapter';
 import {
     clearDirtyMap,

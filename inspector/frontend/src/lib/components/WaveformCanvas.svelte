@@ -11,7 +11,7 @@
 
     import { onMount } from 'svelte';
 
-    import type { PeakBucket } from '../types/domain';
+    import type { PeakBucket } from '../types/peaks-transport';
     import { drawWaveformPeaks } from '../utils/waveform-draw';
 
     /** Peak data to render. null = show empty (black) canvas. Both nested

@@ -9,7 +9,7 @@ import {
     type TsReciterAudio,
 } from '../../recitation-data/ts-source';
 import shard102 from '../../recitation-data/__tests__/fixtures/nasser_al_qatami_mp3quran_102.shard.json';
-import type { TsShardResponse } from '../../types/api';
+import type { TsShardResponse } from '../../types/ts-client';
 import AyahFilmstrip from '../AyahFilmstrip.svelte';
 import {
     buildChapterRecitation,

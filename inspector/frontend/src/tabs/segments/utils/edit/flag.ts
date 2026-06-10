@@ -13,7 +13,8 @@
 
 import { get } from 'svelte/store';
 
-import type { FlagAuthor, Segment } from '../../../../lib/types/domain';
+import type { FlagAuthor } from '../../../../lib/types/generated/schemas';
+import type { Segment } from '../../../../lib/types/view-models';
 import { applyCommand } from '../../domain/apply-command';
 import { refreshSegInStore, selectedChapter } from '../../stores/chapter';
 import { finalizeOp, markDirty, setPendingOp } from '../../stores/dirty';

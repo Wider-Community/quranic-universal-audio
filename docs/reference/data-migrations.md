@@ -118,7 +118,7 @@ All these scripts read/write through the shared pydantic schemas in `qua_shared/
 
 ### Route serialization through wire models
 
-The `seg`/`timestamps`/`public`/`audio` routes now serialize **through** the `wire/` models — `Model.model_validate(...)` on the way in, `model.model_dump(mode="json")` out, with `ErrorEnvelope`/`OkAck` for errors and acks instead of inline dicts. This is byte-identical to the prior hand-built JSON (proven by `inspector/tests/routes/test_response_snapshots.py` + the wire match-route tests), so it is not a data migration — no on-disk bytes move. The hand-mirrored FE contracts (`lib/types/api.ts`, `domain.ts`, `public-state.ts`) still exist but are now superseded by the codegen'd `schemas.ts`; their deletion is a later phase.
+The `seg`/`timestamps`/`public`/`audio` routes serialize **through** the `wire/` models — `Model.model_validate(...)` on the way in, `model.model_dump(mode="json")` out, with `ErrorEnvelope`/`OkAck` for errors and acks instead of inline dicts. This is byte-identical to the prior hand-built JSON (proven by `inspector/tests/routes/test_response_snapshots.py` + the wire match-route tests), so it is not a data migration — no on-disk bytes move. The FE consumes the codegen'd `schemas.ts` directly; the genuinely FE-only view-models, peaks transport, ts-client projections, and public-bucket display vocabulary live in `lib/types/{view-models,peaks-transport,ts-client,public-bucket}.ts`.
 
 ### Bucket-validation harness
 

@@ -9,7 +9,7 @@
 
 import { get } from 'svelte/store';
 
-import type { EditOp, EditOpPatch, Segment } from '../../../../lib/types/domain';
+import type { EditOp, EditOpPatch, Segment } from '../../../../lib/types/view-models';
 import { getSegByChapterIndex, segAllData } from '../../stores/chapter';
 import {
     finalizeOp,

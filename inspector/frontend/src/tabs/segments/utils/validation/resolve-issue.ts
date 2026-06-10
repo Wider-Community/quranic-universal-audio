@@ -32,8 +32,8 @@
 
 import { get } from 'svelte/store';
 
-import type { SegValAnyItem } from '../../../../lib/types/api';
-import type { Segment } from '../../../../lib/types/domain';
+import type { SegValAnyItem } from '../../../../lib/types/generated/schemas';
+import type { Segment } from '../../../../lib/types/view-models';
 import { getChapterSegments, getSegByChapterIndex, selectedChapter } from '../../stores/chapter';
 import { resolveMergeRedirect } from '../../stores/merge-redirect';
 

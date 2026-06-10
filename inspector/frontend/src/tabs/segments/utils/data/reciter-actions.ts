@@ -11,10 +11,7 @@ import { get } from 'svelte/store';
 
 import { fetchJson } from '../../../../lib/api';
 import { loadQuranRefs, quranRefs } from '../../../../lib/refs/quran-refs';
-import type {
-    SegAllResponse,
-    SegValidateResponse,
-} from '../../../../lib/types/api';
+import type { SegAllResponse, SegValidateResponse } from '../../../../lib/types/generated/schemas';
 import { preconnectOrigins } from '../../../../lib/utils/preconnect';
 import type { SegAllState } from '../../stores/chapter';
 import {

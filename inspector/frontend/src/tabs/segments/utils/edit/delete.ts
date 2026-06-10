@@ -11,7 +11,7 @@
 
 import { get } from 'svelte/store';
 
-import type { Segment } from '../../../../lib/types/domain';
+import type { Segment } from '../../../../lib/types/view-models';
 import { applyCommand } from '../../domain/apply-command';
 import {
     getChapterSegments,

@@ -18,7 +18,7 @@
 
 import { get } from 'svelte/store';
 
-import type { Segment } from '../../../../lib/types/domain';
+import type { Segment } from '../../../../lib/types/view-models';
 import { reciterVbrChapters, selectedReciter } from '../../stores/chapter';
 
 /** Resolve a per-segment clip URL for a [startMs, endMs] window if `chapter`
