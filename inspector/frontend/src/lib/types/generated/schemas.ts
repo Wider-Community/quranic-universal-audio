@@ -1748,6 +1748,7 @@ export interface SegValBasmalaAminItem {
   seg_index: number;
   segment_uid?: string | null;
   ref: string;
+  time?: string | null;
   missed_basmala?: boolean | null;
   classified_issues?: string[];
 }

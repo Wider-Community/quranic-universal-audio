@@ -564,6 +564,10 @@ class SegValBasmalaAminItem(BaseModel):
     seg_index: int
     segment_uid: str | None = None
     ref: Ref
+    # ``time`` rides through only on the augmented "missed Basmala" candidates
+    # (``{**first_seg, ...}`` in detail.py — first_seg carries it); the
+    # canonical 1:1 / 1:7 candidates omit it. Optional, not required.
+    time: str | None = None
     missed_basmala: bool | None = None
     classified_issues: list[str] = Field(default_factory=list)
 
