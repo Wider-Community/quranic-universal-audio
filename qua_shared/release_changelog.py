@@ -135,7 +135,7 @@ def _recitation_changes(
     if carried:
         out.extend(
             _accordion(
-                f"Carried recitations - {n_carried}",
+                f"Unchanged recitations - {n_carried}",
                 _member_table(carried),
             )
         )
