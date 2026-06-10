@@ -50,7 +50,7 @@ A leading/trailing repeat (the reciter restarts the verse) is deduped; a within-
 | `shard_bytes(slug, ch, allow_unreleased)` | Released-gate via `_served_slugs`; `allow_unreleased` bypasses it for owner preview. Returns the raw gz body. |
 | Route `GET /api/ts/shard/<reciter>/<int:chapter>` | Streams the gz body with a 24h `Cache-Control`. Sets `allow_unreleased = can(user, "timestamps.view_unreleased")` so an **owner** can preview generated-but-unreleased shards (released stays public, anonymous unchanged). |
 
-**Owner preview:** capability `timestamps.view_unreleased` (owner-only default, `qua_shared/schemas/capabilities.py`) lets the Timestamps tab render an under-review reciter's generated shards before release. The shard route honors it by URL; the manifest is still released-only.
+**Owner preview:** capability `timestamps.view_unreleased` (owner-only default, `qua_shared/schemas/config/capabilities.py`) lets the Timestamps tab render an under-review reciter's generated shards before release. The shard route honors it by URL; the manifest is still released-only.
 
 ## 3. The generation job
 
@@ -85,7 +85,7 @@ Env-driven. **Alignment-only** — the job never persists audio nor bakes peaks 
 
 ### 3a. Durable job record — `reciters/<slug>/jobs/ts/<job_id>.json`
 
-Per-reciter, colocated with the reciter's other content (consistent with the bucket convention — everything for a reciter under its folder). Schema `qua_shared/schemas/ts_job_record.py` (`TsJobRecord` + `TsJobSettings`, codegen'd to FE types). Makes a run's settings + status + logs viewable any time after HF log retention expires.
+Per-reciter, colocated with the reciter's other content (consistent with the bucket convention — everything for a reciter under its folder). Schema `qua_shared/schemas/bucket/ts_job_record.py` (`TsJobRecord` + `TsJobSettings`, codegen'd to FE types). Makes a run's settings + status + logs viewable any time after HF log retention expires.
 
 | Writer | When |
 |---|---|
@@ -102,7 +102,7 @@ The probe (narrower) beams no longer write per-beam `<ch>.beam_<N>.json` sidecar
 | Piece | Detail |
 |---|---|
 | `build_ts_validation(chapters, results_by_beam, beams, …)` | `qua_shared/timestamps_pipeline.py` — a verse passes under beam `b` when every segment mapping to it aligned (`status=="ok"`); a verse is flagged when it fails under ≥1 beam it was tested under. Output: `{"_meta": {beams, canonical_beam, …}, "verses": {key: {failed_beams, min_passing_beam}}}`. Single-beam run → empty `verses`. |
-| Schema | `qua_shared/schemas/ts_validation.py` (`TsValidationDoc`/`Meta`/`Verse`, codegen'd to FE types). Written as a plain dict by the pipeline (runs in-job, no pydantic dep); the models are for readers + FE. |
+| Schema | `qua_shared/schemas/bucket/ts_validation.py` (`TsValidationDoc`/`Meta`/`Verse`, codegen'd to FE types). Written as a plain dict by the pipeline (runs in-job, no pydantic dep); the models are for readers + FE. |
 | Serve | `ts_serve.ts_validation_doc(reciter, allow_unreleased)` reads it, same released/`view_unreleased` gate as shards. Route `GET /api/ts/validation/<reciter>` → `{_meta, verses}` (empty doc when viewable-but-absent; 404 when not viewable). |
 | Render | Timestamps-tab `TsValidationPanel.svelte` (owner preview) — a Low-Confidence-v2-style expandable accordion; clicking a flagged verse jumps the cascade to it. Fetched lazily on reciter change, **gated FE-side on `view_unreleased`** so public users never trigger the bucket read. Store `tabs/timestamps/stores/validation.ts`. |
 
@@ -143,9 +143,9 @@ See `docs/reference/data-migrations.md` and `docs/planning/ts-segment-array-migr
 - Reshape: `qua_shared/timestamps_reshape.py`, `qua_jobs/reshape_timestamps_shards.py`, tests `qua_shared/tests/test_timestamps_reshape.py`
 - Read-path: `inspector/services/reference/timestamps.py`, `inspector/services/storage/{data_dir,storage_paths}.py`, `inspector/routes/timestamps/timestamps.py`
 - FE consumption: `inspector/frontend/src/lib/recitation-data/ts-source.ts` (`TsShardResponse = {_meta, segments[]}`; `assembleVerseFromShard` / occasion grouping)
-- Job: `inspector/services/admin/timestamps_jobs.py`, `qua_jobs/generate_timestamps.py`, `qua_shared/schemas/ts_job_record.py`
-- ts-validation: `qua_shared/timestamps_pipeline.py::build_ts_validation`, `qua_shared/schemas/ts_validation.py`, `inspector/frontend/src/tabs/timestamps/{components/TsValidationPanel.svelte,stores/validation.ts}`
+- Job: `inspector/services/admin/timestamps_jobs.py`, `qua_jobs/generate_timestamps.py`, `qua_shared/schemas/bucket/ts_job_record.py`
+- ts-validation: `qua_shared/timestamps_pipeline.py::build_ts_validation`, `qua_shared/schemas/bucket/ts_validation.py`, `inspector/frontend/src/tabs/timestamps/{components/TsValidationPanel.svelte,stores/validation.ts}`
 - Job image: `.local/quran_ts_job/Dockerfile` (public Docker Space `hetchyy/quran-ts-job`)
 - UI: `inspector/frontend/src/tabs/dashboard/components/admin/releases/{ReleasesTsSettings,ReleasesPastJobs,ReleasesRowExpansion}.svelte`, `lib/api/admin-reviews.ts`
-- Capability: `reviews.generate_timestamps` (maintainer+), `timestamps.view_unreleased` (owner) — `qua_shared/schemas/capabilities.py`
+- Capability: `reviews.generate_timestamps` (maintainer+), `timestamps.view_unreleased` (owner) — `qua_shared/schemas/config/capabilities.py`
 - Planning (the *why*): `docs/planning/inspector-deploy/v2/phases/13-timestamps-job.md`
