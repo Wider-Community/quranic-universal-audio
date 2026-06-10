@@ -737,9 +737,7 @@ def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[byt
         # Add the chapter's offset within its source file (combined-file
         # intakes) so the persisted offset is absolute within the original
         # source; 0 for normal chapters whose audio == the whole source.
-        data["source_offset_ms"].append(
-            _i(row["clip_start"] + row.get("source_offset_base_ms", 0))
-        )
+        data["source_offset_ms"].append(_i(row["clip_start"] + row.get("source_offset_base_ms", 0)))
 
     # Audio(decode=True) matches the existing splits on the hub (consumers
     # expect ``ds[i]["audio"]["array"]``). Torch + torchcodec are installed
@@ -1036,7 +1034,11 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
         for ch, entry in _manifest_chapters.items()
     }
     rows = build_rows(
-        timestamps, detailed_by_ref, surah_info, dk_words, chapter_urls,
+        timestamps,
+        detailed_by_ref,
+        surah_info,
+        dk_words,
+        chapter_urls,
         chapter_offsets=chapter_offsets,
     )
     log.info("built %d rows for %s", len(rows), slug)
