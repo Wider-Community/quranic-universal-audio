@@ -24,7 +24,12 @@ from .bucket.catalog import (
     Style,
     Vocab,
 )
-from .bucket.edit_history import EditHistoryBatch, EditOperation, parse_edit_history_line
+from .bucket.edit_history import (
+    EditHistoryBatch,
+    EditOperation,
+    EditOpPatch,
+    parse_edit_history_line,
+)
 from .bucket.peaks_history import PeaksRecord, parse_peaks_record
 from .bucket.pipeline_meta import PipelineMeta
 from .bucket.playlist_map import MatchConfidence, PlaylistChapterEntry, PlaylistChapterMap
@@ -37,7 +42,9 @@ from .bucket.segment import (
     SegmentFlag,
     parse_detailed_segment,
 )
+from .bucket.segments_doc import SegmentsDoc
 from .bucket.ts_job_record import TsJobRecord, TsJobSettings
+from .bucket.ts_shard import TsShardDoc, TsShardMeta, TsShardSegment, TsShardWord
 from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 from .config.access import Member, Role, RolesFile
 from .config.activity_state import ActivityState
@@ -74,6 +81,7 @@ from .config.state import (
     RevisionContext,
     Visibility,
 )
+from .wire._envelopes import ErrorEnvelope, OkAck
 from .wire.admin_permissions import (
     AdminCapabilityRow,
     AdminCapabilityTierState,
@@ -231,10 +239,13 @@ __all__ = [
     "DetailedMeta",
     "DetailedSegment",
     "EditHistoryBatch",
+    "EditOpPatch",
     "EditOperation",
+    "ErrorEnvelope",
     "FileDigest",
     "FlagFollowUp",
     "SegmentFlag",
+    "SegmentsDoc",
     "BLOCKING_COUNT_KEYS",
     "ChecklistKey",
     "IntakeAttestations",
@@ -246,6 +257,7 @@ __all__ = [
     "MarkReadySubmission",
     "MatchConfidence",
     "Member",
+    "OkAck",
     "PeaksRecord",
     "PlaylistChapterEntry",
     "PlaylistChapterMap",
@@ -282,6 +294,10 @@ __all__ = [
     "TimestampMeta",
     "TsJobRecord",
     "TsJobSettings",
+    "TsShardDoc",
+    "TsShardMeta",
+    "TsShardSegment",
+    "TsShardWord",
     "TsValidationDoc",
     "TsValidationMeta",
     "TsValidationVerse",

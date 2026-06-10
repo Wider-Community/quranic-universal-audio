@@ -39,8 +39,6 @@ _OP_DEAD_FIELDS: set[str] = {
     "affected_chapters",
     "command",
     "merge_direction",
-    "op_context_category",
-    "patch",
     "snapshots",
     "targetSegmentIndex",
     # v0 user-edit op aliases (replaced by kind/op_type)
@@ -70,6 +68,31 @@ _BATCH_DEAD_FIELDS: set[str] = {
 }
 
 
+class EditOpPatch(BaseModel):
+    """Forward-change patch envelope attached to an op at finalize time.
+
+    Structural mirror of the ``SegmentPatch`` dataclass in
+    ``inspector/domain/command.py`` and the FE ``EditOpPatch`` interface in
+    ``inspector/frontend/src/lib/types/domain.ts``. Produced by the FE
+    ``applyCommand`` round-trip; consumed by the undo path
+    (``apply_inverse_patch`` reads ``op["patch"]``).
+
+    ``before`` / ``after`` are full segment-dict snapshots; ``removedIds`` /
+    ``insertedIds`` carry the segment UIDs the command removed/inserted;
+    ``affectedChapterIds`` is the set of chapter numbers whose id ordering
+    changed (ints — what the FE sends and the undo path compares against the
+    batch chapter set).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    before: list[dict[str, Any]] = Field(default_factory=list)
+    after: list[dict[str, Any]] = Field(default_factory=list)
+    removedIds: list[str] = Field(default_factory=list)
+    insertedIds: list[str] = Field(default_factory=list)
+    affectedChapterIds: list[int] = Field(default_factory=list)
+
+
 class EditOperation(BaseModel):
     """One operation in a batch. Shape is intentionally permissive — the
     save flow owns the operation vocabulary (trim, split, merge, delete,
@@ -86,6 +109,12 @@ class EditOperation(BaseModel):
     dicts, not validated against ``DetailedSegment`` because snapshots
     intentionally carry extra fields (``chapter``, ``audio_url``,
     ``index_at_save``) that don't live on persisted segs.
+
+    ``patch`` is the forward-change envelope the save flow persists on every
+    op (``_ensure_patch_on_ops``) and the undo path reverses.
+    ``op_context_category`` is the validation category the edit was launched
+    from; ``build_resolved_by_edit_index`` reads it to suppress re-flagging.
+    Both are live fields, written and read by the app — NOT dead.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -96,6 +125,8 @@ class EditOperation(BaseModel):
 
     # Migration #5 live fields, declared here instead of absorbed via extras.
     fix_kind: str | None = None  # only set by pipeline auto-fix ops
+    op_context_category: str | None = None  # validation category the edit came from
+    patch: EditOpPatch | None = None  # forward-change envelope for undo
     targets_before: list[dict[str, Any]] = Field(default_factory=list)
     targets_after: list[dict[str, Any]] = Field(default_factory=list)
 

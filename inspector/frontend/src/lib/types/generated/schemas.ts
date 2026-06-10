@@ -28,6 +28,17 @@
  */
 export type StaleReason = "ts_regen" | "catalog_edit" | "segments_edited";
 export type Role = "contributor" | "maintainer" | "owner" | "pipeline";
+/**
+ * One encoded word inside a segment — a flat positional tuple.
+ *
+ * Slots: ``[word_idx, start_ms, end_ms, letters, phones]``. Modelled as a
+ * ``RootModel`` over a 5-tuple so the FE codegen emits a positional TS tuple
+ * (mirrors ``TsShardWord`` in ``api.ts``) rather than an object.
+ *
+ * @minItems 5
+ * @maxItems 5
+ */
+export type TsShardWord = [unknown, unknown, unknown, unknown, unknown];
 
 export interface AdminActiveClaim {
   slug: string;
@@ -801,18 +812,67 @@ export interface EditHistoryBatch {
  * dicts, not validated against ``DetailedSegment`` because snapshots
  * intentionally carry extra fields (``chapter``, ``audio_url``,
  * ``index_at_save``) that don't live on persisted segs.
+ *
+ * ``patch`` is the forward-change envelope the save flow persists on every
+ * op (``_ensure_patch_on_ops``) and the undo path reverses.
+ * ``op_context_category`` is the validation category the edit was launched
+ * from; ``build_resolved_by_edit_index`` reads it to suppress re-flagging.
+ * Both are live fields, written and read by the app — NOT dead.
  */
 export interface EditOperation {
   op_id: string;
   kind?: string | null;
   op_type?: string | null;
   fix_kind?: string | null;
+  op_context_category?: string | null;
+  patch?: EditOpPatch | null;
   targets_before?: {
     [k: string]: unknown;
   }[];
   targets_after?: {
     [k: string]: unknown;
   }[];
+}
+/**
+ * Forward-change patch envelope attached to an op at finalize time.
+ *
+ * Structural mirror of the ``SegmentPatch`` dataclass in
+ * ``inspector/domain/command.py`` and the FE ``EditOpPatch`` interface in
+ * ``inspector/frontend/src/lib/types/domain.ts``. Produced by the FE
+ * ``applyCommand`` round-trip; consumed by the undo path
+ * (``apply_inverse_patch`` reads ``op["patch"]``).
+ *
+ * ``before`` / ``after`` are full segment-dict snapshots; ``removedIds`` /
+ * ``insertedIds`` carry the segment UIDs the command removed/inserted;
+ * ``affectedChapterIds`` is the set of chapter numbers whose id ordering
+ * changed (ints — what the FE sends and the undo path compares against the
+ * batch chapter set).
+ */
+export interface EditOpPatch {
+  before?: {
+    [k: string]: unknown;
+  }[];
+  after?: {
+    [k: string]: unknown;
+  }[];
+  removedIds?: string[];
+  insertedIds?: string[];
+  affectedChapterIds?: number[];
+}
+/**
+ * Flat error body returned on a failed request.
+ *
+ * ``error`` is the always-present human-readable message. ``code`` is the
+ * optional stable machine constant (see ``services/errors.py::Codes``) the FE
+ * maps to friendly copy. ``detail`` is optional free-text elaboration.
+ *
+ * Dump with ``exclude_none=True`` (or ``model_dump(exclude_none=True)``) so the
+ * optional fields vanish when unset, matching the bare-dict shape routes emit.
+ */
+export interface ErrorEnvelope {
+  error: string;
+  detail?: string | null;
+  code?: string | null;
 }
 /**
  * Contributor confirmations recorded with the submission (audit trail).
@@ -907,6 +967,12 @@ export interface MarkReadyRequest {
   comment_issues?: string;
 }
 /**
+ * The trivial ``{"ok": true}`` success acknowledgement.
+ */
+export interface OkAck {
+  ok?: true;
+}
+/**
  * One pipeline-op waveform slice. Migration #5 canonical shape.
  *
  * All fields required:
@@ -990,6 +1056,50 @@ export interface TsJobSettings {
   timeout?: string | null;
   batch_size?: number | null;
   download_workers?: number | null;
+}
+/**
+ * The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.
+ *
+ * The on-disk JSON key is ``_meta`` (leading underscore); pydantic disallows
+ * leading-underscore field names, so it is exposed as ``meta`` Python-side
+ * with ``alias="_meta"``. Serialise with ``model_dump(by_alias=True)``.
+ */
+export interface TsShardDoc {
+  _meta: TsShardMeta;
+  segments?: TsShardSegment[];
+}
+/**
+ * Slim per-shard ``_meta`` block.
+ *
+ * Aligner provenance (``padding``, ``beam``, ``method``, ``aligner_model``,
+ * ``shared_cmvn``, ``audio_source``, ``created_at``) passes through when the
+ * source ``_meta`` carried it. Audio routing (reciter / url_template /
+ * audio_urls) is deliberately NOT here — the audio-manifest sidecar is the
+ * source of truth. ``extra="allow"`` so the optional provenance fields the
+ * writer copies through stay typed-open for the FE.
+ */
+export interface TsShardMeta {
+  schema_version: number;
+  chapter: number;
+  audio_category: string;
+  [k: string]: unknown;
+}
+/**
+ * One recited segment in a chapter's temporal ``segments[]`` array.
+ *
+ * ``ref`` is always a single verse ``"surah:ayah"``; ``t`` is the segment's
+ * ``[start_ms, end_ms]`` span. A verse may recur across several entries
+ * (loopbacks / re-dos) — every accepted occurrence is one entry, emitted in
+ * recitation order.
+ */
+export interface TsShardSegment {
+  ref: string;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  t: [unknown, unknown];
+  words?: TsShardWord[];
 }
 /**
  * The ``ts_validation.json`` document — meta + verse-keyed flags.

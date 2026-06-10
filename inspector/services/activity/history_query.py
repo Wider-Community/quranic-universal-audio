@@ -105,6 +105,35 @@ def parse_history_for_reciter(reciter: str) -> list[dict]:
 # on the slug or by re-extracting. Don't reintroduce the heuristic.
 
 
+# op_types whose forward command mutates the segment set (vs a field-only
+# patch). Used to derive the wire ``save_mode`` presentation hint now that
+# batches no longer persist it (it was a save-flow presentation detail, not
+# durable state).
+_STRUCTURAL_OP_TYPES: frozenset[str] = frozenset(
+    {"split_segment", "merge_segments", "delete_segment", "waqf_sakt"}
+)
+
+
+def _derive_save_mode(record: dict) -> str:
+    """Derive the wire ``save_mode`` pill from a batch's shape.
+
+    Legacy batches persisted ``save_mode`` (``"full_replace"`` / ``"patch"``);
+    the save flow stopped writing it. The History panel still wants the hint,
+    so derive it: a batch carrying any structural op (split/merge/delete) or a
+    pipeline ``batch_type`` is ``"full_replace"``; everything else is
+    ``"patch"``. Legacy records that still carry the field win.
+    """
+    persisted = record.get("save_mode")
+    if isinstance(persisted, str) and persisted:
+        return persisted
+    if record.get("batch_type"):
+        return "full_replace"
+    for op in record.get("operations") or []:
+        if isinstance(op, dict) and op.get("op_type") in _STRUCTURAL_OP_TYPES:
+            return "full_replace"
+    return "patch"
+
+
 def _merge_batches_sharing_batch_id(batches: list[dict]) -> list[dict]:
     """Merge consecutive-like batches that share the same ``batch_id`` (multi-chapter saves).
 
@@ -293,7 +322,7 @@ def _load_edit_history_from_records(
             "saved_at_utc": record.get("saved_at_utc"),
             "chapter": record.get("chapter"),
             "chapters": record.get("chapters"),
-            "save_mode": record.get("save_mode"),
+            "save_mode": _derive_save_mode(record),
             "is_revert": False,
             "operations": ops,
         }

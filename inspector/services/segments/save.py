@@ -550,7 +550,6 @@ def _persist_and_record(
         "batch_id": uuid7(),
         "chapter": chapter,
         "saved_at_utc": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
-        "save_mode": "full_replace" if updates.get("full_replace") else "patch",
         "operations": operations,
         "actor": actor.model_dump(mode="json"),
     }

@@ -131,7 +131,9 @@ def test_clean_reciter_audits_ok_with_no_strips(backend, load_fixture):
     result = audit(backend, "test-bucket", SLUG)
 
     assert result.found is True
-    assert result.n_errors == 0, [f"{f.path}: {f.detail}" for f in result.files if f.status == "error"]
+    assert result.n_errors == 0, [
+        f"{f.path}: {f.detail}" for f in result.files if f.status == "error"
+    ]
     assert result.n_legacy == 0
     assert result.n_warnings == 0
 
@@ -151,15 +153,18 @@ def test_clean_reciter_audits_ok_with_no_strips(backend, load_fixture):
 def test_legacy_edit_history_strips_surface_as_info(backend, load_fixture, caplog):
     clean = _clean_detailed(load_fixture("112-ikhlas"))
     # The fixture edit_history carries pre-migration EditHistoryBatch /
-    # EditOperation keys (file_hash_after, save_mode, type, patch, ...) that
-    # the schema strips at INFO.
+    # EditOperation keys (file_hash_after, save_mode, type, started_at_utc, ...)
+    # that the schema strips at INFO. (patch + op_context_category are now live
+    # declared fields, not stripped.)
     _build_reciter_dir(backend, clean, edit_history=_legacy_edit_history_bytes())
 
     with caplog.at_level(logging.INFO, logger="qua_shared.schemas._extras"):
         result = audit(backend, "test-bucket", SLUG)
 
     assert result.found is True
-    assert result.n_errors == 0, [f"{f.path}: {f.detail}" for f in result.files if f.status == "error"]
+    assert result.n_errors == 0, [
+        f"{f.path}: {f.detail}" for f in result.files if f.status == "error"
+    ]
 
     by_path = {f.path: f for f in result.files}
     eh = by_path[f"reciters/{SLUG}/edit_history.jsonl"]

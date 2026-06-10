@@ -20,7 +20,7 @@ committed to git so CI can ``git diff --exit-code`` it.
 
 from __future__ import annotations
 
-from .bucket.edit_history import EditHistoryBatch, EditOperation
+from .bucket.edit_history import EditHistoryBatch, EditOperation, EditOpPatch
 from .bucket.peaks_history import PeaksRecord
 from .bucket.segment import (
     DetailedDocument,
@@ -31,6 +31,7 @@ from .bucket.segment import (
     SegmentFlag,
 )
 from .bucket.ts_job_record import TsJobRecord, TsJobSettings
+from .bucket.ts_shard import TsShardDoc, TsShardMeta, TsShardSegment, TsShardWord
 from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 from .config.automation import (
     AutoGenTsConfig,
@@ -42,6 +43,7 @@ from .config.automation import (
     StaleMetadataConfig,
     StaleTsRegenConfig,
 )
+from .wire._envelopes import ErrorEnvelope, OkAck
 from .wire.admin_permissions import (
     AdminCapabilityRow,
     AdminCapabilityTierState,
@@ -168,6 +170,8 @@ __all__ = [
     "DetailedSegment",
     "EditHistoryBatch",
     "EditOperation",
+    "EditOpPatch",
+    "ErrorEnvelope",
     "FlagFollowUp",
     "IntakeAttestations",
     "IntakeSource",
@@ -176,6 +180,7 @@ __all__ = [
     "MarkReadyChecklist",
     "MarkReadyRequest",
     "MarkReadySubmission",
+    "OkAck",
     "PeaksRecord",
     "ProbeResponse",
     "ProbeResult",
@@ -186,6 +191,10 @@ __all__ = [
     "SuggestedAction",
     "TsJobRecord",
     "TsJobSettings",
+    "TsShardDoc",
+    "TsShardMeta",
+    "TsShardSegment",
+    "TsShardWord",
     "TsValidationDoc",
     "TsValidationMeta",
     "TsValidationVerse",

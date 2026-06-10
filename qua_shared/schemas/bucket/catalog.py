@@ -17,10 +17,11 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .._extras import strip_and_warn
 from ..config.state import SLUG_RE
 
 # Source slugs allow hyphens (e.g. ``surah-quran``); everything else uses
@@ -302,6 +303,16 @@ class SidecarMeta(BaseModel):
     chapter_count: int = Field(..., ge=0)
     category: AudioCategory
 
+    @model_validator(mode="before")
+    @classmethod
+    def _surface_extras(cls, data: Any) -> Any:
+        return strip_and_warn(
+            data,
+            declared=set(cls.model_fields),
+            dead=set(),
+            model_name="SidecarMeta",
+        )
+
 
 class ChapterEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -313,6 +324,16 @@ class ChapterEntry(BaseModel):
     bitrate_mode: ChapterBitrateMode | None = None
     max_linear_seek_err_ms: int | None = Field(default=None, ge=0)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _surface_extras(cls, data: Any) -> Any:
+        return strip_and_warn(
+            data,
+            declared=set(cls.model_fields),
+            dead=set(),
+            model_name="ChapterEntry",
+        )
+
 
 class AudioManifestSidecar(BaseModel):
     """Schema for ``<bucket>/catalog/audio_manifest/<slug>.json``.
@@ -321,6 +342,11 @@ class AudioManifestSidecar(BaseModel):
     bitrate) when probed. Keys in ``chapters`` are stringified surah numbers
     (``"1"``–``"114"``) for ``by_surah``, or ``"<surah>:<ayah>"`` for
     ``by_ayah``.
+
+    Extras handling: ``extra="forbid"`` + ``strip_and_warn`` pre-validator
+    (consistent with the other bucket artefacts). ``DEAD_FIELDS`` is empty —
+    no known-legacy keys yet — so any unknown top-level field surfaces a
+    WARNING and is stripped rather than crashing the read.
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -329,6 +355,23 @@ class AudioManifestSidecar(BaseModel):
     slug: str
     meta: SidecarMeta = Field(alias="_meta")
     chapters: dict[str, ChapterEntry] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _surface_extras(cls, data: Any) -> Any:
+        # ``_meta`` alias is the only non-Python field name; preserve it
+        # before stripping unknowns (alias resolution runs *after* this
+        # pre-validator, so ``_meta`` looks "unknown" to the declared set).
+        if not isinstance(data, dict):
+            return data
+        declared = set(cls.model_fields)
+        declared.add("_meta")  # JSON-side alias for `meta`
+        return strip_and_warn(
+            data,
+            declared=declared,
+            dead=set(),
+            model_name="AudioManifestSidecar",
+        )
 
     @field_validator("slug")
     @classmethod
