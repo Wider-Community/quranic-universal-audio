@@ -18,6 +18,13 @@ from __future__ import annotations
 
 from flask import Blueprint, Response, jsonify, request
 
+from qua_shared.schemas import (
+    AdminViewReciter,
+    BucketCounts,
+    ErrorEnvelope,
+    PublicReciter,
+    PublicReciterPage,
+)
 from services import permissions
 from services import public_activity as public_activity_service
 from services import public_state as public_state_service
@@ -45,6 +52,17 @@ _VALID_BUCKETS = {
 _VALID_SORTS = {"recent", "alphabetical", "deliveries"}
 
 
+def _wire(model) -> dict:
+    """Serialize a wire model to the exact JSON the route emits.
+
+    ``exclude_unset`` keeps the present-with-null fields the producer sets
+    explicitly (``state_since`` / ``next_cursor`` / ``country`` / …) while
+    dropping the modal-only delivery keys (``bucket_dates`` / ``ts_refresh_dates``)
+    on the cached list path, where the producer never sets them.
+    """
+    return model.model_dump(mode="json", by_alias=True, exclude_unset=True)
+
+
 def _with_cache(payload, cache: str):
     """Attach a Cache-Control header to a jsonify() response."""
     resp: Response = jsonify(payload)
@@ -56,7 +74,8 @@ def _with_cache(payload, cache: str):
 @require_capability("view.catalog")
 def stats(user):
     """Counts per public bucket. Mutually exclusive at the reciter level."""
-    return _with_cache(public_state_service.stats(), _LIST_CACHE)
+    counts = BucketCounts.model_validate(public_state_service.stats())
+    return _with_cache(counts.model_dump(), _LIST_CACHE)
 
 
 @public_bp.route("/activity")
@@ -119,18 +138,21 @@ def reciter_detail(user, reciter_id: str):
     if is_admin:
         admin_payload = public_state_service.admin_view_reciter(reciter_id)
         if admin_payload is None:
-            return jsonify({"error": "reciter not found"}), 404
-        resp = jsonify(admin_payload)
+            return jsonify(
+                ErrorEnvelope(error="reciter not found").model_dump(exclude_none=True)
+            ), 404
+        admin_model = AdminViewReciter.model_validate(admin_payload)
+        resp = jsonify(_wire(admin_model))
         resp.headers["Cache-Control"] = "no-store"  # admin view varies by caller
         return resp
 
     public = public_state_service.detail(reciter_id)
     if public is None:
-        return jsonify({"error": "reciter not found"}), 404
+        return jsonify(ErrorEnvelope(error="reciter not found").model_dump(exclude_none=True)), 404
     # no-store: the detail payload folds in per-delivery lifecycle state
     # (status, which combos are discarded) that changes on claim/transition;
     # a client max-age made the detail modal stale for up to a minute.
-    return _with_cache(public, "no-store")
+    return _with_cache(_wire(PublicReciter.model_validate(public)), "no-store")
 
 
 @public_bp.route("/reciters")
@@ -150,33 +172,41 @@ def reciters(user):
     invalid = buckets - _VALID_BUCKETS
     if invalid:
         return jsonify(
-            {
-                "error": f"invalid bucket(s): {sorted(invalid)!r}",
-            }
+            ErrorEnvelope(error=f"invalid bucket(s): {sorted(invalid)!r}").model_dump(
+                exclude_none=True
+            )
         ), 400
 
     search = (request.args.get("search") or "").strip()
     sort = (request.args.get("sort") or "recent").strip()
     if sort not in _VALID_SORTS:
         return jsonify(
-            {
-                "error": f"invalid sort: {sort!r}; must be one of {sorted(_VALID_SORTS)!r}",
-            }
+            ErrorEnvelope(
+                error=f"invalid sort: {sort!r}; must be one of {sorted(_VALID_SORTS)!r}"
+            ).model_dump(exclude_none=True)
         ), 400
 
     try:
         cursor = int(request.args.get("cursor") or 0)
     except ValueError:
-        return jsonify({"error": "cursor must be an integer"}), 400
+        return jsonify(
+            ErrorEnvelope(error="cursor must be an integer").model_dump(exclude_none=True)
+        ), 400
     if cursor < 0:
-        return jsonify({"error": "cursor must be >= 0"}), 400
+        return jsonify(
+            ErrorEnvelope(error="cursor must be >= 0").model_dump(exclude_none=True)
+        ), 400
 
     try:
         limit = int(request.args.get("limit") or 50)
     except ValueError:
-        return jsonify({"error": "limit must be an integer"}), 400
+        return jsonify(
+            ErrorEnvelope(error="limit must be an integer").model_dump(exclude_none=True)
+        ), 400
     if limit < 1 or limit > 500:
-        return jsonify({"error": "limit must be between 1 and 500"}), 400
+        return jsonify(
+            ErrorEnvelope(error="limit must be between 1 and 500").model_dump(exclude_none=True)
+        ), 400
 
     rows = public_state_service.all_public_reciters()
 
@@ -201,11 +231,11 @@ def reciters(user):
     page = rows[cursor : cursor + limit]
     next_cursor = cursor + limit if cursor + limit < total else None
 
-    return _with_cache(
+    page_model = PublicReciterPage.model_validate(
         {
             "reciters": page,
             "total": total,
             "next_cursor": next_cursor,
-        },
-        _LIST_CACHE,
+        }
     )
+    return _with_cache(_wire(page_model), _LIST_CACHE)

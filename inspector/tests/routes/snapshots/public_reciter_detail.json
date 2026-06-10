@@ -1,0 +1,50 @@
+{
+  "buckets": [
+    "published"
+  ],
+  "channels": [
+    "mp3quran"
+  ],
+  "chapter_count_total": 114,
+  "country": null,
+  "coverage_kind": "full",
+  "deliveries": [
+    {
+      "audio_category": "by_surah",
+      "bitrate_kbps_nominal": null,
+      "bitrate_mode": "unknown",
+      "bucket": "published",
+      "bucket_dates": {},
+      "channel": "mp3quran",
+      "channel_name": "MP3 Quran",
+      "chapter_count": 114,
+      "coverage_kind": "full",
+      "recording_context": null,
+      "recording_year": null,
+      "riwayah": "hafs_an_asim",
+      "slug": "husary_qdc",
+      "source": "mp3quran",
+      "source_url": null,
+      "state_since": "2026-05-12T00:00:00+00:00",
+      "style": "murattal",
+      "total_duration_sec": null,
+      "ts_refresh_dates": []
+    }
+  ],
+  "deliveries_count": 1,
+  "last_activity": "2026-05-12T00:00:00+00:00",
+  "name": "Husary",
+  "name_ar": "الحصري",
+  "primary_bucket": "published",
+  "reciter_id": "husary",
+  "recording_contexts": [],
+  "riwayat": [
+    "hafs_an_asim"
+  ],
+  "sources": [
+    "mp3quran"
+  ],
+  "styles": [
+    "murattal"
+  ]
+}

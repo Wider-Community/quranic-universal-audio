@@ -24,6 +24,13 @@ from constants import (
 from constants import (
     STANDALONE_WORDS as _STANDALONE_WORDS,
 )
+from qua_shared.schemas.wire._envelopes import ErrorEnvelope
+from qua_shared.schemas.wire.seg import (
+    SegAllResponse,
+    SegConfigResponse,
+    SegDataResponse,
+    SegRecitersResponse,
+)
 from services import cache
 from services import state as state_service
 from services.audio_meta import chapter_meta, vbr_chapters_for_reciter
@@ -42,28 +49,31 @@ from utils.json_response import orjson_cached_response, orjson_response
 from utils.references import chapter_from_ref
 from utils.uuid7 import uuid7
 
+_DUMP = {"mode": "json", "exclude_none": True, "by_alias": True}
+
 seg_data_bp = Blueprint("seg_data", __name__, url_prefix="/api/seg")
 
 
 @seg_data_bp.route("/config")
 def seg_config():
     """Return display configuration for Segments tab."""
+    model = SegConfigResponse(
+        seg_font_size=SEG_FONT_SIZE,
+        seg_word_spacing=SEG_WORD_SPACING,
+        seg_scroll_anim_mode=SEG_SCROLL_ANIM_MODE,
+        trim_pad_left=TRIM_PAD_LEFT,
+        trim_pad_right=TRIM_PAD_RIGHT,
+        trim_dim_alpha=TRIM_DIM_ALPHA,
+        low_conf_default_threshold=LOW_CONF_DEFAULT_THRESHOLD,
+        validation_categories=list(ALL_CATEGORIES),
+        muqattaat_verses=sorted([tuple(t) for t in _MUQATTAAT_VERSES]),
+        qalqala_letters=sorted(_QALQALA_LETTERS),
+        standalone_refs=sorted([tuple(t) for t in _STANDALONE_REFS]),
+        standalone_words=sorted(_STANDALONE_WORDS),
+        accordion_context=ACCORDION_CONTEXT,
+    )
     return orjson_response(
-        {
-            "seg_font_size": SEG_FONT_SIZE,
-            "seg_word_spacing": SEG_WORD_SPACING,
-            "seg_scroll_anim_mode": SEG_SCROLL_ANIM_MODE,
-            "trim_pad_left": TRIM_PAD_LEFT,
-            "trim_pad_right": TRIM_PAD_RIGHT,
-            "trim_dim_alpha": TRIM_DIM_ALPHA,
-            "low_conf_default_threshold": LOW_CONF_DEFAULT_THRESHOLD,
-            "validation_categories": list(ALL_CATEGORIES),
-            "muqattaat_verses": sorted([list(t) for t in _MUQATTAAT_VERSES]),
-            "qalqala_letters": sorted(_QALQALA_LETTERS),
-            "standalone_refs": sorted([list(t) for t in _STANDALONE_REFS]),
-            "standalone_words": sorted(_STANDALONE_WORDS),
-            "accordion_context": ACCORDION_CONTEXT,
-        },
+        model.model_dump(**_DUMP),
         # Static config keyed off process restart — minute-long client cache
         # is safe (changing a constant requires a restart anyway).
         headers={"Cache-Control": "private, max-age=60"},
@@ -84,21 +94,23 @@ def seg_reciters():
     by_slug = {
         d.slug: (d.source, d.audio_category.value) for d in catalog_service.snapshot().deliveries
     }
-    result = [
-        {
-            "slug": row.slug,
-            "name": slug_to_name(row.slug),
-            "audio_source": by_slug.get(row.slug, ("", ""))[0],
-            "audio_category": by_slug.get(row.slug, ("", ""))[1],
-            "state": row.state.value,
-            "visibility": row.visibility.value,
-        }
-        for row in sorted(state_service.all_rows(), key=lambda r: r.slug)
-    ]
+    model = SegRecitersResponse(
+        [
+            {
+                "slug": row.slug,
+                "name": slug_to_name(row.slug),
+                "audio_source": by_slug.get(row.slug, ("", ""))[0],
+                "audio_category": by_slug.get(row.slug, ("", ""))[1],
+                "state": row.state.value,
+                "visibility": row.visibility.value,
+            }
+            for row in sorted(state_service.all_rows(), key=lambda r: r.slug)
+        ]
+    )
     # no-store: this list carries live lifecycle state (state/visibility per
     # row) that changes on claim/release/transition; a client max-age made the
     # Segments reciter list + picker stale for up to 30s after an action.
-    return orjson_response(result, headers={"Cache-Control": "no-store"})
+    return orjson_response(model.model_dump(**_DUMP), headers={"Cache-Control": "no-store"})
 
 
 @seg_data_bp.route("/chapters/<reciter>")
@@ -106,7 +118,7 @@ def seg_chapters(reciter):
     """Return list of chapter numbers available for a reciter."""
     entries = load_detailed(reciter)
     if not entries:
-        return jsonify({"error": "Reciter not found"}), 404
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     chapters = sorted(set(chapter_from_ref(e["ref"]) for e in entries))
     return jsonify(chapters)
 
@@ -122,8 +134,9 @@ def seg_data(reciter, chapter):
     verse_filter = request.args.get("verse")
     result = get_chapter_data(reciter, chapter, verse_filter)
     if result is None:
-        return jsonify({"error": "Chapter not found"}), 404
-    return orjson_cached_response(result)
+        return jsonify(ErrorEnvelope(error="Chapter not found").model_dump(exclude_none=True)), 404
+    model = SegDataResponse.model_validate(result)
+    return orjson_cached_response(model.model_dump(**_DUMP))
 
 
 @seg_data_bp.route("/auto-split/<reciter>")
@@ -156,7 +169,7 @@ def seg_all(reciter):
     """
     entries = load_detailed(reciter)
     if not entries:
-        return jsonify({"error": "Reciter not found"}), 404
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
 
     # Chapter audio URLs come from the bucket audio_manifest sidecar
     # (catalog/audio_manifest/<slug>.json) — the single source of truth
@@ -237,7 +250,7 @@ def seg_all(reciter):
     for ch_str, url in audio_by_chapter.items():
         if url in duration_ms_by_url:
             chapter_duration_ms_by_chapter[ch_str] = duration_ms_by_url[url]
-    return orjson_response(
+    model = SegAllResponse.model_validate(
         {
             "segments": segments,
             "audio_by_chapter": audio_by_chapter,
@@ -251,3 +264,11 @@ def seg_all(reciter):
             "min_silence_floor_ms": min_silence_floor_ms,
         }
     )
+    payload = model.model_dump(**_DUMP)
+    # `flag_view` already emits the redacted FE shape with intentional ``null``
+    # leaves (``at``/``author.*``); ``exclude_none`` would drop those keys, so we
+    # restore each flag verbatim from the pre-dump segment dicts.
+    for dumped_seg, src_seg in zip(payload["segments"], segments, strict=True):
+        if "flag" in src_seg:
+            dumped_seg["flag"] = src_seg["flag"]
+    return orjson_response(payload)

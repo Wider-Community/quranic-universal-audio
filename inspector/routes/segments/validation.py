@@ -2,6 +2,8 @@
 
 from flask import Blueprint, jsonify
 
+from qua_shared.schemas.wire._envelopes import ErrorEnvelope
+from qua_shared.schemas.wire.seg import SegValidateResponse
 from services import cache
 from services.history_query import load_edit_history
 from services.segments.history_tiers import generation_timeline
@@ -12,6 +14,31 @@ from utils.json_response import orjson_cached_response
 seg_val_bp = Blueprint("seg_val", __name__, url_prefix="/api/seg")
 
 
+def _serialize_validate(result: dict) -> dict:
+    """Project the validation result through ``SegValidateResponse``.
+
+    The model is the wire contract for ``/api/seg/validate``; dumping through it
+    pins the emitted key set. Two faithfulness details:
+
+    * ``exclude_unset`` (not ``exclude_none``) — chapter-level items carry an
+      explicit ``segment_uid: null`` that the wire emits and the FE relies on;
+      ``exclude_none`` would strip it. ``exclude_unset`` keeps every key the
+      service actually set (including explicit nulls) and drops only the
+      optionals the service never populated.
+    * ``stats`` is restored from the raw result verbatim because ``SegValStats``
+      types its duration/pause fields as ``float`` and ``model_dump`` would
+      coerce the integer zeros the service emits (``0`` → ``0.0``) — a byte
+      change on the wire. The block is an opaque numeric map, so passing it
+      through unchanged keeps the response identical.
+    """
+    dumped = SegValidateResponse.model_validate(result).model_dump(
+        mode="json", exclude_unset=True, by_alias=True
+    )
+    if "stats" in result:
+        dumped["stats"] = result["stats"]
+    return dumped
+
+
 @seg_val_bp.route("/validate/<reciter>")
 def seg_validate(reciter):
     """Validate all chapters for a reciter (cached; invalidated on save)."""
@@ -20,9 +47,10 @@ def seg_validate(reciter):
         return orjson_cached_response(cached)
     result = validate_reciter_segments(reciter)
     if result is None:
-        return jsonify({"error": "Reciter not found"}), 404
-    cache.set_seg_validate_cache(reciter, result)
-    return orjson_cached_response(result)
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
+    payload = _serialize_validate(result)
+    cache.set_seg_validate_cache(reciter, payload)
+    return orjson_cached_response(payload)
 
 
 @seg_val_bp.route("/stats/<reciter>")
@@ -33,7 +61,7 @@ def seg_stats(reciter):
         return orjson_cached_response(cached)
     result = compute_stats(reciter)
     if result is None:
-        return jsonify({"error": "Reciter not found"}), 404
+        return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     cache.set_seg_stats_cache(reciter, result)
     return orjson_cached_response(result)
 

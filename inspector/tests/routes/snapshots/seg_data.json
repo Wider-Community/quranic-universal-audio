@@ -1,0 +1,61 @@
+{
+  "audio_url": "",
+  "chapter_bitrate_kbps": {},
+  "reciter_vbr_chapters": [],
+  "segments": [
+    {
+      "audio_url": "",
+      "confidence": 1.0,
+      "entry_idx": 0,
+      "index": 0,
+      "matched_ref": "112:1:1-112:1:4",
+      "time_end": 7700,
+      "time_start": 4700
+    },
+    {
+      "audio_url": "",
+      "confidence": 1.0,
+      "entry_idx": 0,
+      "index": 1,
+      "matched_ref": "112:2:1-112:2:2",
+      "time_end": 10460,
+      "time_start": 8020
+    },
+    {
+      "audio_url": "",
+      "confidence": 0.65,
+      "entry_idx": 0,
+      "index": 2,
+      "matched_ref": "112:3:1-112:3:4",
+      "time_end": 13900,
+      "time_start": 10680
+    },
+    {
+      "audio_url": "",
+      "confidence": 1.0,
+      "entry_idx": 0,
+      "index": 3,
+      "matched_ref": "112:4:1-112:4:5",
+      "time_end": 18480,
+      "time_start": 14100
+    }
+  ],
+  "summary": {
+    "avg_segment_ms": 3260,
+    "avg_silence_ms": 567,
+    "below_60": 0,
+    "below_80": 1,
+    "conf_max": 1.0,
+    "conf_mean": 0.9125,
+    "conf_median": 1.0,
+    "conf_min": 0.65,
+    "failed_segments": 0,
+    "issue_indices": [],
+    "matched_segments": 4,
+    "missing_verses": [],
+    "total_segments": 4,
+    "total_silence_ms": 1700,
+    "total_speech_ms": 13040
+  },
+  "vbr": false
+}

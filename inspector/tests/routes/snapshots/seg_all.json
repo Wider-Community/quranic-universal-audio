@@ -1,0 +1,56 @@
+{
+  "audio_by_chapter": {},
+  "chapter_duration_ms_by_chapter": {},
+  "duration_ms_by_url": {},
+  "min_silence_floor_ms": 0,
+  "pad_left_ms": 160,
+  "pad_ms": 160,
+  "pad_right_ms": 160,
+  "reciter_vbr_chapters": [],
+  "segments": [
+    {
+      "chapter": 112,
+      "confidence": 1.0,
+      "entry_idx": 0,
+      "entry_ref": "112",
+      "index": 0,
+      "matched_ref": "112:1:1-112:1:4",
+      "segment_uid": "019d5c88-f55f-7ee0-81d1-d99f423e8dd5",
+      "time_end": 7700,
+      "time_start": 4700
+    },
+    {
+      "chapter": 112,
+      "confidence": 1.0,
+      "entry_idx": 0,
+      "entry_ref": "112",
+      "index": 1,
+      "matched_ref": "112:2:1-112:2:2",
+      "segment_uid": "019d5c88-f55f-7913-a019-4f2c462c8a3c",
+      "time_end": 10460,
+      "time_start": 8020
+    },
+    {
+      "chapter": 112,
+      "confidence": 0.65,
+      "entry_idx": 0,
+      "entry_ref": "112",
+      "index": 2,
+      "matched_ref": "112:3:1-112:3:4",
+      "segment_uid": "019d5c88-f55f-7e4b-b8c8-0ed347c1a56f",
+      "time_end": 13900,
+      "time_start": 10680
+    },
+    {
+      "chapter": 112,
+      "confidence": 1.0,
+      "entry_idx": 0,
+      "entry_ref": "112",
+      "index": 3,
+      "matched_ref": "112:4:1-112:4:5",
+      "segment_uid": "019d5c88-f55f-771b-8c2f-8c99456c8776",
+      "time_end": 18480,
+      "time_start": 14100
+    }
+  ]
+}

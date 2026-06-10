@@ -1,0 +1,106 @@
+{
+  "audio_bleeding": [],
+  "basmala_amin": [],
+  "boundary_adj": [],
+  "category_counts": {
+    "audio_bleeding": 0,
+    "basmala_amin": 0,
+    "boundary_adj": 0,
+    "cross_verse": 0,
+    "failed": 0,
+    "low_confidence": 1,
+    "low_confidence_v2": 0,
+    "missing_verses": 0,
+    "missing_words": 0,
+    "muqattaat": 0,
+    "qalqala": 4,
+    "repetitions": 0,
+    "structural_errors": 0
+  },
+  "cross_verse": [],
+  "errors": [],
+  "failed": [],
+  "low_confidence": [
+    {
+      "chapter": 112,
+      "classified_issues": [
+        "low_confidence",
+        "qalqala"
+      ],
+      "confidence": 0.65,
+      "ref": "112:3",
+      "seg_index": 2,
+      "segment_uid": "019d5c88-f55f-7e4b-b8c8-0ed347c1a56f"
+    }
+  ],
+  "low_confidence_v2": [],
+  "missing_verses": [],
+  "missing_words": [],
+  "muqattaat": [],
+  "qalqala": [
+    {
+      "chapter": 112,
+      "classified_issues": [
+        "qalqala"
+      ],
+      "end_of_verse": true,
+      "qalqala_letter": "د",
+      "ref": "112:1:1-112:1:4",
+      "seg_index": 0,
+      "segment_uid": "019d5c88-f55f-7ee0-81d1-d99f423e8dd5"
+    },
+    {
+      "chapter": 112,
+      "classified_issues": [
+        "qalqala"
+      ],
+      "end_of_verse": true,
+      "qalqala_letter": "د",
+      "ref": "112:2:1-112:2:2",
+      "seg_index": 1,
+      "segment_uid": "019d5c88-f55f-7913-a019-4f2c462c8a3c"
+    },
+    {
+      "chapter": 112,
+      "classified_issues": [
+        "low_confidence",
+        "qalqala"
+      ],
+      "end_of_verse": true,
+      "qalqala_letter": "د",
+      "ref": "112:3:1-112:3:4",
+      "seg_index": 2,
+      "segment_uid": "019d5c88-f55f-7e4b-b8c8-0ed347c1a56f"
+    },
+    {
+      "chapter": 112,
+      "classified_issues": [
+        "qalqala"
+      ],
+      "end_of_verse": true,
+      "qalqala_letter": "د",
+      "ref": "112:4:1-112:4:5",
+      "seg_index": 3,
+      "segment_uid": "019d5c88-f55f-771b-8c2f-8c99456c8776"
+    }
+  ],
+  "repetitions": [],
+  "split_group_index": {},
+  "stats": {
+    "cross_verse": 0,
+    "max_segs": 1,
+    "multi_segs": 0,
+    "multi_verses": 0,
+    "pause_dur_max": 0,
+    "pause_dur_mean": 0,
+    "pause_dur_med": 0,
+    "pause_dur_min": 0,
+    "seg_dur_max": 4380,
+    "seg_dur_mean": 3260,
+    "seg_dur_med": 3110.0,
+    "seg_dur_min": 2440,
+    "segments": 4,
+    "single": 4
+  },
+  "structural_errors": []
+}
