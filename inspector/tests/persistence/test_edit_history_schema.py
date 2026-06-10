@@ -1,25 +1,27 @@
-"""Round-trip tests for the shared ``EditHistoryBatch`` / ``EditOperation``
-schema — focused on the dead-field fix (TASK A of the schema-unify refactor).
+"""Round-trip + rejection tests for the shared ``EditHistoryBatch`` /
+``EditOperation`` schema under pure ``extra="forbid"``.
 
 Two fields that the live save flow WRITES and the undo / resolved-by-edit
-paths READ — ``patch`` and ``op_context_category`` — used to sit in
-``_OP_DEAD_FIELDS`` and were silently stripped on every ``model_validate``.
-They are now promoted to declared fields (``patch`` typed as ``EditOpPatch``)
-and must survive a round-trip.
+paths READ — ``patch`` and ``op_context_category`` — are declared fields
+(``patch`` typed as ``EditOpPatch``) and must survive a round-trip.
 
-Conversely ``save_mode`` is a wire-only presentation hint: the save flow no
-longer persists it, but legacy batches that carry it still read (it stays in
-``_BATCH_DEAD_FIELDS``), and the History-panel wire shape re-derives it.
+There is no longer a legacy-tolerance layer: ``save_mode`` (a wire-only
+presentation hint the save flow no longer persists), the file-hash chain,
+and the genuinely-dead op fields (``command`` / ``snapshots`` / ``type`` / …)
+are all REJECTED on read — any unexpected key raises ``ValidationError``.
+The History-panel wire shape still re-derives ``save_mode`` for display.
 
-The genuinely-dead op fields (``command`` / ``snapshots`` / ``type`` / …)
-still strip at INFO via the ``qua_shared.schemas._extras`` logger.
+The committed ``112-ikhlas.edit_history.jsonl`` fixture deliberately carries
+legacy keys; it is read raw by the save-flow tests and used here only as a
+rejection case.
 """
 
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
+
+import pytest
 
 from qua_shared.schemas import EditOperation, EditOpPatch, parse_edit_history_line
 
@@ -32,25 +34,51 @@ def _fixture_lines() -> list[str]:
     return [ln for ln in _FIXTURE.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
+def _clean_batch_line() -> str:
+    """A clean batch line in the canonical live-save shape — one op carrying a
+    real ``patch`` + ``op_context_category``, no retired keys."""
+    return json.dumps(
+        {
+            "schema_version": 1,
+            "batch_id": "clean-batch-1",
+            "chapter": 112,
+            "saved_at_utc": "2026-06-10T00:00:00.000Z",
+            "operations": [
+                {
+                    "op_id": "clean-op-1",
+                    "op_type": "trim_segment",
+                    "op_context_category": "boundary_adj",
+                    "patch": {
+                        "before": [
+                            {
+                                "segment_uid": "019d5c88-f55f-7ee0-81d1-d99f423e8dd5",
+                                "time_start": 0,
+                                "time_end": 1000,
+                                "matched_ref": "112:1",
+                            }
+                        ],
+                        "after": [],
+                        "removedIds": [],
+                        "insertedIds": [],
+                        "affectedChapterIds": [112],
+                    },
+                }
+            ],
+        }
+    )
+
+
 # -- (a) live fields survive ------------------------------------------------
 
 
-def test_committed_fixture_patch_and_context_survive_round_trip():
-    """The committed batch carries a real ``patch`` + ``op_context_category``
-    on its op; both must survive ``parse_edit_history_line`` → ``model_dump``.
-
-    The fixture op also carries ``op_context_category`` only implicitly — add
-    it here by parsing a synthesized batch that mirrors the live save shape so
-    the assertion exercises the promoted field directly.
-    """
-    [line] = _fixture_lines()
-    batch = parse_edit_history_line(line)
+def test_clean_batch_patch_and_context_survive_round_trip():
+    """A clean batch carrying a real ``patch`` + ``op_context_category`` on its
+    op: both must survive ``parse_edit_history_line`` → ``model_dump`` intact."""
+    batch = parse_edit_history_line(_clean_batch_line())
     assert batch is not None
     assert len(batch.operations) == 1
     op = batch.operations[0]
 
-    # The fixture op carries a real (non-empty) patch — it must be typed and
-    # round-trip with its payload intact, not stripped.
     assert isinstance(op.patch, EditOpPatch)
     assert op.patch.before and op.patch.before[0]["segment_uid"] == (
         "019d5c88-f55f-7ee0-81d1-d99f423e8dd5"
@@ -59,11 +87,21 @@ def test_committed_fixture_patch_and_context_survive_round_trip():
 
     dumped = batch.model_dump(exclude_none=True)
     dumped_op = dumped["operations"][0]
-    assert "patch" in dumped_op, "patch was stripped on round-trip"
+    assert "patch" in dumped_op, "patch was dropped on round-trip"
     assert dumped_op["patch"]["affectedChapterIds"] == [112]
     assert dumped_op["patch"]["before"][0]["segment_uid"] == (
         "019d5c88-f55f-7ee0-81d1-d99f423e8dd5"
     )
+
+
+def test_committed_legacy_fixture_rejected():
+    """The committed fixture carries retired batch + op keys (``save_mode``,
+    ``file_hash_after``, ``type``, ``applied_at_utc``, …). Under pure
+    ``extra="forbid"`` ``parse_edit_history_line`` now raises ``ValidationError``
+    instead of stripping them."""
+    [line] = _fixture_lines()
+    with pytest.raises(ValueError):
+        parse_edit_history_line(line)
 
 
 def test_op_context_category_survives_round_trip():
@@ -89,12 +127,8 @@ def test_op_context_category_survives_round_trip():
 
 def test_fresh_batch_model_dump_has_no_save_mode():
     """A batch built the way the save flow builds it (no ``save_mode`` key)
-    must NOT gain one through the schema — it's a wire-only hint.
-
-    Also asserts a legacy batch that DOES carry ``save_mode`` still reads
-    (the key is tolerated + stripped), proving the field stays in
-    ``_BATCH_DEAD_FIELDS``.
-    """
+    must NOT gain one through the schema — it's a wire-only hint, not a
+    persisted field."""
     fresh = {
         "schema_version": 1,
         "batch_id": "fresh-batch-1",
@@ -121,19 +155,14 @@ def test_fresh_batch_model_dump_has_no_save_mode():
     assert "save_mode" not in dumped, "save_mode leaked into persisted batch shape"
 
 
-def test_legacy_batch_with_save_mode_still_reads_and_strips_it(caplog):
-    """Legacy on-disk batches carry ``save_mode`` — it must parse (stripped)
-    and never reappear in the emitted shape."""
-    caplog.set_level(logging.INFO, logger="qua_shared.schemas._extras")
-    [line] = _fixture_lines()
-    obj = json.loads(line)
-    assert obj.get("save_mode") == "full_replace"  # the fixture carries it
-
-    batch = parse_edit_history_line(line)
-    assert batch is not None
-    assert "save_mode" not in batch.model_dump(exclude_none=True)
-    msgs = " ".join(r.getMessage() for r in caplog.records)
-    assert "save_mode" in msgs  # stripped + logged at INFO (legacy class)
+def test_batch_with_save_mode_rejected():
+    """``save_mode`` is a wire-only hint, never a persisted batch field — a
+    batch carrying it is REJECTED under pure ``extra="forbid"`` rather than
+    parsed-and-stripped."""
+    obj = json.loads(_clean_batch_line())
+    obj["save_mode"] = "full_replace"
+    with pytest.raises(ValueError):
+        parse_edit_history_line(json.dumps(obj))
 
 
 # -- (c) genesis lines → None ----------------------------------------------
@@ -149,47 +178,42 @@ def test_genesis_lines_parse_to_none():
     assert parse_edit_history_line("   ") is None
 
 
-# -- (d) genuinely-dead op fields still strip at INFO -----------------------
+# -- (d) genuinely-dead op fields are rejected ------------------------------
 
 
-def test_genuinely_dead_op_fields_still_strip_at_info(caplog):
-    """``command`` / ``snapshots`` / ``type`` etc. remain in
-    ``_OP_DEAD_FIELDS`` and strip at INFO — they were NOT promoted."""
-    caplog.set_level(logging.INFO, logger="qua_shared.schemas._extras")
+def test_dead_op_field_rejected():
+    """A retired op field (``type`` / ``command`` / ``snapshots`` /
+    ``merge_direction`` / ``applied_at_utc``) on its own raises under pure
+    ``extra="forbid"`` — none of them are tolerated anymore."""
+    for dead in ("type", "command", "snapshots", "merge_direction", "applied_at_utc"):
+        with pytest.raises(ValueError):
+            EditOperation.model_validate(
+                {
+                    "op_id": "dead-op-1",
+                    "op_type": "trim_segment",
+                    "op_context_category": "boundary_adj",
+                    "targets_before": [],
+                    "targets_after": [],
+                    dead: "x",
+                }
+            )
+
+
+def test_clean_op_validates_with_promoted_fields():
+    """A clean op (no retired keys) validates and keeps its live promoted
+    fields — ``op_context_category`` present, ``patch`` defaulting to None."""
     op = EditOperation.model_validate(
         {
-            "op_id": "dead-op-1",
+            "op_id": "clean-op-2",
             "op_type": "trim_segment",
-            "type": "trim",  # v0 alias — dead
-            "command": {"type": "trim"},  # v1 envelope — dead
-            "snapshots": {"before": {}, "after": {}},  # singular form — dead
-            "merge_direction": "prev",  # dead
-            "applied_at_utc": "2026-01-01T00:00:00Z",  # dead
-            "op_context_category": "boundary_adj",  # LIVE — must survive
+            "op_context_category": "boundary_adj",
             "targets_before": [],
             "targets_after": [],
         }
     )
-    # Dead fields gone — no typed attribute, no extra.
-    for dead in ("type", "command", "snapshots", "merge_direction", "applied_at_utc"):
-        assert not hasattr(op, dead)
-    assert (op.model_extra or {}) == {}
-    # The live promoted field survived alongside the strips.
     assert op.op_context_category == "boundary_adj"
-    assert isinstance(op.patch, type(None))  # absent in input → default None
-
-    msgs = " ".join(r.getMessage() for r in caplog.records)
-    for dead in ("command", "snapshots", "type", "merge_direction", "applied_at_utc"):
-        assert dead in msgs
-    # The promoted fields must NOT show up in the stripped-field log.
-    assert "op_context_category" not in msgs
-    # Confirm the INFO (legacy-class) severity, not WARNING (unknown).
-    info_records = [
-        r
-        for r in caplog.records
-        if r.name == "qua_shared.schemas._extras" and r.levelno == logging.INFO
-    ]
-    assert info_records, "expected an INFO-level legacy-strip log record"
+    assert op.patch is None
+    assert (op.model_extra or {}) == {}
 
 
 # -- WIRE: _load_edit_history_from_records derives save_mode + is_revert -----

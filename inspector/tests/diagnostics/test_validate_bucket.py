@@ -15,7 +15,8 @@ Scenarios:
   - a clean bucket (two reciters + one valid sidecar) -> exit 0;
   - a seeded bad sidecar (missing required ``_meta``) -> exit non-zero;
   - a seeded bad reciter artefact (corrupt detailed.json) -> exit non-zero;
-  - ``--strict`` flips a legacy-strip-free / warning-bearing bucket to fail.
+  - an unknown field in a reciter artefact -> hard error under pure
+    ``extra="forbid"`` (fails both strict and non-strict).
 """
 
 from __future__ import annotations
@@ -196,10 +197,10 @@ def test_corrupt_reciter_artefact_fails_with_nonzero_exit(bucket_backend, load_f
     assert bad.error_details
 
 
-def test_strict_flag_fails_on_unknown_field_warnings(bucket_backend, load_fixture):
-    # Inject an unrecognised top-level key into a reciter's detailed.json so the
-    # schema extras pre-validator emits a WARNING (unknown field), not an INFO
-    # legacy strip. This must pass non-strict but fail under --strict.
+def test_unknown_field_is_a_hard_error(bucket_backend, load_fixture):
+    # Inject an unrecognised top-level key into a reciter's detailed.json. Under
+    # pure extra="forbid" the schema raises ValidationError, so the auditor marks
+    # the file as an error — a hard error that fails both strict and non-strict.
     clean = _clean_detailed(load_fixture("112-ikhlas"))
     clean["totally_unknown_top_level_key"] = {"x": 1}
     _build_reciter_dir(bucket_backend, SLUG_A, clean)
@@ -207,7 +208,6 @@ def test_strict_flag_fails_on_unknown_field_warnings(bucket_backend, load_fixtur
 
     report = validate_bucket(bucket_backend, "test-bucket", check_catalog=True)
 
-    assert report.n_hard_errors == 0
-    assert report.n_warnings >= 1
-    assert report.exit_code(strict=False) == 0
+    assert report.n_hard_errors >= 1
+    assert report.exit_code(strict=False) == 1
     assert report.exit_code(strict=True) == 1

@@ -6,14 +6,11 @@ emitted by the offline extraction pipeline (currently the set of chapters
 whose Basmala was stripped) so Inspector doesn't re-derive them at runtime.
 
 These assert the canonical shape round-trips byte/shape-equal, the required
-``generated_at`` provenance, and that ``extra="forbid"`` + the
-``strip_and_warn`` pre-validator surface unknown keys with a WARNING + strip
-them rather than crashing the read or absorbing them as silent extras.
+``generated_at`` provenance, and that the artefact is pure ``extra="forbid"``
+— any unknown key raises ``ValidationError`` rather than being stripped.
 """
 
 from __future__ import annotations
-
-import logging
 
 import pytest
 
@@ -57,21 +54,16 @@ def test_deleted_basmala_defaults_empty():
     assert m.model_dump()["deleted_basmala_chapters"] == []
 
 
-# -- extra="forbid" / strip_and_warn policy ----------------------------
+# -- pure extra="forbid" policy ----------------------------------------
 
 
-def test_unknown_key_stripped_and_warned(caplog):
-    """An unknown key is stripped + surfaces a WARNING (not absorbed as an
-    extra, not a crash) — the lean-artefact tolerance policy."""
-    caplog.set_level(logging.WARNING, logger="qua_shared.schemas._extras")
+def test_unknown_key_rejected():
+    """An unknown key raises ``ValidationError`` under pure ``extra="forbid"``
+    — no silent strip, no absorbed extra, no crash-on-read tolerance."""
     raw = _canonical_meta()
     raw["bogus_field"] = 123
-    m = PipelineMeta.model_validate(raw)
-    assert (m.model_extra or {}) == {}
-    assert not hasattr(m, "bogus_field")
-    msgs = " ".join(r.getMessage() for r in caplog.records)
-    assert "bogus_field" in msgs
-    assert "UNRECOGNIZED" in msgs
+    with pytest.raises(ValueError):
+        PipelineMeta.model_validate(raw)
 
 
 # -- Round-trip emission ------------------------------------------------

@@ -6,16 +6,12 @@ provenance block plus a ``chapters`` map of stringified surah keys to
 per-chapter URL/probe records.
 
 These assert the canonical on-disk shape round-trips byte/shape-equal via
-``model_dump(by_alias=True)`` (the ``_meta`` alias must survive), that
-``extra="forbid"`` + the ``strip_and_warn`` pre-validator keep the artefact's
-tolerance policy consistent with the other bucket schemas (unknown keys
-stripped + warned, never crashing the read), and that a seeded legacy key
-strips at INFO when promoted into ``DEAD_FIELDS``.
+``model_dump(by_alias=True)`` (the ``_meta`` alias must survive) and that the
+artefact is pure ``extra="forbid"`` — any unexpected top-level key raises
+``ValidationError`` rather than being stripped.
 """
 
 from __future__ import annotations
-
-import logging
 
 import pytest
 
@@ -93,54 +89,16 @@ def test_invalid_slug_fails():
         AudioManifestSidecar.model_validate(raw)
 
 
-# -- extra="forbid" / strip_and_warn policy ----------------------------
+# -- pure extra="forbid" policy ----------------------------------------
 
 
-def test_unknown_top_level_key_stripped_and_warned(caplog):
-    """An unknown top-level key is stripped (not absorbed as an extra) and
-    surfaces a WARNING — the artefact's tolerance policy now matches its
-    sibling bucket schemas instead of crashing the read."""
-    caplog.set_level(logging.WARNING, logger="qua_shared.schemas._extras")
+def test_unknown_top_level_key_rejected():
+    """An unknown top-level key raises ``ValidationError`` under pure
+    ``extra="forbid"`` — no silent strip, no absorbed extra."""
     raw = _canonical_sidecar()
     raw["unexpected_bloat"] = {"junk": True}
-    m = AudioManifestSidecar.model_validate(raw)
-    assert (m.model_extra or {}) == {}
-    assert not hasattr(m, "unexpected_bloat")
-    msgs = " ".join(r.getMessage() for r in caplog.records)
-    assert "unexpected_bloat" in msgs
-    assert "UNRECOGNIZED" in msgs
-
-
-def test_seeded_legacy_key_strips_at_info(caplog):
-    """``AudioManifestSidecar.DEAD_FIELDS`` starts empty, so the only way to
-    exercise the legacy (INFO) branch of the artefact's pre-validator is to
-    invoke ``strip_and_warn`` the same way the model does — declared set +
-    the ``_meta`` alias — with a seeded dead key. This certifies the model
-    routes a promoted legacy field to INFO, not WARNING, the day one is added.
-    """
-    from qua_shared.schemas._extras import strip_and_warn
-
-    declared = set(AudioManifestSidecar.model_fields)
-    declared.add("_meta")
-
-    caplog.set_level(logging.INFO, logger="qua_shared.schemas._extras")
-    raw = _canonical_sidecar()
-    raw["legacy_generated_at"] = "2026-01-01T00:00:00Z"
-    cleaned = strip_and_warn(
-        raw,
-        declared=declared,
-        dead={"legacy_generated_at"},
-        model_name="AudioManifestSidecar",
-    )
-    assert "legacy_generated_at" not in cleaned
-    records = [r for r in caplog.records if "legacy_generated_at" in r.getMessage()]
-    assert records, "expected a log mentioning the seeded legacy key"
-    assert records[0].levelno == logging.INFO
-    assert "legacy" in records[0].getMessage().lower()
-
-    # The cleaned dict still parses into a valid model (the seeded key gone).
-    m = AudioManifestSidecar.model_validate(cleaned)
-    assert not hasattr(m, "legacy_generated_at")
+    with pytest.raises(ValueError):
+        AudioManifestSidecar.model_validate(raw)
 
 
 # -- Round-trip emission ------------------------------------------------

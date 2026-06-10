@@ -18,11 +18,10 @@ Migration #5 changes:
     The legacy ``peaks`` shape is **no longer accepted** — existing bucket
     records must be migrated via ``migrate_wip5_in_place.py``.
 
-Extras handling: ``extra="forbid"`` + ``strip_and_warn`` pre-validator
-(legacy → INFO; unknown → WARNING). Legacy verbose-shape records carry
-``peaks: list[list[float]]`` *and* lack ``peaks_b64`` — those are still
-rejected (they need re-encoding via the migration script) because the
-pre-validator only strips bloat, not malformed records.
+Extras handling: pure ``extra="forbid"`` — any field not declared on the
+model raises ``ValidationError``. Prod data is clean (Phase 10); legacy
+verbose-shape records (``peaks: list[list[float]]`` without ``peaks_b64``)
+must be re-encoded via the migration script before this schema sees them.
 
 Authoritative spec: ``docs/reference/data-migrations.md`` §5.
 """
@@ -32,16 +31,6 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from .._extras import strip_and_warn
-
-_PEAKS_DEAD_FIELDS: set[str] = {
-    # Migration #5 — verbose peaks payload + redundant metadata
-    "peaks",
-    "batch_id",
-    "saved_at_utc",
-    "duration_ms",
-}
 
 
 class PeaksRecord(BaseModel):
@@ -74,16 +63,6 @@ class PeaksRecord(BaseModel):
     bps: int = Field(..., ge=1)
     peaks_b64: str = Field(..., min_length=1)
 
-    @model_validator(mode="before")
-    @classmethod
-    def _surface_extras(cls, data: Any) -> Any:
-        return strip_and_warn(
-            data,
-            declared=set(cls.model_fields),
-            dead=_PEAKS_DEAD_FIELDS,
-            model_name="PeaksRecord",
-        )
-
     @model_validator(mode="after")
     def _validate_shape(self) -> PeaksRecord:
         if self.end_ms <= self.start_ms:
@@ -94,10 +73,10 @@ class PeaksRecord(BaseModel):
 def parse_peaks_record(raw: dict[str, Any]) -> PeaksRecord:
     """Parse one ``edit_history_peaks.jsonl`` line dict.
 
-    Migration #5 dead fields (``peaks``, ``batch_id``, ``duration_ms``,
-    ``saved_at_utc``) are stripped with an INFO log; unknown extras log
-    WARNING. Records missing ``peaks_b64`` (legacy verbose-only shape)
-    still fail at the field-level validator — they need re-encoding via
-    the one-shot migration script first.
+    Pure ``extra="forbid"``: any unexpected field (e.g. the Migration #5
+    dead fields ``peaks`` / ``batch_id`` / ``duration_ms`` / ``saved_at_utc``)
+    raises ``ValidationError``. Records missing ``peaks_b64`` (legacy
+    verbose-only shape) need re-encoding via the one-shot migration script
+    first.
     """
     return PeaksRecord.model_validate(raw)

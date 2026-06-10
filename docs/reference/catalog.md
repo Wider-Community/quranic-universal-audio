@@ -198,7 +198,7 @@ Editable columns: `_DELIVERY_WRITABLE` (`repo_catalog.py`) covers riwayah/style/
 
 Chapter keys: `"1"`–`"114"` (by_surah) or `"<surah>:<ayah>"` (by_ayah). Per-chapter metric fields nullable until probed. `ChapterEntry` fields: `url` (required), `size_bytes`, `duration_sec`, `bitrate_kbps`, `bitrate_mode` (`cbr`/`vbr` per chapter), and `max_linear_seek_err_ms` (probe verdict evidence).
 
-`AudioManifestSidecar` (`qua_shared/schemas/bucket/catalog.py`) is a bucket artefact: `extra="forbid"` + a `strip_and_warn` pre-validator, so legacy sidecar fields are dropped with an INFO log and unknown fields raise a WARNING (writer-drift signal) on parse — the same external-file tolerance the bucket-validation harness surfaces.
+`AudioManifestSidecar` (`qua_shared/schemas/bucket/catalog.py`) is a bucket artefact with pure `extra="forbid"`: any unknown/legacy sidecar field raises `ValidationError` on parse (writer-drift signal), never silently stripped — the same external-file strictness the bucket-validation harness surfaces.
 
 **Checksum** (`_meta.checksum`): `sha256(normalized_urls_sorted.joined_by_newline)` at build time. Normalization: lowercase hostname, strip trailing slashes, drop fragment; query order + path case preserved (CDN-sensitive). Lives only in the sidecar; re-probe jobs compute + compare.
 

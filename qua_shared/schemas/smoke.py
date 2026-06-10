@@ -227,35 +227,41 @@ def smoke() -> int:
         )
         _round_trip("AuditRecord", rec)
 
-        # 6. EditHistoryBatch + v1 tolerance
+        # 6. EditHistoryBatch — canonical Migration #5 shape
         batch = EditHistoryBatch(
             batch_id="batch_001",
-            ts=_now(),
+            saved_at_utc="2026-05-12T14:23:11Z",
             actor=Actor(hf_user_id="12345", login_at_time="alice", role=Role.CONTRIBUTOR),
-            operations=[EditOperation(op_id="op_001", kind="trim", new_end=1.234)],
+            operations=[EditOperation(op_id="op_001", kind="trim")],
         )
         _round_trip("EditHistoryBatch", batch)
 
+        # Genesis records still parse to None (detected before validation).
         v1_genesis = '{"type": "genesis", "file_hash_after": "deadbeef"}'
         assert parse_edit_history_line(v1_genesis) is None
         print("ok  parse_edit_history_line skips v1 genesis")
 
+        # A non-genesis batch carrying a retired field now hard-fails under
+        # pure extra="forbid" — no silent strip.
         v1_batch_with_chain = json.dumps(
             {
                 "batch_id": "batch_legacy",
-                "ts": "2025-01-01T00:00:00Z",
+                "saved_at_utc": "2025-01-01T00:00:00Z",
                 "actor": {
                     "hf_user_id": "1",
                     "login_at_time": "old",
                     "role": "contributor",
                 },
                 "operations": [],
-                "file_hash_after": "deadbeef",  # should be silently dropped
+                "file_hash_after": "deadbeef",  # retired — must be rejected
             }
         )
-        parsed = parse_edit_history_line(v1_batch_with_chain)
-        assert parsed is not None and parsed.batch_id == "batch_legacy"
-        print("ok  parse_edit_history_line drops legacy file_hash_after")
+        try:
+            parse_edit_history_line(v1_batch_with_chain)
+        except Exception:
+            print("ok  parse_edit_history_line rejects retired file_hash_after")
+        else:
+            raise AssertionError("expected ValidationError on retired file_hash_after")
 
         # 7. PipelineMeta (extraction-time sidecar)
         pmeta = PipelineMeta(
@@ -264,9 +270,9 @@ def smoke() -> int:
         )
         _round_trip("PipelineMeta", pmeta)
 
-        # 8. DetailedSegment — dead-field stripper (matched_text / phonemes_asr
-        # were dropped in migration #5; the schema strips them on read so
-        # legacy snapshots embedded in edit_history.jsonl don't burn requests).
+        # 8. DetailedSegment — pure extra="forbid". The retired matched_text /
+        # phonemes_asr fields (dropped in migration #5) now hard-fail on read
+        # instead of being silently stripped; prod data is clean of them.
         legacy_raw = {
             "time_start": 0,
             "time_end": 1000,
@@ -274,11 +280,19 @@ def smoke() -> int:
             "matched_text": "legacy",
             "phonemes_asr": "legacy",
         }
-        stripped = DetailedSegment.model_validate(legacy_raw)
-        dumped = stripped.model_dump(exclude_none=True)
-        assert "matched_text" not in dumped, "matched_text leaked through schema"
-        assert "phonemes_asr" not in dumped, "phonemes_asr leaked through schema"
-        print("ok  DetailedSegment strips matched_text + phonemes_asr")
+        try:
+            DetailedSegment.model_validate(legacy_raw)
+        except Exception:
+            print("ok  DetailedSegment rejects retired matched_text + phonemes_asr")
+        else:
+            raise AssertionError("expected ValidationError on retired seg fields")
+
+        # A clean slim seg still validates + round-trips.
+        clean_seg = DetailedSegment.model_validate(
+            {"time_start": 0, "time_end": 1000, "matched_ref": "1:1:1-1:1:4"}
+        )
+        assert clean_seg.matched_ref == "1:1:1-1:1:4"
+        print("ok  DetailedSegment accepts clean slim seg")
 
         print("smoke: all checks passed")
         return 0

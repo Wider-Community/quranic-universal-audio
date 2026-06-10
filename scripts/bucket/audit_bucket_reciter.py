@@ -54,7 +54,8 @@ canonical workflow used to land cohorts 1, 2, and 4 (May 2026) is:
            [--include-audio]
 
 2. **Migrate** the three legacy JSON/JSONL artefacts in place. Drops
-   every key in the canonical schemas' ``DEAD_FIELDS`` sets; rounds
+   every now-dead legacy key so the artefact round-trips through the
+   canonical (pure ``extra="forbid"``) schemas; rounds
    float ms times; synthesises missing ``op_id`` via
    ``uuid5("legacy_op:{batch_id}:{idx}")``; drops the genesis record
    (both v0 ``type==genesis`` and v1 ``record_type==genesis``); re-encodes
@@ -113,7 +114,8 @@ Common legacy edge cases handled by the migrator:
     UUIDv5 backfill
   - v0 batch shape with ``save_mode`` + ``chapter`` and no ``actor``
     (nasser_al_qatami) → falls back to PIPELINE_ACTOR; ``save_mode`` is
-    in ``_BATCH_DEAD_FIELDS``
+    no longer persisted (the migrator drops it; the canonical batch
+    model now forbids it)
   - v1 pipeline genesis records (``record_type==genesis``) → dropped
     silently by ``parse_edit_history_line``
   - 184 MB plain ``peaks/<ch>.json`` × 114 → 2.5 MB ``.json.gz`` v3 slim
@@ -123,11 +125,14 @@ To onboard a NEW schema field cleanly without resurrecting the silent-
 allow regression:
 
   1. Add the field to the relevant model in ``qua_shared/schemas/``.
-  2. Run this audit on a representative slug. Any UNRECOGNIZED-field
-     warning means a writer is still emitting bloat — fix the writer.
-  3. If the field replaces a now-dead one, add the old name to that
-     model's ``DEAD_FIELDS`` set so legacy on-disk data continues
-     parsing (INFO log, not WARNING).
+  2. Run this audit on a representative slug. The bucket artefact models
+     are pure ``extra="forbid"`` — any unknown field raises a
+     ``ValidationError``, signalling a writer still emitting bloat (fix
+     the writer) or stale on-disk data (run a migration pass).
+  3. If the field replaces an old one, migrate the on-disk artefacts
+     (round-trip through the schemas, as in the workflow above) so
+     legacy data conforms — there are no per-model dead-field sets to
+     update; forbid means old keys must be gone, not tolerated.
   4. Run ``scripts/codegen/regen_fe_types.py`` so the frontend types
      stay in lockstep (CI's ``schema-codegen-check`` enforces this).
 """

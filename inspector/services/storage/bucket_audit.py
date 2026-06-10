@@ -16,9 +16,10 @@ file we expect to find there:
 * ``audio/<ch>.mp3``           -> existence + non-empty (3-chapter sample)
 * ``peaks/<ch>.json.gz``       -> v3 slim round-trip (3-chapter sample)
 
-The auditors surface the legacy-field INFO strips and unknown-field WARNINGs
-emitted by the schema extras pre-validator (``qua_shared.schemas._extras``) so
-writer/schema drift is caught at parse time.
+The schemas are pure ``extra="forbid"``: an unexpected/legacy field raises a
+``ValidationError``, which the per-file auditors catch and report as
+``status="error"`` — so writer/schema drift is caught at parse time rather
+than silently stripped.
 
 Backend-agnostic by design: every auditor operates on any object exposing
 ``read_bytes(path: str) -> bytes`` (raising on a missing path) and

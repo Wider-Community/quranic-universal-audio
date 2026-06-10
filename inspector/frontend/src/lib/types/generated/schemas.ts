@@ -800,8 +800,7 @@ export interface DetailedMeta {
  *
  * ``audio`` (per-chapter URL) was a duplicated source of truth with
  * ``catalog/audio_manifest/<slug>.json::chapters[ch].url`` and was
- * dropped in migration #5. Legacy on-disk data still has it; the
- * pre-validator strips it with an INFO-level warning.
+ * dropped in migration #5 — it is no longer accepted here.
  */
 export interface DetailedEntry {
   ref: string;
@@ -939,11 +938,10 @@ export interface EditHistoryBatch {
   };
 }
 /**
- * One operation in a batch. Shape is intentionally permissive — the
- * save flow owns the operation vocabulary (trim, split, merge, delete,
- * etc.) and stores per-op payloads keyed by ``kind`` (user-driven) or
- * ``op_type`` (pipeline-driven, written by ``.local/extraction/segments/
- * post_passes.py``).
+ * One operation in a batch. The save flow owns the operation vocabulary
+ * (trim, split, merge, delete, etc.) and stores per-op payloads keyed by
+ * ``kind`` (user-driven) or ``op_type`` (pipeline-driven, written by
+ * ``.local/extraction/segments/post_passes.py``).
  *
  * Migration #5: pipeline ops carry ``op_type`` + ``fix_kind`` (no
  * ``kind`` — that's a user-edit-only field set by the FE command store).

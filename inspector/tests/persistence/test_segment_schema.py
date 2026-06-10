@@ -40,10 +40,9 @@ def _legacy_seg() -> dict:
     embedded in legacy ``edit_history.jsonl`` may still contain.
 
     ``matched_text`` + ``phonemes_asr`` were dropped in Migration #5 and
-    the schema now actively strips them on read (with a warning log) so
-    they can't sneak back into the typed surface. ``has_repeated_words``
-    is the tautology field — never modelled, tolerated via ``extra="allow"``
-    so unknown keys don't break parsing.
+    ``has_repeated_words`` was never modelled. Under pure ``extra="forbid"``
+    every one of them now raises ``ValidationError`` on read — prod data is
+    clean of them, so the schema rejects rather than tolerating.
     """
     return {
         "time_start": 430,
@@ -97,23 +96,14 @@ def test_slim_seg_validates():
     assert not hasattr(m, "phonemes_asr")
 
 
-def test_legacy_seg_strips_dead_fields_on_read(caplog):
-    """Legacy seg shape (pre-#5) must parse cleanly with every dead and
-    unknown field stripped by the pre-validator. ``model_extra`` should be
-    empty (extras handling = warn-then-strip, not silent-allow)."""
-    import logging
+def test_legacy_seg_with_dead_fields_rejected():
+    """Legacy seg shape (pre-#5) must be REJECTED under pure ``extra="forbid"``.
 
-    caplog.set_level(logging.INFO, logger="qua_shared.schemas._extras")
-    m = DetailedSegment.model_validate(_legacy_seg())
-    # Dead fields are gone — neither typed attributes nor extras.
-    assert not hasattr(m, "matched_text")
-    assert not hasattr(m, "phonemes_asr")
-    assert not hasattr(m, "has_repeated_words")
-    assert (m.model_extra or {}) == {}
-    # And the pre-validator logged the strip at INFO level (legacy class).
-    msgs = " ".join(r.getMessage() for r in caplog.records)
-    assert "matched_text" in msgs and "phonemes_asr" in msgs
-    assert "has_repeated_words" in msgs
+    The retired ``matched_text`` / ``phonemes_asr`` / ``has_repeated_words``
+    keys no longer strip silently — any one of them raises ``ValidationError``.
+    Prod data is clean of them, so the schema rejects rather than tolerating."""
+    with pytest.raises(ValueError):
+        DetailedSegment.model_validate(_legacy_seg())
 
 
 def test_failed_alignment_seg_validates():
@@ -180,16 +170,14 @@ def test_slim_seg_emits_slim_shape():
         assert banned not in out, f"{banned} leaked into slim emission"
 
 
-def test_dead_fields_dont_round_trip():
-    """Round-tripping a legacy seg through the schema strips every dead +
-    unknown field — they all get warn-then-stripped by the pre-validator
-    so emitted JSON is clean."""
-    seg = _legacy_seg()
-    m = DetailedSegment.model_validate(seg)
-    out = m.model_dump(exclude_none=True)
-
+def test_dead_fields_rejected_individually():
+    """Each retired field on its own raises under pure ``extra="forbid"`` —
+    a clean slim seg with any one of them added must fail to validate."""
     for banned in ("matched_text", "phonemes_asr", "has_repeated_words"):
-        assert banned not in out, f"{banned} leaked into emitted seg"
+        seg = _slim_seg()
+        seg[banned] = "x"
+        with pytest.raises(ValueError):
+            DetailedSegment.model_validate(seg)
 
 
 def test_parse_detailed_segment_helper():
@@ -212,7 +200,7 @@ def test_detailed_document_with_alias_meta():
         },
         "entries": [
             {"ref": "1", "segments": [_slim_seg()]},
-            {"ref": "2", "segments": [_legacy_seg()]},
+            {"ref": "2", "segments": [_wrap_seg()]},
         ],
     }
     doc = DetailedDocument.model_validate(raw)
@@ -225,12 +213,10 @@ def test_detailed_document_with_alias_meta():
     assert "_meta" in out and "meta" not in out
 
 
-def test_entry_with_legacy_audio_field(caplog):
-    """``entry.audio`` was dropped in Migration #5 — the pre-validator
-    strips it on read with an INFO log; readers must not see it."""
-    import logging
-
-    caplog.set_level(logging.INFO, logger="qua_shared.schemas._extras")
+def test_entry_with_legacy_audio_field_rejected():
+    """``entry.audio`` was dropped in Migration #5 — under pure
+    ``extra="forbid"`` a legacy entry carrying it now raises
+    ``ValidationError`` instead of being silently stripped."""
     raw = {
         "_meta": {},
         "entries": [
@@ -241,12 +227,8 @@ def test_entry_with_legacy_audio_field(caplog):
             },
         ],
     }
-    doc = DetailedDocument.model_validate(raw)
-    entry = doc.entries[0]
-    assert (entry.model_extra or {}) == {}
-    assert not hasattr(entry, "audio")
-    msgs = " ".join(r.getMessage() for r in caplog.records)
-    assert "audio" in msgs  # stripped + logged
+    with pytest.raises(ValueError):
+        DetailedDocument.model_validate(raw)
 
 
 # -- Real on-disk sample (optional; runs if a fixture is available) ----
@@ -260,12 +242,20 @@ def test_entry_with_legacy_audio_field(caplog):
     ],
 )
 def test_on_disk_fixture_validates(fixture_name):
-    """Validate the shipped fixtures parse via the schema — protects
-    against schema regressions that would break tests using fixtures."""
+    """The shipped fixtures still carry legacy ``matched_text`` /
+    ``phonemes_asr`` seg keys + a test-only ``_fixture_meta`` block (the
+    save-flow tests read them via raw JSON, not this model). Under pure
+    ``extra="forbid"`` the typed model rejects those keys, so the clean
+    projection — what extraction emits today — is what must validate."""
     fixture_path = Path(__file__).parents[2] / "tests" / "fixtures" / "segments" / fixture_name
     if not fixture_path.is_file():
         pytest.skip(f"fixture missing: {fixture_path}")
     raw = json.loads(fixture_path.read_text(encoding="utf-8"))
+    raw.pop("_fixture_meta", None)
+    for entry in raw.get("entries", []):
+        for seg in entry.get("segments", []):
+            seg.pop("matched_text", None)
+            seg.pop("phonemes_asr", None)
     doc = DetailedDocument.model_validate(raw)
     assert len(doc.entries) >= 1
     total_segs = sum(len(e.segments) for e in doc.entries)
