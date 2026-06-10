@@ -175,3 +175,39 @@ def test_job_detail_surfaces_batch_members(store):
     slugs = {m.slug for m in rec.members}
     assert slugs == {"a", "b"}
     assert rec.kind == "hf_publish_batch"
+
+
+def test_statusless_completed_record_reads_succeeded(store):
+    # The batch HF Job self-writes {job_id, completed_at, members} with NO
+    # top-level status — must read as succeeded, NOT default to running.
+    path = base.job_record_path("hf_publish_batch", None, "jidNoStatus")
+    store[path] = json.dumps(
+        {
+            "job_id": "jidNoStatus",
+            "completed_at": "2026-06-09T05:00:00Z",
+            "members": [{"slug": "a", "status": "succeeded"}],
+        }
+    ).encode()
+    rec = records.read("hf_publish_batch", None, "jidNoStatus")
+    assert rec is not None
+    assert rec.status == "succeeded"
+
+
+def test_timestamps_kind_maps_to_ts_dir(store):
+    # The unified store must read/write timestamps records under jobs/ts/ (where
+    # the TS HF-Job + legacy writer put them), not jobs/timestamps/.
+    assert base.kind_dir("timestamps") == "ts"
+    assert base.job_record_path("timestamps", "reciter_x", "j").endswith(
+        "reciters/reciter_x/jobs/ts/j.json"
+    )
+    assert base.job_record_path("timestamps", None, "j") == "jobs/_global/ts/j.json"
+    assert base.job_record_path("hf_publish", "reciter_x", "j").endswith(
+        "reciters/reciter_x/jobs/hf_publish/j.json"
+    )
+    # a legacy TS record stored under jobs/ts/ is found by read + list_for_slug
+    store[base.job_record_path("timestamps", "reciter_x", "tsjob")] = json.dumps(
+        {"job_id": "tsjob", "slug": "reciter_x", "type": "ts", "status": "succeeded"}
+    ).encode()
+    rec = records.read("timestamps", "reciter_x", "tsjob")
+    assert rec is not None and rec.kind == "timestamps" and rec.status == "succeeded"
+    assert any(r.job_id == "tsjob" for r in records.list_for_slug("reciter_x"))

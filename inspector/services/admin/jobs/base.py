@@ -127,18 +127,31 @@ def hf_job_url(job_id: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Job-record paths: ``reciters/<slug>/jobs/<kind>/<job_id>.json`` for per-slug
 # kinds, ``jobs/_global/<kind>/<job_id>.json`` for global kinds (cut_release).
+#
+# The on-disk DIRECTORY can differ from the kind label: ``timestamps`` records
+# (written by the TS HF-Job + the legacy ``timestamps_jobs`` writer) live under
+# ``jobs/ts/`` — so the unified store reads/writes them there, not under
+# ``jobs/timestamps/``. Every other kind's dir == its label.
 # ---------------------------------------------------------------------------
+
+_KIND_DIR = {"timestamps": "ts"}
+
+
+def kind_dir(kind: str) -> str:
+    """Bucket sub-directory for a job kind (``timestamps`` → ``ts``)."""
+    return _KIND_DIR.get(kind, kind)
 
 
 def job_record_path(kind: str, slug: str | None, job_id: str) -> str:
+    d = kind_dir(kind)
     if slug is None:
-        return f"jobs/_global/{kind}/{job_id}.json"
-    return f"reciters/{slug}/jobs/{kind}/{job_id}.json"
+        return f"jobs/_global/{d}/{job_id}.json"
+    return f"reciters/{slug}/jobs/{d}/{job_id}.json"
 
 
 def legacy_job_record_path(kind: str, job_id: str) -> str:
     """Pre-2026-05 top-level path (kept for back-compat reads, never written)."""
-    return f"jobs/{kind}/{job_id}.json"
+    return f"jobs/{kind_dir(kind)}/{job_id}.json"
 
 
 # ---------------------------------------------------------------------------

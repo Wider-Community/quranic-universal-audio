@@ -89,10 +89,14 @@ def read(kind: str, slug: str | None, job_id: str) -> JobRecord | None:
     data["job_id"] = data.get("job_id") or job_id
     if slug is not None:
         data.setdefault("slug", slug)
-    # Legacy TS records use ``completed_at`` (batch) — leave as extras; normalize
-    # the status to the FE vocabulary.
+    # Normalize status to the FE vocabulary. The batch record the HF Job
+    # self-writes carries a ``completed_at`` but NO top-level ``status`` — infer
+    # ``succeeded`` from the completion timestamp so a finished job never reads
+    # as ``running`` (per-member outcomes live in ``members``).
     if data.get("status"):
         data["status"] = normalize_status(data.get("status"))
+    elif data.get("ended_at") or data.get("completed_at"):
+        data["status"] = "succeeded"
     try:
         return JobRecord.model_validate(data)
     except Exception as exc:  # noqa: BLE001 — tolerate forward/legacy shapes
@@ -191,7 +195,7 @@ def list_for_slug(slug: str) -> list[JobRecord]:
     backend = base.get_backend()
     for kind in PER_SLUG_KINDS:
         try:
-            names = backend.list_dir(f"reciters/{slug}/jobs/{kind}")
+            names = backend.list_dir(f"reciters/{slug}/jobs/{base.kind_dir(kind)}")
         except Exception:
             continue
         for name in names:
@@ -216,7 +220,7 @@ def list_all() -> list[JobRecord]:
     backend = base.get_backend()
     for kind in GLOBAL_KINDS:
         try:
-            names = backend.list_dir(f"jobs/_global/{kind}")
+            names = backend.list_dir(f"jobs/_global/{base.kind_dir(kind)}")
         except Exception:
             names = []
         for name in names:
