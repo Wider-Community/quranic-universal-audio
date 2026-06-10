@@ -26,7 +26,6 @@ from constants import (
 )
 from qua_shared.schemas.wire._envelopes import ErrorEnvelope
 from qua_shared.schemas.wire.seg import (
-    SegAllResponse,
     SegConfigResponse,
     SegDataResponse,
     SegRecitersResponse,
@@ -250,25 +249,23 @@ def seg_all(reciter):
     for ch_str, url in audio_by_chapter.items():
         if url in duration_ms_by_url:
             chapter_duration_ms_by_chapter[ch_str] = duration_ms_by_url[url]
-    model = SegAllResponse.model_validate(
-        {
-            "segments": segments,
-            "audio_by_chapter": audio_by_chapter,
-            "chapter_duration_ms_by_chapter": chapter_duration_ms_by_chapter,
-            "duration_ms_by_url": duration_ms_by_url,
-            "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
-            # Legacy symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.
-            "pad_ms": (pad_left_ms + pad_right_ms) // 2,
-            "pad_left_ms": pad_left_ms,
-            "pad_right_ms": pad_right_ms,
-            "min_silence_floor_ms": min_silence_floor_ms,
-        }
-    )
-    payload = model.model_dump(**_DUMP)
-    # `flag_view` already emits the redacted FE shape with intentional ``null``
-    # leaves (``at``/``author.*``); ``exclude_none`` would drop those keys, so we
-    # restore each flag verbatim from the pre-dump segment dicts.
-    for dumped_seg, src_seg in zip(payload["segments"], segments, strict=True):
-        if "flag" in src_seg:
-            dumped_seg["flag"] = src_seg["flag"]
+    # Served directly without a SegAllResponse validate+dump round-trip. The dict
+    # assembled here is already the exact on-wire shape (keys in field order,
+    # optionals emitted only-when-truthy, confidence pre-rounded, flags carrying
+    # their intentional ``null`` leaves), so the round-trip would be pure overhead
+    # — hundreds of ms on a full-mushaf reciter, and uncached. Conformance to
+    # SegAllResponse is asserted at the test boundary (test_wire_seg_models) and
+    # the bytes frozen by test_seg_all_snapshot; bucket data is validated at write.
+    payload = {
+        "segments": segments,
+        "audio_by_chapter": audio_by_chapter,
+        "chapter_duration_ms_by_chapter": chapter_duration_ms_by_chapter,
+        "duration_ms_by_url": duration_ms_by_url,
+        "reciter_vbr_chapters": vbr_chapters_for_reciter(reciter),
+        # Symmetric shim: total padding == 2 * pad_ms ≈ pad_left + pad_right.
+        "pad_ms": (pad_left_ms + pad_right_ms) // 2,
+        "pad_left_ms": pad_left_ms,
+        "pad_right_ms": pad_right_ms,
+        "min_silence_floor_ms": min_silence_floor_ms,
+    }
     return orjson_response(payload)
