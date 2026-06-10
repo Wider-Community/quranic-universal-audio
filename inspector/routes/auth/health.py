@@ -6,6 +6,13 @@ Two routes share one blueprint:
   Returns 200 in local mode (where there's no mount to check) and 503 in
   deployed mode when DB/bucket are degraded so probes fail loud.
 
+  ``?deep=1`` adds a ``sample_validation`` block: a bounded external-bucket
+  drift probe (DB-catalog round-trip + a small reciter-folder sample) delegated
+  to ``services.storage.bucket_audit.sample_validation``. It is OPT-IN — the
+  default probe never walks the bucket, so its latency is unchanged. A deep
+  probe that finds drift flips the response to degraded (503 in deployed mode)
+  so the misconfiguration surfaces at health-check time, not mid-request.
+
 - ``GET /livez``  — liveness signal. Always 200 with a tiny body; use it when
   a probe should not touch the bucket.
 """
@@ -15,7 +22,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 from services import auth as auth_service
 from services import auto_detect as auto_detect_service
@@ -80,6 +87,16 @@ def healthz():
         "last_error": sync_status["last_error"],
     }
     healthy = healthy and bool(db_health.get("open"))
+
+    # Opt-in deep probe: validate the DB catalog + a small reciter-folder
+    # sample so external-bucket drift surfaces here, not mid-request. Off the
+    # default path entirely — only ``?deep=1`` pays the bucket walk.
+    if request.args.get("deep") == "1":
+        from services.storage import bucket_audit
+
+        sample = bucket_audit.sample_validation()
+        payload["sample_validation"] = sample
+        healthy = healthy and sample["ok"]
 
     # Return 503 in deployed mode (mount configured) so probes fail loud.
     # Local mode has no mount and would always 503 — keep it 200 there.
