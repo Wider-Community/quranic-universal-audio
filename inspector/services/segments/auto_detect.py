@@ -84,13 +84,18 @@ def hydrate_initial_seen() -> None:
     """
     backend = get_backend()
     slugs = _list_candidate_slugs(backend)
-    with _seen_lock:
-        _seen_slugs.update(slugs)
 
     fired = 0
+    seen_now: set[str] = set()
     for slug in slugs:
         row = state_service.get_row(slug)
-        if row is None or row.state != ReciterState.AWAITING_ALIGNMENT:
+        if row is None:
+            # Content on the bucket but no request row yet — an intake whose
+            # files were uploaded before the mint created the row. Leave it OUT
+            # of the seen set so reconcile_once picks it up once the row lands.
+            continue
+        seen_now.add(slug)
+        if row.state != ReciterState.AWAITING_ALIGNMENT:
             continue
         try:
             state_service.transition(
@@ -104,9 +109,11 @@ def hydrate_initial_seen() -> None:
                 "auto_detect: catch-up alignment_completed failed for slug=%s",
                 slug,
             )
+    with _seen_lock:
+        _seen_slugs.update(seen_now)
     logger.info(
         "auto_detect: hydrated initial seen set (%d slug(s), %d catch-up transition(s) fired)",
-        len(slugs),
+        len(seen_now),
         fired,
     )
 
@@ -114,27 +121,31 @@ def hydrate_initial_seen() -> None:
 def reconcile_once() -> int:
     """Single reconcile pass. Returns the number of transitions fired.
 
-    Safe to call from any thread. Slugs not in ``AWAITING_ALIGNMENT`` are
-    no-ops (the state handler raises ``InvalidTransition`` which we
-    swallow). Each new slug is added to the seen set whether or not the
-    transition fired — avoids re-trying every loop iteration for slugs
-    that don't yet have a state row or are in a different state.
+    Safe to call from any thread. A slug is marked "seen" only once it has a
+    state row — whether or not the transition fired — so we don't re-scan
+    resolved slugs every tick. A slug whose folder exists but has **no row yet**
+    is deliberately left UNSEEN: that is the intake case where content is
+    uploaded before the mint creates the row, and blanket-seeing it here would
+    strand it in ``AWAITING_ALIGNMENT`` forever (the seen-set diff would never
+    surface it again). Leaving it unseen costs one ``get_row`` per pass until
+    the row lands, then it transitions normally.
     """
     backend = get_backend()
     current = _list_candidate_slugs(backend)
 
     with _seen_lock:
-        new_slugs = current - _seen_slugs
-        _seen_slugs.update(current)
+        candidates = current - _seen_slugs
 
     fired = 0
     transitioned: list[str] = []
-    for slug in new_slugs:
+    seen_now: set[str] = set()
+    for slug in candidates:
         row = state_service.get_row(slug)
-        if row is None or row.state != ReciterState.AWAITING_ALIGNMENT:
-            # Manual upload outside the request flow, or row not yet seeded.
-            # Either way, no transition to fire — the slug is now in the seen
-            # set so we won't retry on every poll tick.
+        if row is None:
+            # Content present, request row not yet minted — recheck next pass.
+            continue
+        seen_now.add(slug)
+        if row.state != ReciterState.AWAITING_ALIGNMENT:
             continue
         try:
             state_service.transition(
@@ -149,6 +160,8 @@ def reconcile_once() -> int:
                 "auto_detect: alignment_completed failed for slug=%s",
                 slug,
             )
+    with _seen_lock:
+        _seen_slugs.update(seen_now)
     if fired:
         logger.info(
             "auto_detect: fired alignment_completed for %d slug(s)",

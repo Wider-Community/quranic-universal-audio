@@ -81,19 +81,37 @@ def _seed_state(*, slug: str, state: ReciterState):
 # ---------------------------------------------------------------------------
 
 
-def test_hydrate_initial_seen_seeds_from_wip(auto_detect_env):
+def test_hydrate_leaves_rowless_folder_unseen(auto_detect_env):
+    """A folder with NO state row must be left out of the seen set at hydrate.
+
+    Otherwise an intake whose content is uploaded before the mint creates the
+    row would be stranded in AWAITING_ALIGNMENT forever — the seen-set diff in
+    reconcile_once would never resurface it. A row-seeded slug IS marked seen
+    (see the other tests); a row-less folder stays re-checkable.
+    """
     svc, _, backend = auto_detect_env
-    # Pre-create a folder under reciters/ — anything works as long as list_dir picks
-    # up the directory entry.
     backend.write_json_atomic("reciters/preexisting_slug/marker.json", {"x": 1})
     svc.hydrate_initial_seen()
-    # Verify the side effect directly: the slug landed in the seen set.
-    # Without this assertion the test passes for the wrong reason — reconcile
-    # would return 0 whether or not the seen set was populated, because the
-    # slug has no AWAITING_ALIGNMENT state row to advance.
-    assert "preexisting_slug" in svc._seen_slugs
-    fired = svc.reconcile_once()
-    assert fired == 0
+    assert "preexisting_slug" not in svc._seen_slugs
+    # Still a no-op (no row to advance), and it remains unseen for later passes.
+    assert svc.reconcile_once() == 0
+
+
+def test_reconcile_fires_after_row_appears_for_preexisting_folder(auto_detect_env):
+    """Intake ordering regression: content is uploaded BEFORE the mint creates
+    the row. The folder is observed while row is None (no-op, stays unseen),
+    then the mint seeds an AWAITING_ALIGNMENT row → the next pass fires.
+    """
+    svc, state_service, backend = auto_detect_env
+    # 1. Upload lands first — no state row yet (mint hasn't run).
+    backend.write_json_atomic("reciters/rec_a/detailed.json", {"entries": []})
+    assert svc.reconcile_once() == 0
+    assert "rec_a" not in svc._seen_slugs  # left unseen for re-check
+    # 2. Mint creates the row in AWAITING_ALIGNMENT.
+    _seed_state(slug="rec_a", state=ReciterState.AWAITING_ALIGNMENT)
+    # 3. The next reconcile now picks it up and fires.
+    assert svc.reconcile_once() == 1
+    assert state_service.get_row("rec_a").state == ReciterState.AWAITING_REVIEW
 
 
 def test_hydrate_initial_seen_catches_up_stuck_awaiting_alignment(auto_detect_env):
