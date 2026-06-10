@@ -228,6 +228,7 @@ export interface AdminReleaseStatusRow {
   gh: AdminGhReleaseMember | null;
   publish_error?: AdminPublishError | null;
   readiness?: AdminReciterReadiness | null;
+  flagged_issues_count?: number | null;
   [k: string]: unknown;
 }
 export interface AdminReleasesStatusResponse {

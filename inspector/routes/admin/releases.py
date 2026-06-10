@@ -554,6 +554,12 @@ def releases_status(user):
             # Audio/peaks readiness is a non-blocking warn — compute only for
             # rows the FE will actually render (TTL-cached, never gates).
             row["readiness"] = release_readiness.reciter_bucket_readiness(slug)
+            # Flagged-segment count — ONLY for Ready-to-generate rows (marked
+            # ready, no TS yet), so the admin sees outstanding flags before
+            # generating. Same best-effort read as the reviews-detail builder;
+            # every other bucket leaves it None (no extra bucket I/O).
+            if marked_ready and ts is None:
+                row["flagged_issues_count"] = _flagged_count(slug)
             out.append(row)
     payload = AdminReleasesStatusResponse.model_validate(
         {
@@ -689,3 +695,18 @@ def _slim_release_row(row: dict | None, *, fields: tuple[str, ...]) -> dict | No
     if row is None:
         return None
     return {k: row.get(k) for k in fields if k in row}
+
+
+def _flagged_count(slug: str) -> int:
+    """Count of flagged segments in ``slug``'s detailed.json (best-effort → 0).
+
+    Mirrors the reviews-detail builder (``services/admin/reviews.py``) — one
+    cached ``load_detailed`` read; a bucket failure must never break the grid."""
+    from services.segments.flags import count_flagged
+    from services.storage.data_loader import load_detailed
+
+    try:
+        return count_flagged(load_detailed(slug) or [])
+    except Exception:  # noqa: BLE001 — count is non-critical metadata
+        log.warning("[%s] flagged-issue count read failed; defaulting to 0", slug, exc_info=True)
+        return 0

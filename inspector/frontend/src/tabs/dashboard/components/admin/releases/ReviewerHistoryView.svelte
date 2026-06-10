@@ -6,17 +6,9 @@
      * the Reviews tab / the Ready-to-generate row's Send-back).
      */
     import type { AdminReviewDetail } from '../../../../../lib/types/generated/schemas';
-    import {
-        CHECKLIST_ORDER,
-        type ChecklistKey,
-        markReadyCopy,
-    } from '../../../../segments/copy/mark-ready';
+    import { markReadyCopy } from '../../../../segments/copy/mark-ready';
 
     let { detail }: { detail: AdminReviewDetail } = $props();
-
-    function checklistLabelFor(key: ChecklistKey): string {
-        return markReadyCopy.checklist.find((c) => c.key === key)?.label ?? key;
-    }
 
     function initials(login: string | null | undefined): string {
         const t = (login ?? '').trim();
@@ -46,6 +38,11 @@
 
     const history = $derived((detail.claim_history ?? []).filter((c) => c.released_at !== null));
     const submission = $derived(detail.current_claim?.mark_ready_submission ?? null);
+    // The two free-text questions from the mark-ready form (not the checklist).
+    const hasSubmissionComments = $derived(
+        (submission?.comment_checks ?? '').trim() !== '' ||
+            (submission?.comment_issues ?? '').trim() !== '',
+    );
 </script>
 
 <div class="rev">
@@ -67,35 +64,19 @@
         {/if}
     </section>
 
-    {#if submission}
-        {@const checklist = submission.checklist}
-        <section class="rsec mr" class:bypass={submission.bypass_used}>
-            <h4 class="rhead">
-                Mark-ready submission
-                {#if submission.bypass_used}<span class="pill">owner bypass</span>{/if}
-            </h4>
-            {#if submission.bypass_used || !checklist}
-                <p class="bypass-line">Submitted via owner bypass — the checklist and zero-count gates were skipped.</p>
-            {:else}
-                <ul class="checklist">
-                    {#each CHECKLIST_ORDER as key (key)}
-                        <li class:done={checklist[key]}>
-                            <span class="glyph" aria-hidden="true">{checklist[key] ? '✓' : '·'}</span>
-                            <span>{checklistLabelFor(key)}</span>
-                        </li>
-                    {/each}
-                </ul>
-            {/if}
-            {#if (submission.comment_checks ?? '').trim()}
+    {#if hasSubmissionComments}
+        <section class="rsec mr">
+            <h4 class="rhead">Submission responses</h4>
+            {#if (submission?.comment_checks ?? '').trim()}
                 <div class="comment">
                     <div class="comment-lbl">{markReadyCopy.comments.checks.label}</div>
-                    <blockquote>{submission.comment_checks}</blockquote>
+                    <blockquote>{submission?.comment_checks}</blockquote>
                 </div>
             {/if}
-            {#if (submission.comment_issues ?? '').trim()}
+            {#if (submission?.comment_issues ?? '').trim()}
                 <div class="comment">
                     <div class="comment-lbl">{markReadyCopy.comments.issues.label}</div>
-                    <blockquote>{submission.comment_issues}</blockquote>
+                    <blockquote>{submission?.comment_issues}</blockquote>
                 </div>
             {/if}
         </section>
@@ -176,20 +157,6 @@
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
     }
-    .mr.bypass { border-color: oklch(0.86 0.130 75 / 0.4); }
-    .pill {
-        font-size: 9.5px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase;
-        color: var(--state-error-fg);
-        background: var(--state-error-bg);
-        border: 1px solid oklch(0.86 0.130 75 / 0.4);
-        border-radius: 999px; padding: 1px 7px;
-    }
-    .bypass-line { margin: 0; font-size: var(--fs-meta); font-style: italic; color: var(--text-secondary); }
-    .checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-    .checklist li { display: flex; align-items: flex-start; gap: var(--s-2); font-size: var(--fs-meta); color: var(--text-secondary); }
-    .checklist li.done span:last-child { color: var(--text-primary); }
-    .glyph { flex: 0 0 14px; font-family: var(--font-mono); color: var(--text-faint); text-align: center; }
-    .checklist li.done .glyph { color: var(--accent); font-weight: 600; }
     .comment { margin-top: var(--s-2); display: flex; flex-direction: column; gap: 3px; }
     .comment-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .comment blockquote {
