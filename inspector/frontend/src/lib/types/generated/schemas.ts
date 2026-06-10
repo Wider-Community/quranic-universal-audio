@@ -817,14 +817,19 @@ export interface EditOperation {
 /**
  * Contributor confirmations recorded with the submission (audit trail).
  *
- * All three must be true to submit — gated client-side and re-checked server-
- * side. Rights to *share* (distribution / reciter permission) and rights to
- * *store* (QUA download + permanent retention) are deliberately separate.
+ * The first three are always required to submit — gated client-side and
+ * re-checked server-side. Rights to *share* (distribution / reciter
+ * permission) and rights to *store* (QUA download + permanent retention) are
+ * deliberately separate. ``playlist_public`` is an extra gate that only
+ * applies to a ``playlist`` source: the contributor agreeing to keep their
+ * own playlist public so the community can benefit from the audio + derived
+ * timings (enforced in ``intake_validation`` only for the playlist method).
  */
 export interface IntakeAttestations {
   distribution_rights?: boolean;
   links_verified?: boolean;
   storage_rights?: boolean;
+  playlist_public?: boolean;
   [k: string]: unknown;
 }
 /**

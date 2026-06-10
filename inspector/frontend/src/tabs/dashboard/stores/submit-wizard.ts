@@ -46,11 +46,15 @@ export interface CombinationFields {
     recording_year: number | '';
 }
 
-/** Step-4 consent gates — all must be true to submit. */
+/**
+ * Step-4 consent gates. The first three are always required; `playlist_public`
+ * is an extra gate shown + required only when `sourceMethod === 'playlist'`.
+ */
 export interface Attestations {
     distribution_rights: boolean;
     links_verified: boolean;
     storage_rights: boolean;
+    playlist_public: boolean;
 }
 
 export interface SubmitWizardState {
@@ -102,6 +106,7 @@ const initial: SubmitWizardState = {
         distribution_rights: false,
         links_verified: false,
         storage_rights: false,
+        playlist_public: false,
     },
 };
 

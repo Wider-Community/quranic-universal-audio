@@ -134,7 +134,8 @@
     $: canSubmit =
         state.attestations.distribution_rights &&
         state.attestations.links_verified &&
-        state.attestations.storage_rights;
+        state.attestations.storage_rights &&
+        (state.sourceMethod !== 'playlist' || state.attestations.playlist_public);
     // existing_combo skips source + details — the canonical edit path lives in
     // RequestForm. We don't need step 2/3/4 for that mode.
     $: skipSourceAndDetails = state.reciterMode === 'existing_combo';

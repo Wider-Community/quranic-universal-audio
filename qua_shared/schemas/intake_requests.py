@@ -82,15 +82,20 @@ class IntakeSource(BaseModel):
 class IntakeAttestations(BaseModel):
     """Contributor confirmations recorded with the submission (audit trail).
 
-    All three must be true to submit — gated client-side and re-checked server-
-    side. Rights to *share* (distribution / reciter permission) and rights to
-    *store* (QUA download + permanent retention) are deliberately separate."""
+    The first three are always required to submit — gated client-side and
+    re-checked server-side. Rights to *share* (distribution / reciter
+    permission) and rights to *store* (QUA download + permanent retention) are
+    deliberately separate. ``playlist_public`` is an extra gate that only
+    applies to a ``playlist`` source: the contributor agreeing to keep their
+    own playlist public so the community can benefit from the audio + derived
+    timings (enforced in ``intake_validation`` only for the playlist method)."""
 
     model_config = ConfigDict(extra="allow")
 
     distribution_rights: bool = False
     links_verified: bool = False
     storage_rights: bool = False
+    playlist_public: bool = False
 
     def all_true(self) -> bool:
         return self.distribution_rights and self.links_verified and self.storage_rights
