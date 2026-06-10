@@ -1500,8 +1500,8 @@ export interface SegReciter {
   name: string;
   audio_source: string;
   audio_category: "by_surah" | "by_ayah";
-  state: "awaiting_review" | "under_review" | "ready_for_release" | "released";
-  visibility: "public" | "hidden" | "discarded";
+  state: "catalogued" | "awaiting_alignment" | "awaiting_review" | "under_review" | "released";
+  visibility: "public" | "discarded";
 }
 /**
  * ``POST /api/seg/save/<reciter>/<chapter>`` request body.

@@ -46,14 +46,19 @@ VerseRef = str
 
 # Lifecycle state + visibility enums the ``/reciters`` route emits as the
 # ``.value`` of the SQLite-backed ReciterState / Visibility enums. Mirrored
-# here as ``Literal`` so the FE gets a closed switch surface.
+# here as ``Literal`` so the FE gets a closed switch surface. The Segments tab
+# lists WIP reciters too, so this MUST carry the FULL ``ReciterState`` set
+# (``catalogued`` / ``awaiting_alignment`` included) — a narrower mirror 500s
+# the reciter list for any pre-review reciter. Kept in lockstep with the
+# canonical enums by ``tests/persistence/test_seg_state_parity.py``.
 SegReciterState = Literal[
+    "catalogued",
+    "awaiting_alignment",
     "awaiting_review",
     "under_review",
-    "ready_for_release",
     "released",
 ]
-SegReciterVisibility = Literal["public", "hidden", "discarded"]
+SegReciterVisibility = Literal["public", "discarded"]
 
 
 # ===========================================================================
