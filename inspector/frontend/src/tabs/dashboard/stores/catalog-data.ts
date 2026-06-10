@@ -40,6 +40,25 @@ export const catalogData = writable<CatalogSnapshot>(initial);
 
 let inflight: Promise<void> | null = null;
 
+const PAGE_SIZE = 500;
+
+/**
+ * Fetch the full reciter list across every page. The catalog outgrew a single
+ * page (a new source can multiply the roster), so a one-shot `limit` would
+ * silently truncate the browse + skew client-side facet counts.
+ */
+async function fetchAllReciters(signal?: AbortSignal): Promise<PublicReciter[]> {
+    const all: PublicReciter[] = [];
+    let cursor: number | undefined;
+    for (;;) {
+        const page = await fetchPublicReciters({ limit: PAGE_SIZE, cursor, signal });
+        all.push(...page.reciters);
+        if (page.next_cursor == null) break;
+        cursor = page.next_cursor;
+    }
+    return all;
+}
+
 export async function loadCatalog(force = false): Promise<void> {
     if (inflight && !force) return inflight;
     // Already loaded — skip the network round-trip. Callers that need a
@@ -48,14 +67,14 @@ export async function loadCatalog(force = false): Promise<void> {
     inflight = (async () => {
         catalogData.update((s) => ({ ...s, loading: true, error: null }));
         try {
-            const [page, stats] = await Promise.all([
-                fetchPublicReciters({ limit: 500 }),
+            const [reciters, stats] = await Promise.all([
+                fetchAllReciters(),
                 fetchPublicStats(),
             ]);
             catalogData.set({
                 loading: false,
                 error: null,
-                reciters: page.reciters,
+                reciters,
                 stats,
             });
         } catch (e) {
@@ -95,7 +114,7 @@ export function startCatalogPolling(): () => void {
             intervalMs: CATALOG_POLL_MS,
             fetcher: (signal) =>
                 Promise.all([
-                    fetchPublicReciters({ limit: 500, signal }),
+                    fetchAllReciters(signal).then((reciters) => ({ reciters })),
                     fetchPublicStats(signal),
                 ]),
             onResult: ([page, stats]) => applyPage(page, stats),
