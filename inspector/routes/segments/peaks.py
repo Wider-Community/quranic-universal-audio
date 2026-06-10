@@ -31,7 +31,7 @@ from pydantic import ValidationError
 from qua_shared.schemas.wire._envelopes import ErrorEnvelope
 from qua_shared.schemas.wire.seg import (
     SegPeaksResponse,
-    SegSegmentPeaksRequest,
+    SegSegmentPeaksRequestItem,
     SegSegmentPeaksResponse,
 )
 from services import audio_fetch, cache
@@ -165,13 +165,16 @@ def seg_segment_peaks(reciter):
     with nested ``PeakBucket[]`` floats at HD 30 bps. ``pad_ms`` widens the
     decoded range symmetrically for split/scrubber UIs.
     """
-    try:
-        parsed = SegSegmentPeaksRequest.model_validate(request.get_json(silent=True) or {})
-        segments = parsed.segments
-    except ValidationError:
-        # Tolerant of malformed payloads — a bad item shouldn't 500 a fallback
-        # render. The FE payload builder is the only sender; this is defensive.
-        segments = []
+    # Validate per-item so one malformed slice is skipped, not the whole
+    # batch — a bad item shouldn't drop the fallback render for its siblings.
+    raw = request.get_json(silent=True) or {}
+    raw_items = raw.get("segments", []) if isinstance(raw, dict) else []
+    segments = []
+    for item in raw_items if isinstance(raw_items, list) else []:
+        try:
+            segments.append(SegSegmentPeaksRequestItem.model_validate(item))
+        except ValidationError:
+            continue
 
     results: dict[str, dict] = {}
     for seg in segments:
