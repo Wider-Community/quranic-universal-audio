@@ -52,9 +52,7 @@ def _normalize(value):
     the snapshot still proves the exact shape + content of the wire.
     """
     if isinstance(value, dict):
-        return {
-            k: (_SENTINEL if k in _VOLATILE_KEYS else _normalize(v)) for k, v in value.items()
-        }
+        return {k: (_SENTINEL if k in _VOLATILE_KEYS else _normalize(v)) for k, v in value.items()}
     if isinstance(value, list):
         return [_normalize(v) for v in value]
     return value

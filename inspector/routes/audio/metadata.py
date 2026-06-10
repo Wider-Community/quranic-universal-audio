@@ -79,7 +79,9 @@ def audio_surahs(category, source, slug):
         return jsonify(ErrorEnvelope(error="Reciter not found").model_dump(exclude_none=True)), 404
     if not isinstance(doc, dict):
         return (
-            jsonify(ErrorEnvelope(error="invalid audio_manifest sidecar").model_dump(exclude_none=True)),
+            jsonify(
+                ErrorEnvelope(error="invalid audio_manifest sidecar").model_dump(exclude_none=True)
+            ),
             500,
         )
     chapters = doc.get("chapters") or {}
