@@ -15,8 +15,6 @@ extend-exclude = [
     ".local",
     ".claude",
     "node_modules",
-    "quranic-universal-aligner",     # embedded sibling repo
-    "quranic-universal-timestamps",  # embedded sibling repo
 ]
 
 [lint]

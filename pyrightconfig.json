@@ -13,9 +13,7 @@
     "**/node_modules",
     "inspector/frontend",
     ".local",
-    ".claude",
-    "quranic-universal-aligner",
-    "quranic-universal-timestamps"
+    ".claude"
   ],
   "pythonVersion": "3.11",
   "typeCheckingMode": "basic",

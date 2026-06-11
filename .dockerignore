@@ -9,8 +9,6 @@
 # These are nested git repos that must never be baked into the image.
 .local/
 mfa_aligner/
-quranic-universal-aligner/
-quranic-universal-timestamps/
 reciter_requests/
 
 # --- Runtime-shared packages ship at runtime. qua_shared/ + qua_jobs/ are
