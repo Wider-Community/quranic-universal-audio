@@ -10,8 +10,8 @@ Today there are two:
   cross-verse + repetition candidates only. Provides word-level boundaries
   so Inspector's Auto Split tool can position cut cursors instantly.
 
-Both passes import the local MFA Space app and warm the Kalpy dictionary
-inside every worker. Opening one ``ProcessPoolExecutor`` (via
+Both passes build a qua_sdk ``MfaLocalAligner`` and warm the Kalpy
+dictionary inside every worker. Opening one ``ProcessPoolExecutor`` (via
 :class:`qua_shared.mfa_runtime.MfaRuntime`) and reusing it across both
 passes amortises that startup. Audio decode is still per-pass — both
 passes read from the same on-disk per-chapter MP3s, so OS page cache
@@ -22,7 +22,7 @@ CLI::
     python3 -m qua_shared.mfa_sidecars \
         --reciter-dir /srv/scratch/.../<slug> \
         --audio-dir   /srv/scratch/.../<slug>/audio \
-        --mfa-app-path quranic-universal-timestamps/app.py
+        --mfa-runtime-dir /srv/scratch/.../mfa-runtime
 
 Both ``run_probe`` and ``run_precompute`` keep working standalone (when
 called without a runtime they self-manage). This orchestrator is the
@@ -57,6 +57,7 @@ from qua_shared.probe_mfa import (
     DEFAULT_PROBE_BEAM,
     run_probe,
 )
+from qua_shared.timestamps_pipeline import _paths_from_app_path, resolve_mfa_runtime
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +74,9 @@ DEFAULT_WORKERS = 24
 def run_all_sidecars(
     reciter_dir: Path,
     *,
-    mfa_app_path: Path,
+    mfa_model_path: Path | None = None,
+    mfa_dictionary_path: Path | None = None,
+    mfa_app_path: Path | None = None,
     audio_dir: Path | None = None,
     audio_manifest: Path | None = None,
     repo_root: Path | None = None,
@@ -95,7 +98,15 @@ def run_all_sidecars(
     Worker / batch / download knobs are forwarded to each pass; if you
     need per-pass workers (e.g. fewer workers for the smaller auto-split
     candidate set), call the underlying functions directly.
+    ``mfa_app_path`` is a deprecated alias for the model + dictionary pair
+    (derived from the app.py file's directory).
     """
+    if mfa_app_path is not None and not (mfa_model_path and mfa_dictionary_path):
+        model_str, dict_str = _paths_from_app_path(mfa_app_path)
+        mfa_model_path, mfa_dictionary_path = Path(model_str), Path(dict_str)
+    if not mfa_model_path or not mfa_dictionary_path:
+        log.error("mfa_model_path + mfa_dictionary_path are required; nothing to do")
+        return None, None
     reciter_dir = Path(reciter_dir).resolve()
     if not (reciter_dir / "detailed.json").exists():
         log.error("detailed.json not found in %s — nothing to do", reciter_dir)
@@ -108,12 +119,13 @@ def run_all_sidecars(
     probe_path: Path | None = None
     split_path: Path | None = None
 
-    with MfaRuntime(mfa_app_path, workers) as runtime:
+    with MfaRuntime(mfa_model_path, mfa_dictionary_path, workers) as runtime:
         if not skip_probe:
             log.info("=== probe (beam=%d) ===", probe_beam)
             probe_path = run_probe(
                 reciter_dir,
-                mfa_app_path=mfa_app_path,
+                mfa_model_path=mfa_model_path,
+                mfa_dictionary_path=mfa_dictionary_path,
                 audio_dir=audio_dir,
                 audio_manifest=audio_manifest,
                 beam=probe_beam,
@@ -126,7 +138,8 @@ def run_all_sidecars(
             log.info("=== auto-split precompute (beam=%d) ===", split_beam)
             split_path = run_precompute(
                 reciter_dir,
-                mfa_app_path=mfa_app_path,
+                mfa_model_path=mfa_model_path,
+                mfa_dictionary_path=mfa_dictionary_path,
                 audio_dir=audio_dir,
                 audio_manifest=audio_manifest,
                 repo_root=repo_root,
@@ -167,7 +180,11 @@ def _main(argv: list[str] | None = None) -> int:
         "carries the source.",
     )
     p.add_argument(
-        "--mfa-app-path", type=Path, required=True, help="Path to the local MFA aligner module."
+        "--mfa-runtime-dir",
+        type=Path,
+        default=None,
+        help="Dir holding quran_aligner_model.zip + dictionary.txt. "
+        "Omit to use the MFA_MODEL_PATH / MFA_DICTIONARY_PATH env vars.",
     )
     p.add_argument(
         "--repo-root",
@@ -206,9 +223,11 @@ def _main(argv: list[str] | None = None) -> int:
         log.warning("audio_dir %s missing; will fall back to URLs in detailed.json", audio_dir)
         audio_dir = None
 
+    mfa_model_path, mfa_dictionary_path = resolve_mfa_runtime(args.mfa_runtime_dir)
     probe_path, split_path = run_all_sidecars(
         args.reciter_dir,
-        mfa_app_path=args.mfa_app_path,
+        mfa_model_path=Path(mfa_model_path),
+        mfa_dictionary_path=Path(mfa_dictionary_path),
         audio_dir=audio_dir,
         audio_manifest=args.audio_manifest,
         repo_root=args.repo_root,

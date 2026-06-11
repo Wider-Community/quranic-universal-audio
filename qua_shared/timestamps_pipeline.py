@@ -52,6 +52,10 @@ DOWNLOAD_LOG_INTERVAL = 500  # log download progress every N verses
 # and saturates the bucket FUSE I/O, which is what stalled Husary/Mishary.
 # Override per launch with DOWNLOAD_WORKERS env / settings.download_workers.
 DEFAULT_DOWNLOAD_WORKERS = 4
+# Canonical filenames inside an MFA runtime dir (bucket ``mfa-runtime/`` or a
+# Katana-synced copy): the acoustic model zip + pronunciation dictionary.
+MFA_MODEL_FILENAME = "quran_aligner_model.zip"
+MFA_DICTIONARY_FILENAME = "dictionary.txt"
 # Hard cap on a single chapter's ffmpeg decode. Anchored to the worst case
 # observed: 191 MB CBR-128k MP3 → 382 MB PCM, ~22s local, ~100s in an 8-way
 # parallel CPU-bound burst; 600s leaves ~6× headroom for the bucket FUSE
@@ -137,31 +141,105 @@ class SpaceMfaBackend:
             time.sleep(self.batch_delay_seconds)
 
 
-class LocalMfaBackend:
-    """Direct adapter around the quranic-universal-timestamps repo's app.py.
+def resolve_mfa_runtime(runtime_dir: str | Path | None) -> tuple[str, str]:
+    """Resolve ``(model_path, dictionary_path)`` for the local MFA runtime.
 
-    Used when running on Katana / locally with the MFA Space code imported
-    in-process (no HTTP). Single-thread aligner — the pipeline parallelises
-    across beams and batches via a process pool, so this backend stays
-    serial. ``mfa_app_path`` is captured so process-pool workers can
-    re-import the module independently.
+    A directory yields its bundled ``quran_aligner_model.zip`` +
+    ``dictionary.txt`` (both must exist). ``None`` falls back to the
+    ``MFA_MODEL_PATH`` / ``MFA_DICTIONARY_PATH`` env vars.
+    """
+    if runtime_dir is not None:
+        d = Path(runtime_dir)
+        model = d / MFA_MODEL_FILENAME
+        dictionary = d / MFA_DICTIONARY_FILENAME
+        missing = [str(p) for p in (model, dictionary) if not p.is_file()]
+        if missing:
+            raise FileNotFoundError(f"MFA runtime dir {d} is missing: {', '.join(missing)}")
+        return str(model), str(dictionary)
+    model_env = os.environ.get("MFA_MODEL_PATH", "").strip()
+    dict_env = os.environ.get("MFA_DICTIONARY_PATH", "").strip()
+    if not model_env or not dict_env:
+        raise RuntimeError(
+            "MFA runtime unresolved: pass an --mfa-runtime-dir (containing "
+            f"{MFA_MODEL_FILENAME} + {MFA_DICTIONARY_FILENAME}) or set the "
+            "MFA_MODEL_PATH and MFA_DICTIONARY_PATH env vars"
+        )
+    return model_env, dict_env
+
+
+def _paths_from_app_path(mfa_app_path: str | Path) -> tuple[str, str]:
+    """DEPRECATED shim: derive ``(model, dictionary)`` from the legacy aligner
+    ``app.py`` FILE path — both runtime files sit next to it in the same dir."""
+    import warnings
+
+    d = Path(mfa_app_path).resolve().parent
+    warnings.warn(
+        "mfa_app_path is deprecated; pass mfa_model_path + mfa_dictionary_path "
+        f"(deriving {d / MFA_MODEL_FILENAME} + {d / MFA_DICTIONARY_FILENAME})",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    return str(d / MFA_MODEL_FILENAME), str(d / MFA_DICTIONARY_FILENAME)
+
+
+def _sdk_align(
+    aligner,
+    refs: Sequence,
+    audio_paths: Sequence[str],
+    *,
+    method: str,
+    beam: int,
+    shared_cmvn: bool,
+    padding: str,
+    word_boundary_allocation: dict | None = None,
+) -> list[dict]:
+    """Run one batch through a qua_sdk ``MfaLocalAligner`` → legacy row dicts.
+
+    ``retry_beam`` is pinned to ``beam`` (no implicit retry — a wider retry
+    beam is expressed as a separate value in the caller's beams list; the SDK
+    default would silently widen to 35 otherwise). The wb-allocation payload
+    is resolved to the full per-rule dict before the call.
+    """
+    from qua_sdk.components.timing.lib import resolve_word_boundary_allocation
+
+    envelope = aligner.align_items(
+        [(ref, str(p)) for ref, p in zip(refs, audio_paths, strict=True)],
+        method=method,
+        beam=beam,
+        retry_beam=beam,
+        shared_cmvn=shared_cmvn,
+        padding=padding,
+        wb_allocation_resolved=resolve_word_boundary_allocation(word_boundary_allocation),
+    )
+    if envelope.status != "ok":
+        raise RuntimeError(f"Local MFA batch failed: {envelope.error}")
+    return [row.model_dump() for row in envelope.results or []]
+
+
+class LocalMfaBackend:
+    """In-process MFA backend over qua_sdk's ``MfaLocalAligner``.
+
+    Serial single-aligner backend — the pipeline parallelises across beams
+    and batches via the process pool (``_init_worker``/``_worker_align``)
+    when ``workers > 1``, so this backend covers the ``workers == 1`` path.
+    qua_sdk imports stay call-local: importing this module must never pull
+    the SDK (inspector services import it for pure helpers).
     """
 
-    def __init__(self, app_path: Path, *, mfa_threads: int = 1):
-        os.environ["MFA_NUM_THREADS"] = str(mfa_threads)
-        self.app_path = Path(app_path).resolve()
-        self.module = self._load_app_module(self.app_path)
+    def __init__(
+        self,
+        model_path: str | Path | None = None,
+        dictionary_path: str | Path | None = None,
+        *,
+        mfa_threads: int = 1,
+    ):
+        from qua_sdk.components.timing.runtimes.mfa_local import MfaLocalAligner
 
-    @staticmethod
-    def _load_app_module(app_path: Path):
-        import importlib.util
-
-        spec = importlib.util.spec_from_file_location("local_mfa_aligner", app_path)
-        if spec is None or spec.loader is None:
-            raise RuntimeError(f"Cannot import local MFA app: {app_path}")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
+        self.model_path = str(model_path) if model_path else None
+        self.dictionary_path = str(dictionary_path) if dictionary_path else None
+        self.aligner = MfaLocalAligner(
+            self.model_path, self.dictionary_path, num_threads=mfa_threads, use_pool=False
+        )
 
     def align_batch(
         self,
@@ -174,26 +252,16 @@ class LocalMfaBackend:
         padding: str,
         word_boundary_allocation: dict | None = None,
     ) -> list[dict] | None:
-        class _FileObj:
-            def __init__(self, name):
-                self.name = name
-
-        files = [_FileObj(str(p)) for p in audio_paths]
-        wb_json = json.dumps(word_boundary_allocation) if word_boundary_allocation else ""
-        result = self.module._api_align_batch_impl(
-            "local_batch",
-            list(refs),
-            files,
-            method,
-            str(beam),
-            str(beam),  # retry_beam=beam (no implicit retry)
-            str(shared_cmvn).lower(),
-            padding,
-            wb_json,
+        return _sdk_align(
+            self.aligner,
+            refs,
+            audio_paths,
+            method=method,
+            beam=beam,
+            shared_cmvn=shared_cmvn,
+            padding=padding,
+            word_boundary_allocation=word_boundary_allocation,
         )
-        if result.get("status") != "ok":
-            raise RuntimeError(f"Local MFA batch failed: {result}")
-        return result["results"]
 
 
 # ---------------------------------------------------------------------------
@@ -201,19 +269,18 @@ class LocalMfaBackend:
 # ---------------------------------------------------------------------------
 
 # Per-worker globals populated by the executor's initializer.
-_WORKER = {"module": None}
+_WORKER = {"aligner": None}
 
 
-def _init_worker(mfa_app_path: str, mfa_threads: int = 1):
-    """ProcessPoolExecutor initializer: import the MFA app once per worker.
+def _init_worker(model_path: str, dictionary_path: str):
+    """ProcessPoolExecutor initializer: build one MFA aligner per worker.
 
     Each worker gets a unique HOME under /tmp so MFA extracts its acoustic
     model into a worker-private ``~/Documents/MFA`` tree. This sidesteps the
     "Directory not empty" race that hits when N workers all target the
-    same ``~/Documents/MFA/extracted_models`` path.
+    same ``~/Documents/MFA/extracted_models`` path. ``MFA_ROOT_DIR`` is also
+    pinned per-worker (mirrors the SDK's own pool initializer).
     """
-    import importlib.util
-
     pid = os.getpid()
     # Worker HOMEs go under MFA_WORKER_BASE if set, else $TMPDIR (PBS
     # job-scratch — node-local SSD, plenty of space), else /tmp (last resort:
@@ -221,8 +288,10 @@ def _init_worker(mfa_app_path: str, mfa_threads: int = 1):
     base = os.environ.get("MFA_WORKER_BASE") or os.environ.get("TMPDIR") or "/tmp"
     home = f"{base}/mfa_w{pid}"
     os.makedirs(home + "/Documents/MFA", exist_ok=True)
+    mfa_root = f"{home}/mfa_data"
+    os.makedirs(mfa_root, exist_ok=True)
     os.environ["HOME"] = home
-    os.environ["MFA_NUM_THREADS"] = str(mfa_threads)
+    os.environ["MFA_ROOT_DIR"] = mfa_root
     # Single-thread the BLAS stack — workers themselves provide parallelism.
     for var in (
         "OMP_NUM_THREADS",
@@ -231,40 +300,28 @@ def _init_worker(mfa_app_path: str, mfa_threads: int = 1):
         "NUMEXPR_NUM_THREADS",
     ):
         os.environ.setdefault(var, "1")
-    spec = importlib.util.spec_from_file_location("local_mfa_aligner", mfa_app_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    _WORKER["module"] = module
+    from qua_sdk.components.timing.runtimes.mfa_local import MfaLocalAligner
+
+    _WORKER["aligner"] = MfaLocalAligner(model_path, dictionary_path, num_threads=1, use_pool=False)
 
 
 def _worker_align(
     refs, audio_paths, method, beam, shared_cmvn, padding, word_boundary_allocation=None
 ):
     """ProcessPoolExecutor task: align one batch slice for one beam."""
-    module = _WORKER["module"]
-    if module is None:
-        raise RuntimeError("Worker not initialized; missing MFA module.")
-
-    class _FileObj:
-        def __init__(self, name):
-            self.name = name
-
-    files = [_FileObj(p) for p in audio_paths]
-    wb_json = json.dumps(word_boundary_allocation) if word_boundary_allocation else ""
-    result = module._api_align_batch_impl(
-        f"w{os.getpid()}",
-        list(refs),
-        files,
-        method,
-        str(beam),
-        str(beam),
-        str(shared_cmvn).lower(),
-        padding,
-        wb_json,
+    aligner = _WORKER["aligner"]
+    if aligner is None:
+        raise RuntimeError("Worker not initialized; missing MFA aligner.")
+    return _sdk_align(
+        aligner,
+        refs,
+        audio_paths,
+        method=method,
+        beam=beam,
+        shared_cmvn=shared_cmvn,
+        padding=padding,
+        word_boundary_allocation=word_boundary_allocation,
     )
-    if result.get("status") != "ok":
-        raise RuntimeError(f"Worker MFA batch failed: {result}")
-    return result["results"]
 
 
 # ---------------------------------------------------------------------------
@@ -757,6 +814,8 @@ def process(
     refresh_chapters: set[int] | None = None,
     download_workers: int = DEFAULT_DOWNLOAD_WORKERS,
     workers: int = DEFAULT_WORKERS,
+    mfa_model_path: str | Path | None = None,
+    mfa_dictionary_path: str | Path | None = None,
     mfa_app_path: str | Path | None = None,
     word_boundary_allocation: dict | None = None,
 ) -> Path | None:
@@ -770,11 +829,13 @@ def process(
     ``ts_validation.json`` sidecar — verses that align under the canonical
     beam but fail under a tighter beam are flagged as low-confidence.
 
-    When ``mfa_app_path`` is set and ``workers > 1``, the alignment
-    fan-out runs across a ProcessPoolExecutor (true parallelism, GIL
-    bypassed) — this is the local Katana / Kalpy path. Otherwise the
-    single supplied ``backend`` is called serially per (batch, beam),
-    which is what the HF Space wrapper uses.
+    When ``mfa_model_path`` + ``mfa_dictionary_path`` are set and
+    ``workers > 1``, the alignment fan-out runs across a
+    ProcessPoolExecutor (true parallelism, GIL bypassed) — this is the
+    local Katana / Kalpy path. Otherwise the single supplied ``backend``
+    is called serially per (batch, beam), which is what the HF Space
+    wrapper uses. ``mfa_app_path`` is a deprecated alias: the model +
+    dictionary are derived from the app.py file's directory.
 
     ``refresh_chapters`` (surah numbers) scopes the run to those chapters only —
     untouched chapters keep their existing shards, and the whole-reciter
@@ -788,7 +849,9 @@ def process(
     # Canonical = widest beam, regardless of input order. The narrower beams
     # feed the verse-level ts_validation.json sidecar (built after alignment).
     canonical_beam = max(beams)
-    use_pool = mfa_app_path is not None and workers > 1
+    if mfa_app_path is not None and not (mfa_model_path and mfa_dictionary_path):
+        mfa_model_path, mfa_dictionary_path = _paths_from_app_path(mfa_app_path)
+    use_pool = bool(mfa_model_path and mfa_dictionary_path) and workers > 1
     if not use_pool and backend is None:
         raise ValueError("backend is required when not using the process pool")
 
@@ -1103,7 +1166,9 @@ def process(
         producer.start()
 
         with ProcessPoolExecutor(
-            max_workers=workers, initializer=_init_worker, initargs=(str(mfa_app_path), 1)
+            max_workers=workers,
+            initializer=_init_worker,
+            initargs=(str(mfa_model_path), str(mfa_dictionary_path)),
         ) as pool:
             buf_refs, buf_paths, buf_map = [], [], []
             while True:
@@ -1391,9 +1456,11 @@ def main():
     parser.add_argument(
         "--method", default=DEFAULT_METHOD, help="Alignment method (default: kalpy)"
     )
-    parser.add_argument("--beam", type=int, default=DEFAULT_BEAM, help="Beam width (default: 10)")
     parser.add_argument(
-        "--retry-beam", type=int, default=DEFAULT_RETRY_BEAM, help="Retry beam width (default: 40)"
+        "--beams",
+        default=",".join(str(b) for b in DEFAULT_BEAMS),
+        help="Comma-separated beam widths; the widest is canonical, the rest "
+        f"are validation probes (default: {DEFAULT_BEAMS[0]})",
     )
     parser.add_argument(
         "--shared-cmvn", action="store_true", help="Compute shared CMVN across batch (kalpy only)"
@@ -1431,13 +1498,13 @@ def main():
     input_dir = Path(args.input).resolve()
     output_dir = Path(args.output).resolve() if args.output else None
     refresh = set(args.refresh_verses.split(",")) if args.refresh_verses else None
+    beams = [int(t) for t in args.beams.replace(" ", "").split(",") if t]
 
     process(
         input_dir=input_dir,
         backend=SpaceMfaBackend(args.space_url),
         method=args.method,
-        beam=args.beam,
-        retry_beam=args.retry_beam,
+        beams=beams,
         shared_cmvn=args.shared_cmvn,
         resume=args.resume,
         batch_size=args.batch_size,

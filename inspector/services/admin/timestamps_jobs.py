@@ -124,7 +124,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _INSTALL = (
     "mamba install -y -c conda-forge python=3.11 montreal-forced-aligner "
     "&& /opt/conda/bin/pip install gradio soundfile tgt numpy PyYAML requests psutil "
-    "'quranic-phonemizer>=2.0' 'huggingface_hub>=1.8.0' "
+    "'quranic-phonemizer>=2.2,<3' 'huggingface_hub>=1.8.0' "
     "&& mkdir -p /scratch"
 )
 _ENTRYPOINT = "python /aux/code/qua_jobs/generate_timestamps.py"
@@ -146,10 +146,59 @@ def _job_id(job) -> str | None:
     return getattr(job, "id", None) or getattr(job, "job_id", None)
 
 
+def _resolve_qua_sdk_src() -> Path | None:
+    """Locate a qua_sdk source tree to stage alongside qua_shared.
+
+    Resolution chain: ``QUA_SDK_SRC`` env (the qua_sdk package dir, or its
+    ``src/`` parent) → repo-root sibling ``../qua-sdk/src/qua_sdk`` → the
+    installed package via ``find_spec``. None when nothing resolves (the
+    deployed Space has no checkout — the durable bucket copy is reused)."""
+    env = os.environ.get("QUA_SDK_SRC", "").strip()
+    if env:
+        for cand in (Path(env), Path(env) / "qua_sdk"):
+            if (cand / "__init__.py").is_file():
+                return cand
+        log.warning("QUA_SDK_SRC=%s does not contain a qua_sdk package; ignoring", env)
+    sibling = _REPO_ROOT.parent / "qua-sdk" / "src" / "qua_sdk"
+    if (sibling / "__init__.py").is_file():
+        return sibling
+    try:
+        import importlib.util
+
+        spec = importlib.util.find_spec("qua_sdk")
+        if spec is not None and spec.origin:
+            return Path(spec.origin).parent
+    except Exception as exc:  # noqa: BLE001 — staging is best-effort
+        log.warning("find_spec('qua_sdk') failed: %s", exc)
+    return None
+
+
+def _qua_sdk_stage_adds(sdk_src: Path) -> list[tuple[str, str]]:
+    """(local, bucket) pairs for the qua_sdk tree: ``*.py`` + ``py.typed`` +
+    ``domain/data/*.json``, excluding ``__pycache__`` and the compiled
+    ``_dp_core`` artefacts (the job uses timing only, never the DP core)."""
+    adds: list[tuple[str, str]] = []
+    for path in sdk_src.rglob("*"):
+        if not path.is_file() or "__pycache__" in path.parts:
+            continue
+        if path.name.startswith("_dp_core"):
+            continue
+        rel = path.relative_to(sdk_src).as_posix()
+        keep = (
+            path.suffix == ".py"
+            or path.name == "py.typed"
+            or (path.suffix == ".json" and rel.startswith("domain/data/"))
+        )
+        if keep:
+            adds.append((str(path), f"code/qua_sdk/{rel}"))
+    return adds
+
+
 def _stage_job_code() -> None:
-    """Upload qua_shared + qua_jobs to ``aligner-bucket/code/`` so the job
-    can import the pipeline. Idempotent (Xet skips unchanged content); cheap
-    enough to run on every launch so the job always runs current code."""
+    """Upload qua_shared + qua_jobs + the qua_sdk source to
+    ``aligner-bucket/code/`` so the job can import the pipeline and the SDK
+    aligner. Idempotent (Xet skips unchanged content); cheap enough to run on
+    every launch so the job always runs current code."""
     from huggingface_hub import batch_bucket_files
 
     adds: list[tuple[str, str]] = []
@@ -160,6 +209,15 @@ def _stage_job_code() -> None:
                 continue
             rel = path.relative_to(_REPO_ROOT).as_posix()
             adds.append((str(path), f"code/{rel}"))
+    sdk_src = _resolve_qua_sdk_src()
+    if sdk_src is None:
+        log.warning(
+            "qua_sdk source not found (QUA_SDK_SRC env / sibling checkout / "
+            "installed package) — skipping SDK staging; the job reuses the "
+            "existing bucket copy"
+        )
+    else:
+        adds.extend(_qua_sdk_stage_adds(sdk_src))
     if adds:
         batch_bucket_files(ALIGNER_BUCKET, add=adds)
         log.info("staged %d job-code files to %s/code/", len(adds), ALIGNER_BUCKET)
@@ -334,6 +392,10 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
     env = {
         "SLUG": slug,
         "INSPECTOR_BUCKET_MOUNT": "/data",
+        "MFA_MODEL_PATH": "/aux/mfa-runtime/quran_aligner_model.zip",
+        "MFA_DICTIONARY_PATH": "/aux/mfa-runtime/dictionary.txt",
+        # Legacy fallback for one release: a job picking up a stale bucket
+        # qua_shared still derives the runtime from this dir.
         "MFA_APP_PATH": "/aux/mfa-runtime/app.py",
         "PYTHONPATH": "/aux/code",
         "MFA_WORKER_BASE": "/scratch",
