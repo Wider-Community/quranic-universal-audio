@@ -2,14 +2,16 @@
  * Accordion-scoped navigation sequence.
  *
  * When a validation accordion is open the main list is hidden, so the only
- * non-context `.seg-row` cards in the DOM are the open category's card rows —
- * in render order. This reads them straight from the DOM (cheap, and immune to
- * the per-card split-group / resolve complexity) to drive ↑/↓ navigation and
- * autoplay-advance through the cards, skipping the grey context rows.
+ * `.seg-row` cards in the DOM are the open category's rows — in render order.
+ * This reads them straight from the DOM (cheap, and immune to the per-card
+ * split-group / resolve complexity) to drive ↑/↓ navigation and autoplay-
+ * advance through the accordion.
  *
- * Multi-segment cards (split groups) render several non-context rows, so they
- * fall into the sequence naturally — ↓ flows card→card AND through a card's
- * pieces as one continuous list, exactly the "context-aware" behaviour.
+ * The sequence includes context (prev/next neighbour) rows as well as main
+ * rows, so ↑/↓ can land on a neighbour, and multi-segment split cards flow
+ * through their pieces — one continuous list. A segment that appears twice
+ * (e.g. one card's "next" neighbour is the next card's main row) is deduped to
+ * a single stop in DOM order.
  */
 
 import { get } from 'svelte/store';
@@ -22,19 +24,24 @@ export interface AccordionRowRef {
     index: number;
 }
 
-/** Ordered (chapter, index) list of the open accordion's focusable card rows,
- *  or [] when no accordion is open / nothing is rendered. */
+/** Ordered, deduped (chapter, index) list of the open accordion's rows
+ *  (context + main), or [] when no accordion is open / nothing is rendered. */
 export function accordionSequence(): AccordionRowRef[] {
     if (get(valUiOpenCategory) === null) return [];
     if (typeof document === 'undefined') return [];
     const rows = document.querySelectorAll<HTMLElement>(
-        '.seg-row[data-seg-uid]:not(.seg-row-context):not(.mode-history)',
+        '.seg-row[data-seg-uid]:not(.mode-history)',
     );
     const out: AccordionRowRef[] = [];
+    const seen = new Set<string>();
     rows.forEach((el) => {
         const idx = Number(el.dataset.segIndex);
         const ch = el.dataset.segChapter != null ? Number(el.dataset.segChapter) : NaN;
-        if (Number.isFinite(idx) && Number.isFinite(ch)) out.push({ chapter: ch, index: idx });
+        if (!Number.isFinite(idx) || !Number.isFinite(ch)) return;
+        const key = `${ch}:${idx}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push({ chapter: ch, index: idx });
     });
     return out;
 }

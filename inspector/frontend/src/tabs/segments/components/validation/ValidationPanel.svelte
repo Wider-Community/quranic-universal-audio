@@ -532,28 +532,35 @@
     // ---- Accordion auto-scroll ----
     // The main-list autoscroll (SegmentsList) ignores accordion plays, so the
     // open accordion keeps the focused card centred itself. Every card switch —
-    // autoplay-advance, ↑/↓ nav, or a card play click — routes through
-    // playFromSegment → playingSegmentIndex with origin 'accordion', so we just
-    // react to that. Targets the card's MAIN row (`:not(.seg-row-context)`) so
-    // Show/Hide Context can't redirect the scroll onto a neighbour.
+    // autoplay-advance, ↑/↓ nav, or a card / context play click — routes through
+    // playFromSegment → playingSegmentIndex with origin 'accordion', so we react
+    // to that and scroll to whichever row is now playing (main OR context).
+    // `_ctxEpoch` bumps on any Show/Hide Context toggle so we also re-centre the
+    // focused card when context rows appear/disappear and shove it off-screen.
     let _lastAccordionScrollKey = '';
-    $: maybeAccordionAutoScroll($autoScrollEnabled, $playingSegmentIndex, $valUiOpenCategory);
+    let _lastCtxEpoch = -1;
+    let _ctxEpoch = 0;
+    $: maybeAccordionAutoScroll($autoScrollEnabled, $playingSegmentIndex, $valUiOpenCategory, _ctxEpoch);
     function maybeAccordionAutoScroll(
         on: boolean,
         active: { chapter: number; index: number; origin?: string } | null,
         openCat: string | null,
+        epoch: number,
     ): void {
         if (!on || openCat === null || !active || active.origin !== 'accordion') {
             _lastAccordionScrollKey = '';
+            _lastCtxEpoch = epoch;
             return;
         }
         const key = `${active.chapter}:${active.index}`;
-        if (key === _lastAccordionScrollKey) return;
+        const epochChanged = epoch !== _lastCtxEpoch;
+        if (key === _lastAccordionScrollKey && !epochChanged) return;
         _lastAccordionScrollKey = key;
+        _lastCtxEpoch = epoch;
         requestAnimationFrame(() => {
             document
                 .querySelector<HTMLElement>(
-                    `.seg-row[data-seg-chapter="${active.chapter}"][data-seg-index="${active.index}"]:not(.seg-row-context)`,
+                    `.seg-row[data-seg-chapter="${active.chapter}"][data-seg-index="${active.index}"]`,
                 )
                 ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
         });
@@ -922,6 +929,10 @@
     // ---- Context state sync: card notifies panel when user toggles Show/Hide ----
     function onCardContextChange(type: string, absIdx: number, shown: boolean): void {
         getContextState(type).set(absIdx, shown);
+        // Bump the epoch so the auto-scroll driver re-centres the focused card —
+        // showing/hiding context rows shifts it and would otherwise leave it
+        // off-screen.
+        _ctxEpoch += 1;
     }
 
     function relayCardContext(catType: string, absIdx: number, ev: CustomEvent<boolean>): void {
