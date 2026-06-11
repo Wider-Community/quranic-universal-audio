@@ -95,7 +95,7 @@ export const SHORTCUT_SECTIONS: ShortcutSection[] = [
     {
         title: 'While adjusting / splitting',
         hint: 'During trim or split — fixed keys',
-        ids: ['edit_step_back', 'edit_step_fwd', 'edit_cycle', 'edit_confirm', 'edit_cancel'],
+        ids: ['edit_step_back', 'edit_step_fwd', 'edit_cycle', 'edit_replay', 'edit_confirm', 'edit_cancel'],
     },
 ];
 
