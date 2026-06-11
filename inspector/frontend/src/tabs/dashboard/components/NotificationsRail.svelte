@@ -1,14 +1,18 @@
 <script lang="ts">
     /**
-     * Per-user "My Notifications" rail — sits above Recent activity, under the
-     * admin-dashboard button. Shows events that happened to the signed-in user
-     * (request sent back / discarded, reciter ready, assigned, claim
-     * force-released, segment-flag reply). Each notification is a mini-accordion
-     * (collapsed: title + time; expanded: detail + a link to the reciter).
+     * "My Notifications" rail — sits above Recent activity, under the
+     * admin-dashboard button. Two sources, rendered as one list:
      *
-     * Per-user, dismissable → archived (Active/Archive toggle in the header).
-     * Polls every 30s while visible via the shared notifications store. Hidden
-     * for anonymous users (they have no notifications).
+     * - Global announcements (public; shown to everyone incl. anonymous) — an
+     *   owner broadcast. Dismiss is client-side (localStorage); no archive.
+     * - Per-user notifications (signed-in only) — events that happened to the
+     *   user (request sent back / discarded, reciter ready, assigned, claim
+     *   force-released, segment-flag reply). Dismissable → archived.
+     *
+     * In the Active view both sources merge, newest-first, styled identically.
+     * The Active/Archive toggle + archive list are signed-in-only (announcements
+     * never archive). The whole rail shows for anonymous users whenever at least
+     * one announcement is active. Polls every 30s while visible.
      */
     import { onDestroy, onMount } from 'svelte';
 
@@ -16,18 +20,33 @@
     import { currentUser, isSignedIn } from '../../../lib/stores/current-user';
     import { gotoSegments } from '../../../lib/utils/goto-segments';
     import { relativeTime } from '../../../lib/utils/relative-time';
+    import { announcements } from '../stores/announcements.svelte';
     import { resolveDeliverySlug } from '../stores/catalog-data';
     import { openDetail } from '../stores/dashboard-state';
     import { notifications } from '../stores/notifications.svelte';
 
     const signedIn = $derived(isSignedIn($currentUser));
+    const visible = $derived(signedIn || announcements.active.length > 0);
 
-    onMount(() => notifications.start());
-    onDestroy(() => notifications.stop());
+    onMount(() => {
+        announcements.start();
+        if (signedIn) notifications.start();
+    });
+    onDestroy(() => {
+        announcements.stop();
+        if (signedIn) notifications.stop();
+    });
 
-    const list = $derived(
-        notifications.view === 'active' ? notifications.active : notifications.archived,
-    );
+    /** Unified card shape so announcements + notifications render identically. */
+    interface RailCard {
+        key: string;
+        title: string;
+        body: string | null;
+        created_at: string;
+        unseen: boolean;
+        nav: { label: string; go: () => void } | null;
+        dismiss: () => void;
+    }
 
     function openReciter(n: UserNotification): void {
         if (!n.slug) return;
@@ -37,13 +56,7 @@
 
     /**
      * Where clicking a notification should take the user, with an explicit
-     * label so the destination is transparent before they click:
-     * - alignment-ready / assigned → open the reciter in the Segments tab
-     *   (mirrors the post-claim redirect).
-     * - flag reply → open it in Segments, open the Flagged accordion, and
-     *   scroll to the flagged segment.
-     * - everything else (request/intake rejections) → the dashboard detail
-     *   modal, when the reciter is still in the catalog.
+     * label so the destination is transparent before they click.
      */
     function navTarget(n: UserNotification): { label: string; go: () => void } | null {
         const slug = n.slug;
@@ -66,75 +79,133 @@
                     : null;
         }
     }
+
+    /** Active view: announcements + personal notifications merged, newest-first. */
+    const activeCards = $derived<RailCard[]>(
+        [
+            ...announcements.active.map(
+                (a): RailCard => ({
+                    key: `ann-${a.id}`,
+                    title: a.title,
+                    body: a.body ?? null,
+                    created_at: a.created_at,
+                    unseen: announcements.isNew(a.id),
+                    nav: null,
+                    dismiss: () => announcements.dismiss(a.id),
+                }),
+            ),
+            ...notifications.active.map(
+                (n): RailCard => ({
+                    key: `notif-${n.id}`,
+                    title: n.title,
+                    body: n.body,
+                    created_at: n.created_at,
+                    unseen: !n.seen_at,
+                    nav: navTarget(n),
+                    dismiss: () => notifications.dismiss(n.id),
+                }),
+            ),
+        ].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
+    );
+
+    const badge = $derived(announcements.unread + notifications.unread);
 </script>
 
-{#if signedIn}
+{#if visible}
     <aside class="notifs" aria-label="My notifications">
         <header>
             <h2>My notifications</h2>
-            {#if notifications.unread > 0 && notifications.view === 'active'}
-                <span class="badge" aria-label="{notifications.unread} unread">{notifications.unread}</span>
+            {#if badge > 0 && notifications.view === 'active'}
+                <span class="badge" aria-label="{badge} unread">{badge}</span>
             {/if}
-            <div class="toggle" role="tablist" aria-label="Notifications view">
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={notifications.view === 'active'}
-                    class:on={notifications.view === 'active'}
-                    onclick={() => notifications.setView('active')}>Active</button>
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={notifications.view === 'archive'}
-                    class:on={notifications.view === 'archive'}
-                    onclick={() => notifications.setView('archive')}>Archive</button>
-            </div>
+            {#if signedIn}
+                <div class="toggle" role="tablist" aria-label="Notifications view">
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={notifications.view === 'active'}
+                        class:on={notifications.view === 'active'}
+                        onclick={() => notifications.setView('active')}>Active</button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={notifications.view === 'archive'}
+                        class:on={notifications.view === 'archive'}
+                        onclick={() => notifications.setView('archive')}>Archive</button>
+                </div>
+            {/if}
         </header>
 
-        {#if notifications.error}
-            <div class="state error">{notifications.error}</div>
-        {:else if notifications.view === 'active' && notifications.loading}
-            <div class="state">Loading…</div>
-        {:else if list.length === 0}
-            <div class="state">
-                {notifications.view === 'active' ? 'No notifications.' : 'Nothing archived.'}
-            </div>
-        {:else}
-            <ol class="list">
-                {#each list as n (n.id)}
-                    {@const target = navTarget(n)}
-                    <li class="item" class:unseen={notifications.view === 'active' && !n.seen_at}>
-                        <div class="body-wrap">
-                            <p class="title">{n.title}</p>
-                            {#if n.body}
-                                <p class="body">{n.body}</p>
-                            {/if}
-                            <time class="time" datetime={n.created_at}>{relativeTime(n.created_at)}</time>
-                        </div>
-                        <div class="actions">
-                            {#if target}
-                                <button
-                                    class="act"
-                                    type="button"
-                                    aria-label={target.label}
-                                    title={target.label}
-                                    onclick={target.go}>↗</button>
-                            {/if}
-                            {#if notifications.view === 'active'}
-                                <button
-                                    class="act"
-                                    type="button"
-                                    aria-label="Dismiss"
-                                    title="Dismiss to archive"
-                                    onclick={() => notifications.dismiss(n.id)}>✕</button>
-                            {:else}
+        {#if notifications.view === 'archive'}
+            {#if notifications.error}
+                <div class="state error">{notifications.error}</div>
+            {:else if notifications.archived.length === 0}
+                <div class="state">Nothing archived.</div>
+            {:else}
+                <ol class="list">
+                    {#each notifications.archived as n (n.id)}
+                        {@const target = navTarget(n)}
+                        <li class="item">
+                            <div class="body-wrap">
+                                <p class="title">{n.title}</p>
+                                {#if n.body}
+                                    <p class="body">{n.body}</p>
+                                {/if}
+                                <time class="time" datetime={n.created_at}
+                                    >{relativeTime(n.created_at)}</time>
+                            </div>
+                            <div class="actions">
+                                {#if target}
+                                    <button
+                                        class="act"
+                                        type="button"
+                                        aria-label={target.label}
+                                        title={target.label}
+                                        onclick={target.go}>↗</button>
+                                {/if}
                                 <button
                                     class="act"
                                     type="button"
                                     aria-label="Restore"
                                     title="Restore to active"
                                     onclick={() => notifications.restore(n.id)}>↩</button>
+                            </div>
+                        </li>
+                    {/each}
+                </ol>
+            {/if}
+        {:else if notifications.error}
+            <div class="state error">{notifications.error}</div>
+        {:else if signedIn && notifications.loading && activeCards.length === 0}
+            <div class="state">Loading…</div>
+        {:else if activeCards.length === 0}
+            <div class="state">No notifications.</div>
+        {:else}
+            <ol class="list">
+                {#each activeCards as c (c.key)}
+                    <li class="item" class:unseen={c.unseen}>
+                        <div class="body-wrap">
+                            <p class="title">{c.title}</p>
+                            {#if c.body}
+                                <p class="body">{c.body}</p>
                             {/if}
+                            <time class="time" datetime={c.created_at}>{relativeTime(c.created_at)}</time>
+                        </div>
+                        <div class="actions">
+                            {#if c.nav}
+                                <button
+                                    class="act"
+                                    type="button"
+                                    aria-label={c.nav.label}
+                                    title={c.nav.label}
+                                    onclick={c.nav.go}>↗</button>
+                            {/if}
+                            <button
+                                class="act"
+                                type="button"
+                                aria-label="Dismiss"
+                                title="Dismiss"
+                                onclick={c.dismiss}>✕</button>
                         </div>
                     </li>
                 {/each}

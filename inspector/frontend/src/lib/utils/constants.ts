@@ -19,6 +19,8 @@ export const LS_KEYS = {
     SEG_AUTOSAVE:    'insp_seg_autosave',
     SEG_SHORTCUTS:   'insp_seg_shortcuts',
     DASH_RECITER:    'insp_dash_reciter',
+    DISMISSED_ANNOUNCEMENTS: 'insp_dismissed_announcements',
+    SEEN_ANNOUNCEMENTS:      'insp_seen_announcements',
 } as const;
 
 export const PLACEHOLDER_SELECT = '-- select --';

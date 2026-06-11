@@ -79,6 +79,7 @@ from .wire.admin_users import (
     AdminVisitorStats,
     VisitorDayStat,
 )
+from .wire.announcements import Announcement
 from .wire.audio import AudioSurahEntry, AudioSurahsResponse
 from .wire.intake_requests import (
     IntakeAttestations,
@@ -144,6 +145,7 @@ from .wire.seg import (
 from .wire.timestamps import TsConfigResponse, TsManifestResponse
 
 __all__ = [
+    "Announcement",
     "AdminDiscardedDelivery",
     "AdminViewReciter",
     "AudioSurahEntry",

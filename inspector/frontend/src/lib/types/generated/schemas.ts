@@ -616,6 +616,15 @@ export interface VisitorDayStat {
   unique_anon?: number;
   [k: string]: unknown;
 }
+/**
+ * Public read shape — the fields the notifications rail renders.
+ */
+export interface Announcement {
+  id: number;
+  title: string;
+  body?: string | null;
+  created_at: string;
+}
 export interface AudioSurahEntry {
   [k: string]: unknown;
 }
