@@ -139,3 +139,38 @@ describe('audio-graph', () => {
         expect(_ctxResume).toHaveBeenCalled();
     });
 });
+
+class LatencyCtx extends FakeAudioContext {
+    baseLatency = 0.01;
+    outputLatency = 0.04;
+}
+
+describe('output latency / displayTimeMs', () => {
+    it('getOutputLatencyMs returns (baseLatency + outputLatency) * 1000', async () => {
+        (globalThis as { AudioContext: typeof AudioContext }).AudioContext =
+            LatencyCtx as unknown as typeof AudioContext;
+        const { getOutputLatencyMs } = await import('../audio-graph');
+        expect(getOutputLatencyMs()).toBeCloseTo(50, 6);
+    });
+
+    it('displayTimeMs subtracts the output latency from the media clock', async () => {
+        (globalThis as { AudioContext: typeof AudioContext }).AudioContext =
+            LatencyCtx as unknown as typeof AudioContext;
+        const { displayTimeMs } = await import('../audio-graph');
+        expect(displayTimeMs(1000)).toBeCloseTo(950, 6);
+    });
+
+    it('displayTimeMs clamps to 0 when latency exceeds the media position', async () => {
+        (globalThis as { AudioContext: typeof AudioContext }).AudioContext =
+            LatencyCtx as unknown as typeof AudioContext;
+        const { displayTimeMs } = await import('../audio-graph');
+        expect(displayTimeMs(10)).toBe(0);
+    });
+
+    it('displayTimeMs is identity (latency 0) when no AudioContext is available', async () => {
+        delete (globalThis as { AudioContext?: typeof AudioContext }).AudioContext;
+        const { displayTimeMs, getOutputLatencyMs } = await import('../audio-graph');
+        expect(getOutputLatencyMs()).toBe(0);
+        expect(displayTimeMs(1234)).toBe(1234);
+    });
+});

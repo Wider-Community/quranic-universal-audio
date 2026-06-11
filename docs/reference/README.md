@@ -25,6 +25,7 @@ Where a reference doc here touches those domains (e.g. the route map in `archite
 | [automation.md](automation.md) | Owner-configurable release automations — the opt-in reconciler daemon that fires the release jobs on a schedule/rules (auto-gen TS, GH cut, HF batch-publish, stale-TS regen, stale-metadata refresh), config blob + state tables, the `release.manage_automation` gate, the Releases-tab Automation card, single-flight / failed-skip / debounce / chaining invariants. |
 | [validation.md](validation.md) | Registry-backed validation engine, categories, persisted classifier fields, bench/drift harness. |
 | [frontend.md](frontend.md) | The Svelte 5 SPA — dashboard/timestamps/segments tabs, `lib/` cross-tab, stores, charts, peaks caching. |
+| [keyboard-shortcuts.md](keyboard-shortcuts.md) | Segments tab user-editable, context-scoped keyboard shortcuts — the catalogue + binding store (localStorage), the context-resolving dispatcher, the active-row action registry, accordion nav + auto-scroll, the footer rebind popover, and the convention for adding a key. |
 | [accordion-guides.md](accordion-guides.md) | Validation accordion help-modal guide templates (`tabs/segments/guides/`). |
 | [config-deploy.md](config-deploy.md) | Env vars, Space secrets, image build, deploy workflow, healthz, single-worker invariant. |
 | [data-migrations.md](data-migrations.md) | One-shot migration / backfill scripts (`scripts/migrations/`, `scripts/backfills/`) — detection, apply CLI, rollback. |

@@ -241,7 +241,7 @@
         left: 0;
         min-width: 320px;
         max-width: 480px;
-        max-height: min(360px, 50vh);
+        max-height: min(720px, 80vh);
         overflow: hidden;
         background: var(--panel);
         border: 1px solid var(--border-default);

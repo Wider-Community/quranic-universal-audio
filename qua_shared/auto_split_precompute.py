@@ -62,9 +62,11 @@ from typing import NamedTuple
 from qua_shared.mfa_runtime import MfaRuntime
 from qua_shared.timestamps_pipeline import (
     DEFAULT_ALIGNER_MODEL,
+    _paths_from_app_path,
     _worker_align,
     download_audio,
     load_audio_int16,
+    resolve_mfa_runtime,
     slice_audio,
 )
 from qua_shared.timestamps_pipeline import (
@@ -284,7 +286,9 @@ def _build_seg_candidate(
 def run_precompute(
     reciter_dir: Path,
     *,
-    mfa_app_path: Path,
+    mfa_model_path: Path | None = None,
+    mfa_dictionary_path: Path | None = None,
+    mfa_app_path: Path | None = None,
     audio_dir: Path | None = None,
     audio_manifest: Path | None = None,
     repo_root: Path | None = None,
@@ -315,9 +319,20 @@ def run_precompute(
        skip silently if neither the explicit path nor the auto-detected one
        exists.
 
+    ``mfa_app_path`` is a deprecated alias for the model + dictionary pair
+    (derived from the app.py file's directory).
+
     Returns the sidecar path on success, or ``None`` when ``detailed.json``
     is missing.
     """
+    if mfa_app_path is not None and not (mfa_model_path and mfa_dictionary_path):
+        mfa_model_path, mfa_dictionary_path = _paths_from_app_path(mfa_app_path)
+    if not mfa_model_path or not mfa_dictionary_path:
+        raise ValueError(
+            "run_precompute needs mfa_model_path + mfa_dictionary_path "
+            "(or the deprecated mfa_app_path)"
+        )
+
     reciter_dir = Path(reciter_dir).resolve()
     detailed_path = reciter_dir / "detailed.json"
     if not detailed_path.exists():
@@ -462,7 +477,7 @@ def run_precompute(
     # a self-contained pool. See qua_shared/mfa_runtime.py.
     owned_runtime: MfaRuntime | None = None
     if runtime is None:
-        owned_runtime = MfaRuntime(mfa_app_path, workers)
+        owned_runtime = MfaRuntime(mfa_model_path, mfa_dictionary_path, workers)
         owned_runtime.__enter__()
     pool = (runtime or owned_runtime).pool
     try:
@@ -615,7 +630,11 @@ def _main(argv: list[str] | None = None) -> int:
         "--reciter-dir", required=True, type=Path, help="Directory containing detailed.json."
     )
     p.add_argument(
-        "--mfa-app-path", required=True, type=Path, help="Path to the local MFA aligner module."
+        "--mfa-runtime-dir",
+        type=Path,
+        default=None,
+        help="Dir holding quran_aligner_model.zip + dictionary.txt. "
+        "Omit to use the MFA_MODEL_PATH / MFA_DICTIONARY_PATH env vars.",
     )
     p.add_argument(
         "--audio-dir",
@@ -645,9 +664,11 @@ def _main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         datefmt="%H:%M:%S",
     )
+    mfa_model_path, mfa_dictionary_path = resolve_mfa_runtime(args.mfa_runtime_dir)
     sidecar = run_precompute(
         args.reciter_dir,
-        mfa_app_path=args.mfa_app_path,
+        mfa_model_path=Path(mfa_model_path),
+        mfa_dictionary_path=Path(mfa_dictionary_path),
         audio_dir=args.audio_dir,
         repo_root=args.repo_root,
         beam=args.beam,

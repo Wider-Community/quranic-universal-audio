@@ -54,6 +54,7 @@
     import { getActiveTab } from '../../utils/active-tab';
     import { TAB_NAMES } from '../../utils/constants';
     import { DASHBOARD_SPEEDS } from '../../utils/speed-control';
+    import { getSurahInfo, surahInfoReady } from '../../utils/surah-info';
     import PlayerControls from './PlayerControls.svelte';
     import PlayerMetaChip from './PlayerMetaChip.svelte';
     import PlayerProgress from './PlayerProgress.svelte';
@@ -590,6 +591,11 @@
         .map(Number)
         .filter(Number.isFinite)
         .sort((a, b) => a - b);
+
+    let _surahMap: ReturnType<typeof getSurahInfo> = {};
+    void surahInfoReady.then(() => { _surahMap = getSurahInfo(); });
+    $: activeSurahName = _surahMap[String($playerContext.surahNum)]?.name_en ?? null;
+
     $: canPrev = $playerContext.surahNum !== null && surahNums.indexOf($playerContext.surahNum) > 0;
     $: canNext = $playerContext.surahNum !== null
         && surahNums.indexOf($playerContext.surahNum) >= 0
@@ -640,7 +646,7 @@
                         aria-haspopup="dialog"
                     >
                         {#if $playerContext.surahNum}
-                            Surah <span class="num">{$playerContext.surahNum}</span>
+                            {activeSurahName ?? `Surah ${$playerContext.surahNum}`}
                         {:else}
                             Pick surah
                         {/if}
@@ -842,11 +848,6 @@
     .surah-trigger:disabled {
         opacity: 0.35;
         cursor: not-allowed;
-    }
-    .surah-trigger .num {
-        font-family: var(--font-mono);
-        font-size: 10.5px;
-        color: var(--text-faint);
     }
     .surah-pop {
         position: absolute;

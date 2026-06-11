@@ -36,6 +36,7 @@ import {
     setEditStatusText,
     setSplitPreviewSelection,
     setSplitState,
+    splitPreviewSelection,
     updateSplitState,
 } from '../../stores/edit';
 import { clearFlashForChapter, targetSegmentIndex } from '../../stores/navigation';
@@ -374,6 +375,83 @@ export function nudgeSplitCursor(idx: number, deltaMs: number): number | null {
 /** Binary-mode convenience: step the single cursor (index 0). */
 export function nudgeSplitBoundary(deltaMs: number): number | null {
     return nudgeSplitCursor(0, deltaMs);
+}
+
+// ---------------------------------------------------------------------------
+// Selection switching — shared by SplitPanel clicks AND keyboard Tab cycling.
+// Each switch also previews (plays) the newly-selected range; multi-cursor
+// region switches additionally zoom the view to frame the region.
+// ---------------------------------------------------------------------------
+
+/** Select + cold-play a binary L/R side. */
+export function selectSplitSide(side: 'left' | 'right', canvas?: SegCanvas | null): void {
+    setSplitPreviewSelection({ kind: side });
+    previewSplitAudio(side, canvas ?? get(editCanvas), { mode: 'cold' });
+}
+
+/** Select + cold-play a multi-cursor region, zooming the view to frame it. */
+export function selectSplitRegion(idx: number, canvas?: SegCanvas | null): void {
+    setSplitPreviewSelection({ kind: 'region', index: idx });
+    previewSplitRegion(idx, canvas ?? get(editCanvas), { mode: 'cold', zoom: true });
+}
+
+/** Map the current preview selection onto the cursor index the keyboard
+ *  stepper should move. Binary → cursor 0; region `i` → its right-edge cursor
+ *  (`i`) when one exists, else the left-edge cursor (last region). */
+function activeSplitCursorIndex(cursorCount: number): number {
+    if (cursorCount <= 1) return 0;
+    const sel = get(splitPreviewSelection);
+    const i = sel.kind === 'region' ? sel.index : sel.kind === 'left' ? 0 : cursorCount;
+    return Math.max(0, Math.min(i, cursorCount - 1));
+}
+
+/**
+ * Cycle the split selection forward/back (Tab in split mode), switching which
+ * region is previewed/played. Binary mode toggles L↔R; multi-cursor mode steps
+ * through the N+1 regions (wrapping) and zooms to each. Mirrors the SplitPanel
+ * pill clicks, so the >2-cursor zoom path fires here too.
+ */
+export function cycleSplitSelection(dir: 1 | -1, canvas?: SegCanvas | null): void {
+    const c = canvas ?? get(editCanvas);
+    const sd = c?._splitData;
+    if (!sd) return;
+    const n = sd.currentSplits.length;
+    if (n === 1) {
+        const sel = get(splitPreviewSelection);
+        const cur: 'left' | 'right' = sel.kind === 'right' ? 'right' : 'left';
+        selectSplitSide(cur === 'left' ? 'right' : 'left', c);
+        return;
+    }
+    const regionCount = n + 1;
+    const sel = get(splitPreviewSelection);
+    const curIdx = sel.kind === 'region' ? sel.index : sel.kind === 'left' ? 0 : regionCount - 1;
+    const nextIdx = (curIdx + dir + regionCount) % regionCount;
+    selectSplitRegion(nextIdx, c);
+}
+
+/** Nudge the keyboard-active split cursor by `deltaMs` (←/→ in split mode). */
+export function nudgeActiveSplitCursor(deltaMs: number): number | null {
+    const c = get(editCanvas);
+    const n = c?._splitData?.currentSplits.length ?? 0;
+    if (n === 0) return null;
+    return nudgeSplitCursor(activeSplitCursorIndex(n), deltaMs);
+}
+
+/** Replay (cold-start) the currently-selected split region/side without
+ *  changing the selection or zooming — the keyboard `R` equivalent of the
+ *  region-pill / footer-▶ replay. */
+export function replayCurrentSplitSelection(canvas?: SegCanvas | null): void {
+    const c = canvas ?? get(editCanvas);
+    const sd = c?._splitData;
+    if (!sd) return;
+    const n = sd.currentSplits.length;
+    const sel = get(splitPreviewSelection);
+    if (n === 1) {
+        previewSplitAudio(sel.kind === 'right' ? 'right' : 'left', c, { mode: 'cold' });
+    } else {
+        const idx = sel.kind === 'region' ? sel.index : sel.kind === 'left' ? 0 : n;
+        previewSplitRegion(idx, c, { mode: 'cold' });
+    }
 }
 
 // ---------------------------------------------------------------------------

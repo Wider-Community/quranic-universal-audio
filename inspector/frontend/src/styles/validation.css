@@ -49,6 +49,13 @@
     color: #aaa;
     user-select: none;
     list-style: none;
+    /* Pin the category header to the top of the page scroll so it (and the
+       collapsed siblings) stay reachable while a long card list scrolls past.
+       z-index sits above the cards (auto) but below the fixed edit overlay. */
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #16213e;
 }
 
 .seg-validation summary::before {
@@ -256,7 +263,11 @@
     flex-direction: column;
     gap: 8px;
     padding: 8px 12px 12px;
-    max-height: 600px;
+    /* Stays a scroll viewport (the card virtualizer measures its scrollTop /
+       clientHeight), but sized to the screen instead of a fixed 600px so many
+       more cards show at once and tall displays aren't wasted. The reserve
+       leaves room for the footer, filters bar, and pinned category headers. */
+    max-height: clamp(360px, calc(100dvh - 220px), 1200px);
     overflow-y: auto;
 }
 

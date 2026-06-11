@@ -19,7 +19,12 @@ Launched by ``inspector/services/admin/timestamps_jobs.py`` via
 Env:
   SLUG               (required) reciter slug
   INSPECTOR_BUCKET_MOUNT  bucket mount root (default ``/data``)
-  MFA_APP_PATH       aligner app.py from the runtime bucket
+  MFA_MODEL_PATH     acoustic model zip from the runtime bucket
+                     (default ``/aux/mfa-runtime/quran_aligner_model.zip``)
+  MFA_DICTIONARY_PATH  pronunciation dictionary
+                     (default ``/aux/mfa-runtime/dictionary.txt``)
+  MFA_APP_PATH       legacy fallback: when the two paths above are unset,
+                     the model + dictionary are derived from this file's dir
                      (default ``/aux/mfa-runtime/app.py``)
   BEAMS              comma-separated beams; canonical = max (default ``50``)
   WORKERS            process-pool size (default min(cpu_count, 8))
@@ -56,6 +61,8 @@ from qua_shared.timestamps_pipeline import (  # noqa: E402
     DEFAULT_DOWNLOAD_WORKERS,
     DEFAULT_METHOD,
     DEFAULT_PADDING,
+    MFA_DICTIONARY_FILENAME,
+    MFA_MODEL_FILENAME,
     LocalMfaBackend,
     is_compound_cross_verse,
     process,
@@ -174,16 +181,40 @@ def main() -> int:
         return 2
 
     mount = Path(os.environ.get("INSPECTOR_BUCKET_MOUNT", "/data"))
-    app_path = Path(os.environ.get("MFA_APP_PATH", "/aux/mfa-runtime/app.py"))
     reciter_dir = mount / "reciters" / slug
     detailed = reciter_dir / "detailed.json"
+
+    # MFA runtime: explicit model + dictionary env, with a legacy fallback
+    # deriving both from MFA_APP_PATH's directory (kept one release so a
+    # launcher/staging mismatch can't strand prod).
+    model_env = os.environ.get("MFA_MODEL_PATH", "").strip()
+    dict_env = os.environ.get("MFA_DICTIONARY_PATH", "").strip()
+    if model_env and dict_env:
+        model_path, dictionary_path = Path(model_env), Path(dict_env)
+    else:
+        runtime_dir = Path(os.environ.get("MFA_APP_PATH", "/aux/mfa-runtime/app.py")).parent
+        model_path = runtime_dir / MFA_MODEL_FILENAME
+        dictionary_path = runtime_dir / MFA_DICTIONARY_FILENAME
 
     if not detailed.exists():
         log.error("detailed.json not found at %s", detailed)
         return 3
-    if not app_path.exists():
-        log.error("MFA app not found at %s (runtime bucket not mounted?)", app_path)
-        return 3
+    for p, label in ((model_path, "MFA model"), (dictionary_path, "MFA dictionary")):
+        if not p.exists():
+            log.error("%s not found at %s (runtime bucket not mounted?)", label, p)
+            return 3
+
+    import importlib.metadata
+
+    import qua_sdk
+
+    log.info(
+        "mfa runtime: model=%s dictionary=%s qua_sdk=%s quranic-phonemizer=%s",
+        model_path,
+        dictionary_path,
+        qua_sdk.__version__,
+        importlib.metadata.version("quranic-phonemizer"),
+    )
 
     beams = _beams(os.environ.get("BEAMS", "50"))
     # Cap default workers: each pool worker extracts its own ~92 MB MFA model
@@ -213,14 +244,13 @@ def main() -> int:
     started_at = _now_iso()
 
     log.info(
-        "generate_timestamps slug=%s cores=%s workers=%s beams=%s batch=%s dl_workers=%s app=%s",
+        "generate_timestamps slug=%s cores=%s workers=%s beams=%s batch=%s dl_workers=%s",
         slug,
         os.cpu_count(),
         workers,
         beams,
         batch_size,
         dl_workers,
-        app_path,
     )
 
     # Inject the per-chapter audio source: detailed.json entries carry no
@@ -282,13 +312,18 @@ def main() -> int:
     job_input.mkdir(parents=True, exist_ok=True)
     (job_input / "detailed.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
 
-    # In-container MFA: pool path engages when workers>1 AND mfa_app_path is
-    # set (process() gates on this). LocalMfaBackend covers the serial
-    # fallback. process() writes segment-array shards into reciter_dir/timestamps/.
+    # In-container MFA: the pool path engages when workers>1 (process() gates
+    # on the model/dictionary pair). The backend is constructed in the PARENT
+    # even in pool mode: its eager KalpyEngine warm-up imports kalpy/MFA and
+    # extracts the model pre-fork, which the forked pool workers inherit —
+    # without it all workers deadlock importing kalpy inside fork children
+    # while parent download threads are live. process() writes segment-array
+    # shards into reciter_dir/timestamps/.
     try:
+        backend = LocalMfaBackend(model_path, dictionary_path)
         process(
             input_dir=job_input,
-            backend=LocalMfaBackend(app_path),
+            backend=backend,
             method=method,
             beams=beams,
             shared_cmvn=False,
@@ -300,7 +335,8 @@ def main() -> int:
             refresh_chapters=refresh_chapters,
             download_workers=dl_workers,
             workers=workers,
-            mfa_app_path=app_path,
+            mfa_model_path=model_path,
+            mfa_dictionary_path=dictionary_path,
         )
     except Exception as exc:  # noqa: BLE001
         log.exception("alignment failed for %s", slug)

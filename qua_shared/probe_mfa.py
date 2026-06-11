@@ -44,6 +44,7 @@ from typing import NamedTuple
 from qua_shared.mfa_runtime import MfaRuntime
 from qua_shared.timestamps_pipeline import (
     DEFAULT_ALIGNER_MODEL,
+    _paths_from_app_path,
     _worker_align,
     build_mfa_ref,
     download_audio,
@@ -101,7 +102,9 @@ def _is_url(source: str) -> bool:
 def run_probe(
     reciter_dir: Path,
     *,
-    mfa_app_path: Path,
+    mfa_model_path: Path | None = None,
+    mfa_dictionary_path: Path | None = None,
+    mfa_app_path: Path | None = None,
     audio_dir: Path | None = None,
     audio_manifest: Path | None = None,
     beam: int = DEFAULT_PROBE_BEAM,
@@ -126,10 +129,20 @@ def run_probe(
        reciters whose ``detailed.json`` no longer carries ``entry.audio``.
        Defaults to ``<reciter_dir>/audio_manifest.json``.
 
+    ``mfa_app_path`` is a deprecated alias for the model + dictionary pair
+    (derived from the app.py file's directory).
+
     Returns the sidecar path on success, or ``None`` when ``detailed.json``
     is missing.
     """
     from qua_shared.auto_split_precompute import load_chapter_urls  # local import
+
+    if mfa_app_path is not None and not (mfa_model_path and mfa_dictionary_path):
+        mfa_model_path, mfa_dictionary_path = _paths_from_app_path(mfa_app_path)
+    if not mfa_model_path or not mfa_dictionary_path:
+        raise ValueError(
+            "run_probe needs mfa_model_path + mfa_dictionary_path (or the deprecated mfa_app_path)"
+        )
 
     reciter_dir = Path(reciter_dir).resolve()
     detailed_path = reciter_dir / "detailed.json"
@@ -263,7 +276,7 @@ def run_probe(
     # a self-contained pool. Both paths drain through the same body.
     owned_runtime: MfaRuntime | None = None
     if runtime is None:
-        owned_runtime = MfaRuntime(mfa_app_path, workers)
+        owned_runtime = MfaRuntime(mfa_model_path, mfa_dictionary_path, workers)
         owned_runtime.__enter__()
     pool = (runtime or owned_runtime).pool
     try:

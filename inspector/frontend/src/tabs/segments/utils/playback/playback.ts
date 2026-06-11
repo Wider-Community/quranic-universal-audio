@@ -34,6 +34,7 @@
 
 import { get } from 'svelte/store';
 
+import { displayTimeMs } from '../../../../lib/playback/audio-graph';
 import { AudioRange } from '../../../../lib/playback/audio-range';
 import type { Segment } from '../../../../lib/types/view-models';
 import { type AnimationLoop,createAnimationLoop } from '../../../../lib/utils/animation';
@@ -59,6 +60,7 @@ import {
     segPort,
     setPlayingSegment,
 } from '../../stores/playback';
+import { accordionStep } from '../accordion-nav';
 import { drawSegPlayhead, drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 import { _fetchPeaksForClick } from '../waveform/utils';
 import {
@@ -222,9 +224,23 @@ function _onRangeTick(timeMs: number): void {
 
 function _onRangeBoundary(ev: { reason: string }): void {
     if (ev.reason === 'stop') {
-        // Segment ended in bounded mode — nothing else to do, the port is
-        // paused at seg.time_end. The DOM 'pause' event will fire
-        // `stopSegAnimation` in parallel and reset the play button glyph.
+        // Segment ended in bounded mode. With autoplay ON inside an accordion,
+        // advance to the next card in the accordion sequence (the one narrow
+        // case where accordion playback does NOT stop). Deferred to a
+        // microtask so we don't dispose this range from inside its own
+        // boundary callback. Otherwise the port stays paused at seg.time_end
+        // and the DOM 'pause' event resets the play-button glyph.
+        const active = get(playingSegmentIndex);
+        if (get(autoPlayEnabled) && active?.origin === 'accordion') {
+            const next = accordionStep(1);
+            if (next && !(next.chapter === active.chapter && next.index === active.index)) {
+                queueMicrotask(() => {
+                    const cur = get(playingSegmentIndex);
+                    if (cur?.origin !== 'accordion') return; // superseded
+                    playFromSegment(next.index, next.chapter, undefined, { isAccordionPlay: true });
+                });
+            }
+        }
         return;
     }
 }
@@ -776,10 +792,18 @@ export function drawActivePlayhead(timeMs?: number): void {
     if (!seg) return;
     const audioUrl = seg.audio_url || allData?.audio_by_chapter?.[String(active.chapter)] || '';
 
+    // Compensate the visual playhead for platform output latency: `time` is the
+    // media/decode clock, which leads the audible recitation by the OS+Web-Audio
+    // output latency. Subtract it so the playhead tracks what the user HEARS.
+    // Clamp into the segment window so it pins at the left edge during the
+    // initial latency window instead of vanishing (drawSegPlayhead skips
+    // out-of-range times). Display-only — control paths keep the raw clock.
+    const displayT = Math.min(seg.time_end, Math.max(seg.time_start, displayTimeMs(time)));
+
     // Draw the playhead on EVERY mounted twin for this (chapter, index) — main
     // list row and any accordion rows showing the same segment. Both need the
     // synchronized playhead per spec.
     for (const entry of getRowEntriesFor(active.chapter, active.index)) {
-        if (entry.canvas) drawSegPlayhead(entry.canvas, seg.time_start, seg.time_end, time, audioUrl);
+        if (entry.canvas) drawSegPlayhead(entry.canvas, seg.time_start, seg.time_end, displayT, audioUrl);
     }
 }

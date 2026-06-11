@@ -18,6 +18,7 @@ import bolt from './bolt.svg?raw';
 import caretDown from './caret-down.svg?raw';
 import check from './check.svg?raw';
 import history from './history.svg?raw';
+import keyboard from './keyboard.svg?raw';
 import pause from './pause.svg?raw';
 import play from './play.svg?raw';
 import replay from './replay.svg?raw';
@@ -31,6 +32,7 @@ export const ICONS = {
     'caret-down': caretDown,
     check,
     history,
+    keyboard,
     pause,
     play,
     replay,
