@@ -1,17 +1,12 @@
 # Commit
 
-Automatically commit at the completion of a task/feature only without being asked.
+Autonomously commit at the completion of a task/feature.
 
 ## Commit Message Format
 
-```
-prefix(scope): imperative description
-1-2 concise detail
-```
-- Lowercase prefix
 - Subject ≤72 chars. Name the unit then the change: `prefix(scope): <target> — <what>` (e.g. `<target>` = the script/file/function). 
-- Short comprehensive detail in the body, not crammed into the subject. 1 sentence default. 2 for bigger commits.
-- Do not commit as Claude or say co-authored by Claude
+- Short comprehensive 1 sentence detail in the body.
+- No Claude attribution.
 
 ### Prefixes
 
