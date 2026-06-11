@@ -45,7 +45,7 @@
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
     import { openGuideModal } from '../../stores/guides';
-    import { playingSegmentIndex } from '../../stores/playback';
+    import { autoScrollEnabled, playingSegmentIndex } from '../../stores/playback';
     import { segValidation, valUiLcThreshold, valUiMeasuredCardHeight,valUiOpenCategory, valUiScrollTop } from '../../stores/validation';
     import {
         VAL_VIRTUALIZE_THRESHOLD,
@@ -528,6 +528,36 @@
     }
     const canSeeFlaggerStore = can('segments.see_flagger_identity');
     $: canSeeFlagger = $canSeeFlaggerStore;
+
+    // ---- Accordion auto-scroll ----
+    // The main-list autoscroll (SegmentsList) ignores accordion plays, so the
+    // open accordion keeps the focused card centred itself. Every card switch —
+    // autoplay-advance, ↑/↓ nav, or a card play click — routes through
+    // playFromSegment → playingSegmentIndex with origin 'accordion', so we just
+    // react to that. Targets the card's MAIN row (`:not(.seg-row-context)`) so
+    // Show/Hide Context can't redirect the scroll onto a neighbour.
+    let _lastAccordionScrollKey = '';
+    $: maybeAccordionAutoScroll($autoScrollEnabled, $playingSegmentIndex, $valUiOpenCategory);
+    function maybeAccordionAutoScroll(
+        on: boolean,
+        active: { chapter: number; index: number; origin?: string } | null,
+        openCat: string | null,
+    ): void {
+        if (!on || openCat === null || !active || active.origin !== 'accordion') {
+            _lastAccordionScrollKey = '';
+            return;
+        }
+        const key = `${active.chapter}:${active.index}`;
+        if (key === _lastAccordionScrollKey) return;
+        _lastAccordionScrollKey = key;
+        requestAnimationFrame(() => {
+            document
+                .querySelector<HTMLElement>(
+                    `.seg-row[data-seg-chapter="${active.chapter}"][data-seg-index="${active.index}"]:not(.seg-row-context)`,
+                )
+                ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        });
+    }
 
     // ---- Virtualization window for the open category ----
     $: openCat = categories.find((c) => c.type === openCategory) ?? null;

@@ -39,12 +39,13 @@ import { isDirty } from '../stores/dirty';
 import { editMode } from '../stores/edit';
 import { displayedSegments } from '../stores/filters';
 import { historyVisible } from '../stores/history';
+import { savedFilterView } from '../stores/navigation';
 import {
     autoPlayEnabled,
+    autoScrollEnabled,
     playbackSpeed,
     segPort,
 } from '../stores/playback';
-import { savedFilterView, targetSegmentIndex } from '../stores/navigation';
 import { savePreviewVisible } from '../stores/save';
 import { valUiOpenCategory } from '../stores/validation';
 import { accordionStep } from './accordion-nav';
@@ -52,8 +53,8 @@ import { EDIT_NUDGE_MS, KEY_SEEK_SECONDS } from './constants';
 import { _restoreFilterView } from './data/navigation-actions';
 import { exitEditMode, getEditingSeg } from './edit/common';
 import { beginRefEdit } from './edit/reference';
-import { confirmSplit, cycleSplitSelection, nudgeActiveSplitCursor } from './edit/split';
-import { confirmTrim, cycleTrimBoundary, nudgeActiveTrimBoundary } from './edit/trim';
+import { confirmSplit, cycleSplitSelection, nudgeActiveSplitCursor, replayCurrentSplitSelection } from './edit/split';
+import { confirmTrim, cycleTrimBoundary, nudgeActiveTrimBoundary, previewTrimAudio } from './edit/trim';
 import { hideHistoryView, showHistoryView } from './history/actions';
 import { onSegPlayClick, playFromSegment } from './playback/playback';
 import { confirmSaveFromPreview, hideSavePreview, onSegSaveClick } from './save/actions';
@@ -136,13 +137,10 @@ function toggleHistory(): boolean {
     return true;
 }
 
-function scrollCurrentIntoView(): boolean {
-    const curIdx = get(segCurrentIdx);
-    const active = get(displayedSegments)?.find((s) => s.index === curIdx);
-    const chapter = active?.chapter;
-    if (curIdx >= 0 && chapter != null) {
-        targetSegmentIndex.set({ chapter, index: curIdx });
-    }
+function toggleAutoscroll(): boolean {
+    const next = !get(autoScrollEnabled);
+    autoScrollEnabled.set(next);
+    try { localStorage.setItem(LS_KEYS.SEG_AUTOSCROLL, String(next)); } catch { /* ignore */ }
     return true;
 }
 
@@ -187,6 +185,10 @@ function handleEditKey(e: KeyboardEvent, mode: 'trim' | 'split'): boolean {
         case 'Tab':
             if (mode === 'trim') cycleTrimBoundary();
             else cycleSplitSelection(1);
+            return true;
+        case 'KeyR':
+            if (mode === 'trim') previewTrimAudio(null, { mode: 'cold' });
+            else replayCurrentSplitSelection();
             return true;
         case 'Enter': {
             const seg = getEditingSeg();
@@ -240,7 +242,7 @@ export function handleSegmentsKey(e: KeyboardEvent): boolean {
         case 'nav_next':       return ctx === 'accordion' ? navAccordion(1) : navDefault(1);
         case 'speed_down':     return cycleSpeed('down');
         case 'speed_up':       return cycleSpeed('up');
-        case 'scroll_current': return scrollCurrentIntoView();
+        case 'autoscroll':     return toggleAutoscroll();
         case 'autoplay':       return toggleAutoplay();
         case 'history':        return toggleHistory();
         case 'save':           return save();

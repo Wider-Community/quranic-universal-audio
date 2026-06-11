@@ -51,7 +51,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
     { id: 'nav_next',      label: 'Next segment',              context: 'default',   defaultKey: 'ArrowDown',  rebindable: false },
     { id: 'speed_down',    label: 'Slower',                    context: 'default',   defaultKey: 'Comma',      rebindable: true },
     { id: 'speed_up',      label: 'Faster',                    context: 'default',   defaultKey: 'Period',     rebindable: true },
-    { id: 'scroll_current',label: 'Scroll current into view',  context: 'default',   defaultKey: 'KeyJ',       rebindable: true },
+    { id: 'autoscroll',    label: 'Toggle auto-scroll',        context: 'default',   defaultKey: 'KeyJ',       rebindable: true },
     { id: 'autoplay',      label: 'Toggle autoplay-next',      context: 'default',   defaultKey: 'KeyK',       rebindable: true },
 
     // ---- Editing (default — acts on current / focused segment) ----
@@ -71,6 +71,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
     { id: 'edit_step_back',label: 'Nudge cursor back',         context: 'edit',      defaultKey: 'ArrowLeft',  rebindable: false },
     { id: 'edit_step_fwd', label: 'Nudge cursor forward',      context: 'edit',      defaultKey: 'ArrowRight', rebindable: false },
     { id: 'edit_cycle',    label: 'Cycle cursor / region',     context: 'edit',      defaultKey: 'Tab',        rebindable: false },
+    { id: 'edit_replay',   label: 'Replay region',             context: 'edit',      defaultKey: 'KeyR',       rebindable: false },
     { id: 'edit_confirm',  label: 'Confirm',                   context: 'edit',      defaultKey: 'Enter',      rebindable: false },
     { id: 'edit_cancel',   label: 'Cancel',                    context: 'edit',      defaultKey: 'Escape',     rebindable: false },
 ];
@@ -79,7 +80,7 @@ export const SHORTCUT_SECTIONS: ShortcutSection[] = [
     {
         title: 'Playback',
         hint: 'Anywhere on the tab',
-        ids: ['play_pause', 'seek_back', 'seek_fwd', 'nav_prev', 'nav_next', 'speed_down', 'speed_up', 'scroll_current', 'autoplay'],
+        ids: ['play_pause', 'seek_back', 'seek_fwd', 'nav_prev', 'nav_next', 'speed_down', 'speed_up', 'autoscroll', 'autoplay'],
     },
     {
         title: 'Editing',

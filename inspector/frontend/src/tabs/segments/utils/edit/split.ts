@@ -437,6 +437,23 @@ export function nudgeActiveSplitCursor(deltaMs: number): number | null {
     return nudgeSplitCursor(activeSplitCursorIndex(n), deltaMs);
 }
 
+/** Replay (cold-start) the currently-selected split region/side without
+ *  changing the selection or zooming — the keyboard `R` equivalent of the
+ *  region-pill / footer-▶ replay. */
+export function replayCurrentSplitSelection(canvas?: SegCanvas | null): void {
+    const c = canvas ?? get(editCanvas);
+    const sd = c?._splitData;
+    if (!sd) return;
+    const n = sd.currentSplits.length;
+    const sel = get(splitPreviewSelection);
+    if (n === 1) {
+        previewSplitAudio(sel.kind === 'right' ? 'right' : 'left', c, { mode: 'cold' });
+    } else {
+        const idx = sel.kind === 'region' ? sel.index : sel.kind === 'left' ? 0 : n;
+        previewSplitRegion(idx, c, { mode: 'cold' });
+    }
+}
+
 // ---------------------------------------------------------------------------
 // confirmSplit — apply the split and chain ref editing
 // ---------------------------------------------------------------------------
