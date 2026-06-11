@@ -38,7 +38,9 @@ Pattern in each script:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
+import shutil
 import sys
 import tempfile
 import time
@@ -47,6 +49,35 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Optional
+
+
+def _ensure_inspector_runtime() -> None:
+    """Make inspector imports work under any interpreter (run at import time).
+
+    The inspector chain uses ``datetime.UTC`` (3.11 alias). Polyfill it so the
+    import works under a 3.10 interpreter that already has the deps; only
+    re-exec under ``python3.11`` when the env is bare (no ``pydantic``), so
+    plain ``python3 admin_*.py`` Just Works without the caller picking 3.11.
+    Mirrors ``.local/extraction/_pyguard.py`` (separate repo → can't share).
+    """
+    import datetime as _dt
+    if not hasattr(_dt, "UTC"):
+        _dt.UTC = _dt.timezone.utc
+    if sys.version_info[:2] >= (3, 11):
+        return
+    if importlib.util.find_spec("pydantic") is not None:
+        return
+    for minor in range(11, 20):
+        exe = shutil.which(f"python3.{minor}")
+        if exe:
+            os.execv(exe, [exe, *sys.argv])
+    raise SystemExit(
+        "inspector-admin needs Python >= 3.11 with deps; none found on PATH "
+        f"(running {sys.version_info[0]}.{sys.version_info[1]})."
+    )
+
+
+_ensure_inspector_runtime()
 
 # Bucket id table mirrors inspector/services/storage/hf_bucket.py.
 BUCKETS = {
