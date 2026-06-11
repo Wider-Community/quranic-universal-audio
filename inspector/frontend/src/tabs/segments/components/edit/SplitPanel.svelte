@@ -44,8 +44,8 @@
         confirmSplit,
         nudgeSplitBoundary,
         nudgeSplitCursor,
-        previewSplitAudio,
-        previewSplitRegion,
+        selectSplitRegion,
+        selectSplitSide,
     } from '../../utils/edit/split';
 
     export let seg: Segment;
@@ -138,12 +138,10 @@
      *  `mode: 'cold'` bypasses the entry-time warm-attach so an explicit
      *  pill click always seeks-and-plays from the region's start. */
     function pickAndMaybeSwitch(nextKind: 'left' | 'right'): void {
-        setSplitPreviewSelection({ kind: nextKind });
-        previewSplitAudio(nextKind, canvas, { mode: 'cold' });
+        selectSplitSide(nextKind, canvas);
     }
     function pickRegionAndMaybeSwitch(i: number): void {
-        setSplitPreviewSelection({ kind: 'region', index: i });
-        previewSplitRegion(i, canvas, { mode: 'cold', zoom: true });
+        selectSplitRegion(i, canvas);
     }
 </script>
 

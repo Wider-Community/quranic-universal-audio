@@ -219,6 +219,20 @@ export function setSplitPreviewSelection(s: SplitPreviewSelection): void {
 }
 
 // ---------------------------------------------------------------------------
+// Active trim boundary — which handle the keyboard stepper (←/→) nudges and
+// Tab toggles in trim mode. Mouse drag targets either handle directly, so this
+// only matters for keyboard-driven trimming. Reset to 'start' on every enter.
+// ---------------------------------------------------------------------------
+
+export type TrimBoundarySide = 'start' | 'end';
+
+export const activeTrimBoundary = writable<TrimBoundarySide>('start');
+
+export function setActiveTrimBoundary(side: TrimBoundarySide): void {
+    activeTrimBoundary.set(side);
+}
+
+// ---------------------------------------------------------------------------
 // Setters — all writes route through a single `_editState.update(...)`.
 // ---------------------------------------------------------------------------
 

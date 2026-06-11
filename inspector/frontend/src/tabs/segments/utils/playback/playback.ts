@@ -60,6 +60,7 @@ import {
     segPort,
     setPlayingSegment,
 } from '../../stores/playback';
+import { accordionStep } from '../accordion-nav';
 import { drawSegPlayhead, drawWaveformFromPeaksForSeg } from '../waveform/draw-seg';
 import { _fetchPeaksForClick } from '../waveform/utils';
 import {
@@ -223,9 +224,23 @@ function _onRangeTick(timeMs: number): void {
 
 function _onRangeBoundary(ev: { reason: string }): void {
     if (ev.reason === 'stop') {
-        // Segment ended in bounded mode — nothing else to do, the port is
-        // paused at seg.time_end. The DOM 'pause' event will fire
-        // `stopSegAnimation` in parallel and reset the play button glyph.
+        // Segment ended in bounded mode. With autoplay ON inside an accordion,
+        // advance to the next card in the accordion sequence (the one narrow
+        // case where accordion playback does NOT stop). Deferred to a
+        // microtask so we don't dispose this range from inside its own
+        // boundary callback. Otherwise the port stays paused at seg.time_end
+        // and the DOM 'pause' event resets the play-button glyph.
+        const active = get(playingSegmentIndex);
+        if (get(autoPlayEnabled) && active?.origin === 'accordion') {
+            const next = accordionStep(1);
+            if (next && !(next.chapter === active.chapter && next.index === active.index)) {
+                queueMicrotask(() => {
+                    const cur = get(playingSegmentIndex);
+                    if (cur?.origin !== 'accordion') return; // superseded
+                    playFromSegment(next.index, next.chapter, undefined, { isAccordionPlay: true });
+                });
+            }
+        }
         return;
     }
 }

@@ -32,11 +32,13 @@
     import type { FlagAuthor } from '../../../../lib/types/generated/schemas';
 import type { Segment } from '../../../../lib/types/view-models';
     import { clearAccordionPin } from '../../stores/accordion-pin';
+    import { clearRowActions, publishRowActions } from '../../stores/active-actions';
     import { ensureAutoSplitMap } from '../../stores/auto-split';
     import {
         getAdjacentSegments,
         pickerDisplayChapter,
         segAllData,
+        segCurrentIdx,
         selectedChapter,
         selectedReciter,
         selectedVerse,
@@ -168,6 +170,15 @@ import type { Segment } from '../../../../lib/types/view-models';
      * Main-list and history/preview rows pass null.
      */
     export let accordionSiblings: Segment[] | null = null;
+    /**
+     * Card-level action callbacks, set ONLY by accordion cards on their main
+     * (non-context) member rows. Forwarded into the active-row action bundle so
+     * the keyboard shortcuts L (ignore) / F (auto-fill) / C (toggle context)
+     * can act on the focused card. `null` on every other placement.
+     */
+    export let onCardIgnore: (() => void) | null = null;
+    export let onCardAutofill: (() => void) | null = null;
+    export let onCardToggleContext: (() => void) | null = null;
 
     // Apply history-mode highlight descriptors to the underlying canvas element
     // so the IntersectionObserver draw pipeline (segments/waveform/index.ts +
@@ -460,6 +471,7 @@ import type { Segment } from '../../../../lib/types/view-models';
         }
         _unsubPreviewActive?.();
         _unsubPreviewPlaying?.();
+        clearRowActions(_mountId);
         if (_hoverWarmTimer) {
             clearTimeout(_hoverWarmTimer);
             _hoverWarmTimer = null;
@@ -548,8 +560,12 @@ import type { Segment } from '../../../../lib/types/view-models';
         }
     }
 
-    async function onGotoClick(e: MouseEvent): Promise<void> {
+    function onGotoClick(e: MouseEvent): void {
         e.stopPropagation();
+        void doGoto();
+    }
+
+    async function doGoto(): Promise<void> {
         const filters = get(activeFilters);
         if (filters.some(f => f.value !== null)) {
             const listEl = get(segListElement);
@@ -578,6 +594,10 @@ import type { Segment } from '../../../../lib/types/view-models';
 
     function onAdjustClick(e: MouseEvent): void {
         e.stopPropagation();
+        doAdjust();
+    }
+
+    function doAdjust(): void {
         enterEditWithBuffer(seg, rowEl, 'trim', validationCategory, _mountId, rowChapter);
     }
 
@@ -591,8 +611,12 @@ import type { Segment } from '../../../../lib/types/view-models';
         || (validationCategory === 'repetitions' && !!(seg as any).wrap_word_ranges);
     $: isAutoSplit = isAutoSplitCandidate && !!seg.segment_uid;
 
-    async function onSplitClick(e: MouseEvent): Promise<void> {
+    function onSplitClick(e: MouseEvent): void {
         e.stopPropagation();
+        void doSplit();
+    }
+
+    async function doSplit(): Promise<void> {
         let initialSplits: number[] | null = null;
         let initialRefs: string[] | null = null;
         if (isAutoSplit) {
@@ -649,12 +673,59 @@ import type { Segment } from '../../../../lib/types/view-models';
 
     function onDeleteClick(e: MouseEvent): void {
         e.stopPropagation();
+        doDelete();
+    }
+
+    function doDelete(): void {
         deleteSegment(seg, rowEl, validationCategory, _mountId);
     }
 
     function onEditRefClick(e: MouseEvent): void {
         e.stopPropagation();
+        doEditRef();
+    }
+
+    function doEditRef(): void {
         beginRefEdit(seg, validationCategory, _mountId);
+    }
+
+    // ---------------------------------------------------------------------
+    // Active-row action registry — publish this row's edit actions while it is
+    // the "primary" target (playing, or the main-list current segment when
+    // paused), so global keyboard shortcuts (A / S / E / G / L / F / C) act on
+    // it. Accordion cards forward their card-level callbacks via the
+    // onCard* props. Only one row is primary at a time (the main list is
+    // hidden while an accordion is open).
+    // ---------------------------------------------------------------------
+    $: accordionOpen = $valUiOpenCategory !== null;
+    $: isPrimaryForShortcuts = !readOnly && !isContext && !!rowEl
+        && (isPlaying
+            || (instanceRole === 'main' && !accordionOpen && $segCurrentIdx === seg.index));
+    let _pubKey = '';
+    $: {
+        if (isPrimaryForShortcuts) {
+            const k = `${rowChapter}:${seg.index}:${!!onCardIgnore}:${!!onCardAutofill}:${!!onCardToggleContext}`;
+            if (k !== _pubKey) {
+                _pubKey = k;
+                publishRowActions({
+                    owner: _mountId,
+                    chapter: rowChapter,
+                    index: seg.index,
+                    uid: seg.segment_uid ?? null,
+                    adjust: doAdjust,
+                    split: () => void doSplit(),
+                    editRef: doEditRef,
+                    goto: () => void doGoto(),
+                    delete: doDelete,
+                    ignore: onCardIgnore ?? undefined,
+                    autofill: onCardAutofill ?? undefined,
+                    toggleContext: onCardToggleContext ?? undefined,
+                });
+            }
+        } else if (_pubKey) {
+            _pubKey = '';
+            clearRowActions(_mountId);
+        }
     }
 
     function onRefTextClick(e: MouseEvent): void {
