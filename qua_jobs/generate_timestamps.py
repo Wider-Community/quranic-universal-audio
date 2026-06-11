@@ -313,11 +313,14 @@ def main() -> int:
     (job_input / "detailed.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
 
     # In-container MFA: the pool path engages when workers>1 (process() gates
-    # on the model/dictionary pair). The serial LocalMfaBackend is built ONLY
-    # for workers==1 — its ctor eagerly warms a KalpyEngine, wasted in pool
-    # mode. process() writes segment-array shards into reciter_dir/timestamps/.
+    # on the model/dictionary pair). The backend is constructed in the PARENT
+    # even in pool mode: its eager KalpyEngine warm-up imports kalpy/MFA and
+    # extracts the model pre-fork, which the forked pool workers inherit —
+    # without it all workers deadlock importing kalpy inside fork children
+    # while parent download threads are live. process() writes segment-array
+    # shards into reciter_dir/timestamps/.
     try:
-        backend = LocalMfaBackend(model_path, dictionary_path) if workers == 1 else None
+        backend = LocalMfaBackend(model_path, dictionary_path)
         process(
             input_dir=job_input,
             backend=backend,
