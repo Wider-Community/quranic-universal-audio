@@ -53,6 +53,7 @@ Symptom → likely root → first probe. Ordered by area, not severity. VBR-only
 | Cross-origin CORS failure on segment-clip | `Access-Control-Allow-Origin: *` header dropped | `routes/audio/clip.py`. Check no middleware strips it. |
 | Segment-clip 403 | `_is_known_chapter_url` rejected — URL not in the **manifest sidecar** | Confirm `audio_meta.chapter_for_url(reciter, url)` resolves (NOT `detailed.json` — its `audio` field is `""`). |
 | Segment-clip 200 / 0 bytes | ffmpeg cmd missing `-vn` → stripped ffmpeg chokes on embedded APIC cover-art (no png encoder) | Confirm `routes/audio/clip.py` cmd has `-vn`. |
+| Segments footer progress bar blank for ONE reciter (audio still plays) | Chapter audio not on the bucket → `_stream_cdn` serves a headerless MP3 → browser reports `el.duration` Infinity/NaN. The footer hides the bar when duration isn't finite. (Footer now listens for late `durationchange` + falls back to `segAllData.chapter_duration_ms_by_chapter`; also fix the data: `populate_bucket_audio.py --slug <s> --bucket prod`.) | `scripts/bucket/bucket_reciters.py --bucket prod` → compare `audio_n` vs manifest chapters. FE: `SegmentsFooter.svelte` + `footer-duration.ts::resolveChapterDurationMs`. |
 
 ## Peaks
 

@@ -60,6 +60,27 @@ export function _getCtx(): AudioContext | null {
     }
 }
 
+/** Platform audio output latency in ms — `baseLatency + outputLatency` off
+ *  the shared AudioContext. This is how far the media clock (`el.currentTime`)
+ *  runs AHEAD of the sound actually reaching the speakers (~20–30 ms wired,
+ *  100–300 ms on Bluetooth). Returns 0 when the context is null/suspended or
+ *  the values aren't finite, so callers degrade to no compensation. */
+export function getOutputLatencyMs(): number {
+    const ctx = _getCtx();
+    if (!ctx) return 0;
+    const l = (ctx.baseLatency || 0) + (ctx.outputLatency || 0);
+    return Number.isFinite(l) ? l * 1000 : 0;
+}
+
+/** Media-clock ms → display ms: subtract the platform output latency so a
+ *  visual playhead tracks the AUDIBLE position instead of the decode position.
+ *  DISPLAY ONLY — never feed the result to seek / boundary / highlight logic
+ *  (those must use the raw media clock). Clamps to ≥ 0; identity when no
+ *  latency is known. */
+export function displayTimeMs(mediaTimeMs: number): number {
+    return Math.max(0, mediaTimeMs - getOutputLatencyMs());
+}
+
 /** Return the AudioGraph for `el`, building it lazily. Returns `null`
  *  when Web Audio is unavailable OR when the AudioContext isn't running yet.
  *
