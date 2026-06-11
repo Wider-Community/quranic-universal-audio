@@ -75,6 +75,7 @@
         onSegSaveClick,
     } from '../../utils/save/actions';
     import MarkReadyModal from './MarkReadyModal.svelte';
+    import ShortcutsGuide from './ShortcutsGuide.svelte';
 
     export let reciterTask: ReciterTask | null = null;
     export let chipActionBusy: '' | 'unclaim' | 'mark' = '';
@@ -525,6 +526,7 @@
             {#if hasReciter}
                 <div class="transport" use:clickOutside={() => { surahOpen = false; ayahOpen = false; }}>
                     <div class="transport-left">
+                        <ShortcutsGuide />
                         <button
                             type="button"
                             class="speed-cell"
@@ -538,7 +540,7 @@
                             class="pref-cell"
                             class:on={$autoPlayEnabled}
                             aria-pressed={$autoPlayEnabled}
-                            title="Autoplay — when ON, play continues through the whole chapter; when OFF, stops at the end of each segment (chapter mode only; accordions always stop)"
+                            title="Autoplay — when ON, play continues through the whole chapter (or advances card-to-card inside an open accordion); when OFF, stops at the end of each segment"
                             on:click={handleAutoPlayToggle}
                         ><Icon name="autoplay" size={16} /></button>
                         <button

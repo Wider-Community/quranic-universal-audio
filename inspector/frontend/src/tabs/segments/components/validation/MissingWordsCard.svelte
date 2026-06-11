@@ -159,6 +159,14 @@
         autoFixMissingWord(targetSeg, newRef);
     }
 
+    // Keyboard "F" target — the single auto-fill (or the "up" variant when the
+    // gap offers a directional pair). Null when this card has no auto-fix.
+    $: cardAutofill = item.auto_fix
+        ? () => handleAutoFix(item.auto_fix)
+        : item.auto_fix_up
+          ? () => handleAutoFix(item.auto_fix_up)
+          : null;
+
 </script>
 
 <div>
@@ -181,6 +189,8 @@
             showChapter={true}
             validationCategory="missing_words"
             accordionSiblings={siblings}
+            onCardAutofill={cardAutofill}
+            onCardToggleContext={toggleContext}
         />
     {/each}
     {#if nextSeg}

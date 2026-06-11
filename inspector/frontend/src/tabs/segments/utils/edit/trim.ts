@@ -23,8 +23,10 @@ import {
     markDirty,
 } from '../../stores/dirty';
 import {
+    activeTrimBoundary,
     editCanvas,
     editMode,
+    setActiveTrimBoundary,
     setEdit,
     setEditCanvas,
     setEditingSegIndex,
@@ -119,6 +121,7 @@ export function enterTrimMode(seg: Segment, row: HTMLElement, mountId: symbol | 
     setEdit('trim', seg.segment_uid ?? null, mountId);
     setEditingSegIndex(seg.index);
     setEditStatusText('');
+    setActiveTrimBoundary('start');
 
     const canvas = row.querySelector<SegCanvas>('canvas');
     if (!canvas) return;
@@ -354,6 +357,16 @@ export function nudgeTrimBoundary(side: 'start' | 'end', deltaMs: number): numbe
     updateTrimWindow((w) => w ? { ...w, currentStart: tw.currentStart, currentEnd: tw.currentEnd } : w);
     drawTrimWaveform(canvas);
     return next;
+}
+
+/** Toggle which trim handle the keyboard stepper drives (Tab in trim mode). */
+export function cycleTrimBoundary(): void {
+    setActiveTrimBoundary(get(activeTrimBoundary) === 'start' ? 'end' : 'start');
+}
+
+/** Nudge the keyboard-active trim handle by `deltaMs` (←/→ in trim mode). */
+export function nudgeActiveTrimBoundary(deltaMs: number): number | null {
+    return nudgeTrimBoundary(get(activeTrimBoundary), deltaMs);
 }
 
 // ---------------------------------------------------------------------------
