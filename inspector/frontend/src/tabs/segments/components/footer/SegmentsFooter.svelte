@@ -742,10 +742,10 @@
         z-index: 100;
         display: flex;
         flex-direction: column;
-        min-height: var(--seg-footer-h, 72px);
         background: var(--panel);
         border-top: 1px solid var(--border-default);
         box-shadow: 0 -8px 24px oklch(0 0 0 / 0.28);
+        padding: 0 var(--s-4) var(--s-2); /* container-level padding matches BottomPlayer */
     }
 
     /* The <audio> element is the source of all playback DOM events. It
@@ -762,8 +762,8 @@
         display: flex;
         align-items: center;
         gap: var(--s-3);
-        padding: var(--s-2) var(--s-4) 0;
         flex-shrink: 0;
+        /* no padding — container handles horizontal; no top gap matches BottomPlayer */
     }
     .progress:not(.active) {
         opacity: 0;
@@ -805,14 +805,14 @@
     }
 
     /* Three-column grid — same centering convention as BottomPlayer.
-       The player cluster (auto center) is flanked by equal 1fr columns,
-       placing the play button on the true viewport center. */
+       Fixed height matches BottomPlayer's row so the play button sits at
+       the exact same distance from the screen bottom on every tab. */
     .row {
         display: grid;
         grid-template-columns: 1fr auto 1fr;
         align-items: center;
         gap: var(--s-4);
-        padding: var(--s-2) var(--s-4);
+        height: calc(var(--player-h, 72px) - 14px);
     }
 
     .zone {
@@ -1294,8 +1294,9 @@
     @media (max-width: 960px) {
         .row {
             grid-template-columns: 1fr;
+            height: auto;
+            padding: var(--s-2) 0; /* vertical padding; horizontal from .segs-footer container */
             gap: var(--s-2);
-            padding: var(--s-2) var(--s-3);
         }
         .zone-location {
             justify-content: flex-start;
