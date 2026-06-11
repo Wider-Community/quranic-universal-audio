@@ -28,13 +28,18 @@
     const signedIn = $derived(isSignedIn($currentUser));
     const visible = $derived(signedIn || announcements.active.length > 0);
 
-    onMount(() => {
-        announcements.start();
-        if (signedIn) notifications.start();
-    });
+    onMount(() => announcements.start());
     onDestroy(() => {
         announcements.stop();
-        if (signedIn) notifications.stop();
+        notifications.stop();
+    });
+
+    // Start the per-user poll once we know the user is signed in. `$currentUser`
+    // loads async (from /api/me), so `signedIn` is usually still false at mount —
+    // gating start() on a mount-time snapshot would leave `loading` true forever
+    // (the "infinite Loading…" with no notifications). `start()` is idempotent.
+    $effect(() => {
+        if (signedIn) notifications.start();
     });
 
     /** Unified card shape so announcements + notifications render identically. */
