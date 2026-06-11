@@ -34,7 +34,8 @@
     import type { PublicBucket } from '../../../../lib/types/public-bucket';
     import { LS_KEYS } from '../../../../lib/utils/constants';
     import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
-    import { SPEEDS } from '../../../../lib/utils/speed-control';
+    import { getSurahInfo, surahInfoReady } from '../../../../lib/utils/surah-info';
+    import { SEGMENTS_SPEEDS } from '../../../../lib/utils/speed-control';
     import { autoSaveEnabled, toggleAutoSave } from '../../stores/autosave';
     import {
         livePlayingVerse,
@@ -195,6 +196,11 @@
     // Falls back to `selectedChapter` (the authoritative load gate).
     $: displaySurahNum =
         $pickerDisplayChapter ?? ($selectedChapter ? parseInt($selectedChapter) : null);
+
+    let _surahMap: ReturnType<typeof getSurahInfo> = {};
+    void surahInfoReady.then(() => { _surahMap = getSurahInfo(); });
+    $: displaySurahName = _surahMap[String(displaySurahNum)]?.name_en ?? null;
+
     $: chipMeta = [titleCaseSlug(contextRiwayah), titleCaseSlug(contextStyle)]
         .filter(Boolean)
         .join(' · ');
@@ -288,9 +294,9 @@
 
     function cyclePlaybackSpeed(): void {
         const cur = get(playbackSpeed);
-        const curIdx = SPEEDS.findIndex((s) => Math.abs(s - cur) < 0.01);
-        const idx = curIdx === -1 ? SPEEDS.indexOf(1) : curIdx;
-        const next = SPEEDS[(idx + 1) % SPEEDS.length] ?? 1;
+        const curIdx = SEGMENTS_SPEEDS.findIndex((s) => Math.abs(s - cur) < 0.01);
+        const idx = curIdx === -1 ? SEGMENTS_SPEEDS.indexOf(1) : curIdx;
+        const next = SEGMENTS_SPEEDS[(idx + 1) % SEGMENTS_SPEEDS.length] ?? 1;
         playbackSpeed.set(next);
         localStorage.setItem(LS_KEYS.SEG_SPEED, String(next));
         segPort.setPlaybackRate(next);
@@ -556,16 +562,15 @@
                     <div class="transport-right">
                         <button
                             type="button"
-                            class="loc-cell"
+                            class="loc-cell surah-cell"
                             class:has-value={!!displaySurahNum}
                             class:live={surahLive}
                             on:click={() => { surahOpen = !surahOpen; ayahOpen = false; }}
                             aria-haspopup="dialog"
                             aria-expanded={surahOpen}
                         >
-                            <span class="loc-label">Surah</span>
-                            {#if displaySurahNum}<span class="loc-value">{displaySurahNum}</span
-                            >{:else}<span class="loc-empty">—</span>{/if}
+                            {#if displaySurahNum}<span class="loc-value">{displaySurahName ?? displaySurahNum}</span
+                            >{:else}<span class="loc-empty">Surah</span>{/if}
                             <Icon name="caret-down" size={10} />
                         </button>
                         <button
@@ -1011,6 +1016,15 @@
         font-size: 12px;
         font-variant-numeric: tabular-nums;
         color: var(--text-primary);
+    }
+    .loc-cell.surah-cell .loc-value {
+        font-family: var(--font-sans);
+        font-variant-numeric: normal;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+    .loc-cell.surah-cell {
+        min-width: 80px;
     }
     .loc-cell .loc-empty {
         font-style: italic;

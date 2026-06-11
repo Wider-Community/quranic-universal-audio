@@ -6,7 +6,7 @@ import { openGuidesGate } from '../../../lib/stores/guides-gate';
 import { openSignInModal } from '../../../lib/stores/sign-in-modal';
 import { LS_KEYS } from '../../../lib/utils/constants';
 import { shouldHandleKey } from '../../../lib/utils/keyboard-guard';
-import { cycleSpeedStore } from '../../../lib/utils/speed-control';
+import { cycleSpeedStore, SEGMENTS_SPEEDS } from '../../../lib/utils/speed-control';
 import { segCurrentIdx, selectedChapter } from '../stores/chapter';
 import { isDirty } from '../stores/dirty';
 import { editMode } from '../stores/edit';
@@ -102,7 +102,7 @@ export function handleSegmentsKey(e: KeyboardEvent): boolean {
 
         case 'Period':
         case 'Comma': {
-            const rate = cycleSpeedStore(playbackSpeed, e.code === 'Period' ? 'up' : 'down', LS_KEYS.SEG_SPEED);
+            const rate = cycleSpeedStore(playbackSpeed, e.code === 'Period' ? 'up' : 'down', LS_KEYS.SEG_SPEED, SEGMENTS_SPEEDS);
             // Write through the port. The main audio must NOT be updated
             // via a reactive `$: audioEl.playbackRate = $playbackSpeed`
             // block — on Period/Comma that reactive fires while the keydown
