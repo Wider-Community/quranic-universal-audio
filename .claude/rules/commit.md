@@ -27,10 +27,6 @@ Concerns (optional): `ui`, `fe`, `be`, `db`, `audio`
 
 Not every area needs a concern necessarily
 
-## PRs
-
-PR titles follow the same format
-
 ## Gitignored 
 
 `.local/`
