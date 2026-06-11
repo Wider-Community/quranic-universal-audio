@@ -45,10 +45,6 @@ known-first-party = ["qua_shared", "qua_jobs", "services", "config", "domain", "
 "inspector/tests/**" = ["F811", "F401"]
 # Package re-export hubs intentionally re-export names.
 "**/__init__.py" = ["F401"]
-# Pre-existing broken CLI main(): references undefined DEFAULT_BEAM/DEFAULT_RETRY_BEAM AND
-# calls process() with a stale signature (process takes beams: list[int], no retry_beam).
-# Out of scope for a lint pass — needs a real fix to the entrypoint, not a rename.
-"qua_shared/timestamps_pipeline.py" = ["F821"]
 
 [format]
 quote-style = "double"
