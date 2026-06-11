@@ -560,7 +560,7 @@
                         on:click={handlePlayClick}
                         aria-label={playGlyph === 'pause' ? 'Pause' : 'Play'}
                     >
-                        <Icon name={playGlyph} size={14} />
+                        <Icon name={playGlyph} size={18} />
                     </button>
 
                     <button
@@ -804,23 +804,15 @@
         transition: width 80ms linear;
     }
 
+    /* Three-column grid — same centering convention as BottomPlayer.
+       The player cluster (auto center) is flanked by equal 1fr columns,
+       placing the play button on the true viewport center. */
     .row {
-        position: relative;
-        flex: 1;
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
         align-items: center;
-        justify-content: space-between;
-        gap: var(--s-3);
+        gap: var(--s-4);
         padding: var(--s-2) var(--s-4);
-    }
-
-    /* Location (player cluster) is pinned to the true viewport
-       horizontal center, decoupled from the side zones' widths. */
-    .zone-location {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
     }
 
     .zone {
@@ -834,6 +826,7 @@
         flex-wrap: nowrap;
     }
     .zone-location {
+        position: relative; /* containing block for .pop popovers */
         justify-content: center;
         gap: var(--s-2);
     }
@@ -977,14 +970,15 @@
         cursor: not-allowed;
     }
 
-    /* Play — the only accent-filled element. Round, slightly larger
-       than the icon prefs so it reads as the primary action. */
+    /* Play — the only accent-filled element. 40px matches BottomPlayer's
+       PlayerControls.btn.primary so the play button reads at identical
+       visual weight across all three tabs. */
     .player-row .play-cell {
         background: var(--accent);
         color: var(--accent-fg);
         border-radius: 50%;
-        width: 30px;
-        height: 30px;
+        width: 40px;
+        height: 40px;
         margin: 0 var(--s-1);
     }
     .player-row .play-cell:hover:not(:disabled) {
@@ -992,11 +986,11 @@
         color: var(--accent-fg);
     }
 
-    /* Pref toggles (auto-play / auto-scroll) — naked square icon
-       buttons. Active state tints the icon accent; no background. */
+    /* Pref toggles (auto-play / auto-scroll) — naked square icon buttons.
+       32px matches BottomPlayer's non-primary transport buttons. */
     .player-row .pref-cell {
-        width: 26px;
-        height: 26px;
+        width: 32px;
+        height: 32px;
         color: var(--text-muted);
     }
     .player-row .pref-cell:hover:not(:disabled) {
@@ -1013,7 +1007,7 @@
 
     /* Speed — text pill, slightly subdued. Goes accent when boosted. */
     .player-row .speed-cell {
-        height: 26px;
+        height: 32px;
         padding: 0 7px;
         font-family: var(--font-mono);
         font-size: 11px;
@@ -1037,7 +1031,7 @@
        advances past their boundary. */
     .player-row .loc-cell {
         gap: 5px;
-        height: 28px;
+        height: 32px;
         padding: 0 8px;
         color: var(--text-secondary);
         font-size: var(--fs-meta);
@@ -1299,16 +1293,11 @@
     /* ---------- Responsive ---------- */
     @media (max-width: 960px) {
         .row {
-            flex-direction: column;
-            align-items: stretch;
+            grid-template-columns: 1fr;
             gap: var(--s-2);
             padding: var(--s-2) var(--s-3);
         }
-        /* Return location to in-flow stacking — absolute positioning would
-           collapse it on top of the identity row at narrow widths. */
         .zone-location {
-            position: static;
-            transform: none;
             justify-content: flex-start;
         }
         .zone-save {
