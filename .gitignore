@@ -33,6 +33,5 @@ dist/
 .coverage.*
 coverage/
 htmlcov/
-.claude/skills/impeccable/scripts/
 
 # Nested working repos (separate clones, not part of this repo)
