@@ -8,6 +8,9 @@ import { get } from 'svelte/store';
 /** Canonical speed options shared across all speed controls. */
 export const SPEEDS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5];
 
+/** Speed options for the segments tab cycler (capped at 3×). */
+export const SEGMENTS_SPEEDS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+
 /** Speed options for the dashboard bottom player (cycle-button, no higher speeds). */
 export const DASHBOARD_SPEEDS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 export const DEFAULT_SPEED = 1;
@@ -50,14 +53,15 @@ export function cycleSpeedStore(
     speedStore: Writable<number>,
     direction: 'up' | 'down',
     lsKey: string,
+    speeds: readonly number[] = _SPEEDS,
 ): number {
     const cur = get(speedStore);
-    const curIdx = _SPEEDS.findIndex(s => Math.abs(s - cur) < 0.01);
-    const idx = curIdx === -1 ? _SPEEDS.indexOf(1) : curIdx;
+    const curIdx = speeds.findIndex(s => Math.abs(s - cur) < 0.01);
+    const idx = curIdx === -1 ? speeds.indexOf(1) : curIdx;
     const newIdx = direction === 'up'
-        ? Math.min(idx + 1, _SPEEDS.length - 1)
+        ? Math.min(idx + 1, speeds.length - 1)
         : Math.max(idx - 1, 0);
-    const newVal = _SPEEDS[newIdx];
+    const newVal = speeds[newIdx];
     if (newVal === undefined) return cur;
     speedStore.set(newVal);
     localStorage.setItem(lsKey, String(newVal));

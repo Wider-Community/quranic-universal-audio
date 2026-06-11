@@ -73,7 +73,11 @@ _getCtx()                     // exported for warmup/probing; AudioContext | nul
 getAudioGraph(el)             // null while ctx suspended; kicks ctx.resume()
 ensureAudioContextRunning()   // await before play after a tab switch
 cutAudio(el) / uncutAudio(el) // 5 ms ramp to 0 / 1
+getOutputLatencyMs()          // (baseLatency+outputLatency)*1000; 0 when ctx null/suspended
+displayTimeMs(mediaMs)        // mediaMs − output latency, clamped ≥0 — DISPLAY-ONLY playhead comp
 ```
+
+**Visual latency compensation (`displayTimeMs`).** `el.currentTime` is the decode/media clock; it leads the audible output by the platform output latency (`baseLatency+outputLatency`, ~20–30 ms wired, 100–300 ms BT). The Segments waveform playhead compensates by drawing at `displayTimeMs(time)` (clamped into `[seg.time_start, seg.time_end]`) inside `playback.ts::drawActivePlayhead` — the single chokepoint for both continuous + bounded draw paths. **Display-only:** never feed it to `seek`/AudioRange boundary/`onSegTimeUpdate` (those use the raw clock). Degrades to identity when the ctx is null/suspended. Segments-only today; Timestamps karaoke playhead could adopt the same helper.
 
 **Two invariants:**
 - **Graph build is gated on `ctx.state === 'running'`.** `getAudioGraph` returns `null` while suspended — building a `MediaElementAudioSourceNode` against a suspended context redirects output to a silent graph. So the kill-switch silently no-ops on the very first play (warmup may still be resuming); subsequent plays get it.

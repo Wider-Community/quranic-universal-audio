@@ -34,7 +34,8 @@
     import type { PublicBucket } from '../../../../lib/types/public-bucket';
     import { LS_KEYS } from '../../../../lib/utils/constants';
     import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
-    import { SPEEDS } from '../../../../lib/utils/speed-control';
+    import { getSurahInfo, surahInfoReady } from '../../../../lib/utils/surah-info';
+    import { SEGMENTS_SPEEDS } from '../../../../lib/utils/speed-control';
     import { autoSaveEnabled, toggleAutoSave } from '../../stores/autosave';
     import {
         livePlayingVerse,
@@ -60,6 +61,7 @@
     } from '../../stores/playback';
     import { saveButtonLabel, savePreviewVisible } from '../../stores/save';
     import { hideHistoryView, showHistoryView } from '../../utils/history/actions';
+    import { resolveChapterDurationMs } from '../../utils/playback/footer-duration';
     import { editPreviewPlaying } from '../../utils/playback/play-range';
     import {
         onSegAudioEnded,
@@ -74,6 +76,7 @@
         onSegSaveClick,
     } from '../../utils/save/actions';
     import MarkReadyModal from './MarkReadyModal.svelte';
+    import ShortcutsGuide from './ShortcutsGuide.svelte';
 
     export let reciterTask: ReciterTask | null = null;
     export let chipActionBusy: '' | 'unclaim' | 'mark' = '';
@@ -114,6 +117,15 @@
     // be reactive without polling. Written by the onTimeUpdate
     // subscription mounted below.
     let currentMs = 0;
+
+    // Live mirror of `<audio>.duration` (ms), kept fresh by the
+    // loadedmetadata/durationchange listeners wired in onMount. 0 while
+    // non-finite (browser hasn't resolved a streamed/headerless duration yet).
+    let elDurationMs = 0;
+    function onElDuration(): void {
+        const d = audioEl?.duration;
+        elDurationMs = d && isFinite(d) ? d * 1000 : 0;
+    }
 
     // ResizeObserver + port-subscription handles live at module scope so
     // the unified teardown in `onMount`'s return can reach them.
@@ -156,6 +168,13 @@
             segAudioElement.set(audioEl);
             segPort.attachElement(audioEl);
             segPortReady.set(true);
+            // Re-read `<audio>.duration` whenever the browser resolves it.
+            // Headerless MP3s (CDN stream-through) report duration LATE via
+            // `durationchange` rather than at the first `loadedmetadata`;
+            // without this listener the footer's once-sampled read missed it
+            // and the progress bar stayed hidden.
+            audioEl.addEventListener('loadedmetadata', onElDuration);
+            audioEl.addEventListener('durationchange', onElDuration);
             playbackUnsubs = [
                 segPort.onPlay(startSegAnimation),
                 segPort.onPause(stopSegAnimation),
@@ -173,6 +192,10 @@
             document.documentElement.style.removeProperty('--seg-footer-actual-h');
             for (const off of playbackUnsubs) off();
             playbackUnsubs = [];
+            if (audioEl) {
+                audioEl.removeEventListener('loadedmetadata', onElDuration);
+                audioEl.removeEventListener('durationchange', onElDuration);
+            }
             segPort.attachElement(null);
             segPortReady.set(false);
             segAudioElement.set(null);
@@ -195,6 +218,11 @@
     // Falls back to `selectedChapter` (the authoritative load gate).
     $: displaySurahNum =
         $pickerDisplayChapter ?? ($selectedChapter ? parseInt($selectedChapter) : null);
+
+    let _surahMap: ReturnType<typeof getSurahInfo> = {};
+    void surahInfoReady.then(() => { _surahMap = getSurahInfo(); });
+    $: displaySurahName = _surahMap[String(displaySurahNum)]?.name_en ?? null;
+
     $: chipMeta = [titleCaseSlug(contextRiwayah), titleCaseSlug(contextStyle)]
         .filter(Boolean)
         .join(' · ');
@@ -228,18 +256,25 @@
     // ---- Progress bar -----------------------------------------------
     // % through the currently-loaded CHAPTER audio. Under chapter-continuous
     // playback the user sees a single timeline spanning the full chapter;
-    // clicking seeks anywhere within it. `chapterDurationMs` is read from
-    // the `<audio>` element's `duration` once canplay has fired (a small
-    // reactive bump on $isMainAudioPlaying keeps it fresh after chapter
-    // swaps).
+    // clicking seeks anywhere within it. `chapterDurationMs` prefers the live
+    // `<audio>.duration` (kept fresh by the durationchange listener) but falls
+    // back to the manifest's chapter duration when the browser can't resolve
+    // one up-front (headerless CDN stream) or is playing a short VBR clip —
+    // see `resolveChapterDurationMs`.
     let chapterDurationMs = 0;
     $: {
-        // Re-read whenever playback state or chapter changes; the audio element
-        // updates duration on metadata load.
+        // Recompute on any playback/chapter change. `elDurationMs` is itself
+        // reactive (durationchange/loadedmetadata listeners); the other reads
+        // are reactive deps so this block re-runs when playback moves.
         void $isMainAudioPlaying;
         void $segData?.audio_url;
-        const dur = segPort.element?.duration;
-        chapterDurationMs = dur && isFinite(dur) ? dur * 1000 : 0;
+        const inClip = !!segPort.window?.isClip;
+        const playingCh = $playingSegmentIndex?.chapter
+            ?? ($selectedChapter ? parseInt($selectedChapter) : NaN);
+        const manifestDurMs = Number.isFinite(playingCh)
+            ? ($segAllData?.chapter_duration_ms_by_chapter?.[String(playingCh)] ?? 0)
+            : 0;
+        chapterDurationMs = resolveChapterDurationMs({ elDurationMs, inClip, manifestDurMs });
     }
 
     // Progress bar DISPLAY is always chapter-wide — `currentMs` /
@@ -288,9 +323,9 @@
 
     function cyclePlaybackSpeed(): void {
         const cur = get(playbackSpeed);
-        const curIdx = SPEEDS.findIndex((s) => Math.abs(s - cur) < 0.01);
-        const idx = curIdx === -1 ? SPEEDS.indexOf(1) : curIdx;
-        const next = SPEEDS[(idx + 1) % SPEEDS.length] ?? 1;
+        const curIdx = SEGMENTS_SPEEDS.findIndex((s) => Math.abs(s - cur) < 0.01);
+        const idx = curIdx === -1 ? SEGMENTS_SPEEDS.indexOf(1) : curIdx;
+        const next = SEGMENTS_SPEEDS[(idx + 1) % SEGMENTS_SPEEDS.length] ?? 1;
         playbackSpeed.set(next);
         localStorage.setItem(LS_KEYS.SEG_SPEED, String(next));
         segPort.setPlaybackRate(next);
@@ -417,6 +452,8 @@
     // rAF can resume seamlessly).
     $: playGlyph = ($isMainAudioPlaying || $editPreviewPlaying ? 'pause' : 'play') as IconName;
 
+    $: canPlay = $segPortReady && !!($segData?.audio_url || $playingSegmentIndex);
+
     // Time display for the progress row.
     function fmt(ms: number): string {
         if (!ms || !isFinite(ms)) return '0:00:00';
@@ -452,7 +489,8 @@
     </div>
 
     <div class="row">
-        <div class="zone zone-identity">
+        <!-- Left zone: reciter identity + actions + playback prefs -->
+        <div class="zone zone-left">
             <button
                 type="button"
                 class="identity"
@@ -479,10 +517,6 @@
             {#if hasReciter && !showSavePreview}
                 <div class="reciter-actions">
                     {#if reciterTask?.row.marked_ready}
-                        <!-- After mark-ready submission the reviewer's affordances are
-                             fully locked. Only an admin can move forward (publish)
-                             or send back (force-release). The pill is a passive
-                             status indicator, not a button. -->
                         <span class="status-pill marked-ready" title="Awaiting admin review">
                             <span class="pill-main">Marked ready · awaiting admin</span>
                             <span class="pill-hint">You can claim a different reciter</span>
@@ -511,206 +545,179 @@
                     {/if}
                 </div>
             {/if}
+
         </div>
 
-        {#if hasReciter}
-            <div
-                class="zone zone-location"
-                use:clickOutside={() => {
-                    surahOpen = false;
-                    ayahOpen = false;
-                }}
-            >
-                <div class="player-row">
-                    <button
-                        type="button"
-                        class="speed-cell"
-                        class:boosted={$playbackSpeed !== 1}
-                        on:click={cyclePlaybackSpeed}
-                        title="Playback speed (click to cycle)"
-                        aria-label="Playback speed {$playbackSpeed}×">{$playbackSpeed}×</button
-                    >
+        <!-- Center transport: 1fr [play 40px] 1fr — play is pinned at viewport
+             center; secondary controls flank it symmetrically. -->
+        <div class="controls">
+            {#if hasReciter}
+                <div class="transport" use:clickOutside={() => { surahOpen = false; ayahOpen = false; }}>
+                    <div class="transport-left">
+                        <ShortcutsGuide />
+                        <button
+                            type="button"
+                            class="speed-cell"
+                            class:boosted={$playbackSpeed !== 1}
+                            on:click={cyclePlaybackSpeed}
+                            title="Playback speed (click to cycle)"
+                            aria-label="Playback speed {$playbackSpeed}×">{$playbackSpeed}×</button
+                        >
+                        <button
+                            type="button"
+                            class="pref-cell"
+                            class:on={$autoPlayEnabled}
+                            aria-pressed={$autoPlayEnabled}
+                            title="Autoplay — when ON, play continues through the whole chapter (or advances card-to-card inside an open accordion); when OFF, stops at the end of each segment"
+                            on:click={handleAutoPlayToggle}
+                        ><Icon name="autoplay" size={16} /></button>
+                        <button
+                            type="button"
+                            class="pref-cell"
+                            class:on={$autoScrollEnabled}
+                            aria-pressed={$autoScrollEnabled}
+                            title="Auto-scroll the list to follow the playing segment"
+                            on:click={handleAutoScrollToggle}
+                        ><Icon name="autoscroll" size={16} /></button>
+                    </div>
 
                     <button
                         type="button"
-                        class="pref-cell"
-                        class:on={$autoPlayEnabled}
-                        aria-pressed={$autoPlayEnabled}
-                        title="Autoplay — when ON, play continues through the whole chapter; when OFF, stops at the end of each segment (chapter mode only; accordions always stop)"
-                        on:click={handleAutoPlayToggle}
-                    >
-                        <Icon name="autoplay" size={16} />
-                    </button>
-
-                    <button
-                        type="button"
-                        class="pref-cell"
-                        class:on={$autoScrollEnabled}
-                        aria-pressed={$autoScrollEnabled}
-                        title="Auto-scroll the list to follow the playing segment"
-                        on:click={handleAutoScrollToggle}
-                    >
-                        <Icon name="autoscroll" size={16} />
-                    </button>
-
-                    <button
-                        type="button"
-                        class="play-cell"
-                        disabled={!$segPortReady || (!$segData?.audio_url && !$playingSegmentIndex)}
+                        class="play-btn"
+                        disabled={!canPlay}
                         on:click={handlePlayClick}
                         aria-label={playGlyph === 'pause' ? 'Pause' : 'Play'}
-                    >
-                        <Icon name={playGlyph} size={14} />
-                    </button>
+                    ><Icon name={playGlyph} size={18} /></button>
 
-                    <button
-                        type="button"
-                        class="loc-cell"
-                        class:has-value={!!displaySurahNum}
-                        class:live={surahLive}
-                        on:click={() => {
-                            surahOpen = !surahOpen;
-                            ayahOpen = false;
-                        }}
-                        aria-haspopup="dialog"
-                        aria-expanded={surahOpen}
-                    >
-                        <span class="loc-label">Surah</span>
-                        {#if displaySurahNum}
-                            <span class="loc-value">{displaySurahNum}</span>
-                        {:else}
-                            <span class="loc-empty">—</span>
+                    <div class="transport-right">
+                        <button
+                            type="button"
+                            class="loc-cell surah-cell"
+                            class:has-value={!!displaySurahNum}
+                            class:live={surahLive}
+                            on:click={() => { surahOpen = !surahOpen; ayahOpen = false; }}
+                            aria-haspopup="dialog"
+                            aria-expanded={surahOpen}
+                        >
+                            {#if displaySurahNum}<span class="loc-value">{displaySurahName ?? displaySurahNum}</span
+                            >{:else}<span class="loc-empty">Surah</span>{/if}
+                            <Icon name="caret-down" size={10} />
+                        </button>
+                        <button
+                            type="button"
+                            class="loc-cell"
+                            class:has-value={!!$selectedVerse}
+                            class:live={ayahLive}
+                            disabled={!$selectedChapter}
+                            on:click={openAyah}
+                            aria-haspopup="dialog"
+                            aria-expanded={ayahOpen}
+                        >
+                            <span class="loc-label">Ayah</span>
+                            {#if $selectedVerse}<span class="loc-value">{$selectedVerse}</span
+                            >{:else}<span class="loc-empty">all</span>{/if}
+                            <Icon name="caret-down" size={10} />
+                        </button>
+
+                        {#if surahOpen}
+                            <div class="pop pop-surah">
+                                <SurahPopover surahNums={allSurahs} value={displaySurahNum} on:change={onSurahPick} />
+                            </div>
                         {/if}
-                        <Icon name="caret-down" size={10} />
-                    </button>
-
-                    <button
-                        type="button"
-                        class="loc-cell"
-                        class:has-value={!!$selectedVerse}
-                        class:live={ayahLive}
-                        disabled={!$selectedChapter}
-                        on:click={openAyah}
-                        aria-haspopup="dialog"
-                        aria-expanded={ayahOpen}
-                    >
-                        <span class="loc-label">Ayah</span>
-                        {#if $selectedVerse}
-                            <span class="loc-value">{$selectedVerse}</span>
-                        {:else}
-                            <span class="loc-empty">all</span>
+                        {#if ayahOpen}
+                            <div class="pop pop-ayah" role="dialog" aria-label="Ayah picker">
+                                <input
+                                    bind:this={ayahFilterInput}
+                                    bind:value={ayahQuery}
+                                    on:keydown={onAyahKey}
+                                    class="ayah-search"
+                                    type="text"
+                                    inputmode="numeric"
+                                    placeholder="Jump to ayah…"
+                                    autocomplete="off"
+                                />
+                                <div class="ayah-grid" role="listbox">
+                                    {#each filteredAyahs as v (v)}
+                                        <button type="button" class="ayah-cell"
+                                            class:active={String(v) === $selectedVerse}
+                                            role="option" aria-selected={String(v) === $selectedVerse}
+                                            on:click={() => onAyahPick(v)}>{v}</button>
+                                    {:else}
+                                        <div class="empty">No matches</div>
+                                    {/each}
+                                </div>
+                            </div>
                         {/if}
-                        <Icon name="caret-down" size={10} />
-                    </button>
-                </div>
-
-                {#if surahOpen}
-                    <div class="pop pop-surah">
-                        <SurahPopover
-                            surahNums={allSurahs}
-                            value={displaySurahNum}
-                            on:change={onSurahPick}
-                        />
                     </div>
-                {/if}
+                </div>
+            {/if}
+        </div>
 
-                {#if ayahOpen}
-                    <div class="pop pop-ayah" role="dialog" aria-label="Ayah picker">
-                        <input
-                            bind:this={ayahFilterInput}
-                            bind:value={ayahQuery}
-                            on:keydown={onAyahKey}
-                            class="ayah-search"
-                            type="text"
-                            inputmode="numeric"
-                            placeholder="Jump to ayah…"
-                            autocomplete="off"
-                        />
-                        <div class="ayah-grid" role="listbox">
-                            {#each filteredAyahs as v (v)}
+        <!-- Right zone: save controls only -->
+        <div class="zone zone-right">
+            <div class="save-cluster">
+                {#if hasReciter}
+                    {#if showSavePreview}
+                        <button class="action ghost" on:click={() => hideSavePreview()}>Cancel</button>
+                        <button class="action primary" on:click={confirmSaveFromPreview}>Confirm save</button>
+                    {:else}
+                        <button
+                            type="button"
+                            class="utility"
+                            class:on={$historyVisible}
+                            title={$historyVisible ? 'Back to segments' : 'History'}
+                            aria-label={historyButtonLabel}
+                            on:click={toggleHistory}
+                        >
+                            {#if $historyVisible}
+                                <Icon name="arrow-left" size={14} />
+                                <span class="util-label">Back</span>
+                            {:else}
+                                <Icon name="history" size={14} />
+                                <span class="util-label">History</span>
+                            {/if}
+                        </button>
+
+                        {#if writeable}
+                            <div class="save-group">
                                 <button
                                     type="button"
-                                    class="ayah-cell"
-                                    class:active={String(v) === $selectedVerse}
-                                    role="option"
-                                    aria-selected={String(v) === $selectedVerse}
-                                    on:click={() => onAyahPick(v)}>{v}</button
+                                    class="autosave-toggle"
+                                    class:on={$autoSaveEnabled}
+                                    aria-pressed={$autoSaveEnabled}
+                                    title={$autoSaveEnabled
+                                        ? 'Auto-save on — click to disable'
+                                        : 'Auto-save off — click to enable'}
+                                    on:click={() => toggleAutoSave(!$autoSaveEnabled)}
                                 >
-                            {:else}
-                                <div class="empty">No matches</div>
-                            {/each}
-                        </div>
-                    </div>
-                {/if}
-            </div>
-        {:else}
-            <div class="zone zone-location empty-spacer" aria-hidden="true"></div>
-        {/if}
+                                    <Icon name="bolt" size={12} />
+                                    <span>Auto</span>
+                                </button>
 
-        <div class="zone zone-save">
-            {#if hasReciter}
-                {#if showSavePreview}
-                    <button class="action ghost" on:click={() => hideSavePreview()}>Cancel</button>
-                    <button class="action primary" on:click={confirmSaveFromPreview}
-                        >Confirm save</button
-                    >
-                {:else}
-                    <button
-                        type="button"
-                        class="utility"
-                        class:on={$historyVisible}
-                        title={$historyVisible ? 'Back to segments' : 'History'}
-                        aria-label={historyButtonLabel}
-                        on:click={toggleHistory}
-                    >
-                        {#if $historyVisible}
-                            <Icon name="arrow-left" size={14} />
-                            <span class="util-label">Back</span>
-                        {:else}
-                            <Icon name="history" size={14} />
-                            <span class="util-label">History</span>
+                                <button
+                                    type="button"
+                                    class="action save"
+                                    class:primary={$isDirtyStore && !$autoSaveEnabled}
+                                    class:saved={!$isDirtyStore}
+                                    class:auto-busy={$autoSaveEnabled && $isDirtyStore}
+                                    disabled={saveDisabled}
+                                    on:click={onSegSaveClick}
+                                >
+                                    {#if !$isDirtyStore}
+                                        <span class="save-glyph" aria-hidden="true">✓</span>
+                                        <span>Saved</span>
+                                    {:else if $autoSaveEnabled}
+                                        <span class="save-pulse" aria-hidden="true"></span>
+                                        <span>Auto-saving…</span>
+                                    {:else}
+                                        <span>{saveLabel}</span>
+                                    {/if}
+                                </button>
+                            </div>
                         {/if}
-                    </button>
-
-                    {#if writeable}
-                        <div class="save-group">
-                            <button
-                                type="button"
-                                class="autosave-toggle"
-                                class:on={$autoSaveEnabled}
-                                aria-pressed={$autoSaveEnabled}
-                                title={$autoSaveEnabled
-                                    ? 'Auto-save on — click to disable'
-                                    : 'Auto-save off — click to enable'}
-                                on:click={() => toggleAutoSave(!$autoSaveEnabled)}
-                            >
-                                <Icon name="bolt" size={12} />
-                                <span>Auto</span>
-                            </button>
-
-                            <button
-                                type="button"
-                                class="action save"
-                                class:primary={$isDirtyStore && !$autoSaveEnabled}
-                                class:saved={!$isDirtyStore}
-                                class:auto-busy={$autoSaveEnabled && $isDirtyStore}
-                                disabled={saveDisabled}
-                                on:click={onSegSaveClick}
-                            >
-                                {#if !$isDirtyStore}
-                                    <span class="save-glyph" aria-hidden="true">✓</span>
-                                    <span>Saved</span>
-                                {:else if $autoSaveEnabled}
-                                    <span class="save-pulse" aria-hidden="true"></span>
-                                    <span>Auto-saving…</span>
-                                {:else}
-                                    <span>{saveLabel}</span>
-                                {/if}
-                            </button>
-                        </div>
                     {/if}
                 {/if}
-            {/if}
+            </div>
         </div>
     </div>
 
@@ -738,14 +745,14 @@
         position: fixed;
         bottom: 0;
         left: 0;
-        right: 0;
+        width: 100vw;
         z-index: 100;
         display: flex;
         flex-direction: column;
-        min-height: var(--seg-footer-h, 72px);
         background: var(--panel);
         border-top: 1px solid var(--border-default);
         box-shadow: 0 -8px 24px oklch(0 0 0 / 0.28);
+        padding: 0 var(--s-4) var(--s-2); /* container-level padding matches BottomPlayer */
     }
 
     /* The <audio> element is the source of all playback DOM events. It
@@ -762,8 +769,8 @@
         display: flex;
         align-items: center;
         gap: var(--s-3);
-        padding: var(--s-2) var(--s-4) 0;
         flex-shrink: 0;
+        /* no padding — container handles horizontal; no top gap matches BottomPlayer */
     }
     .progress:not(.active) {
         opacity: 0;
@@ -804,53 +811,46 @@
         transition: width 80ms linear;
     }
 
+    /* Three-column grid matching BottomPlayer: equal minmax(220px,1fr) flanks
+       with an auto transport column — the play button (center of the symmetric
+       5-button cluster) lands at the exact viewport center on every tab. */
     .row {
-        position: relative;
-        flex: 1;
-        display: flex;
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
         align-items: center;
-        justify-content: space-between;
-        gap: var(--s-3);
-        padding: var(--s-2) var(--s-4);
-    }
-
-    /* Location (player cluster) is pinned to the true viewport
-       horizontal center, decoupled from the side zones' widths. */
-    .zone-location {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
+        gap: var(--s-4);
+        height: calc(var(--player-h, 72px) - 14px);
     }
 
     .zone {
-        min-width: 0;
         display: flex;
         align-items: center;
+        gap: var(--s-3);
+        min-width: 0;
+        justify-content: space-between;
     }
-    .zone-identity {
+    .zone-left {
         justify-content: flex-start;
         gap: var(--s-3);
         flex-wrap: nowrap;
     }
-    .zone-location {
-        justify-content: center;
-        gap: var(--s-2);
-    }
-    .zone-save {
+    .zone-right {
         justify-content: flex-end;
-        gap: var(--s-2);
-        flex-wrap: wrap;
+        gap: var(--s-3);
     }
-    .empty-spacer {
-        display: none;
+
+    /* Transport center — mirrors BottomPlayer's .controls */
+    .controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .reciter-actions {
         display: inline-flex;
         align-items: center;
         gap: var(--s-2);
-        flex: 0 0 auto;
+        flex-shrink: 0;
     }
 
     /* Marked-ready status pill — replaces the entire action button group
@@ -940,135 +940,138 @@
         color: var(--accent);
     }
 
-    /* ---------- Player row (single-row, container-less) ----------
-       Reading order, left-to-right:
-         speed pill · auto-play · auto-scroll · ▶ play · Surah · Ayah
-       The play button is the only accent-filled element; everything
-       else is naked text or icon, no surrounding pill. The cluster
-       sits viewport-centered (zone-location's absolute positioning). */
-    .player-row {
-        display: inline-flex;
+    /* ---------- Transport: 1fr [play 40px] 1fr ----------
+       Fixed width anchors the 1fr columns so the play button sits exactly
+       at the transport center — and since .controls centers the transport
+       in the auto column, play lands at the viewport center. */
+    .transport {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr);
         align-items: center;
+        gap: var(--s-3);
+        width: 440px;
+    }
+    .transport-left {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--s-2);
+    }
+    .transport-right {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
         gap: var(--s-2);
     }
 
-    .player-row > button {
-        border: 0;
-        background: transparent;
-        color: var(--text-secondary);
-        border-radius: var(--r-2);
-        font-family: var(--font-sans);
-        font-size: var(--fs-meta);
-        cursor: pointer;
-        display: inline-flex;
+    /* Play button — 40px accent circle, matches BottomPlayer's .btn.primary */
+    .play-btn {
+        width: 40px;
+        height: 40px;
+        display: flex;
         align-items: center;
         justify-content: center;
-        padding: 0;
-        transition:
-            background var(--t-fast),
-            color var(--t-fast);
-        min-width: 0;
-    }
-    .player-row > button:hover:not(:disabled) {
-        color: var(--text-primary);
-    }
-    .player-row > button:disabled {
-        opacity: 0.35;
-        cursor: not-allowed;
-    }
-
-    /* Play — the only accent-filled element. Round, slightly larger
-       than the icon prefs so it reads as the primary action. */
-    .player-row .play-cell {
         background: var(--accent);
         color: var(--accent-fg);
+        border: 0;
         border-radius: 50%;
-        width: 30px;
-        height: 30px;
-        margin: 0 var(--s-1);
+        cursor: pointer;
+        transition: background var(--t-fast);
+        position: relative;
+        flex-shrink: 0;
     }
-    .player-row .play-cell:hover:not(:disabled) {
-        background: var(--accent-strong);
-        color: var(--accent-fg);
-    }
+    .play-btn:hover:not(:disabled) { background: var(--accent-strong); }
+    .play-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-    /* Pref toggles (auto-play / auto-scroll) — naked square icon
-       buttons. Active state tints the icon accent; no background. */
-    .player-row .pref-cell {
-        width: 26px;
-        height: 26px;
-        color: var(--text-muted);
-    }
-    .player-row .pref-cell:hover:not(:disabled) {
-        color: var(--text-primary);
-        background: var(--panel-2);
-    }
-    .player-row .pref-cell.on {
-        color: var(--accent);
-    }
-    .player-row .pref-cell.on:hover:not(:disabled) {
-        color: var(--accent-strong);
-        background: var(--accent-tint);
-    }
-
-    /* Speed — text pill, slightly subdued. Goes accent when boosted. */
-    .player-row .speed-cell {
-        height: 26px;
-        padding: 0 7px;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        font-variant-numeric: tabular-nums;
-        color: var(--text-muted);
-    }
-    .player-row .speed-cell:hover:not(:disabled) {
-        color: var(--text-primary);
-        background: var(--panel-2);
-    }
-    .player-row .speed-cell.boosted {
-        color: var(--accent);
-    }
-    .player-row .speed-cell.boosted:hover:not(:disabled) {
-        color: var(--accent-strong);
-        background: var(--accent-tint);
-    }
-
-    /* Location triggers (Surah / Ayah) — text + small caret. Subtle
-       outline only on hover; accent tint when the playing segment
-       advances past their boundary. */
-    .player-row .loc-cell {
-        gap: 5px;
-        height: 28px;
-        padding: 0 8px;
-        color: var(--text-secondary);
-        font-size: var(--fs-meta);
-    }
-    /* Label and value share the button's color so the cell reads as one
-       unit ("Surah 1"), and so the live-state accent flip recolours both
-       spans together without per-span overrides. */
-    .player-row .loc-cell .loc-label {
-        font-size: 10px;
-        text-transform: uppercase;
-        letter-spacing: 0.07em;
-    }
-    .player-row .loc-cell .loc-value {
+    /* Secondary transport buttons — 36px, visually subordinate to the 40px play */
+    .speed-cell {
+        height: 36px;
+        padding: 0 9px;
         font-family: var(--font-mono);
         font-size: 11.5px;
         font-variant-numeric: tabular-nums;
+        color: var(--text-secondary);
+        background: transparent;
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+        cursor: pointer;
+        transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+        min-width: 38px;
+        text-align: center;
     }
-    .player-row .loc-cell .loc-empty {
+    .speed-cell:hover { color: var(--text-primary); border-color: var(--border-strong); }
+    .speed-cell.boosted { color: var(--accent); border-color: oklch(0.785 0.13 220 / 0.45); }
+    .speed-cell.boosted:hover { background: var(--accent-tint); border-color: var(--accent); }
+
+    .pref-cell {
+        width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--r-2);
+        cursor: pointer;
+        transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+    }
+    .pref-cell:hover { color: var(--text-primary); background: var(--panel-2); border-color: var(--border-quiet); }
+    .pref-cell.on { color: var(--accent); border-color: oklch(0.785 0.13 220 / 0.35); background: var(--accent-tint-soft); }
+    .pref-cell.on:hover { background: var(--accent-tint); border-color: var(--accent); }
+
+    .loc-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 36px;
+        padding: 0 10px;
+        color: var(--text-secondary);
+        font-size: var(--fs-meta);
+        background: transparent;
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+        cursor: pointer;
+        transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+    }
+    .loc-cell .loc-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-faint);
+    }
+    .loc-cell .loc-value {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        color: var(--text-primary);
+    }
+    .loc-cell.surah-cell .loc-value {
+        font-family: var(--font-sans);
+        font-variant-numeric: normal;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+    .loc-cell.surah-cell {
+        min-width: 80px;
+    }
+    .loc-cell .loc-empty {
         font-style: italic;
-        font-size: 10.5px;
-        opacity: 0.65;
+        font-size: 11px;
+        opacity: 0.5;
     }
-    .player-row .loc-cell:hover:not(:disabled) {
-        background: var(--panel-2);
-        color: var(--text-primary);
-    }
-    .player-row .loc-cell.has-value {
-        color: var(--text-primary);
-    }
-    .player-row .loc-cell.live {
-        color: var(--accent);
+    .loc-cell:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text-primary); background: var(--panel-2); }
+    .loc-cell.has-value { border-color: var(--border-default); }
+    .loc-cell:hover:not(:disabled) .loc-label { color: var(--text-muted); }
+    .loc-cell:disabled { opacity: 0.35; cursor: not-allowed; }
+    .loc-cell.live { color: var(--accent); border-color: oklch(0.785 0.13 220 / 0.35); }
+    .loc-cell.live .loc-label { color: oklch(0.785 0.13 220 / 0.65); }
+
+    .save-cluster {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s-2);
     }
 
     .pop {
@@ -1299,21 +1302,13 @@
     /* ---------- Responsive ---------- */
     @media (max-width: 960px) {
         .row {
-            flex-direction: column;
-            align-items: stretch;
+            grid-template-columns: 1fr;
+            height: auto;
+            padding: var(--s-2) 0;
             gap: var(--s-2);
-            padding: var(--s-2) var(--s-3);
         }
-        /* Return location to in-flow stacking — absolute positioning would
-           collapse it on top of the identity row at narrow widths. */
-        .zone-location {
-            position: static;
-            transform: none;
-            justify-content: flex-start;
-        }
-        .zone-save {
-            justify-content: flex-start;
-        }
+        .zone-left  { justify-content: flex-start; flex-wrap: wrap; }
+        .zone-right { justify-content: flex-start; flex-wrap: wrap; }
         .pop-surah,
         .pop-ayah {
             left: 0;

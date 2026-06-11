@@ -235,6 +235,8 @@
                 showChapter={true}
                 validationCategory={category}
                 accordionSiblings={siblings}
+                onCardIgnore={canIgnore ? handleIgnore : null}
+                onCardToggleContext={toggleContext}
             />
             {#if category === 'cross_verse' && i < mainMembers.length - 1}
                 {@const next = mainMembers[i + 1]}

@@ -23,7 +23,7 @@
 
     import Icon from '../../../../lib/icons/Icon.svelte';
     import type { Segment } from '../../../../lib/types/view-models';
-    import { editStatusText, trimWindow } from '../../stores/edit';
+    import { activeTrimBoundary, editStatusText, trimWindow } from '../../stores/edit';
     import type { SegCanvas } from '../../types/segments-waveform';
     import { EDIT_MIN_DURATION_MS, EDIT_NUDGE_MS } from '../../utils/constants';
     import { exitEditMode } from '../../utils/edit/common';
@@ -61,7 +61,7 @@
     <div class="seg-edit-buttons">
         <button class="btn btn-sm btn-cancel" on:click={exitEditMode}>Cancel</button>
 
-        <div class="seg-nudge-pair seg-nudge-start" role="group" aria-label="Trim start">
+        <div class="seg-nudge-pair seg-nudge-start" class:kb-active={$activeTrimBoundary === 'start'} role="group" aria-label="Trim start">
             <button class="seg-nudge"
                 title="Move start back {EDIT_NUDGE_MS} ms"
                 disabled={startBackDisabled}
@@ -81,7 +81,7 @@
             <Icon name="replay" size={14} />
         </button>
 
-        <div class="seg-nudge-pair seg-nudge-end" role="group" aria-label="Trim end">
+        <div class="seg-nudge-pair seg-nudge-end" class:kb-active={$activeTrimBoundary === 'end'} role="group" aria-label="Trim end">
             <button class="seg-nudge"
                 title="Move end back {EDIT_NUDGE_MS} ms"
                 disabled={endBackDisabled}
@@ -96,3 +96,13 @@
         <span class="seg-edit-status">{$editStatusText}</span>
     </div>
 </div>
+
+<style>
+    /* Ring the stepper pair the keyboard ←/→ + Tab currently drives, so the
+       active handle is visible when trimming without the mouse. */
+    .seg-nudge-pair.kb-active {
+        outline: 1.5px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: var(--r-1);
+    }
+</style>
