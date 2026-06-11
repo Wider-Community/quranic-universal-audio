@@ -214,13 +214,18 @@
     }
     .sg-reset:hover { color: var(--accent-strong); text-decoration: underline; }
 
+    /* Balanced CSS columns (not a 2-col grid) so the unequal-length sections
+       pack tightly down each column instead of leaving a dead gap under the
+       short one — keeps the popover only as tall as its content. */
     .sg-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--s-3) var(--s-4);
-        align-items: start;
+        columns: 2;
+        column-gap: var(--s-4);
     }
-    .sg-sec { min-width: 0; }
+    .sg-sec {
+        min-width: 0;
+        break-inside: avoid;
+        margin-bottom: var(--s-3);
+    }
     .sg-sec-head { margin-bottom: 4px; }
     .sg-sec-head h4 {
         margin: 0;
@@ -289,6 +294,6 @@
     .sg-note { font-size: var(--fs-meta); color: var(--state-warn-fg, var(--accent)); }
 
     @media (max-width: 600px) {
-        .sg-grid { grid-template-columns: 1fr; }
+        .sg-grid { columns: 1; }
     }
 </style>
