@@ -60,6 +60,7 @@
     } from '../../stores/playback';
     import { saveButtonLabel, savePreviewVisible } from '../../stores/save';
     import { hideHistoryView, showHistoryView } from '../../utils/history/actions';
+    import { resolveChapterDurationMs } from '../../utils/playback/footer-duration';
     import { editPreviewPlaying } from '../../utils/playback/play-range';
     import {
         onSegAudioEnded,
@@ -115,6 +116,15 @@
     // subscription mounted below.
     let currentMs = 0;
 
+    // Live mirror of `<audio>.duration` (ms), kept fresh by the
+    // loadedmetadata/durationchange listeners wired in onMount. 0 while
+    // non-finite (browser hasn't resolved a streamed/headerless duration yet).
+    let elDurationMs = 0;
+    function onElDuration(): void {
+        const d = audioEl?.duration;
+        elDurationMs = d && isFinite(d) ? d * 1000 : 0;
+    }
+
     // ResizeObserver + port-subscription handles live at module scope so
     // the unified teardown in `onMount`'s return can reach them.
     let footerResizeObs: ResizeObserver | null = null;
@@ -156,6 +166,13 @@
             segAudioElement.set(audioEl);
             segPort.attachElement(audioEl);
             segPortReady.set(true);
+            // Re-read `<audio>.duration` whenever the browser resolves it.
+            // Headerless MP3s (CDN stream-through) report duration LATE via
+            // `durationchange` rather than at the first `loadedmetadata`;
+            // without this listener the footer's once-sampled read missed it
+            // and the progress bar stayed hidden.
+            audioEl.addEventListener('loadedmetadata', onElDuration);
+            audioEl.addEventListener('durationchange', onElDuration);
             playbackUnsubs = [
                 segPort.onPlay(startSegAnimation),
                 segPort.onPause(stopSegAnimation),
@@ -173,6 +190,10 @@
             document.documentElement.style.removeProperty('--seg-footer-actual-h');
             for (const off of playbackUnsubs) off();
             playbackUnsubs = [];
+            if (audioEl) {
+                audioEl.removeEventListener('loadedmetadata', onElDuration);
+                audioEl.removeEventListener('durationchange', onElDuration);
+            }
             segPort.attachElement(null);
             segPortReady.set(false);
             segAudioElement.set(null);
@@ -228,18 +249,25 @@
     // ---- Progress bar -----------------------------------------------
     // % through the currently-loaded CHAPTER audio. Under chapter-continuous
     // playback the user sees a single timeline spanning the full chapter;
-    // clicking seeks anywhere within it. `chapterDurationMs` is read from
-    // the `<audio>` element's `duration` once canplay has fired (a small
-    // reactive bump on $isMainAudioPlaying keeps it fresh after chapter
-    // swaps).
+    // clicking seeks anywhere within it. `chapterDurationMs` prefers the live
+    // `<audio>.duration` (kept fresh by the durationchange listener) but falls
+    // back to the manifest's chapter duration when the browser can't resolve
+    // one up-front (headerless CDN stream) or is playing a short VBR clip —
+    // see `resolveChapterDurationMs`.
     let chapterDurationMs = 0;
     $: {
-        // Re-read whenever playback state or chapter changes; the audio element
-        // updates duration on metadata load.
+        // Recompute on any playback/chapter change. `elDurationMs` is itself
+        // reactive (durationchange/loadedmetadata listeners); the other reads
+        // are reactive deps so this block re-runs when playback moves.
         void $isMainAudioPlaying;
         void $segData?.audio_url;
-        const dur = segPort.element?.duration;
-        chapterDurationMs = dur && isFinite(dur) ? dur * 1000 : 0;
+        const inClip = !!segPort.window?.isClip;
+        const playingCh = $playingSegmentIndex?.chapter
+            ?? ($selectedChapter ? parseInt($selectedChapter) : NaN);
+        const manifestDurMs = Number.isFinite(playingCh)
+            ? ($segAllData?.chapter_duration_ms_by_chapter?.[String(playingCh)] ?? 0)
+            : 0;
+        chapterDurationMs = resolveChapterDurationMs({ elDurationMs, inClip, manifestDurMs });
     }
 
     // Progress bar DISPLAY is always chapter-wide — `currentMs` /

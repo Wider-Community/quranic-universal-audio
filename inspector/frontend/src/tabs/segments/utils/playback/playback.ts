@@ -34,6 +34,7 @@
 
 import { get } from 'svelte/store';
 
+import { displayTimeMs } from '../../../../lib/playback/audio-graph';
 import { AudioRange } from '../../../../lib/playback/audio-range';
 import type { Segment } from '../../../../lib/types/view-models';
 import { type AnimationLoop,createAnimationLoop } from '../../../../lib/utils/animation';
@@ -776,10 +777,18 @@ export function drawActivePlayhead(timeMs?: number): void {
     if (!seg) return;
     const audioUrl = seg.audio_url || allData?.audio_by_chapter?.[String(active.chapter)] || '';
 
+    // Compensate the visual playhead for platform output latency: `time` is the
+    // media/decode clock, which leads the audible recitation by the OS+Web-Audio
+    // output latency. Subtract it so the playhead tracks what the user HEARS.
+    // Clamp into the segment window so it pins at the left edge during the
+    // initial latency window instead of vanishing (drawSegPlayhead skips
+    // out-of-range times). Display-only — control paths keep the raw clock.
+    const displayT = Math.min(seg.time_end, Math.max(seg.time_start, displayTimeMs(time)));
+
     // Draw the playhead on EVERY mounted twin for this (chapter, index) — main
     // list row and any accordion rows showing the same segment. Both need the
     // synchronized playhead per spec.
     for (const entry of getRowEntriesFor(active.chapter, active.index)) {
-        if (entry.canvas) drawSegPlayhead(entry.canvas, seg.time_start, seg.time_end, time, audioUrl);
+        if (entry.canvas) drawSegPlayhead(entry.canvas, seg.time_start, seg.time_end, displayT, audioUrl);
     }
 }
