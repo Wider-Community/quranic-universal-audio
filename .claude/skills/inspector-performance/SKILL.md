@@ -1,7 +1,6 @@
 ---
 name: inspector-performance
 description: Inspector performance across the whole stack — single-worker backend (SQLite / caching / bucket-I/O / hot paths), frontend (bundle / render / wire-shape), and the live-stack runtime probing that produces the evidence (Playwright/Chrome MCP + Flask/Vite log correlation). The cost model, the measurement playbook, and the cautionary patterns.
-when_to_use: "Feels slow" reports; before agreeing to a feature-first ask that touches a hot path (validate / save / page load / audio play / cold validate); choosing compute placement (write-time vs read-time); adding or invalidating a cache; deciding to parallelize bucket reads; FE bundle/lazy-load/wire-shape decisions; and any time you need to drive the running stack and collect ranked runtime evidence (network waterfall, console, performance traces, backend logs).
 ---
 
 # inspector-performance
