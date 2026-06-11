@@ -100,8 +100,60 @@ Deliberately **excluded**: `claim.reassigned` (event unused), `reciter.published
 (already on the public activity rail), `reciter.merge_rejected`, and all
 admin/catalog/self events.
 
+## Announcements (global broadcast)
+
+The same rail also shows **announcements** — an owner-composed broadcast that
+reaches **everyone, including signed-out visitors**. Unlike per-user
+notifications (one materialized row per target), an announcement is a **single
+global row**; there is no per-user fan-out, so it also reaches anonymous users
+who have no `hf_user_id`.
+
+**Model.** SQLite table `announcements` (migration `0021_announcements.sql`):
+`id`, `title`, `body` (nullable), `author_hf_user_id` + `author_login`
+(provenance, no FK), `created_at`, `revoked_at` (NULL ⇒ active). An announcement
+stays active until an owner revokes it. Repo `services/db/repo_announcements.py`
+(`create` / `list_active` / `list_all` / `revoke`); service
+`services/announcements.py` (Flask-free; writes open their own
+`durable_transaction`, validates title non-empty).
+
+**Routes.**
+- Public read: `GET /api/announcements` (`routes/announcements.py`) — **ungated**,
+  anonymous-reachable (mirrors `/api/static/*`); serves the active rows as the
+  public `Announcement` wire shape (`id`/`title`/`body`/`created_at`).
+- Owner compose/manage (`routes/admin/announcements.py`, all gate
+  `announcements.send`): `GET /api/admin/announcements` (active + revoked, the
+  `AnnouncementAdmin` shape), `POST /api/admin/announcements` (compose, validates
+  via `AnnouncementCreate`), `POST /api/admin/announcements/<id>/revoke`. The two
+  POSTs also carry `@require_same_origin`.
+
+`announcements.send` is a `G_ADMIN` capability, **owner-only by default but
+toggleable** (an owner can delegate to maintainers from the Permissions tab).
+
+**Dismiss / seen — client-side only.** There is **no** server-side per-user
+dismiss state. The browser tracks it in localStorage
+(`insp_dismissed_announcements`, `insp_seen_announcements`); dismissing hides an
+announcement permanently on that browser. The store
+(`tabs/dashboard/stores/announcements.svelte.ts`) polls the public route on the
+same 30s visibility-aware cadence and computes `unread` against a page-load
+snapshot of the seen-set, so a freshly-arrived announcement reads as "new" for
+the session without the always-visible rail clearing it instantly.
+
+**Rail rendering.** Announcements render as **normal notification cards** (not a
+separate group): in the Active view they merge with personal notifications,
+newest-first, styled identically — each with a dismiss `✕` (no nav-target, no
+archive/restore). The whole rail (`NotificationsRail.svelte`, mounted
+unconditionally inside the public `ActivityRail`) shows for anonymous users
+whenever ≥1 announcement is active; the Active/Archive toggle + personal list
+stay signed-in-only. Compose UI: the Admin → **Announcements** tab
+(`AnnouncementsCompartment.svelte`).
+
 ## Tests
 
+- `tests/db/test_repo_announcements.py` — announcement create / list_active /
+  revoke (active⇄all, no-op double-revoke).
+- `tests/routes/test_route_announcements.py` — public read anon-reachable,
+  compose gated owner-only (maintainer/contributor 403, anon 401), revoke drops
+  from the public list, empty title 400.
 - `tests/notifications/test_emit_resolvers.py` — resolver target correctness,
   self-suppression, SYSTEM-actor alignment, auto-claim keep-self, dedup,
   flag-reply self-suppression.

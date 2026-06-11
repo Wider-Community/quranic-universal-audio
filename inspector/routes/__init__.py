@@ -19,11 +19,13 @@ def register_blueprints(app):
     from routes.admin.access import access_admin_bp
     from routes.admin.actions import admin_actions_bp
     from routes.admin.activity import public_activity_admin_bp
+    from routes.admin.announcements import admin_announcements_bp
     from routes.admin.jobs import admin_jobs_bp
     from routes.admin.permissions import admin_permissions_bp
     from routes.admin.releases import admin_releases_bp
     from routes.admin.reviews import admin_reviews_bp
     from routes.admin.users import admin_users_bp
+    from routes.announcements import announcements_bp
     from routes.audio.clip import segment_clip_bp
     from routes.audio.metadata import audio_meta_bp
     from routes.audio.proxy import audio_proxy_bp
@@ -49,6 +51,7 @@ def register_blueprints(app):
     app.register_blueprint(auth_bp)
     app.register_blueprint(guides_bp)
     app.register_blueprint(notifications_bp)
+    app.register_blueprint(announcements_bp)
     app.register_blueprint(claims_bp)
     app.register_blueprint(public_bp)
     app.register_blueprint(access_admin_bp)
@@ -59,6 +62,7 @@ def register_blueprints(app):
     app.register_blueprint(admin_jobs_bp)
     app.register_blueprint(admin_reviews_bp)
     app.register_blueprint(admin_users_bp)
+    app.register_blueprint(admin_announcements_bp)
     app.register_blueprint(requests_bp)
     app.register_blueprint(ts_bp)
     app.register_blueprint(seg_data_bp)

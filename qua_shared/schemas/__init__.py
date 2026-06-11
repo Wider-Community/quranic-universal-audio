@@ -118,6 +118,7 @@ from .wire.admin_users import (
     AdminVisitorStats,
     VisitorDayStat,
 )
+from .wire.announcements import Announcement, AnnouncementAdmin, AnnouncementCreate
 from .wire.audio import AudioSurahEntry, AudioSurahsResponse, AudioVia
 from .wire.intake_requests import (
     IntakeAttestations,
@@ -334,6 +335,9 @@ __all__ = [
     "RequestChange",
     "ArchivedRequestsFile",
     "AudioCategory",
+    "Announcement",
+    "AnnouncementAdmin",
+    "AnnouncementCreate",
     "AudioManifestSidecar",
     "AudioSurahEntry",
     "AudioSurahsResponse",

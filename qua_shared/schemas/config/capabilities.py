@@ -441,6 +441,16 @@ CAPABILITIES: tuple[Capability, ...] = (
         maintainer=True,
     ),
     _c(
+        "announcements.send",
+        G_ADMIN,
+        "Send announcements",
+        "Compose and revoke global announcements shown in every user's "
+        "My Notifications rail, including signed-out visitors. Owner-only by "
+        "default.",
+        contributor=False,
+        maintainer=False,
+    ),
+    _c(
         MANAGE_PERMISSIONS,
         G_ADMIN,
         "Manage permissions",

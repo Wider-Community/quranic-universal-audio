@@ -5,7 +5,14 @@
  * permissions; reviews replaced the disabled `to_publish` placeholder).
  */
 
-export type AdminTab = 'users' | 'requests' | 'reviews' | 'releases' | 'jobs' | 'permissions';
+export type AdminTab =
+    | 'users'
+    | 'requests'
+    | 'reviews'
+    | 'releases'
+    | 'jobs'
+    | 'announcements'
+    | 'permissions';
 
 const ALL_TABS: readonly AdminTab[] = [
     'users',
@@ -13,6 +20,7 @@ const ALL_TABS: readonly AdminTab[] = [
     'reviews',
     'releases',
     'jobs',
+    'announcements',
     'permissions',
 ];
 const LS_TAB_KEY = 'insp_admin_active_tab';

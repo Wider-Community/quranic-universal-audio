@@ -3,8 +3,10 @@
      * tab is owner-only — maintainers don't see it at all (the
      * ``manage_permissions`` capability is owner-only fixed). */
     import Modal from '../../../../lib/components/Modal.svelte';
+    import { can } from '../../../../lib/stores/capabilities';
     import { isOwner } from '../../../../lib/stores/current-user';
     import { adminDashboard, type AdminTab } from '../../stores/admin-dashboard.svelte';
+    import AnnouncementsCompartment from './AnnouncementsCompartment.svelte';
     import JobsCompartment from './jobs/JobsCompartment.svelte';
     import PermissionsCompartment from './PermissionsCompartment.svelte';
     import ReleasesCompartment from './releases/ReleasesCompartment.svelte';
@@ -12,7 +14,13 @@
     import ReviewsCompartment from './reviews/ReviewsCompartment.svelte';
     import UsersCompartment from './UsersCompartment.svelte';
 
-    type TabDef = { id: AdminTab; label: string; enabled: boolean; ownerOnly?: boolean };
+    type TabDef = {
+        id: AdminTab;
+        label: string;
+        enabled: boolean;
+        ownerOnly?: boolean;
+        cap?: string;
+    };
 
     const ALL_TABS: TabDef[] = [
         { id: 'users', label: 'Users', enabled: true },
@@ -20,11 +28,23 @@
         { id: 'reviews', label: 'Reviews', enabled: true },
         { id: 'releases', label: 'Releases', enabled: true },
         { id: 'jobs', label: 'Jobs', enabled: true },
+        { id: 'announcements', label: 'Announcements', enabled: true, cap: 'announcements.send' },
         { id: 'permissions', label: 'Permissions', enabled: true, ownerOnly: true },
     ];
 
-    // Owner-only tabs vanish entirely for non-owners (not a disabled stub).
-    const tabs = $derived(ALL_TABS.filter((t) => !t.ownerOnly || $isOwner));
+    // Capability-gated tab (owner-only by default, but owner-toggleable to
+    // maintainers from the Permissions tab — so gate on the capability, not the tier).
+    const canAnnounce = can('announcements.send');
+
+    // Owner-only / capability-gated tabs vanish entirely when not eligible
+    // (not a disabled stub).
+    const tabs = $derived(
+        ALL_TABS.filter((t) => {
+            if (t.ownerOnly) return $isOwner;
+            if (t.cap === 'announcements.send') return $canAnnounce;
+            return true;
+        }),
+    );
 
     // If the visible tab set changes out from under the active tab (e.g. a
     // live owner→maintainer demotion with the modal open), snap back to Users.
@@ -71,6 +91,8 @@
         <ReleasesCompartment />
     {:else if adminDashboard.activeTab === 'jobs'}
         <JobsCompartment />
+    {:else if adminDashboard.activeTab === 'announcements' && $canAnnounce}
+        <AnnouncementsCompartment />
     {:else if adminDashboard.activeTab === 'permissions' && $isOwner}
         <PermissionsCompartment />
     {/if}
