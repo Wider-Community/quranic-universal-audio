@@ -337,11 +337,24 @@ def ingest(request_id: str, payload: dict, actor: Actor) -> dict:
             raise IngestVocabMissing(str(e)) from e
 
         # seed AWAITING_ALIGNMENT + pending entry (same path as existing_combo_edit).
+        # Fire reciter.requested AS THE ORIGINAL REQUESTER, carrying their
+        # auto_claim + proposed_edits + comments — the pending entry records the
+        # requester from the transition actor (state._h_requested), and the
+        # auto_claim self-review allocation in _maybe_auto_claim fires for THEM at
+        # alignment_completed. Attributing it to the admin running the ingest would
+        # both mis-credit the request and silently drop the self-review claim.
+        req_payload = _serde.json_loads(row["payload"]) or {}
+        requester_raw = req_payload.get("requester")
+        requester = Actor.model_validate(requester_raw) if requester_raw else actor
         new_row = state_service.transition(
             slug,
             "reciter.requested",
-            actor=actor,
-            payload={"proposed_edits": {}, "comments": None, "auto_claim": False},
+            actor=requester,
+            payload={
+                "proposed_edits": req_payload.get("proposed_edits") or {},
+                "comments": row["comments"],
+                "auto_claim": bool(row["auto_claim"]),
+            },
         )
 
         # 7. back-fill requests.slug.
