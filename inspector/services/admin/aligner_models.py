@@ -24,8 +24,9 @@ _cache: dict[str, object] = {"at": 0.0, "models": None}
 def _fetch() -> list[dict]:
     from huggingface_hub import hf_hub_download
 
-    path = hf_hub_download(_MODEL_REPO, "catalog.json", repo_type="model",
-                           token=os.environ.get("HF_TOKEN") or None)
+    path = hf_hub_download(
+        _MODEL_REPO, "catalog.json", repo_type="model", token=os.environ.get("HF_TOKEN") or None
+    )
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     default = data.get("default")
