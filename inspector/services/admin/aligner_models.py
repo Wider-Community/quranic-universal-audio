@@ -32,8 +32,7 @@ def _fetch() -> list[dict]:
     default = data.get("default")
     out = []
     for m in data.get("models", []):
-        out.append({"id": m["id"], "label": m.get("label", m["id"]),
-                    "default": m["id"] == default})
+        out.append({"id": m["id"], "label": m.get("label", m["id"]), "default": m["id"] == default})
     if out and not any(m["default"] for m in out):
         out[0]["default"] = True
     return out
