@@ -152,6 +152,8 @@ export interface TimestampsJobLaunch {
 export interface TimestampsJobSettings {
     beam: number;
     probe_beams: number[];
+    // Acoustic model (catalog id); omitted/null → store default.
+    aligner_model?: string | null;
     // Affected-only regen scope (omitted → full reciter).
     chapters?: number[] | null;
     // Advanced (omitted → server defaults).
@@ -160,6 +162,20 @@ export interface TimestampsJobSettings {
     timeout?: string | null;
     batch_size?: number | null;
     download_workers?: number | null;
+}
+
+export interface AlignerModel {
+    id: string | null;
+    label: string;
+    default: boolean;
+}
+
+/** Selectable acoustic models (the store catalog) for the launch form. */
+export async function fetchAlignerModels(signal?: AbortSignal): Promise<AlignerModel[]> {
+    const resp = await fetch('/api/admin/aligner-models', { signal });
+    if (!resp.ok) return _unwrapError(resp);
+    const body = (await resp.json()) as { models: AlignerModel[] };
+    return body.models ?? [];
 }
 
 /** Live status + bounded log tail proxied from HF. */
