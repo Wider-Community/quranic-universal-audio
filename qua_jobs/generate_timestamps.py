@@ -198,8 +198,9 @@ def main() -> int:
         try:
             m = cat.resolve(model_id)
         except KeyError:
-            log.warning("aligner model %r not in catalog; using default %r",
-                        model_id, cat.default_id)
+            log.warning(
+                "aligner model %r not in catalog; using default %r", model_id, cat.default_id
+            )
             m = cat.resolve(None)
         model_path, dictionary_path = Path(m.model_path), Path(m.dictionary_path)
         log.info("aligner model %r (keep_q=%s, label=%s)", m.id, m.keep_q, m.label)
