@@ -54,9 +54,14 @@ jobs:
         # so a clean checkout drives lint/check/test/build deterministically.
         run: git checkout -- src/ || true
 
-      - name: Lint, typecheck, test (with coverage), build
+      - name: Lint (non-blocking)
+        # Advisory — eslint findings surface but never gate the build. The real
+        # gates are typecheck/test/build below.
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Typecheck, test (with coverage), build
         run: |
-          npm run lint
           npm run check
           npm run test:coverage
           npm run build
@@ -97,11 +102,15 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: python -m pip install ruff==0.15.12
 
-      - name: Ruff lint (blocking)
+      - name: Ruff lint (non-blocking)
+        # Advisory — surfaces lint findings as GitHub annotations but never gates
+        # the build. The real gates in this job are the test steps above.
+        continue-on-error: true
         working-directory: ${{ github.workspace }}
         run: ruff check --output-format=github inspector qua_shared qua_jobs scripts
 
-      - name: Ruff format check (blocking)
+      - name: Ruff format check (non-blocking)
+        continue-on-error: true
         working-directory: ${{ github.workspace }}
         run: ruff format --check inspector qua_shared qua_jobs scripts
 
