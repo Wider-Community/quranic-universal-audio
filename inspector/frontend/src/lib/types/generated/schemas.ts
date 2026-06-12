@@ -1192,6 +1192,7 @@ export interface JobRecord {
  */
 export interface TsJobSettings {
   beams?: number[];
+  aligner_model?: string | null;
   chapters?: number[] | null;
   workers?: number | null;
   flavor?: string | null;
