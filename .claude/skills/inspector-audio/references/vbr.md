@@ -41,7 +41,7 @@ ffmpeg -i reciters/<slug>/audio/<chapter>.mp3 2>&1 | grep -iE 'xing|vbri|info'
 
 `Info` ⇒ CBR, linear seek (best). `Xing`/`VBRI` ⇒ VBR seek path (TOC). A `Xing` tag on a **CBR** chapter is the bug above — it should be `Info`; run `backfill_xing_to_info.py`. Absence with `bitrate_mode == "vbr"` in the sidecar ⇒ remux failed.
 
-**Duration oracle for no-Xing VBR is the frame-walk, not ffprobe `format=duration`.** ffprobe's `format=duration` back-estimates from nominal bitrate ÷ size on a no-Xing VBR file → wildly wrong (the phantom-tail failure mode). Use the frame-walk (`_mp3probe` full path / `qua_shared.mp3_frames.build_frame_index`), which counts real frames. Evidence: mahmoud-ali-al-banna-mujawad ch27 — frame-walk 134,535 frames (matches ffprobe `-count_frames` authoritative 134,534 within one frame) vs ffprobe `format=duration` reporting 3523 s.
+**Duration oracle for no-Xing VBR is the frame-walk, not ffprobe `format=duration`.** ffprobe's `format=duration` back-estimates from nominal bitrate ÷ size on a no-Xing VBR file → wildly wrong (the phantom-tail failure mode). Use the frame-walk (`mp3_probe` full path / `qua_shared.mp3_frames.build_frame_index`), which counts real frames. Evidence: mahmoud-ali-al-banna-mujawad ch27 — frame-walk 134,535 frames (matches ffprobe `-count_frames` authoritative 134,534 within one frame) vs ffprobe `format=duration` reporting 3523 s.
 
 ## Segment-clip route
 

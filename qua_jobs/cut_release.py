@@ -834,7 +834,7 @@ def main() -> int:
     # 2. Build per-recitation artifacts and accumulate member rows.
     refs_dir = _code_root() / "data"
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
-    from qua_shared.auto_split_precompute import word_counts_from_surah_info
+    from qua_shared.surah_words import word_counts_from_surah_info
     from qua_shared.timestamps_dedup import select_complete_verses
 
     word_counts = word_counts_from_surah_info(surah_info)

@@ -74,16 +74,9 @@ canonical workflow used to land cohorts 1, 2, and 4 (May 2026) is:
        python3 scripts/backfills/convert_peaks_v2_to_v3.py \
            --dir /tmp/<slug>/peaks/
 
-4. **Derive pipeline_meta.json**. Two paths auto-selected:
-    - **New** (Migration #5+): per-op snapshot ``chapter`` stamps drive
-      ``qua_shared.pipeline_meta.collect_deleted_basmalas``.
-    - **Legacy fallback**: walks strip_specials ops in chapter+time
-      order, pairing each Basmala-class op with the next entry in
-      ``batch.chapters[]`` — recovers ``deleted_basmala_chapters``
-      without per-snapshot stamps::
-
-       python3 scripts/backfills/derive_pipeline_meta.py \
-           --dir /tmp/<slug>/
+4. **pipeline_meta.json** is produced by the offline extraction pipeline
+   (qua-aligner-offline) and uploaded alongside the reciter's artefacts;
+   it is no longer derived in this repo.
 
 5. **Audit locally** — same script, ``--local-path`` mode. Pre-flight
    gate before any bucket write::

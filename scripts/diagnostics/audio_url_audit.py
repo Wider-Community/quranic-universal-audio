@@ -34,8 +34,8 @@ import urllib.error
 import urllib.request as u
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backfills"))
-from _mp3probe import canonical_archive_url  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from qua_shared.mp3_probe import canonical_archive_url  # noqa: E402
 
 NODE_RE = re.compile(r"^https?://(?:ia\d+\.us|dn\d+\.ca)\.archive\.org/\d+/items/")
 CHANNELS = {"archive", "mp3quran", "tvquran", "qdc", "quranicaudio", "everyayah", "qf"}

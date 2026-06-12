@@ -105,7 +105,7 @@ reintroduce them:
   Xing-TOC-linearity check.
 
 Because the metric needs every frame, source probing downloads the **full file**
-(`probe_audio_meta.classify`, `_mp3probe.probe_source(allow_full=True)`);
+(`probe_audio_meta.classify`, `mp3_probe.probe_source(allow_full=True)`);
 `allow_full=False` returns a head duration estimate with `bitrate_mode` left
 unset (`needs_full`). A one-shot catalog correction (manifest labels + delivery
 rollup + bucket `Xing→Info` tag reconcile) runs from the extraction bitrate
@@ -116,16 +116,16 @@ audit; this detection fix stops intake from regenerating the mislabels.
 - **ID3v2 cover-art tags**: archive.org embeds art in tags up to ~1.5 MB (tvquran ~285 KB), so a
   256 KB range fetch from byte 0 never reaches the first audio frame (`no_frame_in_head`). Read
   the ID3v2 size from the first 10 bytes, then range-fetch *after* the tag. See
-  `scripts/backfills/_mp3probe.py::_fetch`.
+  `qua_shared/mp3_probe.py::_fetch`.
 - **MPEG version**: archive/tvquran files are often MPEG-2/2.5 (lower sample rates) — a
-  MPEG-1-only frame parser scans 0 frames. Use the multi-version parser in `_mp3probe.py`
+  MPEG-1-only frame parser scans 0 frames. Use the multi-version parser in `mp3_probe.py`
   (not the MPEG-1-only `remux_bucket_audio.parse_frame_header`).
 - **archive.org stale node URLs**: manifests store per-item node hostnames
   (`ia801506.us.archive.org/<n>/items/<item>/…`) that go stale as items migrate → timeouts /
   connection-refused. The **canonical** `https://archive.org/download/<item>/<file>` form
   302-redirects to a live node and is durable; the proxy (`requests.get`, `allow_redirects=True`)
   follows it. Rewrite stored URLs to canonical to fix playback *and* re-enable probing
-  (`_mp3probe.canonical_archive_url`). Changing a URL means recomputing `_meta.checksum`.
+  (`mp3_probe.canonical_archive_url`). Changing a URL means recomputing `_meta.checksum`.
 - **archive.org throttling**: bursts of range requests return timeouts that *look* like dead
   URLs. Use modest concurrency + a retry, and treat archive staleness as **per-item** (probe the
   node once per reciter, classify chapters via the fast canonical form) — see
@@ -161,7 +161,7 @@ dry-run:
 |---|---|
 | `diagnostics/audio_metadata_sweep.py` | scan all manifests for null metadata; `--peaks` flags **duration drift** (manifest vs decoded peaks → phantom tails) |
 | `diagnostics/audio_url_audit.py` | classify every source url **ok / fixable (canonical) / dead**; per-reciter valid-after-fix; cross-channel duplicate/keep-remove signal |
-| `backfills/_mp3probe.py` | pure-python multi-version mp3 source prober: cbr/vbr via whole-file linear-seek metric (`qua_shared/mp3_frames`), decoded duration off the frame grid, ID3v2 skip, archive canonicalization. `allow_full=True` downloads the file; `allow_full=False` → head duration only, mode `needs_full` |
+| `qua_shared/mp3_probe.py` | pure-python multi-version mp3 source prober: cbr/vbr via whole-file linear-seek metric (`qua_shared/mp3_frames`), decoded duration off the frame grid, ID3v2 skip, archive canonicalization. `allow_full=True` downloads the file; `allow_full=False` → head duration only, mode `needs_full` |
 | `backfills/backfill_audio_manifest_meta.py` | fill null meta from bucket-decode / peaks / source-probe; `--fix-drift` corrects phantom tails from peaks; `--rewrite-urls` repairs stale archive urls; `--remove-dead <audit.json>` drops dead chapters; emits delivery-row rollup `UPDATE`s via `--sql-out` |
 
 ### Runbook — onboard a new source/channel, or re-audit the catalog
