@@ -15,7 +15,9 @@
      */
     import {
         generateTimestamps,
+        fetchAlignerModels,
         type TimestampsJobSettings,
+        type AlignerModel,
     } from '../../../../../lib/api/admin-reviews';
     import type { ReleaseStatusRow } from '../../../../../lib/api/admin-releases';
     import { surahOptionText } from '../../../../../lib/utils/surah-info';
@@ -34,6 +36,17 @@
     // form state — defaults: beam 50, probe 2.
     let beam = $state(50);
     let probe = $state(2);
+    // acoustic model — null until the catalog loads, then the store default.
+    let models = $state<AlignerModel[]>([]);
+    let modelId = $state<string | null>(null);
+    $effect(() => {
+        fetchAlignerModels()
+            .then((ms) => {
+                models = ms;
+                modelId = ms.find((m) => m.default)?.id ?? ms[0]?.id ?? null;
+            })
+            .catch(() => {});
+    });
     let scope = $state<'affected' | 'full'>('affected');
     let advancedOpen = $state(false);
     let workers = $state<number | null>(null);
@@ -69,6 +82,7 @@
         const settings: TimestampsJobSettings = {
             beam,
             probe_beams: probeBeams,
+            aligner_model: modelId,
             chapters: chapters ?? null,
             workers: advancedOpen ? workers : null,
             flavor: advancedOpen && flavor.trim() ? flavor.trim() : null,
@@ -88,6 +102,16 @@
 
 <div class="ts-settings">
     <div class="beam-row">
+        {#if models.length > 1}
+            <label class="field wide">
+                <span class="lbl">model</span>
+                <select bind:value={modelId}>
+                    {#each models as m (m.id)}
+                        <option value={m.id}>{m.label}{m.default ? ' (default)' : ''}</option>
+                    {/each}
+                </select>
+            </label>
+        {/if}
         <label class="field">
             <span class="lbl">beam</span>
             <input type="number" min="1" bind:value={beam} />
@@ -180,6 +204,17 @@
     }
     .field.wide input { width: 110px; }
     .field input:focus { outline: 0; border-color: var(--accent-tint); }
+    .field select {
+        background: var(--panel);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-1);
+        color: var(--text-primary);
+        font: inherit;
+        font-size: var(--fs-meta);
+        padding: 3px 6px;
+        max-width: 200px;
+    }
+    .field select:focus { outline: 0; border-color: var(--accent-tint); }
 
     .adv-toggle {
         background: transparent;

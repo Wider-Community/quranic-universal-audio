@@ -30,6 +30,9 @@ class TsJobSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     beams: list[int] = Field(default_factory=lambda: [50])
+    #: Acoustic model to align with (catalog id). ``None`` = the store's default
+    #: model. Echoed into the durable record so a run's model stays auditable.
+    aligner_model: str | None = None
     #: Regenerate only these chapters (surah numbers). ``None`` = full reciter.
     #: Untouched chapters keep their existing shards; the run merges (not
     #: clobbers) the whole-reciter ``ts_validation.json``.

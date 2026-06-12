@@ -20,6 +20,15 @@
         fetchAutomation,
         saveAutomation,
     } from '../../../../../lib/api/admin-releases';
+    import { fetchAlignerModels, type AlignerModel } from '../../../../../lib/api/admin-reviews';
+
+    // Selectable acoustic models (the store catalog) for the auto-gen default.
+    let alignerModels = $state<AlignerModel[]>([]);
+    $effect(() => {
+        fetchAlignerModels()
+            .then((ms) => (alignerModels = ms))
+            .catch(() => {});
+    });
 
     // The codegen marks every defaulted field optional. The server always sends a
     // complete blob, so we normalize into a fully-required local shape on load —
@@ -35,7 +44,12 @@
         timezone: string;
     }
     interface Draft {
-        auto_gen_ts: { enabled: boolean; gate_by_comments: boolean; gate_by_flags: boolean } & BeamCfg;
+        auto_gen_ts: {
+            enabled: boolean;
+            gate_by_comments: boolean;
+            gate_by_flags: boolean;
+            aligner_model: string | null;
+        } & BeamCfg;
         stale_ts_regen: { enabled: boolean; guard_minutes: number; scope: 'full' | 'affected' } & BeamCfg;
         stale_metadata: { enabled: boolean; guard_minutes: number };
         hf_publish: SchedCfg;
@@ -55,6 +69,7 @@
                 enabled: a.enabled ?? false,
                 gate_by_comments: a.gate_by_comments ?? true,
                 gate_by_flags: a.gate_by_flags ?? true,
+                aligner_model: a.aligner_model ?? null,
                 beam: a.beam ?? 50,
                 probe_beams: a.probe_beams ?? 2,
             },
@@ -246,6 +261,18 @@
                                 <span>Skip when any segment is flagged</span>
                             </label>
                             {@render beams(draft.auto_gen_ts)}
+                            {#if alignerModels.length > 1}
+                                <label class="field wide">
+                                    <span class="lbl">model</span>
+                                    <select bind:value={draft.auto_gen_ts.aligner_model}>
+                                        {#each alignerModels as m (m.id)}
+                                            <option value={m.id}>
+                                                {m.label}{m.default ? ' (default)' : ''}
+                                            </option>
+                                        {/each}
+                                    </select>
+                                </label>
+                            {/if}
                         </div>
                     {/if}
                 </div>

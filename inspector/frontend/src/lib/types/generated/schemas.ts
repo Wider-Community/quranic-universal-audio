@@ -653,6 +653,7 @@ export interface AutoGenTsConfig {
   gate_by_flags?: boolean;
   beam?: number;
   probe_beams?: number;
+  aligner_model?: string | null;
 }
 /**
  * The owner's full automation configuration (one persisted blob).
@@ -1191,6 +1192,7 @@ export interface JobRecord {
  */
 export interface TsJobSettings {
   beams?: number[];
+  aligner_model?: string | null;
   chapters?: number[] | null;
   workers?: number | null;
   flavor?: string | null;

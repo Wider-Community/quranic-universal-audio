@@ -392,6 +392,10 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
     env = {
         "SLUG": slug,
         "INSPECTOR_BUCKET_MOUNT": "/data",
+        # Model store root (catalog.json + models/<id>/). The job resolves
+        # MFA_MODEL_ID against it; MFA_MODEL_PATH/DICTIONARY_PATH below are the
+        # fallback for a store-less bucket (single bare model = legacy).
+        "MFA_RUNTIME_DIR": "/aux/mfa-runtime",
         "MFA_MODEL_PATH": "/aux/mfa-runtime/quran_aligner_model.zip",
         "MFA_DICTIONARY_PATH": "/aux/mfa-runtime/dictionary.txt",
         # Legacy fallback for one release: a job picking up a stale bucket
@@ -404,6 +408,9 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
         "MKL_NUM_THREADS": "1",
         "NUMEXPR_NUM_THREADS": "1",
     }
+    # Acoustic model selection (catalog id); empty cedes to the store default.
+    if settings.aligner_model:
+        env["MFA_MODEL_ID"] = settings.aligner_model
     if settings.beams:
         env["BEAMS"] = ",".join(str(b) for b in settings.beams)
     # Affected-only regen scope — the job re-aligns just these chapters.
