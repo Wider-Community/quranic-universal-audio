@@ -68,6 +68,10 @@ jobs:
 
   backend-checks:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # pull-requests: write lets reviewdog post ruff --fix review suggestions.
+      pull-requests: write
     defaults:
       run:
         working-directory: inspector
@@ -101,6 +105,33 @@ jobs:
         # Pinned so CI matches the version landed alongside the ruleset.
         working-directory: ${{ github.workspace }}
         run: python -m pip install ruff==0.15.12
+
+      - name: Autofix ruff (lint + format)
+        # Apply ruff's auto-fixes in-place so the diff can be surfaced as PR
+        # suggestions below. We NEVER commit/push back to the branch — on
+        # pull_request events the diff becomes reviewdog review suggestions;
+        # on branch pushes it is simply discarded (mirrors the frontend job).
+        working-directory: ${{ github.workspace }}
+        run: |
+          ruff check --fix inspector qua_shared qua_jobs scripts || true
+          ruff format inspector qua_shared qua_jobs scripts || true
+
+      - name: Suggest ruff --fix changes (PR only)
+        if: github.event_name == 'pull_request'
+        # Advisory only — surfaces ruff autofixes as one-click PR suggestions. A
+        # reviewdog infra hiccup must never gate the build; the non-blocking
+        # checks below still annotate anything not auto-fixable.
+        continue-on-error: true
+        uses: reviewdog/action-suggester@v1
+        with:
+          tool_name: ruff
+          filter_mode: diff_context
+
+      - name: Discard autofix diff before checks
+        # The checks below run against the committed sources, so the annotations
+        # reflect the real tree (not the locally-fixed one).
+        working-directory: ${{ github.workspace }}
+        run: git checkout -- inspector qua_shared qua_jobs scripts || true
 
       - name: Ruff lint (non-blocking)
         # Advisory — surfaces lint findings as GitHub annotations but never gates
