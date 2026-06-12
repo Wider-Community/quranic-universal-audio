@@ -59,7 +59,7 @@ deliveries are bucket-served only — the watch URL is provenance, never streame
 by the audio-proxy. See `catalog.md` §5 and the `segments-extraction` skill's
 `references/playlist_intake.md`.
 
-### Probing CDN stream-through sources (`scripts/backfills/_mp3probe.py`)
+### Probing CDN stream-through sources (`qua_shared/mp3_probe.py`)
 
 When authoring the audio-manifest sidecar from a CDN source rather than from
 produced bucket files, probe **per-chapter, never per-delivery**. way2quran mixes
@@ -69,7 +69,7 @@ sample-rate and bitrate chapter-to-chapter *within a single delivery* (nabil-hat
 deliveries), not absent.
 
 Cloudflare ignores `Range` on a cold-cache MISS (returns `200` with the full body
-instead of `206`). The `status == 200` re-slice branch in `_mp3probe._fetch`
+instead of `206`). The `status == 200` re-slice branch in `mp3_probe._fetch`
 (dropping the leading ID3 tag) is load-bearing for any new CDN source — verify it
 survives when adding one.
 
