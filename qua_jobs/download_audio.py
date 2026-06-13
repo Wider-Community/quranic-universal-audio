@@ -220,8 +220,19 @@ def _trim_copy(src: Path, dest: Path, start_ms: int, end_ms: int | None) -> None
     cmd = [ffmpeg, "-y", "-ss", f"{start_ms / 1000:.3f}"]
     if end_ms is not None:
         cmd += ["-to", f"{end_ms / 1000:.3f}"]
-    cmd += ["-i", str(src), "-c", "copy", "-avoid_negative_ts", "make_zero",
-            "-f", "mp3", "-v", "error", str(dest)]
+    cmd += [
+        "-i",
+        str(src),
+        "-c",
+        "copy",
+        "-avoid_negative_ts",
+        "make_zero",
+        "-f",
+        "mp3",
+        "-v",
+        "error",
+        str(dest),
+    ]
     subprocess.run(cmd, check=True)
 
 
