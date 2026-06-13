@@ -11,6 +11,7 @@ Every release contains all reciters aligned up to date, not just new ones from t
 | `<recitation>.zip` | One recitation's verse, word, and letter timestamp files, plus its own `catalog.json`. |
 | `shard.py` | Optional helper that splits a large timestamp file into one JSON file per surah. |
 | `check_updates.py` | Optional helper that checks the latest release for updates to the reciters you use; add `--sync` to re-download them. |
+| `download_audio.py` | Optional helper that fetches a reciter's source audio (YouTube/Drive/CDN) re-encoded so the timestamps line up. |
 | `surah_info.json` | Surah names, ayah counts, and word counts. |
 | `qpc_hafs.json` | QPC Hafs word reference used by the word and letter indexes. |
 | `letter_vocab_hafs_qpc.csv` | Optional letter-tier character vocabulary (`char,codepoint,name`). |
@@ -22,9 +23,21 @@ The release-level `manifest.json` and `catalog.json` index the whole release; ea
 
 ## How audio and timestamps pair
 
-`catalog.json` contains the audio URLs for each recitation, and every timestamp value is milliseconds relative to that matching source audio.
+`catalog.json` contains the audio URLs for each recitation which can be streamed/downloaded directly, and every timestamp value is milliseconds relative to that matching source audio.
 
-The verse-tier entry `"1:1": [0, 2831]` means ayah 1:1 starts at `0 ms` and ends at `2831 ms` within surah 1's audio file.
+**Combined sources.** Most reciters serve one audio file per chapter, so each chapter's timestamps start at `0 ms` of its file. Some non-CDN sources (a YouTube video or Drive file holding several surahs) instead serve **one file for many chapters**. For those, `catalog.json` carries an `audio.chapter_offsets_ms` map: chapter `C`'s timestamps are relative to `chapter_offsets_ms[C]` inside `chapter_urls[C]`, i.e. `source_ms = chapter_offsets_ms.get(C, 0) + timestamp_ms`.
+
+**Downloading source audio.** `download_audio.py` fetches a reciter's audio and re-encodes it to the same profile the alignment used (192 kbps CBR MP3, 44.1 kHz, mono by default), so the timestamps land correctly. Two layouts:
+
+```bash
+# one file per surah (001.mp3 … 114.mp3); timestamps apply directly (offset 0)
+python download_audio.py catalog.json --reciter ibrahim_al_akhdar_drive
+
+# the source files as published, plus a chapter -> file + offset map
+python download_audio.py catalog.json --reciter ibrahim_al_akhdar_drive --format original
+```
+
+It uses `yt-dlp` + `ffmpeg` for YouTube/Drive sources and needs neither for direct CDN MP3s. `--bitrate`, `--sample-rate`, and `--channels` are configurable; see `--help`.
 
 ## Timestamp levels
 
@@ -41,6 +54,8 @@ Use `shard.py` when your app prefers per-surah files locally:
 ```bash
 python shard.py word_timestamps.json.gz --out-dir per_surah
 ```
+
+By design, timestamps have no gaps between them except at pauses, such that highlighting appears smooth and continuous during one breath. 
 
 ## Programmatic use
 
@@ -176,7 +191,9 @@ type ReciterCatalog = {
   riwayah?: string; style?: string; channel?: string;
   audio_category?: "by_surah" | "by_ayah";
   audio: {
-    chapter_urls: Record<string, string>;   // chapter (or ayah) number -> source audio URL
+    chapter_urls: Record<string, string>;       // chapter (or ayah) number -> source audio URL
+    chapter_offsets_ms?: Record<string, number>; // present only for combined sources:
+                                                 // chapter -> ms offset within its (shared) source file
     sample_rate_hz?: number; channels?: number;
     bitrate_mode?: string; bitrate_kbps_nominal?: number;
   };

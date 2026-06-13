@@ -107,9 +107,10 @@ The same predicate drives the Releases-tab buckets and the cut job's member disc
    → builds the three
    tier files (verse/word/letter, top-down), `catalog.json`, a per-recitation `manifest.json`; packs
    a deterministic `<slug>.zip`; computes `content_hash = SHA-256(letter_tier.gz || catalog.json)`.
-   `catalog.json` is built from `catalog/audio_manifest/<slug>.json::chapters[*].url`; legacy
-   sidecar metadata is tolerated here because the GH adapter only needs consumer audio URLs. A
-   GH-eligible recitation with no usable audio URLs is fatal.
+   `catalog.json` is built from `catalog/audio_manifest/<slug>.json` — each chapter's native
+   `source_url` (falling back to `url`) plus `source_offset_ms` → `chapter_offsets_ms` (see
+   [Audio policy](#audio-policy-as-built)); legacy sidecar metadata is tolerated here because the GH
+   adapter only needs consumer audio URLs. A GH-eligible recitation with no usable audio URLs is fatal.
 3. Classifies each reciter `added` / `refresh` / `unchanged` (vs prior `content_hash`) and computes
    the version (below).
 4. Builds the dataset-level `manifest.json`, `catalog.json`, and `CHANGELOG.md` (the release body — see
@@ -147,6 +148,7 @@ gh:releases/v{X.Y.Z}/
 ├── catalog.json          # dataset-level: reciter rows with audio URLs paired to timestamps
 ├── shard.py              # consumer helper (per-surah file splitter)
 ├── check_updates.py      # consumer helper (per-reciter update check)
+├── download_audio.py     # consumer helper (fetch source audio @ aligned CBR encode)
 ├── surah_info.json       # static reference
 ├── qpc_hafs.json         # static reference (mushaf text)
 ├── letter_vocab_hafs_qpc.csv  # letter-tier char alphabet (42 tokens): char,codepoint,name
@@ -192,6 +194,24 @@ from those URLs and read timestamps relative to those exact files. The fuller
 `redistribution_policy` registry (cdn_link / embedded_consent /
 internal_only) described in early design is **not implemented** — revisit if embedded-audio
 releases become a real requirement.
+
+**Native source + offsets (combined non-CDN sources).** `chapter_urls[ch]` is the **native** source
+URL — for a playlist intake (one YouTube/Drive file serving several chapters) the audio manifest
+stores a per-chapter *bucket* path in `chapters[ch].url` and the real source in `source_url`; the cut
+surfaces `source_url` (`cut_release._audio_sources_from_manifest`, mirroring `publish_hf`'s per-row
+resolution) so the release never leaks an internal bucket URL. When one source serves several chapters
+(or a single file has a trimmed lead-in), `audio.chapter_offsets_ms[ch]` carries that chapter's start
+offset inside its source — the same value the HF dataset persists as `source_offset_ms`. Map a release
+tier-file timestamp into the source file with `source_ms = chapter_offsets_ms.get(ch, 0) + tier_ms`.
+`chapter_offsets_ms` is **omitted from the JSON when empty** (model_serializer on `ReleaseCatalogAudio`),
+so CDN by-surah catalogs stay byte-stable and their `content_hash` doesn't churn.
+
+**`download_audio.py`** (release asset, `qua_jobs/download_audio.py`) fetches a reciter's source audio
+re-encoded to the alignment profile (192 kbps CBR / 44.1 kHz / mono by default; configurable). It reads
+`catalog.json` and offers `--format chapters` (one offset-0 file per surah — splits a combined file at
+the chapter offsets) or `--format original` (the source files as published + a `download_map.json` of
+chapter→file+offset). Uses `yt-dlp` + `ffmpeg` for YouTube/Drive, fails loud with install hints when a
+tool is missing. Staged like the other helpers (`base.REQUIRED_ENTRYPOINTS`) and uploaded by the cut.
 
 ### `manifest.json` (dataset-level)
 
