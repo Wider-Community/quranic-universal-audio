@@ -195,7 +195,9 @@ def main(argv: list[str] | None = None) -> int:
         return 3
     man_rt = _json_model_bytes(ReleaseManifest.model_validate(root_manifest))
     if man_rt != manifest_path.read_bytes():
-        print("error: manifest.json no-op round-trip not byte-identical — aborting", file=sys.stderr)
+        print(
+            "error: manifest.json no-op round-trip not byte-identical — aborting", file=sys.stderr
+        )
         return 3
 
     recitations: list[dict] = root_catalog["recitations"]
