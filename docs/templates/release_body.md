@@ -23,9 +23,7 @@ The release-level `manifest.json` and `catalog.json` index the whole release; ea
 
 ## How audio and timestamps pair
 
-`catalog.json` contains the audio URLs for each recitation, and every timestamp value is milliseconds relative to that matching source audio.
-
-The verse-tier entry `"1:1": [0, 2831]` means ayah 1:1 starts at `0 ms` and ends at `2831 ms` within surah 1's audio file.
+`catalog.json` contains the audio URLs for each recitation which can be streamed/downloaded directly, and every timestamp value is milliseconds relative to that matching source audio.
 
 **Combined sources.** Most reciters serve one audio file per chapter, so each chapter's timestamps start at `0 ms` of its file. Some non-CDN sources (a YouTube video or Drive file holding several surahs) instead serve **one file for many chapters**. For those, `catalog.json` carries an `audio.chapter_offsets_ms` map: chapter `C`'s timestamps are relative to `chapter_offsets_ms[C]` inside `chapter_urls[C]`, i.e. `source_ms = chapter_offsets_ms.get(C, 0) + timestamp_ms`.
 
@@ -39,7 +37,7 @@ python download_audio.py catalog.json --reciter ibrahim_al_akhdar_drive
 python download_audio.py catalog.json --reciter ibrahim_al_akhdar_drive --format original
 ```
 
-It uses `yt-dlp` + `ffmpeg` for YouTube/Drive sources (it tells you what to install if either is missing) and needs neither for direct CDN MP3s. `--bitrate`, `--sample-rate`, and `--channels` are configurable; they change only audio fidelity, never the timestamps.
+It uses `yt-dlp` + `ffmpeg` for YouTube/Drive sources and needs neither for direct CDN MP3s. `--bitrate`, `--sample-rate`, and `--channels` are configurable; see `--help`.
 
 ## Timestamp levels
 
@@ -56,6 +54,8 @@ Use `shard.py` when your app prefers per-surah files locally:
 ```bash
 python shard.py word_timestamps.json.gz --out-dir per_surah
 ```
+
+By design, timestamps have no gaps between them except at pauses, such that highlighting appears smooth and continuous during one breath. 
 
 ## Programmatic use
 
