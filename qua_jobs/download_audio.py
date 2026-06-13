@@ -176,12 +176,28 @@ def _download_source(url: str, *, bitrate: str, sample_rate: str, channels: str)
     src_dir = Path(tempfile.mkdtemp(prefix="qua_src_"))
     try:
         proc = subprocess.run(
-            [yt_dlp, "-f", _YTDLP_FORMAT, "--no-playlist",
-             "--extractor-args", _YTDLP_EXTRACTOR_ARGS,
-             "--retries", "5", "--fragment-retries", "5", "--retry-sleep", "5",
-             "--socket-timeout", "30",
-             "-o", str(src_dir / "src.%(ext)s"), "--force-overwrites", url],
-            capture_output=True, text=True,
+            [
+                yt_dlp,
+                "-f",
+                _YTDLP_FORMAT,
+                "--no-playlist",
+                "--extractor-args",
+                _YTDLP_EXTRACTOR_ARGS,
+                "--retries",
+                "5",
+                "--fragment-retries",
+                "5",
+                "--retry-sleep",
+                "5",
+                "--socket-timeout",
+                "30",
+                "-o",
+                str(src_dir / "src.%(ext)s"),
+                "--force-overwrites",
+                url,
+            ],
+            capture_output=True,
+            text=True,
         )
         srcs = [p for p in src_dir.iterdir() if p.name.startswith("src.")]
         if proc.returncode != 0 or not srcs:
