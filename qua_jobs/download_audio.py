@@ -131,9 +131,26 @@ def _encode_cbr(src: Path, dest: Path, *, bitrate: str, sample_rate: str, channe
     without a PNG encoder)."""
     ffmpeg = _require("ffmpeg", "https://ffmpeg.org/download.html (or `apt install ffmpeg`)")
     subprocess.run(
-        [ffmpeg, "-y", "-i", str(src), "-vn", "-c:a", "libmp3lame",
-         "-b:a", bitrate, "-ar", sample_rate, "-ac", channels,
-         "-f", "mp3", "-v", "error", str(dest)],
+        [
+            ffmpeg,
+            "-y",
+            "-i",
+            str(src),
+            "-vn",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            bitrate,
+            "-ar",
+            sample_rate,
+            "-ac",
+            channels,
+            "-f",
+            "mp3",
+            "-v",
+            "error",
+            str(dest),
+        ],
         check=True,
     )
 
