@@ -371,8 +371,13 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         dl_map = download_reciter(
-            reciter, out_dir, fmt=args.fmt, bitrate=args.bitrate,
-            sample_rate=args.sample_rate, channels=args.channels, only=only,
+            reciter,
+            out_dir,
+            fmt=args.fmt,
+            bitrate=args.bitrate,
+            sample_rate=args.sample_rate,
+            channels=args.channels,
+            only=only,
         )
     except MissingTool as exc:
         print(f"\nerror: {exc}", file=sys.stderr)
