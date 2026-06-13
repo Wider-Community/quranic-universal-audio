@@ -113,6 +113,8 @@
     let footerEl: HTMLDivElement | null = null;
     let audioEl: HTMLAudioElement | null = null;
 
+    let isCollapsed = false;
+
     // Local mirror of `segPort.currentTimeMs()` so the progress bar can
     // be reactive without polling. Written by the onTimeUpdate
     // subscription mounted below.
@@ -131,6 +133,22 @@
     // the unified teardown in `onMount`'s return can reach them.
     let footerResizeObs: ResizeObserver | null = null;
     let playbackUnsubs: Array<() => void> = [];
+
+    $: {
+        isCollapsed;
+        if (footerEl && typeof document !== 'undefined') {
+            // Use a microtask so the DOM has updated after the collapse toggle
+            // before we read offsetHeight.
+            requestAnimationFrame(() => {
+                if (footerEl) {
+                    document.documentElement.style.setProperty(
+                        '--seg-footer-actual-h',
+                        `${footerEl.offsetHeight}px`,
+                    );
+                }
+            });
+        }
+    }
 
     onMount(() => {
         // -------------------------------------------------------------
@@ -467,15 +485,27 @@
     $: totalMs = progressVisible ? chapterDurationMs : 0;
 </script>
 
-<div class="segs-footer" class:is-empty={!hasReciter} bind:this={footerEl}>
+<div class="segs-footer" class:is-empty={!hasReciter} bind:this={footerEl} class:collapsed={isCollapsed}>
+    <button
+        type="button"
+        class="collapse-tab"
+        on:click={() => (isCollapsed = !isCollapsed)}
+        aria-label={isCollapsed ? 'Expand player' : 'Collapse player'}
+        title={isCollapsed ? 'Expand player' : 'Collapse player'}
+    >
+        {isCollapsed ? '▲' : '▼'}
+    </button>
+
     <div class="progress" class:active={progressVisible}>
-        <span class="time pos">{fmt(elapsedMs)}</span>
+        {#if !isCollapsed}
+            <span class="time pos">{fmt(elapsedMs)}</span>
+        {/if}
         <div
             class="bar"
-            on:click={onProgressClick}
-            on:keydown={onProgressKey}
+            on:click={!isCollapsed ? onProgressClick : undefined}
+            on:keydown={!isCollapsed ? onProgressKey : undefined}
             role="slider"
-            tabindex="0"
+            tabindex={isCollapsed ? -1 : 0}
             aria-label="Segment playback progress"
             aria-valuemin="0"
             aria-valuemax="100"
@@ -485,9 +515,12 @@
                 <div class="fill" style:width="{progressPct}%"></div>
             </div>
         </div>
-        <span class="time dur">{fmt(totalMs)}</span>
+        {#if !isCollapsed}
+            <span class="time dur">{fmt(totalMs)}</span>
+        {/if}
     </div>
 
+    {#if !isCollapsed}
     <div class="row">
         <!-- Left zone: reciter identity + actions + playback prefs -->
         <div class="zone zone-left">
@@ -554,7 +587,9 @@
             {#if hasReciter}
                 <div class="transport" use:clickOutside={() => { surahOpen = false; ayahOpen = false; }}>
                     <div class="transport-left">
-                        <ShortcutsGuide />
+                        <!-- Keyboard shortcuts reference: desktop only — hidden on
+                             the touch/mobile footer layout where shortcuts don't apply. -->
+                        <div class="kb-guide-slot"><ShortcutsGuide /></div>
                         <button
                             type="button"
                             class="speed-cell"
@@ -720,6 +755,113 @@
             </div>
         </div>
     </div>
+    {:else}
+        <!-- Collapsed layout — keeps save controls visible -->
+        <div class="collapsed-row">
+            <div class="collapsed-meta"
+                role="button"
+                tabindex="0"
+                on:click={() => isCollapsed = false}
+                on:keydown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        isCollapsed = false;
+                    }
+                }}
+            >
+                <span class="collapsed-title">
+                    {#if contextName}
+                        {contextName}
+                    {:else}
+                        No reciter selected
+                    {/if}
+                </span>
+                <span class="collapsed-subtitle">
+                    {#if displaySurahNum}
+                        · Surah {displaySurahNum}
+                    {/if}
+                    {#if $selectedVerse}
+                        :{selectedVerse}
+                    {/if}
+                </span>
+            </div>
+            <div class="collapsed-controls">
+                <button
+                    type="button"
+                    class="collapsed-play-btn"
+                    disabled={!$segPortReady || (!$segData?.audio_url && !$playingSegmentIndex)}
+                    on:click|stopPropagation={handlePlayClick}
+                >
+                    <Icon name={playGlyph} size={11} />
+                </button>
+            </div>
+            <div class="zone zone-save">
+                {#if hasReciter}
+                    {#if showSavePreview}
+                        <button class="action ghost" on:click={() => hideSavePreview()}>Cancel</button>
+                        <button class="action primary" on:click={confirmSaveFromPreview}
+                            >Confirm save</button
+                        >
+                    {:else}
+                        <button
+                            type="button"
+                            class="utility"
+                            class:on={$historyVisible}
+                            title={$historyVisible ? 'Back to segments' : 'History'}
+                            aria-label={historyButtonLabel}
+                            on:click={toggleHistory}
+                        >
+                            {#if $historyVisible}
+                                <Icon name="arrow-left" size={14} />
+                                <span class="util-label">Back</span>
+                            {:else}
+                                <Icon name="history" size={14} />
+                                <span class="util-label">History</span>
+                            {/if}
+                        </button>
+
+                        {#if writeable}
+                            <div class="save-group">
+                                <button
+                                    type="button"
+                                    class="autosave-toggle"
+                                    class:on={$autoSaveEnabled}
+                                    aria-pressed={$autoSaveEnabled}
+                                    title={$autoSaveEnabled
+                                        ? 'Auto-save on — click to disable'
+                                        : 'Auto-save off — click to enable'}
+                                    on:click={() => toggleAutoSave(!$autoSaveEnabled)}
+                                >
+                                    <Icon name="bolt" size={12} />
+                                    <span>Auto</span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    class="action save"
+                                    class:primary={$isDirtyStore && !$autoSaveEnabled}
+                                    class:saved={!$isDirtyStore}
+                                    class:auto-busy={$autoSaveEnabled && $isDirtyStore}
+                                    disabled={saveDisabled}
+                                    on:click={onSegSaveClick}
+                                >
+                                    {#if !$isDirtyStore}
+                                        <span class="save-glyph" aria-hidden="true">✓</span>
+                                        <span>Saved</span>
+                                    {:else if $autoSaveEnabled}
+                                        <span class="save-pulse" aria-hidden="true"></span>
+                                        <span>Auto-saving…</span>
+                                    {:else}
+                                        <span>{saveLabel}</span>
+                                    {/if}
+                                </button>
+                            </div>
+                        {/if}
+                    {/if}
+                {/if}
+            </div>
+        </div>
+    {/if}
 
     <audio bind:this={audioEl} preload="none"></audio>
 </div>
@@ -752,6 +894,15 @@
         background: var(--panel);
         border-top: 1px solid var(--border-default);
         box-shadow: 0 -8px 24px oklch(0 0 0 / 0.28);
+        transition: min-height var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    padding var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    background var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    bottom var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    right var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    left var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    width var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    border-radius var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1),
+                    box-shadow var(--t-fast) cubic-bezier(0.4, 0, 0.2, 1);
         padding: 0 var(--s-4) var(--s-2); /* container-level padding matches BottomPlayer */
     }
 
@@ -760,6 +911,34 @@
        intrinsic 0×0 size from contributing to the footer height. */
     audio {
         display: none;
+    }
+
+    .collapse-tab {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        height: 18px;
+        padding: 0 12px;
+        border-radius: 100px;
+        background: var(--panel-2);
+        color: var(--text-faint);
+        border: 1px solid var(--border-quiet);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 8px;
+        line-height: 1;
+        z-index: 10;
+        transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+        box-shadow: var(--shadow-sm);
+        white-space: nowrap;
+    }
+    .collapse-tab:hover {
+        background: var(--accent-tint-soft);
+        border-color: var(--accent);
+        color: var(--accent);
     }
 
     /* Progress row: times flanking the scrub bar, matching the dashboard
@@ -957,6 +1136,10 @@
         justify-content: flex-end;
         gap: var(--s-2);
     }
+    .kb-guide-slot {
+        display: inline-flex;
+        align-items: center;
+    }
     .transport-right {
         position: relative;
         display: flex;
@@ -1090,7 +1273,7 @@
     .pop-surah {
         left: 50%;
         transform: translateX(-50%);
-        width: min(700px, calc(100vw - var(--s-4) * 2));
+        width: 238px;
     }
     .pop-ayah {
         left: 50%;
@@ -1299,6 +1482,100 @@
         border-color: oklch(0.785 0.13 220 / 0.35);
     }
 
+    /* ---------- Collapsed state ---------- */
+    .segs-footer.collapsed {
+        min-height: 0 !important;
+    }
+    .segs-footer.collapsed:hover {
+        background: var(--panel-2);
+    }
+
+    /* Progress bar goes full-bleed in collapsed state */
+    .segs-footer.collapsed .progress {
+        gap: 0;
+        padding: 0;
+        margin: 0;
+        width: 100%;
+    }
+    .segs-footer.collapsed .progress .bar {
+        height: 4px;
+        padding: 0;
+        margin: 0;
+        border-radius: 0;
+    }
+    .segs-footer.collapsed .progress .track {
+        height: 4px;
+        border-radius: 0;
+    }
+
+    .collapsed-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 8px 14px;
+        min-height: 48px;
+    }
+    .collapsed-row:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+    }
+    .collapsed-meta {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        flex: 1;
+        gap: var(--s-1);
+        padding-right: var(--s-2);
+    }
+    .collapsed-title {
+        font-size: var(--fs-body);
+        font-weight: 500;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .collapsed-subtitle {
+        font-size: var(--fs-meta);
+        color: var(--text-secondary);
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    .collapsed-controls {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        flex-shrink: 0;
+    }
+    .collapsed-play-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: var(--accent-fg);
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 11px;
+        box-shadow: var(--shadow-sm);
+        position: relative;
+        transition: background var(--t-fast), transform var(--t-fast);
+    }
+    .collapsed-play-btn:hover:not(:disabled) {
+        background: var(--accent-strong);
+        transform: scale(1.05);
+    }
+    .collapsed-play-btn:active:not(:disabled) {
+        transform: scale(0.95);
+    }
+    .collapsed-play-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
     /* ---------- Responsive ---------- */
     @media (max-width: 960px) {
         .row {
@@ -1309,12 +1586,14 @@
         }
         .zone-left  { justify-content: flex-start; flex-wrap: wrap; }
         .zone-right { justify-content: flex-start; flex-wrap: wrap; }
+        /* Keyboard shortcuts don't apply on the touch/mobile footer. */
+        .kb-guide-slot { display: none; }
         .pop-surah,
         .pop-ayah {
-            left: 0;
-            right: 0;
-            transform: none;
-            width: auto;
+            left: 50%;
+            transform: translateX(-50%);
+            right: auto;
+            width: min(320px, calc(100vw - 32px));
         }
     }
     @media (max-width: 540px) {
@@ -1323,6 +1602,16 @@
         }
         .action.save {
             min-width: 92px;
+        }
+        .collapsed-subtitle {
+            display: none !important;
+        }
+        .collapsed-row {
+            padding: 6px 10px !important;
+            min-height: 40px !important;
+        }
+        .identity {
+            padding: 2px var(--s-2) !important;
         }
     }
 </style>

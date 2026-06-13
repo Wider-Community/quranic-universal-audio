@@ -624,3 +624,32 @@
     border-radius: 10px;
 }
 .seg-row.seg-neighbour { border-left: 3px solid #f0a500; opacity: 0.85; }
+
+/* ============ Mobile Responsiveness ============ */
+@media (max-width: 899px) {
+    .seg-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .seg-left {
+        flex: 1 1 auto;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .seg-text {
+        flex: 1 1 auto;
+        width: 100%;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .seg-silence-gap-wrapper {
+        padding-left: 12px;
+    }
+}

@@ -67,6 +67,14 @@
         font-size: 0.9rem;
         color: #ccc;
     }
+    @media (max-width: 899px) {
+        .speed-label {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+            font-size: 0.82rem;
+        }
+    }
     .speed-select {
         background: #16213e;
         color: #eee;

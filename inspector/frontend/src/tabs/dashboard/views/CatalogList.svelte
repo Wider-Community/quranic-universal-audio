@@ -33,6 +33,8 @@
         setSearch,
         setSort,
         toggleFacet,
+        setFilterDrawer,
+        setActivityDrawer,
     } from '../stores/dashboard-state';
     import { openSubmitWizard } from '../stores/submit-wizard';
 
@@ -249,7 +251,7 @@
             </div>
             <div class="sort">
                 <label>
-                    <span class="sort-label">Sort</span>
+                    <span class="sort-label label-hide-mobile">Sort</span>
                     <select
                         value={$dashboardState.sort}
                         on:change={onSortChange}
@@ -261,6 +263,14 @@
                     </select>
                 </label>
             </div>
+            <button
+                type="button"
+                class="submit-recitation"
+                on:click={openSubmitWizard}
+            >
+                <span class="sr-glyph" aria-hidden="true">+</span>
+                <span class="sr-label">Submit recitation</span>
+            </button>
         </div>
         {#if $catalogData.loading}
             <div class="state">Loading reciters…</div>
@@ -298,8 +308,54 @@
         {/if}
     </section>
 
-    <ActivityRail />
+    <div class="desktop-only-activity">
+        <ActivityRail />
+    </div>
 </div>
+
+<!-- Left / Right drawers for mobile view rendered natively in Svelte -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<div
+    class="drawer-overlay"
+    class:open={$dashboardState.filterDrawerOpen || $dashboardState.activityDrawerOpen}
+    on:click={() => { setFilterDrawer(false); setActivityDrawer(false); }}
+></div>
+
+<aside class="drawer" class:open={$dashboardState.filterDrawerOpen} id="leftDrawer">
+    <div class="drawer-head">
+        <span class="drawer-title">Filters</span>
+        <button class="icon-btn" aria-label="Close" on:click={() => setFilterDrawer(false)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 6l12 12M18 6L6 18"/>
+            </svg>
+        </button>
+    </div>
+    <div class="drawer-body">
+        {#if descriptor}
+            <PickerFilterRail
+                axes={descriptor.axes}
+                activeFilters={$dashboardState.activeFilters}
+                perFacetCounts={facetResult.perFacetCounts}
+                on:toggle={(e) => toggleFacet(e.detail.axis, e.detail.tag)}
+            />
+        {/if}
+    </div>
+</aside>
+
+<aside class="drawer right" class:open={$dashboardState.activityDrawerOpen} id="rightDrawer">
+    <div class="drawer-head">
+        <span class="drawer-title">Recent activity</span>
+        <button class="icon-btn" aria-label="Close" on:click={() => setActivityDrawer(false)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 6l12 12M18 6L6 18"/>
+            </svg>
+        </button>
+    </div>
+    <div class="drawer-body">
+        <ActivityRail />
+    </div>
+</aside>
 
 <SubmitWizard />
 
@@ -307,23 +363,38 @@
     .toolbar {
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: var(--s-4);
-        padding: 0 0 var(--s-2);
-        flex-wrap: wrap;
+        padding: 10px 0;
+        flex-wrap: nowrap;
     }
-    .search-group {
-        display: flex;
-        align-items: center;
-        gap: var(--s-2);
-        min-width: 0;
+    /* Mobile toolbar: tighten gap, hide sort label, keep everything on one row, shrink search input and submit button */
+    @media (max-width: 767px) {
+        .toolbar {
+            gap: var(--s-2);
+            flex-wrap: nowrap;
+        }
+        .label-hide-mobile { display: none; }
+        .search {
+            min-width: 100px;
+        }
+        .sr-label {
+            display: none;
+        }
+        .submit-recitation {
+            padding: 0;
+            width: 32px;
+            justify-content: center;
+            gap: 0;
+        }
     }
     .search {
-        width: 210px;
-        min-width: 120px;
-        max-width: 210px;
+        flex: 1 1 auto;
+        min-width: 140px;
+        max-width: 420px;
     }
     .sort {
-        margin-left: auto;
+        flex-shrink: 0;
     }
     .sort label { display: inline-flex; align-items: center; gap: var(--s-2); }
     .sort-label {
@@ -333,7 +404,8 @@
         letter-spacing: 0.08em;
     }
     .sort select {
-        padding: var(--s-2) var(--s-2);
+        height: 32px;
+        padding: 0 var(--s-2);
         background: var(--panel);
         border: 1px solid var(--border-quiet);
         border-radius: var(--r-2);
@@ -342,7 +414,7 @@
         cursor: pointer;
     }
     .sort select:focus { border-color: var(--accent); outline: none; }
-
+ 
     .submit-recitation {
         display: inline-flex;
         align-items: center;
@@ -362,6 +434,8 @@
                     transform var(--t-fast),
                     box-shadow var(--t-base) var(--ease-out-quart);
         box-shadow: 0 1px 2px oklch(0 0 0 / 0.18);
+        white-space: nowrap;
+        flex-shrink: 0;
     }
     .submit-recitation:hover {
         background: var(--accent-strong);
@@ -412,9 +486,15 @@
     }
     .info-btn svg { display: block; }
 
+    /* On desktop the wrapper dissolves so <ActivityRail> is the grid's 3rd
+       column; the media queries below hide it (and the rail) on narrower
+       widths, where both move into the slide-in drawers. */
+    .desktop-only-activity {
+        display: contents;
+    }
     .grid {
         display: grid;
-        grid-template-columns: 320px minmax(0, 1fr) 320px;
+        grid-template-columns: var(--sidebar-w, 260px) minmax(0, 1fr) var(--activity-w, 300px);
         gap: var(--s-6);
         padding: 0 var(--gutter) var(--s-12);
         /* Shared column height: the smaller of the filter rail's natural height
@@ -428,16 +508,20 @@
                  - var(--now-reciting-h, 0px) - var(--s-12) - 8px)
         ));
     }
+    /* Intermediate widths: hide the activity panel, keep the filters sidebar. */
     @media (max-width: 1280px) {
         .grid { grid-template-columns: 330px minmax(0, 1fr); }
-        .grid :global(.activity) { display: none; }
+        .desktop-only-activity { display: none; }
     }
-    @media (max-width: 900px) {
+    /* Mobile: single column. Filters + activity move into the slide-in drawers
+       (markup below), so the in-grid rail and activity panel are hidden and the
+       page flows — CatalogTable keeps its own scroll box. The `.grid > .body`
+       selector outranks the base `.body` height so the envelope is dropped. */
+    @media (max-width: 899px) {
         .grid { grid-template-columns: 1fr; }
-        /* Single column: drop the shared-height envelope and let the page flow;
-           the list keeps its own viewport-tall scroll box (see CatalogTable). */
-        .rail { max-height: none; overflow: visible; }
-        .body { height: auto; }
+        .rail { display: none; }
+        .desktop-only-activity { display: none; }
+        .grid > .body { height: auto; }
     }
     .rail {
         max-height: var(--catalog-h);
@@ -521,4 +605,104 @@
         cursor: pointer;
     }
     .clear:hover { color: var(--text-primary); }
+
+    /* ── Drawer overlay ── */
+    .drawer-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 16, 32, 0.6);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 90;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .drawer-overlay.open {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    /* ── Drawer panel ── */
+    .drawer {
+        display: none;
+    }
+
+    /* Show drawers only below 900px */
+    @media (max-width: 899px) {
+        .drawer {
+            display: block;
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            width: 300px;
+            background: var(--panel);
+            border-right: 1px solid var(--border-default);
+            z-index: 130;
+            padding: 16px;
+            overflow-y: auto;
+            transform: translateX(-100%);
+            visibility: hidden;
+            transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                        visibility 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .drawer-overlay {
+            z-index: 120;
+        }
+        .drawer.open {
+            transform: translateX(0);
+            visibility: visible;
+        }
+        .drawer.right {
+            left: auto;
+            right: 0;
+            border-right: none;
+            border-left: 1px solid var(--border-default);
+            transform: translateX(100%);
+        }
+        .drawer.right.open {
+            transform: translateX(0);
+        }
+    }
+
+    .drawer-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-quiet);
+    }
+    .drawer-title {
+        font-weight: 600;
+        color: var(--text-primary);
+        font-size: 14px;
+    }
+    .drawer-body {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    /* Close button base style inside drawers */
+    .icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-md, 6px);
+        background: transparent;
+        border: 1px solid var(--border-quiet);
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .icon-btn:hover {
+        background: var(--panel-2);
+        border-color: var(--border-default);
+        color: var(--text-primary);
+    }
+    .icon-btn svg { width: 16px; height: 16px; display: block; }
 </style>

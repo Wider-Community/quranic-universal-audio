@@ -436,3 +436,31 @@
 .seg-history-wasl-tag.on {
     color: var(--accent);
 }
+
+/* ============ Mobile Responsiveness ============ */
+@media (max-width: 899px) {
+    .seg-history-diff {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .seg-history-arrows {
+        height: 24px;
+        min-height: 24px;
+        margin: 4px 0;
+    }
+
+    .seg-history-arrows svg {
+        display: none;
+    }
+
+    .seg-history-arrows::before {
+        content: '↓';
+        color: #4cc9f0;
+        font-size: 1.5rem;
+        line-height: 1;
+        font-weight: bold;
+    }
+}

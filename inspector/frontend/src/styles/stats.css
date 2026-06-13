@@ -148,3 +148,17 @@
     0%, 70% { opacity: 1; }
     100% { opacity: 0; }
 }
+
+/* ============ Mobile Responsiveness ============ */
+@media (max-width: 899px) {
+    .seg-stats-charts {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 8px;
+    }
+
+    .seg-stats-chart-btn {
+        padding: 4px 8px;
+        font-size: 0.85rem;
+    }
+}

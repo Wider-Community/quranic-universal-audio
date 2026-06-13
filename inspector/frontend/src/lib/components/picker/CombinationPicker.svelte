@@ -93,11 +93,7 @@
     let listEl: HTMLDivElement | null = null;
 
     // Group order for non-pinned rows.
-    const GROUP_ORDER: PublicBucket[] = [
-        'available_for_review',
-        'under_review',
-        'published',
-    ];
+    const GROUP_ORDER: PublicBucket[] = ['available_for_review', 'under_review', 'published'];
 
     onMount(() => {
         void load();
@@ -155,8 +151,8 @@
     // Filter axes to the three relevant for combinations (no status,
     // no mushaf coverage, no recording context) — the state tabs already
     // cover bucket; the rail keeps cross-cutting taxonomy axes only.
-    $: railAxes = (descriptor?.axes ?? []).filter((a) =>
-        a.key === 'riwayah' || a.key === 'style' || a.key === 'channel',
+    $: railAxes = (descriptor?.axes ?? []).filter(
+        (a) => a.key === 'riwayah' || a.key === 'style' || a.key === 'channel',
     );
 
     // Flatten reciters into combos, keeping only deliveries whose own
@@ -187,11 +183,13 @@
 
     // Split into pinned (active claims) + groups by bucket.
     // Owners can hold multiple simultaneous claims — pin all of them.
-    $: mineSlugs = new Set($currentUser?.active_claims ?? ($currentUser?.active_claim ? [$currentUser.active_claim] : []));
+    $: mineSlugs = new Set(
+        $currentUser?.active_claims ??
+            ($currentUser?.active_claim ? [$currentUser.active_claim] : []),
+    );
     $: mineRows = visible.filter((c) => mineSlugs.has(c.delivery.slug));
-    $: restRows = mineRows.length > 0
-        ? visible.filter((c) => !mineSlugs.has(c.delivery.slug))
-        : visible;
+    $: restRows =
+        mineRows.length > 0 ? visible.filter((c) => !mineSlugs.has(c.delivery.slug)) : visible;
     $: groupedRest = (() => {
         const out: Array<{ bucket: PublicBucket; rows: Combo[] }> = [];
         for (const b of GROUP_ORDER) {
@@ -202,9 +200,10 @@
     })();
 
     // Flat list of all visible rows in display order — drives keyboard nav.
-    $: orderedRows = mineRows.length > 0
-        ? [...mineRows, ...groupedRest.flatMap((g) => g.rows)]
-        : groupedRest.flatMap((g) => g.rows);
+    $: orderedRows =
+        mineRows.length > 0
+            ? [...mineRows, ...groupedRest.flatMap((g) => g.rows)]
+            : groupedRest.flatMap((g) => g.rows);
 
     // Tab pills count deliveries (combos), so they agree with the per-bucket
     // section head-counts and the SearchInput total. `/api/public/stats` counts
@@ -292,6 +291,8 @@
         else if (d.channel) parts.push(tagLabel(descriptor, 'channel', d.channel));
         return parts.filter(Boolean).join(' · ');
     }
+
+    let showControls = false;
 </script>
 
 <Modal {open} {title} on:close={onClose}>
@@ -302,7 +303,17 @@
         on:keydown={onKey}
         tabindex="-1"
     >
-        <div class="picker-controls">
+        <button
+            type="button"
+            class="mobile-controls-toggle"
+            on:click={() => (showControls = !showControls)}
+            aria-expanded={showControls}
+        >
+            <span>Search & Filters</span>
+            <span class="toggle-state">{showControls ? 'Hide' : 'Show'}</span>
+        </button>
+
+        <div class="picker-controls" class:mobile-hidden={!showControls}>
             <div class="picker-controls-search">
                 <SearchInput
                     bind:this={searchInputEl}
@@ -326,12 +337,14 @@
 
         <div class="body">
             {#if descriptor}
-                <PickerFilterRail
-                    axes={railAxes}
-                    {activeFilters}
-                    perFacetCounts={facetResult.perFacetCounts}
-                    on:toggle={(e) => toggleFacet(e.detail)}
-                />
+                <div class="filter-rail-wrapper" class:mobile-hidden={!showControls}>
+                    <PickerFilterRail
+                        axes={railAxes}
+                        {activeFilters}
+                        perFacetCounts={facetResult.perFacetCounts}
+                        on:toggle={(e) => toggleFacet(e.detail)}
+                    />
+                </div>
             {/if}
 
             <div class="list" bind:this={listEl}>
@@ -449,7 +462,9 @@
         color: var(--text-muted);
         font-size: var(--fs-meta);
     }
-    .state.error { color: var(--state-error-fg); }
+    .state.error {
+        color: var(--state-error-fg);
+    }
 
     .picker-controls-search {
         width: 360px;
@@ -468,5 +483,53 @@
         padding: var(--s-3) var(--s-6);
         border-top: 1px solid var(--border-quiet);
         flex-shrink: 0;
+    }
+
+    .mobile-controls-toggle {
+        display: none;
+    }
+
+    @media (max-width: 767px) {
+        .body {
+            grid-template-columns: 1fr;
+            grid-template-rows: auto 1fr;
+        }
+        .picker-controls-search {
+            width: 100%;
+        }
+        .foot {
+            padding: var(--s-3) var(--s-3);
+        }
+
+        .mobile-controls-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--s-3) var(--s-4);
+            background: var(--panel-2, #1a1a3e);
+            border: none;
+            border-bottom: 1px solid var(--border-quiet, #333);
+            color: var(--text-default, #eee);
+            cursor: pointer;
+            font-size: var(--fs-meta, 13px);
+            font-weight: 600;
+            outline: none;
+            width: 100%;
+        }
+        .mobile-controls-toggle:hover {
+            background: var(--accent-tint-soft, rgba(76, 201, 240, 0.08));
+        }
+        .toggle-state {
+            font-size: 11px;
+            color: var(--accent, #4cc9f0);
+            background: var(--accent-tint-soft, rgba(76, 201, 240, 0.08));
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .picker-controls.mobile-hidden,
+        .filter-rail-wrapper.mobile-hidden {
+            display: none !important;
+        }
     }
 </style>

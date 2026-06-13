@@ -321,7 +321,8 @@
             {#if reciter.deliveries.length === 0}
                 <div class="state">No combinations available.</div>
             {:else}
-                <div class="table-wrap">
+                <!-- Desktop View (Scrollable Table) -->
+                <div class="table-wrap desktop-only">
                     <table class="combinations">
                         <thead>
                             <tr>
@@ -472,6 +473,171 @@
                             </tbody>
                         {/if}
                     </table>
+                </div>
+
+                <!-- Mobile View (Compact Responsive Card List) -->
+                <div class="mobile-combinations mobile-only">
+                    {#if hasFacetFilters && partition.matching.length > 0}
+                        <div class="mobile-group-title">
+                            Matching your filters ({partition.matching.length})
+                        </div>
+                        {#each partition.matching as d (d.slug)}
+                            <!-- svelte-ignore a11y-click-events-have-key-events -->
+                            <div
+                                class="combo-card"
+                                class:selected={d.slug === selectedSlug}
+                                on:click={() => selectRow(d)}
+                                role="button"
+                                tabindex="0"
+                            >
+                                <div class="card-top">
+                                    <div class="card-play-title">
+                                        {#if d.audio_category !== 'by_ayah'}
+                                            <button
+                                                type="button"
+                                                class="play"
+                                                aria-label="Play this combination"
+                                                on:click={(e) => playDelivery(d, e)}
+                                            >▶</button>
+                                        {/if}
+                                        <div class="card-title">
+                                            <span class="riwayah">{titleCaseSlug(d.riwayah)}</span>
+                                            <span class="style">{titleCaseSlug(d.style)}</span>
+                                        </div>
+                                    </div>
+                                    <div class="card-state">
+                                        {#if d.bucket === 'available_for_request'}
+                                            <button
+                                                type="button"
+                                                class="request-btn"
+                                                on:click|stopPropagation={() => openRequest(d)}
+                                            >Request</button>
+                                        {:else if d.bucket === 'requested' && $isAdmin}
+                                            <button
+                                                type="button"
+                                                class="pill-as-btn"
+                                                title="Review submitted request"
+                                                on:click|stopPropagation={() => openReview(d)}
+                                            ><StatePill state={d.bucket} size="sm" /></button>
+                                        {:else}
+                                            <StatePill state={d.bucket} size="sm" />
+                                        {/if}
+                                    </div>
+                                </div>
+                                <div class="card-meta">
+                                    {#each visibleCols.filter(c => c.key !== 'riwayah' && c.key !== 'style') as col (col.key)}
+                                        {#if col.present(d)}
+                                            <span class="meta-tag">
+                                                <span class="meta-label">{col.label}:</span>
+                                                <span class="meta-val">{col.value(d)}</span>
+                                            </span>
+                                        {/if}
+                                    {/each}
+                                </div>
+                            </div>
+                        {/each}
+                        {#if partition.other.length > 0}
+                            <div class="mobile-group-title other">
+                                Other combinations ({partition.other.length})
+                            </div>
+                            {#each partition.other as d (d.slug)}
+                                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                <div
+                                    class="combo-card dim"
+                                    class:selected={d.slug === selectedSlug}
+                                    on:click={() => selectRow(d)}
+                                    role="button"
+                                    tabindex="0"
+                                >
+                                    <div class="card-top">
+                                        <div class="card-play-title">
+                                            {#if d.audio_category !== 'by_ayah'}
+                                                <button
+                                                    type="button"
+                                                    class="play"
+                                                    aria-label="Play this combination"
+                                                    on:click={(e) => playDelivery(d, e)}
+                                                >▶</button>
+                                            {/if}
+                                            <div class="card-title">
+                                                <span class="riwayah">{titleCaseSlug(d.riwayah)}</span>
+                                                <span class="style">{titleCaseSlug(d.style)}</span>
+                                            </div>
+                                        </div>
+                                        <div class="card-state">
+                                            <StatePill state={d.bucket} size="sm" />
+                                        </div>
+                                    </div>
+                                    <div class="card-meta">
+                                        {#each visibleCols.filter(c => c.key !== 'riwayah' && c.key !== 'style') as col (col.key)}
+                                            {#if col.present(d)}
+                                                <span class="meta-tag">
+                                                    <span class="meta-label">{col.label}:</span>
+                                                    <span class="meta-val">{col.value(d)}</span>
+                                                </span>
+                                            {/if}
+                                        {/each}
+                                    </div>
+                                </div>
+                            {/each}
+                        {/if}
+                    {:else}
+                        {#each sortedDeliveries as d (d.slug)}
+                            <!-- svelte-ignore a11y-click-events-have-key-events -->
+                            <div
+                                class="combo-card"
+                                class:selected={d.slug === selectedSlug}
+                                on:click={() => selectRow(d)}
+                                role="button"
+                                tabindex="0"
+                            >
+                                <div class="card-top">
+                                    <div class="card-play-title">
+                                        {#if d.audio_category !== 'by_ayah'}
+                                            <button
+                                                type="button"
+                                                class="play"
+                                                aria-label="Play this combination"
+                                                on:click={(e) => playDelivery(d, e)}
+                                            >▶</button>
+                                        {/if}
+                                        <div class="card-title">
+                                            <span class="riwayah">{titleCaseSlug(d.riwayah)}</span>
+                                            <span class="style">{titleCaseSlug(d.style)}</span>
+                                        </div>
+                                    </div>
+                                    <div class="card-state">
+                                        {#if d.bucket === 'available_for_request'}
+                                            <button
+                                                type="button"
+                                                class="request-btn"
+                                                on:click|stopPropagation={() => openRequest(d)}
+                                            >Request</button>
+                                        {:else if d.bucket === 'requested' && $isAdmin}
+                                            <button
+                                                type="button"
+                                                class="pill-as-btn"
+                                                title="Review submitted request"
+                                                on:click|stopPropagation={() => openReview(d)}
+                                            ><StatePill state={d.bucket} size="sm" /></button>
+                                        {:else}
+                                            <StatePill state={d.bucket} size="sm" />
+                                        {/if}
+                                    </div>
+                                </div>
+                                <div class="card-meta">
+                                    {#each visibleCols.filter(c => c.key !== 'riwayah' && c.key !== 'style') as col (col.key)}
+                                        {#if col.present(d)}
+                                            <span class="meta-tag">
+                                                <span class="meta-label">{col.label}:</span>
+                                                <span class="meta-val">{col.value(d)}</span>
+                                            </span>
+                                        {/if}
+                                    {/each}
+                                </div>
+                            </div>
+                        {/each}
+                    {/if}
                 </div>
             {/if}
 
@@ -794,5 +960,106 @@
         /* Reserve the bottom player's height so the centered modal — and its
            footer — stay clear of where the player sits. */
         padding-bottom: calc(var(--s-6) + var(--player-h, 72px));
+    }
+
+    .desktop-only { display: block; }
+    .mobile-only { display: none; }
+
+    .mobile-combinations {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-2);
+    }
+    .mobile-group-title {
+        color: var(--text-muted);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: var(--s-2) var(--s-1) var(--s-1);
+    }
+    .mobile-group-title.other {
+        margin-top: var(--s-3);
+    }
+    .combo-card {
+        background: var(--panel);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-2);
+        padding: var(--s-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-2);
+        cursor: pointer;
+        transition: background var(--t-fast), border-color var(--t-fast);
+        outline: none;
+    }
+    .combo-card:hover {
+        background: var(--panel-2);
+        border-color: var(--border-default);
+    }
+    .combo-card.selected {
+        background: var(--accent-tint-soft);
+        border-color: var(--accent);
+    }
+    .combo-card.dim {
+        opacity: 0.7;
+    }
+    .card-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--s-2);
+    }
+    .card-play-title {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+    }
+    .card-title {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+    }
+    .card-title .riwayah {
+        font-weight: 500;
+        font-size: var(--fs-meta);
+        color: var(--text-primary);
+    }
+    .card-title .style {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    .card-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--s-1) var(--s-3);
+        padding-top: var(--s-2);
+        border-top: 1px solid var(--border-quiet);
+    }
+    .meta-tag {
+        font-size: 11px;
+        color: var(--text-secondary);
+        display: inline-flex;
+        gap: 3px;
+    }
+    .meta-label {
+        color: var(--text-faint);
+    }
+    .meta-val {
+        font-family: var(--font-mono);
+        color: var(--text-primary);
+    }
+
+    @media (max-width: 767px) {
+        .desktop-only { display: none; }
+        .mobile-only { display: block; }
+        .detail {
+            padding: var(--s-3) var(--s-4) var(--s-4);
+            width: 100%;
+        }
+        .timeline-pin {
+            margin: 0 calc(var(--s-4) * -1) var(--s-3);
+            padding-left: var(--s-4);
+            padding-right: var(--s-4);
+        }
     }
 </style>
