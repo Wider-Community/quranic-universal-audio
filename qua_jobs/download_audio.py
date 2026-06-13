@@ -333,8 +333,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("catalog", type=Path, help="Path to catalog.json (release-level or per-reciter)")
     p.add_argument("--reciter", help="Reciter slug (required unless the catalog has one reciter)")
     p.add_argument("--list", action="store_true", help="List reciters in the catalog and exit")
-    p.add_argument("--format", choices=("chapters", "original"), default="chapters",
-                   dest="fmt", help="Output layout (default: chapters = one file per surah)")
+    p.add_argument(
+        "--format",
+        choices=("chapters", "original"),
+        default="chapters",
+        dest="fmt",
+        help="Output layout (default: chapters = one file per surah)",
+    )
     p.add_argument("--out-dir", type=Path, help="Output directory (default: ./<slug>)")
     p.add_argument("--chapters", help="Comma-separated chapter subset (default: all)")
     p.add_argument("--bitrate", default="192k", help="CBR audio bitrate (default: 192k)")
