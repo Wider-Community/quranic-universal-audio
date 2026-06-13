@@ -195,9 +195,9 @@ def test_audio_urls_come_from_sidecar_chapters():
         },
     }
 
-    assert cut_release._audio_urls_from_manifest("example_reciter", sidecar) == {
-        "100": "https://cdn.example/100.mp3"
-    }
+    urls, offsets = cut_release._audio_sources_from_manifest("example_reciter", sidecar)
+    assert urls == {"100": "https://cdn.example/100.mp3"}
+    assert offsets == {}  # CDN by-surah: no offsets
 
 
 def test_audio_urls_tolerate_legacy_sidecar_metadata():
@@ -212,9 +212,56 @@ def test_audio_urls_tolerate_legacy_sidecar_metadata():
         },
     }
 
-    assert cut_release._audio_urls_from_manifest("legacy_reciter", sidecar) == {
-        "2": "https://cdn.example/2.mp3"
+    urls, offsets = cut_release._audio_sources_from_manifest("legacy_reciter", sidecar)
+    assert urls == {"2": "https://cdn.example/2.mp3"}
+    assert offsets == {}
+
+
+def test_combined_source_surfaces_native_url_and_offset():
+    # One Drive file serves chapters 1 + 2 (bucket path swapped into ``url``);
+    # the release must point at the native ``source_url`` and carry the offset of
+    # the chapter that starts partway into the file.
+    sidecar = {
+        "schema_version": 1,
+        "slug": "combined_reciter",
+        "_meta": {"checksum": "abc", "chapter_count": 2, "category": "by_surah"},
+        "chapters": {
+            "1": {
+                "url": "https://bucket/reciters/combined_reciter/audio/1.mp3",
+                "source_url": "https://drive.google.com/file/d/XYZ/view",
+            },
+            "2": {
+                "url": "https://bucket/reciters/combined_reciter/audio/2.mp3",
+                "source_url": "https://drive.google.com/file/d/XYZ/view",
+                "source_offset_ms": 215000,
+            },
+        },
     }
+
+    urls, offsets = cut_release._audio_sources_from_manifest("combined_reciter", sidecar)
+    assert urls == {
+        "1": "https://drive.google.com/file/d/XYZ/view",
+        "2": "https://drive.google.com/file/d/XYZ/view",
+    }
+    assert offsets == {"2": 215000}  # only the non-zero offset is emitted
+
+
+def test_single_file_offset_emitted_without_source_url():
+    # A unique-per-chapter source whose recitation starts after a lead-in: the
+    # URL is already native (no ``source_url``) but the offset must still ship.
+    sidecar = {
+        "_meta": {"checksum": "abc", "chapter_count": 1, "category": "by_surah"},
+        "chapters": {
+            "36": {
+                "url": "https://drive.google.com/file/d/ABC/view",
+                "source_offset_ms": 4200,
+            }
+        },
+    }
+
+    urls, offsets = cut_release._audio_sources_from_manifest("single_file_reciter", sidecar)
+    assert urls == {"36": "https://drive.google.com/file/d/ABC/view"}
+    assert offsets == {"36": 4200}
 
 
 def test_empty_audio_urls_are_fatal_for_catalog_build():

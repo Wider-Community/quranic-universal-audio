@@ -72,6 +72,37 @@ def test_release_catalog_requires_audio_url_map():
     assert catalog.recitations[0].audio.chapter_urls["100"].endswith("100.mp3")
 
 
+def test_chapter_offsets_omitted_from_json_when_empty():
+    # CDN by-surah: no offsets → the key must be ABSENT (not ``{}``) so existing
+    # catalogs stay byte-stable and their content_hash doesn't churn.
+    audio = ReleaseCatalogAudio(chapter_urls={"1": "https://cdn.example/1.mp3"})
+    dumped = audio.model_dump(mode="json", by_alias=True)
+    assert "chapter_offsets_ms" not in dumped
+
+
+def test_chapter_offsets_present_for_combined_source():
+    audio = ReleaseCatalogAudio(
+        chapter_urls={"1": "https://yt.example/v", "2": "https://yt.example/v"},
+        chapter_offsets_ms={"2": 215000},
+    )
+    dumped = audio.model_dump(mode="json", by_alias=True)
+    assert dumped["chapter_offsets_ms"] == {"2": 215000}
+    # Round-trips back through validation.
+    assert ReleaseCatalogAudio.model_validate(dumped).chapter_offsets_ms == {"2": 215000}
+
+
+def test_legacy_catalog_without_offsets_still_validates():
+    # An old release catalog.json (cut before the field existed) must load.
+    rec = ReleaseRecitationCatalog.model_validate(
+        {
+            "slug": "example_reciter",
+            "audio": {"chapter_urls": {"1": "https://cdn.example/1.mp3"}},
+            "coverage": {"surahs": 1, "ayahs": 3},
+        }
+    )
+    assert rec.audio.chapter_offsets_ms == {}
+
+
 def test_qpc_hafs_doc_validates_location_keys():
     doc = QpcHafsDoc.model_validate(
         {

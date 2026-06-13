@@ -16,7 +16,7 @@ import re
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, RootModel, model_serializer, model_validator
 
 SCHEMA_VERSION = 1
 VERSE_KEY_RE = re.compile(r"^[1-9]\d{0,2}:[1-9]\d{0,2}$")
@@ -68,11 +68,30 @@ class ReleaseManifest(BaseModel):
 class ReleaseCatalogAudio(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    #: Per chapter, the NATIVE source URL the timestamps are relative to. For a
+    #: combined non-CDN source (one YouTube/Drive file serving several chapters)
+    #: this is the shared source URL — multiple chapters map to it, each at a
+    #: different ``chapter_offsets_ms``.
     chapter_urls: dict[str, str] = Field(default_factory=dict)
+    #: Per chapter, the ms offset of that chapter's start *inside* its source
+    #: URL. Present ONLY for non-CDN sources where the chapter doesn't begin at
+    #: byte 0 — combined files (one URL → many chapters) or a single file with a
+    #: trimmed lead-in. Absent/empty for CDN by-surah (each chapter is its own
+    #: file at offset 0). Map a release tier-file timestamp into the source file
+    #: with ``source_ms = chapter_offsets_ms.get(ch, 0) + tier_ms``. Omitted from
+    #: the serialized JSON when empty so CDN catalogs stay byte-stable.
+    chapter_offsets_ms: dict[str, int] = Field(default_factory=dict)
     sample_rate_hz: int | None = None
     channels: int | None = None
     bitrate_mode: str | None = None
     bitrate_kbps_nominal: int | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_offsets(self, handler):
+        data = handler(self)
+        if not data.get("chapter_offsets_ms"):
+            data.pop("chapter_offsets_ms", None)
+        return data
 
 
 class ReleaseCoverage(BaseModel):
