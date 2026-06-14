@@ -25,6 +25,7 @@ describe('resolveShuffleTick', () => {
         // against 2:1's end, NOT re-base onto 2:2 (which would leak 2:2 in full).
         const outcome = resolveShuffleTick({
             verses: CONTIGUOUS,
+            swapInFlight: false,
             ms: 1400,
             armed: true,
             focusEndMs: 1000,
@@ -38,6 +39,7 @@ describe('resolveShuffleTick', () => {
     it('fires within the early guard window before the exact ayah end', () => {
         const outcome = resolveShuffleTick({
             verses: CONTIGUOUS,
+            swapInFlight: false,
             ms: 970,
             armed: true,
             focusEndMs: 1000,
@@ -51,6 +53,7 @@ describe('resolveShuffleTick', () => {
     it('advances focus to the containing ayah, without firing, before the guard window', () => {
         const outcome = resolveShuffleTick({
             verses: CONTIGUOUS,
+            swapInFlight: false,
             ms: 950,
             armed: true,
             focusEndMs: 1000,
@@ -64,6 +67,7 @@ describe('resolveShuffleTick', () => {
     it('does not re-fire for an ayah it already fired for; advances focus instead', () => {
         const outcome = resolveShuffleTick({
             verses: CONTIGUOUS,
+            swapInFlight: false,
             ms: 1400,
             armed: true,
             focusEndMs: 1000,
@@ -77,6 +81,7 @@ describe('resolveShuffleTick', () => {
     it('does not fire when shuffle is disarmed; tracks focus normally', () => {
         const outcome = resolveShuffleTick({
             verses: CONTIGUOUS,
+            swapInFlight: false,
             ms: 1400,
             armed: false,
             focusEndMs: 1000,
@@ -85,6 +90,58 @@ describe('resolveShuffleTick', () => {
         });
 
         expect(outcome).toEqual({ kind: 'focus', ref: '2:2' });
+    });
+});
+
+describe('resolveShuffleTick — cross-source chapter swap window', () => {
+    // After a cross-source jump, the shared player points at the NEW chapter (so
+    // the playhead time is the new chapter's) while `verses` still describes the
+    // OLD chapter, until its data loads. Every frame in that window must hold:
+    // firing again or focusing an old-chapter verse is the double-fire / wrong-
+    // verse-flash bug.
+    it('holds (idle) when a frame would otherwise fire, even with the once-per-ayah guard disarmed', () => {
+        // Worst case: the guard is already disarmed (firedForCurrentFocus false) and
+        // the new playhead (1400) has overshot the OLD 2:1 end (1000) — exactly the
+        // condition that produced the second mid-recitation jump.
+        const outcome = resolveShuffleTick({
+            verses: CONTIGUOUS, // OLD chapter
+            swapInFlight: true,
+            ms: 1400, // NEW-chapter time
+            armed: true,
+            focusEndMs: 1000,
+            guardMs: GUARD,
+            firedForCurrentFocus: false,
+        });
+
+        expect(outcome).toEqual({ kind: 'idle' });
+    });
+
+    it('holds (idle) instead of focusing an old-chapter verse mid-swap', () => {
+        const outcome = resolveShuffleTick({
+            verses: CONTIGUOUS,
+            swapInFlight: true,
+            ms: 500, // would normally focus 2:1
+            armed: false,
+            focusEndMs: 1000,
+            guardMs: GUARD,
+            firedForCurrentFocus: true,
+        });
+
+        expect(outcome).toEqual({ kind: 'idle' });
+    });
+
+    it('resumes normal firing once the swap completes', () => {
+        const outcome = resolveShuffleTick({
+            verses: CONTIGUOUS,
+            swapInFlight: false,
+            ms: 1400,
+            armed: true,
+            focusEndMs: 1000,
+            guardMs: GUARD,
+            firedForCurrentFocus: false,
+        });
+
+        expect(outcome).toEqual({ kind: 'fire' });
     });
 });
 

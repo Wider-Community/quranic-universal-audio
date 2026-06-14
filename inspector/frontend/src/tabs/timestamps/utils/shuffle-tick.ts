@@ -11,6 +11,13 @@
  * just-loaded ayah is short) would re-base the boundary onto the NEXT ayah and
  * leak it in full. Resolving the fire decision first, against the auditioned
  * ayah's captured end, bounds the leak to a single frame.
+ *
+ * A cross-source jump also opens a multi-frame window where the shared player
+ * already points at the NEW chapter (so the playhead time is the new chapter's)
+ * but the verse list still describes the OLD chapter, until its data loads.
+ * `resolveShuffleTick` reports `idle` for that window so the caller freezes both
+ * focus and firing instead of interpreting the new time against stale verses
+ * (which would focus a wrong old verse and double-fire the jump).
  */
 
 export interface ShuffleTickVerse {
@@ -20,6 +27,7 @@ export interface ShuffleTickVerse {
 }
 
 export type ShuffleTickOutcome =
+    | { kind: 'idle' }
     | { kind: 'fire' }
     | { kind: 'focus'; ref: string | null };
 
@@ -62,13 +70,17 @@ export function verseAt(verses: ShuffleTickVerse[], ms: number): string | null {
     return (hit ?? verses[0]!).ref;
 }
 
-/** Combined tick decision: fire the shuffle jump if the auditioned ayah ended,
- *  otherwise report which verse to focus. Firing is resolved BEFORE focus so an
- *  overshoot past a contiguous seam still measures against the auditioned ayah,
- *  never the next one. */
+/** Combined tick decision: hold everything while a chapter is mid-swap, else
+ *  fire the shuffle jump if the auditioned ayah ended, otherwise report which
+ *  verse to focus. The swap check comes first because `verses` and the playhead
+ *  belong to different chapters during the swap window, so neither firing nor
+ *  focusing can be trusted. Firing is resolved BEFORE focus so an overshoot past
+ *  a contiguous seam still measures against the auditioned ayah, never the next
+ *  one. */
 export function resolveShuffleTick(
-    args: ShuffleFireArgs & { verses: ShuffleTickVerse[] },
+    args: ShuffleFireArgs & { verses: ShuffleTickVerse[]; swapInFlight: boolean },
 ): ShuffleTickOutcome {
+    if (args.swapInFlight) return { kind: 'idle' };
     if (shouldFireShuffle(args)) return { kind: 'fire' };
     return { kind: 'focus', ref: verseAt(args.verses, args.ms) };
 }

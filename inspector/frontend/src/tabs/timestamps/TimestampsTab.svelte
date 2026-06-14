@@ -384,6 +384,20 @@
         }
     }
 
+    /** True while a cross-source jump is mid-swap: the shared player already points
+     *  at (and may already be playing) the new chapter, but `chapterVerses` /
+     *  `focusRef` / `loadedVerse` still describe the previous chapter until
+     *  syncChapter finishes loading and sets `loadedChapterKey`. `loadedChapterKey`
+     *  trails `playerContext` across the whole window (incl. before `tsLoading`
+     *  flips at line ~289), so it — not `tsLoading` — is the reliable guard. tick()
+     *  and the media-clock backstop both no-op during this window so the new
+     *  playhead time isn't read against stale verses (wrong-verse focus +
+     *  double-fire). */
+    function chapterSwapInFlight(): boolean {
+        const ctx = get(playerContext);
+        return `${ctx.delivery?.slug ?? ''}:${ctx.surahNum ?? 0}` !== loadedChapterKey;
+    }
+
     // ---------------------------------------------------------------------
     // Per-frame tick (focus + highlights + waveform cursor + loop + shuffle)
     // ---------------------------------------------------------------------
@@ -437,11 +451,15 @@
         const outcome = resolveShuffleTick({
             verses: chapterVerses,
             ms,
+            swapInFlight: chapterSwapInFlight(),
             armed: getActiveTab() === TAB_NAMES.TIMESTAMPS && !get(loopTarget) && get(shuffleAyah),
             focusEndMs: fv ? fv.tsSegEnd * 1000 : null,
             guardMs: SHUFFLE_END_GUARD_MS,
             firedForCurrentFocus: shuffleFiredForRef === focusRef,
         });
+        // Mid-swap: freeze focus + display (no refresh) so the new playhead time
+        // isn't drawn against the old chapter's verse; syncChapter resumes us.
+        if (outcome.kind === 'idle') return;
         if (outcome.kind === 'fire') {
             shuffleFiredForRef = focusRef;
             void shuffleJump(); // sets the new focus itself; hold focus this frame
@@ -460,6 +478,10 @@
     // Dashboard playback (its own gapless advance owns dashPort.onEnded when active).
     function maybeFireShuffle(ms: number): boolean {
         if (getActiveTab() !== TAB_NAMES.TIMESTAMPS) return false;
+        // Mid-swap the timeupdate clock is the NEW chapter's but loadedVerse is the
+        // OLD one — measuring against it would fire against the wrong ayah. tick()
+        // also freezes focus here, so this is belt-and-braces, not the sole guard.
+        if (chapterSwapInFlight()) return false;
         const fv = get(loadedVerse);
         const fire = shouldFireShuffle({
             armed: !get(loopTarget) && get(shuffleAyah),
