@@ -19,12 +19,14 @@
     import { openGuidesGate } from '../../lib/stores/guides-gate';
     import type { SegReciter } from '../../lib/types/generated/schemas';
     import { LS_KEYS } from '../../lib/utils/constants';
+    import { pendingSegmentsDeepLink } from '../../lib/utils/goto-segments';
     import { surahInfoReady } from '../../lib/utils/surah-info';
     import { catalogData, loadCatalog, startCatalogPolling } from '../dashboard/stores/catalog-data';
     import EditOverlay from './components/edit/EditOverlay.svelte';
     import FiltersBar from './components/filters/FiltersBar.svelte';
     import SegmentsFooter from './components/footer/SegmentsFooter.svelte';
     import HistoryPanel from './components/history/HistoryPanel.svelte';
+    import MarkReadyReviewModal from './components/footer/MarkReadyReviewModal.svelte';
     import SegmentsList from './components/list/SegmentsList.svelte';
     import SavePreview from './components/save/SavePreview.svelte';
     import AccordionGuideModal from './components/validation/AccordionGuideModal.svelte';
@@ -121,6 +123,22 @@
         _lastBoundReciter = $selectedReciter;
         _bindTask($selectedReciter);
         void onReciterChange($selectedReciter);
+    }
+
+    // Mark-ready review deep-link (from the owner "marked ready — reviewer left
+    // notes" notification): once the reciter is switched in, open the read-only
+    // review modal and consume the pending intent. Carries no openFlagged, so
+    // ValidationPanel's flag-deep-link consumer ignores it.
+    let markReadyReviewOpen = false;
+    let markReadyReviewSlug: string | null = null;
+    $: if (
+        $pendingSegmentsDeepLink?.openMarkReadyReview &&
+        typeof $selectedReciter === 'string' &&
+        $selectedReciter
+    ) {
+        markReadyReviewSlug = $selectedReciter;
+        markReadyReviewOpen = true;
+        pendingSegmentsDeepLink.set(null);
     }
 
     $: filterBarHidden = $segAllData === null;
@@ -408,6 +426,15 @@
     <!-- First-edit onboarding gate / browsable guide index. Self-subscribes to
          the `guidesGate` store; opens guides via the host above. -->
     <GuidesGateModal />
+
+    <!-- Read-only mark-ready review modal, opened by the owner notification
+         deep-link (openMarkReadyReview). -->
+    {#if markReadyReviewOpen && markReadyReviewSlug}
+        <MarkReadyReviewModal
+            slug={markReadyReviewSlug}
+            onClose={() => (markReadyReviewOpen = false)}
+        />
+    {/if}
 </div>
 
 <style>

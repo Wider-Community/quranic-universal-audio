@@ -63,7 +63,6 @@ class AdminRequestRow(BaseModel):
     probe: dict | None = None
 
     # per-caller overlay
-    viewed: bool = False
     requester_role: str | None = None
     requester_login: str | None = None  # owner-only
     requester_hf_user_id: str | None = None  # owner-only
@@ -85,4 +84,3 @@ class AdminRequestsResponse(BaseModel):
 
     rows: list[AdminRequestRow] = Field(default_factory=list)
     counts: AdminRequestCounts = Field(default_factory=AdminRequestCounts)
-    unviewed_count: int = 0

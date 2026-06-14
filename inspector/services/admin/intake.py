@@ -125,7 +125,36 @@ def submit(sub: IntakeSubmission, *, requester: Actor) -> tuple[str, IntakeValid
             payload={"request_id": rid, "kind": sub.kind, "reciter_id": sub.reciter_id},
         )
     _invalidate()
+    _notify_owners_new_intake(sub, rid, requester=requester)
     return rid, validation
+
+
+def _notify_owners_new_intake(sub: IntakeSubmission, rid: str, *, requester: Actor) -> None:
+    """Owner-facing review alert for a slugless intake (best-effort, own txn).
+    Resolves a display name (proposed name for new reciters, the existing
+    reciter's name for new combos) and a short riwayah · style body. Wrapped so
+    a lookup hiccup never breaks the submission."""
+    try:
+        from services.notifications import emit as notify_service
+        from services.state import catalog as catalog_service
+
+        proposed = sub.proposed_edits
+        if sub.kind == "new_reciter":
+            name = proposed.name_en or "a new reciter"
+        else:  # existing_reciter_new_combo
+            reciter = catalog_service.find_reciter(sub.reciter_id) if sub.reciter_id else None
+            name = (reciter.name_en if reciter is not None else None) or "a new combination"
+        combo = " · ".join(p for p in (proposed.riwayah, proposed.style) if p)
+        notify_service.notify_owners_new_request(
+            kind=sub.kind,
+            reciter_name=name,
+            requester=requester,
+            slug=None,
+            request_id=rid,
+            body=combo or None,
+        )
+    except Exception:  # noqa: BLE001 — best-effort; never break the submission
+        logger.exception("intake: owner new-request notification failed for rid=%s", rid)
 
 
 def _append_dedup_warning(sub: IntakeSubmission, validation: IntakeValidation) -> None:

@@ -73,9 +73,6 @@
                     onclick={() => adminDashboard.setTab(t.id)}
                 >
                     {t.label}
-                    {#if t.id === 'requests' && adminDashboard.unviewedRequests > 0}
-                        <span class="am-tab-count">{adminDashboard.unviewedRequests}</span>
-                    {/if}
                 </button>
             {/each}
         </nav>
@@ -118,17 +115,4 @@
         height: 2px; background: var(--accent); border-radius: 2px 2px 0 0;
     }
     .am-tab.disabled { color: var(--text-faint); cursor: not-allowed; }
-    .am-tab-count {
-        margin-left: var(--s-1);
-        min-width: 17px;
-        padding: 0 5px;
-        font-family: var(--font-mono);
-        font-size: 10.5px;
-        line-height: 17px;
-        font-variant-numeric: tabular-nums;
-        text-align: center;
-        color: var(--accent);
-        background: var(--accent-tint);
-        border-radius: 999px;
-    }
 </style>

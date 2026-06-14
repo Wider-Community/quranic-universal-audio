@@ -422,7 +422,7 @@ def test_undiscard_requires_reason(signed_in_client):
 
 
 # ---------------------------------------------------------------------------
-# GET /api/admin/requests  (Requests-tab list) + view-mark + unviewed-count
+# GET /api/admin/requests  (Requests-tab list)
 # ---------------------------------------------------------------------------
 
 
@@ -445,11 +445,9 @@ def test_list_requests_maintainer_open_redacts_and_diffs(signed_in_client):
     body = json.loads(res.data)
 
     assert body["counts"]["open"] == 1
-    assert body["unviewed_count"] == 1
     assert len(body["rows"]) == 1
     row = body["rows"][0]
     assert row["slug"] == "rec_pending"
-    assert row["viewed"] is False
     # maintainer: requester identity redacted, role retained
     assert "requester_login" not in row
     assert row["requester_role"] == "contributor"
@@ -468,39 +466,6 @@ def test_list_requests_owner_includes_requester_login(signed_in_client):
     row = body["rows"][0]
     assert row["requester_login"] == "requester"
     assert row["requester_hf_user_id"] == "u-requester"
-
-
-def test_view_marks_request_and_decrements_unviewed(signed_in_client):
-    client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
-    rid = json.loads(client.get("/api/admin/requests?status=open").data)["rows"][0]["id"]
-
-    res = client.post(f"/api/admin/requests/{rid}/view", headers=_HEADERS)
-    assert res.status_code == 200
-
-    after = json.loads(client.get("/api/admin/requests?status=open").data)
-    assert after["unviewed_count"] == 0
-    assert after["rows"][0]["viewed"] is True
-
-    # count endpoint agrees
-    cnt = json.loads(client.get("/api/admin/requests/unviewed-count").data)
-    assert cnt["count"] == 0
-
-
-def test_view_unknown_request_returns_404(signed_in_client):
-    client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
-    res = client.post("/api/admin/requests/rq_nope/view", headers=_HEADERS)
-    assert res.status_code == 404
-
-
-def test_unviewed_count_is_per_admin(signed_in_client):
-    """One admin viewing doesn't clear another admin's unviewed count."""
-    m_client, _ = signed_in_client(role="maintainer", hf_user_id="u-M")
-    rid = json.loads(m_client.get("/api/admin/requests?status=open").data)["rows"][0]["id"]
-    m_client.post(f"/api/admin/requests/{rid}/view", headers=_HEADERS)
-
-    o_client, _ = signed_in_client(role="owner", hf_user_id="u-O")
-    cnt = json.loads(o_client.get("/api/admin/requests/unviewed-count").data)
-    assert cnt["count"] == 1
 
 
 # ---------------------------------------------------------------------------

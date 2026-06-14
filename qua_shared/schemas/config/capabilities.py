@@ -451,6 +451,17 @@ CAPABILITIES: tuple[Capability, ...] = (
         maintainer=False,
     ),
     _c(
+        "notifications.receive_review_alerts",
+        G_ADMIN,
+        "Receive review alerts",
+        "Get a My Notifications card when a new request arrives, when a "
+        "contributor marks a recitation ready with written notes, or when a "
+        "segment is flagged or replied to. Owner-only by default; delegate to "
+        "maintainers to share the review load.",
+        contributor=False,
+        maintainer=False,
+    ),
+    _c(
         MANAGE_PERMISSIONS,
         G_ADMIN,
         "Manage permissions",

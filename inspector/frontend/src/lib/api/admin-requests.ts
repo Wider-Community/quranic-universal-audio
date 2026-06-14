@@ -1,10 +1,10 @@
 /**
  * Admin dashboard → Requests-tab API client.
  *
- * Backed by ``/api/admin/requests`` (maintainer+), ``/unviewed-count``
- * (maintainer+), and ``/<id>/view`` (maintainer+) — see
+ * Backed by ``/api/admin/requests`` (maintainer+) — see
  * ``inspector/routes/claims/requests.py``. Reject actions (owner-only) live in
- * ``lib/api/requests.ts`` (keyed by slug).
+ * ``lib/api/requests.ts`` (keyed by slug). "New request" awareness is surfaced
+ * via the My Notifications rail, so there is no unviewed-count / view-mark here.
  */
 
 import type { AdminRequestsResponse, ProbeResponse } from '../types/generated/schemas';
@@ -26,23 +26,6 @@ export async function fetchRequests(
     const res = await fetch(`/api/admin/requests?status=${status}`, { signal });
     if (!res.ok) throw new Error(`fetchRequests: HTTP ${res.status}`);
     return (await res.json()) as AdminRequestsResponse;
-}
-
-export async function fetchUnviewedRequestCount(
-    signal?: AbortSignal,
-): Promise<number> {
-    const res = await fetch('/api/admin/requests/unviewed-count', { signal });
-    if (!res.ok) throw new Error(`unviewed-count: HTTP ${res.status}`);
-    const body = (await res.json()) as { count?: number };
-    return body.count ?? 0;
-}
-
-export async function markRequestViewed(id: string): Promise<void> {
-    const res = await fetch(`/api/admin/requests/${id}/view`, {
-        method: 'POST',
-        headers: _JSON,
-    });
-    if (!res.ok) throw new Error(`markRequestViewed: HTTP ${res.status}`);
 }
 
 // ---- Intake (slugless new-combo / new-reciter) owner actions ----------------

@@ -26,7 +26,7 @@ from typing import Any
 
 from qua_shared.schemas import CAPABILITIES, CAPABILITIES_BY_ID, TIERS
 from qua_shared.schemas.config.capabilities import ANONYMOUS
-from services.db import current_db_seq, repo_permissions
+from services.db import current_db_seq, repo_access, repo_permissions
 from services.storage import cache
 
 from . import permissions
@@ -98,3 +98,15 @@ def capabilities_for(user_or_actor: Any) -> list[str]:
     """Every capability id the caller currently holds — for ``/api/me`` so the
     FE can gate UI immediately. Order follows the registry (stable)."""
     return [c.id for c in CAPABILITIES if can(user_or_actor, c.id)]
+
+
+def users_with_capability(capability: str) -> list[str]:
+    """The ``hf_user_id`` of every active member who currently holds
+    ``capability`` — the recipient set for owner-fanout notifications.
+
+    Owners always qualify (superusers); maintainers qualify only when an owner
+    has granted the capability to their tier from the Permissions tab. Resolved
+    through ``can()`` so it tracks runtime overrides. Non-members (plain
+    contributors with no role assignment) are never enumerated — they have no
+    role row, which is correct for review-alert recipients."""
+    return [m.hf_user_id for m in repo_access.active_members() if can(m, capability)]
