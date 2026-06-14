@@ -191,15 +191,21 @@ type ReciterCatalog = {
   riwayah?: string; style?: string; channel?: string;
   audio_category?: "by_surah" | "by_ayah";
   audio: {
-    chapter_urls: Record<string, string>;       // chapter (or ayah) number -> source audio URL
+    chapter_urls: Record<string, string>;        // chapter number -> source audio URL
     chapter_offsets_ms?: Record<string, number>; // present only for combined sources:
                                                  // chapter -> ms offset within its (shared) source file
     sample_rate_hz?: number; channels?: number;
     bitrate_mode?: string; bitrate_kbps_nominal?: number;
   };
-  coverage: { surahs: number; ayahs: number };
+  coverage: {
+    surahs: number; ayahs: number;
+    missing_surahs?: string;  // surahs not covered at all, e.g. "1-84" or "4,7,9,37,39-40,45,65"
+    missing_verses?: string;  // within-surah gaps, e.g. "75:18-40" or "7:116, 41:15"
+  };
 };
 ```
+
+`coverage.missing_surahs` and `coverage.missing_verses` describe what a recitation does **not** cover in concise `surah` / `surah:ayah` notation (consecutive numbers collapse to runs like `18-40`). A whole missing surah appears only in `missing_surahs`; a partly-covered surah's gaps appear only in `missing_verses`. Both keys are omitted when the recitation is complete. A missing verse is almost always upstream (the source omits it — commonly the Basmala `1:1` — or recites it incompletely), so it is excluded rather than shipped with a misaligned timestamp.
 
 ```jsonc
 {

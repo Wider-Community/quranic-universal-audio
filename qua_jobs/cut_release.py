@@ -375,7 +375,14 @@ def _audio_sources_from_manifest(
     return flat, {}
 
 
-def _build_catalog_json(rec: dict, audio_manifest: dict | None, verses: dict) -> bytes:
+def _build_catalog_json(
+    rec: dict,
+    audio_manifest: dict | None,
+    verses: dict,
+    *,
+    missing_surahs: str = "",
+    missing_verses: str = "",
+) -> bytes:
     """Per-recitation catalog.json bytes (orjson-equivalent serialisation).
 
     ``chapter_urls`` is keyed by chapter string (``"1"``) for by_surah and by
@@ -412,7 +419,12 @@ def _build_catalog_json(rec: dict, audio_manifest: dict | None, verses: dict) ->
             bitrate_mode=rec.get("bitrate_mode"),
             bitrate_kbps_nominal=rec.get("bitrate_kbps_nominal"),
         ),
-        coverage=ReleaseCoverage(surahs=len(surahs), ayahs=coverage_ayahs),
+        coverage=ReleaseCoverage(
+            surahs=len(surahs),
+            ayahs=coverage_ayahs,
+            missing_surahs=missing_surahs,
+            missing_verses=missing_verses,
+        ),
     )
     return _json_model_bytes(catalog)
 
@@ -551,6 +563,8 @@ def _build_changelog(
             "change_kind": m.get("change_kind"),
             "coverage_surahs": m.get("coverage_surahs"),
             "coverage_ayahs": m.get("coverage_ayahs"),
+            "missing_surahs": m.get("missing_surahs"),
+            "missing_verses": m.get("missing_verses"),
         }
         for m in members
     ]
@@ -855,10 +869,12 @@ def main() -> int:
     # 2. Build per-recitation artifacts and accumulate member rows.
     refs_dir = _code_root() / "data"
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
+    from qua_shared.coverage import missing_coverage, verse_counts_from_surah_info
     from qua_shared.surah_words import word_counts_from_surah_info
     from qua_shared.timestamps_dedup import select_complete_verses
 
     word_counts = word_counts_from_surah_info(surah_info)
+    surah_verse_counts = verse_counts_from_surah_info(surah_info)
 
     # qpc_hafs is a consumer-facing release asset. The staged image .gz is an
     # LFS pointer (HF auto-LFS by extension), so resolve the real decompressed
@@ -954,7 +970,22 @@ def main() -> int:
                 audio_manifest = json.loads(audio_manifest_path.read_bytes())
             except (json.JSONDecodeError, OSError):
                 audio_manifest = None
-        catalog_bytes = _build_catalog_json(rec, audio_manifest, verses)
+        # Concise coverage-gap notation (vs the full mushaf) for catalog.json +
+        # the changelog Missing column — whole missing surahs vs within-surah
+        # verse gaps, split so even a partial recitation stays short.
+        present_refs = {
+            (int(k.split(":")[0]), int(k.split(":")[1]))
+            for k in verses
+            if not k.startswith("_")
+        }
+        missing_surahs, missing_verses = missing_coverage(present_refs, surah_verse_counts)
+        catalog_bytes = _build_catalog_json(
+            rec,
+            audio_manifest,
+            verses,
+            missing_surahs=missing_surahs,
+            missing_verses=missing_verses,
+        )
 
         # content_hash — over letter tier + catalog bytes.
         content_hash = _sha256_hex(tier_files["letter_timestamps.json.gz"] + catalog_bytes)
@@ -982,6 +1013,8 @@ def main() -> int:
                 "ts_version": str(rec["ts_version"]),
                 "coverage_ayahs": coverage_ayahs,
                 "coverage_surahs": rec.get("chapter_count"),
+                "missing_surahs": missing_surahs,
+                "missing_verses": missing_verses,
                 "content_hash": content_hash,
                 "change_kind": change_kind,
                 "catalog_snapshot": catalog_snapshot,

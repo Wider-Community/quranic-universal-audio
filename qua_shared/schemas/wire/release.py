@@ -99,6 +99,23 @@ class ReleaseCoverage(BaseModel):
 
     surahs: int = Field(..., ge=0)
     ayahs: int = Field(..., ge=0)
+    #: Surahs with ZERO covered verses, as compact ascending runs of surah
+    #: numbers (``"1-84"``, ``"4,7,9,37,39-40,45,65"``). Omitted from the JSON
+    #: when empty so complete recitations stay byte-stable.
+    missing_surahs: str = ""
+    #: Within-surah verse gaps (a surah that IS partly covered), as
+    #: ``surah:ayah`` runs joined by ``", "`` (``"7:116, 41:15"``,
+    #: ``"75:18-40"``). A whole missing surah is in ``missing_surahs``, never
+    #: here. Omitted from the JSON when empty.
+    missing_verses: str = ""
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_missing(self, handler):
+        data = handler(self)
+        for key in ("missing_surahs", "missing_verses"):
+            if not data.get(key):
+                data.pop(key, None)
+        return data
 
 
 class ReleaseRecitationCatalog(BaseModel):

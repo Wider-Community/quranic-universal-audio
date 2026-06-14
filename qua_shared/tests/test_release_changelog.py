@@ -21,6 +21,8 @@ def _member(
     coverage_surahs=114,
     coverage_ayahs=None,
     name_ar="فلان",
+    missing_surahs="",
+    missing_verses="",
 ):
     return {
         "name_en": name_en,
@@ -31,6 +33,8 @@ def _member(
         "change_kind": change_kind,
         "coverage_surahs": coverage_surahs,
         "coverage_ayahs": coverage_ayahs,
+        "missing_surahs": missing_surahs,
+        "missing_verses": missing_verses,
     }
 
 
@@ -173,6 +177,43 @@ def test_table_cell_pipe_escaped():
         members=[_member("A | B")],
     )
     assert "A \\| B" in md
+
+
+def test_missing_column_and_callout_render_when_a_reciter_has_gaps():
+    members = [
+        _member("Complete One"),
+        _member("Juz Amma Only", missing_surahs="1-84"),
+        _member("Two Verses Short", missing_verses="7:116, 41:15"),
+    ]
+    md = render_changelog(
+        version="v2.0.0",
+        previous_version="v1.2.0",
+        release_date="12-06-2026",
+        members=members,
+    )
+    # New column header present.
+    assert "| Reciter | Riwayah | Style | Channel | Coverage | Missing |" in md
+    # Whole-surah gap rendered with the "surahs" prefix; verse gaps verbatim.
+    assert "surahs 1-84" in md
+    assert "7:116, 41:15" in md
+    # The complete reciter's cell is an em dash.
+    assert "| Complete One - فلان |" in md
+    assert "| — |" in md
+    # The explanatory callout appears once.
+    assert "**About missing verses.**" in md
+    assert md.count("**About missing verses.**") == 1
+
+
+def test_no_missing_callout_when_all_complete():
+    md = render_changelog(
+        version="v1.0.0",
+        previous_version=None,
+        release_date="d",
+        members=[_member("R"), _member("S")],
+    )
+    assert "About missing verses" not in md
+    # Column header still present; every cell is an em dash.
+    assert "| Coverage | Missing |" in md
 
 
 def test_schema_sections_are_collapsed():
