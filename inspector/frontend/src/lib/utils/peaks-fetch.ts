@@ -197,12 +197,14 @@ export function ensureSegmentPeaks(
 }
 
 /**
- * Prewarm a verse's peaks into the cache the waveform render reads, picking the
- * tier that render will actually use: baked chapter peaks if the chapter has
- * them, else the ffmpeg/CDN fallback for the exact verse window. Fire-and-forget
- * from a look-ahead (next sequential verse / shuffle target) so the post-jump
- * render is a cache hit instead of a cold fetch. `startMs`/`endMs` MUST match
- * the render's window (round of the verse's time_start_ms/time_end_ms).
+ * Prewarm a verse's peaks into the caches the TS waveform render reads. The TS
+ * waveform paints the baked chapter slice as an instant placeholder and then
+ * upgrades to the HD ffmpeg peaks (`reactToVerse`), so we warm BOTH: the baked
+ * chapter overview (cheap, one shared GET/chapter) and the per-verse HD ffmpeg
+ * window. Fire-and-forget from a look-ahead (next sequential verse / shuffle
+ * target) so the post-jump render AND its HD upgrade are both cache hits.
+ * `startMs`/`endMs` MUST match the render's window (round of the verse's
+ * time_start_ms/time_end_ms).
  */
 export async function prewarmVersePeaks(
     reciter: string,
@@ -212,11 +214,8 @@ export async function prewarmVersePeaks(
     endMs: number,
 ): Promise<void> {
     if (!reciter || !chapter) return;
-    try {
-        const map = await ensureChapterPeaks(reciter, chapter);
-        if (pickChapterPeaks(map, url ?? '')) return; // baked tier covers it
-    } catch { /* fall through to the ffmpeg/CDN fallback */ }
-    await ensureSegmentPeaks(reciter, url ?? '', startMs, endMs, chapter).catch(() => {});
+    void ensureChapterPeaks(reciter, chapter).catch(() => {}); // placeholder tier
+    await ensureSegmentPeaks(reciter, url ?? '', startMs, endMs, chapter).catch(() => {}); // HD upgrade
 }
 
 /** Test seam — clears the chapter- and segment-peaks caches. */

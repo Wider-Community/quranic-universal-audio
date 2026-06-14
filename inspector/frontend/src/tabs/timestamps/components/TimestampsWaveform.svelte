@@ -333,11 +333,12 @@
         // instant and keep their base — no flash on in-chapter advance.
         if (chapter && chapter !== _loadedPeaksChapter) _clearPeaks();
 
-        // FAST PATH: baked 10bps chapter peaks (server-cached, sliced
-        // client-side). For a by_surah reciter this is one ~6KB GET per chapter
-        // then a ~2µs slice per verse — replacing the 289-762ms per-verse
-        // ffmpeg POST. Falls through to ffmpeg only when the chapter has no
-        // baked peaks (un-backfilled / pre-publish / by_ayah without a match).
+        // PLACEHOLDER: baked 10bps chapter peaks (server-cached, sliced
+        // client-side). One ~6KB GET per chapter then a ~2µs slice per verse —
+        // paints instantly, but at 10bps int8 it's coarse on this full-width
+        // hero canvas, so it's only a placeholder: we always upgrade to the HD
+        // ffmpeg peaks below. When no baked peaks exist the HD path is primary.
+        let drewPlaceholder = false;
         if (chapter) {
             let chMap: Record<string, AudioPeaks> | null = null;
             try {
@@ -360,24 +361,27 @@
                     if (gen !== fetchGen) return;
                     _captureBase(key);
                     drawOverlays();
-                    return;
+                    drewPlaceholder = true;
+                    // fall through to the HD upgrade
                 }
             }
         }
 
-        // FALLBACK: per-verse ffmpeg peaks (verse-relative PeakBucket[]). Kept
-        // for reciters/chapters whose slim peaks aren't baked yet. Shared
-        // module cache (ensureSegmentPeaks) so a look-ahead prewarm of this same
-        // window is a cache hit here instead of a cold ffmpeg/CDN fetch.
+        // HD UPGRADE / PRIMARY: per-verse ffmpeg peaks (verse-exact float
+        // PeakBucket[] @30bps — 3× the temporal points + continuous amplitude
+        // vs the 10bps int8 placeholder). Shared module cache (ensureSegmentPeaks)
+        // so a look-ahead prewarm of this same window makes it a cache hit
+        // instead of a cold ffmpeg/CDN fetch. When a placeholder was drawn this
+        // REPLACES it; a fetch error/empty result keeps the placeholder.
         let entry: SegmentPeaks | null;
         try {
             entry = await ensureSegmentPeaks(reciter, safeUrl, startMs, endMs, chapter || undefined);
         } catch (e) {
-            console.error('Waveform peaks fetch failed:', e);
+            if (!drewPlaceholder) console.error('Waveform peaks fetch failed:', e);
             return;
         }
         if (gen !== fetchGen) return;
-        if (!entry || !entry.peaks?.length) { _clearPeaks(); return; }
+        if (!entry || !entry.peaks?.length) { if (!drewPlaceholder) _clearPeaks(); return; }
 
         peaks = entry.peaks;
         // ffmpeg peaks are verse-exact (no bucket-snap) — use the exact window.
