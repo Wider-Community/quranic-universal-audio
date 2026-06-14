@@ -85,6 +85,7 @@
         selectedVerse,
         type TsLoadedVerse,
     } from './stores/verse';
+    import { resolveShuffleTick, shouldFireShuffle, verseAt } from './utils/shuffle-tick';
     import { setupZoomLifecycle } from './utils/zoom';
 
     // ---- Local display constants ----
@@ -376,14 +377,11 @@
     /** Focus the verse containing `ms` (chapter-absolute), else the nearest
      *  preceding one. No-op if the focus is unchanged. */
     function focusAt(ms: number): void {
-        if (chapterVerses.length === 0) return;
-        let hit: ChapVerse | null = null;
-        for (const v of chapterVerses) {
-            if (ms >= v.startMs && ms < v.endMs) { hit = v; break; }
-            if (v.startMs <= ms) hit = v; // nearest preceding
+        const ref = verseAt(chapterVerses, ms);
+        if (ref && ref !== focusRef) {
+            const v = chapterVerses.find((x) => x.ref === ref);
+            if (v) setFocus(v);
         }
-        const v = hit ?? chapterVerses[0]!;
-        if (v.ref !== focusRef) setFocus(v);
     }
 
     // ---------------------------------------------------------------------
@@ -428,32 +426,54 @@
             return;
         }
 
-        focusAt(ms);
-        // rAF gives tight (~16 ms) boundary timing while the tab is active; the
-        // onTimeUpdate/onEnded media-clock backstop (onMount) catches the boundary
-        // when rAF is throttled (backgrounded tab / GC / heavy repaint), where it
-        // would otherwise overshoot by 1-3 words. The once-per-verse guard dedupes
-        // whichever fires first.
-        maybeFireShuffle(ms);
+        // Resolve the ayah-end shuffle boundary BEFORE advancing focus. Advancing
+        // focus first (the old order) would flip the verse the boundary is measured
+        // against to the NEXT ayah the instant the playhead crosses a contiguous
+        // seam — so a frame that overshoots the seam (heavy repaint right after a
+        // jump starves rAF, most visible when the just-loaded ayah is short) re-bases
+        // onto the next ayah and leaks it in full. Deciding fire-vs-focus together,
+        // against the auditioned ayah's captured end, bounds the leak to one frame.
+        const fv = get(loadedVerse);
+        const outcome = resolveShuffleTick({
+            verses: chapterVerses,
+            ms,
+            armed: getActiveTab() === TAB_NAMES.TIMESTAMPS && !get(loopTarget) && get(shuffleAyah),
+            focusEndMs: fv ? fv.tsSegEnd * 1000 : null,
+            guardMs: SHUFFLE_END_GUARD_MS,
+            firedForCurrentFocus: shuffleFiredForRef === focusRef,
+        });
+        if (outcome.kind === 'fire') {
+            shuffleFiredForRef = focusRef;
+            void shuffleJump(); // sets the new focus itself; hold focus this frame
+        } else if (outcome.ref && outcome.ref !== focusRef) {
+            const v = chapterVerses.find((x) => x.ref === outcome.ref);
+            if (v) setFocus(v);
+        }
         refreshDisplays();
     }
 
-    // Ayah-end shuffle boundary: jump to a random target when the playhead reaches
-    // the focus verse's end (once per verse). Called from both the rAF tick and the
-    // onTimeUpdate/onEnded media-clock backstop; reads the focus verse fresh so the
-    // boundary and the dedupe key never disagree. Gated to the active Timestamps tab
-    // so the shared dashPort backstop can't hijack Dashboard playback (its own
-    // gapless advance owns dashPort.onEnded when that tab is active).
-    function maybeFireShuffle(ms: number): void {
-        if (getActiveTab() !== TAB_NAMES.TIMESTAMPS) return;
-        if (get(loopTarget) || !get(shuffleAyah)) return;
+    // Media-clock backstop for the ayah-end shuffle: fire the jump when the playhead
+    // reaches the auditioned ayah's end. Driven off onTimeUpdate/onEnded so the
+    // boundary is still caught when rAF is throttled (backgrounded tab) — where the
+    // tick (and so focus) isn't advancing, so the focus verse IS the auditioned one.
+    // Gated to the active Timestamps tab so the shared dashPort backstop can't hijack
+    // Dashboard playback (its own gapless advance owns dashPort.onEnded when active).
+    function maybeFireShuffle(ms: number): boolean {
+        if (getActiveTab() !== TAB_NAMES.TIMESTAMPS) return false;
         const fv = get(loadedVerse);
-        if (!fv) return;
-        const endMs = fv.tsSegEnd * 1000;
-        if (ms >= endMs - SHUFFLE_END_GUARD_MS && shuffleFiredForRef !== focusRef) {
+        const fire = shouldFireShuffle({
+            armed: !get(loopTarget) && get(shuffleAyah),
+            ms,
+            focusEndMs: fv ? fv.tsSegEnd * 1000 : null,
+            guardMs: SHUFFLE_END_GUARD_MS,
+            firedForCurrentFocus: shuffleFiredForRef === focusRef,
+        });
+        if (fire) {
             shuffleFiredForRef = focusRef;
             void shuffleJump();
+            return true;
         }
+        return false;
     }
 
     function refreshDisplays(): void {
