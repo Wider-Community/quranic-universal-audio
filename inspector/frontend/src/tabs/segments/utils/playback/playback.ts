@@ -168,15 +168,20 @@ function _maybeSkipDeletedGap(timeMs: number): boolean {
         // the chapter's trailing audio.
         segPort.pause();
         setPlayingSegment(null);
+        segCurrentIdx.set(-1);
         _drawLoop.stop();
         return true;
     }
 
-    // Jump the active pair (drives class:playing + the playhead row) and seek
-    // to the surviving segment. `segCurrentIdx`, warmup, and on-demand peaks are
-    // reconciled by `onSegTimeUpdate`'s next tick once the playhead lands inside
-    // `next` and its crossing block fires.
+    // Jump the active pair (drives class:playing + the playhead row) and seek to
+    // the surviving segment. `segCurrentIdx` MUST advance in lockstep: this same
+    // rAF loop calls `updateSegHighlight` right after us, and it forces
+    // `playingSegmentIndex` back onto `segCurrentIdx` every frame. Leaving
+    // `segCurrentIdx` on the segment we just left lets that bridge snap the
+    // active pair backwards until `onSegTimeUpdate`'s slower tick catches up —
+    // the highlight stalls/repeats on the previous segment across the gap.
     setPlayingSegment({ chapter: next.chapter ?? active.chapter, index: next.index });
+    segCurrentIdx.set(next.index);
     segPort.seek(next.time_start);
     return true;
 }

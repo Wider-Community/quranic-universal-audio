@@ -28,7 +28,7 @@
         verseTranslations,
     } from '../stores/display';
     import type { TsLoopTarget } from '../stores/playback';
-    import { autoMode, loopTarget } from '../stores/playback';
+    import { loopTarget } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
@@ -476,8 +476,7 @@
 
     /**
      * Toggle loop on the given token. If it's already the looped target,
-     * exit loop mode; otherwise engage loop + seek to its start. Also
-     * clears `autoMode` (loop + auto-advance are mutually exclusive).
+     * exit loop mode; otherwise engage loop + seek to its start.
      */
     function toggleLoopOn(target: TsLoopTarget): void {
         const lv = get(loadedVerse);
@@ -492,7 +491,6 @@
             return;
         }
         loopTarget.set(target);
-        autoMode.set(null);
         seekToTime(target.startSec + lv.tsSegOffset);
         // Zoom/pan is handled by the centralized `loopTarget` subscription in
         // `utils/zoom.ts::setupZoomLifecycle` — no per-callsite hook needed.

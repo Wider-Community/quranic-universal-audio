@@ -87,6 +87,7 @@
         selectedVerse,
         type TsLoadedVerse,
     } from './stores/verse';
+    import { resolveShuffleTick, shouldFireShuffle, verseAt } from './utils/shuffle-tick';
     import { setupZoomLifecycle } from './utils/zoom';
 
     // ---- Local display constants ----
@@ -379,14 +380,25 @@
     /** Focus the verse containing `ms` (chapter-absolute), else the nearest
      *  preceding one. No-op if the focus is unchanged. */
     function focusAt(ms: number): void {
-        if (chapterVerses.length === 0) return;
-        let hit: ChapVerse | null = null;
-        for (const v of chapterVerses) {
-            if (ms >= v.startMs && ms < v.endMs) { hit = v; break; }
-            if (v.startMs <= ms) hit = v; // nearest preceding
+        const ref = verseAt(chapterVerses, ms);
+        if (ref && ref !== focusRef) {
+            const v = chapterVerses.find((x) => x.ref === ref);
+            if (v) setFocus(v);
         }
-        const v = hit ?? chapterVerses[0]!;
-        if (v.ref !== focusRef) setFocus(v);
+    }
+
+    /** True while a cross-source jump is mid-swap: the shared player already points
+     *  at (and may already be playing) the new chapter, but `chapterVerses` /
+     *  `focusRef` / `loadedVerse` still describe the previous chapter until
+     *  syncChapter finishes loading and sets `loadedChapterKey`. `loadedChapterKey`
+     *  trails `playerContext` across the whole window (incl. before `tsLoading`
+     *  flips at line ~289), so it — not `tsLoading` — is the reliable guard. tick()
+     *  and the media-clock backstop both no-op during this window so the new
+     *  playhead time isn't read against stale verses (wrong-verse focus +
+     *  double-fire). */
+    function chapterSwapInFlight(): boolean {
+        const ctx = get(playerContext);
+        return `${ctx.delivery?.slug ?? ''}:${ctx.surahNum ?? 0}` !== loadedChapterKey;
     }
 
     // ---------------------------------------------------------------------
@@ -431,32 +443,62 @@
             return;
         }
 
-        focusAt(ms);
-        // rAF gives tight (~16 ms) boundary timing while the tab is active; the
-        // onTimeUpdate/onEnded media-clock backstop (onMount) catches the boundary
-        // when rAF is throttled (backgrounded tab / GC / heavy repaint), where it
-        // would otherwise overshoot by 1-3 words. The once-per-verse guard dedupes
-        // whichever fires first.
-        maybeFireShuffle(ms);
+        // Resolve the ayah-end shuffle boundary BEFORE advancing focus. Advancing
+        // focus first (the old order) would flip the verse the boundary is measured
+        // against to the NEXT ayah the instant the playhead crosses a contiguous
+        // seam — so a frame that overshoots the seam (heavy repaint right after a
+        // jump starves rAF, most visible when the just-loaded ayah is short) re-bases
+        // onto the next ayah and leaks it in full. Deciding fire-vs-focus together,
+        // against the auditioned ayah's captured end, bounds the leak to one frame.
+        const fv = get(loadedVerse);
+        const outcome = resolveShuffleTick({
+            verses: chapterVerses,
+            ms,
+            swapInFlight: chapterSwapInFlight(),
+            armed: getActiveTab() === TAB_NAMES.TIMESTAMPS && !get(loopTarget) && get(shuffleAyah),
+            focusEndMs: fv ? fv.tsSegEnd * 1000 : null,
+            guardMs: SHUFFLE_END_GUARD_MS,
+            firedForCurrentFocus: shuffleFiredForRef === focusRef,
+        });
+        // Mid-swap: freeze focus + display (no refresh) so the new playhead time
+        // isn't drawn against the old chapter's verse; syncChapter resumes us.
+        if (outcome.kind === 'idle') return;
+        if (outcome.kind === 'fire') {
+            shuffleFiredForRef = focusRef;
+            void shuffleJump(); // sets the new focus itself; hold focus this frame
+        } else if (outcome.ref && outcome.ref !== focusRef) {
+            const v = chapterVerses.find((x) => x.ref === outcome.ref);
+            if (v) setFocus(v);
+        }
         refreshDisplays();
     }
 
-    // Ayah-end shuffle boundary: jump to a random target when the playhead reaches
-    // the focus verse's end (once per verse). Called from both the rAF tick and the
-    // onTimeUpdate/onEnded media-clock backstop; reads the focus verse fresh so the
-    // boundary and the dedupe key never disagree. Gated to the active Timestamps tab
-    // so the shared dashPort backstop can't hijack Dashboard playback (its own
-    // gapless advance owns dashPort.onEnded when that tab is active).
-    function maybeFireShuffle(ms: number): void {
-        if (getActiveTab() !== TAB_NAMES.TIMESTAMPS) return;
-        if (get(loopTarget) || !get(shuffleAyah)) return;
+    // Media-clock backstop for the ayah-end shuffle: fire the jump when the playhead
+    // reaches the auditioned ayah's end. Driven off onTimeUpdate/onEnded so the
+    // boundary is still caught when rAF is throttled (backgrounded tab) — where the
+    // tick (and so focus) isn't advancing, so the focus verse IS the auditioned one.
+    // Gated to the active Timestamps tab so the shared dashPort backstop can't hijack
+    // Dashboard playback (its own gapless advance owns dashPort.onEnded when active).
+    function maybeFireShuffle(ms: number): boolean {
+        if (getActiveTab() !== TAB_NAMES.TIMESTAMPS) return false;
+        // Mid-swap the timeupdate clock is the NEW chapter's but loadedVerse is the
+        // OLD one — measuring against it would fire against the wrong ayah. tick()
+        // also freezes focus here, so this is belt-and-braces, not the sole guard.
+        if (chapterSwapInFlight()) return false;
         const fv = get(loadedVerse);
-        if (!fv) return;
-        const endMs = fv.tsSegEnd * 1000;
-        if (ms >= endMs - SHUFFLE_END_GUARD_MS && shuffleFiredForRef !== focusRef) {
+        const fire = shouldFireShuffle({
+            armed: !get(loopTarget) && get(shuffleAyah),
+            ms,
+            focusEndMs: fv ? fv.tsSegEnd * 1000 : null,
+            guardMs: SHUFFLE_END_GUARD_MS,
+            firedForCurrentFocus: shuffleFiredForRef === focusRef,
+        });
+        if (fire) {
             shuffleFiredForRef = focusRef;
             void shuffleJump();
+            return true;
         }
+        return false;
     }
 
     function refreshDisplays(): void {
@@ -477,10 +519,19 @@
         // Prefer the pre-rolled (warm) target so the jump can adopt gaplessly;
         // else roll a fresh one (gapped fallback).
         const consumed = consumeShuffle();
+        // Warm miss → the jump must roll a target and load a new source (both
+        // awaited, and slow off the bucket) while nothing else stops the current
+        // chapter, so it would keep playing into the next verse until the new source
+        // lands — the short-verse leak. Pause now so the gap is silence; the landing
+        // (seekFocus / syncChapter's pendingSeek) resumes playback on the target.
+        // Warm hits stay gapless: adoptGapless swaps + plays synchronously.
+        const wasPlaying = !consumed && !dashPort.paused;
+        if (!consumed) dashPort.pause();
         const target = consumed?.target
             ?? await getRandomTarget(randomReciter ? {} : { reciter: curSlug }).catch(() => null);
         if (!target) {
             if (consumed) discardWarm(consumed.el);
+            else if (wasPlaying) dashPort.play(); // no target to jump to — restore playback
             return;
         }
 
