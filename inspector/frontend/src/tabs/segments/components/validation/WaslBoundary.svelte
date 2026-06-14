@@ -27,6 +27,13 @@
      * After commit, the picker clears its UID from pendingWaslConfirm,
      * unhooks focus, and calls resumePendingChain() so the post-split
      * chain advances to the next piece's ref-edit.
+     *
+     * Keyboard (while this boundary is the paused chain step): ← highlights
+     * WASL, → highlights WAQF (positional), Tab toggles between them, and
+     * Enter commits the highlighted choice — advancing the chain to the next
+     * child's ref-edit. Handled locally (the picker auto-focuses a button)
+     * and stopPropagation'd so the global Segments dispatcher doesn't also
+     * seek / cycle focus away on those keys. Space + other keys fall through.
      */
 
     import { tick } from 'svelte';
@@ -51,6 +58,12 @@
     export let rightSeg: Segment;
 
     let waslBtnEl: HTMLButtonElement | undefined;
+    let waqfBtnEl: HTMLButtonElement | undefined;
+
+    /** Transient keyboard highlight while this boundary is the paused chain
+     *  step. ←/→ pick positionally (WASL · WAQF), Tab toggles, Enter commits.
+     *  Null whenever this picker isn't the active step. */
+    let highlighted: 'wasl' | 'waqf' | null = null;
 
     $: leftUid = leftSeg.segment_uid ?? '';
     $: sameChapter =
@@ -66,8 +79,42 @@
     // appears; otherwise the user sees the ring mid-scroll and may miss it.
     $: if (leftUid && $focusWaslBoundary === leftUid && waslBtnEl) {
         const el = waslBtnEl;
+        highlighted = 'wasl';
         el.scrollIntoView({ block: 'center', behavior: 'smooth' });
         void tick().then(() => el.focus());
+    }
+
+    /** Move the keyboard highlight to `side` and pull DOM focus with it so the
+     *  focus ring tracks the staged choice. */
+    function setHighlight(side: 'wasl' | 'waqf', e: KeyboardEvent): void {
+        e.preventDefault();
+        e.stopPropagation();
+        highlighted = side;
+        (side === 'wasl' ? waslBtnEl : waqfBtnEl)?.focus();
+    }
+
+    /** Keyboard nav for the paused chain step: ← / → highlight WASL / WAQF
+     *  positionally, Tab toggles, Enter commits the highlighted choice and
+     *  advances the chain. Only intercepts while this boundary is pending —
+     *  other keys (Space preview, …) bubble to the global Segments dispatcher. */
+    function onPickerKeydown(e: KeyboardEvent): void {
+        if (!isPending) return;
+        switch (e.key) {
+            case 'ArrowLeft':
+                setHighlight('wasl', e);
+                break;
+            case 'ArrowRight':
+                setHighlight('waqf', e);
+                break;
+            case 'Tab':
+                setHighlight(highlighted === 'wasl' ? 'waqf' : 'wasl', e);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                e.stopPropagation();
+                commit(highlighted !== 'waqf');
+                break;
+        }
     }
 
     function commit(value: boolean): void {
@@ -92,6 +139,7 @@
         } catch (err) {
             console.warn('WaslBoundary: commit failed:', err);
         } finally {
+            highlighted = null;
             clearWaslPending(leftUid);
             focusWaslBoundary.set(null);
             // Re-enter the chain handoff. If a pending wasl gate was the
@@ -130,19 +178,24 @@
                 type="button"
                 class="choice"
                 class:active={!isPending && isWasl}
+                class:highlighted={isPending && highlighted === 'wasl'}
                 aria-pressed={!isPending && isWasl}
                 title="Wasl — continuous recitation across this boundary"
                 use:editGate
+                on:keydown={onPickerKeydown}
                 on:click={() => commit(true)}
             >WASL</button>
             <span class="sep" aria-hidden="true">·</span>
             <button
+                bind:this={waqfBtnEl}
                 type="button"
                 class="choice"
                 class:active={!isPending && !isWasl}
+                class:highlighted={isPending && highlighted === 'waqf'}
                 aria-pressed={!isPending && !isWasl}
                 title="Waqf — the reciter stopped at this boundary"
                 use:editGate
+                on:keydown={onPickerKeydown}
                 on:click={() => commit(false)}
             >WAQF</button>
         </span>
@@ -210,6 +263,12 @@
     }
     .choice.active:hover {
         color: var(--accent-strong);
+    }
+    /* Staged keyboard choice during the paused chain step — accent it so the
+       pending selection reads clearly before Enter commits it. */
+    .choice.highlighted {
+        color: var(--accent);
+        font-weight: 600;
     }
     .choice:focus-visible {
         outline: 2px solid var(--accent);

@@ -93,3 +93,7 @@ Row-owned edit actions (A/S/E/G + delete) and card-owned ones (L ignore, F auto-
 5. `npm run check` / `lint` / `test`. Store behaviour is covered by `tabs/segments/shortcuts/__tests__/store.test.ts`.
 
 Structural keys (Enter / Escape / Tab / in-edit arrows / Ctrl+S / R) are intentionally `rebindable: false` so confirm/cancel/stepper stay stable.
+
+## Self-contained widgets (outside the dispatcher)
+
+`WaslBoundary.svelte` — the WASL/WAQF picker that pauses a cross-verse split chain after each child's ref-edit — owns its own keyboard, not the dispatcher. While the boundary is the paused step (auto-focused), `←`/`→` highlight WASL/WAQF positionally, `Tab` toggles, and `Enter` commits the highlighted choice and advances the chain to the next child. It `stopPropagation`s those keys so the global handler doesn't also seek / move focus; everything else (Space preview, …) falls through to `handleSegmentsKey`.
