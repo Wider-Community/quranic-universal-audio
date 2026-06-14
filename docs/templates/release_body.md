@@ -21,6 +21,8 @@ The release-level `manifest.json` and `catalog.json` index the whole release; ea
 
 {{ recitation_changes }}
 
+> ⚠️ A missing verse is almost always upstream (the source omits it, has an audio issue, or missing words). This is usually discovered during alignment and review, and we choose to not release those verses. 
+
 ## How audio and timestamps pair
 
 `catalog.json` contains the audio URLs for each recitation which can be streamed/downloaded directly, and every timestamp value is milliseconds relative to that matching source audio.
@@ -55,7 +57,7 @@ Use `shard.py` when your app prefers per-surah files locally:
 python shard.py word_timestamps.json.gz --out-dir per_surah
 ```
 
-By design, timestamps have no gaps between them except at pauses, such that highlighting appears smooth and continuous during one breath. 
+By design, timestamps have no gaps between them except at pauses, making highlighting appear smooth and continuous during one breath. 
 
 ## Programmatic use
 
@@ -205,7 +207,7 @@ type ReciterCatalog = {
 };
 ```
 
-`coverage.missing_surahs` and `coverage.missing_verses` describe what a recitation does **not** cover in concise `surah` / `surah:ayah` notation (consecutive numbers collapse to runs like `18-40`). A whole missing surah appears only in `missing_surahs`; a partly-covered surah's gaps appear only in `missing_verses`. Both keys are omitted when the recitation is complete. A missing verse is almost always upstream (the source omits it — commonly the Basmala `1:1` — or recites it incompletely), so it is excluded rather than shipped with a misaligned timestamp.
+`coverage.missing_surahs` and `coverage.missing_verses` describe what a recitation does **not** cover in concise `surah` / `surah:ayah` notation (consecutive numbers collapse as `18-40`). A whole missing surah appears only in `missing_surahs`; a partly-covered surah's gaps appear only in `missing_verses`. Both keys are omitted when the recitation is complete.
 
 ```jsonc
 {

@@ -241,11 +241,13 @@ def edit_delivery(
     style: str | None = None,
     recording_context: str | None = None,
     recording_year: int | None = None,
+    variant_label: str | None = None,
     reason: str | None = None,
 ) -> Delivery:
-    """Mutate a delivery row in place. ``slug``/``reciter_id`` immutable. Only
-    the legacy editable surface (riwayah/style/recording_context/recording_year)
-    is exposed. Invalid vocab FK → ``InvalidCatalogChange`` (SQLite FK)."""
+    """Mutate a delivery row in place. ``slug``/``reciter_id`` immutable. Editable
+    surface: riwayah/style/recording_context/recording_year + ``variant_label``
+    (the free-text UI distinguisher between same-reciter deliveries, e.g. Qasr vs
+    Tawassut). Invalid vocab FK → ``InvalidCatalogChange`` (SQLite FK)."""
     _require_capability(actor, "catalog.edit")
     existing = repo_catalog.find_delivery(slug)
     if existing is None:
@@ -255,6 +257,7 @@ def edit_delivery(
         "style": style,
         "recording_context": recording_context,
         "recording_year": recording_year,
+        "variant_label": variant_label,
     }
     patch: dict = {}
     for field, new in proposed.items():
