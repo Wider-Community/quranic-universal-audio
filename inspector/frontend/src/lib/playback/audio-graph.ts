@@ -60,16 +60,29 @@ export function _getCtx(): AudioContext | null {
     }
 }
 
+/** Last non-zero latency we observed off a running context, in ms. The
+ *  browser reports `outputLatency` as 0 while the context is suspended/just
+ *  resumed and on the very first play (before the kill-switch graph is built
+ *  — `getAudioGraph` refuses to build under a suspended ctx). Caching the
+ *  last good value keeps the visual compensation stable across those windows
+ *  instead of snapping back to 0 (cursor/footer jumping forward) every time
+ *  the live read momentarily returns 0. */
+let _lastOutputLatencyMs = 0;
+
 /** Platform audio output latency in ms — `baseLatency + outputLatency` off
  *  the shared AudioContext. This is how far the media clock (`el.currentTime`)
  *  runs AHEAD of the sound actually reaching the speakers (~20–30 ms wired,
- *  100–300 ms on Bluetooth). Returns 0 when the context is null/suspended or
- *  the values aren't finite, so callers degrade to no compensation. */
+ *  100–300 ms on Bluetooth). When the live read is 0 (context null/suspended,
+ *  values not finite, or a browser that reports 0 before the graph is in the
+ *  signal path) it falls back to the last non-zero value seen this session, so
+ *  callers degrade to the best estimate available rather than no compensation. */
 export function getOutputLatencyMs(): number {
     const ctx = _getCtx();
-    if (!ctx) return 0;
+    if (!ctx) return _lastOutputLatencyMs;
     const l = (ctx.baseLatency || 0) + (ctx.outputLatency || 0);
-    return Number.isFinite(l) ? l * 1000 : 0;
+    const ms = Number.isFinite(l) ? l * 1000 : 0;
+    if (ms > 0) _lastOutputLatencyMs = ms;
+    return ms > 0 ? ms : _lastOutputLatencyMs;
 }
 
 /** Media-clock ms → display ms: subtract the platform output latency so a

@@ -26,12 +26,14 @@
     import ClaimButton from '../../../../lib/components/ClaimButton.svelte';
     import type { CombinationSelection } from '../../../../lib/components/picker/combination-picker-types';
     import CombinationPicker from '../../../../lib/components/picker/CombinationPicker.svelte';
+    import LoadingSpinner from '../../../../lib/components/player/LoadingSpinner.svelte';
     import SurahPopover from '../../../../lib/components/player/SurahPopover.svelte';
     import ReciterChip from '../../../../lib/components/ReciterChip.svelte';
     import Icon from '../../../../lib/icons/Icon.svelte';
     import type { IconName } from '../../../../lib/icons/index';
     import { editingMode } from '../../../../lib/stores/editing-mode';
     import type { PublicBucket } from '../../../../lib/types/public-bucket';
+    import { displayTimeMs } from '../../../../lib/playback/audio-graph';
     import { LS_KEYS } from '../../../../lib/utils/constants';
     import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
     import { getSurahInfo, surahInfoReady } from '../../../../lib/utils/surah-info';
@@ -55,6 +57,7 @@
         isMainAudioPlaying,
         playbackSpeed,
         playingSegmentIndex,
+        segAudioBuffering,
         segAudioElement,
         segPort,
         segPortReady,
@@ -113,9 +116,14 @@
     let footerEl: HTMLDivElement | null = null;
     let audioEl: HTMLAudioElement | null = null;
 
-    // Local mirror of `segPort.currentTimeMs()` so the progress bar can
-    // be reactive without polling. Written by the onTimeUpdate
-    // subscription mounted below.
+    // Local mirror of the AUDIBLE playback position (ms) so the progress bar
+    // and elapsed clock can be reactive without polling. Written by the
+    // onTimeUpdate subscription below, which compensates the raw media clock
+    // (`el.currentTime`, the decode position) for platform output latency via
+    // `displayTimeMs` — the same compensation the waveform cursor uses
+    // (`playback.ts::drawActivePlayhead`). Without this the bar leads the
+    // recitation by the output latency (issue #172). Display-only: control
+    // paths (seek, segment-crossing) keep reading the raw clock off the port.
     let currentMs = 0;
 
     // Live mirror of `<audio>.duration` (ms), kept fresh by the
@@ -179,8 +187,21 @@
                 segPort.onPlay(startSegAnimation),
                 segPort.onPause(stopSegAnimation),
                 segPort.onEnded(onSegAudioEnded),
+                // First audible frame — the click→sound gap is over, so drop
+                // the play-button buffering spinner (issue #172).
+                segPort.onPlaying(() => segAudioBuffering.set(false)),
+                // A media error means the audible frame will never come —
+                // don't strand the spinner.
+                segPort.onError(() => segAudioBuffering.set(false)),
                 segPort.onTimeUpdate((fileMs) => {
-                    currentMs = fileMs;
+                    // Display the audible position; `onSegTimeUpdate` keeps the
+                    // raw clock for segment-crossing / highlight control logic.
+                    // While buffering (play committed but not yet audible) the
+                    // synchronous seek fires a `timeupdate` at the destination
+                    // position — leave the bar where it was so it doesn't jump
+                    // AHEAD of the still-silent audio (issue #172). The first
+                    // post-`playing` timeupdate resumes normal tracking.
+                    if (!get(segAudioBuffering)) currentMs = displayTimeMs(fileMs);
                     onSegTimeUpdate(fileMs);
                 }),
             ];
@@ -584,10 +605,12 @@
                     <button
                         type="button"
                         class="play-btn"
+                        class:buffering={$segAudioBuffering}
                         disabled={!canPlay}
                         on:click={handlePlayClick}
-                        aria-label={playGlyph === 'pause' ? 'Pause' : 'Play'}
-                    ><Icon name={playGlyph} size={18} /></button>
+                        aria-busy={$segAudioBuffering}
+                        aria-label={$segAudioBuffering ? 'Loading audio' : playGlyph === 'pause' ? 'Pause' : 'Play'}
+                    >{#if $segAudioBuffering}<LoadingSpinner color="var(--accent-fg)" />{:else}<Icon name={playGlyph} size={18} />{/if}</button>
 
                     <div class="transport-right">
                         <button
@@ -983,6 +1006,11 @@
     }
     .play-btn:hover:not(:disabled) { background: var(--accent-strong); }
     .play-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* Buffering: the play was committed but the first audible frame hasn't
+       arrived (cold segment fetch). The shared <LoadingSpinner> replaces the
+       glyph so the control doesn't falsely read as "playing" during the
+       silent gap. */
 
     /* Secondary transport buttons — 36px, visually subordinate to the 40px play */
     .speed-cell {

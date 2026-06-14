@@ -57,6 +57,7 @@ import {
     playbackSpeed,
     playButtonLabel,
     playingSegmentIndex,
+    segAudioBuffering,
     segPort,
     setPlayingSegment,
 } from '../../stores/playback';
@@ -199,6 +200,7 @@ export function resetHighlightRefs(): void {
  *  swap. */
 export function disposeSegPlayback(): void {
     _drawLoop.stop();
+    segAudioBuffering.set(false);
     _segRange?.dispose();
     _segRange = null;
 }
@@ -369,6 +371,14 @@ export function playFromSegment(
     const resolvedChapter = chapter ?? seg.chapter ?? 0;
     const isAccordionPlay = opts?.isAccordionPlay ?? false;
 
+    // Raise the buffering flag the instant a play is committed: the button
+    // flips to "pause" and the playhead jumps to seg.time_start now, but the
+    // clicked segment's audio bytes may not be buffered, so the first audible
+    // frame is hundreds of ms away. Cleared on the `playing` event (see the
+    // SegmentsFooter `onPlaying` sub) so the spinner spans exactly the
+    // click→audible gap (issue #172).
+    segAudioBuffering.set(true);
+
     // Bind the port to THIS seg's source. Cross-chapter accordion rows
     // (validation cards mounting rows from other chapters) and main-list
     // rows in the active chapter both flow through here. setSource is a
@@ -521,6 +531,9 @@ export function onSegPlayClick(): void {
             // sail past their segment boundary on resume.
             ensureBoundedRange();
             segPort.setPlaybackRate(get(playbackSpeed));
+            // Resume can also rebuffer (paused long enough for the forward
+            // buffer to drain); show the spinner until the next audible frame.
+            segAudioBuffering.set(true);
             segPort.play();
         }
     } else {
@@ -689,6 +702,8 @@ export function stopSegAnimation(): void {
     playButtonLabel.set('Play');
     if (get(activeAudioSource) === 'main') activeAudioSource.set(null);
     isMainAudioPlaying.set(false);
+    // A pause cancels any in-flight startup buffer wait — drop the spinner.
+    segAudioBuffering.set(false);
     _drawLoop.stop();
 }
 
@@ -696,6 +711,7 @@ export function onSegAudioEnded(): void {
     // Chapter audio file ended (user let it play through). Clear the active
     // pair, tear down any segment-bounded range, and stop the rAF.
     setPlayingSegment(null);
+    segAudioBuffering.set(false);
     _segRange?.dispose();
     _segRange = null;
     _drawLoop.stop();

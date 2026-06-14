@@ -2,6 +2,8 @@
     /** Player transport controls: prev surah · -15s · play|pause · +15s · next surah. */
     import { createEventDispatcher } from 'svelte';
 
+    import LoadingSpinner from './LoadingSpinner.svelte';
+
     export let isPlaying = false;
     export let isLoading = false;
     export let canPlay = true;
@@ -38,7 +40,7 @@
         aria-busy={isLoading}
         disabled={!canPlay || isLoading}
         on:click={() => dispatch('toggle')}
-    >{isPlaying ? '⏸' : '▶'}</button>
+    >{#if isLoading}<LoadingSpinner color="var(--accent-fg)" />{:else}{isPlaying ? '⏸' : '▶'}{/if}</button>
     <button type="button" class="btn" aria-label="Forward 15 seconds" on:click={() => dispatch('seekForward')}>»</button>
     <button
         type="button"
@@ -86,36 +88,16 @@
         background: var(--accent-strong);
         color: var(--accent-fg);
     }
-    /* Loading: pulse a ring around the play button until audio is ready
-     * to play immediately. The play/pause glyph stays visible — only the
-     * ring signals "buffering". Ring is a ::before pseudo-element so it
-     * doesn't interfere with the click target. */
+    /* Loading: the shared <LoadingSpinner> replaces the play/pause glyph
+     * until the first audible frame (`playing`), so the control reads as
+     * "buffering" rather than falsely "playing" during the click/seek →
+     * sound gap. */
     .btn.primary.loading {
         cursor: progress;
     }
-    /* The .loading disc itself keeps full opacity so the glyph stays
+    /* The .loading disc itself keeps full opacity so the spinner stays
      * legible — override the generic :disabled dim. */
     .btn.primary.loading:disabled {
         opacity: 1;
-    }
-    .btn.primary.loading::before {
-        content: '';
-        position: absolute;
-        inset: -3px;
-        border-radius: 50%;
-        border: 2px solid var(--accent);
-        animation: player-ring-pulse 1.2s ease-in-out infinite;
-        pointer-events: none;
-    }
-    @keyframes player-ring-pulse {
-        0%   { transform: scale(1);    opacity: 0.35; }
-        50%  { transform: scale(1.18); opacity: 1; }
-        100% { transform: scale(1);    opacity: 0.35; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-        .btn.primary.loading::before {
-            animation: none;
-            opacity: 0.7;
-        }
     }
 </style>
