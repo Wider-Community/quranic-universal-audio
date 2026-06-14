@@ -28,6 +28,13 @@ Symptom → likely root → first probe. Ordered by area, not severity. VBR-only
 | Click/pop at pause | Kill-switch ramp duration too short, or gain was already 0 | Default 5 ms ramp. Check `cutAudio` not called twice. |
 | Glitch at clip boundary in advance mode | `endMs` clip end didn't have post-roll pad — boundary flush has no audio to drain | Bump `defaultPadMs` on the AudioPort instance. VBR-specific — see `vbr.md`. |
 
+## Playhead / progress runs AHEAD of the audio
+
+| Symptom | Likely root | First probe |
+|---|---|---|
+| Waveform cursor and/or footer progress bar lead the recitation by a constant offset ("looks like the start should be cropped"); only on SOME clients (e.g. Brave/Edge laptop), maintainer can't repro | `el.currentTime` is the decode/render clock and leads the AUDIBLE sink by the platform output latency (Web Audio graph buffer + OS sink, ~20–30 ms wired, 50–300 ms on some stacks/BT). The rAF cursor + footer track `currentTime`, so they lead by that latency. Client-audio-stack dependent → not reproducible on a low-latency setup. NOT network/region (a slow network makes the cursor WAIT on a pinned `currentTime`, it can't lead). | Reporter console: `_getCtx()?.outputLatency`, `_getCtx()?.baseLatency`, `_getCtx()?.state`. Enable `localStorage.insp_warmup_log='true'` → `[play] FIRST audible frame …ms` gap. |
+| The compensation (`displayTimeMs`) doesn't fix it | (a) The **footer** bar/elapsed must also be compensated — it reads the raw clock (`SegmentsFooter.svelte` `currentMs = displayTimeMs(fileMs)`), the cursor is done in `playback.ts::drawActivePlayhead`. (b) `getOutputLatencyMs` returns 0 when the ctx is suspended / on the first play before the kill-switch graph is built / a browser reports `outputLatency` 0 — it now caches the last non-zero reading to bridge those windows. If the browser genuinely reports ~0 latency yet the lead is perceived, `ctx.outputLatency` is under-reporting and only a user-adjustable sync offset can correct it. | `audio-graph.ts::getOutputLatencyMs` / `displayTimeMs`; confirm BOTH `drawActivePlayhead` and the footer `onTimeUpdate` apply it. |
+
 ## VBR seek (see `vbr.md` for full coverage)
 
 | Symptom | Likely root | First probe |

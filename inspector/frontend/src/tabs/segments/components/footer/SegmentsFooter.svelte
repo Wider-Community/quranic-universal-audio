@@ -32,6 +32,7 @@
     import type { IconName } from '../../../../lib/icons/index';
     import { editingMode } from '../../../../lib/stores/editing-mode';
     import type { PublicBucket } from '../../../../lib/types/public-bucket';
+    import { displayTimeMs } from '../../../../lib/playback/audio-graph';
     import { LS_KEYS } from '../../../../lib/utils/constants';
     import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
     import { getSurahInfo, surahInfoReady } from '../../../../lib/utils/surah-info';
@@ -113,9 +114,14 @@
     let footerEl: HTMLDivElement | null = null;
     let audioEl: HTMLAudioElement | null = null;
 
-    // Local mirror of `segPort.currentTimeMs()` so the progress bar can
-    // be reactive without polling. Written by the onTimeUpdate
-    // subscription mounted below.
+    // Local mirror of the AUDIBLE playback position (ms) so the progress bar
+    // and elapsed clock can be reactive without polling. Written by the
+    // onTimeUpdate subscription below, which compensates the raw media clock
+    // (`el.currentTime`, the decode position) for platform output latency via
+    // `displayTimeMs` — the same compensation the waveform cursor uses
+    // (`playback.ts::drawActivePlayhead`). Without this the bar leads the
+    // recitation by the output latency (issue #172). Display-only: control
+    // paths (seek, segment-crossing) keep reading the raw clock off the port.
     let currentMs = 0;
 
     // Live mirror of `<audio>.duration` (ms), kept fresh by the
@@ -180,7 +186,9 @@
                 segPort.onPause(stopSegAnimation),
                 segPort.onEnded(onSegAudioEnded),
                 segPort.onTimeUpdate((fileMs) => {
-                    currentMs = fileMs;
+                    // Display the audible position; `onSegTimeUpdate` keeps the
+                    // raw clock for segment-crossing / highlight control logic.
+                    currentMs = displayTimeMs(fileMs);
                     onSegTimeUpdate(fileMs);
                 }),
             ];

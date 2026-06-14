@@ -173,4 +173,19 @@ describe('output latency / displayTimeMs', () => {
         expect(getOutputLatencyMs()).toBe(0);
         expect(displayTimeMs(1234)).toBe(1234);
     });
+
+    it('getOutputLatencyMs falls back to the last non-zero reading when the live value drops to 0', async () => {
+        // A browser reports outputLatency as 0 while the ctx is suspended / on
+        // the first play before the graph is in the signal path. The cached
+        // last-good value must survive that window so the compensation (and the
+        // cursor/footer it drives) doesn't snap back to uncompensated.
+        (globalThis as { AudioContext: typeof AudioContext }).AudioContext =
+            LatencyCtx as unknown as typeof AudioContext;
+        const { getOutputLatencyMs, _getCtx } = await import('../audio-graph');
+        expect(getOutputLatencyMs()).toBeCloseTo(50, 6);
+        const ctx = _getCtx() as unknown as { baseLatency: number; outputLatency: number };
+        ctx.baseLatency = 0;
+        ctx.outputLatency = 0;
+        expect(getOutputLatencyMs()).toBeCloseTo(50, 6);
+    });
 });
