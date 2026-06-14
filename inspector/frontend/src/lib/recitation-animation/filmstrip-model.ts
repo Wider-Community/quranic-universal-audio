@@ -17,12 +17,24 @@
  * imports. Times are seconds (matching `AnimUnit`).
  */
 
+import type { ChapterCoverage } from '../recitation-data/coverage';
 import { ayahUnitRanges } from './chapter-words';
 import type { AnimUnit } from './types';
 
 /** Weighting for a word's share of its verse's progress bar.
  *  `duration` (default) = canonical word length; `equal` = one slot per word. */
 export type WordWeighting = 'duration' | 'equal';
+
+/** Per-cell coverage state: complete, present-but-missing-words, or fully
+ *  unrecited (a placeholder cell — no units, non-clickable). */
+export type CellMissing = 'none' | 'words' | 'full';
+
+/** The active/selected verse the filmstrip reports up to its parent (drives the
+ *  contextual "missing words" pill). */
+export interface ActiveCellInfo {
+    ayah: number;
+    missing: CellMissing;
+}
 
 /** A word's position within its verse, as a half-open fraction range. */
 export interface WordFrac {
@@ -49,6 +61,10 @@ export interface VerseCell {
     words: WordFrac[];
     /** Canonical first-occurrence start (seconds) — the click/drag seek target. */
     canonStartSec: number;
+    /** Coverage state. `full` cells are placeholders (no units, no geometry):
+     *  unrecited verses kept in the strip so the gap is visible, but skipped by
+     *  playback + navigation. Default `none` when no coverage is supplied. */
+    missing: CellMissing;
 }
 
 export interface FilmstripModel {
@@ -74,22 +90,41 @@ function canonDur(u: AnimUnit): number {
     return Math.max(0.001, iv.end - iv.start);
 }
 
+/** A placeholder cell for a fully-missing (unrecited) verse — no geometry, no
+ *  units. `canonDurSec: 0` makes the strip clamp it to the min cell width. */
+function placeholderCell(surah: number, ayah: number): VerseCell {
+    return {
+        ayahKey: `${surah}:${ayah}`,
+        surah,
+        ayah,
+        canonDurSec: 0,
+        unitStart: -1,
+        unitEnd: -1,
+        words: [],
+        canonStartSec: -1,
+        missing: 'full',
+    };
+}
+
 /**
  * Build the filmstrip cell model from the chapter's deduped units.
  *
  * @param units    deduped `AnimUnit[]` in reading order (from `buildChapterRecitation`)
  * @param weighting word-fraction weighting (`duration` default, `equal` swappable)
+ * @param coverage optional chapter coverage. When supplied, present cells are
+ *   tagged `none`/`words` and a `full` placeholder cell is inserted for each
+ *   unrecited verse so the gap shows in the strip. Omitted → all cells `none`,
+ *   no placeholders (back-compat).
  */
 export function buildFilmstripModel(
     units: AnimUnit[],
     weighting: WordWeighting,
+    coverage?: ChapterCoverage,
 ): FilmstripModel {
     if (!units.length) return EMPTY_MODEL;
 
-    const cells: VerseCell[] = [];
-    const indexByAyahKey = new Map<string, number>();
-    const cellOfUnit = new Int32Array(units.length).fill(-1);
-
+    // Present cells (one per recited verse), with their global unit ranges.
+    const present: VerseCell[] = [];
     // `ayahUnitRanges` preserves reading order and assumes each ayah's units are
     // contiguous (true for the deduped reading-order list).
     for (const [ayahKey, [unitStart, unitEnd]] of ayahUnitRanges(units)) {
@@ -111,11 +146,9 @@ export function buildFilmstripModel(
             const frac0 = cum / total;
             cum += wgt;
             words.push({ unitIdx: i, word: u.word, frac0, frac1: cum / total });
-            cellOfUnit[i] = cells.length;
         }
 
-        indexByAyahKey.set(ayahKey, cells.length);
-        cells.push({
+        present.push({
             ayahKey,
             surah: head.surah,
             ayah: head.ayah,
@@ -124,8 +157,35 @@ export function buildFilmstripModel(
             unitEnd,
             words,
             canonStartSec: head.intervals[0]?.start ?? head.start,
+            missing: coverage?.status.get(head.ayah) === 'words' ? 'words' : 'none',
         });
     }
 
+    if (!coverage) return _assemble(present, units.length);
+
+    // Merge placeholders for fully-missing verses in ayah order. Defensive max
+    // covers a present ayah beyond the qpc reference count (shouldn't happen).
+    const presentByAyah = new Map(present.map((c) => [c.ayah, c]));
+    const surah = present[0]!.surah;
+    let maxAyah = coverage.numVerses;
+    for (const c of present) if (c.ayah > maxAyah) maxAyah = c.ayah;
+
+    const merged: VerseCell[] = [];
+    for (let a = 1; a <= maxAyah; a++) {
+        merged.push(presentByAyah.get(a) ?? placeholderCell(surah, a));
+    }
+    return _assemble(merged, units.length);
+}
+
+/** Build reverse lookups for an ordered cell list. `cellOfUnit[u]` maps a global
+ *  unit index to its cell; placeholder cells (empty unit range) contribute none. */
+function _assemble(cells: VerseCell[], unitCount: number): FilmstripModel {
+    const indexByAyahKey = new Map<string, number>();
+    const cellOfUnit = new Int32Array(unitCount).fill(-1);
+    for (let idx = 0; idx < cells.length; idx++) {
+        const c = cells[idx]!;
+        indexByAyahKey.set(c.ayahKey, idx);
+        for (let u = c.unitStart; u < c.unitEnd; u++) cellOfUnit[u] = idx;
+    }
     return { cells, indexByAyahKey, cellOfUnit };
 }
