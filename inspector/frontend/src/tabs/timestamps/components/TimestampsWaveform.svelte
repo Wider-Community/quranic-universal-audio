@@ -26,6 +26,7 @@
     import { get } from 'svelte/store';
 
     import WaveformCanvas from '../../../lib/components/WaveformCanvas.svelte';
+    import { signalDashSeekIntent } from '../../../lib/playback/dash-buffering';
     import { dashPort } from '../../../lib/playback/dash-port';
     import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { recitationConfigStore } from '../../../lib/recitation-animation/recitation-settings';
@@ -775,6 +776,7 @@
             const targetMs = (w.start + lv.tsSegOffset) * 1000;
             ensureDashCovering(targetMs);
             dashPort.seek(targetMs);
+            signalDashSeekIntent();
             if (dashPort.paused) dashPort.play();
             drawOverlays();
             return;
@@ -784,6 +786,7 @@
         const targetMs = (w.start + lv.tsSegOffset) * 1000;
         ensureDashCovering(targetMs);
         dashPort.seek(targetMs);
+        signalDashSeekIntent();
         // Start playback if paused — matches block-click behavior.
         if (dashPort.paused) dashPort.play();
         drawOverlays();

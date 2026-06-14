@@ -24,6 +24,7 @@
     import { fetchSurahsForDelivery } from '../../lib/api/audio-surahs';
     import { setAdoptedSource } from '../../lib/playback/adopt-signal';
     import { adjacentAyahStartMs } from '../../lib/playback/ayah-seek';
+    import { signalDashSeekIntent } from '../../lib/playback/dash-buffering';
     import { ensureDashCovering, ensureDashCoveringRange } from '../../lib/playback/dash-covering';
     import { dashPort } from '../../lib/playback/dash-port';
     import { recycleAsShadow } from '../../lib/playback/shadow-audio';
@@ -341,6 +342,7 @@
                     setFocus(v);
                     ensureDashCoveringRange(v.startMs, v.endMs);
                     dashPort.seek(v.startMs);
+                    signalDashSeekIntent();
                     if (_autoplayPending) {
                         _autoplayPending = false;
                         try { dashPort.play(); } catch { /* autoplay policy */ }
@@ -618,6 +620,9 @@
         setFocus(v);
         ensureDashCoveringRange(v.startMs, v.endMs);
         dashPort.seek(v.startMs);
+        // Raise the buffering spinner (debounced) — clears on the first audible
+        // frame, no-ops if the verse start is already buffered.
+        signalDashSeekIntent();
         if (autoplay || wasPlaying) tryPlay();
         refreshDisplays();
     }
@@ -625,6 +630,7 @@
     function seekMsAndResume(targetMs: number): void {
         ensureDashCovering(targetMs);
         dashPort.seek(targetMs);
+        signalDashSeekIntent();
         tryPlay();
         focusAt(targetMs);
         refreshDisplays();

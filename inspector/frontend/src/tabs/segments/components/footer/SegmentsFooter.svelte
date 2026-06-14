@@ -26,6 +26,7 @@
     import ClaimButton from '../../../../lib/components/ClaimButton.svelte';
     import type { CombinationSelection } from '../../../../lib/components/picker/combination-picker-types';
     import CombinationPicker from '../../../../lib/components/picker/CombinationPicker.svelte';
+    import LoadingSpinner from '../../../../lib/components/player/LoadingSpinner.svelte';
     import SurahPopover from '../../../../lib/components/player/SurahPopover.svelte';
     import ReciterChip from '../../../../lib/components/ReciterChip.svelte';
     import Icon from '../../../../lib/icons/Icon.svelte';
@@ -609,7 +610,7 @@
                         on:click={handlePlayClick}
                         aria-busy={$segAudioBuffering}
                         aria-label={$segAudioBuffering ? 'Loading audio' : playGlyph === 'pause' ? 'Pause' : 'Play'}
-                    >{#if $segAudioBuffering}<span class="play-spinner" aria-hidden="true"></span>{:else}<Icon name={playGlyph} size={18} />{/if}</button>
+                    >{#if $segAudioBuffering}<LoadingSpinner color="var(--accent-fg)" />{:else}<Icon name={playGlyph} size={18} />{/if}</button>
 
                     <div class="transport-right">
                         <button
@@ -1007,22 +1008,9 @@
     .play-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
     /* Buffering: the play was committed but the first audible frame hasn't
-       arrived (cold segment fetch). A spinner replaces the glyph so the
-       control doesn't falsely read as "playing" during the silent gap. */
-    .play-spinner {
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        border: 2px solid oklch(from var(--accent-fg) l c h / 0.35);
-        border-top-color: var(--accent-fg);
-        animation: play-spin 0.7s linear infinite;
-    }
-    @media (prefers-reduced-motion: reduce) {
-        .play-spinner { animation-duration: 1.4s; }
-    }
-    @keyframes play-spin {
-        to { transform: rotate(360deg); }
-    }
+       arrived (cold segment fetch). The shared <LoadingSpinner> replaces the
+       glyph so the control doesn't falsely read as "playing" during the
+       silent gap. */
 
     /* Secondary transport buttons — 36px, visually subordinate to the 40px play */
     .speed-cell {
