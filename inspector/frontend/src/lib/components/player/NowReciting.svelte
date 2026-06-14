@@ -22,13 +22,14 @@
         AyahFilmstrip,
         buildFilmstripModel,
         buildSortedIntervals,
+        type CellMissing,
         ControlIcon,
         findActiveAt,
         RecitationSection,
         type AnimUnit,
         type AyahBoundary,
     } from '../../recitation-animation';
-    import { loadChapterRecitation } from '../../recitation-data/load-chapter';
+    import { type ChapterCoverage, loadChapterRecitation } from '../../recitation-data/load-chapter';
     import {
         cycleMotion,
         cycleUpcoming,
@@ -63,7 +64,11 @@
 
     let units = $state<AnimUnit[]>([]);
     let ayahs = $state<AyahBoundary[]>([]);
+    let coverage = $state<ChapterCoverage | undefined>(undefined);
     let rootH = $state(0);
+    // The verse currently under the playhead + its coverage status, reported by
+    // the filmstrip — drives the contextual "missing words" pill.
+    let activeCell = $state<{ ayah: number; missing: CellMissing } | null>(null);
     // Surah:ayah under the playhead — drives the filmstrip bookmark button.
     // Sourced from `recitationFocus`, which TimestampsTab writes from its
     // existing per-frame tick (`focusAt(ms)`). No separate rAF needed; the
@@ -78,8 +83,18 @@
     const config = $derived($recitationConfigStore);
     // Recitation-correct cell geometry + per-verse word fractions, rebuilt once
     // per chapter. Duration-weighted: the cell bar fills to the recited word's
-    // share of the verse's spoken time.
-    const filmstripModel = $derived(buildFilmstripModel(units, 'duration'));
+    // share of the verse's spoken time. `coverage` inserts placeholder cells for
+    // fully-missing verses + tags incomplete ones.
+    const filmstripModel = $derived(buildFilmstripModel(units, 'duration', coverage));
+
+    // Contextual pill: shown only while the selected/active verse is itself
+    // missing words (never a standing badge). Fully-missing verses can't be
+    // active (filmstrip skips them), so this only ever fires for `words`.
+    const activeMissingWords = $derived(
+        activeCell?.missing === 'words'
+            ? (coverage?.missingWords.get(activeCell.ayah) ?? [])
+            : null,
+    );
 
     // Recitation locator over the full-coverage units — resolves the ayahKey
     // being RECITED at a time (covers re-takes), published for the footer seek
@@ -156,6 +171,8 @@
         if (!isPublished || !reciterSlug || !surahNum) {
             units = [];
             ayahs = [];
+            coverage = undefined;
+            activeCell = null;
             recitationAyahs.set([]);
             return;
         }
@@ -167,6 +184,8 @@
                 if (controller.signal.aborted) return;
                 units = res?.units ?? [];
                 ayahs = res?.ayahs ?? [];
+                coverage = res?.coverage;
+                activeCell = null;
                 recitationAyahs.set(ayahs);
                 await tick();
                 if (controller.signal.aborted) return;
@@ -177,6 +196,8 @@
                 if (!controller.signal.aborted) {
                     units = [];
                     ayahs = [];
+                    coverage = undefined;
+                    activeCell = null;
                     recitationAyahs.set([]);
                 }
             });
@@ -222,6 +243,14 @@
              filmstrip stays. Chevron points up when collapsed (expand), down
              when expanded (collapse). -->
         <div class="nr-handle">
+            {#if activeMissingWords}
+                <span
+                    class="nr-missing-pill"
+                    title={activeMissingWords.length
+                        ? `Missing words: ${activeMissingWords.join(', ')}`
+                        : 'This verse is missing words'}
+                >missing words</span>
+            {/if}
             {#if $recitationOpen}
                 <div class="nr-ctrls" role="group" aria-label="Recitation display">
                     <button
@@ -341,6 +370,8 @@
                         scrubMs={$progressScrubMs}
                         onSeek={seek}
                         onHoverPrewarm={warmCurrentChapter}
+                        missingWordsByAyah={coverage?.missingWords}
+                        onActiveCell={(info) => { activeCell = info; }}
                     />
                 </div>
             </div>
@@ -368,6 +399,26 @@
         justify-content: center;
         gap: var(--s-2);
         min-height: 22px;
+    }
+    /* Contextual "missing words" pill — anchored to the handle's left edge so it
+       doesn't shift the centered controls. Red-tinted; shown only while the
+       active verse is incomplete. */
+    .nr-missing-pill {
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 7px;
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--state-missing-fg);
+        background: var(--state-missing-bg);
+        border: 1px solid var(--state-missing-border);
+        border-radius: var(--r-1);
+        white-space: nowrap;
+        cursor: default;
     }
     .nr-swatch-wrap {
         position: relative;

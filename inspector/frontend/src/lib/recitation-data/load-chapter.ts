@@ -25,6 +25,9 @@ import {
     buildChapterRecitation,
 } from '../recitation-animation/chapter-words';
 import type { AnimUnit, AyahBoundary } from '../recitation-animation/types';
+import { type ChapterCoverage, computeChapterCoverage } from './coverage';
+
+export type { ChapterCoverage };
 import {
     assembleVerseFromShard,
     chapterOccasionIntervals,
@@ -33,6 +36,7 @@ import {
     loadDk,
     loadManifest,
     loadQpc,
+    loadQpcVerseIndex,
     reciterAudioFromManifest,
 } from './ts-source';
 
@@ -42,6 +46,9 @@ export interface ChapterRecitationData {
     /** Last word end (ms). Informational; surfaces prefer the real audio
      *  duration from the transport when they have it. */
     contentEndMs: number;
+    /** Mushaf coverage gaps (incomplete + fully-missing verses) for the chapter,
+     *  derived client-side from the canonical units vs the qpc verse index. */
+    coverage: ChapterCoverage;
 }
 
 /**
@@ -63,10 +70,11 @@ export async function loadChapterRecitation(
     if (!reciterAudio) return null; // reciter not advertised by the TS manifest
     if (reciterAudio.audio_category !== 'by_surah') return null; // see scope guard
 
-    const [shard, qpc, dk] = await Promise.all([
+    const [shard, qpc, dk, qpcVerseIndex] = await Promise.all([
         loadChapterShard(reciter, chapter),
         loadQpc(),
         loadDk(),
+        loadQpcVerseIndex(),
     ]);
     if (signal?.aborted) return null;
 
@@ -86,5 +94,11 @@ export async function loadChapterRecitation(
     const occasionIntervals = chapterOccasionIntervals(shard);
 
     const built = buildChapterRecitation(reciter, chapter, verses, occasionIntervals);
-    return { units: built.units, ayahs: built.ayahs, contentEndMs: built.contentEndMs };
+    const coverage = computeChapterCoverage(built.units, chapter, qpcVerseIndex.get(chapter));
+    return {
+        units: built.units,
+        ayahs: built.ayahs,
+        contentEndMs: built.contentEndMs,
+        coverage,
+    };
 }

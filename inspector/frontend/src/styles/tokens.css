@@ -77,6 +77,15 @@
     --state-warn-bg:             oklch(0.86 0.130 75 / 0.12);
     --state-warn-border:         oklch(0.86 0.130 75 / 0.40);
 
+    /* Missing/excluded recitation content — verses or words a reciter did not
+       recite. The one true-red voice (distinct from amber "attention"): a
+       reddish border marks an incomplete verse, a stronger red + tint marks a
+       fully-missing one. Used by the recitation filmstrip's coverage markers. */
+    --state-missing-fg:          oklch(0.66 0.180 25);
+    --state-missing-bg:          oklch(0.66 0.180 25 / 0.14);
+    --state-missing-border:      oklch(0.66 0.180 25 / 0.45);
+    --state-missing-border-strong: oklch(0.66 0.180 25 / 0.85);
+
     /* ---------- type ---------- */
     --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
                   "Helvetica Neue", Arial, sans-serif;

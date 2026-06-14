@@ -48,6 +48,7 @@ import {
 let _config: Promise<TsConfigResponse> | null = null;
 let _manifest: Promise<TsManifestResponse> | null = null;
 let _qpc: Promise<Record<string, { text?: string }>> | null = null;
+let _qpcVerseIndex: Promise<Map<number, Map<number, number>>> | null = null;
 let _dk: Promise<Record<string, { text?: string }>> | null = null;
 
 /** Bounded LRU for chapter shards — covers current + adjacent + two pre-rolls. */
@@ -165,6 +166,40 @@ export async function loadQpc(): Promise<Record<string, { text?: string }>> {
         })();
     }
     return _qpc;
+}
+
+/**
+ * Reference word counts per verse, derived once from the full `qpc_hafs`
+ * singleton: `chapter → (ayah → wordCount)`. The mushaf reference for "does
+ * this verse have every word" — the chapter's verse count is the max ayah key.
+ * Memoized (one O(qpc) scan), so the filmstrip's coverage diff is free after the
+ * qpc the animation already loads. Word count = max word index seen (robust to a
+ * gap in qpc keys).
+ */
+export async function loadQpcVerseIndex(): Promise<Map<number, Map<number, number>>> {
+    if (!_qpcVerseIndex) {
+        _qpcVerseIndex = (async () => {
+            const qpc = await loadQpc();
+            const index = new Map<number, Map<number, number>>();
+            for (const loc of Object.keys(qpc)) {
+                const parts = loc.split(':');
+                if (parts.length !== 3) continue;
+                const ch = parseInt(parts[0]!, 10);
+                const ayah = parseInt(parts[1]!, 10);
+                const word = parseInt(parts[2]!, 10);
+                if (!ch || !ayah || !word) continue;
+                let byAyah = index.get(ch);
+                if (!byAyah) {
+                    byAyah = new Map();
+                    index.set(ch, byAyah);
+                }
+                const prev = byAyah.get(ayah) ?? 0;
+                if (word > prev) byAyah.set(ayah, word);
+            }
+            return index;
+        })();
+    }
+    return _qpcVerseIndex;
 }
 
 /**
@@ -673,6 +708,7 @@ export function _resetForTests(): void {
     _config = null;
     _manifest = null;
     _qpc = null;
+    _qpcVerseIndex = null;
     _dk = null;
     _shards.clear();
     _vbrChapters.clear();
