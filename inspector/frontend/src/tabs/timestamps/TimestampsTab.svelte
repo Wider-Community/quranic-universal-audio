@@ -516,10 +516,19 @@
         // Prefer the pre-rolled (warm) target so the jump can adopt gaplessly;
         // else roll a fresh one (gapped fallback).
         const consumed = consumeShuffle();
+        // Warm miss → the jump must roll a target and load a new source (both
+        // awaited, and slow off the bucket) while nothing else stops the current
+        // chapter, so it would keep playing into the next verse until the new source
+        // lands — the short-verse leak. Pause now so the gap is silence; the landing
+        // (seekFocus / syncChapter's pendingSeek) resumes playback on the target.
+        // Warm hits stay gapless: adoptGapless swaps + plays synchronously.
+        const wasPlaying = !consumed && !dashPort.paused;
+        if (!consumed) dashPort.pause();
         const target = consumed?.target
             ?? await getRandomTarget(randomReciter ? {} : { reciter: curSlug }).catch(() => null);
         if (!target) {
             if (consumed) discardWarm(consumed.el);
+            else if (wasPlaying) dashPort.play(); // no target to jump to — restore playback
             return;
         }
 
