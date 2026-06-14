@@ -56,6 +56,7 @@
         isMainAudioPlaying,
         playbackSpeed,
         playingSegmentIndex,
+        segAudioBuffering,
         segAudioElement,
         segPort,
         segPortReady,
@@ -185,10 +186,21 @@
                 segPort.onPlay(startSegAnimation),
                 segPort.onPause(stopSegAnimation),
                 segPort.onEnded(onSegAudioEnded),
+                // First audible frame — the click→sound gap is over, so drop
+                // the play-button buffering spinner (issue #172).
+                segPort.onPlaying(() => segAudioBuffering.set(false)),
+                // A media error means the audible frame will never come —
+                // don't strand the spinner.
+                segPort.onError(() => segAudioBuffering.set(false)),
                 segPort.onTimeUpdate((fileMs) => {
                     // Display the audible position; `onSegTimeUpdate` keeps the
                     // raw clock for segment-crossing / highlight control logic.
-                    currentMs = displayTimeMs(fileMs);
+                    // While buffering (play committed but not yet audible) the
+                    // synchronous seek fires a `timeupdate` at the destination
+                    // position — leave the bar where it was so it doesn't jump
+                    // AHEAD of the still-silent audio (issue #172). The first
+                    // post-`playing` timeupdate resumes normal tracking.
+                    if (!get(segAudioBuffering)) currentMs = displayTimeMs(fileMs);
                     onSegTimeUpdate(fileMs);
                 }),
             ];
@@ -592,10 +604,12 @@
                     <button
                         type="button"
                         class="play-btn"
+                        class:buffering={$segAudioBuffering}
                         disabled={!canPlay}
                         on:click={handlePlayClick}
-                        aria-label={playGlyph === 'pause' ? 'Pause' : 'Play'}
-                    ><Icon name={playGlyph} size={18} /></button>
+                        aria-busy={$segAudioBuffering}
+                        aria-label={$segAudioBuffering ? 'Loading audio' : playGlyph === 'pause' ? 'Pause' : 'Play'}
+                    >{#if $segAudioBuffering}<span class="play-spinner" aria-hidden="true"></span>{:else}<Icon name={playGlyph} size={18} />{/if}</button>
 
                     <div class="transport-right">
                         <button
@@ -991,6 +1005,24 @@
     }
     .play-btn:hover:not(:disabled) { background: var(--accent-strong); }
     .play-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* Buffering: the play was committed but the first audible frame hasn't
+       arrived (cold segment fetch). A spinner replaces the glyph so the
+       control doesn't falsely read as "playing" during the silent gap. */
+    .play-spinner {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2px solid oklch(from var(--accent-fg) l c h / 0.35);
+        border-top-color: var(--accent-fg);
+        animation: play-spin 0.7s linear infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .play-spinner { animation-duration: 1.4s; }
+    }
+    @keyframes play-spin {
+        to { transform: rotate(360deg); }
+    }
 
     /* Secondary transport buttons — 36px, visually subordinate to the 40px play */
     .speed-cell {
