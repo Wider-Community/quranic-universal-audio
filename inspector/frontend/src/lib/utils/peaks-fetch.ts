@@ -150,7 +150,77 @@ export function pickChapterPeaks(
     return null;
 }
 
-/** Test seam — clears the chapter-peaks cache. */
+// ---------------------------------------------------------------------------
+// Shared ffmpeg-fallback cache (the SECOND tier) — for reciters/chapters with
+// no baked chapter peaks (un-backfilled, pre-publish, by_ayah without a match,
+// and ALL reciters on a dev bucket that has no peaks/*.json.gz). Module-level
+// so a prewarm and the later render hit the SAME entry — without this the
+// waveform's per-instance LRU made the fallback impossible to warm ahead of a
+// jump. Keyed by reciter+url+window so it survives across verse/chapter swaps.
+// ---------------------------------------------------------------------------
+const SEGMENT_PEAKS_CACHE = 12;
+const _segmentPeaks = new Map<string, Promise<SegmentPeaks | null>>();
+
+function _segKey(reciter: string, url: string, startMs: number, endMs: number, bps?: number): string {
+    return `${reciter}:${url}:${startMs}:${endMs}:${bps ?? ''}`;
+}
+
+/**
+ * Fetch the ffmpeg-fallback peaks for a single verse window, de-duped + cached
+ * at module scope so a prewarm and the subsequent render share the result.
+ * Thin idempotent wrapper over {@link fetchSegmentPeaks}; returns null (and
+ * does not cache) on empty/failed fetches so the next call retries.
+ */
+export function ensureSegmentPeaks(
+    reciter: string,
+    url: string,
+    startMs: number,
+    endMs: number,
+    chapter?: number,
+    bps?: number,
+): Promise<SegmentPeaks | null> {
+    if (!reciter || !url || endMs <= startMs) return Promise.resolve(null);
+    const key = _segKey(reciter, url, startMs, endMs, bps);
+    const hit = _segmentPeaks.get(key);
+    if (hit) return hit;
+    const promise = fetchSegmentPeaks(reciter, url, startMs, endMs, chapter, bps);
+    _segmentPeaks.set(key, promise);
+    // Drop empty/failed results so they don't pin a permanent miss.
+    promise.then((v) => { if (!v || !v.peaks?.length) _segmentPeaks.delete(key); })
+        .catch(() => _segmentPeaks.delete(key));
+    while (_segmentPeaks.size > SEGMENT_PEAKS_CACHE) {
+        const oldest = _segmentPeaks.keys().next().value;
+        if (oldest === undefined || oldest === key) break;
+        _segmentPeaks.delete(oldest);
+    }
+    return promise;
+}
+
+/**
+ * Prewarm a verse's peaks into the cache the waveform render reads, picking the
+ * tier that render will actually use: baked chapter peaks if the chapter has
+ * them, else the ffmpeg/CDN fallback for the exact verse window. Fire-and-forget
+ * from a look-ahead (next sequential verse / shuffle target) so the post-jump
+ * render is a cache hit instead of a cold fetch. `startMs`/`endMs` MUST match
+ * the render's window (round of the verse's time_start_ms/time_end_ms).
+ */
+export async function prewarmVersePeaks(
+    reciter: string,
+    chapter: number,
+    url: string,
+    startMs: number,
+    endMs: number,
+): Promise<void> {
+    if (!reciter || !chapter) return;
+    try {
+        const map = await ensureChapterPeaks(reciter, chapter);
+        if (pickChapterPeaks(map, url ?? '')) return; // baked tier covers it
+    } catch { /* fall through to the ffmpeg/CDN fallback */ }
+    await ensureSegmentPeaks(reciter, url ?? '', startMs, endMs, chapter).catch(() => {});
+}
+
+/** Test seam — clears the chapter- and segment-peaks caches. */
 export function _resetChapterPeaksForTests(): void {
     _chapterPeaks.clear();
+    _segmentPeaks.clear();
 }

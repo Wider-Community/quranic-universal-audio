@@ -36,7 +36,7 @@
         PREVIEW_PLAYHEAD_COLOR,
         WAVEFORM_BG_COLOR,
     } from '../../../lib/utils/constants';
-    import { ensureChapterPeaks, fetchSegmentPeaks, pickChapterPeaks } from '../../../lib/utils/peaks-fetch';
+    import { ensureChapterPeaks, ensureSegmentPeaks, pickChapterPeaks } from '../../../lib/utils/peaks-fetch';
     import { drawWaveformPeaks } from '../../../lib/utils/waveform-draw';
     import {
         granularity,
@@ -58,8 +58,6 @@
     // ---- Local layout constants ----
     const TS_WAVEFORM_DEFAULT_WIDTH = 1200;
     const TS_WAVEFORM_HEIGHT = 200;
-    /** Max in-component peaks slices retained across verse switches. */
-    const PEAKS_LRU_SIZE = 5;
 
     // Pixel tolerance for "same boundary" deduplication across tiers.
     const BOUNDARY_DEDUP_EPS = 1;
@@ -103,6 +101,12 @@
     // chapter-peaks fast path (pre-sliced to the verse window).
     let peaks: PeakBucket[] | Int8Array | null = null;
     let fetchGen = 0;
+    // Chapter the current `peaks`/`_baseImageData` represent. On a cross-chapter
+    // jump we clear before the (possibly cold) fetch so the draw blank-fills
+    // instead of compositing the new verse's overlays onto the previous
+    // chapter's waveform. Same-chapter slices are instant, so we never clear
+    // there (avoids a flash on every in-chapter advance).
+    let _loadedPeaksChapter = 0;
 
     // Bucket-snap metadata for the baked-peaks fast path. `_sliceVerseLocal`
     // snaps the int8 slice to bucket boundaries, so the array covers a span
@@ -114,26 +118,6 @@
     // null for the ffmpeg fallback (PeakBucket[] is already verse-exact).
     let _peaksSpanMs: number | null = null;
     let _peaksOriginMs = 0;
-
-    /** Per-tab LRU keyed by `${url}:${startMs}:${endMs}`. */
-    const _peaksLRU = new Map<string, SegmentPeaks>();
-
-    function _lruGet(key: string): SegmentPeaks | undefined {
-        const v = _peaksLRU.get(key);
-        if (v !== undefined) {
-            _peaksLRU.delete(key);
-            _peaksLRU.set(key, v);
-        }
-        return v;
-    }
-
-    function _lruSet(key: string, value: SegmentPeaks): void {
-        if (_peaksLRU.size >= PEAKS_LRU_SIZE) {
-            const oldest = _peaksLRU.keys().next().value;
-            if (oldest !== undefined) _peaksLRU.delete(oldest);
-        }
-        _peaksLRU.set(key, value);
-    }
 
     // ---- Snapshot of peaks-only base ----
     let _baseImageData: ImageData | null = null;
@@ -250,6 +234,7 @@
         _peaksOriginMs = 0;
         _baseImageData = null;
         _baseCacheKey = null;
+        _loadedPeaksChapter = 0;
     }
 
     /** Slice a chapter int8 [min,max] envelope down to a VERSE-LOCAL Int8Array
@@ -342,6 +327,12 @@
         const key = `${safeUrl}:${startMs}:${endMs}`;
         const gen = ++fetchGen;
 
+        // Cross-chapter jump: drop the stale peak before the (possibly cold)
+        // fetch so the draw blank-fills rather than painting the new verse's
+        // overlays on the previous chapter's waveform. Same-chapter slices are
+        // instant and keep their base — no flash on in-chapter advance.
+        if (chapter && chapter !== _loadedPeaksChapter) _clearPeaks();
+
         // FAST PATH: baked 10bps chapter peaks (server-cached, sliced
         // client-side). For a by_surah reciter this is one ~6KB GET per chapter
         // then a ~2µs slice per verse — replacing the 289-762ms per-verse
@@ -362,6 +353,7 @@
                     peaks = sliced.peaks;
                     _peaksSpanMs = sliced.spanMs;
                     _peaksOriginMs = sliced.originMs;
+                    _loadedPeaksChapter = chapter;
                     _baseImageData = null;
                     _baseCacheKey = null;
                     await tick();
@@ -374,24 +366,24 @@
         }
 
         // FALLBACK: per-verse ffmpeg peaks (verse-relative PeakBucket[]). Kept
-        // for reciters/chapters whose slim peaks aren't baked yet.
-        let entry: SegmentPeaks | null | undefined = _lruGet(key);
-        if (!entry) {
-            try {
-                entry = await fetchSegmentPeaks(reciter, safeUrl, startMs, endMs, chapter || undefined);
-            } catch (e) {
-                console.error('Waveform peaks fetch failed:', e);
-                return;
-            }
-            if (gen !== fetchGen) return;
-            if (!entry || !entry.peaks?.length) { _clearPeaks(); return; }
-            _lruSet(key, entry);
+        // for reciters/chapters whose slim peaks aren't baked yet. Shared
+        // module cache (ensureSegmentPeaks) so a look-ahead prewarm of this same
+        // window is a cache hit here instead of a cold ffmpeg/CDN fetch.
+        let entry: SegmentPeaks | null;
+        try {
+            entry = await ensureSegmentPeaks(reciter, safeUrl, startMs, endMs, chapter || undefined);
+        } catch (e) {
+            console.error('Waveform peaks fetch failed:', e);
+            return;
         }
+        if (gen !== fetchGen) return;
+        if (!entry || !entry.peaks?.length) { _clearPeaks(); return; }
 
         peaks = entry.peaks;
         // ffmpeg peaks are verse-exact (no bucket-snap) — use the exact window.
         _peaksSpanMs = null;
         _peaksOriginMs = 0;
+        _loadedPeaksChapter = chapter;
 
         _baseImageData = null;
         _baseCacheKey = null;

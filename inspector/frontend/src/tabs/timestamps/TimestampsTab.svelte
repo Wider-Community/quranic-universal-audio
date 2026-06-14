@@ -47,6 +47,7 @@
     import { analogousTriad } from '../../lib/utils/color-derive';
     import { LS_KEYS, TAB_NAMES } from '../../lib/utils/constants';
     import { shouldHandleKey } from '../../lib/utils/keyboard-guard';
+    import { prewarmVersePeaks } from '../../lib/utils/peaks-fetch';
     import { wordBoundaryScan } from '../../lib/utils/word-boundary';
     import { loadCatalog as loadPublicCatalog, catalogData } from '../dashboard/stores/catalog-data';
     import TimestampsWaveform from './components/TimestampsWaveform.svelte';
@@ -577,7 +578,21 @@
             const data = ra
                 ? assembleVerseFromShard(target.reciter, shard, target.verseRef, qpc, dk, ra, rawUrl)
                 : null;
-            if (data) seekSec = data.time_start_ms / 1000;
+            if (data) {
+                seekSec = data.time_start_ms / 1000;
+                // Warm the target verse's peaks (baked tier or ffmpeg/CDN
+                // fallback) + glosses so both render instantly on the jump.
+                void prewarmVersePeaks(
+                    target.reciter,
+                    target.chapter,
+                    data.audio_url ?? rawUrl,
+                    Math.max(0, Math.round(data.time_start_ms)),
+                    Math.round(data.time_end_ms),
+                );
+                if (get(showTranslations) && data.words.length) {
+                    void loadVerseTranslations(data.words, get(translationLanguage)).catch(() => {});
+                }
+            }
         } catch { /* seek 0 is an acceptable fallback */ }
         primeShuffle({ target, proxyUrl, rawUrl, seekSec });
     }
@@ -711,6 +726,32 @@
         loadVerseTranslations(lv.data.words, lang)
             .then((map) => { if (token === _trReq) verseTranslations.set(map); })
             .catch(() => { if (token === _trReq) verseTranslations.set({}); });
+    }
+
+    // Prewarm the next sequential verse so it renders instantly on advance:
+    // peaks always (baked tier or ffmpeg/CDN fallback), glosses only when
+    // translations are visible. Within-chapter; the cross-chapter / random next
+    // is warmed by primeShuffleSlot. All calls idempotent (shared caches).
+    $: prewarmNext($loadedVerse, $showTranslations, $translationLanguage);
+    function prewarmNext(
+        lv: typeof $loadedVerse,
+        transOn: boolean,
+        lang: string,
+    ): void {
+        if (!lv) return;
+        const idx = chapterVerses.findIndex((x) => x.ref === focusRef);
+        const next = idx >= 0 ? chapterVerses[idx + 1] : undefined;
+        if (!next) return;
+        void prewarmVersePeaks(
+            next.lv.data.reciter,
+            next.lv.data.chapter,
+            next.lv.data.audio_url ?? '',
+            Math.max(0, Math.round(next.startMs)),
+            Math.round(next.endMs),
+        );
+        if (transOn && next.lv.data.words.length) {
+            void loadVerseTranslations(next.lv.data.words, lang).catch(() => {});
+        }
     }
 
     // (The once-per-verse shuffle guard resets implicitly: `shuffleFiredForRef`
