@@ -493,7 +493,7 @@
         aria-label="Ayah scrubber"
         aria-valuemin={cells[0]!.ayah}
         aria-valuemax={cells[cells.length - 1]!.ayah}
-        aria-valuenow={activeIdx >= 0 ? cells[activeIdx]!.ayah : cells[0]!.ayah}
+        aria-valuenow={cells[activeIdx]?.ayah ?? cells[0]!.ayah}
         onpointerdown={onPointerDown}
         onpointermove={onHoverMove}
         onkeydown={(e) => {
