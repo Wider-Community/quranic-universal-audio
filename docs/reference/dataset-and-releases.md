@@ -252,7 +252,17 @@ Format (display names only — never slugs):
 - Inline `**License:** CC-BY-4.0` + repository / HF-dataset links.
 
 Coverage shows exact **ayahs** at cut time; the DB-only preview shows **surahs** (chapter_count)
-because exact ayah coverage is only computed during the cut. Riwayah/style/channel display names
+because exact ayah coverage is only computed during the cut. A **Missing** column reports
+coverage gaps vs the full 6236-verse mushaf using
+[`qua_shared/coverage.py::missing_coverage`](../../qua_shared/coverage.py) — whole un-covered
+surahs (`surahs 1-84`) and within-surah verse gaps (`75:18-40`, `7:116, 41:15`) are split into two
+concise run-collapsed strings so even a partial recitation (a Juzʾ ʿAmma reciter) stays short; a
+complete reciter shows `—`. The same two strings (`coverage.missing_surahs` / `coverage.missing_verses`,
+omitted when empty) are written to each `catalog.json`, so the human table and the JSON can't drift.
+A data-gated callout above the recitation tables explains that a missing verse is almost always
+upstream (source omits it — commonly the Basmala `1:1` — or recites it incompletely) and is excluded
+rather than shipped misaligned. The DB-only preview can't compute exact gaps, so its Missing column is
+all `—`. Riwayah/style/channel display names
 come from the `riwayahs` / `styles` / `channels` vocab tables — `catalog.json` keeps the slug forms
 (stable consumer identifiers), the human-facing changelog never shows them.
 

@@ -52,18 +52,43 @@ def _coverage_cell(m: dict) -> str:
     return "-"
 
 
+def _missing_cell(m: dict) -> str:
+    """Concise coverage-gap cell: whole missing surahs + within-surah gaps."""
+    surahs = (m.get("missing_surahs") or "").strip()
+    verses = (m.get("missing_verses") or "").strip()
+    parts: list[str] = []
+    if surahs:
+        parts.append(f"surahs {surahs}")
+    if verses:
+        parts.append(verses)
+    return _escape_cell("; ".join(parts)) if parts else "—"
+
+
 def _member_table(members: list[dict]) -> list[str]:
     rows = [
-        "| Reciter | Riwayah | Style | Channel | Coverage |",
-        "|---|---|---|---|---|",
+        "| Reciter | Riwayah | Style | Channel | Coverage | Missing |",
+        "|---|---|---|---|---|---|",
     ]
     for m in members:
         rows.append(
             f"| {_reciter_cell(m)} | {_escape_cell(m.get('riwayah'))} "
             f"| {_escape_cell(m.get('style'))} | {_escape_cell(m.get('channel'))} "
-            f"| {_coverage_cell(m)} |"
+            f"| {_coverage_cell(m)} | {_missing_cell(m)} |"
         )
     return rows
+
+
+def _has_missing(members: list[dict]) -> bool:
+    return any((m.get("missing_surahs") or m.get("missing_verses")) for m in members)
+
+
+_MISSING_CALLOUT = (
+    "> **About missing verses.** A few recitations are missing whole surahs or a "
+    "small number of verses (the *Missing* column). This is almost always upstream "
+    "— the source audio omits a verse (commonly the Basmala, `1:1`), has a corrupt "
+    "or incomplete clip, or doesn't recite it in full — so we exclude it rather "
+    "than ship a misaligned timestamp."
+)
 
 
 def _accordion(summary: str, body_lines: list[str]) -> list[str]:
@@ -116,6 +141,8 @@ def _recitation_changes(
         _summary_sentence(previous_version, len(added), len(refreshed), n_carried),
         "",
     ]
+    if _has_missing(added + refreshed + carried):
+        out.extend([_MISSING_CALLOUT, ""])
     if added:
         out.extend(
             _accordion(

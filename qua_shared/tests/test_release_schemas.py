@@ -103,6 +103,28 @@ def test_legacy_catalog_without_offsets_still_validates():
     assert rec.audio.chapter_offsets_ms == {}
 
 
+def test_coverage_missing_keys_omitted_when_complete():
+    # A complete recitation: neither missing key in the JSON (byte-stable hash).
+    dumped = ReleaseCoverage(surahs=114, ayahs=6236).model_dump(mode="json")
+    assert "missing_surahs" not in dumped
+    assert "missing_verses" not in dumped
+
+
+def test_coverage_missing_keys_present_and_round_trip():
+    cov = ReleaseCoverage(
+        surahs=30, ayahs=327, missing_surahs="1-84", missing_verses="2:3"
+    )
+    dumped = cov.model_dump(mode="json")
+    assert dumped["missing_surahs"] == "1-84"
+    assert dumped["missing_verses"] == "2:3"
+    assert ReleaseCoverage.model_validate(dumped).missing_surahs == "1-84"
+
+
+def test_legacy_coverage_without_missing_keys_validates():
+    cov = ReleaseCoverage.model_validate({"surahs": 114, "ayahs": 6236})
+    assert cov.missing_surahs == "" and cov.missing_verses == ""
+
+
 def test_qpc_hafs_doc_validates_location_keys():
     doc = QpcHafsDoc.model_validate(
         {
