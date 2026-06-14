@@ -89,7 +89,7 @@ jobs:
       - name: Install deps and run pytest
         run: |
           pip install -r requirements.txt -r requirements-dev.txt
-          python -m pytest
+          python -m pytest --cov --cov-report=term-missing:skip-covered --cov-report=xml:.coverage.xml --no-cov-on-fail
 
       - name: Run shared-package (qua_shared) tests
         # qua_shared/ is a root-level package imported by the app; its tests
