@@ -93,6 +93,7 @@ To contribute code to the repo directly, fork the repo and see [inspector/README
 
 - [ ] **Unified API/SDKs** — typed Python/JS client (`pip`/`npm`) over the published QUA artifacts: fetches and caches only requested data, defaults to latest with optional pinning and offline vendoring, and exposes the schemas for type consistency. Complements the Releases + HF dataset.
 - [ ] **Global CDN** — mirror all recitations and audio across regions, prewarmed with demand-based routing for low-latency delivery everywhere.
+- [ ] **Rich Metadata** — Comprehensive metadata for reciters (personal information, images, links, etc.) and recitations (year, tajweed conventions/turuq, mistakes, audio issues, etc.) ensuring consistency and easier developer integration.
 
 **Coverage + Quality**
 
