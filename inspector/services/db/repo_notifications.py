@@ -122,6 +122,18 @@ def dismiss(notification_id: int, hf_user_id: str, *, at: datetime | None = None
     return cur.rowcount > 0
 
 
+def dismiss_by_source_key(source_key: str, *, at: datetime | None = None) -> int:
+    """Archive every active notification sharing ``source_key`` — across ALL
+    users (a fan-out writes one row per recipient under the same source_key, so
+    one call clears the whole set). Returns the number archived. Used for
+    auto-dismissing a request alert once its reciter reaches review."""
+    cur = get_conn().execute(
+        "UPDATE notifications SET dismissed_at = ? WHERE source_key = ? AND dismissed_at IS NULL",
+        (_serde.to_iso(at or _serde.now()), source_key),
+    )
+    return cur.rowcount
+
+
 def restore(notification_id: int, hf_user_id: str) -> bool:
     """Move one archived notification back to active. Returns False if the id
     doesn't exist, isn't theirs, or wasn't dismissed."""

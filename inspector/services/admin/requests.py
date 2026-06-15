@@ -1,13 +1,10 @@
-"""Admin Requests-tab read models + per-admin view marks (Flask-free).
+"""Admin Requests-tab read models (Flask-free).
 
 ``list_requests()`` assembles the review-queue payload for one status facet:
 a catalog-joined base list (cached on ``db_seq`` like ``admin/users.py``) with
-a per-caller overlay applied live (requester redaction for maintainers, the
-``viewed`` flag, and the caller's unviewed-open count).
-
-``mark_viewed()`` records that the calling admin has seen a request — written
-the first time they inline-expand it. Mirrors ``services/admin/reviews.py``'s
-per-admin ``review_views`` writer.
+a per-caller overlay applied live (requester redaction for maintainers).
+"Incoming request" awareness is surfaced via the per-user My Notifications rail
+(``services/notifications``) — this tab has no unviewed badge of its own.
 
 The proposed-changes ``changes`` list is built strictly over the
 ``ProposedEdits`` field set (the same fields the request form can edit), with
@@ -17,7 +14,6 @@ the current catalog value joined in as the ``from`` side.
 from __future__ import annotations
 
 from services.db import _serde, repo_requests
-from services.db import sync as _sync
 from services.db.connection import current_db_seq
 from services.state import catalog as catalog_service
 from services.storage import cache
@@ -61,8 +57,7 @@ def list_requests(*, status: str, caller_is_owner: bool, caller_hf_id: str) -> d
         base = _build_base_rows(db_status)
         cache.set_admin_requests_cache(db_seq, db_status, base)
 
-    viewed = repo_requests.viewed_ids_for_user(caller_hf_id) if db_status == "pending" else set()
-    rows = [_serialize(r, owner=caller_is_owner, viewed=viewed) for r in base]
+    rows = [_serialize(r, owner=caller_is_owner) for r in base]
 
     counts = repo_requests.counts_by_status()
     return {
@@ -73,31 +68,7 @@ def list_requests(*, status: str, caller_is_owner: bool, caller_hf_id: str) -> d
             "returned": counts.get("returned", 0),
             "discarded": counts.get("discarded", 0),
         },
-        "unviewed_count": repo_requests.count_unviewed_open_for_user(caller_hf_id),
     }
-
-
-def unviewed_count(*, caller_hf_id: str) -> int:
-    """Open requests the calling admin has not yet viewed (badge source)."""
-    return repo_requests.count_unviewed_open_for_user(caller_hf_id)
-
-
-# ---------------------------------------------------------------------------
-# Mutations
-# ---------------------------------------------------------------------------
-
-
-def mark_viewed(request_id: str, *, actor) -> bool:
-    """Mark ``request_id`` viewed for ``actor`` (idempotent). Returns False if
-    the request id is unknown. The first view per (request, admin) is a durable
-    write; repeats short-circuit so an expand doesn't churn the bucket."""
-    if repo_requests.is_viewed(request_id, actor.hf_user_id):
-        return True
-    if repo_requests.get_by_id(request_id) is None:
-        return False
-    with _sync.durable_transaction():
-        repo_requests.mark_viewed(request_id, actor.hf_user_id)
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -240,14 +211,13 @@ def _conflict(slug, delivery, proposed: dict) -> bool:
     )
 
 
-def _serialize(base_row: dict, *, owner: bool, viewed: set[str]) -> dict:
+def _serialize(base_row: dict, *, owner: bool) -> dict:
     out = {k: v for k, v in base_row.items() if not k.startswith("_")}
     requester = base_row["_requester"]
     out["requester_role"] = requester.get("role")
     if owner:
         out["requester_login"] = requester.get("login_at_time")
         out["requester_hf_user_id"] = requester.get("hf_user_id")
-    out["viewed"] = base_row["id"] in viewed
 
     tb = base_row["_transitioned_by"]
     if tb:

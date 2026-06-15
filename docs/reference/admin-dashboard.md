@@ -8,7 +8,7 @@ Owner/maintainer control surface launched from the Dashboard activity rail. A wi
 
 Gated on `$isAdmin` (maintainer **or** owner). Read-only data for maintainers; the role picker (Users), request resolution (Requests), and reviewer overrides (Reviews → General-drawer popover) are owner-only or use existing owner-gated routes.
 
-The entry button (`AdminDashboardButton`) shows a single quiet **dot** (no number) when the caller has unviewed open **requests** (`adminDashboard.unviewedRequests`, driven by a 30s `visiblePoll` on `/api/admin/requests/unviewed-count`). Inside the modal the **Requests** tab carries a numeric pill (`am-tab-count`). The marked-ready review notification was retired with the Releases-tab restructure — marked-ready work moved to Releases and carries no notification.
+The entry button (`AdminDashboardButton`) is badge-free — it just opens the modal. "New request" awareness moved to the per-user My Notifications rail (the owner-facing `request.received` alert, see [notifications.md](notifications.md) § Owner review alerts); the Requests tab no longer carries an unviewed dot/count, and the marked-ready review notification was retired with the Releases-tab restructure.
 
 ## Frontend
 
@@ -16,8 +16,8 @@ The entry button (`AdminDashboardButton`) shows a single quiet **dot** (no numbe
 
 | File | Role |
 |---|---|
-| `AdminDashboardButton.svelte` | Entry button above the activity rail; rendered only when `$isAdmin`. Opens the modal via the store. Runs the requests unviewed-count poller — quiet dot when > 0. |
-| `AdminDashboardModal.svelte` | `Modal size="wide"` + tab strip (`adminDashboard.activeTab`, persisted to localStorage). Renders `UsersCompartment` / `RequestsCompartment` / `reviews/ReviewsCompartment` / `releases/ReleasesCompartment` / `jobs/JobsCompartment` / `AnnouncementsCompartment` / `PermissionsCompartment`; the Requests tab carries the `am-tab-count` pill. |
+| `AdminDashboardButton.svelte` | Entry button above the activity rail; rendered only when `$isAdmin`. Opens the modal via the store. No badge. |
+| `AdminDashboardModal.svelte` | `Modal size="wide"` + tab strip (`adminDashboard.activeTab`, persisted to localStorage). Renders `UsersCompartment` / `RequestsCompartment` / `reviews/ReviewsCompartment` / `releases/ReleasesCompartment` / `jobs/JobsCompartment` / `AnnouncementsCompartment` / `PermissionsCompartment`. |
 | `AnnouncementsCompartment.svelte` | Compose a global announcement (title + optional body) + a management list of past announcements (active + revoked) with per-row Revoke. Gated on `announcements.send`. API client `lib/api/announcements.ts`; see [notifications.md](notifications.md) § Announcements. |
 | `RequestsCompartment.svelte` | Status facets (open / accepted / sent back / discarded + counts) over a review queue. Clicking a pending row expands an inline review (proposed-changes diff over `ProposedEdits` fields, requester note, conflict notice). Expanding a pending request marks it viewed (clears the unviewed dot/pill, decrements the badge). **Owner-only** inline reason + Send back / Discard; maintainers are read-only. Archived rows show a read-only resolution footer. Lazy-fetched on first activation + light `visiblePoll` while open. |
 | `reviews/ReviewsCompartment.svelte` | Slimmed read-only oversight surface — two collapsible buckets (**Under review** [claimed, not yet marked ready] / **Available for review**) split FE-side from one `/api/admin/reviews/list` fetch. Available collapsed by default (localStorage-persisted). Filter bar (Arabic + Latin search · riwayah/style/channel facets · `stalled`/`name` sort). Marked-ready / published / staleness moved to the Releases tab. |
@@ -66,7 +66,7 @@ API client `lib/api/admin-jobs.ts` (`fetchJobs`, `fetchJobDetail`; re-exports `c
 Pre-store history (cut/hf_publish that predate the store) is one-shot synthesized into records by `scripts/backfills/backfill_job_records.py` (from `gh_releases` + `per_recitation_releases(track='hf')`), so the tab reads complete history from one store.
 
 State:
-- `tabs/dashboard/stores/admin-dashboard.svelte.ts` (`adminDashboard`: `open`, `activeTab` [localStorage-persisted], `unviewedRequests`, `openModal/close/setTab/setUnviewedRequests`).
+- `tabs/dashboard/stores/admin-dashboard.svelte.ts` (`adminDashboard`: `open`, `activeTab` [localStorage-persisted], `openModal/close/setTab`).
 - `lib/stores/reviews.svelte.ts` (`reviewsStore`: `selectedSlug`, `openDrawer` [`'general'`], `filters`, `sortBy`, `refreshSeq`; `open(slug)`).
 - `lib/stores/releases.svelte.ts` (`releasesStore`: `filters`, `sortBy`, `refreshSeq` + `requestRefresh()`).
 
@@ -91,9 +91,7 @@ Routes live in `requests_bp` (`routes/claims/requests.py`); reads in `services/a
 
 | Route | Purpose |
 |---|---|
-| `GET /admin/requests?status=open\|accepted\|returned\|discarded` | Review-queue payload for one facet — catalog-joined (name/riwayah/style), proposed-changes diff over `ProposedEdits` fields, conflict flag, per-caller `viewed`, facet counts, and the caller's `unviewed_count`. Includes **slugless intake rows** (new-combo / new-reciter) alongside slug-based edit requests; intake rows carry `source` + `probe`. Maintainer+; **tier-redacted** (owners get `@login`+hf_id, maintainers role only). Base list cached on `db_seq` in `cache.py` (`get/set_admin_requests_cache`); per-caller overlay applied live. |
-| `GET /admin/requests/unviewed-count` | The caller's unviewed-open count (button dot + tab pill). Never cached. |
-| `POST /admin/requests/<id>/view` | Mark a request viewed for the calling admin (fired on inline expand). Per-admin, idempotent (`request_views` table); first view per (request, admin) is a durable write. |
+| `GET /admin/requests?status=open\|accepted\|returned\|discarded` | Review-queue payload for one facet — catalog-joined (name/riwayah/style), proposed-changes diff over `ProposedEdits` fields, conflict flag, facet counts. Includes **slugless intake rows** (new-combo / new-reciter) alongside slug-based edit requests; intake rows carry `source` + `probe`. Maintainer+; **tier-redacted** (owners get `@login`+hf_id, maintainers role only). Base list cached on `db_seq` in `cache.py` (`get/set_admin_requests_cache`); per-caller overlay applied live. "New request" awareness is the rail's `request.received` alert — no unviewed badge / view-mark route. |
 
 Resolution of **slug-based edit requests** stays on the existing per-slug routes, now **owner-only**: `POST /admin/request/<slug>/reject-{soft,hard}` (`@require_role(Role.OWNER)`; the `reciter.request_rejected_{soft,hard}` transition handlers use `_require_owner`). Acceptance is implicit (the alignment pipeline → `reciter.alignment_completed` applies the proposed edits + resolves the request to `accepted`).
 
