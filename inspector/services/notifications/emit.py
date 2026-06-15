@@ -44,6 +44,26 @@ class _Target(NamedTuple):
 
 _Resolver = Callable[[AuditRecord, ReciterRow | None, dict, str], list[_Target]]
 
+#: Capability that gates the owner-facing review alerts (new request, mark-ready
+#: with notes, segment flag/reply). Owner-only by default; an owner can delegate
+#: it to maintainers from the Permissions tab.
+REVIEW_ALERTS_CAP = "notifications.receive_review_alerts"
+
+
+def _review_alert_recipients() -> list[str]:
+    """Every user who currently holds ``REVIEW_ALERTS_CAP`` (owners + delegated
+    maintainers). Imported lazily to keep the state-machine import graph clean."""
+    from services.auth import capabilities as _caps
+
+    return _caps.users_with_capability(REVIEW_ALERTS_CAP)
+
+
+def _owner_targets(title: str, body: str | None, payload: dict[str, Any] | None) -> list[_Target]:
+    """One ``_Target`` per review-alert recipient, all sharing the frozen
+    title/body/payload. Per-target self-suppression (drop the acting user) is
+    applied by ``emit_for_event``'s loop."""
+    return [_Target(uid, title, body, payload, False) for uid in _review_alert_recipients()]
+
 
 def _reciter_name(record: AuditRecord, extra: dict) -> str:
     """Display name for the notification title. Prefers an explicit name in
@@ -111,6 +131,27 @@ def _r_intake_discarded(record, before, extra, name) -> list[_Target]:
     return [_Target(rid, copy.submission_discarded(name), record.reason, None, False)]
 
 
+def _r_marked_ready(record, before, extra, name) -> list[_Target]:
+    # Owner-facing alert — ONLY when the contributor left written notes in one
+    # of the mark-ready form's free-text boxes. A clean mark-ready (boxes empty,
+    # or an owner-bypass with no body) notifies no one — the reciter already
+    # shows up in the Reviews queue. Body carries the notes verbatim; the payload
+    # marker opens the read-only review modal in the Segments tab on click.
+    payload = record.payload or {}
+    checks = str(payload.get("comment_checks") or "").strip()
+    issues = str(payload.get("comment_issues") or "").strip()
+    if not checks and not issues:
+        return []
+    parts: list[str] = []
+    if checks:
+        parts.append(f"On the checks: {checks}")
+    if issues:
+        parts.append(f"Remaining issues: {issues}")
+    return _owner_targets(
+        copy.marked_ready_with_notes(name), "\n".join(parts), {"openMarkReadyReview": True}
+    )
+
+
 _RESOLVERS: dict[str, _Resolver] = {
     "reciter.request_rejected_soft": _r_request_rejected_soft,
     "reciter.request_rejected_hard": _r_request_rejected_hard,
@@ -119,6 +160,7 @@ _RESOLVERS: dict[str, _Resolver] = {
     "claim.force_released": _r_force_released,
     "request.intake_returned": _r_intake_returned,
     "request.intake_discarded": _r_intake_discarded,
+    "reciter.marked_ready": _r_marked_ready,
 }
 
 
@@ -137,31 +179,46 @@ def emit_for_event(
     """
     try:
         resolver = _RESOLVERS.get(record.event)
-        if resolver is None:
-            return
         extra = extra or {}
         name = _reciter_name(record, extra)
         actor_id = record.actor.hf_user_id if record.actor else None
-        for t in resolver(record, before, extra, name):
-            if not t.hf_user_id:
-                continue
-            if t.hf_user_id == actor_id and not t.keep_self:
-                continue
-            repo_notifications.create(
-                hf_user_id=t.hf_user_id,
-                event=record.event,
-                slug=record.slug,
-                title=t.title,
-                body=t.body,
-                payload=t.payload,
-                source_key=record.request_id,
-            )
+        if resolver is not None:
+            for t in resolver(record, before, extra, name):
+                if not t.hf_user_id:
+                    continue
+                if t.hf_user_id == actor_id and not t.keep_self:
+                    continue
+                repo_notifications.create(
+                    hf_user_id=t.hf_user_id,
+                    event=record.event,
+                    slug=record.slug,
+                    title=t.title,
+                    body=t.body,
+                    payload=t.payload,
+                    source_key=record.request_id,
+                )
+
+        # Auto-archive the "new request" alerts once the reciter reaches review:
+        # the request has been fully handled, so its card is stale for everyone.
+        if record.event == "reciter.alignment_completed" and record.slug:
+            _archive_request_alerts(record.slug)
     except Exception:  # noqa: BLE001 — best-effort; never break the transition
         logger.exception(
             "notifications.emit_for_event failed for event=%s slug=%s",
             getattr(record, "event", "?"),
             getattr(record, "slug", "?"),
         )
+
+
+def _archive_request_alerts(slug: str) -> None:
+    """Dismiss every owner's ``request.received`` card for ``slug``. Each request
+    row for the slug shares one ``source_key`` across all recipients, so one
+    ``dismiss_by_source_key`` per request clears the whole fan-out. Runs in the
+    caller's live transaction."""
+    from services.db import repo_requests
+
+    for rid in repo_requests.ids_for_slug(slug):
+        repo_notifications.dismiss_by_source_key(f"request:{rid}")
 
 
 def notify_flag_reply(
@@ -199,4 +256,89 @@ def notify_flag_reply(
     except Exception:  # noqa: BLE001 — best-effort; never break the save
         logger.exception(
             "notifications.notify_flag_reply failed for slug=%s uid=%s", slug, segment_uid
+        )
+
+
+def notify_owners_new_request(
+    *,
+    kind: str,
+    requester: Actor,
+    slug: str | None,
+    request_id: str,
+    body: str | None,
+    reciter_name: str | None = None,
+) -> None:
+    """Fan a just-submitted request out to the review-alert recipients.
+
+    Called from BOTH request-creation paths (the slug-based edit-request route
+    and the slugless intake submit) — deliberately NOT a ``reciter.requested``
+    resolver, since that event re-fires on intake ingest and would double-notify.
+    ``reciter_name`` is resolved from the catalog when omitted (slug-based);
+    slugless intake passes the proposed/looked-up name explicitly. Opens its own
+    ``durable_transaction``; self-suppressed for the requester. Best-effort. The
+    card is informational (no click-through) and auto-archives when the reciter
+    reaches review (see ``_archive_request_alerts``)."""
+    try:
+        if reciter_name is None:
+            from services.state import catalog
+
+            reciter_name = (catalog.display_name(slug) if slug else None) or "a new request"
+        from services.db import sync as _sync
+
+        with _sync.durable_transaction():
+            for uid in _review_alert_recipients():
+                if uid == requester.hf_user_id:
+                    continue
+                repo_notifications.create(
+                    hf_user_id=uid,
+                    event="request.received",
+                    slug=slug,
+                    title=copy.request_received(reciter_name),
+                    body=body,
+                    payload={"kind": kind, "request_id": request_id},
+                    source_key=f"request:{request_id}",
+                )
+    except Exception:  # noqa: BLE001 — best-effort; never break the submission
+        logger.exception(
+            "notifications.notify_owners_new_request failed for request=%s", request_id
+        )
+
+
+def notify_owners_flag_activity(
+    *,
+    actor: Actor,
+    slug: str,
+    segment_uid: str,
+    kind: str,
+    body: str | None,
+    at_utc: str,
+) -> None:
+    """Fan a new flag (``kind='created'``) or a flag reply (``kind='replied'``)
+    out to the review-alert recipients. Distinct audience from
+    ``notify_flag_reply`` (which tells the *original flagger*). Opens its own
+    ``durable_transaction``; self-suppressed for the acting user, so an owner's
+    own flag/reply never notifies them. Best-effort."""
+    try:
+        from services.state import catalog
+
+        name = catalog.display_name(slug) or slug
+        title = copy.flag_created(name) if kind == "created" else copy.flag_replied(name)
+        from services.db import sync as _sync
+
+        with _sync.durable_transaction():
+            for uid in _review_alert_recipients():
+                if uid == actor.hf_user_id:
+                    continue
+                repo_notifications.create(
+                    hf_user_id=uid,
+                    event="flag.created" if kind == "created" else "flag.replied",
+                    slug=slug,
+                    title=title,
+                    body=body,
+                    payload={"segment_uid": segment_uid},
+                    source_key=f"ownerflag:{kind}:{slug}:{segment_uid}:{at_utc}",
+                )
+    except Exception:  # noqa: BLE001 — best-effort; never break the save
+        logger.exception(
+            "notifications.notify_owners_flag_activity failed for slug=%s uid=%s", slug, segment_uid
         )

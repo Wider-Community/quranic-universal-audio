@@ -345,7 +345,6 @@ export interface AdminRequestRow {
   probe?: {
     [k: string]: unknown;
   } | null;
-  viewed?: boolean;
   requester_role?: string | null;
   requester_login?: string | null;
   requester_hf_user_id?: string | null;
@@ -369,7 +368,6 @@ export interface RequestChange {
 export interface AdminRequestsResponse {
   rows?: AdminRequestRow[];
   counts?: AdminRequestCounts;
-  unviewed_count?: number;
   [k: string]: unknown;
 }
 /**

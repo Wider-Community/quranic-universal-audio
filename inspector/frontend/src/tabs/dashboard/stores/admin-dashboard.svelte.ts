@@ -61,10 +61,6 @@ class AdminDashboardStore {
      * live case (owner→maintainer hides Permissions); ``loadLastTab`` guards
      * the cold-start case. */
     activeTab = $state<AdminTab>(loadLastTab());
-    /** Caller's unviewed-open request count. Drives the Requests tab pill +
-     * the dot on the entry button. Polled by the button; refreshed by the
-     * Requests compartment on load/view/resolve so both surfaces agree. */
-    unviewedRequests = $state(0);
 
     /** Reopen to the caller's last tab unless an explicit tab is given. */
     openModal(tab: AdminTab = this.activeTab): void {
@@ -79,10 +75,6 @@ class AdminDashboardStore {
     setTab(tab: AdminTab): void {
         this.activeTab = tab;
         persistTab(tab);
-    }
-
-    setUnviewedRequests(n: number): void {
-        this.unviewedRequests = Math.max(0, n);
     }
 }
 

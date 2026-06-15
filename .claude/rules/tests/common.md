@@ -14,6 +14,11 @@ paths:
 - New module / new branch / new error path = new test. Don't ship the change without one.
 - Tactical exceptions (config tweaks, doc edits, mechanical renames): note in the commit, don't pretend.
 
+## Running locally
+
+- Run only the tests relevant to the change (touched files/dirs), never the full suite — CI runs the full matrix.
+- Parallelise independent commands (codegen + targeted tests + typecheck) — issue them together or in the background, don't wait on each in sequence.
+
 ## Universal assertion principles
 
 - Pick the expected outcome and assert it strictly. Never `status in (200, 404)` or `body in ({...}, None)` — a regression must fail loudly, not slip through a disjunction.

@@ -47,6 +47,7 @@
         key: string;
         title: string;
         body: string | null;
+        badge: string | null;
         created_at: string;
         unseen: boolean;
         nav: { label: string; go: () => void } | null;
@@ -65,12 +66,23 @@
      */
     function navTarget(n: UserNotification): { label: string; go: () => void } | null {
         const slug = n.slug;
-        if (!slug) return null;
         switch (n.event) {
+            case 'request.received':
+                return null; // informational — owner reviews from the Requests tab
+            case 'reciter.marked_ready':
+                return slug
+                    ? {
+                          label: 'Review submission',
+                          go: () => gotoSegments(slug, { openMarkReadyReview: true }),
+                      }
+                    : null;
             case 'reciter.alignment_completed':
             case 'reciter.claimed':
-                return { label: 'Review in Segments', go: () => gotoSegments(slug) };
-            case 'flag.reply': {
+                return slug ? { label: 'Review in Segments', go: () => gotoSegments(slug) } : null;
+            case 'flag.reply':
+            case 'flag.created':
+            case 'flag.replied': {
+                if (!slug) return null;
                 const uid =
                     typeof n.payload?.segment_uid === 'string' ? n.payload.segment_uid : undefined;
                 return {
@@ -79,9 +91,39 @@
                 };
             }
             default:
-                return resolveDeliverySlug(slug)
+                return slug && resolveDeliverySlug(slug)
                     ? { label: 'View reciter', go: () => openReciter(n) }
                     : null;
+        }
+    }
+
+    /** A short type pill for a notification (the request kind, a flag/reply
+     *  marker, or a "has notes" marker). Announcements carry none. */
+    function kindBadgeLabel(kind: unknown): string | null {
+        switch (kind) {
+            case 'existing_combo_edit':
+                return 'Edit existing combo';
+            case 'existing_reciter_new_combo':
+                return 'New riwāyah / style';
+            case 'new_reciter':
+                return 'New reciter';
+            default:
+                return null;
+        }
+    }
+
+    function cardBadge(n: UserNotification): string | null {
+        switch (n.event) {
+            case 'request.received':
+                return kindBadgeLabel(n.payload?.kind);
+            case 'reciter.marked_ready':
+                return 'Has notes';
+            case 'flag.created':
+                return 'Flag · comment';
+            case 'flag.replied':
+                return 'Flag · reply';
+            default:
+                return null;
         }
     }
 
@@ -93,6 +135,7 @@
                     key: `ann-${a.id}`,
                     title: a.title,
                     body: a.body ?? null,
+                    badge: null,
                     created_at: a.created_at,
                     unseen: announcements.isNew(a.id),
                     nav: null,
@@ -104,6 +147,7 @@
                     key: `notif-${n.id}`,
                     title: n.title,
                     body: n.body,
+                    badge: cardBadge(n),
                     created_at: n.created_at,
                     unseen: !n.seen_at,
                     nav: navTarget(n),
@@ -150,9 +194,12 @@
                 <ol class="list">
                     {#each notifications.archived as n (n.id)}
                         {@const target = navTarget(n)}
+                        {@const bdg = cardBadge(n)}
                         <li class="item">
                             <div class="body-wrap">
-                                <p class="title">{n.title}</p>
+                                <p class="title">
+                                    {n.title}{#if bdg}<span class="kind">{bdg}</span>{/if}
+                                </p>
                                 {#if n.body}
                                     <p class="body">{n.body}</p>
                                 {/if}
@@ -190,7 +237,9 @@
                 {#each activeCards as c (c.key)}
                     <li class="item" class:unseen={c.unseen}>
                         <div class="body-wrap">
-                            <p class="title">{c.title}</p>
+                            <p class="title">
+                                {c.title}{#if c.badge}<span class="kind">{c.badge}</span>{/if}
+                            </p>
                             {#if c.body}
                                 <p class="body">{c.body}</p>
                             {/if}
@@ -301,6 +350,19 @@
         font-size: var(--fs-body);
         color: var(--text-secondary);
         line-height: var(--lh-normal);
+    }
+    .kind {
+        display: inline-block;
+        margin-left: 6px;
+        font-size: 10px;
+        font-weight: 500;
+        line-height: 1.4;
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: var(--surface-raised, var(--border-quiet));
+        color: var(--text-muted);
+        vertical-align: middle;
+        white-space: nowrap;
     }
     .body {
         margin: 0;

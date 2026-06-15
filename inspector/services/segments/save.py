@@ -476,21 +476,34 @@ def _mutate_seg_flag(seg: dict, intent: str, comment: str, actor: Actor, now: st
     return {"error": f"unknown flag intent: {intent!r}"}, 400
 
 
+def _flag_ref(seg: dict) -> str:
+    """A human ``surah:ayah`` locator from a seg's ``matched_ref`` for the
+    notification body. ``"2:255:1-2:255:5"`` → ``"2:255"``; a special transition
+    token (``Basmala`` …) passes through; anything unparseable → ``"segment"``."""
+    mr = str(seg.get("matched_ref") or "")
+    parts = mr.split("-")[0].split(":")
+    if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+        return f"{parts[0]}:{parts[1]}"
+    return mr or "segment"
+
+
 def _apply_flag_ops(matching: list[dict], operations: list, *, actor: Actor):
     """Apply every ``flag_segment`` op in ``operations`` to ``matching`` in place.
 
     Resolves the target by ``segment_uid`` against the current (post-apply)
     segments so it composes with any patch/full_replace in the same batch.
-    Returns ``(err_or_none, replies)``: ``err`` is ``None`` on success or an
-    ``(error_dict, http_status)`` tuple; ``replies`` describes each follow-up on
-    a flag owned by someone other than the actor, so the caller can notify the
-    original flagger after a successful save.
+    Returns ``(err_or_none, replies, owner_activity)``: ``err`` is ``None`` on
+    success or an ``(error_dict, http_status)`` tuple; ``replies`` describes each
+    follow-up on a flag owned by someone other than the actor (notify the
+    original flagger); ``owner_activity`` describes each new flag + reply for the
+    owner-facing review alerts (notify the review-alert recipients). Edits /
+    unflags produce neither.
     """
     flag_ops = [
         op for op in operations if isinstance(op, dict) and op.get("op_type") == "flag_segment"
     ]
     if not flag_ops:
-        return None, []
+        return None, [], []
 
     by_uid: dict[str, dict] = {}
     for e in matching:
@@ -501,24 +514,39 @@ def _apply_flag_ops(matching: list[dict], operations: list, *, actor: Actor):
 
     now = _utc_now_iso()
     replies: list[dict] = []
+    owner_activity: list[dict] = []
     for op in flag_ops:
         cmd = op.get("command") or {}
         uid = cmd.get("segmentUid")
         seg = by_uid.get(uid)
         if seg is None:
-            return ({"error": f"flag target segment not found: {uid!r}"}, 404), replies
+            return (
+                ({"error": f"flag target segment not found: {uid!r}"}, 404),
+                replies,
+                owner_activity,
+            )
         intent = cmd.get("intent") or "set"
         comment = (cmd.get("comment") or "").strip()
         # Capture the original flagger BEFORE the reply is appended.
         prior_flagger = ((seg.get("flag") or {}).get("actor") or {}).get("hf_user_id")
         err = _mutate_seg_flag(seg, intent, comment, actor, now)
         if err is not None:
-            return err, replies
+            return err, replies, owner_activity
         if intent == "followup" and prior_flagger and prior_flagger != actor.hf_user_id:
             replies.append(
                 {"flagger_id": prior_flagger, "segment_uid": uid, "comment": comment, "at_utc": now}
             )
-    return None, replies
+        if intent in ("set", "followup") and comment:
+            owner_activity.append(
+                {
+                    "segment_uid": uid,
+                    "kind": "created" if intent == "set" else "replied",
+                    "ref": _flag_ref(seg),
+                    "comment": comment,
+                    "at_utc": now,
+                }
+            )
+    return None, replies, owner_activity
 
 
 def _persist_and_record(
@@ -653,7 +681,9 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
 
     # Flag ops carry their payload in the operation envelope, not in
     # ``segments`` — applied here with a server-authoritative actor + clock.
-    flag_err, flag_replies = _apply_flag_ops(matching, updates.get("operations") or [], actor=actor)
+    flag_err, flag_replies, flag_owner_activity = _apply_flag_ops(
+        matching, updates.get("operations") or [], actor=actor
+    )
     if flag_err is not None:
         return flag_err
 
@@ -672,9 +702,10 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
         actor=actor,
     )
 
-    # Notify the original flagger of each reply on their flag — only after the
-    # save persisted. Best-effort (own durable txn); never affects the save.
-    if flag_replies and not (isinstance(result, tuple)):
+    # Notify after the save persisted — best-effort (own durable txn), never
+    # affects the save. Two audiences: the original flagger on a reply to their
+    # flag, and the review-alert recipients on any new flag / reply.
+    if not isinstance(result, tuple):
         from services.notifications import emit as _notify
 
         for r in flag_replies:
@@ -685,5 +716,14 @@ def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) ->
                 segment_uid=r["segment_uid"],
                 comment=r["comment"],
                 at_utc=r["at_utc"],
+            )
+        for a in flag_owner_activity:
+            _notify.notify_owners_flag_activity(
+                actor=actor,
+                slug=reciter,
+                segment_uid=a["segment_uid"],
+                kind=a["kind"],
+                body=f"{a['ref']} — {a['comment']}",
+                at_utc=a["at_utc"],
             )
     return result

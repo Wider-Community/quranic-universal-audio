@@ -17,15 +17,25 @@ the redirect is transparent on hover (`NotificationsRail.navTarget`):
 | Event | Tooltip | Destination |
 |---|---|---|
 | `reciter.alignment_completed`, `reciter.claimed` | "Review in Segments" | `gotoSegments(slug)` — Segments tab, reciter loaded (mirrors the post-claim redirect) |
-| `flag.reply` | "Open flagged segment" | `gotoSegments(slug, {openFlagged, focusFlaggedUid})` — Segments tab + Flagged accordion open + scrolled to the flagged segment |
+| `reciter.marked_ready` | "Review submission" | `gotoSegments(slug, {openMarkReadyReview})` — Segments tab + the read-only `MarkReadyReviewModal` (the reviewer's free-text notes, no checklist) |
+| `flag.reply`, `flag.created`, `flag.replied` | "Open flagged segment" | `gotoSegments(slug, {openFlagged, focusFlaggedUid})` — Segments tab + Flagged accordion open + scrolled to the flagged segment |
+| `request.received` | (none) | informational — no click-through; a type pill (`payload.kind`) names the request kind |
 | everything else | "View reciter" | dashboard detail modal (`openDetail`), when the reciter is still catalogued |
+
+A `cardBadge(n)` helper renders a small type pill next to the title:
+`request.received` → the kind (Edit existing combo / New riwāyah · style / New
+reciter), `reciter.marked_ready` → "Has notes", `flag.created` → "Flag · comment",
+`flag.replied` → "Flag · reply".
 
 The flag deep-link is a cross-tab handoff: `gotoSegments` writes
 `pendingSegmentsDeepLink` (`lib/utils/goto-segments.ts`); `ValidationPanel`
 consumes it once the reciter's flagged segments load — opens the `__flagged__`
 accordion and scrolls the `[data-flag-uid=...]` card into view. It waits for the
 target uid to appear so a stale (previous-reciter) flag list never triggers it.
-`flag.reply` notifications carry `payload.segment_uid` for this.
+`flag.reply` / `flag.created` / `flag.replied` notifications carry
+`payload.segment_uid` for this. The `openMarkReadyReview` variant is consumed by
+`SegmentsTab` (not `ValidationPanel`) — once the reciter is switched in it mounts
+`MarkReadyReviewModal` and clears the pending intent.
 
 ## Model
 
@@ -89,6 +99,34 @@ Every title names its reciter, resolved once via `catalog.display_name(slug)`
 | `request.intake_returned` | requester (`requests.requester_id`) | "Your submission for X was sent back" + reason |
 | `request.intake_discarded` | requester | "Your submission for X was discarded" + reason |
 | `flag.reply` | original flagger | "New reply on a segment you flagged in X" + reply text |
+| `reciter.marked_ready` | review-alert recipients (only when a comment box is non-empty) | "X marked ready — reviewer left notes" + the notes |
+
+## Owner review alerts
+
+Three event types fan out to **review-alert recipients** — everyone holding the
+`notifications.receive_review_alerts` capability (owner-default-on, delegatable
+to maintainers from the Permissions tab). `emit._review_alert_recipients()` →
+`capabilities.users_with_capability(...)`. Per-target self-suppression drops the
+acting user (an owner's own request / mark-ready / flag never notifies them).
+
+| Event | Fired from | Copy |
+|---|---|---|
+| `request.received` | `notify_owners_new_request` — called from the slug-based edit-request route AND `intake.submit` (NOT a `reciter.requested` resolver, which re-fires on ingest) | "New request · X" + a body detail; `payload.kind` = `existing_combo_edit` / `existing_reciter_new_combo` / `new_reciter` |
+| `reciter.marked_ready` | `_r_marked_ready` resolver (only when `comment_checks` or `comment_issues` is non-empty) | "X marked ready — reviewer left notes" + the notes; `payload.openMarkReadyReview` |
+| `flag.created` / `flag.replied` | `notify_owners_flag_activity` — from the segment-save flow for `set` / `followup` flag ops | "New flag on X" / "New reply on a flag · X" + `surah:ayah — comment`; `payload.segment_uid` |
+
+**Auto-archive.** `request.received` cards are informational. When the reciter
+reaches `awaiting_review` (the `reciter.alignment_completed` event), the request
+has been handled, so `emit._archive_request_alerts(slug)` dismisses every
+owner's card for it — `repo_requests.ids_for_slug(slug)` →
+`repo_notifications.dismiss_by_source_key("request:<id>")` (one source_key shared
+across all recipients, so one call clears the whole fan-out). The intake row's
+slug is back-filled at ingest, so both request paths are reachable by slug.
+
+The old per-admin **Requests-tab unviewed badge** (entry-button dot, tab count,
+per-row dot, `/api/admin/requests/unviewed-count`, the `request_views` writer)
+was retired in favour of these alerts — "new request" awareness lives only on
+the rail now.
 
 The requester for the reject/alignment events is captured in `_apply_event`
 **before** the handler runs (the pending row is archived mid-handler). The

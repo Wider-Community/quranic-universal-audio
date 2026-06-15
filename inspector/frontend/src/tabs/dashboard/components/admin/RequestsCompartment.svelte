@@ -2,14 +2,13 @@
     /**
      * Requests compartment: status facets + a review queue. Clicking a pending
      * row expands an inline review panel (proposed-changes diff + requester
-     * note + owner-only resolve actions). Expanding a pending request marks it
-     * "viewed" for the caller (clears the unviewed dot/pill). Maintainers are
-     * read-only; only owners see Send back / Discard.
+     * note + owner-only resolve actions). Maintainers are read-only; only owners
+     * see Send back / Discard. "New request" awareness lives in the My
+     * Notifications rail, so this tab carries no unviewed badge.
      */
     import {
         discardRequest,
         fetchRequests,
-        markRequestViewed,
         probeRequest,
         type RequestStatus,
         returnRequest,
@@ -24,7 +23,6 @@
     import { titleCaseSlug } from '../../../../lib/utils/delivery-label';
     import { relativeTime } from '../../../../lib/utils/relative-time';
     import { visiblePoll } from '../../../../lib/utils/visible-poll';
-    import { adminDashboard } from '../../stores/admin-dashboard.svelte';
     import AcceptIntakeDialog from './AcceptIntakeDialog.svelte';
 
     const INTAKE_KINDS = ['existing_reciter_new_combo', 'new_reciter'];
@@ -57,7 +55,6 @@
 
     function applyResult(r: AdminRequestsResponse): void {
         resp = r;
-        adminDashboard.setUnviewedRequests(r.unviewed_count ?? 0);
         loading = false;
         error = null;
     }
@@ -81,7 +78,7 @@
         return () => teardown();
     });
 
-    async function toggle(row: AdminRequestRow): Promise<void> {
+    function toggle(row: AdminRequestRow): void {
         if (expandedId === row.id) {
             expandedId = null;
             return;
@@ -89,17 +86,6 @@
         expandedId = row.id;
         reason = '';
         actionError = null;
-
-        // Mark viewed on first open of an unviewed open request (optimistic).
-        if (status === 'open' && !row.viewed) {
-            row.viewed = true;
-            adminDashboard.setUnviewedRequests(adminDashboard.unviewedRequests - 1);
-            try {
-                await markRequestViewed(row.id);
-            } catch {
-                // Best-effort: the next poll reconciles the authoritative count.
-            }
-        }
     }
 
     async function resolve(row: AdminRequestRow, kind: 'soft' | 'hard'): Promise<void> {
@@ -271,9 +257,6 @@
                     >
                         <span class="identity">
                             <span class="id-name">
-                                {#if status === 'open' && !row.viewed}
-                                    <span class="unread" aria-label="Unviewed"></span>
-                                {/if}
                                 <span class="name-en">{displayName(row)}</span>
                                 {#if row.name_ar}
                                     <span class="name-ar" dir="rtl">{row.name_ar}</span>
@@ -542,7 +525,6 @@
        rigid column grid stranding content in the middle. */
     .identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
     .id-name { display: flex; align-items: baseline; gap: var(--s-2); min-width: 0; }
-    .unread { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; align-self: center; }
     /* Latin leads at row-text size + primary; Arabic trails as a muted
      * inline detail. Matches the Reviews tab convention. */
     .name-en { font-size: var(--fs-row); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
