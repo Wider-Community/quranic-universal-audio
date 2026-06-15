@@ -18,6 +18,7 @@ export const LS_KEYS = {
     SEG_AUTOSCROLL:  'insp_seg_autoscroll',
     SEG_AUTOSAVE:    'insp_seg_autosave',
     SEG_SHORTCUTS:   'insp_seg_shortcuts',
+    SEG_VAL_SORTS:   'insp_seg_val_sorts',
     DASH_RECITER:    'insp_dash_reciter',
     DISMISSED_ANNOUNCEMENTS: 'insp_dismissed_announcements',
     SEEN_ANNOUNCEMENTS:      'insp_seen_announcements',

@@ -219,6 +219,19 @@
     color: #4cc9f0;
 }
 
+/* Sort pills — one per registry `sorts` option; active pill carries a
+   direction arrow and the cyan-active fill shared with the qalqala filters. */
+.val-sort-row { gap: 6px; }
+.val-btn.val-sort-pill.active {
+    background: rgba(76, 201, 240, 0.3);
+    border-color: #4cc9f0;
+    color: #fff;
+}
+.val-sort-arrow {
+    margin-left: 4px;
+    font-size: 0.85em;
+}
+
 .qalqala-filter-row { gap: 6px; }
 .val-btn.qalqala-letter-btn { font-size: 1.1em; min-width: 2.2em; }
 .val-btn.qalqala-letter-btn.active {
