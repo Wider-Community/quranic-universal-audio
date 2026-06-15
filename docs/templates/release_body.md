@@ -21,7 +21,7 @@ The release-level `manifest.json` and `catalog.json` index the whole release; ea
 
 {{ recitation_changes }}
 
-> ⚠️ A missing verse is almost always upstream (the source omits it, has an audio issue, or missing words). This is usually discovered during alignment and review, and we choose to not release those verses. 
+> ⚠️ Missing verses are almost always upstream (the source omits it, audio issue, missing words, or reciter mistake). As such, we deliberately do not release their timings. This is usually discovered during alignment and review, and get manually flagged by a reviewer. The segments tab in the website should pinpoint the root cause of the issue/removal.
 
 ## How audio and timestamps pair
 
