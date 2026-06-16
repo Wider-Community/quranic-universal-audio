@@ -17,9 +17,11 @@
     import { onDestroy, onMount } from 'svelte';
 
     import type { UserNotification } from '../../../lib/api/notifications';
+    import Icon from '../../../lib/icons/Icon.svelte';
     import { currentUser, isSignedIn } from '../../../lib/stores/current-user';
     import { gotoSegments } from '../../../lib/utils/goto-segments';
     import { relativeTime } from '../../../lib/utils/relative-time';
+    import EmailPrefsModal from './EmailPrefsModal.svelte';
     import { announcements } from '../stores/announcements.svelte';
     import { resolveDeliverySlug } from '../stores/catalog-data';
     import { openDetail } from '../stores/dashboard-state';
@@ -27,6 +29,8 @@
 
     const signedIn = $derived(isSignedIn($currentUser));
     const visible = $derived(signedIn || announcements.active.length > 0);
+
+    let prefsOpen = $state(false);
 
     onMount(() => announcements.start());
     onDestroy(() => {
@@ -164,6 +168,16 @@
     <aside class="notifs" aria-label="My notifications">
         <header>
             <h2>My notifications</h2>
+            {#if signedIn}
+                <button
+                    type="button"
+                    class="email-btn"
+                    aria-label="Email notification settings"
+                    title="Email notifications"
+                    onclick={() => (prefsOpen = true)}>
+                    <Icon name="mail" size={15} />
+                </button>
+            {/if}
             {#if badge > 0 && notifications.view === 'active'}
                 <span class="badge" aria-label="{badge} unread">{badge}</span>
             {/if}
@@ -268,6 +282,8 @@
     </aside>
 {/if}
 
+<EmailPrefsModal open={prefsOpen} onclose={() => (prefsOpen = false)} />
+
 <style>
     .notifs {
         padding: var(--s-5) var(--s-5);
@@ -285,6 +301,26 @@
         color: var(--text-primary);
         font-weight: 500;
         margin: 0;
+    }
+    .email-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 3px;
+        background: transparent;
+        border: 0;
+        border-radius: var(--radius-sm, 4px);
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: color var(--t-fast), background var(--t-fast);
+    }
+    .email-btn:hover {
+        color: var(--text-primary);
+        background: var(--surface-raised, var(--border-quiet));
+    }
+    .email-btn:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--accent);
     }
     .badge {
         font-size: 10px;

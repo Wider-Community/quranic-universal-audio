@@ -185,6 +185,47 @@ whenever ≥1 announcement is active; the Active/Archive toggle + personal list
 stay signed-in-only. Compose UI: the Admin → **Announcements** tab
 (`AnnouncementsCompartment.svelte`).
 
+## Email preferences (frontend)
+
+The rail header carries an **envelope button** (signed-in only,
+`NotificationsRail.svelte`) that opens `EmailPrefsModal.svelte`
+(`tabs/dashboard/components/`) — a per-user opt-in to no-reply emails for
+catalog + workflow events, distinct from the in-app rail above.
+
+**This is frontend wiring only.** The modal reads/writes through a typed client
+(`lib/api/email-prefs.ts`, the `EmailPrefs` shape) against
+`GET/POST /api/me/email-preferences`; that contract is the spec. The backend
+half — a prefs table, the email emitter, SMTP/no-reply delivery, and seeding the
+destination `email` from the HF account on first GET — is **not built yet**.
+
+**Model.** One destination `email`, six event settings, and two *shared*
+selections that several events reuse (pick once, applies to both):
+
+| Field | Type | Event |
+|---|---|---|
+| `request_aligned` | bool | A request you submitted finishes alignment |
+| `recitation_published` | `off`/`all`/`selected` | A recitation is published |
+| `timestamps_regenerated` | `off`/`all`/`selected` | A reciter's timestamps are regenerated |
+| `github_release` | bool | A new GitHub release is cut |
+| `riwayah_new_recitation` | bool | New recitation in a followed riwayah |
+| `riwayah_first_available` | bool | A followed riwayah becomes available (one-time) |
+| `reciters` | `reciter_id[]` | shared target for every `selected`-scope event |
+| `riwayahs` | slug[] | shared follow-list for both riwayah events |
+
+A `selected` scope with an empty `reciters` list (or a riwayah event with an
+empty `riwayahs` list) is a no-op — the modal warns inline rather than blocking
+save. The reciter/riwayah option sets are derived client-side from the loaded
+catalog (`PublicReciter.reciter_id` / the distinct `riwayat`).
+
+Reusable primitives added for the modal: `lib/components/Segmented.svelte`
+(scope selector) and `lib/components/ChipMultiSelect.svelte` (searchable
+multi-select chips); envelope glyph at `lib/icons/mail.svg`.
+
+**Backend follow-up:** add the `email_preferences` store + `GET/POST
+/api/me/email-preferences` (owner-scoped, `@require_same_origin` on POST, GET
+seeds `email` from the HF cookie), then an emitter that fans the six events out
+to subscribed addresses via a no-reply SMTP path.
+
 ## Tests
 
 - `tests/db/test_repo_announcements.py` — announcement create / list_active /
