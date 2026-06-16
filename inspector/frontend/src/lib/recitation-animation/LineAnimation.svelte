@@ -212,7 +212,7 @@
         const inPause = hit === null && lastActive >= 0;
         const items = wordCache.items;
         for (let i = 0; i < items.length; i++) {
-            const span = items[i]?.el?.querySelector('.ra-waqf');
+            const span = items[i]?.el?.querySelector('.ra-waqf-ink');
             if (span) span.classList.toggle('waqf-active', inPause && i === lastActive);
         }
     }
@@ -400,7 +400,7 @@
             tabindex="-1"
             onclick={() => onSeekToWord?.((pageUnits[i]?.start ?? 0) * 1000)}
             onkeydown={() => {}}
-        >{#if config.granularity === 'char' && w.hasChars}<span
+        >{#if w.waqf}<span class="ra-waqf-ink" aria-hidden="true">{w.clean}{w.waqf}</span>{/if}{#if config.granularity === 'char' && w.hasChars}<span
                     class="ra-word-ink"
                     aria-hidden="true"
                 >{w.clean}</span>{#each w.chars as ch, ci (ci)}<span
@@ -408,7 +408,7 @@
                     data-start={ch.start}
                     data-end={ch.end}
                     data-group-id={ch.groupId}
-                >{ch.text}</span>{/each}{:else}{w.clean}{/if}{#if w.waqf}<span class="ra-waqf" aria-hidden="true">{w.waqf}</span>{/if}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
+                >{ch.text}</span>{/each}{:else}{w.clean}{/if}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
     {/each}
 </div>
 
@@ -454,6 +454,11 @@
      *  word silhouette rather than each joined letter. */
     .ra-word {
         display: inline-block;
+        /* Containing block + own stacking context, so the `.ra-waqf-ink` mark
+         *  layer (z-index:-1) anchors to the word and stays clipped behind the
+         *  word's own letters rather than escaping to the line. */
+        position: relative;
+        isolation: isolate;
         cursor: pointer;
         opacity: var(--ra-unreached-opacity);
         text-shadow: var(--ra-word-shadow);
@@ -484,7 +489,6 @@
      *  stroked — a per-char outline shows dark seams across the joins. */
     .ra-line.ra-chars .ra-word {
         opacity: 1;
-        position: relative;
         /* Don't inherit the word outline down to each char span. */
         text-shadow: none;
     }
@@ -539,47 +543,48 @@
         opacity: 1;
     }
 
-    /* Waqf (stop) sign — split out of the word and given its own inline-block box
-     *  so it stands alone, never merges with the word's last letter, and never
-     *  takes the reveal highlight. Its own color always wins over the inherited
-     *  `.ra-word.active`/`.reached` color; it tracks the word's upcoming-visibility
-     *  (see opacity rules below); lit only while a pause holds on its word
-     *  (`.waqf-active`). `z-index` keeps it above the char-mode ink. */
-    .ra-line .ra-word .ra-waqf {
-        /* The waqf glyph is a combining mark: it must sit in its OWN run so it
-         *  doesn't merge onto the word's last letter and inherit the reveal
-         *  highlight (word mode) or collapse away (char mode). A zero-width
-         *  `inline-block` with `overflow: visible` gives it that run while adding
-         *  no horizontal advance (no gap between words). On its own it draws low
-         *  (no base letter to sit atop), so `translateY` lifts it back to the
-         *  natural high mark position. */
-        display: inline-block;
-        width: 0;
-        overflow: visible;
-        transform: translateY(-0.65em);
-        position: relative;
-        z-index: 2;
+    /* Waqf (stop) sign — the mark layer.
+     *
+     *  A waqf glyph is a combining mark: to sit at its true font-anchored (GPOS)
+     *  position it MUST shape in the same run as the word's last letter — but a
+     *  mark shaped into a run is also painted in that run's colour, so it can't
+     *  be recoloured independently from a split-out span. We need both natural
+     *  position AND an independent highlight, so we separate the *colour*, not
+     *  the *shaping*: this layer renders the FULL word (`clean` + mark) once more,
+     *  behind the real letters, painted in the MARK's colour. The word's own
+     *  in-flow letters (word mode) / ink + char spans (char mode) sit on top and
+     *  fully occlude this layer's letters, so only the mark — which rides above
+     *  the letters — peeks through. Both runs are identical `clean` glyphs at the
+     *  same origin, so the mark lands exactly where it would naturally.
+     *
+     *  Result: the mark never takes the word's reveal colour (it's a separate
+     *  layer), and lights on its own while a pause holds (`.waqf-active`). */
+    .ra-line .ra-word .ra-waqf-ink {
+        position: absolute;
+        inset: 0;
+        z-index: -1; /* behind the word's letters; clipped by the word's context */
+        white-space: nowrap;
+        pointer-events: none;
         color: var(--ra-base-color);
         text-shadow: var(--ra-word-shadow);
-        transition:
-            opacity var(--ra-word-reveal) var(--ra-easing),
-            color var(--ra-active-emphasis) var(--ra-easing),
-            text-shadow var(--ra-active-emphasis) var(--ra-easing);
+        transition: color var(--ra-active-emphasis) var(--ra-easing);
     }
     /* Visibility follows the upcoming setting like the rest of the line. In word
-     *  mode the parent `.ra-word`'s own opacity already compounds onto the mark
+     *  mode the parent `.ra-word`'s group opacity already dims this child layer
      *  (upcoming → dim/hidden, reached/active → full). In char mode the word
-     *  stays opaque and the ink/chars carry the dimming, so mirror that here. */
-    .ra-line.ra-chars .ra-word .ra-waqf {
+     *  stays opaque and the ink/chars carry the dimming, so mirror it here. */
+    .ra-line.ra-chars .ra-word .ra-waqf-ink {
         opacity: var(--ra-unreached-opacity);
     }
-    .ra-line.ra-chars .ra-word:global(.reached) .ra-waqf,
-    .ra-line.ra-chars .ra-word:global(.active) .ra-waqf {
+    .ra-line.ra-chars .ra-word:global(.reached) .ra-waqf-ink,
+    .ra-line.ra-chars .ra-word:global(.active) .ra-waqf-ink {
         opacity: 1;
     }
-    .ra-line .ra-word .ra-waqf:global(.waqf-active) {
+    /* Lit while a pause holds on this word — pure colour pop. No glow: this layer
+     *  also holds the (occluded) letters, so a text-shadow blur would halo the
+     *  whole word, not just the mark. */
+    .ra-line .ra-word .ra-waqf-ink:global(.waqf-active) {
         color: var(--ra-highlight);
-        text-shadow: var(--ra-glow);
     }
 
     /* One-frame transition kill across a granularity / layout re-page so words
@@ -595,7 +600,7 @@
     @media (prefers-reduced-motion: reduce) {
         .ra-word,
         .ra-line.ra-chars .ra-char,
-        .ra-line .ra-word .ra-waqf {
+        .ra-line .ra-word .ra-waqf-ink {
             transition: none;
         }
     }
