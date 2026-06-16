@@ -155,3 +155,49 @@ def test_detect_shafawi_on_prev_tail(pm):
     flat = _flat(pm, "2:10")
     for idx, _rule in bridges:
         assert _looks_like_merger(flat[idx])
+
+
+_SPLIT_EXT = {"ٰ", "ۥ", "ۦ"}
+
+
+def _shard_word(widx, word_mapping):
+    """A minimal shard word whose letters use the shard's written-grapheme
+    tokenization (split dagger/mini, keep maddah merged)."""
+    letters: list = []
+    for lm in word_mapping.letter_mappings:
+        full = lm.char + "".join(e.char for e in lm.extensions if e.char)
+        cur = ""
+        for ch in full:
+            if ch in _SPLIT_EXT:
+                if cur:
+                    letters.append([cur, 0, 10])
+                    cur = ""
+                letters.append([ch, 0, 10])
+            else:
+                cur += ch
+        if cur:
+            letters.append([cur, 0, 10])
+    return [widx, 0, 10, letters, [["x", 0, 10]]]
+
+
+def test_tag_stamps_silent_flags_matching_phonemizer(pm):
+    # بِسْمِ ٱللَّهِ continuing: the hamza wasl + first lam of ٱللَّهِ are silent.
+    res = pm.phonemize(ref="1:1:1-1:1:2")
+    mapping = res.get_mapping()
+    words = [_shard_word(i + 1, w) for i, w in enumerate(mapping.words)]
+
+    tag_segment_words(pm, "1:1", words)
+
+    stamped = [(lt[0], lt[3]) for wd in words for lt in wd[3]]
+    assert all(len(lt) == 4 for wd in words for lt in wd[3])
+    assert stamped == res.silent_flags()
+    assert ("ٱ", True) in stamped  # hamza wasl silent when continuing
+    assert ("ب", False) in stamped  # sounding consonant kept
+
+
+def test_stamp_silent_flags_noop_on_char_mismatch(pm):
+    # Letters that don't match the canonical text must be left untouched.
+    mapping = pm.phonemize(ref="1:1:1").get_mapping()
+    word = [1, 0, 10, [["z", 0, 10], ["q", 0, 10]], [["x", 0, 10]]]
+    tag_segment_words(pm, "1:1", [word])
+    assert word[3] == [["z", 0, 10], ["q", 0, 10]]  # unchanged, no 4th slot

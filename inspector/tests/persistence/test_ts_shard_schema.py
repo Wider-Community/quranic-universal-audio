@@ -22,15 +22,16 @@ from qua_shared.schemas import TsShardDoc, TsShardWord
 def _sample_word() -> list:
     """One 5-slot word tuple: [word_idx, start_ms, end_ms, letters, phones].
 
-    ``letters`` carries [char, start_ms|null, end_ms|null] triples (one null
-    timing to exercise the optional slot); ``phones`` carries a 3-cell row and
-    a 4-cell bridge-tagged row (slot 5 = cross-word tajweed bridge rule).
+    ``letters`` mixes a 4-slot row carrying the v4 ``silent`` flag with legacy
+    3-slot triples (one null timing to exercise the optional slot); ``phones``
+    carries a 3-cell row and a 4-cell bridge-tagged row (slot 5 = cross-word
+    tajweed bridge rule).
     """
     return [
         1,
         100,
         540,
-        [["ب", 100, 180], ["س", 180, None], ["م", 280, 540]],
+        [["ب", 100, 180, False], ["س", 180, None], ["م", 280, 540]],
         [["b", 100, 180], ["s", 180, 280, "bridge:idgham"]],
     ]
 
