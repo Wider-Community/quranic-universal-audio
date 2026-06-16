@@ -274,8 +274,8 @@
        glyph font), so the cell hugs the mark like a compact letter/phoneme tile
        instead of a slack box. A pinch of negative inline margin tightens it
        toward the words it sits between. */
-    width: calc(var(--analysis-word-font-size, 1.3rem) * 1.05);
-    height: calc(var(--analysis-word-font-size, 1.3rem) * 0.82);
+    width: calc(var(--analysis-word-font-size, 1.3rem) * 0.85);
+    height: calc(var(--analysis-word-font-size, 1.3rem) * 0.7);
     margin-inline: -2px;
     background: #0f0f23;
     border: 1px solid transparent;
@@ -302,9 +302,9 @@
        baseline) and to the right of the origin. Size it up (its ink is only ~0.4em
        of the font) and translate left+up by the measured ink-center offset so the
        mark lands centered in the cell. */
-    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.95);
+    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.5);
     line-height: 1;
-    transform: translate(-0.18em, -0.34em);
+    transform: translate(-0.16em, -0.16em);
 }
 /* Standard two-bar pause icon, drawn from currentColor so it inverts with the
    cell fill on active. */
