@@ -2,9 +2,10 @@
  * UnifiedDisplay silent-letter rendering tests.
  *
  * From shard schema v4 each letter carries a `silent` flag (phonemizer
- * `silent_flags()`). UnifiedDisplay renders every grapheme sharing a cell's
- * timing as its own `.lc` span and marks silent ones `.lc-silent`, so the
- * active-cell highlight reads on the pronounced letter alone.
+ * `silent_flags()`). UnifiedDisplay renders every grapheme as its own
+ * `.mega-letter` cell (never grouped) and marks silent ones `.silent` — greyed,
+ * non-interactive, and excluded from the highlight — so the highlight reads on
+ * the pronounced letter that shares the timing alone.
  */
 import { cleanup, render } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -58,8 +59,9 @@ describe('UnifiedDisplay — silent-letter rendering', () => {
         dashPort.attachElement(null);
     });
 
-    it('flags only the silent grapheme of a shared-timing cell with .lc-silent', () => {
-        // ٱل share one cell (same timing): hamza wasl silent, lam sounding; ح is its own cell.
+    it('renders every grapheme as its own cell and flags the silent one', () => {
+        // ٱ and ل share timing but each is still its own cell (no grouping); the
+        // hamza wasl is silent (greyed + inert), lam and ح sound.
         const { container } = mount(
             word([
                 { char: 'ٱ', start: 0, end: 0.2, silent: true },
@@ -68,15 +70,10 @@ describe('UnifiedDisplay — silent-letter rendering', () => {
             ]),
         );
         const cells = container.querySelectorAll('.mega-letter:not(.null-ts)');
-        expect(cells.length).toBe(2);
-
-        const firstParts = cells[0]!.querySelectorAll('.lc');
-        expect(Array.from(firstParts).map((s) => s.textContent)).toEqual(['ٱ', 'ل']);
-        expect(firstParts[0]!.classList.contains('lc-silent')).toBe(true);
-        expect(firstParts[1]!.classList.contains('lc-silent')).toBe(false);
-
-        const secondParts = cells[1]!.querySelectorAll('.lc');
-        expect(Array.from(secondParts).map((s) => s.textContent)).toEqual(['ح']);
-        expect(secondParts[0]!.classList.contains('lc-silent')).toBe(false);
+        // one cell per grapheme — NOT merged by shared timing
+        expect(Array.from(cells).map((c) => c.textContent)).toEqual(['ٱ', 'ل', 'ح']);
+        expect(cells[0]!.classList.contains('silent')).toBe(true); // hamza wasl
+        expect(cells[1]!.classList.contains('silent')).toBe(false); // lam
+        expect(cells[2]!.classList.contains('silent')).toBe(false); // ح
     });
 });
