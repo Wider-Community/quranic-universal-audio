@@ -163,23 +163,19 @@ _SPLIT_EXT = {"ٰ", "ۥ", "ۦ"}
 
 def _shard_word(widx, word_mapping):
     """A minimal shard word with contiguous word timing (no internal gap → one
-    run) whose letters use the shard's written-grapheme tokenization (split
-    dagger/mini, keep maddah merged)."""
+    run) whose letters use the shard's written-grapheme tokenization: split the
+    standalone extensions (dagger/mini), merge every other combining mark (the
+    maddah) onto the grapheme it follows — so a madd-silah is one ``ۦٓ`` token."""
     ws, we = (widx - 1) * 100, widx * 100
     letters: list = []
     for lm in word_mapping.letter_mappings:
-        full = lm.char + "".join(e.char for e in lm.extensions if e.char)
-        cur = ""
-        for ch in full:
-            if ch in _SPLIT_EXT:
-                if cur:
-                    letters.append([cur, ws, we])
-                    cur = ""
-                letters.append([ch, ws, we])
+        tokens: list = []
+        for ch in lm.char + "".join(e.char for e in lm.extensions if e.char):
+            if not tokens or ch in _SPLIT_EXT:
+                tokens.append(ch)
             else:
-                cur += ch
-        if cur:
-            letters.append([cur, ws, we])
+                tokens[-1] += ch
+        letters.extend([tok, ws, we] for tok in tokens)
     return [widx, ws, we, letters, [["x", ws, we]]]
 
 
@@ -220,6 +216,16 @@ def test_tag_silah_silent_only_when_word_stops(pm):
     cont = [_shard_word(15 + i, w) for i, w in enumerate(res2.get_mapping().words)]
     tag_segment_words(pm, "2:90", cont)
     assert ("ۦ", False) in [(lt[0], lt[3]) for lt in cont[0][3]]
+
+
+def test_tag_stamps_silah_maddah_word(pm):
+    # 2:90 بِهِۦٓ — the madd-silah ۦٓ is one grapheme; the segment must stamp (not
+    # NO-SLOT) — guards the maddah-after-split tokenization match.
+    res = pm.phonemize(ref="2:90:1-2:90:3")
+    words = [_shard_word(i + 1, w) for i, w in enumerate(res.get_mapping().words)]
+    tag_segment_words(pm, "2:90", words)
+    assert all(len(lt) == 4 for wd in words for lt in wd[3])  # every letter stamped
+    assert "ۦٓ" in [lt[0] for wd in words for lt in wd[3]]  # silah+maddah one token
 
 
 def test_stamp_silent_flags_noop_on_char_mismatch(pm):
