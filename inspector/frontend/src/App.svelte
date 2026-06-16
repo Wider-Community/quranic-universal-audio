@@ -23,6 +23,7 @@
     import SegmentsTab from './tabs/segments/SegmentsTab.svelte';
     import { segPort } from './tabs/segments/stores/playback';
     import TimestampsFooterAnalysis from './tabs/timestamps/components/TimestampsFooterAnalysis.svelte';
+    import TimestampsFooterFlags from './tabs/timestamps/components/TimestampsFooterFlags.svelte';
     import TimestampsFooterLeft from './tabs/timestamps/components/TimestampsFooterLeft.svelte';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
 
@@ -178,6 +179,11 @@
                         delivery={$playerContext.delivery}
                         on:select={onCombinationSelect}
                     />
+                {/if}
+            </svelte:fragment>
+            <svelte:fragment slot="loc-lead">
+                {#if activeTab === TAB_NAMES.TIMESTAMPS}
+                    <TimestampsFooterFlags />
                 {/if}
             </svelte:fragment>
             <svelte:fragment slot="center-trail">

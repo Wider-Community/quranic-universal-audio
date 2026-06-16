@@ -51,6 +51,7 @@
     import { wordBoundaryScan } from '../../lib/utils/word-boundary';
     import { loadCatalog as loadPublicCatalog, catalogData } from '../dashboard/stores/catalog-data';
     import TimestampsWaveform from './components/TimestampsWaveform.svelte';
+    import TsFlaggedAccordion from './components/TsFlaggedAccordion.svelte';
     import TsValidationPanel from './components/TsValidationPanel.svelte';
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
@@ -77,6 +78,7 @@
         verseTranslations,
     } from './stores/display';
     import { tsLoading } from './stores/loading';
+    import { loadTsFlags, tsFlaggedVerses } from './stores/ts-flags';
     import { exitLoop, loopTarget } from './stores/playback';
     import { manualShuffleRequest, shuffleAyah, shuffleMode } from './stores/shuffle';
     import { tsValidation } from './stores/validation';
@@ -116,6 +118,7 @@
     let chapterStartMs: number[] = [];
     let loadedChapterKey = ''; // `${slug}:${chapter}` currently assembled
     let focusRef = '';
+    let lastFlagsSlug = ''; // reciter whose user-reported flags are loaded
     let manifestSlugs = new Set<string>();
     /** Set when a context switch should seek to a specific verse once the new
      *  chapter's data + audio are ready (shuffle / validation jump / entry). */
@@ -333,6 +336,13 @@
                 });
             } else {
                 tsValidation.set(null);
+            }
+
+            // Public user-reported verse flags — reciter-scoped, so only reload
+            // when the reciter actually changes (not on every chapter switch).
+            if (slug !== lastFlagsSlug) {
+                lastFlagsSlug = slug;
+                void loadTsFlags(slug);
             }
 
             // Apply a queued seek (entry / shuffle / validation jump), else focus
@@ -729,10 +739,20 @@
     let navHandled = false;
     $: if ($pendingTsNavigation) consumePendingNav($pendingTsNavigation);
 
-    function consumePendingNav(nav: { surah: number; ayah: number; autoplay: boolean }): void {
+    function consumePendingNav(nav: {
+        surah: number;
+        ayah: number;
+        autoplay: boolean;
+        slug?: string;
+    }): void {
         navHandled = true;
         pendingTsNavigation.set(null);
-        void loadBookmarkedVerse(nav.surah, nav.ayah, nav.autoplay);
+        if (nav.slug) {
+            // Flag-notification redirect — go to that exact reciter + verse.
+            void jumpToTarget(nav.slug, nav.surah, `${nav.surah}:${nav.ayah}`, nav.autoplay);
+        } else {
+            void loadBookmarkedVerse(nav.surah, nav.ayah, nav.autoplay);
+        }
     }
 
     async function loadBookmarkedVerse(surah: number, ayah: number, autoplay: boolean): Promise<void> {
@@ -958,10 +978,17 @@
     style:--analysis-letter-font-size={cfg?.analysis_letter_font_size ?? ''}
 >
     <main>
-        {#if $tsValidation}
+        {#if $tsValidation || $tsFlaggedVerses.length}
             <div class="ts-validation-row">
-                <TsValidationPanel
-                    doc={$tsValidation}
+                {#if $tsValidation}
+                    <TsValidationPanel
+                        doc={$tsValidation}
+                        activeVerse={$selectedVerse}
+                        onselect={jumpToFlaggedVerse}
+                    />
+                {/if}
+                <TsFlaggedAccordion
+                    flags={$tsFlaggedVerses}
                     activeVerse={$selectedVerse}
                     onselect={jumpToFlaggedVerse}
                 />

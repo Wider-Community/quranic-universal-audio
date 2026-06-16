@@ -608,31 +608,38 @@
                 />
             </slot>
 
-            <div class="surah-trigger-wrap" use:clickOutside={() => (surahPopoverOpen = false)}>
-                <button
-                    type="button"
-                    class="surah-trigger"
-                    on:click={() => (surahPopoverOpen = !surahPopoverOpen)}
-                    disabled={surahNums.length === 0}
-                    aria-expanded={surahPopoverOpen}
-                    aria-haspopup="dialog"
-                >
-                    {#if $playerContext.surahNum}
-                        {activeSurahName ?? `Surah ${$playerContext.surahNum}`}
-                    {:else}
-                        Pick surah
+            <!-- Inner-edge group: a tab-specific lead affordance (Timestamps
+                 fills it with the Report button) sits directly left of the
+                 surah picker, both pinned to the transport edge. -->
+            <div class="loc-group">
+                <slot name="loc-lead" />
+
+                <div class="surah-trigger-wrap" use:clickOutside={() => (surahPopoverOpen = false)}>
+                    <button
+                        type="button"
+                        class="surah-trigger"
+                        on:click={() => (surahPopoverOpen = !surahPopoverOpen)}
+                        disabled={surahNums.length === 0}
+                        aria-expanded={surahPopoverOpen}
+                        aria-haspopup="dialog"
+                    >
+                        {#if $playerContext.surahNum}
+                            {activeSurahName ?? `Surah ${$playerContext.surahNum}`}
+                        {:else}
+                            Pick surah
+                        {/if}
+                    </button>
+                    {#if surahPopoverOpen}
+                        <div class="surah-pop">
+                            <SurahPopover
+                                surahNums={surahNums}
+                                value={$playerContext.surahNum}
+                                on:change={onSurahChange}
+                                on:hover={(ev) => warmSurah(ev.detail)}
+                            />
+                        </div>
                     {/if}
-                </button>
-                {#if surahPopoverOpen}
-                    <div class="surah-pop">
-                        <SurahPopover
-                            surahNums={surahNums}
-                            value={$playerContext.surahNum}
-                            on:change={onSurahChange}
-                            on:hover={(ev) => warmSurah(ev.detail)}
-                        />
-                    </div>
-                {/if}
+                </div>
             </div>
         </div>
 
@@ -745,6 +752,14 @@
         align-items: center;
         justify-content: center;
         gap: var(--s-3);
+    }
+    /* Lead affordance + surah picker, kept together at the inner (transport)
+       edge while `meta` stays pinned far-left via the zone's space-between. */
+    .loc-group {
+        display: flex;
+        align-items: stretch;
+        gap: var(--s-2);
+        min-width: 0;
     }
     .surah-trigger-wrap { position: relative; }
     .surah-trigger {

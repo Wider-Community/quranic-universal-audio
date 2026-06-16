@@ -22,6 +22,7 @@ export const LS_KEYS = {
     DASH_RECITER:    'insp_dash_reciter',
     DISMISSED_ANNOUNCEMENTS: 'insp_dismissed_announcements',
     SEEN_ANNOUNCEMENTS:      'insp_seen_announcements',
+    ANON_FLAG_TOKEN: 'insp_anon_flag_token',
 } as const;
 
 export const PLACEHOLDER_SELECT = '-- select --';

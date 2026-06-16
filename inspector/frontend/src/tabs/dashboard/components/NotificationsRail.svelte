@@ -21,6 +21,7 @@
     import { can } from '../../../lib/stores/capabilities';
     import { currentUser, isSignedIn } from '../../../lib/stores/current-user';
     import { gotoSegments } from '../../../lib/utils/goto-segments';
+    import { gotoTimestamps } from '../../../lib/utils/goto-timestamps';
     import { relativeTime } from '../../../lib/utils/relative-time';
     import EmailPrefsModal from './EmailPrefsModal.svelte';
     import { announcements } from '../stores/announcements.svelte';
@@ -30,6 +31,7 @@
 
     const signedIn = $derived(isSignedIn($currentUser));
     const canEmail = can('notify.email_subscriptions');
+    const canSeeReporter = can('timestamps.see_flagger_identity');
     // The rail is the email-subscribe entry point for everyone (incl. anonymous),
     // so it shows whenever email is available — not only for signed-in users or
     // when an announcement is active.
@@ -123,6 +125,15 @@
                     go: () => gotoSegments(slug, { openFlagged: true, focusFlaggedUid: uid }),
                 };
             }
+            case 'ts_flag.created': {
+                const verseKey =
+                    typeof n.payload?.verse_key === 'string' ? n.payload.verse_key : '';
+                if (!slug || !verseKey) return null;
+                return {
+                    label: 'View flagged verse',
+                    go: () => gotoTimestamps(slug, verseKey),
+                };
+            }
             default:
                 return slug && resolveDeliverySlug(slug)
                     ? { label: 'View reciter', go: () => openReciter(n) }
@@ -155,9 +166,24 @@
                 return 'Flag · comment';
             case 'flag.replied':
                 return 'Flag · reply';
+            case 'ts_flag.created':
+                return 'Timestamps · report';
             default:
                 return null;
         }
+    }
+
+    /** Card body — for a timestamps-flag report, identity-capable owners also
+     *  see who reported it (appended from the payload). Everyone else sees the
+     *  verse + comment only. */
+    function cardBody(n: UserNotification, showReporter: boolean): string | null {
+        if (n.event === 'ts_flag.created' && showReporter) {
+            const login =
+                typeof n.payload?.author_login === 'string' ? n.payload.author_login : null;
+            const who = login ?? 'an anonymous listener';
+            return n.body ? `${n.body}\n— reported by ${who}` : `Reported by ${who}`;
+        }
+        return n.body;
     }
 
     /** Active view: announcements + personal notifications merged, newest-first. */
@@ -179,7 +205,7 @@
                 (n): RailCard => ({
                     key: `notif-${n.id}`,
                     title: n.title,
-                    body: n.body,
+                    body: cardBody(n, $canSeeReporter),
                     badge: cardBadge(n),
                     created_at: n.created_at,
                     unseen: !n.seen_at,
@@ -238,13 +264,14 @@
                     {#each notifications.archived as n (n.id)}
                         {@const target = navTarget(n)}
                         {@const bdg = cardBadge(n)}
+                        {@const body = cardBody(n, $canSeeReporter)}
                         <li class="item">
                             <div class="body-wrap">
                                 <p class="title">
                                     {n.title}{#if bdg}<span class="kind">{bdg}</span>{/if}
                                 </p>
-                                {#if n.body}
-                                    <p class="body">{n.body}</p>
+                                {#if body}
+                                    <p class="body">{body}</p>
                                 {/if}
                                 <time class="time" datetime={n.created_at}
                                     >{relativeTime(n.created_at)}</time>

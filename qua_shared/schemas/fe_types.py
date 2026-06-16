@@ -144,6 +144,14 @@ from .wire.seg import (
     SegValidateResponse,
 )
 from .wire.timestamps import TsConfigResponse, TsManifestResponse
+from .wire.ts_flags import (
+    TsFlagAuthor,
+    TsFlagComment,
+    TsFlagCreateRequest,
+    TsFlagVerseCount,
+    TsReciterFlags,
+    TsVerseFlags,
+)
 
 __all__ = [
     "Announcement",
@@ -174,6 +182,12 @@ __all__ = [
     "SegmentsChapterSummary",
     "TsConfigResponse",
     "TsManifestResponse",
+    "TsFlagAuthor",
+    "TsFlagComment",
+    "TsFlagCreateRequest",
+    "TsFlagVerseCount",
+    "TsReciterFlags",
+    "TsVerseFlags",
     "AutoGenTsConfig",
     "AutomationConfig",
     "AutomationResponse",

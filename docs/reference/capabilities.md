@@ -62,7 +62,7 @@ The FE hardcodes **nothing** about which capabilities exist — it renders whate
 ## Invariants (hold regardless of the override table)
 - **Owner is a superuser** — `can(owner, anything) is True`.
 - **`manage_permissions` is `owner_only_fixed`** — never grantable to a lower tier even if a row is forced in. Gates the Permissions tab + endpoints; the recovery anchor, so owners can't lock themselves out.
-- **Anonymous only where `anon_eligible`** — action caps are always `False` for anonymous; only the public-read caps (`view.catalog`, `view.public_activity`) are anonymous-toggleable.
+- **Anonymous only where `anon_eligible`** — action caps are always `False` for anonymous; only the public-read caps (`view.catalog`, `view.public_activity`) and the public Timestamps-tab report cap (`timestamps.flag`, default-on for everyone) are anonymous-toggleable. `timestamps.see_flagger_identity` (owner-default) gates revealing the reporter's login on a verse flag's comments + notification — the owner-facing sibling of `segments.see_flagger_identity`.
 - **Structural integrity is NOT a capability** — the last-active-owner guard + owner-on-owner revoke asymmetry (`services/admin/users.py`, `services/auth/access.py`) stay enforced even with `roles.*` toggled on.
 
 ## Guards (keep the convention honest)

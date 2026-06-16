@@ -304,6 +304,54 @@ def notify_owners_new_request(
         )
 
 
+def notify_owners_ts_flag(
+    *,
+    slug: str,
+    verse_key: str,
+    comment: str | None,
+    author_id: str | None,
+    author_login: str | None,
+    at_utc: str,
+) -> None:
+    """Fan a new Timestamps-tab verse flag out to the review-alert recipients.
+
+    Fires once per NEW comment (re-edits of an existing comment don't re-notify).
+    Anonymous flags have ``author_id``/``author_login`` ``None``. ``author_login``
+    rides in the payload so the rail can show it to identity-capable owners; the
+    body stays identity-free. Opens its own ``durable_transaction``;
+    self-suppressed for a signed-in flagger. Best-effort. Clicking the card
+    deep-links to the Timestamps tab at this reciter + verse.
+    """
+    try:
+        from services.state import catalog
+
+        name = catalog.display_name(slug) or slug
+        body = f"{verse_key} — {comment}" if comment else verse_key
+        from services.db import sync as _sync
+
+        with _sync.durable_transaction():
+            for uid in _review_alert_recipients():
+                if author_id and uid == author_id:
+                    continue
+                repo_notifications.create(
+                    hf_user_id=uid,
+                    event="ts_flag.created",
+                    slug=slug,
+                    title=copy.ts_flag_reported(name),
+                    body=body,
+                    payload={
+                        "verse_key": verse_key,
+                        "author_id": author_id,
+                        "author_login": author_login,
+                    },
+                    source_key=f"tsflag:{slug}:{verse_key}:{at_utc}",
+                )
+    except Exception:  # noqa: BLE001 — best-effort; never break the flag write
+        logger.exception(
+            "notifications.notify_owners_ts_flag failed for slug=%s verse=%s", slug, verse_key
+        )
+
+
 def notify_owners_flag_activity(
     *,
     actor: Actor,
