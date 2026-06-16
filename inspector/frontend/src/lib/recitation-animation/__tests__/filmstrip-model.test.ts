@@ -58,6 +58,37 @@ describe('buildFilmstripModel word fractions', () => {
     });
 });
 
+describe('buildFilmstripModel nextGapSec', () => {
+    it('measures between-verse silence from canonical end to the next start', () => {
+        const units = [
+            unit('1:1:1', [[0, 1]]),
+            unit('1:1:2', [[1, 2]]), // verse 1 canonical end = 2
+            unit('1:2:1', [[3, 4]]), // verse 2 starts at 3 → 1s pause
+            unit('1:3:1', [[4, 5]]), // verse 3 starts at 4 → contiguous (0)
+        ];
+        const cells = buildFilmstripModel(units, 'duration').cells;
+        expect(cells[0]!.nextGapSec).toBeCloseTo(1, 6);
+        expect(cells[1]!.nextGapSec).toBeCloseTo(0, 6);
+        expect(cells[2]!.nextGapSec).toBeCloseTo(0, 6); // last cell — no next
+    });
+
+    it('skips unrecited placeholders when measuring the gap to the next present verse', () => {
+        const units = [
+            unit('1:1:1', [[0, 2]]), // verse 1 end = 2
+            unit('1:3:1', [[5, 6]]), // verse 3 starts at 5 (verse 2 fully missing)
+        ];
+        const coverage = {
+            numVerses: 3,
+            status: new Map<number, 'words' | 'full'>([[2, 'full']]),
+            missingWords: new Map<number, number[]>(),
+        };
+        const cells = buildFilmstripModel(units, 'duration', coverage).cells;
+        // cells: [verse1, placeholder verse2, verse3]; gap skips the placeholder.
+        expect(cells[0]!.nextGapSec).toBeCloseTo(3, 6);
+        expect(cells[1]!.nextGapSec).toBe(0); // placeholder carries no silence
+    });
+});
+
 describe('buildFilmstripModel lookups', () => {
     it('maps every unit to its verse cell across two verses', () => {
         const units = [

@@ -92,8 +92,13 @@ export interface RecitationAnimConfig {
     filmstripMinCellPx: number;
     /** Max cell width (px) — caps long ayahs. */
     filmstripMaxCellPx: number;
-    /** Gap between cells (px). */
+    /** Gap between cells (px) — the MINIMUM (a near-zero inter-verse silence). */
     filmstripGapPx: number;
+    /** Largest inter-cell gap, as a multiple of `filmstripGapPx`, that the
+     *  longest between-verse silence in the chapter scales up to. The cursor
+     *  scrolls continuously across the scaled gap during the silence (non-snap
+     *  modes only); snap mode keeps the fixed `filmstripGapPx`. */
+    filmstripGapMaxScale: number;
     /** Strip height (px). */
     filmstripHeightPx: number;
 }
@@ -148,6 +153,7 @@ export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
     filmstripMinCellPx: 30,
     filmstripMaxCellPx: 170,
     filmstripGapPx: 5,
+    filmstripGapMaxScale: 6,
     filmstripHeightPx: 36,
 };
 

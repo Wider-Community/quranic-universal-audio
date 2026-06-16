@@ -197,9 +197,24 @@
         const h = hit !== undefined ? hit : findActiveAt(units, sortedIntervals, tt, globalActive);
         if (config.granularity === 'char') {
             sweepChar(tt, h);
-            return;
+        } else {
+            sweepWord(h);
         }
-        sweepWord(h);
+        sweepWaqf(h);
+    }
+
+    /** Light the stop sign on the just-finished word while a pause holds. A pause
+     *  is a silence gap (`hit == null`) after at least one word was lit; the sign
+     *  on `lastActive` lights, everything else stays neutral. A pause at a word
+     *  with no stop sign does nothing. */
+    function sweepWaqf(hit: ActiveHit | null): void {
+        if (!wordCache) return;
+        const inPause = hit === null && lastActive >= 0;
+        const items = wordCache.items;
+        for (let i = 0; i < items.length; i++) {
+            const span = items[i]?.el?.querySelector('.ra-waqf');
+            if (span) span.classList.toggle('waqf-active', inPause && i === lastActive);
+        }
     }
 
     /** Translate a global unit index to its page-local position, or -1 if the
@@ -388,12 +403,12 @@
         >{#if config.granularity === 'char' && w.hasChars}<span
                     class="ra-word-ink"
                     aria-hidden="true"
-                >{w.word.display_text || w.word.text}</span>{#each w.chars as ch, ci (ci)}<span
+                >{w.clean}</span>{#each w.chars as ch, ci (ci)}<span
                     class="ra-char"
                     data-start={ch.start}
                     data-end={ch.end}
                     data-group-id={ch.groupId}
-                >{ch.text}</span>{/each}{:else}{w.word.display_text || w.word.text}{/if}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
+                >{ch.text}</span>{/each}{:else}{w.clean}{/if}{#if w.waqf}<span class="ra-waqf" aria-hidden="true">{w.waqf}</span>{/if}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
     {/each}
 </div>
 
@@ -524,6 +539,21 @@
         opacity: 1;
     }
 
+    /* Waqf (stop) sign — split out of the word so the reveal never colors it.
+     *  Always neutral (own color beats the inherited `.ra-word.active` highlight);
+     *  lights only while a pause holds on its word (`.waqf-active`). */
+    .ra-waqf {
+        color: var(--ra-base-color);
+        text-shadow: var(--ra-word-shadow);
+        transition:
+            color var(--ra-active-emphasis) var(--ra-easing),
+            text-shadow var(--ra-active-emphasis) var(--ra-easing);
+    }
+    .ra-waqf:global(.waqf-active) {
+        color: var(--ra-highlight);
+        text-shadow: var(--ra-glow);
+    }
+
     /* One-frame transition kill across a granularity / layout re-page so words
      *  snap to their new-mode opacity instead of all fading together (the
      *  letter→word flash). */
@@ -536,7 +566,8 @@
 
     @media (prefers-reduced-motion: reduce) {
         .ra-word,
-        .ra-line.ra-chars .ra-char {
+        .ra-line.ra-chars .ra-char,
+        .ra-waqf {
             transition: none;
         }
     }

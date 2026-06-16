@@ -15,6 +15,7 @@ import {
     splitIntoCharGroups,
     ZWSP,
 } from '../../utils/arabic-text';
+import { splitWaqf } from '../../utils/waqf';
 
 /** Minimal word shape the builder needs. Both `TsWord` and `AnimUnit`
  *  (mapped) satisfy it — keeps the builder reusable across surfaces. */
@@ -38,7 +39,13 @@ export interface AnimWord {
     wordIndex: number;
     start: number;
     end: number;
-    /** Characters split for character-granularity animation. */
+    /** Display text with any surfaced waqf (stop) mark removed — what the reveal
+     *  actually animates. The mark is pulled out to `waqf` so it never takes the
+     *  highlight (it lights only on a pause, handled by the surface). */
+    clean: string;
+    /** The surfaced waqf mark stripped from `clean`, or null. */
+    waqf: string | null;
+    /** Characters split for character-granularity animation (from `clean`). */
     chars: AnimChar[];
     /** Whether the word has any char groups (empty display_text → render text directly). */
     hasChars: boolean;
@@ -51,8 +58,10 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
     const out: AnimWord[] = [];
 
     words.forEach((word, wi) => {
-        const displayText = word.display_text || word.text;
-        const charGroups = splitIntoCharGroups(displayText);
+        // Pull any surfaced waqf (stop) mark out before grouping — it's a
+        // combining mark riding the last letter and must never join the reveal.
+        const { clean, mark } = splitWaqf(word.display_text || word.text);
+        const charGroups = splitIntoCharGroups(clean);
         const letters = word.letters || [];
 
         // Assign initial group IDs.
@@ -118,6 +127,8 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
             wordIndex: wi,
             start: word.start,
             end: word.end,
+            clean,
+            waqf: mark,
             chars,
             hasChars: chars.length > 0,
         });

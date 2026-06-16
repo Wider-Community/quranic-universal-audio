@@ -56,7 +56,7 @@
     flex-direction: column;
     gap: var(--word-phoneme-gap);
     cursor: pointer;
-    transition: transform 0.15s;
+    transition: transform 0.15s, opacity 0.15s;
     /* Double-click engages loop — don't let the browser's default word-select
        kick in and smear text highlight across the token. */
     user-select: none;
@@ -256,6 +256,72 @@
 
 .crossword-bridge.hidden {
     display: none;
+}
+
+/* ============ Pause bridge ============ */
+/* A detected inter-word silence, surfaced as a small cell at the top between the
+   two word columns. Neutral (muted) at rest; lights to the word-highlight hue
+   while its silence plays or on waveform-hover. Carries the lifted-out waqf
+   (stop) sign, or the neutral pause icon when the pause has no stop sign. */
+.pause-bridge {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 14px;
+    height: var(--analysis-word-font-size, 1.3rem);
+    margin-top: 2px;
+    color: var(--text-muted, #8a8a99);
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+.pause-bridge.active {
+    color: var(--anim-highlight-color);
+    transform: translateY(-1px) scale(1.08);
+}
+.pause-bridge.hover-preview {
+    color: color-mix(in srgb, var(--anim-highlight-color) 70%, var(--text-muted, #8a8a99));
+}
+.pause-waqf {
+    font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 0.95);
+    line-height: 1;
+}
+/* Standard two-bar pause icon, drawn from currentColor so it lights with the
+   bridge. */
+.pause-icon {
+    position: relative;
+    width: 7px;
+    height: 0.78em;
+}
+.pause-icon::before,
+.pause-icon::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    border-radius: 1px;
+    background: currentColor;
+}
+.pause-icon::before {
+    left: 1px;
+}
+.pause-icon::after {
+    right: 1px;
+}
+/* During a live pause, the rest of the row recedes so the bridge reads as the
+   moment's focus. */
+.unified-display.in-pause .mega-block {
+    opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pause-bridge {
+        transition: none;
+    }
+    .pause-bridge.active {
+        transform: none;
+    }
 }
 
 /* Active states */

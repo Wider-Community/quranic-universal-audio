@@ -30,7 +30,7 @@
     import { type RecitationAnimConfig } from './config';
     import type { ActiveCellInfo, CellMissing, FilmstripModel } from './filmstrip-model';
     import { stepScroll } from './filmstrip-scroll';
-    import { buildSortedIntervals, findActiveAt } from './recitation-active';
+    import { buildSortedIntervals, findActiveAt, nextIntervalAfter } from './recitation-active';
     import type { AnimUnit } from './types';
 
     interface Props {
@@ -120,7 +120,20 @@
         ayah: number;
         w: number;
         cumBefore: number; // px before this cell's left (cells + gaps)
+        gapAfter: number; // px gap to the right (silence-scaled, non-snap)
         missing: CellMissing;
+    }
+
+    /** Per-cell inter-cell gap (px), scaled by the between-verse silence so the
+     *  cursor scrolls continuously across it. `filmstripGapPx` is the floor (a
+     *  contiguous boundary); the chapter's longest silence reaches
+     *  `filmstripGapPx × filmstripGapMaxScale`, linearly normalized. Snap mode
+     *  keeps the fixed floor so its geometry is unchanged. */
+    function gapPxFor(nextGapSec: number, maxGapSec: number): number {
+        const floor = config.filmstripGapPx;
+        if (config.filmstripMotion === 'snap' || nextGapSec <= 0 || maxGapSec <= 0) return floor;
+        const norm = clamp(0, 1, nextGapSec / maxGapSec);
+        return Math.round(floor * (1 + norm * (config.filmstripGapMaxScale - 1)));
     }
 
     // Cell widths from each verse's CANONICAL recited duration — never inflated
@@ -130,6 +143,7 @@
         if (!mc.length) return [];
         const durs = mc.map((c) => Math.max(1, c.canonDurSec * 1000));
         const maxDur = Math.max(...durs);
+        const maxGap = mc.reduce((m, c) => Math.max(m, c.nextGapSec), 0);
         const out: Cell[] = [];
         let cum = 0;
         for (let i = 0; i < mc.length; i++) {
@@ -141,8 +155,9 @@
                     lerp(config.filmstripMinCellPx, propW, config.filmstripProportional),
                 ),
             );
-            out.push({ ayah: mc[i]!.ayah, w, cumBefore: cum, missing: mc[i]!.missing });
-            cum += w + config.filmstripGapPx;
+            const gapAfter = gapPxFor(mc[i]!.nextGapSec, maxGap);
+            out.push({ ayah: mc[i]!.ayah, w, cumBefore: cum, gapAfter, missing: mc[i]!.missing });
+            cum += w + gapAfter;
         }
         return out;
     });
@@ -345,6 +360,31 @@
         return false;
     }
 
+    /** During a BETWEEN-verse silence, glide the needle across the inter-cell gap
+     *  proportionally to elapsed silence — so a pause feels like continuous travel
+     *  rather than a freeze-then-jump. Within-verse / leading / trailing silence
+     *  holds (returns without moving). Scrolling modes only (gated by caller). */
+    function scrollThroughGap(tSec: number): void {
+        if (frozenIdx < 0) return; // leading silence — nothing recited yet
+        const mcA = model.cells[frozenIdx];
+        const cellA = cells[frozenIdx];
+        if (!mcA || !cellA || mcA.canonStartSec < 0) return;
+        const nextIv = nextIntervalAfter(sorted, tSec);
+        if (!nextIv) return; // trailing silence — hold at the last position
+        const nextIdx = model.cellOfUnit[nextIv.unitIdx] ?? -1;
+        if (nextIdx < 0 || nextIdx === frozenIdx) return; // within-verse pause — hold
+        const cellB = cells[nextIdx];
+        if (!cellB) return;
+        const gapStart = mcA.canonStartSec + mcA.canonDurSec;
+        const gapEnd = nextIv.start;
+        const p = gapEnd > gapStart ? clamp(0, 1, (tSec - gapStart) / (gapEnd - gapStart)) : 1;
+        const from = cellA.cumBefore + cellA.w; // right edge of the finished cell
+        const to = cellB.cumBefore; //            left edge of the upcoming cell
+        if (tween) cancelTween();
+        following = false;
+        offset = clamp(0, lastRight, lerp(from, to, p));
+    }
+
     /** One rAF step of recitation-driven playback. */
     function drivePlayback(): void {
         const nowMs = getTimeMs();
@@ -355,9 +395,12 @@
         const seeked = lastTimeMs >= 0 && Math.abs(nowMs - lastTimeMs) > SEEK_JUMP_MS;
         lastTimeMs = nowMs;
         if (!r) {
-            // Silence: freeze — hold offset + fill, drop highlight/cursor. The
-            // last active cell (frozenIdx) stays as a de-accented, held bar.
+            // Silence. Snap mode freezes (holds offset + fill, no needle). The
+            // scrolling modes keep moving: a between-verse pause scrolls the grey
+            // needle continuously across the (silence-scaled) inter-cell gap;
+            // within-verse / leading / trailing silence holds.
             silent = true;
+            if (config.filmstripMotion !== 'snap') scrollThroughGap(tSec);
             return;
         }
         const prevIdx = activeIdx;
@@ -587,7 +630,7 @@
                     class:missing-full={c.missing === 'full'}
                     title={missingTitle(c)}
                     style:width="{c.w}px"
-                    style:margin-right="{config.filmstripGapPx}px"
+                    style:margin-right="{c.gapAfter}px"
                 >
                     {#if c.missing !== 'full'}
                         <div class="cell-fill" class:glide={jumping && i === activeIdx}></div>
@@ -597,8 +640,8 @@
             {/each}
             <div class="pad" style:width="{pad}px"></div>
         </div>
-        {#if config.filmstripMotion !== 'snap' && !silent}
-            <div class="needle" aria-hidden="true"></div>
+        {#if config.filmstripMotion !== 'snap'}
+            <div class="needle" class:silent aria-hidden="true"></div>
         {/if}
         <div class="fade fade-l" aria-hidden="true"></div>
         <div class="fade fade-r" aria-hidden="true"></div>
@@ -752,6 +795,18 @@
         border-radius: 1px;
         pointer-events: none;
         box-shadow: 0 0 8px var(--accent-tint);
+        transition: background var(--t-fast), box-shadow var(--t-fast);
+    }
+    /* Silence: the needle keeps traveling (across the gap) but greys out so the
+       pause reads as "not reciting" without losing the position cursor. */
+    .needle.silent {
+        background: var(--text-muted);
+        box-shadow: none;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .needle {
+            transition: none;
+        }
     }
     .fade {
         position: absolute;

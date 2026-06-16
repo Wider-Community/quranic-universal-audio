@@ -61,6 +61,12 @@ export interface VerseCell {
     words: WordFrac[];
     /** Canonical first-occurrence start (seconds) — the click/drag seek target. */
     canonStartSec: number;
+    /** Detected between-verse silence (seconds) from this verse's canonical end to
+     *  the next PRESENT verse's canonical start; 0 for the last cell, a missing
+     *  next, or contiguous verses. Drives the silence-scaled inter-cell gap +
+     *  continuous scroll-through. Within-verse silences live inside the cell and
+     *  never appear here. */
+    nextGapSec: number;
     /** Coverage state. `full` cells are placeholders (no units, no geometry):
      *  unrecited verses kept in the strip so the gap is visible, but skipped by
      *  playback + navigation. Default `none` when no coverage is supplied. */
@@ -102,6 +108,7 @@ function placeholderCell(surah: number, ayah: number): VerseCell {
         unitEnd: -1,
         words: [],
         canonStartSec: -1,
+        nextGapSec: 0,
         missing: 'full',
     };
 }
@@ -157,6 +164,7 @@ export function buildFilmstripModel(
             unitEnd,
             words,
             canonStartSec: head.intervals[0]?.start ?? head.start,
+            nextGapSec: 0,
             missing: coverage?.status.get(head.ayah) === 'words' ? 'words' : 'none',
         });
     }
@@ -178,7 +186,9 @@ export function buildFilmstripModel(
 }
 
 /** Build reverse lookups for an ordered cell list. `cellOfUnit[u]` maps a global
- *  unit index to its cell; placeholder cells (empty unit range) contribute none. */
+ *  unit index to its cell; placeholder cells (empty unit range) contribute none.
+ *  Also stamps each present cell's `nextGapSec` (silence to the next present
+ *  cell, skipping unrecited placeholders). */
 function _assemble(cells: VerseCell[], unitCount: number): FilmstripModel {
     const indexByAyahKey = new Map<string, number>();
     const cellOfUnit = new Int32Array(unitCount).fill(-1);
@@ -186,6 +196,20 @@ function _assemble(cells: VerseCell[], unitCount: number): FilmstripModel {
         const c = cells[idx]!;
         indexByAyahKey.set(c.ayahKey, idx);
         for (let u = c.unitStart; u < c.unitEnd; u++) cellOfUnit[u] = idx;
+    }
+    // Between-verse silence: each present cell's canonical end → the next present
+    // cell's canonical start. Placeholders (canonStartSec < 0) are skipped on
+    // both sides so an unrecited verse doesn't fabricate a silence.
+    for (let i = 0; i < cells.length; i++) {
+        const c = cells[i]!;
+        if (c.canonStartSec < 0) continue;
+        const end = c.canonStartSec + c.canonDurSec;
+        for (let j = i + 1; j < cells.length; j++) {
+            const n = cells[j]!;
+            if (n.canonStartSec < 0) continue;
+            c.nextGapSec = Math.max(0, n.canonStartSec - end);
+            break;
+        }
     }
     return { cells, indexByAyahKey, cellOfUnit };
 }
