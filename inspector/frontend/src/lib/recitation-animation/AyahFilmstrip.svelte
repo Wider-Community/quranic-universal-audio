@@ -85,6 +85,11 @@
     /** An audio-time jump beyond this in one frame ⇒ a seek (glide), not the
      *  normal forward creep of playback. */
     const SEEK_JUMP_MS = 400;
+    /** Width (px) of an unrecited (placeholder) verse cell. It has no recited
+     *  duration to scale from, and playback skips it, so it gets a fixed visible
+     *  width purely to stay legible as a skipped slot. Recited cells are pure
+     *  time and carry no minimum. */
+    const PLACEHOLDER_CELL_PX = 30;
 
     let containerEl = $state<HTMLDivElement | undefined>(undefined);
     let cw = $state(0); // container width
@@ -95,6 +100,7 @@
     let activeIdx = $state(-1); // cell of the recited word; holds during silence
     let cellFrac = $state(0); // word-proportional fill of the active cell
     let silent = $state(false); // in a silence gap → frozen, no highlight/cursor
+    let crossingGap = $state(false); // between-verse pause → needle greys + scrolls the gap
     let frozenIdx = $state(-1); // last active cell, held while silent
     let jumping = $state(false); // mid-glide → cell-fill eases too
     let following = false; // continuous mode: smoothing offset toward live target
@@ -120,43 +126,35 @@
         ayah: number;
         w: number;
         cumBefore: number; // px before this cell's left (cells + gaps)
-        gapAfter: number; // px gap to the right (silence-scaled, non-snap)
+        gapAfter: number; // px gap to the right (silence-scaled)
         missing: CellMissing;
     }
 
-    /** Per-cell inter-cell gap (px), scaled by the between-verse silence so the
-     *  cursor scrolls continuously across it. `filmstripGapPx` is the floor (a
-     *  contiguous boundary); the chapter's longest silence reaches
-     *  `filmstripGapPx × filmstripGapMaxScale`, linearly normalized. Snap mode
-     *  keeps the fixed floor so its geometry is unchanged. */
-    function gapPxFor(nextGapSec: number, maxGapSec: number): number {
-        const floor = config.filmstripGapPx;
-        if (config.filmstripMotion === 'snap' || nextGapSec <= 0 || maxGapSec <= 0) return floor;
-        const norm = clamp(0, 1, nextGapSec / maxGapSec);
-        return Math.round(floor * (1 + norm * (config.filmstripGapMaxScale - 1)));
-    }
-
-    // Cell widths from each verse's CANONICAL recited duration — never inflated
-    // by a loopback's later occurrence (unlike the old ayah max-end boundary).
+    // The strip is a fixed-scale time-ruler at the global `filmstripPxPerSec`:
+    // cell width = canonical recited seconds × pxPerSec, between-verse gap =
+    // silence seconds × pxPerSec. The cursor therefore travels at one velocity
+    // everywhere (within cells and across silences), and a given silence renders
+    // to the same px in every surah and for every reciter — no per-chapter
+    // normalization. Width uses each verse's CANONICAL recited duration, so a
+    // loopback's later occurrence never inflates it. Recited cells carry NO
+    // minimum width — a floor would make the cursor speed up crossing a short
+    // verse — only an unrecited placeholder (no recited time) gets a fixed
+    // visible width. A near-zero silence floors to `filmstripGapPx`. Geometry is
+    // identical across motion modes (only the cursor's motion differs), so
+    // toggling modes never shifts the layout.
     const cells = $derived.by((): Cell[] => {
         const mc = model.cells;
         if (!mc.length) return [];
-        const durs = mc.map((c) => Math.max(1, c.canonDurSec * 1000));
-        const maxDur = Math.max(...durs);
-        const maxGap = mc.reduce((m, c) => Math.max(m, c.nextGapSec), 0);
+        const pxPerSec = config.filmstripPxPerSec;
         const out: Cell[] = [];
         let cum = 0;
         for (let i = 0; i < mc.length; i++) {
-            const propW = (durs[i]! / maxDur) * config.filmstripMaxCellPx;
-            const w = Math.round(
-                clamp(
-                    config.filmstripMinCellPx,
-                    config.filmstripMaxCellPx,
-                    lerp(config.filmstripMinCellPx, propW, config.filmstripProportional),
-                ),
-            );
-            const gapAfter = gapPxFor(mc[i]!.nextGapSec, maxGap);
-            out.push({ ayah: mc[i]!.ayah, w, cumBefore: cum, gapAfter, missing: mc[i]!.missing });
+            const c = mc[i]!;
+            const w = c.missing === 'full'
+                ? PLACEHOLDER_CELL_PX
+                : Math.max(1, Math.round(c.canonDurSec * pxPerSec));
+            const gapAfter = Math.round(Math.max(config.filmstripGapPx, c.nextGapSec * pxPerSec));
+            out.push({ ayah: c.ayah, w, cumBefore: cum, gapAfter, missing: c.missing });
             cum += w + gapAfter;
         }
         return out;
@@ -360,22 +358,17 @@
         return false;
     }
 
-    /** During a BETWEEN-verse silence, glide the needle across the inter-cell gap
-     *  proportionally to elapsed silence — so a pause feels like continuous travel
-     *  rather than a freeze-then-jump. Within-verse / leading / trailing silence
-     *  holds (returns without moving). Scrolling modes only (gated by caller). */
-    function scrollThroughGap(tSec: number): void {
-        if (frozenIdx < 0) return; // leading silence — nothing recited yet
+    /** Glide the needle across the inter-cell gap proportionally to the elapsed
+     *  between-verse silence, so the pause reads as continuous travel rather than a
+     *  freeze-then-jump. `gapStart` is the verse's real recited END (`canonEndSec`,
+     *  NOT canonStart+canonDur — that omits within-verse gaps and would start the
+     *  glide already part-way across). The caller has resolved the upcoming cell. */
+    function scrollThroughGap(tSec: number, nextIv: { start: number }, nextIdx: number): void {
         const mcA = model.cells[frozenIdx];
         const cellA = cells[frozenIdx];
-        if (!mcA || !cellA || mcA.canonStartSec < 0) return;
-        const nextIv = nextIntervalAfter(sorted, tSec);
-        if (!nextIv) return; // trailing silence — hold at the last position
-        const nextIdx = model.cellOfUnit[nextIv.unitIdx] ?? -1;
-        if (nextIdx < 0 || nextIdx === frozenIdx) return; // within-verse pause — hold
         const cellB = cells[nextIdx];
-        if (!cellB) return;
-        const gapStart = mcA.canonStartSec + mcA.canonDurSec;
+        if (!mcA || !cellA || !cellB || mcA.canonEndSec < 0) return;
+        const gapStart = mcA.canonEndSec;
         const gapEnd = nextIv.start;
         const p = gapEnd > gapStart ? clamp(0, 1, (tSec - gapStart) / (gapEnd - gapStart)) : 1;
         const from = cellA.cumBefore + cellA.w; // right edge of the finished cell
@@ -395,12 +388,21 @@
         const seeked = lastTimeMs >= 0 && Math.abs(nowMs - lastTimeMs) > SEEK_JUMP_MS;
         lastTimeMs = nowMs;
         if (!r) {
-            // Silence. Snap mode freezes (holds offset + fill, no needle). The
-            // scrolling modes keep moving: a between-verse pause scrolls the grey
-            // needle continuously across the (silence-scaled) inter-cell gap;
-            // within-verse / leading / trailing silence holds.
+            // Silence: hold the cell as frozen. Only a BETWEEN-verse pause gets the
+            // special treatment — the needle stays visible, greys, and scrolls
+            // continuously across the inter-cell gap. Within-verse / leading /
+            // trailing silence is left untouched (needle hidden, held), so a
+            // reciter's mid-verse pause doesn't grey or move the cursor.
             silent = true;
-            if (config.filmstripMotion !== 'snap') scrollThroughGap(tSec);
+            crossingGap = false;
+            if (config.filmstripMotion !== 'snap' && frozenIdx >= 0) {
+                const nextIv = nextIntervalAfter(sorted, tSec);
+                const nextIdx = nextIv ? (model.cellOfUnit[nextIv.unitIdx] ?? -1) : -1;
+                if (nextIdx > frozenIdx) {
+                    crossingGap = true;
+                    scrollThroughGap(tSec, nextIv!, nextIdx);
+                }
+            }
             return;
         }
         const prevIdx = activeIdx;
@@ -408,6 +410,7 @@
         lastActiveUnit = r.unitIdx;
         const discont = seeked || isJump(prevIdx, r.idx, prevFrac, r.frac);
         silent = false;
+        crossingGap = false;
         activeIdx = r.idx;
         cellFrac = r.frac;
         frozenIdx = r.idx;
@@ -471,6 +474,7 @@
         activeIdx = -1;
         cellFrac = 0;
         silent = false;
+        crossingGap = false;
         frozenIdx = -1;
         lastActiveUnit = -1;
         lastTimeMs = -1;
@@ -548,6 +552,7 @@
     /** Re-sync after a seek while paused (parent calls this). */
     export function refresh(): void {
         if (cw === 0) return;
+        crossingGap = false;
         const r = recitationAt((getTimeMs() + config.leadMs) / 1000, -1);
         if (!r) {
             // Landed in a gap → hold the frozen state (or nothing, pre-first).
@@ -572,6 +577,7 @@
         activeIdx = -1;
         cellFrac = 0;
         silent = false;
+        crossingGap = false;
         frozenIdx = -1;
         lastActiveUnit = -1;
         lastTimeMs = -1;
@@ -640,8 +646,8 @@
             {/each}
             <div class="pad" style:width="{pad}px"></div>
         </div>
-        {#if config.filmstripMotion !== 'snap'}
-            <div class="needle" class:silent aria-hidden="true"></div>
+        {#if config.filmstripMotion !== 'snap' && (!silent || crossingGap)}
+            <div class="needle" class:silent={crossingGap} aria-hidden="true"></div>
         {/if}
         <div class="fade fade-l" aria-hidden="true"></div>
         <div class="fade fade-r" aria-hidden="true"></div>

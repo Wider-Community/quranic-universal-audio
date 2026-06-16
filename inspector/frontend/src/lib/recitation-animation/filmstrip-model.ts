@@ -61,6 +61,11 @@ export interface VerseCell {
     words: WordFrac[];
     /** Canonical first-occurrence start (seconds) — the click/drag seek target. */
     canonStartSec: number;
+    /** Verse's canonical recited END (seconds) — the latest first-occurrence end
+     *  across its words. Unlike `canonStartSec + canonDurSec` (which sums word
+     *  durations and so EXCLUDES within-verse gaps), this is the real wall-clock
+     *  end, so the between-verse gap measures only the silence after the verse. */
+    canonEndSec: number;
     /** Detected between-verse silence (seconds) from this verse's canonical end to
      *  the next PRESENT verse's canonical start; 0 for the last cell, a missing
      *  next, or contiguous verses. Drives the silence-scaled inter-cell gap +
@@ -108,6 +113,7 @@ function placeholderCell(surah: number, ayah: number): VerseCell {
         unitEnd: -1,
         words: [],
         canonStartSec: -1,
+        canonEndSec: -1,
         nextGapSec: 0,
         missing: 'full',
     };
@@ -138,10 +144,13 @@ export function buildFilmstripModel(
         const head = units[unitStart]!;
         let canonDurSec = 0;
         let total = 0;
+        let canonEndSec = head.intervals[0]?.end ?? head.end;
         for (let i = unitStart; i < unitEnd; i++) {
             const d = canonDur(units[i]!);
             canonDurSec += d;
             total += weighting === 'equal' ? 1 : d;
+            const end = units[i]!.intervals[0]?.end ?? units[i]!.end;
+            if (end > canonEndSec) canonEndSec = end;
         }
         if (total <= 0) total = 1; // degenerate guard (all-zero weights)
 
@@ -164,6 +173,7 @@ export function buildFilmstripModel(
             unitEnd,
             words,
             canonStartSec: head.intervals[0]?.start ?? head.start,
+            canonEndSec,
             nextGapSec: 0,
             missing: coverage?.status.get(head.ayah) === 'words' ? 'words' : 'none',
         });
@@ -197,17 +207,19 @@ function _assemble(cells: VerseCell[], unitCount: number): FilmstripModel {
         indexByAyahKey.set(c.ayahKey, idx);
         for (let u = c.unitStart; u < c.unitEnd; u++) cellOfUnit[u] = idx;
     }
-    // Between-verse silence: each present cell's canonical end → the next present
-    // cell's canonical start. Placeholders (canonStartSec < 0) are skipped on
-    // both sides so an unrecited verse doesn't fabricate a silence.
+    // Between-verse silence: each present cell's recited END → the next present
+    // cell's start. Uses `canonEndSec` (real wall-clock end), NOT
+    // `canonStartSec + canonDurSec` (which omits within-verse gaps and would fold
+    // a verse's internal pauses into the between-verse gap). Placeholders
+    // (canonStartSec < 0) are skipped on both sides so an unrecited verse doesn't
+    // fabricate a silence.
     for (let i = 0; i < cells.length; i++) {
         const c = cells[i]!;
         if (c.canonStartSec < 0) continue;
-        const end = c.canonStartSec + c.canonDurSec;
         for (let j = i + 1; j < cells.length; j++) {
             const n = cells[j]!;
             if (n.canonStartSec < 0) continue;
-            c.nextGapSec = Math.max(0, n.canonStartSec - end);
+            c.nextGapSec = Math.max(0, n.canonStartSec - c.canonEndSec);
             break;
         }
     }

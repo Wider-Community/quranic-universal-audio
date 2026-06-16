@@ -72,6 +72,19 @@ describe('buildFilmstripModel nextGapSec', () => {
         expect(cells[2]!.nextGapSec).toBeCloseTo(0, 6); // last cell — no next
     });
 
+    it('excludes within-verse gaps from the between-verse silence', () => {
+        const units = [
+            unit('1:1:1', [[0, 1]]),
+            unit('1:1:2', [[2, 3]]), // 1s WITHIN-verse gap (word1 end 1 → word2 start 2)
+            unit('1:2:1', [[4, 5]]), // verse 2 starts at 4 → real between-verse gap = 1
+        ];
+        const cells = buildFilmstripModel(units, 'duration').cells;
+        // canonEnd is the real recited end (3), not canonStart(0)+canonDur(2)=2.
+        expect(cells[0]!.canonEndSec).toBeCloseTo(3, 6);
+        // The internal 1s gap must NOT inflate the between-verse silence.
+        expect(cells[0]!.nextGapSec).toBeCloseTo(1, 6);
+    });
+
     it('skips unrecited placeholders when measuring the gap to the next present verse', () => {
         const units = [
             unit('1:1:1', [[0, 2]]), // verse 1 end = 2

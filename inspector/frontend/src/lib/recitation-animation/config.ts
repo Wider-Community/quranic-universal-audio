@@ -86,19 +86,18 @@ export interface RecitationAnimConfig {
      *  `tuner` (continuous, drag scrubs exact time), `snap` (center on ayah
      *  change only, drag = carousel snap). */
     filmstripMotion: FilmstripMotion;
-    /** 0 = all cells equal (min width); 1 = fully duration-proportional. */
-    filmstripProportional: number;
-    /** Min cell width (px) — must fit the widest verse number. */
-    filmstripMinCellPx: number;
-    /** Max cell width (px) — caps long ayahs. */
-    filmstripMaxCellPx: number;
-    /** Gap between cells (px) — the MINIMUM (a near-zero inter-verse silence). */
+    /** Global cursor velocity — px per second of audio. The strip is a true
+     *  fixed-scale time-ruler: cell width = `canonDurSec × pxPerSec` and
+     *  between-verse gap = `nextGapSec × pxPerSec`, so the cursor travels at this
+     *  one velocity everywhere (within cells and across silences) and a given
+     *  silence renders to the same px in every surah and for every reciter.
+     *  Higher = more zoomed-in (wider cells, more prominent silences). */
+    filmstripPxPerSec: number;
+    /** Minimum gap between cells (px) — the floor for a near-zero inter-verse
+     *  silence so cells stay distinct. A real between-verse silence widens the gap
+     *  at `filmstripPxPerSec`, crossed at the same velocity the cursor travels
+     *  within a verse. */
     filmstripGapPx: number;
-    /** Largest inter-cell gap, as a multiple of `filmstripGapPx`, that the
-     *  longest between-verse silence in the chapter scales up to. The cursor
-     *  scrolls continuously across the scaled gap during the silence (non-snap
-     *  modes only); snap mode keeps the fixed `filmstripGapPx`. */
-    filmstripGapMaxScale: number;
     /** Strip height (px). */
     filmstripHeightPx: number;
 }
@@ -149,11 +148,8 @@ export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
 
     filmstripShow: true,
     filmstripMotion: 'hybrid',
-    filmstripProportional: 1,
-    filmstripMinCellPx: 30,
-    filmstripMaxCellPx: 170,
-    filmstripGapPx: 5,
-    filmstripGapMaxScale: 6,
+    filmstripPxPerSec: 8,
+    filmstripGapPx: 2,
     filmstripHeightPx: 36,
 };
 
