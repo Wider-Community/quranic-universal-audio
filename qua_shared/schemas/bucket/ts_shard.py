@@ -45,10 +45,7 @@ from .._extras import strip_and_warn
 # its own position (hamza wasl, lam shamsiyah, the otiose tanween alef, …), so
 # the highlight skips it once each letter is its own cell. Sourced from the
 # phonemizer's ``silent_flags()``; absent on legacy v3 shards.
-LetterTiming = (
-    tuple[str, int | None, int | None]
-    | tuple[str, int | None, int | None, bool]
-)
+LetterTiming = tuple[str, int | None, int | None] | tuple[str, int | None, int | None, bool]
 
 # Phone row: [phone, start_ms, end_ms, ...optional flags]. Heterogeneous and
 # variable-length (slot 5 = cross-word bridge rule when present), so it stays a
