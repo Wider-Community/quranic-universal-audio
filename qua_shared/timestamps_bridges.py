@@ -166,11 +166,12 @@ def tag_segment_words(pm, verse_key: str, words: list) -> int:
     2. **Tagging** — the merger phone grows to length 6 with its rule at slot 5
        (``[phone, start, end, None, None, rule]``; slots 3/4 are the FE reader's
        geminate flags).
-    3. **Silent flags** — each letter grows a 4th slot ``silent`` (bool) from the
-       phonemizer's ``silent_flags()`` so the highlight skips silent graphemes
-       once each letter is its own cell. The segment is phonemized continuously,
-       so verse-final waqf forms (a stopping tanween alef) render in their
-       continuing form — a pausal refinement needs the true stop boundary.
+    3. **Silent flags + marks** — each letter grows a 4th slot ``silent`` (bool)
+       and its silence combining mark (SILENT_ALWAYS / SILENT_AT_CONTINUATION) is
+       folded onto its char, from the phonemizer's ``silent_flags()``, so the
+       highlight skips silent graphemes and shows the mark. Stamped over
+       gap-bounded runs (any timing gap is a stop), so a silah drops at waqf and
+       every occurrence is stamped — independent of the bridge guard below.
 
     Returns the number of phones tagged. Skips (returns 0, no mutation) for
     repeats / out-of-order words, or if the phonemizer shape doesn't match the
@@ -179,14 +180,15 @@ def tag_segment_words(pm, verse_key: str, words: list) -> int:
     """
     if not words:
         return 0
+    # Effect 3 runs first, independent of the bridge guard below, over gap-bounded
+    # runs — so repeats/partials are never NO-SLOT and a silah at a stop drops.
+    _stamp_silent_flags(pm, verse_key, words)
     widxs = [wd[0] for wd in words]
     if widxs != list(range(widxs[0], widxs[0] + len(widxs))):
         return 0
     lo, hi = widxs[0], widxs[-1]
     seg_ref = f"{verse_key}:{lo}" if lo == hi else f"{verse_key}:{lo}-{verse_key}:{hi}"
-    mapping = pm.phonemize(ref=seg_ref).get_mapping()
-    bridges, counts = _scan_mapping(mapping)
-    _stamp_silent_flags(words, mapping)
+    bridges, counts = _scan_mapping(pm.phonemize(ref=seg_ref).get_mapping())
     tagged = _apply_to_words(words, bridges, counts)
     if bridges and not tagged:
         # The shape guard tripped with bridges in hand — render-only markers are
@@ -199,26 +201,49 @@ def tag_segment_words(pm, verse_key: str, words: list) -> int:
     return tagged
 
 
-def _stamp_silent_flags(words: list, mapping) -> bool:
-    """Append a 4th ``silent`` bool to every letter triple, in place.
+def _gap_runs(words: list) -> list:
+    """Split ``words`` into maximal runs contiguous in BOTH widx and time. A run
+    breaks at any widx discontinuity (repeat / out-of-order) or any timing gap —
+    and a gap is a stop (the shard is contiguous except at a waqf), so each run is
+    one gap-bounded recitation unit whose last word stops."""
+    runs: list = []
+    run: list = []
+    for wd in words:
+        if run and (wd[0] != run[-1][0] + 1 or wd[1] != run[-1][2]):
+            runs.append(run)
+            run = []
+        run.append(wd)
+    if run:
+        runs.append(run)
+    return runs
 
-    The phonemizer's per-grapheme silent flags are 1:1 with the shard's
-    ``letters[]`` (same written-text tokenization); they are consumed in lockstep
-    by character. No-op (returns False, no mutation) on any char-misalignment so a
-    phonemizer/shard mismatch can never corrupt a letter.
+
+def _stamp_silent_flags(pm, verse_key: str, words: list) -> None:
+    """Stamp each letter's 4th ``silent`` bool and fold its silence mark onto its
+    char, in place, from the phonemizer's ``silent_flags()``.
+
+    Walks gap-bounded runs (see ``_gap_runs``) and phonemizes each on its own ref,
+    so the run's last word is naturally stopping — a silah drops at waqf — and
+    every occurrence is stamped even when the bridge guard bails (repeats /
+    out-of-order). Per-run no-op on any char-misalignment so a phonemizer/shard
+    mismatch can never corrupt a letter.
     """
     from quranic_phonemizer.silent import build_silent_flags
 
-    flags = build_silent_flags(mapping)
-    letters = [lt for wd in words for lt in wd[3]]
-    if [c for c, _ in flags] != [lt[0] for lt in letters]:
-        return False
-    for lt, (_, silent) in zip(letters, flags, strict=True):
-        if len(lt) <= 3:
-            lt.append(silent)
-        else:
-            lt[3] = silent
-    return True
+    for run in _gap_runs(words):
+        lo, hi = run[0][0], run[-1][0]
+        ref = f"{verse_key}:{lo}" if lo == hi else f"{verse_key}:{lo}-{verse_key}:{hi}"
+        flags = build_silent_flags(pm.phonemize(ref=ref).get_mapping())
+        letters = [lt for wd in run for lt in wd[3]]
+        if [c for c, _s, _m in flags] != [lt[0] for lt in letters]:
+            continue
+        for lt, (_c, silent, mark) in zip(letters, flags, strict=True):
+            if len(lt) <= 3:
+                lt.append(silent)
+            else:
+                lt[3] = silent
+            if mark:
+                lt[0] = lt[0] + mark
 
 
 def _retime(word: list) -> None:
