@@ -9,12 +9,18 @@ encoding the alignment used — **192 kbps CBR MP3, 44.1 kHz, mono** by default 
 so a verse's ``[start_ms, end_ms]`` from the tier files lands on the right audio.
 
 It reads ``catalog.json`` (the release-level array OR a single reciter's in-zip
-``catalog.json``) and downloads one reciter's audio in one of two layouts:
+``catalog.json``) and downloads one reciter's audio in one of three layouts:
 
   --format chapters   (default) one file per surah — ``001.mp3 … 114.mp3``.
                       Each file starts where that chapter starts, so the release
                       timestamps apply directly (offset 0), exactly like a CDN
                       by-surah reciter.
+
+  --format ayah       one file per verse — ``001_001.mp3 … 114_006.mp3``. Each
+                      verse is cut at its ``verse_timestamps.json.gz`` span, so
+                      every file is a standalone ayah clip starting at 0 ms.
+                      Needs the verse tier file (auto-located next to
+                      ``catalog.json``, or passed with ``--timestamps``).
 
   --format original   the source files as published — one file per distinct
                       source URL (a YouTube video / Drive file may hold several
@@ -35,6 +41,10 @@ Examples::
     # one file per surah for a YouTube reciter (default layout)
     python download_audio.py catalog.json --reciter ibrahim_al_akhdar_drive
 
+    # one standalone clip per verse (001_001.mp3 …)
+    python download_audio.py catalog.json --reciter ibrahim_al_akhdar_drive \
+        --format ayah
+
     # the original Drive files, plus a chapter→file+offset map
     python download_audio.py catalog.json --reciter mohammed_ayyub_drive \
         --format original --out-dir ./ayyub
@@ -50,6 +60,7 @@ Examples::
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import shutil
 import subprocess
@@ -103,6 +114,48 @@ def _reciters_in(catalog: dict | list) -> list[dict]:
     if isinstance(catalog, dict) and "slug" in catalog:
         return [catalog]
     raise ValueError("unrecognized catalog.json shape")
+
+
+_VERSE_TS_NAMES = ("verse_timestamps.json.gz", "verse_timestamps.json")
+
+
+def _locate_verse_timestamps(catalog_path: Path, explicit: Path | None) -> Path:
+    """Resolve the verse tier file for ``--format ayah``.
+
+    Uses ``--timestamps`` when given, else looks for ``verse_timestamps.json``
+    (gzipped or plain) next to ``catalog.json`` — the in-zip layout.
+    """
+    if explicit:
+        if not explicit.exists():
+            raise ValueError(f"--timestamps {explicit} does not exist")
+        return explicit
+    for name in _VERSE_TS_NAMES:
+        cand = catalog_path.parent / name
+        if cand.exists():
+            return cand
+    raise ValueError(
+        "--format ayah needs verse timestamps; none found next to "
+        f"{catalog_path.name}. Unzip the reciter zip first, or pass --timestamps."
+    )
+
+
+def _load_verse_windows(path: Path) -> dict[str, list[tuple[int, int, int]]]:
+    """Parse a verse tier file into ``{chapter: [(ayah, start_ms, end_ms), ...]}``.
+
+    Reads gzipped or plain JSON; verse keys are ``"surah:ayah"`` and values are
+    ``[start_ms, end_ms]`` relative to the chapter start (the release contract).
+    """
+    raw = gzip.decompress(path.read_bytes()) if path.suffix == ".gz" else path.read_bytes()
+    doc = json.loads(raw)
+    by_chapter: dict[str, list[tuple[int, int, int]]] = {}
+    for key, val in doc.items():
+        if key.startswith("_"):
+            continue
+        surah, ayah = key.split(":")
+        by_chapter.setdefault(surah, []).append((int(ayah), int(val[0]), int(val[1])))
+    for chs in by_chapter.values():
+        chs.sort()
+    return by_chapter
 
 
 def _pick_reciter(catalog: dict | list, slug: str | None) -> dict:
@@ -268,8 +321,13 @@ def download_reciter(
     sample_rate: str,
     channels: str,
     only: list[str] | None,
+    verse_windows: dict[str, list[tuple[int, int, int]]] | None = None,
 ) -> dict:
-    """Download one reciter's audio into ``out_dir``. Returns a download map."""
+    """Download one reciter's audio into ``out_dir``. Returns a download map.
+
+    ``verse_windows`` is required for ``fmt == "ayah"`` — a
+    ``{chapter: [(ayah, start_ms, end_ms), ...]}`` map from the verse tier file.
+    """
     audio = reciter.get("audio") or {}
     chapter_urls: dict[str, str] = audio.get("chapter_urls") or {}
     offsets: dict[str, int] = audio.get("chapter_offsets_ms") or {}
@@ -300,6 +358,19 @@ def download_reciter(
                 for ch in chs:
                     dl_map[ch] = {"file": name, "offset_ms": int(offsets.get(ch, 0))}
                 print(f"    -> {name}")
+            elif fmt == "ayah":  # split each chapter into one offset-0 file per verse
+                assert verse_windows is not None
+                for ch in chs:
+                    base = int(offsets.get(ch, 0))
+                    verses = verse_windows.get(ch) or []
+                    if not verses:
+                        print(f"    !! no verse timestamps for chapter {ch} — skipped")
+                        continue
+                    for ayah, vs, ve in verses:
+                        dest = out_dir / f"{int(ch):03d}_{ayah:03d}.mp3"
+                        _trim_copy(src_mp3, dest, base + vs, base + ve)
+                        dl_map[f"{ch}:{ayah}"] = {"file": dest.name, "offset_ms": 0}
+                    print(f"    -> {int(ch):03d}_*.mp3  ({len(verses)} verse(s))")
             else:  # chapters: split each chapter to its own offset-0 file
                 windows = _chapter_windows(offsets, chs)
                 for ch in chs:
@@ -335,13 +406,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--list", action="store_true", help="List reciters in the catalog and exit")
     p.add_argument(
         "--format",
-        choices=("chapters", "original"),
+        choices=("chapters", "ayah", "original"),
         default="chapters",
         dest="fmt",
-        help="Output layout (default: chapters = one file per surah)",
+        help="Output layout (default: chapters = one file per surah; "
+        "ayah = one file per verse; original = source files as published)",
     )
     p.add_argument("--out-dir", type=Path, help="Output directory (default: ./<slug>)")
     p.add_argument("--chapters", help="Comma-separated chapter subset (default: all)")
+    p.add_argument(
+        "--timestamps",
+        type=Path,
+        help="Verse tier file for --format ayah (default: verse_timestamps.json.gz "
+        "next to catalog.json)",
+    )
     p.add_argument("--bitrate", default="192k", help="CBR audio bitrate (default: 192k)")
     p.add_argument("--sample-rate", default="44100", help="Sample rate Hz (default: 44100)")
     p.add_argument("--channels", default="1", help="Channels: 1=mono, 2=stereo (default: 1)")
@@ -374,6 +452,15 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = args.out_dir or Path(slug)
     only = [c.strip() for c in args.chapters.split(",") if c.strip()] if args.chapters else None
 
+    verse_windows = None
+    if args.fmt == "ayah":
+        try:
+            ts_path = _locate_verse_timestamps(args.catalog, args.timestamps)
+            verse_windows = _load_verse_windows(ts_path)
+        except (ValueError, OSError, json.JSONDecodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
     try:
         dl_map = download_reciter(
             reciter,
@@ -383,6 +470,7 @@ def main(argv: list[str] | None = None) -> int:
             sample_rate=args.sample_rate,
             channels=args.channels,
             only=only,
+            verse_windows=verse_windows,
         )
     except MissingTool as exc:
         print(f"\nerror: {exc}", file=sys.stderr)
@@ -391,9 +479,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nerror: {exc}", file=sys.stderr)
         return 4
 
-    print(f"\nDone — {len(dl_map)} chapter(s) in {out_dir}/  (see download_map.json)")
+    unit = "verse" if args.fmt == "ayah" else "chapter"
+    print(f"\nDone — {len(dl_map)} {unit}(s) in {out_dir}/  (see download_map.json)")
     if args.fmt == "original":
         print("Timestamps are relative to each chapter's offset_ms within its file.")
+    elif args.fmt == "ayah":
+        print("Each NNN_VVV.mp3 is one verse starting at 0 ms.")
     else:
         print("Each NNN.mp3 starts at its chapter — release timestamps apply directly.")
     return 0

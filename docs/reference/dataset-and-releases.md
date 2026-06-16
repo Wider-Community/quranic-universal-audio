@@ -209,9 +209,11 @@ so CDN by-surah catalogs stay byte-stable and their `content_hash` doesn't churn
 **`download_audio.py`** (release asset, `qua_jobs/download_audio.py`) fetches a reciter's source audio
 re-encoded to the alignment profile (192 kbps CBR / 44.1 kHz / mono by default; configurable). It reads
 `catalog.json` and offers `--format chapters` (one offset-0 file per surah — splits a combined file at
-the chapter offsets) or `--format original` (the source files as published + a `download_map.json` of
-chapter→file+offset). Uses `yt-dlp` + `ffmpeg` for YouTube/Drive, fails loud with install hints when a
-tool is missing. Staged like the other helpers (`base.REQUIRED_ENTRYPOINTS`) and uploaded by the cut.
+the chapter offsets), `--format ayah` (one offset-0 clip per verse, `NNN_VVV.mp3`, cut at the
+`verse_timestamps.json.gz` spans auto-located next to `catalog.json` or passed via `--timestamps`), or
+`--format original` (the source files as published + a `download_map.json` of chapter→file+offset). Uses
+`yt-dlp` + `ffmpeg` for YouTube/Drive, fails loud with install hints when a tool is missing. Staged like
+the other helpers (`base.REQUIRED_ENTRYPOINTS`) and uploaded by the cut.
 
 ### `manifest.json` (dataset-level)
 

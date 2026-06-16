@@ -4,6 +4,9 @@ yt-dlp / ffmpeg downloads are not exercised here."""
 
 from __future__ import annotations
 
+import gzip
+import json
+
 import pytest
 
 from qua_jobs import download_audio as da
@@ -57,3 +60,41 @@ def test_chapter_windows_single_file_trims_lead_in_to_eof():
 def test_missing_tool_message_names_install_command():
     with pytest.raises(da.MissingTool, match="pip install yt-dlp"):
         da._require("yt-dlp-definitely-not-installed", "pip install yt-dlp")
+
+
+def test_load_verse_windows_groups_by_chapter_sorted(tmp_path):
+    doc = {
+        "_meta": {"tier": "verse"},
+        "1:2": [2831, 4000],
+        "1:1": [0, 2831],
+        "2:1": [0, 1500],
+    }
+    path = tmp_path / "verse_timestamps.json.gz"
+    path.write_bytes(gzip.compress(json.dumps(doc).encode()))
+    assert da._load_verse_windows(path) == {
+        "1": [(1, 0, 2831), (2, 2831, 4000)],
+        "2": [(1, 0, 1500)],
+    }
+
+
+def test_load_verse_windows_reads_plain_json(tmp_path):
+    path = tmp_path / "verse_timestamps.json"
+    path.write_text(json.dumps({"_meta": {}, "1:1": [0, 10]}))
+    assert da._load_verse_windows(path) == {"1": [(1, 0, 10)]}
+
+
+def test_locate_verse_timestamps_prefers_explicit(tmp_path):
+    explicit = tmp_path / "vt.json"
+    explicit.write_text("{}")
+    assert da._locate_verse_timestamps(tmp_path / "catalog.json", explicit) == explicit
+
+
+def test_locate_verse_timestamps_finds_sibling_gz(tmp_path):
+    sibling = tmp_path / "verse_timestamps.json.gz"
+    sibling.write_bytes(b"x")
+    assert da._locate_verse_timestamps(tmp_path / "catalog.json", None) == sibling
+
+
+def test_locate_verse_timestamps_errors_when_absent(tmp_path):
+    with pytest.raises(ValueError, match="--format ayah needs verse timestamps"):
+        da._locate_verse_timestamps(tmp_path / "catalog.json", None)
