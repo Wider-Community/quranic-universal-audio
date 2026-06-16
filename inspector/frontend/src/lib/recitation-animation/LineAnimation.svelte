@@ -542,8 +542,8 @@
     /* Waqf (stop) sign — split out of the word and given its own inline-block box
      *  so it stands alone, never merges with the word's last letter, and never
      *  takes the reveal highlight. Its own color always wins over the inherited
-     *  `.ra-word.active`/`.reached` color; full opacity in both granularities (it
-     *  is not a reveal char); lit only while a pause holds on its word
+     *  `.ra-word.active`/`.reached` color; it tracks the word's upcoming-visibility
+     *  (see opacity rules below); lit only while a pause holds on its word
      *  (`.waqf-active`). `z-index` keeps it above the char-mode ink. */
     .ra-line .ra-word .ra-waqf {
         /* The waqf glyph is a combining mark: it must sit in its OWN run so it
@@ -559,12 +559,23 @@
         transform: translateY(-0.65em);
         position: relative;
         z-index: 2;
-        opacity: 1;
         color: var(--ra-base-color);
         text-shadow: var(--ra-word-shadow);
         transition:
+            opacity var(--ra-word-reveal) var(--ra-easing),
             color var(--ra-active-emphasis) var(--ra-easing),
             text-shadow var(--ra-active-emphasis) var(--ra-easing);
+    }
+    /* Visibility follows the upcoming setting like the rest of the line. In word
+     *  mode the parent `.ra-word`'s own opacity already compounds onto the mark
+     *  (upcoming → dim/hidden, reached/active → full). In char mode the word
+     *  stays opaque and the ink/chars carry the dimming, so mirror that here. */
+    .ra-line.ra-chars .ra-word .ra-waqf {
+        opacity: var(--ra-unreached-opacity);
+    }
+    .ra-line.ra-chars .ra-word:global(.reached) .ra-waqf,
+    .ra-line.ra-chars .ra-word:global(.active) .ra-waqf {
+        opacity: 1;
     }
     .ra-line .ra-word .ra-waqf:global(.waqf-active) {
         color: var(--ra-highlight);
