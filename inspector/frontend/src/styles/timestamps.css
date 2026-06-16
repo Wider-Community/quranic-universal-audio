@@ -296,39 +296,16 @@
     border-color: color-mix(in srgb, var(--anim-highlight-color) 40%, transparent);
     color: color-mix(in srgb, var(--anim-highlight-color) 75%, #d7d7df);
 }
+/* A lone waqf mark is a zero-width combining glyph whose ink size + position vary
+   per mark; the calibration lives in `tabs/timestamps/utils/waqf-render.ts` and is
+   projected onto the `--waqf-*` vars per mark by UnifiedDisplay. This rule just
+   consumes them. */
 .pause-waqf {
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
     line-height: 1;
     display: inline-block;
-}
-/* Per-mark size + position. A lone waqf mark is a zero-width combining glyph and
-   each one's ink sits differently in the em, so the glyph size (× word font) and
-   the raise/shift (em of the mark) are tuned per codepoint in the sizing
-   playground rather than shared. */
-.pause-waqf[data-mark='6d6'] {
-    /* ۖ sala */
-    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.02);
-    transform: translate(-0.22em, -0.24em);
-}
-.pause-waqf[data-mark='6d7'] {
-    /* ۗ qila */
-    font-size: var(--analysis-word-font-size, 1.3rem);
-    transform: translate(-0.16em, -0.22em);
-}
-.pause-waqf[data-mark='6d8'] {
-    /* ۘ meem (lazim) */
-    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 0.99);
-    transform: translate(-0.24em, -0.2em);
-}
-.pause-waqf[data-mark='6da'] {
-    /* ۚ jeem (jaiz) */
-    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.01);
-    transform: translate(-0.12em, -0.23em);
-}
-.pause-waqf[data-mark='6db'] {
-    /* ۛ muanaqah (three dots) */
-    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.19);
-    transform: translate(-0.12em, -0.3em);
+    font-size: calc(var(--analysis-word-font-size, 1.3rem) * var(--waqf-scale, 1));
+    transform: translate(var(--waqf-shift, 0), var(--waqf-raise, 0));
 }
 /* Standard two-bar pause icon, drawn from currentColor so it inverts with the
    cell fill on active. */

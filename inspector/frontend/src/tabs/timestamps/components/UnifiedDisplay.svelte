@@ -20,6 +20,7 @@
     import { dashPort } from '../../../lib/playback/dash-port';
     import type { PhonemeInterval, TsWord } from '../../../lib/types/ts-client';
     import { splitWaqf } from '../../../lib/utils/waqf';
+    import { waqfRenderStyle } from '../utils/waqf-render';
     import {
         showLetters,
         showPhonemes,
@@ -670,9 +671,7 @@
                 title={block.pauseBridge.mark ? 'Stop sign' : 'Pause'}
             >
                 {#if block.pauseBridge.mark}
-                    <span
-                        class="pause-waqf"
-                        data-mark={block.pauseBridge.mark.codePointAt(0)?.toString(16)}
+                    <span class="pause-waqf" style={waqfRenderStyle(block.pauseBridge.mark)}
                     >{block.pauseBridge.mark}</span>
                 {:else}
                     <span class="pause-icon" aria-hidden="true"></span>
