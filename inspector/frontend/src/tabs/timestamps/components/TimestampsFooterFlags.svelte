@@ -84,9 +84,9 @@
         align-items: center;
         gap: 5px;
         flex: 0 0 auto;
-        height: 100%;
-        align-self: stretch;
-        padding: 0 var(--s-2);
+        align-self: center;
+        padding: 4px var(--s-2);
+        line-height: var(--lh-tight, 1.2);
         color: var(--text-muted);
         background: var(--panel-2);
         border: 1px solid var(--border-quiet);
