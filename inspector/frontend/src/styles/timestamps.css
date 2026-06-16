@@ -270,13 +270,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    /* Sized to the waqf glyph's natural ink (measured ≈ 0.9 × 0.76 em of the
-       glyph font), so the cell hugs the mark like a compact letter/phoneme tile
-       instead of a slack box. A pinch of negative inline margin tightens it
-       toward the words it sits between. */
-    width: calc(var(--analysis-word-font-size, 1.3rem) * 0.85);
+    /* Global cell box (sized in the waqf sizing playground): compact, anchored at
+       the word top via align-self so its height grows DOWN from the line top.
+       Negative inline margin keeps the inter-word gap minimal — the tile nestles
+       between the words rather than padding them apart. */
+    width: calc(var(--analysis-word-font-size, 1.3rem) * 0.81);
     height: calc(var(--analysis-word-font-size, 1.3rem) * 0.7);
-    margin-inline: -2px;
+    margin-inline: -3px;
     background: #0f0f23;
     border: 1px solid transparent;
     border-radius: 3px;
@@ -298,13 +298,37 @@
 }
 .pause-waqf {
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
-    /* A lone waqf mark is a zero-width combining glyph whose ink draws low (on the
-       baseline) and to the right of the origin. Size it up (its ink is only ~0.4em
-       of the font) and translate left+up by the measured ink-center offset so the
-       mark lands centered in the cell. */
-    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.5);
     line-height: 1;
-    transform: translate(-0.16em, -0.16em);
+    display: inline-block;
+}
+/* Per-mark size + position. A lone waqf mark is a zero-width combining glyph and
+   each one's ink sits differently in the em, so the glyph size (× word font) and
+   the raise/shift (em of the mark) are tuned per codepoint in the sizing
+   playground rather than shared. */
+.pause-waqf[data-mark='6d6'] {
+    /* ۖ sala */
+    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.02);
+    transform: translate(-0.22em, -0.24em);
+}
+.pause-waqf[data-mark='6d7'] {
+    /* ۗ qila */
+    font-size: var(--analysis-word-font-size, 1.3rem);
+    transform: translate(-0.16em, -0.22em);
+}
+.pause-waqf[data-mark='6d8'] {
+    /* ۘ meem (lazim) */
+    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 0.99);
+    transform: translate(-0.24em, -0.2em);
+}
+.pause-waqf[data-mark='6da'] {
+    /* ۚ jeem (jaiz) */
+    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.01);
+    transform: translate(-0.12em, -0.23em);
+}
+.pause-waqf[data-mark='6db'] {
+    /* ۛ muanaqah (three dots) */
+    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.19);
+    transform: translate(-0.12em, -0.3em);
 }
 /* Standard two-bar pause icon, drawn from currentColor so it inverts with the
    cell fill on active. */

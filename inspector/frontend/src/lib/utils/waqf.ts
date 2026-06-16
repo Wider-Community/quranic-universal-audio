@@ -2,18 +2,19 @@
  * Quranic waqf (stop) marks — the single source of stop-sign truth shared by the
  * Timestamps analysis view and the recitation teleprompter.
  *
- * Waqf marks are the small-high pause symbols (ۖ ۗ ۘ ۚ ۛ ۜ) that ride the Quranic
+ * Waqf marks are the small-high pause symbols (ۖ ۗ ۘ ۚ ۛ) that ride the Quranic
  * text as combining marks (Unicode category Mn) at the tail of a word's last
  * letter group. They are NOT pronounced, so they never appear in the MFA-aligned
  * `letters` array — only in the word's `display_text`. We surface one when the
  * reciter actually pauses on it.
  *
- * U+06D9 (ۙ, "لا") means "do NOT stop here" — it is deliberately excluded, so a
- * pause at a لا renders the neutral pause token instead of a stop sign.
+ * Excluded by design: U+06D9 (ۙ, "لا") means "do NOT stop here", and U+06DC
+ * (ۜ, saktah) is a brief breathless hold, not a stop — a pause at either renders
+ * the neutral pause token instead of a stop sign.
  */
 
-/** Surfaced waqf marks. Excludes U+06D9 (لا, no-stop) by design. */
-const STOP_MARKS = new Set([0x06d6, 0x06d7, 0x06d8, 0x06da, 0x06db, 0x06dc]);
+/** Surfaced waqf marks. Excludes U+06D9 (لا) and U+06DC (saktah) by design. */
+const STOP_MARKS = new Set([0x06d6, 0x06d7, 0x06d8, 0x06da, 0x06db]);
 
 /** True when `text` carries a surfaced stop sign. */
 export function hasWaqf(text: string): boolean {

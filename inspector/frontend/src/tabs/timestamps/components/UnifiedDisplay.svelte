@@ -670,7 +670,10 @@
                 title={block.pauseBridge.mark ? 'Stop sign' : 'Pause'}
             >
                 {#if block.pauseBridge.mark}
-                    <span class="pause-waqf">{block.pauseBridge.mark}</span>
+                    <span
+                        class="pause-waqf"
+                        data-mark={block.pauseBridge.mark.codePointAt(0)?.toString(16)}
+                    >{block.pauseBridge.mark}</span>
                 {:else}
                     <span class="pause-icon" aria-hidden="true"></span>
                 {/if}

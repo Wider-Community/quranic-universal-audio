@@ -8,17 +8,18 @@ const MEEM = 'ۘ'; // ۘ — must stop
 const LA = 'ۙ'; // ۙ — do NOT stop (excluded)
 const JEEM = 'ۚ'; // ۚ
 const THREE = 'ۛ'; // ۛ — muanaqah
-const SEEN = 'ۜ'; // ۜ — saktah
+const SEEN = 'ۜ'; // ۜ — saktah (NOT a stop; excluded)
 
 describe('hasWaqf', () => {
     it('detects each surfaced stop mark', () => {
-        for (const m of [SALA, QILA, MEEM, JEEM, THREE, SEEN]) {
+        for (const m of [SALA, QILA, MEEM, JEEM, THREE]) {
             expect(hasWaqf(`فمن${m}`)).toBe(true);
         }
     });
 
-    it('ignores the لا (no-stop) mark', () => {
+    it('ignores the non-stop marks (لا no-stop, ۜ saktah)', () => {
         expect(hasWaqf(`فمن${LA}`)).toBe(false);
+        expect(hasWaqf(`فمن${SEEN}`)).toBe(false);
     });
 
     it('is false for plain text', () => {
