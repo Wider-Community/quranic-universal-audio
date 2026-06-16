@@ -277,7 +277,7 @@
     background: #0f0f23;
     border: 1px solid transparent;
     border-radius: 3px;
-    color: #999;
+    color: #aaa;
     overflow: hidden;
     transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
@@ -295,11 +295,11 @@
 }
 .pause-waqf {
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
-    /* The mark's ink renders high in the em; size it to sit fully inside the slim
-       cell and nudge it down so it reads centered, the way it naturally draws. */
-    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.2);
+    /* A lone waqf mark draws low (on the baseline) with empty space above it, so
+       it must be pulled UP to read centered in the slim cell; sized to fill it. */
+    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.7);
     line-height: 1;
-    transform: translateY(0.16em);
+    transform: translateY(-0.32em);
 }
 /* Standard two-bar pause icon, drawn from currentColor so it inverts with the
    cell fill on active. */
