@@ -81,9 +81,9 @@ vi.mock('../../../api/public-reciters', () => ({
     ),
 }));
 
-function tabCounts(container: HTMLElement): Record<string, number> {
+function tabCounts(root: HTMLElement): Record<string, number> {
     const out: Record<string, number> = {};
-    for (const pill of container.querySelectorAll('.picker-controls-tabs .pill')) {
+    for (const pill of root.querySelectorAll('.picker-controls-tabs .pill')) {
         const label = pill.querySelector('.label')?.textContent?.trim();
         const count = pill.querySelector('.pill-count')?.textContent?.trim();
         if (label && count !== undefined) out[label] = Number(count);
@@ -91,17 +91,19 @@ function tabCounts(container: HTMLElement): Record<string, number> {
     return out;
 }
 
+// CombinationPicker renders inside Modal, whose backdrop portals to
+// `document.body` — so the picker DOM lives in `baseElement`, not `container`.
 describe('CombinationPicker state-tab counts', () => {
     it('counts deliveries per bucket, not reciters by primary_bucket', async () => {
-        const { container } = render(CombinationPicker, {
+        const { baseElement } = render(CombinationPicker, {
             props: { open: true, title: 'Switch reciter' },
         });
 
         await waitFor(() => {
-            expect(container.querySelector('.combo-row')).not.toBeNull();
+            expect(baseElement.querySelector('.combo-row')).not.toBeNull();
         });
 
-        const counts = tabCounts(container);
+        const counts = tabCounts(baseElement);
         expect(counts.All).toBe(4);
         expect(counts.Published).toBe(2);
         expect(counts['Under review']).toBe(1);
@@ -109,20 +111,20 @@ describe('CombinationPicker state-tab counts', () => {
     });
 
     it('makes the Published tab pill agree with the Published group head-count', async () => {
-        const { container } = render(CombinationPicker, {
+        const { baseElement } = render(CombinationPicker, {
             props: { open: true, title: 'Switch reciter' },
         });
 
         await waitFor(() => {
-            expect(container.querySelector('.bucket-head')).not.toBeNull();
+            expect(baseElement.querySelector('.bucket-head')).not.toBeNull();
         });
 
         // The group head-count is delivery-level; the tab pill must match it.
-        const publishedHead = [...container.querySelectorAll('.bucket-head')].find((h) =>
+        const publishedHead = [...baseElement.querySelectorAll('.bucket-head')].find((h) =>
             h.querySelector('.pill')?.textContent?.includes('Published'),
         );
         const headCount = Number(publishedHead?.querySelector('.head-count')?.textContent?.trim());
         expect(headCount).toBe(2);
-        expect(tabCounts(container).Published).toBe(headCount);
+        expect(tabCounts(baseElement).Published).toBe(headCount);
     });
 });
