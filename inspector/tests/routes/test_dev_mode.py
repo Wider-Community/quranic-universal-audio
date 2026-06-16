@@ -95,7 +95,12 @@ def test_dev_mode_anonymous_cookie_yields_null_user(dev_mode_client):
         "active_claim": None,
         "active_claims": [],
         "dev_mode": True,
-        "capabilities": ["view.catalog", "view.public_activity", "notify.email_subscriptions"],
+        "capabilities": [
+            "view.catalog",
+            "view.public_activity",
+            "timestamps.flag",
+            "notify.email_subscriptions",
+        ],
         "guides_read": [],
         "notifications_unread": 0,
     }
