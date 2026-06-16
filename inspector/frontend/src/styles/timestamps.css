@@ -268,9 +268,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 14px;
-    height: var(--analysis-word-font-size, 1.3rem);
-    margin-top: 2px;
+    min-width: 20px;
+    padding: 0 5px;
+    /* Match the word-box height so the bridge reads as a peer cell between the
+       two words it bridges. */
+    height: calc(var(--analysis-word-font-size, 1.3rem) * 1.4 + 12px);
     color: var(--text-muted, #8a8a99);
     transition: color 0.15s ease, transform 0.15s ease;
 }
@@ -283,8 +285,12 @@
 }
 .pause-waqf {
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
-    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 0.95);
+    /* The stop sign is normally a small high mark; the bridge cell exists to show
+       it at full size. Scale it up to fill the box and nudge it down to center
+       (its ink sits high in the em). */
+    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 2);
     line-height: 1;
+    transform: translateY(0.08em);
 }
 /* Standard two-bar pause icon, drawn from currentColor so it lights with the
    bridge. */
