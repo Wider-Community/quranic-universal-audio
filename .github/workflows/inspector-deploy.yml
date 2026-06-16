@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       env:
-        description: "Target Space (auto follows the branch: dev→dev, main→prod)."
+        description: "Target Space (auto follows the branch: dev→dev, main→prod). A dev-targeting manual dispatch skips checks for a fast deploy."
         type: choice
         options: [auto, dev, prod]
         default: auto
@@ -45,6 +45,16 @@ concurrency:
 
 jobs:
   checks:
+    # Fast-path dev deploys: a MANUAL dispatch that targets the dev Space skips
+    # the full check suite (npm ci + build + pytest + coverage + codegen +
+    # pyright) so iterating on dev is quick — the dev Space is a verification
+    # target, not prod. Every push, and any prod-targeting dispatch, still runs
+    # the full gate. A skipped `checks` is treated as non-blocking by deploy's
+    # `if` below (skipped != failure).
+    if: >-
+      ${{ !(github.event_name == 'workflow_dispatch' &&
+            (inputs.env == 'dev' ||
+             (inputs.env == 'auto' && github.ref_name != 'main'))) }}
     uses: ./.github/workflows/inspector-checks.yml
 
   # Opt-in, prod-only: build the image and assert it boots (/healthz) before
@@ -89,12 +99,13 @@ jobs:
 
   deploy:
     needs: [checks, boot-smoke]
-    # boot-smoke is skipped on normal pushes; a skipped `needs` would make the
-    # default `if: success()` fail and skip deploy too. Run deploy whenever
-    # checks passed and boot-smoke did not FAIL (skipped or success both deploy).
+    # Both `needs` may be skipped: boot-smoke on normal pushes, and checks on a
+    # fast-path dev dispatch. A skipped `needs` would make the default
+    # `if: success()` skip deploy too, so gate explicitly: deploy when checks did
+    # NOT fail (success or skipped) and boot-smoke did NOT fail.
     if: >-
       ${{ always() &&
-          needs.checks.result == 'success' &&
+          (needs.checks.result == 'success' || needs.checks.result == 'skipped') &&
           needs.boot-smoke.result != 'failure' &&
           needs.boot-smoke.result != 'cancelled' }}
     runs-on: ubuntu-latest
