@@ -1885,6 +1885,39 @@ export interface TsConfigResponse {
   analysis_letter_font_size: string;
 }
 /**
+ * Comment author identity — only disclosed to identity-capable callers.
+ */
+export interface TsFlagAuthor {
+  hf_user_id?: string | null;
+  login?: string | null;
+  role?: string | null;
+}
+/**
+ * One user's comment on a flagged verse (modal list item / POST echo).
+ */
+export interface TsFlagComment {
+  comment?: string | null;
+  created_at: string;
+  updated_at: string;
+  mine?: boolean;
+  author?: TsFlagAuthor | null;
+}
+/**
+ * Create/update the caller's flag on a verse (``POST .../flags``).
+ */
+export interface TsFlagCreateRequest {
+  verse_key: string;
+  comment?: string | null;
+  anon_token?: string | null;
+}
+/**
+ * A flagged verse + how many comments it carries (accordion pill).
+ */
+export interface TsFlagVerseCount {
+  verse_key: string;
+  count: number;
+}
+/**
  * One job run's durable record (settings + status + logs).
  *
  * ``status`` mirrors HF's lowercased stage (``running`` / ``succeeded`` /
@@ -1947,6 +1980,12 @@ export interface TsManifestReciter {
   audio_category: AudioCategory;
   ts_chapters?: number[];
   vbr_chapters?: number[];
+}
+/**
+ * Every flagged verse for a reciter (``GET .../flags``).
+ */
+export interface TsReciterFlags {
+  flags?: TsFlagVerseCount[];
 }
 /**
  * The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.
@@ -2021,4 +2060,11 @@ export interface TsValidationVerse {
   failed_beams?: number[];
   min_passing_beam?: number | null;
   [k: string]: unknown;
+}
+/**
+ * All comments on a single verse (``GET .../flags/<verse_key>``).
+ */
+export interface TsVerseFlags {
+  verse_key: string;
+  comments?: TsFlagComment[];
 }

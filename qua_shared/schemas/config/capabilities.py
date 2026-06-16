@@ -167,6 +167,17 @@ CAPABILITIES: tuple[Capability, ...] = (
         contributor=True,
         maintainer=True,
     ),
+    _c(
+        "timestamps.flag",
+        G_VIEW,
+        "Report a timestamps issue",
+        "Use the Timestamps-tab Report button to flag the playing verse and "
+        "leave an optional comment about its alignment. Open to everyone incl. "
+        "anonymous by default; turn anonymous off to require sign-in.",
+        anon=True,
+        contributor=True,
+        maintainer=True,
+    ),
     # --- B. Reciter lifecycle ---
     _c(
         "catalog.add",
@@ -521,6 +532,16 @@ CAPABILITIES: tuple[Capability, ...] = (
         "'a contributor').",
         contributor=False,
         maintainer=True,
+    ),
+    _c(
+        "timestamps.see_flagger_identity",
+        G_IDENTITY,
+        "See who reported a timestamps issue",
+        "Reveal the login next to each comment on a Timestamps-tab verse flag "
+        "(and in the flag notification). Others see the comment text only. "
+        "Owner-only by default; delegate to maintainers to share triage.",
+        contributor=False,
+        maintainer=False,
     ),
     # --- J. Email notifications (self-service; anon-eligible) ---
     _c(

@@ -190,11 +190,13 @@ Waveform + phoneme display for published reciters (plus owner preview of generat
 | Path | Role |
 |---|---|
 | `TimestampsTab.svelte` | Shell — reciter/chapter/verse cascade, config→CSS vars, view toggle, keyboard, waveform animation (imperative) |
-| `components/` | `UnifiedDisplay`, `AnimationDisplay`, `TimestampsWaveform` (exempt), `TimestampsControls`, `TimestampsAudio`, `TimestampsKeyboard`, `TimestampsViewControls`, `TimestampsShortcutsGuide`, `TranslationLangSelect`, `WordTranslation` |
-| `services/ts_client.ts` | Shard-fetch data layer (manifest + per-chapter shards; local Flask + HF CDN same shape) |
+| `components/` | `UnifiedDisplay`, `AnimationDisplay`, `TimestampsWaveform` (exempt), `TimestampsControls`, `TimestampsAudio`, `TimestampsKeyboard`, `TimestampsViewControls`, `TimestampsShortcutsGuide`, `TranslationLangSelect`, `WordTranslation`, `TsValidationPanel` (owner low-confidence accordion), `TsFlaggedAccordion` (public flagged-issues accordion), `TsFlagModal`, `TimestampsFooterFlags` (the footer **Report** button) |
+| `services/ts_client.ts` / `services/flags-client.ts` | Shard-fetch data layer / public verse-flag CRUD (`/api/ts/<slug>/flags*`) |
 | `utils/` | `constants.ts`, `loop-target.ts`, `zoom.ts`, `range-spec.ts`, `audio-load.ts` |
 
-**Stores:** `verse.ts` (reciter/chapter/verse selection + `loadedVerse` + `validationData`), `display.ts` (view mode, granularity, show-tashkeel/phonemes; localStorage-persisted), `playback.ts` (auto-play, `currentTime`; defines `tsPort` but the tab plays through the shared `dashPort`), `zoom.ts` (slice-relative visible window).
+**Public verse flagging.** Anyone (incl. anonymous, gated by `timestamps.flag`) reports a timestamps issue on the playing verse via the **Report** button — `TimestampsFooterFlags`, mounted in `BottomPlayer`'s `loc-lead` slot directly left of the surah picker (App.svelte fills the slot only on the TS tab). It **snapshots** the verse playing at click time (so a later auto-advance doesn't move the target) and opens `TsFlagModal`: every comment on that verse is globally viewable; the caller adds/edits/deletes their own (signed-in keyed by `hf_user_id`, anonymous by a localStorage token from `lib/utils/anon-token.ts`). Author logins show only to holders of `timestamps.see_flagger_identity`. Flagged verses surface as pills in `TsFlaggedAccordion` (mirrors `TsValidationPanel`; click → seek to verse). Owners get a `ts_flag.created` notification; its rail redirect uses `gotoTimestamps(slug, verseKey)` (`lib/utils/goto-timestamps.ts`), which routes through the shared `pendingTsNavigation` channel (extended with an optional `slug`) → `jumpToTarget`.
+
+**Stores:** `verse.ts` (reciter/chapter/verse selection + `loadedVerse` + `validationData`), `display.ts` (view mode, granularity, show-tashkeel/phonemes; localStorage-persisted), `playback.ts` (auto-play, `currentTime`; defines `tsPort` but the tab plays through the shared `dashPort`), `zoom.ts` (slice-relative visible window), `ts-flags.ts` (current reciter's flagged-verse counts).
 
 ### `tabs/segments/`
 
