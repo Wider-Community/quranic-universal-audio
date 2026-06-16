@@ -213,7 +213,7 @@ def _stamp_silent_flags(words: list, mapping) -> bool:
     letters = [lt for wd in words for lt in wd[3]]
     if [c for c, _ in flags] != [lt[0] for lt in letters]:
         return False
-    for lt, (_, silent) in zip(letters, flags):
+    for lt, (_, silent) in zip(letters, flags, strict=True):
         if len(lt) <= 3:
             lt.append(silent)
         else:
