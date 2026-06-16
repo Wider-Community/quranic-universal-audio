@@ -539,17 +539,31 @@
         opacity: 1;
     }
 
-    /* Waqf (stop) sign — split out of the word so the reveal never colors it.
-     *  Always neutral (own color beats the inherited `.ra-word.active` highlight);
-     *  lights only while a pause holds on its word (`.waqf-active`). */
-    .ra-waqf {
+    /* Waqf (stop) sign — split out of the word and given its own inline-block box
+     *  so it stands alone, never merges with the word's last letter, and never
+     *  takes the reveal highlight. Its own color always wins over the inherited
+     *  `.ra-word.active`/`.reached` color; full opacity in both granularities (it
+     *  is not a reveal char); lit only while a pause holds on its word
+     *  (`.waqf-active`). `z-index` keeps it above the char-mode ink. */
+    .ra-line .ra-word .ra-waqf {
+        /* The waqf glyph has zero advance width (it is a combining mark), so it
+         *  needs its own box to occupy layout space and to break out of the
+         *  word's shaping run — otherwise it collapses (char mode) or merges onto
+         *  the word's last letter and inherits the highlight (word mode). */
+        display: inline-block;
+        min-width: 0.8em;
+        text-align: center;
+        position: relative;
+        z-index: 2;
+        margin-inline-start: 0.1em;
+        opacity: 1;
         color: var(--ra-base-color);
         text-shadow: var(--ra-word-shadow);
         transition:
             color var(--ra-active-emphasis) var(--ra-easing),
             text-shadow var(--ra-active-emphasis) var(--ra-easing);
     }
-    .ra-waqf:global(.waqf-active) {
+    .ra-line .ra-word .ra-waqf:global(.waqf-active) {
         color: var(--ra-highlight);
         text-shadow: var(--ra-glow);
     }
@@ -567,7 +581,7 @@
     @media (prefers-reduced-motion: reduce) {
         .ra-word,
         .ra-line.ra-chars .ra-char,
-        .ra-waqf {
+        .ra-line .ra-word .ra-waqf {
             transition: none;
         }
     }
