@@ -189,11 +189,14 @@
     border-color: var(--ts-letter-color, #2ec4b6);
 }
 
-/* Silent graphemes (hamza wasl, lam shamsiyah, otiose tanween alef, …) are
-   muted while their cell is highlighted, so only the pronounced letter reads
-   as active. */
-.mega-letter.active .lc-silent {
-    opacity: 0.4;
+/* Silent graphemes (hamza wasl, lam shamsiyah, otiose tanween alef, …) never
+   read as a highlight target: greyed + dimmed in every state (the explicit
+   colour overrides the cell's inherited active white) and non-interactive, so
+   only the pronounced letter in a shared-timing cell lights up. */
+.lc-silent {
+    color: #777;
+    opacity: 0.55;
+    pointer-events: none;
 }
 
 .mega-phonemes {
