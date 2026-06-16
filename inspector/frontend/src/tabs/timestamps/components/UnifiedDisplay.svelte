@@ -36,7 +36,9 @@
     // ---- Local structural state (derived declaratively from loadedVerse) ----
 
     interface RenderedLetter {
-        chars: string;
+        /** One entry per grapheme sharing this cell's timing; `silent` ones are
+         *  muted while the cell is active so only the pronounced letter shows. */
+        parts: { ch: string; silent: boolean }[];
         start: number | null;
         end: number | null;
         isNull: boolean;
@@ -117,6 +119,7 @@
         for (const letter of letters) {
             const isNull = letter.start == null || letter.end == null;
             const last = groups[groups.length - 1];
+            const part = { ch: letter.char, silent: letter.silent === true };
             if (
                 !isNull &&
                 last &&
@@ -124,10 +127,10 @@
                 last.start === letter.start &&
                 last.end === letter.end
             ) {
-                last.chars += letter.char;
+                last.parts.push(part);
             } else {
                 groups.push({
-                    chars: letter.char,
+                    parts: [part],
                     start: letter.start,
                     end: letter.end,
                     isNull,
@@ -635,7 +638,8 @@
                                 on:keydown={() => {}}
                                 role="button"
                                 tabindex="-1"
-                            >{lt.chars}</span>
+                            >{#each lt.parts as p}<span class="lc" class:lc-silent={p.silent}
+                                    >{p.ch}</span>{/each}</span>
                         {:else}
                             <span
                                 class="mega-letter"
@@ -652,7 +656,8 @@
                                 on:keydown={() => {}}
                                 role="button"
                                 tabindex="-1"
-                            >{lt.chars}</span>
+                            >{#each lt.parts as p}<span class="lc" class:lc-silent={p.silent}
+                                    >{p.ch}</span>{/each}</span>
                         {/if}
                     {/each}
                 </div>
