@@ -10,12 +10,9 @@ Admin (maintainer + owner):
   Requester actor identity is included for owners, redacted for maintainers
   (same tier-based redaction pattern as the Requests tab list endpoint).
 - ``GET  /api/admin/requests?status=open|accepted|returned|discarded`` —
-  Requests-tab review queue (catalog-joined, tier-redacted) + facet counts +
-  the caller's unviewed-open count.
-- ``GET  /api/admin/requests/unviewed-count`` — the caller's unviewed-open
-  count alone (entry-button dot + tab pill when the modal is closed).
-- ``POST /api/admin/requests/<id>/view`` — mark a request viewed for the
-  calling admin (fired on inline expand). Per-admin, idempotent.
+  Requests-tab review queue (catalog-joined, tier-redacted) + facet counts.
+  "New request" awareness is surfaced via the My Notifications rail
+  (``services/notifications``), not a tab badge.
 
 Owner-only:
 - ``POST /api/admin/request/<slug>/reject-soft`` — send back; row returns
@@ -30,6 +27,8 @@ of ``@require_role`` for the tier check.
 """
 
 from __future__ import annotations
+
+import logging
 
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
@@ -107,6 +106,24 @@ def submit_request(user, slug: str):
         return jsonify({"error": str(e)}), 403
     except state_service.InvalidTransition as e:
         return jsonify({"error": str(e)}), 400
+
+    # Owner-facing review alert (best-effort, own txn). The pending row was just
+    # created by the transition handler; its id keys the auto-archive on review.
+    try:
+        from services.db import repo_requests
+        from services.notifications import emit as notify_service
+
+        pending_row = repo_requests.get_pending_row(slug)
+        if pending_row is not None:
+            notify_service.notify_owners_new_request(
+                kind="existing_combo_edit",
+                requester=actor_for(user),
+                slug=slug,
+                request_id=pending_row["id"],
+                body=comments or None,
+            )
+    except Exception:  # noqa: BLE001 — best-effort; the request already committed
+        logging.getLogger(__name__).exception("owner new-request notification failed for %s", slug)
 
     return jsonify({"ok": True, "slug": slug, "state": new_row.state.value})
 
@@ -247,27 +264,6 @@ def list_requests(user):
     resp = jsonify(payload)
     resp.headers["Cache-Control"] = "no-store"
     return resp
-
-
-@requests_bp.route("/admin/requests/unviewed-count", methods=["GET"])
-@require_capability("request.review")
-def requests_unviewed_count(user):
-    """Open requests the caller hasn't viewed — drives the tab pill + the
-    entry-button dot. Polled, so never cached."""
-    resp = jsonify({"count": admin_requests_service.unviewed_count(caller_hf_id=user.hf_user_id)})
-    resp.headers["Cache-Control"] = "no-store"
-    return resp
-
-
-@requests_bp.route("/admin/requests/<rid>/view", methods=["POST"])
-@require_same_origin
-@require_capability("request.review")
-def mark_request_viewed(user, rid: str):
-    """Mark a request viewed for the calling admin (fired on inline expand)."""
-    ok = admin_requests_service.mark_viewed(rid, actor=actor_for(user))
-    if not ok:
-        return jsonify({"error": "unknown request"}), 404
-    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------

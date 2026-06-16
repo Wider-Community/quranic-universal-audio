@@ -21,9 +21,10 @@ export interface PlayerContext {
     delivery: PublicDelivery | null;
     surahNum: number | null;
     isPlaying: boolean;
-    /** True between a source swap (or play() on a not-yet-ready element)
-     *  and the moment the browser can actually produce audio. Drives the
-     *  ring-pulse buffering indicator around the play button. */
+    /** True between a source swap / seek-intent (or play() on a not-yet-ready
+     *  element) and the first audible frame. Owned by `dash-buffering.ts`
+     *  (debounced raise, clears on `playing`); drives the shared
+     *  `LoadingSpinner` on the play button. */
     isLoading: boolean;
     positionMs: number;
     durationMs: number;

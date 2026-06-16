@@ -1003,7 +1003,7 @@ def publish_slug(slug: str, job_id: str, *, sync_card: bool = True) -> dict:
     # 2b. Gate incomplete verses: any verse missing a reference word index (never
     # recited) is dropped — no row, no audio slice. Coverage falls by that count.
     # The editor/TS tab still shows these (only the published artifacts gate).
-    from qua_shared.auto_split_precompute import word_counts_from_surah_info
+    from qua_shared.surah_words import word_counts_from_surah_info
     from qua_shared.timestamps_dedup import select_complete_verses
 
     timestamps, dropped_incomplete = select_complete_verses(

@@ -17,6 +17,7 @@
     import { fetchSurahsForDelivery, type SurahEntry } from '../../api/audio-surahs';
     import { setAdoptedSource, takeAdoptedSource } from '../../playback/adopt-signal';
     import { ensureAudioContextRunning } from '../../playback/audio-graph';
+    import { installDashBuffering, signalDashSeekIntent } from '../../playback/dash-buffering';
     import {
         adjacentAyahStartFromIndex,
         adjacentAyahStartMs,
@@ -98,11 +99,14 @@
             setPosition(fileMs, dashPort.window?.isClip ? undefined : dur ? dur * 1000 : undefined);
             maybeWarmNext(fileMs, dur ? dur * 1000 : 0);
         });
-        const unsubWaiting = dashPort.onWaiting(() => setIsLoading(true));
-        // Single steady-state clear: the ring stays up from the play request
-        // until audio is actually audible (`playing`), not merely buffered
-        // (`canplay`). `onWaiting` re-raises it on a mid-play decoder stall.
-        const unsubPlaying = dashPort.onPlaying(() => setIsLoading(false));
+        // Buffering spinner: a single controller owns `isLoading` for the shared
+        // port. It raises on `waiting`/seek-intent (debounced so in-buffer seeks
+        // don't flicker) and clears on `playing` (first audible frame) / pause /
+        // ended / error. Every Dashboard + Timestamps seek funnels through the
+        // port, so the spinner tracks actual playback — not the click. Seek-
+        // initiation raises (the `signalDashSeekIntent()` calls below + in
+        // TimestampsTab/Waveform) make it appear immediately on a cold (re)load.
+        const disposeBuffering = installDashBuffering(setIsLoading);
         // Chapter-end gapless auto-advance (Dashboard tab only — on Timestamps,
         // the shuffle handler owns end-of-chapter; see TimestampsTab onEnded).
         const unsubEnded = dashPort.onEnded(() => advanceGaplessOnEnd());
@@ -118,8 +122,7 @@
             unsubPause();
             unsubLoad();
             unsubTime();
-            unsubWaiting();
-            unsubPlaying();
+            disposeBuffering();
             unsubEnded();
             unsubHover();
             unsubScrub();
@@ -252,7 +255,7 @@
                     setDuration(entry.durationMs);
                 }
                 if (wasPlaying || isActiveCombinationSwitch) {
-                    setIsLoading(true);
+                    signalDashSeekIntent();
                     await ensureAudioContextRunning();
                     dashPort.loadCovering(...coveringRangeFor(0));
                     dashPort.play();
@@ -406,9 +409,8 @@
         if (dashPort.source) {
             dashPort.loadCovering(...coveringRangeFor(dashPort.currentTimeMs()));
         }
-        if (audioEl && audioEl.readyState < 3) {
-            setIsLoading(true);
-        }
+        // Debounced raise — no-ops when the element is already buffered + audible.
+        signalDashSeekIntent();
         dashPort.play();
     }
 
@@ -418,9 +420,8 @@
             dashPort.loadCovering(...coveringRangeFor(targetMs));
         }
         dashPort.seek(targetMs);
-        if (audioEl && audioEl.readyState < 3) {
-            setIsLoading(true);
-        }
+        // Debounced raise — no-ops when the seek lands inside the buffered window.
+        signalDashSeekIntent();
         dashPort.play();
     }
 
@@ -607,31 +608,38 @@
                 />
             </slot>
 
-            <div class="surah-trigger-wrap" use:clickOutside={() => (surahPopoverOpen = false)}>
-                <button
-                    type="button"
-                    class="surah-trigger"
-                    on:click={() => (surahPopoverOpen = !surahPopoverOpen)}
-                    disabled={surahNums.length === 0}
-                    aria-expanded={surahPopoverOpen}
-                    aria-haspopup="dialog"
-                >
-                    {#if $playerContext.surahNum}
-                        {activeSurahName ?? `Surah ${$playerContext.surahNum}`}
-                    {:else}
-                        Pick surah
+            <!-- Inner-edge group: a tab-specific lead affordance (Timestamps
+                 fills it with the Report button) sits directly left of the
+                 surah picker, both pinned to the transport edge. -->
+            <div class="loc-group">
+                <slot name="loc-lead" />
+
+                <div class="surah-trigger-wrap" use:clickOutside={() => (surahPopoverOpen = false)}>
+                    <button
+                        type="button"
+                        class="surah-trigger"
+                        on:click={() => (surahPopoverOpen = !surahPopoverOpen)}
+                        disabled={surahNums.length === 0}
+                        aria-expanded={surahPopoverOpen}
+                        aria-haspopup="dialog"
+                    >
+                        {#if $playerContext.surahNum}
+                            {activeSurahName ?? `Surah ${$playerContext.surahNum}`}
+                        {:else}
+                            Pick surah
+                        {/if}
+                    </button>
+                    {#if surahPopoverOpen}
+                        <div class="surah-pop">
+                            <SurahPopover
+                                surahNums={surahNums}
+                                value={$playerContext.surahNum}
+                                on:change={onSurahChange}
+                                on:hover={(ev) => warmSurah(ev.detail)}
+                            />
+                        </div>
                     {/if}
-                </button>
-                {#if surahPopoverOpen}
-                    <div class="surah-pop">
-                        <SurahPopover
-                            surahNums={surahNums}
-                            value={$playerContext.surahNum}
-                            on:change={onSurahChange}
-                            on:hover={(ev) => warmSurah(ev.detail)}
-                        />
-                    </div>
-                {/if}
+                </div>
             </div>
         </div>
 
@@ -744,6 +752,14 @@
         align-items: center;
         justify-content: center;
         gap: var(--s-3);
+    }
+    /* Lead affordance + surah picker, kept together at the inner (transport)
+       edge while `meta` stays pinned far-left via the zone's space-between. */
+    .loc-group {
+        display: flex;
+        align-items: stretch;
+        gap: var(--s-2);
+        min-width: 0;
     }
     .surah-trigger-wrap { position: relative; }
     .surah-trigger {

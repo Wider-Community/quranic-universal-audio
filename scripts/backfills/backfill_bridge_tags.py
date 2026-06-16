@@ -4,8 +4,11 @@ Stamps the per-phone bridge rule (slot 5 of each phone tuple) onto every
 segment-array shard already on the bucket and bumps ``_meta.schema_version``
 2 → 3, using the same ``qua_shared.timestamps_bridges`` logic the live pipeline
 now runs. No MFA / audio — the merger phone is located by re-phonemizing each
-segment's word range, which reproduces the stored phone sequence byte-for-byte
-(verified across the published corpus).
+segment's word range, which reproduces the stored *indexable* phone sequence
+(render-only qalqala ``Q`` markers in the shard ride along with their anchor and
+do not skew the index). Use it to re-tag shards generated before a fix to that
+logic — e.g. recovering the cross-word idghams an earlier guard silently dropped
+on every segment that carried a stored ``Q``.
 
 Dry-run by default: reports per-reciter tag counts, the per-rule distribution,
 and any anti-drift violation (a tag landing on a non-merger phone) WITHOUT

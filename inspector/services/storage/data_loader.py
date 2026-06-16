@@ -171,8 +171,8 @@ def load_probe_v2(reciter: str) -> tuple[set[str], dict | None]:
     returns ``(set(), None)`` and caches the empty result so repeated
     lookups don't re-stat the filesystem. The sidecar is the source of
     truth for the *Low Confidence v2* validation category and is never
-    written from the Inspector — it's emitted by the segments-stage
-    MFA probe (``qua_shared/probe_mfa.py``).
+    written from the Inspector — it's emitted offline by the segments-stage
+    MFA probe (qua-aligner-offline).
     """
     cached = cache.get_seg_probe_v2(reciter)
     if cached is not None:

@@ -38,15 +38,17 @@
     import { pendingSegmentsDeepLink, type SegmentsDeepLink } from '../../../../lib/utils/goto-segments';
     import { getWaveformPeaks } from '../../../../lib/utils/waveform-cache';
     import { IssueRegistry } from '../../domain/registry';
+    import { SORT_META, sortItems, type SortOption } from '../../domain/sorting';
     import { hasAccordionGuide, isGuideRead } from '../../guides/registry';
     import { accordionPin, clearAccordionPin, pinAccordion } from '../../stores/accordion-pin';
-    import { ensureAutoSplitMap } from '../../stores/auto-split';
+    import { autoSplitMap, ensureAutoSplitMap } from '../../stores/auto-split';
     import { segAllData, selectedReciter } from '../../stores/chapter';
     import { segConfig } from '../../stores/config';
     import { editingSegUid } from '../../stores/edit';
     import { openGuideModal } from '../../stores/guides';
     import { autoScrollEnabled, playingSegmentIndex } from '../../stores/playback';
     import { segValidation, valUiLcThreshold, valUiMeasuredCardHeight,valUiOpenCategory, valUiScrollTop } from '../../stores/validation';
+    import { resolveSort, selectSort, toggleDir, valSortPrefs, type SortPrefs } from '../../stores/validation-sort';
     import {
         VAL_VIRTUALIZE_THRESHOLD,
         VIRT_BUFFER_ROWS,
@@ -287,6 +289,8 @@
         isQalqala: boolean;
         /** Letters present in qalqala items (for filter buttons). */
         qalqalaLetters: string[];
+        /** Sort options this accordion offers (undefined = no sort pills). */
+        sorts?: readonly SortOption[];
     }
 
     /** Base-layer descriptor — everything except the per-filter projection.
@@ -303,6 +307,7 @@
         isLowConf: boolean;
         isQalqala: boolean;
         qalqalaLetters: string[];
+        sorts?: readonly SortOption[];
     }
 
     // ---- Chapter filter ----
@@ -423,6 +428,7 @@
                 isLowConf,
                 isQalqala,
                 qalqalaLetters,
+                sorts: defn.sorts,
             };
         });
         return _baseMemoResult;
@@ -435,17 +441,18 @@
         _lcThreshold: number,
         _activeQalqalaLetter: string | null,
         _qalqalaEndOfVerse: boolean,
+        _sortPrefs: SortPrefs,
+        _autoSplitMap: Record<string, { refs: string[] }> | null,
     ): CategoryDescriptor[] {
         const out: CategoryDescriptor[] = [];
+        const sortCtx = { autoSplitMap: _autoSplitMap };
         for (const b of base) {
             if (b.items.length === 0) continue;
             let visibleItems: SegValAnyItem[] = b.items;
             let summaryCount = b.items.length;
             if (b.isLowConf) {
                 const lowConf = b.items as SegValLowConfidenceItem[];
-                visibleItems = lowConf
-                    .filter((i) => (i.confidence * 100) < _lcThreshold)
-                    .sort((a, b2) => a.confidence - b2.confidence);
+                visibleItems = lowConf.filter((i) => (i.confidence * 100) < _lcThreshold);
                 summaryCount = b.defaultLowConfCount;
             } else if (b.isQalqala && (_activeQalqalaLetter || _qalqalaEndOfVerse)) {
                 const qal = b.items as SegValQalqalaItem[];
@@ -461,6 +468,13 @@
                 // Qalqala: badge tracks the active filter (parallel to LC).
                 summaryCount = filtered.length;
             }
+            // Sort the post-filter list per the active (kind, dir) for this
+            // accordion. resolveSort falls back to the registry default and
+            // returns null for accordions that offer no sorts.
+            const eff = resolveSort(_sortPrefs, b.kind);
+            if (eff) {
+                visibleItems = sortItems(visibleItems, eff.kind, eff.dir, b.sorts, sortCtx);
+            }
             out.push({
                 name: b.name,
                 type: b.kind,
@@ -471,18 +485,20 @@
                 isLowConf: b.isLowConf,
                 isQalqala: b.isQalqala,
                 qalqalaLetters: b.qalqalaLetters,
+                sorts: b.sorts,
             });
         }
         return out;
     }
 
     $: _baseDescriptors = buildBaseDescriptors($segValidation, $segAllData, chapter);
-    $: categories = projectVisible(_baseDescriptors, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse);
-    // Filter signature: the subset of inputs that truly narrow the item list
-    // (chapter / LC threshold / qalqala letter / end-of-verse). Lifted to
-    // top-level so the re-pin reactive can also react to sig flips while the
-    // same accordion stays open.
-    $: _filterSig = `${chapter}|${lcThreshold}|${activeQalqalaLetter ?? ''}|${qalqalaEndOfVerse}`;
+    $: categories = projectVisible(_baseDescriptors, lcThreshold, activeQalqalaLetter, qalqalaEndOfVerse, $valSortPrefs, $autoSplitMap);
+    // Filter signature: the subset of inputs that change the displayed list —
+    // narrowing (chapter / LC threshold / qalqala letter / end-of-verse) plus
+    // the active sort (so a sort change re-pins the open accordion's snapshot
+    // against the freshly ordered list). Lifted to top-level so the re-pin
+    // reactive can also react to sig flips while the same accordion stays open.
+    $: _filterSig = `${chapter}|${lcThreshold}|${activeQalqalaLetter ?? ''}|${qalqalaEndOfVerse}|${JSON.stringify($valSortPrefs)}`;
     $: {
         // If the filter sig hasn't changed for a category, preserve its
         // context-shown map so structural edits (split/merge) that republish
@@ -1008,6 +1024,26 @@
                         </span>
                     </span>
                 </summary>
+
+                <!-- Sort pills (per registry `sorts`) -->
+                {#if cat.sorts && cat.sorts.length > 0}
+                    {@const active = resolveSort($valSortPrefs, cat.type)}
+                    <div class="lc-slider-row val-sort-row">
+                        <span class="lc-slider-label">Sort:</span>
+                        {#each cat.sorts as opt (opt.kind)}
+                            {@const isActive = active?.kind === opt.kind}
+                            <button
+                                class="val-btn val-cross val-sort-pill"
+                                class:active={isActive}
+                                aria-pressed={isActive}
+                                title={isActive
+                                    ? `Sorted by ${SORT_META[opt.kind].label} — click to reverse`
+                                    : `Sort by ${SORT_META[opt.kind].label}`}
+                                on:click={() => (isActive ? toggleDir(cat.type) : selectSort(cat.type, opt.kind))}
+                            >{SORT_META[opt.kind].label}{#if isActive && active}<span class="val-sort-arrow">{active.dir === 'asc' ? '▲' : '▼'}</span>{/if}</button>
+                        {/each}
+                    </div>
+                {/if}
 
                 <!-- LC slider (Low Confidence only) -->
                 {#if cat.isLowConf}

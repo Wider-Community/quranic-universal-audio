@@ -31,7 +31,9 @@ export {
     type SortedInterval,
 } from './recitation-active';
 export {
+    type ActiveCellInfo,
     buildFilmstripModel,
+    type CellMissing,
     type FilmstripModel,
     type VerseCell,
     type WordFrac,

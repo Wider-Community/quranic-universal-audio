@@ -9,7 +9,7 @@
 #
 # Build context is the REPO ROOT (one level above inspector/). `qua_shared/`
 # ships alongside `inspector/` so the in-process imports of
-# `qua_shared.boundary_check` (timestamps validator) and similar resolve.
+# `qua_shared.timestamps_pipeline` (timestamps validator) and similar resolve.
 #
 # Build:    docker build -t inspector:dev -f inspector/Dockerfile .   # from repo root
 # Run dev:  docker run --rm -p 5000:5000 -v "$PWD/data:/data" inspector:dev

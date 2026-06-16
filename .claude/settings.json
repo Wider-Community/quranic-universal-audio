@@ -1,8 +1,16 @@
 {
+    "extraKnownMarketplaces": {
+      "qua-hub": { "source": { "source": "github", "repo": "Hetchy/qua-hub" } }
+    },
     "enabledPlugins": {
       "frontend-design@claude-plugins-official": true,
       "claude-md-management@claude-plugins-official": true,
-      "context7@claude-plugins-official": true
+      "context7@claude-plugins-official": true,
+      "qua-tracker@qua-hub": true,
+      "qua-conventions@qua-hub": true,
+      "qua-general@qua-hub": true,
+      "qua-infra@qua-hub": true,
+      "qua-domain@qua-hub": true
     },
     "permissions": {
       "allow": [

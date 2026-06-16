@@ -28,7 +28,7 @@
         verseTranslations,
     } from '../stores/display';
     import type { TsLoopTarget } from '../stores/playback';
-    import { autoMode, loopTarget } from '../stores/playback';
+    import { loopTarget } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
@@ -36,7 +36,12 @@
     // ---- Local structural state (derived declaratively from loadedVerse) ----
 
     interface RenderedLetter {
-        chars: string;
+        /** One grapheme = one cell (letters are never grouped, even when they
+         *  share timing). A `silent` grapheme is greyed, non-interactive, and
+         *  never highlighted — the highlight/hover/click land on the pronounced
+         *  letter that shares its timing. */
+        ch: string;
+        silent: boolean;
         start: number | null;
         end: number | null;
         isNull: boolean;
@@ -112,29 +117,14 @@
     // ---- Pure helpers (state-free) ----
 
     function letterGroupsFor(word: TsWord): RenderedLetter[] {
-        const letters = word.letters || [];
-        const groups: RenderedLetter[] = [];
-        for (const letter of letters) {
-            const isNull = letter.start == null || letter.end == null;
-            const last = groups[groups.length - 1];
-            if (
-                !isNull &&
-                last &&
-                !last.isNull &&
-                last.start === letter.start &&
-                last.end === letter.end
-            ) {
-                last.chars += letter.char;
-            } else {
-                groups.push({
-                    chars: letter.char,
-                    start: letter.start,
-                    end: letter.end,
-                    isNull,
-                });
-            }
-        }
-        return groups;
+        // One cell per grapheme — never grouped, even when letters share timing.
+        return (word.letters || []).map((letter) => ({
+            ch: letter.char,
+            silent: letter.silent === true,
+            start: letter.start,
+            end: letter.end,
+            isNull: letter.start == null || letter.end == null,
+        }));
     }
 
     /** Split a phone string into base character(s) and trailing IPA modifiers
@@ -308,9 +298,11 @@
             ph.classList.toggle('hover-preview', parseInt(ph.dataset.index ?? '-1') === hoverPhonemeIndex);
         });
 
-        // Letter highlights — must check each frame (time-based within word)
+        // Letter highlights — must check each frame (time-based within word).
+        // Silent cells are excluded: at a shared [start,end] the highlight lands
+        // on the pronounced letter alone.
         rootEl
-            .querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts)')
+            .querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts):not(.silent)')
             .forEach((el) => {
                 const s = parseFloat(el.dataset.letterStart ?? '0');
                 const e = parseFloat(el.dataset.letterEnd ?? '0');
@@ -476,8 +468,7 @@
 
     /**
      * Toggle loop on the given token. If it's already the looped target,
-     * exit loop mode; otherwise engage loop + seek to its start. Also
-     * clears `autoMode` (loop + auto-advance are mutually exclusive).
+     * exit loop mode; otherwise engage loop + seek to its start.
      */
     function toggleLoopOn(target: TsLoopTarget): void {
         const lv = get(loadedVerse);
@@ -492,7 +483,6 @@
             return;
         }
         loopTarget.set(target);
-        autoMode.set(null);
         seekToTime(target.startSec + lv.tsSegOffset);
         // Zoom/pan is handled by the centralized `loopTarget` subscription in
         // `utils/zoom.ts::setupZoomLifecycle` — no per-callsite hook needed.
@@ -633,14 +623,16 @@
                         {#if lt.isNull}
                             <span
                                 class="mega-letter null-ts"
+                                class:silent={lt.silent}
                                 on:click|stopPropagation
                                 on:keydown={() => {}}
                                 role="button"
                                 tabindex="-1"
-                            >{lt.chars}</span>
+                            >{lt.ch}</span>
                         {:else}
                             <span
                                 class="mega-letter"
+                                class:silent={lt.silent}
                                 data-letter-start={lt.start}
                                 data-letter-end={lt.end}
                                 data-word-index={block.wordIndex}
@@ -654,7 +646,7 @@
                                 on:keydown={() => {}}
                                 role="button"
                                 tabindex="-1"
-                            >{lt.chars}</span>
+                            >{lt.ch}</span>
                         {/if}
                     {/each}
                 </div>

@@ -11,6 +11,8 @@
  *   autoSuppress / persistsIgnore / scope / displayTitle / description.
  */
 
+import type { SortOption } from './sorting';
+
 export type CardType = 'generic' | 'missingWords' | 'missingVerses' | 'error';
 export type Severity = 'error' | 'warning' | 'info';
 export type Scope = 'per_segment' | 'per_verse' | 'per_chapter';
@@ -26,6 +28,13 @@ export interface IssueDefinition {
     scope: Scope;
     displayTitle: string;
     description: string;
+    /**
+     * Sort options the accordion offers (first = active default). FE-only
+     * presentation concern — deliberately absent from the Python registry and
+     * its parity snapshot. Omit to offer no sorting (Missing Verses). See
+     * `./sorting.ts`.
+     */
+    sorts?: readonly SortOption[];
 }
 
 export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.freeze({
@@ -40,6 +49,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         scope: 'per_segment',
         displayTitle: 'Failed Alignments',
         description: '',
+        sorts: [{ kind: 'quran_order', default: true }],
     },
     missing_verses: {
         kind: 'missing_verses',
@@ -64,6 +74,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         scope: 'per_verse',
         displayTitle: 'Missing Words',
         description: '',
+        sorts: [{ kind: 'quran_order', default: true }, { kind: 'word_count' }],
     },
     structural_errors: {
         kind: 'structural_errors',
@@ -76,6 +87,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         scope: 'per_chapter',
         displayTitle: 'Structural Errors',
         description: '',
+        sorts: [{ kind: 'quran_order', default: true }],
     },
     low_confidence: {
         kind: 'low_confidence',
@@ -88,6 +100,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         scope: 'per_segment',
         displayTitle: 'Low Confidence',
         description: '',
+        sorts: [{ kind: 'confidence', default: true }, { kind: 'quran_order' }],
     },
     low_confidence_v2: {
         kind: 'low_confidence_v2',
@@ -100,6 +113,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         scope: 'per_segment',
         displayTitle: 'Low Confidence v2',
         description: 'MFA tight-beam probe disagreed with the DP alignment for these segments. Treat as a second-opinion warning.',
+        sorts: [{ kind: 'quran_order', default: true }],
     },
     repetitions: {
         kind: 'repetitions',
@@ -112,6 +126,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         scope: 'per_segment',
         displayTitle: 'Detected Repetitions',
         description: '',
+        sorts: [{ kind: 'quran_order', default: true }, { kind: 'rep_split_count' }],
     },
     audio_bleeding: {
         kind: 'audio_bleeding',
@@ -124,6 +139,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         scope: 'per_segment',
         displayTitle: 'Audio Bleeding',
         description: '',
+        sorts: [{ kind: 'quran_order', default: true }],
     },
     boundary_adj: {
         kind: 'boundary_adj',
@@ -136,6 +152,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         scope: 'per_segment',
         displayTitle: 'May Require Boundary Adjustment',
         description: '',
+        sorts: [{ kind: 'quran_order', default: true }],
     },
     cross_verse: {
         kind: 'cross_verse',
@@ -148,6 +165,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         scope: 'per_segment',
         displayTitle: 'Cross-verse',
         description: 'Split cross verses at the verse boundary. If the reciter recited continuously across the boundary, annotate the new inter-segment boundary as wasl.',
+        sorts: [{ kind: 'quran_order', default: true }, { kind: 'verse_count' }],
     },
     qalqala: {
         kind: 'qalqala',
@@ -160,6 +178,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         scope: 'per_segment',
         displayTitle: 'Qalqala',
         description: '',
+        sorts: [{ kind: 'quran_order', default: true }],
     },
     muqattaat: {
         kind: 'muqattaat',
@@ -172,6 +191,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         scope: 'per_segment',
         displayTitle: 'Muqattaʼat',
         description: '',
+        sorts: [{ kind: 'quran_order', default: true }],
     },
     basmala_amin: {
         kind: 'basmala_amin',
@@ -184,6 +204,7 @@ export const IssueRegistry: Readonly<Record<string, IssueDefinition>> = Object.f
         scope: 'per_segment',
         displayTitle: 'Basmala + Amin',
         description: '',
+        sorts: [{ kind: 'quran_order', default: true }],
     },
 });
 

@@ -6,13 +6,11 @@ testpaths = ["tests"]
 # Repo root added too so cross-consumer modules under qua_shared/schemas
 # (v2 pydantic models) resolve in tests + subprocesses spawned from tests.
 pythonpath = [".", ".."]
+# Coverage is NOT forced here — bare `pytest` runs fast for local iteration.
+# CI passes the `--cov*` flags explicitly (see inspector-checks.yml).
 addopts = [
     "-ra",
     "--strict-markers",
-    "--cov",
-    "--cov-report=term-missing:skip-covered",
-    "--cov-report=xml:.coverage.xml",
-    "--no-cov-on-fail",
 ]
 
 [tool.coverage.run]

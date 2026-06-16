@@ -6,9 +6,9 @@
   <a href="https://huggingface.co/datasets/hetchyy/quranic-universal-ayahs"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Qur'anic%20Universal%20Ayahs-E8C32E" alt="Dataset - Qur'anic Universal Ayahs"></a>
   <!-- stats-badges:start -->
   <br>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Recitations-26-d4842a" alt="Published recitations"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Recitations-30-d4842a" alt="Published recitations"></a>
   <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Riwayat-1-f0ad4e" alt="Published riwayat"></a>
-  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Hours-750h%2B-d4842a" alt="Published audio hours"></a>
+  <a href="data/RECITERS.md"><img src="https://img.shields.io/badge/Hours-900h%2B-d4842a" alt="Published audio hours"></a>
   <!-- stats-badges:end -->
   <br>
   <a href="https://github.com/Wider-Community/quranic-universal-audio/releases/latest"><img src="https://img.shields.io/github/v/release/Wider-Community/quranic-universal-audio?label=Release&color=4a5568" alt="Latest Release"></a>
@@ -93,6 +93,7 @@ To contribute code to the repo directly, fork the repo and see [inspector/README
 
 - [ ] **Unified API/SDKs** — typed Python/JS client (`pip`/`npm`) over the published QUA artifacts: fetches and caches only requested data, defaults to latest with optional pinning and offline vendoring, and exposes the schemas for type consistency. Complements the Releases + HF dataset.
 - [ ] **Global CDN** — mirror all recitations and audio across regions, prewarmed with demand-based routing for low-latency delivery everywhere.
+- [ ] **Rich Metadata** — Comprehensive metadata for reciters (personal information, images, links, etc.) and recitations (year, tajweed conventions/turuq, mistakes, audio issues, etc.) ensuring consistency and easier developer integration.
 
 **Coverage + Quality**
 

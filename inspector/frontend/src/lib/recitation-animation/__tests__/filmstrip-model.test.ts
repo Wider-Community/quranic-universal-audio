@@ -77,3 +77,44 @@ describe('buildFilmstripModel lookups', () => {
         expect(model.cellOfUnit.length).toBe(0);
     });
 });
+
+describe('buildFilmstripModel coverage merge', () => {
+    // Verses 1 (words 1,2) and 3 (word 1) recited; verses 2 and 4 fully missing;
+    // verse 1 is missing word 3.
+    const units = [
+        unit('1:1:1', [[0, 1]]),
+        unit('1:1:2', [[1, 2]]),
+        unit('1:3:1', [[2, 3]]),
+    ];
+    const coverage = {
+        numVerses: 4,
+        status: new Map<number, 'words' | 'full'>([[1, 'words'], [2, 'full'], [4, 'full']]),
+        missingWords: new Map<number, number[]>([[1, [3]]]),
+    };
+
+    it('inserts placeholder cells for fully-missing verses in ayah order', () => {
+        const model = buildFilmstripModel(units, 'duration', coverage);
+        expect(model.cells.map((c) => c.ayah)).toEqual([1, 2, 3, 4]);
+        expect(model.cells.map((c) => c.missing)).toEqual(['words', 'full', 'none', 'full']);
+    });
+
+    it('placeholder cells carry no geometry or units', () => {
+        const ph = buildFilmstripModel(units, 'duration', coverage).cells[1]!;
+        expect(ph.canonDurSec).toBe(0);
+        expect(ph.words).toEqual([]);
+        expect(ph.unitStart).toBe(-1);
+    });
+
+    it('remaps cellOfUnit + indexByAyahKey to the merged indices', () => {
+        const model = buildFilmstripModel(units, 'duration', coverage);
+        // verse 1 units → cell 0; verse 3 unit → cell 2 (placeholders shift it).
+        expect(Array.from(model.cellOfUnit)).toEqual([0, 0, 2]);
+        expect(model.indexByAyahKey.get('1:3')).toBe(2);
+        expect(model.indexByAyahKey.get('1:4')).toBe(3);
+    });
+
+    it('tags every cell none without coverage (back-compat)', () => {
+        const model = buildFilmstripModel(units, 'duration');
+        expect(model.cells.map((c) => c.missing)).toEqual(['none', 'none']);
+    });
+});

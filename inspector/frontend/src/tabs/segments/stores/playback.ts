@@ -156,3 +156,15 @@ export function setPlayingSegment(next: PlayingSegment | null): void {
 /** True when main-tab audio is playing (not paused, and activeAudioSource
  *  === 'main'). Drives the per-row play-button glyph (stop vs play). */
 export const isMainAudioPlaying = writable<boolean>(false);
+
+/** True between a play being requested and the FIRST audible frame
+ *  (`playing` event). A play click flips the button to "pause" and jumps the
+ *  playhead to the segment start synchronously, but the audio bytes for the
+ *  clicked segment are often not yet buffered, so sound starts hundreds of ms
+ *  later (cold CDN fetch / segment not prewarmed) — during which the UI was
+ *  falsely signalling "playing" (issue #172). The footer play button shows a
+ *  buffering spinner while this is true so the control is honest about the
+ *  click→audible gap. Set by the play entry points, cleared on the first
+ *  `playing` event (or pause/ended). Initial-gap only — mid-playback rebuffers
+ *  do NOT re-raise it, to avoid spinner flicker at segment boundaries. */
+export const segAudioBuffering = writable<boolean>(false);

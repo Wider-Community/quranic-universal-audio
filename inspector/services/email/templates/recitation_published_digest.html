@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block subject %}{{ count }} new recitations published{% endblock %}
+{% block content %}
+<p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+  <strong>{{ count }}</strong> recitations have been published and are now
+  available on the site:
+</p>
+<ul style="margin:0;padding:0 0 0 20px;font-size:15px;line-height:1.7;">
+  {% for name in reciters %}
+  <li><strong>{{ name }}</strong></li>
+  {% endfor %}
+</ul>
+{% endblock %}

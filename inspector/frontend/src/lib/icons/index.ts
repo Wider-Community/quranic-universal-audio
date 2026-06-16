@@ -19,6 +19,7 @@ import caretDown from './caret-down.svg?raw';
 import check from './check.svg?raw';
 import history from './history.svg?raw';
 import keyboard from './keyboard.svg?raw';
+import mail from './mail.svg?raw';
 import pause from './pause.svg?raw';
 import play from './play.svg?raw';
 import replay from './replay.svg?raw';
@@ -33,6 +34,7 @@ export const ICONS = {
     check,
     history,
     keyboard,
+    mail,
     pause,
     play,
     replay,

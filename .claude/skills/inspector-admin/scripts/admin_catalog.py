@@ -150,7 +150,7 @@ def _delivery_edit(a, ctx) -> int:
     d = catalog.edit_delivery(
         actor=ctx.actor, slug=a.slug, riwayah=a.riwayah, style=a.style,
         recording_context=a.recording_context, recording_year=a.recording_year,
-        reason=a.reason,
+        variant_label=a.variant_label, reason=a.reason,
     )
     print(f"edited delivery {d.slug}:")
     print(_dump(d))
@@ -292,6 +292,8 @@ def _build_parser() -> argparse.ArgumentParser:
     de.add_argument("--style")
     de.add_argument("--recording-context", dest="recording_context")
     de.add_argument("--recording-year", dest="recording_year", type=int)
+    de.add_argument("--variant-label", dest="variant_label",
+                    help="UI distinguisher between same-reciter deliveries (e.g. Qasr/Tawassut)")
 
     # source
     src = ent.add_parser("source").add_subparsers(dest="action", required=True)

@@ -81,6 +81,7 @@ from .wire.admin_users import (
 )
 from .wire.announcements import Announcement
 from .wire.audio import AudioSurahEntry, AudioSurahsResponse
+from .wire.email_preferences import EmailPreferences, EmailPreferencesSaved
 from .wire.intake_requests import (
     IntakeAttestations,
     IntakeSource,
@@ -143,6 +144,14 @@ from .wire.seg import (
     SegValidateResponse,
 )
 from .wire.timestamps import TsConfigResponse, TsManifestResponse
+from .wire.ts_flags import (
+    TsFlagAuthor,
+    TsFlagComment,
+    TsFlagCreateRequest,
+    TsFlagVerseCount,
+    TsReciterFlags,
+    TsVerseFlags,
+)
 
 __all__ = [
     "Announcement",
@@ -173,6 +182,12 @@ __all__ = [
     "SegmentsChapterSummary",
     "TsConfigResponse",
     "TsManifestResponse",
+    "TsFlagAuthor",
+    "TsFlagComment",
+    "TsFlagCreateRequest",
+    "TsFlagVerseCount",
+    "TsReciterFlags",
+    "TsVerseFlags",
     "AutoGenTsConfig",
     "AutomationConfig",
     "AutomationResponse",
@@ -225,6 +240,8 @@ __all__ = [
     "DetailedEntry",
     "DetailedMeta",
     "DetailedSegment",
+    "EmailPreferences",
+    "EmailPreferencesSaved",
     "EditHistoryBatch",
     "EditOperation",
     "EditOpPatch",

@@ -57,6 +57,7 @@ import {
     playbackSpeed,
     playButtonLabel,
     playingSegmentIndex,
+    segAudioBuffering,
     segPort,
     setPlayingSegment,
 } from '../../stores/playback';
@@ -167,15 +168,20 @@ function _maybeSkipDeletedGap(timeMs: number): boolean {
         // the chapter's trailing audio.
         segPort.pause();
         setPlayingSegment(null);
+        segCurrentIdx.set(-1);
         _drawLoop.stop();
         return true;
     }
 
-    // Jump the active pair (drives class:playing + the playhead row) and seek
-    // to the surviving segment. `segCurrentIdx`, warmup, and on-demand peaks are
-    // reconciled by `onSegTimeUpdate`'s next tick once the playhead lands inside
-    // `next` and its crossing block fires.
+    // Jump the active pair (drives class:playing + the playhead row) and seek to
+    // the surviving segment. `segCurrentIdx` MUST advance in lockstep: this same
+    // rAF loop calls `updateSegHighlight` right after us, and it forces
+    // `playingSegmentIndex` back onto `segCurrentIdx` every frame. Leaving
+    // `segCurrentIdx` on the segment we just left lets that bridge snap the
+    // active pair backwards until `onSegTimeUpdate`'s slower tick catches up —
+    // the highlight stalls/repeats on the previous segment across the gap.
     setPlayingSegment({ chapter: next.chapter ?? active.chapter, index: next.index });
+    segCurrentIdx.set(next.index);
     segPort.seek(next.time_start);
     return true;
 }
@@ -194,6 +200,7 @@ export function resetHighlightRefs(): void {
  *  swap. */
 export function disposeSegPlayback(): void {
     _drawLoop.stop();
+    segAudioBuffering.set(false);
     _segRange?.dispose();
     _segRange = null;
 }
@@ -364,6 +371,14 @@ export function playFromSegment(
     const resolvedChapter = chapter ?? seg.chapter ?? 0;
     const isAccordionPlay = opts?.isAccordionPlay ?? false;
 
+    // Raise the buffering flag the instant a play is committed: the button
+    // flips to "pause" and the playhead jumps to seg.time_start now, but the
+    // clicked segment's audio bytes may not be buffered, so the first audible
+    // frame is hundreds of ms away. Cleared on the `playing` event (see the
+    // SegmentsFooter `onPlaying` sub) so the spinner spans exactly the
+    // click→audible gap (issue #172).
+    segAudioBuffering.set(true);
+
     // Bind the port to THIS seg's source. Cross-chapter accordion rows
     // (validation cards mounting rows from other chapters) and main-list
     // rows in the active chapter both flow through here. setSource is a
@@ -516,6 +531,9 @@ export function onSegPlayClick(): void {
             // sail past their segment boundary on resume.
             ensureBoundedRange();
             segPort.setPlaybackRate(get(playbackSpeed));
+            // Resume can also rebuffer (paused long enough for the forward
+            // buffer to drain); show the spinner until the next audible frame.
+            segAudioBuffering.set(true);
             segPort.play();
         }
     } else {
@@ -684,6 +702,8 @@ export function stopSegAnimation(): void {
     playButtonLabel.set('Play');
     if (get(activeAudioSource) === 'main') activeAudioSource.set(null);
     isMainAudioPlaying.set(false);
+    // A pause cancels any in-flight startup buffer wait — drop the spinner.
+    segAudioBuffering.set(false);
     _drawLoop.stop();
 }
 
@@ -691,6 +711,7 @@ export function onSegAudioEnded(): void {
     // Chapter audio file ended (user let it play through). Clear the active
     // pair, tear down any segment-bounded range, and stop the rAF.
     setPlayingSegment(null);
+    segAudioBuffering.set(false);
     _segRange?.dispose();
     _segRange = null;
     _drawLoop.stop();

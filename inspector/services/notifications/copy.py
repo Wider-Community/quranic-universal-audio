@@ -38,3 +38,26 @@ def submission_discarded(name: str) -> str:
 
 def flag_reply(name: str) -> str:
     return f"New reply on a segment you flagged in {name}"
+
+
+# --- Owner-facing review alerts (gated by notifications.receive_review_alerts) ---
+
+
+def request_received(name: str) -> str:
+    return f"New request · {name}"
+
+
+def marked_ready_with_notes(name: str) -> str:
+    return f"{name} marked ready — reviewer left notes"
+
+
+def flag_created(name: str) -> str:
+    return f"New flag on {name}"
+
+
+def flag_replied(name: str) -> str:
+    return f"New reply on a flag · {name}"
+
+
+def ts_flag_reported(name: str) -> str:
+    return f"Timestamps issue reported · {name}"

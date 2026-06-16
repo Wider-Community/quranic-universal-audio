@@ -72,6 +72,59 @@ def test_release_catalog_requires_audio_url_map():
     assert catalog.recitations[0].audio.chapter_urls["100"].endswith("100.mp3")
 
 
+def test_chapter_offsets_omitted_from_json_when_empty():
+    # CDN by-surah: no offsets → the key must be ABSENT (not ``{}``) so existing
+    # catalogs stay byte-stable and their content_hash doesn't churn.
+    audio = ReleaseCatalogAudio(chapter_urls={"1": "https://cdn.example/1.mp3"})
+    dumped = audio.model_dump(mode="json", by_alias=True)
+    assert "chapter_offsets_ms" not in dumped
+
+
+def test_chapter_offsets_present_for_combined_source():
+    audio = ReleaseCatalogAudio(
+        chapter_urls={"1": "https://yt.example/v", "2": "https://yt.example/v"},
+        chapter_offsets_ms={"2": 215000},
+    )
+    dumped = audio.model_dump(mode="json", by_alias=True)
+    assert dumped["chapter_offsets_ms"] == {"2": 215000}
+    # Round-trips back through validation.
+    assert ReleaseCatalogAudio.model_validate(dumped).chapter_offsets_ms == {"2": 215000}
+
+
+def test_legacy_catalog_without_offsets_still_validates():
+    # An old release catalog.json (cut before the field existed) must load.
+    rec = ReleaseRecitationCatalog.model_validate(
+        {
+            "slug": "example_reciter",
+            "audio": {"chapter_urls": {"1": "https://cdn.example/1.mp3"}},
+            "coverage": {"surahs": 1, "ayahs": 3},
+        }
+    )
+    assert rec.audio.chapter_offsets_ms == {}
+
+
+def test_coverage_missing_keys_omitted_when_complete():
+    # A complete recitation: neither missing key in the JSON (byte-stable hash).
+    dumped = ReleaseCoverage(surahs=114, ayahs=6236).model_dump(mode="json")
+    assert "missing_surahs" not in dumped
+    assert "missing_verses" not in dumped
+
+
+def test_coverage_missing_keys_present_and_round_trip():
+    cov = ReleaseCoverage(
+        surahs=30, ayahs=327, missing_surahs="1-84", missing_verses="2:3"
+    )
+    dumped = cov.model_dump(mode="json")
+    assert dumped["missing_surahs"] == "1-84"
+    assert dumped["missing_verses"] == "2:3"
+    assert ReleaseCoverage.model_validate(dumped).missing_surahs == "1-84"
+
+
+def test_legacy_coverage_without_missing_keys_validates():
+    cov = ReleaseCoverage.model_validate({"surahs": 114, "ayahs": 6236})
+    assert cov.missing_surahs == "" and cov.missing_verses == ""
+
+
 def test_qpc_hafs_doc_validates_location_keys():
     doc = QpcHafsDoc.model_validate(
         {

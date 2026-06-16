@@ -17,15 +17,31 @@ the redirect is transparent on hover (`NotificationsRail.navTarget`):
 | Event | Tooltip | Destination |
 |---|---|---|
 | `reciter.alignment_completed`, `reciter.claimed` | "Review in Segments" | `gotoSegments(slug)` — Segments tab, reciter loaded (mirrors the post-claim redirect) |
-| `flag.reply` | "Open flagged segment" | `gotoSegments(slug, {openFlagged, focusFlaggedUid})` — Segments tab + Flagged accordion open + scrolled to the flagged segment |
+| `reciter.marked_ready` | "Review submission" | `gotoSegments(slug, {openMarkReadyReview})` — Segments tab + the read-only `MarkReadyReviewModal` (the reviewer's free-text notes, no checklist) |
+| `flag.reply`, `flag.created`, `flag.replied` | "Open flagged segment" | `gotoSegments(slug, {openFlagged, focusFlaggedUid})` — Segments tab + Flagged accordion open + scrolled to the flagged segment |
+| `ts_flag.created` | "View flagged verse" | `gotoTimestamps(slug, payload.verse_key)` — Timestamps tab, that reciter loaded + playhead seeked to the verse (public verse-flag report) |
+| `request.received` | (none) | informational — no click-through; a type pill (`payload.kind`) names the request kind |
 | everything else | "View reciter" | dashboard detail modal (`openDetail`), when the reciter is still catalogued |
+
+A `cardBadge(n)` helper renders a small type pill next to the title:
+`request.received` → the kind (Edit existing combo / New riwāyah · style / New
+reciter), `reciter.marked_ready` → "Has notes", `flag.created` → "Flag · comment",
+`flag.replied` → "Flag · reply", `ts_flag.created` → "Timestamps · report".
+
+For `ts_flag.created`, the card body shows the reporter's login (from
+`payload.author_login`, or "an anonymous listener") only to callers holding
+`timestamps.see_flagger_identity` (owner-default) — otherwise just the
+verse + comment. The FE gate lives in `NotificationsRail.cardBody`.
 
 The flag deep-link is a cross-tab handoff: `gotoSegments` writes
 `pendingSegmentsDeepLink` (`lib/utils/goto-segments.ts`); `ValidationPanel`
 consumes it once the reciter's flagged segments load — opens the `__flagged__`
 accordion and scrolls the `[data-flag-uid=...]` card into view. It waits for the
 target uid to appear so a stale (previous-reciter) flag list never triggers it.
-`flag.reply` notifications carry `payload.segment_uid` for this.
+`flag.reply` / `flag.created` / `flag.replied` notifications carry
+`payload.segment_uid` for this. The `openMarkReadyReview` variant is consumed by
+`SegmentsTab` (not `ValidationPanel`) — once the reciter is switched in it mounts
+`MarkReadyReviewModal` and clears the pending intent.
 
 ## Model
 
@@ -89,6 +105,35 @@ Every title names its reciter, resolved once via `catalog.display_name(slug)`
 | `request.intake_returned` | requester (`requests.requester_id`) | "Your submission for X was sent back" + reason |
 | `request.intake_discarded` | requester | "Your submission for X was discarded" + reason |
 | `flag.reply` | original flagger | "New reply on a segment you flagged in X" + reply text |
+| `reciter.marked_ready` | review-alert recipients (only when a comment box is non-empty) | "X marked ready — reviewer left notes" + the notes |
+
+## Owner review alerts
+
+Three event types fan out to **review-alert recipients** — everyone holding the
+`notifications.receive_review_alerts` capability (owner-default-on, delegatable
+to maintainers from the Permissions tab). `emit._review_alert_recipients()` →
+`capabilities.users_with_capability(...)`. Per-target self-suppression drops the
+acting user (an owner's own request / mark-ready / flag never notifies them).
+
+| Event | Fired from | Copy |
+|---|---|---|
+| `request.received` | `notify_owners_new_request` — called from the slug-based edit-request route AND `intake.submit` (NOT a `reciter.requested` resolver, which re-fires on ingest) | "New request · X" + a body detail; `payload.kind` = `existing_combo_edit` / `existing_reciter_new_combo` / `new_reciter` |
+| `reciter.marked_ready` | `_r_marked_ready` resolver (only when `comment_checks` or `comment_issues` is non-empty) | "X marked ready — reviewer left notes" + the notes; `payload.openMarkReadyReview` |
+| `flag.created` / `flag.replied` | `notify_owners_flag_activity` — from the segment-save flow for `set` / `followup` flag ops | "New flag on X" / "New reply on a flag · X" + `surah:ayah — comment`; `payload.segment_uid` |
+| `ts_flag.created` | `notify_owners_ts_flag` — from the public Timestamps-tab flag route, **once per new comment** (re-edits don't re-notify) | "Timestamps issue reported · X" + `verse_key — comment`; `payload.verse_key` + `author_id` / `author_login` (null for anonymous). `source_key=tsflag:<slug>:<verse>:<at_utc>` |
+
+**Auto-archive.** `request.received` cards are informational. When the reciter
+reaches `awaiting_review` (the `reciter.alignment_completed` event), the request
+has been handled, so `emit._archive_request_alerts(slug)` dismisses every
+owner's card for it — `repo_requests.ids_for_slug(slug)` →
+`repo_notifications.dismiss_by_source_key("request:<id>")` (one source_key shared
+across all recipients, so one call clears the whole fan-out). The intake row's
+slug is back-filled at ingest, so both request paths are reachable by slug.
+
+The old per-admin **Requests-tab unviewed badge** (entry-button dot, tab count,
+per-row dot, `/api/admin/requests/unviewed-count`, the `request_views` writer)
+was retired in favour of these alerts — "new request" awareness lives only on
+the rail now.
 
 The requester for the reject/alignment events is captured in `_apply_event`
 **before** the handler runs (the pending row is archived mid-handler). The
@@ -147,6 +192,92 @@ whenever ≥1 announcement is active; the Active/Archive toggle + personal list
 stay signed-in-only. Compose UI: the Admin → **Announcements** tab
 (`AnnouncementsCompartment.svelte`).
 
+## Email notifications
+
+A second, opt-in channel alongside the in-app rail: no-reply emails for catalog
++ workflow events. The rail header carries an **"Email notifs" button**
+(`NotificationsRail.svelte`, gated on the `notify.email_subscriptions`
+capability — shown to everyone incl. anonymous) that opens
+`EmailPrefsModal.svelte` (`tabs/dashboard/components/`).
+
+**Identity = the email address, not the HF account.** Subscriptions are keyed by
+the typed email so anonymous visitors can subscribe. The row carries an optional
+`hf_user_id` (set when the saver is signed in — used only to match the
+`request_aligned` event to its requester). Per the product decision there is **no
+verification** (saving activates immediately) and **no HF auto-seed** (the field
+is user-typed; the HF cookie carries no email).
+
+**Manage token.** On first save the server mints one stable `manage_token` per
+email (`secrets.token_urlsafe`). It is the only secret guarding the row and does
+double duty: the one-click unsubscribe link (`GET /api/email-unsubscribe?token=`,
+turns every event off) and the email "manage" deep-link
+(`<app>/?manage=<token>` → `NotificationsRail` opens the modal seeded by token).
+The FE caches it in `localStorage`; the modal re-fetches by token on open so it
+stays consistent with an out-of-band unsubscribe (synced on open, not pushed).
+
+**Model** (`EmailPreferences` in `qua_shared/schemas/wire/email_preferences.py`,
+codegen'd → FE `EmailPrefs`). One destination `email`, six event settings, and
+two *shared* selections reused across events (pick once, applies to both):
+
+| Field | Type | Event |
+|---|---|---|
+| `request_aligned` | bool | A request you submitted finishes alignment |
+| `recitation_published` | `off`/`all`/`selected` | A recitation is published |
+| `timestamps_regenerated` | `off`/`all`/`selected` | A reciter's timestamps are regenerated |
+| `github_release` | bool | A new GitHub release is cut |
+| `riwayah_new_recitation` | bool | New recitation in a followed riwayah |
+| `riwayah_first_available` | bool | A followed riwayah becomes available (one-time) |
+| `reciters` | `reciter_id[]` | shared target for every `selected`-scope event |
+| `riwayahs` | slug[] | shared follow-list for both riwayah events |
+
+An enabled event whose backing selection is empty is a no-op; the modal warns
+inline rather than blocking save. The reciter/riwayah option sets are derived
+client-side from the loaded catalog. Reusable primitives:
+`lib/components/Segmented.svelte` + `lib/components/ChipMultiSelect.svelte`;
+envelope glyph at `lib/icons/mail.svg`.
+
+**Backend.**
+- **Store:** `email_subscriptions` (migration `0022`) + `repo_email_subscriptions`
+  — keyed by normalized email, prefs as a JSON blob, stable `manage_token`.
+- **Routes:** `routes/auth/email_preferences.py` — `GET/POST /api/me/email-preferences`
+  (capability-gated, **not** 401 for anonymous; GET resolves by HF cookie → `?token=`
+  → defaults; POST `@require_same_origin`, mints+echoes the token) and the public
+  `GET /api/email-unsubscribe`.
+- **Sender:** `services/email/` (Flask-free; named `services.email` to avoid
+  shadowing the stdlib `email`) — Jinja `templates/` (one per event extending
+  `base.html`, greeting "Assalamu Alaikum"), `send.py` (Gmail SMTP via the
+  `GMAIL`/`GMAIL_PASS` Space secrets, fire-and-forget `ThreadPoolExecutor`; when
+  the secrets are absent it **logs the rendered email** instead of sending so dev
+  exercises the flow), and `emit.py` (per-event recipient resolution).
+- **Event hooks** (best-effort, never break the write): `reciter.published` +
+  `reciter.alignment_completed` in `state._apply_event`; `reciter.ts_regenerated`
+  in `timestamps_jobs._regenerate_timestamps_on_released`; the GH cut in
+  `cut_release.complete`. Each sits past the existing idempotency guard so a
+  webhook+poll double-fire can't double-send. A publish collapses to **one email
+  per address** (precedence `riwayah_first_available > riwayah_new_recitation >
+  recitation_published`); first-in-riwayah is computed from the released set in
+  the catalog. Per-recipient unsubscribe links mean one message per address (no
+  BCC); fan-out is best-effort with no retry — acceptable at current scale.
+- **Links:** release emails point at the GH releases page
+  (`config.EMAIL_GH_RELEASES_URL`); all events link the Space
+  (`config.EMAIL_SITE_URL`). Functional links use `config.EMAIL_APP_BASE_URL`
+  (`INSPECTOR_PUBLIC_BASE_URL`, localhost in dev).
+- **Digest (burst control).** The two high-volume events — the
+  `recitation_published` scope and `timestamps_regenerated` — do **not** send
+  immediately. `emit.py` buffers one `email_digest` row per matched recipient
+  (migration `0023` + `repo_email_digest`; recipient resolution unchanged, so
+  `all`/`selected` both work) and `services/email/digest.py` sweeps that buffer
+  (`start_flush_daemon`, ~60 s, opt-out `INSPECTOR_EMAIL_DIGEST_FLUSH=0`). Each
+  `(email, event_kind)` group flushes as **one** email once its tumbling window
+  (opened by the earliest buffered row) ages past `EMAIL_DIGEST_WINDOW_MINUTES`
+  (60). **Per-event, never cross-event** → at most two batched emails per
+  recipient per window. One buffered reciter reuses the singular template; two or
+  more use `<event_kind>_digest.html`. Buffering rides `durable_transaction`
+  (nesting-safe): inside the publish transition it adds no extra bucket upload;
+  the TS path is its own top-level write. The **riwayah-follow** flavors stay
+  immediate (lower frequency). Flush is send-then-delete (a rare mid-flush crash
+  re-sends rather than drops — consistent with best-effort).
+
 ## Tests
 
 - `tests/db/test_repo_announcements.py` — announcement create / list_active /
@@ -162,3 +293,14 @@ stay signed-in-only. Compose UI: the Admin → **Announcements** tab
   dismiss/restore, owner-scoping.
 - `tests/services/test_state_request_events.py::test_reject_soft_notifies_requester`
   — end-to-end through `transition()`.
+- `tests/db/test_repo_email_subscriptions.py` — email-keyed upsert, token +
+  created_at preserved on update, unsubscribe turns every event off.
+- `tests/routes/test_route_email_preferences.py` — anonymous reachable (no 401),
+  token minted/echoed, GET-by-cookie vs GET-by-token, bad email 400, unsubscribe.
+- `tests/services/test_email_emit.py` — per-event recipient resolution, scope
+  filtering, single-email-per-publish precedence (captured at the `send` seam);
+  the two scope events buffer (no immediate send) while riwayah stays immediate.
+- `tests/services/test_email_digest.py` — flush windowing, single→singular vs
+  many→digest template, reciter dedup, buffer deletion, per-event isolation.
+- `tests/db/test_repo_email_digest.py` — window-edge `due_groups`, oldest-first
+  `items_for`, id-scoped `delete_ids` keeps post-read rows.

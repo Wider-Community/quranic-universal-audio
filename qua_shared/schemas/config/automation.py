@@ -56,6 +56,9 @@ class AutoGenTsConfig(BaseModel):
     gate_by_flags: bool = True
     beam: int = Field(default=_DEFAULT_BEAM, ge=1)
     probe_beams: int = Field(default=_DEFAULT_PROBE_BEAMS, ge=0)
+    #: Acoustic model (catalog id) for auto-generated runs. None = store default.
+    #: The saved owner-wide preference for the new default aligner.
+    aligner_model: str | None = None
 
 
 class GhCutConfig(BaseModel):

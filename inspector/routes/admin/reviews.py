@@ -18,6 +18,7 @@ from pydantic import ValidationError
 
 from qua_shared.schemas import TsJobSettings
 from routes._admin_helpers import require_capability_or_403
+from services.admin import aligner_models as aligner_models_service
 from services.admin import reviews as reviews_service
 from services.admin import timestamps_jobs as ts_jobs
 from services.state import state as state_service
@@ -39,6 +40,13 @@ def review_detail(user, slug):
     if detail is None:
         return jsonify({"error": "unknown slug"}), 404
     return jsonify(detail)
+
+
+@admin_reviews_bp.route("/aligner-models")
+@require_capability("reviews.generate_timestamps")
+def aligner_models(user):
+    """Selectable acoustic models for the TS launch form + automation config."""
+    return jsonify({"models": aligner_models_service.list_models()})
 
 
 @admin_reviews_bp.route("/generate-timestamps/<slug>", methods=["POST"])
@@ -133,9 +141,13 @@ def _parse_ts_settings(body: dict) -> TsJobSettings:
         chapters = sorted(set(chapters_raw))
         if not chapters:
             chapters = None  # empty list = full reciter
+    aligner_model = body.get("aligner_model") or None
+    if aligner_model is not None and not isinstance(aligner_model, str):
+        raise ValueError("aligner_model must be a string (catalog id)")
     try:
         return TsJobSettings(
             beams=beams,
+            aligner_model=aligner_model,
             chapters=chapters,
             workers=workers,
             flavor=body.get("flavor") or None,

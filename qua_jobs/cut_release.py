@@ -331,32 +331,58 @@ def _json_model_bytes(model) -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def _audio_urls_from_manifest(slug: str, audio_manifest: dict | None) -> dict[str, str]:
-    """Return the consumer URL map from ``catalog/audio_manifest/<slug>.json``."""
+def _audio_sources_from_manifest(
+    slug: str, audio_manifest: dict | None
+) -> tuple[dict[str, str], dict[str, int]]:
+    """Return ``(chapter_urls, chapter_offsets_ms)`` from
+    ``catalog/audio_manifest/<slug>.json``.
+
+    ``chapter_urls`` is the NATIVE source URL per chapter — for a combined-file
+    intake (one YouTube/Drive source serving several chapters) the manifest
+    stores a per-chapter bucket path in ``url`` and the real source in
+    ``source_url``; we surface ``source_url`` so the release points consumers at
+    the original, not the internal bucket. ``chapter_offsets_ms`` is the
+    chapter's start offset *inside* that source (``source_offset_ms``), included
+    only when > 0 (combined files, or a single file with a trimmed lead-in).
+    Mirrors ``publish_hf.publish_slug``'s per-row resolution so the two adapters
+    agree on provenance + offset.
+    """
     if not audio_manifest:
-        return {}
+        return {}, {}
     chapters = audio_manifest.get("chapters")
     if isinstance(chapters, dict):
-        urls = {
-            key: chapter["url"].strip()
-            for key, chapter in sorted(chapters.items())
-            if (key.isdigit() or ":" in key)
-            and isinstance(chapter, dict)
-            and isinstance(chapter.get("url"), str)
-            and chapter["url"].strip()
-        }
+        urls: dict[str, str] = {}
+        offsets: dict[str, int] = {}
+        for key, chapter in sorted(chapters.items()):
+            if not (key.isdigit() or ":" in key) or not isinstance(chapter, dict):
+                continue
+            url = chapter.get("source_url") or chapter.get("url")
+            if not isinstance(url, str) or not url.strip():
+                continue
+            urls[key] = url.strip()
+            offset = int(chapter.get("source_offset_ms") or 0)
+            if offset > 0:
+                offsets[key] = offset
         if urls:
-            return urls
+            return urls, offsets
 
     # Legacy flat maps are kept as a defensive fallback for old fixtures.
-    return {
+    flat = {
         key: value.strip()
         for key, value in sorted(audio_manifest.items())
         if (key.isdigit() or ":" in key) and isinstance(value, str) and value.strip()
     }
+    return flat, {}
 
 
-def _build_catalog_json(rec: dict, audio_manifest: dict | None, verses: dict) -> bytes:
+def _build_catalog_json(
+    rec: dict,
+    audio_manifest: dict | None,
+    verses: dict,
+    *,
+    missing_surahs: str = "",
+    missing_verses: str = "",
+) -> bytes:
     """Per-recitation catalog.json bytes (orjson-equivalent serialisation).
 
     ``chapter_urls`` is keyed by chapter string (``"1"``) for by_surah and by
@@ -366,7 +392,7 @@ def _build_catalog_json(rec: dict, audio_manifest: dict | None, verses: dict) ->
     "what the source audio actually serves" so this is the consumer-actionable
     URL set without contraction.
     """
-    audio_urls = _audio_urls_from_manifest(rec["slug"], audio_manifest)
+    audio_urls, audio_offsets = _audio_sources_from_manifest(rec["slug"], audio_manifest)
     if not audio_urls:
         raise RuntimeError(f"{rec['slug']}: audio_manifest has no usable audio URLs")
     surahs = {key.split(":", 1)[0] for key in verses if not key.startswith("_")}
@@ -387,12 +413,18 @@ def _build_catalog_json(rec: dict, audio_manifest: dict | None, verses: dict) ->
         variant_label=rec.get("variant_label"),
         audio=ReleaseCatalogAudio(
             chapter_urls=audio_urls,
+            chapter_offsets_ms=audio_offsets,
             sample_rate_hz=rec.get("sample_rate_hz"),
             channels=rec.get("channels"),
             bitrate_mode=rec.get("bitrate_mode"),
             bitrate_kbps_nominal=rec.get("bitrate_kbps_nominal"),
         ),
-        coverage=ReleaseCoverage(surahs=len(surahs), ayahs=coverage_ayahs),
+        coverage=ReleaseCoverage(
+            surahs=len(surahs),
+            ayahs=coverage_ayahs,
+            missing_surahs=missing_surahs,
+            missing_verses=missing_verses,
+        ),
     )
     return _json_model_bytes(catalog)
 
@@ -531,6 +563,8 @@ def _build_changelog(
             "change_kind": m.get("change_kind"),
             "coverage_surahs": m.get("coverage_surahs"),
             "coverage_ayahs": m.get("coverage_ayahs"),
+            "missing_surahs": m.get("missing_surahs"),
+            "missing_verses": m.get("missing_verses"),
         }
         for m in members
     ]
@@ -794,6 +828,7 @@ def _preflight() -> int:
         "LICENSE",
         "qua_jobs/shard.py",
         "qua_jobs/check_updates.py",
+        "qua_jobs/download_audio.py",
     ):
         if not (code_dir / rel).exists():
             log.error("staged file missing: %s", code_dir / rel)
@@ -834,10 +869,12 @@ def main() -> int:
     # 2. Build per-recitation artifacts and accumulate member rows.
     refs_dir = _code_root() / "data"
     surah_info = json.loads((refs_dir / "surah_info.json").read_bytes())
-    from qua_shared.auto_split_precompute import word_counts_from_surah_info
+    from qua_shared.coverage import missing_coverage, verse_counts_from_surah_info
+    from qua_shared.surah_words import word_counts_from_surah_info
     from qua_shared.timestamps_dedup import select_complete_verses
 
     word_counts = word_counts_from_surah_info(surah_info)
+    surah_verse_counts = verse_counts_from_surah_info(surah_info)
 
     # qpc_hafs is a consumer-facing release asset. The staged image .gz is an
     # LFS pointer (HF auto-LFS by extension), so resolve the real decompressed
@@ -933,7 +970,22 @@ def main() -> int:
                 audio_manifest = json.loads(audio_manifest_path.read_bytes())
             except (json.JSONDecodeError, OSError):
                 audio_manifest = None
-        catalog_bytes = _build_catalog_json(rec, audio_manifest, verses)
+        # Concise coverage-gap notation (vs the full mushaf) for catalog.json +
+        # the changelog Missing column — whole missing surahs vs within-surah
+        # verse gaps, split so even a partial recitation stays short.
+        present_refs = {
+            (int(k.split(":")[0]), int(k.split(":")[1]))
+            for k in verses
+            if not k.startswith("_")
+        }
+        missing_surahs, missing_verses = missing_coverage(present_refs, surah_verse_counts)
+        catalog_bytes = _build_catalog_json(
+            rec,
+            audio_manifest,
+            verses,
+            missing_surahs=missing_surahs,
+            missing_verses=missing_verses,
+        )
 
         # content_hash — over letter tier + catalog bytes.
         content_hash = _sha256_hex(tier_files["letter_timestamps.json.gz"] + catalog_bytes)
@@ -961,6 +1013,8 @@ def main() -> int:
                 "ts_version": str(rec["ts_version"]),
                 "coverage_ayahs": coverage_ayahs,
                 "coverage_surahs": rec.get("chapter_count"),
+                "missing_surahs": missing_surahs,
+                "missing_verses": missing_verses,
                 "content_hash": content_hash,
                 "change_kind": change_kind,
                 "catalog_snapshot": catalog_snapshot,
@@ -1048,6 +1102,7 @@ def main() -> int:
     license_bytes = license_path.read_bytes() if license_path.exists() else b""
     shard_py = (_code_root() / "qua_jobs" / "shard.py").read_bytes()
     check_updates_py = (_code_root() / "qua_jobs" / "check_updates.py").read_bytes()
+    download_audio_py = (_code_root() / "qua_jobs" / "download_audio.py").read_bytes()
     static_files: dict[str, bytes] = {}
     si_path = refs_dir / "surah_info.json"
     if si_path.exists():
@@ -1071,6 +1126,7 @@ def main() -> int:
     uploads.append(("catalog.json", catalog_all, "application/json"))
     uploads.append(("shard.py", shard_py, "text/x-python"))
     uploads.append(("check_updates.py", check_updates_py, "text/x-python"))
+    uploads.append(("download_audio.py", download_audio_py, "text/x-python"))
     # Letter-tier character vocabulary (the 42-token external alphabet that the
     # letter_timestamps.json.gz `char` field draws from). Generated from the
     # canonical mapping module so it can never drift from the emitted data.

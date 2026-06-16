@@ -152,7 +152,9 @@ def eval_auto_gen_ts(cfg: AutomationConfig, now: datetime) -> None:
         try:
             timestamps_jobs.launch(
                 slug,
-                settings=TsJobSettings(beams=_beams(c.beam, c.probe_beams)),
+                settings=TsJobSettings(
+                    beams=_beams(c.beam, c.probe_beams), aligner_model=c.aligner_model
+                ),
                 webhook_base=_webhook_base(),
             )
             launched.append(slug)

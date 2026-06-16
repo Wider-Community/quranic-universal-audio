@@ -46,11 +46,13 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bucket"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / ".local" / "extraction"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _bootstrap as bs  # noqa: E402
-from _mp3probe import probe_source  # noqa: E402
+
+from qua_shared.mp3_probe import probe_source  # noqa: E402
 
 META_FIELDS = ("duration_sec", "bitrate_kbps", "bitrate_mode")
 

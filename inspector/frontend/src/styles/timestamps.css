@@ -189,6 +189,17 @@
     border-color: var(--ts-letter-color, #2ec4b6);
 }
 
+/* Every grapheme is its own cell. A silent grapheme (hamza wasl, lam shamsiyah,
+   the otiose alef, the dropped silah, …) is greyed, non-interactive, and never
+   highlighted — the highlight/hover/click all land on the pronounced letter that
+   shares its timing. */
+.mega-letter.silent {
+    color: #777;
+    opacity: 0.55;
+    pointer-events: none;
+    cursor: default;
+}
+
 .mega-phonemes {
     display: flex;
     gap: var(--phoneme-box-gap);

@@ -49,8 +49,13 @@ def test_me_anonymous_returns_null_shape(flask_client):
         "active_claim": None,
         "active_claims": [],
         "dev_mode": False,
-        # Anonymous holds the anon-eligible view capabilities by default.
-        "capabilities": ["view.catalog", "view.public_activity"],
+        # Anonymous holds the anon-eligible capabilities by default.
+        "capabilities": [
+            "view.catalog",
+            "view.public_activity",
+            "timestamps.flag",
+            "notify.email_subscriptions",
+        ],
         # No identity → no guide read marks.
         "guides_read": [],
         # No identity → no notifications.

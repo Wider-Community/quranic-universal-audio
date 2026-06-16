@@ -135,6 +135,7 @@ G_MODERATION = "Activity & moderation"
 G_ADMIN = "Admin surfaces"
 G_RELEASES = "Releases & distribution"
 G_IDENTITY = "Identity disclosure"
+G_SUBSCRIPTIONS = "Email notifications"
 
 
 # ----------------------------------------------------------------------
@@ -162,6 +163,17 @@ CAPABILITIES: tuple[Capability, ...] = (
         G_VIEW,
         "See the activity rail",
         "Read the public Recent Activity feed on the dashboard.",
+        anon=True,
+        contributor=True,
+        maintainer=True,
+    ),
+    _c(
+        "timestamps.flag",
+        G_VIEW,
+        "Report a timestamps issue",
+        "Use the Timestamps-tab Report button to flag the playing verse and "
+        "leave an optional comment about its alignment. Open to everyone incl. "
+        "anonymous by default; turn anonymous off to require sign-in.",
         anon=True,
         contributor=True,
         maintainer=True,
@@ -451,6 +463,17 @@ CAPABILITIES: tuple[Capability, ...] = (
         maintainer=False,
     ),
     _c(
+        "notifications.receive_review_alerts",
+        G_ADMIN,
+        "Receive review alerts",
+        "Get a My Notifications card when a new request arrives, when a "
+        "contributor marks a recitation ready with written notes, or when a "
+        "segment is flagged or replied to. Owner-only by default; delegate to "
+        "maintainers to share the review load.",
+        contributor=False,
+        maintainer=False,
+    ),
+    _c(
         MANAGE_PERMISSIONS,
         G_ADMIN,
         "Manage permissions",
@@ -508,6 +531,28 @@ CAPABILITIES: tuple[Capability, ...] = (
         "a flagged segment. Others see only the author's role (e.g. "
         "'a contributor').",
         contributor=False,
+        maintainer=True,
+    ),
+    _c(
+        "timestamps.see_flagger_identity",
+        G_IDENTITY,
+        "See who reported a timestamps issue",
+        "Reveal the login next to each comment on a Timestamps-tab verse flag "
+        "(and in the flag notification). Others see the comment text only. "
+        "Owner-only by default; delegate to maintainers to share triage.",
+        contributor=False,
+        maintainer=False,
+    ),
+    # --- J. Email notifications (self-service; anon-eligible) ---
+    _c(
+        "notify.email_subscriptions",
+        G_SUBSCRIPTIONS,
+        "Manage email notifications",
+        "Open the email-notifications modal and subscribe an email address to "
+        "catalog + workflow events. Subscriptions are keyed by email, so this "
+        "works for signed-out visitors too; turn anonymous off to require sign-in.",
+        anon=True,
+        contributor=True,
         maintainer=True,
     ),
 )

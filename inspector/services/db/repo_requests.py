@@ -318,6 +318,15 @@ def get_by_id(request_id: str):
     return get_conn().execute("SELECT * FROM requests WHERE id = ?", (request_id,)).fetchone()
 
 
+def ids_for_slug(slug: str) -> list[str]:
+    """Every request id ever linked to ``slug`` (any status). Drives the
+    auto-archive of the per-owner ``request.received`` alerts once the reciter
+    reaches review — an intake row's slug is back-filled at ingest, a slug-based
+    edit request carries it from creation, so both are reachable here."""
+    rows = get_conn().execute("SELECT id FROM requests WHERE slug = ?", (slug,)).fetchall()
+    return [r[0] for r in rows]
+
+
 def admin_list_rows(*, status: str) -> list:
     """Raw rows for the admin Requests tab. ``status`` is a DB status
     (``pending``/``accepted``/``returned``/``discarded``). Includes slugless
@@ -343,50 +352,3 @@ def counts_by_status() -> dict[str, int]:
     chips)."""
     rows = get_conn().execute("SELECT status, COUNT(*) FROM requests GROUP BY status").fetchall()
     return {r[0]: int(r[1]) for r in rows}
-
-
-# ---- per-admin view marks (drive the Requests-tab unviewed badge) ----
-
-
-def mark_viewed(request_id: str, hf_user_id: str, *, at: datetime | None = None) -> None:
-    """Idempotent: only the first expand of a request by a given admin writes."""
-    repo_access.ensure_user(hf_user_id)
-    get_conn().execute(
-        "INSERT OR IGNORE INTO request_views(request_id, hf_user_id, viewed_at) VALUES (?,?,?)",
-        (request_id, hf_user_id, _serde.to_iso(at or _serde.now())),
-    )
-
-
-def is_viewed(request_id: str, hf_user_id: str) -> bool:
-    return (
-        get_conn()
-        .execute(
-            "SELECT 1 FROM request_views WHERE request_id = ? AND hf_user_id = ?",
-            (request_id, hf_user_id),
-        )
-        .fetchone()
-        is not None
-    )
-
-
-def viewed_ids_for_user(hf_user_id: str) -> set[str]:
-    rows = (
-        get_conn()
-        .execute("SELECT request_id FROM request_views WHERE hf_user_id = ?", (hf_user_id,))
-        .fetchall()
-    )
-    return {r[0] for r in rows}
-
-
-def count_unviewed_open_for_user(hf_user_id: str) -> int:
-    """Open (pending) requests this admin has not yet viewed — edit + intake."""
-    return int(
-        get_conn()
-        .execute(
-            "SELECT COUNT(*) FROM requests r WHERE r.status = 'pending' "
-            "AND NOT EXISTS (SELECT 1 FROM request_views v "
-            "WHERE v.request_id = r.id AND v.hf_user_id = ?)",
-            (hf_user_id,),
-        )
-        .fetchone()[0]
-    )

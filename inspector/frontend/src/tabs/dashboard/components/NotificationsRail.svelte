@@ -17,16 +17,51 @@
     import { onDestroy, onMount } from 'svelte';
 
     import type { UserNotification } from '../../../lib/api/notifications';
+    import Icon from '../../../lib/icons/Icon.svelte';
+    import { can } from '../../../lib/stores/capabilities';
     import { currentUser, isSignedIn } from '../../../lib/stores/current-user';
     import { gotoSegments } from '../../../lib/utils/goto-segments';
+    import { gotoTimestamps } from '../../../lib/utils/goto-timestamps';
     import { relativeTime } from '../../../lib/utils/relative-time';
+    import EmailPrefsModal from './EmailPrefsModal.svelte';
     import { announcements } from '../stores/announcements.svelte';
     import { resolveDeliverySlug } from '../stores/catalog-data';
     import { openDetail } from '../stores/dashboard-state';
     import { notifications } from '../stores/notifications.svelte';
 
     const signedIn = $derived(isSignedIn($currentUser));
-    const visible = $derived(signedIn || announcements.active.length > 0);
+    const canEmail = can('notify.email_subscriptions');
+    const canSeeReporter = can('timestamps.see_flagger_identity');
+    // The rail is the email-subscribe entry point for everyone (incl. anonymous),
+    // so it shows whenever email is available — not only for signed-in users or
+    // when an announcement is active.
+    const visible = $derived(signedIn || announcements.active.length > 0 || $canEmail);
+
+    let prefsOpen = $state(false);
+    let manageToken = $state<string | null>(null);
+
+    // An email "manage" / unsubscribe link deep-links back as `?manage=<token>`.
+    // Open the modal seeded by that token, then strip the param so a refresh
+    // doesn't reopen it.
+    onMount(() => {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('manage');
+            if (token) {
+                manageToken = token;
+                prefsOpen = true;
+                params.delete('manage');
+                const qs = params.toString();
+                window.history.replaceState(
+                    {},
+                    '',
+                    window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash,
+                );
+            }
+        } catch {
+            /* no-op — deep-link is best-effort */
+        }
+    });
 
     onMount(() => announcements.start());
     onDestroy(() => {
@@ -47,6 +82,7 @@
         key: string;
         title: string;
         body: string | null;
+        badge: string | null;
         created_at: string;
         unseen: boolean;
         nav: { label: string; go: () => void } | null;
@@ -65,12 +101,23 @@
      */
     function navTarget(n: UserNotification): { label: string; go: () => void } | null {
         const slug = n.slug;
-        if (!slug) return null;
         switch (n.event) {
+            case 'request.received':
+                return null; // informational — owner reviews from the Requests tab
+            case 'reciter.marked_ready':
+                return slug
+                    ? {
+                          label: 'Review submission',
+                          go: () => gotoSegments(slug, { openMarkReadyReview: true }),
+                      }
+                    : null;
             case 'reciter.alignment_completed':
             case 'reciter.claimed':
-                return { label: 'Review in Segments', go: () => gotoSegments(slug) };
-            case 'flag.reply': {
+                return slug ? { label: 'Review in Segments', go: () => gotoSegments(slug) } : null;
+            case 'flag.reply':
+            case 'flag.created':
+            case 'flag.replied': {
+                if (!slug) return null;
                 const uid =
                     typeof n.payload?.segment_uid === 'string' ? n.payload.segment_uid : undefined;
                 return {
@@ -78,11 +125,65 @@
                     go: () => gotoSegments(slug, { openFlagged: true, focusFlaggedUid: uid }),
                 };
             }
+            case 'ts_flag.created': {
+                const verseKey =
+                    typeof n.payload?.verse_key === 'string' ? n.payload.verse_key : '';
+                if (!slug || !verseKey) return null;
+                return {
+                    label: 'View flagged verse',
+                    go: () => gotoTimestamps(slug, verseKey),
+                };
+            }
             default:
-                return resolveDeliverySlug(slug)
+                return slug && resolveDeliverySlug(slug)
                     ? { label: 'View reciter', go: () => openReciter(n) }
                     : null;
         }
+    }
+
+    /** A short type pill for a notification (the request kind, a flag/reply
+     *  marker, or a "has notes" marker). Announcements carry none. */
+    function kindBadgeLabel(kind: unknown): string | null {
+        switch (kind) {
+            case 'existing_combo_edit':
+                return 'Edit existing combo';
+            case 'existing_reciter_new_combo':
+                return 'New riwāyah / style';
+            case 'new_reciter':
+                return 'New reciter';
+            default:
+                return null;
+        }
+    }
+
+    function cardBadge(n: UserNotification): string | null {
+        switch (n.event) {
+            case 'request.received':
+                return kindBadgeLabel(n.payload?.kind);
+            case 'reciter.marked_ready':
+                return 'Has notes';
+            case 'flag.created':
+                return 'Flag · comment';
+            case 'flag.replied':
+                return 'Flag · reply';
+            case 'ts_flag.created':
+                return 'Timestamps · report';
+            default:
+                return null;
+        }
+    }
+
+    /** Card body — for a timestamps-flag report, identity-capable owners also
+     *  see who reported it (appended from the payload). Everyone else sees the
+     *  verse + comment only. */
+    function cardBody(n: UserNotification, showReporter: boolean): string | null {
+        if (n.event === 'ts_flag.created' && showReporter) {
+            const login =
+                typeof n.payload?.author_login === 'string' ? n.payload.author_login : null;
+            const who = login ?? 'an anonymous listener';
+            return n.body ? `${n.body}\n— reported by ${who}` : `Reported by ${who}`;
+        }
+        return n.body;
     }
 
     /** Active view: announcements + personal notifications merged, newest-first. */
@@ -93,6 +194,7 @@
                     key: `ann-${a.id}`,
                     title: a.title,
                     body: a.body ?? null,
+                    badge: null,
                     created_at: a.created_at,
                     unseen: announcements.isNew(a.id),
                     nav: null,
@@ -103,7 +205,8 @@
                 (n): RailCard => ({
                     key: `notif-${n.id}`,
                     title: n.title,
-                    body: n.body,
+                    body: cardBody(n, $canSeeReporter),
+                    badge: cardBadge(n),
                     created_at: n.created_at,
                     unseen: !n.seen_at,
                     nav: navTarget(n),
@@ -120,6 +223,16 @@
     <aside class="notifs" aria-label="My notifications">
         <header>
             <h2>My notifications</h2>
+            {#if $canEmail}
+                <button
+                    type="button"
+                    class="email-btn"
+                    title="Manage email notifications"
+                    onclick={() => (prefsOpen = true)}>
+                    <Icon name="mail" size={14} />
+                    <span>Email</span>
+                </button>
+            {/if}
             {#if badge > 0 && notifications.view === 'active'}
                 <span class="badge" aria-label="{badge} unread">{badge}</span>
             {/if}
@@ -150,11 +263,15 @@
                 <ol class="list">
                     {#each notifications.archived as n (n.id)}
                         {@const target = navTarget(n)}
+                        {@const bdg = cardBadge(n)}
+                        {@const body = cardBody(n, $canSeeReporter)}
                         <li class="item">
                             <div class="body-wrap">
-                                <p class="title">{n.title}</p>
-                                {#if n.body}
-                                    <p class="body">{n.body}</p>
+                                <p class="title">
+                                    {n.title}{#if bdg}<span class="kind">{bdg}</span>{/if}
+                                </p>
+                                {#if body}
+                                    <p class="body">{body}</p>
                                 {/if}
                                 <time class="time" datetime={n.created_at}
                                     >{relativeTime(n.created_at)}</time>
@@ -190,7 +307,9 @@
                 {#each activeCards as c (c.key)}
                     <li class="item" class:unseen={c.unseen}>
                         <div class="body-wrap">
-                            <p class="title">{c.title}</p>
+                            <p class="title">
+                                {c.title}{#if c.badge}<span class="kind">{c.badge}</span>{/if}
+                            </p>
                             {#if c.body}
                                 <p class="body">{c.body}</p>
                             {/if}
@@ -219,6 +338,8 @@
     </aside>
 {/if}
 
+<EmailPrefsModal {manageToken} open={prefsOpen} onclose={() => (prefsOpen = false)} />
+
 <style>
     .notifs {
         padding: var(--s-5) var(--s-5);
@@ -236,6 +357,31 @@
         color: var(--text-primary);
         font-weight: 500;
         margin: 0;
+        white-space: nowrap;
+    }
+    .email-btn {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        background: transparent;
+        border: 1px solid var(--border-default);
+        border-radius: var(--r-pill, 999px);
+        color: var(--text-secondary);
+        font-size: var(--fs-meta);
+        cursor: pointer;
+        white-space: nowrap;
+        transition: color var(--t-fast), background var(--t-fast), border-color var(--t-fast);
+    }
+    .email-btn:hover {
+        color: var(--text-primary);
+        border-color: var(--border-strong);
+        background: var(--panel-2);
+    }
+    .email-btn:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--accent);
     }
     .badge {
         font-size: 10px;
@@ -301,6 +447,19 @@
         font-size: var(--fs-body);
         color: var(--text-secondary);
         line-height: var(--lh-normal);
+    }
+    .kind {
+        display: inline-block;
+        margin-left: 6px;
+        font-size: 10px;
+        font-weight: 500;
+        line-height: 1.4;
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: var(--surface-raised, var(--border-quiet));
+        color: var(--text-muted);
+        vertical-align: middle;
+        white-space: nowrap;
     }
     .body {
         margin: 0;

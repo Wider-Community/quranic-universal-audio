@@ -345,7 +345,6 @@ export interface AdminRequestRow {
   probe?: {
     [k: string]: unknown;
   } | null;
-  viewed?: boolean;
   requester_role?: string | null;
   requester_login?: string | null;
   requester_hf_user_id?: string | null;
@@ -369,7 +368,6 @@ export interface RequestChange {
 export interface AdminRequestsResponse {
   rows?: AdminRequestRow[];
   counts?: AdminRequestCounts;
-  unviewed_count?: number;
   [k: string]: unknown;
 }
 /**
@@ -653,6 +651,7 @@ export interface AutoGenTsConfig {
   gate_by_flags?: boolean;
   beam?: number;
   probe_beams?: number;
+  aligner_model?: string | null;
 }
 /**
  * The owner's full automation configuration (one persisted blob).
@@ -1036,6 +1035,39 @@ export interface EditOpPatch {
   affectedChapterIds?: number[];
 }
 /**
+ * A subscriber's email-notification preferences (GET response / POST body).
+ */
+export interface EmailPreferences {
+  email?: string;
+  request_aligned?: boolean;
+  recitation_published?: "off" | "all" | "selected";
+  timestamps_regenerated?: "off" | "all" | "selected";
+  github_release?: boolean;
+  riwayah_new_recitation?: boolean;
+  riwayah_first_available?: boolean;
+  reciters?: string[];
+  riwayahs?: string[];
+}
+/**
+ * POST echo: the persisted prefs plus the stable manage/unsubscribe token.
+ *
+ * The FE caches ``manage_token`` so a returning anonymous visitor can re-fetch
+ * fresh server state by token, and so the modal stays consistent with an
+ * out-of-band unsubscribe.
+ */
+export interface EmailPreferencesSaved {
+  email?: string;
+  request_aligned?: boolean;
+  recitation_published?: "off" | "all" | "selected";
+  timestamps_regenerated?: "off" | "all" | "selected";
+  github_release?: boolean;
+  riwayah_new_recitation?: boolean;
+  riwayah_first_available?: boolean;
+  reciters?: string[];
+  riwayahs?: string[];
+  manage_token: string;
+}
+/**
  * Flat error body returned on a failed request.
  *
  * ``error`` is the always-present human-readable message. ``code`` is the
@@ -1191,6 +1223,7 @@ export interface JobRecord {
  */
 export interface TsJobSettings {
   beams?: number[];
+  aligner_model?: string | null;
   chapters?: number[] | null;
   workers?: number | null;
   flavor?: string | null;
@@ -1852,6 +1885,39 @@ export interface TsConfigResponse {
   analysis_letter_font_size: string;
 }
 /**
+ * Comment author identity — only disclosed to identity-capable callers.
+ */
+export interface TsFlagAuthor {
+  hf_user_id?: string | null;
+  login?: string | null;
+  role?: string | null;
+}
+/**
+ * One user's comment on a flagged verse (modal list item / POST echo).
+ */
+export interface TsFlagComment {
+  comment?: string | null;
+  created_at: string;
+  updated_at: string;
+  mine?: boolean;
+  author?: TsFlagAuthor | null;
+}
+/**
+ * Create/update the caller's flag on a verse (``POST .../flags``).
+ */
+export interface TsFlagCreateRequest {
+  verse_key: string;
+  comment?: string | null;
+  anon_token?: string | null;
+}
+/**
+ * A flagged verse + how many comments it carries (accordion pill).
+ */
+export interface TsFlagVerseCount {
+  verse_key: string;
+  count: number;
+}
+/**
  * One job run's durable record (settings + status + logs).
  *
  * ``status`` mirrors HF's lowercased stage (``running`` / ``succeeded`` /
@@ -1914,6 +1980,12 @@ export interface TsManifestReciter {
   audio_category: AudioCategory;
   ts_chapters?: number[];
   vbr_chapters?: number[];
+}
+/**
+ * Every flagged verse for a reciter (``GET .../flags``).
+ */
+export interface TsReciterFlags {
+  flags?: TsFlagVerseCount[];
 }
 /**
  * The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.
@@ -1988,4 +2060,11 @@ export interface TsValidationVerse {
   failed_beams?: number[];
   min_passing_beam?: number | null;
   [k: string]: unknown;
+}
+/**
+ * All comments on a single verse (``GET .../flags/<verse_key>``).
+ */
+export interface TsVerseFlags {
+  verse_key: string;
+  comments?: TsFlagComment[];
 }

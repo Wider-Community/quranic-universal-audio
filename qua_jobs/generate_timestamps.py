@@ -184,17 +184,36 @@ def main() -> int:
     reciter_dir = mount / "reciters" / slug
     detailed = reciter_dir / "detailed.json"
 
-    # MFA runtime: explicit model + dictionary env, with a legacy fallback
-    # deriving both from MFA_APP_PATH's directory (kept one release so a
-    # launcher/staging mismatch can't strand prod).
-    model_env = os.environ.get("MFA_MODEL_PATH", "").strip()
-    dict_env = os.environ.get("MFA_DICTIONARY_PATH", "").strip()
-    if model_env and dict_env:
-        model_path, dictionary_path = Path(model_env), Path(dict_env)
-    else:
-        runtime_dir = Path(os.environ.get("MFA_APP_PATH", "/aux/mfa-runtime/app.py")).parent
-        model_path = runtime_dir / MFA_MODEL_FILENAME
-        dictionary_path = runtime_dir / MFA_DICTIONARY_FILENAME
+    # MFA runtime resolution, in priority order:
+    #   1. model catalog (MFA_RUNTIME_DIR store + MFA_MODEL_ID) — selectable model
+    #   2. explicit MFA_MODEL_PATH/DICTIONARY_PATH env
+    #   3. legacy MFA_APP_PATH dir derive
+    # keep_q is derived from the model itself by the aligner — no flag needed.
+    model_id = os.environ.get("MFA_MODEL_ID", "").strip() or None
+    model_path = dictionary_path = None
+    try:
+        from qua_sdk.components.timing.models import load_catalog
+
+        cat = load_catalog(os.environ.get("MFA_RUNTIME_DIR") or None)
+        try:
+            m = cat.resolve(model_id)
+        except KeyError:
+            log.warning(
+                "aligner model %r not in catalog; using default %r", model_id, cat.default_id
+            )
+            m = cat.resolve(None)
+        model_path, dictionary_path = Path(m.model_path), Path(m.dictionary_path)
+        log.info("aligner model %r (keep_q=%s, label=%s)", m.id, m.keep_q, m.label)
+    except Exception as exc:  # noqa: BLE001 — degrade to the env paths
+        log.info("model catalog unavailable (%s); using env model paths", exc)
+        model_env = os.environ.get("MFA_MODEL_PATH", "").strip()
+        dict_env = os.environ.get("MFA_DICTIONARY_PATH", "").strip()
+        if model_env and dict_env:
+            model_path, dictionary_path = Path(model_env), Path(dict_env)
+        else:
+            runtime_dir = Path(os.environ.get("MFA_APP_PATH", "/aux/mfa-runtime/app.py")).parent
+            model_path = runtime_dir / MFA_MODEL_FILENAME
+            dictionary_path = runtime_dir / MFA_DICTIONARY_FILENAME
 
     if not detailed.exists():
         log.error("detailed.json not found at %s", detailed)

@@ -124,7 +124,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _INSTALL = (
     "mamba install -y -c conda-forge python=3.11 montreal-forced-aligner "
     "&& /opt/conda/bin/pip install gradio soundfile tgt numpy PyYAML requests psutil "
-    "'quranic-phonemizer>=2.2,<3' 'huggingface_hub>=1.8.0' "
+    "'quranic-phonemizer>=2.5,<3' 'huggingface_hub>=1.8.0' "  # >=2.5: silah-stop, marks, maddah-token fix
     "&& mkdir -p /scratch"
 )
 _ENTRYPOINT = "python /aux/code/qua_jobs/generate_timestamps.py"
@@ -392,6 +392,10 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
     env = {
         "SLUG": slug,
         "INSPECTOR_BUCKET_MOUNT": "/data",
+        # Model store root (catalog.json + models/<id>/). The job resolves
+        # MFA_MODEL_ID against it; MFA_MODEL_PATH/DICTIONARY_PATH below are the
+        # fallback for a store-less bucket (single bare model = legacy).
+        "MFA_RUNTIME_DIR": "/aux/mfa-runtime",
         "MFA_MODEL_PATH": "/aux/mfa-runtime/quran_aligner_model.zip",
         "MFA_DICTIONARY_PATH": "/aux/mfa-runtime/dictionary.txt",
         # Legacy fallback for one release: a job picking up a stale bucket
@@ -404,6 +408,9 @@ def launch(slug: str, *, settings: TsJobSettings, webhook_base: str | None = Non
         "MKL_NUM_THREADS": "1",
         "NUMEXPR_NUM_THREADS": "1",
     }
+    # Acoustic model selection (catalog id); empty cedes to the store default.
+    if settings.aligner_model:
+        env["MFA_MODEL_ID"] = settings.aligner_model
     if settings.beams:
         env["BEAMS"] = ",".join(str(b) for b in settings.beams)
     # Affected-only regen scope — the job re-aligns just these chapters.
@@ -817,6 +824,20 @@ def _regenerate_timestamps_on_released(slug: str, job_id: str) -> dict:
 
     _cache.invalidate_in_flight_jobs_cache()
     log.info("complete_timestamps_job(%s): ts regenerated (job=%s)", slug, job_id)
+
+    # Email subscribers who follow this reciter's timestamps (best-effort).
+    try:
+        from services.email import emit as _email
+        from services.state import catalog
+
+        delivery = catalog.find_delivery(slug)
+        if delivery is not None:
+            _email.emit_timestamps_regenerated(
+                reciter_id=delivery.reciter_id, reciter_name=catalog.display_name(slug) or slug
+            )
+    except Exception:  # noqa: BLE001
+        log.exception("email ts_regenerated hook failed (slug=%s)", slug)
+
     return {"slug": slug, "state": "released", "released": False, "regenerated": True}
 
 

@@ -27,6 +27,8 @@ export interface SegmentsDeepLink {
     openFlagged?: boolean;
     /** Scroll the flagged segment with this uid into view inside the accordion. */
     focusFlaggedUid?: string;
+    /** Open the read-only mark-ready review modal once the reciter task loads. */
+    openMarkReadyReview?: boolean;
 }
 
 export const pendingSegmentsDeepLink = writable<SegmentsDeepLink | null>(null);

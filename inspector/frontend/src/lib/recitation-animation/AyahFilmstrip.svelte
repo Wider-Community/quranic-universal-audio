@@ -28,7 +28,7 @@
      * accessor + an onSeek cb.
      */
     import { type RecitationAnimConfig } from './config';
-    import type { FilmstripModel } from './filmstrip-model';
+    import type { ActiveCellInfo, CellMissing, FilmstripModel } from './filmstrip-model';
     import { stepScroll } from './filmstrip-scroll';
     import { buildSortedIntervals, findActiveAt } from './recitation-active';
     import type { AnimUnit } from './types';
@@ -51,11 +51,18 @@
         /** Speculative-prewarm hook: fired with a cell's seek (ms) when the
          *  pointer enters it, so the surface can warm that position. Optional. */
         onHoverPrewarm?: (_ms: number) => void;
+        /** ayah → missing reference word indices, for the `words`-cell tooltip. */
+        missingWordsByAyah?: Map<number, number[]>;
+        /** Fired (on change only) with the active/selected verse + its coverage
+         *  status, or null when none is active. Drives a parent "missing words"
+         *  pill. */
+        onActiveCell?: (_info: ActiveCellInfo | null) => void;
     }
 
     let {
         units, model, getTimeMs, playing, config, onSeek,
         hoverMs = null, scrubMs = null, onHoverPrewarm,
+        missingWordsByAyah, onActiveCell,
     }: Props = $props();
 
     const clamp = (lo: number, hi: number, v: number): number => Math.min(hi, Math.max(lo, v));
@@ -113,6 +120,7 @@
         ayah: number;
         w: number;
         cumBefore: number; // px before this cell's left (cells + gaps)
+        missing: CellMissing;
     }
 
     // Cell widths from each verse's CANONICAL recited duration — never inflated
@@ -133,11 +141,43 @@
                     lerp(config.filmstripMinCellPx, propW, config.filmstripProportional),
                 ),
             );
-            out.push({ ayah: mc[i]!.ayah, w, cumBefore: cum });
+            out.push({ ayah: mc[i]!.ayah, w, cumBefore: cum, missing: mc[i]!.missing });
             cum += w + config.filmstripGapPx;
         }
         return out;
     });
+
+    /** A cell that can be navigated to / recited. `full` placeholders (unrecited
+     *  verses) are skipped by every user-nav path; playback never targets them. */
+    const isPlayable = (i: number): boolean =>
+        i >= 0 && i < cells.length && cells[i]!.missing !== 'full';
+
+    /** Nearest non-placeholder cell to a strip offset (drag-release snap). */
+    function nearestPlayableCell(off: number): number {
+        let best = -1;
+        let bestD = Infinity;
+        for (let i = 0; i < cells.length; i++) {
+            if (cells[i]!.missing === 'full') continue;
+            const d = Math.abs(offsetForCellCenter(i) - off);
+            if (d < bestD) { bestD = d; best = i; }
+        }
+        return best;
+    }
+
+    /** Next non-placeholder cell from `from` in direction `dir` (±1), or −1. */
+    function nextPlayableCell(from: number, dir: number): number {
+        for (let i = from + dir; i >= 0 && i < cells.length; i += dir) {
+            if (cells[i]!.missing !== 'full') return i;
+        }
+        return -1;
+    }
+
+    function missingTitle(c: Cell): string | undefined {
+        if (c.missing === 'full') return 'Not recited';
+        if (c.missing !== 'words') return undefined;
+        const m = missingWordsByAyah?.get(c.ayah);
+        return m && m.length ? `Missing words: ${m.join(', ')}` : 'Missing words';
+    }
 
     const sorted = $derived(buildSortedIntervals(units));
     const lastRight = $derived(
@@ -183,18 +223,24 @@
         }
         return best;
     }
-    /** Map a strip offset back to a canonical seek time (ms) — tuner drag. */
+    /** Map a strip offset back to a canonical seek time (ms) — tuner drag. A
+     *  placeholder (`full`) cell has no canon time, so it resolves to the nearest
+     *  playable cell's seek instead. */
     function timeAtOffset(off: number): number {
         for (let i = 0; i < cells.length; i++) {
             const c = cells[i]!;
             if (off <= c.cumBefore + c.w) {
+                if (c.missing === 'full') {
+                    const j = nearestPlayableCell(off);
+                    return j >= 0 ? seekMsForCell(j) : 0;
+                }
                 const f = clamp(0, 1, (off - c.cumBefore) / c.w);
                 const mc = model.cells[i]!;
                 return (mc.canonStartSec + f * mc.canonDurSec) * 1000;
             }
         }
-        const last = model.cells[model.cells.length - 1];
-        return last ? (last.canonStartSec + last.canonDurSec) * 1000 : 0;
+        const j = nearestPlayableCell(off);
+        return j >= 0 ? seekMsForCell(j) : 0;
     }
     /** The seek target for picking a cell — the verse's canonical first start. */
     function seekMsForCell(i: number): number {
@@ -212,8 +258,17 @@
     // cell), so instead we ring the cell under where the invisible needle would
     // sit. Hidden during silence (no cursor while frozen). -1 outside snap mode.
     const cursorIdx = $derived(
-        config.filmstripMotion === 'snap' && !silent ? nearestCell(offset) : -1,
+        config.filmstripMotion === 'snap' && !silent ? nearestPlayableCell(offset) : -1,
     );
+
+    // Report the active/selected verse (held cell while silent) up to the parent
+    // so it can show a contextual "missing words" pill. Fires only when the
+    // resolved cell changes (derived recompute), never per frame.
+    const reportedIdx = $derived(silent ? frozenIdx : activeIdx);
+    $effect(() => {
+        const c = reportedIdx >= 0 ? cells[reportedIdx] : undefined;
+        onActiveCell?.(c ? { ayah: c.ayah, missing: c.missing } : null);
+    });
 
     function setFill(frac: number): void {
         containerEl?.style.setProperty('--cell-active-fill', clamp(0, 1, frac) * 100 + '%');
@@ -414,7 +469,7 @@
         if (config.filmstripMotion === 'tuner') {
             onSeek(timeAtOffset(offset));
         } else {
-            const i = nearestCell(offset);
+            const i = nearestPlayableCell(offset);
             if (i >= 0) {
                 glideTo(offsetForCellCenter(i));
                 onSeek(seekMsForCell(i));
@@ -425,6 +480,7 @@
         if (!containerEl) return;
         const i = cellAtClientX(clientX);
         if (i < 0) return;
+        if (!isPlayable(i)) return; // unrecited placeholder — non-clickable
         glideTo(offsetForCellCenter(i));
         onSeek(seekMsForCell(i));
     }
@@ -443,7 +499,7 @@
     function onHoverMove(e: PointerEvent): void {
         if (!onHoverPrewarm || dragging) return;
         const i = cellAtClientX(e.clientX);
-        if (i >= 0) onHoverPrewarm(seekMsForCell(i));
+        if (isPlayable(i)) onHoverPrewarm(seekMsForCell(i));
     }
 
     /** Re-sync after a seek while paused (parent calls this). */
@@ -493,7 +549,7 @@
         aria-label="Ayah scrubber"
         aria-valuemin={cells[0]!.ayah}
         aria-valuemax={cells[cells.length - 1]!.ayah}
-        aria-valuenow={activeIdx >= 0 ? cells[activeIdx]!.ayah : cells[0]!.ayah}
+        aria-valuenow={cells[activeIdx]?.ayah ?? cells[0]!.ayah}
         onpointerdown={onPointerDown}
         onpointermove={onHoverMove}
         onkeydown={(e) => {
@@ -505,7 +561,10 @@
                 // the active cell can lag, and ±1 off it would skip verses.
                 const live = cellViaTime(getTimeMs());
                 const base = live >= 0 ? live : (activeIdx < 0 ? 0 : activeIdx);
-                const i = clamp(0, cells.length - 1, base + d);
+                // Step to the next RECITED verse in that direction — skip
+                // unrecited placeholders (and don't run off either end).
+                const i = nextPlayableCell(base, d);
+                if (i < 0) return;
                 glideTo(offsetForCellCenter(i));
                 onSeek(seekMsForCell(i));
             }
@@ -519,15 +578,20 @@
             {#each cells as c, i (c.ayah)}
                 <div
                     class="cell"
-                    class:active={!silent && i === activeIdx}
-                    class:reached={i < (silent ? frozenIdx : activeIdx)}
-                    class:frozen={silent && i === frozenIdx}
-                    class:preview={i === hoverIdx && i !== activeIdx}
+                    class:active={!silent && i === activeIdx && c.missing !== 'full'}
+                    class:reached={c.missing !== 'full' && i < (silent ? frozenIdx : activeIdx)}
+                    class:frozen={silent && i === frozenIdx && c.missing !== 'full'}
+                    class:preview={i === hoverIdx && i !== activeIdx && c.missing !== 'full'}
                     class:cursor={i === cursorIdx}
+                    class:missing-words={c.missing === 'words'}
+                    class:missing-full={c.missing === 'full'}
+                    title={missingTitle(c)}
                     style:width="{c.w}px"
                     style:margin-right="{config.filmstripGapPx}px"
                 >
-                    <div class="cell-fill" class:glide={jumping && i === activeIdx}></div>
+                    {#if c.missing !== 'full'}
+                        <div class="cell-fill" class:glide={jumping && i === activeIdx}></div>
+                    {/if}
                     <span class="cell-num">{c.ayah}</span>
                 </div>
             {/each}
@@ -619,6 +683,27 @@
     }
     .cell.preview .cell-num {
         color: var(--accent-strong);
+    }
+    /* Incomplete verse (present, missing some words) — a red inset ring so it
+       coexists with the active/cursor accent BORDER (still recited → clickable
+       + plays normally). */
+    .cell.missing-words {
+        box-shadow: inset 0 0 0 1.5px var(--state-missing-border-strong);
+    }
+    .cell.missing-words .cell-num {
+        color: var(--state-missing-fg);
+    }
+    /* Fully-missing verse (never recited) — a red-bordered, tinted, dimmed
+       placeholder. Non-clickable (the JS guards skip it); pointer-events stay so
+       the "Not recited" tooltip shows. No fill / active / reached state. */
+    .cell.missing-full {
+        border-color: var(--state-missing-border-strong);
+        background: var(--state-missing-bg);
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+    .cell.missing-full .cell-num {
+        color: var(--state-missing-fg);
     }
     .cell-fill {
         position: absolute;

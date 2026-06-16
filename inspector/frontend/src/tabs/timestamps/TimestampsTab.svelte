@@ -24,6 +24,7 @@
     import { fetchSurahsForDelivery } from '../../lib/api/audio-surahs';
     import { setAdoptedSource } from '../../lib/playback/adopt-signal';
     import { adjacentAyahStartMs } from '../../lib/playback/ayah-seek';
+    import { signalDashSeekIntent } from '../../lib/playback/dash-buffering';
     import { ensureDashCovering, ensureDashCoveringRange } from '../../lib/playback/dash-covering';
     import { dashPort } from '../../lib/playback/dash-port';
     import { recycleAsShadow } from '../../lib/playback/shadow-audio';
@@ -46,9 +47,11 @@
     import { analogousTriad } from '../../lib/utils/color-derive';
     import { LS_KEYS, TAB_NAMES } from '../../lib/utils/constants';
     import { shouldHandleKey } from '../../lib/utils/keyboard-guard';
+    import { prewarmVersePeaks } from '../../lib/utils/peaks-fetch';
     import { wordBoundaryScan } from '../../lib/utils/word-boundary';
     import { loadCatalog as loadPublicCatalog, catalogData } from '../dashboard/stores/catalog-data';
     import TimestampsWaveform from './components/TimestampsWaveform.svelte';
+    import TsFlaggedAccordion from './components/TsFlaggedAccordion.svelte';
     import TsValidationPanel from './components/TsValidationPanel.svelte';
     import UnifiedDisplay from './components/UnifiedDisplay.svelte';
     import {
@@ -75,6 +78,7 @@
         verseTranslations,
     } from './stores/display';
     import { tsLoading } from './stores/loading';
+    import { loadTsFlags, tsFlaggedVerses } from './stores/ts-flags';
     import { exitLoop, loopTarget } from './stores/playback';
     import { manualShuffleRequest, shuffleAyah, shuffleMode } from './stores/shuffle';
     import { tsValidation } from './stores/validation';
@@ -85,6 +89,7 @@
         selectedVerse,
         type TsLoadedVerse,
     } from './stores/verse';
+    import { resolveShuffleTick, shouldFireShuffle, verseAt } from './utils/shuffle-tick';
     import { setupZoomLifecycle } from './utils/zoom';
 
     // ---- Local display constants ----
@@ -113,6 +118,7 @@
     let chapterStartMs: number[] = [];
     let loadedChapterKey = ''; // `${slug}:${chapter}` currently assembled
     let focusRef = '';
+    let lastFlagsSlug = ''; // reciter whose user-reported flags are loaded
     let manifestSlugs = new Set<string>();
     /** Set when a context switch should seek to a specific verse once the new
      *  chapter's data + audio are ready (shuffle / validation jump / entry). */
@@ -332,6 +338,13 @@
                 tsValidation.set(null);
             }
 
+            // Public user-reported verse flags — reciter-scoped, so only reload
+            // when the reciter actually changes (not on every chapter switch).
+            if (slug !== lastFlagsSlug) {
+                lastFlagsSlug = slug;
+                void loadTsFlags(slug);
+            }
+
             // Apply a queued seek (entry / shuffle / validation jump), else focus
             // the verse under the current playhead.
             if (pendingSeekRef) {
@@ -341,6 +354,7 @@
                     setFocus(v);
                     ensureDashCoveringRange(v.startMs, v.endMs);
                     dashPort.seek(v.startMs);
+                    signalDashSeekIntent();
                     if (_autoplayPending) {
                         _autoplayPending = false;
                         try { dashPort.play(); } catch { /* autoplay policy */ }
@@ -376,14 +390,25 @@
     /** Focus the verse containing `ms` (chapter-absolute), else the nearest
      *  preceding one. No-op if the focus is unchanged. */
     function focusAt(ms: number): void {
-        if (chapterVerses.length === 0) return;
-        let hit: ChapVerse | null = null;
-        for (const v of chapterVerses) {
-            if (ms >= v.startMs && ms < v.endMs) { hit = v; break; }
-            if (v.startMs <= ms) hit = v; // nearest preceding
+        const ref = verseAt(chapterVerses, ms);
+        if (ref && ref !== focusRef) {
+            const v = chapterVerses.find((x) => x.ref === ref);
+            if (v) setFocus(v);
         }
-        const v = hit ?? chapterVerses[0]!;
-        if (v.ref !== focusRef) setFocus(v);
+    }
+
+    /** True while a cross-source jump is mid-swap: the shared player already points
+     *  at (and may already be playing) the new chapter, but `chapterVerses` /
+     *  `focusRef` / `loadedVerse` still describe the previous chapter until
+     *  syncChapter finishes loading and sets `loadedChapterKey`. `loadedChapterKey`
+     *  trails `playerContext` across the whole window (incl. before `tsLoading`
+     *  flips at line ~289), so it — not `tsLoading` — is the reliable guard. tick()
+     *  and the media-clock backstop both no-op during this window so the new
+     *  playhead time isn't read against stale verses (wrong-verse focus +
+     *  double-fire). */
+    function chapterSwapInFlight(): boolean {
+        const ctx = get(playerContext);
+        return `${ctx.delivery?.slug ?? ''}:${ctx.surahNum ?? 0}` !== loadedChapterKey;
     }
 
     // ---------------------------------------------------------------------
@@ -428,32 +453,62 @@
             return;
         }
 
-        focusAt(ms);
-        // rAF gives tight (~16 ms) boundary timing while the tab is active; the
-        // onTimeUpdate/onEnded media-clock backstop (onMount) catches the boundary
-        // when rAF is throttled (backgrounded tab / GC / heavy repaint), where it
-        // would otherwise overshoot by 1-3 words. The once-per-verse guard dedupes
-        // whichever fires first.
-        maybeFireShuffle(ms);
+        // Resolve the ayah-end shuffle boundary BEFORE advancing focus. Advancing
+        // focus first (the old order) would flip the verse the boundary is measured
+        // against to the NEXT ayah the instant the playhead crosses a contiguous
+        // seam — so a frame that overshoots the seam (heavy repaint right after a
+        // jump starves rAF, most visible when the just-loaded ayah is short) re-bases
+        // onto the next ayah and leaks it in full. Deciding fire-vs-focus together,
+        // against the auditioned ayah's captured end, bounds the leak to one frame.
+        const fv = get(loadedVerse);
+        const outcome = resolveShuffleTick({
+            verses: chapterVerses,
+            ms,
+            swapInFlight: chapterSwapInFlight(),
+            armed: getActiveTab() === TAB_NAMES.TIMESTAMPS && !get(loopTarget) && get(shuffleAyah),
+            focusEndMs: fv ? fv.tsSegEnd * 1000 : null,
+            guardMs: SHUFFLE_END_GUARD_MS,
+            firedForCurrentFocus: shuffleFiredForRef === focusRef,
+        });
+        // Mid-swap: freeze focus + display (no refresh) so the new playhead time
+        // isn't drawn against the old chapter's verse; syncChapter resumes us.
+        if (outcome.kind === 'idle') return;
+        if (outcome.kind === 'fire') {
+            shuffleFiredForRef = focusRef;
+            void shuffleJump(); // sets the new focus itself; hold focus this frame
+        } else if (outcome.ref && outcome.ref !== focusRef) {
+            const v = chapterVerses.find((x) => x.ref === outcome.ref);
+            if (v) setFocus(v);
+        }
         refreshDisplays();
     }
 
-    // Ayah-end shuffle boundary: jump to a random target when the playhead reaches
-    // the focus verse's end (once per verse). Called from both the rAF tick and the
-    // onTimeUpdate/onEnded media-clock backstop; reads the focus verse fresh so the
-    // boundary and the dedupe key never disagree. Gated to the active Timestamps tab
-    // so the shared dashPort backstop can't hijack Dashboard playback (its own
-    // gapless advance owns dashPort.onEnded when that tab is active).
-    function maybeFireShuffle(ms: number): void {
-        if (getActiveTab() !== TAB_NAMES.TIMESTAMPS) return;
-        if (get(loopTarget) || !get(shuffleAyah)) return;
+    // Media-clock backstop for the ayah-end shuffle: fire the jump when the playhead
+    // reaches the auditioned ayah's end. Driven off onTimeUpdate/onEnded so the
+    // boundary is still caught when rAF is throttled (backgrounded tab) — where the
+    // tick (and so focus) isn't advancing, so the focus verse IS the auditioned one.
+    // Gated to the active Timestamps tab so the shared dashPort backstop can't hijack
+    // Dashboard playback (its own gapless advance owns dashPort.onEnded when active).
+    function maybeFireShuffle(ms: number): boolean {
+        if (getActiveTab() !== TAB_NAMES.TIMESTAMPS) return false;
+        // Mid-swap the timeupdate clock is the NEW chapter's but loadedVerse is the
+        // OLD one — measuring against it would fire against the wrong ayah. tick()
+        // also freezes focus here, so this is belt-and-braces, not the sole guard.
+        if (chapterSwapInFlight()) return false;
         const fv = get(loadedVerse);
-        if (!fv) return;
-        const endMs = fv.tsSegEnd * 1000;
-        if (ms >= endMs - SHUFFLE_END_GUARD_MS && shuffleFiredForRef !== focusRef) {
+        const fire = shouldFireShuffle({
+            armed: !get(loopTarget) && get(shuffleAyah),
+            ms,
+            focusEndMs: fv ? fv.tsSegEnd * 1000 : null,
+            guardMs: SHUFFLE_END_GUARD_MS,
+            firedForCurrentFocus: shuffleFiredForRef === focusRef,
+        });
+        if (fire) {
             shuffleFiredForRef = focusRef;
             void shuffleJump();
+            return true;
         }
+        return false;
     }
 
     function refreshDisplays(): void {
@@ -474,10 +529,19 @@
         // Prefer the pre-rolled (warm) target so the jump can adopt gaplessly;
         // else roll a fresh one (gapped fallback).
         const consumed = consumeShuffle();
+        // Warm miss → the jump must roll a target and load a new source (both
+        // awaited, and slow off the bucket) while nothing else stops the current
+        // chapter, so it would keep playing into the next verse until the new source
+        // lands — the short-verse leak. Pause now so the gap is silence; the landing
+        // (seekFocus / syncChapter's pendingSeek) resumes playback on the target.
+        // Warm hits stay gapless: adoptGapless swaps + plays synchronously.
+        const wasPlaying = !consumed && !dashPort.paused;
+        if (!consumed) dashPort.pause();
         const target = consumed?.target
             ?? await getRandomTarget(randomReciter ? {} : { reciter: curSlug }).catch(() => null);
         if (!target) {
             if (consumed) discardWarm(consumed.el);
+            else if (wasPlaying) dashPort.play(); // no target to jump to — restore playback
             return;
         }
 
@@ -575,7 +639,21 @@
             const data = ra
                 ? assembleVerseFromShard(target.reciter, shard, target.verseRef, qpc, dk, ra, rawUrl)
                 : null;
-            if (data) seekSec = data.time_start_ms / 1000;
+            if (data) {
+                seekSec = data.time_start_ms / 1000;
+                // Warm the target verse's peaks (baked tier or ffmpeg/CDN
+                // fallback) + glosses so both render instantly on the jump.
+                void prewarmVersePeaks(
+                    target.reciter,
+                    target.chapter,
+                    data.audio_url ?? rawUrl,
+                    Math.max(0, Math.round(data.time_start_ms)),
+                    Math.round(data.time_end_ms),
+                );
+                if (get(showTranslations) && data.words.length) {
+                    void loadVerseTranslations(data.words, get(translationLanguage)).catch(() => {});
+                }
+            }
         } catch { /* seek 0 is an acceptable fallback */ }
         primeShuffle({ target, proxyUrl, rawUrl, seekSec });
     }
@@ -618,6 +696,9 @@
         setFocus(v);
         ensureDashCoveringRange(v.startMs, v.endMs);
         dashPort.seek(v.startMs);
+        // Raise the buffering spinner (debounced) — clears on the first audible
+        // frame, no-ops if the verse start is already buffered.
+        signalDashSeekIntent();
         if (autoplay || wasPlaying) tryPlay();
         refreshDisplays();
     }
@@ -625,6 +706,7 @@
     function seekMsAndResume(targetMs: number): void {
         ensureDashCovering(targetMs);
         dashPort.seek(targetMs);
+        signalDashSeekIntent();
         tryPlay();
         focusAt(targetMs);
         refreshDisplays();
@@ -657,10 +739,20 @@
     let navHandled = false;
     $: if ($pendingTsNavigation) consumePendingNav($pendingTsNavigation);
 
-    function consumePendingNav(nav: { surah: number; ayah: number; autoplay: boolean }): void {
+    function consumePendingNav(nav: {
+        surah: number;
+        ayah: number;
+        autoplay: boolean;
+        slug?: string;
+    }): void {
         navHandled = true;
         pendingTsNavigation.set(null);
-        void loadBookmarkedVerse(nav.surah, nav.ayah, nav.autoplay);
+        if (nav.slug) {
+            // Flag-notification redirect — go to that exact reciter + verse.
+            void jumpToTarget(nav.slug, nav.surah, `${nav.surah}:${nav.ayah}`, nav.autoplay);
+        } else {
+            void loadBookmarkedVerse(nav.surah, nav.ayah, nav.autoplay);
+        }
     }
 
     async function loadBookmarkedVerse(surah: number, ayah: number, autoplay: boolean): Promise<void> {
@@ -705,6 +797,32 @@
         loadVerseTranslations(lv.data.words, lang)
             .then((map) => { if (token === _trReq) verseTranslations.set(map); })
             .catch(() => { if (token === _trReq) verseTranslations.set({}); });
+    }
+
+    // Prewarm the next sequential verse so it renders instantly on advance:
+    // peaks always (baked tier or ffmpeg/CDN fallback), glosses only when
+    // translations are visible. Within-chapter; the cross-chapter / random next
+    // is warmed by primeShuffleSlot. All calls idempotent (shared caches).
+    $: prewarmNext($loadedVerse, $showTranslations, $translationLanguage);
+    function prewarmNext(
+        lv: typeof $loadedVerse,
+        transOn: boolean,
+        lang: string,
+    ): void {
+        if (!lv) return;
+        const idx = chapterVerses.findIndex((x) => x.ref === focusRef);
+        const next = idx >= 0 ? chapterVerses[idx + 1] : undefined;
+        if (!next) return;
+        void prewarmVersePeaks(
+            next.lv.data.reciter,
+            next.lv.data.chapter,
+            next.lv.data.audio_url ?? '',
+            Math.max(0, Math.round(next.startMs)),
+            Math.round(next.endMs),
+        );
+        if (transOn && next.lv.data.words.length) {
+            void loadVerseTranslations(next.lv.data.words, lang).catch(() => {});
+        }
     }
 
     // (The once-per-verse shuffle guard resets implicitly: `shuffleFiredForRef`
@@ -860,10 +978,17 @@
     style:--analysis-letter-font-size={cfg?.analysis_letter_font_size ?? ''}
 >
     <main>
-        {#if $tsValidation}
+        {#if $tsValidation || $tsFlaggedVerses.length}
             <div class="ts-validation-row">
-                <TsValidationPanel
-                    doc={$tsValidation}
+                {#if $tsValidation}
+                    <TsValidationPanel
+                        doc={$tsValidation}
+                        activeVerse={$selectedVerse}
+                        onselect={jumpToFlaggedVerse}
+                    />
+                {/if}
+                <TsFlaggedAccordion
+                    flags={$tsFlaggedVerses}
                     activeVerse={$selectedVerse}
                     onselect={jumpToFlaggedVerse}
                 />

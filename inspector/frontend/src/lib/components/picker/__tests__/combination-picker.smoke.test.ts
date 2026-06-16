@@ -109,9 +109,11 @@ afterEach(() => {
 });
 
 describe('CombinationPicker', () => {
+    // CombinationPicker renders inside Modal, whose backdrop portals to
+    // `document.body` — so the rows live in `baseElement`, not `container`.
     it('emits a non-null delivery on first row click', async () => {
         const selected: CombinationSelection[] = [];
-        const { container } = render(CombinationPicker, {
+        const { baseElement } = render(CombinationPicker, {
             props: { open: true, title: 'Switch reciter' },
             events: {
                 select: (e: CustomEvent<CombinationSelection>) => {
@@ -122,7 +124,7 @@ describe('CombinationPicker', () => {
 
         // Wait for load() to flush the rows in.
         const firstRow = await waitFor(() => {
-            const row = container.querySelector<HTMLElement>('.combo-row');
+            const row = baseElement.querySelector<HTMLElement>('.combo-row');
             expect(row).not.toBeNull();
             return row!;
         });
@@ -137,17 +139,17 @@ describe('CombinationPicker', () => {
     });
 
     it('states the bucket once per group head, not on every grouped row', async () => {
-        const { container } = render(CombinationPicker, {
+        const { baseElement } = render(CombinationPicker, {
             props: { open: true, title: 'Switch reciter' },
         });
 
         await waitFor(() => {
-            expect(container.querySelector('.combo-row')).not.toBeNull();
+            expect(baseElement.querySelector('.combo-row')).not.toBeNull();
         });
 
         // Three distinct buckets in the mock (available_for_review,
         // under_review, published) → one labelled StatePill in each group head.
-        const headPills = container.querySelectorAll('.bucket-head .pill');
+        const headPills = baseElement.querySelectorAll('.bucket-head .pill');
         expect(headPills.length).toBe(3);
         const headLabels = [...headPills].map((p) => p.textContent?.trim());
         expect(headLabels).toContain('Available for review');
@@ -157,7 +159,7 @@ describe('CombinationPicker', () => {
         // The state pill must NOT be repeated on the grouped rows — the head
         // already conveys it. (No active claim in this fixture, so every row
         // is grouped.)
-        expect(container.querySelectorAll('.combo-row .pill').length).toBe(0);
+        expect(baseElement.querySelectorAll('.combo-row .pill').length).toBe(0);
     });
 
     it('shows claimer + ready badge on under_review rows when the caller holds reviews.view', async () => {
@@ -173,12 +175,12 @@ describe('CombinationPicker', () => {
             notifications_unread: 0,
         });
 
-        const { container } = render(CombinationPicker, {
+        const { baseElement } = render(CombinationPicker, {
             props: { open: true, title: 'Switch reciter' },
         });
 
         const status = await waitFor(() => {
-            const el = container.querySelector<HTMLElement>('.review-status');
+            const el = baseElement.querySelector<HTMLElement>('.review-status');
             expect(el).not.toBeNull();
             return el!;
         });
@@ -187,20 +189,20 @@ describe('CombinationPicker', () => {
         expect(status.textContent).toContain('reviewer-x');
         expect(status.querySelector('.ready-badge')).not.toBeNull();
         // Only the under_review (Gamma) row carries the overlay.
-        expect(container.querySelectorAll('.review-status').length).toBe(1);
+        expect(baseElement.querySelectorAll('.review-status').length).toBe(1);
     });
 
     it('omits review status and skips the admin fetch without reviews.view', async () => {
         // currentUser stays anonymous (no capabilities) via afterEach reset.
-        const { container } = render(CombinationPicker, {
+        const { baseElement } = render(CombinationPicker, {
             props: { open: true, title: 'Switch reciter' },
         });
 
         await waitFor(() => {
-            expect(container.querySelector('.combo-row')).not.toBeNull();
+            expect(baseElement.querySelector('.combo-row')).not.toBeNull();
         });
 
-        expect(container.querySelector('.review-status')).toBeNull();
+        expect(baseElement.querySelector('.review-status')).toBeNull();
         expect(fetchAdminReviews).not.toHaveBeenCalled();
     });
 });
