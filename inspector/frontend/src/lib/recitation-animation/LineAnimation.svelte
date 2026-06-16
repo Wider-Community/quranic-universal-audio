@@ -546,16 +546,19 @@
      *  is not a reveal char); lit only while a pause holds on its word
      *  (`.waqf-active`). `z-index` keeps it above the char-mode ink. */
     .ra-line .ra-word .ra-waqf {
-        /* The waqf glyph has zero advance width (it is a combining mark), so it
-         *  needs its own box to occupy layout space and to break out of the
-         *  word's shaping run — otherwise it collapses (char mode) or merges onto
-         *  the word's last letter and inherits the highlight (word mode). */
+        /* The waqf glyph is a combining mark: it must sit in its OWN run so it
+         *  doesn't merge onto the word's last letter and inherit the reveal
+         *  highlight (word mode) or collapse away (char mode). A zero-width
+         *  `inline-block` with `overflow: visible` gives it that run while adding
+         *  no horizontal advance (no gap between words). On its own it draws low
+         *  (no base letter to sit atop), so `translateY` lifts it back to the
+         *  natural high mark position. */
         display: inline-block;
-        min-width: 0.8em;
-        text-align: center;
+        width: 0;
+        overflow: visible;
+        transform: translateY(-0.65em);
         position: relative;
         z-index: 2;
-        margin-inline-start: 0.1em;
         opacity: 1;
         color: var(--ra-base-color);
         text-shadow: var(--ra-word-shadow);
