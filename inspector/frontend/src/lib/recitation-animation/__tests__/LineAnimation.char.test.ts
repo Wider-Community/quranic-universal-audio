@@ -75,4 +75,43 @@ describe('LineAnimation char mode', () => {
         expect(words[0]?.classList.contains('active')).toBe(true);
         expect(words[1]?.classList.contains('active')).toBe(true);
     });
+
+    // Regression: the waqf (stop) sign is a SEPARATE clipped overlay, decoupled
+    // from the letters — it must not perturb the per-letter reveal (the old
+    // full-word occlusion layer bled extra ink, so a stop-sign word rendered
+    // brighter / lit whole). Here the clean chars reveal exactly as if no mark
+    // were present, and the mark overlay is never given the reveal highlight.
+    it('renders the waqf mark as a separate overlay that never takes the reveal', async () => {
+        const WAQF = 'ۖ'; // ARABIC SMALL HIGH SAD-LAM-ALEF-MEEM (a surfaced stop)
+        const units = [
+            unit('1:1:1', 'ab' + WAQF, 0, 2, [
+                { char: 'a', start: 0, end: 1 },
+                { char: 'b', start: 1, end: 2 },
+            ]),
+        ];
+
+        const { container } = render(LineAnimation, {
+            units,
+            config: charConfig,
+            getTimeMs: () => 1500,
+            playing: false,
+        });
+        await tick();
+
+        // Per-letter reveal is unperturbed: the mark is stripped from `clean`, so
+        // the chars are exactly 'a','b' with 'a' reached and 'b' active at t=1.5s.
+        const chars = container.querySelectorAll<HTMLElement>('.ra-char');
+        expect([...chars].map((c) => c.textContent)).toEqual(['a', 'b']);
+        expect(chars[0]?.classList.contains('reached')).toBe(true);
+        expect(chars[1]?.classList.contains('active')).toBe(true);
+
+        // The mark is one separate overlay carrying clean+mark, never a `.ra-char`
+        // and never given the reveal highlight; it reveals with its last letter.
+        const marks = container.querySelectorAll<HTMLElement>('.ra-waqf-mark');
+        expect(marks.length).toBe(1);
+        expect(marks[0]?.textContent).toBe('ab' + WAQF);
+        expect(marks[0]?.classList.contains('active')).toBe(false);
+        expect(marks[0]?.classList.contains('revealed')).toBe(true);
+        expect(marks[0]?.classList.contains('waqf-active')).toBe(false);
+    });
 });
