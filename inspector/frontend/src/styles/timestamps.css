@@ -307,6 +307,14 @@
     border-color: var(--ts-letter-color, #2ec4b6);
 }
 
+/* Silent cells read identically whether or not their word is active — the
+   active-block letter treatment above must not brighten or recolour them. */
+.mega-block.active .mega-letter.silent {
+    color: #777;
+    background: #0f0f23;
+    border-color: transparent;
+}
+
 .mega-block.active .mega-letter.null-ts {
     color: #555;
     background: #0f0f23;
