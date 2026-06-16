@@ -233,6 +233,16 @@ def complete(
     from services.storage import cache as _cache
 
     _cache.invalidate_in_flight_jobs_cache()
+
+    # Email subscribers opted into release notifications (best-effort). Past the
+    # idempotency guard above, so a webhook retry can't double-send.
+    try:
+        from services.email import emit as _email
+
+        _email.emit_github_release(version=version)
+    except Exception:  # noqa: BLE001
+        log.exception("email github_release hook failed (version=%s)", version)
+
     return {"ok": True, "release_id": release_id, "recitation_count": len(members)}
 
 

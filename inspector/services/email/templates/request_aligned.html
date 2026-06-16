@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block subject %}Your request is ready for review: {{ reciter_name }}{% endblock %}
+{% block content %}
+<p style="margin:0;font-size:15px;line-height:1.6;">
+  The recitation you requested — <strong>{{ reciter_name }}</strong> — has finished
+  alignment and is now available for review.
+</p>
+{% endblock %}

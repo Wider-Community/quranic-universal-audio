@@ -135,6 +135,7 @@ G_MODERATION = "Activity & moderation"
 G_ADMIN = "Admin surfaces"
 G_RELEASES = "Releases & distribution"
 G_IDENTITY = "Identity disclosure"
+G_SUBSCRIPTIONS = "Email notifications"
 
 
 # ----------------------------------------------------------------------
@@ -519,6 +520,18 @@ CAPABILITIES: tuple[Capability, ...] = (
         "a flagged segment. Others see only the author's role (e.g. "
         "'a contributor').",
         contributor=False,
+        maintainer=True,
+    ),
+    # --- J. Email notifications (self-service; anon-eligible) ---
+    _c(
+        "notify.email_subscriptions",
+        G_SUBSCRIPTIONS,
+        "Manage email notifications",
+        "Open the email-notifications modal and subscribe an email address to "
+        "catalog + workflow events. Subscriptions are keyed by email, so this "
+        "works for signed-out visitors too; turn anonymous off to require sign-in.",
+        anon=True,
+        contributor=True,
         maintainer=True,
     ),
 )

@@ -121,7 +121,11 @@ def test_capabilities_for_owner_is_everything():
 
 
 def test_capabilities_for_anonymous_is_anon_defaults():
-    assert set(caps.capabilities_for(None)) == {"view.catalog", "view.public_activity"}
+    assert set(caps.capabilities_for(None)) == {
+        "view.catalog",
+        "view.public_activity",
+        "notify.email_subscriptions",
+    }
 
 
 def test_manage_permissions_capability_exists():

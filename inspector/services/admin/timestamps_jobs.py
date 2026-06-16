@@ -824,6 +824,20 @@ def _regenerate_timestamps_on_released(slug: str, job_id: str) -> dict:
 
     _cache.invalidate_in_flight_jobs_cache()
     log.info("complete_timestamps_job(%s): ts regenerated (job=%s)", slug, job_id)
+
+    # Email subscribers who follow this reciter's timestamps (best-effort).
+    try:
+        from services.email import emit as _email
+        from services.state import catalog
+
+        delivery = catalog.find_delivery(slug)
+        if delivery is not None:
+            _email.emit_timestamps_regenerated(
+                reciter_id=delivery.reciter_id, reciter_name=catalog.display_name(slug) or slug
+            )
+    except Exception:  # noqa: BLE001
+        log.exception("email ts_regenerated hook failed (slug=%s)", slug)
+
     return {"slug": slug, "state": "released", "released": False, "regenerated": True}
 
 
