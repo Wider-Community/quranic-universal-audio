@@ -418,6 +418,20 @@ def _boot_substrate() -> None:
         except Exception as e:  # noqa: BLE001
             logger.warning("automation reconciler wiring failed: %s", e)
 
+    # Email-digest flush: a ~60 s sweep over the email_digest buffer that sends
+    # one batched email per (recipient, event) window for the two high-volume
+    # events (recitation_published / timestamps_regenerated). A tick with nothing
+    # due does zero writes (no bucket upload). Opt out via
+    # ``INSPECTOR_EMAIL_DIGEST_FLUSH=0``.
+    if os.environ.get("INSPECTOR_EMAIL_DIGEST_FLUSH", "1") == "1":
+        try:
+            from services.email import digest as _email_digest
+
+            _email_digest.start_flush_daemon()
+            logger.info("email digest flush daemon started")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("email digest flush wiring failed: %s", e)
+
 
 _boot_substrate()
 

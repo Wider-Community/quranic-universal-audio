@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block subject %}Timestamps updated for {{ count }} reciters{% endblock %}
+{% block content %}
+<p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+  The timestamps for <strong>{{ count }}</strong> reciters have been regenerated.
+  The updated alignments are now live on the site:
+</p>
+<ul style="margin:0;padding:0 0 0 20px;font-size:15px;line-height:1.7;">
+  {% for name in reciters %}
+  <li><strong>{{ name }}</strong></li>
+  {% endfor %}
+</ul>
+{% endblock %}

@@ -238,6 +238,15 @@ EMAIL_APP_BASE_URL = (
     os.environ.get("INSPECTOR_PUBLIC_BASE_URL", "").strip() or "http://localhost:5000"
 )
 
+# Email digest — per-event batching window. The two high-volume events
+# (recitation_published, timestamps_regenerated) buffer per recipient and flush
+# as ONE batched email per event-kind once the window (opened by the earliest
+# buffered event) elapses; bounds a burst to at most one email per event per
+# window. Not cross-event — the two never merge. The flush daemon sweeps the
+# buffer on this interval; opt out with INSPECTOR_EMAIL_DIGEST_FLUSH=0.
+EMAIL_DIGEST_WINDOW_MINUTES = int(os.getenv("INSPECTOR_EMAIL_DIGEST_WINDOW_MINUTES", "60"))
+EMAIL_DIGEST_FLUSH_INTERVAL_SECONDS = int(os.getenv("INSPECTOR_EMAIL_DIGEST_FLUSH_INTERVAL_S", "60"))
+
 # Audio MIME types (shared between app.py and audio_proxy)
 AUDIO_MIME_TYPES = {
     ".flac": "audio/flac",

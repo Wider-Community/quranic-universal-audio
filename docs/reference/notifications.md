@@ -255,6 +255,21 @@ envelope glyph at `lib/icons/mail.svg`.
   (`config.EMAIL_GH_RELEASES_URL`); all events link the Space
   (`config.EMAIL_SITE_URL`). Functional links use `config.EMAIL_APP_BASE_URL`
   (`INSPECTOR_PUBLIC_BASE_URL`, localhost in dev).
+- **Digest (burst control).** The two high-volume events — the
+  `recitation_published` scope and `timestamps_regenerated` — do **not** send
+  immediately. `emit.py` buffers one `email_digest` row per matched recipient
+  (migration `0023` + `repo_email_digest`; recipient resolution unchanged, so
+  `all`/`selected` both work) and `services/email/digest.py` sweeps that buffer
+  (`start_flush_daemon`, ~60 s, opt-out `INSPECTOR_EMAIL_DIGEST_FLUSH=0`). Each
+  `(email, event_kind)` group flushes as **one** email once its tumbling window
+  (opened by the earliest buffered row) ages past `EMAIL_DIGEST_WINDOW_MINUTES`
+  (60). **Per-event, never cross-event** → at most two batched emails per
+  recipient per window. One buffered reciter reuses the singular template; two or
+  more use `<event_kind>_digest.html`. Buffering rides `durable_transaction`
+  (nesting-safe): inside the publish transition it adds no extra bucket upload;
+  the TS path is its own top-level write. The **riwayah-follow** flavors stay
+  immediate (lower frequency). Flush is send-then-delete (a rare mid-flush crash
+  re-sends rather than drops — consistent with best-effort).
 
 ## Tests
 
@@ -276,4 +291,9 @@ envelope glyph at `lib/icons/mail.svg`.
 - `tests/routes/test_route_email_preferences.py` — anonymous reachable (no 401),
   token minted/echoed, GET-by-cookie vs GET-by-token, bad email 400, unsubscribe.
 - `tests/services/test_email_emit.py` — per-event recipient resolution, scope
-  filtering, single-email-per-publish precedence (captured at the `send` seam).
+  filtering, single-email-per-publish precedence (captured at the `send` seam);
+  the two scope events buffer (no immediate send) while riwayah stays immediate.
+- `tests/services/test_email_digest.py` — flush windowing, single→singular vs
+  many→digest template, reciter dedup, buffer deletion, per-event isolation.
+- `tests/db/test_repo_email_digest.py` — window-edge `due_groups`, oldest-first
+  `items_for`, id-scoped `delete_ids` keeps post-read rows.

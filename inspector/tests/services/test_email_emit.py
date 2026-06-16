@@ -8,8 +8,12 @@ precedence (first_available > new_recitation > recitation_published).
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
+from services.db import _serde
+from services.db import repo_email_digest as repo_digest
 from services.db import repo_email_subscriptions as repo_subs
 from services.db import sync as _sync
 from services.email import emit as email_emit
@@ -47,26 +51,31 @@ def _by_email(calls):
     return {to: subj for to, subj in calls}
 
 
-def test_recitation_published_all_emails_subscriber(captured):
+def _buffered(event_kind):
+    """Addresses with a buffered digest row for ``event_kind`` (any age)."""
+    far = _serde.now() + timedelta(days=1)
+    return {g["email"] for g in repo_digest.due_groups(cutoff=far) if g["event_kind"] == event_kind}
+
+
+def test_recitation_published_all_buffers_subscriber(captured):
+    # The plain recitation_published scope buffers into the digest — no immediate send.
     _sub("all@x.com", recitation_published="all")
     _sub("off@x.com", recitation_published="off")
     email_emit.emit_recitation_published(
         reciter_id="r1", reciter_name="Reciter One", riwayah=None, is_first_in_riwayah=False
     )
-    by = _by_email(captured)
-    assert by["all@x.com"].startswith("Now published")
-    assert "off@x.com" not in by
+    assert captured == []
+    assert _buffered("recitation_published") == {"all@x.com"}
 
 
-def test_recitation_published_selected_matches_only_chosen_reciter(captured):
+def test_recitation_published_selected_buffers_only_chosen_reciter(captured):
     _sub("match@x.com", recitation_published="selected", reciters=["r1"])
     _sub("nomatch@x.com", recitation_published="selected", reciters=["r2"])
     email_emit.emit_recitation_published(
         reciter_id="r1", reciter_name="Reciter One", riwayah=None, is_first_in_riwayah=False
     )
-    by = _by_email(captured)
-    assert "match@x.com" in by
-    assert "nomatch@x.com" not in by
+    assert captured == []
+    assert _buffered("recitation_published") == {"match@x.com"}
 
 
 def test_publish_precedence_first_available_wins(captured):
@@ -105,9 +114,8 @@ def test_timestamps_regenerated_scope_filtering(captured):
     _sub("sel@x.com", timestamps_regenerated="selected", reciters=["r1"])
     _sub("selno@x.com", timestamps_regenerated="selected", reciters=["r9"])
     email_emit.emit_timestamps_regenerated(reciter_id="r1", reciter_name="Reciter One")
-    by = _by_email(captured)
-    assert set(by) == {"all@x.com", "sel@x.com"}
-    assert by["all@x.com"].startswith("Timestamps updated")
+    assert captured == []
+    assert _buffered("timestamps_regenerated") == {"all@x.com", "sel@x.com"}
 
 
 def test_github_release_emails_only_subscribers(captured):

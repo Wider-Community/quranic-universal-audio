@@ -6,6 +6,14 @@ to the sender pool. A publish can match several opt-ins for one address; it
 collapses to a SINGLE email with precedence
 ``riwayah_first_available > riwayah_new_recitation > recitation_published``.
 
+The two high-volume events — the ``recitation_published`` scope and
+``timestamps_regenerated`` — are NOT sent immediately: they buffer per recipient
+in ``email_digest`` and a background sweep (``services.email.digest``) flushes
+each as one batched email per 60-min window, so a burst doesn't spam. The
+riwayah-follow flavors stay immediate (lower frequency). Buffering rides
+``durable_transaction`` (nesting-safe): inside the publish transition it adds no
+extra bucket upload; the TS path is its own top-level write.
+
 Per-recipient unsubscribe links mean no BCC batching — one message per address.
 The subscriber set is small and sends are backgrounded, so this is fine.
 
@@ -84,32 +92,65 @@ def _choose_publish_event(
     return None
 
 
+def _scope_matches(prefs: dict, key: str, reciter_id: str) -> bool:
+    """``all`` matches everything; ``selected`` matches only chosen reciters."""
+    scope = prefs.get(key)
+    return scope == "all" or (scope == "selected" and reciter_id in (prefs.get("reciters") or []))
+
+
 def emit_recitation_published(
     *, reciter_id: str, reciter_name: str, riwayah: str | None, is_first_in_riwayah: bool
 ) -> None:
-    """A recitation was published — fan out the published / riwayah-follow emails
-    (one collapsed email per address)."""
+    """A recitation was published. Riwayah-follow matches send immediately; the
+    plain ``recitation_published`` scope matches buffer into the 60-min digest."""
     try:
+        from services.db import repo_email_digest
+        from services.db import sync as _sync
+
         riwayah_label = _riwayah_label(riwayah)
+        to_buffer: list[dict] = []
         for sub in _all():
             event = _choose_publish_event(sub["prefs"], reciter_id, riwayah, is_first_in_riwayah)
             if event is None:
                 continue
-            _dispatch(sub, event, {"reciter_name": reciter_name, "riwayah_label": riwayah_label})
+            if event == "recitation_published":
+                to_buffer.append(sub)
+            else:  # riwayah_new_recitation / riwayah_first_available — immediate
+                _dispatch(sub, event, {"reciter_name": reciter_name, "riwayah_label": riwayah_label})
+        if to_buffer:
+            with _sync.durable_transaction():
+                for sub in to_buffer:
+                    repo_email_digest.add(
+                        email=sub["email"],
+                        manage_token=sub["manage_token"],
+                        event_kind="recitation_published",
+                        reciter_id=reciter_id,
+                        reciter_name=reciter_name,
+                    )
     except Exception:  # noqa: BLE001
         logger.exception("email.emit_recitation_published failed (reciter_id=%s)", reciter_id)
 
 
 def emit_timestamps_regenerated(*, reciter_id: str, reciter_name: str) -> None:
-    """Timestamps regenerated for a released recitation — email opted-in followers."""
+    """Timestamps regenerated for a released recitation — buffer opted-in
+    followers into the 60-min digest (works for both ``all`` and ``selected``)."""
     try:
-        for sub in _all():
-            prefs = sub["prefs"]
-            scope = prefs.get("timestamps_regenerated")
-            if scope == "all" or (
-                scope == "selected" and reciter_id in (prefs.get("reciters") or [])
-            ):
-                _dispatch(sub, "timestamps_regenerated", {"reciter_name": reciter_name})
+        from services.db import repo_email_digest
+        from services.db import sync as _sync
+
+        to_buffer = [
+            sub for sub in _all() if _scope_matches(sub["prefs"], "timestamps_regenerated", reciter_id)
+        ]
+        if to_buffer:
+            with _sync.durable_transaction():
+                for sub in to_buffer:
+                    repo_email_digest.add(
+                        email=sub["email"],
+                        manage_token=sub["manage_token"],
+                        event_kind="timestamps_regenerated",
+                        reciter_id=reciter_id,
+                        reciter_name=reciter_name,
+                    )
     except Exception:  # noqa: BLE001
         logger.exception("email.emit_timestamps_regenerated failed (reciter_id=%s)", reciter_id)
 
