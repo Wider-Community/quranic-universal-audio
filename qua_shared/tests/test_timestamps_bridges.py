@@ -76,11 +76,40 @@ def test_apply_refuses_non_merger_index():
 
 
 def test_apply_noop_on_shape_mismatch():
-    # Phonemizer count total != shard flat count → skip, no mutation.
+    # Phonemizer count total != shard indexable-unit count → skip, no mutation.
     words = [_word(1, ["a", "m̃"])]
     before = [list(p) for p in words[0][4]]
     assert _apply_to_words(words, [(1, "idgham_shafawi")], [5]) == 0
     assert words[0][4] == before
+
+
+def test_apply_rides_qalqala_marker_without_dropping_bridge():
+    # A shard stores a render-only qalqala "Q" the phonemizer never emits. It must
+    # NOT skew the index or trip the guard: the bridge still tags and the Q rides
+    # along on its word. (Pre-fix this counted Q in `flat`, tripped the guard, and
+    # dropped EVERY bridge in the segment — the 37.6% prod regression.)
+    # idgham ghunnah noon مَن + يَ…; word 8 ends in a qalqala consonant + Q.
+    words = [_word(7, ["m", "i"]), _word(8, ["m̃", "a", "d", "Q"], t0=2)]
+    n = _apply_to_words(words, [(2, "idgham_ghunnah_noon")], [2, 3])
+    assert n == 1
+    # Q is preserved in order on its word; the merger phone carries the rule tag.
+    assert [p[0] for p in words[1][4]] == ["m̃", "a", "d", "Q"]
+    assert words[1][4][0][_BRIDGE_SLOT] == "idgham_ghunnah_noon"
+    # No phone lost from either word.
+    assert [p[0] for p in words[0][4]] == ["m", "i"]
+
+
+def test_apply_qalqala_marker_in_excluded_count_space():
+    # The phonemizer's `counts` exclude Q, so a segment whose only shape diff from
+    # the phonemizer is a stored Q must MATCH (units == sum(counts)) and tag, where
+    # naively counting Q-included phones would mismatch by one and skip.
+    # Shafawi merger on prev tail + a trailing Q on the second word.
+    words = [_word(14, ["k", "u", "m̃", "i"]), _word(15, ["ŋ", "Q"], t0=4)]
+    n = _apply_to_words(words, [(2, "idgham_shafawi")], [3, 2])
+    assert n == 1
+    assert [p[0] for p in words[0][4]] == ["k", "u", "m̃"]
+    assert words[0][4][2][_BRIDGE_SLOT] == "idgham_shafawi"
+    assert [p[0] for p in words[1][4]] == ["i", "ŋ", "Q"]  # kasra re-attributed, Q kept
 
 
 def test_tag_segment_words_skips_non_contiguous():
