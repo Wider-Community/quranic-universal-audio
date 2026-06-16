@@ -53,7 +53,7 @@ _SEGMENT_META_PROVENANCE = (
     "created_at",
 )
 
-SEGMENT_SCHEMA_VERSION = 3
+SEGMENT_SCHEMA_VERSION = 4
 
 
 def _filter_mfa_failures(failures: list[dict] | None, chapter: int) -> list[dict]:

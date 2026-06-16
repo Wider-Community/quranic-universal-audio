@@ -156,7 +156,7 @@ def tag_segment_words(pm, verse_key: str, words: list) -> int:
     ``[widx, start_ms, end_ms, [[char,s,e]...], [[phone,s,e]...]]`` in ascending,
     contiguous word order. ``verse_key`` is the segment's home verse (``"2:48"``).
 
-    Two effects, both anchored to the phonemizer (the single source of truth):
+    Three effects, all anchored to the phonemizer (the single source of truth):
 
     1. **Re-attribution** — the shard's flat phones are re-sliced into words by
        the phonemizer's natural per-word counts. The aligner's word-boundary
@@ -166,6 +166,11 @@ def tag_segment_words(pm, verse_key: str, words: list) -> int:
     2. **Tagging** — the merger phone grows to length 6 with its rule at slot 5
        (``[phone, start, end, None, None, rule]``; slots 3/4 are the FE reader's
        geminate flags).
+    3. **Silent flags** — each letter grows a 4th slot ``silent`` (bool) from the
+       phonemizer's ``silent_flags()`` so the highlight skips silent graphemes
+       once each letter is its own cell. The segment is phonemized continuously,
+       so verse-final waqf forms (a stopping tanween alef) render in their
+       continuing form — a pausal refinement needs the true stop boundary.
 
     Returns the number of phones tagged. Skips (returns 0, no mutation) for
     repeats / out-of-order words, or if the phonemizer shape doesn't match the
@@ -179,7 +184,9 @@ def tag_segment_words(pm, verse_key: str, words: list) -> int:
         return 0
     lo, hi = widxs[0], widxs[-1]
     seg_ref = f"{verse_key}:{lo}" if lo == hi else f"{verse_key}:{lo}-{verse_key}:{hi}"
-    bridges, counts = _scan_mapping(pm.phonemize(ref=seg_ref).get_mapping())
+    mapping = pm.phonemize(ref=seg_ref).get_mapping()
+    bridges, counts = _scan_mapping(mapping)
+    _stamp_silent_flags(words, mapping)
     tagged = _apply_to_words(words, bridges, counts)
     if bridges and not tagged:
         # The shape guard tripped with bridges in hand — render-only markers are
@@ -190,6 +197,28 @@ def tag_segment_words(pm, verse_key: str, words: list) -> int:
             "shape != shard shape)", seg_ref, len(bridges)
         )
     return tagged
+
+
+def _stamp_silent_flags(words: list, mapping) -> bool:
+    """Append a 4th ``silent`` bool to every letter triple, in place.
+
+    The phonemizer's per-grapheme silent flags are 1:1 with the shard's
+    ``letters[]`` (same written-text tokenization); they are consumed in lockstep
+    by character. No-op (returns False, no mutation) on any char-misalignment so a
+    phonemizer/shard mismatch can never corrupt a letter.
+    """
+    from quranic_phonemizer.silent import build_silent_flags
+
+    flags = build_silent_flags(mapping)
+    letters = [lt for wd in words for lt in wd[3]]
+    if [c for c, _ in flags] != [lt[0] for lt in letters]:
+        return False
+    for lt, (_, silent) in zip(letters, flags):
+        if len(lt) <= 3:
+            lt.append(silent)
+        else:
+            lt[3] = silent
+    return True
 
 
 def _retime(word: list) -> None:

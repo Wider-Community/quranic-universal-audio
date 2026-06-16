@@ -22,7 +22,7 @@ A shard is a flat `segments[]` array in recitation order, every accepted segment
 ```
 
 - **`ref` is always a single verse** `"surah:ayah"`. Cross-verse refs cannot be expressed; the job blocks on them upstream (§3) so the bucket never carries one. `_meta` is slim — `reciter` (it's the path) and `url_template`/`audio_urls` (catalog + audio-manifest sidecar are ground truth) are excluded.
-- **Word shape** (per segment): `[widx, start_ms, end_ms, [[char,s,e]...], [[phone,s,e]...]]` — letters/phones nested per word.
+- **Word shape** (per segment): `[widx, start_ms, end_ms, [[char,s,e(,silent)]...], [[phone,s,e]...]]` — letters/phones nested per word. From **schema v4**, each letter carries a 4th `silent` bool (phonemizer `silent_flags()`, stamped in `timestamps_bridges.py`) — true when the grapheme produces no audible phoneme at its own position (hamza wasl, lam shamsiyah, otiose tanween alef, …), so the Timestamps highlight skips it once letters are split one-per-cell. Legacy v3 shards omit it.
 
 | Concept | What |
 |---|---|
