@@ -102,9 +102,10 @@
 <div class="rail-wrap">
     <AdminDashboardButton />
 
-    <NotificationsRail />
+    <div class="rail-scroll">
+        <NotificationsRail />
 
-    <aside class="activity" aria-label="Recent activity">
+        <aside class="activity" aria-label="Recent activity">
         <header>
             <h2>Recent activity</h2>
             <span class="sub">Last {cards.length} events</span>
@@ -146,15 +147,16 @@
                 {/each}
             </ol>
         {/if}
-    </aside>
+        </aside>
+    </div>
 </div>
 
 <style>
     /* Match the catalog's shared-height envelope so all three dashboard columns
-       end on the same bottom line: the admin button + notifications rail stay
-       pinned at the top, and the activity feed takes the remaining space and
-       scrolls on its own. Reverts to natural flow once the column drops out of
-       the 3-up grid (≤1280px). */
+       end on the same bottom line: the admin button stays pinned at the top, and
+       the notifications rail + activity feed share a single scroll container
+       below it (one scrollbar, no two regions fighting for height). Reverts to
+       natural flow once the column drops out of the 3-up grid (≤1280px). */
     .rail-wrap {
         position: sticky;
         top: 0;
@@ -164,16 +166,18 @@
         flex-direction: column;
         min-height: 0;
     }
-    .activity {
+    .rail-scroll {
         flex: 1 1 auto;
         min-height: 0;
         overflow-y: auto;
+    }
+    .activity {
         padding: var(--s-5) var(--s-5);
         border-left: 1px solid var(--border-quiet);
     }
     @media (max-width: 1280px) {
         .rail-wrap { height: auto; }
-        .activity { flex: none; overflow-y: visible; }
+        .rail-scroll { overflow-y: visible; }
     }
     header {
         display: flex;
