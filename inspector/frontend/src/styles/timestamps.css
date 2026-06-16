@@ -259,45 +259,54 @@
 }
 
 /* ============ Pause bridge ============ */
-/* A detected inter-word silence, surfaced as a small cell at the top between the
-   two word columns. Neutral (muted) at rest; lights to the word-highlight hue
-   while its silence plays or on waveform-hover. Carries the lifted-out waqf
-   (stop) sign, or the neutral pause icon when the pause has no stop sign. */
+/* A detected inter-word silence, surfaced as a slim tile in the letter/phoneme
+   family — sitting at the top between the two word columns. The CELL is the unit:
+   muted at rest, it fills with the word-highlight hue while its silence plays (or
+   on waveform-hover), exactly like an active letter/phoneme tile. It carries the
+   lifted-out waqf (stop) sign, or the neutral two-bar pause icon. */
 .pause-bridge {
     align-self: flex-start;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 20px;
-    padding: 0 5px;
-    /* Match the word-box height so the bridge reads as a peer cell between the
-       two words it bridges. */
-    height: calc(var(--analysis-word-font-size, 1.3rem) * 1.4 + 12px);
-    color: var(--text-muted, #8a8a99);
-    transition: color 0.15s ease, transform 0.15s ease;
+    /* ~40% of the word-box height — a slim peer of the letter/phoneme tiles. */
+    height: calc((var(--analysis-word-font-size, 1.3rem) * 1.4 + 12px) * 0.4);
+    min-width: 26px;
+    padding: 0 6px;
+    background: #0f0f23;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: #999;
+    overflow: hidden;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
+/* The CELL lights (background fill), mirroring .mega-word/.mega-phoneme active —
+   the glyph just rides the contrast, it is never recolored on its own. */
 .pause-bridge.active {
-    color: var(--anim-highlight-color);
-    transform: translateY(-1px) scale(1.08);
+    background: var(--anim-highlight-color);
+    border-color: var(--anim-highlight-color);
+    color: #1a1a2e;
 }
 .pause-bridge.hover-preview {
-    color: color-mix(in srgb, var(--anim-highlight-color) 70%, var(--text-muted, #8a8a99));
+    background: color-mix(in srgb, var(--anim-highlight-color) 30%, #0f0f23);
+    border-color: color-mix(in srgb, var(--anim-highlight-color) 40%, transparent);
+    color: color-mix(in srgb, var(--anim-highlight-color) 75%, #d7d7df);
 }
 .pause-waqf {
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
-    /* The stop sign is normally a small high mark; the bridge cell exists to show
-       it at full size. Scale it up to fill the box and nudge it down to center
-       (its ink sits high in the em). */
-    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 2);
+    /* The mark's ink renders high in the em; size it to sit fully inside the slim
+       cell and nudge it down so it reads centered, the way it naturally draws. */
+    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.2);
     line-height: 1;
-    transform: translateY(0.08em);
+    transform: translateY(0.16em);
 }
-/* Standard two-bar pause icon, drawn from currentColor so it lights with the
-   bridge. */
+/* Standard two-bar pause icon, drawn from currentColor so it inverts with the
+   cell fill on active. */
 .pause-icon {
     position: relative;
-    width: 7px;
-    height: 0.78em;
+    width: 6px;
+    height: 9px;
 }
 .pause-icon::before,
 .pause-icon::after {
@@ -305,15 +314,15 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 2px;
+    width: 1.5px;
     border-radius: 1px;
     background: currentColor;
 }
 .pause-icon::before {
-    left: 1px;
+    left: 0;
 }
 .pause-icon::after {
-    right: 1px;
+    right: 0;
 }
 /* During a live pause, the rest of the row recedes so the bridge reads as the
    moment's focus. */
@@ -324,9 +333,6 @@
 @media (prefers-reduced-motion: reduce) {
     .pause-bridge {
         transition: none;
-    }
-    .pause-bridge.active {
-        transform: none;
     }
 }
 
