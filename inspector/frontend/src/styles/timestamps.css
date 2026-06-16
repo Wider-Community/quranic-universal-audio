@@ -270,14 +270,17 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    /* ~40% of the word-box height — a slim peer of the letter/phoneme tiles. */
-    height: calc((var(--analysis-word-font-size, 1.3rem) * 1.4 + 12px) * 0.4);
-    min-width: 26px;
-    padding: 0 6px;
+    /* Sized to the waqf glyph's natural ink (measured ≈ 0.9 × 0.76 em of the
+       glyph font), so the cell hugs the mark like a compact letter/phoneme tile
+       instead of a slack box. A pinch of negative inline margin tightens it
+       toward the words it sits between. */
+    width: calc(var(--analysis-word-font-size, 1.3rem) * 1.05);
+    height: calc(var(--analysis-word-font-size, 1.3rem) * 0.82);
+    margin-inline: -2px;
     background: #0f0f23;
     border: 1px solid transparent;
     border-radius: 3px;
-    color: #aaa;
+    color: #bbb;
     overflow: hidden;
     transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
@@ -295,11 +298,13 @@
 }
 .pause-waqf {
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
-    /* A lone waqf mark draws low (on the baseline) with empty space above it, so
-       it must be pulled UP to read centered in the slim cell; sized to fill it. */
-    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.7);
+    /* A lone waqf mark is a zero-width combining glyph whose ink draws low (on the
+       baseline) and to the right of the origin. Size it up (its ink is only ~0.4em
+       of the font) and translate left+up by the measured ink-center offset so the
+       mark lands centered in the cell. */
+    font-size: calc(var(--analysis-word-font-size, 1.3rem) * 1.95);
     line-height: 1;
-    transform: translateY(-0.32em);
+    transform: translate(-0.18em, -0.34em);
 }
 /* Standard two-bar pause icon, drawn from currentColor so it inverts with the
    cell fill on active. */
