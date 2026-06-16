@@ -84,7 +84,7 @@ The **Dashboard tab** is the entry view: public reciter browse/search/filter/pla
 | `AudioPlayer.svelte` | Full audio player UI |
 | `SearchableSelect.svelte` | Dropdown with fuzzy search + grouped options |
 | `SpeedControl.svelte` | Playback speed selector |
-| `Modal.svelte` | Generic modal shell |
+| `Modal.svelte` | Generic modal shell — focus trap, Esc/backdrop close, body scroll lock. Its backdrop portals to `document.body` (`lib/actions/portal.ts`) so a deeply-mounted modal escapes ancestor stacking contexts (e.g. the sticky dashboard rail) and paints above fixed app chrome like `BottomPlayer`. |
 | `SignInModal.svelte` / `ToastHost.svelte` | Root-mounted sign-in modal + toast host |
 | `EditAffordancePopover.svelte` | Single global popover surfaced by `editGate` |
 | `DevRoleSwitcher.svelte` | Dev-mode role switcher (gated on `$currentUser.dev_mode`) |

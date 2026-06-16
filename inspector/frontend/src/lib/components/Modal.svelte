@@ -11,6 +11,8 @@
      */
     import { createEventDispatcher, onDestroy, tick } from 'svelte';
 
+    import { portal } from '../actions/portal';
+
     export let open = false;
     export let title: string | null = null;
     /** Accessible label for the close button. */
@@ -108,6 +110,7 @@
     <div
         class="backdrop"
         class:elevated
+        use:portal
         on:click={onBackdropClick}
         on:keydown={onKey}
         role="presentation"
