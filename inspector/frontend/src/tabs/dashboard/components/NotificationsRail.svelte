@@ -18,6 +18,7 @@
 
     import type { UserNotification } from '../../../lib/api/notifications';
     import Icon from '../../../lib/icons/Icon.svelte';
+    import { can } from '../../../lib/stores/capabilities';
     import { currentUser, isSignedIn } from '../../../lib/stores/current-user';
     import { gotoSegments } from '../../../lib/utils/goto-segments';
     import { relativeTime } from '../../../lib/utils/relative-time';
@@ -28,9 +29,37 @@
     import { notifications } from '../stores/notifications.svelte';
 
     const signedIn = $derived(isSignedIn($currentUser));
-    const visible = $derived(signedIn || announcements.active.length > 0);
+    const canEmail = can('notify.email_subscriptions');
+    // The rail is the email-subscribe entry point for everyone (incl. anonymous),
+    // so it shows whenever email is available — not only for signed-in users or
+    // when an announcement is active.
+    const visible = $derived(signedIn || announcements.active.length > 0 || $canEmail);
 
     let prefsOpen = $state(false);
+    let manageToken = $state<string | null>(null);
+
+    // An email "manage" / unsubscribe link deep-links back as `?manage=<token>`.
+    // Open the modal seeded by that token, then strip the param so a refresh
+    // doesn't reopen it.
+    onMount(() => {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('manage');
+            if (token) {
+                manageToken = token;
+                prefsOpen = true;
+                params.delete('manage');
+                const qs = params.toString();
+                window.history.replaceState(
+                    {},
+                    '',
+                    window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash,
+                );
+            }
+        } catch {
+            /* no-op — deep-link is best-effort */
+        }
+    });
 
     onMount(() => announcements.start());
     onDestroy(() => {
@@ -168,14 +197,14 @@
     <aside class="notifs" aria-label="My notifications">
         <header>
             <h2>My notifications</h2>
-            {#if signedIn}
+            {#if $canEmail}
                 <button
                     type="button"
                     class="email-btn"
-                    aria-label="Email notification settings"
-                    title="Email notifications"
+                    title="Manage email notifications"
                     onclick={() => (prefsOpen = true)}>
-                    <Icon name="mail" size={15} />
+                    <Icon name="mail" size={14} />
+                    <span>Email</span>
                 </button>
             {/if}
             {#if badge > 0 && notifications.view === 'active'}
@@ -282,7 +311,7 @@
     </aside>
 {/if}
 
-<EmailPrefsModal open={prefsOpen} onclose={() => (prefsOpen = false)} />
+<EmailPrefsModal {manageToken} open={prefsOpen} onclose={() => (prefsOpen = false)} />
 
 <style>
     .notifs {
@@ -301,22 +330,27 @@
         color: var(--text-primary);
         font-weight: 500;
         margin: 0;
+        white-space: nowrap;
     }
     .email-btn {
+        margin-left: auto;
         display: inline-flex;
         align-items: center;
-        justify-content: center;
-        padding: 3px;
+        gap: 5px;
+        padding: 3px 10px;
         background: transparent;
-        border: 0;
-        border-radius: var(--radius-sm, 4px);
-        color: var(--text-muted);
+        border: 1px solid var(--border-default);
+        border-radius: var(--r-pill, 999px);
+        color: var(--text-secondary);
+        font-size: var(--fs-meta);
         cursor: pointer;
-        transition: color var(--t-fast), background var(--t-fast);
+        white-space: nowrap;
+        transition: color var(--t-fast), background var(--t-fast), border-color var(--t-fast);
     }
     .email-btn:hover {
         color: var(--text-primary);
-        background: var(--surface-raised, var(--border-quiet));
+        border-color: var(--border-strong);
+        background: var(--panel-2);
     }
     .email-btn:focus-visible {
         outline: none;

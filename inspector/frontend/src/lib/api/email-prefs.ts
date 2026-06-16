@@ -1,11 +1,12 @@
 /**
  * Email-notification preferences client.
  *
- * The signed-in user opts into no-reply emails for catalog + workflow events
- * from the "My notifications" envelope modal. This module is the FE half: a
- * typed read/write pair against `/api/me/email-preferences`. The shape here is
- * the contract the backend implements (prefs table + emitter + SMTP are a
- * separate change — see the modal's handoff note).
+ * A signed-in OR anonymous visitor opts into no-reply emails for catalog +
+ * workflow events from the "My notifications" envelope modal. This module is the
+ * FE half: a typed read/write pair against `/api/me/email-preferences`.
+ *
+ * The shape is single-sourced from `qua_shared` (`EmailPreferences`, codegen'd
+ * into `schemas.ts`); `EmailPrefs` is the all-fields-present view the UI binds to.
  *
  * Scope semantics:
  * - `'off'`     — never email for this event.
@@ -15,38 +16,23 @@
  *
  * The two riwayah events are booleans gated by the shared `riwayahs` follow
  * list: an enabled flag with an empty follow list emits nothing.
+ *
+ * Identity model: storage is keyed by the email address, not the HF account, so
+ * anonymous visitors can subscribe. On first save the server mints a stable
+ * `manage_token` (returned here, cached by the modal). That token re-fetches
+ * fresh server state for a returning anonymous visitor and powers the email
+ * unsubscribe / "manage" deep-link, keeping the modal consistent with an
+ * out-of-band unsubscribe.
  */
 
+import type { EmailPreferences } from '../types/generated/schemas';
 import { fetchJson } from './index';
 
 /** Per-event scope for reciter-scoped events. */
-export type EmailScope = 'off' | 'all' | 'selected';
+export type EmailScope = NonNullable<EmailPreferences['recitation_published']>;
 
-export interface EmailPrefs {
-    /** Destination address. Seeded server-side from the HF account email on
-     *  first load; empty when neither saved nor available. */
-    email: string;
-
-    /** A request you submitted finishes alignment and is ready for review. */
-    request_aligned: boolean;
-    /** A recitation is published (in-app). Reciter-scoped. */
-    recitation_published: EmailScope;
-    /** A reciter's timestamps are regenerated. Reciter-scoped. */
-    timestamps_regenerated: EmailScope;
-    /** A new GitHub release is published. */
-    github_release: boolean;
-
-    /** A new recitation is published in a riwayah you follow. */
-    riwayah_new_recitation: boolean;
-    /** A riwayah you follow becomes available — its first ever recitation.
-     *  Sent once per riwayah. */
-    riwayah_first_available: boolean;
-
-    /** Shared reciter_ids powering every `selected`-mode event above. */
-    reciters: string[];
-    /** Shared riwayah slugs powering both riwayah events above. */
-    riwayahs: string[];
-}
+/** The UI view of the prefs — every field present (server fills from defaults). */
+export type EmailPrefs = Required<EmailPreferences>;
 
 export const DEFAULT_EMAIL_PREFS: EmailPrefs = {
     email: '',
@@ -92,17 +78,36 @@ export function normalizeEmailPrefs(raw: unknown): EmailPrefs {
     };
 }
 
-/** Load the signed-in user's email preferences. */
-export async function fetchEmailPrefs(signal?: AbortSignal): Promise<EmailPrefs> {
-    const data = await fetchJson<Record<string, unknown>>('/api/me/email-preferences', { signal });
+/** A loaded subscription: the prefs plus the manage token (when the row exists). */
+export interface LoadedEmailPrefs {
+    prefs: EmailPrefs;
+    manageToken: string | null;
+}
+
+function extractToken(data: Record<string, unknown> | null): string | null {
+    return data && typeof data.manage_token === 'string' ? data.manage_token : null;
+}
+
+/**
+ * Load email preferences. Signed-in callers resolve by their HF cookie; pass a
+ * `manageToken` to resolve an anonymous subscription by its token instead
+ * (re-fetches fresh server state, e.g. after an out-of-band unsubscribe).
+ */
+export async function fetchEmailPrefs(
+    opts: { signal?: AbortSignal; manageToken?: string | null } = {},
+): Promise<LoadedEmailPrefs> {
+    const qs = opts.manageToken ? `?token=${encodeURIComponent(opts.manageToken)}` : '';
+    const data = await fetchJson<Record<string, unknown>>(`/api/me/email-preferences${qs}`, {
+        signal: opts.signal,
+    });
     if (data && typeof data === 'object' && 'error' in data && data.error) {
         throw new Error(String(data.error));
     }
-    return normalizeEmailPrefs(data);
+    return { prefs: normalizeEmailPrefs(data), manageToken: extractToken(data) };
 }
 
-/** Persist the user's email preferences. Returns the normalized saved shape. */
-export async function saveEmailPrefs(prefs: EmailPrefs): Promise<EmailPrefs> {
+/** Persist preferences. Returns the normalized saved prefs + the manage token. */
+export async function saveEmailPrefs(prefs: EmailPrefs): Promise<LoadedEmailPrefs> {
     const data = await fetchJson<Record<string, unknown>>('/api/me/email-preferences', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -111,8 +116,10 @@ export async function saveEmailPrefs(prefs: EmailPrefs): Promise<EmailPrefs> {
     if (data && typeof data === 'object' && 'error' in data && data.error) {
         throw new Error(String(data.error));
     }
-    // Backend echoes the persisted prefs; fall back to what we sent.
-    return normalizeEmailPrefs(data && Object.keys(data).length ? data : prefs);
+    return {
+        prefs: normalizeEmailPrefs(data && Object.keys(data).length ? data : prefs),
+        manageToken: extractToken(data),
+    };
 }
 
 /** Minimal email-shape check — a single `@` with non-empty local + domain. */

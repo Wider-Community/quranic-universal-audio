@@ -1035,6 +1035,39 @@ export interface EditOpPatch {
   affectedChapterIds?: number[];
 }
 /**
+ * A subscriber's email-notification preferences (GET response / POST body).
+ */
+export interface EmailPreferences {
+  email?: string;
+  request_aligned?: boolean;
+  recitation_published?: "off" | "all" | "selected";
+  timestamps_regenerated?: "off" | "all" | "selected";
+  github_release?: boolean;
+  riwayah_new_recitation?: boolean;
+  riwayah_first_available?: boolean;
+  reciters?: string[];
+  riwayahs?: string[];
+}
+/**
+ * POST echo: the persisted prefs plus the stable manage/unsubscribe token.
+ *
+ * The FE caches ``manage_token`` so a returning anonymous visitor can re-fetch
+ * fresh server state by token, and so the modal stays consistent with an
+ * out-of-band unsubscribe.
+ */
+export interface EmailPreferencesSaved {
+  email?: string;
+  request_aligned?: boolean;
+  recitation_published?: "off" | "all" | "selected";
+  timestamps_regenerated?: "off" | "all" | "selected";
+  github_release?: boolean;
+  riwayah_new_recitation?: boolean;
+  riwayah_first_available?: boolean;
+  reciters?: string[];
+  riwayahs?: string[];
+  manage_token: string;
+}
+/**
  * Flat error body returned on a failed request.
  *
  * ``error`` is the always-present human-readable message. ``code`` is the

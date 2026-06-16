@@ -185,21 +185,32 @@ whenever ≥1 announcement is active; the Active/Archive toggle + personal list
 stay signed-in-only. Compose UI: the Admin → **Announcements** tab
 (`AnnouncementsCompartment.svelte`).
 
-## Email preferences (frontend)
+## Email notifications
 
-The rail header carries an **envelope button** (signed-in only,
-`NotificationsRail.svelte`) that opens `EmailPrefsModal.svelte`
-(`tabs/dashboard/components/`) — a per-user opt-in to no-reply emails for
-catalog + workflow events, distinct from the in-app rail above.
+A second, opt-in channel alongside the in-app rail: no-reply emails for catalog
++ workflow events. The rail header carries an **"Email notifs" button**
+(`NotificationsRail.svelte`, gated on the `notify.email_subscriptions`
+capability — shown to everyone incl. anonymous) that opens
+`EmailPrefsModal.svelte` (`tabs/dashboard/components/`).
 
-**This is frontend wiring only.** The modal reads/writes through a typed client
-(`lib/api/email-prefs.ts`, the `EmailPrefs` shape) against
-`GET/POST /api/me/email-preferences`; that contract is the spec. The backend
-half — a prefs table, the email emitter, SMTP/no-reply delivery, and seeding the
-destination `email` from the HF account on first GET — is **not built yet**.
+**Identity = the email address, not the HF account.** Subscriptions are keyed by
+the typed email so anonymous visitors can subscribe. The row carries an optional
+`hf_user_id` (set when the saver is signed in — used only to match the
+`request_aligned` event to its requester). Per the product decision there is **no
+verification** (saving activates immediately) and **no HF auto-seed** (the field
+is user-typed; the HF cookie carries no email).
 
-**Model.** One destination `email`, six event settings, and two *shared*
-selections that several events reuse (pick once, applies to both):
+**Manage token.** On first save the server mints one stable `manage_token` per
+email (`secrets.token_urlsafe`). It is the only secret guarding the row and does
+double duty: the one-click unsubscribe link (`GET /api/email-unsubscribe?token=`,
+turns every event off) and the email "manage" deep-link
+(`<app>/?manage=<token>` → `NotificationsRail` opens the modal seeded by token).
+The FE caches it in `localStorage`; the modal re-fetches by token on open so it
+stays consistent with an out-of-band unsubscribe (synced on open, not pushed).
+
+**Model** (`EmailPreferences` in `qua_shared/schemas/wire/email_preferences.py`,
+codegen'd → FE `EmailPrefs`). One destination `email`, six event settings, and
+two *shared* selections reused across events (pick once, applies to both):
 
 | Field | Type | Event |
 |---|---|---|
@@ -212,19 +223,38 @@ selections that several events reuse (pick once, applies to both):
 | `reciters` | `reciter_id[]` | shared target for every `selected`-scope event |
 | `riwayahs` | slug[] | shared follow-list for both riwayah events |
 
-A `selected` scope with an empty `reciters` list (or a riwayah event with an
-empty `riwayahs` list) is a no-op — the modal warns inline rather than blocking
-save. The reciter/riwayah option sets are derived client-side from the loaded
-catalog (`PublicReciter.reciter_id` / the distinct `riwayat`).
+An enabled event whose backing selection is empty is a no-op; the modal warns
+inline rather than blocking save. The reciter/riwayah option sets are derived
+client-side from the loaded catalog. Reusable primitives:
+`lib/components/Segmented.svelte` + `lib/components/ChipMultiSelect.svelte`;
+envelope glyph at `lib/icons/mail.svg`.
 
-Reusable primitives added for the modal: `lib/components/Segmented.svelte`
-(scope selector) and `lib/components/ChipMultiSelect.svelte` (searchable
-multi-select chips); envelope glyph at `lib/icons/mail.svg`.
-
-**Backend follow-up:** add the `email_preferences` store + `GET/POST
-/api/me/email-preferences` (owner-scoped, `@require_same_origin` on POST, GET
-seeds `email` from the HF cookie), then an emitter that fans the six events out
-to subscribed addresses via a no-reply SMTP path.
+**Backend.**
+- **Store:** `email_subscriptions` (migration `0022`) + `repo_email_subscriptions`
+  — keyed by normalized email, prefs as a JSON blob, stable `manage_token`.
+- **Routes:** `routes/auth/email_preferences.py` — `GET/POST /api/me/email-preferences`
+  (capability-gated, **not** 401 for anonymous; GET resolves by HF cookie → `?token=`
+  → defaults; POST `@require_same_origin`, mints+echoes the token) and the public
+  `GET /api/email-unsubscribe`.
+- **Sender:** `services/email/` (Flask-free; named `services.email` to avoid
+  shadowing the stdlib `email`) — Jinja `templates/` (one per event extending
+  `base.html`, greeting "Assalamu Alaikum"), `send.py` (Gmail SMTP via the
+  `GMAIL`/`GMAIL_PASS` Space secrets, fire-and-forget `ThreadPoolExecutor`; when
+  the secrets are absent it **logs the rendered email** instead of sending so dev
+  exercises the flow), and `emit.py` (per-event recipient resolution).
+- **Event hooks** (best-effort, never break the write): `reciter.published` +
+  `reciter.alignment_completed` in `state._apply_event`; `reciter.ts_regenerated`
+  in `timestamps_jobs._regenerate_timestamps_on_released`; the GH cut in
+  `cut_release.complete`. Each sits past the existing idempotency guard so a
+  webhook+poll double-fire can't double-send. A publish collapses to **one email
+  per address** (precedence `riwayah_first_available > riwayah_new_recitation >
+  recitation_published`); first-in-riwayah is computed from the released set in
+  the catalog. Per-recipient unsubscribe links mean one message per address (no
+  BCC); fan-out is best-effort with no retry — acceptable at current scale.
+- **Links:** release emails point at the GH releases page
+  (`config.EMAIL_GH_RELEASES_URL`); all events link the Space
+  (`config.EMAIL_SITE_URL`). Functional links use `config.EMAIL_APP_BASE_URL`
+  (`INSPECTOR_PUBLIC_BASE_URL`, localhost in dev).
 
 ## Tests
 
@@ -241,3 +271,9 @@ to subscribed addresses via a no-reply SMTP path.
   dismiss/restore, owner-scoping.
 - `tests/services/test_state_request_events.py::test_reject_soft_notifies_requester`
   — end-to-end through `transition()`.
+- `tests/db/test_repo_email_subscriptions.py` — email-keyed upsert, token +
+  created_at preserved on update, unsubscribe turns every event off.
+- `tests/routes/test_route_email_preferences.py` — anonymous reachable (no 401),
+  token minted/echoed, GET-by-cookie vs GET-by-token, bad email 400, unsubscribe.
+- `tests/services/test_email_emit.py` — per-event recipient resolution, scope
+  filtering, single-email-per-publish precedence (captured at the `send` seam).

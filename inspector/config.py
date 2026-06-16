@@ -216,6 +216,28 @@ AUTOMATION_INTERVAL_SECONDS = int(os.getenv("INSPECTOR_AUTOMATIONS_INTERVAL_S", 
 # complete cleanly, which is fine since automations are off in dev.
 AUTOMATION_PUBLIC_BASE_URL = os.environ.get("INSPECTOR_PUBLIC_BASE_URL", "").strip()
 
+# Email notifications (inspector/email) — Gmail SMTP via the GMAIL/GMAIL_PASS
+# Space secrets. When those are unset (dev), the sender logs the rendered email
+# instead of dispatching, so the whole flow is exercisable without secrets.
+SMTP_HOST = os.environ.get("INSPECTOR_SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("INSPECTOR_SMTP_PORT", "587"))
+# Display name on the From header (address is the GMAIL account).
+EMAIL_FROM_NAME = os.environ.get("INSPECTOR_EMAIL_FROM_NAME", "Quranic Universal Audio")
+# User-facing "visit the site" link in every email — the HF Space landing page.
+EMAIL_SITE_URL = os.environ.get(
+    "INSPECTOR_EMAIL_SITE_URL", "https://huggingface.co/spaces/hetchyy/quranic-universal-audio"
+)
+# The GitHub releases page linked from release emails.
+EMAIL_GH_RELEASES_URL = os.environ.get(
+    "INSPECTOR_EMAIL_GH_RELEASES_URL",
+    "https://github.com/Wider-Community/quranic-universal-audio/releases",
+)
+# Base URL for functional links (the manage deep-link + unsubscribe endpoint) —
+# the direct app host. Reuses INSPECTOR_PUBLIC_BASE_URL; localhost in dev.
+EMAIL_APP_BASE_URL = (
+    os.environ.get("INSPECTOR_PUBLIC_BASE_URL", "").strip() or "http://localhost:5000"
+)
+
 # Audio MIME types (shared between app.py and audio_proxy)
 AUDIO_MIME_TYPES = {
     ".flac": "audio/flac",

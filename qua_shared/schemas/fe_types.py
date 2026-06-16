@@ -81,6 +81,7 @@ from .wire.admin_users import (
 )
 from .wire.announcements import Announcement
 from .wire.audio import AudioSurahEntry, AudioSurahsResponse
+from .wire.email_preferences import EmailPreferences, EmailPreferencesSaved
 from .wire.intake_requests import (
     IntakeAttestations,
     IntakeSource,
@@ -225,6 +226,8 @@ __all__ = [
     "DetailedEntry",
     "DetailedMeta",
     "DetailedSegment",
+    "EmailPreferences",
+    "EmailPreferencesSaved",
     "EditHistoryBatch",
     "EditOperation",
     "EditOpPatch",

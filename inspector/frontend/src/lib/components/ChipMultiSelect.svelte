@@ -242,6 +242,7 @@
         gap: 1px;
     }
     .menu-item {
+        flex: 0 0 auto; /* keep natural height; the flex column must not squish items when scrolling */
         text-align: left;
         border: 0;
         background: transparent;

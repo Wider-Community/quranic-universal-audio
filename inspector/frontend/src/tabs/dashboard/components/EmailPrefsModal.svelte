@@ -2,15 +2,20 @@
     /**
      * Email-notification preferences modal.
      *
-     * Opened from the envelope button in the "My notifications" rail header
-     * (signed-in only). Lets the user set one destination address and opt into
-     * no-reply emails for catalog + workflow events. Frontend wiring against the
-     * `/api/me/email-preferences` contract (`lib/api/email-prefs.ts`); the
-     * backend prefs table + emitter + SMTP are a separate change.
+     * Opened from the "Email notifs" button in the "My notifications" rail header
+     * (available to everyone, incl. anonymous — subscriptions are keyed by email,
+     * not the HF account). Lets the user set one destination address and opt into
+     * no-reply emails for catalog + workflow events, against the
+     * `/api/me/email-preferences` contract (`lib/api/email-prefs.ts`).
      *
      * One shared reciter selection powers every reciter-scoped event ("Choose"
      * mode); one shared riwayah follow-list powers both riwayah events — pick
      * once, applies to both.
+     *
+     * Identity: signed-in callers resolve by their HF cookie. Anonymous callers
+     * resolve by a `manage_token` minted on first save — cached in localStorage
+     * (so a returning visitor re-loads fresh server state) and passed via the
+     * `manageToken` prop when the modal is opened from an email "manage" link.
      */
     import {
         type EmailPrefs,
@@ -31,8 +36,10 @@
     interface Props {
         open: boolean;
         onclose: () => void;
+        /** When opened from an email "manage" link, the subscription's token. */
+        manageToken?: string | null;
     }
-    let { open, onclose }: Props = $props();
+    let { open, onclose, manageToken = null }: Props = $props();
 
     let working = $state<EmailPrefs | null>(null);
     let baseline = $state('');
@@ -40,6 +47,25 @@
     let saving = $state(false);
     let loadError = $state<string | null>(null);
     let saveError = $state<string | null>(null);
+
+    // The manage token cached in this browser (anonymous re-management). The
+    // server resolves signed-in callers by cookie, so this is only consulted
+    // when no `manageToken` prop was passed.
+    const TOKEN_KEY = 'qua_email_manage_token';
+    function readCachedToken(): string | null {
+        try {
+            return localStorage.getItem(TOKEN_KEY);
+        } catch {
+            return null;
+        }
+    }
+    function cacheToken(token: string | null): void {
+        try {
+            if (token) localStorage.setItem(TOKEN_KEY, token);
+        } catch {
+            /* storage unavailable — token round-trips via the server next save */
+        }
+    }
 
     const SCOPE_OPTS: { value: EmailScope; label: string }[] = [
         { value: 'off', label: 'Off' },
@@ -98,9 +124,11 @@
         saveError = null;
         void loadCatalog();
         try {
-            const prefs = await fetchEmailPrefs();
-            working = prefs;
-            baseline = JSON.stringify(prefs);
+            const token = manageToken ?? readCachedToken();
+            const loaded = await fetchEmailPrefs({ manageToken: token });
+            working = loaded.prefs;
+            baseline = JSON.stringify(loaded.prefs);
+            cacheToken(loaded.manageToken);
         } catch (e) {
             loadError = (e as Error).message ?? 'Could not load your preferences.';
             working = null;
@@ -115,8 +143,9 @@
         saveError = null;
         try {
             const saved = await saveEmailPrefs(working);
-            working = saved;
-            baseline = JSON.stringify(saved);
+            working = saved.prefs;
+            baseline = JSON.stringify(saved.prefs);
+            cacheToken(saved.manageToken);
             pushToast({ kind: 'success', text: 'Email preferences saved' });
             onclose();
         } catch (e) {
@@ -152,9 +181,7 @@
         </div>
     {:else if working}
         <div class="pad">
-            <p class="intro">
-                Get an email when something you follow changes. Mail comes from a no-reply address.
-            </p>
+            <p class="intro">Get an email when something you follow changes.</p>
 
             <div class="email-field">
                 <label class="email-label" for="emailpref-send-to">Send to</label>
@@ -182,9 +209,7 @@
                 <div class="row">
                     <div class="row-text">
                         <p class="row-title">Your request is processed</p>
-                        <p class="row-desc">
-                            A reciter you submitted finishes alignment and is ready for review.
-                        </p>
+                        <p class="row-desc">A reciter you requested is ready to review.</p>
                     </div>
                     <div class="row-ctrl">
                         <Toggle
@@ -201,7 +226,7 @@
                 <div class="row">
                     <div class="row-text">
                         <p class="row-title">A recitation is published</p>
-                        <p class="row-desc">When a recitation goes live in the catalog.</p>
+                        <p class="row-desc">When a recitation gets timestamps.</p>
                     </div>
                     <div class="row-ctrl">
                         <Segmented
@@ -288,7 +313,7 @@
                 <div class="row">
                     <div class="row-text">
                         <p class="row-title">A riwayah becomes available</p>
-                        <p class="row-desc">The first time any recitation in it is published. Sent once.</p>
+                        <p class="row-desc">Its first ever recitation is published. Sent once.</p>
                     </div>
                     <div class="row-ctrl">
                         <Toggle
