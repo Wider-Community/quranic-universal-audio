@@ -206,14 +206,18 @@ export function createStripScroller(opts: StripScrollerOpts): StripScroller {
                 this.snap(to);
                 return;
             }
-            if (plan?.follow) {
-                // Mid-catch-up: keep chasing the live, still-moving target. A small
-                // drift (the replay advancing word-by-word) just re-aims the curve's
-                // endpoint, so the glide tracks the live word and lands on it. A
-                // large sudden jump (a second loopback) re-plans a fresh curve,
-                // carrying current velocity so the speed never jumps.
+            if (plan) {
+                // A glide is in flight — either a follow catch-up, or a FIXED glide
+                // started by a click/refresh that a resuming playback is now feeding
+                // forward targets to. Either way, keep easing toward the live target
+                // instead of hard-snapping over it (which would teleport and then
+                // frame-fight the still-ticking plan). A small drift (the replay /
+                // forward play advancing word-by-word) just re-aims the curve's
+                // endpoint so it tracks the live word and lands on it; a large sudden
+                // jump (a second loopback) re-plans a fresh curve, carrying current
+                // velocity so the speed never jumps.
                 if (Math.abs(to - plan.to) > DRIFT_EPS_PX) planTo(to, true);
-                else plan.to = to;
+                else { plan.to = to; plan.follow = true; }
                 return;
             }
             if (discont && Math.abs(to - offset) >= 1) {

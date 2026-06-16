@@ -159,6 +159,29 @@ describe('StripScroller loopback catch-up (continuous follow)', () => {
     });
 });
 
+describe('StripScroller in-flight glide vs forward follow', () => {
+    it('does not hard-snap over an in-flight glide when a forward follow targets it', () => {
+        // The paused → verse-click → resume case: a fixed glide is mid-flight to
+        // the clicked cell, then a forward (non-discont) follow frame arrives whose
+        // live target IS that cell. The instant path must NOT slam offset onto the
+        // target (a teleport that also frame-fights the still-ticking plan) — the
+        // glide must keep easing.
+        const h = makeHarness();
+        h.scroller.snap(0);
+        h.scroller.glide(300); // fixed glide to the clicked cell
+        h.advance(FRAME);
+        h.drain();
+        const mid = h.scroller.offset;
+        expect(mid).toBeLessThan(60); // barely started
+        h.scroller.follow(300, false); // resume frame: live target == glide dest
+        expect(h.scroller.offset).toBeLessThan(300 - 5); // did NOT teleport to 300
+        expect(h.scroller.animating).toBe(true); // glide still in flight
+        // …and it still lands smoothly.
+        for (let i = 0; i < 200 && h.scroller.animating; i++) { h.advance(FRAME); h.drain(); }
+        expect(h.scroller.offset).toBe(300);
+    });
+});
+
 describe('StripScroller reduced motion + clamping', () => {
     it('applies targets instantly under reduced motion (no glide)', () => {
         const h = makeHarness();
