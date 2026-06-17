@@ -37,9 +37,10 @@
 
     interface RenderedLetter {
         /** One grapheme = one cell (letters are never grouped, even when they
-         *  share timing). A `silent` grapheme is greyed, non-interactive, and
-         *  never highlighted — the highlight/hover/click land on the pronounced
-         *  letter that shares its timing. */
+         *  share timing) — the sole exception is alef-maksura + dagger alef (ىٰ),
+         *  one long-vowel unit folded into a single cell. A `silent` grapheme is
+         *  greyed, non-interactive, and never highlighted — the highlight/hover/
+         *  click land on the pronounced letter that shares its timing. */
         ch: string;
         silent: boolean;
         start: number | null;
@@ -116,15 +117,37 @@
 
     // ---- Pure helpers (state-free) ----
 
+    // Alef-maksura (ى U+0649) + dagger alef (ٰ U+0670) is one long-vowel unit
+    // (علىٰ, موسىٰ, إلىٰ). The aligner splits the dagger into its own shard letter,
+    // but the two render as a single cell. Folding by char is safe — an alef-
+    // maksura never carries an independent dagger. Every other grapheme stays its
+    // own cell: a carrier waw keeps its (silent) waw + dagger split, a consonant's
+    // dagger stays independent.
+    const ALEF_MAKSURA = 'ى';
+    const DAGGER_ALEF = 'ٰ';
+
     function letterGroupsFor(word: TsWord): RenderedLetter[] {
-        // One cell per grapheme — never grouped, even when letters share timing.
-        return (word.letters || []).map((letter) => ({
-            ch: letter.char,
-            silent: letter.silent === true,
-            start: letter.start,
-            end: letter.end,
-            isNull: letter.start == null || letter.end == null,
-        }));
+        const out: RenderedLetter[] = [];
+        for (const letter of word.letters || []) {
+            const prev = out[out.length - 1];
+            if (prev && letter.char.startsWith(DAGGER_ALEF) && prev.ch.endsWith(ALEF_MAKSURA)) {
+                // Fold the dagger onto the maksura cell: one combined unit spanning
+                // both timings, sounding unless both graphemes are silent.
+                prev.ch += letter.char;
+                if (letter.end != null) prev.end = letter.end;
+                prev.silent = prev.silent && letter.silent === true;
+                prev.isNull = prev.isNull || letter.start == null || letter.end == null;
+                continue;
+            }
+            out.push({
+                ch: letter.char,
+                silent: letter.silent === true,
+                start: letter.start,
+                end: letter.end,
+                isNull: letter.start == null || letter.end == null,
+            });
+        }
+        return out;
     }
 
     /** Split a phone string into base character(s) and trailing IPA modifiers

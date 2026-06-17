@@ -76,4 +76,43 @@ describe('UnifiedDisplay — silent-letter rendering', () => {
         expect(cells[1]!.classList.contains('silent')).toBe(false); // lam
         expect(cells[2]!.classList.contains('silent')).toBe(false); // ح
     });
+
+    it('folds alef-maksura + dagger alef into one sounding cell', () => {
+        // علىٰ: the aligner splits the dagger (ٰ) into its own shard letter, but
+        // alef-maksura + dagger is one long-vowel unit → a single combined cell
+        // spanning both timings, never split.
+        const { container } = mount(
+            word([
+                { char: 'ع', start: 0, end: 0.1, silent: false },
+                { char: 'ل', start: 0.1, end: 0.2, silent: false },
+                { char: 'ى', start: 0.2, end: 0.3, silent: false },
+                { char: 'ٰ', start: 0.3, end: 0.5, silent: false },
+            ]),
+        );
+        const cells = container.querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts)');
+        expect(Array.from(cells).map((c) => c.textContent)).toEqual(['ع', 'ل', 'ىٰ']);
+        const merged = cells[2]!;
+        expect(merged.classList.contains('silent')).toBe(false);
+        // spans maksura.start .. dagger.end
+        expect(merged.dataset.letterStart).toBe('0.2');
+        expect(merged.dataset.letterEnd).toBe('0.5');
+    });
+
+    it('keeps a carrier waw + dagger as two cells with the waw silent', () => {
+        // صلوٰة: the waw is a silent seat; the dagger sounds. They stay separate
+        // cells (only alef-maksura folds), and the waw alone is greyed.
+        const { container } = mount(
+            word([
+                { char: 'ص', start: 0, end: 0.1, silent: false },
+                { char: 'ل', start: 0.1, end: 0.2, silent: false },
+                { char: 'و', start: 0.2, end: 0.3, silent: true },
+                { char: 'ٰ', start: 0.3, end: 0.5, silent: false },
+                { char: 'ة', start: 0.5, end: 0.6, silent: false },
+            ]),
+        );
+        const cells = container.querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts)');
+        expect(Array.from(cells).map((c) => c.textContent)).toEqual(['ص', 'ل', 'و', 'ٰ', 'ة']);
+        expect(cells[2]!.classList.contains('silent')).toBe(true); // carrier waw greyed
+        expect(cells[3]!.classList.contains('silent')).toBe(false); // dagger sounds
+    });
 });
