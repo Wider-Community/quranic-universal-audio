@@ -107,7 +107,9 @@ def _stamp_shard(pm, data: dict) -> Counter:
     return cov
 
 
-def process_reciter(fs, pm, bucket: str, slug: str, *, write: bool, backup_dir: str | None) -> tuple[Counter, str]:
+def process_reciter(
+    fs, pm, bucket: str, slug: str, *, write: bool, backup_dir: str | None
+) -> tuple[Counter, str]:
     shards = _shard_paths(fs, bucket, slug)
     if not shards:
         return Counter(), ""
@@ -188,7 +190,9 @@ def main() -> int:
 
         pm = Phonemizer()
         for slug in slugs:
-            cov, line = process_reciter(fs, pm, bucket, slug, write=args.write, backup_dir=args.backup_dir)
+            cov, line = process_reciter(
+                fs, pm, bucket, slug, write=args.write, backup_dir=args.backup_dir
+            )
             if line:
                 log(line)
             grand += cov
