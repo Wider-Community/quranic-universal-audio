@@ -57,15 +57,17 @@ function scrollOffset(container: HTMLElement): number {
     const m = el ? /translateX\((-?[\d.]+)px\)/.exec(el.style.transform) : null;
     return m ? -parseFloat(m[1]!) : 0;
 }
-/** Each cell's [left, right] px span (cumBefore … cumBefore+width), gap-aware —
- *  so a test can assert the offset sits within a given verse's region. */
-function cellSpans(container: HTMLElement, gapPx: number): Array<[number, number]> {
+/** Each cell's [left, right] px span (cumBefore … cumBefore+width), reading the
+ *  ACTUAL per-cell gap the component rendered (`margin-right`) — gaps are
+ *  silence-scaled, not a fixed constant — so a test can assert the offset sits
+ *  within a given verse's region. */
+function cellSpans(container: HTMLElement): Array<[number, number]> {
     const out: Array<[number, number]> = [];
     let cum = 0;
     for (const el of container.querySelectorAll<HTMLElement>('.cell')) {
         const w = parseFloat(el.style.width);
         out.push([cum, cum + w]);
-        cum += w + gapPx;
+        cum += w + (parseFloat(el.style.marginRight) || 0);
     }
     return out;
 }
@@ -108,7 +110,7 @@ describe('AyahFilmstrip loopback (recitation-driven)', () => {
     it('travels the active cell back to the looped verse, never stuck/frozen', async () => {
         const { container } = render(AyahFilmstrip, {
             units, model, durationMs: 8000, getTimeMs, playing: true,
-            config: { ...DEFAULT_RECITATION_CONFIG, filmstripMotion: 'hybrid' },
+            config: { ...DEFAULT_RECITATION_CONFIG, filmstripMotion: 'hybrid', filmstripPxPerSec: 50 },
             onSeek: () => {},
         });
         await tick();
@@ -127,13 +129,12 @@ describe('AyahFilmstrip loopback (recitation-driven)', () => {
     it('travels the strip scroll into the looped verse and tracks the re-recited word', async () => {
         const { container } = render(AyahFilmstrip, {
             units, model, durationMs: 8000, getTimeMs, playing: true,
-            config: { ...DEFAULT_RECITATION_CONFIG, filmstripMotion: 'hybrid' },
+            config: { ...DEFAULT_RECITATION_CONFIG, filmstripMotion: 'hybrid', filmstripPxPerSec: 50 },
             onSeek: () => {},
         });
         await tick();
 
-        const gap = DEFAULT_RECITATION_CONFIG.filmstripGapPx;
-        const spans = cellSpans(container, gap); // [left,right] px per cell
+        const spans = cellSpans(container); // [left,right] px per cell
         const [v2Left, v2Right] = spans[1]!; // verse 2 cell region
 
         // Forward play to verse 3, then loop back to verse 2 (occurrence at 6-8s).
@@ -161,5 +162,48 @@ describe('AyahFilmstrip loopback (recitation-driven)', () => {
         }
         // …advancing monotonically as the replayed word progresses (never frozen).
         expect(landed[landed.length - 1]!).toBeGreaterThan(landed[0]! + 20);
+    });
+});
+
+describe('AyahFilmstrip gap scale is global (chapter-independent)', () => {
+    const getTimeMs = (): number => 0;
+
+    /** The px gap rendered after the FIRST cell (its `margin-right`). */
+    function gapAfterFirstCell(container: HTMLElement): number {
+        const first = container.querySelector<HTMLElement>('.cell');
+        return first ? parseFloat(first.style.marginRight) || 0 : NaN;
+    }
+
+    it('renders a shared between-verse silence at the same px regardless of the longest verse', async () => {
+        // Two chapters identical except chapter B appends a 30s verse. The 2s
+        // silence between verse 1 and verse 2 must render to the SAME px gap in
+        // both — the scale is a global px-per-second, not normalized to the
+        // longest verse (the old `maxCellPx / maxDur` anchor would have shrunk B's
+        // gap because its longest verse jumped from 1s to 30s).
+        const short: AnimUnit[] = [
+            unit('2:1:1', [[0, 1]]),
+            unit('2:2:1', [[3, 4]]), // 2s silence after verse 1
+        ];
+        const withLongTail: AnimUnit[] = [...short, unit('2:3:1', [[10, 40]])]; // +30s verse
+        const cfg = { ...DEFAULT_RECITATION_CONFIG, filmstripMotion: 'hybrid' as const };
+
+        const a = render(AyahFilmstrip, {
+            units: short, model: buildFilmstripModel(short, 'duration'),
+            durationMs: 4000, getTimeMs, playing: false, config: cfg, onSeek: () => {},
+        });
+        await tick();
+        const gapA = gapAfterFirstCell(a.container);
+
+        const b = render(AyahFilmstrip, {
+            units: withLongTail, model: buildFilmstripModel(withLongTail, 'duration'),
+            durationMs: 40000, getTimeMs, playing: false, config: cfg, onSeek: () => {},
+        });
+        await tick();
+        const gapB = gapAfterFirstCell(b.container);
+
+        // A real, scaled silence (2s × 10px/s = 20px), not the near-zero floor…
+        expect(gapA).toBe(Math.round(2 * DEFAULT_RECITATION_CONFIG.filmstripPxPerSec));
+        // …and identical across chapters despite B's far longer verse.
+        expect(gapB).toBe(gapA);
     });
 });

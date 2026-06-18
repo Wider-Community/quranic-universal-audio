@@ -58,6 +58,64 @@ describe('buildFilmstripModel word fractions', () => {
     });
 });
 
+describe('buildFilmstripModel nextGapSec', () => {
+    it('measures between-verse silence from canonical end to the next start', () => {
+        const units = [
+            unit('1:1:1', [[0, 1]]),
+            unit('1:1:2', [[1, 2]]), // verse 1 canonical end = 2
+            unit('1:2:1', [[3, 4]]), // verse 2 starts at 3 → 1s pause
+            unit('1:3:1', [[4, 5]]), // verse 3 starts at 4 → contiguous (0)
+        ];
+        const cells = buildFilmstripModel(units, 'duration').cells;
+        expect(cells[0]!.nextGapSec).toBeCloseTo(1, 6);
+        expect(cells[1]!.nextGapSec).toBeCloseTo(0, 6);
+        expect(cells[2]!.nextGapSec).toBeCloseTo(0, 6); // last cell — no next
+    });
+
+    it('excludes within-verse gaps from the between-verse silence', () => {
+        const units = [
+            unit('1:1:1', [[0, 1]]),
+            unit('1:1:2', [[2, 3]]), // 1s WITHIN-verse gap (word1 end 1 → word2 start 2)
+            unit('1:2:1', [[4, 5]]), // verse 2 starts at 4 → real between-verse gap = 1
+        ];
+        const cells = buildFilmstripModel(units, 'duration').cells;
+        // canonEnd is the real recited end (3), not canonStart(0)+canonDur(2)=2.
+        expect(cells[0]!.canonEndSec).toBeCloseTo(3, 6);
+        // The internal 1s gap must NOT inflate the between-verse silence.
+        expect(cells[0]!.nextGapSec).toBeCloseTo(1, 6);
+    });
+
+    it('measures from the forward-flowing take, excluding a loopback detour', () => {
+        // Verse 1 is read (0-2), the reciter loops back and re-reads it (5-7),
+        // THEN moves on to verse 2 (7.5-8.5). A naive first-occurrence gap would be
+        // 7.5 - 2 = 5.5s of detour; the real pause before verse 2 is 0.5s.
+        const units = [
+            unit('1:1:1', [[0, 1], [5, 6]]),
+            unit('1:1:2', [[1, 2], [6, 7]]),
+            unit('1:2:1', [[7.5, 8.5]]),
+        ];
+        const cells = buildFilmstripModel(units, 'duration').cells;
+        expect(cells[0]!.canonEndSec).toBeCloseTo(7, 6); // forward take end, not 2
+        expect(cells[0]!.nextGapSec).toBeCloseTo(0.5, 6); // real silence, not 5.5
+    });
+
+    it('skips unrecited placeholders when measuring the gap to the next present verse', () => {
+        const units = [
+            unit('1:1:1', [[0, 2]]), // verse 1 end = 2
+            unit('1:3:1', [[5, 6]]), // verse 3 starts at 5 (verse 2 fully missing)
+        ];
+        const coverage = {
+            numVerses: 3,
+            status: new Map<number, 'words' | 'full'>([[2, 'full']]),
+            missingWords: new Map<number, number[]>(),
+        };
+        const cells = buildFilmstripModel(units, 'duration', coverage).cells;
+        // cells: [verse1, placeholder verse2, verse3]; gap skips the placeholder.
+        expect(cells[0]!.nextGapSec).toBeCloseTo(3, 6);
+        expect(cells[1]!.nextGapSec).toBe(0); // placeholder carries no silence
+    });
+});
+
 describe('buildFilmstripModel lookups', () => {
     it('maps every unit to its verse cell across two verses', () => {
         const units = [

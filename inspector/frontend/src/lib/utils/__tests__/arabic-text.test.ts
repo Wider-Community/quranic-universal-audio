@@ -31,6 +31,13 @@ describe('isCombiningMark', () => {
         expect(isCombiningMark(0x0670)).toBe(true);
     });
 
+    it('recognises the small waw / yeh that ride a base (U+06E5–U+06E6)', () => {
+        // Lm by Unicode category, but they stack on the preceding letter (e.g. the
+        // small-waw long-madd marker), so the teleprompter treats them as riding.
+        expect(isCombiningMark(0x06e5)).toBe(true);
+        expect(isCombiningMark(0x06e6)).toBe(true);
+    });
+
     it('rejects base Arabic letters', () => {
         // ب (bāʾ)
         expect(isCombiningMark(0x0628)).toBe(false);
@@ -76,17 +83,21 @@ describe('splitIntoCharGroups', () => {
         expect(groups[0]).toBe('بِ');
     });
 
-    it('U+0654 (hamza-above) starts a new group, not absorbed by previous base', () => {
-        // The splitter explicitly treats U+0654 as a new-group trigger.
+    it('U+0654 (hamza-above) rides its base as one cluster', () => {
+        // A combining mark cannot be a separate run without detaching, so it
+        // stays on its base — base + hamza = one group.
         const groups = splitIntoCharGroups('بٔ');
+        expect(groups).toHaveLength(1);
+    });
+
+    it('U+0670 (dagger alef) starts its own group — it times/renders independently', () => {
+        const groups = splitIntoCharGroups('بٰ');
         expect(groups).toHaveLength(2);
     });
 
-    it('U+0670 (dagger alef) starts a new group, not absorbed by previous base', () => {
-        // The splitter explicitly excludes the dagger alef from combining-
-        // mark absorption — two groups, not one.
-        const groups = splitIntoCharGroups('بٰ');
-        expect(groups).toHaveLength(2);
+    it('U+06E7 (mini-yaa) rides its base as one cluster', () => {
+        const groups = splitIntoCharGroups('بۧ');
+        expect(groups).toHaveLength(1);
     });
 
     it('U+2060 (word joiner) absorbs into the current group', () => {

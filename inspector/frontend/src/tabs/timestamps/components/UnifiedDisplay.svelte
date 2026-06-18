@@ -19,6 +19,8 @@
     import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { dashPort } from '../../../lib/playback/dash-port';
     import type { PhonemeInterval, TsWord } from '../../../lib/types/ts-client';
+    import { splitWaqf } from '../../../lib/utils/waqf';
+    import { waqfRenderStyle } from '../utils/waqf-render';
     import {
         showLetters,
         showPhonemes,
@@ -32,6 +34,11 @@
     import { loadedVerse } from '../stores/verse';
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
+
+    /** Rub-el-hizb (۞ U+06DE) and place-of-sajdah (۩ U+06E9) — section markers,
+     *  not recited; stripped from the analysis word box so the cell shows only the
+     *  recited text. */
+    const NON_RECITED_SIGNS = /[\u06de\u06e9]/g;
 
     // ---- Local structural state (derived declaratively from loadedVerse) ----
 
@@ -58,13 +65,28 @@
         phonemes: RenderedPhoneme[];
     }
 
+    /** A detected silence between this block and the previous one. Sits as a small
+     *  cell between the two words; carries the previous word's lifted-out waqf
+     *  (stop) mark, or null → the neutral pause icon. Lights while its silence
+     *  plays; dims the rest of the row to 70%. */
+    interface RenderedPauseBridge {
+        mark: string | null;
+        startSec: number;
+        endSec: number;
+    }
+
     interface RenderedBlock {
         word: TsWord;
         wordIndex: number;
+        /** Word text to render — the previous-word's waqf mark is stripped here
+         *  when a following pause surfaces it into the pause bridge. */
+        displayText: string;
         letters: RenderedLetter[];
         phonemes: RenderedPhoneme[];
-        /** Optional bridge to render before this block. */
+        /** Optional cross-word (idgham) bridge to render before this block. */
         bridge: RenderedBridge | null;
+        /** Optional pause bridge to render before this block. */
+        pauseBridge: RenderedPauseBridge | null;
     }
 
     // Container ref used for imperative highlight updates.
@@ -91,6 +113,10 @@
     $: rendered, _resetHighlightClasses();
     function _resetHighlightClasses(): void {
         if (!rootEl) return;
+        rootEl.classList.remove('in-pause');
+        rootEl.querySelectorAll<HTMLElement>('.pause-bridge').forEach((b) => {
+            b.classList.remove('active', 'hover-preview');
+        });
         rootEl.querySelectorAll<HTMLElement>('.mega-block').forEach((b) => {
             b.classList.remove('active', 'past', 'hover-preview');
         });
@@ -210,10 +236,28 @@
             blocks.push({
                 word,
                 wordIndex: wi,
+                displayText: (word.display_text || word.text).replace(NON_RECITED_SIGNS, ''),
                 letters: letterGroupsFor(word),
                 phonemes,
                 bridge,
+                pauseBridge: null,
             });
+        }
+
+        // Detected inter-word silences: a positive gap between consecutive words
+        // (their end/start are ms-quantized, so contiguous words share a boundary
+        // and only a real pause leaves a gap). Each gap gets a pause bridge before
+        // the later block; a surfaced waqf mark on the earlier word is lifted out
+        // of its box into the bridge.
+        for (let bi = 0; bi < blocks.length - 1; bi++) {
+            const a = blocks[bi]!;
+            const b = blocks[bi + 1]!;
+            const startSec = a.word.end;
+            const endSec = b.word.start;
+            if (endSec <= startSec) continue;
+            const { clean, mark } = splitWaqf(a.displayText);
+            if (mark) a.displayText = clean;
+            b.pauseBridge = { mark, startSec, endSec };
         }
         return blocks;
     }
@@ -361,6 +405,23 @@
                 lp?.kind === 'phoneme' && lp.childIndex === idx,
             );
         });
+
+        // Pause bridges: the bridge whose silence span contains the playhead lights
+        // (`.active`) and the rest of the row dims to 70% (`.in-pause` on the
+        // container). Waveform hover over a silence span previews its bridge.
+        let inPauseGap = false;
+        rootEl.querySelectorAll<HTMLElement>('.pause-bridge').forEach((b) => {
+            const s = parseFloat(b.dataset.pauseStart ?? 'NaN');
+            const e = parseFloat(b.dataset.pauseEnd ?? 'NaN');
+            const playing = time >= s && time < e;
+            if (playing) inPauseGap = true;
+            b.classList.toggle('active', playing);
+            b.classList.toggle(
+                'hover-preview',
+                hoverTime != null && hoverTime >= s && hoverTime < e,
+            );
+        });
+        rootEl.classList.toggle('in-pause', inPauseGap);
     }
 
     function getSegRelTime(segOffset: number): number {
@@ -622,6 +683,21 @@
                 {/each}
             </div>
         {/if}
+        {#if block.pauseBridge}
+            <div
+                class="pause-bridge"
+                data-pause-start={block.pauseBridge.startSec}
+                data-pause-end={block.pauseBridge.endSec}
+                title={block.pauseBridge.mark ? 'Stop sign' : 'Pause'}
+            >
+                {#if block.pauseBridge.mark}
+                    <span class="pause-waqf" style={waqfRenderStyle(block.pauseBridge.mark)}
+                    >{block.pauseBridge.mark}</span>
+                {:else}
+                    <span class="pause-icon" aria-hidden="true"></span>
+                {/if}
+            </div>
+        {/if}
         <div
             class="mega-block"
             data-word-index={block.wordIndex}
@@ -639,7 +715,7 @@
                 role="group"
                 on:mouseenter={() => onWordEnter(block.word)}
                 on:mouseleave={onHoverLeave}
-            >{block.word.display_text || block.word.text}</div>
+            >{block.displayText}</div>
             {#if block.letters.length}
                 <div class="mega-letters" class:hidden={!$showLetters} dir="rtl">
                     {#each block.letters as lt, li (li)}

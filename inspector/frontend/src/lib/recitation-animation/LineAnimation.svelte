@@ -13,7 +13,7 @@
      * driven by CSS custom properties projected from `RecitationAnimConfig`,
      * so the throwaway playground can tune it live.
      */
-    import { toArabicNumeral } from '../utils/arabic-text';
+    import { toArabicNumeral, ZWSP } from '../utils/arabic-text';
     import { ayahUnitRanges } from './chapter-words';
     import { cssVarText, type RecitationAnimConfig } from './config';
     import { buildAnimStructure, type AnimSourceWord } from './engine/build-structure';
@@ -197,9 +197,44 @@
         const h = hit !== undefined ? hit : findActiveAt(units, sortedIntervals, tt, globalActive);
         if (config.granularity === 'char') {
             sweepChar(tt, h);
-            return;
+        } else {
+            sweepWord(h);
         }
-        sweepWord(h);
+        sweepDecorators(h);
+    }
+
+    /** Drive each word's dynamic decorator marks. Only the waqf (stop) sign is
+     *  dynamic (`.ra-decorator--waqf`); rub-el-hizb and sajdah are static markers
+     *  handled purely in CSS.
+     *
+     *  Opacity follows the SAME reveal model as the text it rides. Word mode
+     *  reveals the whole word at once, so the mark just composites under the
+     *  word's opacity (handled in CSS, no class). Char mode reveals letter by
+     *  letter, and the mark rides the LAST letter — so `.revealed` lights the
+     *  sign once that last letter is REACHED (recitation has passed it), not
+     *  while it is still being recited, and not at the word's first letter.
+     *
+     *  `waqf-active` lights the sign while a pause holds on its word: a silence
+     *  gap (`hit == null`) after at least one word was lit. The sign never takes
+     *  the per-letter reveal highlight — only this pause light recolours it. */
+    function sweepDecorators(hit: ActiveHit | null): void {
+        if (!wordCache) return;
+        const inPause = hit === null && lastActive >= 0;
+        const charMode = config.granularity === 'char';
+        const items = wordCache.items;
+        for (let i = 0; i < items.length; i++) {
+            const wordEl = items[i]?.el;
+            const mark = wordEl?.querySelector('.ra-decorator--waqf');
+            if (!mark || !wordEl) continue;
+            if (charMode) {
+                const chars = wordEl.querySelectorAll('.ra-char');
+                const anchor = chars.length ? chars[chars.length - 1]! : wordEl;
+                // `reached` only — the sign reveals once recitation has PASSED its
+                // last letter, not while that letter is still being recited.
+                mark.classList.toggle('revealed', anchor.classList.contains('reached'));
+            }
+            mark.classList.toggle('waqf-active', inPause && i === lastActive);
+        }
     }
 
     /** Translate a global unit index to its page-local position, or -1 if the
@@ -292,17 +327,21 @@
                 if (wi === active && localT >= 0) {
                     isActive = localT >= ch.start && localT < ch.end;
                     isReached = !isActive && localT >= ch.end;
-                } else if (active >= 0 && sw && (ch.start !== sw.start || ch.end !== sw.end)) {
+                } else if (active >= 0 && localT >= 0 && sw && (ch.start !== sw.start || ch.end !== sw.end)) {
                     // Cross-word idgham/ghunnah: a real-timed letter in a
-                    // NON-active word that's co-timed with the active letter
-                    // must light together. The analysis tab does this because
-                    // it highlights each letter purely by time, not scoped to
-                    // the active word; mirror that here using raw playback time
-                    // against the letter's own interval. Fallback (word-timed)
-                    // chars are skipped so an overlapping word isn't flooded.
-                    if (t >= ch.start && t < ch.end) { isActive = true; isReached = false; }
-                    else if (t >= ch.end) isReached = true; // keep co-timed trail revealed
+                    // NON-active word, co-timed with the active letter, lights
+                    // with it. Compare against the SAME remapped `localT` the
+                    // active word uses — not raw `t`, which on a repeat/loopback
+                    // sits in a later occurrence and overshoots the canonical
+                    // interval, dropping the co-timed letter to `reached`.
+                    // Word-timed fallback chars are skipped so an overlapping
+                    // word isn't flooded.
+                    if (localT >= ch.start && localT < ch.end) { isActive = true; isReached = false; }
+                    else if (localT >= ch.end) isReached = true; // keep co-timed trail revealed
                 }
+                // Inert symbols (rub-el-hizb, sajdah) reveal in place but never
+                // take the highlight — show as reached where they'd otherwise light.
+                if (ch.inert && isActive) { isActive = false; isReached = true; }
                 if (isActive) wordHasActiveChar = true;
                 el.classList.toggle('active', isActive);
                 el.classList.toggle('reached', isReached);
@@ -385,15 +424,21 @@
             tabindex="-1"
             onclick={() => onSeekToWord?.((pageUnits[i]?.start ?? 0) * 1000)}
             onkeydown={() => {}}
-        >{#if config.granularity === 'char' && w.hasChars}<span
+        >{#each w.leading as d, di (di)}<span
+                    class="ra-decorator ra-decorator--{d.role}"
+                    aria-hidden="true"
+                >{ZWSP}{d.glyph}</span>{/each}{#if config.granularity === 'char' && w.hasChars}<span
                     class="ra-word-ink"
                     aria-hidden="true"
-                >{w.word.display_text || w.word.text}</span>{#each w.chars as ch, ci (ci)}<span
+                >{w.clean}</span>{#each w.chars as ch, ci (ci)}<span
                     class="ra-char"
                     data-start={ch.start}
                     data-end={ch.end}
                     data-group-id={ch.groupId}
-                >{ch.text}</span>{/each}{:else}{w.word.display_text || w.word.text}{/if}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
+                >{ch.text}</span>{/each}{:else}{w.clean}{/if}{#each w.trailing as d, di (di)}<span
+                    class="ra-decorator ra-decorator--{d.role}"
+                    aria-hidden="true"
+                >{ZWSP}{d.glyph}</span>{/each}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
     {/each}
 </div>
 
@@ -469,6 +514,7 @@
      *  stroked — a per-char outline shows dark seams across the joins. */
     .ra-line.ra-chars .ra-word {
         opacity: 1;
+        /* Containing block for the absolute `.ra-word-ink` underlay. */
         position: relative;
         /* Don't inherit the word outline down to each char span. */
         text-shadow: none;
@@ -524,6 +570,39 @@
         opacity: 1;
     }
 
+    /* Non-recited decorator marks (waqf stop signs, rub-el-hizb ۞, sajdah ۩) —
+     *  each a standalone glyph anchored to an invisible WORD JOINER (the same
+     *  trick `build-structure` uses for combining letters). They carry no letters,
+     *  so they never take the per-letter reveal highlight; rendered on a
+     *  zero-advance joiner each shapes into its own run with an independent
+     *  colour and adds NO width. */
+    .ra-line .ra-word .ra-decorator {
+        position: relative;
+        z-index: 2; /* above the char/ink layers so the mark always paints on top */
+        pointer-events: none;
+        color: var(--ra-base-color);
+        text-shadow: var(--ra-word-shadow);
+        transition:
+            opacity var(--ra-word-reveal) var(--ra-easing),
+            color var(--ra-active-emphasis) var(--ra-easing);
+    }
+    /* Waqf (stop) sign — opacity follows the same reveal model as the text it
+     *  rides. Word mode dims the whole `.ra-word`, so the child mark just
+     *  composites under it (no own opacity — an own one would double-dim) and
+     *  reveals with the word. Char mode keeps the word box opaque and dims the
+     *  letters, so the mark dims itself and reveals (via the sweep's `.revealed`)
+     *  only once recitation has passed its last letter. */
+    .ra-line.ra-chars .ra-word .ra-decorator--waqf {
+        opacity: var(--ra-unreached-opacity);
+    }
+    .ra-line.ra-chars .ra-word .ra-decorator--waqf:global(.revealed) {
+        opacity: 1;
+    }
+    /* Lit while a pause holds on this word — colour the run; only the mark shows. */
+    .ra-line .ra-word .ra-decorator--waqf:global(.waqf-active) {
+        color: var(--ra-highlight);
+    }
+
     /* One-frame transition kill across a granularity / layout re-page so words
      *  snap to their new-mode opacity instead of all fading together (the
      *  letter→word flash). */
@@ -536,7 +615,8 @@
 
     @media (prefers-reduced-motion: reduce) {
         .ra-word,
-        .ra-line.ra-chars .ra-char {
+        .ra-line.ra-chars .ra-char,
+        .ra-line .ra-word .ra-decorator {
             transition: none;
         }
     }

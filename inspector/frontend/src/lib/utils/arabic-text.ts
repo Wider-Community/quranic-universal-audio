@@ -24,7 +24,7 @@ export function isCombiningMark(cp: number): boolean {
     if (cp === 0x0670) return true;
     if (cp >= 0x06D6 && cp <= 0x06DC) return true;
     if (cp >= 0x06DF && cp <= 0x06E4) return true;
-    if (cp >= 0x06E7 && cp <= 0x06E8) return true;
+    if (cp >= 0x06E5 && cp <= 0x06E8) return true; // small waw/yeh + small high yeh/noon
     if (cp >= 0x06EA && cp <= 0x06ED) return true;
     if (cp >= 0x08D3 && cp <= 0x08FF) return true;
     if (cp >= 0xFE20 && cp <= 0xFE2F) return true;
@@ -55,8 +55,12 @@ export function charsMatch(mfaChar: string, displayChar: string): boolean {
 }
 
 /**
- * Split text into character groups (base char + combining marks).
- * Port of quranic_universal_aligner/src/ui/segments.py:split_into_char_groups()
+ * Split text into grapheme clusters — one group per base letter, carrying its
+ * combining marks. A mark positioned on a specific seat (tashkeel, small hamza,
+ * mini-yaa, …) rides its base: pulling it into its own run detaches it from its
+ * letter. The dagger alef (U+0670) is the exception — it renders cleanly as its
+ * own joiner-anchored superscript and carries its own MFA timing, so it starts a
+ * new group. Tatweel and the word joiner absorb into the current group.
  */
 export function splitIntoCharGroups(text: string): string[] {
     const groups: string[] = [];
@@ -64,12 +68,11 @@ export function splitIntoCharGroups(text: string): string[] {
     for (const ch of text) {
         const cp = ch.codePointAt(0);
         if (cp === undefined) continue;
-        if (cp === 0x0640 || cp === 0x2060) {
-            current += ch;
-        } else if (cp === 0x0654 || cp === 0x0655) {
+        if (cp === 0x0670) {
+            // Dagger alef — its own cell (renders + times independently).
             if (current) groups.push(current);
             current = ch;
-        } else if (isCombiningMark(cp) && cp !== 0x0670) {
+        } else if (cp === 0x0640 || cp === 0x2060 || isCombiningMark(cp)) {
             current += ch;
         } else {
             if (current) groups.push(current);

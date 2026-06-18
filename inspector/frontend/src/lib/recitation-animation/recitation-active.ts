@@ -92,3 +92,22 @@ export function findActiveAt(
     if (t < iv.end) return { unitIdx: iv.unitIdx, ivStart: iv.start, ivEnd: iv.end };
     return null;
 }
+
+/**
+ * The first occurrence interval that STARTS strictly after `t` — i.e. the next
+ * unit to be recited once the current silence ends. Used to resolve which verse
+ * a between-verse pause is heading toward (so the filmstrip can scroll across
+ * the gap instead of freezing). Returns `null` past the last interval.
+ */
+export function nextIntervalAfter(sorted: SortedInterval[], t: number): SortedInterval | null {
+    if (sorted.length === 0 || t >= sorted[sorted.length - 1]!.start) return null;
+    let lo = 0;
+    let hi = sorted.length - 1;
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (sorted[mid]!.start > t) hi = mid;
+        else lo = mid + 1;
+    }
+    const iv = sorted[lo]!;
+    return iv.start > t ? iv : null;
+}
