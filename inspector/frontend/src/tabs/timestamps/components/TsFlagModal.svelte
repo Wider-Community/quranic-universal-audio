@@ -117,7 +117,7 @@
 <Modal {open} size="narrow" title={`Report — verse ${verseKey}`} on:close={onclose}>
     <div class="ts-flag-modal">
         <p class="lead">
-            Flag a timestamps issue on this verse. Your note helps reviewers fix the alignment.
+            Flag a timestamps issue on this verse.
         </p>
 
         {#if loading}
@@ -144,8 +144,6 @@
                     </li>
                 {/each}
             </ul>
-        {:else}
-            <p class="muted">No reports yet — be the first to flag this verse.</p>
         {/if}
 
         <label class="field">
