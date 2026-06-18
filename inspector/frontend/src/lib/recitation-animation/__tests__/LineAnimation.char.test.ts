@@ -106,13 +106,15 @@ describe('LineAnimation char mode', () => {
         expect(chars[1]?.classList.contains('active')).toBe(true);
 
         // The mark is one standalone glyph (`WORD JOINER + mark`, no letters),
-        // never a `.ra-char` and never given the reveal highlight; it reveals
-        // with its last letter.
+        // never a `.ra-char` and never given the reveal highlight. Its opacity
+        // agrees with its word via CSS off the word's class (no own reveal), and
+        // it lights only on a pause (`waqf-active`), which isn't active here.
         const marks = container.querySelectorAll<HTMLElement>('.ra-waqf-mark');
         expect(marks.length).toBe(1);
         expect(marks[0]?.textContent).toBe(ZWSP + WAQF);
         expect(marks[0]?.classList.contains('active')).toBe(false);
-        expect(marks[0]?.classList.contains('revealed')).toBe(true);
         expect(marks[0]?.classList.contains('waqf-active')).toBe(false);
+        // Its word is the active one, so the CSS reveal applies to the mark.
+        expect(marks[0]?.closest('.ra-word')?.classList.contains('active')).toBe(true);
     });
 });
