@@ -76,6 +76,26 @@ describe('buildAnimStructure letter timing', () => {
         expect(w!.chars.filter((c) => c.text === 'ۧ')).toEqual([]); // no standalone cell
     });
 
+    // The dagger alef renders cleanly on its own joiner-anchored cell and carries
+    // its own MFA timing, so it stays a separate cell (NOT folded into its base).
+    it('keeps the dagger alef as its own joiner-anchored cell with its own timing', () => {
+        const letters = [
+            { char: 'ب', start: 0, end: 1 },
+            { char: 'ٰ', start: 1, end: 2 }, // dagger alef, its own MFA letter
+        ];
+        const display = 'بٰ';
+        const [w] = buildAnimStructure([
+            { text: display, display_text: display, start: 0, end: 2, letters },
+        ]);
+        const dagger = w!.chars.find((c) => c.text.includes('ٰ'));
+        expect(dagger).toBeDefined();
+        expect(dagger!.text.startsWith('\u2060')).toBe(true); // anchored on the word joiner
+        expect(dagger!.start).toBe(1);
+        expect(dagger!.end).toBe(2);
+        // The base is a separate cell, not extended to cover the dagger.
+        expect(w!.chars.find((c) => c.text === 'ب')!.end).toBe(1);
+    });
+
     // Regression: an inert symbol cell (no MFA letter) must NOT keep whole-word
     // timing (which would light it for the whole word). It inherits a neighbour's
     // interval instead.

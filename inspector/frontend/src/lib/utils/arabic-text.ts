@@ -55,12 +55,12 @@ export function charsMatch(mfaChar: string, displayChar: string): boolean {
 }
 
 /**
- * Split text into grapheme clusters — one group per base letter, carrying ALL of
- * its combining marks. Every combining mark (tashkeel, small hamza, mini-yaa,
- * dagger alef, …) rides its base so the group stays a single shaped cluster:
- * pulling a mark into its own run detaches it from its letter (it floats out of
- * position). Tatweel and the word joiner absorb into the current group; only a
- * base (non-combining) character starts a new group.
+ * Split text into grapheme clusters — one group per base letter, carrying its
+ * combining marks. A mark positioned on a specific seat (tashkeel, small hamza,
+ * mini-yaa, …) rides its base: pulling it into its own run detaches it from its
+ * letter. The dagger alef (U+0670) is the exception — it renders cleanly as its
+ * own joiner-anchored superscript and carries its own MFA timing, so it starts a
+ * new group. Tatweel and the word joiner absorb into the current group.
  */
 export function splitIntoCharGroups(text: string): string[] {
     const groups: string[] = [];
@@ -68,7 +68,11 @@ export function splitIntoCharGroups(text: string): string[] {
     for (const ch of text) {
         const cp = ch.codePointAt(0);
         if (cp === undefined) continue;
-        if (cp === 0x0640 || cp === 0x2060 || isCombiningMark(cp)) {
+        if (cp === 0x0670) {
+            // Dagger alef — its own cell (renders + times independently).
+            if (current) groups.push(current);
+            current = ch;
+        } else if (cp === 0x0640 || cp === 0x2060 || isCombiningMark(cp)) {
             current += ch;
         } else {
             if (current) groups.push(current);

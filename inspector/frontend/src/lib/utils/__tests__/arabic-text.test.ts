@@ -83,9 +83,9 @@ describe('splitIntoCharGroups', () => {
         expect(groups).toHaveLength(1);
     });
 
-    it('U+0670 (dagger alef) rides its base as one cluster', () => {
+    it('U+0670 (dagger alef) starts its own group — it times/renders independently', () => {
         const groups = splitIntoCharGroups('بٰ');
-        expect(groups).toHaveLength(1);
+        expect(groups).toHaveLength(2);
     });
 
     it('U+06E7 (mini-yaa) rides its base as one cluster', () => {

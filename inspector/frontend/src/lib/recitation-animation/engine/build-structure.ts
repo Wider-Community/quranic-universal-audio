@@ -8,7 +8,7 @@
  * are applied imperatively via `engine/highlight.ts`.
  */
 
-import { charsMatch, isCombiningMark, splitIntoCharGroups } from '../../utils/arabic-text';
+import { charsMatch, isCombiningMark, splitIntoCharGroups, ZWSP } from '../../utils/arabic-text';
 import { type Decorator, splitDecorators } from '../decorators';
 
 /** Non-recited symbols rendered in place but never highlighted (no MFA letter):
@@ -73,8 +73,10 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
         // letter.
         const chars: AnimChar[] = charGroups.map((group) => {
             const base = group.codePointAt(0);
+            // The dagger alef is its own cell — anchor it on an invisible word
+            // joiner so the lone superscript shapes into its own run.
             return {
-                text: group,
+                text: base === 0x0670 ? ZWSP + group : group,
                 start: word.start,
                 end: word.end,
                 groupId: `g${groupIdCounter++}`,
@@ -102,7 +104,8 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
             while (mfaIdx < letters.length) {
                 const nxt = letters[mfaIdx];
                 const cp = nxt?.char ? nxt.char.codePointAt(0) : undefined;
-                if (cp === undefined || !isCombiningMark(cp)) break;
+                // Stop at the dagger alef — it has its own cell to match it.
+                if (cp === undefined || !isCombiningMark(cp) || cp === 0x0670) break;
                 if (nxt!.end != null) endSec = nxt!.end;
                 mfaIdx++;
             }
