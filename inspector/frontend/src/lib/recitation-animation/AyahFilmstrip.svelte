@@ -87,6 +87,10 @@
     /** An audio-time jump beyond this in one frame ⇒ a seek (glide), not the
      *  normal forward creep of playback. */
     const SEEK_JUMP_MS = 400;
+    /** A loopback landing within this verse-fraction of the verse start is a
+     *  "to-start" re-take: its offset is pinned to the start, so the re-tread runs
+     *  at one constant velocity rather than the ruler velocity. */
+    const RETREAD_START_FRAC_EPS = 0.02;
     /** Width (px) of an unrecited (placeholder) verse cell. It has no recited
      *  duration to scale from, and playback skips it, so it gets a fixed visible
      *  width purely to stay legible as a skipped slot. */
@@ -106,6 +110,7 @@
     let lastActiveUnit = -1; // O(1) fast-path hint for findActiveAt
     let lastTimeMs = -1; // previous frame's audio time, for seek detection
     let fillGlideTimer: ReturnType<typeof setTimeout> | null = null;
+    let retread: Retread | null = null; // active loopback constant-velocity re-tread
 
     const reducedMotion = typeof matchMedia === 'function'
         && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -348,6 +353,48 @@
         scroll.snap(lerp(from, to, p));
     }
 
+    /** A loopback re-tread plan: the cursor crosses from `start` to `fromOff` (the
+     *  offset we looped FROM) at ONE constant velocity over the replay window
+     *  [loopSec, rejoinSec], instead of tracking each replayed word — whose pace
+     *  differs from the first take, which varies the speed. A mid-verse landing
+     *  shifts `start` so the velocity equals the ruler `pxPerSec` (both takes
+     *  match); a verse-start landing pins `start` and accepts one constant velocity
+     *  that steps to the ruler speed at the rejoin. */
+    interface Retread {
+        start: number;
+        fromOff: number;
+        loopSec: number;
+        rejoinSec: number;
+    }
+
+    /** Plan a constant-velocity re-tread for a loopback, or null when it can't be
+     *  resolved (the replay never re-reaches the looped-from word) so the plain
+     *  catch-up handles it. `prev*` is the position looped FROM; `r` the landing. */
+    function planRetread(
+        prevUnitIdx: number, prevIdx: number, prevFrac: number, r: Reci, loopSec: number,
+    ): Retread | null {
+        const ivs = units[prevUnitIdx]?.intervals;
+        if (!ivs) return null;
+        const reIv = ivs.find((iv) => iv.start >= loopSec - 1e-6); // the replay re-reaches it
+        if (!reIv) return null;
+        const dt = reIv.end - loopSec;
+        if (dt <= 0) return null;
+        const fromOff = offsetForReci({ unitIdx: prevUnitIdx, idx: prevIdx, frac: prevFrac });
+        const start = r.frac < RETREAD_START_FRAC_EPS
+            ? offsetForReci(r) //                                  pinned to the verse start
+            : Math.max(0, fromOff - config.filmstripPxPerSec * dt); // shifted to hold V
+        if (fromOff - start < 1) return null;
+        return { start, fromOff, loopSec, rejoinSec: reIv.end };
+    }
+
+    /** The re-tread ramp position at `tSec` — time-linear (constant velocity) from
+     *  `start` to the looped-from offset over the replay window. */
+    function retreadAt(rt: Retread, tSec: number): number {
+        const span = rt.rejoinSec - rt.loopSec;
+        const p = span > 0 ? clamp(0, 1, (tSec - rt.loopSec) / span) : 1;
+        return lerp(rt.start, rt.fromOff, p);
+    }
+
     /** One rAF step of recitation-driven playback. */
     function drivePlayback(): void {
         const nowMs = getTimeMs();
@@ -365,6 +412,7 @@
             // reciter's mid-verse pause doesn't grey or move the cursor.
             silent = true;
             crossingGap = false;
+            retread = null;
             if (config.filmstripMotion !== 'snap' && frozenIdx >= 0) {
                 const nextIv = nextIntervalAfter(sorted, tSec);
                 const nextIdx = nextIv ? (model.cellOfUnit[nextIv.unitIdx] ?? -1) : -1;
@@ -377,8 +425,14 @@
         }
         const prevIdx = activeIdx;
         const prevFrac = cellFrac;
+        const prevUnitIdx = lastActiveUnit;
         lastActiveUnit = r.unitIdx;
         const discont = seeked || isJump(prevIdx, r.idx, prevFrac, r.frac);
+        // A backward recitation jump with no audio-time seek = a natural loopback
+        // (the reciter re-reciting), the one case the constant-velocity re-tread
+        // applies to (a forward verse-skip or a user seek does not).
+        const loopedBack = !seeked && prevIdx >= 0
+            && (r.idx < prevIdx || (r.idx === prevIdx && r.frac < prevFrac - JUMP_FRAC_EPS));
         silent = false;
         crossingGap = false;
         activeIdx = r.idx;
@@ -397,11 +451,31 @@
             return;
         }
 
-        // Hybrid/tuner continuously center the LIVE recited position. `scroll.follow`
-        // tracks it instantly in forward play, and on a loopback/seek arms a
-        // velocity-continuous catch-up that chases the moving target (never a stale
-        // snapshot), so scroll, fill and audio stay locked together. A discontinuity
-        // also eases the fill once.
+        // Hybrid/tuner continuously center the LIVE recited position. Forward play
+        // tracks it instantly; a natural loopback re-treads the repeated words at
+        // ONE constant velocity (a time-linear ramp to the looped-from offset) so
+        // the replay doesn't speed up/slow down with the reciter's second-take pace.
+        // The eased `follow` catch-up does the quick hop back onto the ramp; at the
+        // rejoin (live word caught up, or the window elapsed) instant tracking
+        // resumes. A discontinuity also eases the fill once.
+        if (loopedBack) {
+            const plan = planRetread(prevUnitIdx, prevIdx, prevFrac, r, tSec);
+            if (plan) {
+                retread = plan;
+                armFillGlide(GLIDE_MIN_MS);
+                scroll.follow(retreadAt(plan, tSec), true); // eased hop onto the ramp
+                return;
+            }
+            retread = null; // no clean rejoin → plain catch-up below
+        } else if (retread && !seeked
+            && tSec < retread.rejoinSec && offsetForReci(r) < retread.fromOff - 1) {
+            disarmFillGlide();
+            scroll.follow(retreadAt(retread, tSec), false); // ride the ramp at constant V
+            return;
+        } else {
+            retread = null; // rejoined, seeked, or plain forward play
+        }
+
         if (discont) armFillGlide(GLIDE_MIN_MS);
         else disarmFillGlide();
         scroll.follow(target, discont);
@@ -437,6 +511,7 @@
         cellFrac = 0;
         silent = false;
         crossingGap = false;
+        retread = null;
         frozenIdx = -1;
         lastActiveUnit = -1;
         lastTimeMs = -1;
