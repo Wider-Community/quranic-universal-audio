@@ -112,10 +112,11 @@ def test_apply_qalqala_marker_in_excluded_count_space():
     assert [p[0] for p in words[1][4]] == ["i", "ŋ", "Q"]  # kasra re-attributed, Q kept
 
 
-def test_tag_segment_words_skips_non_contiguous():
-    # Repeat / out-of-order word indices can't be range-phonemized → no tag.
+def test_tag_segment_words_skips_non_contiguous(pm):
+    # Repeat / out-of-order word indices can't be range-phonemized → no bridge tag
+    # (silent-stamping still no-ops here: these words carry no letters).
     words = [_word(3, ["m̃"]), _word(1, ["a"])]
-    assert tag_segment_words(object(), "2:5", words) == 0
+    assert tag_segment_words(pm, "2:5", words) == 0
 
 
 # --- phonemizer-backed detection -------------------------------------------
@@ -155,3 +156,80 @@ def test_detect_shafawi_on_prev_tail(pm):
     flat = _flat(pm, "2:10")
     for idx, _rule in bridges:
         assert _looks_like_merger(flat[idx])
+
+
+_SPLIT_EXT = {"ٰ", "ۥ", "ۦ"}
+
+
+def _shard_word(widx, word_mapping):
+    """A minimal shard word with contiguous word timing (no internal gap → one
+    run) whose letters use the shard's written-grapheme tokenization: split the
+    standalone extensions (dagger/mini), merge every other combining mark (the
+    maddah) onto the grapheme it follows — so a madd-silah is one ``ۦٓ`` token."""
+    ws, we = (widx - 1) * 100, widx * 100
+    letters: list = []
+    for lm in word_mapping.letter_mappings:
+        tokens: list = []
+        for ch in lm.char + "".join(e.char for e in lm.extensions if e.char):
+            if not tokens or ch in _SPLIT_EXT:
+                tokens.append(ch)
+            else:
+                tokens[-1] += ch
+        letters.extend([tok, ws, we] for tok in tokens)
+    return [widx, ws, we, letters, [["x", ws, we]]]
+
+
+def test_tag_stamps_silent_flags_matching_phonemizer(pm):
+    # بِسْمِ ٱللَّهِ continuing: the hamza wasl + first lam of ٱللَّهِ are silent.
+    res = pm.phonemize(ref="1:1:1-1:1:2")
+    words = [_shard_word(i + 1, w) for i, w in enumerate(res.get_mapping().words)]
+
+    tag_segment_words(pm, "1:1", words)
+
+    stamped = [(lt[0], lt[3]) for wd in words for lt in wd[3]]
+    assert all(len(lt) == 4 for wd in words for lt in wd[3])
+    # char carries any silence mark folded on; silent matches the phonemizer.
+    assert stamped == [(c + m, s) for c, s, m in res.silent_flags()]
+    assert ("ٱ", True) in stamped  # hamza wasl silent when continuing
+    assert ("ب", False) in stamped  # sounding consonant kept
+
+
+def test_tag_folds_silence_mark_onto_char(pm):
+    # 6:99 ٱنظُرُوٓا۟ : the otiose jama'a alef is silent AND its char carries the
+    # SILENT_ALWAYS mark folded on (which get_full_char alone drops).
+    res = pm.phonemize(ref="6:99")
+    words = [_shard_word(i + 1, w) for i, w in enumerate(res.get_mapping().words)]
+    tag_segment_words(pm, "6:99", words)
+    stamped = [(lt[0], lt[3]) for wd in words for lt in wd[3]]
+    assert ("ا۟", True) in stamped  # alef + ۟ (U+06DF), silent
+
+
+def test_tag_silah_silent_only_when_word_stops(pm):
+    # فَضْلِهِۦ : the silah drops at a stop (gap-terminated run) and sounds when the
+    # run continues to a following word.
+    res = pm.phonemize(ref="2:90:15")
+    stop = [_shard_word(15, res.get_mapping().words[0])]
+    tag_segment_words(pm, "2:90", stop)
+    assert ("ۦ", True) in [(lt[0], lt[3]) for lt in stop[0][3]]
+
+    res2 = pm.phonemize(ref="2:90:15-2:90:17")
+    cont = [_shard_word(15 + i, w) for i, w in enumerate(res2.get_mapping().words)]
+    tag_segment_words(pm, "2:90", cont)
+    assert ("ۦ", False) in [(lt[0], lt[3]) for lt in cont[0][3]]
+
+
+def test_tag_stamps_silah_maddah_word(pm):
+    # 2:90 بِهِۦٓ — the madd-silah ۦٓ is one grapheme; the segment must stamp (not
+    # NO-SLOT) — guards the maddah-after-split tokenization match.
+    res = pm.phonemize(ref="2:90:1-2:90:3")
+    words = [_shard_word(i + 1, w) for i, w in enumerate(res.get_mapping().words)]
+    tag_segment_words(pm, "2:90", words)
+    assert all(len(lt) == 4 for wd in words for lt in wd[3])  # every letter stamped
+    assert "ۦٓ" in [lt[0] for wd in words for lt in wd[3]]  # silah+maddah one token
+
+
+def test_stamp_silent_flags_noop_on_char_mismatch(pm):
+    # Letters that don't match the canonical text must be left untouched.
+    word = [1, 0, 10, [["z", 0, 10], ["q", 0, 10]], [["x", 0, 10]]]
+    tag_segment_words(pm, "1:1", [word])
+    assert word[3] == [["z", 0, 10], ["q", 0, 10]]  # unchanged, no 4th slot

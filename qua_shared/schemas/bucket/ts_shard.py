@@ -21,7 +21,8 @@ Each ``word`` is the 5-slot tuple::
 
     [word_idx, start_ms, end_ms, letters[], phones[]]
 
-where ``letters`` is ``[char, start_ms|null, end_ms|null]`` triples and
+where ``letters`` is ``[char, start_ms|null, end_ms|null(, silent)]`` rows (the
+4th ``silent`` bool lands from schema v4 — phonemizer ``silent_flags()``) and
 ``phones`` is ``[phone, start_ms, end_ms, ...optional flags]`` rows (slot 5
 may carry a cross-word tajweed bridge rule — see ``timestamps_bridges``).
 
@@ -39,8 +40,12 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 from .._extras import strip_and_warn
 
 # Letter timing triple: [char, start_ms, end_ms]; timings may be null when the
-# aligner couldn't place an individual letter.
-LetterTiming = tuple[str, int | None, int | None]
+# aligner couldn't place an individual letter. A 4th slot ``silent`` (bool) is
+# present from schema v4 — true when the grapheme produces no audible phoneme at
+# its own position (hamza wasl, lam shamsiyah, the otiose tanween alef, …), so
+# the highlight skips it once each letter is its own cell. Sourced from the
+# phonemizer's ``silent_flags()``; absent on legacy v3 shards.
+LetterTiming = tuple[str, int | None, int | None] | tuple[str, int | None, int | None, bool]
 
 # Phone row: [phone, start_ms, end_ms, ...optional flags]. Heterogeneous and
 # variable-length (slot 5 = cross-word bridge rule when present), so it stays a

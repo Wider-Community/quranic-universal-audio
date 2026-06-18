@@ -36,7 +36,13 @@
     // ---- Local structural state (derived declaratively from loadedVerse) ----
 
     interface RenderedLetter {
-        chars: string;
+        /** One grapheme = one cell (letters are never grouped, even when they
+         *  share timing) — the sole exception is alef-maksura + dagger alef (ىٰ),
+         *  one long-vowel unit folded into a single cell. A `silent` grapheme is
+         *  greyed, non-interactive, and never highlighted — the highlight/hover/
+         *  click land on the pronounced letter that shares its timing. */
+        ch: string;
+        silent: boolean;
         start: number | null;
         end: number | null;
         isNull: boolean;
@@ -111,30 +117,37 @@
 
     // ---- Pure helpers (state-free) ----
 
+    // Alef-maksura (ى U+0649) + dagger alef (ٰ U+0670) is one long-vowel unit
+    // (علىٰ, موسىٰ, إلىٰ). The aligner splits the dagger into its own shard letter,
+    // but the two render as a single cell. Folding by char is safe — an alef-
+    // maksura never carries an independent dagger. Every other grapheme stays its
+    // own cell: a carrier waw keeps its (silent) waw + dagger split, a consonant's
+    // dagger stays independent.
+    const ALEF_MAKSURA = 'ى';
+    const DAGGER_ALEF = 'ٰ';
+
     function letterGroupsFor(word: TsWord): RenderedLetter[] {
-        const letters = word.letters || [];
-        const groups: RenderedLetter[] = [];
-        for (const letter of letters) {
-            const isNull = letter.start == null || letter.end == null;
-            const last = groups[groups.length - 1];
-            if (
-                !isNull &&
-                last &&
-                !last.isNull &&
-                last.start === letter.start &&
-                last.end === letter.end
-            ) {
-                last.chars += letter.char;
-            } else {
-                groups.push({
-                    chars: letter.char,
-                    start: letter.start,
-                    end: letter.end,
-                    isNull,
-                });
+        const out: RenderedLetter[] = [];
+        for (const letter of word.letters || []) {
+            const prev = out[out.length - 1];
+            if (prev && letter.char.startsWith(DAGGER_ALEF) && prev.ch.endsWith(ALEF_MAKSURA)) {
+                // Fold the dagger onto the maksura cell: one combined unit spanning
+                // both timings, sounding unless both graphemes are silent.
+                prev.ch += letter.char;
+                if (letter.end != null) prev.end = letter.end;
+                prev.silent = prev.silent && letter.silent === true;
+                prev.isNull = prev.isNull || letter.start == null || letter.end == null;
+                continue;
             }
+            out.push({
+                ch: letter.char,
+                silent: letter.silent === true,
+                start: letter.start,
+                end: letter.end,
+                isNull: letter.start == null || letter.end == null,
+            });
         }
-        return groups;
+        return out;
     }
 
     /** Split a phone string into base character(s) and trailing IPA modifiers
@@ -308,9 +321,11 @@
             ph.classList.toggle('hover-preview', parseInt(ph.dataset.index ?? '-1') === hoverPhonemeIndex);
         });
 
-        // Letter highlights — must check each frame (time-based within word)
+        // Letter highlights — must check each frame (time-based within word).
+        // Silent cells are excluded: at a shared [start,end] the highlight lands
+        // on the pronounced letter alone.
         rootEl
-            .querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts)')
+            .querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts):not(.silent)')
             .forEach((el) => {
                 const s = parseFloat(el.dataset.letterStart ?? '0');
                 const e = parseFloat(el.dataset.letterEnd ?? '0');
@@ -631,14 +646,16 @@
                         {#if lt.isNull}
                             <span
                                 class="mega-letter null-ts"
+                                class:silent={lt.silent}
                                 on:click|stopPropagation
                                 on:keydown={() => {}}
                                 role="button"
                                 tabindex="-1"
-                            >{lt.chars}</span>
+                            >{lt.ch}</span>
                         {:else}
                             <span
                                 class="mega-letter"
+                                class:silent={lt.silent}
                                 data-letter-start={lt.start}
                                 data-letter-end={lt.end}
                                 data-word-index={block.wordIndex}
@@ -652,7 +669,7 @@
                                 on:keydown={() => {}}
                                 role="button"
                                 tabindex="-1"
-                            >{lt.chars}</span>
+                            >{lt.ch}</span>
                         {/if}
                     {/each}
                 </div>
