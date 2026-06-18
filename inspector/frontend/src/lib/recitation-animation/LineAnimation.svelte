@@ -327,16 +327,17 @@
                 if (wi === active && localT >= 0) {
                     isActive = localT >= ch.start && localT < ch.end;
                     isReached = !isActive && localT >= ch.end;
-                } else if (active >= 0 && sw && (ch.start !== sw.start || ch.end !== sw.end)) {
+                } else if (active >= 0 && localT >= 0 && sw && (ch.start !== sw.start || ch.end !== sw.end)) {
                     // Cross-word idgham/ghunnah: a real-timed letter in a
-                    // NON-active word that's co-timed with the active letter
-                    // must light together. The analysis tab does this because
-                    // it highlights each letter purely by time, not scoped to
-                    // the active word; mirror that here using raw playback time
-                    // against the letter's own interval. Fallback (word-timed)
-                    // chars are skipped so an overlapping word isn't flooded.
-                    if (t >= ch.start && t < ch.end) { isActive = true; isReached = false; }
-                    else if (t >= ch.end) isReached = true; // keep co-timed trail revealed
+                    // NON-active word, co-timed with the active letter, lights
+                    // with it. Compare against the SAME remapped `localT` the
+                    // active word uses — not raw `t`, which on a repeat/loopback
+                    // sits in a later occurrence and overshoots the canonical
+                    // interval, dropping the co-timed letter to `reached`.
+                    // Word-timed fallback chars are skipped so an overlapping
+                    // word isn't flooded.
+                    if (localT >= ch.start && localT < ch.end) { isActive = true; isReached = false; }
+                    else if (localT >= ch.end) isReached = true; // keep co-timed trail revealed
                 }
                 if (isActive) wordHasActiveChar = true;
                 el.classList.toggle('active', isActive);

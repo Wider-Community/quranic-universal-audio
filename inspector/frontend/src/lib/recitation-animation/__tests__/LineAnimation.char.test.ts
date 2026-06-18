@@ -77,6 +77,55 @@ describe('LineAnimation char mode', () => {
         expect(words[1]?.classList.contains('active')).toBe(true);
     });
 
+    // Regression: cross-word co-timed letters must re-light on a loopback. The
+    // active word remaps the repeat occurrence onto its canonical timeline; the
+    // co-timed letter in the PREVIOUS word must follow the same remapped time,
+    // not raw playback time (which overshoots the canonical interval on a repeat
+    // and drops the letter to `reached`).
+    it('re-lights cross-word co-timed letters on a loopback repeat', async () => {
+        const wordA = unit('1:1:1', 'ab', 0, 2, [
+            { char: 'a', start: 0, end: 1 },
+            { char: 'b', start: 1, end: 2 }, // co-timed with word B's 'c'
+        ]);
+        const wordB: AnimUnit = {
+            location: '1:1:2',
+            ayahKey: '1:1',
+            surah: 1,
+            ayah: 1,
+            word: 2,
+            text: 'cd',
+            start: 1,
+            end: 7,
+            // Canonical occurrence [1,3] plus a repeat at [5,7]; the letters stay
+            // anchored to the canonical span.
+            intervals: [
+                { start: 1, end: 3 },
+                { start: 5, end: 7 },
+            ],
+            letters: [
+                { char: 'c', start: 1, end: 2 },
+                { char: 'd', start: 2, end: 3 },
+            ],
+        };
+
+        const { container } = render(LineAnimation, {
+            units: [wordA, wordB],
+            config: charConfig,
+            getTimeMs: () => 5500, // inside B's repeat [5,7] → localT remaps to 1.5s
+            playing: false,
+        });
+        await tick();
+
+        const chars = container.querySelectorAll<HTMLElement>('.ra-char');
+        expect(chars[1]?.textContent).toBe('b');
+        expect(chars[2]?.textContent).toBe('c');
+        // 'c' is the active word's letter at the remapped time; 'b' is its
+        // cross-word co-timed neighbour in the previous word — both light on the
+        // repeat, exactly as they do on the first pass.
+        expect(chars[2]?.classList.contains('active')).toBe(true);
+        expect(chars[1]?.classList.contains('active')).toBe(true);
+    });
+
     const WAQF = 'ۖ'; // ARABIC SMALL HIGH SAD-LAM-ALEF-MEEM (a surfaced stop)
     // A 3-letter stop word (letters a[0,1] b[1,2] c[2,3], the mark riding the
     // last, c) plus a trailing word so the stop word can become reached.
