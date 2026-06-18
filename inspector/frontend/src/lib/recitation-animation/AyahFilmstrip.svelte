@@ -2,9 +2,12 @@
     /**
      * Center-anchored ayah filmstrip — a by-ayah scrubber that sits above the
      * (linear) progress bar. The strip is a fixed-scale time-ruler: cell width
-     * and inter-cell gap are both `seconds × filmstripPxPerSec`, so the cursor
-     * travels at one global velocity everywhere. A fixed center needle marks
-     * "now"; the strip slides so the live recited position stays centered.
+     * and inter-cell gap are both `seconds × filmstripPxPerSec`. A very short
+     * verse is floored to `filmstripMinCellPx` so its ayah number stays legible;
+     * the cursor still crosses only the verse's time-true span (`aw`) at the one
+     * global velocity, the floor's surplus folding into the adjacent gap. A fixed
+     * center needle marks "now"; the strip slides so the live position stays
+     * centered.
      *
      * Recitation-driven, not clock-driven: the active cell + its progress fill
      * follow which WORD is being recited (via the shared `findActiveAt`
@@ -86,8 +89,7 @@
     const SEEK_JUMP_MS = 400;
     /** Width (px) of an unrecited (placeholder) verse cell. It has no recited
      *  duration to scale from, and playback skips it, so it gets a fixed visible
-     *  width purely to stay legible as a skipped slot. Recited cells are pure
-     *  time and carry no minimum. */
+     *  width purely to stay legible as a skipped slot. */
     const PLACEHOLDER_CELL_PX = 30;
 
     let containerEl = $state<HTMLDivElement | undefined>(undefined);
@@ -120,37 +122,39 @@
 
     interface Cell {
         ayah: number;
-        w: number;
+        w: number; // visible width (floored to filmstripMinCellPx)
+        aw: number; // active span the cursor crosses (time-true, ≤ w)
         cumBefore: number; // px before this cell's left (cells + gaps)
         gapAfter: number; // px gap to the right (silence-scaled)
         missing: CellMissing;
     }
 
     // The strip is a fixed-scale time-ruler at the global `filmstripPxPerSec`:
-    // cell width = canonical recited seconds × pxPerSec, between-verse gap =
-    // silence seconds × pxPerSec. The cursor therefore travels at one velocity
-    // everywhere (within cells and across silences), and a given silence renders
-    // to the same px in every surah and for every reciter — no per-chapter
-    // normalization. Width uses each verse's CANONICAL recited duration, so a
-    // loopback's later occurrence never inflates it. Recited cells carry NO
-    // minimum width — a floor would make the cursor speed up crossing a short
-    // verse — only an unrecited placeholder (no recited time) gets a fixed
-    // visible width. A near-zero silence floors to `filmstripGapPx`. Geometry is
-    // identical across motion modes (only the cursor's motion differs), so
-    // toggling modes never shifts the layout.
+    // a verse's time-true width `aw` = canonical recited seconds × pxPerSec, and a
+    // between-verse gap = silence seconds × pxPerSec, so a given silence renders to
+    // the same px in every surah and for every reciter (no per-chapter
+    // normalization). `aw` uses the CANONICAL recited duration, so a loopback's
+    // later occurrence never inflates it. A too-short verse is floored to
+    // `filmstripMinCellPx` for legibility (visible width `w`); the cursor still
+    // crosses only the centered `aw` at the ruler velocity (see `offsetForReci`),
+    // the surplus `w − aw` folding into the adjacent gap. An unrecited placeholder
+    // gets a fixed visible width; a near-zero silence floors to `filmstripGapPx`.
+    // Geometry is identical across motion modes, so toggling never shifts layout.
     const cells = $derived.by((): Cell[] => {
         const mc = model.cells;
         if (!mc.length) return [];
         const pxPerSec = config.filmstripPxPerSec;
+        const minPx = config.filmstripMinCellPx;
         const out: Cell[] = [];
         let cum = 0;
         for (let i = 0; i < mc.length; i++) {
             const c = mc[i]!;
-            const w = c.missing === 'full'
+            const aw = c.missing === 'full'
                 ? PLACEHOLDER_CELL_PX
                 : Math.max(1, Math.round(c.canonDurSec * pxPerSec));
+            const w = c.missing === 'full' ? PLACEHOLDER_CELL_PX : Math.max(minPx, aw);
             const gapAfter = Math.round(Math.max(config.filmstripGapPx, c.nextGapSec * pxPerSec));
-            out.push({ ayah: c.ayah, w, cumBefore: cum, gapAfter, missing: c.missing });
+            out.push({ ayah: c.ayah, w, aw, cumBefore: cum, gapAfter, missing: c.missing });
             cum += w + gapAfter;
         }
         return out;
@@ -218,7 +222,9 @@
     }
     function offsetForReci(r: Reci): number {
         const c = cells[r.idx];
-        return c ? c.cumBefore + r.frac * c.w : scroll.offset;
+        // Cross only the centered time-true span `aw` (offset by the floor's left
+        // margin), so a floored short cell scrolls at the ruler velocity, not faster.
+        return c ? c.cumBefore + (c.w - c.aw) / 2 + r.frac * c.aw : scroll.offset;
     }
     function nearestCell(off: number): number {
         let best = -1;
@@ -243,7 +249,7 @@
                     const j = nearestPlayableCell(off);
                     return j >= 0 ? seekMsForCell(j) : 0;
                 }
-                const f = clamp(0, 1, (off - c.cumBefore) / c.w);
+                const f = clamp(0, 1, (off - c.cumBefore - (c.w - c.aw) / 2) / c.aw);
                 const mc = model.cells[i]!;
                 return (mc.canonStartSec + f * mc.canonDurSec) * 1000;
             }
@@ -337,8 +343,8 @@
         const gapStart = mcA.canonEndSec;
         const gapEnd = nextIv.start;
         const p = gapEnd > gapStart ? clamp(0, 1, (tSec - gapStart) / (gapEnd - gapStart)) : 1;
-        const from = cellA.cumBefore + cellA.w; // right edge of the finished cell
-        const to = cellB.cumBefore; //            left edge of the upcoming cell
+        const from = cellA.cumBefore + (cellA.w + cellA.aw) / 2; // end of A's active span
+        const to = cellB.cumBefore + (cellB.w - cellB.aw) / 2; //  start of B's active span
         scroll.snap(lerp(from, to, p));
     }
 

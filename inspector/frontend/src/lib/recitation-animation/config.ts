@@ -93,6 +93,12 @@ export interface RecitationAnimConfig {
      *  silence renders to the same px in every surah and for every reciter.
      *  Higher = more zoomed-in (wider cells, more prominent silences). */
     filmstripPxPerSec: number;
+    /** Minimum recited-cell width (px) so a 2-digit ayah number stays legible
+     *  when a verse is too short to earn it at `filmstripPxPerSec`. A floored cell
+     *  keeps its time-true span (`aw`) centered and the cursor crosses only that
+     *  span at the ruler velocity — the surplus margin is absorbed into the
+     *  adjacent gap, so in-verse scrolling never speeds up. */
+    filmstripMinCellPx: number;
     /** Minimum gap between cells (px) — the floor for a near-zero inter-verse
      *  silence so cells stay distinct. A real between-verse silence widens the gap
      *  at `filmstripPxPerSec`, crossed at the same velocity the cursor travels
@@ -148,7 +154,8 @@ export const DEFAULT_RECITATION_CONFIG: RecitationAnimConfig = {
 
     filmstripShow: true,
     filmstripMotion: 'hybrid',
-    filmstripPxPerSec: 8,
+    filmstripPxPerSec: 12,
+    filmstripMinCellPx: 18,
     filmstripGapPx: 2,
     filmstripHeightPx: 36,
 };
