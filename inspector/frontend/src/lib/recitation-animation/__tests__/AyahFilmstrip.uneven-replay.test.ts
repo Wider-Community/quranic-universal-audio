@@ -8,14 +8,14 @@ import { buildFilmstripModel } from '../filmstrip-model';
 import type { AnimUnit, TimeSpan } from '../types';
 
 /**
- * Component guard for the constant-velocity loopback re-tread.
+ * Component guard for a mid-verse uneven re-take (loopback "type 1").
  *
- * When the reciter loops back and re-recites, the replay's pace differs from the
- * first take, so tracking each replayed word's canonical offset would vary the
- * scroll speed word-by-word. The re-tread instead crosses the repeated span at
- * ONE velocity. This fixture loops back mid-verse (type 1) with a deliberately
- * UNEVEN replay (word 3 fast, word 4 slow); the strip must still scroll at the
- * steady ruler velocity, not 3× then ⅓×.
+ * When the reciter loops back and re-recites only SOME of a verse's words at an
+ * uneven pace (word 3 fast, word 4 slow), the cursor must cross the re-recited
+ * span at ONE constant velocity that conforms to the re-take's OWN duration — it
+ * must NOT lurch word-by-word (fast then slow) the way tracking each word's
+ * canonical fraction would. The covered half of the cell (40px) is crossed over
+ * the 3s re-take ≈ 13px/s, steady throughout.
  */
 
 function unit(loc: string, ivs: Array<[number, number]>): AnimUnit {
@@ -38,7 +38,7 @@ const units: AnimUnit[] = [
 ];
 const model = buildFilmstripModel(units, 'duration');
 
-const PX_PER_SEC = 20; // verse 1 (4s canonical) → an 80px cell; ruler velocity 20px/s
+const PX_PER_SEC = 20; // verse 1 (4s canonical) → an 80px cell; re-take covers its right half
 const config = {
     ...DEFAULT_RECITATION_CONFIG,
     filmstripMotion: 'hybrid' as const,
@@ -52,7 +52,7 @@ function scrollOffset(container: HTMLElement): number {
     return m ? -parseFloat(m[1]!) : 0;
 }
 
-describe('AyahFilmstrip loopback re-tread (constant velocity)', () => {
+describe('AyahFilmstrip mid-verse uneven re-take (constant in-cell velocity)', () => {
     let rafCbs: FrameRequestCallback[] = [];
     let nowMs = 0;
     const getTimeMs = (): number => nowMs;
@@ -82,7 +82,7 @@ describe('AyahFilmstrip loopback re-tread (constant velocity)', () => {
         }
     }
 
-    it('crosses the unevenly-replayed span at the steady ruler velocity', async () => {
+    it('crosses the unevenly-replayed span at one steady velocity, no per-word lurch', async () => {
         const { container } = render(AyahFilmstrip, {
             units, model, durationMs: 8000, getTimeMs, playing: true, config, onSeek: () => {},
         });
@@ -92,7 +92,7 @@ describe('AyahFilmstrip loopback re-tread (constant velocity)', () => {
         for (const ms of [500, 1500, 2500, 3900]) await step(ms);
 
         // Fine-step (≈real rAF cadence) through the loopback + replay so the eased
-        // back-hop converges onto the ramp; sample the settled window.
+        // back-hop converges; sample the settled window.
         const off: Record<number, number> = {};
         const marks = new Set([5200, 5950, 6700]);
         for (let ms = 4000; ms <= 6700; ms += 50) {
@@ -101,17 +101,19 @@ describe('AyahFilmstrip loopback re-tread (constant velocity)', () => {
         }
 
         // Moves forward through the replay, not frozen.
-        expect(off[6700]!).toBeGreaterThan(off[5200]! + 20);
+        expect(off[6700]!).toBeGreaterThan(off[5200]! + 5);
 
-        // Holds the ruler velocity (~20px/s). Tracking the live replay instead
-        // would read ~7px/s here (word 4 replayed over 2.5s) — the lurch we fixed.
+        // ONE steady velocity conforming to the re-take: the covered half of the
+        // 80px cell (40px) crossed over the 3s re-take ≈ 13px/s. Tracking each word's
+        // canonical fraction instead would lurch — word 3 (20px / 0.5s = 40px/s) then
+        // word 4 (20px / 2.5s = 8px/s) — the regression this guards.
         const vAll = (off[6700]! - off[5200]!) / 1.5;
-        expect(vAll).toBeGreaterThan(16);
-        expect(vAll).toBeLessThan(24);
+        expect(vAll).toBeGreaterThan(11);
+        expect(vAll).toBeLessThan(16);
 
-        // …and that velocity is consistent across the window (no acceleration).
+        // …and that velocity is constant across the window (no acceleration).
         const firstHalf = off[5950]! - off[5200]!;
         const secondHalf = off[6700]! - off[5950]!;
-        expect(Math.abs(firstHalf - secondHalf)).toBeLessThan(6);
+        expect(Math.abs(firstHalf - secondHalf)).toBeLessThan(3);
     });
 });

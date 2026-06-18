@@ -14,8 +14,9 @@
      * tracks the CURSOR's position within its cell so the lit bar's leading edge
      * sits under the center needle. An inter-take silence (forward OR backward)
      * greys the needle and scrolls it continuously across the inter-cell gap, and a
-     * loopback re-treads the whole re-recited run at one constant velocity — the
-     * strip and the teleprompter line stay in lockstep. Three motion models
+     * loopback replays each re-recited verse over its OWN occurrence (so a multi-verse
+     * re-take conforms per verse, not to the loopback verse) — the strip and the
+     * teleprompter line stay in lockstep. Three motion models
      * (config.filmstripMotion):
      *   - tuner:  continuous center; drag scrubs exact time.
      *   - hybrid: continuous center; drag snaps to whole ayahs on release.
@@ -89,10 +90,6 @@
     /** An audio-time jump beyond this in one frame ⇒ a seek (glide), not the
      *  normal forward creep of playback. */
     const SEEK_JUMP_MS = 400;
-    /** A loopback landing within this verse-fraction of the verse start is a
-     *  "to-start" re-take: its offset is pinned to the start, so the re-tread runs
-     *  at one constant velocity rather than the ruler velocity. */
-    const RETREAD_START_FRAC_EPS = 0.02;
     /** Width (px) of an unrecited (placeholder) verse cell. It has no recited
      *  duration to scale from, and playback skips it, so it gets a fixed visible
      *  width purely to stay legible as a skipped slot. */
@@ -111,10 +108,8 @@
     let fillIdx = $state(-1); // cell the cursor (needle) sits in — the lit fill bar
     let jumping = $state(false); // mid-glide → cell-fill eases too
     let lastActiveUnit = -1; // O(1) fast-path hint for findActiveAt
-    let maxReachedUnit = -1; // furthest first-occurrence unit reached on forward play
     let lastTimeMs = -1; // previous frame's audio time, for seek detection
     let fillGlideTimer: ReturnType<typeof setTimeout> | null = null;
-    let retread: Retread | null = null; // active loopback constant-velocity re-tread
 
     const reducedMotion = typeof matchMedia === 'function'
         && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -222,20 +217,72 @@
 
     interface Reci { unitIdx: number; idx: number; frac: number; }
 
-    /** Map a time (seconds) to the recited cell + its word-proportional fill,
-     *  or null during a silence gap. `hint` seeds the O(1) fast-path (-1 for
-     *  random-access lookups like hover/scrub). */
+    /** First index into `sorted` whose interval starts at/after `s` (bsearch). */
+    function lowerBoundStart(s: number): number {
+        let lo = 0;
+        let hi = sorted.length;
+        while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (sorted[mid]!.start < s) lo = mid + 1;
+            else hi = mid;
+        }
+        return lo;
+    }
+
+    /** The cursor's fraction across the active verse cell, measured in RECITED
+     *  seconds over the verse's CURRENT take — so the cell crosses at ONE constant
+     *  velocity (`aw / take-seconds`) however the take's words are paced, and a
+     *  re-recited verse conforms to its OWN duration, never the loopback verse's.
+     *  The take is the maximal run of consecutive timeline intervals that stay in
+     *  this cell AND advance in reading order (a loopback or another verse breaks the
+     *  run; a within-verse pause does not — its silence isn't summed). The covered
+     *  word range maps recited progress onto the cell sub-span. For a forward first
+     *  take this is identical to the canonical word-fraction crossing. */
+    function takeFrac(idx: number, u: number, ivStart: number, tSec: number): number {
+        const cell = model.cells[idx]!;
+        const us = cell.unitStart;
+        // Locate the active interval in the sorted timeline (bsearch by start, then
+        // disambiguate by unit among equal starts).
+        let k = lowerBoundStart(ivStart);
+        while (k < sorted.length && sorted[k]!.start === ivStart && sorted[k]!.unitIdx !== u) k++;
+        if (k >= sorted.length || sorted[k]!.unitIdx !== u) return cell.words[u - us]?.frac0 ?? 0;
+        // Grow the take left/right over consecutive, same-cell, reading-order-rising
+        // intervals (skipping nothing in between → a within-verse pause stays in, a
+        // loopback / other verse cuts it).
+        let lo = k;
+        let hi = k;
+        while (lo > 0) {
+            const p = sorted[lo - 1]!;
+            if ((model.cellOfUnit[p.unitIdx] ?? -1) !== idx || p.unitIdx >= sorted[lo]!.unitIdx) break;
+            lo--;
+        }
+        while (hi + 1 < sorted.length) {
+            const nx = sorted[hi + 1]!;
+            if ((model.cellOfUnit[nx.unitIdx] ?? -1) !== idx || nx.unitIdx <= sorted[hi]!.unitIdx) break;
+            hi++;
+        }
+        let before = 0; // recited secs of take intervals strictly before the active one
+        let total = 0;
+        for (let i = lo; i <= hi; i++) {
+            const d = sorted[i]!.end - sorted[i]!.start;
+            if (i < k) before += d;
+            total += d;
+        }
+        const f0 = cell.words[sorted[lo]!.unitIdx - us]?.frac0 ?? 0;
+        const f1 = cell.words[sorted[hi]!.unitIdx - us]?.frac1 ?? 1;
+        const p = total > 0 ? clamp(0, 1, (before + (tSec - ivStart)) / total) : 0;
+        return f0 + p * (f1 - f0);
+    }
+
+    /** Map a time (seconds) to the recited cell + its take-proportional cursor
+     *  fraction, or null during a silence gap. `hint` seeds the O(1) fast-path
+     *  (-1 for random-access lookups like hover/scrub). */
     function recitationAt(tSec: number, hint: number): Reci | null {
         const h = findActiveAt(units, sorted, tSec, hint);
         if (!h) return null;
         const idx = model.cellOfUnit[h.unitIdx] ?? -1;
         if (idx < 0) return null;
-        const cell = model.cells[idx]!;
-        const wf = cell.words[h.unitIdx - cell.unitStart];
-        const span = h.ivEnd - h.ivStart;
-        const intra = span > 0 ? clamp(0, 1, (tSec - h.ivStart) / span) : 0;
-        const frac = wf ? wf.frac0 + intra * (wf.frac1 - wf.frac0) : 0;
-        return { unitIdx: h.unitIdx, idx, frac };
+        return { unitIdx: h.unitIdx, idx, frac: takeFrac(idx, h.unitIdx, h.ivStart, tSec) };
     }
 
     function offsetForCellCenter(i: number): number {
@@ -396,77 +443,6 @@
         scroll.snap(lerp(from, to, p));
     }
 
-    /** A loopback re-tread plan: the cursor crosses from `start` to `fromOff` at ONE
-     *  constant velocity over the replay window [loopSec, rejoinSec], instead of
-     *  tracking each replayed word — whose pace differs from the first take, varying
-     *  the speed. The window spans the WHOLE re-recited run: it ends where the replay
-     *  re-enters genuinely-new content (a unit past the reached frontier), so a
-     *  multi-verse re-take rides one ramp, not one-per-replayed-word. A mid-verse
-     *  landing shifts `start` so the velocity equals the ruler `pxPerSec` (both takes
-     *  match); a verse-start landing pins `start` and accepts one constant velocity
-     *  that steps to the ruler speed at the rejoin. */
-    interface Retread {
-        start: number;
-        fromOff: number;
-        loopSec: number;
-        rejoinSec: number;
-    }
-
-    /** Plan a constant-velocity re-tread for a loopback against the unchanged frontier
-     *  (`maxReachedUnit`), or null when it can't be resolved (no further new content,
-     *  or a degenerate window) so the plain catch-up handles it. `r` is the landing.
-     *  Scans the sorted occurrence intervals forward from `loopSec` for the first
-     *  that re-enters new content (`unitIdx > maxReachedUnit`): its start is the
-     *  rejoin and the new verse's offset is the ramp end. If the replay runs to the
-     *  end with no new content, the ramp ends at the last replayed interval. */
-    function planRetread(r: Reci, loopSec: number): Retread | null {
-        let rejoinSec = -1;
-        let fromOff = NaN;
-        let lastEnd = -1;
-        let lastOff = NaN;
-        for (const iv of sorted) {
-            if (iv.end <= loopSec + 1e-6) continue; // already passed
-            if (iv.unitIdx > maxReachedUnit) {
-                // First re-entry into genuinely-new content — the rejoin boundary.
-                const idx = model.cellOfUnit[iv.unitIdx] ?? -1;
-                if (idx < 0) continue;
-                rejoinSec = iv.start;
-                fromOff = offsetForReci({ unitIdx: iv.unitIdx, idx, frac: 0 });
-                break;
-            }
-            // A replayed (already-reached) interval — track the furthest one in case
-            // the replay never re-reaches new content (runs to the end).
-            if (iv.end > lastEnd) {
-                const idx = model.cellOfUnit[iv.unitIdx] ?? -1;
-                if (idx >= 0) {
-                    lastEnd = iv.end;
-                    const wf = model.cells[idx]!.words[iv.unitIdx - model.cells[idx]!.unitStart];
-                    lastOff = offsetForReci({ unitIdx: iv.unitIdx, idx, frac: wf ? wf.frac1 : 1 });
-                }
-            }
-        }
-        if (rejoinSec < 0) {
-            if (lastEnd < 0 || Number.isNaN(lastOff)) return null;
-            rejoinSec = lastEnd;
-            fromOff = lastOff;
-        }
-        const dt = rejoinSec - loopSec;
-        if (dt <= 0) return null;
-        const start = r.frac < RETREAD_START_FRAC_EPS
-            ? offsetForReci(r) //                                  pinned to the verse start
-            : Math.max(0, fromOff - config.filmstripPxPerSec * dt); // shifted to hold V
-        if (fromOff - start < 1) return null;
-        return { start, fromOff, loopSec, rejoinSec };
-    }
-
-    /** The re-tread ramp position at `tSec` — time-linear (constant velocity) from
-     *  `start` to the ramp-end offset over the replay window. */
-    function retreadAt(rt: Retread, tSec: number): number {
-        const span = rt.rejoinSec - rt.loopSec;
-        const p = span > 0 ? clamp(0, 1, (tSec - rt.loopSec) / span) : 1;
-        return lerp(rt.start, rt.fromOff, p);
-    }
-
     /** One rAF step of recitation-driven playback. */
     function drivePlayback(): void {
         const nowMs = getTimeMs();
@@ -477,25 +453,14 @@
         const seeked = lastTimeMs >= 0 && Math.abs(nowMs - lastTimeMs) > SEEK_JUMP_MS;
         lastTimeMs = nowMs;
         if (!r) {
-            // A micro-gap WITHIN an in-flight re-tread (the tiny silence between two
-            // replayed verses) keeps riding the ramp at constant velocity — never
-            // freeze or gap-cross mid-replay, the ramp owns this whole run.
-            if (config.filmstripMotion !== 'snap' && retread && !seeked
-                && tSec >= retread.loopSec && tSec < retread.rejoinSec) {
-                silent = false;
-                crossingGap = false;
-                scroll.follow(retreadAt(retread, tSec), false);
-                fillIdx = cellSpanningOffset(scroll.offset);
-                return;
-            }
-            // Silence: hold the cell as frozen. Only an INTER-TAKE pause gets the
-            // special treatment — the needle stays visible, greys, and scrolls
-            // continuously across the inter-cell gap. Within-verse / leading /
+            // Silence: hold the cell as frozen. Only an INTER-TAKE pause scrolls —
+            // the needle stays visible, greys, and travels continuously across the
+            // inter-cell gap (forward OR backward, so a loopback's pause reads as
+            // travel back to the re-take, not a freeze). Within-verse / leading /
             // trailing silence is left untouched (needle hidden, held), so a
             // reciter's mid-verse pause doesn't grey or move the cursor.
             silent = true;
             crossingGap = false;
-            retread = null;
             if (config.filmstripMotion !== 'snap' && frozenIdx >= 0) {
                 const nextIv = nextIntervalAfter(sorted, tSec);
                 const nextIdx = nextIv ? (model.cellOfUnit[nextIv.unitIdx] ?? -1) : -1;
@@ -513,23 +478,11 @@
         const prevFrac = cellFrac;
         lastActiveUnit = r.unitIdx;
         const discont = seeked || isJump(prevIdx, r.idx, prevFrac, r.frac);
-        // A backward recitation jump with no audio-time seek = a natural loopback
-        // (the reciter re-reciting), the one case the constant-velocity re-tread
-        // applies to (a forward verse-skip or a user seek does not).
-        const loopedBack = !seeked && prevIdx >= 0
-            && (r.idx < prevIdx || (r.idx === prevIdx && r.frac < prevFrac - JUMP_FRAC_EPS));
         silent = false;
         crossingGap = false;
         activeIdx = r.idx;
         cellFrac = r.frac;
         frozenIdx = r.idx;
-        // Whether THIS frame re-enters genuinely-new content (past the frontier) —
-        // captured before the frontier advances, so a riding re-tread exits exactly
-        // at the new-content boundary rather than one frame late.
-        const reachedNew = r.unitIdx > maxReachedUnit;
-        // High-water mark of the furthest genuinely-new (first-occurrence) content
-        // reached on forward frames — the frontier a re-tread ramp runs up to.
-        if (!loopedBack && reachedNew) maxReachedUnit = r.unitIdx;
 
         const snap = config.filmstripMotion === 'snap';
         const target = snap ? offsetForCellCenter(r.idx) : offsetForReci(r);
@@ -545,33 +498,15 @@
             return;
         }
 
-        // Hybrid/tuner continuously center the LIVE recited position. Forward play
-        // tracks it instantly; a natural loopback re-treads the repeated words at
-        // ONE constant velocity (a time-linear ramp) over the WHOLE re-recited run —
-        // from the landing up to the first genuinely-new content — so a multi-verse
-        // re-take doesn't speed up/slow down with the reciter's second-take pace.
-        // The eased `follow` catch-up does the quick hop back onto the ramp; at the
-        // rejoin (new content reached, or the window elapsed) instant tracking
-        // resumes. A discontinuity also eases the fill once.
-        if (loopedBack) {
-            const plan = planRetread(r, tSec);
-            if (plan) {
-                retread = plan;
-                armFillGlide(GLIDE_MIN_MS);
-                scroll.follow(retreadAt(plan, tSec), true); // eased hop onto the ramp
-                fillIdx = cellSpanningOffset(scroll.offset);
-                return;
-            }
-            retread = null; // no clean rejoin → plain catch-up below
-        } else if (retread && !seeked && !reachedNew && tSec < retread.rejoinSec) {
-            disarmFillGlide();
-            scroll.follow(retreadAt(retread, tSec), false); // ride the ramp at constant V
-            fillIdx = cellSpanningOffset(scroll.offset);
-            return;
-        } else {
-            retread = null; // rejoined, seeked, or plain forward play
-        }
-
+        // Hybrid/tuner continuously center the LIVE recited position. Each cell is
+        // crossed over ITS OWN recited occurrence (`offsetForReci` tracks the live
+        // word), so a multi-verse loopback replays every verse at that verse's own
+        // second-take pace — never collapsed onto the loopback verse's duration.
+        // Forward play tracks instantly; a discontinuity (a backward loopback landing
+        // or a seek) runs one eased, distance-proportional glide back onto the live
+        // position and eases the fill once, then instant tracking resumes. A
+        // loopback's pause-back is scrolled above (the inter-take gap), so by the
+        // replay's first word the strip is already at the landing.
         if (discont) armFillGlide(GLIDE_MIN_MS);
         else disarmFillGlide();
         scroll.follow(target, discont);
@@ -608,11 +543,9 @@
         cellFrac = 0;
         silent = false;
         crossingGap = false;
-        retread = null;
         frozenIdx = -1;
         fillIdx = -1;
         lastActiveUnit = -1;
-        maxReachedUnit = -1;
         lastTimeMs = -1;
         scroll.cancel();
         if (fillGlideTimer) clearTimeout(fillGlideTimer);
@@ -701,9 +634,7 @@
         frozenIdx = r.idx;
         fillIdx = r.idx;
         lastActiveUnit = r.unitIdx;
-        maxReachedUnit = r.unitIdx; // re-establish the frontier at the seeked position
         lastTimeMs = -1; // resync; the next playing frame isn't a seek
-        retread = null;
         jumpTo(config.filmstripMotion === 'snap'
             ? offsetForCellCenter(r.idx)
             : offsetForReci(r));
@@ -719,9 +650,7 @@
         frozenIdx = -1;
         fillIdx = -1;
         lastActiveUnit = -1;
-        maxReachedUnit = -1;
         lastTimeMs = -1;
-        retread = null;
         scroll.cancel();
         containerEl?.style.removeProperty('--cell-active-fill');
         scroll.snap(offsetForCellCenter(0));

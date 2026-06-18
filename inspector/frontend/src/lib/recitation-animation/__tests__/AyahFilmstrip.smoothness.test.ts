@@ -17,15 +17,17 @@ import { buildFilmstripModel } from '../filmstrip-model';
 import type { AnimUnit, TimeSpan } from '../types';
 
 /**
- * Per-frame smoothness guard for the three ayah-filmstrip fixes, driven against
- * the REAL nasser_al_qatami chapter-102 units (with multi-verse re-takes) and a
- * synthetic floored-cell fixture:
+ * Per-frame smoothness guard for the ayah-filmstrip motion fixes, driven against
+ * the REAL nasser_al_qatami chapter-102 units (with multi-verse re-takes), a
+ * synthetic uneven multi-verse loopback, and a synthetic floored-cell fixture:
  *
  *   1. FILL FROM CURSOR — the lit fill bar's leading edge sits under the center
  *      needle every non-silent frame (|fillEdge − cursorOffset| ≤ EPS_PX), incl.
  *      on a FLOORED short cell (w > aw).
- *   2. WHOLE-RUN RE-TREAD — each loopback replay (incl. the multi-verse 8→7→8
- *      re-take) tracks at one constant ruler velocity, not raw word fraction.
+ *   2. PER-VERSE CONFORMANCE — a multi-verse loopback replays EACH verse over its
+ *      OWN re-take duration (the cursor crosses THAT verse's own cell at one
+ *      constant velocity), never one velocity collapsed onto the loopback verse's
+ *      duration. An uneven synthetic re-take makes the per-verse pace differ.
  *   3. INTER-TAKE SILENCE SCROLLS — a between-verse pause (forward OR backward)
  *      advances the greyed needle; a within-verse pause holds it.
  *   4. SNAP MODE — unchanged: no continuous-fill divergence, active cell centers
@@ -153,12 +155,13 @@ describe('AyahFilmstrip smoothness (per-frame)', () => {
     async function traceChapter(
         units: AnimUnit[],
         motion: 'hybrid' | 'snap',
+        endMs = END,
     ): Promise<{ frames: Frame[]; cells: DCell[] }> {
         const model = buildFilmstripModel(units, 'duration');
         const cells = deriveCells(model);
         const byAyah = new Map(cells.map((c) => [c.ayah, c]));
         const { container } = render(AyahFilmstrip, {
-            units, model, durationMs: END, getTimeMs, playing: true,
+            units, model, durationMs: endMs, getTimeMs, playing: true,
             config: { ...DEFAULT_RECITATION_CONFIG, leadMs: 0, filmstripMotion: motion },
             onSeek: () => {},
         });
@@ -169,7 +172,7 @@ describe('AyahFilmstrip smoothness (per-frame)', () => {
 
         const frames: Frame[] = [];
         let prevOff = NaN;
-        for (let t = 0; t <= END; t += STEP) {
+        for (let t = 0; t <= endMs; t += STEP) {
             nowMs = t;
             await flushFrame();
             const off = trackOffset(container);
@@ -238,52 +241,80 @@ describe('AyahFilmstrip smoothness (per-frame)', () => {
         expect(worst, `floored-cell max |fillEdge − cursor| = ${worst.toFixed(2)}px`).toBeLessThanOrEqual(EPS_PX);
     });
 
-    it('re-treads each loopback run at one constant velocity (incl. the 8→7→8 re-take)', async () => {
-        const { frames } = await traceChapter(buildNasserUnits(), 'hybrid');
-        // A re-tread run = a contiguous non-silent stretch on the SAME active cell
-        // that begins with a backward active-cell transition (the landing). Collect
-        // every such run, drop its first velocity sample (the single hop onto the
-        // ramp), and assert one constant ruler velocity.
-        const runs: { ayah: number; t0: number; vels: number[] }[] = [];
+    it('keeps each looped-back verse cursor inside its OWN cell (conforms per verse)', async () => {
+        const { frames, cells } = await traceChapter(buildNasserUnits(), 'hybrid');
+        const byAyah = new Map(cells.map((c) => [c.ayah, c]));
+        // Group non-silent frames into runs (one contiguous stretch on one active
+        // cell). A run is a REPLAY when that ayah was already active in an earlier
+        // run — the multi-verse 4→1 loopback re-recites 1,2,3,4, so each gets a
+        // second run. Each replay verse must keep the cursor inside its OWN cell
+        // span while active: it conforms to THAT verse, never drifting along the
+        // loopback envelope (the bug, which would carry the cursor past the verse's
+        // own cell as the run progresses). Constant in-cell velocity is proven by
+        // the synthetic uneven cases below + AyahFilmstrip.uneven-replay; here a real
+        // run can also contain a within-verse loopback hop, so velocity is not flat.
+        const seen = new Set<number>();
+        const replays: { ayah: number; mids: Frame[] }[] = [];
         let i = 0;
-        let lastActive: number | null = null; // last NON-silent ayah (held over silence)
         while (i < frames.length) {
             const f = frames[i]!;
             if (f.silent || f.activeAyah == null) { i++; continue; }
             const ayah = f.activeAyah;
-            const isLanding = lastActive != null && ayah < lastActive; // backward jump → loopback
             const start = i;
             while (i < frames.length && !frames[i]!.silent && frames[i]!.activeAyah === ayah) i++;
-            const seg = frames.slice(start, i);
-            if (isLanding && seg.length >= 4) {
-                // Drop the first two deltas (the hop onto the ramp), keep the steady run.
-                const vels = seg.slice(2).map((s) => s.vel).filter((v) => Number.isFinite(v) && Math.abs(v) < 500);
-                if (vels.length >= 2) runs.push({ ayah, t0: seg[0]!.t, vels });
+            const run = frames.slice(start, i);
+            // Drop the first/last 2 frames (landing ease-in, exit transition).
+            if (seen.has(ayah) && run.length >= 8) replays.push({ ayah, mids: run.slice(2, -2) });
+            seen.add(ayah);
+        }
+        expect(replays.length, 'multi-verse loopback produced replay runs').toBeGreaterThanOrEqual(3);
+        for (const r of replays) {
+            const c = byAyah.get(r.ayah)!;
+            for (const f of r.mids) {
+                if (Number.isNaN(f.off)) continue;
+                expect(
+                    f.off >= c.cumBefore - 1 && f.off <= c.cumBefore + c.w + 1,
+                    `replay verse ${r.ayah}@${f.t}ms cursor ${f.off.toFixed(1)} inside cell [${c.cumBefore}, ${c.cumBefore + c.w}]`,
+                ).toBe(true);
             }
-            lastActive = ayah;
         }
-        expect(runs.length, 'found at least the 4→1, 7→6, 8→7 landings').toBeGreaterThanOrEqual(3);
-        for (const run of runs) {
-            const min = Math.min(...run.vels);
-            const max = Math.max(...run.vels);
-            const mean = run.vels.reduce((a, b) => a + b, 0) / run.vels.length;
-            // The win is ONE constant velocity across the whole replayed run (spread
-            // ~0), not raw per-word fraction. A verse-start landing rides at the
-            // replay's own pace (faster/slower than the original take), so the mean
-            // sits in a sane ruler-ish band around the 12 px/s ruler velocity rather
-            // than pinned to it exactly; a mid-verse landing pins to 12.
-            expect(max - min, `ayah ${run.ayah}@${run.t0}ms velocity spread`).toBeLessThan(4);
-            expect(mean, `ayah ${run.ayah}@${run.t0}ms mean velocity`).toBeGreaterThanOrEqual(8);
-            expect(mean, `ayah ${run.ayah}@${run.t0}ms mean velocity`).toBeLessThanOrEqual(16);
-        }
+    });
 
-        // The 8→7 re-take re-recites verse 7 THEN verse 8 — both must ride one ramp.
-        // Verify the verse-8 REPLAY (the run AFTER the 8→7 landing, on cell 8) is
-        // also constant-velocity, not raw word-fraction.
-        const v8replay = frames.filter((f) => f.t >= 93_100 && f.t <= 103_400 && !f.silent && f.activeAyah === 8);
-        const v8vels = v8replay.map((f) => f.vel).filter((v) => Number.isFinite(v) && Math.abs(v) < 500);
-        expect(v8vels.length).toBeGreaterThan(5);
-        expect(Math.max(...v8vels) - Math.min(...v8vels), 'verse-8 replay velocity spread').toBeLessThan(4);
+    it('replays a multi-verse loopback at each verse\'s OWN pace (uneven re-take), not one collapsed velocity', async () => {
+        // Forward 1,2,3 (canonical 2 / 1.6 / 2s), then a loopback to verse 1 that
+        // re-recites all three UNEVENLY: v1 fast (0.5s), v2 slow (3s), v3 fast (0.5s).
+        // Per-verse conformance ⇒ the cursor crosses each verse's OWN cell over that
+        // verse's OWN re-take, so the slow verse scrolls far slower than the fast one.
+        // The collapsed-velocity bug would scroll all three at one envelope rate.
+        const synth: AnimUnit[] = [
+            unit('1:1:1', [[0, 2], [6, 6.5]]),
+            unit('1:2:1', [[2, 3.6], [6.5, 9.5]]),
+            unit('1:3:1', [[3.6, 5.6], [9.5, 10]]),
+        ];
+        const { frames, cells } = await traceChapter(synth, 'hybrid', 11_000);
+        const byAyah = new Map(cells.map((c) => [c.ayah, c]));
+        const aw = (a: number): number => byAyah.get(a)!.aw;
+        // Average velocity (endpoint displacement / time — immune to per-frame
+        // smoothing) inside a verse's replay window.
+        const avgVel = (lo: number, hi: number, ayah: number): number => {
+            const seg = frames.filter((f) => f.t >= lo && f.t <= hi && !f.silent
+                && f.activeAyah === ayah && !Number.isNaN(f.off));
+            if (seg.length < 2) return NaN;
+            const a = seg[0]!;
+            const b = seg[seg.length - 1]!;
+            return (b.off - a.off) / ((b.t - a.t) / 1000);
+        };
+        const expV2 = aw(2) / 3; //   slow re-take: own cell aw over 3s
+        const expV3 = aw(3) / 0.5; // fast re-take: own cell aw over 0.5s
+        const v2 = avgVel(6_700, 9_400, 2);
+        const v3 = avgVel(9_550, 9_980, 3);
+        // Each verse conforms to its OWN re-take pace (±35% for easing/sampling).
+        expect(v2, `v2 replay ≈ ${expV2.toFixed(1)}px/s`).toBeGreaterThan(expV2 * 0.65);
+        expect(v2, `v2 replay ≈ ${expV2.toFixed(1)}px/s`).toBeLessThan(expV2 * 1.35);
+        expect(v3, `v3 replay ≈ ${expV3.toFixed(1)}px/s`).toBeGreaterThan(expV3 * 0.65);
+        // The slow verse scrolls MUCH slower than the fast one — proof the replay is
+        // NOT one collapsed velocity (which would make v2 ≈ v3).
+        expect(v3, 'fast v3 replay ≫ slow v2 replay').toBeGreaterThan(v2 * 3);
     });
 
     it('scrolls a greyed needle through every inter-take silence, holds within-verse', async () => {
