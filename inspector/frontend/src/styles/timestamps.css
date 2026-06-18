@@ -168,7 +168,10 @@
     padding: 4px 7px;
     background: #0f0f23;
     border-radius: 3px;
-    font-family: 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+    /* 'SilenceMark' first overrides ONLY U+06DF/U+06E0 (the silence zeros) with a
+       crisp DigitalKhatt subset; every letter still falls through to 'Traditional
+       Arabic' unchanged. See the SilenceMark @font-face in base.css. */
+    font-family: 'SilenceMark', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
     font-size: var(--analysis-letter-font-size, 1.05rem);
     color: #aaa;
     text-align: center;
