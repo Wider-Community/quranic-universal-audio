@@ -1,23 +1,16 @@
 /**
- * Non-recited decorator marks for the recitation teleprompter.
- *
- * Some glyphs in the Quranic text are NOT recited — waqf (stop) signs, the
- * rub-el-hizb section marker (۞), the place-of-sajdah mark (۩). They must render
- * in the line but never take a per-letter highlight cell: they carry no MFA
- * timing, so a cell for them would fall back to whole-word timing and stay lit
- * for the entire word. This module is the single registry of those marks. Each
- * maps to a role, a placement (rendered before or after the word's letters), and
- * whether it lights while a pause holds on its word. `splitDecorators` pulls them
- * out of a word's text so only the recited `clean` text becomes highlight cells.
- * Adding a future non-recited mark is a one-line registry entry.
- *
- * Waqf codepoints are reused from `utils/waqf.ts` (the shared stop-sign source,
- * also consumed by the Timestamps tab); rub/sajdah are teleprompter-only.
+ * Waqf (stop) signs lifted out of the reveal text so they can be styled on their
+ * own — revealed after recitation passes them, and lit while a pause holds. A
+ * waqf glyph is a combining mark, so it can't be recoloured in place (it shares
+ * its base letter's shaped run); it is pulled out and re-rendered on an invisible
+ * word joiner as its own styleable glyph. Non-combining symbols that must NOT
+ * move (rub-el-hizb, sajdah) are handled the opposite way — left in the reveal
+ * text as inert cells (see engine/build-structure), never repositioned.
  */
 
 import { STOP_MARKS } from '../utils/waqf';
 
-export type DecoratorRole = 'waqf' | 'rub' | 'sajdah';
+export type DecoratorRole = 'waqf';
 export type DecoratorPlacement = 'leading' | 'trailing';
 
 export interface DecoratorSpec {
@@ -27,22 +20,12 @@ export interface DecoratorSpec {
     litOnPause: boolean;
 }
 
-/** ARABIC START OF RUB EL HIZB (۞) — a quarter-hizb section marker at a verse head. */
-const RUB_EL_HIZB = 0x06de;
-/** ARABIC PLACE OF SAJDAH (۩) — a prostration marker at a verse tail. */
-const SAJDAH = 0x06e9;
-
-/** Codepoint → how to render it as an isolated, non-highlighting decorator. */
-export const DECORATOR_MARKS: ReadonlyMap<number, DecoratorSpec> = new Map<number, DecoratorSpec>([
-    ...[...STOP_MARKS].map(
-        (cp): [number, DecoratorSpec] => [
-            cp,
-            { role: 'waqf', placement: 'trailing', litOnPause: true },
-        ],
+/** Codepoint -> how to render it as an isolated, styleable decorator. */
+export const DECORATOR_MARKS: ReadonlyMap<number, DecoratorSpec> = new Map(
+    [...STOP_MARKS].map(
+        (cp): [number, DecoratorSpec] => [cp, { role: 'waqf', placement: 'trailing', litOnPause: true }],
     ),
-    [RUB_EL_HIZB, { role: 'rub', placement: 'leading', litOnPause: false }],
-    [SAJDAH, { role: 'sajdah', placement: 'trailing', litOnPause: false }],
-]);
+);
 
 export interface Decorator {
     glyph: string;
@@ -51,7 +34,7 @@ export interface Decorator {
 }
 
 export interface SplitDecorators {
-    /** Text with every decorator mark removed — what the reveal actually animates. */
+    /** Text with every decorator mark removed - what the reveal actually animates. */
     clean: string;
     /** Decorators rendered before the word's letters, in source order. */
     leading: Decorator[];

@@ -339,6 +339,9 @@
                     if (localT >= ch.start && localT < ch.end) { isActive = true; isReached = false; }
                     else if (localT >= ch.end) isReached = true; // keep co-timed trail revealed
                 }
+                // Inert symbols (rub-el-hizb, sajdah) reveal in place but never
+                // take the highlight — show as reached where they'd otherwise light.
+                if (ch.inert && isActive) { isActive = false; isReached = true; }
                 if (isActive) wordHasActiveChar = true;
                 el.classList.toggle('active', isActive);
                 el.classList.toggle('reached', isReached);

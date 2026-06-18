@@ -188,4 +188,29 @@ describe('LineAnimation char mode', () => {
         const markAfter = after.container.querySelector<HTMLElement>('.ra-decorator--waqf');
         expect(markAfter?.classList.contains('revealed')).toBe(true);
     });
+
+    // Inert non-recited symbols (rub-el-hizb, sajdah) render in place but never
+    // take the highlight: at the moment its inherited interval would be active,
+    // the symbol cell shows as reached, not active.
+    it('never highlights an inert symbol cell (sajdah)', async () => {
+        const SAJDAH = '۩';
+        const { container } = render(LineAnimation, {
+            units: [
+                unit('1:1:1', 'ab' + SAJDAH, 0, 2, [
+                    { char: 'a', start: 0, end: 1 },
+                    { char: 'b', start: 1, end: 2 },
+                ]),
+            ],
+            config: charConfig,
+            getTimeMs: () => 1500, // 'b' active; the sajdah inherits b's interval
+            playing: false,
+        });
+        await tick();
+        const chars = [...container.querySelectorAll<HTMLElement>('.ra-char')];
+        const b = chars.find((c) => c.textContent === 'b');
+        const saj = chars.find((c) => c.textContent?.includes(SAJDAH));
+        expect(b?.classList.contains('active')).toBe(true);
+        expect(saj).toBeDefined();
+        expect(saj?.classList.contains('active')).toBe(false);
+    });
 });

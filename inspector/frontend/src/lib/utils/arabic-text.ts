@@ -55,23 +55,12 @@ export function charsMatch(mfaChar: string, displayChar: string): boolean {
 }
 
 /**
- * "Small-letter" combining marks — combining codepoints that nonetheless carry
- * their OWN MFA timing (they are letters in the published alphabet), so each must
- * start its own grapheme cell to highlight independently rather than ride a base.
- * Small hamza (U+0654), hamza below (U+0655), dagger alef (U+0670), and the
- * superscript small letters waw / yeh / yaa / noon (U+06E5–U+06E8).
- */
-export const SMALL_LETTER_MARKS = new Set([
-    0x0654, 0x0655, 0x0670, 0x06e5, 0x06e6, 0x06e7, 0x06e8,
-]);
-
-/**
- * Split text into character groups (base char + combining marks).
- * Port of quranic_universal_aligner/src/ui/segments.py:split_into_char_groups().
- *
- * A {@link SMALL_LETTER_MARKS} mark starts its own group (it is independently
- * timed); every other combining mark rides the current base; tatweel and the
- * word joiner absorb into the current group.
+ * Split text into grapheme clusters — one group per base letter, carrying ALL of
+ * its combining marks. Every combining mark (tashkeel, small hamza, mini-yaa,
+ * dagger alef, …) rides its base so the group stays a single shaped cluster:
+ * pulling a mark into its own run detaches it from its letter (it floats out of
+ * position). Tatweel and the word joiner absorb into the current group; only a
+ * base (non-combining) character starts a new group.
  */
 export function splitIntoCharGroups(text: string): string[] {
     const groups: string[] = [];
@@ -79,12 +68,7 @@ export function splitIntoCharGroups(text: string): string[] {
     for (const ch of text) {
         const cp = ch.codePointAt(0);
         if (cp === undefined) continue;
-        if (cp === 0x0640 || cp === 0x2060) {
-            current += ch;
-        } else if (SMALL_LETTER_MARKS.has(cp)) {
-            if (current) groups.push(current);
-            current = ch;
-        } else if (isCombiningMark(cp)) {
+        if (cp === 0x0640 || cp === 0x2060 || isCombiningMark(cp)) {
             current += ch;
         } else {
             if (current) groups.push(current);

@@ -8,14 +8,12 @@
  * are applied imperatively via `engine/highlight.ts`.
  */
 
-import {
-    charsMatch,
-    isCombiningMark,
-    SMALL_LETTER_MARKS,
-    splitIntoCharGroups,
-    ZWSP,
-} from '../../utils/arabic-text';
+import { charsMatch, isCombiningMark, splitIntoCharGroups } from '../../utils/arabic-text';
 import { type Decorator, splitDecorators } from '../decorators';
+
+/** Non-recited symbols rendered in place but never highlighted (no MFA letter):
+ *  rub-el-hizb (U+06DE) and the place-of-sajdah mark (U+06E9). */
+const INERT_SYMBOLS = new Set([0x06de, 0x06e9]);
 
 /** Minimal word shape the builder needs. Both `TsWord` and `AnimUnit`
  *  (mapped) satisfy it — keeps the builder reusable across surfaces. */
@@ -32,6 +30,8 @@ export interface AnimChar {
     start: number;
     end: number;
     groupId: string;
+    /** A non-recited symbol (rub-el-hizb, sajdah): rendered in place, never lit. */
+    inert: boolean;
 }
 
 export interface AnimWord {
@@ -67,76 +67,47 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
         const charGroups = splitIntoCharGroups(clean);
         const letters = word.letters || [];
 
-        // Assign initial group IDs. A group that LEADS with a combining mark (a
-        // small-letter mark like the dagger alef, small hamza, mini-yaa) can't
-        // stand alone — anchor it on an invisible word joiner so it shapes into
-        // its own zero-advance run with an independent colour, no dotted circle.
+        // One cell per grapheme cluster (base letter + all its combining marks).
+        // A cluster whose base is a non-recited symbol (rub-el-hizb, sajdah) is
+        // `inert`: rendered in place but never highlighted, and it takes no MFA
+        // letter.
         const chars: AnimChar[] = charGroups.map((group) => {
-            const firstCp = group.codePointAt(0);
-            const needsJoiner =
-                firstCp !== undefined
-                && (SMALL_LETTER_MARKS.has(firstCp) || isCombiningMark(firstCp));
+            const base = group.codePointAt(0);
             return {
-                text: needsJoiner ? ZWSP + group : group,
+                text: group,
                 start: word.start,
                 end: word.end,
                 groupId: `g${groupIdCounter++}`,
+                inert: base !== undefined && INERT_SYMBOLS.has(base),
             };
         });
 
-        // Fuzzy two-pointer: walk display chars + MFA letters simultaneously,
-        // recording every cell that receives a real per-letter interval.
+        // Walk display clusters + MFA letters in order. A matched base cluster
+        // folds in the timing of any following combining-mark MFA letters (small
+        // hamza, mini-yaa, dagger alef): they ride this base grapheme and share
+        // its lit interval - a separate highlight span would detach the mark from
+        // its letter.
         let mfaIdx = 0;
         const timed = new Set<number>();
         for (let di = 0; di < chars.length; di++) {
-            if (timed.has(di)) continue;
             const span = chars[di];
-            if (!span) continue;
-            const displayChar = span.text.replace(/^[\u2060\u200B]/, ''); // strip the joiner
-            if (mfaIdx < letters.length) {
-                const lt = letters[mfaIdx];
-                if (!lt) {
-                    mfaIdx++;
-                    continue;
-                }
-                const mfaChar = lt.char || '';
-                if (charsMatch(mfaChar, displayChar)) {
-                    const startSec = lt.start != null ? lt.start : word.start;
-                    const endSec = lt.end != null ? lt.end : word.end;
-                    span.start = startSec;
-                    span.end = endSec;
-                    timed.add(di);
-
-                    // Peek ahead: combining-mark-only groups for the same MFA
-                    // letter. A joiner-anchored small-letter cell breaks the run
-                    // (the joiner is not combining), so it is matched on its own
-                    // MFA letter instead of being absorbed here.
-                    const mfaNfd = mfaChar.normalize('NFD');
-                    let peek = di + 1;
-                    while (peek < chars.length) {
-                        const peekSpan = chars[peek];
-                        if (!peekSpan) break;
-                        const peekText = peekSpan.text.replace(/ـ/g, '');
-                        if (
-                            !peekText
-                            || ![...peekText].every((c) => {
-                                const cp = c.codePointAt(0);
-                                return cp !== undefined && isCombiningMark(cp);
-                            })
-                        ) {
-                            break;
-                        }
-                        if (![...peekText].some((c) => mfaNfd.includes(c))) break;
-                        peekSpan.start = startSec;
-                        peekSpan.end = endSec;
-                        timed.add(peek);
-                        peek++;
-                    }
-                    mfaIdx++;
-                }
-                // else: no match — leave this cell for the orphan pass below.
+            if (!span || span.inert) continue;
+            while (mfaIdx < letters.length && !letters[mfaIdx]) mfaIdx++;
+            if (mfaIdx >= letters.length) break;
+            const lt = letters[mfaIdx]!;
+            if (!charsMatch(lt.char || '', span.text)) continue; // mismatch -> orphan pass
+            span.start = lt.start != null ? lt.start : word.start;
+            let endSec = lt.end != null ? lt.end : word.end;
+            mfaIdx++;
+            while (mfaIdx < letters.length) {
+                const nxt = letters[mfaIdx];
+                const cp = nxt?.char ? nxt.char.codePointAt(0) : undefined;
+                if (cp === undefined || !isCombiningMark(cp)) break;
+                if (nxt!.end != null) endSec = nxt!.end;
+                mfaIdx++;
             }
-            // else: exhausted MFA letters → orphan pass below.
+            span.end = endSec;
+            timed.add(di);
         }
 
         // Orphan-timing safety net. A cell the matcher never stamped would keep

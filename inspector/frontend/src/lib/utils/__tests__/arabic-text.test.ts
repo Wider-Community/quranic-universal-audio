@@ -76,24 +76,21 @@ describe('splitIntoCharGroups', () => {
         expect(groups[0]).toBe('بِ');
     });
 
-    it('U+0654 (hamza-above) starts a new group, not absorbed by previous base', () => {
-        // The splitter explicitly treats U+0654 as a new-group trigger.
+    it('U+0654 (hamza-above) rides its base as one cluster', () => {
+        // A combining mark cannot be a separate run without detaching, so it
+        // stays on its base — base + hamza = one group.
         const groups = splitIntoCharGroups('بٔ');
-        expect(groups).toHaveLength(2);
+        expect(groups).toHaveLength(1);
     });
 
-    it('U+0670 (dagger alef) starts a new group, not absorbed by previous base', () => {
-        // The splitter explicitly excludes the dagger alef from combining-
-        // mark absorption — two groups, not one.
+    it('U+0670 (dagger alef) rides its base as one cluster', () => {
         const groups = splitIntoCharGroups('بٰ');
-        expect(groups).toHaveLength(2);
+        expect(groups).toHaveLength(1);
     });
 
-    it('U+06E7 (mini-yaa) starts a new group so it can highlight independently', () => {
-        // The mini-yaa carries its own MFA timing, so it must split into its own
-        // cell rather than ride its base — base + mini-yaa = two groups.
+    it('U+06E7 (mini-yaa) rides its base as one cluster', () => {
         const groups = splitIntoCharGroups('بۧ');
-        expect(groups).toHaveLength(2);
+        expect(groups).toHaveLength(1);
     });
 
     it('U+2060 (word joiner) absorbs into the current group', () => {
