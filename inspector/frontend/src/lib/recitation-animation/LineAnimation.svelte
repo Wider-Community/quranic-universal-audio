@@ -13,7 +13,7 @@
      * driven by CSS custom properties projected from `RecitationAnimConfig`,
      * so the throwaway playground can tune it live.
      */
-    import { toArabicNumeral } from '../utils/arabic-text';
+    import { toArabicNumeral, ZWSP } from '../utils/arabic-text';
     import { ayahUnitRanges } from './chapter-words';
     import { cssVarText, type RecitationAnimConfig } from './config';
     import { buildAnimStructure, type AnimSourceWord } from './engine/build-structure';
@@ -203,13 +203,13 @@
         sweepWaqf(h);
     }
 
-    /** Drive each word's stop-sign overlay (`.ra-waqf-mark`).
+    /** Drive each word's stop-sign mark (`.ra-waqf-mark`).
      *
      *  `revealed` mirrors the mark's own letter so it dims/reveals in lockstep
-     *  with the rest of the line (the overlay paints ONLY the mark — its letters
-     *  are clipped away — so its opacity is independent and never bleeds into the
-     *  per-letter reveal). The mark rides the LAST letter, so in char mode it
-     *  tracks that last char's reveal; in word mode it tracks the word.
+     *  with the rest of the line (the mark is a standalone zero-advance glyph, so
+     *  its opacity is independent and never bleeds into the per-letter reveal).
+     *  The mark rides the LAST letter, so in char mode it tracks that last char's
+     *  reveal; in word mode it tracks the word.
      *
      *  `waqf-active` lights the sign while a pause holds on its word: a silence
      *  gap (`hit == null`) after at least one word was lit. The sign never takes
@@ -423,7 +423,7 @@
             tabindex="-1"
             onclick={() => onSeekToWord?.((pageUnits[i]?.start ?? 0) * 1000)}
             onkeydown={() => {}}
-        >{#if w.waqf}<span class="ra-waqf-mark" aria-hidden="true">{w.clean}{w.waqf}</span>{/if}{#if config.granularity === 'char' && w.hasChars}<span
+        >{#if config.granularity === 'char' && w.hasChars}<span
                     class="ra-word-ink"
                     aria-hidden="true"
                 >{w.clean}</span>{#each w.chars as ch, ci (ci)}<span
@@ -431,7 +431,7 @@
                     data-start={ch.start}
                     data-end={ch.end}
                     data-group-id={ch.groupId}
-                >{ch.text}</span>{/each}{:else}{w.clean}{/if}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
+                >{ch.text}</span>{/each}{:else}{w.clean}{/if}{#if w.waqf}<span class="ra-waqf-mark" aria-hidden="true">{ZWSP}{w.waqf}</span>{/if}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
     {/each}
 </div>
 
@@ -477,8 +477,6 @@
      *  word silhouette rather than each joined letter. */
     .ra-word {
         display: inline-block;
-        /* Containing block for the absolute `.ra-waqf-mark` overlay. */
-        position: relative;
         cursor: pointer;
         opacity: var(--ra-unreached-opacity);
         text-shadow: var(--ra-word-shadow);
@@ -509,6 +507,8 @@
      *  stroked — a per-char outline shows dark seams across the joins. */
     .ra-line.ra-chars .ra-word {
         opacity: 1;
+        /* Containing block for the absolute `.ra-word-ink` underlay. */
+        position: relative;
         /* Don't inherit the word outline down to each char span. */
         text-shadow: none;
     }
@@ -563,27 +563,17 @@
         opacity: 1;
     }
 
-    /* Waqf (stop) sign — the mark overlay.
-     *
-     *  A waqf glyph is a combining mark: to sit at its true font-anchored (GPOS)
-     *  position it MUST shape in the same run as the word's last letter — but a
-     *  mark shaped into a run is painted in that run's colour and can't be
-     *  recoloured from a split-out span (true for HTML *and* SVG `<tspan fill>`:
-     *  the mark inherits the base glyph's fill). To get natural position AND an
-     *  independent colour/opacity, render the FULL word (`clean` + mark) once more
-     *  as a single run over the real word, then CLIP to the high waqf register so
-     *  only the mark paints — the letters are clipped away entirely. Because the
-     *  overlay paints nothing but the mark, we may colour the whole run freely
-     *  (only the mark shows) and its opacity is fully independent — it never
-     *  bleeds extra ink into the per-letter reveal. The surfaced marks sit in the
-     *  top ~18% of the line box and the tallest letters (alef/lam) stay below
-     *  ~40%, so clipping to the top 30% lands in that gap for every mark + base
-     *  letter; being a percentage, it holds at any font size (line-height fixed). */
+    /* Waqf (stop) sign — a standalone mark anchored to an invisible WORD JOINER
+     *  (the same trick `build-structure` uses for the dagger alef). A waqf glyph
+     *  is a combining mark, so on its own it would inherit the run's colour and
+     *  can't be recoloured independently; rendered after the last letter on a
+     *  zero-advance joiner it shapes into its own run with a fully independent
+     *  colour/opacity, adds NO width, and — carrying no letters — can never
+     *  overpaint the reveal. It floats at the word's end in its natural high
+     *  register, which reads as the stop boundary it marks. */
     .ra-line .ra-word .ra-waqf-mark {
-        position: absolute;
-        inset: 0;
-        clip-path: inset(0 0 70% 0);
-        white-space: nowrap;
+        position: relative;
+        z-index: 2; /* above the char/ink layers so the mark always paints on top */
         pointer-events: none;
         color: var(--ra-base-color);
         text-shadow: var(--ra-word-shadow);

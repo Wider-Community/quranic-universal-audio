@@ -2,6 +2,7 @@ import { render } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { describe, expect, it } from 'vitest';
 
+import { ZWSP } from '../../utils/arabic-text';
 import { DEFAULT_RECITATION_CONFIG } from '../config';
 import LineAnimation from '../LineAnimation.svelte';
 import type { AnimUnit } from '../types';
@@ -76,12 +77,11 @@ describe('LineAnimation char mode', () => {
         expect(words[1]?.classList.contains('active')).toBe(true);
     });
 
-    // Regression: the waqf (stop) sign is a SEPARATE clipped overlay, decoupled
-    // from the letters — it must not perturb the per-letter reveal (the old
-    // full-word occlusion layer bled extra ink, so a stop-sign word rendered
-    // brighter / lit whole). Here the clean chars reveal exactly as if no mark
-    // were present, and the mark overlay is never given the reveal highlight.
-    it('renders the waqf mark as a separate overlay that never takes the reveal', async () => {
+    // Regression: the waqf (stop) sign is a standalone zero-advance glyph
+    // (`WORD JOINER + mark`), decoupled from the letters — it must not perturb
+    // the per-letter reveal. Here the clean chars reveal exactly as if no mark
+    // were present, and the mark is never given the reveal highlight.
+    it('renders the waqf mark as a standalone glyph that never takes the reveal', async () => {
         const WAQF = 'ۖ'; // ARABIC SMALL HIGH SAD-LAM-ALEF-MEEM (a surfaced stop)
         const units = [
             unit('1:1:1', 'ab' + WAQF, 0, 2, [
@@ -105,11 +105,12 @@ describe('LineAnimation char mode', () => {
         expect(chars[0]?.classList.contains('reached')).toBe(true);
         expect(chars[1]?.classList.contains('active')).toBe(true);
 
-        // The mark is one separate overlay carrying clean+mark, never a `.ra-char`
-        // and never given the reveal highlight; it reveals with its last letter.
+        // The mark is one standalone glyph (`WORD JOINER + mark`, no letters),
+        // never a `.ra-char` and never given the reveal highlight; it reveals
+        // with its last letter.
         const marks = container.querySelectorAll<HTMLElement>('.ra-waqf-mark');
         expect(marks.length).toBe(1);
-        expect(marks[0]?.textContent).toBe('ab' + WAQF);
+        expect(marks[0]?.textContent).toBe(ZWSP + WAQF);
         expect(marks[0]?.classList.contains('active')).toBe(false);
         expect(marks[0]?.classList.contains('revealed')).toBe(true);
         expect(marks[0]?.classList.contains('waqf-active')).toBe(false);
