@@ -35,6 +35,11 @@
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
 
+    /** Rub-el-hizb (۞ U+06DE) and place-of-sajdah (۩ U+06E9) — section markers,
+     *  not recited; stripped from the analysis word box so the cell shows only the
+     *  recited text. */
+    const NON_RECITED_SIGNS = /[\u06de\u06e9]/g;
+
     // ---- Local structural state (derived declaratively from loadedVerse) ----
 
     interface RenderedLetter {
@@ -218,7 +223,7 @@
             blocks.push({
                 word,
                 wordIndex: wi,
-                displayText: word.display_text || word.text,
+                displayText: (word.display_text || word.text).replace(NON_RECITED_SIGNS, ''),
                 letters: letterGroupsFor(word),
                 phonemes,
                 bridge,
