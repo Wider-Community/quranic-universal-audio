@@ -1334,7 +1334,10 @@ def process(
 
     def _emit_segment_shards(results_by_ch, suffix=""):
         v2_doc = build_raw_v2(chapters, results_by_ch, audio_category)
-        # Stamp cross-word tajweed bridge rules onto merger phones (schema v3).
+        # Tag cross-word tajweed bridges AND stamp per-letter silent flags + folded
+        # silence marks (tag_v2_doc → tag_segment_words → _stamp_silent_flags) — the
+        # same path the silent-flags backfill runs. build_segment_shards then stamps
+        # schema v4. Correctness tracks the phonemizer version this job runs.
         n_bridges = tag_v2_doc(bridge_pm, v2_doc)
         log.info("Tagged %d cross-word bridge phone(s)", n_bridges)
         shards = build_segment_shards(
