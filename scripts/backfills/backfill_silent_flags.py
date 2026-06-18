@@ -13,7 +13,7 @@ Idempotent: re-running no-ops on an already-stamped shard (the char-match guard
 sees the folded mark and skips). After a silent-logic change (e.g. the carrier-waw
 silence in 2.6) pass ``--restamp`` to reset already-stamped letters to bare and
 re-derive — no re-alignment, since the flags are a pure function of the text.
-Requires ``quranic-phonemizer>=2.6``.
+Requires ``quranic-phonemizer>=2.7``.
 
 Dry-run by default: reports per-reciter coverage (letters / stamped / silent /
 marked / NO-SLOT) WITHOUT writing. ``--write`` uploads the stamped shards via
