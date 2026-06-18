@@ -168,10 +168,7 @@
     padding: 4px 7px;
     background: #0f0f23;
     border-radius: 3px;
-    /* DigitalKhatt first (matches .mega-word + the animation): it carries the
-       Quranic silence zeros (۟ U+06DF / ۠ U+06E0) that 'Traditional Arabic' lacks,
-       so the folded silence mark renders on the cell instead of dropping. */
-    font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+    font-family: 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
     font-size: var(--analysis-letter-font-size, 1.05rem);
     color: #aaa;
     text-align: center;
