@@ -38,6 +38,9 @@ export interface Letter {
     char: string;
     start: number | null;
     end: number | null;
+    /** True when the grapheme is silent (no audible phoneme at its own
+     *  position) — the highlight skips it. From shard schema v4; absent on v3. */
+    silent?: boolean;
 }
 
 /** Single word with text + timing + letters + phoneme indices into the flat intervals list. */
@@ -127,7 +130,8 @@ export type TsShardWord = [
     /** word_idx (1-based) */ number,
     /** start_ms */ number,
     /** end_ms */ number,
-    /** letters: [char, start_ms|null, end_ms|null][] */ Array<[string, number | null, number | null]>,
+    /** letters: [char, start_ms|null, end_ms|null(, silent)][] (4th slot from schema v4) */
+    Array<[string, number | null, number | null, boolean?]>,
     /** phones: [phone, start_ms, end_ms, ...optional flags][] */ Array<(string | number | boolean)[]>,
 ];
 

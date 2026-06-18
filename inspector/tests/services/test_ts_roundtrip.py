@@ -25,7 +25,11 @@ from qua_shared.timestamps_dedup import (
     build_raw_v2,
     project_segment_shard,
 )
-from qua_shared.timestamps_shards import build_segment_shards, gzip_shard
+from qua_shared.timestamps_shards import (
+    SEGMENT_SCHEMA_VERSION,
+    build_segment_shards,
+    gzip_shard,
+)
 from services import storage_paths
 from services.storage import data_dir
 from services.storage.hf_bucket import get_backend
@@ -94,7 +98,7 @@ def test_read_path_is_byte_passthrough(tmp_reciter_dir):
     # The inflated form decodes to the segment-array shard shape.
     inflated = data_dir.read_timestamps_chapter(SLUG, chapter)
     shard = orjson.loads(inflated)
-    assert shard["_meta"]["schema_version"] == 3
+    assert shard["_meta"]["schema_version"] == SEGMENT_SCHEMA_VERSION
     assert isinstance(shard["segments"], list)
     assert all(set(s) == {"ref", "t", "words"} for s in shard["segments"])
 

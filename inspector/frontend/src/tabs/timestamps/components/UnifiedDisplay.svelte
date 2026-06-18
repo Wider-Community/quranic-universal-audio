@@ -19,6 +19,8 @@
     import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { dashPort } from '../../../lib/playback/dash-port';
     import type { PhonemeInterval, TsWord } from '../../../lib/types/ts-client';
+    import { splitWaqf } from '../../../lib/utils/waqf';
+    import { waqfRenderStyle } from '../utils/waqf-render';
     import {
         showLetters,
         showPhonemes,
@@ -33,10 +35,21 @@
     import { TS_CLICK_DELAY_MS } from '../utils/constants';
     import WordTranslation from './WordTranslation.svelte';
 
+    /** Rub-el-hizb (۞ U+06DE) and place-of-sajdah (۩ U+06E9) — section markers,
+     *  not recited; stripped from the analysis word box so the cell shows only the
+     *  recited text. */
+    const NON_RECITED_SIGNS = /[\u06de\u06e9]/g;
+
     // ---- Local structural state (derived declaratively from loadedVerse) ----
 
     interface RenderedLetter {
-        chars: string;
+        /** One grapheme = one cell (letters are never grouped, even when they
+         *  share timing) — the sole exception is alef-maksura + dagger alef (ىٰ),
+         *  one long-vowel unit folded into a single cell. A `silent` grapheme is
+         *  greyed, non-interactive, and never highlighted — the highlight/hover/
+         *  click land on the pronounced letter that shares its timing. */
+        ch: string;
+        silent: boolean;
         start: number | null;
         end: number | null;
         isNull: boolean;
@@ -52,13 +65,28 @@
         phonemes: RenderedPhoneme[];
     }
 
+    /** A detected silence between this block and the previous one. Sits as a small
+     *  cell between the two words; carries the previous word's lifted-out waqf
+     *  (stop) mark, or null → the neutral pause icon. Lights while its silence
+     *  plays; dims the rest of the row to 70%. */
+    interface RenderedPauseBridge {
+        mark: string | null;
+        startSec: number;
+        endSec: number;
+    }
+
     interface RenderedBlock {
         word: TsWord;
         wordIndex: number;
+        /** Word text to render — the previous-word's waqf mark is stripped here
+         *  when a following pause surfaces it into the pause bridge. */
+        displayText: string;
         letters: RenderedLetter[];
         phonemes: RenderedPhoneme[];
-        /** Optional bridge to render before this block. */
+        /** Optional cross-word (idgham) bridge to render before this block. */
         bridge: RenderedBridge | null;
+        /** Optional pause bridge to render before this block. */
+        pauseBridge: RenderedPauseBridge | null;
     }
 
     // Container ref used for imperative highlight updates.
@@ -85,6 +113,10 @@
     $: rendered, _resetHighlightClasses();
     function _resetHighlightClasses(): void {
         if (!rootEl) return;
+        rootEl.classList.remove('in-pause');
+        rootEl.querySelectorAll<HTMLElement>('.pause-bridge').forEach((b) => {
+            b.classList.remove('active', 'hover-preview');
+        });
         rootEl.querySelectorAll<HTMLElement>('.mega-block').forEach((b) => {
             b.classList.remove('active', 'past', 'hover-preview');
         });
@@ -111,30 +143,37 @@
 
     // ---- Pure helpers (state-free) ----
 
+    // Alef-maksura (ى U+0649) + dagger alef (ٰ U+0670) is one long-vowel unit
+    // (علىٰ, موسىٰ, إلىٰ). The aligner splits the dagger into its own shard letter,
+    // but the two render as a single cell. Folding by char is safe — an alef-
+    // maksura never carries an independent dagger. Every other grapheme stays its
+    // own cell: a carrier waw keeps its (silent) waw + dagger split, a consonant's
+    // dagger stays independent.
+    const ALEF_MAKSURA = 'ى';
+    const DAGGER_ALEF = 'ٰ';
+
     function letterGroupsFor(word: TsWord): RenderedLetter[] {
-        const letters = word.letters || [];
-        const groups: RenderedLetter[] = [];
-        for (const letter of letters) {
-            const isNull = letter.start == null || letter.end == null;
-            const last = groups[groups.length - 1];
-            if (
-                !isNull &&
-                last &&
-                !last.isNull &&
-                last.start === letter.start &&
-                last.end === letter.end
-            ) {
-                last.chars += letter.char;
-            } else {
-                groups.push({
-                    chars: letter.char,
-                    start: letter.start,
-                    end: letter.end,
-                    isNull,
-                });
+        const out: RenderedLetter[] = [];
+        for (const letter of word.letters || []) {
+            const prev = out[out.length - 1];
+            if (prev && letter.char.startsWith(DAGGER_ALEF) && prev.ch.endsWith(ALEF_MAKSURA)) {
+                // Fold the dagger onto the maksura cell: one combined unit spanning
+                // both timings, sounding unless both graphemes are silent.
+                prev.ch += letter.char;
+                if (letter.end != null) prev.end = letter.end;
+                prev.silent = prev.silent && letter.silent === true;
+                prev.isNull = prev.isNull || letter.start == null || letter.end == null;
+                continue;
             }
+            out.push({
+                ch: letter.char,
+                silent: letter.silent === true,
+                start: letter.start,
+                end: letter.end,
+                isNull: letter.start == null || letter.end == null,
+            });
         }
-        return groups;
+        return out;
     }
 
     /** Split a phone string into base character(s) and trailing IPA modifiers
@@ -197,10 +236,28 @@
             blocks.push({
                 word,
                 wordIndex: wi,
+                displayText: (word.display_text || word.text).replace(NON_RECITED_SIGNS, ''),
                 letters: letterGroupsFor(word),
                 phonemes,
                 bridge,
+                pauseBridge: null,
             });
+        }
+
+        // Detected inter-word silences: a positive gap between consecutive words
+        // (their end/start are ms-quantized, so contiguous words share a boundary
+        // and only a real pause leaves a gap). Each gap gets a pause bridge before
+        // the later block; a surfaced waqf mark on the earlier word is lifted out
+        // of its box into the bridge.
+        for (let bi = 0; bi < blocks.length - 1; bi++) {
+            const a = blocks[bi]!;
+            const b = blocks[bi + 1]!;
+            const startSec = a.word.end;
+            const endSec = b.word.start;
+            if (endSec <= startSec) continue;
+            const { clean, mark } = splitWaqf(a.displayText);
+            if (mark) a.displayText = clean;
+            b.pauseBridge = { mark, startSec, endSec };
         }
         return blocks;
     }
@@ -308,9 +365,11 @@
             ph.classList.toggle('hover-preview', parseInt(ph.dataset.index ?? '-1') === hoverPhonemeIndex);
         });
 
-        // Letter highlights — must check each frame (time-based within word)
+        // Letter highlights — must check each frame (time-based within word).
+        // Silent cells are excluded: at a shared [start,end] the highlight lands
+        // on the pronounced letter alone.
         rootEl
-            .querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts)')
+            .querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts):not(.silent)')
             .forEach((el) => {
                 const s = parseFloat(el.dataset.letterStart ?? '0');
                 const e = parseFloat(el.dataset.letterEnd ?? '0');
@@ -346,6 +405,23 @@
                 lp?.kind === 'phoneme' && lp.childIndex === idx,
             );
         });
+
+        // Pause bridges: the bridge whose silence span contains the playhead lights
+        // (`.active`) and the rest of the row dims to 70% (`.in-pause` on the
+        // container). Waveform hover over a silence span previews its bridge.
+        let inPauseGap = false;
+        rootEl.querySelectorAll<HTMLElement>('.pause-bridge').forEach((b) => {
+            const s = parseFloat(b.dataset.pauseStart ?? 'NaN');
+            const e = parseFloat(b.dataset.pauseEnd ?? 'NaN');
+            const playing = time >= s && time < e;
+            if (playing) inPauseGap = true;
+            b.classList.toggle('active', playing);
+            b.classList.toggle(
+                'hover-preview',
+                hoverTime != null && hoverTime >= s && hoverTime < e,
+            );
+        });
+        rootEl.classList.toggle('in-pause', inPauseGap);
     }
 
     function getSegRelTime(segOffset: number): number {
@@ -607,6 +683,21 @@
                 {/each}
             </div>
         {/if}
+        {#if block.pauseBridge}
+            <div
+                class="pause-bridge"
+                data-pause-start={block.pauseBridge.startSec}
+                data-pause-end={block.pauseBridge.endSec}
+                title={block.pauseBridge.mark ? 'Stop sign' : 'Pause'}
+            >
+                {#if block.pauseBridge.mark}
+                    <span class="pause-waqf" style={waqfRenderStyle(block.pauseBridge.mark)}
+                    >{block.pauseBridge.mark}</span>
+                {:else}
+                    <span class="pause-icon" aria-hidden="true"></span>
+                {/if}
+            </div>
+        {/if}
         <div
             class="mega-block"
             data-word-index={block.wordIndex}
@@ -624,21 +715,23 @@
                 role="group"
                 on:mouseenter={() => onWordEnter(block.word)}
                 on:mouseleave={onHoverLeave}
-            >{block.word.display_text || block.word.text}</div>
+            >{block.displayText}</div>
             {#if block.letters.length}
                 <div class="mega-letters" class:hidden={!$showLetters} dir="rtl">
                     {#each block.letters as lt, li (li)}
                         {#if lt.isNull}
                             <span
                                 class="mega-letter null-ts"
+                                class:silent={lt.silent}
                                 on:click|stopPropagation
                                 on:keydown={() => {}}
                                 role="button"
                                 tabindex="-1"
-                            >{lt.chars}</span>
+                            >{lt.ch}</span>
                         {:else}
                             <span
                                 class="mega-letter"
+                                class:silent={lt.silent}
                                 data-letter-start={lt.start}
                                 data-letter-end={lt.end}
                                 data-word-index={block.wordIndex}
@@ -652,7 +745,7 @@
                                 on:keydown={() => {}}
                                 role="button"
                                 tabindex="-1"
-                            >{lt.chars}</span>
+                            >{lt.ch}</span>
                         {/if}
                     {/each}
                 </div>

@@ -491,7 +491,7 @@ export function assembleVerseFromShard(
         const wordIdx = w[0];
         const wStart = w[1] / 1000;
         const wEnd = w[2] / 1000;
-        const lettersRaw = (w[3] ?? []) as Array<[string, number | null, number | null]>;
+        const lettersRaw = (w[3] ?? []) as Array<[string, number | null, number | null, boolean?]>;
         const phonesRaw = (w[4] ?? []) as Array<(string | number | boolean)[]>;
 
         const location = `${verseRef}:${wordIdx}`;
@@ -502,6 +502,7 @@ export function assembleVerseFromShard(
             char: lt[0],
             start: lt[1] === null ? null : lt[1] / 1000,
             end: lt[2] === null ? null : lt[2] / 1000,
+            silent: lt[3] === true,
         }));
 
         const phoneStartIdx = intervals.length;

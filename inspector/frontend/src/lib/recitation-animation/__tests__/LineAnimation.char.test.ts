@@ -2,6 +2,7 @@ import { render } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { describe, expect, it } from 'vitest';
 
+import { ZWSP } from '../../utils/arabic-text';
 import { DEFAULT_RECITATION_CONFIG } from '../config';
 import LineAnimation from '../LineAnimation.svelte';
 import type { AnimUnit } from '../types';
@@ -74,5 +75,142 @@ describe('LineAnimation char mode', () => {
         expect(chars[2]?.classList.contains('active')).toBe(true);
         expect(words[0]?.classList.contains('active')).toBe(true);
         expect(words[1]?.classList.contains('active')).toBe(true);
+    });
+
+    // Regression: cross-word co-timed letters must re-light on a loopback. The
+    // active word remaps the repeat occurrence onto its canonical timeline; the
+    // co-timed letter in the PREVIOUS word must follow the same remapped time,
+    // not raw playback time (which overshoots the canonical interval on a repeat
+    // and drops the letter to `reached`).
+    it('re-lights cross-word co-timed letters on a loopback repeat', async () => {
+        const wordA = unit('1:1:1', 'ab', 0, 2, [
+            { char: 'a', start: 0, end: 1 },
+            { char: 'b', start: 1, end: 2 }, // co-timed with word B's 'c'
+        ]);
+        const wordB: AnimUnit = {
+            location: '1:1:2',
+            ayahKey: '1:1',
+            surah: 1,
+            ayah: 1,
+            word: 2,
+            text: 'cd',
+            start: 1,
+            end: 7,
+            // Canonical occurrence [1,3] plus a repeat at [5,7]; the letters stay
+            // anchored to the canonical span.
+            intervals: [
+                { start: 1, end: 3 },
+                { start: 5, end: 7 },
+            ],
+            letters: [
+                { char: 'c', start: 1, end: 2 },
+                { char: 'd', start: 2, end: 3 },
+            ],
+        };
+
+        const { container } = render(LineAnimation, {
+            units: [wordA, wordB],
+            config: charConfig,
+            getTimeMs: () => 5500, // inside B's repeat [5,7] → localT remaps to 1.5s
+            playing: false,
+        });
+        await tick();
+
+        const chars = container.querySelectorAll<HTMLElement>('.ra-char');
+        expect(chars[1]?.textContent).toBe('b');
+        expect(chars[2]?.textContent).toBe('c');
+        // 'c' is the active word's letter at the remapped time; 'b' is its
+        // cross-word co-timed neighbour in the previous word — both light on the
+        // repeat, exactly as they do on the first pass.
+        expect(chars[2]?.classList.contains('active')).toBe(true);
+        expect(chars[1]?.classList.contains('active')).toBe(true);
+    });
+
+    const WAQF = 'ۖ'; // ARABIC SMALL HIGH SAD-LAM-ALEF-MEEM (a surfaced stop)
+    // A 3-letter stop word (letters a[0,1] b[1,2] c[2,3], the mark riding the
+    // last, c) plus a trailing word so the stop word can become reached.
+    const stopUnit = () => unit('1:1:1', 'abc' + WAQF, 0, 3, [
+        { char: 'a', start: 0, end: 1 },
+        { char: 'b', start: 1, end: 2 },
+        { char: 'c', start: 2, end: 3 },
+    ]);
+    const trailingUnit = () => unit('1:1:2', 'd', 3.2, 4.2, [{ char: 'd', start: 3.2, end: 4.2 }]);
+
+    // The waqf sign is a standalone zero-advance glyph (`WORD JOINER + mark`),
+    // decoupled from the letters — it never perturbs the per-letter reveal and is
+    // never given the reveal highlight.
+    it('renders the waqf mark as a standalone glyph that never takes the reveal', async () => {
+        const { container } = render(LineAnimation, {
+            units: [stopUnit()],
+            config: charConfig,
+            getTimeMs: () => 1500, // 'b' active
+            playing: false,
+        });
+        await tick();
+
+        // Per-letter reveal is unperturbed: the mark is stripped from `clean`, so
+        // the chars are exactly 'a','b','c'.
+        const chars = container.querySelectorAll<HTMLElement>('.ra-char');
+        expect([...chars].map((c) => c.textContent)).toEqual(['a', 'b', 'c']);
+
+        const marks = container.querySelectorAll<HTMLElement>('.ra-decorator--waqf');
+        expect(marks.length).toBe(1);
+        expect(marks[0]?.textContent).toBe(ZWSP + WAQF);
+        expect(marks[0]?.classList.contains('active')).toBe(false);
+        expect(marks[0]?.classList.contains('waqf-active')).toBe(false);
+    });
+
+    // Regression: the sign reveals only once recitation has PASSED its last
+    // letter — not while that letter is still being recited, and not when the
+    // word first becomes active. With the last letter 'c' ACTIVE the word is
+    // active but the mark must stay dim; once 'c' is reached the mark reveals.
+    it('reveals the waqf mark only after its letter is reached, not while active', async () => {
+        const mid = render(LineAnimation, {
+            units: [stopUnit()],
+            config: charConfig,
+            getTimeMs: () => 2500, // 'c' (last) ACTIVE, not yet reached
+            playing: false,
+        });
+        await tick();
+        const markMid = mid.container.querySelector<HTMLElement>('.ra-decorator--waqf');
+        // The word IS active (its last letter is being recited), yet the mark
+        // stays un-revealed — the sign hasn't been passed yet.
+        expect(markMid?.closest('.ra-word')?.classList.contains('active')).toBe(true);
+        expect(markMid?.classList.contains('revealed')).toBe(false);
+
+        const after = render(LineAnimation, {
+            units: [stopUnit(), trailingUnit()],
+            config: charConfig,
+            getTimeMs: () => 3500, // trailing word active → stop word + 'c' reached
+            playing: false,
+        });
+        await tick();
+        const markAfter = after.container.querySelector<HTMLElement>('.ra-decorator--waqf');
+        expect(markAfter?.classList.contains('revealed')).toBe(true);
+    });
+
+    // Inert non-recited symbols (rub-el-hizb, sajdah) render in place but never
+    // take the highlight: at the moment its inherited interval would be active,
+    // the symbol cell shows as reached, not active.
+    it('never highlights an inert symbol cell (sajdah)', async () => {
+        const SAJDAH = '۩';
+        const { container } = render(LineAnimation, {
+            units: [
+                unit('1:1:1', 'ab' + SAJDAH, 0, 2, [
+                    { char: 'a', start: 0, end: 1 },
+                    { char: 'b', start: 1, end: 2 },
+                ]),
+            ],
+            config: charConfig,
+            getTimeMs: () => 1500, // 'b' active; the sajdah inherits b's interval
+            playing: false,
+        });
+        await tick();
+        const chars = [...container.querySelectorAll<HTMLElement>('.ra-char')];
+        const b = chars.find((c) => c.textContent === 'b');
+        const saj = chars.find((c) => c.textContent?.includes(SAJDAH));
+        expect(b?.classList.contains('active')).toBe(true);
+        expect(saj).toBeDefined();
+        expect(saj?.classList.contains('active')).toBe(false);
     });
 });

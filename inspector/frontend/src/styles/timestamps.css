@@ -56,7 +56,7 @@
     flex-direction: column;
     gap: var(--word-phoneme-gap);
     cursor: pointer;
-    transition: transform 0.15s;
+    transition: transform 0.15s, opacity 0.15s;
     /* Double-click engages loop — don't let the browser's default word-select
        kick in and smear text highlight across the token. */
     user-select: none;
@@ -168,7 +168,10 @@
     padding: 4px 7px;
     background: #0f0f23;
     border-radius: 3px;
-    font-family: 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+    /* 'SilenceMark' first overrides ONLY U+06DF/U+06E0 (the silence zeros) with a
+       crisp DigitalKhatt subset; every letter still falls through to 'Traditional
+       Arabic' unchanged. See the SilenceMark @font-face in base.css. */
+    font-family: 'SilenceMark', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
     font-size: var(--analysis-letter-font-size, 1.05rem);
     color: #aaa;
     text-align: center;
@@ -187,6 +190,17 @@
     background: var(--ts-letter-color, #2ec4b6);
     color: white;
     border-color: var(--ts-letter-color, #2ec4b6);
+}
+
+/* Every grapheme is its own cell. A silent grapheme (hamza wasl, lam shamsiyah,
+   the otiose alef, the dropped silah, …) is greyed, non-interactive, and never
+   highlighted — the highlight/hover/click all land on the pronounced letter that
+   shares its timing. */
+.mega-letter.silent {
+    color: #777;
+    opacity: 0.55;
+    pointer-events: none;
+    cursor: default;
 }
 
 .mega-phonemes {
@@ -258,6 +272,90 @@
     display: none;
 }
 
+/* ============ Pause bridge ============ */
+/* A detected inter-word silence, surfaced as a slim tile in the letter/phoneme
+   family — sitting at the top between the two word columns. The CELL is the unit:
+   muted at rest, it fills with the word-highlight hue while its silence plays (or
+   on waveform-hover), exactly like an active letter/phoneme tile. It carries the
+   lifted-out waqf (stop) sign, or the neutral two-bar pause icon. */
+.pause-bridge {
+    align-self: flex-start;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Global cell box (sized in the waqf sizing playground): compact, anchored at
+       the word top via align-self so its height grows DOWN from the line top.
+       Negative inline margin keeps the inter-word gap minimal — the tile nestles
+       between the words rather than padding them apart. */
+    width: calc(var(--analysis-word-font-size, 1.3rem) * 0.81);
+    height: calc(var(--analysis-word-font-size, 1.3rem) * 0.7);
+    margin-inline: -3px;
+    background: #0f0f23;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: #bbb;
+    overflow: hidden;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+/* The CELL lights (background fill), mirroring .mega-word/.mega-phoneme active —
+   the glyph just rides the contrast, it is never recolored on its own. */
+.pause-bridge.active {
+    background: var(--anim-highlight-color);
+    border-color: var(--anim-highlight-color);
+    color: #1a1a2e;
+}
+.pause-bridge.hover-preview {
+    background: color-mix(in srgb, var(--anim-highlight-color) 30%, #0f0f23);
+    border-color: color-mix(in srgb, var(--anim-highlight-color) 40%, transparent);
+    color: color-mix(in srgb, var(--anim-highlight-color) 75%, #d7d7df);
+}
+/* A lone waqf mark is a zero-width combining glyph whose ink size + position vary
+   per mark; the calibration lives in `tabs/timestamps/utils/waqf-render.ts` and is
+   projected onto the `--waqf-*` vars per mark by UnifiedDisplay. This rule just
+   consumes them. */
+.pause-waqf {
+    font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+    line-height: 1;
+    display: inline-block;
+    font-size: calc(var(--analysis-word-font-size, 1.3rem) * var(--waqf-scale, 1));
+    transform: translate(var(--waqf-shift, 0), var(--waqf-raise, 0));
+}
+/* Standard two-bar pause icon, drawn from currentColor so it inverts with the
+   cell fill on active. */
+.pause-icon {
+    position: relative;
+    width: 6px;
+    height: 9px;
+}
+.pause-icon::before,
+.pause-icon::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1.5px;
+    border-radius: 1px;
+    background: currentColor;
+}
+.pause-icon::before {
+    left: 0;
+}
+.pause-icon::after {
+    right: 0;
+}
+/* During a live pause, the rest of the row recedes so the bridge reads as the
+   moment's focus. */
+.unified-display.in-pause .mega-block {
+    opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pause-bridge {
+        transition: none;
+    }
+}
+
 /* Active states */
 .mega-phoneme.active {
     background: var(--ts-phoneme-color, #4361ee);
@@ -294,6 +392,14 @@
     background: var(--ts-letter-color, #2ec4b6);
     color: white;
     border-color: var(--ts-letter-color, #2ec4b6);
+}
+
+/* Silent cells read identically whether or not their word is active — the
+   active-block letter treatment above must not brighten or recolour them. */
+.mega-block.active .mega-letter.silent {
+    color: #777;
+    background: #0f0f23;
+    border-color: transparent;
 }
 
 .mega-block.active .mega-letter.null-ts {
