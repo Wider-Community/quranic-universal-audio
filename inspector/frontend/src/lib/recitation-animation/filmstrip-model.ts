@@ -61,16 +61,18 @@ export interface VerseCell {
     words: WordFrac[];
     /** Canonical first-occurrence start (seconds) — the click/drag seek target. */
     canonStartSec: number;
-    /** Verse's canonical recited END (seconds) — the latest first-occurrence end
-     *  across its words. Unlike `canonStartSec + canonDurSec` (which sums word
-     *  durations and so EXCLUDES within-verse gaps), this is the real wall-clock
-     *  end, so the between-verse gap measures only the silence after the verse. */
+    /** Verse's recited END (seconds) that the between-verse gap measures from.
+     *  Starts as the latest FIRST-occurrence word end, then refined in `_assemble`
+     *  to the FORWARD-FLOWING occurrence end — the take that leads into the next
+     *  verse — so a loopback's later re-recitation isn't counted as silence. Real
+     *  wall-clock (not `canonStartSec + canonDurSec`), so within-verse gaps stay
+     *  inside the cell. */
     canonEndSec: number;
-    /** Detected between-verse silence (seconds) from this verse's canonical end to
-     *  the next PRESENT verse's canonical start; 0 for the last cell, a missing
-     *  next, or contiguous verses. Drives the silence-scaled inter-cell gap +
-     *  continuous scroll-through. Within-verse silences live inside the cell and
-     *  never appear here. */
+    /** Audible between-verse silence (seconds) from this verse's forward-flowing
+     *  end to the next PRESENT verse's start; 0 for the last cell, a missing next,
+     *  or contiguous verses. A loopback detour is excluded (see `canonEndSec`).
+     *  Drives the silence-scaled inter-cell gap + continuous scroll-through;
+     *  within-verse silences live inside the cell and never appear here. */
     nextGapSec: number;
     /** Coverage state. `full` cells are placeholders (no units, no geometry):
      *  unrecited verses kept in the strip so the gap is visible, but skipped by
@@ -179,7 +181,7 @@ export function buildFilmstripModel(
         });
     }
 
-    if (!coverage) return _assemble(present, units.length);
+    if (!coverage) return _assemble(present, units);
 
     // Merge placeholders for fully-missing verses in ayah order. Defensive max
     // covers a present ayah beyond the qpc reference count (shouldn't happen).
@@ -192,36 +194,47 @@ export function buildFilmstripModel(
     for (let a = 1; a <= maxAyah; a++) {
         merged.push(presentByAyah.get(a) ?? placeholderCell(surah, a));
     }
-    return _assemble(merged, units.length);
+    return _assemble(merged, units);
 }
 
 /** Build reverse lookups for an ordered cell list. `cellOfUnit[u]` maps a global
  *  unit index to its cell; placeholder cells (empty unit range) contribute none.
- *  Also stamps each present cell's `nextGapSec` (silence to the next present
- *  cell, skipping unrecited placeholders). */
-function _assemble(cells: VerseCell[], unitCount: number): FilmstripModel {
+ *  Also refines each present cell's `canonEndSec` to its forward-flowing end and
+ *  stamps `nextGapSec` (audible silence to the next present cell, loopback
+ *  excluded, skipping unrecited placeholders). */
+function _assemble(cells: VerseCell[], units: AnimUnit[]): FilmstripModel {
     const indexByAyahKey = new Map<string, number>();
-    const cellOfUnit = new Int32Array(unitCount).fill(-1);
+    const cellOfUnit = new Int32Array(units.length).fill(-1);
     for (let idx = 0; idx < cells.length; idx++) {
         const c = cells[idx]!;
         indexByAyahKey.set(c.ayahKey, idx);
         for (let u = c.unitStart; u < c.unitEnd; u++) cellOfUnit[u] = idx;
     }
-    // Between-verse silence: each present cell's recited END → the next present
-    // cell's start. Uses `canonEndSec` (real wall-clock end), NOT
-    // `canonStartSec + canonDurSec` (which omits within-verse gaps and would fold
-    // a verse's internal pauses into the between-verse gap). Placeholders
-    // (canonStartSec < 0) are skipped on both sides so an unrecited verse doesn't
-    // fabricate a silence.
+    // Between-verse silence: from this verse's FORWARD-FLOWING recited end (the
+    // occurrence that leads into the next verse) → the next present cell's start.
+    // The forward end is the latest occurrence end that still precedes that start,
+    // so a loopback's re-recitation time is excluded — the gap is the audible
+    // pause, not the detour. `canonEndSec` (the first-occurrence end) is refined
+    // to that forward end here. Placeholders (canonStartSec < 0) are skipped on
+    // both sides so an unrecited verse doesn't fabricate a silence.
     for (let i = 0; i < cells.length; i++) {
         const c = cells[i]!;
         if (c.canonStartSec < 0) continue;
+        let nextStart = -1;
         for (let j = i + 1; j < cells.length; j++) {
-            const n = cells[j]!;
-            if (n.canonStartSec < 0) continue;
-            c.nextGapSec = Math.max(0, n.canonStartSec - c.canonEndSec);
+            if (cells[j]!.canonStartSec < 0) continue;
+            nextStart = cells[j]!.canonStartSec;
             break;
         }
+        if (nextStart < 0) continue; // last present cell — no next, gap stays 0
+        let fwdEnd = -Infinity;
+        for (let u = c.unitStart; u < c.unitEnd; u++) {
+            for (const iv of units[u]!.intervals) {
+                if (iv.end <= nextStart && iv.end > fwdEnd) fwdEnd = iv.end;
+            }
+        }
+        if (fwdEnd > -Infinity) c.canonEndSec = fwdEnd;
+        c.nextGapSec = Math.max(0, nextStart - c.canonEndSec);
     }
     return { cells, indexByAyahKey, cellOfUnit };
 }

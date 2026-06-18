@@ -85,6 +85,20 @@ describe('buildFilmstripModel nextGapSec', () => {
         expect(cells[0]!.nextGapSec).toBeCloseTo(1, 6);
     });
 
+    it('measures from the forward-flowing take, excluding a loopback detour', () => {
+        // Verse 1 is read (0-2), the reciter loops back and re-reads it (5-7),
+        // THEN moves on to verse 2 (7.5-8.5). A naive first-occurrence gap would be
+        // 7.5 - 2 = 5.5s of detour; the real pause before verse 2 is 0.5s.
+        const units = [
+            unit('1:1:1', [[0, 1], [5, 6]]),
+            unit('1:1:2', [[1, 2], [6, 7]]),
+            unit('1:2:1', [[7.5, 8.5]]),
+        ];
+        const cells = buildFilmstripModel(units, 'duration').cells;
+        expect(cells[0]!.canonEndSec).toBeCloseTo(7, 6); // forward take end, not 2
+        expect(cells[0]!.nextGapSec).toBeCloseTo(0.5, 6); // real silence, not 5.5
+    });
+
     it('skips unrecited placeholders when measuring the gap to the next present verse', () => {
         const units = [
             unit('1:1:1', [[0, 2]]), // verse 1 end = 2
