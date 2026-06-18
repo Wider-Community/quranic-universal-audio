@@ -10,9 +10,10 @@ minimal, additive change to shards that were already bridge-tagged. No MFA / aud
 is a stop, so a silah drops at waqf), exactly like a regen but without re-aligning.
 
 Idempotent: re-running no-ops on an already-stamped shard (the char-match guard
-sees the folded mark and skips) — so a behaviour change in the silent logic (e.g.
-the carrier-waw silence in 2.6) reaches an already-stamped shard only via a full
-regen, not this backfill. Requires ``quranic-phonemizer>=2.6``.
+sees the folded mark and skips). After a silent-logic change (e.g. the carrier-waw
+silence in 2.6) pass ``--restamp`` to reset already-stamped letters to bare and
+re-derive — no re-alignment, since the flags are a pure function of the text.
+Requires ``quranic-phonemizer>=2.6``.
 
 Dry-run by default: reports per-reciter coverage (letters / stamped / silent /
 marked / NO-SLOT) WITHOUT writing. ``--write`` uploads the stamped shards via
@@ -87,10 +88,28 @@ def _shard_paths(fs, bucket: str, slug: str) -> list[tuple[int, str]]:
     return sorted(out)
 
 
-def _stamp_shard(pm, data: dict) -> Counter:
-    """Stamp every segment's letters in place. Returns a coverage Counter."""
+def _unstamp_words(words) -> None:
+    """Reset every letter to its aligner-bare ``[char, start, end]`` — strip any
+    folded silence mark and drop the 4th ``silent`` slot — so a re-stamp re-derives
+    the flags from scratch. Without this the char-guard sees the folded mark, the
+    bare phonemizer char mismatches, and the run is skipped (so a silent-logic
+    change like 2.6 carrier-waw never reaches an already-stamped shard)."""
+    for word in words:
+        for lt in word[3]:
+            lt[0] = "".join(c for c in lt[0] if c not in _SILENT_MARKS)
+            del lt[3:]
+
+
+def _stamp_shard(pm, data: dict, *, restamp: bool = False) -> Counter:
+    """Stamp every segment's letters in place. Returns a coverage Counter.
+
+    ``restamp`` first resets already-stamped letters to bare so the silent flags
+    are re-derived (use after a silent-logic change); otherwise stamping no-ops on
+    a folded shard."""
     cov = Counter()
     for seg in data.get("segments", []):
+        if restamp:
+            _unstamp_words(seg["words"])
         _stamp_silent_flags(pm, seg["ref"], seg["words"])
     for seg in data.get("segments", []):
         for word in seg["words"]:
@@ -108,7 +127,7 @@ def _stamp_shard(pm, data: dict) -> Counter:
 
 
 def process_reciter(
-    fs, pm, bucket: str, slug: str, *, write: bool, backup_dir: str | None
+    fs, pm, bucket: str, slug: str, *, write: bool, backup_dir: str | None, restamp: bool = False
 ) -> tuple[Counter, str]:
     shards = _shard_paths(fs, bucket, slug)
     if not shards:
@@ -123,7 +142,7 @@ def process_reciter(
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(raw)
         data = json.loads(gzip.decompress(raw))
-        cov += _stamp_shard(pm, data)
+        cov += _stamp_shard(pm, data, restamp=restamp)
         cov["shards"] += 1
         if write:
             data.setdefault("_meta", {})["schema_version"] = SEGMENT_SCHEMA_VERSION
@@ -144,12 +163,14 @@ def process_reciter(
 
 def _mp_worker(task: tuple) -> tuple[dict, str]:
     """ProcessPool entrypoint — builds its own fs + phonemizer per process."""
-    slug, bucket, write, backup_dir = task
+    slug, bucket, write, backup_dir, restamp = task
     from huggingface_hub import HfFileSystem
     from quranic_phonemizer import Phonemizer
 
     fs = HfFileSystem(token=os.environ.get("HF_TOKEN"))
-    cov, line = process_reciter(fs, Phonemizer(), bucket, slug, write=write, backup_dir=backup_dir)
+    cov, line = process_reciter(
+        fs, Phonemizer(), bucket, slug, write=write, backup_dir=backup_dir, restamp=restamp
+    )
     return dict(cov), line
 
 
@@ -163,6 +184,11 @@ def main() -> int:
     ap.add_argument("--write", action="store_true", help="upload stamped shards (default: dry-run)")
     ap.add_argument("--backup-dir", help="save each original shard here before overwriting")
     ap.add_argument("--workers", type=int, default=1, help="parallel reciter processes")
+    ap.add_argument(
+        "--restamp",
+        action="store_true",
+        help="reset already-stamped letters to bare and re-derive (after a silent-logic change)",
+    )
     bs.add_bucket_args(ap)
     args = ap.parse_args()
     if args.write:
@@ -179,7 +205,7 @@ def main() -> int:
     if args.workers > 1:
         from concurrent.futures import ProcessPoolExecutor
 
-        tasks = [(s, bucket, args.write, args.backup_dir) for s in slugs]
+        tasks = [(s, bucket, args.write, args.backup_dir, args.restamp) for s in slugs]
         with ProcessPoolExecutor(max_workers=args.workers) as ex:
             for cov, line in ex.map(_mp_worker, tasks):
                 if line:
@@ -191,7 +217,13 @@ def main() -> int:
         pm = Phonemizer()
         for slug in slugs:
             cov, line = process_reciter(
-                fs, pm, bucket, slug, write=args.write, backup_dir=args.backup_dir
+                fs,
+                pm,
+                bucket,
+                slug,
+                write=args.write,
+                backup_dir=args.backup_dir,
+                restamp=args.restamp,
             )
             if line:
                 log(line)
