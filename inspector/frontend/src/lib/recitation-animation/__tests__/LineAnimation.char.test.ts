@@ -78,22 +78,21 @@ describe('LineAnimation char mode', () => {
     });
 
     const WAQF = 'ۖ'; // ARABIC SMALL HIGH SAD-LAM-ALEF-MEEM (a surfaced stop)
-    // A 3-letter stop word so the active letter can be a NON-last one — letters
-    // a[0,1] b[1,2] c[2,3], the mark riding the last (c).
-    const stopWordUnits = () => [
-        unit('1:1:1', 'abc' + WAQF, 0, 3, [
-            { char: 'a', start: 0, end: 1 },
-            { char: 'b', start: 1, end: 2 },
-            { char: 'c', start: 2, end: 3 },
-        ]),
-    ];
+    // A 3-letter stop word (letters a[0,1] b[1,2] c[2,3], the mark riding the
+    // last, c) plus a trailing word so the stop word can become reached.
+    const stopUnit = () => unit('1:1:1', 'abc' + WAQF, 0, 3, [
+        { char: 'a', start: 0, end: 1 },
+        { char: 'b', start: 1, end: 2 },
+        { char: 'c', start: 2, end: 3 },
+    ]);
+    const trailingUnit = () => unit('1:1:2', 'd', 3.2, 4.2, [{ char: 'd', start: 3.2, end: 4.2 }]);
 
     // The waqf sign is a standalone zero-advance glyph (`WORD JOINER + mark`),
     // decoupled from the letters — it never perturbs the per-letter reveal and is
     // never given the reveal highlight.
     it('renders the waqf mark as a standalone glyph that never takes the reveal', async () => {
         const { container } = render(LineAnimation, {
-            units: stopWordUnits(),
+            units: [stopUnit()],
             config: charConfig,
             getTimeMs: () => 1500, // 'b' active
             playing: false,
@@ -112,27 +111,28 @@ describe('LineAnimation char mode', () => {
         expect(marks[0]?.classList.contains('waqf-active')).toBe(false);
     });
 
-    // Regression: in char mode the mark reveals with the LAST letter it rides,
-    // NOT when the word first becomes active at its first letter. With 'b' active
-    // and the last letter 'c' not yet reached, the word is active but the mark
-    // must stay un-revealed; once 'c' is reached the mark reveals.
-    it('reveals the waqf mark with its last letter, not the word becoming active', async () => {
-        const before = render(LineAnimation, {
-            units: stopWordUnits(),
+    // Regression: the sign reveals only once recitation has PASSED its last
+    // letter — not while that letter is still being recited, and not when the
+    // word first becomes active. With the last letter 'c' ACTIVE the word is
+    // active but the mark must stay dim; once 'c' is reached the mark reveals.
+    it('reveals the waqf mark only after its letter is reached, not while active', async () => {
+        const mid = render(LineAnimation, {
+            units: [stopUnit()],
             config: charConfig,
-            getTimeMs: () => 1500, // 'b' active, 'c' not reached
+            getTimeMs: () => 2500, // 'c' (last) ACTIVE, not yet reached
             playing: false,
         });
         await tick();
-        const markBefore = before.container.querySelector<HTMLElement>('.ra-waqf-mark');
-        // The word IS active (its middle letter is), yet the mark stays dim.
-        expect(markBefore?.closest('.ra-word')?.classList.contains('active')).toBe(true);
-        expect(markBefore?.classList.contains('revealed')).toBe(false);
+        const markMid = mid.container.querySelector<HTMLElement>('.ra-waqf-mark');
+        // The word IS active (its last letter is being recited), yet the mark
+        // stays un-revealed — the sign hasn't been passed yet.
+        expect(markMid?.closest('.ra-word')?.classList.contains('active')).toBe(true);
+        expect(markMid?.classList.contains('revealed')).toBe(false);
 
         const after = render(LineAnimation, {
-            units: stopWordUnits(),
+            units: [stopUnit(), trailingUnit()],
             config: charConfig,
-            getTimeMs: () => 2500, // 'c' (last) active → mark reveals
+            getTimeMs: () => 3500, // trailing word active → stop word + 'c' reached
             playing: false,
         });
         await tick();

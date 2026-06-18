@@ -208,9 +208,9 @@
      *  Opacity follows the SAME reveal model as the text it rides. Word mode
      *  reveals the whole word at once, so the mark just composites under the
      *  word's opacity (handled in CSS, no class). Char mode reveals letter by
-     *  letter, and the mark rides the LAST letter — so `.revealed` tracks that
-     *  last char, lighting the sign when the reciter reaches it, not when the
-     *  word first becomes active at its first letter.
+     *  letter, and the mark rides the LAST letter — so `.revealed` lights the
+     *  sign once that last letter is REACHED (recitation has passed it), not
+     *  while it is still being recited, and not at the word's first letter.
      *
      *  `waqf-active` lights the sign while a pause holds on its word: a silence
      *  gap (`hit == null`) after at least one word was lit. The sign never takes
@@ -227,10 +227,9 @@
             if (charMode) {
                 const chars = wordEl.querySelectorAll('.ra-char');
                 const anchor = chars.length ? chars[chars.length - 1]! : wordEl;
-                mark.classList.toggle(
-                    'revealed',
-                    anchor.classList.contains('reached') || anchor.classList.contains('active'),
-                );
+                // `reached` only — the sign reveals once recitation has PASSED its
+                // last letter, not while that letter is still being recited.
+                mark.classList.toggle('revealed', anchor.classList.contains('reached'));
             }
             mark.classList.toggle('waqf-active', inPause && i === lastActive);
         }
@@ -581,8 +580,8 @@
      *  mode dims the whole `.ra-word`, so the child mark just composites under it
      *  (no own opacity — an own one would double-dim) and reveals with the word.
      *  Char mode keeps the word box opaque and dims the letters, so the mark dims
-     *  itself and reveals with its LAST letter via the sweep's `.revealed` — not
-     *  when the word first becomes active at its first letter. */
+     *  itself and reveals (via the sweep's `.revealed`) only once recitation has
+     *  passed its last letter — not while that letter is still being recited. */
     .ra-line.ra-chars .ra-word .ra-waqf-mark {
         opacity: var(--ra-unreached-opacity);
     }
