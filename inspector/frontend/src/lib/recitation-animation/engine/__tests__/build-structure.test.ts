@@ -96,6 +96,32 @@ describe('buildAnimStructure letter timing', () => {
         expect(w!.chars.find((c) => c.text === 'ب')!.end).toBe(1);
     });
 
+    // 17:7:12-shaped long madd: the seen carries a stacked small-high-waw + madda
+    // (display U+08F3) whose MFA letter is the small waw U+06E5 with a long madd
+    // duration, plus a riding hamza. The seen cluster must stay lit through the
+    // madd + hamza; the trailing waw/alef keep their own LATER timing (the bug:
+    // they orphaned to the seen's interval and lit with it).
+    it('folds a small-waw long-madd letter (U+06E5) into its base cluster', () => {
+        const SEEN = String.fromCodePoint(0x633);
+        const WAW = String.fromCodePoint(0x648);
+        const display = String.fromCodePoint(0x633, 0x64f, 0x8f3, 0x653, 0x654, 0x648, 0x627);
+        const letters = [
+            { char: SEEN, start: 0, end: 1 }, // seen
+            { char: String.fromCodePoint(0x6e5, 0x653), start: 1, end: 5 }, // small waw + madda (long)
+            { char: String.fromCodePoint(0x654), start: 5, end: 5.1 }, // riding hamza
+            { char: WAW, start: 5.1, end: 6 }, // waw
+            { char: String.fromCodePoint(0x627), start: 5.1, end: 6 }, // alef
+        ];
+        const [w] = buildAnimStructure([
+            { text: display, display_text: display, start: 0, end: 6, letters },
+        ]);
+        const seen = w!.chars.find((c) => c.text.startsWith(SEEN));
+        expect(seen!.start).toBe(0);
+        expect(seen!.end).toBe(5.1); // through the long madd AND the riding hamza
+        const waw = w!.chars.find((c) => c.text === WAW);
+        expect(waw!.start).toBe(5.1); // its own later interval, not the cluster's
+    });
+
     // Regression: an inert symbol cell (no MFA letter) must NOT keep whole-word
     // timing (which would light it for the whole word). It inherits a neighbour's
     // interval instead.

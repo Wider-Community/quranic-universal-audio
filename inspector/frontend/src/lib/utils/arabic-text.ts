@@ -24,7 +24,7 @@ export function isCombiningMark(cp: number): boolean {
     if (cp === 0x0670) return true;
     if (cp >= 0x06D6 && cp <= 0x06DC) return true;
     if (cp >= 0x06DF && cp <= 0x06E4) return true;
-    if (cp >= 0x06E7 && cp <= 0x06E8) return true;
+    if (cp >= 0x06E5 && cp <= 0x06E8) return true; // small waw/yeh + small high yeh/noon
     if (cp >= 0x06EA && cp <= 0x06ED) return true;
     if (cp >= 0x08D3 && cp <= 0x08FF) return true;
     if (cp >= 0xFE20 && cp <= 0xFE2F) return true;

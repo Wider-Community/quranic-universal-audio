@@ -31,6 +31,13 @@ describe('isCombiningMark', () => {
         expect(isCombiningMark(0x0670)).toBe(true);
     });
 
+    it('recognises the small waw / yeh that ride a base (U+06E5–U+06E6)', () => {
+        // Lm by Unicode category, but they stack on the preceding letter (e.g. the
+        // small-waw long-madd marker), so the teleprompter treats them as riding.
+        expect(isCombiningMark(0x06e5)).toBe(true);
+        expect(isCombiningMark(0x06e6)).toBe(true);
+    });
+
     it('rejects base Arabic letters', () => {
         // ب (bāʾ)
         expect(isCombiningMark(0x0628)).toBe(false);
