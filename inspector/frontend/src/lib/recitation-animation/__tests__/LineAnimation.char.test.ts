@@ -77,44 +77,66 @@ describe('LineAnimation char mode', () => {
         expect(words[1]?.classList.contains('active')).toBe(true);
     });
 
-    // Regression: the waqf (stop) sign is a standalone zero-advance glyph
-    // (`WORD JOINER + mark`), decoupled from the letters — it must not perturb
-    // the per-letter reveal. Here the clean chars reveal exactly as if no mark
-    // were present, and the mark is never given the reveal highlight.
-    it('renders the waqf mark as a standalone glyph that never takes the reveal', async () => {
-        const WAQF = 'ۖ'; // ARABIC SMALL HIGH SAD-LAM-ALEF-MEEM (a surfaced stop)
-        const units = [
-            unit('1:1:1', 'ab' + WAQF, 0, 2, [
-                { char: 'a', start: 0, end: 1 },
-                { char: 'b', start: 1, end: 2 },
-            ]),
-        ];
+    const WAQF = 'ۖ'; // ARABIC SMALL HIGH SAD-LAM-ALEF-MEEM (a surfaced stop)
+    // A 3-letter stop word so the active letter can be a NON-last one — letters
+    // a[0,1] b[1,2] c[2,3], the mark riding the last (c).
+    const stopWordUnits = () => [
+        unit('1:1:1', 'abc' + WAQF, 0, 3, [
+            { char: 'a', start: 0, end: 1 },
+            { char: 'b', start: 1, end: 2 },
+            { char: 'c', start: 2, end: 3 },
+        ]),
+    ];
 
+    // The waqf sign is a standalone zero-advance glyph (`WORD JOINER + mark`),
+    // decoupled from the letters — it never perturbs the per-letter reveal and is
+    // never given the reveal highlight.
+    it('renders the waqf mark as a standalone glyph that never takes the reveal', async () => {
         const { container } = render(LineAnimation, {
-            units,
+            units: stopWordUnits(),
             config: charConfig,
-            getTimeMs: () => 1500,
+            getTimeMs: () => 1500, // 'b' active
             playing: false,
         });
         await tick();
 
         // Per-letter reveal is unperturbed: the mark is stripped from `clean`, so
-        // the chars are exactly 'a','b' with 'a' reached and 'b' active at t=1.5s.
+        // the chars are exactly 'a','b','c'.
         const chars = container.querySelectorAll<HTMLElement>('.ra-char');
-        expect([...chars].map((c) => c.textContent)).toEqual(['a', 'b']);
-        expect(chars[0]?.classList.contains('reached')).toBe(true);
-        expect(chars[1]?.classList.contains('active')).toBe(true);
+        expect([...chars].map((c) => c.textContent)).toEqual(['a', 'b', 'c']);
 
-        // The mark is one standalone glyph (`WORD JOINER + mark`, no letters),
-        // never a `.ra-char` and never given the reveal highlight. Its opacity
-        // agrees with its word via CSS off the word's class (no own reveal), and
-        // it lights only on a pause (`waqf-active`), which isn't active here.
         const marks = container.querySelectorAll<HTMLElement>('.ra-waqf-mark');
         expect(marks.length).toBe(1);
         expect(marks[0]?.textContent).toBe(ZWSP + WAQF);
         expect(marks[0]?.classList.contains('active')).toBe(false);
         expect(marks[0]?.classList.contains('waqf-active')).toBe(false);
-        // Its word is the active one, so the CSS reveal applies to the mark.
-        expect(marks[0]?.closest('.ra-word')?.classList.contains('active')).toBe(true);
+    });
+
+    // Regression: in char mode the mark reveals with the LAST letter it rides,
+    // NOT when the word first becomes active at its first letter. With 'b' active
+    // and the last letter 'c' not yet reached, the word is active but the mark
+    // must stay un-revealed; once 'c' is reached the mark reveals.
+    it('reveals the waqf mark with its last letter, not the word becoming active', async () => {
+        const before = render(LineAnimation, {
+            units: stopWordUnits(),
+            config: charConfig,
+            getTimeMs: () => 1500, // 'b' active, 'c' not reached
+            playing: false,
+        });
+        await tick();
+        const markBefore = before.container.querySelector<HTMLElement>('.ra-waqf-mark');
+        // The word IS active (its middle letter is), yet the mark stays dim.
+        expect(markBefore?.closest('.ra-word')?.classList.contains('active')).toBe(true);
+        expect(markBefore?.classList.contains('revealed')).toBe(false);
+
+        const after = render(LineAnimation, {
+            units: stopWordUnits(),
+            config: charConfig,
+            getTimeMs: () => 2500, // 'c' (last) active → mark reveals
+            playing: false,
+        });
+        await tick();
+        const markAfter = after.container.querySelector<HTMLElement>('.ra-waqf-mark');
+        expect(markAfter?.classList.contains('revealed')).toBe(true);
     });
 });

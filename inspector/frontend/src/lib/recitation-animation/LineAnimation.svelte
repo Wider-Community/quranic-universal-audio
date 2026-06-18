@@ -203,19 +203,35 @@
         sweepWaqf(h);
     }
 
-    /** Light each word's stop-sign mark (`.ra-waqf-mark`) while a pause holds on
-     *  it: a silence gap (`hit == null`) after at least one word was lit. The
-     *  mark's opacity tracks its word purely in CSS (off the word's `reached` /
-     *  `active` class), so the sign dims/reveals in lockstep with the text it
-     *  rides and never takes the per-letter reveal highlight — only this pause
-     *  light recolours it. */
+    /** Drive each word's stop-sign mark (`.ra-waqf-mark`).
+     *
+     *  Opacity follows the SAME reveal model as the text it rides. Word mode
+     *  reveals the whole word at once, so the mark just composites under the
+     *  word's opacity (handled in CSS, no class). Char mode reveals letter by
+     *  letter, and the mark rides the LAST letter — so `.revealed` tracks that
+     *  last char, lighting the sign when the reciter reaches it, not when the
+     *  word first becomes active at its first letter.
+     *
+     *  `waqf-active` lights the sign while a pause holds on its word: a silence
+     *  gap (`hit == null`) after at least one word was lit. The sign never takes
+     *  the per-letter reveal highlight — only this pause light recolours it. */
     function sweepWaqf(hit: ActiveHit | null): void {
         if (!wordCache) return;
         const inPause = hit === null && lastActive >= 0;
+        const charMode = config.granularity === 'char';
         const items = wordCache.items;
         for (let i = 0; i < items.length; i++) {
-            const mark = items[i]?.el?.querySelector('.ra-waqf-mark');
-            if (!mark) continue;
+            const wordEl = items[i]?.el;
+            const mark = wordEl?.querySelector('.ra-waqf-mark');
+            if (!mark || !wordEl) continue;
+            if (charMode) {
+                const chars = wordEl.querySelectorAll('.ra-char');
+                const anchor = chars.length ? chars[chars.length - 1]! : wordEl;
+                mark.classList.toggle(
+                    'revealed',
+                    anchor.classList.contains('reached') || anchor.classList.contains('active'),
+                );
+            }
             mark.classList.toggle('waqf-active', inPause && i === lastActive);
         }
     }
@@ -561,16 +577,16 @@
             opacity var(--ra-word-reveal) var(--ra-easing),
             color var(--ra-active-emphasis) var(--ra-easing);
     }
-    /* Opacity always AGREES with the word the mark rides — it has no reveal of
-     *  its own. Word mode dims the whole `.ra-word`, so the child mark composites
-     *  under it (leave it at 1 — an own opacity would double-dim). Char mode keeps
-     *  the word box opaque and dims the letters, so the mark dims itself in
-     *  lockstep with the word's `reached` / `active` state. */
+    /* Opacity follows the same reveal model as the text the mark rides. Word
+     *  mode dims the whole `.ra-word`, so the child mark just composites under it
+     *  (no own opacity — an own one would double-dim) and reveals with the word.
+     *  Char mode keeps the word box opaque and dims the letters, so the mark dims
+     *  itself and reveals with its LAST letter via the sweep's `.revealed` — not
+     *  when the word first becomes active at its first letter. */
     .ra-line.ra-chars .ra-word .ra-waqf-mark {
         opacity: var(--ra-unreached-opacity);
     }
-    .ra-line.ra-chars .ra-word:global(.reached) .ra-waqf-mark,
-    .ra-line.ra-chars .ra-word:global(.active) .ra-waqf-mark {
+    .ra-line.ra-chars .ra-word .ra-waqf-mark:global(.revealed) {
         opacity: 1;
     }
     /* Lit while a pause holds on this word — colour the run; only the mark shows. */
