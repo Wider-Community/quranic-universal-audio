@@ -200,10 +200,12 @@
         } else {
             sweepWord(h);
         }
-        sweepWaqf(h);
+        sweepDecorators(h);
     }
 
-    /** Drive each word's stop-sign mark (`.ra-waqf-mark`).
+    /** Drive each word's dynamic decorator marks. Only the waqf (stop) sign is
+     *  dynamic (`.ra-decorator--waqf`); rub-el-hizb and sajdah are static markers
+     *  handled purely in CSS.
      *
      *  Opacity follows the SAME reveal model as the text it rides. Word mode
      *  reveals the whole word at once, so the mark just composites under the
@@ -215,14 +217,14 @@
      *  `waqf-active` lights the sign while a pause holds on its word: a silence
      *  gap (`hit == null`) after at least one word was lit. The sign never takes
      *  the per-letter reveal highlight — only this pause light recolours it. */
-    function sweepWaqf(hit: ActiveHit | null): void {
+    function sweepDecorators(hit: ActiveHit | null): void {
         if (!wordCache) return;
         const inPause = hit === null && lastActive >= 0;
         const charMode = config.granularity === 'char';
         const items = wordCache.items;
         for (let i = 0; i < items.length; i++) {
             const wordEl = items[i]?.el;
-            const mark = wordEl?.querySelector('.ra-waqf-mark');
+            const mark = wordEl?.querySelector('.ra-decorator--waqf');
             if (!mark || !wordEl) continue;
             if (charMode) {
                 const chars = wordEl.querySelectorAll('.ra-char');
@@ -418,7 +420,10 @@
             tabindex="-1"
             onclick={() => onSeekToWord?.((pageUnits[i]?.start ?? 0) * 1000)}
             onkeydown={() => {}}
-        >{#if config.granularity === 'char' && w.hasChars}<span
+        >{#each w.leading as d, di (di)}<span
+                    class="ra-decorator ra-decorator--{d.role}"
+                    aria-hidden="true"
+                >{ZWSP}{d.glyph}</span>{/each}{#if config.granularity === 'char' && w.hasChars}<span
                     class="ra-word-ink"
                     aria-hidden="true"
                 >{w.clean}</span>{#each w.chars as ch, ci (ci)}<span
@@ -426,7 +431,10 @@
                     data-start={ch.start}
                     data-end={ch.end}
                     data-group-id={ch.groupId}
-                >{ch.text}</span>{/each}{:else}{w.clean}{/if}{#if w.waqf}<span class="ra-waqf-mark" aria-hidden="true">{ZWSP}{w.waqf}</span>{/if}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
+                >{ch.text}</span>{/each}{:else}{w.clean}{/if}{#each w.trailing as d, di (di)}<span
+                    class="ra-decorator ra-decorator--{d.role}"
+                    aria-hidden="true"
+                >{ZWSP}{d.glyph}</span>{/each}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
     {/each}
 </div>
 
@@ -558,15 +566,13 @@
         opacity: 1;
     }
 
-    /* Waqf (stop) sign — a standalone mark anchored to an invisible WORD JOINER
-     *  (the same trick `build-structure` uses for the dagger alef). A waqf glyph
-     *  is a combining mark, so on its own it would inherit the run's colour and
-     *  can't be recoloured independently; rendered after the last letter on a
-     *  zero-advance joiner it shapes into its own run with a fully independent
-     *  colour/opacity, adds NO width, and — carrying no letters — can never
-     *  overpaint the reveal. It floats at the word's end in its natural high
-     *  register, which reads as the stop boundary it marks. */
-    .ra-line .ra-word .ra-waqf-mark {
+    /* Non-recited decorator marks (waqf stop signs, rub-el-hizb ۞, sajdah ۩) —
+     *  each a standalone glyph anchored to an invisible WORD JOINER (the same
+     *  trick `build-structure` uses for combining letters). They carry no letters,
+     *  so they never take the per-letter reveal highlight; rendered on a
+     *  zero-advance joiner each shapes into its own run with an independent
+     *  colour and adds NO width. */
+    .ra-line .ra-word .ra-decorator {
         position: relative;
         z-index: 2; /* above the char/ink layers so the mark always paints on top */
         pointer-events: none;
@@ -576,20 +582,20 @@
             opacity var(--ra-word-reveal) var(--ra-easing),
             color var(--ra-active-emphasis) var(--ra-easing);
     }
-    /* Opacity follows the same reveal model as the text the mark rides. Word
-     *  mode dims the whole `.ra-word`, so the child mark just composites under it
-     *  (no own opacity — an own one would double-dim) and reveals with the word.
-     *  Char mode keeps the word box opaque and dims the letters, so the mark dims
-     *  itself and reveals (via the sweep's `.revealed`) only once recitation has
-     *  passed its last letter — not while that letter is still being recited. */
-    .ra-line.ra-chars .ra-word .ra-waqf-mark {
+    /* Waqf (stop) sign — opacity follows the same reveal model as the text it
+     *  rides. Word mode dims the whole `.ra-word`, so the child mark just
+     *  composites under it (no own opacity — an own one would double-dim) and
+     *  reveals with the word. Char mode keeps the word box opaque and dims the
+     *  letters, so the mark dims itself and reveals (via the sweep's `.revealed`)
+     *  only once recitation has passed its last letter. */
+    .ra-line.ra-chars .ra-word .ra-decorator--waqf {
         opacity: var(--ra-unreached-opacity);
     }
-    .ra-line.ra-chars .ra-word .ra-waqf-mark:global(.revealed) {
+    .ra-line.ra-chars .ra-word .ra-decorator--waqf:global(.revealed) {
         opacity: 1;
     }
     /* Lit while a pause holds on this word — colour the run; only the mark shows. */
-    .ra-line .ra-word .ra-waqf-mark:global(.waqf-active) {
+    .ra-line .ra-word .ra-decorator--waqf:global(.waqf-active) {
         color: var(--ra-highlight);
     }
 
@@ -606,7 +612,7 @@
     @media (prefers-reduced-motion: reduce) {
         .ra-word,
         .ra-line.ra-chars .ra-char,
-        .ra-line .ra-word .ra-waqf-mark {
+        .ra-line .ra-word .ra-decorator {
             transition: none;
         }
     }

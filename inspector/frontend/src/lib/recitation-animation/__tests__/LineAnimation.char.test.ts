@@ -104,7 +104,7 @@ describe('LineAnimation char mode', () => {
         const chars = container.querySelectorAll<HTMLElement>('.ra-char');
         expect([...chars].map((c) => c.textContent)).toEqual(['a', 'b', 'c']);
 
-        const marks = container.querySelectorAll<HTMLElement>('.ra-waqf-mark');
+        const marks = container.querySelectorAll<HTMLElement>('.ra-decorator--waqf');
         expect(marks.length).toBe(1);
         expect(marks[0]?.textContent).toBe(ZWSP + WAQF);
         expect(marks[0]?.classList.contains('active')).toBe(false);
@@ -123,7 +123,7 @@ describe('LineAnimation char mode', () => {
             playing: false,
         });
         await tick();
-        const markMid = mid.container.querySelector<HTMLElement>('.ra-waqf-mark');
+        const markMid = mid.container.querySelector<HTMLElement>('.ra-decorator--waqf');
         // The word IS active (its last letter is being recited), yet the mark
         // stays un-revealed — the sign hasn't been passed yet.
         expect(markMid?.closest('.ra-word')?.classList.contains('active')).toBe(true);
@@ -136,7 +136,7 @@ describe('LineAnimation char mode', () => {
             playing: false,
         });
         await tick();
-        const markAfter = after.container.querySelector<HTMLElement>('.ra-waqf-mark');
+        const markAfter = after.container.querySelector<HTMLElement>('.ra-decorator--waqf');
         expect(markAfter?.classList.contains('revealed')).toBe(true);
     });
 });

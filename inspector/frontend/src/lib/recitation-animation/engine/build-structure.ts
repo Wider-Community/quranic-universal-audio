@@ -10,12 +10,12 @@
 
 import {
     charsMatch,
-    DAGGER_ALEF,
     isCombiningMark,
+    SMALL_LETTER_MARKS,
     splitIntoCharGroups,
     ZWSP,
 } from '../../utils/arabic-text';
-import { splitWaqf } from '../../utils/waqf';
+import { type Decorator, splitDecorators } from '../decorators';
 
 /** Minimal word shape the builder needs. Both `TsWord` and `AnimUnit`
  *  (mapped) satisfy it — keeps the builder reusable across surfaces. */
@@ -39,12 +39,14 @@ export interface AnimWord {
     wordIndex: number;
     start: number;
     end: number;
-    /** Display text with any surfaced waqf (stop) mark removed — what the reveal
-     *  actually animates. The mark is pulled out to `waqf` so it never takes the
-     *  highlight (it lights only on a pause, handled by the surface). */
+    /** Display text with all non-recited decorator marks removed — what the
+     *  reveal actually animates. Decorators are pulled out to `leading`/`trailing`
+     *  so they never take a highlight cell (see `../decorators`). */
     clean: string;
-    /** The surfaced waqf mark stripped from `clean`, or null. */
-    waqf: string | null;
+    /** Non-recited decorators rendered before the word's letters (e.g. rub-el-hizb). */
+    leading: Decorator[];
+    /** Non-recited decorators rendered after the word's letters (waqf stop, sajdah). */
+    trailing: Decorator[];
     /** Characters split for character-granularity animation (from `clean`). */
     chars: AnimChar[];
     /** Whether the word has any char groups (empty display_text → render text directly). */
@@ -58,28 +60,39 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
     const out: AnimWord[] = [];
 
     words.forEach((word, wi) => {
-        // Pull any surfaced waqf (stop) mark out before grouping — it's a
-        // combining mark riding the last letter and must never join the reveal.
-        const { clean, mark } = splitWaqf(word.display_text || word.text);
+        // Pull all non-recited decorator marks (waqf stops, rub-el-hizb, sajdah)
+        // out before grouping — they carry no MFA timing and must never join the
+        // reveal as a highlight cell.
+        const { clean, leading, trailing } = splitDecorators(word.display_text || word.text);
         const charGroups = splitIntoCharGroups(clean);
         const letters = word.letters || [];
 
-        // Assign initial group IDs.
-        const chars: AnimChar[] = charGroups.map((group) => ({
-            text: group.startsWith(DAGGER_ALEF) ? ZWSP + group : group,
-            start: word.start,
-            end: word.end,
-            groupId: `g${groupIdCounter++}`,
-        }));
+        // Assign initial group IDs. A group that LEADS with a combining mark (a
+        // small-letter mark like the dagger alef, small hamza, mini-yaa) can't
+        // stand alone — anchor it on an invisible word joiner so it shapes into
+        // its own zero-advance run with an independent colour, no dotted circle.
+        const chars: AnimChar[] = charGroups.map((group) => {
+            const firstCp = group.codePointAt(0);
+            const needsJoiner =
+                firstCp !== undefined
+                && (SMALL_LETTER_MARKS.has(firstCp) || isCombiningMark(firstCp));
+            return {
+                text: needsJoiner ? ZWSP + group : group,
+                start: word.start,
+                end: word.end,
+                groupId: `g${groupIdCounter++}`,
+            };
+        });
 
-        // Fuzzy two-pointer: walk display chars + MFA letters simultaneously.
+        // Fuzzy two-pointer: walk display chars + MFA letters simultaneously,
+        // recording every cell that receives a real per-letter interval.
         let mfaIdx = 0;
-        const stamped = new Set<number>();
+        const timed = new Set<number>();
         for (let di = 0; di < chars.length; di++) {
-            if (stamped.has(di)) continue;
+            if (timed.has(di)) continue;
             const span = chars[di];
             if (!span) continue;
-            const displayChar = span.text.replace(/^\u200B/, ''); // strip ZWSP for matching
+            const displayChar = span.text.replace(/^[\u2060\u200B]/, ''); // strip the joiner
             if (mfaIdx < letters.length) {
                 const lt = letters[mfaIdx];
                 if (!lt) {
@@ -92,8 +105,12 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
                     const endSec = lt.end != null ? lt.end : word.end;
                     span.start = startSec;
                     span.end = endSec;
+                    timed.add(di);
 
-                    // Peek ahead: combining-mark-only groups for the same MFA letter.
+                    // Peek ahead: combining-mark-only groups for the same MFA
+                    // letter. A joiner-anchored small-letter cell breaks the run
+                    // (the joiner is not combining), so it is matched on its own
+                    // MFA letter instead of being absorbed here.
                     const mfaNfd = mfaChar.normalize('NFD');
                     let peek = di + 1;
                     while (peek < chars.length) {
@@ -112,14 +129,36 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
                         if (![...peekText].some((c) => mfaNfd.includes(c))) break;
                         peekSpan.start = startSec;
                         peekSpan.end = endSec;
-                        stamped.add(peek);
+                        timed.add(peek);
                         peek++;
                     }
                     mfaIdx++;
                 }
-                // else: no-match path keeps word-level timing (already set).
+                // else: no match — leave this cell for the orphan pass below.
             }
-            // else: exhausted MFA letters → word timing (already set).
+            // else: exhausted MFA letters → orphan pass below.
+        }
+
+        // Orphan-timing safety net. A cell the matcher never stamped would keep
+        // whole-word timing and stay "active" for the ENTIRE word — lighting in
+        // lockstep with the real first letter (the first+last-together artifact).
+        // Inherit the nearest stamped neighbour's interval instead, so an orphan
+        // lights with the letter it visually rides, never the whole word. If
+        // NOTHING was stamped (no MFA letters at all), leave word timing — the
+        // whole word lights together, which is correct with no per-letter data.
+        if (timed.size > 0) {
+            for (let di = 0; di < chars.length; di++) {
+                if (timed.has(di)) continue;
+                const span = chars[di];
+                if (!span) continue;
+                let src: AnimChar | null = null;
+                for (let p = di - 1; p >= 0 && !src; p--) if (timed.has(p)) src = chars[p]!;
+                for (let n = di + 1; n < chars.length && !src; n++) if (timed.has(n)) src = chars[n]!;
+                if (src) {
+                    span.start = src.start;
+                    span.end = src.end;
+                }
+            }
         }
 
         out.push({
@@ -128,7 +167,8 @@ export function buildAnimStructure(words: AnimSourceWord[]): AnimWord[] {
             start: word.start,
             end: word.end,
             clean,
-            waqf: mark,
+            leading,
+            trailing,
             chars,
             hasChars: chars.length > 0,
         });

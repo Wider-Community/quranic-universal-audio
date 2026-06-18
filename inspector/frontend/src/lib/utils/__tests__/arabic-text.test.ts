@@ -89,6 +89,13 @@ describe('splitIntoCharGroups', () => {
         expect(groups).toHaveLength(2);
     });
 
+    it('U+06E7 (mini-yaa) starts a new group so it can highlight independently', () => {
+        // The mini-yaa carries its own MFA timing, so it must split into its own
+        // cell rather than ride its base — base + mini-yaa = two groups.
+        const groups = splitIntoCharGroups('بۧ');
+        expect(groups).toHaveLength(2);
+    });
+
     it('U+2060 (word joiner) absorbs into the current group', () => {
         // base + U+2060 collapses into a single group.
         const groups = splitIntoCharGroups('ب⁠');

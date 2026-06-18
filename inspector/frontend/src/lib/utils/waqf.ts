@@ -14,7 +14,7 @@
  */
 
 /** Surfaced waqf marks. Excludes U+06D9 (لا) and U+06DC (saktah) by design. */
-const STOP_MARKS = new Set([0x06d6, 0x06d7, 0x06d8, 0x06da, 0x06db]);
+export const STOP_MARKS = new Set([0x06d6, 0x06d7, 0x06d8, 0x06da, 0x06db]);
 
 /** True when `text` carries a surfaced stop sign. */
 export function hasWaqf(text: string): boolean {
