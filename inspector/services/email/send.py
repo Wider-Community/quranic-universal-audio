@@ -1,26 +1,31 @@
-"""SMTP dispatch — fire-and-forget, best-effort.
+"""HTTPS email dispatch via Brevo — fire-and-forget, best-effort.
 
-``send`` builds a multipart (plaintext + HTML) message and submits the actual
-SMTP work to a small ``ThreadPoolExecutor`` so a transition / job-completion is
-never blocked on the network. When Gmail credentials are absent (dev), the fully
-rendered email is logged instead of dispatched, so the whole flow is exercisable
-without secrets. Failures are logged and swallowed — a lost notification email
-must never break the motivating write.
+``send`` submits the actual network work to a small ``ThreadPoolExecutor`` so a
+transition / job-completion is never blocked on it. Delivery goes over HTTPS
+(Brevo's transactional REST API, ``POST /v3/smtp/email``) because HF Spaces block
+outbound SMTP on every port — a direct ``smtplib`` connection returns "Network is
+unreachable" and silently never delivers. Auth is the ``BREVO_API_KEY`` secret;
+the From address is the Brevo-verified sender (``config.EMAIL_FROM_ADDRESS``).
+
+When the key is absent (local dev), the fully rendered email is logged instead of
+dispatched, so the whole flow is exercisable without secrets. Failures are logged
+and swallowed — a lost notification email must never break the motivating write.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import re
-import smtplib
+import urllib.error
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
-from email.message import EmailMessage
 
 import config
 
-from .secrets import get_gmail_credentials
-
 logger = logging.getLogger("email")
+
+_BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
 
 # Single shared pool — single-worker app, low volume; 2 threads bound a fan-out.
 _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="email-send")
@@ -49,9 +54,9 @@ def send(to: str, subject: str, html: str, text: str | None = None) -> None:
 
 def _deliver(to: str, subject: str, html: str, text: str | None) -> None:
     try:
-        creds = get_gmail_credentials()
+        api_key = config.BREVO_API_KEY
         body_text = text or html_to_text(html)
-        if creds is None:
+        if not api_key:
             logger.info(
                 "email (dev, not sent) → %s | subject=%s\n%s",
                 to,
@@ -59,17 +64,32 @@ def _deliver(to: str, subject: str, html: str, text: str | None) -> None:
                 body_text,
             )
             return
-        address, password = creds
-        msg = EmailMessage()
-        msg["From"] = f"{config.EMAIL_FROM_NAME} <{address}>"
-        msg["To"] = to
-        msg["Subject"] = subject
-        msg.set_content(body_text)
-        msg.add_alternative(html, subtype="html")
-        with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=20) as smtp:
-            smtp.starttls()
-            smtp.login(address, password)
-            smtp.send_message(msg)
+        payload = {
+            "sender": {"name": config.EMAIL_FROM_NAME, "email": config.EMAIL_FROM_ADDRESS},
+            "to": [{"email": to}],
+            "subject": subject,
+            "htmlContent": html,
+            "textContent": body_text,
+        }
+        req = urllib.request.Request(
+            _BREVO_ENDPOINT,
+            data=json.dumps(payload).encode("utf-8"),
+            method="POST",
+            headers={
+                "api-key": api_key,
+                "content-type": "application/json",
+                "accept": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            resp.read()
         logger.info("email sent → %s | subject=%s", to, subject)
+    except urllib.error.HTTPError as e:  # 4xx/5xx — surface Brevo's reason
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8", "replace")[:300]
+        except Exception:  # noqa: BLE001
+            pass
+        logger.error("email send failed → %s | subject=%s | HTTP %s %s", to, subject, e.code, detail)
     except Exception:  # noqa: BLE001 — best-effort; never raise into the caller
         logger.exception("email send failed → %s | subject=%s", to, subject)

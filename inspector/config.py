@@ -216,13 +216,19 @@ AUTOMATION_INTERVAL_SECONDS = int(os.getenv("INSPECTOR_AUTOMATIONS_INTERVAL_S", 
 # complete cleanly, which is fine since automations are off in dev.
 AUTOMATION_PUBLIC_BASE_URL = os.environ.get("INSPECTOR_PUBLIC_BASE_URL", "").strip()
 
-# Email notifications (inspector/email) — Gmail SMTP via the GMAIL/GMAIL_PASS
-# Space secrets. When those are unset (dev), the sender logs the rendered email
-# instead of dispatching, so the whole flow is exercisable without secrets.
-SMTP_HOST = os.environ.get("INSPECTOR_SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("INSPECTOR_SMTP_PORT", "587"))
-# Display name on the From header (address is the GMAIL account).
+# Email notifications (inspector/email) — Brevo transactional REST API over HTTPS
+# (HF Spaces block outbound SMTP on every port, so smtplib can't deliver). The
+# BREVO_API_KEY secret authenticates; when it's unset (local dev) the sender logs
+# the rendered email instead of dispatching, so the flow is exercisable without it.
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "").strip()
+# Display name on the From header.
 EMAIL_FROM_NAME = os.environ.get("INSPECTOR_EMAIL_FROM_NAME", "Quranic Universal Audio")
+# From address — MUST be a Brevo-verified sender. Defaults to the GMAIL account
+# (already a verified single-sender) unless overridden.
+EMAIL_FROM_ADDRESS = (
+    os.environ.get("INSPECTOR_EMAIL_FROM_ADDRESS", "").strip()
+    or os.environ.get("GMAIL", "").strip()
+)
 # User-facing "visit the site" link in every email — the HF Space landing page.
 EMAIL_SITE_URL = os.environ.get(
     "INSPECTOR_EMAIL_SITE_URL", "https://huggingface.co/spaces/hetchyy/quranic-universal-audio"

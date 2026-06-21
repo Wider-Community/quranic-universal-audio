@@ -245,10 +245,13 @@ envelope glyph at `lib/icons/mail.svg`.
   `GET /api/email-unsubscribe`.
 - **Sender:** `services/email/` (Flask-free; named `services.email` to avoid
   shadowing the stdlib `email`) — Jinja `templates/` (one per event extending
-  `base.html`, greeting "Assalamu Alaikum"), `send.py` (Gmail SMTP via the
-  `GMAIL`/`GMAIL_PASS` Space secrets, fire-and-forget `ThreadPoolExecutor`; when
-  the secrets are absent it **logs the rendered email** instead of sending so dev
-  exercises the flow), and `emit.py` (per-event recipient resolution).
+  `base.html`, greeting "Assalamu Alaikum"), `send.py` (Brevo transactional REST
+  API over HTTPS — `POST /v3/smtp/email`, auth `BREVO_API_KEY`, From the
+  Brevo-verified `EMAIL_FROM_ADDRESS`; fire-and-forget `ThreadPoolExecutor`. **HF
+  Spaces block outbound SMTP on every port**, so a direct `smtplib` send silently
+  never delivers — hence HTTPS. When `BREVO_API_KEY` is absent it **logs the
+  rendered email** instead of sending so dev exercises the flow), and `emit.py`
+  (per-event recipient resolution).
 - **Event hooks** (best-effort, never break the write): `reciter.published` +
   `reciter.alignment_completed` in `state._apply_event`; `reciter.ts_regenerated`
   in `timestamps_jobs._regenerate_timestamps_on_released`; the GH cut in

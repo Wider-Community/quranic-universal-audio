@@ -430,7 +430,7 @@ def _apply_event(
     _notify.emit_for_event(conn, record, before=before, extra=notify_extra)
 
     # Email notifications — separate opt-in channel (subscriptions keyed by email).
-    # Recipient resolution reads the in-transaction state; SMTP is fire-and-forget.
+    # Recipient resolution reads the in-transaction state; the send is fire-and-forget.
     # Best-effort inside the emit module; never raises into the transition.
     if event == "reciter.published":
         from services.email import emit as _email
