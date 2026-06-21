@@ -211,3 +211,13 @@ def test_timestamps_kind_maps_to_ts_dir(store):
     rec = records.read("timestamps", "reciter_x", "tsjob")
     assert rec is not None and rec.kind == "timestamps" and rec.status == "succeeded"
     assert any(r.job_id == "tsjob" for r in records.list_for_slug("reciter_x"))
+
+
+def test_write_record_bytes_round_trips_through_real_backend(state_persistence):
+    # The ``store`` fixture stubs write/read_record_bytes, so the real
+    # ``get_backend().write_bytes_atomic`` call is never exercised there — which
+    # is how a wrong backend method name silently no-op'd every job-record write
+    # in prod. Drive the real path against a FilesystemBackend.
+    payload = json.dumps({"job_id": "jidRT", "status": "succeeded"}).encode()
+    base.write_record_bytes("hf_publish_batch", None, "jidRT", payload)
+    assert base.read_record_bytes("hf_publish_batch", None, "jidRT") == payload

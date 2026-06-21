@@ -335,7 +335,7 @@ def list_in_flight_jobs(kinds: tuple[str, ...], *, block: bool = True) -> list[d
 
 def write_record_bytes(kind: str, slug: str | None, job_id: str, payload: bytes) -> None:
     try:
-        get_backend().write_bytes(job_record_path(kind, slug, job_id), payload)
+        get_backend().write_bytes_atomic(job_record_path(kind, slug, job_id), payload)
     except Exception as exc:
         log.warning("write job record %s/%s/%s failed: %s", kind, slug, job_id, exc)
 
