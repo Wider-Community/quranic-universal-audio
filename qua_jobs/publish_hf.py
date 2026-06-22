@@ -42,6 +42,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from qua_shared.letter_vocab import to_external_char  # noqa: E402
+from qua_shared.ts_shard_letters import iter_letters  # noqa: E402
 from qua_shared.mp3_frames import (  # noqa: E402
     FrameIndex,
     MultiFrameSlice,
@@ -450,20 +451,20 @@ def build_rows(
                         ]
                     )
 
-            # Letters: flatten (widx, char, start, end) — clip-relative. Shard
-            # letter tuples carry a trailing silent flag (``[char, s, e, silent]``)
-            # that the published letter tier doesn't expose — ignore it.
+            # Letters: flatten (widx, char, start, end) — clip-relative. Read via
+            # the named accessor; the shard's trailing ``silent`` flag (and any
+            # future slot) isn't exposed in the published letter tier.
             verse_letters: list[dict] = []
             for widx, letters in tdata.get("letters", []):
-                for ch, s, e, *_ in letters:
+                for lt in iter_letters(letters):
                     verse_letters.append(
                         {
                             "word_idx": _i(widx),
                             # Internal 57-token alphabet -> published 42-token set
                             # (same mapping as the GH release letter tier).
-                            "char": to_external_char(ch),
-                            "start_ms": _i(s - clip_start),
-                            "end_ms": _i(e - clip_start),
+                            "char": to_external_char(lt.char),
+                            "start_ms": _i(lt.start_ms - clip_start),
+                            "end_ms": _i(lt.end_ms - clip_start),
                         }
                     )
 

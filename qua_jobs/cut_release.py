@@ -49,6 +49,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from qua_shared.letter_vocab import VOCAB_FILENAME, to_external_char, vocab_csv_bytes  # noqa: E402
+from qua_shared.ts_shard_letters import iter_letters  # noqa: E402
 from qua_shared.schemas import (  # noqa: E402
     FileDigest,
     LetterTimestampsDoc,
@@ -236,12 +237,13 @@ def _build_tier_files(
             we = int(w[2])
             word_array.append([widx, ws, we])
             letters = w[3] if len(w) > 3 else []
-            # Shard letters carry a trailing silent flag (``[char, s, e, silent]``)
-            # not exposed in the GH release letter tier — ignore it.
-            for ch, ls, le, *_ in letters:
+            # Read letters by name; the accessor ignores the shard's trailing
+            # ``silent`` flag (and any future slot), which the GH letter tier
+            # doesn't expose.
+            for lt in iter_letters(letters):
                 # Map the internal 57-token alphabet to the published 42-token
                 # external set (drops the maddah mark; fail-loud on unknown).
-                letter_array.append([widx, to_external_char(ch), int(ls), int(le)])
+                letter_array.append([widx, to_external_char(lt.char), int(lt.start_ms), int(lt.end_ms)])
 
         verse_body[key] = verse_pos
         word_body[key] = [verse_pos, word_array]
