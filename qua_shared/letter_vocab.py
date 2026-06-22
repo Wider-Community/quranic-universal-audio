@@ -11,7 +11,8 @@ tokens** — it keeps the maddah mark ``U+0653`` fused onto base letters
 This module defines the smaller, stable **external** alphabet we publish, and the
 build-time mapping the release/dataset jobs apply. The rule is intentionally tiny:
 
-    external = internal with the maddah mark (U+0653) removed.
+    external = internal with the maddah (U+0653) and silent-zero (U+06DF, U+06E0)
+    marks removed.
 
 That collapses the 15 ``base+maddah`` composites into their already-present bases
 (a non-lossy, prolongation-only merge — no two distinct letters ever combine),
@@ -44,6 +45,15 @@ import unicodedata
 
 # The maddah (prolongation) mark. Dropped from every token at publish time.
 MADDAH = "ٓ"  # ARABIC MADDAH ABOVE
+
+# Silent-zero marks (Quranic "small high zero") the v4 silent-letter shard format
+# folds onto a written-but-unpronounced grapheme. Dropped at publish time like
+# the maddah — they flag silence, not a distinct letter, and the base they sit on
+# is already a vocab token (silence isn't carried in the published letter tier).
+SILENT_ZERO_MARKS = ("۟", "۠")  # SMALL HIGH ROUNDED / RECTANGULAR ZERO
+
+# Every mark stripped from an internal token to derive its external form.
+_DROP_MARKS = (MADDAH, *SILENT_ZERO_MARKS)
 
 # Provenance — encoded in the published asset's filename for extensibility.
 RIWAYAH = "hafs_an_asim"
@@ -121,11 +131,14 @@ assert len(EXTERNAL_VOCAB) == len(VOCAB_TOKENS) == 42, (
 def to_external_char(ch: str) -> str:
     """Map one internal letter token to its external (published) form.
 
-    Drops the maddah mark (``U+0653``). Fail-loud: raises ``ValueError`` if the
-    result is not a known token, so an unexpected upstream token (new riwayah /
-    orthography) is caught at cut time rather than shipped silently.
+    Drops the maddah (``U+0653``) and silent-zero (``U+06DF`` / ``U+06E0``) marks.
+    Fail-loud: raises ``ValueError`` if the result is not a known token, so an
+    unexpected upstream token (new riwayah / orthography) is caught at cut time
+    rather than shipped silently.
     """
-    ext = ch.replace(MADDAH, "")
+    ext = ch
+    for _mark in _DROP_MARKS:
+        ext = ext.replace(_mark, "")
     if ext not in VOCAB_TOKENS:
         raise ValueError(
             f"letter token {ch!r} (-> {ext!r}, codepoints "

@@ -44,6 +44,23 @@ def test_maddah_composites_collapse_to_base():
         assert MADDAH not in to_external_char(composite)
 
 
+def test_silent_zero_marks_drop_to_base_letter():
+    # v4 silent-letter shards fold a silent-zero mark (U+06DF rounded / U+06E0
+    # rectangular) onto a written-but-unpronounced grapheme. The published
+    # alphabet has no such token, so it must drop like the maddah, collapsing to
+    # the base letter already in vocab.
+    cases = {
+        "ا۟": "ا",  # alef + small high rounded zero
+        "و۟": "و",  # waw + small high rounded zero
+        "ي۟": "ي",  # yeh + small high rounded zero
+        "ى۟": "ى",  # alef maksura + small high rounded zero
+        "ا۠": "ا",  # alef + small high rectangular zero
+    }
+    for marked, base in cases.items():
+        assert to_external_char(marked) == base
+        assert base in VOCAB_TOKENS
+
+
 def test_preserved_tokens_pass_through_unchanged():
     for tok in _PRESERVED:
         assert to_external_char(tok) == tok
