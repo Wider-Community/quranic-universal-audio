@@ -161,12 +161,7 @@ def _recitation_changes(
 
 
 def _release_footer(*, license_id: str, owner: str, repo: str, hf_dataset: str) -> str:
-    out = [f"**License:** {license_id}"]
-    if owner and repo:
-        out.append(f"- Repository: https://github.com/{owner}/{repo}")
-    if hf_dataset:
-        out.append(f"- HF dataset: https://huggingface.co/datasets/{hf_dataset}")
-    return "\n".join(out)
+    return f"**License:** {license_id}"
 
 
 def render_changelog(
