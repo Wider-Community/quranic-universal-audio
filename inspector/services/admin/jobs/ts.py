@@ -16,7 +16,12 @@ from __future__ import annotations
 
 from services.admin import timestamps_jobs as _legacy
 
-KIND = "ts"
+# Must equal the HF TS job's ``labels.task`` ("timestamps") — the poll
+# dispatcher (``base._poll_terminal_jobs``) matches a job to its handler by
+# that label, so registering under "ts" silently skips every TS completion.
+# The bucket record dir stays "ts" (abbreviated via ``base._KIND_DIR``); only
+# the dir abbreviates, the kind/label do not.
+KIND = "timestamps"
 
 # Re-export public API for the uniform jobs package surface.
 launch = _legacy.launch

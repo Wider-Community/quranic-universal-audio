@@ -127,22 +127,53 @@ def test_stage_job_code_raises_when_entrypoint_missing(stub_batch, monkeypatch, 
 # --- poll-handler registration (the auto-regen completion path) --------------
 
 
-def test_register_poll_handlers_includes_ts(monkeypatch):
-    """Every poll-completable kind — crucially ``ts`` — must be registered.
+def test_register_poll_handlers_includes_timestamps(monkeypatch):
+    """Every poll-completable kind — crucially the TS handler — must be
+    registered under the kind the HF job is labelled with (``timestamps``).
 
-    ``ts`` being dropped from boot wiring left automated TS regens with no
-    completion path (no webhook, no open drawer, poll skips an unregistered
-    kind), freezing ``produced_at`` and looping the auto-regen automation. The
-    handler set is asserted against the single source of truth so any future
-    omission fails here instead of in prod."""
+    The TS handler being absent (or, historically, registered under the wrong
+    key "ts" while the job is labelled "timestamps") left automated TS regens
+    with no completion path (no webhook, no open drawer, poll skips a label it
+    has no handler for), freezing ``produced_at`` and looping the auto-regen
+    automation. The handler set is asserted against the single source of truth
+    so any future omission fails here instead of in prod."""
     saved = dict(base._HANDLERS)
     base._HANDLERS.clear()
     try:
         base.register_poll_handlers()
         assert set(base._HANDLERS) == set(base.POLL_COMPLETABLE_KINDS)
-        assert "ts" in base._HANDLERS
+        assert "timestamps" in base._HANDLERS
         # cut_release is webhook-only — it must NOT be on the poll path.
         assert "cut_release" not in base._HANDLERS
+    finally:
+        base._HANDLERS.clear()
+        base._HANDLERS.update(saved)
+
+
+def test_poll_dispatches_timestamps_labelled_job_to_handler(monkeypatch):
+    """A completed HF job labelled ``task='timestamps'`` must reach the TS
+    handler. The dispatcher keys handlers by the raw HF label, so a handler
+    registered under any other string (the historical "ts") is silently skipped
+    and the reciter never releases — this drives the real label→handler path
+    that ``test_register_poll_handlers_includes_timestamps`` alone can't prove."""
+    hub = sys.modules.get("huggingface_hub")
+    if hub is None:
+        hub = types.ModuleType("huggingface_hub")
+        monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    fake_job = types.SimpleNamespace(
+        id="jid-ts-1",
+        labels={"task": "timestamps", "reciter": "foo_slug"},
+        status=types.SimpleNamespace(stage="COMPLETED"),
+    )
+    monkeypatch.setattr(hub, "list_jobs", lambda: [fake_job], raising=False)
+
+    dispatched: list[tuple[str | None, str]] = []
+    saved = dict(base._HANDLERS)
+    base._HANDLERS.clear()
+    try:
+        base.register_handler("timestamps", lambda slug, jid: dispatched.append((slug, jid)))
+        base._poll_terminal_jobs()
+        assert dispatched == [("foo_slug", "jid-ts-1")]
     finally:
         base._HANDLERS.clear()
         base._HANDLERS.update(saved)

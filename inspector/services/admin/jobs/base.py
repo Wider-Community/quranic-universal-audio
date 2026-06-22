@@ -522,7 +522,7 @@ def register_handler(kind: str, fn: PollHandler) -> None:
 #: idempotent DB write from ``(slug, job_id)`` alone. ``cut_release`` is excluded
 #: on purpose: it is webhook-only (its complete() needs the full members payload
 #: the poll path cannot reconstruct).
-POLL_COMPLETABLE_KINDS = ("ts", "hf_publish", "hf_publish_batch", "refresh_catalog")
+POLL_COMPLETABLE_KINDS = ("timestamps", "hf_publish", "hf_publish_batch", "refresh_catalog")
 
 
 def register_poll_handlers() -> None:

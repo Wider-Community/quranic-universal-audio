@@ -146,8 +146,10 @@ def _notify_complete(slug: str, status: str) -> None:
 
     Best-effort: the Inspector's poll fallback releases anyway if this fails or
     isn't configured. Only fires when both the URL + secret env are present (the
-    launcher threads them only in deployed mode). Short timeout — never block
-    the job's exit on a slow/unreachable server.
+    launcher threads them only in deployed mode). The handler runs a synchronous
+    publish (state transition + full-file DB→bucket sync) that can take tens of
+    seconds, so the read timeout matches the server's own request timeout; a true
+    miss (server down / mid-deploy) is still covered by the poll fallback.
     """
     url = os.environ.get("INSPECTOR_WEBHOOK_URL", "").strip()
     secret = os.environ.get("INSPECTOR_WEBHOOK_SECRET", "").strip()
@@ -161,7 +163,7 @@ def _notify_complete(slug: str, status: str) -> None:
             url,
             json={"slug": slug, "job_id": job_id, "status": status},
             headers={"X-Inspector-Job-Secret": secret},
-            timeout=15,
+            timeout=60,
         )
         log.info("completion callback %s → HTTP %s", url, resp.status_code)
     except Exception as exc:  # noqa: BLE001 — poll fallback covers a miss
