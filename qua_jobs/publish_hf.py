@@ -450,10 +450,12 @@ def build_rows(
                         ]
                     )
 
-            # Letters: flatten (widx, char, start, end) — clip-relative.
+            # Letters: flatten (widx, char, start, end) — clip-relative. Shard
+            # letter tuples carry a trailing silent flag (``[char, s, e, silent]``)
+            # that the published letter tier doesn't expose — ignore it.
             verse_letters: list[dict] = []
             for widx, letters in tdata.get("letters", []):
-                for ch, s, e in letters:
+                for ch, s, e, *_ in letters:
                     verse_letters.append(
                         {
                             "word_idx": _i(widx),
