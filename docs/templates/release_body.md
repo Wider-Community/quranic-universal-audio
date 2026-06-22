@@ -42,9 +42,9 @@ python download_audio.py catalog.json --reciter ibrahim_al_akhdar_drive --format
 python download_audio.py catalog.json --reciter ibrahim_al_akhdar_drive --format original
 ```
 
-The `ayah` layout needs the verse tier file; run it from the unzipped reciter zip so `verse_timestamps.json.gz` sits next to `catalog.json` (or pass `--timestamps`).
-
 It uses `yt-dlp` + `ffmpeg` for YouTube/Drive sources and needs neither for direct CDN MP3s. `--bitrate`, `--sample-rate`, and `--channels` are configurable; see `--help`.
+
+The `ayah` layout needs the verse tier file; run it from the unzipped reciter zip so `verse_timestamps.json.gz` sits next to `catalog.json` (or pass `--timestamps`).
 
 ## Timestamp levels
 

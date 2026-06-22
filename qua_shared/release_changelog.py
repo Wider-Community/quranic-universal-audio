@@ -81,15 +81,7 @@ def _member_table(members: list[dict]) -> list[str]:
 def _has_missing(members: list[dict]) -> bool:
     return any((m.get("missing_surahs") or m.get("missing_verses")) for m in members)
 
-
-_MISSING_CALLOUT = (
-    "> **About missing verses.** A few recitations are missing whole surahs or a "
-    "small number of verses (the *Missing* column). This is almost always upstream "
-    "— the source audio omits a verse (commonly the Basmala, `1:1`), has a corrupt "
-    "or incomplete clip, or doesn't recite it in full — so we exclude it rather "
-    "than ship a misaligned timestamp."
-)
-
+# Removed _MISSING_CALLOUT and its use
 
 def _accordion(summary: str, body_lines: list[str]) -> list[str]:
     return [f"<details><summary>{summary}</summary>", "", *body_lines, "</details>"]
@@ -141,8 +133,7 @@ def _recitation_changes(
         _summary_sentence(previous_version, len(added), len(refreshed), n_carried),
         "",
     ]
-    if _has_missing(added + refreshed + carried):
-        out.extend([_MISSING_CALLOUT, ""])
+    # Removed the missing callout extension here
     if added:
         out.extend(
             _accordion(
