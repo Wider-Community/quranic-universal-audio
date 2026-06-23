@@ -785,7 +785,14 @@
             if (isBridgeTag(c.tag)) {
                 if (c.shareGroup != null) idghamGroupColors.set(c.shareGroup, color);
             } else {
-                for (const fi of c.phonemeIndices) phonemeColor.set(fi, color);
+                // A ghunnah is ONE phoneme on the phoneme row. A tanwīn rule (ikhfaa/
+                // iqlab) sounds [short-vowel, nasal] — colour only the nasal (the last
+                // phoneme); the preceding vowel is the letter's, not the rule's. Every
+                // other rule already references a single phoneme.
+                const idxs = c.role === 'tanween' && c.phonemeIndices.length > 1
+                    ? c.phonemeIndices.slice(-1)
+                    : c.phonemeIndices;
+                for (const fi of idxs) phonemeColor.set(fi, color);
             }
         }
 

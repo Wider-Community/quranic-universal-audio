@@ -857,4 +857,35 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(alef).toBeTruthy();
         expect(alef.classList.contains('silent')).toBe(true);
     });
+
+    it('ghunnah tanwīn (ikhfaa/iqlab): the phoneme row underlines only the nasal, not the vowel', () => {
+        // بَعُوضَةً-style: the tanwīn sounds [short-vowel, nasal]. A ghunnah is ONE
+        // phoneme on the phoneme row — only the nasal (idx 4) is underlined; the
+        // tanwīn's own vowel (idx 3) is not (it's the letter's, not the rule's).
+        const mk = (tag: string) => {
+            const intervals: PhonemeInterval[] = [
+                { phone: 'dˤ', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.2 },
+                { phone: 't', start: 0.2, end: 0.3 },
+                { phone: 'a', start: 0.3, end: 0.34 }, // tanwīn vowel
+                { phone: 'ŋ', start: 0.34, end: 0.8 }, // tanwīn nasal
+            ];
+            const word = w(
+                [{ char: 'ض', start: 0, end: 0.2, silent: false }, { char: 'ة', start: 0.2, end: 0.34, silent: false }],
+                [
+                    base(0, [0], { chars: 'ض' }),
+                    { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                    base(1, [2], { chars: 'ة' }),
+                    { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [3, 4], sourceLetterIndex: 1, tag, shareGroup: null },
+                ],
+                [0, 1, 2, 3, 4],
+            );
+            return mount([word], intervals).container;
+        };
+        for (const tag of ['ikhfaa_tanween', 'iqlab_tanween']) {
+            const c = mk(tag);
+            expect(c.querySelector<HTMLElement>('.mega-phoneme[data-index="4"]')!.dataset.tj).toBe('1'); // nasal
+            expect(c.querySelector<HTMLElement>('.mega-phoneme[data-index="3"]')!.dataset.tj).toBeUndefined(); // vowel
+            cleanup();
+        }
+    });
 });
