@@ -15,6 +15,7 @@ node_modules/
 .claude/scheduled_tasks.lock
 .claude/launch.json
 .claude/worktrees/
+.worktrees/
 
 # envs
 .env
