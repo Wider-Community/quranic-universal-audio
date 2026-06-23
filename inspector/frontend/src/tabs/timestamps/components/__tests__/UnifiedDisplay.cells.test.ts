@@ -421,6 +421,40 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(fatha.dataset.cellStart).toBe('0.2');
     });
 
+    it('madd-ʿiwaḍ at hamza waqf: dropped fatḥatan groups + co-lights with the IMPLICIT alef', () => {
+        // مَآءً at waqf ends in hamza with NO written alef carrier: ء base, dropped
+        // fatḥatan (tag madd_iwad), and an INSERTED graphemeless alef (chars='', a:).
+        // The fatḥa must join the implicit alef as [fatḥa, alef] and co-light, not grey.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'ʔ', start: 0, end: 0.2 }, { phone: 'a:', start: 0.2, end: 0.6 },
+        ];
+        const word = w(
+            [{ char: 'ء', start: 0, end: 0.2, silent: false }],
+            [
+                base(0, [0], { chars: 'ء' }),
+                { chars: 'ً', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: 'madd_iwad', shareGroup: null },
+                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'madd_iwad', shareGroup: null },
+            ],
+            [0, 1],
+        );
+        const { container } = mount([word], intervals);
+        const groups = container.querySelectorAll<HTMLElement>('.cell-group');
+        // ء base separate; the iwaḍ group = [fatḥa(small), implicit alef(full)].
+        const vowel = Array.from(groups).find((g) => g.classList.contains('vowel'))!;
+        expect(vowel).toBeTruthy();
+        const small = vowel.querySelector<HTMLElement>('.haraka-cell .g')!;
+        expect(small.textContent).toBe('َ'); // a SINGLE fatḥa, not the fatḥatan
+        // the added alef is an implicit, inserted-glow full cell rendering 'ا'.
+        const implicit = vowel.querySelector<HTMLElement>('.mega-letter.implicit')!;
+        expect(implicit).toBeTruthy();
+        expect(implicit.textContent).toBe('ا');
+        expect(implicit.classList.contains('dia-inserted')).toBe(true);
+        // the fatḥa co-lights on the alef's long ā (timed, not greyed).
+        const fatha = vowel.querySelector<HTMLElement>('.haraka-cell')!;
+        expect(fatha.dataset.cellTimed).toBe('1');
+        expect(fatha.dataset.cellStart).toBe('0.2');
+    });
+
     it('idgham shafawi: a merged base absorbs the vowel — its fatḥa co-lights, not greyed', () => {
         // مَّرَض receiving meem: the consonant merged cross-word, so the base sounds
         // the VOWEL ("a"). The phonemizer hands the fatḥa as `present` sharing the

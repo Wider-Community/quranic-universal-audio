@@ -397,7 +397,7 @@
         //     ADJACENT carrier must co-light + group with that carrier, not grey
         //     out. Three carriers: the madd-ʿiwaḍ alef, the Allah dagger-alef, and
         //     (idgham shafawi / noon) the merged base that absorbed the vowel. ---
-        const iwadAlef = cells.find((c) => c.role === 'madd' && c.tag === 'madd_iwad' && c.chars !== '');
+        const iwadAlef = cells.find((c) => c.role === 'madd' && c.tag === 'madd_iwad');
         const _iwadIv = iwadAlef
             ? _cellTiming(iwadAlef.phonemeIndices, intervals, null)
             : { start: null, end: null };
@@ -570,10 +570,12 @@
                     pushFullGrapheme(curBase, c, true);
                 } else if (c.role === 'madd') {
                     if (c.chars !== '' && foldIdx != null && consumedFold.has(foldIdx)) continue; // fold half
-                    if (c.tag === 'madd_iwad' && c.chars !== '') {
-                        // the substituted iwaḍ alef joins the [fatḥa, alef] vowel group
+                    if (c.tag === 'madd_iwad') {
+                        // the substituted (written) or inserted (implicit — word ends in
+                        // hamza, مَآءً) iwaḍ alef joins the [fatḥa, alef] vowel group
                         iwadGroup = iwadGroup ?? newGroup('vowel');
-                        pushFullGrapheme(iwadGroup, c, false);
+                        if (c.chars === '') pushFullImplicit(iwadGroup, c);
+                        else pushFullGrapheme(iwadGroup, c, false);
                     } else if (c.chars === '') {
                         const g = c.shareGroup != null && longVowelSG.has(c.shareGroup)
                             ? vowelGroupFor(c.shareGroup) : newGroup('vowel');
