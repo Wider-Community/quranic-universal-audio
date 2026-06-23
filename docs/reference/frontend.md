@@ -189,7 +189,7 @@ Entry view: public catalog browse/search/filter/play + admin controls.
 | `components/DetailHeader.svelte`, `FactsList.svelte`, `StateTimeline.svelte` | Detail/table pieces |
 | `components/ActivityRail.svelte` | Public activity feed (owner-visible delete affordance on each card) |
 | `components/RequestForm.svelte`, `submit/{SubmitWizard,StepReciter,StepSource,StepDetails}.svelte` | Request/submit flow |
-| `stores/catalog-data.ts` | Full public reciter roster (paginated) + stats, cached in-memory; visibility-aware poll skips no-op refreshes |
+| `stores/catalog-data.ts` | Full public reciter roster (paginated) + stats, cached in-memory; visibility-aware poll gates the multi-page refetch on the `/api/public/version` (`db_seq`) probe — an idle catalog costs one tiny request per tick, not a full roster page-through |
 | `stores/dashboard-state.ts` | Filter/sort/search + detail-modal flag (mounted at root, survives modal) |
 | `stores/submit-wizard.ts` | Submit-recitation wizard FE state (3-step) |
 

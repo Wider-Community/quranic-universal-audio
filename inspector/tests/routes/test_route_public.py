@@ -157,6 +157,33 @@ def test_stats_sets_cache_control(flask_client):
 
 
 # ---------------------------------------------------------------------------
+# /api/public/version
+# ---------------------------------------------------------------------------
+
+
+def test_version_returns_db_seq_with_no_store(flask_client):
+    _install(reciters=[], deliveries=[], rows=[])
+    resp = flask_client.get("/api/public/version")
+    assert resp.status_code == 200
+    body = json.loads(resp.data)
+    assert isinstance(body["db_seq"], int)
+    assert "no-store" in resp.headers["Cache-Control"]
+
+
+def test_version_increments_after_committed_write(flask_client):
+    # The dashboard poll gates its roster refetch on this counter, so a
+    # committed write must move it — otherwise the catalog would never refresh.
+    from services import db
+
+    _install(reciters=[], deliveries=[], rows=[])
+    before = json.loads(flask_client.get("/api/public/version").data)["db_seq"]
+    with db.transaction():
+        pass  # an empty committed txn still bumps db_seq
+    after = json.loads(flask_client.get("/api/public/version").data)["db_seq"]
+    assert after > before
+
+
+# ---------------------------------------------------------------------------
 # /api/public/reciters
 # ---------------------------------------------------------------------------
 
