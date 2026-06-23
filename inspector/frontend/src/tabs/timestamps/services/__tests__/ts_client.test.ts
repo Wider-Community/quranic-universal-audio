@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchJson } from '../../../../lib/api';
 import type { SegmentEntry, TsShardResponse, TsShardWord } from '../../../../lib/types/ts-client';
 import {
-    assembleVerseFromShard,
+    assembleOccasion,
     chapterVerseRefs,
     resolveVbrChaptersForReciter,
+    shardOccasions,
     type TsReciterAudio,
     vbrChaptersFromManifest,
 } from '../ts_client';
@@ -46,9 +47,16 @@ function seg(ref: string, startMs: number, endMs: number, words: TsShardWord[]):
     return { ref, t: [startMs, endMs], words };
 }
 
+/** Resolve the (first) occasion for a verse ref in a freshly-built shard. */
+function occasionFor(shard: TsShardResponse, ref: string) {
+    const occ = shardOccasions(shard).find((o) => o.ref === ref);
+    if (!occ) throw new Error(`no occasion for ${ref}`);
+    return occ;
+}
+
 function bySurahShard(): TsShardResponse {
-    // by_surah: word offsets are absolute file timestamps; ts_client
-    // subtracts the verse's start to make timings relative to playback.
+    // by_surah: word offsets are absolute file timestamps; the assembler
+    // subtracts the occasion's start to make timings relative to playback.
     return {
         _meta: { schema_version: 2, chapter: 1, audio_category: 'by_surah' },
         segments: [
@@ -92,27 +100,26 @@ const fakeDk = {
 };
 
 // ---------------------------------------------------------------------------
-// assembleVerseFromShard — canonical audio URL injection
+// assembleOccasion — canonical audio URL injection
 //
 // `audio_category` is sourced from the manifest's reciter block; the per-chapter
 // URL is the canonical link the caller resolved from /api/audio/surahs and is
 // echoed verbatim into `audio_url` (never recomputed from a template). The
-// by_surah offset adjustment 0-anchors word times to the verse's clip start.
+// by_surah offset adjustment 0-anchors word times to the occasion's clip start.
 // ---------------------------------------------------------------------------
 
-describe('assembleVerseFromShard — canonical audio URL', () => {
+describe('assembleOccasion — canonical audio URL', () => {
     it('uses the injected canonical chapter URL and 0-anchors by_surah words', () => {
         const shard: TsShardResponse = {
             _meta: { schema_version: 2, chapter: 1, audio_category: 'by_surah' },
             segments: [seg('1:1', 5000, 6000, [makeWord(1, 5000, 6000)])],
         };
         const url = 'https://server7.mp3quran.net/shur/001.mp3';
-        const result = assembleVerseFromShard('r', shard, '1:1', fakeQpc, fakeDk, RA_SURAH, url);
-        expect(result).not.toBeNull();
-        expect(result!.audio_url).toBe(url);
-        expect(result!.audio_category).toBe('by_surah_audio');
-        expect(result!.time_start_ms).toBe(5000);
-        expect(result!.words[0]!.start).toBeCloseTo(0);
+        const result = assembleOccasion('r', occasionFor(shard, '1:1'), fakeQpc, fakeDk, RA_SURAH, url);
+        expect(result.audio_url).toBe(url);
+        expect(result.audio_category).toBe('by_surah_audio');
+        expect(result.time_start_ms).toBe(5000);
+        expect(result.words[0]!.start).toBeCloseTo(0);
     });
 
     it('uses a non-templatable per-chapter URL verbatim (YouTube by_surah)', () => {
@@ -124,93 +131,94 @@ describe('assembleVerseFromShard — canonical audio URL', () => {
             segments: [seg('2:1', 4000, 12000, [makeWord(1, 4000, 12000)])],
         };
         const url = 'https://www.youtube.com/watch?v=E5sWmvpn0EI';
-        const result = assembleVerseFromShard('r', shard, '2:1', fakeQpc, fakeDk, RA_SURAH, url);
-        expect(result!.audio_url).toBe(url);
+        const result = assembleOccasion('r', occasionFor(shard, '2:1'), fakeQpc, fakeDk, RA_SURAH, url);
+        expect(result.audio_url).toBe(url);
     });
 });
 
 // ---------------------------------------------------------------------------
-// assembleVerseFromShard — by_ayah path
+// assembleOccasion — by_ayah path
 // ---------------------------------------------------------------------------
 
-describe('assembleVerseFromShard (by_ayah)', () => {
+describe('assembleOccasion (by_ayah)', () => {
     const shard = byAyahShard();
 
     it('builds a verse with second-scaled timings, location strings, and intervals', () => {
-        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk, RA_AYAH, AYAH_URL);
-        expect(result).not.toBeNull();
-        expect(result!.reciter).toBe('saad_al_ghamdi');
-        expect(result!.chapter).toBe(1);
-        expect(result!.verse_ref).toBe('1:1');
-        expect(result!.audio_category).toBe('by_ayah_audio');
-        expect(result!.audio_url).toBe('https://everyayah.com/data/Saad_40k/001001.mp3');
+        const result = assembleOccasion('saad_al_ghamdi', occasionFor(shard, '1:1'), fakeQpc, fakeDk, RA_AYAH, AYAH_URL);
+        expect(result.reciter).toBe('saad_al_ghamdi');
+        expect(result.chapter).toBe(1);
+        expect(result.verse_ref).toBe('1:1');
+        expect(result.audio_category).toBe('by_ayah_audio');
+        expect(result.audio_url).toBe('https://everyayah.com/data/Saad_40k/001001.mp3');
 
         // Words: locations + ms→sec + display_text fallback to QPC when DK missing.
-        expect(result!.words).toHaveLength(2);
-        expect(result!.words[0]!.location).toBe('1:1:1');
-        expect(result!.words[0]!.text).toBe('بِسْمِ');
-        expect(result!.words[0]!.display_text).toBe('بسم[dk]');
-        expect(result!.words[0]!.start).toBeCloseTo(0);
-        expect(result!.words[0]!.end).toBeCloseTo(0.8);
-        expect(result!.words[1]!.display_text).toBe('ٱللَّهِ');
+        expect(result.words).toHaveLength(2);
+        expect(result.words[0]!.location).toBe('1:1:1');
+        expect(result.words[0]!.text).toBe('بِسْمِ');
+        expect(result.words[0]!.display_text).toBe('بسم[dk]');
+        expect(result.words[0]!.start).toBeCloseTo(0);
+        expect(result.words[0]!.end).toBeCloseTo(0.8);
+        expect(result.words[1]!.display_text).toBe('ٱللَّهِ');
 
         // Intervals concatenated; phoneme_indices points back into them.
-        expect(result!.intervals).toHaveLength(3);
-        expect(result!.intervals[0]).toEqual({ phone: 'b', start: 0, end: 0.2 });
-        expect(result!.words[0]!.phoneme_indices).toEqual([0, 1]);
-        expect(result!.words[1]!.phoneme_indices).toEqual([2]);
+        expect(result.intervals).toHaveLength(3);
+        expect(result.intervals[0]).toEqual({ phone: 'b', start: 0, end: 0.2 });
+        expect(result.words[0]!.phoneme_indices).toEqual([0, 1]);
+        expect(result.words[1]!.phoneme_indices).toEqual([2]);
     });
 
-    it('time_start_ms stays 0 and time_end_ms tracks the segment span end for by_ayah', () => {
-        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk, RA_AYAH, AYAH_URL);
-        expect(result!.time_start_ms).toBe(0);
-        expect(result!.time_end_ms).toBe(1500); // segment span end (ms)
+    it('time_start_ms stays 0 and time_end_ms tracks the occasion span end for by_ayah', () => {
+        const result = assembleOccasion('saad_al_ghamdi', occasionFor(shard, '1:1'), fakeQpc, fakeDk, RA_AYAH, AYAH_URL);
+        expect(result.time_start_ms).toBe(0);
+        expect(result.time_end_ms).toBe(1500); // occasion span end (ms)
     });
 
-    it('returns null for an unknown verse ref', () => {
-        expect(assembleVerseFromShard('saad_al_ghamdi', shard, '99:99', fakeQpc, fakeDk, RA_AYAH, AYAH_URL)).toBeNull();
+    it('has no occasion for an unknown verse ref', () => {
+        expect(shardOccasions(byAyahShard()).find((o) => o.ref === '99:99')).toBeUndefined();
     });
 });
 
 // ---------------------------------------------------------------------------
-// assembleVerseFromShard — by_surah offset adjustment
+// assembleOccasion — by_surah offset adjustment
 // ---------------------------------------------------------------------------
 
-describe('assembleVerseFromShard (by_surah)', () => {
+describe('assembleOccasion (by_surah)', () => {
     const shard = bySurahShard();
 
-    it('subtracts the verse start offset from word/letter/interval timings', () => {
-        const result = assembleVerseFromShard('saad_al_ghamdi', shard, '1:1', fakeQpc, fakeDk, RA_SURAH, CH_URL);
-        expect(result!.audio_category).toBe('by_surah_audio');
+    it('subtracts the occasion start offset from word/letter/interval timings', () => {
+        const result = assembleOccasion('saad_al_ghamdi', occasionFor(shard, '1:1'), fakeQpc, fakeDk, RA_SURAH, CH_URL);
+        expect(result.audio_category).toBe('by_surah_audio');
 
         // Verse starts at 5s of the surah file → all timings shift by -5s.
-        expect(result!.time_start_ms).toBe(5000);
-        expect(result!.time_end_ms).toBe(7000);
+        expect(result.time_start_ms).toBe(5000);
+        expect(result.time_end_ms).toBe(7000);
 
-        expect(result!.words[0]!.start).toBeCloseTo(0); // 5000 - 5000
-        expect(result!.words[0]!.end).toBeCloseTo(1.0); // 6000 - 5000
-        expect(result!.words[1]!.start).toBeCloseTo(1.5); // 6500 - 5000
-        expect(result!.words[1]!.end).toBeCloseTo(2.0); // 7000 - 5000
+        expect(result.words[0]!.start).toBeCloseTo(0); // 5000 - 5000
+        expect(result.words[0]!.end).toBeCloseTo(1.0); // 6000 - 5000
+        expect(result.words[1]!.start).toBeCloseTo(1.5); // 6500 - 5000
+        expect(result.words[1]!.end).toBeCloseTo(2.0); // 7000 - 5000
 
         // Letters and intervals should also be shifted.
-        expect(result!.words[0]!.letters[0]!.start).toBeCloseTo(0);
-        expect(result!.words[0]!.letters[0]!.end).toBeCloseTo(0.2);
-        expect(result!.intervals[0]!.start).toBeCloseTo(0);
-        expect(result!.intervals[0]!.end).toBeCloseTo(0.2);
+        expect(result.words[0]!.letters[0]!.start).toBeCloseTo(0);
+        expect(result.words[0]!.letters[0]!.end).toBeCloseTo(0.2);
+        expect(result.intervals[0]!.start).toBeCloseTo(0);
+        expect(result.intervals[0]!.end).toBeCloseTo(0.2);
     });
 });
 
 // ---------------------------------------------------------------------------
-// assembleVerseFromShard — loopback occasion dedup
+// assembleOccasion — no dedup (every recited word kept)
 //
 // The shard stores every recited segment raw; a verse may recur (loopbacks /
-// re-dos). The assembler reduces a verse to its canonical (completing) occasion.
+// re-dos). One occasion = a contiguous run of same-verse segments; the assembler
+// keeps EVERY word of it, and a verse re-recited after a foreign verse splits
+// into separate occasions that each assemble independently.
 // ---------------------------------------------------------------------------
 
-describe('assembleVerseFromShard — loopback occasion dedup', () => {
-    it('concatenates a single occasion (lead+trail) into one canonical clip', () => {
-        // 2:2 recited as words 1-5 then 6-7 (a `lead+trail` loopback): one
-        // contiguous occasion (no foreign verse interleaves) — all words kept.
+describe('assembleOccasion — keeps all recited words', () => {
+    it('concatenates a single occasion (lead+trail) keeping every word', () => {
+        // 2:2 recited as words 1-5 then 6-7: one contiguous occasion (no foreign
+        // verse interleaves) — all words kept, in audio order.
         const shard: TsShardResponse = {
             _meta: { schema_version: 2, chapter: 2, audio_category: 'by_surah' },
             segments: [
@@ -218,19 +226,15 @@ describe('assembleVerseFromShard — loopback occasion dedup', () => {
                 seg('2:2', 11770, 14920, [makeWord(6, 11770, 13000), makeWord(7, 13000, 14920)]),
             ],
         };
-        const result = assembleVerseFromShard('r', shard, '2:2', fakeQpc, fakeDk, RA_SURAH, CH_URL);
-        expect(result).not.toBeNull();
-        expect(result!.words.map((w) => w.location)).toEqual([
-            '2:2:1', '2:2:5', '2:2:6', '2:2:7',
-        ]);
+        const result = assembleOccasion('r', occasionFor(shard, '2:2'), fakeQpc, fakeDk, RA_SURAH, CH_URL);
+        expect(result.words.map((w) => w.location)).toEqual(['2:2:1', '2:2:5', '2:2:6', '2:2:7']);
         // Clip spans both segments; by_surah 0-anchors to the first start (7450).
-        expect(result!.time_start_ms).toBe(7450);
-        expect(result!.time_end_ms).toBe(14920);
+        expect(result.time_start_ms).toBe(7450);
+        expect(result.time_end_ms).toBe(14920);
     });
 
-    it('picks one completing occasion when a foreign verse interleaves a re-do', () => {
-        // 1:1 take A, then 1:2 (breaks the run), then 1:1 take B. With no
-        // confidence join client-side, the EARLIEST completing occasion (A) wins.
+    it('splits a foreign-interleaved re-do into two occasions, each kept verbatim', () => {
+        // 1:1 take A, then 1:2 (breaks the run), then 1:1 take B → two 1:1 occasions.
         const shard: TsShardResponse = {
             _meta: { schema_version: 2, chapter: 1, audio_category: 'by_ayah' },
             segments: [
@@ -239,39 +243,32 @@ describe('assembleVerseFromShard — loopback occasion dedup', () => {
                 seg('1:1', 1500, 2500, [makeWord(1, 1500, 2000), makeWord(2, 2000, 2500)]),
             ],
         };
-        const result = assembleVerseFromShard('r', shard, '1:1', fakeQpc, fakeDk, RA_AYAH, AYAH_URL);
-        expect(result!.words.map((w) => w.location)).toEqual(['1:1:1', '1:1:2']);
-        // Occasion A spans 0-1000.
-        expect(result!.time_end_ms).toBe(1000);
+        const takes = shardOccasions(shard).filter((o) => o.ref === '1:1');
+        expect(takes).toHaveLength(2);
+
+        const a = assembleOccasion('r', takes[0]!, fakeQpc, fakeDk, RA_AYAH, AYAH_URL);
+        expect(a.words.map((w) => w.location)).toEqual(['1:1:1', '1:1:2']);
+        expect(a.time_end_ms).toBe(1000);
+
+        const b = assembleOccasion('r', takes[1]!, fakeQpc, fakeDk, RA_AYAH, AYAH_URL);
+        expect(b.words.map((w) => w.location)).toEqual(['1:1:1', '1:1:2']);
+        expect(b.time_end_ms).toBe(2500);
     });
-});
 
-// ---------------------------------------------------------------------------
-// assembleVerseFromShard — consecutive-repeat dedup
-//
-// A verse recited several times back-to-back is one occasion (no foreign verse
-// interleaves). The canonical clip trims post-completion takes to one clean take.
-// ---------------------------------------------------------------------------
-
-describe('assembleVerseFromShard — consecutive repeats', () => {
-    // 1:1 (words 1-2) recited twice, consecutively — a single occasion.
-    function consecutiveRepeatShard(): TsShardResponse {
-        return {
+    it('keeps a consecutive back-to-back repeat as both takes (no trim)', () => {
+        // 1:1 (words 1-2) recited twice, consecutively — a single occasion. Both
+        // takes are kept; the clip spans the whole occasion.
+        const shard: TsShardResponse = {
             _meta: { schema_version: 2, chapter: 1, audio_category: 'by_surah' },
             segments: [
                 seg('1:1', 5000, 6000, [makeWord(1, 5000, 5500), makeWord(2, 5500, 6000)]),
                 seg('1:1', 6500, 7500, [makeWord(1, 6500, 7000), makeWord(2, 7000, 7500)]),
             ],
         };
-    }
-
-    it('trims the repeat to one take (canonical clip)', () => {
-        const shard = consecutiveRepeatShard();
-        const result = assembleVerseFromShard('r', shard, '1:1', fakeQpc, fakeDk, RA_SURAH, CH_URL);
-        expect(result!.words.map((w) => w.location)).toEqual(['1:1:1', '1:1:2']);
-        // Clip ends at the first take's end (6000); take 2 is dropped.
-        expect(result!.time_start_ms).toBe(5000);
-        expect(result!.time_end_ms).toBe(6000);
+        const result = assembleOccasion('r', occasionFor(shard, '1:1'), fakeQpc, fakeDk, RA_SURAH, CH_URL);
+        expect(result.words.map((w) => w.location)).toEqual(['1:1:1', '1:1:2', '1:1:1', '1:1:2']);
+        expect(result.time_start_ms).toBe(5000);
+        expect(result.time_end_ms).toBe(7500);
     });
 });
 
