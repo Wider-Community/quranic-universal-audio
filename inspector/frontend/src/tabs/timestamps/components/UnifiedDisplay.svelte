@@ -115,6 +115,13 @@
         full: RenderedFull[];
         small: RenderedSmall[];
         shareGroup: number | null;
+        /** Flat interval indices this group's cells sound — bucketed into
+         *  `phonemes` by `_bucketPhonemes`. A silent / merged-away group has none. */
+        phoneIdx: number[];
+        /** The group's phonemes, rendered as ONE column-aligned cluster beneath the
+         *  group's letter(s); empty (a reserved slot) when the group is silent or
+         *  its sound merged into an adjacent word. */
+        phonemes: RenderedPhoneme[];
     }
 
     /** The folded letter view of `word.letters` — one entry per rendered letter
@@ -258,6 +265,8 @@
         rootEl.querySelectorAll<HTMLElement>('.bridge-letter').forEach((c) => {
             c.classList.remove('active', 'hover-preview');
         });
+        rootEl.querySelectorAll<HTMLElement>('.group-hover').forEach((c) => c.classList.remove('group-hover'));
+        rootEl.querySelectorAll<HTMLElement>('.mega-grid').forEach((g) => { g.dataset.hoverGi = ''; });
     }
 
     // Waveform hover → re-run highlights. The rAF loop is stopped while paused,
@@ -424,12 +433,15 @@
         let iwadGroup: RenderedGroup | null = null;
 
         const newGroup = (kind: 'base' | 'vowel'): RenderedGroup => {
-            const g: RenderedGroup = { kind, full: [], small: [], shareGroup: null };
+            const g: RenderedGroup = { kind, full: [], small: [], shareGroup: null, phoneIdx: [], phonemes: [] };
             groups.push(g);
             return g;
         };
+        // Record a cell's share-group + the phoneme indices it sounds onto its
+        // group, so `_bucketPhonemes` can place those phonemes under this column.
         const noteShare = (g: RenderedGroup, c: TsCell): void => {
             if (c.shareGroup != null && g.shareGroup == null) g.shareGroup = c.shareGroup;
+            if (c.phonemeIndices.length) g.phoneIdx.push(...c.phonemeIndices);
         };
 
         const pushSmall = (
@@ -680,8 +692,43 @@
         return m ? { base: phone.slice(0, -m[0].length), mod: m[0] } : { base: phone, mod: '' };
     }
 
-    /** Parse the trailing word number from a ``surah:ayah:word`` location.
-     *  Returns 0 when the location is malformed — caller filters those out. */
+    /** Bucket the word's rendered phonemes into their owning cell-group, so each
+     *  group renders its sounds as a column-aligned cluster beneath its letter(s).
+     *  A phoneme is claimed by the first group (reading order) whose cells sound
+     *  it; one claimed by no group is appended to the last cluster so nothing is
+     *  ever dropped. Order within a cluster follows interval index (reading order).
+     *  The synthetic-base fallback (no `base` cells → no cell↔phoneme mapping)
+     *  has nothing to map, so its phonemes all fall to the last cluster without a
+     *  warning; an orphan in a properly-mapped word is a real bug and is logged. */
+    function _bucketPhonemes(groups: RenderedGroup[], phonemes: RenderedPhoneme[]): void {
+        if (!groups.length) return;
+        const byIdx = new Map<number, RenderedPhoneme>();
+        for (const p of phonemes) byIdx.set(p.index, p);
+        const claimed = new Set<number>();
+        for (const g of groups) {
+            for (const idx of g.phoneIdx) {
+                if (claimed.has(idx)) continue;
+                const p = byIdx.get(idx);
+                if (!p) continue; // bridged / geminate_end / not in the render set
+                claimed.add(idx);
+                g.phonemes.push(p);
+            }
+            g.phonemes.sort((a, b) => a.index - b.index);
+        }
+        const orphans = phonemes.filter((p) => !claimed.has(p.index));
+        if (orphans.length) {
+            const anyMapped = groups.some((g) => g.phoneIdx.length > 0);
+            if (anyMapped) {
+                console.warn('[ts-align] phonemes not mapped to a cell-group:', orphans.map((o) => o.index));
+            }
+            groups[groups.length - 1]!.phonemes.push(...orphans);
+        }
+    }
+
+    /** Build the per-word `RenderedBlock[]` for the analysis view: cross-word
+     *  idgham / iltiqaa bridges lifted to between-word tiles, cell-groups with
+     *  their phonemes bucketed for column alignment, and detected inter-word
+     *  pause bridges. */
     function buildRendered(
         words: TsWord[],
         intervals: PhonemeInterval[],
@@ -762,11 +809,14 @@
                 if (iv && !iv.geminate_end) phonemes.push({ interval: iv, index: pi });
             }
 
+            const groups = cellGroupsFor(word, intervals, shareUnions, liftedIltiqaa.has(wi));
+            _bucketPhonemes(groups, phonemes);
+
             blocks.push({
                 word,
                 wordIndex: wi,
                 displayText: (word.display_text || word.text).replace(NON_RECITED_SIGNS, ''),
-                groups: cellGroupsFor(word, intervals, shareUnions, liftedIltiqaa.has(wi)),
+                groups,
                 phonemes,
                 bridge,
                 pauseBridge: null,
@@ -1203,6 +1253,34 @@
         seekToTime(startSec + lv.tsSegOffset);
     }
 
+    // ---- Group-hover spotlight ----
+    // Hovering any cell softly tints its whole column (the cell-group + its
+    // phoneme cluster, matched by `data-group-index`), so the letter↔phoneme
+    // relationship reads on hover — not only when co-highlighted. A single
+    // delegated listener per grid keeps this off the 60fps highlight path.
+    function _applyColHover(grid: HTMLElement, gi: string | null): void {
+        if (grid.dataset.hoverGi === (gi ?? '')) return;
+        grid.dataset.hoverGi = gi ?? '';
+        grid.querySelectorAll<HTMLElement>('[data-group-index]').forEach((el) => {
+            el.classList.toggle('group-hover', gi != null && el.dataset.groupIndex === gi);
+        });
+    }
+    function colHover(node: HTMLElement) {
+        const over = (e: Event): void => {
+            const t = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-group-index]');
+            _applyColHover(node, t?.dataset.groupIndex ?? null);
+        };
+        const leave = (): void => _applyColHover(node, null);
+        node.addEventListener('mouseover', over);
+        node.addEventListener('mouseleave', leave);
+        return {
+            destroy(): void {
+                node.removeEventListener('mouseover', over);
+                node.removeEventListener('mouseleave', leave);
+            },
+        };
+    }
+
     // ---- Per-cell duration tooltip (warmup/cooldown) ----------------------
     // Shows a cell's recited duration (ms, rounded to the nearest 10) on hover.
     // The first (cold) hover warms up for TS_TIP_WARMUP_MS before showing; once
@@ -1380,9 +1458,10 @@
                 on:mouseleave={onHoverLeave}
             >{block.displayText}</div>
             {#if block.groups.length}
-                <div class="mega-letters" class:hidden={!$showLetters} dir="rtl">
+                <div class="mega-grid" style="--col-count:{block.groups.length}" dir="rtl" use:colHover>
+                <div class="mega-letters" class:hidden={!$showLetters}>
                     {#each block.groups as grp, gi (gi)}
-                        <span class="cell-group" class:vowel={grp.kind === 'vowel'} class:share-group={grp.shareGroup != null}>
+                        <span class="cell-group" class:vowel={grp.kind === 'vowel'} class:share-group={grp.shareGroup != null} data-group-index={gi}>
                             {#each grp.full as f}
                                 {#if f.implicit}
                                     <!-- implicit madd (Allah dagger-alef / madd-ʿiwaḍ): a FULL cell,
@@ -1464,29 +1543,57 @@
                         </span>
                     {/each}
                 </div>
+                <div class="mega-phonemes" class:hidden={!$showPhonemes}>
+                    {#each block.groups as grp, gi (gi)}
+                        <span class="phoneme-cluster" class:empty={grp.phonemes.length === 0} data-group-index={gi}>
+                            {#each grp.phonemes as ph (ph.index)}
+                                {@const parts = splitPhone(ph.interval.phone)}
+                                <span
+                                    class="mega-phoneme"
+                                    class:silence={!ph.interval.phone ||
+                                        ph.interval.phone === 'sil' ||
+                                        ph.interval.phone === 'sp'}
+                                    class:geminate={ph.interval.geminate_start}
+                                    data-index={ph.index}
+                                    on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
+                                    on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
+                                    on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
+                                    on:mouseleave={onHoverLeave}
+                                    on:keydown={() => {}}
+                                    role="button"
+                                    tabindex="-1"
+                                >
+                                    <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
+                                </span>
+                            {/each}
+                        </span>
+                    {/each}
+                </div>
+                </div>
+            {:else}
+                <div class="mega-phonemes flat" class:hidden={!$showPhonemes} dir="rtl">
+                    {#each block.phonemes as ph (ph.index)}
+                        {@const parts = splitPhone(ph.interval.phone)}
+                        <span
+                            class="mega-phoneme"
+                            class:silence={!ph.interval.phone ||
+                                ph.interval.phone === 'sil' ||
+                                ph.interval.phone === 'sp'}
+                            class:geminate={ph.interval.geminate_start}
+                            data-index={ph.index}
+                            on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
+                            on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
+                            on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
+                            on:mouseleave={onHoverLeave}
+                            on:keydown={() => {}}
+                            role="button"
+                            tabindex="-1"
+                        >
+                            <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
+                        </span>
+                    {/each}
+                </div>
             {/if}
-            <div class="mega-phonemes" class:hidden={!$showPhonemes} dir="rtl">
-                {#each block.phonemes as ph (ph.index)}
-                    {@const parts = splitPhone(ph.interval.phone)}
-                    <span
-                        class="mega-phoneme"
-                        class:silence={!ph.interval.phone ||
-                            ph.interval.phone === 'sil' ||
-                            ph.interval.phone === 'sp'}
-                        class:geminate={ph.interval.geminate_start}
-                        data-index={ph.index}
-                        on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
-                        on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
-                        on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
-                        on:mouseleave={onHoverLeave}
-                        on:keydown={() => {}}
-                        role="button"
-                        tabindex="-1"
-                    >
-                        <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
-                    </span>
-                {/each}
-            </div>
         </div>
     {/each}
     {#if tipText}

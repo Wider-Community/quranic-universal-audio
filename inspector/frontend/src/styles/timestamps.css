@@ -156,31 +156,70 @@
     border-bottom: 2px solid var(--anim-highlight-color);
 }
 
-/* The letters row: one ordered flex row of GROUPS (a base cell + its trailing
-   diacritic cells). The GROUP is the flex child (flex:1; min-width:fit-content)
-   so the row's total width still tracks the word cell above it. Gap is 0 WITHIN
-   a group; the gap BETWEEN groups is applied as margin on the group. */
-.mega-letters {
-    display: flex;
+/* The analysis grid: ONE shared column track per cell-group, with the letter row
+   and the phoneme row both bound to it via `subgrid` — so every phoneme sits
+   directly under its letter-group and the letter↔phoneme relationship reads from
+   alignment, not only when co-highlighted. A track sizes to the max-content of
+   (its letter group | its phonemes); a 1-letter→2-sound group simply widens its
+   shared column. The gap BETWEEN groups is the grid column-gap; the gap WITHIN a
+   group is 0. `--col-count` is the group count, set inline per word. */
+.mega-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--col-count, 1), max-content);
+    grid-template-rows: auto auto;
+    column-gap: var(--haraka-group-gap, 7px);
+    row-gap: var(--word-phoneme-gap, 4px);
     direction: rtl;
+    justify-content: flex-start;
     align-items: stretch;
 }
 
-/* A GROUP = a base cell + its trailing diacritics. The flex child. */
+/* The letter + phoneme rows span every column and re-expose the parent's tracks
+   via `subgrid`; each emits exactly one child per group (in group order), so
+   column N of one row lines up with column N of the other. */
+.mega-letters,
+.mega-phonemes {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: stretch;
+}
+.mega-letters { grid-row: 1; }
+.mega-phonemes { grid-row: 2; }
+
+/* A GROUP = a base cell + its trailing diacritics; the subgrid cell for its
+   column. The track may be wider than the group's own letters (when its phonemes
+   are wider), so the group stretches and centres its letter(s) over its sounds. */
 .cell-group {
-    flex: 1;
-    min-width: fit-content;
     display: flex;
     direction: rtl;
     align-items: stretch;
+    justify-content: center;
     gap: 0; /* gap WITHIN a group — base + its diacritics sit flush */
-}
-.cell-group + .cell-group {
-    /* gap BETWEEN groups (the letter ↔ diacritic relationship) */
-    margin-inline-start: var(--haraka-group-gap, 9px);
 }
 /* share-group cells co-light via shared timing — no border/outline around the
    combined group (the synchronized highlight is the only affordance). */
+
+/* A phoneme cluster = the column's sounds beneath its letter-group; one per
+   group. Centred under the letter(s); an empty cluster (silent / merged-away
+   group) still reserves the row band so the columns stay aligned. */
+.phoneme-cluster {
+    display: flex;
+    direction: rtl;
+    align-items: center;
+    justify-content: center;
+    gap: var(--phoneme-box-gap, 2px);
+    min-height: var(--letter-cell-h, 34px);
+}
+
+/* Group-hover spotlight: hovering any cell softly tints its whole column (the
+   cell-group + its phoneme cluster) so the relationship reads on hover. Quiet by
+   design — the resting cue is proximity + alignment alone. */
+.cell-group.group-hover .mega-letter:not(.silent):not(.null-ts):not(.active),
+.cell-group.group-hover .haraka-cell:not(.dia-dropped):not(.active),
+.phoneme-cluster.group-hover .mega-phoneme:not(.active) {
+    background: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 12%, #0f0f23);
+}
 
 .mega-letter {
     flex: 1;
@@ -352,15 +391,16 @@
     background: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 24%, transparent);
 }
 
-.mega-phonemes {
+/* The degenerate fallback (a word with no cell-groups) renders phonemes as a
+   plain flex row — there's no grid to align to. */
+.mega-phonemes.flat {
     display: flex;
     gap: var(--phoneme-box-gap);
     direction: rtl;
 }
 
 .mega-phoneme {
-    flex: 1;
-    min-width: 0;
+    flex: none;
     padding: 3px 5px;
     background: #0f0f23;
     border-radius: 3px;

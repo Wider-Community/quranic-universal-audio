@@ -585,7 +585,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(fatha.dataset.cellStart).toBe('0.15'); // co-lit on the dagger ā
     });
 
-    it('renders group gaps: gap 0 within, non-zero between (margin on group)', () => {
+    it('renders one cell-group per letter-group, each holding its base + pinned diacritic', () => {
         const intervals: PhonemeInterval[] = [
             { phone: 'b', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.2 },
             { phone: 's', start: 0.2, end: 0.3 },
@@ -605,8 +605,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const { container } = mount([word], intervals);
         const groups = container.querySelectorAll<HTMLElement>('.cell-group');
         expect(groups.length).toBe(2);
-        // Each group is a flex child; gap is 0 within (CSS `gap: 0`); the between-
-        // group gap is the margin-inline-start applied to a `.cell-group + .cell-group`.
+        // Gap WITHIN a group is 0 (CSS `gap: 0`); the between-group gap is the grid
+        // column-gap. Each group holds its base + its pinned diacritic, no nesting.
         const first = groups[0]!;
         // first group has base + small inside it, no nested stack.
         expect(first.querySelector('.mega-letter')).toBeTruthy();
@@ -678,5 +678,139 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+});
+
+/**
+ * Column alignment: the letter row and the phoneme row share one per-group column
+ * grid, so each letter-group's sounds render as a cluster directly beneath it. A
+ * silent base / dropped diacritic at waqf contributes no phoneme — its column's
+ * cluster is empty (a reserved slot), keeping the columns aligned.
+ */
+describe('UnifiedDisplay — column alignment (per-group phoneme clusters)', () => {
+    beforeEach(() => {
+        dashPort.attachElement(
+            makePortAudioStub({ src: 'http://audio/1.mp3', readyState: 4 }) as unknown as HTMLAudioElement,
+        );
+        dashPort.setSource({ audioUrl: 'http://audio/1.mp3', reciter: null, vbr: false });
+    });
+    afterEach(() => {
+        cleanup();
+        loadedVerse.set(null);
+        dashPort.attachElement(null);
+    });
+
+    const clusterPhones = (el: HTMLElement): (string | null)[] =>
+        Array.from(el.querySelectorAll('.ph-base')).map((p) => p.textContent);
+
+    it('aligns each letter-group with its own phoneme cluster, one per group', () => {
+        // قُلْ : ق+ḍamma → [q, u] (1 letter, 2 sounds); ل+sukūn → [l]. Two groups → two
+        // clusters; the ق column is the wider one (2 sounds).
+        const intervals: PhonemeInterval[] = [
+            { phone: 'q', start: 0, end: 0.1 }, { phone: 'u', start: 0.1, end: 0.2 },
+            { phone: 'l', start: 0.2, end: 0.3 },
+        ];
+        const word = w(
+            [{ char: 'ق', start: 0, end: 0.2, silent: false }, { char: 'ل', start: 0.2, end: 0.3, silent: false }],
+            [
+                base(0, [0]),
+                { chars: 'ُ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                base(1, [2]),
+                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null }, // sukūn
+            ],
+            [0, 1, 2],
+        );
+        const { container } = mount([word], intervals);
+        const grid = container.querySelector<HTMLElement>('.mega-grid')!;
+        expect(grid.style.getPropertyValue('--col-count')).toBe('2');
+        const groups = container.querySelectorAll<HTMLElement>('.cell-group');
+        const clusters = container.querySelectorAll<HTMLElement>('.phoneme-cluster');
+        expect(clusters.length).toBe(groups.length);
+        expect(clusters.length).toBe(2);
+        // ق's column holds [q, u]; ل's holds [l].
+        expect(clusterPhones(clusters[0]!)).toEqual(['q', 'u']);
+        expect(clusterPhones(clusters[1]!)).toEqual(['l']);
+        // each cluster shares its column's data-group-index with its cell-group.
+        expect(clusters[0]!.dataset.groupIndex).toBe(groups[0]!.dataset.groupIndex);
+        expect(clusters[1]!.dataset.groupIndex).toBe(groups[1]!.dataset.groupIndex);
+    });
+
+    it('reserves an empty cluster under a silent base letter', () => {
+        // ٱل : hamza-waṣl ٱ is silent (dropped, no phoneme); ل sounds [l]. ٱ's column
+        // shows an empty (reserved) cluster — "this letter makes no sound".
+        const intervals: PhonemeInterval[] = [{ phone: 'l', start: 0.1, end: 0.3 }];
+        const word = w(
+            [{ char: 'ٱ', start: null, end: null, silent: true }, { char: 'ل', start: 0.1, end: 0.3, silent: false }],
+            [base(0, [], { status: 'dropped', chars: 'ٱ' }), base(1, [0], { chars: 'ل' })],
+            [0],
+        );
+        const { container } = mount([word], intervals);
+        const clusters = container.querySelectorAll<HTMLElement>('.phoneme-cluster');
+        expect(clusters.length).toBe(2);
+        expect(clusters[0]!.classList.contains('empty')).toBe(true);
+        expect(clusters[0]!.querySelectorAll('.mega-phoneme').length).toBe(0);
+        expect(clusterPhones(clusters[1]!)).toEqual(['l']);
+    });
+
+    it('a dropped tanwīn at waqf adds no phoneme to its column', () => {
+        // مٌ at waqf: م sounds [m]; the ḍammatan is dropped — the column shows only m,
+        // and the dropped mark is greyed in the letter row (same as a silent letter).
+        const intervals: PhonemeInterval[] = [{ phone: 'm', start: 0, end: 0.2 }];
+        const word = w(
+            [{ char: 'م', start: 0, end: 0.2, silent: false }],
+            [
+                base(0, [0]),
+                { chars: 'ٌ', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
+            ],
+            [0],
+        );
+        const { container } = mount([word], intervals);
+        const clusters = container.querySelectorAll<HTMLElement>('.phoneme-cluster');
+        expect(clusters.length).toBe(1);
+        expect(clusterPhones(clusters[0]!)).toEqual(['m']);
+        expect(container.querySelector('.haraka-cell.dia-dropped')).toBeTruthy();
+    });
+
+    it('shows ONE shared phoneme under a long-vowel [diacritic, carrier] column', () => {
+        // مِي : base م → [m]; kasra + ي carrier share one phoneme iː — the vowel
+        // column shows a single sound, not two.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'm', start: 0, end: 0.1 }, { phone: 'i:', start: 0.1, end: 0.4 },
+        ];
+        const word = w(
+            [{ char: 'م', start: 0, end: 0.1, silent: false }, { char: 'ي', start: 0.1, end: 0.4, silent: false }],
+            [
+                base(0, [0]),
+                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 1 },
+                { chars: 'ي', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, tag: null, shareGroup: 1 },
+            ],
+            [0, 1],
+        );
+        const { container } = mount([word], intervals);
+        const clusters = container.querySelectorAll<HTMLElement>('.phoneme-cluster');
+        expect(clusters.length).toBe(2);
+        expect(clusterPhones(clusters[0]!)).toEqual(['m']);
+        expect(clusters[1]!.querySelectorAll('.mega-phoneme').length).toBe(1);
+        expect(clusters[1]!.querySelector('.ph-base')!.textContent).toBe('i'); // iː → base 'i' + ː superscript
+    });
+
+    it('the clusters partition the word’s phonemes — none dropped, none duplicated', () => {
+        const intervals: PhonemeInterval[] = [
+            { phone: 'q', start: 0, end: 0.1 }, { phone: 'u', start: 0.1, end: 0.2 },
+            { phone: 'l', start: 0.2, end: 0.3 },
+        ];
+        const word = w(
+            [{ char: 'ق', start: 0, end: 0.2, silent: false }, { char: 'ل', start: 0.2, end: 0.3, silent: false }],
+            [
+                base(0, [0]),
+                { chars: 'ُ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                base(1, [2]),
+            ],
+            [0, 1, 2],
+        );
+        const { container } = mount([word], intervals);
+        const all = Array.from(container.querySelectorAll<HTMLElement>('.phoneme-cluster .mega-phoneme'))
+            .map((p) => p.querySelector('.ph-base')!.textContent);
+        expect(all).toEqual(['q', 'u', 'l']); // exactly the word's three sounds, in order
     });
 });
