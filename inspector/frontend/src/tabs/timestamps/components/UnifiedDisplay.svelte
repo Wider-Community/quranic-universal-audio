@@ -489,7 +489,12 @@
             let letterIndex: number;
             if (c.chars) {
                 glyph = c.chars; // canonical text, shaddah already composed by the phonemizer
-                silent = c.status === 'dropped';
+                // A dropped consonant that CO-LIGHTS through a merger — the idgham-noon
+                // source noon: silent on its own (the merged sound is on the receiving
+                // letter) but lit together with it — renders as a NORMAL cell, not greyed,
+                // so both letters highlight as one. A genuinely silent letter (no share
+                // group) still greys.
+                silent = c.status === 'dropped' && c.shareGroup == null;
                 lStart = start;
                 lEnd = end;
                 isNull = start == null;
@@ -500,7 +505,7 @@
                 const foldIdx = srcToFold.get(c.sourceLetterIndex);
                 const fl = foldIdx != null ? folded[foldIdx] : undefined;
                 glyph = fl?.glyph ?? '';
-                silent = fl?.silent ?? c.status === 'dropped';
+                silent = (fl?.silent ?? c.status === 'dropped') && c.shareGroup == null;
                 lStart = fl?.start ?? null;
                 lEnd = fl?.end ?? null;
                 isNull = fl?.isNull ?? (start == null);
@@ -1262,17 +1267,18 @@
             </div>
         {/if}
         {#if block.pauseBridge}
+            {@const pb = block.pauseBridge}
             <div
                 class="pause-bridge"
-                data-pause-start={block.pauseBridge.startSec}
-                data-pause-end={block.pauseBridge.endSec}
+                data-pause-start={pb.startSec}
+                data-pause-end={pb.endSec}
                 role="group"
-                on:mouseenter={(e) => onCellEnter(e, block.pauseBridge.startSec, block.pauseBridge.endSec)}
+                on:mouseenter={(e) => onCellEnter(e, pb.startSec, pb.endSec)}
                 on:mouseleave={onCellLeave}
             >
-                {#if block.pauseBridge.mark}
-                    <span class="pause-waqf" style={waqfRenderStyle(block.pauseBridge.mark)}
-                    >{block.pauseBridge.mark}</span>
+                {#if pb.mark}
+                    <span class="pause-waqf" style={waqfRenderStyle(pb.mark)}
+                    >{pb.mark}</span>
                 {:else}
                     <span class="pause-icon" aria-hidden="true"></span>
                 {/if}
