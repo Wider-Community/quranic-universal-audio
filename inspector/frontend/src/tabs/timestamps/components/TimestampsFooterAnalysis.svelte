@@ -18,6 +18,7 @@
     import { loopTarget } from '../stores/playback';
     import { loadedVerse } from '../stores/verse';
     import { findWordAt } from '../utils/loop-target';
+    import { tajweedColorVar } from '../utils/tajweed-colors';
     import TranslationGlobe from './TranslationGlobe.svelte';
 
     let guideOpen = $state(false);
@@ -70,6 +71,28 @@
             { key: 'Waveform', label: 'Click to seek' },
         ] },
     ];
+
+    // Tajweed-rule colour legend — each row mirrors the per-cell underline badge
+    // (the swatch pulls its hue from the canonical tajweed-colors map so the legend
+    // can never drift from what the cells actually render). The bracketed figure is
+    // the rule's length in ḥarakāt.
+    type LegendRow = { label: string; dur: string; tag: string };
+    const TAJWEED: { title: string; rows: LegendRow[] }[] = [
+        { title: 'Ghunnah', rows: [
+            { label: 'Idgham Ghunnah', dur: '2', tag: 'idgham_ghunnah_noon' },
+            { label: 'Idgham Shafawi', dur: '2', tag: 'idgham_shafawi' },
+            { label: 'Ikhfaa', dur: '2', tag: 'ikhfaa_noon' },
+            { label: 'Ikhfaa Shafawi', dur: '2', tag: 'ikhfaa_shafawi' },
+            { label: 'Iqlab', dur: '2', tag: 'iqlab_noon' },
+        ] },
+        { title: 'Madd', rows: [
+            { label: 'Lazim', dur: '6', tag: 'madd_lazim' },
+            { label: 'Jaiz', dur: '2/4/5', tag: 'madd_jaiz_munfasil' },
+            { label: 'Wajib', dur: '4/5', tag: 'madd_wajib_muttasil' },
+            { label: "'Arid", dur: '2/4/6', tag: 'madd_arid_lissukun' },
+            { label: 'Leen', dur: '2/4/6', tag: 'madd_leen' },
+        ] },
+    ];
 </script>
 
 <div class="tfa" role="group" aria-label="Analysis tiers">
@@ -95,22 +118,38 @@
         ><ControlIcon name="help" size={15} /></button>
         {#if guideOpen}
             <div class="guide-pop">
-                {#each SHORTCUTS as sec (sec.title)}
-                    <div class="guide-sec">
-                        <h4>{sec.title}</h4>
-                        {#each sec.rows as r (r.label)}
-                            <div class="guide-row">
-                                {#if r.icon}
-                                    <span class="g-ic"><ControlIcon name={r.icon} size={14} /></span>
-                                {:else if r.img}
-                                    <span class="g-ic"><img class="g-img" src={r.img} alt="" aria-hidden="true" /></span>
-                                {/if}
-                                {#if r.key}<kbd>{r.key}</kbd>{/if}
-                                <span class="g-label">{r.label}</span>
-                            </div>
-                        {/each}
-                    </div>
-                {/each}
+                <div class="guide-shortcuts">
+                    {#each SHORTCUTS as sec (sec.title)}
+                        <div class="guide-sec">
+                            <h4>{sec.title}</h4>
+                            {#each sec.rows as r (r.label)}
+                                <div class="guide-row">
+                                    {#if r.icon}
+                                        <span class="g-ic"><ControlIcon name={r.icon} size={14} /></span>
+                                    {:else if r.img}
+                                        <span class="g-ic"><img class="g-img" src={r.img} alt="" aria-hidden="true" /></span>
+                                    {/if}
+                                    {#if r.key}<kbd>{r.key}</kbd>{/if}
+                                    <span class="g-label">{r.label}</span>
+                                </div>
+                            {/each}
+                        </div>
+                    {/each}
+                </div>
+                <div class="guide-legend">
+                    {#each TAJWEED as col (col.title)}
+                        <div class="guide-sec tj-col">
+                            <h4>{col.title}</h4>
+                            {#each col.rows as r (r.label)}
+                                <div class="tj-row">
+                                    <span class="tj-swatch" style:--tj-badge={tajweedColorVar(r.tag)}></span>
+                                    <span class="g-label">{r.label}</span>
+                                    <span class="tj-dur">[{r.dur}]</span>
+                                </div>
+                            {/each}
+                        </div>
+                    {/each}
+                </div>
             </div>
         {/if}
     </div>
@@ -152,18 +191,63 @@
     .guide-pop {
         position: absolute;
         bottom: calc(100% + var(--s-2));
-        left: 50%;
-        transform: translateX(-50%);
-        width: min(460px, calc(100vw - var(--s-4) * 2));
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--s-3);
+        /* Anchored to the help button's right edge so the wider box grows
+         * leftward instead of overflowing the viewport's right side. */
+        right: 0;
+        left: auto;
+        display: flex;
+        align-items: flex-start;
+        gap: var(--s-4);
+        width: max-content;
+        max-width: calc(100vw - var(--s-4) * 2);
         background: var(--panel);
         border: 1px solid var(--border-default);
         border-radius: var(--r-3);
         box-shadow: 0 16px 48px oklch(0 0 0 / 0.45);
         z-index: 50;
         padding: var(--s-3);
+    }
+    .guide-shortcuts {
+        flex: 0 0 auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--s-3) var(--s-4);
+        min-width: 360px;
+    }
+    .guide-legend {
+        flex: 0 0 auto;
+        display: flex;
+        gap: var(--s-4);
+        padding-left: var(--s-4);
+        border-left: 1px solid var(--border-quiet);
+    }
+    .tj-col { min-width: 0; }
+    .tj-row {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+        margin-bottom: 2px;
+        font-size: var(--fs-meta);
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+    /* A miniature resting cell carrying only its tajweed underline badge —
+     * the exact treatment the analysis-row cells use (inset-box-shadow channel). */
+    .tj-swatch {
+        flex: 0 0 auto;
+        width: 22px;
+        height: 16px;
+        background: var(--canvas-inset);
+        border: 1px solid var(--border-quiet);
+        border-radius: var(--r-1);
+        box-shadow: inset 0 -2px 0 var(--tj-badge);
+    }
+    .tj-dur {
+        flex: 0 0 auto;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--text-faint);
+        font-variant-numeric: tabular-nums;
     }
     .guide-sec h4 {
         margin: 0 0 4px;
