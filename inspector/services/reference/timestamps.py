@@ -17,9 +17,11 @@ from __future__ import annotations
 import gzip
 import json
 import logging
+import os
 import threading
 from collections import OrderedDict
 from datetime import UTC, datetime
+from pathlib import Path
 
 from config import DK_SCRIPT_PATH
 from qua_shared.schemas import ReciterCatalog, TsManifestResponse
@@ -233,6 +235,20 @@ def _ensure_built() -> None:
         )
 
 
+def _dev_fixture_shard(reciter: str, chapter: int) -> bytes | None:
+    """Dev-only override: when ``TS_DEV_FIXTURES`` points at a bucket-shaped dir,
+    serve ``<dir>/reciters/<reciter>/timestamps/<chapter>.json.gz`` from disk
+    instead of the bucket — for iterating on locally-generated v5 shards. Never
+    set in production."""
+    base = os.environ.get("TS_DEV_FIXTURES")
+    if not base:
+        return None
+    try:
+        return (Path(base) / "reciters" / reciter / "timestamps" / f"{chapter}.json.gz").read_bytes()
+    except OSError:
+        return None
+
+
 def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
     """Return the raw gzipped per-chapter shard from the bucket, or ``None``.
 
@@ -240,6 +256,9 @@ def _load_bucket_shard(reciter: str, chapter: int) -> bytes | None:
     the read path is a byte pass-through, no inflate/reshape/recompress. LRU
     so chapter scrubbing within one reciter doesn't re-pay the bucket fetch.
     """
+    dev = _dev_fixture_shard(reciter, chapter)
+    if dev is not None:
+        return dev
     key = (reciter, chapter)
     cached = _shard_lru.get(key)
     if cached is not None:

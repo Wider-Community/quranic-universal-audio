@@ -35,3 +35,6 @@ coverage/
 htmlcov/
 
 # Nested working repos (separate clones, not part of this repo)
+
+# local v5 shard fixtures for inspector dev iteration (D3/D4)
+inspector/dev_fixtures/

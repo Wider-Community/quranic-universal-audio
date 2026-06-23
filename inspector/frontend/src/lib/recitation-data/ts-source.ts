@@ -28,6 +28,7 @@ import type { TsConfigResponse, TsManifestResponse, TsValidationDoc } from '../t
 import type {
     Letter,
     PhonemeInterval,
+    TsCell,
     TsShardResponse,
     TsVbrResponse,
     TsVerseData,
@@ -522,9 +523,34 @@ export function assembleVerseFromShard(
             (_, i) => phoneStartIdx + i,
         );
 
+        // Verse-flat indices of this word's INDEXABLE phones (qalqala `Q`
+        // excluded) — maps a cell's word-local indexable index to the flat list.
+        const indexableFlat: number[] = [];
+        for (let i = 0; i < phonesRaw.length; i++) {
+            const p = phonesRaw[i]?.[0] as string | undefined;
+            if (p && p !== 'Q') indexableFlat.push(phoneStartIdx + i);
+        }
+        // All cells flow through unchanged — including `base` cells (the ordered
+        // anchors the letter row groups on). `phoneme_indices` are word-local
+        // indexable-phone indices; map each to the verse-flat list.
+        const cellsRaw = (w[5] ?? []) as Array<
+            [string, string, string, number[], number, (string | null)?, (number | null)?]
+        >;
+        const cells: TsCell[] = cellsRaw.map((c) => ({
+            chars: c[0],
+            role: c[1] as TsCell['role'],
+            status: c[2] as TsCell['status'],
+            phonemeIndices: (c[3] ?? [])
+                .map((k) => indexableFlat[k])
+                .filter((x): x is number => x !== undefined),
+            sourceLetterIndex: c[4],
+            tag: (c[5] ?? null) as string | null,
+            shareGroup: (c[6] ?? null) as number | null,
+        }));
+
         wordsOut.push({
             location, text, display_text: displayText,
-            start: wStart, end: wEnd, phoneme_indices: phonemeIndices, letters,
+            start: wStart, end: wEnd, phoneme_indices: phonemeIndices, letters, cells,
         });
     }
 

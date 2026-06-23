@@ -17,14 +17,27 @@ Document shape (decompressed)::
       "segments": [{"ref": "1:1", "t": [start_ms, end_ms], "words": [<word>, ...]}, ...]
     }
 
-Each ``word`` is the 5-slot tuple::
+Each ``word`` is the 5- or 6-slot tuple::
 
-    [word_idx, start_ms, end_ms, letters[], phones[]]
+    [word_idx, start_ms, end_ms, letters[], phones[](, cells[])]
 
 where ``letters`` is ``[char, start_ms|null, end_ms|null(, silent)]`` rows (the
 4th ``silent`` bool lands from schema v4 — phonemizer ``silent_flags()``) and
 ``phones`` is ``[phone, start_ms, end_ms, ...optional flags]`` rows (slot 5
-may carry a cross-word tajweed bridge rule — see ``timestamps_bridges``).
+may carry a cross-word tajweed bridge rule — see
+``qua_sdk.components.timing.lib.cells``).
+
+The optional 6th slot ``cells`` (schema v5) is the per-character phoneme cells
+from the phonemizer's ``character_phoneme_mappings()`` — the full per-character
+breakdown. From the SDK annotator move, cells include ``role == 'base'``
+(consonant) rows alongside ``haraka``/``tanween``/``madd`` — the structure is
+unchanged (``CellTiming`` / ``ts_shard_cells.parse_cell`` already tolerate every
+role), only the role set written is wider. Each cell is the positional row
+``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group]``;
+see ``qua_shared/ts_shard_cells.py``. ``phoneme_indices`` are **word-local indices
+over the word's indexable phones** (the qalqala ``Q`` excluded, same coordinate
+space as the bridge index). Read via ``ts_shard_cells.parse_cell`` — never unpack
+positionally, and tolerate a missing 6th slot on v3/v4 shards.
 
 Extras handling: ``extra="forbid"`` + ``strip_and_warn`` on the document and
 ``_meta``. The word/letter/phone tuples are positional and are validated by
@@ -52,13 +65,24 @@ LetterTiming = tuple[str, int | None, int | None] | tuple[str, int | None, int |
 # loose ``list`` of the union of cell types rather than a fixed tuple.
 PhoneTiming = list[str | int | bool]
 
+# Cell row (schema v5, the 6th word slot): a per-character haraka/tanween cell.
+# ``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group]``.
+# ``phoneme_indices`` are word-local indices over the word's indexable phones.
+CellTiming = tuple[str, str, str, list[int], int, str | None, int | None]
 
-class TsShardWord(RootModel[tuple[int, int, int, list[LetterTiming], list[PhoneTiming]]]):
+
+class TsShardWord(
+    RootModel[
+        tuple[int, int, int, list[LetterTiming], list[PhoneTiming]]
+        | tuple[int, int, int, list[LetterTiming], list[PhoneTiming], list[CellTiming]]
+    ]
+):
     """One encoded word inside a segment — a flat positional tuple.
 
-    Slots: ``[word_idx, start_ms, end_ms, letters, phones]``. Modelled as a
-    ``RootModel`` over a 5-tuple so the FE codegen emits a positional TS tuple
-    (mirrors ``TsShardWord`` in ``ts-client.ts``) rather than an object.
+    Slots: ``[word_idx, start_ms, end_ms, letters, phones(, cells)]``. Modelled as
+    a ``RootModel`` over a 5- **or** 6-tuple (the 6th ``cells`` slot is schema v5)
+    so the FE codegen emits a positional TS tuple (mirrors ``TsShardWord`` in
+    ``ts-client.ts``) rather than an object, and v3/v4 shards still validate.
     """
 
 

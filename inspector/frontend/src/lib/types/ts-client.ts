@@ -43,6 +43,28 @@ export interface Letter {
     silent?: boolean;
 }
 
+/** One per-character cell — the ordered source for the analysis letter row
+ *  (schema v5). Cells include `base` consonant/carrier cells (which anchor a
+ *  group + carry its full-letter glyph via `sourceLetterIndex`) alongside the
+ *  haraka / tanween / long-vowel-carrier / implicit cells from the phonemizer's
+ *  `character_phoneme_mappings()`. All script/visual specifics (mini-meem glyph,
+ *  open/closed/iqlab form, above/below placement) are derived in the FE from
+ *  `tag` + `chars`. */
+export interface TsCell {
+    /** canonical source char(s); '' for a fully implicit cell */
+    chars: string;
+    role: 'base' | 'haraka' | 'tanween' | 'madd';
+    status: 'present' | 'inserted' | 'dropped' | 'replaced' | 'shortened';
+    /** indices into the verse-flat `intervals[]` — the cell's timing anchor ([] = silent) */
+    phonemeIndices: number[];
+    /** the letter (index into this word's `letters`) the cell sits on/after; -1 if implicit */
+    sourceLetterIndex: number;
+    /** canonical rule/case key the renderer switches on (e.g. 'iqlab_tanween', 'madd_iwad') */
+    tag: string | null;
+    /** cells sharing one id highlight together (long vowel; cross-word idgham) */
+    shareGroup: number | null;
+}
+
 /** Single word with text + timing + letters + phoneme indices into the flat intervals list. */
 export interface TsWord {
     location: string; // "surah:ayah:word"
@@ -52,6 +74,11 @@ export interface TsWord {
     end: number;
     phoneme_indices: number[];
     letters: Letter[];
+    /** Ordered per-character cells (schema v5) — includes `base` cells; the
+     *  single source for the analysis letter row. Always present on real shard
+     *  data; optional only so lightweight unit-test fixtures may omit it (the
+     *  renderer synthesizes base cells from `letters` when absent). */
+    cells?: TsCell[];
 }
 
 /** Full verse data for the timestamps tab. */
@@ -133,6 +160,10 @@ export type TsShardWord = [
     /** letters: [char, start_ms|null, end_ms|null(, silent)][] (4th slot from schema v4) */
     Array<[string, number | null, number | null, boolean?]>,
     /** phones: [phone, start_ms, end_ms, ...optional flags][] */ Array<(string | number | boolean)[]>,
+    /** cells (schema v5, optional): [chars, role, status, phoneme_indices,
+     *  source_letter_index, tag?, share_group?][]. phoneme_indices are word-local
+     *  indices over the word's INDEXABLE phones (qalqala `Q` excluded). */
+    Array<[string, string, string, number[], number, (string | null)?, (number | null)?]>?,
 ];
 
 /** One recited segment in a chapter's temporal `segments[]` array. FE-typed

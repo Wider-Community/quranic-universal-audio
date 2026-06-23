@@ -3,7 +3,7 @@
 Stamps the schema-v4 silent data onto every segment-array shard already on the
 bucket — a 4th ``silent`` bool on each letter and the silence combining mark
 (``۟`` / ``۠``) folded onto its char — using the same
-``qua_shared.timestamps_bridges._stamp_silent_flags`` the live pipeline runs.
+``qua_sdk.components.timing.lib.cells._stamp_silent_flags`` the live pipeline runs.
 **Letters only**: phones / cross-word bridge tags are left untouched, so this is a
 minimal, additive change to shards that were already bridge-tagged. No MFA / audio
 — each gap-bounded run is re-phonemized to derive its silent flags (any timing gap
@@ -44,7 +44,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bucket"))
 import _bootstrap as bs  # noqa: E402
 
-from qua_shared.timestamps_bridges import _stamp_silent_flags  # noqa: E402
+from qua_sdk.components.timing.lib.cells import _stamp_silent_flags  # noqa: E402
+
 from qua_shared.timestamps_shards import (  # noqa: E402
     SEGMENT_SCHEMA_VERSION,
     gzip_shard,
@@ -100,17 +101,18 @@ def _unstamp_words(words) -> None:
             del lt[3:]
 
 
-def _stamp_shard(pm, data: dict, *, restamp: bool = False) -> Counter:
+def _stamp_shard(data: dict, *, restamp: bool = False) -> Counter:
     """Stamp every segment's letters in place. Returns a coverage Counter.
 
     ``restamp`` first resets already-stamped letters to bare so the silent flags
     are re-derived (use after a silent-logic change); otherwise stamping no-ops on
-    a folded shard."""
+    a folded shard. The SDK annotator owns the phonemizer (reached via the SDK
+    domain layer), so no handle is passed."""
     cov = Counter()
     for seg in data.get("segments", []):
         if restamp:
             _unstamp_words(seg["words"])
-        _stamp_silent_flags(pm, seg["ref"], seg["words"])
+        _stamp_silent_flags(seg["ref"], seg["words"])
     for seg in data.get("segments", []):
         for word in seg["words"]:
             for lt in word[3]:
@@ -127,7 +129,7 @@ def _stamp_shard(pm, data: dict, *, restamp: bool = False) -> Counter:
 
 
 def process_reciter(
-    fs, pm, bucket: str, slug: str, *, write: bool, backup_dir: str | None, restamp: bool = False
+    fs, bucket: str, slug: str, *, write: bool, backup_dir: str | None, restamp: bool = False
 ) -> tuple[Counter, str]:
     shards = _shard_paths(fs, bucket, slug)
     if not shards:
@@ -142,7 +144,7 @@ def process_reciter(
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(raw)
         data = json.loads(gzip.decompress(raw))
-        cov += _stamp_shard(pm, data, restamp=restamp)
+        cov += _stamp_shard(data, restamp=restamp)
         cov["shards"] += 1
         if write:
             data.setdefault("_meta", {})["schema_version"] = SEGMENT_SCHEMA_VERSION
@@ -162,14 +164,14 @@ def process_reciter(
 
 
 def _mp_worker(task: tuple) -> tuple[dict, str]:
-    """ProcessPool entrypoint — builds its own fs + phonemizer per process."""
+    """ProcessPool entrypoint — builds its own fs per process. The SDK annotator
+    owns the phonemizer (reached via the SDK domain layer)."""
     slug, bucket, write, backup_dir, restamp = task
     from huggingface_hub import HfFileSystem
-    from quranic_phonemizer import Phonemizer
 
     fs = HfFileSystem(token=os.environ.get("HF_TOKEN"))
     cov, line = process_reciter(
-        fs, Phonemizer(), bucket, slug, write=write, backup_dir=backup_dir, restamp=restamp
+        fs, bucket, slug, write=write, backup_dir=backup_dir, restamp=restamp
     )
     return dict(cov), line
 
@@ -212,13 +214,9 @@ def main() -> int:
                     log(line)
                 grand += Counter(cov)
     else:
-        from quranic_phonemizer import Phonemizer
-
-        pm = Phonemizer()
         for slug in slugs:
             cov, line = process_reciter(
                 fs,
-                pm,
                 bucket,
                 slug,
                 write=args.write,

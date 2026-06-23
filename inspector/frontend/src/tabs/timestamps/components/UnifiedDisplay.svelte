@@ -13,13 +13,14 @@
      * Scoped styles use `:global()` selectors for the dynamic classes.
      */
 
-    import { onDestroy, untrack } from 'svelte';
+    import { onDestroy, tick, untrack } from 'svelte';
     import { get } from 'svelte/store';
 
     import { ensureDashCovering } from '../../../lib/playback/dash-covering';
     import { dashPort } from '../../../lib/playback/dash-port';
-    import type { PhonemeInterval, TsWord } from '../../../lib/types/ts-client';
+    import type { PhonemeInterval, TsCell, TsWord } from '../../../lib/types/ts-client';
     import { splitWaqf } from '../../../lib/utils/waqf';
+    import { harakaRenderStyle } from '../utils/haraka-render';
     import { waqfRenderStyle } from '../utils/waqf-render';
     import {
         showLetters,
@@ -42,17 +43,75 @@
 
     // ---- Local structural state (derived declaratively from loadedVerse) ----
 
-    interface RenderedLetter {
-        /** One grapheme = one cell (letters are never grouped, even when they
-         *  share timing) — the sole exception is alef-maksura + dagger alef (ىٰ),
-         *  one long-vowel unit folded into a single cell. A `silent` grapheme is
-         *  greyed, non-interactive, and never highlighted — the highlight/hover/
-         *  click land on the pronounced letter that shares its timing. */
-        ch: string;
+    /** A FULL letter-sized cell in the letter row — a `base` consonant/carrier or
+     *  an implicit `madd` (Allah dagger-alef / madd-ʿiwaḍ alef). A base cell is
+     *  the interactive "letter" element: it carries the LETTER's full [start,end]
+     *  (for click/dblclick/hover/loop) AND its own phoneme-interval [cellStart,
+     *  cellEnd] (for per-frame highlight — the base lights on its consonant). */
+    interface RenderedFull {
+        glyph: string;
+        silent: boolean;
+        status: string;
+        tag: string | null;
+        /** Implicit madd (chars==='') — rendered with the inserted/replaced glow. */
+        implicit: boolean;
+        /** True for a `base` cell (the interactive letter target). */
+        isBase: boolean;
+        /** Highlight interval from the cell's own phoneme indices (+share union). */
+        cellStart: number | null;
+        cellEnd: number | null;
+        /** The LETTER's full [start,end] for click/dblclick/hover/loop. */
+        letterStart: number | null;
+        letterEnd: number | null;
+        /** Untimed letter (no per-letter timing) → never highlighted, inert. */
+        isNull: boolean;
+        /** Rendered-letter index this base cell maps to (loop-highlight identity). */
+        letterIndex: number;
+        shareGroup: number | null;
+    }
+
+    /** A SMALL diacritic cell — haraka / tanween (incl. iqlab fused mini-meem,
+     *  inserted graphemeless vowels). Pins top or bottom of the group's letter
+     *  row. Sukūn cells are filtered out upstream and never become one of these. */
+    interface RenderedSmall {
+        /** The combining mark(s) to render — a single haraka/tanwīn, or for iqlab
+         *  the single short-vowel + its mini-meem composed in one DK glyph. */
+        glyph: string;
+        slot: 'top' | 'bottom';
+        status: string;
+        tag: string | null;
+        cellStart: number | null;
+        cellEnd: number | null;
+        shareGroup: number | null;
+        /** Per-glyph centring style string (`--haraka-*`). */
+        renderStyle: string;
+        /** inserted graphemeless vowel (hamza-waṣl / iltiqaa) — affordance only. */
+        inserted: boolean;
+    }
+
+    /** A rendered cell-group. `kind` drives the in-row order:
+     *  - `base`  : a consonant (+ its short haraka/tanwīn) → full THEN small.
+     *  - `vowel` : a long-vowel unit [diacritic + carrier] (base lives in its own
+     *    separate group) or a standalone/implicit madd → small THEN full, so the
+     *    diacritic precedes the vowel grapheme it pairs with.
+     *  Gap 0 within a group, non-zero between groups. */
+    interface RenderedGroup {
+        kind: 'base' | 'vowel';
+        full: RenderedFull[];
+        small: RenderedSmall[];
+        shareGroup: number | null;
+    }
+
+    /** The folded letter view of `word.letters` — one entry per rendered letter
+     *  (the ىٰ fold collapses two source letters into one), each carrying the
+     *  glyph + per-letter timing + silent flag a `base` cell reads from. */
+    interface FoldedLetter {
+        glyph: string;
         silent: boolean;
         start: number | null;
         end: number | null;
         isNull: boolean;
+        srcIndices: number[];
     }
 
     interface RenderedPhoneme {
@@ -81,7 +140,9 @@
         /** Word text to render — the previous-word's waqf mark is stripped here
          *  when a following pause surfaces it into the pause bridge. */
         displayText: string;
-        letters: RenderedLetter[];
+        /** Ordered cell-groups (base + its trailing diacritics) — the single
+         *  source for the analysis letter row. */
+        groups: RenderedGroup[];
         phonemes: RenderedPhoneme[];
         /** Optional cross-word (idgham) bridge to render before this block. */
         bridge: RenderedBridge | null;
@@ -111,6 +172,46 @@
     // and the new audio's `play` event the rAF loop is stopped, so the user
     // sees the stale highlight pinned on the old word until playback resumes.
     $: rendered, _resetHighlightClasses();
+    // Measure a real full letter cell after each structural render so the small
+    // diacritic cells (sized as a factor of --letter-cell-w/h) track the actual
+    // letter box at the current zoom. tick() waits for the DOM to flush.
+    $: rendered, untrack(() => void tick().then(() => { _measureLetterCell(); _rebuildHighlightCache(); }));
+    function _measureLetterCell(): void {
+        if (!rootEl) return;
+        const sample =
+            rootEl.querySelector<HTMLElement>('.mega-letter:not(.implicit):not(.null-ts)')
+            ?? rootEl.querySelector<HTMLElement>('.mega-letter');
+        if (!sample) return;
+        const r = sample.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+            rootEl.style.setProperty('--letter-cell-w', `${r.width.toFixed(2)}px`);
+            rootEl.style.setProperty('--letter-cell-h', `${r.height.toFixed(2)}px`);
+        }
+    }
+
+    // Per-frame highlight node cache. `updateHighlights` runs at 60fps and must
+    // NOT re-query the (now much larger) cell DOM each frame — that regressed the
+    // animation to a laggy, trailing smear. We snapshot the node lists once per
+    // structural render (the only time the DOM changes) and iterate the arrays.
+    interface HiCache {
+        blocks: HTMLElement[];
+        phonemes: HTMLElement[];
+        timedCells: HTMLElement[];
+        letters: HTMLElement[];
+        pauseBridges: HTMLElement[];
+    }
+    let _hc: HiCache | null = null;
+    function _rebuildHighlightCache(): void {
+        if (!rootEl) { _hc = null; return; }
+        const q = (s: string): HTMLElement[] => Array.from(rootEl.querySelectorAll<HTMLElement>(s));
+        _hc = {
+            blocks: q('.mega-block'),
+            phonemes: q('.mega-phoneme'),
+            timedCells: q('[data-cell-timed]'),
+            letters: q('.mega-letter:not(.null-ts)'),
+            pauseBridges: q('.pause-bridge'),
+        };
+    }
     function _resetHighlightClasses(): void {
         if (!rootEl) return;
         rootEl.classList.remove('in-pause');
@@ -125,6 +226,9 @@
         });
         rootEl.querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts)').forEach((l) => {
             l.classList.remove('active', 'hover-preview');
+        });
+        rootEl.querySelectorAll<HTMLElement>('.haraka-cell').forEach((c) => {
+            c.classList.remove('active', 'hover-preview');
         });
     }
 
@@ -152,28 +256,482 @@
     const ALEF_MAKSURA = 'ى';
     const DAGGER_ALEF = 'ٰ';
 
-    function letterGroupsFor(word: TsWord): RenderedLetter[] {
-        const out: RenderedLetter[] = [];
+    // Diacritic codepoints.
+    const FATHA = 'َ'; // U+064E
+    const DAMMA = 'ُ'; // U+064F
+    const KASRA = 'ِ'; // U+0650
+    const FATHATAN = 'ً'; // U+064B
+    const DAMMATAN = 'ٌ'; // U+064C
+    const KASRATAN = 'ٍ'; // U+064D
+    const DAGGER = 'ٰ'; // U+0670
+    const SUKUN = 'ْ'; // U+0652
+    const SHADDA = 'ّ'; // U+0651
+    const MEEM_HI = 'ۢ'; // U+06E2 mini-meem above (iqlab)
+    const MEEM_LO = 'ۭ'; // U+06ED mini-meem below (iqlab)
+
+    // Marks that sit ABOVE the base (pin top) vs BELOW (pin bottom). A mark pins
+    // to the edge it visually occupies: below = kasra/kasratan.
+    const BELOW_MARKS = new Set([KASRA, KASRATAN]);
+
+    // iqlab tanwīn renders as a SINGLE short vowel + a mini-meem (NOT a doubled
+    // tanwīn): the meem composes onto the haraka in one DK glyph (the user's
+    // "harakah + iqlab mark"), sized by the haraka's own calibration. Map the
+    // canonical tanwīn mark → [single haraka, mini-meem].
+    const IQLAB_FORM: Record<string, { haraka: string; meem: string }> = {
+        [FATHATAN]: { haraka: FATHA, meem: MEEM_HI },
+        [DAMMATAN]: { haraka: DAMMA, meem: MEEM_HI },
+        [KASRATAN]: { haraka: KASRA, meem: MEEM_LO },
+    };
+
+    // Open (parallel) vs stacked tanwīn forms. The mushaf/DK convention: the two
+    // strokes are STACKED (the canonical ◌ً◌ٌ◌ٍ) ONLY for iẓhar — the noon sounds
+    // clearly — and OPEN (parallel) whenever the tanwīn assimilates into the next
+    // word (idgham / ikhfaa). DigitalKhatt encodes the open form as distinct
+    // codepoints (U+08F0–08F2); the canonical char alone renders stacked, so map
+    // to the open codepoint when the tanwīn IS assimilated. (iqlab → its own
+    // mini-meem form, madd-ʿiwaḍ → fatḥa+alef; both handled separately.)
+    const OPEN_TANWEEN: Record<string, string> = {
+        [FATHATAN]: 'ࣰ',
+        [DAMMATAN]: 'ࣱ',
+        [KASRATAN]: 'ࣲ',
+    };
+    // Tags whose tanwīn assimilates into the next word → render the OPEN form.
+    // Everything else (iẓhar, which carries no tanwīn tag) stays stacked.
+    const OPEN_TANWEEN_TAGS = new Set([
+        'idgham_ghunnah_tanween',
+        'idgham_bila_ghunnah_tanween',
+        'ikhfaa_tanween',
+    ]);
+
+    /** A geminated (shaddah) consonant phoneme — the phonemizer doubles it (bb,
+     *  ll, dd, rˤrˤ, …; m/n add a ghunnah tilde). The shaddah mark is NOT in the
+     *  aligner's bare letter char, so a base cell whose phone is geminated must
+     *  compose ◌ّ onto its glyph to render base+shaddah. */
+    function _isGeminatePhone(phone: string | undefined): boolean {
+        if (!phone) return false;
+        const p = phone.replace(/[ˤː̃]/gu, ''); // strip emphatic / length / tilde
+        return p.length >= 2 && p.length % 2 === 0 && p.slice(0, p.length / 2) === p.slice(p.length / 2);
+    }
+
+    /** A vowel phoneme (short/long/emphatic a u i). Used to tell a merge case
+     *  (idgham shafawi: the base absorbed the haraka's VOWEL → co-light the
+     *  dropped haraka) from a true waqf drop (the base is a consonant). */
+    function _isVowelPhone(phone: string | undefined): boolean {
+        if (!phone) return false;
+        const p = phone.replace(/[ˤː:̃]/gu, '');
+        return p === 'a' || p === 'u' || p === 'i';
+    }
+
+    /** A sukūn cell — never rendered (cell exists with empty phonemeIndices). */
+    function _isSukunCell(c: TsCell): boolean {
+        return c.role === 'haraka' && _firstMark(c.chars) === SUKUN;
+    }
+
+    /** First combining mark of `chars`, skipping a leading shadda (shadda+haraka
+     *  composed → render the second mark). */
+    function _firstMark(chars: string): string {
+        if (!chars) return '';
+        const arr = [...chars];
+        if (arr[0] === SHADDA && arr[1]) return arr[1];
+        return arr[0]!;
+    }
+
+    /** The DK glyph for a SMALL cell — its own mark, or derived for an implicit
+     *  graphemeless cell (the phonemizer keeps `chars` empty + canonical). */
+    function _cellGlyph(c: TsCell, phone: string | undefined): string {
+        if (c.chars) return _firstMark(c.chars);
+        if (c.tag === 'allah_dagger_alef') return DAGGER;
+        if (c.tag === 'madd_iwad') return 'ا'; // the added alef (full cell)
+        if (c.tag === 'iltiqaa_kasra' || c.tag === 'iltiqaa') return KASRA;
+        // hamza-waṣl connecting vowel: pick the haraka by the sounded vowel.
+        return phone === 'i' ? KASRA : phone === 'u' ? DAMMA : FATHA;
+    }
+
+    /** The FULL-cell glyph for an implicit madd (chars==='') — dagger / alef. */
+    function _implicitMaddGlyph(c: TsCell): string {
+        if (c.tag === 'madd_iwad') return 'ا';
+        return DAGGER; // allah_dagger_alef + any other implicit dagger madd
+    }
+
+    /** Pin slot for a small cell's mark — top unless it's a below-mark. */
+    function _cellSlot(glyph: string): 'top' | 'bottom' {
+        return BELOW_MARKS.has(glyph) ? 'bottom' : 'top';
+    }
+
+    function _cellTiming(
+        indices: number[],
+        intervals: PhonemeInterval[],
+        shareIv: [number, number] | null,
+    ): { start: number | null; end: number | null } {
+        let s = Infinity;
+        let e = -Infinity;
+        for (const i of indices) {
+            const iv = intervals[i];
+            if (!iv) continue;
+            s = Math.min(s, iv.start);
+            e = Math.max(e, iv.end);
+        }
+        if (shareIv) {
+            // A sounded share-group member extends to (and a silent one borrows)
+            // the group's interval union so co-lit cells light together.
+            s = Math.min(s, shareIv[0]);
+            e = Math.max(e, shareIv[1]);
+        }
+        return s === Infinity ? { start: null, end: null } : { start: s, end: e };
+    }
+
+    /** Per-word share-group interval unions: cells sharing one non-null shareGroup
+     *  co-highlight, so each resolves its span to the union of all members. */
+    function _shareUnions(
+        cells: TsCell[],
+        intervals: PhonemeInterval[],
+    ): Map<number, [number, number]> {
+        const unions = new Map<number, [number, number]>();
+        for (const c of cells) {
+            if (c.shareGroup == null) continue;
+            for (const i of c.phonemeIndices) {
+                const iv = intervals[i];
+                if (!iv) continue;
+                const cur = unions.get(c.shareGroup);
+                if (!cur) unions.set(c.shareGroup, [iv.start, iv.end]);
+                else {
+                    cur[0] = Math.min(cur[0], iv.start);
+                    cur[1] = Math.max(cur[1], iv.end);
+                }
+            }
+        }
+        return unions;
+    }
+
+    /** The folded letter view of `word.letters` (the ىٰ fold collapses two source
+     *  letters into one). Used both for the synthetic-base fallback and to resolve
+     *  a `base` cell's glyph / letter-timing by its `sourceLetterIndex`. */
+    function foldedLettersFor(word: TsWord): {
+        folded: FoldedLetter[];
+        srcToFold: Map<number, number>;
+    } {
+        const folded: FoldedLetter[] = [];
+        const srcToFold = new Map<number, number>();
+        let origIdx = 0;
         for (const letter of word.letters || []) {
-            const prev = out[out.length - 1];
-            if (prev && letter.char.startsWith(DAGGER_ALEF) && prev.ch.endsWith(ALEF_MAKSURA)) {
+            const prev = folded[folded.length - 1];
+            if (prev && letter.char.startsWith(DAGGER_ALEF) && prev.glyph.endsWith(ALEF_MAKSURA)) {
                 // Fold the dagger onto the maksura cell: one combined unit spanning
                 // both timings, sounding unless both graphemes are silent.
-                prev.ch += letter.char;
+                prev.glyph += letter.char;
                 if (letter.end != null) prev.end = letter.end;
                 prev.silent = prev.silent && letter.silent === true;
                 prev.isNull = prev.isNull || letter.start == null || letter.end == null;
+                prev.srcIndices.push(origIdx);
+                srcToFold.set(origIdx, folded.length - 1);
+                origIdx++;
                 continue;
             }
-            out.push({
-                ch: letter.char,
+            folded.push({
+                glyph: letter.char,
                 silent: letter.silent === true,
                 start: letter.start,
                 end: letter.end,
                 isNull: letter.start == null || letter.end == null,
+                srcIndices: [origIdx],
             });
+            srcToFold.set(origIdx, folded.length - 1);
+            origIdx++;
         }
-        return out;
+        return { folded, srcToFold };
+    }
+
+    /**
+     * Build the ordered cell-group model — the single source for the letter row.
+     *
+     * GROUPING (respects allocation): a SHORT vowel stays with its base
+     * (`[base, haraka]`, kind `base`); a LONG vowel is its own unit
+     * `[diacritic, carrier]` (kind `vowel`) whose base is rendered SEPARATELY in
+     * its own base group. A long-vowel unit is a `madd` carrier that shares a
+     * phoneme (shareGroup) with a haraka. Implicit / standalone madds get their
+     * own `vowel` group too. Full cells (`base` + `madd` carriers, real or
+     * implicit) render letter-sized; haraka/tanwīn render as small pinned cells.
+     * Sukūn is filtered. A base/carrier glyph comes from
+     * `word.letters[sourceLetterIndex]` (folded), with ◌ّ composed on when the
+     * consonant is geminated (the aligner's letter char carries no shaddah).
+     *
+     * When a word carries no `base` cells (lightweight test fixtures), synthesize
+     * one base per folded letter so the row matches the letters.
+     */
+    function cellGroupsFor(
+        word: TsWord,
+        intervals: PhonemeInterval[],
+        shareUnions: Map<number, [number, number]>,
+    ): RenderedGroup[] {
+        const { folded, srcToFold } = foldedLettersFor(word);
+        const cells = word.cells ?? [];
+        const hasBase = cells.some((c) => c.role === 'base');
+        const groups: RenderedGroup[] = [];
+
+        // Share-groups that contain a madd carrier = long-vowel units (the haraka
+        // pairs with the carrier after it; its base renders separately).
+        const longVowelSG = new Set<number>();
+        for (const c of cells) {
+            if (c.role === 'madd' && c.shareGroup != null) longVowelSG.add(c.shareGroup);
+        }
+        // Folded letters already emitted as a full cell (the ىٰ maksura+dagger fold).
+        const consumedFold = new Set<number>();
+
+        // --- Carried-vowel resolution: a haraka/tanwīn the phonemizer marks
+        //     `dropped` (empty indices) because its vowel is realized on an
+        //     ADJACENT carrier must co-light + group with that carrier, not grey
+        //     out. Three carriers: the madd-ʿiwaḍ alef, the Allah dagger-alef, and
+        //     (idgham shafawi / noon) the merged base that absorbed the vowel. ---
+        const iwadAlef = cells.find((c) => c.role === 'madd' && c.tag === 'madd_iwad' && c.chars !== '');
+        const _iwadIv = iwadAlef
+            ? _cellTiming(iwadAlef.phonemeIndices, intervals, null)
+            : { start: null, end: null };
+        const iwadIv: [number, number] | null = _iwadIv.start != null ? [_iwadIv.start, _iwadIv.end!] : null;
+        const daggerBySrc = new Map<number, { group: RenderedGroup; iv: [number, number] }>();
+        let iwadGroup: RenderedGroup | null = null;
+        let curBaseIv: [number, number] | null = null;
+        let curBaseVowel = false; // the current base cell's phoneme is a vowel (merge case)
+
+        const newGroup = (kind: 'base' | 'vowel'): RenderedGroup => {
+            const g: RenderedGroup = { kind, full: [], small: [], shareGroup: null };
+            groups.push(g);
+            return g;
+        };
+        const noteShare = (g: RenderedGroup, c: TsCell): void => {
+            if (c.shareGroup != null && g.shareGroup == null) g.shareGroup = c.shareGroup;
+        };
+
+        const pushSmall = (
+            g: RenderedGroup,
+            c: TsCell,
+            opts: { coLightIv?: [number, number]; glyphOverride?: string } = {},
+        ): void => {
+            const phone = c.phonemeIndices.length ? intervals[c.phonemeIndices[0]!]?.phone : undefined;
+            const shareIv = c.shareGroup != null ? shareUnions.get(c.shareGroup) ?? null : null;
+            let { start, end } = _cellTiming(c.phonemeIndices, intervals, shareIv);
+            if (opts.coLightIv) [start, end] = opts.coLightIv; // co-light on the carrier's interval
+            const mark = _firstMark(c.chars);
+            const iqlab = c.tag === 'iqlab_tanween' ? IQLAB_FORM[mark] : undefined;
+            let glyph: string;
+            let slot: 'top' | 'bottom';
+            let sizeGlyph: string;
+            let extraShift = 0;
+            if (opts.glyphOverride) {
+                glyph = opts.glyphOverride;
+                slot = _cellSlot(glyph);
+                sizeGlyph = glyph;
+            } else if (iqlab) {
+                // SINGLE short vowel + a mini-meem composed in ONE DK glyph (never a
+                // doubled tanwīn); sized/centred by the haraka, nudged slightly right.
+                glyph = iqlab.haraka + iqlab.meem;
+                slot = iqlab.haraka === KASRA ? 'bottom' : 'top';
+                sizeGlyph = iqlab.haraka;
+                extraShift = 0.06;
+            } else if (c.role === 'tanween' && OPEN_TANWEEN[mark] && OPEN_TANWEEN_TAGS.has(c.tag ?? '')) {
+                // Assimilated tanwīn (idgham / ikhfaa) renders OPEN (DK encodes it
+                // as a distinct codepoint); iẓhar (tagless) keeps the stacked form.
+                // Slot follows the canonical mark (kasratan below, others above).
+                glyph = OPEN_TANWEEN[mark]!;
+                slot = _cellSlot(mark);
+                sizeGlyph = glyph;
+            } else {
+                glyph = _cellGlyph(c, phone);
+                slot = _cellSlot(glyph);
+                sizeGlyph = glyph;
+            }
+            g.small.push({
+                glyph,
+                slot,
+                // a carried-vowel cell sounds (co-lit) — render timed, not greyed.
+                status: opts.coLightIv ? 'present' : c.status,
+                tag: c.tag,
+                cellStart: start,
+                cellEnd: end,
+                shareGroup: c.shareGroup,
+                renderStyle: harakaRenderStyle(sizeGlyph, extraShift),
+                inserted: c.chars === '' && c.status === 'inserted',
+            });
+            noteShare(g, c);
+        };
+
+        // A FULL letter-sized cell from a `base` or real `madd` carrier. The glyph
+        // is the cell's OWN canonical char (◌ّ composed on a geminated consonant) —
+        // NOT looked up in word.letters: the phonemizer's source_letter_index folds
+        // a dagger-alef ٰ into its base letter, while the aligner keeps it a
+        // separate `word.letters` entry, so the two indexings diverge and a
+        // word.letters lookup mis-glyphs / drops carriers. `isBase` marks the
+        // interactive letter element.
+        const pushFullGrapheme = (g: RenderedGroup, c: TsCell, isBase: boolean): void => {
+            const shareIv = c.shareGroup != null ? shareUnions.get(c.shareGroup) ?? null : null;
+            const { start, end } = _cellTiming(c.phonemeIndices, intervals, shareIv);
+            const phone = c.phonemeIndices.length ? intervals[c.phonemeIndices[0]!]?.phone : undefined;
+            let glyph: string;
+            let silent: boolean;
+            let lStart: number | null;
+            let lEnd: number | null;
+            let isNull: boolean;
+            let letterIndex: number;
+            if (c.chars) {
+                glyph = c.chars;
+                if (_isGeminatePhone(phone) && !glyph.includes(SHADDA)) glyph += SHADDA;
+                silent = c.status === 'dropped';
+                lStart = start;
+                lEnd = end;
+                isNull = start == null;
+                letterIndex = c.sourceLetterIndex;
+            } else {
+                // Graphemeless base cell (lightweight test fixtures): fall back to
+                // the folded word.letters glyph + timing.
+                const foldIdx = srcToFold.get(c.sourceLetterIndex);
+                const fl = foldIdx != null ? folded[foldIdx] : undefined;
+                glyph = fl?.glyph ?? '';
+                silent = fl?.silent ?? c.status === 'dropped';
+                lStart = fl?.start ?? null;
+                lEnd = fl?.end ?? null;
+                isNull = fl?.isNull ?? (start == null);
+                letterIndex = foldIdx ?? -1;
+                if (foldIdx != null) consumedFold.add(foldIdx);
+            }
+            g.full.push({
+                glyph,
+                silent,
+                status: c.status,
+                tag: c.tag,
+                implicit: false,
+                isBase,
+                cellStart: start,
+                cellEnd: end,
+                letterStart: lStart,
+                letterEnd: lEnd,
+                isNull,
+                letterIndex,
+                shareGroup: c.shareGroup,
+            });
+            noteShare(g, c);
+        };
+
+        const pushFullImplicit = (g: RenderedGroup, c: TsCell): void => {
+            const shareIv = c.shareGroup != null ? shareUnions.get(c.shareGroup) ?? null : null;
+            const { start, end } = _cellTiming(c.phonemeIndices, intervals, shareIv);
+            g.full.push({
+                glyph: _implicitMaddGlyph(c),
+                silent: c.status === 'dropped',
+                status: c.status,
+                tag: c.tag,
+                implicit: true,
+                isBase: false,
+                cellStart: start,
+                cellEnd: end,
+                letterStart: null,
+                letterEnd: null,
+                isNull: true,
+                letterIndex: -1,
+                shareGroup: c.shareGroup,
+            });
+            noteShare(g, c);
+        };
+
+        if (hasBase) {
+            let curBase: RenderedGroup | null = null;
+            const vowelGroups = new Map<number, RenderedGroup>();
+            const vowelGroupFor = (sg: number): RenderedGroup => {
+                let g = vowelGroups.get(sg);
+                if (!g) {
+                    g = newGroup('vowel');
+                    vowelGroups.set(sg, g);
+                }
+                return g;
+            };
+            const ownIv = (c: TsCell): [number, number] | null => {
+                const t = _cellTiming(c.phonemeIndices, intervals, null);
+                return t.start != null ? [t.start, t.end!] : null;
+            };
+            for (const c of cells) {
+                if (_isSukunCell(c)) continue; // sukūn never rendered
+                const foldIdx = srcToFold.get(c.sourceLetterIndex);
+                if (c.role === 'base') {
+                    if (foldIdx != null && consumedFold.has(foldIdx)) continue; // maksura+dagger half
+                    curBase = newGroup('base');
+                    pushFullGrapheme(curBase, c, true);
+                    curBaseIv = ownIv(c);
+                    curBaseVowel = _isVowelPhone(
+                        c.phonemeIndices.length ? intervals[c.phonemeIndices[0]!]?.phone : undefined,
+                    );
+                } else if (c.role === 'madd') {
+                    if (c.chars !== '' && foldIdx != null && consumedFold.has(foldIdx)) continue; // fold half
+                    if (c.tag === 'madd_iwad' && c.chars !== '') {
+                        // the substituted iwaḍ alef joins the [fatḥa, alef] vowel group
+                        iwadGroup = iwadGroup ?? newGroup('vowel');
+                        pushFullGrapheme(iwadGroup, c, false);
+                    } else if (c.chars === '') {
+                        const g = c.shareGroup != null && longVowelSG.has(c.shareGroup)
+                            ? vowelGroupFor(c.shareGroup) : newGroup('vowel');
+                        pushFullImplicit(g, c);
+                        if (c.tag === 'allah_dagger_alef') {
+                            const iv = ownIv(c);
+                            if (iv) daggerBySrc.set(c.sourceLetterIndex, { group: g, iv });
+                        }
+                    } else {
+                        const lv = c.shareGroup != null && longVowelSG.has(c.shareGroup);
+                        pushFullGrapheme(lv ? vowelGroupFor(c.shareGroup!) : newGroup('vowel'), c, false);
+                    }
+                } else {
+                    // haraka / tanwīn
+                    const dropped = c.phonemeIndices.length === 0;
+                    if (c.shareGroup != null && longVowelSG.has(c.shareGroup)) {
+                        pushSmall(vowelGroupFor(c.shareGroup), c); // long vowel — leaves its base
+                    } else if (dropped && c.tag === 'madd_iwad' && iwadIv) {
+                        // dropped tanwīn at waqf → a fatḥa grouped + co-lit with the iwaḍ alef
+                        iwadGroup = iwadGroup ?? newGroup('vowel');
+                        pushSmall(iwadGroup, c, { coLightIv: iwadIv, glyphOverride: FATHA });
+                    } else if (dropped && daggerBySrc.has(c.sourceLetterIndex)) {
+                        const d = daggerBySrc.get(c.sourceLetterIndex)!;
+                        pushSmall(d.group, c, { coLightIv: d.iv }); // Allah: fatḥa joins the dagger ā
+                    } else if (dropped && curBase && curBaseIv && curBaseVowel) {
+                        // idgham shafawi / noon: the consonant merged and the base
+                        // absorbed the haraka's VOWEL — co-light the haraka with the
+                        // base instead of greying it. (A base that's still a consonant
+                        // is a true waqf drop → falls through to greyed.)
+                        pushSmall(curBase, c, { coLightIv: curBaseIv });
+                    } else {
+                        pushSmall(curBase ?? (curBase = newGroup('base')), c); // short vowel / true drop
+                    }
+                }
+            }
+            return groups;
+        }
+
+        // --- Synthetic-base fallback: no base cells (test fixtures). One group
+        //     per folded letter, with the word's diacritic cells attached. ---
+        const groupByFold: RenderedGroup[] = folded.map((fl, i) => {
+            const g = newGroup('base');
+            g.full.push({
+                glyph: fl.glyph,
+                silent: fl.silent,
+                status: 'present',
+                tag: null,
+                implicit: false,
+                isBase: true,
+                cellStart: fl.start,
+                cellEnd: fl.end,
+                letterStart: fl.start,
+                letterEnd: fl.end,
+                isNull: fl.isNull,
+                letterIndex: i,
+                shareGroup: null,
+            });
+            return g;
+        });
+        for (const c of cells) {
+            if (_isSukunCell(c)) continue;
+            if (c.role === 'madd' && c.chars !== '') continue; // real carrier — already a folded letter
+            const foldIdx = srcToFold.get(c.sourceLetterIndex);
+            const g = (foldIdx != null ? groupByFold[foldIdx] : undefined) ?? groupByFold[groupByFold.length - 1];
+            if (!g) continue;
+            if (c.role === 'madd' && c.chars === '') pushFullImplicit(g, c);
+            else pushSmall(g, c);
+        }
+        return groups;
     }
 
     /** Split a phone string into base character(s) and trailing IPA modifiers
@@ -218,6 +776,12 @@
             }
         }
 
+        // Share-group interval unions computed VERSE-WIDE (across all words' cells):
+        // a cross-word idgham tanwīn shares a group with the receiving word's base,
+        // so its highlight must span the haraka + the ghunnah/merger in the next
+        // word — a per-word union would miss the other side.
+        const shareUnions = _shareUnions(words.flatMap((w) => w.cells ?? []), intervals);
+
         const blocks: RenderedBlock[] = [];
         for (let wi = 0; wi < words.length; wi++) {
             const word = words[wi];
@@ -237,7 +801,7 @@
                 word,
                 wordIndex: wi,
                 displayText: (word.display_text || word.text).replace(NON_RECITED_SIGNS, ''),
-                letters: letterGroupsFor(word),
+                groups: cellGroupsFor(word, intervals, shareUnions),
                 phonemes,
                 bridge,
                 pauseBridge: null,
@@ -283,6 +847,12 @@
         const portReady = !!dashPort.element;
         const portPaused = dashPort.paused;
         const hoverTime = get(tsWaveformHoverTime);
+
+        // Cached node lists (rebuilt only on structural render) — never query the
+        // DOM per frame; that regressed the animation to a laggy, trailing smear.
+        if (!_hc) _rebuildHighlightCache();
+        const hc = _hc;
+        if (!hc) return;
 
         // Current phoneme (skip geminate_end)
         let currentIndex = -1;
@@ -336,8 +906,7 @@
         }
         const isHoverDriven = hoverTime != null && portReady && portPaused;
         if (currentWordIndex !== _prevActiveWordIdx) {
-            const blocks = rootEl.querySelectorAll<HTMLElement>('.mega-block');
-            blocks.forEach((block) => {
+            hc.blocks.forEach((block) => {
                 const wi = parseInt(block.dataset.wordIndex ?? '-1');
                 block.classList.remove('active', 'past');
                 if (wi === currentWordIndex) {
@@ -349,48 +918,49 @@
             });
             _prevActiveWordIdx = currentWordIndex;
         }
-        rootEl.querySelectorAll<HTMLElement>('.mega-block').forEach((block) => {
+        hc.blocks.forEach((block) => {
             const wi = parseInt(block.dataset.wordIndex ?? '-1');
             block.classList.toggle('hover-preview', wi === hoverWordIndex);
         });
 
         // Phoneme highlights — diff-only
         if (currentIndex !== _prevActivePhonemeIdx) {
-            rootEl.querySelectorAll<HTMLElement>('.mega-phoneme').forEach((ph) => {
+            hc.phonemes.forEach((ph) => {
                 ph.classList.toggle('active', parseInt(ph.dataset.index ?? '-1') === currentIndex);
             });
             _prevActivePhonemeIdx = currentIndex;
         }
-        rootEl.querySelectorAll<HTMLElement>('.mega-phoneme').forEach((ph) => {
+        hc.phonemes.forEach((ph) => {
             ph.classList.toggle('hover-preview', parseInt(ph.dataset.index ?? '-1') === hoverPhonemeIndex);
         });
 
-        // Letter highlights — must check each frame (time-based within word).
-        // Silent cells are excluded: at a shared [start,end] the highlight lands
-        // on the pronounced letter alone.
-        rootEl
-            .querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts):not(.silent)')
-            .forEach((el) => {
-                const s = parseFloat(el.dataset.letterStart ?? '0');
-                const e = parseFloat(el.dataset.letterEnd ?? '0');
-                const wi = parseInt(el.dataset.wordIndex ?? '-1');
-                el.classList.toggle('active', time >= s && time < e);
-                el.classList.toggle(
-                    'hover-preview',
-                    hoverTime != null && wi === hoverWordIndex && hoverTime >= s && hoverTime < e,
-                );
-            });
+        // Cell highlights — ONE loop over EVERY timed cell (full base + small
+        // diacritic). Each lights on ITS OWN phoneme interval (data-cell-start/
+        // end): a base lights on its consonant; a haraka on the vowel; a long-
+        // vowel haraka + carrier share an index (and share-group union) and
+        // co-light. This tiles cleanly with no flash/gap. Untimed cells (sukūn,
+        // dropped, null-ts) carry no `data-cell-timed` and are skipped.
+        hc.timedCells.forEach((el) => {
+            const s = parseFloat(el.dataset.cellStart ?? 'NaN');
+            const e = parseFloat(el.dataset.cellEnd ?? 'NaN');
+            const wi = parseInt(el.dataset.wordIndex ?? '-1');
+            el.classList.toggle('active', time >= s && time < e);
+            el.classList.toggle(
+                'hover-preview',
+                hoverTime != null && wi === hoverWordIndex && hoverTime >= s && hoverTime < e,
+            );
+        });
 
         // Loop perma-highlight — outline the looped element on its tier.
         const lp = get(loopTarget);
-        rootEl.querySelectorAll<HTMLElement>('.mega-block').forEach((block) => {
+        hc.blocks.forEach((block) => {
             const wi = parseInt(block.dataset.wordIndex ?? '-1');
             block.classList.toggle(
                 'loop',
                 lp?.kind === 'word' && lp.wordIndex === wi,
             );
         });
-        rootEl.querySelectorAll<HTMLElement>('.mega-letter:not(.null-ts)').forEach((el) => {
+        hc.letters.forEach((el) => {
             const wi = parseInt(el.dataset.wordIndex ?? '-1');
             const li = parseInt(el.dataset.letterIndex ?? '-1');
             el.classList.toggle(
@@ -398,7 +968,7 @@
                 lp?.kind === 'letter' && lp.wordIndex === wi && lp.childIndex === li,
             );
         });
-        rootEl.querySelectorAll<HTMLElement>('.mega-phoneme').forEach((el) => {
+        hc.phonemes.forEach((el) => {
             const idx = parseInt(el.dataset.index ?? '-1');
             el.classList.toggle(
                 'loop',
@@ -410,7 +980,7 @@
         // (`.active`) and the rest of the row dims to 70% (`.in-pause` on the
         // container). Waveform hover over a silence span previews its bridge.
         let inPauseGap = false;
-        rootEl.querySelectorAll<HTMLElement>('.pause-bridge').forEach((b) => {
+        hc.pauseBridges.forEach((b) => {
             const s = parseFloat(b.dataset.pauseStart ?? 'NaN');
             const e = parseFloat(b.dataset.pauseEnd ?? 'NaN');
             const playing = time >= s && time < e;
@@ -716,37 +1286,73 @@
                 on:mouseenter={() => onWordEnter(block.word)}
                 on:mouseleave={onHoverLeave}
             >{block.displayText}</div>
-            {#if block.letters.length}
+            {#if block.groups.length}
                 <div class="mega-letters" class:hidden={!$showLetters} dir="rtl">
-                    {#each block.letters as lt, li (li)}
-                        {#if lt.isNull}
-                            <span
-                                class="mega-letter null-ts"
-                                class:silent={lt.silent}
-                                on:click|stopPropagation
-                                on:keydown={() => {}}
-                                role="button"
-                                tabindex="-1"
-                            >{lt.ch}</span>
-                        {:else}
-                            <span
-                                class="mega-letter"
-                                class:silent={lt.silent}
-                                data-letter-start={lt.start}
-                                data-letter-end={lt.end}
-                                data-word-index={block.wordIndex}
-                                data-letter-index={li}
-                                on:click={(e) =>
-                                    onLetterClick(e, lt.start ?? 0, lt.end ?? 0, block.wordIndex, li)}
-                                on:dblclick={(e) =>
-                                    onLetterDblClick(e, lt.start ?? 0, lt.end ?? 0, block.wordIndex, li)}
-                                on:mouseenter={() => onLetterEnter(lt.start, lt.end)}
-                                on:mouseleave={onHoverLeave}
-                                on:keydown={() => {}}
-                                role="button"
-                                tabindex="-1"
-                            >{lt.ch}</span>
-                        {/if}
+                    {#each block.groups as grp, gi (gi)}
+                        <span class="cell-group" class:vowel={grp.kind === 'vowel'} class:share-group={grp.shareGroup != null}>
+                            {#each grp.full as f}
+                                {#if f.implicit}
+                                    <!-- implicit madd (Allah dagger-alef / madd-ʿiwaḍ): a FULL cell,
+                                         non-interactive, with the inserted/replaced affordance -->
+                                    <span
+                                        class="mega-letter implicit dia-{f.status}"
+                                        class:dia-timed={f.status !== 'dropped' && f.cellStart != null}
+                                        data-cell-timed={f.status !== 'dropped' && f.cellStart != null ? '1' : undefined}
+                                        data-cell-start={f.cellStart}
+                                        data-cell-end={f.cellEnd}
+                                        data-word-index={block.wordIndex}
+                                    >{f.glyph}</span>
+                                {:else if f.isNull}
+                                    <span
+                                        class="mega-letter null-ts"
+                                        class:silent={f.silent}
+                                        on:click|stopPropagation
+                                        on:keydown={() => {}}
+                                        role="button"
+                                        tabindex="-1"
+                                    >{f.glyph}</span>
+                                {:else}
+                                    <!-- base consonant OR real madd carrier (ا و ي ٰ) — a FULL,
+                                         interactive, timed letter cell -->
+                                    <span
+                                        class="mega-letter"
+                                        class:silent={f.silent}
+                                        class:dia-timed={f.cellStart != null && (!f.silent || f.shareGroup != null)}
+                                        data-cell-timed={f.cellStart != null && (!f.silent || f.shareGroup != null) ? '1' : undefined}
+                                        data-cell-start={f.cellStart}
+                                        data-cell-end={f.cellEnd}
+                                        data-letter-start={f.letterStart}
+                                        data-letter-end={f.letterEnd}
+                                        data-word-index={block.wordIndex}
+                                        data-letter-index={f.letterIndex}
+                                        on:click={(e) =>
+                                            onLetterClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
+                                        on:dblclick={(e) =>
+                                            onLetterDblClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
+                                        on:mouseenter={() => onLetterEnter(f.letterStart, f.letterEnd)}
+                                        on:mouseleave={onHoverLeave}
+                                        on:keydown={() => {}}
+                                        role="button"
+                                        tabindex="-1"
+                                    >{f.glyph}</span>
+                                {/if}
+                            {/each}
+                            {#each grp.small as c}
+                                <span class="dia-track">
+                                    <span
+                                        class="haraka-cell pin-{c.slot} dia-{c.status}"
+                                        class:dia-inserted={c.inserted}
+                                        class:dia-timed={c.status !== 'dropped' && c.cellStart != null}
+                                        data-cell-timed={c.status !== 'dropped' && c.cellStart != null ? '1' : undefined}
+                                        data-cell-start={c.cellStart}
+                                        data-cell-end={c.cellEnd}
+                                        data-word-index={block.wordIndex}
+                                    >
+                                        <span class="g" style={c.renderStyle}>{c.glyph}</span>
+                                    </span>
+                                </span>
+                            {/each}
+                        </span>
                     {/each}
                 </div>
             {/if}

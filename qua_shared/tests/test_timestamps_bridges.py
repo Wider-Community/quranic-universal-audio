@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import pytest
 
-from qua_shared.timestamps_bridges import (
+from qua_sdk.components.timing.lib.cells import (
     _BRIDGE_SLOT,
     BRIDGE_RULES,
     _apply_to_words,
     _looks_like_merger,
+    annotate_segment_words,
     detect_segment_bridges,
-    tag_segment_words,
 )
 
 
@@ -112,13 +112,6 @@ def test_apply_qalqala_marker_in_excluded_count_space():
     assert [p[0] for p in words[1][4]] == ["i", "ŋ", "Q"]  # kasra re-attributed, Q kept
 
 
-def test_tag_segment_words_skips_non_contiguous(pm):
-    # Repeat / out-of-order word indices can't be range-phonemized → no bridge tag
-    # (silent-stamping still no-ops here: these words carry no letters).
-    words = [_word(3, ["m̃"]), _word(1, ["a"])]
-    assert tag_segment_words(pm, "2:5", words) == 0
-
-
 # --- phonemizer-backed detection -------------------------------------------
 
 pytestmark_pm = pytest.importorskip("quranic_phonemizer", reason="phonemizer not installed")
@@ -131,6 +124,14 @@ def pm():
     return Phonemizer()
 
 
+def test_annotate_segment_words_skips_non_contiguous():
+    # Repeat / out-of-order word indices can't be range-phonemized → no bridge tag
+    # (silent-stamping still no-ops here: these words carry no letters). The SDK
+    # annotator reaches the phonemizer via its domain layer (no pm handle).
+    words = [_word(3, ["m̃"]), _word(1, ["a"])]
+    assert annotate_segment_words("2:5", words) == 0
+
+
 def _flat(pm, ref):
     gm = pm.phonemize(ref=ref).get_mapping()
     return [p for w in gm.words for p in w.phonemes if p and p != "Q"]
@@ -139,7 +140,7 @@ def _flat(pm, ref):
 def test_detect_known_bridges(pm):
     # 2:5 ...هُدࣰى مِّن رَّبِّهِمْ : tanween→meem (m̃) then noon→raa (rˤrˤ).
     flat = _flat(pm, "2:5")
-    bridges = detect_segment_bridges(pm, "2:5")
+    bridges = detect_segment_bridges("2:5")
     rules = {r for _, r in bridges}
     assert "idgham_ghunnah_tanween" in rules
     assert "idgham_bila_ghunnah_noon" in rules
@@ -151,7 +152,7 @@ def test_detect_known_bridges(pm):
 
 def test_detect_shafawi_on_prev_tail(pm):
     # 2:10 ...فِی قُلُوبِهِم مَّرَضٌ : idgham shafawi, merger m̃ on prev tail.
-    bridges = detect_segment_bridges(pm, "2:10")
+    bridges = detect_segment_bridges("2:10")
     assert any(r == "idgham_shafawi" for _, r in bridges)
     flat = _flat(pm, "2:10")
     for idx, _rule in bridges:
@@ -184,7 +185,7 @@ def test_tag_stamps_silent_flags_matching_phonemizer(pm):
     res = pm.phonemize(ref="1:1:1-1:1:2")
     words = [_shard_word(i + 1, w) for i, w in enumerate(res.get_mapping().words)]
 
-    tag_segment_words(pm, "1:1", words)
+    annotate_segment_words("1:1", words)
 
     stamped = [(lt[0], lt[3]) for wd in words for lt in wd[3]]
     assert all(len(lt) == 4 for wd in words for lt in wd[3])
@@ -199,7 +200,7 @@ def test_tag_folds_silence_mark_onto_char(pm):
     # SILENT_ALWAYS mark folded on (which get_full_char alone drops).
     res = pm.phonemize(ref="6:99")
     words = [_shard_word(i + 1, w) for i, w in enumerate(res.get_mapping().words)]
-    tag_segment_words(pm, "6:99", words)
+    annotate_segment_words("6:99", words)
     stamped = [(lt[0], lt[3]) for wd in words for lt in wd[3]]
     assert ("ا۟", True) in stamped  # alef + ۟ (U+06DF), silent
 
@@ -209,12 +210,12 @@ def test_tag_silah_silent_only_when_word_stops(pm):
     # run continues to a following word.
     res = pm.phonemize(ref="2:90:15")
     stop = [_shard_word(15, res.get_mapping().words[0])]
-    tag_segment_words(pm, "2:90", stop)
+    annotate_segment_words("2:90", stop)
     assert ("ۦ", True) in [(lt[0], lt[3]) for lt in stop[0][3]]
 
     res2 = pm.phonemize(ref="2:90:15-2:90:17")
     cont = [_shard_word(15 + i, w) for i, w in enumerate(res2.get_mapping().words)]
-    tag_segment_words(pm, "2:90", cont)
+    annotate_segment_words("2:90", cont)
     assert ("ۦ", False) in [(lt[0], lt[3]) for lt in cont[0][3]]
 
 
@@ -223,7 +224,7 @@ def test_tag_stamps_silah_maddah_word(pm):
     # NO-SLOT) — guards the maddah-after-split tokenization match.
     res = pm.phonemize(ref="2:90:1-2:90:3")
     words = [_shard_word(i + 1, w) for i, w in enumerate(res.get_mapping().words)]
-    tag_segment_words(pm, "2:90", words)
+    annotate_segment_words("2:90", words)
     assert all(len(lt) == 4 for wd in words for lt in wd[3])  # every letter stamped
     assert "ۦٓ" in [lt[0] for wd in words for lt in wd[3]]  # silah+maddah one token
 
@@ -231,5 +232,5 @@ def test_tag_stamps_silah_maddah_word(pm):
 def test_stamp_silent_flags_noop_on_char_mismatch(pm):
     # Letters that don't match the canonical text must be left untouched.
     word = [1, 0, 10, [["z", 0, 10], ["q", 0, 10]], [["x", 0, 10]]]
-    tag_segment_words(pm, "1:1", [word])
+    annotate_segment_words("1:1", [word])
     assert word[3] == [["z", 0, 10], ["q", 0, 10]]  # unchanged, no 4th slot

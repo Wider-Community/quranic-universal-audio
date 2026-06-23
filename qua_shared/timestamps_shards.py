@@ -12,8 +12,9 @@ Two shard shapes share the deterministic gzip writer here:
 
 Phone tuples are ``[phone, start_ms, end_ms]``, optionally extended to
 ``[phone, start, end, geminate_start, geminate_end, bridge_rule]`` — slot 5
-carries the cross-word tajweed bridge rule (see `timestamps_bridges`), stamped
-at write time by the pipeline. Schema version 3 = bridge-tagged.
+carries the cross-word tajweed bridge rule (see
+`qua_sdk.components.timing.lib.cells`), stamped at write time by the pipeline.
+Schema version 3 = bridge-tagged.
 
 Both are gzipped via `gzip_shard` (level 6, mtime 0 → byte-stable output).
 """
@@ -53,7 +54,12 @@ _SEGMENT_META_PROVENANCE = (
     "created_at",
 )
 
-SEGMENT_SCHEMA_VERSION = 4
+# v5 adds a 6th word slot ``cells[]`` — per-character phoneme cells from the
+# phonemizer's ``character_phoneme_mappings()`` (see
+# ``qua_sdk.components.timing.lib.cells._stamp_cells`` and
+# ``qua_shared/ts_shard_cells.py``). The SDK annotator emits ``role == 'base'``
+# cells too; structurally unchanged, so no version bump.
+SEGMENT_SCHEMA_VERSION = 5
 
 
 def _filter_mfa_failures(failures: list[dict] | None, chapter: int) -> list[dict]:

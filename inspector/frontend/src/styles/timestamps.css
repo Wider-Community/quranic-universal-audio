@@ -156,11 +156,31 @@
     border-bottom: 2px solid var(--anim-highlight-color);
 }
 
+/* The letters row: one ordered flex row of GROUPS (a base cell + its trailing
+   diacritic cells). The GROUP is the flex child (flex:1; min-width:fit-content)
+   so the row's total width still tracks the word cell above it. Gap is 0 WITHIN
+   a group; the gap BETWEEN groups is applied as margin on the group. */
 .mega-letters {
     display: flex;
-    gap: var(--phoneme-box-gap);
     direction: rtl;
+    align-items: stretch;
 }
+
+/* A GROUP = a base cell + its trailing diacritics. The flex child. */
+.cell-group {
+    flex: 1;
+    min-width: fit-content;
+    display: flex;
+    direction: rtl;
+    align-items: stretch;
+    gap: 0; /* gap WITHIN a group — base + its diacritics sit flush */
+}
+.cell-group + .cell-group {
+    /* gap BETWEEN groups (the letter ↔ diacritic relationship) */
+    margin-inline-start: var(--haraka-group-gap, 9px);
+}
+/* share-group cells co-light via shared timing — no border/outline around the
+   combined group (the synchronized highlight is the only affordance). */
 
 .mega-letter {
     flex: 1;
@@ -176,9 +196,14 @@
     color: #aaa;
     text-align: center;
     line-height: 1.3;
-    transition: background 0.1s, color 0.1s;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
     border: 1px solid transparent;
     cursor: pointer;
+    /* Centre the glyph so a full cell aligns with the pinned small cells in its
+       group (the small cells are absolutely positioned in a fixed-height track). */
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .mega-letter.null-ts {
@@ -201,6 +226,115 @@
     opacity: 0.55;
     pointer-events: none;
     cursor: default;
+}
+
+/* --- Diacritic (haraka / tanween) small-cell tier ------------------------ */
+/* Ported from the diacritic-cell sizing playground. A small cell is NOT a
+   flex-flow column: it sits inside a vertical pin-track (`.dia-track`) sized as
+   a factor of a real letter cell, so it can pin to the top or bottom edge of
+   the group's letter row. Height + width are the only knobs (no nudge); the
+   bare combining mark inside (`.g`) is scaled + translated per-glyph via the
+   `--haraka-*` vars projected by `harakaRenderStyle` (mirrors waqf-render). */
+
+/* Small-cell box, as factors of a FULL letter cell (measured at runtime into
+   --letter-cell-w / --letter-cell-h). */
+:root {
+    --haraka-dia-w: 0.5; /* small-cell width  / letter cell width  */
+    --haraka-dia-h: 0.45; /* small-cell height / letter cell height */
+    --haraka-group-gap: 6px; /* gap BETWEEN groups */
+    --letter-cell-w: 30px; /* measured at runtime from a real letter cell */
+    --letter-cell-h: 34px;
+}
+
+/* A `vowel` group is a long-vowel unit [diacritic, carrier] — render the small
+   diacritic BEFORE the full carrier (flex order; the row is RTL so order 0 is
+   the rightmost / first-read). A `base` group keeps DOM order (full then its
+   pinned diacritic). */
+.cell-group.vowel .dia-track { order: 0; }
+.cell-group.vowel .mega-letter { order: 1; }
+
+.dia-track {
+    position: relative;
+    width: calc(var(--letter-cell-w) * var(--haraka-dia-w));
+    align-self: stretch; /* span the full group height (the letter row) */
+    flex: none;
+}
+
+.haraka-cell {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: calc(var(--letter-cell-h) * var(--haraka-dia-h));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0f0f23;
+    border-radius: 3px;
+    border: 1px solid transparent;
+    overflow: hidden;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.haraka-cell.pin-top {
+    top: 0;
+}
+.haraka-cell.pin-bottom {
+    bottom: 0;
+}
+/* the bare combining mark, scaled + nudged per-glyph so it centres. The mark
+   reads in the SAME neutral ink as a letter cell — a diacritic is not a
+   different-coloured token, just a smaller cell. (iqlab composes a mini-meem
+   onto the haraka in this one glyph; DK stacks them.) */
+.haraka-cell .g {
+    font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+    line-height: 1;
+    color: #aaa;
+    display: inline-block;
+    /* per-glyph scale × a global 0.75 (diacritics ride ~25% smaller than the
+       letter they sit on). */
+    font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4) * 0.75);
+    transform: translate(var(--haraka-shift, 0em), var(--haraka-raise, 0em));
+}
+/* Active highlight uses the SAME hue as a letter cell — one highlight colour
+   across the whole letter row, never a separate diacritic colour. */
+.haraka-cell.active {
+    background: var(--ts-letter-color, #2ec4b6);
+}
+.haraka-cell.active .g {
+    color: #fff;
+}
+.haraka-cell.hover-preview {
+    background: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 30%, transparent);
+}
+/* dropped (e.g. tanwīn silenced at waqf) — greyed, never lights */
+.haraka-cell.dia-dropped {
+    opacity: 0.5;
+}
+.haraka-cell.dia-dropped .g {
+    color: #777;
+}
+/* Small diacritic cells render as plain marks — no inserted/replaced/shortened
+   affordance (those would read as "special" on what should look like an ordinary
+   haraka). Only `dia-dropped` (greyed) marks a silenced one. The inserted/replaced
+   affordance stays on the implicit-madd FULL cell below, where it's wanted. */
+
+/* --- Implicit-madd FULL cell affordance ---------------------------------- */
+/* An implicit madd (Allah dagger-alef / madd-ʿiwaḍ alef — chars==='') is a
+   full letter-sized cell with an inserted/replaced glow so it reads as
+   "not in the rasm". */
+.mega-letter.implicit {
+    border-style: dashed;
+    border-color: #6a6f8c;
+    color: #aaa;
+}
+.mega-letter.implicit.dia-replaced {
+    border-style: solid;
+}
+.mega-letter.implicit.dia-dropped {
+    opacity: 0.5;
+}
+.mega-letter.implicit.active {
+    background: var(--ts-letter-color, #2ec4b6);
+    color: #fff;
 }
 
 .mega-phonemes {
@@ -382,7 +516,7 @@
     border-color: var(--ts-phoneme-color, #4361ee);
 }
 
-.mega-block.active .mega-letter {
+.mega-block.active .mega-letter:not(.implicit) {
     background: #1a1a3e;
     color: #ccc;
     border-color: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 27%, transparent);
@@ -402,10 +536,38 @@
     border-color: transparent;
 }
 
+/* …with ONE exception: a silent consonant that fully merges into the next word
+   (idgham noon ن→ , idgham shafawi م→) is greyed at rest but CO-LIGHTS through
+   the merger — it shares the merged sound, so `active` must win over `silent`.
+   Only a merged consonant is ever silent AND share-grouped; ordinary silent
+   graphemes (hamza waṣl, lam shamsiyah, the otiose alef …) carry no group and
+   never light. */
+.mega-letter.silent.active,
+.mega-block.active .mega-letter.silent.active {
+    color: white;
+    opacity: 1;
+    background: var(--ts-letter-color, #2ec4b6);
+    border-color: var(--ts-letter-color, #2ec4b6);
+}
+
 .mega-block.active .mega-letter.null-ts {
     color: #555;
     background: #0f0f23;
     border-color: transparent;
+}
+
+/* Diacritic cells follow the active-word treatment too: dim to the block bg at
+   rest, and the one that's currently sounding lights in the letter colour (same
+   hue as the active letter). Without this they stayed flat black in an active
+   word. Dropped (greyed) diacritics opt out. */
+.mega-block.active .haraka-cell {
+    background: #1a1a3e;
+}
+.mega-block.active .haraka-cell.dia-dropped {
+    background: #0f0f23;
+}
+.mega-block.active .haraka-cell.active {
+    background: var(--ts-letter-color, #2ec4b6);
 }
 
 .mega-letters.hidden,
