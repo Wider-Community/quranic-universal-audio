@@ -9,8 +9,8 @@
  * fuses with a mini-meem in one cell. Implicit madd (chars==='') is a full cell
  * with an inserted/replaced affordance. Cells sharing a shareGroup co-light.
  */
-import { cleanup, render } from '@testing-library/svelte';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render } from '@testing-library/svelte';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { dashPort } from '../../../../lib/playback/dash-port';
 import { makeAudioStub as makePortAudioStub } from '../../../../lib/playback/__tests__/raf-harness';
@@ -563,5 +563,72 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         // first group has base + small inside it, no nested stack.
         expect(first.querySelector('.mega-letter')).toBeTruthy();
         expect(first.querySelector('.dia-track')).toBeTruthy();
+    });
+
+    it('seeks to a diacritic cell on click (cellStart × 1000)', async () => {
+        // بَ : ب base, fatḥa on phoneme idx 1 (start 0.1s). Clicking the small
+        // fatḥa cell seeks to 0.1s = 100ms (tsSegOffset 0), not the word start.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'b', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.35 },
+        ];
+        const word = w(
+            [{ char: 'ب', start: 0, end: 0.35, silent: false }],
+            [
+                base(0, [0]),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+            ],
+            [0, 1],
+        );
+        const seekSpy = vi.spyOn(dashPort, 'seek').mockImplementation(() => {});
+        const { container } = mount([word], intervals);
+        const haraka = container.querySelector<HTMLElement>('.haraka-cell.dia-seekable')!;
+        expect(haraka).toBeTruthy();
+        await fireEvent.click(haraka);
+        expect(seekSpy).toHaveBeenCalledWith(100);
+        seekSpy.mockRestore();
+    });
+
+    it('raises a duration tooltip: warmup delay, rounded to 10ms, instant when warm, reset after cooldown', async () => {
+        vi.useFakeTimers();
+        try {
+            // ب letter spans 0..0.234s (→ 230 ms); the fatḥa is phoneme idx 1,
+            // 0.157..0.234s (77 ms → 80 ms).
+            const intervals: PhonemeInterval[] = [
+                { phone: 'b', start: 0, end: 0.157 }, { phone: 'a', start: 0.157, end: 0.234 },
+            ];
+            const word = w(
+                [{ char: 'ب', start: 0, end: 0.234, silent: false }],
+                [
+                    base(0, [0]),
+                    { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                ],
+                [0, 1],
+            );
+            const { container } = mount([word], intervals);
+            const letter = container.querySelector<HTMLElement>('.mega-letter:not(.implicit)')!;
+            const haraka = container.querySelector<HTMLElement>('.haraka-cell')!;
+
+            // Cold hover → nothing until the 0.5s warmup elapses, then rounded.
+            await fireEvent.mouseEnter(letter);
+            expect(container.querySelector('.cell-tip')).toBeNull();
+            await vi.advanceTimersByTimeAsync(500);
+            expect(container.querySelector('.cell-tip')!.textContent).toBe('230 ms');
+
+            // Warm: leaving then entering another cell shows near-instantly (no delay).
+            await fireEvent.mouseLeave(letter);
+            await fireEvent.mouseEnter(haraka);
+            expect(container.querySelector('.cell-tip')!.textContent).toBe('80 ms');
+
+            // Cooldown: 2s after the pointer leaves with no re-entry, warm decays —
+            // the next hover is cold again (no tooltip until another 0.5s).
+            await fireEvent.mouseLeave(haraka);
+            await vi.advanceTimersByTimeAsync(2000);
+            await fireEvent.mouseEnter(letter);
+            expect(container.querySelector('.cell-tip')).toBeNull();
+            await vi.advanceTimersByTimeAsync(500);
+            expect(container.querySelector('.cell-tip')!.textContent).toBe('230 ms');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

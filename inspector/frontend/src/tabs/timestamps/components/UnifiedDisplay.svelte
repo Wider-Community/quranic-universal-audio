@@ -1105,31 +1105,103 @@
         });
     }
 
-    // ---- Hover handlers: publish to tsHoveredElement for waveform sync ----
+    // ---- Hover handlers: publish to tsHoveredElement for waveform sync, AND
+    //      raise the per-cell duration tooltip (see the tooltip block below). ----
 
-    function onWordEnter(word: TsWord): void {
+    function onWordEnter(e: MouseEvent, word: TsWord): void {
         tsHoveredElement.set({ kind: 'word', startSec: word.start, endSec: word.end });
+        _tipEnter(e, word.start, word.end);
     }
 
-    function onLetterEnter(startSec: number | null, endSec: number | null): void {
+    function onLetterEnter(e: MouseEvent, startSec: number | null, endSec: number | null): void {
         if (startSec == null || endSec == null) return;
         tsHoveredElement.set({ kind: 'letter', startSec, endSec });
+        _tipEnter(e, startSec, endSec);
     }
 
-    function onPhonemeEnter(iv: PhonemeInterval): void {
+    function onPhonemeEnter(e: MouseEvent, iv: PhonemeInterval): void {
         tsHoveredElement.set({ kind: 'phoneme', startSec: iv.start, endSec: iv.end });
+        _tipEnter(e, iv.start, iv.end);
     }
 
     function onHoverLeave(): void {
         tsHoveredElement.set(null);
+        _tipLeave();
+    }
+
+    // Diacritic cells (haraka/tanwīn small cells + implicit-madd full cells) and
+    // the pause/stop cell: duration tooltip on hover, and — for diacritics —
+    // click-to-seek. They deliberately do NOT publish tsHoveredElement, so the
+    // waveform cursors stay exactly as they were (per requirement).
+    function onCellEnter(e: MouseEvent, startSec: number | null, endSec: number | null): void {
+        _tipEnter(e, startSec, endSec);
+    }
+
+    function onCellLeave(): void {
+        _tipLeave();
+    }
+
+    function onCellClick(e: MouseEvent, startSec: number | null): void {
+        e.stopPropagation();
+        if (startSec == null) return;
+        const lv = get(loadedVerse);
+        if (!lv) return;
+        seekToTime(startSec + lv.tsSegOffset);
+    }
+
+    // ---- Per-cell duration tooltip (warmup/cooldown) ----------------------
+    // Shows a cell's recited duration (ms, rounded to the nearest 10) on hover.
+    // The first (cold) hover warms up for TS_TIP_WARMUP_MS before showing; once
+    // warm, moving to another cell shows near-instantly; warm decays back to
+    // cold TS_TIP_COOLDOWN_MS after the pointer leaves a cell.
+    const TS_TIP_WARMUP_MS = 500;
+    const TS_TIP_COOLDOWN_MS = 2000;
+    let tipText: string | null = null;
+    let tipX = 0;
+    let tipY = 0;
+    let _tipWarm = false;
+    let _tipShowTimer: number | null = null;
+    let _tipCoolTimer: number | null = null;
+
+    function _roundMs(startSec: number, endSec: number): number {
+        return Math.round(((endSec - startSec) * 1000) / 10) * 10;
+    }
+
+    function _tipShowAt(el: HTMLElement, ms: number): void {
+        if (!el.isConnected) return; // cell removed (verse change) before warmup fired
+        const r = el.getBoundingClientRect();
+        tipX = r.left + r.width / 2;
+        tipY = r.top;
+        tipText = `${ms} ms`;
+        _tipWarm = true;
+    }
+
+    function _tipEnter(e: MouseEvent, startSec: number | null, endSec: number | null): void {
+        const el = e.currentTarget as HTMLElement | null;
+        if (!el || startSec == null || endSec == null) return;
+        const ms = _roundMs(startSec, endSec);
+        if (_tipCoolTimer !== null) { clearTimeout(_tipCoolTimer); _tipCoolTimer = null; }
+        if (_tipShowTimer !== null) { clearTimeout(_tipShowTimer); _tipShowTimer = null; }
+        if (_tipWarm) _tipShowAt(el, ms);
+        else _tipShowTimer = window.setTimeout(() => { _tipShowTimer = null; _tipShowAt(el, ms); }, TS_TIP_WARMUP_MS);
+    }
+
+    function _tipLeave(): void {
+        if (_tipShowTimer !== null) { clearTimeout(_tipShowTimer); _tipShowTimer = null; }
+        tipText = null;
+        if (_tipCoolTimer !== null) clearTimeout(_tipCoolTimer);
+        _tipCoolTimer = window.setTimeout(() => { _tipCoolTimer = null; _tipWarm = false; }, TS_TIP_COOLDOWN_MS);
     }
 
     // Safety net: if the component unmounts while a hover is active (e.g. view
     // switch), clear the store so the waveform doesn't keep a stale band.
-    // Also drop any pending deferred click so it doesn't fire post-unmount.
+    // Also drop any pending deferred click / tooltip timer so neither fires
+    // post-unmount.
     onDestroy(() => {
         tsHoveredElement.set(null);
         _cancelPendingClick();
+        if (_tipShowTimer !== null) clearTimeout(_tipShowTimer);
+        if (_tipCoolTimer !== null) clearTimeout(_tipCoolTimer);
     });
 
     // DEV-only highlight-transition perf A/B/C harness (remove before merge).
@@ -1178,7 +1250,7 @@
                         data-index={ph.index}
                         on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
                         on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
-                        on:mouseenter={() => onPhonemeEnter(ph.interval)}
+                        on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
                         on:mouseleave={onHoverLeave}
                         on:keydown={() => {}}
                         role="button"
@@ -1194,7 +1266,9 @@
                 class="pause-bridge"
                 data-pause-start={block.pauseBridge.startSec}
                 data-pause-end={block.pauseBridge.endSec}
-                title={block.pauseBridge.mark ? 'Stop sign' : 'Pause'}
+                role="group"
+                on:mouseenter={(e) => onCellEnter(e, block.pauseBridge.startSec, block.pauseBridge.endSec)}
+                on:mouseleave={onCellLeave}
             >
                 {#if block.pauseBridge.mark}
                     <span class="pause-waqf" style={waqfRenderStyle(block.pauseBridge.mark)}
@@ -1219,7 +1293,7 @@
             <div
                 class="mega-word"
                 role="group"
-                on:mouseenter={() => onWordEnter(block.word)}
+                on:mouseenter={(e) => onWordEnter(e, block.word)}
                 on:mouseleave={onHoverLeave}
             >{block.displayText}</div>
             {#if block.groups.length}
@@ -1233,10 +1307,18 @@
                                     <span
                                         class="mega-letter implicit dia-{f.status}"
                                         class:dia-timed={f.status !== 'dropped' && f.cellStart != null}
+                                        class:dia-seekable={f.cellStart != null}
                                         data-cell-timed={f.status !== 'dropped' && f.cellStart != null ? '1' : undefined}
                                         data-cell-start={f.cellStart}
                                         data-cell-end={f.cellEnd}
                                         data-word-index={block.wordIndex}
+                                        on:click={(e) => onCellClick(e, f.cellStart)}
+                                        on:dblclick|stopPropagation
+                                        on:mouseenter={(e) => onCellEnter(e, f.cellStart, f.cellEnd)}
+                                        on:mouseleave={onCellLeave}
+                                        on:keydown={() => {}}
+                                        role="button"
+                                        tabindex="-1"
                                     >{f.glyph}</span>
                                 {:else if f.isNull}
                                     <span
@@ -1265,7 +1347,7 @@
                                             onLetterClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
                                         on:dblclick={(e) =>
                                             onLetterDblClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
-                                        on:mouseenter={() => onLetterEnter(f.letterStart, f.letterEnd)}
+                                        on:mouseenter={(e) => onLetterEnter(e, f.letterStart, f.letterEnd)}
                                         on:mouseleave={onHoverLeave}
                                         on:keydown={() => {}}
                                         role="button"
@@ -1279,10 +1361,18 @@
                                         class="haraka-cell pin-{c.slot} dia-{c.status}"
                                         class:dia-inserted={c.inserted}
                                         class:dia-timed={c.status !== 'dropped' && c.cellStart != null}
+                                        class:dia-seekable={c.cellStart != null}
                                         data-cell-timed={c.status !== 'dropped' && c.cellStart != null ? '1' : undefined}
                                         data-cell-start={c.cellStart}
                                         data-cell-end={c.cellEnd}
                                         data-word-index={block.wordIndex}
+                                        on:click={(e) => onCellClick(e, c.cellStart)}
+                                        on:dblclick|stopPropagation
+                                        on:mouseenter={(e) => onCellEnter(e, c.cellStart, c.cellEnd)}
+                                        on:mouseleave={onCellLeave}
+                                        on:keydown={() => {}}
+                                        role="button"
+                                        tabindex="-1"
                                     >
                                         <span class="g" style={c.renderStyle}>{c.glyph}</span>
                                     </span>
@@ -1304,7 +1394,7 @@
                         data-index={ph.index}
                         on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
                         on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
-                        on:mouseenter={() => onPhonemeEnter(ph.interval)}
+                        on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
                         on:mouseleave={onHoverLeave}
                         on:keydown={() => {}}
                         role="button"
@@ -1316,4 +1406,7 @@
             </div>
         </div>
     {/each}
+    {#if tipText}
+        <div class="cell-tip" dir="ltr" style="left:{tipX}px; top:{tipY}px;" aria-hidden="true">{tipText}</div>
+    {/if}
 </div>
