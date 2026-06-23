@@ -79,6 +79,7 @@
     type LegendRow = { label: string; dur: string; tag: string };
     const TAJWEED: { title: string; rows: LegendRow[] }[] = [
         { title: 'Ghunnah', rows: [
+            { label: 'Ghunnah', dur: '2', tag: 'noon_ghunnah' },
             { label: 'Idgham Ghunnah', dur: '2', tag: 'idgham_ghunnah_noon' },
             { label: 'Idgham Shafawi', dur: '2', tag: 'idgham_shafawi' },
             { label: 'Ikhfaa', dur: '2', tag: 'ikhfaa_noon' },
@@ -196,7 +197,7 @@
         right: 0;
         left: auto;
         display: flex;
-        align-items: flex-start;
+        align-items: stretch;
         gap: var(--s-4);
         width: max-content;
         max-width: calc(100vw - var(--s-4) * 2);
@@ -217,11 +218,19 @@
     .guide-legend {
         flex: 0 0 auto;
         display: flex;
+        align-items: stretch;
         gap: var(--s-4);
         padding-left: var(--s-4);
         border-left: 1px solid var(--border-quiet);
     }
-    .tj-col { min-width: 0; }
+    /* Distribute the rows over the popup's full height so both legend columns
+     * line up with the taller shortcut columns instead of leaving a gap below. */
+    .tj-col {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
     .tj-row {
         display: flex;
         align-items: center;

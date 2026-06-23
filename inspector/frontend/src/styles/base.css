@@ -43,9 +43,9 @@
     --tj-idgham-ghunnah: oklch(0.75 0.16 150); /* green        */
     --tj-idgham-shafawi: oklch(0.70 0.14 168); /* green 2      */
     --tj-ghunnah: oklch(0.80 0.11 200);        /* cyan/teal    */
-    --tj-ikhfaa: oklch(0.72 0.13 250);         /* blue/purple 1 */
-    --tj-iqlab: oklch(0.67 0.15 288);          /* blue/purple 2 */
-    --tj-ikhfaa-shafawi: oklch(0.63 0.15 312); /* blue/purple 3 */
+    --tj-ikhfaa: oklch(0.67 0.15 288);         /* purple */
+    --tj-ikhfaa-shafawi: oklch(0.63 0.15 312); /* purple (mid) */
+    --tj-iqlab: oklch(0.52 0.17 315);          /* dark purple */
 }
 
 * {
