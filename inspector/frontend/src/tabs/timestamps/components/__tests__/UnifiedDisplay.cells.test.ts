@@ -813,4 +813,29 @@ describe('UnifiedDisplay — column alignment (per-group phoneme clusters)', () 
             .map((p) => p.querySelector('.ph-base')!.textContent);
         expect(all).toEqual(['q', 'u', 'l']); // exactly the word's three sounds, in order
     });
+
+    it('a qalqala echo (Q, not cell-indexed) rides its consonant column, not the word end', () => {
+        // قْد : ق sounds [q] then the qalqala echo [Q] (render-only — in NO cell's
+        // phonemeIndices), then د [d]. Q must sit in the ق column beside q, NOT jump
+        // to the last cluster (the regression this guards).
+        const intervals: PhonemeInterval[] = [
+            { phone: 'q', start: 0, end: 0.1 },
+            { phone: 'Q', start: 0.1, end: 0.15 },
+            { phone: 'd', start: 0.15, end: 0.3 },
+        ];
+        const word = w(
+            [{ char: 'ق', start: 0, end: 0.15, silent: false }, { char: 'د', start: 0.15, end: 0.3, silent: false }],
+            [
+                base(0, [0], { tag: 'qalqala' }), // ق owns only q (idx 0), not the Q echo
+                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null }, // sukūn
+                base(1, [2]), // د owns d (idx 2)
+            ],
+            [0, 1, 2], // Q (idx 1) is rendered but indexed by no cell
+        );
+        const { container } = mount([word], intervals);
+        const clusters = container.querySelectorAll<HTMLElement>('.phoneme-cluster');
+        expect(clusters.length).toBe(2);
+        expect(clusterPhones(clusters[0]!)).toEqual(['q', 'Q']); // echo rides its qāf
+        expect(clusterPhones(clusters[1]!)).toEqual(['d']);
+    });
 });

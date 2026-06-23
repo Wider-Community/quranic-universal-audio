@@ -694,34 +694,24 @@
 
     /** Bucket the word's rendered phonemes into their owning cell-group, so each
      *  group renders its sounds as a column-aligned cluster beneath its letter(s).
-     *  A phoneme is claimed by the first group (reading order) whose cells sound
-     *  it; one claimed by no group is appended to the last cluster so nothing is
-     *  ever dropped. Order within a cluster follows interval index (reading order).
-     *  The synthetic-base fallback (no `base` cells → no cell↔phoneme mapping)
-     *  has nothing to map, so its phonemes all fall to the last cluster without a
-     *  warning; an orphan in a properly-mapped word is a real bug and is logged. */
+     *  Each indexable phone is owned by the first group (reading order) whose cells
+     *  sound it. Walking the phonemes in reading order, an UN-owned phone — the
+     *  qalqala echo `Q` and any other render-only phone no cell indexes — rides the
+     *  PRECEDING consonant's group, so it stays beside its source instead of
+     *  jumping to the word end. Nothing is dropped; cluster order follows reading
+     *  order. (The synthetic-base fallback has no mapping, so all its phones fall
+     *  to the first group — order is still preserved.) */
     function _bucketPhonemes(groups: RenderedGroup[], phonemes: RenderedPhoneme[]): void {
         if (!groups.length) return;
-        const byIdx = new Map<number, RenderedPhoneme>();
-        for (const p of phonemes) byIdx.set(p.index, p);
-        const claimed = new Set<number>();
+        const owner = new Map<number, RenderedGroup>();
         for (const g of groups) {
-            for (const idx of g.phoneIdx) {
-                if (claimed.has(idx)) continue;
-                const p = byIdx.get(idx);
-                if (!p) continue; // bridged / geminate_end / not in the render set
-                claimed.add(idx);
-                g.phonemes.push(p);
-            }
-            g.phonemes.sort((a, b) => a.index - b.index);
+            for (const idx of g.phoneIdx) if (!owner.has(idx)) owner.set(idx, g);
         }
-        const orphans = phonemes.filter((p) => !claimed.has(p.index));
-        if (orphans.length) {
-            const anyMapped = groups.some((g) => g.phoneIdx.length > 0);
-            if (anyMapped) {
-                console.warn('[ts-align] phonemes not mapped to a cell-group:', orphans.map((o) => o.index));
-            }
-            groups[groups.length - 1]!.phonemes.push(...orphans);
+        let current: RenderedGroup | null = null;
+        for (const p of phonemes) {
+            const owned = owner.get(p.index);
+            if (owned) current = owned;
+            (owned ?? current ?? groups[0]!).phonemes.push(p);
         }
     }
 
