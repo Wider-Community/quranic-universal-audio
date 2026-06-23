@@ -518,12 +518,12 @@
             let letterIndex: number;
             if (c.chars) {
                 glyph = c.chars; // canonical text, shaddah already composed by the phonemizer
-                // A dropped consonant that CO-LIGHTS through a merger — the idgham-noon
-                // source noon: silent on its own (the merged sound is on the receiving
-                // letter) but lit together with it — renders as a NORMAL cell, not greyed,
-                // so both letters highlight as one. A genuinely silent letter (no share
-                // group) still greys.
-                silent = c.status === 'dropped' && c.shareGroup == null;
+                // Silent = sounds nothing (no own phoneme indices) AND isn't co-lit through
+                // a merger (no share group). Keyed on the indices, NOT a specific status, so
+                // every soundless carrier greys uniformly — a `dropped` otiose alef, a
+                // `shortened` iltiqāʾ carrier, etc. (A merger-receiving idgham-noon source
+                // noon has no own phones but a share group, so it stays a normal co-lit cell.)
+                silent = c.phonemeIndices.length === 0 && c.shareGroup == null;
                 lStart = start;
                 lEnd = end;
                 isNull = start == null;

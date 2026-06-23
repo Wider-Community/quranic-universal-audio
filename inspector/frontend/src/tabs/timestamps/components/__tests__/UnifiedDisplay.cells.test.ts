@@ -833,4 +833,28 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         );
         expect(mount([bN, bN1], bilaIv).container.querySelector('[data-tj]')).toBeNull();
     });
+
+    it('iltiqaa: the shortened carrier (no phones) greys like any silent letter', () => {
+        // ٱهْدِنَا ٱللَّه — the long ā of نَا is shortened (iltiqāʾ): its alef carrier
+        // sounds nothing (status=shortened, no phoneme indices). It must grey via the
+        // SAME .silent path as a dropped silent letter — silence keys on "no own
+        // phones + no share group", NOT on status==='dropped' (the bg-mismatch root cause).
+        const intervals: PhonemeInterval[] = [
+            { phone: 'n', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.2 },
+        ];
+        const word = w(
+            [{ char: 'ن', start: 0, end: 0.1, silent: false }, { char: 'ا', start: 0.1, end: 0.2, silent: false }],
+            [
+                base(0, [0], { chars: 'ن' }),
+                { chars: 'َ', role: 'haraka', status: 'shortened', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'iltiqaa', shareGroup: null },
+                { chars: 'ا', role: 'madd', status: 'shortened', phonemeIndices: [], sourceLetterIndex: 1, tag: 'iltiqaa', shareGroup: null },
+            ],
+            [0, 1],
+        );
+        const { container } = mount([word], intervals);
+        const alef = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .find((e) => e.textContent === 'ا')!;
+        expect(alef).toBeTruthy();
+        expect(alef.classList.contains('silent')).toBe(true);
+    });
 });
