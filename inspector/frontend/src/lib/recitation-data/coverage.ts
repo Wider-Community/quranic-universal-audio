@@ -1,8 +1,8 @@
 /**
  * Chapter coverage gaps for the recitation filmstrip — pure, client-side.
  *
- * Diffs the canonical recited words (the deduped `AnimUnit[]` the filmstrip
- * already holds) against the mushaf reference word counts (from the qpc verse
+ * Diffs the recited words (the `AnimUnit[]` the filmstrip already holds)
+ * against the mushaf reference word counts (from the qpc verse
  * index, `ts-source.loadQpcVerseIndex`) to classify every verse of a chapter:
  *   - `full`  — never recited (no units at all),
  *   - `words` — present but missing some reference word index,
@@ -50,7 +50,7 @@ export function computeChapterCoverage(
     }
     if (numVerses === 0) return EMPTY;
 
-    // Recited word indices per ayah, from the canonical units of this chapter.
+    // Recited word indices per ayah, from the units of this chapter.
     const recited = new Map<number, Set<number>>();
     for (const u of units) {
         if (u.surah !== chapter) continue;

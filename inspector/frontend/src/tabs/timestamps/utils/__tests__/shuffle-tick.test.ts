@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    occasionIndexAt,
     resolveShuffleTick,
     shouldFireShuffle,
-    verseAt,
-    type ShuffleTickVerse,
+    type ShuffleTickOccasion,
 } from '../shuffle-tick';
 
-// Three ayahs recited continuously → contiguous (each end == next start), so
+// Three occasions recited continuously → contiguous (each end == next start), so
 // the playhead crosses a seam with no gap. This is the shape that triggered the
 // short-verse leak.
-const CONTIGUOUS: ShuffleTickVerse[] = [
+const CONTIGUOUS: ShuffleTickOccasion[] = [
     { ref: '2:1', startMs: 0, endMs: 1000 },
     { ref: '2:2', startMs: 1000, endMs: 2000 },
     { ref: '2:3', startMs: 2000, endMs: 3000 },
@@ -19,12 +19,12 @@ const CONTIGUOUS: ShuffleTickVerse[] = [
 const GUARD = 40;
 
 describe('resolveShuffleTick', () => {
-    it('fires against the auditioned ayah even when a skipped frame overshoots past its end', () => {
+    it('fires against the auditioned occasion even when a skipped frame overshoots past its end', () => {
         // Auditioning 2:1 (ends at 1000). A starved rAF frame lands the playhead at
-        // 1400 — already inside the contiguous next ayah. The fire must still resolve
-        // against 2:1's end, NOT re-base onto 2:2 (which would leak 2:2 in full).
+        // 1400 — already inside the contiguous next occasion. The fire must still
+        // resolve against 2:1's end, NOT re-base onto 2:2 (which would leak it).
         const outcome = resolveShuffleTick({
-            verses: CONTIGUOUS,
+            occasions: CONTIGUOUS,
             swapInFlight: false,
             ms: 1400,
             armed: true,
@@ -36,9 +36,9 @@ describe('resolveShuffleTick', () => {
         expect(outcome).toEqual({ kind: 'fire' });
     });
 
-    it('fires within the early guard window before the exact ayah end', () => {
+    it('fires within the early guard window before the exact occasion end', () => {
         const outcome = resolveShuffleTick({
-            verses: CONTIGUOUS,
+            occasions: CONTIGUOUS,
             swapInFlight: false,
             ms: 970,
             armed: true,
@@ -50,9 +50,9 @@ describe('resolveShuffleTick', () => {
         expect(outcome).toEqual({ kind: 'fire' });
     });
 
-    it('advances focus to the containing ayah, without firing, before the guard window', () => {
+    it('advances focus to the containing occasion index, without firing, before the guard window', () => {
         const outcome = resolveShuffleTick({
-            verses: CONTIGUOUS,
+            occasions: CONTIGUOUS,
             swapInFlight: false,
             ms: 950,
             armed: true,
@@ -61,12 +61,12 @@ describe('resolveShuffleTick', () => {
             firedForCurrentFocus: false,
         });
 
-        expect(outcome).toEqual({ kind: 'focus', ref: '2:1' });
+        expect(outcome).toEqual({ kind: 'focus', idx: 0 });
     });
 
-    it('does not re-fire for an ayah it already fired for; advances focus instead', () => {
+    it('does not re-fire for an occasion it already fired for; advances focus instead', () => {
         const outcome = resolveShuffleTick({
-            verses: CONTIGUOUS,
+            occasions: CONTIGUOUS,
             swapInFlight: false,
             ms: 1400,
             armed: true,
@@ -75,12 +75,12 @@ describe('resolveShuffleTick', () => {
             firedForCurrentFocus: true,
         });
 
-        expect(outcome).toEqual({ kind: 'focus', ref: '2:2' });
+        expect(outcome).toEqual({ kind: 'focus', idx: 1 });
     });
 
     it('does not fire when shuffle is disarmed; tracks focus normally', () => {
         const outcome = resolveShuffleTick({
-            verses: CONTIGUOUS,
+            occasions: CONTIGUOUS,
             swapInFlight: false,
             ms: 1400,
             armed: false,
@@ -89,22 +89,19 @@ describe('resolveShuffleTick', () => {
             firedForCurrentFocus: false,
         });
 
-        expect(outcome).toEqual({ kind: 'focus', ref: '2:2' });
+        expect(outcome).toEqual({ kind: 'focus', idx: 1 });
     });
 });
 
 describe('resolveShuffleTick — cross-source chapter swap window', () => {
     // After a cross-source jump, the shared player points at the NEW chapter (so
-    // the playhead time is the new chapter's) while `verses` still describes the
+    // the playhead time is the new chapter's) while `occasions` still describes the
     // OLD chapter, until its data loads. Every frame in that window must hold:
-    // firing again or focusing an old-chapter verse is the double-fire / wrong-
+    // firing again or focusing an old-chapter occasion is the double-fire / wrong-
     // verse-flash bug.
-    it('holds (idle) when a frame would otherwise fire, even with the once-per-ayah guard disarmed', () => {
-        // Worst case: the guard is already disarmed (firedForCurrentFocus false) and
-        // the new playhead (1400) has overshot the OLD 2:1 end (1000) — exactly the
-        // condition that produced the second mid-recitation jump.
+    it('holds (idle) when a frame would otherwise fire, even with the once-per-occasion guard disarmed', () => {
         const outcome = resolveShuffleTick({
-            verses: CONTIGUOUS, // OLD chapter
+            occasions: CONTIGUOUS, // OLD chapter
             swapInFlight: true,
             ms: 1400, // NEW-chapter time
             armed: true,
@@ -116,11 +113,11 @@ describe('resolveShuffleTick — cross-source chapter swap window', () => {
         expect(outcome).toEqual({ kind: 'idle' });
     });
 
-    it('holds (idle) instead of focusing an old-chapter verse mid-swap', () => {
+    it('holds (idle) instead of focusing an old-chapter occasion mid-swap', () => {
         const outcome = resolveShuffleTick({
-            verses: CONTIGUOUS,
+            occasions: CONTIGUOUS,
             swapInFlight: true,
-            ms: 500, // would normally focus 2:1
+            ms: 500, // would normally focus index 0
             armed: false,
             focusEndMs: 1000,
             guardMs: GUARD,
@@ -132,7 +129,7 @@ describe('resolveShuffleTick — cross-source chapter swap window', () => {
 
     it('resumes normal firing once the swap completes', () => {
         const outcome = resolveShuffleTick({
-            verses: CONTIGUOUS,
+            occasions: CONTIGUOUS,
             swapInFlight: false,
             ms: 1400,
             armed: true,
@@ -158,7 +155,7 @@ describe('shouldFireShuffle', () => {
         ).toBe(true);
     });
 
-    it('does not fire when no verse is loaded (null end)', () => {
+    it('does not fire when nothing is loaded (null end)', () => {
         expect(
             shouldFireShuffle({
                 armed: true,
@@ -171,30 +168,30 @@ describe('shouldFireShuffle', () => {
     });
 });
 
-describe('verseAt', () => {
-    it('returns the ayah whose span contains the playhead', () => {
-        expect(verseAt(CONTIGUOUS, 1500)).toBe('2:2');
+describe('occasionIndexAt', () => {
+    it('returns the index of the occasion whose span contains the playhead', () => {
+        expect(occasionIndexAt(CONTIGUOUS, 1500)).toBe(1);
     });
 
-    it('returns the nearest preceding ayah when the playhead sits in a gap', () => {
-        const gapped: ShuffleTickVerse[] = [
+    it('returns the nearest preceding occasion index when the playhead sits in a gap', () => {
+        const gapped: ShuffleTickOccasion[] = [
             { ref: '7:1', startMs: 0, endMs: 1000 },
             { ref: '7:2', startMs: 2000, endMs: 3000 },
         ];
 
-        expect(verseAt(gapped, 1500)).toBe('7:1');
+        expect(occasionIndexAt(gapped, 1500)).toBe(0);
     });
 
-    it('returns the first ayah when the playhead precedes all spans', () => {
-        const offset: ShuffleTickVerse[] = [
+    it('returns the first occasion index when the playhead precedes all spans', () => {
+        const offset: ShuffleTickOccasion[] = [
             { ref: '9:1', startMs: 100, endMs: 1000 },
             { ref: '9:2', startMs: 1000, endMs: 2000 },
         ];
 
-        expect(verseAt(offset, 50)).toBe('9:1');
+        expect(occasionIndexAt(offset, 50)).toBe(0);
     });
 
-    it('returns null when there are no verses', () => {
-        expect(verseAt([], 100)).toBeNull();
+    it('returns -1 when there are no occasions', () => {
+        expect(occasionIndexAt([], 100)).toBe(-1);
     });
 });

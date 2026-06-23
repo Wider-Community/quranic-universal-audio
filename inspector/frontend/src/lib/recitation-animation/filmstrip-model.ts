@@ -2,9 +2,9 @@
  * Filmstrip cell model — recitation-correct geometry + per-verse word fractions.
  *
  * The ayah filmstrip is a verse ruler driven by the actual recitation. This
- * derives, from the chapter's deduped `units`, one `VerseCell` per ayah (in
+ * derives, from the chapter's recited `units`, one `VerseCell` per ayah (in
  * reading order) carrying:
- *   - `canonDurSec` — the verse's canonical recited length (sum of each word's
+ *   - `canonDurSec` — the verse's recited length (sum of each word's
  *     FIRST-occurrence duration), used to SIZE the cell. Never inflated by a
  *     loopback's later occurrence (unlike `AyahBoundary.endMs = max(end)`).
  *   - `words` — a fraction table: each word's `[frac0, frac1)` position within
@@ -94,9 +94,9 @@ const EMPTY_MODEL: FilmstripModel = {
     cellOfUnit: new Int32Array(0),
 };
 
-/** Each word's canonical duration = its FIRST occurrence's span (seconds). A
- *  repeat re-emits the word with a new interval, but the first is the canonical
- *  reading-order length; `>= eps` so a zero-length word still gets a slot. */
+/** Each word's cell duration = its FIRST occurrence's span (seconds). A repeat
+ *  re-emits the word with a new interval, but the first is the reading-order
+ *  length; `>= eps` so a zero-length word still gets a slot. */
 function canonDur(u: AnimUnit): number {
     const iv = u.intervals[0];
     if (!iv) return 0.001;
@@ -122,9 +122,9 @@ function placeholderCell(surah: number, ayah: number): VerseCell {
 }
 
 /**
- * Build the filmstrip cell model from the chapter's deduped units.
+ * Build the filmstrip cell model from the chapter's recited units.
  *
- * @param units    deduped `AnimUnit[]` in reading order (from `buildChapterRecitation`)
+ * @param units    recited `AnimUnit[]` in reading order (from `buildChapterRecitation`)
  * @param weighting word-fraction weighting (`duration` default, `equal` swappable)
  * @param coverage optional chapter coverage. When supplied, present cells are
  *   tagged `none`/`words` and a `full` placeholder cell is inserted for each
