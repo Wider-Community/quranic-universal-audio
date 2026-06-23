@@ -34,18 +34,19 @@
 }
 
 
-/* Unified display — centered word rows with one uniform, capped gap. Each
-   `.word-unit` is an inline-flex atom (a single word, or a bridge/pause-paired
-   word pair/chain with the connector tile between). The flex `gap` is identical on
-   every row and between every unit, so the verse keeps one consistent rhythm and no
-   row can open a too-wide gap; `justify-content: center` keeps equal inset on both
-   sides of the container. */
+/* Unified display — centered word rows sharing ONE uniform, capped column gap.
+   Each `.word-unit` is an inline-flex atom (a single word, or a bridge/pause-paired
+   word pair/chain with the connector tile between). `--mega-row-gap` is sized by
+   `recomputeRowGap` in UnifiedDisplay to flush the densest wrapped row, clamped to
+   [16px, 40px]: dense rows fill the width, sparser rows still center but with a
+   smaller edge, and the gap can never blow out. Vertical row-gap stays fixed. */
 .unified-display {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
     align-items: flex-end;
-    gap: var(--mega-line-gap, 16px);
+    column-gap: var(--mega-row-gap, 16px);
+    row-gap: var(--mega-line-gap, 16px);
     padding: 20px;
     background: #16213e;
     border-radius: 10px;
@@ -186,9 +187,11 @@
     gap: var(--haraka-group-gap, 7px);
 }
 
-/* A GROUP mini-grid: `--gcols` grapheme columns (set inline), two rows. A column
-   sizes to the wider of its grapheme cell or its phoneme(s); `justify-items:
-   center` centres each cell in its column so the grapheme caps its sound. */
+/* A GROUP mini-grid: `--gcols` grapheme columns (set inline), two rows. Each
+   column is `max-content` → it sizes to the WIDER of its grapheme cell (row 1) or
+   its phoneme cluster (row 2), so a multi-sound mark (tanwīn) reserves its full
+   width and never overlaps the neighbour — in every display mode, including
+   letters-hidden (columns then size to the clusters alone). */
 .cell-group {
     display: grid;
     grid-template-columns: repeat(var(--gcols, 1), max-content);
@@ -206,29 +209,23 @@
 /* share-group cells co-light via shared timing — no border/outline around the
    combined group (the synchronized highlight is the only affordance). */
 
-/* A phoneme cluster sits under its grapheme column (row 2), positioned by its
-   inline `grid-column`. Two regimes by which grapheme it's under:
-   - under a BASE letter (default): the cluster sizes its column, so a wide sound
-     grows the BASE column and the letter centres over its sound ("size the base,
-     centre the wider row"). The narrower of letter/sound centres under the other.
-   - under a small MARK (`.under-mark`): `width: 0` so the sound NEVER widens the
-     mark's column — the mark stays flush against its base (the hard rule); the
-     sound centres on the mark, overflowing a narrow mark's slot.
-   A grapheme with no sound (silent letter, merged-away consonant) gets no cluster
-   — a reserved empty slot keeps the columns aligned. */
+/* Row-1 cells anchor toward the group's internal seam (`justify-self` set inline
+   per column via `colJustify`) so the base and its diacritic stay flush even when
+   a wide sound grows the column: the narrow mark is pinned to the base edge and
+   the extra column width opens on the OUTER side, under the sound. Phoneme
+   clusters (row 2) centre in their column — when a cluster is the widest item it
+   fills the column, so its edge sound lands directly under the seam-pinned mark;
+   when narrower it centres under the (centred) glyph. A grapheme with no sound
+   (silent letter, merged-away consonant) gets no cluster — its reserved empty slot
+   keeps the columns aligned. */
 .cell-group > .phoneme-cluster {
     grid-row: 2;
     justify-self: center;
-    overflow: visible;
     display: flex;
     direction: rtl;
     align-items: center;
     justify-content: center;
     gap: var(--phoneme-box-gap, 2px);
-}
-.cell-group > .phoneme-cluster.under-mark {
-    width: 0;
-    min-width: 0;
 }
 
 /* Group-hover spotlight: hovering any cell softly tints its whole column (the
@@ -741,6 +738,12 @@
 }
 .mega-grid.no-phonemes .phoneme-cluster {
     display: none;
+}
+/* With a whole band hidden the empty row track would still claim the row-gap —
+   collapse it so the remaining band sits flush under the word. */
+.mega-grid.no-letters .cell-group,
+.mega-grid.no-phonemes .cell-group {
+    row-gap: 0;
 }
 /* The cell-less fallback row honours the phonemes toggle directly. */
 .mega-phonemes.hidden {

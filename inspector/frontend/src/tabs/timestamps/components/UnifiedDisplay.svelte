@@ -13,7 +13,7 @@
      * Scoped styles use `:global()` selectors for the dynamic classes.
      */
 
-    import { onDestroy, tick, untrack } from 'svelte';
+    import { onDestroy, onMount, tick, untrack } from 'svelte';
     import { get } from 'svelte/store';
 
     import { ensureDashCovering } from '../../../lib/playback/dash-covering';
@@ -228,10 +228,73 @@
         $loadedVerse?.data.intervals ?? [],
     );
 
-    // Group blocks into unbreakable justification units (bridge-linked words stay
-    // together; a trailing pause cell anchors its own word). The row justifies
-    // BETWEEN units — see `.word-unit` / `.unified-display` in timestamps.css.
+    // Group blocks into unbreakable `.word-unit`s (a bridge OR pause connector
+    // pairs its two words into one unit). Centered rows share ONE uniform gap —
+    // see `.word-unit` / `.unified-display` in timestamps.css and `recomputeRowGap`.
     $: units = groupUnits(rendered);
+
+    // --- Uniform, capped inter-unit gap -------------------------------------
+    // Centered rows with a flat gap leave wide edges on sparse rows. Instead size
+    // ONE shared column-gap to flush the DENSEST wrapped row (the gap that exactly
+    // fills the row with the least slack), clamped to [MIN, MAX]: dense rows fill
+    // the width, sparser rows still center but with a smaller edge, and the gap
+    // can never blow out. Re-measured on content/tier/size/font changes.
+    const ROW_GAP_MIN = 16; // mirrors --mega-line-gap (base.css)
+    const ROW_GAP_MAX = 40; // cap so a sparse row never opens an absurd gap
+    let rowGapPx = ROW_GAP_MIN;
+
+    function setRowGap(g: number): void {
+        if (Math.abs(g - rowGapPx) > 0.5) rowGapPx = g;
+    }
+
+    /** Size the shared column-gap to the largest value that won't overflow any
+     *  wrapped row, clamped to [MIN, MAX]. Units bottom-align (flex-end), so a row
+     *  is the set of units sharing a rendered bottom edge. */
+    function recomputeRowGap(): void {
+        if (!rootEl || $loadedVerse === null) return;
+        const unitEls = rootEl.querySelectorAll<HTMLElement>('.word-unit');
+        if (unitEls.length < 2) {
+            setRowGap(ROW_GAP_MIN);
+            return;
+        }
+        const cs = getComputedStyle(rootEl);
+        const innerW =
+            rootEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        const rows = new Map<number, { free: number; n: number }>();
+        unitEls.forEach((u) => {
+            const r = u.getBoundingClientRect();
+            const key = Math.round(r.bottom);
+            const row = rows.get(key) ?? { free: innerW, n: 0 };
+            row.free -= r.width;
+            row.n += 1;
+            rows.set(key, row);
+        });
+        let minFlush = Infinity;
+        rows.forEach(({ free, n }) => {
+            if (n > 1) minFlush = Math.min(minFlush, free / (n - 1));
+        });
+        setRowGap(
+            Number.isFinite(minFlush)
+                ? Math.max(ROW_GAP_MIN, Math.min(minFlush, ROW_GAP_MAX))
+                : ROW_GAP_MIN,
+        );
+    }
+
+    // Re-measure after the DOM reflects a content or tier-visibility change (the
+    // leading refs are the tracked reactive deps); container resize / web-font swap
+    // are caught by the ResizeObserver + fonts.ready below.
+    function scheduleGapRecompute(): void {
+        void tick().then(recomputeRowGap);
+    }
+    $: units, $showLetters, $showPhonemes, $showTranslations, scheduleGapRecompute();
+
+    onMount(() => {
+        if (typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(() => recomputeRowGap());
+        ro.observe(rootEl);
+        if (document.fonts) void document.fonts.ready.then(() => recomputeRowGap());
+        return () => ro.disconnect();
+    });
 
     // Reset previous-index cache when structure changes (new verse, etc.)
     $: rendered, (_prevActiveWordIdx = -1);
@@ -772,6 +835,19 @@
             if (!m) continue;
             for (const [ci, phs] of m) g.phonemeSpans.push({ phonemes: phs, colStart: ci, span: 1 });
         }
+    }
+
+    /** Where a row-1 grapheme cell anchors within its (possibly sound-widened)
+     *  column: toward the group's internal seam so a base and its diacritic stay
+     *  flush even when a wide sound grows the column — the narrow mark is pinned to
+     *  the base edge and the extra width opens on the OUTER side under the sound.
+     *  Single-column groups centre. RTL grid: `end` = left, `start` = right,
+     *  grid-column 1 = rightmost. */
+    function colJustify(ci: number, n: number): 'center' | 'start' | 'end' {
+        if (n <= 1) return 'center';
+        if (ci === 0) return 'end'; // rightmost col → pack left toward the seam
+        if (ci === n - 1) return 'start'; // leftmost col → pack right toward the seam
+        return 'center';
     }
 
     /** Build the per-word `RenderedBlock[]` for the analysis view: cross-word
@@ -1447,6 +1523,7 @@
     bind:this={rootEl}
     class="unified-display"
     dir="rtl"
+    style="--mega-row-gap: {rowGapPx}px"
     class:hidden={$loadedVerse === null}
 >
     {#each units as unit (unit.key)}
@@ -1566,7 +1643,7 @@
                                             class="mega-letter implicit dia-{f.status}"
                                             class:dia-timed={f.status !== 'dropped' && f.cellStart != null}
                                             class:dia-seekable={f.cellStart != null}
-                                            style="grid-column:{ci + 1}"
+                                            style="grid-column:{ci + 1}; justify-self:{colJustify(ci, grp.cols.length)}"
                                             data-cell-timed={f.status !== 'dropped' && f.cellStart != null ? '1' : undefined}
                                             data-cell-start={f.cellStart}
                                             data-cell-end={f.cellEnd}
@@ -1583,7 +1660,7 @@
                                         <span
                                             class="mega-letter null-ts"
                                             class:silent={f.silent}
-                                            style="grid-column:{ci + 1}"
+                                            style="grid-column:{ci + 1}; justify-self:{colJustify(ci, grp.cols.length)}"
                                             on:click|stopPropagation
                                             on:keydown={() => {}}
                                             role="button"
@@ -1596,7 +1673,7 @@
                                             class="mega-letter"
                                             class:silent={f.silent}
                                             class:dia-timed={f.cellStart != null && (!f.silent || f.shareGroup != null)}
-                                            style="grid-column:{ci + 1}"
+                                            style="grid-column:{ci + 1}; justify-self:{colJustify(ci, grp.cols.length)}"
                                             data-cell-timed={f.cellStart != null && (!f.silent || f.shareGroup != null) ? '1' : undefined}
                                             data-cell-start={f.cellStart}
                                             data-cell-end={f.cellEnd}
@@ -1617,7 +1694,7 @@
                                     {/if}
                                 {:else if col.small}
                                     {@const c = col.small}
-                                    <span class="dia-track" style="grid-column:{ci + 1}">
+                                    <span class="dia-track" style="grid-column:{ci + 1}; justify-self:{colJustify(ci, grp.cols.length)}">
                                         <span
                                             class="haraka-cell pin-{c.slot} dia-{c.status}"
                                             class:dia-inserted={c.inserted}
@@ -1643,7 +1720,6 @@
                             {#each grp.phonemeSpans as ps}
                                 <span
                                     class="phoneme-cluster"
-                                    class:under-mark={grp.cols[ps.colStart]?.small != null}
                                     data-group-index={gi}
                                     style="grid-column:{ps.colStart + 1} / span {ps.span}"
                                 >
