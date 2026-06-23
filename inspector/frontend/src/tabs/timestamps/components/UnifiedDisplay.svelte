@@ -890,31 +890,31 @@
         return blocks;
     }
 
-    /** Group the rendered blocks into unbreakable `.word-unit`s for justified
-     *  rows. A `block.bridge` always links the block to its predecessor (idgham /
-     *  iltiqaa), so bridged words — and consecutive-idgham chains — join one unit
-     *  with the bridge tile between them. A `block.pauseBridge` is the silence
-     *  before the block carrying the PRECEDING word's waqf, so it's appended as
-     *  the trailing part of that preceding word's unit (the stop-cell anchor),
-     *  never the next word's. Bridge and pause are mutually exclusive at a
-     *  boundary; a bridge join wins if both ever appear. */
+    /** Group the rendered blocks into unbreakable `.word-unit`s for centered,
+     *  uniform-gap rows. A `block.bridge` (idgham / iltiqaa) and a `block.pauseBridge`
+     *  (inter-word silence) are both CONNECTORS linking the block to its
+     *  predecessor: each pairs the two words into one unit with the connector tile
+     *  between them, so neither a bridged pair/chain nor a word+stop-cell splits
+     *  across rows. Bridge and pause are mutually exclusive at a boundary (a merger
+     *  is contiguous, a pause is a gap); a bridge wins if both ever appear. */
     function groupUnits(blocks: RenderedBlock[]): RenderedUnit[] {
         const units: RenderedUnit[] = [];
         let cur: RenderedUnit | null = null;
         for (let i = 0; i < blocks.length; i++) {
             const block = blocks[i]!;
-            const joins = block.bridge != null && cur != null && cur.lastBlockIndex === i - 1;
-            if (block.pauseBridge && !joins && cur != null) {
-                cur.parts.push({ kind: 'pause', pause: block.pauseBridge }); // trails prev word
-            }
+            const connector: RenderedUnitPart | null = block.bridge
+                ? { kind: 'bridge', bridge: block.bridge, wordIndex: block.wordIndex }
+                : block.pauseBridge
+                  ? { kind: 'pause', pause: block.pauseBridge }
+                  : null;
+            const joins = connector != null && cur != null && cur.lastBlockIndex === i - 1;
             if (joins) {
-                cur!.parts.push({ kind: 'bridge', bridge: block.bridge!, wordIndex: block.wordIndex });
-                cur!.parts.push({ kind: 'block', block });
+                cur!.parts.push(connector!, { kind: 'block', block });
                 cur!.lastBlockIndex = i;
             } else {
                 cur = { key: block.wordIndex, parts: [], lastBlockIndex: i };
-                // Defensive: a bridge with no joinable predecessor still renders.
-                if (block.bridge) cur.parts.push({ kind: 'bridge', bridge: block.bridge, wordIndex: block.wordIndex });
+                // Defensive: a connector with no joinable predecessor still renders.
+                if (connector) cur.parts.push(connector);
                 cur.parts.push({ kind: 'block', block });
                 units.push(cur);
             }
@@ -1643,6 +1643,7 @@
                             {#each grp.phonemeSpans as ps}
                                 <span
                                     class="phoneme-cluster"
+                                    class:under-mark={grp.cols[ps.colStart]?.small != null}
                                     data-group-index={gi}
                                     style="grid-column:{ps.colStart + 1} / span {ps.span}"
                                 >
@@ -1698,7 +1699,7 @@
         </div>
         {/if}
         {/each}
-        </div>{' '}
+        </div>
     {/each}
     {#if tipText}
         <div class="cell-tip" dir="ltr" style="left:{tipX}px; top:{tipY}px;" aria-hidden="true">{tipText}</div>

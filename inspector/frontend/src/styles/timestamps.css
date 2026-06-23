@@ -34,20 +34,18 @@
 }
 
 
-/* Unified display — justified word rows. Each `.word-unit` is an inline-flex atom
-   (a single word, a bridge-linked pair/chain, or a word + its trailing stop-cell).
-   Interior wrapped rows justify to flush BOTH container edges with even gaps between
-   units; the last row and single-row verses stay start-aligned (text-align-last).
-   The atoms are separated by a space the justify distributes (see the `{' '}` in the
-   template) — word-spacing sets its minimum so a non-justified row keeps real gaps. */
+/* Unified display — centered word rows with one uniform, capped gap. Each
+   `.word-unit` is an inline-flex atom (a single word, or a bridge/pause-paired
+   word pair/chain with the connector tile between). The flex `gap` is identical on
+   every row and between every unit, so the verse keeps one consistent rhythm and no
+   row can open a too-wide gap; `justify-content: center` keeps equal inset on both
+   sides of the container. */
 .unified-display {
-    /* justify interior rows; the last row stays start-aligned via the default
-       `text-align-last: auto` (which resolves to start under justify). We must NOT
-       set `text-align-last` here — it's inherited, and would force every single-line
-       `.mega-word` / translation to start instead of its own `text-align: center`. */
-    text-align: justify;
-    word-spacing: var(--mega-line-gap, 16px);
-    line-height: 0; /* drop the inline strut so rows pack to the unit height */
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-end;
+    gap: var(--mega-line-gap, 16px);
     padding: 20px;
     background: #16213e;
     border-radius: 10px;
@@ -57,18 +55,14 @@
     display: none;
 }
 
-/* A justification atom: word(s) + optional bridge/pause laid out as ONE inline-flex
-   row that never wraps internally — so a bridged pair never splits across rows and a
-   word+stop-cell stays glued (the stop cell its trailing flush anchor). Bottom-aligned
-   across the row; the internal gap keeps the word↔bridge/pause spacing while the row
-   justifies BETWEEN units. */
+/* A layout atom: word(s) + optional bridge/pause connector laid out as ONE
+   inline-flex row that never wraps internally — so a bridged pair and a
+   word+pause+word triple stay glued on one row. Bottom-aligned; the internal gap
+   sets word↔connector spacing (a pause tile nestles tighter via its own margin). */
 .word-unit {
     display: inline-flex;
     align-items: flex-end;
-    vertical-align: bottom;
-    line-height: normal;
     gap: var(--mega-line-gap, 16px);
-    margin-bottom: var(--mega-line-gap, 16px);
 }
 
 /* Mega blocks */
@@ -212,17 +206,18 @@
 /* share-group cells co-light via shared timing — no border/outline around the
    combined group (the synchronized highlight is the only affordance). */
 
-/* A phoneme cluster = the sound(s) under ONE grapheme column (row 2), positioned
-   by its inline `grid-column`. `width: 0` is deliberate: the phonemes must NOT
-   widen the grapheme column — otherwise a diacritic floats off its base. So the
-   column stays grapheme-sized (the mark sits flush against its base, gap 0) and
-   the phoneme centres on the column centre, overflowing a narrow mark's slot. A
-   grapheme with no sound (silent letter, merged-away consonant) gets no cluster —
-   a reserved empty slot keeps the columns aligned. */
+/* A phoneme cluster sits under its grapheme column (row 2), positioned by its
+   inline `grid-column`. Two regimes by which grapheme it's under:
+   - under a BASE letter (default): the cluster sizes its column, so a wide sound
+     grows the BASE column and the letter centres over its sound ("size the base,
+     centre the wider row"). The narrower of letter/sound centres under the other.
+   - under a small MARK (`.under-mark`): `width: 0` so the sound NEVER widens the
+     mark's column — the mark stays flush against its base (the hard rule); the
+     sound centres on the mark, overflowing a narrow mark's slot.
+   A grapheme with no sound (silent letter, merged-away consonant) gets no cluster
+   — a reserved empty slot keeps the columns aligned. */
 .cell-group > .phoneme-cluster {
     grid-row: 2;
-    width: 0;
-    min-width: 0;
     justify-self: center;
     overflow: visible;
     display: flex;
@@ -230,6 +225,10 @@
     align-items: center;
     justify-content: center;
     gap: var(--phoneme-box-gap, 2px);
+}
+.cell-group > .phoneme-cluster.under-mark {
+    width: 0;
+    min-width: 0;
 }
 
 /* Group-hover spotlight: hovering any cell softly tints its whole column (the

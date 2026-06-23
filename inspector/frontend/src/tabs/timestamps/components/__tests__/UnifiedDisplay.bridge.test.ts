@@ -70,8 +70,8 @@ function mount(words: TsWord[], ivals: PhonemeInterval[]) {
 function readSequence(container: HTMLElement) {
     const root = container.querySelector('.unified-display')!;
     const seq: Array<{ kind: string; text?: string; phon?: string[] }> = [];
-    // Each `.word-unit` wraps an unbreakable run (bridge-linked words + a trailing
-    // pause cell); descend to its bridge/block parts in document order.
+    // Each `.word-unit` wraps an unbreakable run (words paired by a bridge or pause
+    // connector); descend to its bridge/block parts in document order.
     const parts = Array.from(root.querySelectorAll('.word-unit')).flatMap((u) => Array.from(u.children));
     for (const el of parts) {
         if (el.classList.contains('crossword-bridge')) {
@@ -316,19 +316,21 @@ describe('UnifiedDisplay — word-unit grouping (justification atoms)', () => {
         expect(units[0]!.querySelector('.crossword-bridge')).toBeTruthy();
     });
 
-    it('trails a pause cell on its own word and starts a new unit for the next word', () => {
-        // word A (0–0.5), silence, word B (0.8–1.2): the pause cell is A's unit's
-        // trailing child (the flush anchor); B is a separate unit with no pause.
+    it('pairs a word and the next across a pause into ONE unit with the stop cell between', () => {
+        // word A (0–0.5), silence, word B (0.8–1.2): the pause connector joins A and B
+        // into one unbreakable unit with the stop cell sitting BETWEEN the two words.
         const ivals = intervals([{ sym: 'a', start: 0, end: 0.5 }, { sym: 'b', start: 0.8, end: 1.2 }]);
         const { container } = mount(
             [timedWord('2:1:1', 'ا', 0, 0.5, [0]), timedWord('2:1:2', 'ب', 0.8, 1.2, [1])],
             ivals,
         );
         const units = container.querySelectorAll<HTMLElement>('.word-unit');
-        expect(units.length).toBe(2);
-        expect(units[0]!.querySelector('.pause-bridge')).toBeTruthy();
-        expect(units[0]!.lastElementChild!.classList.contains('pause-bridge')).toBe(true);
-        expect(units[1]!.querySelector('.pause-bridge')).toBeNull();
+        expect(units.length).toBe(1); // the pause pairs its two words on one row
+        expect(units[0]!.querySelectorAll('.mega-block').length).toBe(2);
+        const kids = Array.from(units[0]!.children);
+        expect(kids[0]!.classList.contains('mega-block')).toBe(true);
+        expect(kids[1]!.classList.contains('pause-bridge')).toBe(true); // stop cell between
+        expect(kids[2]!.classList.contains('mega-block')).toBe(true);
     });
 
     it('puts plain contiguous words in separate units', () => {
