@@ -784,7 +784,18 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const dagger = c.querySelector<HTMLElement>('.mega-letter.implicit')!;
         expect(dagger.dataset.tj).toBe('1');
         expect(dagger.style.getPropertyValue('--tj-badge')).toContain('madd-arid');
-        expect(c.querySelector<HTMLElement>('.haraka-cell')!.dataset.tj).toBeUndefined();
+        // the dropped fatḥa STILL groups + co-lights with the arid dagger (it must NOT
+        // fall back to the lām's base group greyed — daggerBySrc keys off the implicit
+        // madd, not the allah_dagger_alef tag, so the arid waqf case still co-lights).
+        const vowel = Array.from(c.querySelectorAll<HTMLElement>('.cell-group')).find(
+            (g) => g.querySelector('.mega-letter.implicit'),
+        )!;
+        const fatha = vowel.querySelector<HTMLElement>('.haraka-cell')!;
+        expect(fatha).toBeTruthy();
+        expect(fatha.classList.contains('dia-dropped')).toBe(false); // co-lit, not greyed
+        expect(fatha.dataset.cellTimed).toBe('1');
+        expect(fatha.dataset.cellStart).toBe('0.15'); // the dagger's ā interval
+        expect(fatha.dataset.tj).toBeUndefined(); // colour is carrier-only
     });
 
     it('no badge for ṭabīʿī madd, nor for bila-ghunnah idgham + its receiver', () => {
