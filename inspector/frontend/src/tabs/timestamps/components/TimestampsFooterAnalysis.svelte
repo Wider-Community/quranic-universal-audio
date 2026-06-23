@@ -94,6 +94,26 @@
             { label: 'Leen', dur: '2/4/6', tag: 'madd_leen' },
         ] },
     ];
+
+    // Keep the drop-up on-screen: it's anchored to the help button, but on a
+    // narrow window the footer overflows and the button slides off the right
+    // edge, dragging the popup (and the Madd column) with it. Shift it left so
+    // its right edge clears the viewport, and only cap its width as a last resort.
+    function keepInView(node: HTMLElement) {
+        const margin = 8;
+        const place = (): void => {
+            node.style.right = '0px';
+            node.style.maxWidth = '';
+            const overflowRight = node.getBoundingClientRect().right - (window.innerWidth - margin);
+            node.style.right = `${Math.max(0, overflowRight)}px`;
+            if (node.getBoundingClientRect().left < margin) {
+                node.style.maxWidth = `${window.innerWidth - margin * 2}px`;
+            }
+        };
+        place();
+        window.addEventListener('resize', place);
+        return { destroy: () => window.removeEventListener('resize', place) };
+    }
 </script>
 
 <div class="tfa" role="group" aria-label="Analysis tiers">
@@ -118,7 +138,7 @@
             onclick={() => (guideOpen = !guideOpen)}
         ><ControlIcon name="help" size={15} /></button>
         {#if guideOpen}
-            <div class="guide-pop">
+            <div class="guide-pop" use:keepInView>
                 <div class="guide-shortcuts">
                     {#each SHORTCUTS as sec (sec.title)}
                         <div class="guide-sec">
@@ -198,9 +218,8 @@
         left: auto;
         display: flex;
         align-items: stretch;
-        gap: var(--s-4);
+        gap: var(--s-3);
         width: max-content;
-        max-width: calc(100vw - var(--s-4) * 2);
         background: var(--panel);
         border: 1px solid var(--border-default);
         border-radius: var(--r-3);
@@ -219,8 +238,8 @@
         flex: 0 0 auto;
         display: flex;
         align-items: stretch;
-        gap: var(--s-4);
-        padding-left: var(--s-4);
+        gap: var(--s-3);
+        padding-left: var(--s-3);
         border-left: 1px solid var(--border-quiet);
     }
     /* Distribute the rows over the popup's full height so both legend columns
