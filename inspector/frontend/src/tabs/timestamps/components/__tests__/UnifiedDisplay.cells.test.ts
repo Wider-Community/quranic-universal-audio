@@ -455,6 +455,54 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(fatha.dataset.cellStart).toBe('0.2');
     });
 
+    it('madd-ʿiwaḍ at hamza waqf works with VERSE-GLOBAL indices (iwaḍ word is 2nd)', () => {
+        // Production indices are verse-global, not word-local: ...مَآءً as the 2nd
+        // word, its phones offset past word 1. Proves iwadIv resolves at the global
+        // index so the dropped fatḥatan still groups + co-lights with the alef.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'w', start: 0, end: 0.1 },     // word 1: وَ
+            { phone: 'a', start: 0.1, end: 0.2 },
+            { phone: 'm', start: 0.2, end: 0.3 },   // word 2: مَآءً (global 2..5)
+            { phone: 'a:', start: 0.3, end: 0.6 },
+            { phone: 'ʔ', start: 0.6, end: 0.7 },
+            { phone: 'a:', start: 0.7, end: 1.0 },  // the iwaḍ ā at global idx 5
+        ];
+        const wa = w(
+            [{ char: 'و', start: 0, end: 0.2, silent: false }],
+            [
+                base(0, [0], { chars: 'و' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+            ],
+            [0, 1],
+        );
+        const maa = w(
+            [
+                { char: 'م', start: 0.2, end: 0.3, silent: false },
+                { char: 'آ', start: 0.3, end: 0.6, silent: false },
+                { char: 'ء', start: 0.6, end: 0.7, silent: false },
+            ],
+            [
+                base(0, [2], { chars: 'م' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 0, tag: null, shareGroup: 9 },
+                { chars: 'آ', role: 'madd', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, tag: null, shareGroup: 9 },
+                base(2, [4], { chars: 'ء' }),
+                { chars: 'ً', role: 'tanween', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 2, tag: 'madd_iwad', shareGroup: null },
+                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [5], sourceLetterIndex: 2, tag: 'madd_iwad', shareGroup: null },
+            ],
+            [2, 3, 4, 5],
+        );
+        const { container } = mount([wa, maa], intervals);
+        // Find the iwaḍ vowel group: a vowel group whose full cell is the implicit alef.
+        const groups = Array.from(container.querySelectorAll<HTMLElement>('.cell-group.vowel'));
+        const iwad = groups.find((g) => g.querySelector('.mega-letter.implicit'))!;
+        expect(iwad).toBeTruthy();
+        expect(iwad.querySelector('.mega-letter.implicit')!.textContent).toBe('ا');
+        const fatha = iwad.querySelector<HTMLElement>('.haraka-cell')!;
+        expect(fatha.querySelector('.g')!.textContent).toBe('َ'); // single fatḥa
+        expect(fatha.dataset.cellTimed).toBe('1');
+        expect(fatha.dataset.cellStart).toBe('0.7'); // co-lit on the iwaḍ ā at global idx 5
+    });
+
     it('idgham shafawi: a merged base absorbs the vowel — its fatḥa co-lights, not greyed', () => {
         // مَّرَض receiving meem: the consonant merged cross-word, so the base sounds
         // the VOWEL ("a"). The phonemizer hands the fatḥa as `present` sharing the
@@ -476,11 +524,11 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(fatha.dataset.cellStart).toBe('0');
     });
 
-    it('idgham noon cross-word: the SILENT noon base co-lights through the merger', () => {
-        // مَن يَقُول — the noon of مَن is silent (dropped, no phone) but shares a group
-        // (5) with يقول's receiving yaa, which carries the merger j̃. The noon stays
-        // greyed at rest yet must light during j̃ (data-cell-timed), unlike an
-        // ordinary silent letter which never lights.
+    it('idgham noon cross-word: the noon base co-lights with the receiver as a NORMAL (non-greyed) cell', () => {
+        // مَن يَقُول — the noon of مَن has no own phone (dropped: the merged sound is
+        // on يقول's receiving yaa, which carries j̃) but shares a group (5) with it.
+        // Because it co-lights, it must NOT be greyed: it renders as an ordinary cell
+        // that highlights together with the yaa through j̃ — not a silent letter.
         const intervals: PhonemeInterval[] = [
             { phone: 'm', start: 0, end: 0.1 },
             { phone: 'a', start: 0.1, end: 0.2 },
@@ -504,8 +552,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const noon = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
             .find((el) => el.textContent === 'ن')!;
         expect(noon).toBeTruthy();
-        expect(noon.classList.contains('silent')).toBe(true);   // greyed at rest
-        expect(noon.dataset.cellTimed).toBe('1');                 // …but co-lights
+        expect(noon.classList.contains('silent')).toBe(false);  // NOT greyed — a normal cell
+        expect(noon.dataset.cellTimed).toBe('1');                 // co-lights through the merger
         expect(noon.dataset.cellStart).toBe('0.2');               // borrows the yaa's j̃ interval
         expect(noon.dataset.cellEnd).toBe('0.5');
     });
