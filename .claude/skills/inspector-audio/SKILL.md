@@ -1,7 +1,6 @@
 ---
 name: inspector-audio
 description: Inspector audio subsystem — everything between bytes-on-disk and an `<audio>` element rendering audio in the browser, plus the extraction → bucket → inspector handoff that produces `reciters/<slug>/` in the first place. Covers both debugging AND building audio features.
-when_to_use: Audio bug reports AND new audio/playback/waveform feature work. Anything CBR/VBR, peaks, bucket audio/peaks lifecycle, ffmpeg, AudioPort, AudioGraph kill-switch, warmup, AudioRange, shadow-audio gapless, Xing TOC, the segment-clip route, the audio-proxy / audio_fetch / audio_source / audio_meta / peaks modules, the `/api/audio/surahs` dashboard-player metadata route, and the shared `dashPort`. Also the offline-extraction handoff: how `reciters/<slug>/` + the audio-manifest sidecar get written, the `auto_detect` reconciler firing `reciter.alignment_completed`, the three request kinds, the ALIGN / INGEST work queues, and the `POST /api/admin/intake/<rid>/ingest` mint flow.
 ---
 
 # inspector-audio
