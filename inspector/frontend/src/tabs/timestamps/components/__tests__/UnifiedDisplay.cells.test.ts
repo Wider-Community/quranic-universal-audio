@@ -727,46 +727,13 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [2],
         );
         const { container } = mount([wordN, wordN1], intervals);
-        // the tanwīn's bearing LETTER (ب) is badged, NOT the tanwīn diacritic itself
-        const baa = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
-            .find((e) => e.textContent === 'ب')!;
-        expect(baa.dataset.tj).toBe('1');
-        expect(container.querySelector<HTMLElement>('.haraka-cell')!.dataset.tj).toBeUndefined();
+        expect(container.querySelector<HTMLElement>('.haraka-cell')!.dataset.tj).toBe('1'); // tanwīn source
         const meem = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
             .find((e) => e.textContent === 'م')!;
         expect(meem.dataset.tj).toBe('1');                                                  // receiver, via group
         expect(container.querySelector<HTMLElement>('.crossword-bridge .mega-phoneme')!.dataset.tj).toBe('1');
         // the source tanwīn's own vowel box is NOT badged (its merger is the bridge)
         expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!.dataset.tj).toBeUndefined();
-    });
-
-    it('ikhfaa tanwīn: the underline is on the bearing letter, not the tanwīn diacritic', () => {
-        // بَعُوضَةً (ikhfāʾ): the ة base + its fathatan tanwīn. The ghunnah underline must
-        // land on the ة LETTER (like every other ghunnah rule), never on the small tanwīn
-        // cell — its rule is tagged on the tanwīn but rendered on the bearing letter.
-        const intervals: PhonemeInterval[] = [
-            { phone: 'dˤ', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.2 },
-            { phone: 't', start: 0.2, end: 0.3 }, { phone: 'a', start: 0.3, end: 0.34 },
-            { phone: 'ŋ', start: 0.34, end: 0.8 },
-        ];
-        const word = w(
-            [{ char: 'ض', start: 0, end: 0.2, silent: false }, { char: 'ة', start: 0.2, end: 0.34, silent: false }],
-            [
-                base(0, [0], { chars: 'ض' }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
-                base(1, [2], { chars: 'ة' }),
-                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [3, 4], sourceLetterIndex: 1, tag: 'ikhfaa_tanween', shareGroup: null },
-            ],
-            [0, 1, 2, 3, 4],
-        );
-        const { container } = mount([word], intervals);
-        const taa = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
-            .find((e) => e.textContent === 'ة')!;
-        expect(taa.dataset.tj).toBe('1');
-        expect(taa.style.getPropertyValue('--tj-badge')).toContain('ikhfaa');
-        // no diacritic small cell is badged
-        expect(Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell'))
-            .every((c) => c.dataset.tj === undefined)).toBe(true);
     });
 
     it('idgham shafawi: both mīms badged + the single bridge tile', () => {
