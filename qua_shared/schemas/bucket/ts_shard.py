@@ -51,6 +51,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 
 from .._extras import strip_and_warn
+from ..config.cell_vocab import CellRole, CellStatus
 
 # Letter timing triple: [char, start_ms, end_ms]; timings may be null when the
 # aligner couldn't place an individual letter. A 4th slot ``silent`` (bool) is
@@ -65,10 +66,11 @@ LetterTiming = tuple[str, int | None, int | None] | tuple[str, int | None, int |
 # loose ``list`` of the union of cell types rather than a fixed tuple.
 PhoneTiming = list[str | int | bool]
 
-# Cell row (schema v5, the 6th word slot): a per-character haraka/tanween cell.
+# Cell row (the 6th word slot): a per-character haraka/tanween cell.
 # ``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group]``.
+# ``role`` / ``status`` are the codegen-source enums (``config/cell_vocab``);
 # ``phoneme_indices`` are word-local indices over the word's indexable phones.
-CellTiming = tuple[str, str, str, list[int], int, str | None, int | None]
+CellTiming = tuple[str, CellRole, CellStatus, list[int], int, str | None, int | None]
 
 
 class TsShardWord(
@@ -84,6 +86,27 @@ class TsShardWord(
     so the FE codegen emits a positional TS tuple (mirrors ``TsShardWord`` in
     ``ts-client.ts``) rather than an object, and v3/v4 shards still validate.
     """
+
+
+class TsShardCell(BaseModel):
+    """Named (object) view of a positional ``CellTiming`` row.
+
+    The shard stores cells positionally (``CellTiming``) and they are read via
+    ``ts_shard_cells.parse_cell`` — this model is the codegen vehicle that emits
+    ``CellRole`` / ``CellStatus`` as TS string unions for the FE (json2ts drops
+    enums referenced only inside a positional tuple), and documents the row's
+    fields by name.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    chars: str
+    role: CellRole
+    status: CellStatus
+    phoneme_indices: list[int]
+    source_letter_index: int
+    tag: str | None = None
+    share_group: int | None = None
 
 
 class TsShardSegment(BaseModel):

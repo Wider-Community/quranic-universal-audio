@@ -29,11 +29,19 @@ import type {
     Letter,
     PhonemeInterval,
     TsCell,
+    TsShardCellRow,
     TsShardResponse,
     TsVbrResponse,
     TsVerseData,
     TsWord,
 } from '../types/ts-client';
+import { parseShardCell } from '../types/ts-client';
+
+// Render-only phone markers — NOT letter-derived, so excluded from the indexable
+// phone sequence the cell `phoneme_indices` count against. Mirrors the
+// phonemizer's `is_render_only` (the qalqala echo `Q`); the phonemizer test pins
+// the value, keep the two in lockstep.
+const RENDER_ONLY_PHONES = new Set(['Q']);
 
 import {
     type VerseOccasions,
@@ -528,30 +536,27 @@ export function assembleVerseFromShard(
             (_, i) => phoneStartIdx + i,
         );
 
-        // Verse-flat indices of this word's INDEXABLE phones (qalqala `Q`
+        // Verse-flat indices of this word's INDEXABLE phones (render-only markers
         // excluded) — maps a cell's word-local indexable index to the flat list.
         const indexableFlat: number[] = [];
         for (let i = 0; i < phonesRaw.length; i++) {
             const p = phonesRaw[i]?.[0] as string | undefined;
-            if (p && p !== 'Q') indexableFlat.push(phoneStartIdx + i);
+            if (p && !RENDER_ONLY_PHONES.has(p)) indexableFlat.push(phoneStartIdx + i);
         }
         // All cells flow through unchanged — including `base` cells (the ordered
-        // anchors the letter row groups on). `phoneme_indices` are word-local
-        // indexable-phone indices; map each to the verse-flat list.
-        const cellsRaw = (w[5] ?? []) as Array<
-            [string, string, string, number[], number, (string | null)?, (number | null)?]
-        >;
-        const cells: TsCell[] = cellsRaw.map((c) => ({
-            chars: c[0],
-            role: c[1] as TsCell['role'],
-            status: c[2] as TsCell['status'],
-            phonemeIndices: (c[3] ?? [])
-                .map((k) => indexableFlat[k])
-                .filter((x): x is number => x !== undefined),
-            sourceLetterIndex: c[4],
-            tag: (c[5] ?? null) as string | null,
-            shareGroup: c[6] == null ? null : (c[6] as number) + sgOffset,
-        }));
+        // anchors the letter row groups on). Read each row by name (parseShardCell)
+        // then map its word-local indexable indices to the verse-flat list; the
+        // share_group carries the per-segment offset so cross-segment ids don't collide.
+        const cells: TsCell[] = ((w[5] ?? []) as TsShardCellRow[]).map((row) => {
+            const c = parseShardCell(row);
+            return {
+                ...c,
+                phonemeIndices: c.phonemeIndices
+                    .map((k) => indexableFlat[k])
+                    .filter((x): x is number => x !== undefined),
+                shareGroup: c.shareGroup == null ? null : c.shareGroup + sgOffset,
+            };
+        });
 
         wordsOut.push({
             location, text, display_text: displayText,

@@ -11,7 +11,7 @@
  * The codegen'd `Ts*` wire types are imported from `./generated/schemas`.
  */
 
-import type { ErrorEnvelope, TsShardMeta } from './generated/schemas';
+import type { CellRole, CellStatus, ErrorEnvelope, TsShardMeta } from './generated/schemas';
 import type { VerseRef } from './view-models';
 
 // ---------------------------------------------------------------------------
@@ -53,8 +53,8 @@ export interface Letter {
 export interface TsCell {
     /** canonical source char(s); '' for a fully implicit cell */
     chars: string;
-    role: 'base' | 'haraka' | 'tanween' | 'madd';
-    status: 'present' | 'inserted' | 'dropped' | 'replaced' | 'shortened';
+    role: CellRole;
+    status: CellStatus;
     /** indices into the verse-flat `intervals[]` — the cell's timing anchor ([] = silent) */
     phonemeIndices: number[];
     /** the letter (index into this word's `letters`) the cell sits on/after; -1 if implicit */
@@ -63,6 +63,27 @@ export interface TsCell {
     tag: string | null;
     /** cells sharing one id highlight together (long vowel; cross-word idgham) */
     shareGroup: number | null;
+}
+
+/** A raw positional shard cell row (the 6th word slot) —
+ *  `[chars, role, status, phoneme_indices, source_letter_index, tag?, share_group?]`.
+ *  `phoneme_indices` are word-local indexable-phone indices. */
+export type TsShardCellRow = [string, string, string, number[], number, (string | null)?, (number | null)?];
+
+/** Read a positional shard cell row by name — the FE mirror of
+ *  `qua_shared/ts_shard_cells.parse_cell`, so no consumer unpacks `row[0..6]`
+ *  inline. `phonemeIndices` stay WORD-LOCAL here; the caller maps them to the
+ *  verse-flat `intervals[]`. */
+export function parseShardCell(row: TsShardCellRow): TsCell {
+    return {
+        chars: row[0],
+        role: row[1] as CellRole,
+        status: row[2] as CellStatus,
+        phonemeIndices: row[3] ?? [],
+        sourceLetterIndex: row[4],
+        tag: (row[5] ?? null) as string | null,
+        shareGroup: (row[6] ?? null) as number | null,
+    };
 }
 
 /** Single word with text + timing + letters + phoneme indices into the flat intervals list. */

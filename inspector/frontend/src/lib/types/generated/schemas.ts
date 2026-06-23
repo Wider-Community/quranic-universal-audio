@@ -53,17 +53,19 @@ export type SegValAnyItem =
   | SegValQalqalaItem
   | SegValBasmalaAminItem;
 export type AudioCategory = "by_surah" | "by_ayah";
+export type CellRole = "base" | "haraka" | "tanween" | "madd";
+export type CellStatus = "present" | "inserted" | "dropped" | "replaced" | "shortened";
 /**
  * One encoded word inside a segment — a flat positional tuple.
  *
- * Slots: ``[word_idx, start_ms, end_ms, letters, phones]``. Modelled as a
- * ``RootModel`` over a 5-tuple so the FE codegen emits a positional TS tuple
- * (mirrors ``TsShardWord`` in ``ts-client.ts``) rather than an object.
- *
- * @minItems 5
- * @maxItems 5
+ * Slots: ``[word_idx, start_ms, end_ms, letters, phones(, cells)]``. Modelled as
+ * a ``RootModel`` over a 5- **or** 6-tuple (the 6th ``cells`` slot is schema v5)
+ * so the FE codegen emits a positional TS tuple (mirrors ``TsShardWord`` in
+ * ``ts-client.ts``) rather than an object, and v3/v4 shards still validate.
  */
-export type TsShardWord = [unknown, unknown, unknown, unknown, unknown];
+export type TsShardWord =
+  | [unknown, unknown, unknown, unknown, unknown]
+  | [unknown, unknown, unknown, unknown, unknown, unknown];
 
 export interface AdminActiveClaim {
   slug: string;
@@ -1986,6 +1988,24 @@ export interface TsManifestReciter {
  */
 export interface TsReciterFlags {
   flags?: TsFlagVerseCount[];
+}
+/**
+ * Named (object) view of a positional ``CellTiming`` row.
+ *
+ * The shard stores cells positionally (``CellTiming``) and they are read via
+ * ``ts_shard_cells.parse_cell`` — this model is the codegen vehicle that emits
+ * ``CellRole`` / ``CellStatus`` as TS string unions for the FE (json2ts drops
+ * enums referenced only inside a positional tuple), and documents the row's
+ * fields by name.
+ */
+export interface TsShardCell {
+  chars: string;
+  role: CellRole;
+  status: CellStatus;
+  phoneme_indices: number[];
+  source_letter_index: number;
+  tag?: string | null;
+  share_group?: number | null;
 }
 /**
  * The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.

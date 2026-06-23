@@ -54,12 +54,14 @@ _SEGMENT_META_PROVENANCE = (
     "created_at",
 )
 
-# v5 adds a 6th word slot ``cells[]`` — per-character phoneme cells from the
+# v5 added the 6th word slot ``cells[]`` — per-character phoneme cells from the
 # phonemizer's ``character_phoneme_mappings()`` (see
 # ``qua_sdk.components.timing.lib.cells._stamp_cells`` and
-# ``qua_shared/ts_shard_cells.py``). The SDK annotator emits ``role == 'base'``
-# cells too; structurally unchanged, so no version bump.
-SEGMENT_SCHEMA_VERSION = 5
+# ``qua_shared/ts_shard_cells.py``). v6 carries two extra phonemizer-owned cell
+# facts so the FE never infers phonology: the canonical shaddah composed into a
+# geminated base cell's ``chars``, and a ``share_group`` on the vowel-absorbed
+# haraka of a cross-word idgham. The cell-row structure is unchanged.
+SEGMENT_SCHEMA_VERSION = 6
 
 
 def _filter_mfa_failures(failures: list[dict] | None, chapter: int) -> list[dict]:

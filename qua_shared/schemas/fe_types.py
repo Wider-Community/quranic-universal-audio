@@ -32,7 +32,7 @@ from .bucket.segment import (
     SegmentFlag,
 )
 from .bucket.ts_job_record import TsJobRecord, TsJobSettings
-from .bucket.ts_shard import TsShardDoc, TsShardMeta, TsShardSegment, TsShardWord
+from .bucket.ts_shard import TsShardCell, TsShardDoc, TsShardMeta, TsShardSegment, TsShardWord
 from .bucket.ts_validation import TsValidationDoc, TsValidationMeta, TsValidationVerse
 from .config.automation import (
     AutoGenTsConfig,
@@ -44,6 +44,7 @@ from .config.automation import (
     StaleMetadataConfig,
     StaleTsRegenConfig,
 )
+from .config.cell_vocab import CellRole, CellStatus
 from .wire._envelopes import ErrorEnvelope, OkAck
 from .wire.admin_permissions import (
     AdminCapabilityRow,
@@ -268,10 +269,13 @@ __all__ = [
     "SuggestedAction",
     "TsJobRecord",
     "TsJobSettings",
+    "TsShardCell",
     "TsShardDoc",
     "TsShardMeta",
     "TsShardSegment",
     "TsShardWord",
+    "CellRole",
+    "CellStatus",
     "TsValidationDoc",
     "TsValidationMeta",
     "TsValidationVerse",

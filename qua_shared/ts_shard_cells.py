@@ -19,6 +19,11 @@ Consumers MUST read cells through ``parse_cell`` / ``iter_cells`` / ``word_cells
 rather than unpacking positionally, and MUST tolerate a word with no 6th slot
 (v3/v4 shards) — ``word_cells`` returns ``[]`` there. This mirrors
 ``ts_shard_letters`` and keeps a future trailing slot from breaking a reader.
+
+This 7-slot row is the SDK's shard projection (written by
+``qua_sdk.components.timing.lib.cells._stamp_cells``, read here). It is a DIFFERENT
+contract from the phonemizer's ``Cell.to_list`` (a fuller 9-field dump in its own
+field order) — do not apply one's positions to the other.
 """
 
 from __future__ import annotations
@@ -65,8 +70,13 @@ def parse_cell(row: object) -> CellRow:
     tag = seq[5] if len(seq) > 5 else None
     share_group = seq[6] if len(seq) > 6 else None
     return CellRow(
-        str(chars), str(role), str(status),
-        list(phoneme_indices), int(source_letter_index), tag, share_group,
+        str(chars),
+        str(role),
+        str(status),
+        list(phoneme_indices),
+        int(source_letter_index),
+        tag,
+        share_group,
     )
 
 

@@ -287,9 +287,9 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(kasra.dataset.cellEnd).toBe('0.4');
     });
 
-    it('composes shaddah onto a base whose consonant is geminated', () => {
-        // رَبِّ: the ب is geminated (phone "bb"); the aligner letter char is bare
-        // "ب", so the base cell must compose ◌ّ to render بّ.
+    it('renders a geminated base verbatim from chars (shaddah composed by the phonemizer)', () => {
+        // رَبِّ: the ب is geminated — the phonemizer composes ◌ّ into the base
+        // cell's chars (بّ); the FE renders chars verbatim (no phone inspection).
         const intervals: PhonemeInterval[] = [
             { phone: 'rˤ', start: 0, end: 0.1 }, { phone: 'aˤ', start: 0.1, end: 0.2 },
             { phone: 'bb', start: 0.2, end: 0.4 }, { phone: 'i', start: 0.4, end: 0.5 },
@@ -302,14 +302,13 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             [
                 base(0, [0], { chars: 'ر' }),
                 { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
-                base(1, [2], { chars: 'ب' }),
+                base(1, [2], { chars: 'بّ' }),
                 { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [3], sourceLetterIndex: 1, tag: null, shareGroup: null },
             ],
             [0, 1, 2, 3],
         );
         const { container } = mount([word], intervals);
         const letters = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter:not(.implicit)'));
-        // ر bare, ب composed with shaddah (ب + U+0651).
         expect(letters.map((l) => l.textContent)).toEqual(['ر', 'بّ']);
     });
 
@@ -423,13 +422,16 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
     });
 
     it('idgham shafawi: a merged base absorbs the vowel — its fatḥa co-lights, not greyed', () => {
-        // مَّرَض receiving meem: base meem carries the VOWEL ("a"), fatḥa is dropped.
+        // مَّرَض receiving meem: the consonant merged cross-word, so the base sounds
+        // the VOWEL ("a"). The phonemizer hands the fatḥa as `present` sharing the
+        // base's vowel index + merger group — the FE co-lights it via that group,
+        // with NO phone inspection.
         const intervals: PhonemeInterval[] = [{ phone: 'a', start: 0, end: 0.25 }];
         const word = w(
             [{ char: 'م', start: 0, end: 0.25, silent: false }],
             [
-                base(0, [0], { chars: 'م' }),
-                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                base(0, [0], { chars: 'م', shareGroup: 1 }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, tag: null, shareGroup: 1 },
             ],
             [0],
         );

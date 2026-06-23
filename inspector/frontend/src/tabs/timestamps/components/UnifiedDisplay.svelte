@@ -21,6 +21,21 @@
     import type { PhonemeInterval, TsCell, TsWord } from '../../../lib/types/ts-client';
     import { splitWaqf } from '../../../lib/utils/waqf';
     import { harakaRenderStyle } from '../utils/haraka-render';
+    import {
+        ALEF_MAKSURA,
+        cellGlyph,
+        cellSlot,
+        DAGGER,
+        DAMMA,
+        FATHA,
+        firstMark,
+        implicitMaddGlyph,
+        IQLAB_FORM,
+        KASRA,
+        OPEN_TANWEEN,
+        OPEN_TANWEEN_TAGS,
+        SUKUN,
+    } from '../utils/tajweed-script';
     import { waqfRenderStyle } from '../utils/waqf-render';
     import {
         showLetters,
@@ -253,109 +268,9 @@
     // maksura never carries an independent dagger. Every other grapheme stays its
     // own cell: a carrier waw keeps its (silent) waw + dagger split, a consonant's
     // dagger stays independent.
-    const ALEF_MAKSURA = 'ى';
-    const DAGGER_ALEF = 'ٰ';
-
-    // Diacritic codepoints.
-    const FATHA = 'َ'; // U+064E
-    const DAMMA = 'ُ'; // U+064F
-    const KASRA = 'ِ'; // U+0650
-    const FATHATAN = 'ً'; // U+064B
-    const DAMMATAN = 'ٌ'; // U+064C
-    const KASRATAN = 'ٍ'; // U+064D
-    const DAGGER = 'ٰ'; // U+0670
-    const SUKUN = 'ْ'; // U+0652
-    const SHADDA = 'ّ'; // U+0651
-    const MEEM_HI = 'ۢ'; // U+06E2 mini-meem above (iqlab)
-    const MEEM_LO = 'ۭ'; // U+06ED mini-meem below (iqlab)
-
-    // Marks that sit ABOVE the base (pin top) vs BELOW (pin bottom). A mark pins
-    // to the edge it visually occupies: below = kasra/kasratan.
-    const BELOW_MARKS = new Set([KASRA, KASRATAN]);
-
-    // iqlab tanwīn renders as a SINGLE short vowel + a mini-meem (NOT a doubled
-    // tanwīn): the meem composes onto the haraka in one DK glyph (the user's
-    // "harakah + iqlab mark"), sized by the haraka's own calibration. Map the
-    // canonical tanwīn mark → [single haraka, mini-meem].
-    const IQLAB_FORM: Record<string, { haraka: string; meem: string }> = {
-        [FATHATAN]: { haraka: FATHA, meem: MEEM_HI },
-        [DAMMATAN]: { haraka: DAMMA, meem: MEEM_HI },
-        [KASRATAN]: { haraka: KASRA, meem: MEEM_LO },
-    };
-
-    // Open (parallel) vs stacked tanwīn forms. The mushaf/DK convention: the two
-    // strokes are STACKED (the canonical ◌ً◌ٌ◌ٍ) ONLY for iẓhar — the noon sounds
-    // clearly — and OPEN (parallel) whenever the tanwīn assimilates into the next
-    // word (idgham / ikhfaa). DigitalKhatt encodes the open form as distinct
-    // codepoints (U+08F0–08F2); the canonical char alone renders stacked, so map
-    // to the open codepoint when the tanwīn IS assimilated. (iqlab → its own
-    // mini-meem form, madd-ʿiwaḍ → fatḥa+alef; both handled separately.)
-    const OPEN_TANWEEN: Record<string, string> = {
-        [FATHATAN]: 'ࣰ',
-        [DAMMATAN]: 'ࣱ',
-        [KASRATAN]: 'ࣲ',
-    };
-    // Tags whose tanwīn assimilates into the next word → render the OPEN form.
-    // Everything else (iẓhar, which carries no tanwīn tag) stays stacked.
-    const OPEN_TANWEEN_TAGS = new Set([
-        'idgham_ghunnah_tanween',
-        'idgham_bila_ghunnah_tanween',
-        'ikhfaa_tanween',
-    ]);
-
-    /** A geminated (shaddah) consonant phoneme — the phonemizer doubles it (bb,
-     *  ll, dd, rˤrˤ, …; m/n add a ghunnah tilde). The shaddah mark is NOT in the
-     *  aligner's bare letter char, so a base cell whose phone is geminated must
-     *  compose ◌ّ onto its glyph to render base+shaddah. */
-    function _isGeminatePhone(phone: string | undefined): boolean {
-        if (!phone) return false;
-        const p = phone.replace(/[ˤː̃]/gu, ''); // strip emphatic / length / tilde
-        return p.length >= 2 && p.length % 2 === 0 && p.slice(0, p.length / 2) === p.slice(p.length / 2);
-    }
-
-    /** A vowel phoneme (short/long/emphatic a u i). Used to tell a merge case
-     *  (idgham shafawi: the base absorbed the haraka's VOWEL → co-light the
-     *  dropped haraka) from a true waqf drop (the base is a consonant). */
-    function _isVowelPhone(phone: string | undefined): boolean {
-        if (!phone) return false;
-        const p = phone.replace(/[ˤː:̃]/gu, '');
-        return p === 'a' || p === 'u' || p === 'i';
-    }
-
     /** A sukūn cell — never rendered (cell exists with empty phonemeIndices). */
     function _isSukunCell(c: TsCell): boolean {
-        return c.role === 'haraka' && _firstMark(c.chars) === SUKUN;
-    }
-
-    /** First combining mark of `chars`, skipping a leading shadda (shadda+haraka
-     *  composed → render the second mark). */
-    function _firstMark(chars: string): string {
-        if (!chars) return '';
-        const arr = [...chars];
-        if (arr[0] === SHADDA && arr[1]) return arr[1];
-        return arr[0]!;
-    }
-
-    /** The DK glyph for a SMALL cell — its own mark, or derived for an implicit
-     *  graphemeless cell (the phonemizer keeps `chars` empty + canonical). */
-    function _cellGlyph(c: TsCell, phone: string | undefined): string {
-        if (c.chars) return _firstMark(c.chars);
-        if (c.tag === 'allah_dagger_alef') return DAGGER;
-        if (c.tag === 'madd_iwad') return 'ا'; // the added alef (full cell)
-        if (c.tag === 'iltiqaa_kasra' || c.tag === 'iltiqaa') return KASRA;
-        // hamza-waṣl connecting vowel: pick the haraka by the sounded vowel.
-        return phone === 'i' ? KASRA : phone === 'u' ? DAMMA : FATHA;
-    }
-
-    /** The FULL-cell glyph for an implicit madd (chars==='') — dagger / alef. */
-    function _implicitMaddGlyph(c: TsCell): string {
-        if (c.tag === 'madd_iwad') return 'ا';
-        return DAGGER; // allah_dagger_alef + any other implicit dagger madd
-    }
-
-    /** Pin slot for a small cell's mark — top unless it's a below-mark. */
-    function _cellSlot(glyph: string): 'top' | 'bottom' {
-        return BELOW_MARKS.has(glyph) ? 'bottom' : 'top';
+        return c.role === 'haraka' && firstMark(c.chars) === SUKUN;
     }
 
     function _cellTiming(
@@ -415,7 +330,7 @@
         let origIdx = 0;
         for (const letter of word.letters || []) {
             const prev = folded[folded.length - 1];
-            if (prev && letter.char.startsWith(DAGGER_ALEF) && prev.glyph.endsWith(ALEF_MAKSURA)) {
+            if (prev && letter.char.startsWith(DAGGER) && prev.glyph.endsWith(ALEF_MAKSURA)) {
                 // Fold the dagger onto the maksura cell: one combined unit spanning
                 // both timings, sounding unless both graphemes are silent.
                 prev.glyph += letter.char;
@@ -489,8 +404,6 @@
         const iwadIv: [number, number] | null = _iwadIv.start != null ? [_iwadIv.start, _iwadIv.end!] : null;
         const daggerBySrc = new Map<number, { group: RenderedGroup; iv: [number, number] }>();
         let iwadGroup: RenderedGroup | null = null;
-        let curBaseIv: [number, number] | null = null;
-        let curBaseVowel = false; // the current base cell's phoneme is a vowel (merge case)
 
         const newGroup = (kind: 'base' | 'vowel'): RenderedGroup => {
             const g: RenderedGroup = { kind, full: [], small: [], shareGroup: null };
@@ -510,7 +423,7 @@
             const shareIv = c.shareGroup != null ? shareUnions.get(c.shareGroup) ?? null : null;
             let { start, end } = _cellTiming(c.phonemeIndices, intervals, shareIv);
             if (opts.coLightIv) [start, end] = opts.coLightIv; // co-light on the carrier's interval
-            const mark = _firstMark(c.chars);
+            const mark = firstMark(c.chars);
             const iqlab = c.tag === 'iqlab_tanween' ? IQLAB_FORM[mark] : undefined;
             let glyph: string;
             let slot: 'top' | 'bottom';
@@ -521,7 +434,7 @@
             let calibKey: string | undefined;
             if (opts.glyphOverride) {
                 glyph = opts.glyphOverride;
-                slot = _cellSlot(glyph);
+                slot = cellSlot(glyph);
                 sizeGlyph = glyph;
             } else if (iqlab) {
                 // SINGLE short vowel + a mini-meem composed in ONE DK glyph (never a
@@ -536,11 +449,11 @@
                 // as a distinct codepoint); iẓhar (tagless) keeps the stacked form.
                 // Slot follows the canonical mark (kasratan below, others above).
                 glyph = OPEN_TANWEEN[mark]!;
-                slot = _cellSlot(mark);
+                slot = cellSlot(mark);
                 sizeGlyph = glyph;
             } else {
-                glyph = _cellGlyph(c, phone);
-                slot = _cellSlot(glyph);
+                glyph = cellGlyph(c.chars, c.tag, phone);
+                slot = cellSlot(glyph);
                 sizeGlyph = glyph;
             }
             g.small.push({
@@ -559,16 +472,15 @@
         };
 
         // A FULL letter-sized cell from a `base` or real `madd` carrier. The glyph
-        // is the cell's OWN canonical char (◌ّ composed on a geminated consonant) —
-        // NOT looked up in word.letters: the phonemizer's source_letter_index folds
-        // a dagger-alef ٰ into its base letter, while the aligner keeps it a
-        // separate `word.letters` entry, so the two indexings diverge and a
-        // word.letters lookup mis-glyphs / drops carriers. `isBase` marks the
-        // interactive letter element.
+        // is the cell's OWN canonical char (the phonemizer composes ◌ّ onto a
+        // geminated consonant) — NOT looked up in word.letters: the phonemizer's
+        // source_letter_index folds a dagger-alef ٰ into its base letter, while the
+        // aligner keeps it a separate `word.letters` entry, so the two indexings
+        // diverge and a word.letters lookup mis-glyphs / drops carriers. `isBase`
+        // marks the interactive letter element.
         const pushFullGrapheme = (g: RenderedGroup, c: TsCell, isBase: boolean): void => {
             const shareIv = c.shareGroup != null ? shareUnions.get(c.shareGroup) ?? null : null;
             const { start, end } = _cellTiming(c.phonemeIndices, intervals, shareIv);
-            const phone = c.phonemeIndices.length ? intervals[c.phonemeIndices[0]!]?.phone : undefined;
             let glyph: string;
             let silent: boolean;
             let lStart: number | null;
@@ -576,8 +488,7 @@
             let isNull: boolean;
             let letterIndex: number;
             if (c.chars) {
-                glyph = c.chars;
-                if (_isGeminatePhone(phone) && !glyph.includes(SHADDA)) glyph += SHADDA;
+                glyph = c.chars; // canonical text, shaddah already composed by the phonemizer
                 silent = c.status === 'dropped';
                 lStart = start;
                 lEnd = end;
@@ -618,7 +529,7 @@
             const shareIv = c.shareGroup != null ? shareUnions.get(c.shareGroup) ?? null : null;
             const { start, end } = _cellTiming(c.phonemeIndices, intervals, shareIv);
             g.full.push({
-                glyph: _implicitMaddGlyph(c),
+                glyph: implicitMaddGlyph(c.tag),
                 silent: c.status === 'dropped',
                 status: c.status,
                 tag: c.tag,
@@ -657,10 +568,6 @@
                     if (foldIdx != null && consumedFold.has(foldIdx)) continue; // maksura+dagger half
                     curBase = newGroup('base');
                     pushFullGrapheme(curBase, c, true);
-                    curBaseIv = ownIv(c);
-                    curBaseVowel = _isVowelPhone(
-                        c.phonemeIndices.length ? intervals[c.phonemeIndices[0]!]?.phone : undefined,
-                    );
                 } else if (c.role === 'madd') {
                     if (c.chars !== '' && foldIdx != null && consumedFold.has(foldIdx)) continue; // fold half
                     if (c.tag === 'madd_iwad' && c.chars !== '') {
@@ -691,14 +598,12 @@
                     } else if (dropped && daggerBySrc.has(c.sourceLetterIndex)) {
                         const d = daggerBySrc.get(c.sourceLetterIndex)!;
                         pushSmall(d.group, c, { coLightIv: d.iv }); // Allah: fatḥa joins the dagger ā
-                    } else if (dropped && curBase && curBaseIv && curBaseVowel) {
-                        // idgham shafawi / noon: the consonant merged and the base
-                        // absorbed the haraka's VOWEL — co-light the haraka with the
-                        // base instead of greying it. (A base that's still a consonant
-                        // is a true waqf drop → falls through to greyed.)
-                        pushSmall(curBase, c, { coLightIv: curBaseIv });
                     } else {
-                        pushSmall(curBase ?? (curBase = newGroup('base')), c); // short vowel / true drop
+                        // short vowel / true waqf drop. (An idgham-shafawi haraka
+                        // whose vowel the merged base absorbed arrives `present` +
+                        // share-grouped from the phonemizer, so it co-lights here via
+                        // its share union — no phone inspection.)
+                        pushSmall(curBase ?? (curBase = newGroup('base')), c);
                     }
                 }
             }
