@@ -27,31 +27,39 @@ export interface HarakaRender {
 /** Fallback for any surfaced mark without an explicit entry. */
 const DEFAULT_RENDER: HarakaRender = { scale: 1.4, shiftEm: 0, raiseEm: 0 };
 
-/** Codepoint (hex) → calibration. Tuned against DigitalKhatt in the diacritic-
- *  cell playground. Only the SMALL-cell short-vowel + tanwīn marks are listed:
- *  the dagger-alef (ٰ) renders as a FULL madd cell (its own grapheme, no centring
- *  override), and the iqlab mini-meem rides WITH its haraka (it composes onto the
- *  haraka glyph and inherits the haraka's calibration — no separate entry). */
+/** Codepoint-hex → calibration for single small-cell marks (short vowels +
+ *  tanwins, incl. the open DK tanwin forms 8f0-8f2). Tuned against DigitalKhatt.
+ *  The dagger-alef renders as a FULL madd cell (no entry). The iqlab composites
+ *  (haraka + mini-meem) carry their OWN calibration under a named key
+ *  (iqlab_fatha/damma/kasra) since the mini-meem shifts the ink. */
 const BY_CODEPOINT: Record<string, HarakaRender> = {
-    '64e': { scale: 1.5, shiftEm: -0.115, raiseEm: -0.35 }, // َ fatḥa
-    '64f': { scale: 1.24, shiftEm: -0.155, raiseEm: -0.2 }, // ُ ḍamma
-    '650': { scale: 1.49, shiftEm: -0.105, raiseEm: -0.3 }, //  ِ kasra
-    '64b': { scale: 1.54, shiftEm: -0.1, raiseEm: -0.305 }, //  ً fatḥatan
-    '64c': { scale: 1.1, shiftEm: -0.145, raiseEm: -0.14 }, //  ٌ ḍammatan
-    '64d': { scale: 1.5, shiftEm: -0.12, raiseEm: -0.26 }, //   ٍ kasratan
+    '64e': { scale: 1.01, shiftEm: -0.11, raiseEm: -0.335 }, // fatha
+    '64f': { scale: 0.9, shiftEm: -0.11, raiseEm: -0.215 }, // damma
+    '650': { scale: 0.99, shiftEm: -0.125, raiseEm: -0.24 }, // kasra
+    '64b': { scale: 0.62, shiftEm: -0.115, raiseEm: -0.23 }, // fathatan (stacked)
+    '64c': { scale: 0.9, shiftEm: -0.13, raiseEm: -0.17 }, // dammatan (stacked)
+    '64d': { scale: 1.09, shiftEm: -0.125, raiseEm: -0.23 }, // kasratan (stacked)
+    '8f0': { scale: 1.15, shiftEm: -0.145, raiseEm: -0.345 }, // fathatan open (DK U+08F0)
+    '8f1': { scale: 0.79, shiftEm: -0.205, raiseEm: -0.24 }, // dammatan open (U+08F1)
+    '8f2': { scale: 1.13, shiftEm: -0.11, raiseEm: -0.355 }, // kasratan open (U+08F2)
+    'iqlab_fatha': { scale: 0.79, shiftEm: -0.015, raiseEm: -0.365 }, // fatha + mini-meem
+    'iqlab_damma': { scale: 0.8, shiftEm: -0.055, raiseEm: -0.285 }, // damma + mini-meem
+    'iqlab_kasra': { scale: 0.81, shiftEm: -0.09, raiseEm: -0.485 }, // kasra + mini-meem
 };
 
-/** Calibration for a single diacritic glyph (defaults if the mark is unlisted). */
-export function harakaRenderFor(glyph: string): HarakaRender {
-    const cp = glyph.codePointAt(0)?.toString(16);
+/** Calibration for a glyph OR an explicit named key. Named keys (iqlab composites)
+ *  resolve first; otherwise the glyph's leading codepoint. */
+export function harakaRenderFor(keyOrGlyph: string): HarakaRender {
+    if (BY_CODEPOINT[keyOrGlyph]) return BY_CODEPOINT[keyOrGlyph];
+    const cp = keyOrGlyph.codePointAt(0)?.toString(16);
     return (cp && BY_CODEPOINT[cp]) || DEFAULT_RENDER;
 }
 
 /** Inline `style` string projecting a glyph's calibration to the `--haraka-*`
- *  vars the `.haraka-cell .g` CSS rule reads. `extraShiftEm` nudges the glyph
- *  horizontally on top of its calibrated shift (used to slide the fused iqlab
- *  haraka+mini-meem slightly right). */
-export function harakaRenderStyle(glyph: string, extraShiftEm = 0): string {
-    const r = harakaRenderFor(glyph);
+ *  vars the `.haraka-cell .g` CSS rule reads. `extraShiftEm` nudges horizontally on
+ *  top of the calibrated shift; `calibKey` selects an explicit calibration (e.g. an
+ *  iqlab composite) instead of the glyph's codepoint. */
+export function harakaRenderStyle(glyph: string, extraShiftEm = 0, calibKey?: string): string {
+    const r = harakaRenderFor(calibKey ?? glyph);
     return `--haraka-scale:${r.scale};--haraka-shift:${(r.shiftEm + extraShiftEm).toFixed(3)}em;--haraka-raise:${r.raiseEm}em`;
 }

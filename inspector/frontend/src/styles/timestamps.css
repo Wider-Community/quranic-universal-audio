@@ -239,9 +239,9 @@
 /* Small-cell box, as factors of a FULL letter cell (measured at runtime into
    --letter-cell-w / --letter-cell-h). */
 :root {
-    --haraka-dia-w: 0.5; /* small-cell width  / letter cell width  */
-    --haraka-dia-h: 0.45; /* small-cell height / letter cell height */
-    --haraka-group-gap: 6px; /* gap BETWEEN groups */
+    --haraka-dia-w: 0.55; /* small-cell width  / letter cell width  */
+    --haraka-dia-h: 0.35; /* small-cell height / letter cell height */
+    --haraka-group-gap: 7px; /* gap BETWEEN groups */
     --letter-cell-w: 30px; /* measured at runtime from a real letter cell */
     --letter-cell-h: 34px;
 }
@@ -289,9 +289,8 @@
     line-height: 1;
     color: #aaa;
     display: inline-block;
-    /* per-glyph scale × a global 0.75 (diacritics ride ~25% smaller than the
-       letter they sit on). */
-    font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4) * 0.75);
+    /* per-glyph scale relative to the analysis letter font. */
+    font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4));
     transform: translate(var(--haraka-shift, 0em), var(--haraka-raise, 0em));
 }
 /* Active highlight uses the SAME hue as a letter cell — one highlight colour
@@ -712,4 +711,76 @@
 }
 #animation-display .anim-char {
     display: inline;
+}
+
+/* ======================================================================
+   DEV ONLY — highlight-transition perf A/B/C harness (remove before merge)
+   Flip live from the floating bar in the analysis pane, or in the console:
+     document.documentElement.dataset.tsPerf = 'baseline'|'drop'|'fast'|'contain'
+   baseline = the shipped `transition: ... 0.1s` on every highlight cell.
+
+   The lag/flicker is paint-bound: each base/haraka cell now lights on a single
+   ~50-90ms phoneme window — SHORTER than the 0.1s transition — so the background
+   never settles and every in-flight transition re-rasters the cell (incl. the
+   complex DigitalKhatt mark) each frame. These three variants test the fix. */
+
+/* (A) DROP — no transition: highlight flips instantly. Crispest + cheapest
+   paint (one raster on activate, one on deactivate). Expected biggest win. */
+:root[data-ts-perf='drop'] .mega-letter,
+:root[data-ts-perf='drop'] .haraka-cell {
+    transition: none;
+}
+
+/* (B) FAST — 30ms transition: keeps a hint of ease but ~3x fewer in-flight
+   frames than 0.1s, so far less overlap/smear. Middle ground. */
+:root[data-ts-perf='fast'] .mega-letter,
+:root[data-ts-perf='fast'] .haraka-cell {
+    transition: background 0.03s linear, color 0.03s linear, border-color 0.03s linear;
+}
+
+/* (C) CONTAIN — keep the 0.1s transition but isolate the new diacritic tier's
+   paint to its own box (the small cells already clip via overflow:hidden, so no
+   visual change). Bounds the invalidation rect; can't avoid the glyph raster, so
+   expected to help least. */
+:root[data-ts-perf='contain'] .haraka-cell,
+:root[data-ts-perf='contain'] .dia-track {
+    contain: layout paint style;
+}
+
+/* The floating A/B/C control (DEV build only — rendered in UnifiedDisplay). */
+.perf-ab {
+    position: fixed;
+    top: 6px;
+    right: 8px;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    background: rgba(15, 15, 35, 0.92);
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    font: 11px/1 ui-monospace, monospace;
+    color: #aaa;
+}
+.perf-ab-label {
+    opacity: 0.7;
+    margin-inline-end: 2px;
+}
+.perf-ab-btn {
+    background: #1a1a3e;
+    color: #cfcfe6;
+    border: 1px solid #33335a;
+    border-radius: 4px;
+    padding: 3px 6px;
+    cursor: pointer;
+}
+.perf-ab-btn:hover {
+    border-color: #4361ee;
+}
+.perf-ab-btn.on {
+    background: #2ec4b6;
+    color: #07120f;
+    border-color: #2ec4b6;
+    font-weight: 700;
 }

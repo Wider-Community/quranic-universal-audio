@@ -516,17 +516,21 @@
             let slot: 'top' | 'bottom';
             let sizeGlyph: string;
             let extraShift = 0;
+            // iqlab composites carry their OWN calibration (the mini-meem shifts
+            // the ink), via a named key — not the bare haraka's.
+            let calibKey: string | undefined;
             if (opts.glyphOverride) {
                 glyph = opts.glyphOverride;
                 slot = _cellSlot(glyph);
                 sizeGlyph = glyph;
             } else if (iqlab) {
                 // SINGLE short vowel + a mini-meem composed in ONE DK glyph (never a
-                // doubled tanwīn); sized/centred by the haraka, nudged slightly right.
+                // doubled tanwīn); calibrated by its own iqlab key.
                 glyph = iqlab.haraka + iqlab.meem;
                 slot = iqlab.haraka === KASRA ? 'bottom' : 'top';
                 sizeGlyph = iqlab.haraka;
-                extraShift = 0.06;
+                calibKey = iqlab.haraka === FATHA ? 'iqlab_fatha'
+                    : iqlab.haraka === DAMMA ? 'iqlab_damma' : 'iqlab_kasra';
             } else if (c.role === 'tanween' && OPEN_TANWEEN[mark] && OPEN_TANWEEN_TAGS.has(c.tag ?? '')) {
                 // Assimilated tanwīn (idgham / ikhfaa) renders OPEN (DK encodes it
                 // as a distinct codepoint); iẓhar (tagless) keeps the stacked form.
@@ -548,7 +552,7 @@
                 cellStart: start,
                 cellEnd: end,
                 shareGroup: c.shareGroup,
-                renderStyle: harakaRenderStyle(sizeGlyph, extraShift),
+                renderStyle: harakaRenderStyle(sizeGlyph, extraShift, calibKey),
                 inserted: c.chars === '' && c.status === 'inserted',
             });
             noteShare(g, c);
@@ -1220,7 +1224,32 @@
         tsHoveredElement.set(null);
         _cancelPendingClick();
     });
+
+    // DEV-only highlight-transition perf A/B/C harness (remove before merge).
+    // Sets `data-ts-perf` on <html>; the variants live in timestamps.css.
+    const _perfModes: Array<[string, string]> = [
+        ['baseline', 'baseline 0.1s'],
+        ['drop', 'drop (none)'],
+        ['fast', '30ms'],
+        ['contain', 'contain:paint'],
+    ];
+    let _perfMode = 'baseline';
+    function _setPerf(m: string): void {
+        _perfMode = m;
+        const el = document.documentElement;
+        if (m === 'baseline') el.removeAttribute('data-ts-perf');
+        else el.setAttribute('data-ts-perf', m);
+    }
 </script>
+
+{#if import.meta.env.DEV}
+    <div class="perf-ab" dir="ltr">
+        <span class="perf-ab-label">highlight perf:</span>
+        {#each _perfModes as [m, label] (m)}
+            <button class="perf-ab-btn" class:on={_perfMode === m} on:click={() => _setPerf(m)}>{label}</button>
+        {/each}
+    </div>
+{/if}
 
 <div
     bind:this={rootEl}
