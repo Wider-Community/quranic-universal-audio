@@ -36,6 +36,7 @@
         OPEN_TANWEEN_TAGS,
         SUKUN,
     } from '../utils/tajweed-script';
+    import { isBridgeTag, tajweedColorVar } from '../utils/tajweed-colors';
     import { waqfRenderStyle } from '../utils/waqf-render';
     import {
         showLetters,
@@ -83,6 +84,8 @@
         /** Rendered-letter index this base cell maps to (loop-highlight identity). */
         letterIndex: number;
         shareGroup: number | null;
+        /** Tajweed-rule badge colour (`var(--tj-*)`) or null — a static underline. */
+        tjColor: string | null;
     }
 
     /** A SMALL diacritic cell — haraka / tanween (incl. iqlab fused mini-meem,
@@ -102,6 +105,8 @@
         renderStyle: string;
         /** inserted graphemeless vowel (hamza-waṣl / iltiqaa) — affordance only. */
         inserted: boolean;
+        /** Tajweed-rule badge colour (`var(--tj-*)`) or null. */
+        tjColor: string | null;
     }
 
     /** A rendered cell-group. `kind` drives the in-row order:
@@ -133,6 +138,8 @@
         interval: PhonemeInterval;
         /** Flat interval index (for highlight matching + click seek). */
         index: number;
+        /** Tajweed-rule badge colour (`var(--tj-*)`) or null — a static underline. */
+        tjColor: string | null;
     }
 
     interface RenderedBridge {
@@ -390,6 +397,7 @@
         word: TsWord,
         intervals: PhonemeInterval[],
         shareUnions: Map<number, [number, number]>,
+        idghamGroupColors: Map<number, string>,
         liftIltiqaa = false,
     ): RenderedGroup[] {
         const { folded, srcToFold } = foldedLettersFor(word);
@@ -485,6 +493,9 @@
                 shareGroup: c.shareGroup,
                 renderStyle: harakaRenderStyle(sizeGlyph, extraShift, calibKey),
                 inserted: c.chars === '' && c.status === 'inserted',
+                // Diacritic cells colour from their OWN tag only (tanwīn idgham/
+                // ikhfaa/iqlab); a madd's haraka has no tag → uncoloured.
+                tjColor: tajweedColorVar(c.tag),
             });
             noteShare(g, c);
         };
@@ -544,6 +555,10 @@
                 isNull,
                 letterIndex,
                 shareGroup: c.shareGroup,
+                // Own tag, else the cross-word idgham colour propagated from the
+                // source cell across the share_group (the receiving merged letter).
+                tjColor: tajweedColorVar(c.tag)
+                    ?? (c.shareGroup != null ? idghamGroupColors.get(c.shareGroup) ?? null : null),
             });
             noteShare(g, c);
         };
@@ -565,6 +580,9 @@
                 isNull: true,
                 letterIndex: -1,
                 shareGroup: c.shareGroup,
+                // Implicit madd (dagger/iwaḍ alef) — its own tag (madd_arid for the
+                // Allah dagger at waqf; madd_iwad is uncoloured).
+                tjColor: tajweedColorVar(c.tag),
             });
             noteShare(g, c);
         };
@@ -603,10 +621,11 @@
                         const g = c.shareGroup != null && longVowelSG.has(c.shareGroup)
                             ? vowelGroupFor(c.shareGroup) : newGroup('vowel');
                         pushFullImplicit(g, c);
-                        if (c.tag === 'allah_dagger_alef') {
-                            const iv = ownIv(c);
-                            if (iv) daggerBySrc.set(c.sourceLetterIndex, { group: g, iv });
-                        }
+                        // An implicit (chars='') non-iwaḍ madd is the Allah dagger-alef —
+                        // tagged allah_dagger_alef (ṭabīʿī) or madd_arid_lissukun (ʿāriḍ at
+                        // waqf). Co-light its dropped fatḥa with the dagger either way.
+                        const iv = ownIv(c);
+                        if (iv) daggerBySrc.set(c.sourceLetterIndex, { group: g, iv });
                     } else {
                         const lv = c.shareGroup != null && longVowelSG.has(c.shareGroup);
                         pushFullGrapheme(lv ? vowelGroupFor(c.shareGroup!) : newGroup('vowel'), c, false);
@@ -653,6 +672,7 @@
                 isNull: fl.isNull,
                 letterIndex: i,
                 shareGroup: null,
+                tjColor: null,
             });
             return g;
         });
@@ -709,7 +729,10 @@
                 const target = k === 0 ? wi : wi + 1;
                 if (target < words.length) {
                     bridgeBeforeBlock.set(target, {
-                        phonemes: [{ interval: intervals[pi]!, index: pi }],
+                        phonemes: [{
+                            interval: intervals[pi]!, index: pi,
+                            tjColor: tajweedColorVar(intervals[pi]!.bridge),
+                        }],
                         letter: null,
                     });
                     excluded.add(pi);
@@ -728,7 +751,7 @@
                 const iv = intervals[kpi];
                 const glyph = cellGlyph(kasra.chars, kasra.tag, iv.phone);
                 bridgeBeforeBlock.set(wi + 1, {
-                    phonemes: [{ interval: iv, index: kpi }],
+                    phonemes: [{ interval: iv, index: kpi, tjColor: null }],
                     letter: {
                         glyph,
                         style: harakaRenderStyle(glyph),
@@ -748,6 +771,24 @@
         // word — a per-word union would miss the other side.
         const shareUnions = _shareUnions(words.flatMap((w) => w.cells ?? []), intervals);
 
+        // Tajweed-badge colour maps, built verse-wide from cell tags:
+        //  - phonemeColor: flat interval index → colour, for INLINE phoneme boxes
+        //    (madd carriers + single-cell ghunnah/ikhfaa/iqlab). Cross-word idgham
+        //    tags are skipped here — their merger is the bridge tile, coloured below.
+        //  - idghamGroupColors: share_group → colour, so a cross-word idgham's
+        //    receiving letter (no own tag) co-colours with its tagged source.
+        const phonemeColor = new Map<number, string>();
+        const idghamGroupColors = new Map<number, string>();
+        for (const c of words.flatMap((w) => w.cells ?? [])) {
+            const color = tajweedColorVar(c.tag);
+            if (!color) continue;
+            if (isBridgeTag(c.tag)) {
+                if (c.shareGroup != null) idghamGroupColors.set(c.shareGroup, color);
+            } else {
+                for (const fi of c.phonemeIndices) phonemeColor.set(fi, color);
+            }
+        }
+
         const blocks: RenderedBlock[] = [];
         for (let wi = 0; wi < words.length; wi++) {
             const word = words[wi];
@@ -759,14 +800,16 @@
             for (const pi of word.phoneme_indices ?? []) {
                 if (excluded.has(pi)) continue;
                 const iv = intervals[pi];
-                if (iv && !iv.geminate_end) phonemes.push({ interval: iv, index: pi });
+                if (iv && !iv.geminate_end) {
+                    phonemes.push({ interval: iv, index: pi, tjColor: phonemeColor.get(pi) ?? null });
+                }
             }
 
             blocks.push({
                 word,
                 wordIndex: wi,
                 displayText: (word.display_text || word.text).replace(NON_RECITED_SIGNS, ''),
-                groups: cellGroupsFor(word, intervals, shareUnions, liftedIltiqaa.has(wi)),
+                groups: cellGroupsFor(word, intervals, shareUnions, idghamGroupColors, liftedIltiqaa.has(wi)),
                 phonemes,
                 bridge,
                 pauseBridge: null,
@@ -1330,6 +1373,8 @@
                             ph.interval.phone === 'sp'}
                         class:geminate={ph.interval.geminate_start}
                         data-index={ph.index}
+                        data-tj={ph.tjColor ? '1' : undefined}
+                        style:--tj-badge={ph.tjColor}
                         on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
                         on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
                         on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
@@ -1395,6 +1440,8 @@
                                         data-cell-start={f.cellStart}
                                         data-cell-end={f.cellEnd}
                                         data-word-index={block.wordIndex}
+                                        data-tj={f.tjColor ? '1' : undefined}
+                                        style:--tj-badge={f.tjColor}
                                         on:click={(e) => onCellClick(e, f.cellStart)}
                                         on:dblclick|stopPropagation
                                         on:mouseenter={(e) => onCellEnter(e, f.cellStart, f.cellEnd)}
@@ -1407,6 +1454,8 @@
                                     <span
                                         class="mega-letter null-ts"
                                         class:silent={f.silent}
+                                        data-tj={f.tjColor ? '1' : undefined}
+                                        style:--tj-badge={f.tjColor}
                                         on:click|stopPropagation
                                         on:keydown={() => {}}
                                         role="button"
@@ -1426,6 +1475,8 @@
                                         data-letter-end={f.letterEnd}
                                         data-word-index={block.wordIndex}
                                         data-letter-index={f.letterIndex}
+                                        data-tj={f.tjColor ? '1' : undefined}
+                                        style:--tj-badge={f.tjColor}
                                         on:click={(e) =>
                                             onLetterClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
                                         on:dblclick={(e) =>
@@ -1449,6 +1500,8 @@
                                         data-cell-start={c.cellStart}
                                         data-cell-end={c.cellEnd}
                                         data-word-index={block.wordIndex}
+                                        data-tj={c.tjColor ? '1' : undefined}
+                                        style:--tj-badge={c.tjColor}
                                         on:click={(e) => onCellClick(e, c.cellStart)}
                                         on:dblclick|stopPropagation
                                         on:mouseenter={(e) => onCellEnter(e, c.cellStart, c.cellEnd)}
@@ -1475,6 +1528,8 @@
                             ph.interval.phone === 'sp'}
                         class:geminate={ph.interval.geminate_start}
                         data-index={ph.index}
+                        data-tj={ph.tjColor ? '1' : undefined}
+                        style:--tj-badge={ph.tjColor}
                         on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
                         on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
                         on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}

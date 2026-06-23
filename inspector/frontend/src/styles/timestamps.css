@@ -423,7 +423,6 @@
 
 .crossword-bridge .mega-phoneme {
     flex: none;
-    border-color: #665500;
 }
 
 .crossword-bridge.hidden {
@@ -586,6 +585,17 @@
     .pause-bridge {
         transition: none;
     }
+}
+
+/* Tajweed-rule badge — a static per-cell underline driven by `data-tj` + the
+   `--tj-badge` custom prop (set in UnifiedDisplay from the cell's tag). Uses the
+   inset-box-shadow channel so it survives the .active fill (which owns background +
+   border-color); applies identically to letter cells, diacritic cells, and phoneme
+   boxes (incl. the cross-word bridge tile). */
+.mega-letter[data-tj],
+.haraka-cell[data-tj],
+.mega-phoneme[data-tj] {
+    box-shadow: inset 0 -2px 0 var(--tj-badge);
 }
 
 /* Active states */
