@@ -30,6 +30,22 @@
     --anim-highlight-color: #f0a500;
     --anim-word-transition: opacity 0.15s ease;
     --anim-char-transition: opacity 0.15s ease;
+
+    /* Tajweed-rule badge colours (Timestamps analysis row) — a static per-cell
+       underline, distinct from the playback highlight. Dark-only OKLCH; tuned for
+       legibility on the cell backgrounds (#0f0f23 rest / #1a1a3e active-word).
+       Mapped from cell `tag` in tabs/timestamps/utils/tajweed-colors.ts. */
+    --tj-madd-jaiz: oklch(0.80 0.10 350);      /* light pink   */
+    --tj-madd-wajib: oklch(0.68 0.16 350);     /* darker pink  */
+    --tj-madd-lazim: oklch(0.58 0.13 30);      /* reddish-brown */
+    --tj-madd-arid: oklch(0.80 0.13 75);       /* yellow-orange 1 */
+    --tj-madd-leen: oklch(0.72 0.16 55);       /* yellow-orange 2 */
+    --tj-idgham-ghunnah: oklch(0.75 0.16 150); /* green        */
+    --tj-idgham-shafawi: oklch(0.70 0.14 168); /* green 2      */
+    --tj-ghunnah: oklch(0.80 0.11 200);        /* cyan/teal    */
+    --tj-ikhfaa: oklch(0.67 0.15 288);         /* purple */
+    --tj-ikhfaa-shafawi: oklch(0.63 0.15 312); /* purple (mid) */
+    --tj-iqlab: oklch(0.52 0.17 315);          /* dark purple */
 }
 
 * {

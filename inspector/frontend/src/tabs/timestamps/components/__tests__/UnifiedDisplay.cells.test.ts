@@ -679,6 +679,215 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             vi.useRealTimers();
         }
     });
+
+    // --- Tajweed-rule colour badges (data-tj + --tj-badge) ------------------
+
+    it('madd: badges the carrier grapheme + its phoneme box, NOT the haraka', () => {
+        const intervals: PhonemeInterval[] = [
+            { phone: 'dˤ', start: 0, end: 0.1 }, { phone: 'a:', start: 0.1, end: 0.5 },
+        ];
+        const word = w(
+            [{ char: 'ض', start: 0, end: 0.1, silent: false }, { char: 'ا', start: 0.1, end: 0.5, silent: false }],
+            [
+                base(0, [0], { chars: 'ض' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 0 },
+                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, tag: 'madd_wajib_muttasil', shareGroup: 0 },
+            ],
+            [0, 1],
+        );
+        const { container } = mount([word], intervals);
+        const carrier = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .find((e) => e.textContent === 'ا')!;
+        expect(carrier.dataset.tj).toBe('1');
+        expect(carrier.style.getPropertyValue('--tj-badge')).toContain('madd-wajib');
+        // the haraka co-lights but is NOT coloured (madd = carrier grapheme only)
+        const haraka = container.querySelector<HTMLElement>('.haraka-cell')!;
+        expect(haraka.dataset.tj).toBeUndefined();
+        // the long-vowel phoneme box is badged
+        expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!.dataset.tj).toBe('1');
+    });
+
+    it('tanwīn idgham: both letter cells badged; the phoneme badge is the single bridge tile', () => {
+        const intervals: PhonemeInterval[] = [
+            { phone: 'b', start: 0, end: 0.1 },
+            { phone: 'i', start: 0.1, end: 0.2 },                                       // tanwīn's own vowel
+            { phone: 'm̃', start: 0.2, end: 0.6, bridge: 'idgham_ghunnah_tanween' },     // merger (bridge)
+        ];
+        const wordN = w(
+            [{ char: 'ب', start: 0, end: 0.2, silent: false }],
+            [
+                base(0, [0], { chars: 'ب' }),
+                { chars: 'ٍ', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'idgham_ghunnah_tanween', shareGroup: 7 },
+            ],
+            [0, 1],
+        );
+        const wordN1 = w(
+            [{ char: 'م', start: 0.2, end: 0.6, silent: false }],
+            [base(0, [2], { chars: 'م', shareGroup: 7 })],
+            [2],
+        );
+        const { container } = mount([wordN, wordN1], intervals);
+        expect(container.querySelector<HTMLElement>('.haraka-cell')!.dataset.tj).toBe('1'); // tanwīn source
+        const meem = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .find((e) => e.textContent === 'م')!;
+        expect(meem.dataset.tj).toBe('1');                                                  // receiver, via group
+        expect(container.querySelector<HTMLElement>('.crossword-bridge .mega-phoneme')!.dataset.tj).toBe('1');
+        // the source tanwīn's own vowel box is NOT badged (its merger is the bridge)
+        expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!.dataset.tj).toBeUndefined();
+    });
+
+    it('idgham shafawi: both mīms badged + the single bridge tile', () => {
+        const intervals: PhonemeInterval[] = [
+            { phone: 'h', start: 0, end: 0.1 },
+            { phone: 'm̃', start: 0.1, end: 0.5, bridge: 'idgham_shafawi' }, // source-mīm merger (bridge)
+            { phone: 'a', start: 0.5, end: 0.6 },                           // receiver mīm's vowel
+        ];
+        const wordN = w(
+            [{ char: 'ه', start: 0, end: 0.1, silent: false }, { char: 'م', start: 0.1, end: 0.5, silent: false }],
+            [base(0, [0], { chars: 'ه' }), base(1, [1], { chars: 'م', tag: 'idgham_shafawi', shareGroup: 8 })],
+            [0, 1],
+        );
+        const wordN1 = w(
+            [{ char: 'م', start: 0.5, end: 0.6, silent: false }],
+            [base(0, [2], { chars: 'م', shareGroup: 8 })],
+            [2],
+        );
+        const { container } = mount([wordN, wordN1], intervals);
+        const meems = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .filter((e) => e.textContent === 'م');
+        expect(meems.length).toBe(2);
+        expect(meems.every((m) => m.dataset.tj === '1')).toBe(true);
+        const bridge = container.querySelector<HTMLElement>('.crossword-bridge .mega-phoneme')!;
+        expect(bridge.dataset.tj).toBe('1');
+        expect(bridge.style.getPropertyValue('--tj-badge')).toContain('idgham-shafawi');
+    });
+
+    it('Allah dagger: arid-badged at waqf (carrier only, not the fatḥa); uncoloured continuing', () => {
+        const intervals: PhonemeInterval[] = [
+            { phone: 'll', start: 0, end: 0.15 }, { phone: 'a:', start: 0.15, end: 0.5 },
+        ];
+        const mk = (tag: string) => w(
+            [{ char: 'ل', start: 0, end: 0.5, silent: false }, { char: 'ه', start: 0.5, end: 0.6, silent: false }],
+            [
+                base(0, [0], { chars: 'ل' }),
+                { chars: '', role: 'madd', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, tag, shareGroup: null },
+                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
+            ],
+            [0, 1],
+        );
+        // continuing → allah_dagger_alef → no badge
+        let c = mount([mk('allah_dagger_alef')], intervals).container;
+        expect(c.querySelector<HTMLElement>('.mega-letter.implicit')!.dataset.tj).toBeUndefined();
+        cleanup();
+        // stopping → madd_arid_lissukun → dagger badged, fatḥa not
+        c = mount([mk('madd_arid_lissukun')], intervals).container;
+        const dagger = c.querySelector<HTMLElement>('.mega-letter.implicit')!;
+        expect(dagger.dataset.tj).toBe('1');
+        expect(dagger.style.getPropertyValue('--tj-badge')).toContain('madd-arid');
+        // the dropped fatḥa STILL groups + co-lights with the arid dagger (it must NOT
+        // fall back to the lām's base group greyed — daggerBySrc keys off the implicit
+        // madd, not the allah_dagger_alef tag, so the arid waqf case still co-lights).
+        const vowel = Array.from(c.querySelectorAll<HTMLElement>('.cell-group')).find(
+            (g) => g.querySelector('.mega-letter.implicit'),
+        )!;
+        const fatha = vowel.querySelector<HTMLElement>('.haraka-cell')!;
+        expect(fatha).toBeTruthy();
+        expect(fatha.classList.contains('dia-dropped')).toBe(false); // co-lit, not greyed
+        expect(fatha.dataset.cellTimed).toBe('1');
+        expect(fatha.dataset.cellStart).toBe('0.15'); // the dagger's ā interval
+        expect(fatha.dataset.tj).toBeUndefined(); // colour is carrier-only
+    });
+
+    it('no badge for ṭabīʿī madd, nor for bila-ghunnah idgham + its receiver', () => {
+        const tabiiIv: PhonemeInterval[] = [
+            { phone: 'q', start: 0, end: 0.1 }, { phone: 'a:', start: 0.1, end: 0.4 },
+        ];
+        const tabii = w(
+            [{ char: 'ق', start: 0, end: 0.1, silent: false }, { char: 'ا', start: 0.1, end: 0.4, silent: false }],
+            [
+                base(0, [0], { chars: 'ق' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 0 },
+                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, tag: null, shareGroup: 0 },
+            ],
+            [0, 1],
+        );
+        expect(mount([tabii], tabiiIv).container.querySelector('[data-tj]')).toBeNull();
+        cleanup();
+
+        const bilaIv: PhonemeInterval[] = [
+            { phone: 'b', start: 0, end: 0.1 }, { phone: 'i', start: 0.1, end: 0.2 },
+            { phone: 'rˤrˤ', start: 0.2, end: 0.5, bridge: 'idgham_bila_ghunnah_tanween' },
+        ];
+        const bN = w(
+            [{ char: 'ب', start: 0, end: 0.2, silent: false }],
+            [
+                base(0, [0], { chars: 'ب' }),
+                { chars: 'ٍ', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'idgham_bila_ghunnah_tanween', shareGroup: 7 },
+            ],
+            [0, 1],
+        );
+        const bN1 = w(
+            [{ char: 'ر', start: 0.2, end: 0.5, silent: false }],
+            [base(0, [2], { chars: 'ر', shareGroup: 7 })],
+            [2],
+        );
+        expect(mount([bN, bN1], bilaIv).container.querySelector('[data-tj]')).toBeNull();
+    });
+
+    it('iltiqaa: the shortened carrier (no phones) greys like any silent letter', () => {
+        // ٱهْدِنَا ٱللَّه — the long ā of نَا is shortened (iltiqāʾ): its alef carrier
+        // sounds nothing (status=shortened, no phoneme indices). It must grey via the
+        // SAME .silent path as a dropped silent letter — silence keys on "no own
+        // phones + no share group", NOT on status==='dropped' (the bg-mismatch root cause).
+        const intervals: PhonemeInterval[] = [
+            { phone: 'n', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.2 },
+        ];
+        const word = w(
+            [{ char: 'ن', start: 0, end: 0.1, silent: false }, { char: 'ا', start: 0.1, end: 0.2, silent: false }],
+            [
+                base(0, [0], { chars: 'ن' }),
+                { chars: 'َ', role: 'haraka', status: 'shortened', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'iltiqaa', shareGroup: null },
+                { chars: 'ا', role: 'madd', status: 'shortened', phonemeIndices: [], sourceLetterIndex: 1, tag: 'iltiqaa', shareGroup: null },
+            ],
+            [0, 1],
+        );
+        const { container } = mount([word], intervals);
+        const alef = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .find((e) => e.textContent === 'ا')!;
+        expect(alef).toBeTruthy();
+        expect(alef.classList.contains('silent')).toBe(true);
+    });
+
+    it('ghunnah tanwīn (ikhfaa/iqlab): the phoneme row underlines only the nasal, not the vowel', () => {
+        // بَعُوضَةً-style: the tanwīn sounds [short-vowel, nasal]. A ghunnah is ONE
+        // phoneme on the phoneme row — only the nasal (idx 4) is underlined; the
+        // tanwīn's own vowel (idx 3) is not (it's the letter's, not the rule's).
+        const mk = (tag: string) => {
+            const intervals: PhonemeInterval[] = [
+                { phone: 'dˤ', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.2 },
+                { phone: 't', start: 0.2, end: 0.3 },
+                { phone: 'a', start: 0.3, end: 0.34 }, // tanwīn vowel
+                { phone: 'ŋ', start: 0.34, end: 0.8 }, // tanwīn nasal
+            ];
+            const word = w(
+                [{ char: 'ض', start: 0, end: 0.2, silent: false }, { char: 'ة', start: 0.2, end: 0.34, silent: false }],
+                [
+                    base(0, [0], { chars: 'ض' }),
+                    { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                    base(1, [2], { chars: 'ة' }),
+                    { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [3, 4], sourceLetterIndex: 1, tag, shareGroup: null },
+                ],
+                [0, 1, 2, 3, 4],
+            );
+            return mount([word], intervals).container;
+        };
+        for (const tag of ['ikhfaa_tanween', 'iqlab_tanween']) {
+            const c = mk(tag);
+            expect(c.querySelector<HTMLElement>('.mega-phoneme[data-index="4"]')!.dataset.tj).toBe('1'); // nasal
+            expect(c.querySelector<HTMLElement>('.mega-phoneme[data-index="3"]')!.dataset.tj).toBeUndefined(); // vowel
+            cleanup();
+        }
+    });
 });
 
 /**

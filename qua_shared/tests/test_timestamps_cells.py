@@ -35,6 +35,7 @@ needs_cpm = pytest.mark.skipif(
 
 # --- pure accessor ---------------------------------------------------------
 
+
 def test_parse_cell_named():
     row = ["ِ", "haraka", "present", [1], 0, "iltiqaa", 3]
     c = ts_shard_cells.parse_cell(row)
@@ -43,6 +44,19 @@ def test_parse_cell_named():
     assert c.source_letter_index == 0
     assert c.tag == "iltiqaa"
     assert c.share_group == 3
+
+
+def test_parse_cell_carries_new_open_form_tag():
+    # `tag` is open-form (phonemizer-owned vocabulary): a v7 madd-subtype / plain-
+    # ghunnah tag rides through the accessor unchanged, no enum to extend.
+    assert (
+        ts_shard_cells.parse_cell(["ا", "madd", "present", [3], 1, "madd_lazim", 2]).tag
+        == "madd_lazim"
+    )
+    assert (
+        ts_shard_cells.parse_cell(["ن", "base", "present", [0], 0, "noon_ghunnah", None]).tag
+        == "noon_ghunnah"
+    )
 
 
 def test_parse_cell_tolerates_minimal_and_trailing():
@@ -65,6 +79,7 @@ def test_word_cells_tolerates_missing_slot():
 
 # --- schema tolerates both arities ----------------------------------------
 
+
 def test_schema_accepts_v4_and_v5_words():
     v4 = [1, 10, 200, [["ب", 10, 90, False]], [["b", 10, 50], ["i", 50, 90]]]
     v5 = v4 + [[["ِ", "haraka", "present", [1], 0, None, None]]]
@@ -78,6 +93,7 @@ def test_schema_accepts_v4_and_v5_words():
 
 
 # --- phonemizer-backed stamping on the real fixtures -----------------------
+
 
 @needs_cpm
 @pytest.mark.parametrize("chapter", [101, 102])
@@ -110,7 +126,7 @@ def test_cells_stamped_and_valid_on_fixture(chapter):
             # a phone shared by >1 cell must carry one (non-None) share_group.
             # (base + haraka can legitimately share a consonant index; when they
             # do, the index must still resolve to a single non-None group.)
-            for i, groups in by_index.items():
+            for groups in by_index.values():
                 if len(groups) > 1:
                     assert None not in groups and len(groups) == 1
     assert total_words > 0

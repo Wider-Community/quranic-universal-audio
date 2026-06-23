@@ -60,8 +60,10 @@ _SEGMENT_META_PROVENANCE = (
 # ``qua_shared/ts_shard_cells.py``). v6 carries two extra phonemizer-owned cell
 # facts so the FE never infers phonology: the canonical shaddah composed into a
 # geminated base cell's ``chars``, and a ``share_group`` on the vowel-absorbed
-# haraka of a cross-word idgham. The cell-row structure is unchanged.
-SEGMENT_SCHEMA_VERSION = 6
+# haraka of a cross-word idgham. v7 expands the open-form cell ``tag`` vocabulary
+# (madd subtypes, plain ghunnah, ikhfaa/idgham shafawi) so a consumer can colour
+# per-rule tajweed badges — the cell-row STRUCTURE is unchanged across v5–v7.
+SEGMENT_SCHEMA_VERSION = 7
 
 
 def _filter_mfa_failures(failures: list[dict] | None, chapter: int) -> list[dict]:
