@@ -70,16 +70,17 @@ function mount(words: TsWord[], ivals: PhonemeInterval[]) {
 function readSequence(container: HTMLElement) {
     const root = container.querySelector('.unified-display')!;
     const seq: Array<{ kind: string; text?: string; phon?: string[] }> = [];
-    for (const el of Array.from(root.children)) {
+    // Each `.word-unit` wraps an unbreakable run (bridge-linked words + a trailing
+    // pause cell); descend to its bridge/block parts in document order.
+    const parts = Array.from(root.querySelectorAll('.word-unit')).flatMap((u) => Array.from(u.children));
+    for (const el of parts) {
         if (el.classList.contains('crossword-bridge')) {
             const text = Array.from(el.querySelectorAll('.mega-phoneme'))
                 .map((s) => s.textContent!.trim())
                 .join(' ');
             seq.push({ kind: 'bridge', text });
         } else if (el.classList.contains('mega-block')) {
-            const phon = Array.from(el.querySelectorAll('.mega-phonemes .mega-phoneme')).map((s) =>
-                s.textContent!.trim(),
-            );
+            const phon = Array.from(el.querySelectorAll('.mega-phoneme')).map((s) => s.textContent!.trim());
             seq.push({ kind: 'word', phon });
         }
     }
@@ -214,10 +215,10 @@ describe('UnifiedDisplay — iltiqaa connecting-kasra borderless bridge', () => 
         // phoneme row: the i, lifted out of word N's inline phonemes.
         expect(bridge.querySelector('.mega-phoneme')!.textContent!.trim()).toBe('i');
         const wNblock = container.querySelectorAll<HTMLElement>('.mega-block')[0]!;
-        const wNphon = Array.from(wNblock.querySelectorAll('.mega-phonemes .mega-phoneme')).map((s) => s.textContent!.trim());
+        const wNphon = Array.from(wNblock.querySelectorAll('.mega-phoneme')).map((s) => s.textContent!.trim());
         expect(wNphon).toEqual(['d', 'u', 'n']); // the i is NOT inline
         // the kasra small cell is not duplicated inside word N's letter row.
-        const wNletterMarks = Array.from(wNblock.querySelectorAll('.mega-letters .haraka-cell .g')).map((s) => s.textContent);
+        const wNletterMarks = Array.from(wNblock.querySelectorAll('.haraka-cell .g')).map((s) => s.textContent);
         expect(wNletterMarks).not.toContain(KASRA);
     });
 
@@ -264,7 +265,79 @@ describe('UnifiedDisplay — iltiqaa connecting-kasra borderless bridge', () => 
         expect(bridge.querySelector('.bridge-letter .g')!.textContent).toBe(KASRA);
         expect(wNblock.querySelector('.bridge-letter')).toBeNull();
         // i lifted out of word N inline phonemes.
-        const wNphon = Array.from(wNblock.querySelectorAll('.mega-phonemes .mega-phoneme')).map((s) => s.textContent!.trim());
+        const wNphon = Array.from(wNblock.querySelectorAll('.mega-phoneme')).map((s) => s.textContent!.trim());
         expect(wNphon).toEqual(['x', 'a', 'j', 'r', 'a', 'n']);
+    });
+});
+
+describe('UnifiedDisplay — word-unit grouping (justification atoms)', () => {
+    beforeEach(() => {
+        dashPort.attachElement(
+            makePortAudioStub({ src: 'http://audio/28.mp3', readyState: 4 }) as unknown as HTMLAudioElement,
+        );
+        dashPort.setSource({ audioUrl: 'http://audio/28.mp3', reciter: null, vbr: false });
+    });
+    afterEach(() => {
+        cleanup();
+        loadedVerse.set(null);
+        dashPort.attachElement(null);
+    });
+
+    function timedWord(loc: string, ch: string, start: number, end: number, idx: number[]): TsWord {
+        return {
+            location: loc, text: ch, display_text: ch, start, end, phoneme_indices: idx,
+            letters: [{ char: ch, start, end, silent: false }],
+            cells: [{ chars: ch, role: 'base', status: 'present', phonemeIndices: idx, sourceLetterIndex: 0, tag: null, shareGroup: null }],
+        };
+    }
+
+    it('keeps a bridge-linked pair in ONE word-unit', () => {
+        // iltiqaa connecting-kasra bridges word N and N+1 → one unbreakable unit.
+        const ivals = intervals([
+            { sym: 'd', start: 0, end: 0.1 }, { sym: 'u', start: 0.1, end: 0.2 },
+            { sym: 'n', start: 0.2, end: 0.3 }, { sym: 'i', start: 0.3, end: 0.4 },
+            { sym: 'l', start: 0.4, end: 0.6 },
+        ]);
+        const wN = cellWord('2:1:1', [{ char: 'د', start: 0, end: 0.3 }], [
+            { chars: 'د', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, tag: null, shareGroup: null },
+            { chars: 'ٌ', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, tag: null, shareGroup: null },
+            { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [3], sourceLetterIndex: 0, tag: 'iltiqaa_kasra', shareGroup: null },
+        ], [0, 1, 2, 3]);
+        const wNext = cellWord('2:1:2', [
+            { char: 'ٱ', start: 0.4, end: 0.4 }, { char: 'ل', start: 0.4, end: 0.6 },
+        ], [
+            { chars: 'ٱ', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
+            { chars: 'ل', role: 'base', status: 'present', phonemeIndices: [4], sourceLetterIndex: 1, tag: null, shareGroup: null },
+        ], [4]);
+        const { container } = mount([wN, wNext], ivals);
+        const units = container.querySelectorAll<HTMLElement>('.word-unit');
+        expect(units.length).toBe(1); // the bridged pair never splits across rows
+        expect(units[0]!.querySelectorAll('.mega-block').length).toBe(2);
+        expect(units[0]!.querySelector('.crossword-bridge')).toBeTruthy();
+    });
+
+    it('trails a pause cell on its own word and starts a new unit for the next word', () => {
+        // word A (0–0.5), silence, word B (0.8–1.2): the pause cell is A's unit's
+        // trailing child (the flush anchor); B is a separate unit with no pause.
+        const ivals = intervals([{ sym: 'a', start: 0, end: 0.5 }, { sym: 'b', start: 0.8, end: 1.2 }]);
+        const { container } = mount(
+            [timedWord('2:1:1', 'ا', 0, 0.5, [0]), timedWord('2:1:2', 'ب', 0.8, 1.2, [1])],
+            ivals,
+        );
+        const units = container.querySelectorAll<HTMLElement>('.word-unit');
+        expect(units.length).toBe(2);
+        expect(units[0]!.querySelector('.pause-bridge')).toBeTruthy();
+        expect(units[0]!.lastElementChild!.classList.contains('pause-bridge')).toBe(true);
+        expect(units[1]!.querySelector('.pause-bridge')).toBeNull();
+    });
+
+    it('puts plain contiguous words in separate units', () => {
+        // word A (0–0.5) then word B (0.5–1.0): contiguous (no gap, no bridge) → 2 units.
+        const ivals = intervals([{ sym: 'a', start: 0, end: 0.5 }, { sym: 'b', start: 0.5, end: 1.0 }]);
+        const { container } = mount(
+            [timedWord('2:1:1', 'ا', 0, 0.5, [0]), timedWord('2:1:2', 'ب', 0.5, 1.0, [1])],
+            ivals,
+        );
+        expect(container.querySelectorAll('.word-unit').length).toBe(2);
     });
 });

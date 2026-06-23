@@ -682,12 +682,13 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
 });
 
 /**
- * Column alignment: the letter row and the phoneme row share one per-group column
- * grid, so each letter-group's sounds render as a cluster directly beneath it. A
- * silent base / dropped diacritic at waqf contributes no phoneme — its column's
- * cluster is empty (a reserved slot), keeping the columns aligned.
+ * Per-grapheme phoneme alignment: each cell-group is a mini-grid where every
+ * phoneme sits under its OWN source grapheme — the consonant under the base
+ * letter, the vowel under its diacritic. A silent letter or a merged-away
+ * consonant leaves its column with no phoneme; a long vowel's sound sits under
+ * its diacritic, not the carrier.
  */
-describe('UnifiedDisplay — column alignment (per-group phoneme clusters)', () => {
+describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
     beforeEach(() => {
         dashPort.attachElement(
             makePortAudioStub({ src: 'http://audio/1.mp3', readyState: 4 }) as unknown as HTMLAudioElement,
@@ -703,9 +704,24 @@ describe('UnifiedDisplay — column alignment (per-group phoneme clusters)', () 
     const clusterPhones = (el: HTMLElement): (string | null)[] =>
         Array.from(el.querySelectorAll('.ph-base')).map((p) => p.textContent);
 
-    it('aligns each letter-group with its own phoneme cluster, one per group', () => {
-        // قُلْ : ق+ḍamma → [q, u] (1 letter, 2 sounds); ل+sukūn → [l]. Two groups → two
-        // clusters; the ق column is the wider one (2 sounds).
+    /** Map a cell-group's grid columns → { grapheme glyph, phonemes } by reading
+     *  the inline `grid-column` each cell/cluster is placed at. */
+    const colsOf = (group: HTMLElement) => {
+        const startCol = (el: HTMLElement): number =>
+            parseInt((el.style.gridColumn || '0').split('/')[0]!.trim(), 10);
+        const graphemes = new Map<number, string>();
+        group.querySelectorAll<HTMLElement>(':scope > .mega-letter').forEach((l) =>
+            graphemes.set(startCol(l), l.textContent ?? ''));
+        group.querySelectorAll<HTMLElement>(':scope > .dia-track').forEach((d) =>
+            graphemes.set(startCol(d), d.querySelector('.g')?.textContent ?? ''));
+        const phon = new Map<number, (string | null)[]>();
+        group.querySelectorAll<HTMLElement>(':scope > .phoneme-cluster').forEach((c) =>
+            phon.set(startCol(c), Array.from(c.querySelectorAll('.ph-base')).map((p) => p.textContent)));
+        return { graphemes, phon };
+    };
+
+    it('places the consonant under its letter and the short vowel under its mark (قُلْ)', () => {
+        // ق+ḍamma → q under ق, u under the ḍamma; ل+sukūn → l under ل.
         const intervals: PhonemeInterval[] = [
             { phone: 'q', start: 0, end: 0.1 }, { phone: 'u', start: 0.1, end: 0.2 },
             { phone: 'l', start: 0.2, end: 0.3 },
@@ -721,23 +737,21 @@ describe('UnifiedDisplay — column alignment (per-group phoneme clusters)', () 
             [0, 1, 2],
         );
         const { container } = mount([word], intervals);
-        const grid = container.querySelector<HTMLElement>('.mega-grid')!;
-        expect(grid.style.getPropertyValue('--col-count')).toBe('2');
         const groups = container.querySelectorAll<HTMLElement>('.cell-group');
-        const clusters = container.querySelectorAll<HTMLElement>('.phoneme-cluster');
-        expect(clusters.length).toBe(groups.length);
-        expect(clusters.length).toBe(2);
-        // ق's column holds [q, u]; ل's holds [l].
-        expect(clusterPhones(clusters[0]!)).toEqual(['q', 'u']);
-        expect(clusterPhones(clusters[1]!)).toEqual(['l']);
-        // each cluster shares its column's data-group-index with its cell-group.
-        expect(clusters[0]!.dataset.groupIndex).toBe(groups[0]!.dataset.groupIndex);
-        expect(clusters[1]!.dataset.groupIndex).toBe(groups[1]!.dataset.groupIndex);
+        expect(groups.length).toBe(2);
+        // ق group: TWO grapheme columns — ق (col 1) → q, ḍamma (col 2) → u.
+        expect(groups[0]!.style.getPropertyValue('--gcols')).toBe('2');
+        const qg = colsOf(groups[0]!);
+        expect(qg.graphemes.get(1)).toBe('ق');
+        expect(qg.phon.get(1)).toEqual(['q']);
+        expect(qg.phon.get(2)).toEqual(['u']);
+        // ل group: l under ل.
+        expect(colsOf(groups[1]!).phon.get(1)).toEqual(['l']);
     });
 
-    it('reserves an empty cluster under a silent base letter', () => {
+    it('leaves a silent base letter\'s column with no phoneme', () => {
         // ٱل : hamza-waṣl ٱ is silent (dropped, no phoneme); ل sounds [l]. ٱ's column
-        // shows an empty (reserved) cluster — "this letter makes no sound".
+        // has NO phoneme cluster — a reserved empty slot.
         const intervals: PhonemeInterval[] = [{ phone: 'l', start: 0.1, end: 0.3 }];
         const word = w(
             [{ char: 'ٱ', start: null, end: null, silent: true }, { char: 'ل', start: 0.1, end: 0.3, silent: false }],
@@ -745,16 +759,17 @@ describe('UnifiedDisplay — column alignment (per-group phoneme clusters)', () 
             [0],
         );
         const { container } = mount([word], intervals);
-        const clusters = container.querySelectorAll<HTMLElement>('.phoneme-cluster');
-        expect(clusters.length).toBe(2);
-        expect(clusters[0]!.classList.contains('empty')).toBe(true);
-        expect(clusters[0]!.querySelectorAll('.mega-phoneme').length).toBe(0);
-        expect(clusterPhones(clusters[1]!)).toEqual(['l']);
+        const groups = container.querySelectorAll<HTMLElement>('.cell-group');
+        // ٱ group: grapheme present, but no phoneme cluster at all.
+        expect(colsOf(groups[0]!).graphemes.get(1)).toBe('ٱ');
+        expect(groups[0]!.querySelectorAll('.phoneme-cluster').length).toBe(0);
+        // ل group: l under ل.
+        expect(colsOf(groups[1]!).phon.get(1)).toEqual(['l']);
     });
 
-    it('a dropped tanwīn at waqf adds no phoneme to its column', () => {
-        // مٌ at waqf: م sounds [m]; the ḍammatan is dropped — the column shows only m,
-        // and the dropped mark is greyed in the letter row (same as a silent letter).
+    it('a dropped tanwīn at waqf gets no phoneme — only the consonant sounds', () => {
+        // مٌ at waqf: م sounds [m] under its column; the ḍammatan is dropped — its
+        // (col 2) has no phoneme, and the mark is greyed in the letter row.
         const intervals: PhonemeInterval[] = [{ phone: 'm', start: 0, end: 0.2 }];
         const word = w(
             [{ char: 'م', start: 0, end: 0.2, silent: false }],
@@ -765,15 +780,17 @@ describe('UnifiedDisplay — column alignment (per-group phoneme clusters)', () 
             [0],
         );
         const { container } = mount([word], intervals);
-        const clusters = container.querySelectorAll<HTMLElement>('.phoneme-cluster');
-        expect(clusters.length).toBe(1);
-        expect(clusterPhones(clusters[0]!)).toEqual(['m']);
+        const group = container.querySelector<HTMLElement>('.cell-group')!;
+        const { phon } = colsOf(group);
+        expect(phon.get(1)).toEqual(['m']); // م
+        // only ONE cluster (under م) — the dropped tanwīn column has none.
+        expect(group.querySelectorAll('.phoneme-cluster').length).toBe(1);
         expect(container.querySelector('.haraka-cell.dia-dropped')).toBeTruthy();
     });
 
-    it('shows ONE shared phoneme under a long-vowel [diacritic, carrier] column', () => {
-        // مِي : base م → [m]; kasra + ي carrier share one phoneme iː — the vowel
-        // column shows a single sound, not two.
+    it('puts a long-vowel sound under its diacritic, leaving the carrier empty', () => {
+        // مِي : base م → [m]; the [kasra, ي] unit sounds one iː — under the KASRA, with
+        // the ي carrier column empty (the user rule: vowel under the diacritic).
         const intervals: PhonemeInterval[] = [
             { phone: 'm', start: 0, end: 0.1 }, { phone: 'i:', start: 0.1, end: 0.4 },
         ];
@@ -787,11 +804,15 @@ describe('UnifiedDisplay — column alignment (per-group phoneme clusters)', () 
             [0, 1],
         );
         const { container } = mount([word], intervals);
-        const clusters = container.querySelectorAll<HTMLElement>('.phoneme-cluster');
-        expect(clusters.length).toBe(2);
-        expect(clusterPhones(clusters[0]!)).toEqual(['m']);
-        expect(clusters[1]!.querySelectorAll('.mega-phoneme').length).toBe(1);
-        expect(clusters[1]!.querySelector('.ph-base')!.textContent).toBe('i'); // iː → base 'i' + ː superscript
+        const groups = container.querySelectorAll<HTMLElement>('.cell-group');
+        expect(groups.length).toBe(2);
+        expect(colsOf(groups[0]!).phon.get(1)).toEqual(['m']); // base م
+        // vowel unit [kasra (col 1), ي carrier (col 2)] — iː under the kasra, ي empty.
+        const vg = colsOf(groups[1]!);
+        expect(vg.graphemes.get(1)).toBe('ِ');
+        expect(vg.phon.get(1)).toEqual(['i']); // iː → ph-base 'i' (ː is a superscript)
+        expect(vg.graphemes.get(2)).toBe('ي');
+        expect(vg.phon.has(2)).toBe(false); // carrier has no sound beneath it
     });
 
     it('the clusters partition the word’s phonemes — none dropped, none duplicated', () => {

@@ -34,20 +34,41 @@
 }
 
 
-/* Unified display */
+/* Unified display — justified word rows. Each `.word-unit` is an inline-flex atom
+   (a single word, a bridge-linked pair/chain, or a word + its trailing stop-cell).
+   Interior wrapped rows justify to flush BOTH container edges with even gaps between
+   units; the last row and single-row verses stay start-aligned (text-align-last).
+   The atoms are separated by a space the justify distributes (see the `{' '}` in the
+   template) — word-spacing sets its minimum so a non-justified row keeps real gaps. */
 .unified-display {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--mega-line-gap);
-    justify-content: flex-start;
+    /* justify interior rows; the last row stays start-aligned via the default
+       `text-align-last: auto` (which resolves to start under justify). We must NOT
+       set `text-align-last` here — it's inherited, and would force every single-line
+       `.mega-word` / translation to start instead of its own `text-align: center`. */
+    text-align: justify;
+    word-spacing: var(--mega-line-gap, 16px);
+    line-height: 0; /* drop the inline strut so rows pack to the unit height */
     padding: 20px;
     background: #16213e;
     border-radius: 10px;
-    align-items: flex-end;
 }
 
 .unified-display.hidden {
     display: none;
+}
+
+/* A justification atom: word(s) + optional bridge/pause laid out as ONE inline-flex
+   row that never wraps internally — so a bridged pair never splits across rows and a
+   word+stop-cell stays glued (the stop cell its trailing flush anchor). Bottom-aligned
+   across the row; the internal gap keeps the word↔bridge/pause spacing while the row
+   justifies BETWEEN units. */
+.word-unit {
+    display: inline-flex;
+    align-items: flex-end;
+    vertical-align: bottom;
+    line-height: normal;
+    gap: var(--mega-line-gap, 16px);
+    margin-bottom: var(--mega-line-gap, 16px);
 }
 
 /* Mega blocks */
@@ -156,60 +177,59 @@
     border-bottom: 2px solid var(--anim-highlight-color);
 }
 
-/* The analysis grid: ONE shared column track per cell-group, with the letter row
-   and the phoneme row both bound to it via `subgrid` — so every phoneme sits
-   directly under its letter-group and the letter↔phoneme relationship reads from
-   alignment, not only when co-highlighted. A track sizes to the max-content of
-   (its letter group | its phonemes); a 1-letter→2-sound group simply widens its
-   shared column. The gap BETWEEN groups is the grid column-gap; the gap WITHIN a
-   group is 0. `--col-count` is the group count, set inline per word. */
+/* The analysis layout: each cell-group is a self-contained 2-row mini-grid —
+   row 1 its graphemes (a base letter / carrier / implicit madd plus their small
+   diacritics), row 2 the phonemes placed under their OWN grapheme column. So a
+   phoneme sits directly beneath the letter or mark that sounds it: a silent
+   grapheme leaves an empty slot, a vowel sits under its diacritic (not centred
+   over the carrier). Groups sit in one RTL row, top-aligned so the letter band
+   and phoneme band read continuously across the word. */
 .mega-grid {
-    display: grid;
-    grid-template-columns: repeat(var(--col-count, 1), max-content);
-    grid-template-rows: auto auto;
-    column-gap: var(--haraka-group-gap, 7px);
-    row-gap: var(--word-phoneme-gap, 4px);
-    direction: rtl;
-    justify-content: flex-start;
-    align-items: stretch;
-}
-
-/* The letter + phoneme rows span every column and re-expose the parent's tracks
-   via `subgrid`; each emits exactly one child per group (in group order), so
-   column N of one row lines up with column N of the other. */
-.mega-letters,
-.mega-phonemes {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: subgrid;
-    align-items: stretch;
-}
-.mega-letters { grid-row: 1; }
-.mega-phonemes { grid-row: 2; }
-
-/* A GROUP = a base cell + its trailing diacritics; the subgrid cell for its
-   column. The track may be wider than the group's own letters (when its phonemes
-   are wider), so the group stretches and centres its letter(s) over its sounds. */
-.cell-group {
     display: flex;
     direction: rtl;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: var(--haraka-group-gap, 7px);
+}
+
+/* A GROUP mini-grid: `--gcols` grapheme columns (set inline), two rows. A column
+   sizes to the wider of its grapheme cell or its phoneme(s); `justify-items:
+   center` centres each cell in its column so the grapheme caps its sound. */
+.cell-group {
+    display: grid;
+    grid-template-columns: repeat(var(--gcols, 1), max-content);
+    grid-template-rows: auto auto;
+    row-gap: var(--word-phoneme-gap, 4px);
+    column-gap: 0; /* graphemes within a group sit flush */
+    direction: rtl;
+    justify-items: center;
     align-items: stretch;
-    justify-content: center;
-    gap: 0; /* gap WITHIN a group — base + its diacritics sit flush */
+}
+.cell-group > .mega-letter,
+.cell-group > .dia-track {
+    grid-row: 1;
 }
 /* share-group cells co-light via shared timing — no border/outline around the
    combined group (the synchronized highlight is the only affordance). */
 
-/* A phoneme cluster = the column's sounds beneath its letter-group; one per
-   group. Centred under the letter(s); an empty cluster (silent / merged-away
-   group) still reserves the row band so the columns stay aligned. */
-.phoneme-cluster {
+/* A phoneme cluster = the sound(s) under ONE grapheme column (row 2), positioned
+   by its inline `grid-column`. `width: 0` is deliberate: the phonemes must NOT
+   widen the grapheme column — otherwise a diacritic floats off its base. So the
+   column stays grapheme-sized (the mark sits flush against its base, gap 0) and
+   the phoneme centres on the column centre, overflowing a narrow mark's slot. A
+   grapheme with no sound (silent letter, merged-away consonant) gets no cluster —
+   a reserved empty slot keeps the columns aligned. */
+.cell-group > .phoneme-cluster {
+    grid-row: 2;
+    width: 0;
+    min-width: 0;
+    justify-self: center;
+    overflow: visible;
     display: flex;
     direction: rtl;
     align-items: center;
     justify-content: center;
     gap: var(--phoneme-box-gap, 2px);
-    min-height: var(--letter-cell-h, 34px);
 }
 
 /* Group-hover spotlight: hovering any cell softly tints its whole column (the
@@ -222,7 +242,10 @@
 }
 
 .mega-letter {
-    flex: 1;
+    /* Natural width (NOT flex:1) — a stretched letter cell skews
+       `_measureLetterCell`, inflating every diacritic track. The cell-group
+       centres its natural-width letter(s) within the (possibly wider) column. */
+    flex: 0 0 auto;
     min-width: fit-content;
     padding: 4px 7px;
     background: #0f0f23;
@@ -285,18 +308,14 @@
     --letter-cell-h: 34px;
 }
 
-/* A `vowel` group is a long-vowel unit [diacritic, carrier] — render the small
-   diacritic BEFORE the full carrier (flex order; the row is RTL so order 0 is
-   the rightmost / first-read). A `base` group keeps DOM order (full then its
-   pinned diacritic). */
-.cell-group.vowel .dia-track { order: 0; }
-.cell-group.vowel .mega-letter { order: 1; }
-
+/* The grapheme columns (and thus diacritic-before-carrier vs base-then-diacritic
+   order) are placed by `grid-column` from `_buildColumns`; the dia-track just
+   sizes to a fraction of a letter cell and spans the row height for its pinned
+   mark. */
 .dia-track {
     position: relative;
     width: calc(var(--letter-cell-w) * var(--haraka-dia-w));
-    align-self: stretch; /* span the full group height (the letter row) */
-    flex: none;
+    align-self: stretch; /* span the full row-1 height (the letter band) */
 }
 
 .haraka-cell {
@@ -715,7 +734,16 @@
     background: var(--ts-letter-color, #2ec4b6);
 }
 
-.mega-letters.hidden,
+/* Show/hide a whole band via the toggle classes on the grid (row 1 = graphemes,
+   row 2 = phoneme clusters). */
+.mega-grid.no-letters .mega-letter,
+.mega-grid.no-letters .dia-track {
+    display: none;
+}
+.mega-grid.no-phonemes .phoneme-cluster {
+    display: none;
+}
+/* The cell-less fallback row honours the phonemes toggle directly. */
 .mega-phonemes.hidden {
     display: none;
 }

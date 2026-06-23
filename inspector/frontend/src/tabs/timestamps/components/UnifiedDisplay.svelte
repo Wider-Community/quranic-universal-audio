@@ -83,6 +83,8 @@
         /** Rendered-letter index this base cell maps to (loop-highlight identity). */
         letterIndex: number;
         shareGroup: number | null;
+        /** Flat interval indices this cell sounds — placed under its own column. */
+        phoneIdx: number[];
     }
 
     /** A SMALL diacritic cell — haraka / tanween (incl. iqlab fused mini-meem,
@@ -102,6 +104,8 @@
         renderStyle: string;
         /** inserted graphemeless vowel (hamza-waṣl / iltiqaa) — affordance only. */
         inserted: boolean;
+        /** Flat interval indices this cell sounds — placed under its own column. */
+        phoneIdx: number[];
     }
 
     /** A rendered cell-group. `kind` drives the in-row order:
@@ -110,18 +114,31 @@
      *    separate group) or a standalone/implicit madd → small THEN full, so the
      *    diacritic precedes the vowel grapheme it pairs with.
      *  Gap 0 within a group, non-zero between groups. */
+    /** One grapheme's column within a group: the row-1 cell (a full letter OR a
+     *  small diacritic) whose phonemes render directly beneath it in row 2. */
+    interface GraphemeColumn {
+        full: RenderedFull | null;
+        small: RenderedSmall | null;
+    }
+
+    /** A row-2 phoneme placement: the phonemes sounding under column `colStart`,
+     *  spanning `span` columns when adjacent graphemes share one sound. */
+    interface PhonemeSpan {
+        phonemes: RenderedPhoneme[];
+        colStart: number;
+        span: number;
+    }
+
     interface RenderedGroup {
         kind: 'base' | 'vowel';
         full: RenderedFull[];
         small: RenderedSmall[];
         shareGroup: number | null;
-        /** Flat interval indices this group's cells sound — bucketed into
-         *  `phonemes` by `_bucketPhonemes`. A silent / merged-away group has none. */
-        phoneIdx: number[];
-        /** The group's phonemes, rendered as ONE column-aligned cluster beneath the
-         *  group's letter(s); empty (a reserved slot) when the group is silent or
-         *  its sound merged into an adjacent word. */
-        phonemes: RenderedPhoneme[];
+        /** Ordered grapheme columns (reading order) — the group's row-1 cells. */
+        cols: GraphemeColumn[];
+        /** Row-2 phoneme placements, each aligned under its source grapheme so a
+         *  silent grapheme leaves an empty slot and a vowel sits under its mark. */
+        phonemeSpans: PhonemeSpan[];
     }
 
     /** The folded letter view of `word.letters` — one entry per rendered letter
@@ -182,6 +199,23 @@
         pauseBridge: RenderedPauseBridge | null;
     }
 
+    /** A justification line-unit: an unbreakable run of word block(s) — bridge-
+     *  linked words stay together — plus an optional trailing pause cell, all
+     *  rendered inside one `.word-unit`. The whole unit is the atom the row
+     *  justifies between, so a bridged pair never splits across rows and a
+     *  word+stop-cell stays glued with the stop cell as the flush anchor. */
+    type RenderedUnitPart =
+        | { kind: 'block'; block: RenderedBlock }
+        | { kind: 'bridge'; bridge: RenderedBridge; wordIndex: number }
+        | { kind: 'pause'; pause: RenderedPauseBridge };
+    interface RenderedUnit {
+        /** First block's wordIndex — the keyed-each identity. */
+        key: number;
+        parts: RenderedUnitPart[];
+        /** Array index of the unit's last block (for bridge-join adjacency). */
+        lastBlockIndex: number;
+    }
+
     // Container ref used for imperative highlight updates.
     let rootEl: HTMLDivElement;
 
@@ -193,6 +227,11 @@
         $loadedVerse?.data.words ?? [],
         $loadedVerse?.data.intervals ?? [],
     );
+
+    // Group blocks into unbreakable justification units (bridge-linked words stay
+    // together; a trailing pause cell anchors its own word). The row justifies
+    // BETWEEN units — see `.word-unit` / `.unified-display` in timestamps.css.
+    $: units = groupUnits(rendered);
 
     // Reset previous-index cache when structure changes (new verse, etc.)
     $: rendered, (_prevActiveWordIdx = -1);
@@ -433,15 +472,13 @@
         let iwadGroup: RenderedGroup | null = null;
 
         const newGroup = (kind: 'base' | 'vowel'): RenderedGroup => {
-            const g: RenderedGroup = { kind, full: [], small: [], shareGroup: null, phoneIdx: [], phonemes: [] };
+            const g: RenderedGroup = { kind, full: [], small: [], shareGroup: null, cols: [], phonemeSpans: [] };
             groups.push(g);
             return g;
         };
-        // Record a cell's share-group + the phoneme indices it sounds onto its
-        // group, so `_bucketPhonemes` can place those phonemes under this column.
+        // Carry a cell's share-group onto its group (the synchronized-highlight cue).
         const noteShare = (g: RenderedGroup, c: TsCell): void => {
             if (c.shareGroup != null && g.shareGroup == null) g.shareGroup = c.shareGroup;
-            if (c.phonemeIndices.length) g.phoneIdx.push(...c.phonemeIndices);
         };
 
         const pushSmall = (
@@ -497,6 +534,7 @@
                 shareGroup: c.shareGroup,
                 renderStyle: harakaRenderStyle(sizeGlyph, extraShift, calibKey),
                 inserted: c.chars === '' && c.status === 'inserted',
+                phoneIdx: c.phonemeIndices,
             });
             noteShare(g, c);
         };
@@ -556,6 +594,7 @@
                 isNull,
                 letterIndex,
                 shareGroup: c.shareGroup,
+                phoneIdx: c.phonemeIndices,
             });
             noteShare(g, c);
         };
@@ -577,6 +616,7 @@
                 isNull: true,
                 letterIndex: -1,
                 shareGroup: c.shareGroup,
+                phoneIdx: c.phonemeIndices,
             });
             noteShare(g, c);
         };
@@ -665,6 +705,7 @@
                 isNull: fl.isNull,
                 letterIndex: i,
                 shareGroup: null,
+                phoneIdx: [],
             });
             return g;
         });
@@ -692,33 +733,51 @@
         return m ? { base: phone.slice(0, -m[0].length), mod: m[0] } : { base: phone, mod: '' };
     }
 
-    /** Bucket the word's rendered phonemes into their owning cell-group, so each
-     *  group renders its sounds as a column-aligned cluster beneath its letter(s).
-     *  Each indexable phone is owned by the first group (reading order) whose cells
-     *  sound it. Walking the phonemes in reading order, an UN-owned phone — the
-     *  qalqala echo `Q` and any other render-only phone no cell indexes — rides the
-     *  PRECEDING consonant's group, so it stays beside its source instead of
-     *  jumping to the word end. Nothing is dropped; cluster order follows reading
-     *  order. (The synthetic-base fallback has no mapping, so all its phones fall
-     *  to the first group — order is still preserved.) */
-    function _bucketPhonemes(groups: RenderedGroup[], phonemes: RenderedPhoneme[]): void {
+    /** Assign each rendered phoneme to its source grapheme's COLUMN, so a phoneme
+     *  sits directly under the letter or diacritic that sounds it. Each group's
+     *  graphemes become ordered `cols` (base→haraka, or [diacritic, carrier] for a
+     *  vowel unit); a phoneme is owned by the first column whose cell indexes it,
+     *  so a silent grapheme leaves an empty slot and a vowel sits under its own
+     *  mark (not centred over the carrier). A render-only phone that no cell indexes
+     *  (qalqala echo `Q`) rides the preceding column, staying beside its source. */
+    function _buildColumns(groups: RenderedGroup[], phonemes: RenderedPhoneme[]): void {
         if (!groups.length) return;
-        const owner = new Map<number, RenderedGroup>();
+        const owner = new Map<number, { g: RenderedGroup; ci: number }>();
         for (const g of groups) {
-            for (const idx of g.phoneIdx) if (!owner.has(idx)) owner.set(idx, g);
+            g.cols = g.kind === 'vowel'
+                ? [...g.small.map((s) => ({ full: null, small: s })), ...g.full.map((f) => ({ full: f, small: null }))]
+                : [...g.full.map((f) => ({ full: f, small: null })), ...g.small.map((s) => ({ full: null, small: s }))];
+            g.phonemeSpans = [];
+            g.cols.forEach((col, ci) => {
+                for (const idx of col.full?.phoneIdx ?? col.small?.phoneIdx ?? []) {
+                    if (!owner.has(idx)) owner.set(idx, { g, ci });
+                }
+            });
         }
-        let current: RenderedGroup | null = null;
+        // Walk the phonemes in reading order; an unowned phone rides the current column.
+        const acc = new Map<RenderedGroup, Map<number, RenderedPhoneme[]>>();
+        let cur: { g: RenderedGroup; ci: number } | null = null;
         for (const p of phonemes) {
-            const owned = owner.get(p.index);
-            if (owned) current = owned;
-            (owned ?? current ?? groups[0]!).phonemes.push(p);
+            const found = owner.get(p.index);
+            if (found) cur = found;
+            const t = found ?? cur ?? { g: groups[0]!, ci: 0 };
+            let m = acc.get(t.g);
+            if (!m) { m = new Map(); acc.set(t.g, m); }
+            let arr = m.get(t.ci);
+            if (!arr) { arr = []; m.set(t.ci, arr); }
+            arr.push(p);
+        }
+        for (const g of groups) {
+            const m = acc.get(g);
+            if (!m) continue;
+            for (const [ci, phs] of m) g.phonemeSpans.push({ phonemes: phs, colStart: ci, span: 1 });
         }
     }
 
     /** Build the per-word `RenderedBlock[]` for the analysis view: cross-word
-     *  idgham / iltiqaa bridges lifted to between-word tiles, cell-groups with
-     *  their phonemes bucketed for column alignment, and detected inter-word
-     *  pause bridges. */
+     *  idgham / iltiqaa bridges lifted to between-word tiles, cell-groups whose
+     *  phonemes are aligned per-grapheme to their source columns, and detected
+     *  inter-word pause bridges. */
     function buildRendered(
         words: TsWord[],
         intervals: PhonemeInterval[],
@@ -800,7 +859,7 @@
             }
 
             const groups = cellGroupsFor(word, intervals, shareUnions, liftedIltiqaa.has(wi));
-            _bucketPhonemes(groups, phonemes);
+            _buildColumns(groups, phonemes);
 
             blocks.push({
                 word,
@@ -829,6 +888,38 @@
             b.pauseBridge = { mark, startSec, endSec };
         }
         return blocks;
+    }
+
+    /** Group the rendered blocks into unbreakable `.word-unit`s for justified
+     *  rows. A `block.bridge` always links the block to its predecessor (idgham /
+     *  iltiqaa), so bridged words — and consecutive-idgham chains — join one unit
+     *  with the bridge tile between them. A `block.pauseBridge` is the silence
+     *  before the block carrying the PRECEDING word's waqf, so it's appended as
+     *  the trailing part of that preceding word's unit (the stop-cell anchor),
+     *  never the next word's. Bridge and pause are mutually exclusive at a
+     *  boundary; a bridge join wins if both ever appear. */
+    function groupUnits(blocks: RenderedBlock[]): RenderedUnit[] {
+        const units: RenderedUnit[] = [];
+        let cur: RenderedUnit | null = null;
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i]!;
+            const joins = block.bridge != null && cur != null && cur.lastBlockIndex === i - 1;
+            if (block.pauseBridge && !joins && cur != null) {
+                cur.parts.push({ kind: 'pause', pause: block.pauseBridge }); // trails prev word
+            }
+            if (joins) {
+                cur!.parts.push({ kind: 'bridge', bridge: block.bridge!, wordIndex: block.wordIndex });
+                cur!.parts.push({ kind: 'block', block });
+                cur!.lastBlockIndex = i;
+            } else {
+                cur = { key: block.wordIndex, parts: [], lastBlockIndex: i };
+                // Defensive: a bridge with no joinable predecessor still renders.
+                if (block.bridge) cur.parts.push({ kind: 'bridge', bridge: block.bridge, wordIndex: block.wordIndex });
+                cur.parts.push({ kind: 'block', block });
+                units.push(cur);
+            }
+        }
+        return units;
     }
 
     // ---- Per-frame imperative highlight update (called from animation loop) ----
@@ -1358,9 +1449,11 @@
     dir="rtl"
     class:hidden={$loadedVerse === null}
 >
-    {#each rendered as block (block.wordIndex)}
-        {#if block.bridge}
-            {@const br = block.bridge}
+    {#each units as unit (unit.key)}
+        <div class="word-unit">
+        {#each unit.parts as part}
+        {#if part.kind === 'bridge'}
+            {@const br = part.bridge}
             <div
                 class="crossword-bridge"
                 class:borderless={br.letter != null}
@@ -1398,8 +1491,8 @@
                             ph.interval.phone === 'sp'}
                         class:geminate={ph.interval.geminate_start}
                         data-index={ph.index}
-                        on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
-                        on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
+                        on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, part.wordIndex)}
+                        on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, part.wordIndex)}
                         on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
                         on:mouseleave={onHoverLeave}
                         on:keydown={() => {}}
@@ -1410,9 +1503,8 @@
                     </span>
                 {/each}
             </div>
-        {/if}
-        {#if block.pauseBridge}
-            {@const pb = block.pauseBridge}
+        {:else if part.kind === 'pause'}
+            {@const pb = part.pause}
             <div
                 class="pause-bridge"
                 data-pause-start={pb.startSec}
@@ -1428,7 +1520,8 @@
                     <span class="pause-icon" aria-hidden="true"></span>
                 {/if}
             </div>
-        {/if}
+        {:else}
+            {@const block = part.block}
         <div
             class="mega-block"
             data-word-index={block.wordIndex}
@@ -1448,117 +1541,135 @@
                 on:mouseleave={onHoverLeave}
             >{block.displayText}</div>
             {#if block.groups.length}
-                <div class="mega-grid" style="--col-count:{block.groups.length}" dir="rtl" use:colHover>
-                <div class="mega-letters" class:hidden={!$showLetters}>
+                <div
+                    class="mega-grid"
+                    dir="rtl"
+                    use:colHover
+                    class:no-letters={!$showLetters}
+                    class:no-phonemes={!$showPhonemes}
+                >
                     {#each block.groups as grp, gi (gi)}
-                        <span class="cell-group" class:vowel={grp.kind === 'vowel'} class:share-group={grp.shareGroup != null} data-group-index={gi}>
-                            {#each grp.full as f}
-                                {#if f.implicit}
-                                    <!-- implicit madd (Allah dagger-alef / madd-ʿiwaḍ): a FULL cell,
-                                         non-interactive, with the inserted/replaced affordance -->
-                                    <span
-                                        class="mega-letter implicit dia-{f.status}"
-                                        class:dia-timed={f.status !== 'dropped' && f.cellStart != null}
-                                        class:dia-seekable={f.cellStart != null}
-                                        data-cell-timed={f.status !== 'dropped' && f.cellStart != null ? '1' : undefined}
-                                        data-cell-start={f.cellStart}
-                                        data-cell-end={f.cellEnd}
-                                        data-word-index={block.wordIndex}
-                                        on:click={(e) => onCellClick(e, f.cellStart)}
-                                        on:dblclick|stopPropagation
-                                        on:mouseenter={(e) => onCellEnter(e, f.cellStart, f.cellEnd)}
-                                        on:mouseleave={onCellLeave}
-                                        on:keydown={() => {}}
-                                        role="button"
-                                        tabindex="-1"
-                                    >{f.glyph}</span>
-                                {:else if f.isNull}
-                                    <span
-                                        class="mega-letter null-ts"
-                                        class:silent={f.silent}
-                                        on:click|stopPropagation
-                                        on:keydown={() => {}}
-                                        role="button"
-                                        tabindex="-1"
-                                    >{f.glyph}</span>
-                                {:else}
-                                    <!-- base consonant OR real madd carrier (ا و ي ٰ) — a FULL,
-                                         interactive, timed letter cell -->
-                                    <span
-                                        class="mega-letter"
-                                        class:silent={f.silent}
-                                        class:dia-timed={f.cellStart != null && (!f.silent || f.shareGroup != null)}
-                                        data-cell-timed={f.cellStart != null && (!f.silent || f.shareGroup != null) ? '1' : undefined}
-                                        data-cell-start={f.cellStart}
-                                        data-cell-end={f.cellEnd}
-                                        data-letter-start={f.letterStart}
-                                        data-letter-end={f.letterEnd}
-                                        data-word-index={block.wordIndex}
-                                        data-letter-index={f.letterIndex}
-                                        on:click={(e) =>
-                                            onLetterClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
-                                        on:dblclick={(e) =>
-                                            onLetterDblClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
-                                        on:mouseenter={(e) => onLetterEnter(e, f.letterStart, f.letterEnd)}
-                                        on:mouseleave={onHoverLeave}
-                                        on:keydown={() => {}}
-                                        role="button"
-                                        tabindex="-1"
-                                    >{f.glyph}</span>
+                        <div
+                            class="cell-group"
+                            class:vowel={grp.kind === 'vowel'}
+                            class:share-group={grp.shareGroup != null}
+                            data-group-index={gi}
+                            style="--gcols:{grp.cols.length}"
+                        >
+                            {#each grp.cols as col, ci}
+                                {#if col.full}
+                                    {@const f = col.full}
+                                    {#if f.implicit}
+                                        <!-- implicit madd (Allah dagger-alef / madd-ʿiwaḍ): a FULL cell,
+                                             non-interactive, with the inserted/replaced affordance -->
+                                        <span
+                                            class="mega-letter implicit dia-{f.status}"
+                                            class:dia-timed={f.status !== 'dropped' && f.cellStart != null}
+                                            class:dia-seekable={f.cellStart != null}
+                                            style="grid-column:{ci + 1}"
+                                            data-cell-timed={f.status !== 'dropped' && f.cellStart != null ? '1' : undefined}
+                                            data-cell-start={f.cellStart}
+                                            data-cell-end={f.cellEnd}
+                                            data-word-index={block.wordIndex}
+                                            on:click={(e) => onCellClick(e, f.cellStart)}
+                                            on:dblclick|stopPropagation
+                                            on:mouseenter={(e) => onCellEnter(e, f.cellStart, f.cellEnd)}
+                                            on:mouseleave={onCellLeave}
+                                            on:keydown={() => {}}
+                                            role="button"
+                                            tabindex="-1"
+                                        >{f.glyph}</span>
+                                    {:else if f.isNull}
+                                        <span
+                                            class="mega-letter null-ts"
+                                            class:silent={f.silent}
+                                            style="grid-column:{ci + 1}"
+                                            on:click|stopPropagation
+                                            on:keydown={() => {}}
+                                            role="button"
+                                            tabindex="-1"
+                                        >{f.glyph}</span>
+                                    {:else}
+                                        <!-- base consonant OR real madd carrier (ا و ي ٰ) — a FULL,
+                                             interactive, timed letter cell -->
+                                        <span
+                                            class="mega-letter"
+                                            class:silent={f.silent}
+                                            class:dia-timed={f.cellStart != null && (!f.silent || f.shareGroup != null)}
+                                            style="grid-column:{ci + 1}"
+                                            data-cell-timed={f.cellStart != null && (!f.silent || f.shareGroup != null) ? '1' : undefined}
+                                            data-cell-start={f.cellStart}
+                                            data-cell-end={f.cellEnd}
+                                            data-letter-start={f.letterStart}
+                                            data-letter-end={f.letterEnd}
+                                            data-word-index={block.wordIndex}
+                                            data-letter-index={f.letterIndex}
+                                            on:click={(e) =>
+                                                onLetterClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
+                                            on:dblclick={(e) =>
+                                                onLetterDblClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
+                                            on:mouseenter={(e) => onLetterEnter(e, f.letterStart, f.letterEnd)}
+                                            on:mouseleave={onHoverLeave}
+                                            on:keydown={() => {}}
+                                            role="button"
+                                            tabindex="-1"
+                                        >{f.glyph}</span>
+                                    {/if}
+                                {:else if col.small}
+                                    {@const c = col.small}
+                                    <span class="dia-track" style="grid-column:{ci + 1}">
+                                        <span
+                                            class="haraka-cell pin-{c.slot} dia-{c.status}"
+                                            class:dia-inserted={c.inserted}
+                                            class:dia-timed={c.status !== 'dropped' && c.cellStart != null}
+                                            class:dia-seekable={c.cellStart != null}
+                                            data-cell-timed={c.status !== 'dropped' && c.cellStart != null ? '1' : undefined}
+                                            data-cell-start={c.cellStart}
+                                            data-cell-end={c.cellEnd}
+                                            data-word-index={block.wordIndex}
+                                            on:click={(e) => onCellClick(e, c.cellStart)}
+                                            on:dblclick|stopPropagation
+                                            on:mouseenter={(e) => onCellEnter(e, c.cellStart, c.cellEnd)}
+                                            on:mouseleave={onCellLeave}
+                                            on:keydown={() => {}}
+                                            role="button"
+                                            tabindex="-1"
+                                        >
+                                            <span class="g" style={c.renderStyle}>{c.glyph}</span>
+                                        </span>
+                                    </span>
                                 {/if}
                             {/each}
-                            {#each grp.small as c}
-                                <span class="dia-track">
-                                    <span
-                                        class="haraka-cell pin-{c.slot} dia-{c.status}"
-                                        class:dia-inserted={c.inserted}
-                                        class:dia-timed={c.status !== 'dropped' && c.cellStart != null}
-                                        class:dia-seekable={c.cellStart != null}
-                                        data-cell-timed={c.status !== 'dropped' && c.cellStart != null ? '1' : undefined}
-                                        data-cell-start={c.cellStart}
-                                        data-cell-end={c.cellEnd}
-                                        data-word-index={block.wordIndex}
-                                        on:click={(e) => onCellClick(e, c.cellStart)}
-                                        on:dblclick|stopPropagation
-                                        on:mouseenter={(e) => onCellEnter(e, c.cellStart, c.cellEnd)}
-                                        on:mouseleave={onCellLeave}
-                                        on:keydown={() => {}}
-                                        role="button"
-                                        tabindex="-1"
-                                    >
-                                        <span class="g" style={c.renderStyle}>{c.glyph}</span>
-                                    </span>
-                                </span>
-                            {/each}
-                        </span>
-                    {/each}
-                </div>
-                <div class="mega-phonemes" class:hidden={!$showPhonemes}>
-                    {#each block.groups as grp, gi (gi)}
-                        <span class="phoneme-cluster" class:empty={grp.phonemes.length === 0} data-group-index={gi}>
-                            {#each grp.phonemes as ph (ph.index)}
-                                {@const parts = splitPhone(ph.interval.phone)}
+                            {#each grp.phonemeSpans as ps}
                                 <span
-                                    class="mega-phoneme"
-                                    class:silence={!ph.interval.phone ||
-                                        ph.interval.phone === 'sil' ||
-                                        ph.interval.phone === 'sp'}
-                                    class:geminate={ph.interval.geminate_start}
-                                    data-index={ph.index}
-                                    on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
-                                    on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
-                                    on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
-                                    on:mouseleave={onHoverLeave}
-                                    on:keydown={() => {}}
-                                    role="button"
-                                    tabindex="-1"
+                                    class="phoneme-cluster"
+                                    data-group-index={gi}
+                                    style="grid-column:{ps.colStart + 1} / span {ps.span}"
                                 >
-                                    <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
+                                    {#each ps.phonemes as ph (ph.index)}
+                                        {@const parts = splitPhone(ph.interval.phone)}
+                                        <span
+                                            class="mega-phoneme"
+                                            class:silence={!ph.interval.phone ||
+                                                ph.interval.phone === 'sil' ||
+                                                ph.interval.phone === 'sp'}
+                                            class:geminate={ph.interval.geminate_start}
+                                            data-index={ph.index}
+                                            on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
+                                            on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}
+                                            on:mouseenter={(e) => onPhonemeEnter(e, ph.interval)}
+                                            on:mouseleave={onHoverLeave}
+                                            on:keydown={() => {}}
+                                            role="button"
+                                            tabindex="-1"
+                                        >
+                                            <span class="ph-base">{parts.base || '(sil)'}</span>{#if parts.mod}<sup class="ph-mod">{parts.mod}</sup>{/if}
+                                        </span>
+                                    {/each}
                                 </span>
                             {/each}
-                        </span>
+                        </div>
                     {/each}
-                </div>
                 </div>
             {:else}
                 <div class="mega-phonemes flat" class:hidden={!$showPhonemes} dir="rtl">
@@ -1585,6 +1696,9 @@
                 </div>
             {/if}
         </div>
+        {/if}
+        {/each}
+        </div>{' '}
     {/each}
     {#if tipText}
         <div class="cell-tip" dir="ltr" style="left:{tipX}px; top:{tipY}px;" aria-hidden="true">{tipText}</div>
