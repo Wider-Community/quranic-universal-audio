@@ -413,6 +413,12 @@
     gap: var(--phoneme-box-gap);
     align-self: flex-end;
     justify-content: flex-end;
+    /* A sibling of .mega-block (it sits BETWEEN two word columns), so it doesn't
+       inherit the block's interaction affordance — restore it here so the merger
+       tiles read as clickable instead of selectable text. */
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .crossword-bridge .mega-phoneme {
