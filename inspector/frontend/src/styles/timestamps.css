@@ -424,6 +424,54 @@
     display: none;
 }
 
+/* iltiqaa connecting-kasra bridge: a two-tier (letter + phoneme) cell between two
+   words, like the merger bridge but BORDERLESS (a connecting vowel, not a merged
+   consonant). The --word-phoneme-gap between tiers matches the .mega-block column
+   gap so the letter/phoneme cells line up with their rows on either side. */
+.crossword-bridge.borderless {
+    gap: var(--word-phoneme-gap);
+    align-items: center;
+}
+.crossword-bridge.borderless .mega-phoneme {
+    border-color: transparent;
+}
+
+.bridge-letter {
+    flex: none;
+    height: var(--letter-cell-h);
+    min-width: calc(var(--letter-cell-w) * var(--haraka-dia-w));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    background: #0f0f23;
+    border-radius: 3px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.bridge-letter.hidden {
+    display: none;
+}
+.bridge-letter .g {
+    font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
+    line-height: 1;
+    color: #aaa;
+    display: inline-block;
+    font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4));
+    transform: translate(var(--haraka-shift, 0em), var(--haraka-raise, 0em));
+}
+.bridge-letter.active {
+    background: var(--ts-letter-color, #2ec4b6);
+}
+.bridge-letter.active .g {
+    color: #fff;
+}
+.bridge-letter:hover {
+    background: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 30%, transparent);
+    border-color: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 35%, transparent);
+}
+
 /* ============ Pause bridge ============ */
 /* A detected inter-word silence, surfaced as a slim tile in the letter/phoneme
    family — sitting at the top between the two word columns. The CELL is the unit:

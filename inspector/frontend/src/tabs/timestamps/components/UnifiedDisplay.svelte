@@ -137,6 +137,16 @@
 
     interface RenderedBridge {
         phonemes: RenderedPhoneme[];
+        /** iltiqaa connecting-kasra letter cell — the kasra char lifted onto the
+         *  letter row of a borderless bridge; null for an idgham merger (which
+         *  bridges only the phoneme row). */
+        letter: {
+            glyph: string;
+            style: string;
+            cellStart: number | null;
+            cellEnd: number | null;
+            wordIndex: number;
+        } | null;
     }
 
     /** A detected silence between this block and the previous one. Sits as a small
@@ -243,6 +253,9 @@
             l.classList.remove('active', 'hover-preview');
         });
         rootEl.querySelectorAll<HTMLElement>('.haraka-cell').forEach((c) => {
+            c.classList.remove('active', 'hover-preview');
+        });
+        rootEl.querySelectorAll<HTMLElement>('.bridge-letter').forEach((c) => {
             c.classList.remove('active', 'hover-preview');
         });
     }
@@ -377,9 +390,14 @@
         word: TsWord,
         intervals: PhonemeInterval[],
         shareUnions: Map<number, [number, number]>,
+        liftIltiqaa = false,
     ): RenderedGroup[] {
         const { folded, srcToFold } = foldedLettersFor(word);
-        const cells = word.cells ?? [];
+        // The iltiqaa-kasra cell is lifted into a cross-word bridge — drop it from
+        // the word's own letter row so it renders only between the two words.
+        const cells = (word.cells ?? []).filter(
+            (c) => !(liftIltiqaa && c.tag === 'iltiqaa_kasra'),
+        );
         const hasBase = cells.some((c) => c.role === 'base');
         const groups: RenderedGroup[] = [];
 
@@ -677,18 +695,50 @@
         // that block; one in a word's tail (idgham shafawi) bridges into the
         // next block. The generator placed the tag on the exact merger interval,
         // so there's nothing to disambiguate here.
-        const bridgeBeforeBlock = new Map<number, RenderedPhoneme>();
+        const bridgeBeforeBlock = new Map<number, RenderedBridge>();
         const excluded = new Set<number>();
+        // Words whose inserted iltiqaa-kasra cell was lifted into a bridge — its
+        // small cell is then suppressed in the word's own letter row.
+        const liftedIltiqaa = new Set<number>();
         for (let wi = 0; wi < words.length; wi++) {
-            const indices = words[wi]?.phoneme_indices ?? [];
+            const word = words[wi];
+            const indices = word?.phoneme_indices ?? [];
             for (let k = 0; k < indices.length; k++) {
                 const pi = indices[k]!;
                 if (!intervals[pi]?.bridge) continue;
                 const target = k === 0 ? wi : wi + 1;
                 if (target < words.length) {
-                    bridgeBeforeBlock.set(target, { interval: intervals[pi]!, index: pi });
+                    bridgeBeforeBlock.set(target, {
+                        phonemes: [{ interval: intervals[pi]!, index: pi }],
+                        letter: null,
+                    });
                     excluded.add(pi);
                 }
+            }
+            // iltiqaa kasra: tanwīn meeting the next word's hamza-waṣl inserts a
+            // connecting kasra (i). Lift its cell out of word N into a borderless
+            // bridge before word N+1 — the kasra char on the letter row + the i
+            // phoneme on the phoneme row, between the two words. The silent alef of
+            // a fatḥatan+alef word (خَيْرًا) stays in word N, so the bridge naturally
+            // sits after it; the lifted i is the word's last phoneme.
+            const kasra = (word?.cells ?? []).find((c) => c.tag === 'iltiqaa_kasra');
+            const kpi = kasra?.phonemeIndices[0];
+            if (kasra && kpi != null && intervals[kpi] && wi + 1 < words.length
+                && !bridgeBeforeBlock.has(wi + 1)) {
+                const iv = intervals[kpi];
+                const glyph = cellGlyph(kasra.chars, kasra.tag, iv.phone);
+                bridgeBeforeBlock.set(wi + 1, {
+                    phonemes: [{ interval: iv, index: kpi }],
+                    letter: {
+                        glyph,
+                        style: harakaRenderStyle(glyph),
+                        cellStart: iv.start,
+                        cellEnd: iv.end,
+                        wordIndex: wi,
+                    },
+                });
+                excluded.add(kpi);
+                liftedIltiqaa.add(wi);
             }
         }
 
@@ -703,8 +753,7 @@
             const word = words[wi];
             if (!word) continue;
 
-            const bp = bridgeBeforeBlock.get(wi);
-            const bridge: RenderedBridge | null = bp ? { phonemes: [bp] } : null;
+            const bridge: RenderedBridge | null = bridgeBeforeBlock.get(wi) ?? null;
 
             const phonemes: RenderedPhoneme[] = [];
             for (const pi of word.phoneme_indices ?? []) {
@@ -717,7 +766,7 @@
                 word,
                 wordIndex: wi,
                 displayText: (word.display_text || word.text).replace(NON_RECITED_SIGNS, ''),
-                groups: cellGroupsFor(word, intervals, shareUnions),
+                groups: cellGroupsFor(word, intervals, shareUnions, liftedIltiqaa.has(wi)),
                 phonemes,
                 bridge,
                 pauseBridge: null,
@@ -1243,11 +1292,39 @@
 >
     {#each rendered as block (block.wordIndex)}
         {#if block.bridge}
-            <div class="crossword-bridge" class:hidden={!$showPhonemes}>
-                {#each block.bridge.phonemes as ph (ph.index)}
+            {@const br = block.bridge}
+            <div
+                class="crossword-bridge"
+                class:borderless={br.letter != null}
+                class:hidden={br.letter != null ? !$showLetters && !$showPhonemes : !$showPhonemes}
+            >
+                {#if br.letter}
+                    {@const lt = br.letter}
+                    <!-- iltiqaa connecting kasra lifted onto the letter row, between
+                         the two words; borderless, click-to-seek, lights on its i. -->
+                    <span
+                        class="bridge-letter dia-seekable"
+                        class:hidden={!$showLetters}
+                        data-cell-timed={lt.cellStart != null ? '1' : undefined}
+                        data-cell-start={lt.cellStart}
+                        data-cell-end={lt.cellEnd}
+                        data-word-index={lt.wordIndex}
+                        on:click={(e) => onCellClick(e, lt.cellStart)}
+                        on:dblclick|stopPropagation
+                        on:mouseenter={(e) => onCellEnter(e, lt.cellStart, lt.cellEnd)}
+                        on:mouseleave={onCellLeave}
+                        on:keydown={() => {}}
+                        role="button"
+                        tabindex="-1"
+                    >
+                        <span class="g" style={lt.style}>{lt.glyph}</span>
+                    </span>
+                {/if}
+                {#each br.phonemes as ph (ph.index)}
                     {@const parts = splitPhone(ph.interval.phone)}
                     <span
                         class="mega-phoneme"
+                        class:hidden={br.letter != null && !$showPhonemes}
                         class:silence={!ph.interval.phone ||
                             ph.interval.phone === 'sil' ||
                             ph.interval.phone === 'sp'}
