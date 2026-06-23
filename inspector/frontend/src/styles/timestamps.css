@@ -566,6 +566,13 @@
     border-color: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 27%, transparent);
 }
 
+/* An implicit-madd full cell (dagger-alef / madd-ʿiwaḍ) takes the same active-word
+   resting fill as its siblings; it keeps its dashed "not in the rasm" border + muted
+   ink, and still lights in the letter colour when it's the cell currently sounding. */
+.mega-block.active .mega-letter.implicit:not(.active) {
+    background: #1a1a3e;
+}
+
 .mega-block.active .mega-letter.active {
     background: var(--ts-letter-color, #2ec4b6);
     color: white;
