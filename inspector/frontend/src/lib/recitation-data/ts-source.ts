@@ -484,11 +484,16 @@ export function assembleVerseFromShard(
     const occasion = grouped?.canonical ?? verseSegs;
     const clip = canonicalClip(occasion, nWords);
     const wordsRaw = clip.words;
+    const sgOffsets = clip.sgOffsets;
 
     const intervals: PhonemeInterval[] = [];
     const wordsOut: TsWord[] = [];
 
-    for (const w of wordsRaw) {
+    for (let wi = 0; wi < wordsRaw.length; wi++) {
+        const w = wordsRaw[wi]!;
+        // Per-segment base so cross-segment share_group ids don't collide (a
+        // multi-segment occasion restarts ids at 0 per segment — see canonicalClip).
+        const sgOffset = sgOffsets[wi] ?? 0;
         const wordIdx = w[0];
         const wStart = w[1] / 1000;
         const wEnd = w[2] / 1000;
@@ -545,7 +550,7 @@ export function assembleVerseFromShard(
                 .filter((x): x is number => x !== undefined),
             sourceLetterIndex: c[4],
             tag: (c[5] ?? null) as string | null,
-            shareGroup: (c[6] ?? null) as number | null,
+            shareGroup: c[6] == null ? null : (c[6] as number) + sgOffset,
         }));
 
         wordsOut.push({

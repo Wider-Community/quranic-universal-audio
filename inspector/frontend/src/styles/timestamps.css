@@ -359,7 +359,10 @@
        length marks and emphatic modifiers always render after the base char. */
     direction: ltr;
     unicode-bidi: isolate;
-    transition: background 0.1s, color 0.1s;
+    /* Include border-color so the border eases in WITH the background fill — else
+       the border snaps to the active colour instantly while the fill transitions,
+       reading as the border lighting just before the cell (letters already do this). */
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
     border: 1px solid transparent;
     position: relative;
 }

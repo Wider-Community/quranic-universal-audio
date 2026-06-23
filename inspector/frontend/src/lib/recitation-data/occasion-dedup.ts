@@ -176,15 +176,34 @@ function trimLeadingFalseStart(kept: Occasion, target: Set<number>): Occasion {
 export function canonicalClip(
     occasion: Occasion,
     nWords: number,
-): { words: SegmentEntry['words']; startMs: number; endMs: number } {
+): { words: SegmentEntry['words']; sgOffsets: number[]; startMs: number; endMs: number } {
     const target = new Set<number>();
     for (let i = 1; i <= nWords; i++) target.add(i);
     const comp = completesAt(occasion, target);
     const trailing = comp !== null ? occasion.slice(0, comp + 1) : occasion;
     const kept = trimLeadingFalseStart(trailing, target);
 
+    // `cells[].share_group` ids are numbered per source SEGMENT (each restarts at
+    // 0). An occasion can span several segments whose words we concatenate here,
+    // so offset each segment's ids by a running base to keep them verse-unique —
+    // else a consumer keying co-light purely by id merges unrelated groups across
+    // segments into verse-spanning highlight intervals. `sgOffsets[i]` is the base
+    // to add to word `words[i]`'s cell share_groups.
     const words: SegmentEntry['words'] = [];
-    for (const seg of kept) words.push(...seg.words);
+    const sgOffsets: number[] = [];
+    let sgBase = 0;
+    for (const seg of kept) {
+        let maxSg = -1;
+        for (const w of seg.words) {
+            words.push(w);
+            sgOffsets.push(sgBase);
+            for (const c of w[5] ?? []) {
+                const sg = c[6];
+                if (sg != null && sg > maxSg) maxSg = sg;
+            }
+        }
+        sgBase += maxSg + 1;
+    }
 
     let startMs = kept[0]?.t[0] ?? 0;
     let endMs = kept[0]?.t[1] ?? 0;
@@ -200,7 +219,7 @@ export function canonicalClip(
             }
         }
     }
-    return { words, startMs, endMs };
+    return { words, sgOffsets, startMs, endMs };
 }
 
 /** Highest word index across all of a verse's segments (= every recited word). */
