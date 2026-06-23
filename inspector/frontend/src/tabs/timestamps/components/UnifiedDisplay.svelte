@@ -409,6 +409,17 @@
         const hasBase = cells.some((c) => c.role === 'base');
         const groups: RenderedGroup[] = [];
 
+        // A tajweed underline belongs on the LETTER, never on a diacritic small cell.
+        // The tanwīn rules (ikhfaa/iqlab/idgham_ghunnah_tanween) are tagged on the
+        // tanwīn cell, so carry their colour to the base letter that bears the tanwīn —
+        // keeping every ghunnah badge on a letter, consistent with the noon/meem rules.
+        const tanweenColorBySrc = new Map<number, string>();
+        for (const c of cells) {
+            if (c.role !== 'tanween') continue;
+            const col = tajweedColorVar(c.tag);
+            if (col) tanweenColorBySrc.set(c.sourceLetterIndex, col);
+        }
+
         // Share-groups that contain a madd carrier = long-vowel units (the haraka
         // pairs with the carrier after it; its base renders separately).
         const longVowelSG = new Set<number>();
@@ -493,9 +504,9 @@
                 shareGroup: c.shareGroup,
                 renderStyle: harakaRenderStyle(sizeGlyph, extraShift, calibKey),
                 inserted: c.chars === '' && c.status === 'inserted',
-                // Diacritic cells colour from their OWN tag only (tanwīn idgham/
-                // ikhfaa/iqlab); a madd's haraka has no tag → uncoloured.
-                tjColor: tajweedColorVar(c.tag),
+                // A tajweed underline never sits on a diacritic small cell — a tanwīn
+                // rule's colour is carried to its bearing letter (tanweenColorBySrc).
+                tjColor: null,
             });
             noteShare(g, c);
         };
@@ -555,10 +566,12 @@
                 isNull,
                 letterIndex,
                 shareGroup: c.shareGroup,
-                // Own tag, else the cross-word idgham colour propagated from the
-                // source cell across the share_group (the receiving merged letter).
+                // Own tag, else the cross-word idgham colour propagated across the
+                // share_group (the receiving merged letter), else a tanwīn rule's colour
+                // carried from its diacritic onto this bearing letter.
                 tjColor: tajweedColorVar(c.tag)
-                    ?? (c.shareGroup != null ? idghamGroupColors.get(c.shareGroup) ?? null : null),
+                    ?? (c.shareGroup != null ? idghamGroupColors.get(c.shareGroup) ?? null : null)
+                    ?? tanweenColorBySrc.get(c.sourceLetterIndex) ?? null,
             });
             noteShare(g, c);
         };
