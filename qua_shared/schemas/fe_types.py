@@ -20,6 +20,7 @@ committed to git so CI can ``git diff --exit-code`` it.
 
 from __future__ import annotations
 
+from .bucket.cell_vocab import CellRole, CellStatus
 from .bucket.edit_history import EditHistoryBatch, EditOperation, EditOpPatch
 from .bucket.jobs import JobMember, JobRecord, JobsListResponse
 from .bucket.peaks_history import PeaksRecord
@@ -44,7 +45,6 @@ from .config.automation import (
     StaleMetadataConfig,
     StaleTsRegenConfig,
 )
-from .config.cell_vocab import CellRole, CellStatus
 from .wire._envelopes import ErrorEnvelope, OkAck
 from .wire.admin_permissions import (
     AdminCapabilityRow,

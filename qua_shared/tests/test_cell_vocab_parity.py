@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
+from qua_shared.schemas.bucket.cell_vocab import CellRole, CellStatus
 from qua_shared.schemas.bucket.ts_shard import TsShardWord
-from qua_shared.schemas.config.cell_vocab import CellRole, CellStatus
 
 
 def _phonemizer_vocab():

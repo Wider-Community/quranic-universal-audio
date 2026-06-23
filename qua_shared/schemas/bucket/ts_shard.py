@@ -51,7 +51,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 
 from .._extras import strip_and_warn
-from ..config.cell_vocab import CellRole, CellStatus
+from .cell_vocab import CellRole, CellStatus
 
 # Letter timing triple: [char, start_ms, end_ms]; timings may be null when the
 # aligner couldn't place an individual letter. A 4th slot ``silent`` (bool) is
@@ -68,7 +68,7 @@ PhoneTiming = list[str | int | bool]
 
 # Cell row (the 6th word slot): a per-character haraka/tanween cell.
 # ``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group]``.
-# ``role`` / ``status`` are the codegen-source enums (``config/cell_vocab``);
+# ``role`` / ``status`` are the codegen-source enums (``bucket/cell_vocab``);
 # ``phoneme_indices`` are word-local indices over the word's indexable phones.
 CellTiming = tuple[str, CellRole, CellStatus, list[int], int, str | None, int | None]
 
