@@ -131,6 +131,24 @@ The canonical dev/prod Spaces have **no** auto-provisioning script — their sec
 
 **Contributor (personal) Spaces** are fully scripted — no manual Space-settings clicks. `scripts/devenv/bootstrap_dev_env.py <name>` provisions a private bucket + Space under the contributor's own account, **attaches the bucket as a Space volume at `/data/inspector-bucket`** (`HfApi.set_space_volumes`), auto-generates `INSPECTOR_SESSION_SECRET`, sets `HF_TOKEN` + the `INSPECTOR_BUCKET_REPO` variable, and (with `--deploy`) pushes code via `scripts/deploy/deploy_space.py <space-id>` (the committed, parameterized cousin of `scripts/deploy/upload_inspector.py`). The only manual prerequisite is an HF token with write scope; OAuth vars are auto-injected via `hf_oauth: true`. See `inspector/README.md` for the three-tier dev workflow.
 
+## Type-check gate (pyright)
+
+`qua_shared/schemas/` is type-checked in basic mode as a **blocking** CI gate
+(`type-check` job in `inspector-checks.yml`). It runs via `npx -y pyright
+--level error qua_shared/schemas` so no Python type-checker dependency is added
+to the image — node 24 is already present.
+
+To widen coverage to additional packages, follow the runbook embedded in
+`pyrightconfig.json`: add **one** package to `include` (recommended order:
+`qua_jobs`, then `inspector/services/` package by package), run pyright, fix or
+annotate the real errors, and only then add the next. Never widen to the whole
+repo in one step — the `extraPaths` in `pyrightconfig.json` ensures flat-layout
+imports resolve cleanly when you do.
+
+Touching any file under `qua_shared/schemas/` also requires regenerating the
+codegen'd FE types and committing the result — see `schema-codegen-check` in
+`inspector-checks.yml` and `docs/reference/schemas.md`.
+
 ## Secret rotation
 
 - `INSPECTOR_HF_TOKEN` — new token → update Space secret → restart. Revoke the old after verifying.
