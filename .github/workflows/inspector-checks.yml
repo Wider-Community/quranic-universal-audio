@@ -189,15 +189,12 @@ jobs:
           fi
 
   type-check:
-    # NON-BLOCKING (continue-on-error) pyright type check, intentionally scoped
-    # to the Pydantic typed core (qua_shared/schemas/) in basic mode. Run via
-    # `npx pyright` so no Python type-checker dependency is added — node 24 is
-    # available. Repo-wide basic mode is ~636 errors of flat-import resolution
-    # noise; this narrow scope reports real schema-typing issues without
-    # gating the build. Flip continue-on-error off (blocking) once the handful
-    # of qua_shared/schemas/ errors are cleared. See CLAUDE.md / rollout notes.
+    # Blocking pyright gate for the Pydantic typed core (qua_shared/schemas/).
+    # Run via `npx pyright` — no Python type-checker dep added, node 24 is
+    # available. To widen coverage follow the runbook in pyrightconfig.json:
+    # add one package to `include` at a time, never widen to the whole repo
+    # in one step.
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
