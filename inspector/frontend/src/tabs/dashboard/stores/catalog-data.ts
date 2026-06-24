@@ -97,8 +97,17 @@ export async function loadCatalog(force = false): Promise<void> {
 
 const CATALOG_POLL_MS = 30_000;
 
+/** Consecutive failed poll ticks tolerated before the dashboard surfaces an
+ *  error. A single transient 5xx (the Space proxy momentarily can't reach the
+ *  single worker) shouldn't blank a working dashboard — keep the last-good
+ *  snapshot and only surface once failures persist. */
+const POLL_ERROR_TOLERANCE = 3;
+
 let pollTeardown: (() => void) | null = null;
 let pollRefs = 0;
+
+/** Running count of consecutive failed poll ticks; reset on any success. */
+let pollErrorStreak = 0;
 
 /** Signature of the last applied snapshot, so a poll that returns an unchanged
  *  catalog skips the store write (and the list re-reconcile it would trigger). */
@@ -145,6 +154,7 @@ function applyPage(page: { reciters: PublicReciter[] }, stats: BucketCounts): vo
 export function startCatalogPolling(): () => void {
     pollRefs += 1;
     if (!pollTeardown) {
+        pollErrorStreak = 0;
         pollTeardown = visiblePoll<CatalogPollResult>({
             intervalMs: CATALOG_POLL_MS,
             fetcher: async (signal) => {
@@ -161,16 +171,28 @@ export function startCatalogPolling(): () => void {
                 return { page: { reciters }, stats, version };
             },
             onResult: (result) => {
+                pollErrorStreak = 0;
+                // A recovered tick clears any transient error a prior failed
+                // tick surfaced (applyPage only clears it when the data changed).
+                const cur = get(catalogData);
+                if (cur.error) catalogData.set({ ...cur, error: null });
                 if (result === null) return;
                 lastVersion = result.version;
                 applyPage(result.page, result.stats);
             },
-            onError: (e) =>
-                catalogData.update((s) => ({
-                    ...s,
-                    loading: false,
-                    error: (e as Error).message ?? 'Failed to load catalog',
-                })),
+            onError: (e) => {
+                pollErrorStreak += 1;
+                const haveData = get(catalogData).reciters.length > 0;
+                // Swallow a transient blip while we still have data to show;
+                // only surface once we've never loaded or failures persist.
+                if (!haveData || pollErrorStreak >= POLL_ERROR_TOLERANCE) {
+                    catalogData.update((s) => ({
+                        ...s,
+                        loading: false,
+                        error: (e as Error).message ?? 'Failed to load catalog',
+                    }));
+                }
+            },
         });
     }
     return () => {

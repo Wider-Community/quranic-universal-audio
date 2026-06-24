@@ -21,6 +21,11 @@ import { visiblePoll } from '../../../lib/utils/visible-poll';
 
 export type NotificationsView = 'active' | 'archive';
 
+/** Consecutive failed poll ticks tolerated before the rail surfaces an error.
+ *  A single transient 5xx (the Space proxy momentarily can't reach the single
+ *  worker) shouldn't replace a populated rail with an error banner. */
+const POLL_ERROR_TOLERANCE = 3;
+
 class NotificationsStore {
     active = $state<UserNotification[]>([]);
     archived = $state<UserNotification[]>([]);
@@ -31,22 +36,30 @@ class NotificationsStore {
     archivedLoaded = $state(false);
 
     #teardown: (() => void) | null = null;
+    #errorStreak = 0;
 
     /** Begin the visibility-aware poll of the active list. Idempotent. */
     start(): void {
         if (this.#teardown) return;
+        this.#errorStreak = 0;
         this.#teardown = visiblePoll<{ notifications: UserNotification[]; unread: number }>({
             intervalMs: 30_000,
             fetcher: (signal) => fetchNotifications(signal),
             onResult: (page) => {
+                this.#errorStreak = 0;
                 this.active = page.notifications;
                 this.unread = page.unread;
                 this.loading = false;
                 this.error = null;
             },
             onError: (e) => {
+                this.#errorStreak += 1;
                 this.loading = false;
-                this.error = (e as Error).message ?? 'Failed to load notifications';
+                // Swallow a transient blip while the rail still has content;
+                // only surface once we've never loaded or failures persist.
+                if (this.active.length === 0 || this.#errorStreak >= POLL_ERROR_TOLERANCE) {
+                    this.error = (e as Error).message ?? 'Failed to load notifications';
+                }
             },
         });
     }

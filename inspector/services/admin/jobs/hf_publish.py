@@ -132,6 +132,22 @@ def complete(
         return {"ok": False, "reason": "no slug"}
 
     version = version or job_id  # fallback so the unique key has something
+
+    # Idempotency pre-check OUTSIDE the write txn. The poll worker re-checks
+    # every still-listed terminal job, so for an already-recorded publish this
+    # returns before opening a durable_transaction — which would bump db_seq and
+    # push the whole DB to the bucket for a no-op. Any row (current OR
+    # superseded) for (hf, slug, version) counts.
+    existing = repo_releases.release_by_version("hf", slug, version)
+    if existing is not None:
+        log.info(
+            "hf_publish.complete(%s, %s): already recorded (id=%s)",
+            slug,
+            version,
+            existing.get("id"),
+        )
+        return {"ok": True, "skipped": "duplicate"}
+
     now = datetime.now(UTC)
     actor = Actor(
         hf_user_id="SYSTEM_ACTOR",
@@ -139,18 +155,12 @@ def complete(
         role="owner",
     )
     with durable_transaction() as _:
-        # Idempotency: if any row (current OR superseded) for
-        # (hf, slug, version) already exists, no-op. The partial-unique on
-        # (track, slug) WHERE superseded_at IS NULL only blocks two CURRENT
-        # rows — a retry after a later supersede must NOT re-INSERT.
-        existing_any = repo_releases.release_by_version("hf", slug, version)
-        if existing_any is not None:
-            log.info(
-                "hf_publish.complete(%s, %s): already recorded (id=%s)",
-                slug,
-                version,
-                existing_any.get("id"),
-            )
+        # Re-read inside the txn as the atomic guard: webhook + poll can
+        # double-fire for a freshly-terminal job, and the serialized writer
+        # means the loser sees the winner's row here and bails (one-time, not
+        # the recurring poll path). The partial-unique on (track, slug) WHERE
+        # superseded_at IS NULL only blocks two CURRENT rows.
+        if repo_releases.release_by_version("hf", slug, version) is not None:
             return {"ok": True, "skipped": "duplicate"}
         # Supersede prior current row FIRST — the partial-unique blocks two
         # current rows for (hf, slug) so we can't insert before clearing.
