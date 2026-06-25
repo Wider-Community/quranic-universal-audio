@@ -39,8 +39,14 @@ and screenshots `#app`. The harness fetches manifest/shard/qpc/dk via the real
 loaders, builds `TsVerseData` with `assembleVerseFromShard`, sets the real
 `loadedVerse` store, and mounts `UnifiedDisplay` — the exact app render path.
 
+## Show the result in chat
+
+After the PNG is written, **display it inline in chat by `Read`-ing the PNG path**
+(the Read tool renders images) — don't just report the path. One Read per shot.
+
 ## Notes
 
+- Both tiers render by default (the app defaults the **phoneme row OFF**; the harness turns it ON since the letter↔phoneme alignment is the point). Opt out with `&letters=0` / `&phonemes=0` on the harness URL.
 - After a re-stamp the shot is immediately fresh (shard endpoint is `no-store`); there is no browser/CDN cache to bust. → [[shard-browser-cache-stale]]
 - The dev-only perf-A/B HUD is hidden by the harness CSS.
 - The screenshot is the analysis (letter ↔ phoneme cell) view only — to verify tajweed underlines / merger badges / silent greys after a phonemizer or qua-sdk change, this is the tool.

@@ -26,6 +26,7 @@ import {
     reciterAudioFromManifest,
 } from '../src/lib/recitation-data/ts-source';
 import UnifiedDisplay from '../src/tabs/timestamps/components/UnifiedDisplay.svelte';
+import { showLetters, showPhonemes } from '../src/tabs/timestamps/stores/display';
 import { loadedVerse } from '../src/tabs/timestamps/stores/verse';
 
 async function render(): Promise<void> {
@@ -55,6 +56,12 @@ async function render(): Promise<void> {
         const [a, b] = range.split('-').map((n) => parseInt(n, 10));
         data.words = data.words.slice(a - 1, (Number.isNaN(b) ? a : b));
     }
+
+    // Both tiers ON by default (the phoneme row defaults OFF in the app) — the
+    // whole point of the harness is the letter↔phoneme alignment. `&letters=0` /
+    // `&phonemes=0` opt out of either tier.
+    showLetters.set(p.get('letters') !== '0');
+    showPhonemes.set(p.get('phonemes') !== '0');
 
     loadedVerse.set({ data, tsSegOffset: 0, tsSegEnd: Number.MAX_SAFE_INTEGER });
     mount(UnifiedDisplay, { target: document.getElementById('app')! });
