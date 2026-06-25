@@ -48,9 +48,13 @@ def add_bookmark():
     if not sess:
         return jsonify({"error": "not connected"}), 401
     body = request.get_json(silent=True) or {}
+    raw_surah = body.get("surah")
+    raw_ayah = body.get("ayah")
+    if raw_surah is None or raw_ayah is None:
+        return jsonify({"error": "surah and ayah required"}), 400
     try:
-        surah = int(body.get("surah"))
-        ayah = int(body.get("ayah"))
+        surah = int(raw_surah)
+        ayah = int(raw_ayah)
     except (TypeError, ValueError):
         return jsonify({"error": "surah and ayah required"}), 400
     try:

@@ -100,6 +100,14 @@ def _vocab(conn) -> Vocab:
     )
 
 
+def _dt(value: str | None) -> datetime:
+    """Parse a NOT-NULL timestamp column; the column invariant guarantees a value."""
+    dt = _serde.from_iso(value)
+    if dt is None:
+        raise ValueError("expected a non-null timestamp column")
+    return dt
+
+
 def _delivery_from_row(r) -> Delivery:
     return Delivery(
         slug=r["slug"],
@@ -121,7 +129,7 @@ def _delivery_from_row(r) -> Delivery:
         bitrate_mode=r["bitrate_mode"],
         bitrate_kbps_nominal=r["bitrate_kbps_nominal"],
         total_duration_sec=r["total_duration_sec"],
-        added_at=_serde.from_iso(r["added_at"]),
+        added_at=_dt(r["added_at"]),
         added_by_hf_id=r["added_by_hf_id"],
     )
 
@@ -147,7 +155,7 @@ def snapshot() -> ReciterCatalog:
         _delivery_from_row(r) for r in conn.execute("SELECT * FROM deliveries ORDER BY slug")
     ]
     aliases = [
-        Alias(kind=r["kind"], old=r["old"], new=r["new"], ts=_serde.from_iso(r["ts"]))
+        Alias(kind=r["kind"], old=r["old"], new=r["new"], ts=_dt(r["ts"]))
         for r in conn.execute("SELECT kind, old, new, ts FROM catalog_aliases ORDER BY id")
     ]
     derived = Derived.model_validate(_serde.json_loads(meta["derived"]) or {"source_channels": []})
@@ -421,7 +429,7 @@ def insert_alias(alias: Alias) -> None:
 def set_meta(*, generated_at: datetime | None, derived: Derived | dict | None) -> None:
     if derived is None:
         derived_json = '{"source_channels": []}'
-    elif hasattr(derived, "model_dump"):
+    elif isinstance(derived, Derived):
         derived_json = _serde.json_dumps(derived.model_dump(mode="json"))
     else:
         derived_json = _serde.json_dumps(derived)

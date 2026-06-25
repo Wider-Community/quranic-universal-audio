@@ -61,14 +61,16 @@ def fs_backend(tmp_path, monkeypatch):
 
 
 def _seed_accepted_intake(
-    *, kind: str, reciter_id: str | None,
-    requester: Actor | None = None, auto_claim: bool = False,
+    *,
+    kind: str,
+    reciter_id: str | None,
+    requester: Actor | None = None,
+    auto_claim: bool = False,
 ) -> str:
     """Insert an accepted slugless intake request (slug=NULL) and return its id."""
     from services import db
 
-    requester = requester or Actor(
-        hf_user_id="u-1", login_at_time="alice", role=Role.CONTRIBUTOR)
+    requester = requester or Actor(hf_user_id="u-1", login_at_time="alice", role=Role.CONTRIBUTOR)
     extra = {"reciter_id": reciter_id, "source": {"method": "links", "links": []}}
     with db.transaction():
         rid = repo_requests.submit(
@@ -142,6 +144,7 @@ def test_ingest_new_combo_mints_seeds_and_backfills(fs_backend):
 
     # audio_manifest sidecar written with the chapter map audio_meta reads.
     manifest = get_backend().read_json(storage_paths.audio_manifest_path("rec_x_hafs_ch1"))
+    assert isinstance(manifest, dict)
     assert manifest["chapters"]["1"]["url"] == "https://cdn.example/001.mp3"
     assert manifest["_meta"]["chapter_count"] == 3
 
@@ -381,22 +384,27 @@ def test_ingest_preserves_requester_and_auto_claim_self_review(fs_backend):
     """The mint's reciter.requested must be attributed to the ORIGINAL requester
     (not the admin running the ingest) and carry their auto_claim, so the
     self-review allocation fires for them at alignment_completed."""
+    from services.db import repo_claims
     from services.segments import auto_detect
     from services.state import pending_requests
-    from services.db import repo_claims
 
-    requester = Actor(hf_user_id="u-req", login_at_time="toundey",
-                      role=Role.CONTRIBUTOR)
+    requester = Actor(hf_user_id="u-req", login_at_time="toundey", role=Role.CONTRIBUTOR)
     rid = _seed_accepted_intake(
-        kind="existing_reciter_new_combo", reciter_id="rec_x",
-        requester=requester, auto_claim=True,
+        kind="existing_reciter_new_combo",
+        reciter_id="rec_x",
+        requester=requester,
+        auto_claim=True,
     )
     slug = "rec_x_hafs_ch1"
     # Admin (OWNER) runs the ingest — but the request belongs to u-req.
     intake_service.ingest(
         rid,
-        {"reciter": None, "delivery": _delivery_block(slug, "rec_x"),
-         "vocab_additions": None, "audio_manifest": _manifest_block(2)},
+        {
+            "reciter": None,
+            "delivery": _delivery_block(slug, "rec_x"),
+            "vocab_additions": None,
+            "audio_manifest": _manifest_block(2),
+        },
         actor=OWNER,
     )
 
@@ -407,13 +415,14 @@ def test_ingest_preserves_requester_and_auto_claim_self_review(fs_backend):
     assert pending.auto_claim is True
 
     # alignment_completed (via auto_detect) folds the self-review claim to u-req.
-    fs_backend.write_json_atomic(
-        storage_paths.detailed_path(slug), {"_meta": {}, "entries": []})
+    fs_backend.write_json_atomic(storage_paths.detailed_path(slug), {"_meta": {}, "entries": []})
     auto_detect._reset_seen_for_tests()
     assert auto_detect.reconcile_once() == 1
     # auto_claim folds reciter.claimed → the reciter is allocated (under_review),
     # NOT left unclaimed in awaiting_review (the bug this guards).
-    assert state_service.get_row(slug).state == ReciterState.UNDER_REVIEW
+    row = state_service.get_row(slug)
+    assert row is not None
+    assert row.state == ReciterState.UNDER_REVIEW
     assert repo_claims.open_claim_for_user("u-req") == slug
 
 
@@ -433,7 +442,9 @@ def test_ingest_then_autodetect_flips_to_awaiting_review(fs_backend):
         actor=OWNER,
     )
 
-    assert state_service.get_row(slug).state == ReciterState.AWAITING_ALIGNMENT
+    row = state_service.get_row(slug)
+    assert row is not None
+    assert row.state == ReciterState.AWAITING_ALIGNMENT
 
     # The offline pipeline uploads content under reciters/<slug>/.
     fs_backend.write_json_atomic(
@@ -445,4 +456,6 @@ def test_ingest_then_autodetect_flips_to_awaiting_review(fs_backend):
     auto_detect._reset_seen_for_tests()
     fired = auto_detect.reconcile_once()
     assert fired == 1
-    assert state_service.get_row(slug).state == ReciterState.AWAITING_REVIEW
+    row = state_service.get_row(slug)
+    assert row is not None
+    assert row.state == ReciterState.AWAITING_REVIEW

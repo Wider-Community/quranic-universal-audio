@@ -42,7 +42,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from qua_shared.letter_vocab import to_external_char  # noqa: E402
-from qua_shared.ts_shard_letters import iter_letters  # noqa: E402
 from qua_shared.mp3_frames import (  # noqa: E402
     FrameIndex,
     MultiFrameSlice,
@@ -50,6 +49,7 @@ from qua_shared.mp3_frames import (  # noqa: E402
     slice_frames,
     slice_frames_multi,
 )
+from qua_shared.ts_shard_letters import iter_letters  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("publish_hf")
@@ -681,7 +681,7 @@ def _verses_for_validation(rows: list[dict]) -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 
-def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[bytes]) -> str:
+def _push_to_hf(slug: str, riwayah: str, rows: list[dict], audio_bytes: list[bytes | None]) -> str:
     """Build the parquet split and push to HF. Returns the dataset commit SHA."""
     from datasets import Audio, Dataset, Features, Sequence, Value
     from huggingface_hub import HfApi

@@ -10,6 +10,8 @@ error contracts (401 / 403 / 400 tuples).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from flask import jsonify
 
 from qua_shared.schemas import Actor, Role
@@ -17,12 +19,17 @@ from services import auth as auth_service
 from services import catalog as catalog_service
 from services import permissions
 
+if TYPE_CHECKING:
+    from flask import Response
+
+    from services.auth.auth import User
+
 # Re-exported for back-compat with imports of ``MIN_REASON_CHARS`` from this
 # module. The canonical definition lives in ``services/permissions.py``.
 MIN_REASON_CHARS = permissions.MIN_REASON_CHARS
 
 
-def require_signed_in_or_401():
+def require_signed_in_or_401() -> tuple[User | None, tuple[Response, int] | None]:
     """Return ``(user, None)`` for signed-in or ``(None, (resp, 401))``."""
     user = auth_service.current_user()
     if user is None:
@@ -53,7 +60,9 @@ def actor_for(user) -> Actor:
     return Actor(
         hf_user_id=user.hf_user_id,
         login_at_time=user.login,
-        role=permissions.role_of(user).value,
+        # ``use_enum_values=True`` on Actor stores the enum's string value; pass
+        # the Role enum so the annotation matches (Pydantic does the coercion).
+        role=permissions.role_of(user),
     )
 
 

@@ -149,14 +149,16 @@ def create_flag(slug: str):
         return jsonify({"error": "failed to save flag"}), 500
 
     if created:
-        _notify.notify_owners_ts_flag(
-            slug=slug,
-            verse_key=req.verse_key,
-            comment=comment,
-            author_id=hf_user_id,
-            author_login=login_at_time,
-            at_utc=_serde.to_iso(row["updated_at"]),
-        )
+        at_utc = _serde.to_iso(row["updated_at"])
+        if at_utc is not None:
+            _notify.notify_owners_ts_flag(
+                slug=slug,
+                verse_key=req.verse_key,
+                comment=comment,
+                author_id=hf_user_id,
+                author_login=login_at_time,
+                at_utc=at_utc,
+            )
 
     show_author = cap_service.can(user, _IDENTITY_CAP)
     return jsonify(

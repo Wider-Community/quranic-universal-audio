@@ -95,7 +95,9 @@ def _stream_cdn(url: str, disposition: str | None = None) -> Response:
         )
     except requests.RequestException as exc:
         logger.warning("audio_proxy: upstream fetch failed url=%s err=%s", url, exc)
-        return jsonify({"error": "upstream audio fetch failed"}), 502
+        resp = jsonify({"error": "upstream audio fetch failed"})
+        resp.status_code = 502
+        return resp
 
     # Cache only successful bodies. A forwarded upstream error (4xx/5xx) must NOT
     # carry the immutable 1-year Cache-Control, or the browser pins the failure

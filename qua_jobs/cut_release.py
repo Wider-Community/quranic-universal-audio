@@ -49,7 +49,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from qua_shared.letter_vocab import VOCAB_FILENAME, to_external_char, vocab_csv_bytes  # noqa: E402
-from qua_shared.ts_shard_letters import iter_letters  # noqa: E402
 from qua_shared.schemas import (  # noqa: E402
     FileDigest,
     LetterTimestampsDoc,
@@ -63,6 +62,7 @@ from qua_shared.schemas import (  # noqa: E402
     VerseTimestampsDoc,
     WordTimestampsDoc,
 )
+from qua_shared.ts_shard_letters import iter_letters  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("cut_release")
@@ -243,7 +243,13 @@ def _build_tier_files(
             for lt in iter_letters(letters):
                 # Map the internal 57-token alphabet to the published 42-token
                 # external set (drops the maddah mark; fail-loud on unknown).
-                letter_array.append([widx, to_external_char(lt.char), int(lt.start_ms), int(lt.end_ms)])
+                # The published letter tier can't encode an unplaced letter, so
+                # fail loud if the aligner left a None timing.
+                if lt.start_ms is None or lt.end_ms is None:
+                    raise ValueError(f"letter {lt.char!r} in {key} has unplaced timing: {lt!r}")
+                letter_array.append(
+                    [widx, to_external_char(lt.char), int(lt.start_ms), int(lt.end_ms)]
+                )
 
         verse_body[key] = verse_pos
         word_body[key] = [verse_pos, word_array]
@@ -978,9 +984,7 @@ def main() -> int:
         # the changelog Missing column — whole missing surahs vs within-surah
         # verse gaps, split so even a partial recitation stays short.
         present_refs = {
-            (int(k.split(":")[0]), int(k.split(":")[1]))
-            for k in verses
-            if not k.startswith("_")
+            (int(k.split(":")[0]), int(k.split(":")[1])) for k in verses if not k.startswith("_")
         }
         missing_surahs, missing_verses = missing_coverage(present_refs, surah_verse_counts)
         catalog_bytes = _build_catalog_json(

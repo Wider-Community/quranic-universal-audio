@@ -59,10 +59,11 @@ def validate_submission(sub: IntakeSubmission) -> IntakeValidation:
         if not (edits.name_en or "").strip():
             errors.append("English name is required for a new reciter.")
     else:  # existing_reciter_new_combo
-        if not (sub.reciter_id or "").strip():
+        reciter_id = sub.reciter_id
+        if not (reciter_id or "").strip():
             errors.append("A reciter must be selected for a new combination.")
-        elif catalog_service.find_reciter(sub.reciter_id) is None:
-            errors.append(f"Unknown reciter: {sub.reciter_id!r}.")
+        elif reciter_id is None or catalog_service.find_reciter(reciter_id) is None:
+            errors.append(f"Unknown reciter: {reciter_id!r}.")
 
     if not (edits.riwayah or "").strip():
         errors.append("Riwayah is required.")

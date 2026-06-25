@@ -39,7 +39,7 @@ def test_error_envelope_default_dump_keeps_none_fields() -> None:
 
 def test_error_envelope_rejects_unknown_field() -> None:
     with pytest.raises(ValidationError):
-        ErrorEnvelope(error="x", unexpected="nope")
+        ErrorEnvelope(error="x", unexpected="nope")  # type: ignore[reportCallIssue]  # negative test: extra=forbid must reject unknown field at runtime
 
 
 def test_ok_ack_dumps_true() -> None:
@@ -48,9 +48,9 @@ def test_ok_ack_dumps_true() -> None:
 
 def test_ok_ack_rejects_false() -> None:
     with pytest.raises(ValidationError):
-        OkAck(ok=False)
+        OkAck(ok=False)  # type: ignore[reportArgumentType]  # negative test: ok is constrained to True, runtime must reject False
 
 
 def test_ok_ack_rejects_unknown_field() -> None:
     with pytest.raises(ValidationError):
-        OkAck(extra="nope")
+        OkAck(extra="nope")  # type: ignore[reportCallIssue]  # negative test: extra=forbid must reject unknown field at runtime

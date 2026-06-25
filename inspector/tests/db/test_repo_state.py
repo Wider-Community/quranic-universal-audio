@@ -39,6 +39,7 @@ def test_under_review_assignee_from_open_claim(fresh_db):
             claimed_at=_dt("2026-02-02T00:00:00+00:00"),
         )
     row = repo_state.get_row("d1")
+    assert row is not None
     assert row.state == ReciterState.UNDER_REVIEW
     assert row.assignee_hf_id == "rev1"
     assert row.assignee_login == "reviewer"
@@ -54,10 +55,14 @@ def test_marked_ready_derived_from_claim(fresh_db):
         repo_claims.open_claim(slug="d1", assignee_id="rev1", assignee_login="reviewer")
     with db.transaction():
         repo_claims.set_marked_ready("d1", ready=True)
-    assert repo_state.get_row("d1").marked_ready is True
+    row = repo_state.get_row("d1")
+    assert row is not None
+    assert row.marked_ready is True
     with db.transaction():
         repo_claims.set_marked_ready("d1", ready=False)
-    assert repo_state.get_row("d1").marked_ready is False
+    row = repo_state.get_row("d1")
+    assert row is not None
+    assert row.marked_ready is False
 
 
 def test_release_clears_assignee(fresh_db):
@@ -75,6 +80,7 @@ def test_release_clears_assignee(fresh_db):
     # `row.assignee_hf_id is None` alone passes for the wrong reason.
     assert repo_claims.get_open_claim("d1") is None
     row = repo_state.get_row("d1")
+    assert row is not None
     assert row.state == ReciterState.RELEASED
     assert row.assignee_hf_id is None
 
@@ -90,6 +96,7 @@ def test_retained_columns_roundtrip(fresh_db):
             timestamps_job_ids=["job-1", "job-2"],
         )
     row = repo_state.get_row("d1")
+    assert row is not None
     assert row.timestamps_job_ids == ["job-1", "job-2"]
     assert row.last_save_at == _dt("2026-03-03T00:00:00+00:00")
 
@@ -122,5 +129,6 @@ def test_visibility_discarded_with_reason(fresh_db):
             visibility_reason="spam submission",
         )
     row = repo_state.get_row("d1")
+    assert row is not None
     assert row.visibility == Visibility.DISCARDED
     assert row.visibility_reason == "spam submission"

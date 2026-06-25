@@ -24,6 +24,8 @@ _SCRIPT = _REPO / "scripts" / "devenv" / "make_fixtures_dataset.py"
 
 def _load_script():
     spec = importlib.util.spec_from_file_location("make_fixtures_dataset", _SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

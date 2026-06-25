@@ -46,9 +46,15 @@ def test_upsert_creates_row_normalizes_email_and_injects_key():
 
 def test_get_by_email_token_and_hf_user():
     _upsert("a@b.com", hf_user_id="u-1", token="tok-get")
-    assert repo_subs.get_by_email("A@B.com")["manage_token"] == "tok-get"
-    assert repo_subs.get_by_token("tok-get")["email"] == "a@b.com"
-    assert repo_subs.get_by_hf_user("u-1")["email"] == "a@b.com"
+    by_email = repo_subs.get_by_email("A@B.com")
+    by_token = repo_subs.get_by_token("tok-get")
+    by_hf_user = repo_subs.get_by_hf_user("u-1")
+    assert by_email is not None
+    assert by_token is not None
+    assert by_hf_user is not None
+    assert by_email["manage_token"] == "tok-get"
+    assert by_token["email"] == "a@b.com"
+    assert by_hf_user["email"] == "a@b.com"
 
 
 def test_update_preserves_token_and_created_at():

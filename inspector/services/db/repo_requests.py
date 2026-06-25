@@ -38,6 +38,16 @@ def _actor_dict(actor: Actor) -> dict:
     }
 
 
+def _require_dt(raw: str | None, *, column: str) -> datetime:
+    """Parse a NOT-NULL timestamp column. ``submitted_at`` is always written at
+    submit time and ``resolved_at`` is always present on archived rows, so a None
+    here means corrupt data — raise rather than feed it to a non-Optional field."""
+    dt = _serde.from_iso(raw)
+    if dt is None:
+        raise ValueError(f"requests.{column} is unexpectedly NULL")
+    return dt
+
+
 # ---- adapters ----
 
 
@@ -45,7 +55,7 @@ def _to_pending(row) -> PendingRequest:
     payload = _serde.json_loads(row["payload"]) or {}
     return PendingRequest(
         slug=row["slug"],
-        submitted_at=_serde.from_iso(row["submitted_at"]),
+        submitted_at=_require_dt(row["submitted_at"], column="submitted_at"),
         requester=Actor(**payload["requester"]),
         proposed_edits=ProposedEdits(**(payload.get("proposed_edits") or {})),
         comments=row["comments"],
@@ -57,12 +67,12 @@ def _to_archived(row) -> ArchivedRequest:
     payload = _serde.json_loads(row["payload"]) or {}
     return ArchivedRequest(
         slug=row["slug"],
-        submitted_at=_serde.from_iso(row["submitted_at"]),
+        submitted_at=_require_dt(row["submitted_at"], column="submitted_at"),
         requester=Actor(**payload["requester"]),
         proposed_edits=ProposedEdits(**(payload.get("proposed_edits") or {})),
         comments=row["comments"],
         auto_claim=bool(row["auto_claim"]),
-        archived_at=_serde.from_iso(row["resolved_at"]),
+        archived_at=_require_dt(row["resolved_at"], column="resolved_at"),
         transitioned_by=Actor(**payload["transitioned_by"]),
         reason=row["resolution_reason"],
     )

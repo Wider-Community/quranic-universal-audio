@@ -20,7 +20,8 @@ Slice B of phase 6.
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from collections.abc import Sequence
+from typing import Literal, NotRequired, TypedDict
 
 from qua_shared.schemas import (
     AudioCategory,
@@ -75,18 +76,10 @@ _FULL_CHAPTERS: dict[AudioCategory, int] = {
 # ---------- types (TypedDicts for docs; runtime returns plain dicts) ----------
 
 
-class PublicDelivery(TypedDict, total=False):
+class PublicDelivery(TypedDict):
     slug: str  # ID only — never rendered to users.
     bucket: PublicBucket
     state_since: str | None  # ISO datetime; None when no state row exists.
-    # Per-bucket entry timestamps: {bucket: [iso, ...]} chronological, one entry
-    # per *distinct* visit to that bucket. Modal-only — attached by the detail /
-    # admin-view paths (NOT the cached list), so it's absent on list payloads.
-    bucket_dates: dict[str, list[str]]
-    # Timestamp-regeneration dates: every TS generation after the first, ISO
-    # ascending. Empty when never regenerated. Modal-only (same paths as
-    # ``bucket_dates``) — drives the conditional "Timestamps refreshed" node.
-    ts_refresh_dates: list[str]
     riwayah: str
     style: str
     recording_context: str | None
@@ -103,9 +96,17 @@ class PublicDelivery(TypedDict, total=False):
     bitrate_kbps_nominal: int | None
     bitrate_mode: str
     total_duration_sec: int | None
+    # Per-bucket entry timestamps: {bucket: [iso, ...]} chronological, one entry
+    # per *distinct* visit to that bucket. Modal-only — attached by the detail /
+    # admin-view paths (NOT the cached list), so it's absent on list payloads.
+    bucket_dates: NotRequired[dict[str, list[str]]]
+    # Timestamp-regeneration dates: every TS generation after the first, ISO
+    # ascending. Empty when never regenerated. Modal-only (same paths as
+    # ``bucket_dates``) — drives the conditional "Timestamps refreshed" node.
+    ts_refresh_dates: NotRequired[list[str]]
 
 
-class PublicReciter(TypedDict, total=False):
+class PublicReciter(TypedDict):
     reciter_id: str  # ID only.
     name: str  # display (en)
     name_ar: str | None
@@ -239,7 +240,7 @@ def _ts_refresh_dates_for_slug(slug: str) -> list[str]:
     return produced[1:]
 
 
-def _attach_bucket_dates(deliveries: list[PublicDelivery]) -> None:
+def _attach_bucket_dates(deliveries: Sequence[PublicDelivery]) -> None:
     """Populate ``bucket_dates`` + ``ts_refresh_dates`` on each delivery in place
     (modal paths only)."""
     for d in deliveries:
@@ -415,7 +416,7 @@ def detail(reciter_id: str) -> PublicReciter | None:
     return public
 
 
-class AdminViewDelivery(PublicDelivery, total=False):
+class AdminViewDelivery(PublicDelivery):
     """Admin-view delivery: same fields as PublicDelivery plus visibility + reason
     so the reciter modal can render a separate ``Discarded`` section.
     """
@@ -424,7 +425,7 @@ class AdminViewDelivery(PublicDelivery, total=False):
     visibility_reason: str | None
 
 
-class AdminViewReciter(TypedDict, total=False):
+class AdminViewReciter(TypedDict):
     """Like ``PublicReciter`` but the discarded combos are pulled into a
     separate list so the frontend can render them in a dedicated section
     (only visible to maintainers + owners). The ``deliveries`` list still

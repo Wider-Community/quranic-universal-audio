@@ -122,7 +122,7 @@ def _seed_released_ts_reciter(slug: str = "rec_ts") -> None:
 def _seed_public_husary() -> None:
     """Seed one released ``husary``/``husary_qdc`` reciter with fixed-date state
     (mirrors the public match-route ``_install`` helper, fixed seeds only)."""
-    from qua_shared.schemas import Channel, Riwayah, Source, Style, Vocab
+    from qua_shared.schemas import AudioCategory, Channel, Riwayah, Source, Style, Vocab
     from services import db
     from services.db import repo_catalog
     from tests.conftest import _seed_state
@@ -135,7 +135,7 @@ def _seed_public_husary() -> None:
                 slug="mp3quran",
                 name="mp3quran",
                 url="https://mp3quran.net",
-                audio_categories=["by_surah"],
+                audio_categories=[AudioCategory.BY_SURAH],
             )
         ],
         channels=[

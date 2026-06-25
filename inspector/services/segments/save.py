@@ -37,6 +37,10 @@ from services.validation.snapshot_classifier import classify_snapshot
 from utils.references import chapter_from_ref, normalize_ref
 from utils.uuid7 import uuid7
 
+# Service result: a success dict (``{"ok": True, ...}``) or an
+# ``(error_dict, http_status)`` tuple. The route layer unpacks both.
+SaveResult = dict | tuple[dict, int]
+
 # Categories that should not surface in the History panel's per-op
 # "classified_issues" deltas. They exist in the validation accordion for
 # review/awareness but represent display-only context, not gains/losses
@@ -518,7 +522,7 @@ def _apply_flag_ops(matching: list[dict], operations: list, *, actor: Actor):
     for op in flag_ops:
         cmd = op.get("command") or {}
         uid = cmd.get("segmentUid")
-        seg = by_uid.get(uid)
+        seg = by_uid.get(uid) if uid is not None else None
         if seg is None:
             return (
                 ({"error": f"flag target segment not found: {uid!r}"}, 404),
@@ -551,7 +555,7 @@ def _apply_flag_ops(matching: list[dict], operations: list, *, actor: Actor):
 
 def _persist_and_record(
     reciter: str, chapter: int, entries: list[dict], meta: dict, updates: dict, *, actor: Actor
-) -> dict:
+) -> SaveResult:
     """Persist mutated entries to disk, append edit_history, invalidate caches."""
     # Validate patch envelopes before writing anything.
     raw_ops = updates.get("operations", [])
@@ -642,7 +646,7 @@ def _refresh_split_group_index_on_save(reciter: str, batch: dict) -> None:
     cache.pop_seg_split_group_index(reciter)
 
 
-def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) -> dict:
+def save_seg_data(reciter: str, chapter: int, updates: dict, *, actor: Actor) -> SaveResult:
     """Save edited segments.  Returns ``{"ok": True}`` or ``{"error": ...}``
     with an HTTP status code as a second element in a tuple.
 

@@ -63,7 +63,9 @@ def _window_cutoff_iso(months: int) -> str:
     while month <= 0:
         month += 12
         year -= 1
-    return _serde.to_iso(datetime(year, month, 1, tzinfo=UTC))
+    iso = _serde.to_iso(datetime(year, month, 1, tzinfo=UTC))
+    assert iso is not None  # non-None datetime always serializes to a string
+    return iso
 
 
 def _iter_partitions(months: int) -> Iterable[dict]:
@@ -154,7 +156,7 @@ def all_public_cards(
         if card.get("audit_id") in deleted_ids:
             continue
         cards.append(card)
-    cards.sort(key=lambda c: c["ts"], reverse=True)
+    cards.sort(key=lambda c: c.get("ts", ""), reverse=True)
     return cards
 
 

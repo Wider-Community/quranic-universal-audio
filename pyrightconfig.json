@@ -1,19 +1,16 @@
-// pyrightconfig.json (repo root) — SCOPED, gradual type checking.
-// Covers qua_shared/schemas/ (the Pydantic typed core), which is clean and
-// enforced as a blocking CI gate. A repo-wide basic run reports many errors from
-// flat sys.path import layout, not real type bugs — do NOT widen `include` in
-// one step. Expand one package at a time per the widening runbook below.
+// pyrightconfig.json (repo root) — basic type checking for the WHOLE backend.
+// The entire Python backend (inspector/, qua_jobs/, qua_shared/) is type-checked
+// in basic mode and enforced as a blocking CI gate.
 {
   "include": [
-    "qua_shared/schemas"
+    "inspector",
+    "qua_jobs",
+    "qua_shared"
   ],
   // Flat sys.path layout: the app imports `from config import ...` /
   // `from services... import ...` with `inspector/` on the path, and several
   // shared modules import each other with repo-root on the path. Mirror that
-  // here so a future `include` widening doesn't drown in import-resolution
-  // noise. WIDENING RUNBOOK: add ONE package to `include` (e.g. "qua_jobs"),
-  // run `npx pyright`, fix or `# type: ignore[<rule>]` the real errors, and only
-  // then add the next. Never widen to the whole repo in one step.
+  // here so flat-layout imports resolve cleanly.
   "extraPaths": [".", "inspector"],
   "exclude": [
     "**/node_modules",

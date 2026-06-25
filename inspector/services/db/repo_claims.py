@@ -9,6 +9,7 @@ transition layer (owners are exempt by policy) via ``open_claim_for_user``.
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 
 from . import _serde
@@ -78,6 +79,8 @@ def open_claim(
         "opened_by_transition_id) VALUES (?,?,?,?,?)",
         (slug, assignee_id, assignee_login, ts, opened_by_transition_id),
     )
+    if cur.lastrowid is None:
+        raise sqlite3.IntegrityError("claim insert did not return a row id")
     return int(cur.lastrowid)
 
 

@@ -329,6 +329,8 @@ def ingest_intake(rid: str):
     actor, err = _resolve_owner_actor()
     if err is not None:
         return err
+    if actor is None:
+        return jsonify({"error": "authentication required"}), 401
 
     # CSRF defense for the cookie path only (a bearer token can't be CSRF'd —
     # the browser never auto-attaches an Authorization header cross-site).
@@ -397,7 +399,7 @@ def _resolve_intake(user, rid: str, status: str):
     if err is not None:
         return err
     try:
-        intake_service.resolve(rid, status=status, reason=reason, actor=actor_for(user))
+        intake_service.resolve(rid, status=status, reason=reason or "", actor=actor_for(user))
     except intake_service.NotIntakeRequest:
         return jsonify({"error": "unknown intake request"}), 404
     return jsonify({"ok": True})

@@ -106,7 +106,7 @@ def append_peaks_records(
     # Build the seen-op_id set once (warms the in-memory list cache). Dedup
     # against both already-persisted ops and earlier records in this same call.
     seen: set[str] = {
-        rec.get("op_id") for rec in load_peaks_records(reciter) if isinstance(rec.get("op_id"), str)
+        op_id for rec in load_peaks_records(reciter) if isinstance(op_id := rec.get("op_id"), str)
     }
 
     written = 0
