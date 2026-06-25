@@ -596,24 +596,6 @@
         const carrierGroupBySrc = new Map<number, RenderedGroup>();
         let iwadGroup: RenderedGroup | null = null;
 
-        // --- Idgham-shafawi absorbed vowel: the receiving meem merged cross-word,
-        //     so the phonemizer overloads its fatḥa — base AND haraka both carry the
-        //     SAME vowel index + the merger share_group. Lighting that haraka via the
-        //     group union would smear it across the whole merger; instead it must light
-        //     on its OWN vowel interval. Detect it: a haraka phoneme index that a
-        //     sibling `base` at the SAME sourceLetterIndex also carries. ---
-        const baseIdxBySrc = new Map<number, Set<number>>();
-        for (const c of cells) {
-            if (c.role !== 'base') continue;
-            let set = baseIdxBySrc.get(c.sourceLetterIndex);
-            if (!set) { set = new Set(); baseIdxBySrc.set(c.sourceLetterIndex, set); }
-            for (const i of c.phonemeIndices) set.add(i);
-        }
-        const isAbsorbedShafawiVowel = (c: TsCell): boolean => {
-            const siblingBase = baseIdxBySrc.get(c.sourceLetterIndex);
-            return !!siblingBase && c.phonemeIndices.some((i) => siblingBase.has(i));
-        };
-
         const newGroup = (kind: 'base' | 'vowel'): RenderedGroup => {
             const g: RenderedGroup = { kind, full: [], small: [], shareGroup: null, cols: [], phonemeSpans: [] };
             groups.push(g);
@@ -852,15 +834,11 @@
                         // its own fatḥa drops at the stop. Render it silent in the
                         // carrier's vowel group (after it), not on the preceding base.
                         pushSmall(carrierGroupBySrc.get(c.sourceLetterIndex)!, c);
-                    } else if (!dropped && c.shareGroup != null && isAbsorbedShafawiVowel(c)) {
-                        // Idgham-shafawi: the receiving meem's fatḥa shares the base's
-                        // vowel index + merger group. Light it on its OWN vowel interval
-                        // (not the merger union) so it doesn't smear across the merger.
-                        // The base still co-lights through the share union.
-                        const iv = ownIv(c);
-                        pushSmall(curBase ?? (curBase = newGroup('base')), c, iv ? { coLightIv: iv } : {});
                     } else {
-                        // short vowel / true waqf drop.
+                        // short vowel / true waqf drop — and the idgham-shafawi
+                        // receiving meem's vowel, which the phonemizer now keeps on the
+                        // haraka alone (own interval, no merger group), so it lights here
+                        // on its own vowel without smearing across the merger.
                         pushSmall(curBase ?? (curBase = newGroup('base')), c);
                     }
                 }

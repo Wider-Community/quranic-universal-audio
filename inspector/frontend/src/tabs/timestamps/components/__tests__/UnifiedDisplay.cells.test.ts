@@ -588,55 +588,72 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(fatha.dataset.cellStart).toBe('0.7'); // co-lit on the iwaḍ ā at global idx 5
     });
 
-    it('idgham shafawi: a merged base absorbs the vowel — its fatḥa co-lights, not greyed', () => {
-        // مَّرَض receiving meem: the consonant merged cross-word, so the base sounds
-        // the VOWEL ("a"). The phonemizer hands the fatḥa as `present` sharing the
-        // base's vowel index + merger group — the FE co-lights it via that group,
-        // with NO phone inspection.
-        const intervals: PhonemeInterval[] = [{ phone: 'a', start: 0, end: 0.25 }];
-        const word = w(
-            [{ char: 'م', start: 0, end: 0.25, silent: false }],
-            [
-                base(0, [0], { chars: 'م', shareGroup: 1 }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, tag: null, shareGroup: 1 },
-            ],
+    it('idgham shafawi: the receiving meem owns no phoneme and co-lights via the merger union (not greyed)', () => {
+        // …هِم مَّرَض — the geminated m̃ lives on the SOURCE meem (word A); the receiving
+        // meem (word B) carries NO phoneme and co-lights purely through the shared merger
+        // group, exactly like an idgham-noon receiver — so it must not grey out, and it
+        // spans the m̃ union [0, 0.1], NOT the following vowel.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'm̃', start: 0, end: 0.1 },   // the merged nasal (source meem)
+            { phone: 'a', start: 0.1, end: 0.25 }, // the receiving meem's vowel
+        ];
+        const him = w(
+            [{ char: 'م', start: 0, end: 0.1, silent: false }],
+            [base(0, [0], { chars: 'م', tag: 'idgham_shafawi', shareGroup: 5 })],
             [0],
         );
-        const { container } = mount([word], intervals);
-        const fatha = container.querySelector<HTMLElement>('.haraka-cell')!;
-        expect(fatha.classList.contains('dia-dropped')).toBe(false);
-        expect(fatha.dataset.cellTimed).toBe('1'); // co-lit on the base's vowel
-        expect(fatha.dataset.cellStart).toBe('0');
+        const marad = w(
+            [{ char: 'م', start: 0.1, end: 0.25, silent: false }],
+            [
+                base(0, [], { chars: 'م', shareGroup: 5 }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+            ],
+            [1],
+        );
+        const { container } = mount([him, marad], intervals);
+        const meems = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .filter((el) => el.textContent === 'م');
+        expect(meems.length).toBe(2);
+        for (const m of meems) {
+            expect(m.classList.contains('silent')).toBe(false);
+            expect(m.dataset.cellTimed).toBe('1');
+            expect(m.dataset.cellStart).toBe('0');
+            expect(m.dataset.cellEnd).toBe('0.1'); // the m̃ union — NOT the vowel
+        }
     });
 
-    it('idgham shafawi: the absorbed fatḥa lights on its OWN vowel interval, not the merger union', () => {
-        // …هِم مَّرَض receiving meem: the merged consonant (m̃) + the absorbed vowel (a)
-        // both sit on the SAME meem base in one merger share_group, so the group UNION
-        // spans [m̃, a] = [0, 0.25]. The fatḥa must light on its OWN vowel interval
-        // [0.1, 0.25] (A4) — not smeared across the whole merger union.
+    it('idgham shafawi: the absorbed vowel lights on its own haraka interval, disjoint from the meems', () => {
+        // The vowel now lives ONLY on the receiving meem's haraka (its own interval, no
+        // merger group). Looping the haraka lights its vowel [0.1, 0.25] without
+        // intersecting either meem's cell span (the m̃ union [0, 0.1]).
         const intervals: PhonemeInterval[] = [
-            { phone: 'm̃', start: 0, end: 0.1 },   // merged consonant (group-wide)
-            { phone: 'a', start: 0.1, end: 0.25 }, // the absorbed vowel
+            { phone: 'm̃', start: 0, end: 0.1 },
+            { phone: 'a', start: 0.1, end: 0.25 },
         ];
-        const word = w(
-            [{ char: 'م', start: 0, end: 0.25, silent: false }],
-            [
-                base(0, [0, 1], { chars: 'م', shareGroup: 1 }),
-                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 1 },
-            ],
-            [0, 1],
+        const him = w(
+            [{ char: 'م', start: 0, end: 0.1, silent: false }],
+            [base(0, [0], { chars: 'م', tag: 'idgham_shafawi', shareGroup: 5 })],
+            [0],
         );
-        const { container } = mount([word], intervals);
+        const marad = w(
+            [{ char: 'م', start: 0.1, end: 0.25, silent: false }],
+            [
+                base(0, [], { chars: 'م', shareGroup: 5 }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+            ],
+            [1],
+        );
+        const { container } = mount([him, marad], intervals);
         const fatha = container.querySelector<HTMLElement>('.haraka-cell')!;
         expect(fatha.classList.contains('dia-dropped')).toBe(false);
         expect(fatha.dataset.cellTimed).toBe('1');
-        // OWN vowel interval [0.1, 0.25], NOT the merger union [0, 0.25].
+        // OWN vowel interval [0.1, 0.25], disjoint from the meems.
         expect(fatha.dataset.cellStart).toBe('0.1');
         expect(fatha.dataset.cellEnd).toBe('0.25');
-        // The base meem STILL co-lights through the merger union (whole [0, 0.25]).
+        // the meems span only the m̃ union [0, 0.1].
         const meem = container.querySelector<HTMLElement>('.mega-letter[data-cell-timed]')!;
         expect(meem.dataset.cellStart).toBe('0');
-        expect(meem.dataset.cellEnd).toBe('0.25');
+        expect(meem.dataset.cellEnd).toBe('0.1');
     });
 
     it('idgham noon cross-word: the noon base co-lights with the receiver as a NORMAL (non-greyed) cell', () => {
@@ -917,7 +934,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         );
         const wordN1 = w(
             [{ char: 'م', start: 0.5, end: 0.6, silent: false }],
-            [base(0, [2], { chars: 'م', shareGroup: 8 })],
+            [
+                base(0, [], { chars: 'م', shareGroup: 8 }), // receiver: no phoneme, co-lit via union
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [2], sourceLetterIndex: 0, tag: null, shareGroup: null },
+            ],
             [2],
         );
         const { container } = mount([wordN, wordN1], intervals);
