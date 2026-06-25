@@ -1178,6 +1178,79 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(ph(5).style.getPropertyValue('--tj-badge')).toContain('madd-lazim'); // j leen-glide
         expect(ph(6).style.getPropertyValue('--tj-badge')).toContain('ikhfaa'); // ŋ
     });
+
+    // --- Cross-word merger carrier timing (idgham / shafawi) ----------------
+
+    it('cross-word idgham carrier: letter span = the ghunnah nasal, highlight = the haraka+ghunnah union', () => {
+        // tanwīn → mīm idgham-with-ghunnah (هُدًى مِّن). The source tanwīn sounds
+        // [haraka, ghunnah]; the receiving merged mīm sounds ONLY the ghunnah. The
+        // carrier's own click/loop/tooltip span must be the nasal alone, while its
+        // highlight band still co-lights the whole haraka+ghunnah union.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'd', start: 0, end: 0.1 }, // word1 consonant
+            { phone: 'a', start: 0.1, end: 0.22 }, // tanwīn fatḥatān vowel (source haraka)
+            { phone: 'm̃', start: 0.22, end: 0.88 }, // merged ghunnah mīm (carrier nasal)
+        ];
+        const src = w(
+            [{ char: 'د', start: 0, end: 0.22, silent: false }],
+            [
+                base(0, [0], { chars: 'د' }),
+                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'idgham_ghunnah_tanween', shareGroup: 4 },
+            ],
+            [0, 1],
+        );
+        const carrier = { ...w(
+            [{ char: 'م', start: 0.22, end: 0.88, silent: false }],
+            [{ chars: 'مّ', role: 'base', status: 'present', phonemeIndices: [2], sourceLetterIndex: 0, tag: null, shareGroup: 4 }],
+            [2],
+        ), location: '1:2:2' };
+        const { container } = mount([src, carrier], intervals);
+        const meem = container.querySelector<HTMLElement>('.mega-letter[data-word-index="1"]')!;
+        // Letter (click/loop/tooltip) = the ghunnah nasal alone [0.22, 0.88] = 660ms.
+        expect(meem.dataset.letterStart).toBe('0.22');
+        expect(meem.dataset.letterEnd).toBe('0.88');
+        // Highlight band still spans the whole merger [0.1, 0.88] (haraka + ghunnah).
+        expect(meem.dataset.cellStart).toBe('0.1');
+        expect(meem.dataset.cellEnd).toBe('0.88');
+        // The source tanwīn keeps haraka + ghunnah (the union) — carrier time + haraka time.
+        const tanwin = container.querySelector<HTMLElement>('.haraka-cell[data-cell-timed]')!;
+        expect(tanwin.dataset.cellStart).toBe('0.1');
+        expect(tanwin.dataset.cellEnd).toBe('0.88');
+    });
+
+    it('idgham shafawi: both meems take the same single ghunnah nasal as their letter span', () => {
+        // قُلُوبِهِم مَّرَضٌ — the two meems fuse into ONE held nasal m̃ (stored on the
+        // source meem); the receiving meem owns only the trailing vowel. Per the
+        // merger model both meems read the SAME nasal duration as their own span,
+        // not the union and not the stray vowel.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'm̃', start: 0, end: 0.59 }, // the one merged nasal (on the source meem)
+            { phone: 'a', start: 0.59, end: 0.66 }, // the receiving word's first vowel
+        ];
+        const src = w(
+            [{ char: 'م', start: 0, end: 0.59, silent: false }],
+            [{ chars: 'م', role: 'base', status: 'present', phonemeIndices: [0], sourceLetterIndex: 0, tag: 'idgham_shafawi', shareGroup: 3 }],
+            [0],
+        );
+        const recv = { ...w(
+            [{ char: 'م', start: 0.59, end: 0.66, silent: false }],
+            [{ chars: 'م', role: 'base', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 3 }],
+            [1],
+        ), location: '1:2:2' };
+        const { container } = mount([src, recv], intervals);
+        const srcMeem = container.querySelector<HTMLElement>('.mega-letter[data-word-index="0"]')!;
+        const recvMeem = container.querySelector<HTMLElement>('.mega-letter[data-word-index="1"]')!;
+        // Both meems' letter (click/loop/tooltip) span = the single nasal [0, 0.59] = 590ms.
+        for (const m of [srcMeem, recvMeem]) {
+            expect(m.dataset.letterStart).toBe('0');
+            expect(m.dataset.letterEnd).toBe('0.59');
+        }
+        // Highlight spans the union [0, 0.66] for both (co-light cue unchanged).
+        for (const m of [srcMeem, recvMeem]) {
+            expect(m.dataset.cellStart).toBe('0');
+            expect(m.dataset.cellEnd).toBe('0.66');
+        }
+    });
 });
 
 /**

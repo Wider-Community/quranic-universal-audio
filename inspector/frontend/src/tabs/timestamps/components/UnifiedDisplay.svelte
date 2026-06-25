@@ -461,6 +461,33 @@
         return unions;
     }
 
+    /** Per-group interval of a cross-word merger's ghunnah nasal phone (m̃ ñ j̃ w̃).
+     *  Only groups whose merged sound is a nasal appear. A receiving carrier in such
+     *  a group sounds only that ghunnah, not the source tanwīn's haraka — so its OWN
+     *  click/loop/tooltip span is THIS interval, while the highlight span keeps the
+     *  full haraka+ghunnah union. Nasals are the only tilde-bearing phones. */
+    function _nasalUnions(
+        cells: TsCell[],
+        intervals: PhonemeInterval[],
+    ): Map<number, [number, number]> {
+        const unions = new Map<number, [number, number]>();
+        for (const c of cells) {
+            if (c.shareGroup == null) continue;
+            for (const i of c.phonemeIndices) {
+                const iv = intervals[i];
+                // U+0303 combining tilde marks every ghunnah nasal (m̃ ñ j̃ w̃).
+                if (!iv || !iv.phone.normalize('NFD').includes('̃')) continue;
+                const cur = unions.get(c.shareGroup);
+                if (!cur) unions.set(c.shareGroup, [iv.start, iv.end]);
+                else {
+                    cur[0] = Math.min(cur[0], iv.start);
+                    cur[1] = Math.max(cur[1], iv.end);
+                }
+            }
+        }
+        return unions;
+    }
+
     /** The folded letter view of `word.letters` (the ىٰ fold collapses two source
      *  letters into one). Used both for the synthetic-base fallback and to resolve
      *  a `base` cell's glyph / letter-timing by its `sourceLetterIndex`. */
@@ -520,6 +547,7 @@
         word: TsWord,
         intervals: PhonemeInterval[],
         shareUnions: Map<number, [number, number]>,
+        nasalUnions: Map<number, [number, number]>,
         idghamGroupColors: Map<number, string>,
         liftIltiqaa = false,
     ): RenderedGroup[] {
@@ -692,6 +720,16 @@
                 isNull = fl?.isNull ?? (start == null);
                 letterIndex = foldIdx ?? -1;
                 if (foldIdx != null) consumedFold.add(foldIdx);
+            }
+            // A receiving carrier in a cross-word nasal merger (idgham / shafawi)
+            // sounds only the ghunnah, not the source tanwīn's haraka. Point its OWN
+            // click/loop/tooltip span at that nasal phone — the highlight span
+            // (cellStart/cellEnd) keeps the full co-lit haraka+ghunnah union. Both
+            // merged letters (e.g. the two shafawi meems) thus read the same nasal.
+            const nasalIv = c.shareGroup != null ? nasalUnions.get(c.shareGroup) : undefined;
+            if (nasalIv && lStart != null) {
+                lStart = nasalIv[0];
+                lEnd = nasalIv[1];
             }
             g.full.push({
                 glyph,
@@ -1005,7 +1043,9 @@
         // a cross-word idgham tanwīn shares a group with the receiving word's base,
         // so its highlight must span the haraka + the ghunnah/merger in the next
         // word — a per-word union would miss the other side.
-        const shareUnions = _shareUnions(words.flatMap((w) => w.cells ?? []), intervals);
+        const allCells = words.flatMap((w) => w.cells ?? []);
+        const shareUnions = _shareUnions(allCells, intervals);
+        const nasalUnions = _nasalUnions(allCells, intervals);
 
         // Tajweed-badge colour maps, built verse-wide from cell tags:
         //  - phonemeColor: flat interval index → colour, for INLINE phoneme boxes
@@ -1059,7 +1099,7 @@
                 }
             }
 
-            const groups = cellGroupsFor(word, intervals, shareUnions, idghamGroupColors, liftedIltiqaa.has(wi));
+            const groups = cellGroupsFor(word, intervals, shareUnions, nasalUnions, idghamGroupColors, liftedIltiqaa.has(wi));
             _buildColumns(groups, phonemes);
 
             blocks.push({
