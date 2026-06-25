@@ -1294,6 +1294,50 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         return { graphemes, phon };
     };
 
+    it('و/ى waqf carrier: ḍamma+waw share uː; the carrier’s own fatḥa drops AFTER it, silent', () => {
+        // هُوَ stopped on → /huː/: the waw turns madd_ʿāriḍ (its /w/ becomes the
+        // prolongation of the preceding ḍamma) and its OWN fatḥa drops. The vowel
+        // unit is double-sided — [ḍamma, waw, silent fatḥa] — with uː spanning only
+        // [ḍamma, waw]; the haa stands alone, the trailing fatḥa sits past the waw,
+        // silent (no phoneme, not cell-timed).
+        const intervals: PhonemeInterval[] = [
+            { phone: 'h', start: 0, end: 0.3 },
+            { phone: 'u:', start: 0.3, end: 1.0 },
+        ];
+        const word = w(
+            [{ char: 'ه', start: 0, end: 0.3, silent: false }, { char: 'و', start: 0.3, end: 1.0, silent: false }],
+            [
+                base(0, [0], { chars: 'ه' }),
+                { chars: 'ُ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 0 },
+                { chars: 'و', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, tag: 'madd_arid_lissukun', shareGroup: 0 },
+                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
+            ],
+            [0, 1],
+        );
+        const { container } = mount([word], intervals);
+        const groups = container.querySelectorAll<HTMLElement>('.cell-group');
+        expect(groups.length).toBe(2);
+        // The haa stands alone (its dropped neighbour does NOT land on it).
+        expect(Array.from(groups[0]!.querySelectorAll('.mega-letter')).map((l) => l.textContent)).toEqual(['ه']);
+        // The vowel group is double-sided: ḍamma (col 1), waw carrier (col 2), the
+        // carrier's silent fatḥa AFTER it (col 3).
+        const vowel = groups[1]!;
+        const glyphCol = (glyph: string) =>
+            Array.from(vowel.querySelectorAll<HTMLElement>('.dia-track, .mega-letter'))
+                .find((e) => (e.querySelector('.g') ?? e).textContent?.trim() === glyph)?.style.gridColumn;
+        expect(glyphCol('ُ')).toBe('1');
+        expect(glyphCol('و')).toBe('2');
+        expect(glyphCol('َ')).toBe('3');
+        // uː spans [ḍamma, waw] only — the silent fatḥa is past the span.
+        const cluster = vowel.querySelector<HTMLElement>('.phoneme-cluster')!;
+        expect(cluster.querySelector('.ph-base')!.textContent).toBe('u');
+        expect(cluster.style.gridColumn).toBe('1 / span 2');
+        // The trailing fatḥa is silent (dropped — not cell-timed).
+        const fatha = Array.from(vowel.querySelectorAll<HTMLElement>('.haraka-cell'))
+            .find((s) => s.querySelector('.g')?.textContent === 'َ')!;
+        expect(fatha.hasAttribute('data-cell-timed')).toBe(false);
+    });
+
     it('places the consonant under its letter and the short vowel under its mark (قُلْ)', () => {
         // ق+ḍamma → q under ق, u under the ḍamma; ل+sukūn → l under ل.
         const intervals: PhonemeInterval[] = [

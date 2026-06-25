@@ -588,6 +588,10 @@
             : { start: null, end: null };
         const iwadIv: [number, number] | null = _iwadIv.start != null ? [_iwadIv.start, _iwadIv.end!] : null;
         const daggerBySrc = new Map<number, { group: RenderedGroup; iv: [number, number] }>();
+        // و/ى waqf carrier → its vowel group, so the carrier's own dropped fatḥa
+        // rejoins it silently (a double-sided [haraka, carrier, dropped-fatḥa] unit)
+        // instead of landing on the preceding base.
+        const carrierGroupBySrc = new Map<number, RenderedGroup>();
         let iwadGroup: RenderedGroup | null = null;
 
         // --- Idgham-shafawi absorbed vowel: the receiving meem merged cross-word,
@@ -820,7 +824,9 @@
                         if (iv) daggerBySrc.set(c.sourceLetterIndex, { group: g, iv });
                     } else {
                         const lv = c.shareGroup != null && longVowelSG.has(c.shareGroup);
-                        pushFullGrapheme(lv ? vowelGroupFor(c.shareGroup!) : newGroup('vowel'), c, false);
+                        const cg = lv ? vowelGroupFor(c.shareGroup!) : newGroup('vowel');
+                        pushFullGrapheme(cg, c, false);
+                        carrierGroupBySrc.set(c.sourceLetterIndex, cg);
                     }
                 } else {
                     // haraka / tanwīn
@@ -834,6 +840,11 @@
                     } else if (dropped && daggerBySrc.has(c.sourceLetterIndex)) {
                         const d = daggerBySrc.get(c.sourceLetterIndex)!;
                         pushSmall(d.group, c, { coLightIv: d.iv }); // Allah: fatḥa joins the dagger ā
+                    } else if (dropped && carrierGroupBySrc.has(c.sourceLetterIndex)) {
+                        // و/ى waqf: the carrier stole the haraka before it into a madd;
+                        // its own fatḥa drops at the stop. Render it silent in the
+                        // carrier's vowel group (after it), not on the preceding base.
+                        pushSmall(carrierGroupBySrc.get(c.sourceLetterIndex)!, c);
                     } else if (!dropped && c.shareGroup != null && isAbsorbedShafawiVowel(c)) {
                         // Idgham-shafawi: the receiving meem's fatḥa shares the base's
                         // vowel index + merger group. Light it on its OWN vowel interval
@@ -915,8 +926,18 @@
         // vowel's lone phone spans both [diacritic, carrier] columns).
         const owner = new Map<number, { g: RenderedGroup; cols: Set<number> }>();
         for (const g of groups) {
+            // Vowel group order: [live diacritic(s), carrier, …trailing silent drop].
+            // A و/ى waqf carrier's OWN dropped fatḥa renders AFTER the carrier (its
+            // glyph order in the word), outside the vowel sound — every other diacritic
+            // precedes the carrier as usual.
+            const liveSmalls = g.small.filter((s) => s.status !== 'dropped');
+            const droppedSmalls = g.small.filter((s) => s.status === 'dropped');
             g.cols = g.kind === 'vowel'
-                ? [...g.small.map((s) => ({ full: null, small: s })), ...g.full.map((f) => ({ full: f, small: null }))]
+                ? [
+                      ...liveSmalls.map((s) => ({ full: null, small: s })),
+                      ...g.full.map((f) => ({ full: f, small: null })),
+                      ...droppedSmalls.map((s) => ({ full: null, small: s })),
+                  ]
                 : [...g.full.map((f) => ({ full: f, small: null })), ...g.small.map((s) => ({ full: null, small: s }))];
             g.phonemeSpans = [];
             const sgCols = new Map<number, Set<number>>();
@@ -968,7 +989,10 @@
         for (const g of groups) {
             if (g.kind !== 'vowel' || g.phonemeSpans.length === 0) continue;
             const phonemes = g.phonemeSpans.flatMap((s) => s.phonemes);
-            g.phonemeSpans = [{ phonemes, colStart: 0, span: g.cols.length }];
+            // The sound spans [diacritic, carrier] only; a trailing silent drop (a
+            // و/ى waqf carrier's dropped fatḥa) sits past the carrier, outside the span.
+            const silentTail = g.cols.filter((c) => c.small?.status === 'dropped').length;
+            g.phonemeSpans = [{ phonemes, colStart: 0, span: g.cols.length - silentTail }];
         }
     }
 
