@@ -19,10 +19,9 @@ export const DAGGER = 'ٰ'; // U+0670 dagger-alef
 export const ALEF = 'ا'; // U+0627
 export const ALEF_MAKSURA = 'ى'; // U+0649
 /** Mini-meem glyphs the phonemizer stamps onto an iqlab tanwīn's own meem cell —
- *  MEEM_HI above (fatḥa/ḍamma source), MEEM_LO below (kasra source). `cellGlyph`
- *  normalises both to MEEM_LO so every iqlab meem renders BELOW with one
- *  calibration; MEEM_LO is the codepoint `haraka-render.ts` tunes + `BELOW_MARKS`
- *  slots. Kept here as the single script home. */
+ *  MEEM_HI above (fatḥa/ḍamma source), MEEM_LO below (kasra source). The FE only
+ *  renders the cell's `chars`; these are the codepoints `haraka-render.ts`
+ *  calibrates + `BELOW_MARKS` slots, kept here as the single script home. */
 export const MEEM_HI = 'ۢ'; // U+06E2 mini-meem above (iqlab)
 export const MEEM_LO = 'ۭ'; // U+06ED mini-meem below (iqlab)
 
@@ -63,12 +62,7 @@ export function cellSlot(glyph: string): 'top' | 'bottom' {
 /** The DK glyph for a SMALL cell — its own mark, or derived for an implicit
  *  graphemeless cell (the phonemizer keeps `chars` empty + carries the tag). */
 export function cellGlyph(chars: string, tag: string | null, phone: string | undefined): string {
-    if (chars) {
-        // The iqlab mini-meem always renders BELOW, regardless of the source
-        // haraka the phonemizer stamped it as (MEEM_HI above / MEEM_LO below).
-        const mark = firstMark(chars);
-        return mark === MEEM_HI ? MEEM_LO : mark;
-    }
+    if (chars) return firstMark(chars);
     if (tag === 'allah_dagger_alef') return DAGGER;
     if (tag === 'madd_iwad') return ALEF; // the added alef (full cell)
     if (tag === 'iltiqaa_kasra' || tag === 'iltiqaa') return KASRA;
