@@ -576,6 +576,15 @@
         for (const c of cells) {
             if (c.role === 'madd' && c.shareGroup != null) longVowelSG.add(c.shareGroup);
         }
+        // Source letters bearing a dropped ṣilah carrier (mini-waw/yaa at waqf, هُۥ/هِۦ):
+        // its preceding ḥaraka folds into a shared SILENT vowel group with it, instead
+        // of gluing onto the base — resolved in the haraka branch below.
+        const droppedSilahSrc = new Set<number>();
+        for (const c of cells) {
+            if (c.role === 'madd' && c.status === 'dropped' && c.chars) {
+                droppedSilahSrc.add(c.sourceLetterIndex);
+            }
+        }
         // Folded letters already emitted as a full cell (the ىٰ maksura+dagger fold).
         const consumedFold = new Set<number>();
 
@@ -813,7 +822,10 @@
                         if (iv) daggerBySrc.set(c.sourceLetterIndex, { group: g, iv });
                     } else {
                         const lv = c.shareGroup != null && longVowelSG.has(c.shareGroup);
-                        const cg = lv ? vowelGroupFor(c.shareGroup!) : newGroup('vowel');
+                        // A dropped ṣilah carrier reuses the vowel group its own ḥaraka
+                        // already opened (the ḥaraka is emitted first); else a fresh one.
+                        const cg = carrierGroupBySrc.get(c.sourceLetterIndex)
+                            ?? (lv ? vowelGroupFor(c.shareGroup!) : newGroup('vowel'));
                         pushFullGrapheme(cg, c, false);
                         carrierGroupBySrc.set(c.sourceLetterIndex, cg);
                     }
@@ -834,6 +846,13 @@
                         // its own fatḥa drops at the stop. Render it silent in the
                         // carrier's vowel group (after it), not on the preceding base.
                         pushSmall(carrierGroupBySrc.get(c.sourceLetterIndex)!, c);
+                    } else if (dropped && droppedSilahSrc.has(c.sourceLetterIndex)) {
+                        // Dropped ṣilah ḥaraka (هُۥ/هِۦ at waqf): OPEN the shared silent
+                        // vowel group here so the ḍamma/kasra pairs with its mini-waw/yaa
+                        // as one [ḥaraka, carrier] unit, instead of landing on the haa.
+                        const cg = newGroup('vowel');
+                        carrierGroupBySrc.set(c.sourceLetterIndex, cg);
+                        pushSmall(cg, c);
                     } else {
                         // short vowel / true waqf drop — and the idgham-shafawi
                         // receiving meem's vowel, which the phonemizer now keeps on the
@@ -914,16 +933,25 @@
             // Vowel group order: [live diacritic(s), carrier, …trailing silent drop].
             // A و/ى waqf carrier's OWN dropped fatḥa renders AFTER the carrier (its
             // glyph order in the word), outside the vowel sound — every other diacritic
-            // precedes the carrier as usual.
+            // precedes the carrier as usual. A FULLY-silent vowel group (dropped ṣilah at
+            // waqf: ḍamma/kasra + mini-waw/yaa, both silent) is the exception: its
+            // ḥaraka leads its carrier (orthographic هُ + ۥ), so the dropped diacritic
+            // does NOT trail.
             const liveSmalls = g.small.filter((s) => s.status !== 'dropped');
             const droppedSmalls = g.small.filter((s) => s.status === 'dropped');
-            g.cols = g.kind === 'vowel'
-                ? [
-                      ...liveSmalls.map((s) => ({ full: null, small: s })),
-                      ...g.full.map((f) => ({ full: f, small: null })),
-                      ...droppedSmalls.map((s) => ({ full: null, small: s })),
-                  ]
-                : [...g.full.map((f) => ({ full: f, small: null })), ...g.small.map((s) => ({ full: null, small: s }))];
+            const silentVowel = g.kind === 'vowel' && g.full.length > 0 && g.full.every((f) => f.silent);
+            g.cols = g.kind !== 'vowel'
+                ? [...g.full.map((f) => ({ full: f, small: null })), ...g.small.map((s) => ({ full: null, small: s }))]
+                : silentVowel
+                  ? [
+                        ...g.small.map((s) => ({ full: null, small: s })),
+                        ...g.full.map((f) => ({ full: f, small: null })),
+                    ]
+                  : [
+                        ...liveSmalls.map((s) => ({ full: null, small: s })),
+                        ...g.full.map((f) => ({ full: f, small: null })),
+                        ...droppedSmalls.map((s) => ({ full: null, small: s })),
+                    ];
             g.phonemeSpans = [];
             const sgCols = new Map<number, Set<number>>();
             g.cols.forEach((col, ci) => {

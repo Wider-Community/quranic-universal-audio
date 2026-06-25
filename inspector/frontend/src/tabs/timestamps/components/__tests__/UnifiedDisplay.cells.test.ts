@@ -324,6 +324,48 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(Array.from(small).map((c) => c.textContent)).toEqual(['ِ']);
     });
 
+    it('dropped ṣilah at waqf: ḍamma + mini-waw form ONE silent vowel group, ḍamma leading', () => {
+        // لَهُۥ stopped ("lah"): the ṣilah drops, so the haa's ḍamma AND the mini-waw
+        // are both silent. They must render as one [ḍamma, mini-waw] vowel group (ḍamma
+        // first, orthographic هُ + ۥ) — NOT the ḍamma glued onto the haa base.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'l', start: 0, end: 0.1 },
+            { phone: 'a', start: 0.1, end: 0.2 },
+            { phone: 'h', start: 0.2, end: 0.3 },
+        ];
+        const word = w(
+            [
+                { char: 'ل', start: 0, end: 0.2, silent: false },
+                { char: 'ه', start: 0.2, end: 0.3, silent: false },
+            ],
+            [
+                base(0, [0], { chars: 'ل' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                base(1, [2], { chars: 'ه' }),
+                { chars: 'ُ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
+                { chars: 'ۥ', role: 'madd', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
+            ],
+            [0, 1, 2],
+        );
+        const { container } = mount([word], intervals);
+        // The haa base group carries NO haraka — the ḍamma left it for the vowel group.
+        const haaGroup = Array.from(container.querySelectorAll<HTMLElement>('.cell-group'))
+            .find((g) => !g.classList.contains('vowel') && g.querySelector('.mega-letter')?.textContent === 'ه')!;
+        expect(haaGroup).toBeTruthy();
+        expect(haaGroup.querySelectorAll('.haraka-cell').length).toBe(0);
+        // The ṣilah vowel group holds BOTH the ḍamma and the mini-waw, ḍamma FIRST.
+        const vowel = Array.from(container.querySelectorAll<HTMLElement>('.cell-group'))
+            .find((g) => g.querySelector('.mega-letter')?.textContent === 'ۥ')!;
+        expect(vowel).toBeTruthy();
+        expect(vowel.classList.contains('vowel')).toBe(true);
+        expect(vowel.querySelector('.haraka-cell .g')!.textContent).toBe('ُ');
+        const graphemes = Array.from(vowel.querySelectorAll<HTMLElement>('.haraka-cell, .mega-letter'));
+        expect(graphemes[0]!.classList.contains('haraka-cell')).toBe(true); // ḍamma leads
+        expect(graphemes[1]!.textContent).toBe('ۥ');                         // mini-waw after
+        // Both are silent (the ṣilah dropped at the stop).
+        expect(vowel.querySelector('.haraka-cell')!.classList.contains('dia-dropped')).toBe(true);
+    });
+
     it('groups a long vowel as [diacritic, carrier] with its base SEPARATED', () => {
         // مِي → base م in its OWN group; the kasra + ي carrier form a `vowel` group.
         const intervals: PhonemeInterval[] = [
