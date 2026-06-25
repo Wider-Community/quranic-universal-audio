@@ -19,12 +19,12 @@ export const DAGGER = 'ٰ'; // U+0670 dagger-alef
 export const ALEF = 'ا'; // U+0627
 export const ALEF_MAKSURA = 'ى'; // U+0649
 /** Mini-meem glyphs the phonemizer stamps onto an iqlab tanwīn's own meem cell —
- *  MEEM_HI above (fatḥa/ḍamma source), MEEM_LO below (kasra source). `cellGlyph`
- *  normalises both to MEEM_LO so every iqlab meem renders BELOW with one
- *  calibration; MEEM_LO is the codepoint `haraka-render.ts` tunes + `BELOW_MARKS`
- *  slots. Kept here as the single script home. */
-export const MEEM_HI = 'ۢ'; // U+06E2 mini-meem above (iqlab)
-export const MEEM_LO = 'ۭ'; // U+06ED mini-meem below (iqlab)
+ *  MEEM_HI for a ḍamma/fatḥa source, MEEM_LO for a kasra source. `cellGlyph`
+ *  always DISPLAYS the low-meem glyph (cleaner than the isolated high-meem), but
+ *  `pushSmall` slots + calibrates by the source mark — MEEM_HI → above (6e2),
+ *  MEEM_LO → below (6ed) via `BELOW_MARKS`. Kept here as the single script home. */
+export const MEEM_HI = 'ۢ'; // U+06E2 mini-meem, ḍamma/fatḥa source → above slot
+export const MEEM_LO = 'ۭ'; // U+06ED mini-meem, kasra source → below slot
 
 /** Marks that pin to the BELOW edge of the letter row (others pin top). */
 export const BELOW_MARKS = new Set([KASRA, KASRATAN, MEEM_LO]);
@@ -64,8 +64,9 @@ export function cellSlot(glyph: string): 'top' | 'bottom' {
  *  graphemeless cell (the phonemizer keeps `chars` empty + carries the tag). */
 export function cellGlyph(chars: string, tag: string | null, phone: string | undefined): string {
     if (chars) {
-        // The iqlab mini-meem always renders BELOW, regardless of the source
-        // haraka the phonemizer stamped it as (MEEM_HI above / MEEM_LO below).
+        // The iqlab mini-meem always DISPLAYS the low-meem glyph (cleaner than the
+        // isolated high-meem); pushSmall slots it by the source mark (MEEM_HI →
+        // above, MEEM_LO → below).
         const mark = firstMark(chars);
         return mark === MEEM_HI ? MEEM_LO : mark;
     }

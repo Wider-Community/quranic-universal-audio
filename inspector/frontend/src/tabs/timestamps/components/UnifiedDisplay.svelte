@@ -29,6 +29,8 @@
         FATHA,
         firstMark,
         implicitMaddGlyph,
+        MEEM_HI,
+        MEEM_LO,
         OPEN_TANWEEN,
         OPEN_TANWEEN_TAGS,
         SUKUN,
@@ -649,8 +651,13 @@
                 sizeGlyph = glyph;
             } else {
                 glyph = cellGlyph(c.chars, c.tag, phone);
-                slot = cellSlot(glyph);
-                sizeGlyph = glyph;
+                // Iqlab mini-meem: the displayed GLYPH is always the low-meem
+                // (cellGlyph normalises it), but its SLOT + calibration follow the
+                // SOURCE haraka the phonemizer stamped — MEEM_HI (ḍamma/fatḥa) sits
+                // ABOVE, MEEM_LO (kasra) below — so a non-kasra iqlab meem is on top.
+                const meemSrc = mark === MEEM_HI || mark === MEEM_LO;
+                slot = meemSrc ? cellSlot(mark) : cellSlot(glyph);
+                sizeGlyph = meemSrc ? mark : glyph;
             }
             g.small.push({
                 glyph,

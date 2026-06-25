@@ -163,8 +163,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
     it('renders iqlab as TWO cells — a normal haraka + a standalone mini-meem', () => {
         // fatḥatan iqlab → the phonemizer emits a haraka cell (fatḥa, sounds the
         // vowel) and a separate mini-meem cell (sounds the nasal, carries the iqlab
-        // tag). The above-form meem the phonemizer stamps renders BELOW (cellGlyph
-        // normalises it). Both anchor to the base ب → one group [ب, fatḥa, mini-meem].
+        // tag). The meem DISPLAYS the low-meem glyph but, with a ḍamma/fatḥa source
+        // (MEEM_HI), pins to the TOP slot. Both anchor to ب → one group [ب, fatḥa, meem].
         const intervals: PhonemeInterval[] = [
             { phone: 'b', start: 0, end: 0.1 },
             { phone: 'a', start: 0.1, end: 0.2 },   // the haraka's vowel
@@ -189,12 +189,12 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const haraka = smalls[0]!;
         expect(haraka.textContent).toBe('َ');
         expect(haraka.textContent).not.toContain('ۭ');
-        // The mini-meem is its OWN cell (second small); the above-form input renders
-        // BELOW (pin-bottom) after cellGlyph normalises it.
+        // The mini-meem is its OWN cell (second small): the low-meem GLYPH is shown,
+        // but a ḍamma/fatḥa-source (MEEM_HI) iqlab pins it to the TOP slot.
         expect(smalls[1]!.textContent).toBe('ۭ');
         const meemCell = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell'))
             .find((c) => c.querySelector('.g')!.textContent === 'ۭ')!;
-        expect(meemCell.classList.contains('pin-bottom')).toBe(true);
+        expect(meemCell.classList.contains('pin-top')).toBe(true);
         expect(container.querySelector('.fused')).toBeNull();
     });
 
