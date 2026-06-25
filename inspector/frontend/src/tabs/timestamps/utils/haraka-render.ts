@@ -43,8 +43,8 @@ const BY_CODEPOINT: Record<string, HarakaRender> = {
     '8f0': { scale: 1.15, shiftEm: -0.145, raiseEm: -0.345 }, // fathatan open (DK U+08F0)
     '8f1': { scale: 0.79, shiftEm: -0.205, raiseEm: -0.24 }, // dammatan open (U+08F1)
     '8f2': { scale: 1.13, shiftEm: -0.11, raiseEm: -0.355 }, // kasratan open (U+08F2)
-    '6e2': { scale: 0.8, shiftEm: -0.035, raiseEm: -0.325 }, // mini-meem above (iqlab, U+06E2)
-    '6ed': { scale: 0.81, shiftEm: -0.09, raiseEm: -0.445 }, // mini-meem below (iqlab, U+06ED)
+    '6e2': { scale: 0.8, shiftEm: -0.035, raiseEm: -0.275 }, // mini-meem above (iqlab, U+06E2)
+    '6ed': { scale: 0.81, shiftEm: -0.09, raiseEm: -0.27 }, // mini-meem below (iqlab, U+06ED)
 };
 
 /** Calibration for a glyph keyed by its leading codepoint. */
