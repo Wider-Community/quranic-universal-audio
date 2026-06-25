@@ -46,6 +46,8 @@
     --tj-ikhfaa: oklch(0.67 0.15 288);         /* purple */
     --tj-ikhfaa-shafawi: oklch(0.63 0.15 312); /* purple (mid) */
     --tj-iqlab: oklch(0.52 0.17 315);          /* dark purple */
+    --tj-izhar-halqi: oklch(0.70 0.14 250);    /* blue */
+    --tj-izhar-shafawi: oklch(0.62 0.13 258);  /* blue 2 */
 }
 
 * {

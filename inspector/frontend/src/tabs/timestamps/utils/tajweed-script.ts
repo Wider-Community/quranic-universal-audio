@@ -18,6 +18,9 @@ export const SHADDA = 'ّ'; // U+0651
 export const DAGGER = 'ٰ'; // U+0670 dagger-alef
 export const ALEF = 'ا'; // U+0627
 export const ALEF_MAKSURA = 'ى'; // U+0649
+export const MADDAH = 'ٓ'; // U+0653 maddah-above — the silah-madd mark
+export const NOON = 'ن'; // U+0646
+export const MEEM = 'م'; // U+0645
 /** Mini-meem glyphs the phonemizer stamps onto an iqlab tanwīn's own meem cell —
  *  MEEM_HI for a ḍamma/fatḥa source, MEEM_LO for a kasra source. `cellGlyph`
  *  always DISPLAYS the low-meem glyph (cleaner than the isolated high-meem), but

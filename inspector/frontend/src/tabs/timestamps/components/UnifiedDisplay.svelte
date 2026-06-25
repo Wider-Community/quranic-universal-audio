@@ -29,10 +29,14 @@
         FATHA,
         firstMark,
         implicitMaddGlyph,
+        MADDAH,
+        MEEM,
         MEEM_HI,
         MEEM_LO,
+        NOON,
         OPEN_TANWEEN,
         OPEN_TANWEEN_TAGS,
+        SHADDA,
         SUKUN,
     } from '../utils/tajweed-script';
     import { isBridgeTag, tajweedColorVar } from '../utils/tajweed-colors';
@@ -70,6 +74,10 @@
         tag: string | null;
         /** Implicit madd (chars==='') — rendered with the inserted/replaced glow. */
         implicit: boolean;
+        /** A written-but-"added" full cell (the madd-ʿiwaḍ alef substituted for the
+         *  fatḥatan at waqf) — carries the muted dashed inserted border, like the
+         *  implicit madd, without being implicit. */
+        inserted: boolean;
         /** True for a `base` cell (the interactive letter target). */
         isBase: boolean;
         /** Highlight interval from the cell's own phoneme indices (+share union). */
@@ -162,6 +170,10 @@
         index: number;
         /** Tajweed-rule badge colour (`var(--tj-*)`) or null — a static underline. */
         tjColor: string | null;
+        /** DISPLAY-only phone override (the shard keeps `interval.phone`): a heavy
+         *  ikhfaa nasal `ŋ` shown as `ŋˤ` before an istiʿlāʾ letter. Render sites
+         *  prefer this over `interval.phone`; null/undefined → use the raw phone. */
+        displayPhone?: string;
     }
 
     interface RenderedBridge {
@@ -337,6 +349,7 @@
         phonemes: HTMLElement[];
         timedCells: HTMLElement[];
         letters: HTMLElement[];
+        harakas: HTMLElement[];
         pauseBridges: HTMLElement[];
     }
     let _hc: HiCache | null = null;
@@ -348,6 +361,7 @@
             phonemes: q('.mega-phoneme'),
             timedCells: q('[data-cell-timed]'),
             letters: q('.mega-letter:not(.null-ts)'),
+            harakas: q('.haraka-cell[data-dia-loop-idx]'),
             pauseBridges: q('.pause-bridge'),
         };
     }
@@ -400,6 +414,37 @@
     /** A sukūn cell — never rendered (cell exists with empty phonemeIndices). */
     function _isSukunCell(c: TsCell): boolean {
         return c.role === 'haraka' && firstMark(c.chars) === SUKUN;
+    }
+
+    /** Iẓhar — the phonemizer emits NO izhar tag, so it's synthesized here as the
+     *  DEFAULT rule for a sounding, untagged, SAKIN noon/meem/tanwīn (the fallback
+     *  when no assimilation/conversion rule fired). Two colours: ḥalqī (noon/tanwīn
+     *  before a throat letter) vs shafawī (sakin meem). `voweledSrc` is the set of
+     *  source-letter indices in the cell's word that carry a real (non-sukūn) vowel,
+     *  used to decide a noon/meem is sakin. Returns the synthetic tag or null. */
+    function _izharTag(c: TsCell, voweledSrc: Set<number>): 'izhar_halqi' | 'izhar_shafawi' | null {
+        if (!c.phonemeIndices.length || c.tag != null || c.shareGroup != null) return null;
+        // A tanwīn IS an inherent word-final nūn sound → ḥalqī when untagged.
+        if (c.role === 'tanween') return 'izhar_halqi';
+        if (c.role !== 'base') return null;
+        const head = [...c.chars][0];
+        if (c.chars.includes(SHADDA)) return null; // mushaddad → ghunnah, not izhar
+        if (voweledSrc.has(c.sourceLetterIndex)) return null; // voweled → not sakin
+        if (head === NOON) return 'izhar_halqi';
+        if (head === MEEM) return 'izhar_shafawi';
+        return null;
+    }
+
+    /** Source-letter indices in a word that carry a real (sounding, non-sukūn)
+     *  haraka — a noon/meem on one of these is voweled, not sakin (so not iẓhar). */
+    function _voweledSrcSet(cells: TsCell[]): Set<number> {
+        const s = new Set<number>();
+        for (const c of cells) {
+            if (c.role === 'haraka' && c.phonemeIndices.length && !_isSukunCell(c)) {
+                s.add(c.sourceLetterIndex);
+            }
+        }
+        return s;
     }
 
     function _cellTiming(
@@ -551,6 +596,7 @@
         shareUnions: Map<number, [number, number]>,
         nasalUnions: Map<number, [number, number]>,
         idghamGroupColors: Map<number, string>,
+        izharCellTag: Map<TsCell, string>,
         liftIltiqaa = false,
     ): RenderedGroup[] {
         const { folded, srcToFold } = foldedLettersFor(word);
@@ -583,6 +629,16 @@
         for (const c of cells) {
             if (c.role === 'madd' && c.status === 'dropped' && c.chars) {
                 droppedSilahSrc.add(c.sourceLetterIndex);
+            }
+        }
+        // Silah-madd: the phonemizer merges the maddah onto the bearing letter's
+        // grapheme (هٓ), but it visually belongs on the mini-waw/yaa silah carrier
+        // (هۥٓ). Track the source letter so the base sheds the maddah glyph and its
+        // dropped silah carrier gains it (resolved in pushFullGrapheme via glyphOverride).
+        const silahMaddahSrc = new Set<number>();
+        for (const c of cells) {
+            if (c.role === 'base' && c.chars.includes(MADDAH) && droppedSilahSrc.has(c.sourceLetterIndex)) {
+                silahMaddahSrc.add(c.sourceLetterIndex);
             }
         }
         // Folded letters already emitted as a full cell (the ىٰ maksura+dagger fold).
@@ -618,7 +674,7 @@
         const pushSmall = (
             g: RenderedGroup,
             c: TsCell,
-            opts: { coLightIv?: [number, number]; glyphOverride?: string } = {},
+            opts: { coLightIv?: [number, number]; glyphOverride?: string; inserted?: boolean } = {},
         ): void => {
             const phone = c.phonemeIndices.length ? intervals[c.phonemeIndices[0]!]?.phone : undefined;
             const shareIv = c.shareGroup != null ? shareUnions.get(c.shareGroup) ?? null : null;
@@ -660,11 +716,12 @@
                 cellEnd: end,
                 shareGroup: c.shareGroup,
                 renderStyle: harakaRenderStyle(sizeGlyph, extraShift),
-                inserted: c.chars === '' && c.status === 'inserted',
+                inserted: opts.inserted ?? (c.chars === '' && c.status === 'inserted'),
                 phoneIdx: c.phonemeIndices,
-                // Diacritic cells colour from their OWN tag only (tanwīn idgham/
-                // ikhfaa/iqlab); a madd's haraka has no tag → uncoloured.
-                tjColor: tajweedColorVar(c.tag),
+                // Diacritic cells colour from their OWN tag (tanwīn idgham/ikhfaa/
+                // iqlab) or the synthesized iẓhar colour (an untagged sounding
+                // tanwīn); a madd's haraka has no tag → uncoloured.
+                tjColor: tajweedColorVar(c.tag) ?? tajweedColorVar(izharCellTag.get(c)),
             });
             noteShare(g, c);
         };
@@ -676,21 +733,28 @@
         // aligner keeps it a separate `word.letters` entry, so the two indexings
         // diverge and a word.letters lookup mis-glyphs / drops carriers. `isBase`
         // marks the interactive letter element.
-        const pushFullGrapheme = (g: RenderedGroup, c: TsCell, isBase: boolean): void => {
+        const pushFullGrapheme = (
+            g: RenderedGroup,
+            c: TsCell,
+            isBase: boolean,
+            opts: { glyphOverride?: string } = {},
+        ): void => {
             const shareIv = c.shareGroup != null ? shareUnions.get(c.shareGroup) ?? null : null;
             const { start: ownStart, end: ownEnd } = _cellTiming(c.phonemeIndices, intervals, shareIv);
-            // Qalqala: extend the cell's HIGHLIGHT interval to ALSO cover the render-only
-            // `Q` echo right after this consonant (the echo is in intervals[] but no cell
-            // indexes it). Only the highlight span (cellStart/cellEnd) grows — the
-            // letter's own [start,end] for click/loop stays the consonant timing.
+            // Qalqala: cover the render-only `Q` echo right after this consonant
+            // (the echo is in intervals[] but no cell indexes it). BOTH the highlight
+            // span (cellStart/cellEnd) AND the letter's own [start,end] grow to the
+            // echo end, so click-seek, tooltip duration and loop all run the
+            // consonant + its echo as one unit. Applied to the letter span below.
             let start = ownStart;
             let end = ownEnd;
-            if (c.tag === 'qalqala' && end != null) {
-                const echo = _qalqalaEchoIv(c.phonemeIndices, intervals);
-                if (echo) {
-                    start = start != null ? Math.min(start, echo[0]) : echo[0];
-                    end = Math.max(end, echo[1]);
-                }
+            const qalqalaEcho =
+                c.tag === 'qalqala' && ownEnd != null
+                    ? _qalqalaEchoIv(c.phonemeIndices, intervals)
+                    : null;
+            if (qalqalaEcho) {
+                start = start != null ? Math.min(start, qalqalaEcho[0]) : qalqalaEcho[0];
+                end = Math.max(end!, qalqalaEcho[1]);
             }
             let glyph: string;
             let silent: boolean;
@@ -699,7 +763,9 @@
             let isNull: boolean;
             let letterIndex: number;
             if (c.chars) {
-                glyph = c.chars; // canonical text, shaddah already composed by the phonemizer
+                // canonical text (shaddah already composed by the phonemizer);
+                // glyphOverride relocates a silah maddah off the bearing letter.
+                glyph = opts.glyphOverride ?? c.chars;
                 // Silent = sounds nothing (no own phoneme indices) AND isn't co-lit through
                 // a merger (no share group). Keyed on the indices, NOT a specific status, so
                 // every soundless carrier greys uniformly — a `dropped` otiose alef, a
@@ -733,12 +799,20 @@
                 lStart = nasalIv[0];
                 lEnd = nasalIv[1];
             }
+            // Qalqala: the letter's click/loop/tooltip span runs through the echo too.
+            if (qalqalaEcho && lEnd != null) {
+                lStart = lStart != null ? Math.min(lStart, qalqalaEcho[0]) : qalqalaEcho[0];
+                lEnd = Math.max(lEnd, qalqalaEcho[1]);
+            }
             g.full.push({
                 glyph,
                 silent,
                 status: c.status,
                 tag: c.tag,
                 implicit: false,
+                // The written madd-ʿiwaḍ alef (substitutes the fatḥatan at waqf) is
+                // "added, not in the rasm" → the muted dashed inserted border.
+                inserted: c.tag === 'madd_iwad',
                 isBase,
                 cellStart: start,
                 cellEnd: end,
@@ -748,9 +822,11 @@
                 letterIndex,
                 shareGroup: c.shareGroup,
                 phoneIdx: c.phonemeIndices,
-                // Own tag, else the cross-word idgham colour propagated from the
+                // Own tag, else the synthesized iẓhar colour (untagged sakin
+                // noon/meem), else the cross-word idgham colour propagated from the
                 // source cell across the share_group (the receiving merged letter).
                 tjColor: tajweedColorVar(c.tag)
+                    ?? tajweedColorVar(izharCellTag.get(c))
                     ?? (c.shareGroup != null ? idghamGroupColors.get(c.shareGroup) ?? null : null),
             });
             noteShare(g, c);
@@ -765,6 +841,7 @@
                 status: c.status,
                 tag: c.tag,
                 implicit: true,
+                inserted: false,
                 isBase: false,
                 cellStart: start,
                 cellEnd: end,
@@ -802,7 +879,27 @@
                 if (c.role === 'base') {
                     if (foldIdx != null && consumedFold.has(foldIdx)) continue; // maksura+dagger half
                     curBase = newGroup('base');
-                    pushFullGrapheme(curBase, c, true);
+                    if (c.tag === 'iqlab_noon') {
+                        // Iqlab noon: the نْ falls silent (greyed, inert) and its nasal
+                        // sounds on a mini-meem stacked above it — synthesized here because
+                        // the phonemizer only stamps a meem cell for tanwīn iqlab, not noon.
+                        // The meem owns the nasal (the click/loop + tooltip target) and the
+                        // lone iqlab underline; the ن itself sounds + carries nothing.
+                        pushFullGrapheme(curBase, { ...c, phonemeIndices: [], tag: null, shareGroup: null }, false);
+                        pushSmall(curBase, {
+                            chars: MEEM_HI,
+                            role: 'tanween',
+                            status: 'inserted',
+                            phonemeIndices: c.phonemeIndices,
+                            sourceLetterIndex: c.sourceLetterIndex,
+                            tag: 'iqlab_noon',
+                            shareGroup: null,
+                        });
+                    } else if (silahMaddahSrc.has(c.sourceLetterIndex)) {
+                        pushFullGrapheme(curBase, c, true, { glyphOverride: c.chars.replace(MADDAH, '') });
+                    } else {
+                        pushFullGrapheme(curBase, c, true);
+                    }
                 } else if (c.role === 'madd') {
                     if (c.chars !== '' && foldIdx != null && consumedFold.has(foldIdx)) continue; // fold half
                     if (c.tag === 'madd_iwad') {
@@ -826,7 +923,14 @@
                         // already opened (the ḥaraka is emitted first); else a fresh one.
                         const cg = carrierGroupBySrc.get(c.sourceLetterIndex)
                             ?? (lv ? vowelGroupFor(c.shareGroup!) : newGroup('vowel'));
-                        pushFullGrapheme(cg, c, false);
+                        // A silah carrier bearing a madd takes the maddah the phonemizer
+                        // merged onto its bearing letter (هٓ → ه + ۥٓ).
+                        pushFullGrapheme(
+                            cg,
+                            c,
+                            false,
+                            silahMaddahSrc.has(c.sourceLetterIndex) ? { glyphOverride: c.chars + MADDAH } : {},
+                        );
                         carrierGroupBySrc.set(c.sourceLetterIndex, cg);
                     }
                 } else {
@@ -835,9 +939,11 @@
                     if (c.shareGroup != null && longVowelSG.has(c.shareGroup)) {
                         pushSmall(vowelGroupFor(c.shareGroup), c); // long vowel — leaves its base
                     } else if (dropped && c.tag === 'madd_iwad' && iwadIv) {
-                        // dropped tanwīn at waqf → a fatḥa grouped + co-lit with the iwaḍ alef
+                        // dropped tanwīn at waqf → a fatḥa grouped + co-lit with the iwaḍ
+                        // alef. The fatḥatan→fatḥa transform is "not in the rasm" — flag it
+                        // inserted so the small fatḥa cell carries the muted dashed border.
                         iwadGroup = iwadGroup ?? newGroup('vowel');
-                        pushSmall(iwadGroup, c, { coLightIv: iwadIv, glyphOverride: FATHA });
+                        pushSmall(iwadGroup, c, { coLightIv: iwadIv, glyphOverride: FATHA, inserted: true });
                     } else if (dropped && daggerBySrc.has(c.sourceLetterIndex)) {
                         const d = daggerBySrc.get(c.sourceLetterIndex)!;
                         pushSmall(d.group, c, { coLightIv: d.iv }); // Allah: fatḥa joins the dagger ā
@@ -876,6 +982,7 @@
                 status: 'present',
                 tag: null,
                 implicit: false,
+                inserted: false,
                 isBase: true,
                 cellStart: fl.start,
                 cellEnd: fl.end,
@@ -905,12 +1012,33 @@
      *  (length ː, emphatic ˤ, ghunnah tilde ̃). The modifier is rendered as a
      *  superscript so the base stays visually centred in the cell. */
     // Only length marks (ː / ASCII :) are detached modifiers; ˤ is integral to
-    // the consonant symbol (rˤ, aˤ) and must stay in the base.
+    // the consonant symbol (rˤ, dˤ, sˤ, tˤ, ðˤ) and must stay in the base.
     const PHONE_MOD_RE = /([ː:]+)$/u;
+    // The emphatic open vowel (heavy `a` after an istiʿlāʾ consonant) is stamped
+    // `aˤ` (optionally with a length mark) in the shard, but DISPLAYS as a plain
+    // `a` — the emphasis is a quality of the vowel, not a separate symbol the way
+    // a consonant emphatic is. Display-only: the shard keeps `aˤ`.
+    const EMPHATIC_A_RE = /^aˤ([ː:]*)$/u;
     function splitPhone(phone: string | undefined): { base: string; mod: string } {
         if (!phone || phone === 'sil' || phone === 'sp') return { base: phone ?? '', mod: '' };
+        const ea = EMPHATIC_A_RE.exec(phone);
+        if (ea) return { base: 'a', mod: ea[1] ?? '' };
         const m = PHONE_MOD_RE.exec(phone);
         return m ? { base: phone.slice(0, -m[0].length), mod: m[0] } : { base: phone, mod: '' };
+    }
+
+    /** The istiʿlāʾ (heavy) consonants among the 15 ikhfaa letters — ص ض ط ظ ق,
+     *  whose base phones are `sˤ dˤ tˤ ðˤ q`. The ikhfaa nasal `ŋ` before one of
+     *  these is articulated heavy (tafkhīm). */
+    const HEAVY_IKHFAA_PHONES = new Set(['sˤ', 'dˤ', 'tˤ', 'ðˤ', 'q']);
+    /** DISPLAY-only ikhfaa-heavy override: a plain ikhfaa nasal `ŋ` immediately
+     *  before a heavy istiʿlāʾ consonant renders as `ŋˤ`. Returns the override
+     *  phone, or undefined when no transform applies (the raw phone is used). The
+     *  GATE skips a phone that is ALREADY `ŋˤ` so a future phonemizer-side heavy
+     *  nasal wins unchanged. */
+    function _heavyIkhfaaDisplay(phone: string | undefined, nextPhone: string | undefined): string | undefined {
+        if (phone !== 'ŋ' || !nextPhone) return undefined;
+        return HEAVY_IKHFAA_PHONES.has(nextPhone) ? 'ŋˤ' : undefined;
     }
 
     /** Assign each rendered phoneme to the grapheme COLUMN(s) that sound it, then
@@ -1031,6 +1159,18 @@
         // Words whose inserted iltiqaa-kasra cell was lifted into a bridge — its
         // small cell is then suppressed in the word's own letter row.
         const liftedIltiqaa = new Set<number>();
+        // A merged phone's OWN cell colour, keyed by flat interval index. A ghunnah
+        // merger (idgham mutajanisayn/mutaqaribayn whose receiving letter sounds a
+        // nasal — e.g. ٱرْكَب مَّعَنَا: ب→مّ, the مّ carries `meem_ghunnah`) has an
+        // UNCOLOURED bridge rule, so the bridge tile would drop the ghunnah hue. Fall
+        // back to the receiving cell's own tag colour so the bridge phoneme underlines
+        // in the same hue as its letter.
+        const cellTagColorByFlat = new Map<number, string>();
+        for (const c of words.flatMap((w) => w?.cells ?? [])) {
+            const color = tajweedColorVar(c.tag);
+            if (!color || isBridgeTag(c.tag)) continue;
+            for (const fi of c.phonemeIndices) cellTagColorByFlat.set(fi, color);
+        }
         for (let wi = 0; wi < words.length; wi++) {
             const word = words[wi];
             const indices = word?.phoneme_indices ?? [];
@@ -1042,7 +1182,8 @@
                     bridgeBeforeBlock.set(target, {
                         phonemes: [{
                             interval: intervals[pi]!, index: pi,
-                            tjColor: tajweedColorVar(intervals[pi]!.bridge),
+                            tjColor: tajweedColorVar(intervals[pi]!.bridge)
+                                ?? cellTagColorByFlat.get(pi) ?? null,
                         }],
                         letter: null,
                     });
@@ -1084,6 +1225,21 @@
         const shareUnions = _shareUnions(allCells, intervals);
         const nasalUnions = _nasalUnions(allCells, intervals);
 
+        // Iẓhar (synthesized): the DEFAULT rule for an untagged sounding sakin
+        // noon/meem/tanwīn. Resolved per-word (sakin-ness needs the word's voweling
+        // context) into a cell→tag map, then fed to BOTH the phoneme colour map
+        // (below) and the letter row (`cellGroupsFor`) so letter + phoneme underline
+        // together, exactly like a real tagged rule.
+        const izharCellTag = new Map<TsCell, string>();
+        for (const w of words) {
+            const cells = w?.cells ?? [];
+            const voweled = _voweledSrcSet(cells);
+            for (const c of cells) {
+                const t = _izharTag(c, voweled);
+                if (t) izharCellTag.set(c, t);
+            }
+        }
+
         // Tajweed-badge colour maps, built verse-wide from cell tags:
         //  - phonemeColor: flat interval index → colour, for INLINE phoneme boxes
         //    (madd carriers + single-cell ghunnah/ikhfaa/iqlab). Cross-word idgham
@@ -1104,15 +1260,15 @@
                 });
                 continue;
             }
-            const color = tajweedColorVar(c.tag);
+            const color = tajweedColorVar(c.tag) ?? tajweedColorVar(izharCellTag.get(c));
             if (!color) continue;
             if (isBridgeTag(c.tag)) {
                 if (c.shareGroup != null) idghamGroupColors.set(c.shareGroup, color);
             } else {
                 // A ghunnah is ONE phoneme on the phoneme row. A tanwīn rule (ikhfaa/
-                // iqlab) sounds [short-vowel, nasal] — colour only the nasal (the last
-                // phoneme); the preceding vowel is the letter's, not the rule's. Every
-                // other rule already references a single phoneme.
+                // iqlab) AND an iẓhar tanwīn sound [short-vowel, nasal] — colour only
+                // the nasal (the last phoneme); the preceding vowel is the letter's,
+                // not the rule's. Every other rule already references a single phoneme.
                 const idxs = c.role === 'tanween' && c.phonemeIndices.length > 1
                     ? c.phonemeIndices.slice(-1)
                     : c.phonemeIndices;
@@ -1132,11 +1288,16 @@
                 if (excluded.has(pi)) continue;
                 const iv = intervals[pi];
                 if (iv && !iv.geminate_end) {
-                    phonemes.push({ interval: iv, index: pi, tjColor: phonemeColor.get(pi) ?? null });
+                    phonemes.push({
+                        interval: iv,
+                        index: pi,
+                        tjColor: phonemeColor.get(pi) ?? null,
+                        displayPhone: _heavyIkhfaaDisplay(iv.phone, intervals[pi + 1]?.phone),
+                    });
                 }
             }
 
-            const groups = cellGroupsFor(word, intervals, shareUnions, nasalUnions, idghamGroupColors, liftedIltiqaa.has(wi));
+            const groups = cellGroupsFor(word, intervals, shareUnions, nasalUnions, idghamGroupColors, izharCellTag, liftedIltiqaa.has(wi));
             _buildColumns(groups, phonemes);
 
             blocks.push({
@@ -1347,6 +1508,14 @@
             el.classList.toggle(
                 'loop',
                 lp?.kind === 'phoneme' && lp.childIndex === idx,
+            );
+        });
+        hc.harakas.forEach((el) => {
+            const wi = parseInt(el.dataset.wordIndex ?? '-1');
+            const idx = parseInt(el.dataset.diaLoopIdx ?? '-1');
+            el.classList.toggle(
+                'loop',
+                lp?.kind === 'diacritic' && lp.wordIndex === wi && lp.childIndex === idx,
             );
         });
 
@@ -1612,6 +1781,53 @@
         seekToTime(startSec + lv.tsSegOffset);
     }
 
+    /** A diacritic (haraka / tanwīn) loop target spanning the cell's [cellStart,
+     *  cellEnd) — already the UNION of the cell's phoneme(s) (a tanwīn covers both
+     *  its short-vowel + nasal, a plain haraka its one). Identity is the cell's
+     *  first sounded interval index; null when the cell carries no timing. */
+    function _diacriticTarget(
+        startSec: number | null,
+        endSec: number | null,
+        wordIndex: number,
+        firstPhoneIdx: number | undefined,
+    ): TsLoopTarget | null {
+        if (startSec == null || endSec == null || firstPhoneIdx == null) return null;
+        return { kind: 'diacritic', startSec, endSec, wordIndex, childIndex: firstPhoneIdx };
+    }
+
+    /** Single-click a diacritic cell: loop-aware (swap target while looping, else
+     *  seek) — deferred to disambiguate from dblclick, matching letter/phoneme. */
+    function onDiacriticClick(
+        e: MouseEvent,
+        startSec: number | null,
+        endSec: number | null,
+        wordIndex: number,
+        firstPhoneIdx: number | undefined,
+    ): void {
+        e.stopPropagation();
+        const target = _diacriticTarget(startSec, endSec, wordIndex, firstPhoneIdx);
+        if (!target) return;
+        _deferClick(() => {
+            const lv = get(loadedVerse);
+            if (!lv) return;
+            _swapLoopOrSeek(target, target.startSec + lv.tsSegOffset);
+        });
+    }
+
+    /** Double-click a diacritic cell: toggle loop on its span. */
+    function onDiacriticDblClick(
+        e: MouseEvent,
+        startSec: number | null,
+        endSec: number | null,
+        wordIndex: number,
+        firstPhoneIdx: number | undefined,
+    ): void {
+        e.stopPropagation();
+        _cancelPendingClick();
+        const target = _diacriticTarget(startSec, endSec, wordIndex, firstPhoneIdx);
+        if (target) toggleLoopOn(target);
+    }
+
     // ---- Group-hover spotlight ----
     // Hovering any cell softly tints its whole column (the cell-group + its
     // phoneme cluster, matched by `data-group-index`), so the letter↔phoneme
@@ -1761,11 +1977,11 @@
                         role="button"
                         tabindex="-1"
                     >
-                        <span class="g" style={lt.style}>{lt.glyph}</span>
+                        <span class="bg"><span class="g" style={lt.style}>{lt.glyph}</span></span>
                     </span>
                 {/if}
                 {#each br.phonemes as ph (ph.index)}
-                    {@const parts = splitPhone(ph.interval.phone)}
+                    {@const parts = splitPhone(ph.displayPhone ?? ph.interval.phone)}
                     <span
                         class="mega-phoneme"
                         class:hidden={br.letter != null && !$showPhonemes}
@@ -1884,6 +2100,7 @@
                                         <span
                                             class="mega-letter"
                                             class:silent={f.silent}
+                                            class:dia-inserted={f.inserted}
                                             class:dia-timed={f.cellStart != null && (!f.silent || f.shareGroup != null)}
                                             style="grid-column:{ci + 1}; justify-self:stretch"
                                             data-cell-timed={f.cellStart != null && (!f.silent || f.shareGroup != null) ? '1' : undefined}
@@ -1918,10 +2135,11 @@
                                             data-cell-start={c.cellStart}
                                             data-cell-end={c.cellEnd}
                                             data-word-index={block.wordIndex}
+                                            data-dia-loop-idx={c.phoneIdx.length ? c.phoneIdx[0] : undefined}
                                             data-tj={c.tjColor ? '1' : undefined}
                                             style:--tj-badge={c.tjColor}
-                                            on:click={(e) => onCellClick(e, c.cellStart)}
-                                            on:dblclick|stopPropagation
+                                            on:click={(e) => onDiacriticClick(e, c.cellStart, c.cellEnd, block.wordIndex, c.phoneIdx[0])}
+                                            on:dblclick={(e) => onDiacriticDblClick(e, c.cellStart, c.cellEnd, block.wordIndex, c.phoneIdx[0])}
                                             on:mouseenter={(e) => onCellEnter(e, c.cellStart, c.cellEnd)}
                                             on:mouseleave={onCellLeave}
                                             on:keydown={() => {}}
@@ -1941,7 +2159,7 @@
                                     style="grid-column:{ps.colStart + 1} / span {ps.span}"
                                 >
                                     {#each ps.phonemes as ph (ph.index)}
-                                        {@const parts = splitPhone(ph.interval.phone)}
+                                        {@const parts = splitPhone(ph.displayPhone ?? ph.interval.phone)}
                                         <span
                                             class="mega-phoneme"
                                             class:silence={!ph.interval.phone ||
@@ -1970,7 +2188,7 @@
             {:else}
                 <div class="mega-phonemes flat" class:hidden={!$showPhonemes} dir="rtl">
                     {#each block.phonemes as ph (ph.index)}
-                        {@const parts = splitPhone(ph.interval.phone)}
+                        {@const parts = splitPhone(ph.displayPhone ?? ph.interval.phone)}
                         <span
                             class="mega-phoneme"
                             class:silence={!ph.interval.phone ||

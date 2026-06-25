@@ -390,10 +390,16 @@
 .haraka-cell.dia-dropped .g {
     color: #777;
 }
-/* Small diacritic cells render as plain marks — no inserted/replaced/shortened
-   affordance (those would read as "special" on what should look like an ordinary
-   haraka). Only `dia-dropped` (greyed) marks a silenced one. The inserted/replaced
-   affordance stays on the implicit-madd FULL cell below, where it's wanted. */
+/* Small diacritic cells render as plain marks — no replaced/shortened affordance
+   (those would read as "special" on what should look like an ordinary haraka).
+   Only `dia-dropped` (greyed) marks a silenced one. The ONE exception is an
+   INSERTED graphemeless vowel (hamzat-waṣl / iltiqaa connecting kasra) — not in
+   the rasm — which carries the same muted dashed border as the inserted/implicit
+   madd FULL cell below, so it reads as "added, not written". */
+.haraka-cell.dia-inserted {
+    border-style: dashed;
+    border-color: #6a6f8c;
+}
 
 /* --- Implicit-madd FULL cell affordance ---------------------------------- */
 /* An implicit madd (Allah dagger-alef / madd-ʿiwaḍ alef — chars==='') is a
@@ -403,6 +409,13 @@
     border-style: dashed;
     border-color: #6a6f8c;
     color: #aaa;
+}
+/* A WRITTEN-but-"added" full cell (the madd-ʿiwaḍ alef substituted for the
+   fatḥatan at waqf) — same muted dashed border as the implicit madd, but it
+   keeps its own ink + interactivity (it's a real, sounding letter). */
+.mega-letter.dia-inserted {
+    border-style: dashed;
+    border-color: #6a6f8c;
 }
 .mega-letter.implicit.dia-replaced {
     border-style: solid;
@@ -521,22 +534,34 @@
     border-color: transparent;
 }
 
+/* The connecting kasra reads as a normal kasra small-cell, NOT a full letter:
+   the bridge-letter is a full letter-band-height transparent track that
+   bottom-pins a small box (matching `.haraka-cell` sizing) so it lines up with
+   the kasra small-cells on either side. The visible box lives on `.g`'s wrapper
+   `.bg`. The box carries the muted dashed inserted border (an added vowel, not
+   in the rasm). */
 .bridge-letter {
     flex: none;
     height: var(--letter-cell-h);
     min-width: calc(var(--letter-cell-w) * var(--haraka-dia-w));
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: center;
-    padding: 0 4px;
-    background: #0f0f23;
-    border-radius: 3px;
-    border: 1px solid transparent;
     cursor: pointer;
-    transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
 .bridge-letter.hidden {
     display: none;
+}
+.bridge-letter .bg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: calc(var(--letter-cell-h) * var(--haraka-dia-h));
+    background: #0f0f23;
+    border-radius: 3px;
+    border: 1px dashed #6a6f8c;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
 .bridge-letter .g {
     font-family: 'DigitalKhatt', 'Traditional Arabic', 'Scheherazade New', 'Amiri', serif;
@@ -546,13 +571,13 @@
     font-size: calc(var(--analysis-letter-font-size, 1.05rem) * var(--haraka-scale, 1.4));
     transform: translate(var(--haraka-shift, 0em), var(--haraka-raise, 0em));
 }
-.bridge-letter.active {
+.bridge-letter.active .bg {
     background: var(--ts-letter-color, #2ec4b6);
 }
 .bridge-letter.active .g {
     color: #fff;
 }
-.bridge-letter:hover {
+.bridge-letter:hover .bg {
     background: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 30%, transparent);
     border-color: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 35%, transparent);
 }
@@ -811,6 +836,13 @@
     outline: 2px solid var(--ts-phoneme-color, #4361ee);
     outline-offset: 2px;
     position: relative;
+    z-index: 1;
+}
+/* A looped diacritic (haraka / tanwīn) small-cell — outlined in the letter hue,
+   matching its sibling letter cells (one highlight colour across the row). */
+.haraka-cell.loop {
+    outline: 2px solid var(--ts-letter-color, #2ec4b6);
+    outline-offset: 1px;
     z-index: 1;
 }
 #animation-display .anim-word.loop {

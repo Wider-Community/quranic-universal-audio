@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isBridgeTag, tajweedColorVar } from '../tajweed-colors';
+import { isBridgeTag, KNOWN_UNCOLORED_TAGS, tajweedColorVar } from '../tajweed-colors';
 
 describe('tajweed-colors', () => {
     it('maps each coloured rule to its --tj custom prop', () => {
@@ -17,6 +17,16 @@ describe('tajweed-colors', () => {
         expect(tajweedColorVar('ikhfaa_noon')).toBe('var(--tj-ikhfaa)');
         expect(tajweedColorVar('iqlab_tanween')).toBe('var(--tj-iqlab)');
         expect(tajweedColorVar('ikhfaa_shafawi')).toBe('var(--tj-ikhfaa-shafawi)');
+        expect(tajweedColorVar('izhar_halqi')).toBe('var(--tj-izhar-halqi)');
+        expect(tajweedColorVar('izhar_shafawi')).toBe('var(--tj-izhar-shafawi)');
+    });
+
+    it('recognises shard-tagged uncoloured rules without colouring them', () => {
+        for (const t of ['qalqala_sughra', 'qalqala_kubra', 'tafkheem', 'madd_tabii',
+            'lam_shamsiyah', 'hamza_wasl_silent', 'silent_iltiqaa_sakinayn']) {
+            expect(KNOWN_UNCOLORED_TAGS.has(t)).toBe(true);
+            expect(tajweedColorVar(t)).toBeNull();
+        }
     });
 
     it('returns null for uncoloured, structural, and absent tags', () => {

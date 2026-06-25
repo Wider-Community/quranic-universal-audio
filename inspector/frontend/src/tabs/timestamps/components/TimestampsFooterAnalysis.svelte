@@ -85,6 +85,8 @@
             { label: 'Ikhfaa', dur: '2', tag: 'ikhfaa_noon' },
             { label: 'Ikhfaa Shafawi', dur: '2', tag: 'ikhfaa_shafawi' },
             { label: 'Iqlab', dur: '2', tag: 'iqlab_noon' },
+            { label: 'Izhar', dur: '1', tag: 'izhar_halqi' },
+            { label: 'Izhar Shafawi', dur: '1', tag: 'izhar_shafawi' },
         ] },
         { title: 'Madd', rows: [
             { label: 'Lazim', dur: '6', tag: 'madd_lazim' },

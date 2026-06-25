@@ -10,6 +10,11 @@
  * `null` → no badge (madd ṭabīʿī, bila-ghunnah idgham, mutamathilayn family, and
  * the structural keys madd_iwad / allah_dagger_alef / hamza_wasl_vowel / iltiqaa /
  * qalqala are all intentionally uncoloured).
+ *
+ * Iẓhar (`izhar_halqi` / `izhar_shafawi`) is NOT a phonemizer-emitted tag — it's
+ * synthesized FE-side as the default rule for a sounding, untagged, sakin
+ * noon/meem/tanwīn (the fallback when no assimilation/conversion rule fires). See
+ * `synthIzharTag` in UnifiedDisplay.
  */
 
 const TAG_COLOR: Record<string, string> = {
@@ -30,7 +35,31 @@ const TAG_COLOR: Record<string, string> = {
     iqlab_noon: 'var(--tj-iqlab)',
     iqlab_tanween: 'var(--tj-iqlab)',
     ikhfaa_shafawi: 'var(--tj-ikhfaa-shafawi)',
+    // iẓhar — FE-synthesized fallback for an untagged sakin noon/meem/tanwīn
+    izhar_halqi: 'var(--tj-izhar-halqi)',
+    izhar_shafawi: 'var(--tj-izhar-shafawi)',
 };
+
+/** Tags the phonemizer emits that carry no badge hue (name-only in the legend):
+ *  qalqala + tafkheem + madd ṭabīʿī are recognised tajweed but intentionally
+ *  uncoloured, and the named SILENT rules just grey their letter. Listed so a
+ *  consumer can tell "known, deliberately uncoloured" from "unknown tag". */
+export const KNOWN_UNCOLORED_TAGS: ReadonlySet<string> = new Set([
+    'qalqala_sughra',
+    'qalqala_kubra',
+    'tafkheem',
+    'madd_tabii',
+    'idgham_bila_ghunnah_noon',
+    'idgham_bila_ghunnah_tanween',
+    'idgham_mutamathilayn',
+    'idgham_mutaqaribayn',
+    'idgham_mutajanisayn_kamil',
+    'idgham_mutajanisayn_naqis',
+    'vowel_silent',
+    'hamza_wasl_silent',
+    'lam_shamsiyah',
+    'silent_iltiqaa_sakinayn',
+]);
 
 /**
  * Cross-word idgham tags — these manifest as ONE bridge phoneme between two words

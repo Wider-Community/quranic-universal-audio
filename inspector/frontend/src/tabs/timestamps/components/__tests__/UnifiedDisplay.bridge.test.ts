@@ -128,7 +128,8 @@ describe('UnifiedDisplay — consecutive idgham bridges around a dissolving word
         const wordsArr = seq.filter((s) => s.kind === 'word');
         expect(bridges).toEqual(['m̃', 'rˤrˤ']);
         expect(wordsArr[1]!.phon).toEqual(['i']); // مِّن keeps its surviving kasra
-        expect(wordsArr[2]!.phon).toEqual(['aˤ', 'bb', 'i', 'k']); // ربك without the rˤrˤ bridge
+        // ربك without the rˤrˤ bridge; the heavy `aˤ` vowel DISPLAYS as plain `a`.
+        expect(wordsArr[2]!.phon).toEqual(['a', 'bb', 'i', 'k']);
     });
 
     it('m̃ tagged in من head (curr) renders its own tile; rˤrˤ tile is never re-used', () => {
@@ -159,7 +160,8 @@ describe('UnifiedDisplay — consecutive idgham bridges around a dissolving word
         const wordsArr = seq.filter((s) => s.kind === 'word');
         expect(bridges).toEqual(['m̃', 'rˤrˤ']); // NOT ['m̃','m̃']
         expect(wordsArr[1]!.phon).toEqual(['i']); // مِّن keeps its surviving kasra
-        expect(wordsArr[2]!.phon).toEqual(['aˤ', 'bb', 'i', 'k']); // rˤrˤ lifted out
+        // rˤrˤ lifted out; the heavy `aˤ` vowel DISPLAYS as plain `a`.
+        expect(wordsArr[2]!.phon).toEqual(['a', 'bb', 'i', 'k']);
     });
 });
 
