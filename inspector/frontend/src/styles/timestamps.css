@@ -220,12 +220,19 @@
    keeps the columns aligned. */
 .cell-group > .phoneme-cluster {
     grid-row: 2;
-    justify-self: center;
+    /* Fill the column (or span) so the cluster shares its grapheme's edges; the
+       phonemes inside centre. A lone phoneme under a single grapheme grows to fill
+       (.fill) so the two boxes are the same size; a multi-sound or spanned cluster
+       keeps natural-width phonemes and centres them across the unit. */
+    justify-self: stretch;
     display: flex;
     direction: rtl;
     align-items: center;
     justify-content: center;
     gap: var(--phoneme-box-gap, 2px);
+}
+.cell-group > .phoneme-cluster.fill > .mega-phoneme {
+    flex: 1 1 auto;
 }
 
 /* Group-hover spotlight: hovering any cell softly tints its whole column (the
@@ -237,11 +244,11 @@
     background: color-mix(in srgb, var(--ts-letter-color, #2ec4b6) 12%, #0f0f23);
 }
 
-.mega-letter {
-    /* Natural width (NOT flex:1) — a stretched letter cell skews
-       `_measureLetterCell`, inflating every diacritic track. The cell-group
-       centres its natural-width letter(s) within the (possibly wider) column. */
-    flex: 0 0 auto;
+.mega-letter,
+.letter-metrics {
+    /* Fills its grid column (justify-self:stretch) so the letter and the phoneme
+       beneath it share edges; min-width keeps it from collapsing under the glyph.
+       .letter-metrics shares this box only to be measured (see its rule below). */
     min-width: fit-content;
     padding: 4px 7px;
     background: #0f0f23;
@@ -267,6 +274,16 @@
 .mega-letter.null-ts {
     color: #444;
     cursor: default;
+}
+
+/* Off-flow natural-width reference cell. Read by `_measureLetterCell` to size the
+   small diacritic cells against a real letter box (live cells stretch, so they
+   can't be measured). Hidden, out of flow, not a .mega-letter so it never matches
+   cell queries. */
+.letter-metrics {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .mega-letter.active {
@@ -310,8 +327,14 @@
    mark. */
 .dia-track {
     position: relative;
-    width: calc(var(--letter-cell-w) * var(--haraka-dia-w));
+    /* Always fill the column (floored at the tuned small size) so the cell and its
+       sound share one width — an emphatic/long vowel widens the cell while it stays
+       flush to its base. The mark stays centred: the tuned `--haraka-*` offsets are
+       em-based (glyph-relative), so they hold at any width. */
+    min-width: calc(var(--letter-cell-w) * var(--haraka-dia-w));
+    width: auto;
     align-self: stretch; /* span the full row-1 height (the letter band) */
+    justify-self: stretch;
 }
 
 .haraka-cell {

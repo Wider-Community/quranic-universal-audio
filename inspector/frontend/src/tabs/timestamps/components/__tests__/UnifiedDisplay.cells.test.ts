@@ -160,28 +160,98 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(cell.dataset.cellTimed).toBeUndefined();
     });
 
-    it('renders iqlab as a SINGLE haraka + mini-meem (not a doubled tanwīn)', () => {
-        // fatḥatan iqlab → fatḥa + mini-meem-above composed in one DK glyph; the
-        // doubled tanwīn mark is NEVER shown.
+    it('renders iqlab as TWO cells — a normal haraka + a standalone mini-meem', () => {
+        // fatḥatan iqlab → the phonemizer emits a haraka cell (fatḥa, sounds the
+        // vowel) and a separate mini-meem-above cell (sounds the nasal, carries the
+        // iqlab tag). Both anchor to the base ب → one base group [ب, fatḥa, mini-meem].
         const intervals: PhonemeInterval[] = [
-            { phone: 'b', start: 0, end: 0.1 }, { phone: 'm', start: 0.1, end: 0.3 },
+            { phone: 'b', start: 0, end: 0.1 },
+            { phone: 'a', start: 0.1, end: 0.2 },   // the haraka's vowel
+            { phone: 'm', start: 0.2, end: 0.5 },   // the iqlab nasal (mini-meem)
         ];
         const word = w(
             [{ char: 'ب', start: 0, end: 0.1, silent: false }],
             [
-                base(0, [0]),
-                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'iqlab_tanween', shareGroup: null },
+                base(0, [0], { chars: 'ب' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'ۢ', role: 'tanween', status: 'inserted', phonemeIndices: [2], sourceLetterIndex: 0, tag: 'iqlab_tanween', shareGroup: null },
             ],
-            [0, 1],
+            [0, 1, 2],
         );
         const { container } = mount([word], intervals);
-        const cell = container.querySelector<HTMLElement>('.haraka-cell.pin-top')!;
-        expect(cell).toBeTruthy();
-        const g = cell.querySelector<HTMLElement>('.g')!.textContent!;
-        expect(g).toContain('َ'); // single fatḥa
-        expect(g).toContain('ۢ'); // mini-meem above
-        expect(g).not.toContain('ً'); // NOT the doubled tanwīn
-        expect(container.querySelector('.fused')).toBeNull(); // no fusion hack
+        // ONE group holding the base + BOTH small cells.
+        const groups = container.querySelectorAll<HTMLElement>('.cell-group');
+        expect(groups.length).toBe(1);
+        const smalls = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell .g'));
+        expect(smalls.map((g) => g.textContent)).toEqual(['َ', 'ۢ']); // haraka THEN mini-meem
+        // No fused single glyph — the haraka cell shows ONLY the fatḥa.
+        const haraka = smalls[0]!;
+        expect(haraka.textContent).toBe('َ');
+        expect(haraka.textContent).not.toContain('ۢ');
+        // The mini-meem is its OWN cell (second small), pinning to the top slot.
+        expect(smalls[1]!.textContent).toBe('ۢ');
+        const meemCell = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell'))
+            .find((c) => c.querySelector('.g')!.textContent === 'ۢ')!;
+        expect(meemCell.classList.contains('pin-top')).toBe(true);
+        expect(container.querySelector('.fused')).toBeNull();
+    });
+
+    it('iqlab kasra: the mini-meem-below pins to the bottom slot', () => {
+        // kasratan iqlab → fatḥa-less; the haraka is a kasra (pins bottom) and the
+        // mini-meem is the BELOW form (U+06ED), which also pins bottom.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'b', start: 0, end: 0.1 },
+            { phone: 'i', start: 0.1, end: 0.2 },
+            { phone: 'm', start: 0.2, end: 0.5 },
+        ];
+        const word = w(
+            [{ char: 'ب', start: 0, end: 0.1, silent: false }],
+            [
+                base(0, [0], { chars: 'ب' }),
+                { chars: 'ِ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'ۭ', role: 'tanween', status: 'inserted', phonemeIndices: [2], sourceLetterIndex: 0, tag: 'iqlab_tanween', shareGroup: null },
+            ],
+            [0, 1, 2],
+        );
+        const { container } = mount([word], intervals);
+        const meem = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell'))
+            .find((c) => c.querySelector('.g')!.textContent === 'ۭ')!;
+        expect(meem).toBeTruthy();
+        expect(meem.classList.contains('pin-bottom')).toBe(true);
+    });
+
+    it('iqlab: the vowel under the haraka is uncoloured; the nasal under the mini-meem is iqlab-coloured', () => {
+        // The iqlab tag rides ONLY the mini-meem cell (the nasal). The haraka cell
+        // (vowel) is uncoloured; the mini-meem cell + its nasal phoneme carry --tj-iqlab.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'b', start: 0, end: 0.1 },
+            { phone: 'a', start: 0.1, end: 0.2 },   // vowel (haraka)
+            { phone: 'm', start: 0.2, end: 0.5 },   // nasal (mini-meem)
+        ];
+        const word = w(
+            [{ char: 'ب', start: 0, end: 0.1, silent: false }],
+            [
+                base(0, [0], { chars: 'ب' }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'ۢ', role: 'tanween', status: 'inserted', phonemeIndices: [2], sourceLetterIndex: 0, tag: 'iqlab_tanween', shareGroup: null },
+            ],
+            [0, 1, 2],
+        );
+        const { container } = mount([word], intervals);
+        const haraka = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell'))
+            .find((c) => c.querySelector('.g')!.textContent === 'َ')!;
+        const meem = Array.from(container.querySelectorAll<HTMLElement>('.haraka-cell'))
+            .find((c) => c.querySelector('.g')!.textContent === 'ۢ')!;
+        // haraka (vowel) uncoloured
+        expect(haraka.dataset.tj).toBeUndefined();
+        // mini-meem cell coloured iqlab
+        expect(meem.dataset.tj).toBe('1');
+        expect(meem.style.getPropertyValue('--tj-badge')).toContain('iqlab');
+        // the vowel phoneme (idx 1) is NOT coloured; the nasal phoneme (idx 2) IS.
+        expect(container.querySelector<HTMLElement>('.mega-phoneme[data-index="1"]')!.dataset.tj).toBeUndefined();
+        const nasal = container.querySelector<HTMLElement>('.mega-phoneme[data-index="2"]')!;
+        expect(nasal.dataset.tj).toBe('1');
+        expect(nasal.style.getPropertyValue('--tj-badge')).toContain('iqlab');
     });
 
     it('renders an implicit madd as a FULL cell with an inserted affordance', () => {
@@ -381,6 +451,9 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         );
         let { container } = mount([izhar], intervals);
         expect(container.querySelector('.haraka-cell .g')!.textContent).toBe('ٌ');
+        // two-phoneme tanwīn ([u, n]) → its dia-track fills its column (the
+        // stretch is now general CSS, no per-cell class).
+        expect(container.querySelector('.dia-track')!.classList.contains('wide')).toBe(false);
         cleanup();
         // idgham (assimilates into the next word) → OPEN ḍammatan (U+08F1).
         const idgham = w(
@@ -391,6 +464,8 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         );
         ({ container } = mount([idgham], intervals));
         expect(container.querySelector('.haraka-cell .g')!.textContent).toBe(String.fromCodePoint(0x08f1));
+        // single-phoneme tanwīn → still a dia-track, no per-cell stretch class.
+        expect(container.querySelector('.dia-track')!.classList.contains('wide')).toBe(false);
     });
 
     it('madd-ʿiwaḍ: dropped tanwīn → a fatḥa grouped + co-lit with the added alef', () => {
@@ -419,6 +494,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const fatha = vowel.querySelector<HTMLElement>('.haraka-cell')!;
         expect(fatha.dataset.cellTimed).toBe('1');
         expect(fatha.dataset.cellStart).toBe('0.2');
+        // the ʿiwaḍ sound spans the WHOLE [fatḥa, alef] group (same width as the unit).
+        expect(vowel.querySelectorAll('.phoneme-cluster').length).toBe(1);
+        expect(vowel.querySelector<HTMLElement>('.phoneme-cluster')!.style.gridColumn
+            .replace(/\s+/g, ' ').trim()).toBe('1 / span 2');
     });
 
     it('madd-ʿiwaḍ at hamza waqf: dropped fatḥatan groups + co-lights with the IMPLICIT alef', () => {
@@ -453,6 +532,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         const fatha = vowel.querySelector<HTMLElement>('.haraka-cell')!;
         expect(fatha.dataset.cellTimed).toBe('1');
         expect(fatha.dataset.cellStart).toBe('0.2');
+        // the ʿiwaḍ sound spans the WHOLE [fatḥa, implicit-alef] group.
+        expect(vowel.querySelectorAll('.phoneme-cluster').length).toBe(1);
+        expect(vowel.querySelector<HTMLElement>('.phoneme-cluster')!.style.gridColumn
+            .replace(/\s+/g, ' ').trim()).toBe('1 / span 2');
     });
 
     it('madd-ʿiwaḍ at hamza waqf works with VERSE-GLOBAL indices (iwaḍ word is 2nd)', () => {
@@ -524,6 +607,36 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(fatha.dataset.cellStart).toBe('0');
     });
 
+    it('idgham shafawi: the absorbed fatḥa lights on its OWN vowel interval, not the merger union', () => {
+        // …هِم مَّرَض receiving meem: the merged consonant (m̃) + the absorbed vowel (a)
+        // both sit on the SAME meem base in one merger share_group, so the group UNION
+        // spans [m̃, a] = [0, 0.25]. The fatḥa must light on its OWN vowel interval
+        // [0.1, 0.25] (A4) — not smeared across the whole merger union.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'm̃', start: 0, end: 0.1 },   // merged consonant (group-wide)
+            { phone: 'a', start: 0.1, end: 0.25 }, // the absorbed vowel
+        ];
+        const word = w(
+            [{ char: 'م', start: 0, end: 0.25, silent: false }],
+            [
+                base(0, [0, 1], { chars: 'م', shareGroup: 1 }),
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 1 },
+            ],
+            [0, 1],
+        );
+        const { container } = mount([word], intervals);
+        const fatha = container.querySelector<HTMLElement>('.haraka-cell')!;
+        expect(fatha.classList.contains('dia-dropped')).toBe(false);
+        expect(fatha.dataset.cellTimed).toBe('1');
+        // OWN vowel interval [0.1, 0.25], NOT the merger union [0, 0.25].
+        expect(fatha.dataset.cellStart).toBe('0.1');
+        expect(fatha.dataset.cellEnd).toBe('0.25');
+        // The base meem STILL co-lights through the merger union (whole [0, 0.25]).
+        const meem = container.querySelector<HTMLElement>('.mega-letter[data-cell-timed]')!;
+        expect(meem.dataset.cellStart).toBe('0');
+        expect(meem.dataset.cellEnd).toBe('0.25');
+    });
+
     it('idgham noon cross-word: the noon base co-lights with the receiver as a NORMAL (non-greyed) cell', () => {
         // مَن يَقُول — the noon of مَن has no own phone (dropped: the merged sound is
         // on يقول's receiving yaa, which carries j̃) but shares a group (5) with it.
@@ -558,6 +671,55 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(noon.dataset.cellEnd).toBe('0.5');
     });
 
+    it('qalqala: the consonant cell duration includes the render-only Q echo, but its letter timing does not', () => {
+        // قْد at sukūn: ق sounds [q] (idx 0) then the render-only echo [Q] (idx 1, in NO
+        // cell's phonemeIndices), then د [d]. The qāf cell's HIGHLIGHT span (cellStart/
+        // cellEnd) must stretch over q+Q ([0, 0.15]); its LETTER span (click/loop) stays
+        // the consonant's own letter timing ([0, 0.15] from word.letters here).
+        const intervals: PhonemeInterval[] = [
+            { phone: 'q', start: 0, end: 0.1 },
+            { phone: 'Q', start: 0.1, end: 0.15 },
+            { phone: 'd', start: 0.15, end: 0.3 },
+        ];
+        const word = w(
+            [{ char: 'ق', start: 0, end: 0.1, silent: false }, { char: 'د', start: 0.15, end: 0.3, silent: false }],
+            [
+                base(0, [0], { chars: 'ق', tag: 'qalqala' }), // ق owns only q (idx 0), not Q
+                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null }, // sukūn
+                base(1, [2], { chars: 'د' }),
+            ],
+            [0, 2], // Q (idx 1) is rendered but indexed by no cell
+        );
+        const { container } = mount([word], intervals);
+        const qaf = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter[data-cell-timed]'))
+            .find((el) => el.textContent === 'ق')!;
+        expect(qaf).toBeTruthy();
+        // HIGHLIGHT span covers q (0..0.1) AND the Q echo (0.1..0.15).
+        expect(qaf.dataset.cellStart).toBe('0');
+        expect(qaf.dataset.cellEnd).toBe('0.15');
+        // LETTER span (click/loop) stays the qāf's own letter timing — NOT the echo.
+        expect(qaf.dataset.letterStart).toBe('0');
+        expect(qaf.dataset.letterEnd).toBe('0.1');
+    });
+
+    it('qalqala: a non-qalqala consonant ignores a following Q echo (no over-extend)', () => {
+        // Guard: only a tag==='qalqala' cell unions the Q. A plain consonant followed
+        // by a Q in intervals[] keeps its own [start,end].
+        const intervals: PhonemeInterval[] = [
+            { phone: 'q', start: 0, end: 0.1 },
+            { phone: 'Q', start: 0.1, end: 0.15 },
+        ];
+        const word = w(
+            [{ char: 'ق', start: 0, end: 0.1, silent: false }],
+            [base(0, [0], { chars: 'ق' })], // NO qalqala tag
+            [0],
+        );
+        const { container } = mount([word], intervals);
+        const qaf = container.querySelector<HTMLElement>('.mega-letter[data-cell-timed]')!;
+        expect(qaf.dataset.cellStart).toBe('0');
+        expect(qaf.dataset.cellEnd).toBe('0.1'); // own interval, echo NOT unioned
+    });
+
     it('Allah: the dropped fatḥa groups + co-lights with the implicit dagger-alef', () => {
         // …للَّه: lam (geminate), implicit dagger-alef (a:), dropped fatḥa.
         const intervals: PhonemeInterval[] = [
@@ -583,6 +745,10 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(fatha.classList.contains('dia-dropped')).toBe(false);
         expect(fatha.dataset.cellTimed).toBe('1');
         expect(fatha.dataset.cellStart).toBe('0.15'); // co-lit on the dagger ā
+        // the dagger-alef sound spans the WHOLE [fatḥa, dagger] group (same width).
+        expect(vowel.querySelectorAll('.phoneme-cluster').length).toBe(1);
+        expect(vowel.querySelector<HTMLElement>('.phoneme-cluster')!.style.gridColumn
+            .replace(/\s+/g, ' ').trim()).toBe('1 / span 2');
     });
 
     it('renders one cell-group per letter-group, each holding its base + pinned diacritic', () => {
@@ -997,9 +1163,10 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         expect(container.querySelector('.haraka-cell.dia-dropped')).toBeTruthy();
     });
 
-    it('puts a long-vowel sound under its diacritic, leaving the carrier empty', () => {
-        // مِي : base م → [m]; the [kasra, ي] unit sounds one iː — under the KASRA, with
-        // the ي carrier column empty (the user rule: vowel under the diacritic).
+    it('spans a long-vowel sound across its [diacritic, carrier] unit, centred', () => {
+        // مِي : base م → [m]; the [kasra, ي] unit sounds one iː. The single phoneme
+        // SPANS both grapheme columns (grid-column 1 / span 2) and centres across the
+        // unit, rather than pinning under one sub-column.
         const intervals: PhonemeInterval[] = [
             { phone: 'm', start: 0, end: 0.1 }, { phone: 'i:', start: 0.1, end: 0.4 },
         ];
@@ -1016,12 +1183,16 @@ describe('UnifiedDisplay — per-grapheme phoneme alignment', () => {
         const groups = container.querySelectorAll<HTMLElement>('.cell-group');
         expect(groups.length).toBe(2);
         expect(colsOf(groups[0]!).phon.get(1)).toEqual(['m']); // base م
-        // vowel unit [kasra (col 1), ي carrier (col 2)] — iː under the kasra, ي empty.
-        const vg = colsOf(groups[1]!);
-        expect(vg.graphemes.get(1)).toBe('ِ');
-        expect(vg.phon.get(1)).toEqual(['i']); // iː → ph-base 'i' (ː is a superscript)
-        expect(vg.graphemes.get(2)).toBe('ي');
-        expect(vg.phon.has(2)).toBe(false); // carrier has no sound beneath it
+        // vowel unit [kasra (col 1), ي carrier (col 2)] — graphemes in both columns.
+        const vg = groups[1]!;
+        const cols = colsOf(vg);
+        expect(cols.graphemes.get(1)).toBe('ِ');
+        expect(cols.graphemes.get(2)).toBe('ي');
+        // ONE cluster, spanning both columns (centred across the unit).
+        const clusters = vg.querySelectorAll<HTMLElement>(':scope > .phoneme-cluster');
+        expect(clusters.length).toBe(1);
+        expect(clusters[0]!.style.gridColumn.replace(/\s+/g, ' ').trim()).toBe('1 / span 2');
+        expect(Array.from(clusters[0]!.querySelectorAll('.ph-base')).map((p) => p.textContent)).toEqual(['i']);
     });
 
     it('the clusters partition the word’s phonemes — none dropped, none duplicated', () => {

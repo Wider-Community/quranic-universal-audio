@@ -26,12 +26,9 @@
         cellGlyph,
         cellSlot,
         DAGGER,
-        DAMMA,
         FATHA,
         firstMark,
         implicitMaddGlyph,
-        IQLAB_FORM,
-        KASRA,
         OPEN_TANWEEN,
         OPEN_TANWEEN_TAGS,
         SUKUN,
@@ -90,12 +87,11 @@
         tjColor: string | null;
     }
 
-    /** A SMALL diacritic cell — haraka / tanween (incl. iqlab fused mini-meem,
-     *  inserted graphemeless vowels). Pins top or bottom of the group's letter
-     *  row. Sukūn cells are filtered out upstream and never become one of these. */
+    /** A SMALL diacritic cell — haraka / tanween / an iqlab tanwīn's own mini-meem
+     *  cell / inserted graphemeless vowels. Pins top or bottom of the group's
+     *  letter row. Sukūn cells are filtered out upstream and never become one. */
     interface RenderedSmall {
-        /** The combining mark(s) to render — a single haraka/tanwīn, or for iqlab
-         *  the single short-vowel + its mini-meem composed in one DK glyph. */
+        /** The combining mark to render — a single haraka/tanwīn or mini-meem. */
         glyph: string;
         slot: 'top' | 'bottom';
         status: string;
@@ -313,15 +309,15 @@
     // and the new audio's `play` event the rAF loop is stopped, so the user
     // sees the stale highlight pinned on the old word until playback resumes.
     $: rendered, _resetHighlightClasses();
-    // Measure a real full letter cell after each structural render so the small
-    // diacritic cells (sized as a factor of --letter-cell-w/h) track the actual
+    // Measure the natural-width sample cell after each structural render so the
+    // small diacritic cells (sized as a factor of --letter-cell-w/h) track the
     // letter box at the current zoom. tick() waits for the DOM to flush.
     $: rendered, untrack(() => void tick().then(() => { _measureLetterCell(); _rebuildHighlightCache(); }));
     function _measureLetterCell(): void {
         if (!rootEl) return;
-        const sample =
-            rootEl.querySelector<HTMLElement>('.mega-letter:not(.implicit):not(.null-ts)')
-            ?? rootEl.querySelector<HTMLElement>('.mega-letter');
+        // A dedicated natural-width sample, NOT a live letter cell — live cells
+        // stretch to fill their column, which would inflate every dia-track.
+        const sample = rootEl.querySelector<HTMLElement>('.letter-metrics');
         if (!sample) return;
         const r = sample.getBoundingClientRect();
         if (r.width > 0 && r.height > 0) {
@@ -424,6 +420,22 @@
             e = Math.max(e, shareIv[1]);
         }
         return s === Infinity ? { start: null, end: null } : { start: s, end: e };
+    }
+
+    /** A qalqala consonant's render-only echo `Q` immediately follows its phoneme
+     *  in `intervals[]` but is in NO cell's indexable `phonemeIndices` (excluded by
+     *  design — making it indexable would shift the indexable/bridge index space and
+     *  break shard byte-parity). For a `tag==='qalqala'` cell, return the `[start,end]`
+     *  of the `Q` directly after the cell's last own phoneme so its cell duration can
+     *  include the echo; null when there's no such echo. */
+    function _qalqalaEchoIv(
+        indices: number[],
+        intervals: PhonemeInterval[],
+    ): [number, number] | null {
+        if (!indices.length) return null;
+        const after = Math.max(...indices) + 1;
+        const iv = intervals[after];
+        return iv && iv.phone === 'Q' ? [iv.start, iv.end] : null;
     }
 
     /** Per-word share-group interval unions: cells sharing one non-null shareGroup
@@ -542,6 +554,24 @@
         const daggerBySrc = new Map<number, { group: RenderedGroup; iv: [number, number] }>();
         let iwadGroup: RenderedGroup | null = null;
 
+        // --- Idgham-shafawi absorbed vowel: the receiving meem merged cross-word,
+        //     so the phonemizer overloads its fatḥa — base AND haraka both carry the
+        //     SAME vowel index + the merger share_group. Lighting that haraka via the
+        //     group union would smear it across the whole merger; instead it must light
+        //     on its OWN vowel interval. Detect it: a haraka phoneme index that a
+        //     sibling `base` at the SAME sourceLetterIndex also carries. ---
+        const baseIdxBySrc = new Map<number, Set<number>>();
+        for (const c of cells) {
+            if (c.role !== 'base') continue;
+            let set = baseIdxBySrc.get(c.sourceLetterIndex);
+            if (!set) { set = new Set(); baseIdxBySrc.set(c.sourceLetterIndex, set); }
+            for (const i of c.phonemeIndices) set.add(i);
+        }
+        const isAbsorbedShafawiVowel = (c: TsCell): boolean => {
+            const siblingBase = baseIdxBySrc.get(c.sourceLetterIndex);
+            return !!siblingBase && c.phonemeIndices.some((i) => siblingBase.has(i));
+        };
+
         const newGroup = (kind: 'base' | 'vowel'): RenderedGroup => {
             const g: RenderedGroup = { kind, full: [], small: [], shareGroup: null, cols: [], phonemeSpans: [] };
             groups.push(g);
@@ -562,26 +592,14 @@
             let { start, end } = _cellTiming(c.phonemeIndices, intervals, shareIv);
             if (opts.coLightIv) [start, end] = opts.coLightIv; // co-light on the carrier's interval
             const mark = firstMark(c.chars);
-            const iqlab = c.tag === 'iqlab_tanween' ? IQLAB_FORM[mark] : undefined;
             let glyph: string;
             let slot: 'top' | 'bottom';
             let sizeGlyph: string;
             let extraShift = 0;
-            // iqlab composites carry their OWN calibration (the mini-meem shifts
-            // the ink), via a named key — not the bare haraka's.
-            let calibKey: string | undefined;
             if (opts.glyphOverride) {
                 glyph = opts.glyphOverride;
                 slot = cellSlot(glyph);
                 sizeGlyph = glyph;
-            } else if (iqlab) {
-                // SINGLE short vowel + a mini-meem composed in ONE DK glyph (never a
-                // doubled tanwīn); calibrated by its own iqlab key.
-                glyph = iqlab.haraka + iqlab.meem;
-                slot = iqlab.haraka === KASRA ? 'bottom' : 'top';
-                sizeGlyph = iqlab.haraka;
-                calibKey = iqlab.haraka === FATHA ? 'iqlab_fatha'
-                    : iqlab.haraka === DAMMA ? 'iqlab_damma' : 'iqlab_kasra';
             } else if (c.role === 'tanween' && OPEN_TANWEEN[mark] && OPEN_TANWEEN_TAGS.has(c.tag ?? '')) {
                 // Assimilated tanwīn (idgham / ikhfaa) renders OPEN (DK encodes it
                 // as a distinct codepoint); iẓhar (tagless) keeps the stacked form.
@@ -603,7 +621,7 @@
                 cellStart: start,
                 cellEnd: end,
                 shareGroup: c.shareGroup,
-                renderStyle: harakaRenderStyle(sizeGlyph, extraShift, calibKey),
+                renderStyle: harakaRenderStyle(sizeGlyph, extraShift),
                 inserted: c.chars === '' && c.status === 'inserted',
                 phoneIdx: c.phonemeIndices,
                 // Diacritic cells colour from their OWN tag only (tanwīn idgham/
@@ -622,7 +640,20 @@
         // marks the interactive letter element.
         const pushFullGrapheme = (g: RenderedGroup, c: TsCell, isBase: boolean): void => {
             const shareIv = c.shareGroup != null ? shareUnions.get(c.shareGroup) ?? null : null;
-            const { start, end } = _cellTiming(c.phonemeIndices, intervals, shareIv);
+            const { start: ownStart, end: ownEnd } = _cellTiming(c.phonemeIndices, intervals, shareIv);
+            // Qalqala: extend the cell's HIGHLIGHT interval to ALSO cover the render-only
+            // `Q` echo right after this consonant (the echo is in intervals[] but no cell
+            // indexes it). Only the highlight span (cellStart/cellEnd) grows — the
+            // letter's own [start,end] for click/loop stays the consonant timing.
+            let start = ownStart;
+            let end = ownEnd;
+            if (c.tag === 'qalqala' && end != null) {
+                const echo = _qalqalaEchoIv(c.phonemeIndices, intervals);
+                if (echo) {
+                    start = start != null ? Math.min(start, echo[0]) : echo[0];
+                    end = Math.max(end, echo[1]);
+                }
+            }
             let glyph: string;
             let silent: boolean;
             let lStart: number | null;
@@ -637,9 +668,9 @@
                 // `shortened` iltiqāʾ carrier, etc. (A merger-receiving idgham-noon source
                 // noon has no own phones but a share group, so it stays a normal co-lit cell.)
                 silent = c.phonemeIndices.length === 0 && c.shareGroup == null;
-                lStart = start;
-                lEnd = end;
-                isNull = start == null;
+                lStart = ownStart;
+                lEnd = ownEnd;
+                isNull = ownStart == null;
                 letterIndex = c.sourceLetterIndex;
             } else {
                 // Graphemeless base cell (lightweight test fixtures): fall back to
@@ -757,11 +788,15 @@
                     } else if (dropped && daggerBySrc.has(c.sourceLetterIndex)) {
                         const d = daggerBySrc.get(c.sourceLetterIndex)!;
                         pushSmall(d.group, c, { coLightIv: d.iv }); // Allah: fatḥa joins the dagger ā
+                    } else if (!dropped && c.shareGroup != null && isAbsorbedShafawiVowel(c)) {
+                        // Idgham-shafawi: the receiving meem's fatḥa shares the base's
+                        // vowel index + merger group. Light it on its OWN vowel interval
+                        // (not the merger union) so it doesn't smear across the merger.
+                        // The base still co-lights through the share union.
+                        const iv = ownIv(c);
+                        pushSmall(curBase ?? (curBase = newGroup('base')), c, iv ? { coLightIv: iv } : {});
                     } else {
-                        // short vowel / true waqf drop. (An idgham-shafawi haraka
-                        // whose vowel the merged base absorbed arrives `present` +
-                        // share-grouped from the phonemizer, so it co-lights here via
-                        // its share union — no phone inspection.)
+                        // short vowel / true waqf drop.
                         pushSmall(curBase ?? (curBase = newGroup('base')), c);
                     }
                 }
@@ -816,58 +851,78 @@
         return m ? { base: phone.slice(0, -m[0].length), mod: m[0] } : { base: phone, mod: '' };
     }
 
-    /** Assign each rendered phoneme to its source grapheme's COLUMN, so a phoneme
-     *  sits directly under the letter or diacritic that sounds it. Each group's
-     *  graphemes become ordered `cols` (base→haraka, or [diacritic, carrier] for a
-     *  vowel unit); a phoneme is owned by the first column whose cell indexes it,
-     *  so a silent grapheme leaves an empty slot and a vowel sits under its own
-     *  mark (not centred over the carrier). A render-only phone that no cell indexes
-     *  (qalqala echo `Q`) rides the preceding column, staying beside its source. */
+    /** Assign each rendered phoneme to the grapheme COLUMN(s) that sound it, then
+     *  pack the phonemes into row-2 clusters that SPAN those columns. So a phoneme
+     *  sits beneath the grapheme(s) it belongs to:
+     *   - 1 grapheme : 1 sound  → its own column (the cluster fills it; edges shared);
+     *   - many graphemes : 1 sound (long vowel, share-group) → the cluster spans the
+     *     unit's columns and centres across them (not pinned under one sub-column);
+     *   - 1 grapheme : many sounds → the cluster stays in the single column, which
+     *     widens to fit.
+     *  A silent grapheme indexes nothing → empty slot. A render-only phone no cell
+     *  indexes (qalqala echo `Q`) rides the preceding phoneme's columns. */
     function _buildColumns(groups: RenderedGroup[], phonemes: RenderedPhoneme[]): void {
         if (!groups.length) return;
-        const owner = new Map<number, { g: RenderedGroup; ci: number }>();
+        // phoneme index → owning group + the COLUMN SET that sounds it (a cell's own
+        // columns, widened to every column sharing that cell's share-group so a long
+        // vowel's lone phone spans both [diacritic, carrier] columns).
+        const owner = new Map<number, { g: RenderedGroup; cols: Set<number> }>();
         for (const g of groups) {
             g.cols = g.kind === 'vowel'
                 ? [...g.small.map((s) => ({ full: null, small: s })), ...g.full.map((f) => ({ full: f, small: null }))]
                 : [...g.full.map((f) => ({ full: f, small: null })), ...g.small.map((s) => ({ full: null, small: s }))];
             g.phonemeSpans = [];
+            const sgCols = new Map<number, Set<number>>();
             g.cols.forEach((col, ci) => {
+                const sg = col.full?.shareGroup ?? col.small?.shareGroup ?? null;
+                if (sg == null) return;
+                let s = sgCols.get(sg);
+                if (!s) { s = new Set(); sgCols.set(sg, s); }
+                s.add(ci);
+            });
+            g.cols.forEach((col, ci) => {
+                const sg = col.full?.shareGroup ?? col.small?.shareGroup ?? null;
+                const cols = sg != null ? sgCols.get(sg)! : new Set([ci]);
                 for (const idx of col.full?.phoneIdx ?? col.small?.phoneIdx ?? []) {
-                    if (!owner.has(idx)) owner.set(idx, { g, ci });
+                    if (!owner.has(idx)) owner.set(idx, { g, cols });
                 }
             });
         }
-        // Walk the phonemes in reading order; an unowned phone rides the current column.
-        const acc = new Map<RenderedGroup, Map<number, RenderedPhoneme[]>>();
-        let cur: { g: RenderedGroup; ci: number } | null = null;
+        // Walk phonemes in reading order, merging into a cluster while the column
+        // range overlaps the open one (1:many stays one cluster in one column; an
+        // unowned phone rides the open cluster). A range change opens a new cluster.
+        const acc = new Map<RenderedGroup, PhonemeSpan[]>();
+        let cur: { g: RenderedGroup; lo: number; hi: number; span: PhonemeSpan } | null = null;
         for (const p of phonemes) {
             const found = owner.get(p.index);
-            if (found) cur = found;
-            const t = found ?? cur ?? { g: groups[0]!, ci: 0 };
-            let m = acc.get(t.g);
-            if (!m) { m = new Map(); acc.set(t.g, m); }
-            let arr = m.get(t.ci);
-            if (!arr) { arr = []; m.set(t.ci, arr); }
-            arr.push(p);
+            const g: RenderedGroup = found?.g ?? cur?.g ?? groups[0]!;
+            const lo: number = found ? Math.min(...found.cols) : (cur?.lo ?? 0);
+            const hi: number = found ? Math.max(...found.cols) : (cur?.hi ?? 0);
+            if (cur && cur.g === g && lo <= cur.hi && hi >= cur.lo) {
+                cur.span.phonemes.push(p);
+                cur.lo = Math.min(cur.lo, lo);
+                cur.hi = Math.max(cur.hi, hi);
+                cur.span.colStart = cur.lo;
+                cur.span.span = cur.hi - cur.lo + 1;
+            } else {
+                const span: PhonemeSpan = { phonemes: [p], colStart: lo, span: hi - lo + 1 };
+                (acc.get(g) ?? acc.set(g, []).get(g)!).push(span);
+                cur = { g, lo, hi, span };
+            }
         }
-        for (const g of groups) {
-            const m = acc.get(g);
-            if (!m) continue;
-            for (const [ci, phs] of m) g.phonemeSpans.push({ phonemes: phs, colStart: ci, span: 1 });
-        }
-    }
+        for (const [g, spans] of acc) g.phonemeSpans = spans;
 
-    /** Where a row-1 grapheme cell anchors within its (possibly sound-widened)
-     *  column: toward the group's internal seam so a base and its diacritic stay
-     *  flush even when a wide sound grows the column — the narrow mark is pinned to
-     *  the base edge and the extra width opens on the OUTER side under the sound.
-     *  Single-column groups centre. RTL grid: `end` = left, `start` = right,
-     *  grid-column 1 = rightmost. */
-    function colJustify(ci: number, n: number): 'center' | 'start' | 'end' {
-        if (n <= 1) return 'center';
-        if (ci === 0) return 'end'; // rightmost col → pack left toward the seam
-        if (ci === n - 1) return 'start'; // leftmost col → pack right toward the seam
-        return 'center';
+        // A vowel unit is one co-lit sound across its whole group ([diacritic,
+        // carrier], implicit/ʿiwaḍ madd, dagger-Allah). Collapse its per-column
+        // clusters into ONE cluster spanning every column, centred — so a normal
+        // madd, madd-ʿiwaḍ, the Allah dagger-alef and the inserted ʿiwaḍ alef all
+        // share the group's full width identically (same sound → same width),
+        // regardless of whether they co-light via share-group or interval.
+        for (const g of groups) {
+            if (g.kind !== 'vowel' || g.phonemeSpans.length === 0) continue;
+            const phonemes = g.phonemeSpans.flatMap((s) => s.phonemes);
+            g.phonemeSpans = [{ phonemes, colStart: 0, span: g.cols.length }];
+        }
     }
 
     /** Build the per-word `RenderedBlock[]` for the analysis view: cross-word
@@ -1576,6 +1631,10 @@
     style="--mega-row-gap: {rowGapPx}px"
     class:hidden={$loadedVerse === null}
 >
+    <!-- natural-width reference for sizing the small diacritic cells (read by
+         _measureLetterCell); shares the letter box metrics but is out of flow,
+         not a .mega-letter, never highlighted or queried as a cell. -->
+    <span class="letter-metrics" aria-hidden="true">ب</span>
     {#each units as unit (unit.key)}
         <div class="word-unit">
         {#each unit.parts as part}
@@ -1695,7 +1754,7 @@
                                             class="mega-letter implicit dia-{f.status}"
                                             class:dia-timed={f.status !== 'dropped' && f.cellStart != null}
                                             class:dia-seekable={f.cellStart != null}
-                                            style="grid-column:{ci + 1}; justify-self:{colJustify(ci, grp.cols.length)}"
+                                            style="grid-column:{ci + 1}; justify-self:stretch"
                                             data-cell-timed={f.status !== 'dropped' && f.cellStart != null ? '1' : undefined}
                                             data-cell-start={f.cellStart}
                                             data-cell-end={f.cellEnd}
@@ -1714,7 +1773,7 @@
                                         <span
                                             class="mega-letter null-ts"
                                             class:silent={f.silent}
-                                            style="grid-column:{ci + 1}; justify-self:{colJustify(ci, grp.cols.length)}"
+                                            style="grid-column:{ci + 1}; justify-self:stretch"
                                             data-tj={f.tjColor ? '1' : undefined}
                                             style:--tj-badge={f.tjColor}
                                             on:click|stopPropagation
@@ -1729,7 +1788,7 @@
                                             class="mega-letter"
                                             class:silent={f.silent}
                                             class:dia-timed={f.cellStart != null && (!f.silent || f.shareGroup != null)}
-                                            style="grid-column:{ci + 1}; justify-self:{colJustify(ci, grp.cols.length)}"
+                                            style="grid-column:{ci + 1}; justify-self:stretch"
                                             data-cell-timed={f.cellStart != null && (!f.silent || f.shareGroup != null) ? '1' : undefined}
                                             data-cell-start={f.cellStart}
                                             data-cell-end={f.cellEnd}
@@ -1752,7 +1811,7 @@
                                     {/if}
                                 {:else if col.small}
                                     {@const c = col.small}
-                                    <span class="dia-track" style="grid-column:{ci + 1}; justify-self:{colJustify(ci, grp.cols.length)}">
+                                    <span class="dia-track" style="grid-column:{ci + 1}">
                                         <span
                                             class="haraka-cell pin-{c.slot} dia-{c.status}"
                                             class:dia-inserted={c.inserted}
@@ -1780,6 +1839,7 @@
                             {#each grp.phonemeSpans as ps}
                                 <span
                                     class="phoneme-cluster"
+                                    class:fill={ps.phonemes.length === 1}
                                     data-group-index={gi}
                                     style="grid-column:{ps.colStart + 1} / span {ps.span}"
                                 >
