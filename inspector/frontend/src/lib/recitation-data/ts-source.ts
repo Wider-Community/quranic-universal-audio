@@ -547,13 +547,24 @@ export function assembleVerseFromShard(
         // anchors the letter row groups on). Read each row by name (parseShardCell)
         // then map its word-local indexable indices to the verse-flat list; the
         // share_group carries the per-segment offset so cross-segment ids don't collide.
+        // `phonemeRuleTags` (v8 muqattaat) is parallel to `phonemeIndices`, so it
+        // rides the SAME filter — an index that maps to nothing drops its tag too,
+        // keeping the two lists element-aligned after the remap.
         const cells: TsCell[] = ((w[5] ?? []) as TsShardCellRow[]).map((row) => {
             const c = parseShardCell(row);
+            const ruleTags = c.phonemeRuleTags;
+            const mapped: number[] = [];
+            const mappedTags: (string | null)[] = [];
+            c.phonemeIndices.forEach((k, i) => {
+                const flat = indexableFlat[k];
+                if (flat === undefined) return;
+                mapped.push(flat);
+                if (ruleTags) mappedTags.push(ruleTags[i] ?? null);
+            });
             return {
                 ...c,
-                phonemeIndices: c.phonemeIndices
-                    .map((k) => indexableFlat[k])
-                    .filter((x): x is number => x !== undefined),
+                phonemeIndices: mapped,
+                phonemeRuleTags: ruleTags ? mappedTags : null,
                 shareGroup: c.shareGroup == null ? null : c.shareGroup + sgOffset,
             };
         });

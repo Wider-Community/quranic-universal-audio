@@ -2006,6 +2006,7 @@ export interface TsShardCell {
   source_letter_index: number;
   tag?: string | null;
   share_group?: number | null;
+  phoneme_rule_tags?: (string | null)[] | null;
 }
 /**
  * The decompressed body of one chapter shard: ``_meta`` + ``segments[]``.

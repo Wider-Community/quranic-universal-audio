@@ -63,17 +63,33 @@ export interface TsCell {
     tag: string | null;
     /** cells sharing one id highlight together (long vowel; cross-word idgham) */
     shareGroup: number | null;
+    /** per-phoneme rule tags parallel to `phonemeIndices` (same length), each a
+     *  rule key or null — set only on muqattaat cells whose phonemes carry
+     *  distinct tajweed (schema v8, 8th shard slot). Absent → null, and the FE
+     *  falls back to the single-`tag` colouring. */
+    phonemeRuleTags?: (string | null)[] | null;
 }
 
 /** A raw positional shard cell row (the 6th word slot) —
- *  `[chars, role, status, phoneme_indices, source_letter_index, tag?, share_group?]`.
- *  `phoneme_indices` are word-local indexable-phone indices. */
-export type TsShardCellRow = [string, string, string, number[], number, (string | null)?, (number | null)?];
+ *  `[chars, role, status, phoneme_indices, source_letter_index, tag?, share_group?,
+ *   phoneme_rule_tags?]`. `phoneme_indices` are word-local indexable-phone indices;
+ *  the optional 8th slot `phoneme_rule_tags` is parallel to them (schema v8). */
+export type TsShardCellRow = [
+    string,
+    string,
+    string,
+    number[],
+    number,
+    (string | null)?,
+    (number | null)?,
+    ((string | null)[] | null)?,
+];
 
 /** Read a positional shard cell row by name — the FE mirror of
- *  `qua_shared/ts_shard_cells.parse_cell`, so no consumer unpacks `row[0..6]`
+ *  `qua_shared/ts_shard_cells.parse_cell`, so no consumer unpacks `row[0..7]`
  *  inline. `phonemeIndices` stay WORD-LOCAL here; the caller maps them to the
- *  verse-flat `intervals[]`. */
+ *  verse-flat `intervals[]`. The optional 8th slot `phoneme_rule_tags` (v8) is
+ *  read here too — v5-v7 rows lack it and parse to null. */
 export function parseShardCell(row: TsShardCellRow): TsCell {
     return {
         chars: row[0],
@@ -83,6 +99,7 @@ export function parseShardCell(row: TsShardCellRow): TsCell {
         sourceLetterIndex: row[4],
         tag: (row[5] ?? null) as string | null,
         shareGroup: (row[6] ?? null) as number | null,
+        phonemeRuleTags: (row[7] ?? null) as (string | null)[] | null,
     };
 }
 
@@ -182,9 +199,22 @@ export type TsShardWord = [
     Array<[string, number | null, number | null, boolean?]>,
     /** phones: [phone, start_ms, end_ms, ...optional flags][] */ Array<(string | number | boolean)[]>,
     /** cells (schema v5, optional): [chars, role, status, phoneme_indices,
-     *  source_letter_index, tag?, share_group?][]. phoneme_indices are word-local
-     *  indices over the word's INDEXABLE phones (qalqala `Q` excluded). */
-    Array<[string, string, string, number[], number, (string | null)?, (number | null)?]>?,
+     *  source_letter_index, tag?, share_group?, phoneme_rule_tags?][].
+     *  phoneme_indices are word-local indices over the word's INDEXABLE phones
+     *  (qalqala `Q` excluded); the optional 8th slot phoneme_rule_tags (v8) is
+     *  parallel to phoneme_indices. */
+    Array<
+        [
+            string,
+            string,
+            string,
+            number[],
+            number,
+            (string | null)?,
+            (number | null)?,
+            ((string | null)[] | null)?,
+        ]
+    >?,
 ];
 
 /** One recited segment in a chapter's temporal `segments[]` array. FE-typed

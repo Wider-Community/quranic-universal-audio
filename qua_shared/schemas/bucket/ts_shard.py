@@ -33,11 +33,15 @@ breakdown. From the SDK annotator move, cells include ``role == 'base'``
 (consonant) rows alongside ``haraka``/``tanween``/``madd`` — the structure is
 unchanged (``CellTiming`` / ``ts_shard_cells.parse_cell`` already tolerate every
 role), only the role set written is wider. Each cell is the positional row
-``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group]``;
-see ``qua_shared/ts_shard_cells.py``. ``phoneme_indices`` are **word-local indices
-over the word's indexable phones** (the qalqala ``Q`` excluded, same coordinate
-space as the bridge index). Read via ``ts_shard_cells.parse_cell`` — never unpack
-positionally, and tolerate a missing 6th slot on v3/v4 shards.
+``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group
+(, phoneme_rule_tags)]``; see ``qua_shared/ts_shard_cells.py``. ``phoneme_indices``
+are **word-local indices over the word's indexable phones** (the qalqala ``Q``
+excluded, same coordinate space as the bridge index). The optional 8th slot
+``phoneme_rule_tags`` (schema v8) is a per-phoneme tag list parallel to
+``phoneme_indices`` — each entry a rule key or ``None`` — for cells whose phonemes
+carry distinct tajweed (muqattaat). Read via ``ts_shard_cells.parse_cell`` — never
+unpack positionally, and tolerate a missing 6th slot on v3/v4 shards and a missing
+8th slot on v5-v7 shards.
 
 Extras handling: ``extra="forbid"`` + ``strip_and_warn`` on the document and
 ``_meta``. The word/letter/phone tuples are positional and are validated by
@@ -67,10 +71,19 @@ LetterTiming = tuple[str, int | None, int | None] | tuple[str, int | None, int |
 PhoneTiming = list[str | int | bool]
 
 # Cell row (the 6th word slot): a per-character haraka/tanween cell.
-# ``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group]``.
+# ``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group
+#   (, phoneme_rule_tags)]``.
 # ``role`` / ``status`` are the codegen-source enums (``bucket/cell_vocab``);
 # ``phoneme_indices`` are word-local indices over the word's indexable phones.
-CellTiming = tuple[str, CellRole, CellStatus, list[int], int, str | None, int | None]
+# The optional 8th slot ``phoneme_rule_tags`` (schema v8) is a per-phoneme tag
+# list parallel to ``phoneme_indices`` (same length), each entry a rule key or
+# ``None`` — carries per-phoneme tajweed for cells whose phonemes diverge from
+# the cell ``tag`` (muqattaat: the long vowel gets its madd, a merged nasal gets
+# its idgham, etc.). Absent on v5-v7 shards (readers tolerate the missing slot).
+CellTiming = (
+    tuple[str, CellRole, CellStatus, list[int], int, str | None, int | None]
+    | tuple[str, CellRole, CellStatus, list[int], int, str | None, int | None, list[str | None]]
+)
 
 
 class TsShardWord(
@@ -107,6 +120,7 @@ class TsShardCell(BaseModel):
     source_letter_index: int
     tag: str | None = None
     share_group: int | None = None
+    phoneme_rule_tags: list[str | None] | None = None
 
 
 class TsShardSegment(BaseModel):

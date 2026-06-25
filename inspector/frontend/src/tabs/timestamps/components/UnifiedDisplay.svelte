@@ -1007,6 +1007,17 @@
         const phonemeColor = new Map<number, string>();
         const idghamGroupColors = new Map<number, string>();
         for (const c of words.flatMap((w) => w.cells ?? [])) {
+            // Muqattaat cell with per-phoneme tags (v8): colour each phoneme by its
+            // OWN rule, NOT the cell's letter-tier madd smeared across the cell. A
+            // per-phoneme tag that maps to no hue (madd_tabii / qalqala / tafkheem —
+            // locked uncoloured) simply leaves that phoneme unpainted.
+            if (c.phonemeRuleTags) {
+                c.phonemeIndices.forEach((fi, i) => {
+                    const pc = tajweedColorVar(c.phonemeRuleTags![i]);
+                    if (pc) phonemeColor.set(fi, pc);
+                });
+                continue;
+            }
             const color = tajweedColorVar(c.tag);
             if (!color) continue;
             if (isBridgeTag(c.tag)) {

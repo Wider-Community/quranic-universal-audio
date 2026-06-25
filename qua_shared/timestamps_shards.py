@@ -63,7 +63,10 @@ _SEGMENT_META_PROVENANCE = (
 # haraka of a cross-word idgham. v7 expands the open-form cell ``tag`` vocabulary
 # (madd subtypes, plain ghunnah, ikhfaa/idgham shafawi) so a consumer can colour
 # per-rule tajweed badges — the cell-row STRUCTURE is unchanged across v5–v7.
-SEGMENT_SCHEMA_VERSION = 7
+# v8 adds an OPTIONAL 8th cell slot ``phoneme_rule_tags`` (per-phoneme tag list
+# parallel to ``phoneme_indices``) for muqattaat cells whose phonemes carry
+# distinct tajweed; readers tolerate its absence so v5-v7 shards keep working.
+SEGMENT_SCHEMA_VERSION = 8
 
 
 def _filter_mfa_failures(failures: list[dict] | None, chapter: int) -> list[dict]:

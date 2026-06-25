@@ -63,11 +63,37 @@ def test_parse_cell_tolerates_minimal_and_trailing():
     # 5-slot minimal (tag/share_group default to None)
     c = ts_shard_cells.parse_cell(["م", "tanween", "dropped", [], 1])
     assert c.tag is None and c.share_group is None
-    # a future trailing slot is ignored, not an error
-    c2 = ts_shard_cells.parse_cell(["م", "tanween", "dropped", [], 1, None, None, "future"])
+    # a future trailing slot (beyond the 8th) is ignored, not an error
+    c2 = ts_shard_cells.parse_cell(["م", "tanween", "dropped", [], 1, None, None, None, "future"])
     assert c2.source_letter_index == 1
     with pytest.raises(ValueError):
         ts_shard_cells.parse_cell(["م", "haraka"])  # < 5 slots
+
+
+def test_parse_cell_reads_phoneme_rule_tags_slot():
+    # v8 8th slot: per-phoneme tag list parallel to phoneme_indices.
+    c = ts_shard_cells.parse_cell(
+        [
+            "لٓ",
+            "madd",
+            "present",
+            [0, 1, 2],
+            0,
+            "madd_lazim",
+            4,
+            [None, "madd_lazim", "idgham_shafawi"],
+        ]
+    )
+    assert c.phoneme_rule_tags == [None, "madd_lazim", "idgham_shafawi"]
+
+
+def test_parse_cell_absent_phoneme_rule_tags_is_none():
+    # v5-v7 rows (no 8th slot) parse with phoneme_rule_tags=None.
+    c7 = ts_shard_cells.parse_cell(["ا", "madd", "present", [3], 1, "madd_lazim", 2])
+    assert c7.phoneme_rule_tags is None
+    # an explicit null 8th slot also normalizes to None.
+    c8_null = ts_shard_cells.parse_cell(["ا", "madd", "present", [3], 1, "madd_lazim", 2, None])
+    assert c8_null.phoneme_rule_tags is None
 
 
 def test_word_cells_tolerates_missing_slot():
@@ -88,6 +114,38 @@ def test_schema_accepts_v4_and_v5_words():
     doc = {
         "_meta": {"schema_version": 5, "chapter": 101, "audio_category": "by_surah"},
         "segments": [{"ref": "101:1", "t": [10, 200], "words": [v5]}],
+    }
+    assert len(TsShardDoc.model_validate(doc).segments[0].words) == 1
+
+
+def test_word_with_v8_phoneme_rule_tags_cell_round_trips():
+    # A muqattaat cell WITH the 8th slot round-trips byte-equal through TsShardWord.
+    cell = [
+        "لٓ",
+        "madd",
+        "present",
+        [0, 1, 2],
+        0,
+        "madd_lazim",
+        4,
+        [None, "madd_lazim", "idgham_shafawi"],
+    ]
+    phones = [["l", 10, 50], ["a:", 50, 150], ["m", 150, 200]]
+    word = [1, 10, 200, [["ل", 10, 90, False]], phones, [cell]]
+    model = TsShardWord.model_validate(word)
+    # model_dump(mode="json") yields the on-disk list shape (tuples -> lists).
+    assert model.model_dump(mode="json") == word
+
+
+def test_word_without_phoneme_rule_tags_cell_still_parses():
+    # A v7 cell (no 8th slot) still validates and round-trips unchanged.
+    cell = ["ا", "madd", "present", [3], 1, "madd_lazim", 2]
+    word = [1, 10, 200, [["ا", 10, 90, False]], [["a:", 10, 90]], [cell]]
+    model = TsShardWord.model_validate(word)
+    assert model.model_dump(mode="json") == word
+    doc = {
+        "_meta": {"schema_version": 8, "chapter": 101, "audio_category": "by_surah"},
+        "segments": [{"ref": "101:1", "t": [10, 200], "words": [word]}],
     }
     assert len(TsShardDoc.model_validate(doc).segments[0].words) == 1
 

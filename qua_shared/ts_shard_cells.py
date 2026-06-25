@@ -1,8 +1,10 @@
 """Named accessor for Timestamps-shard cell rows (schema v5, the 6th word slot).
 
 A shard word's optional 6th slot ``cells`` is a list of POSITIONAL rows
-``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group]``
-— see ``CellTiming`` in ``qua_shared/schemas/bucket/ts_shard.py``. They are the
+``[chars, role, status, phoneme_indices, source_letter_index, tag, share_group
+(, phoneme_rule_tags)]`` — see ``CellTiming`` in
+``qua_shared/schemas/bucket/ts_shard.py``. The 8th slot ``phoneme_rule_tags``
+(schema v8) is optional; readers tolerate its absence on v5-v7 shards. They are the
 per-character highlight tier from the phonemizer's
 ``character_phoneme_mappings()``. From the SDK annotator move, this includes
 ``role == 'base'`` (consonant) rows alongside ``haraka``/``tanween``/``madd`` —
@@ -43,6 +45,9 @@ class CellRow(NamedTuple):
     word-local indexable-phone indices (``[]`` = silent). ``source_letter_index``
     is the anchoring letter (``-1`` if fully implicit). ``tag`` is the canonical
     rule/case key the renderer switches on; ``share_group`` ties co-timed cells.
+    ``phoneme_rule_tags`` (schema v8, optional) is a per-phoneme tag list parallel
+    to ``phoneme_indices`` (each entry a rule key or ``None``) for cells whose
+    phonemes carry distinct tajweed (muqattaat); ``None`` on v5-v7 shards.
     """
 
     chars: str
@@ -52,13 +57,16 @@ class CellRow(NamedTuple):
     source_letter_index: int
     tag: str | None = None
     share_group: int | None = None
+    phoneme_rule_tags: list[str | None] | None = None
 
 
 def parse_cell(row: object) -> CellRow:
     """Parse one positional cell row into a :class:`CellRow`.
 
-    Reads only the named positions and ignores any trailing slot. Raises
-    ``ValueError`` on a row with fewer than the 5 required slots.
+    Reads only the named positions and ignores any trailing slot beyond the 8th.
+    Raises ``ValueError`` on a row with fewer than the 5 required slots. The 8th
+    slot ``phoneme_rule_tags`` (schema v8) is a per-phoneme tag list parallel to
+    ``phoneme_indices``; ``None`` when absent (v5-v7 shards).
     """
     seq = tuple(row)  # type: ignore[call-overload]
     if len(seq) < 5:
@@ -69,6 +77,8 @@ def parse_cell(row: object) -> CellRow:
     chars, role, status, phoneme_indices, source_letter_index = seq[:5]
     tag = seq[5] if len(seq) > 5 else None
     share_group = seq[6] if len(seq) > 6 else None
+    raw_rule_tags = seq[7] if len(seq) > 7 else None
+    phoneme_rule_tags = list(raw_rule_tags) if raw_rule_tags is not None else None
     return CellRow(
         str(chars),
         str(role),
@@ -77,6 +87,7 @@ def parse_cell(row: object) -> CellRow:
         int(source_letter_index),
         tag,
         share_group,
+        phoneme_rule_tags,
     )
 
 

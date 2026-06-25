@@ -1054,6 +1054,81 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
             cleanup();
         }
     });
+
+    // --- Muqattaat per-phoneme rule tags (schema v8, phonemeRuleTags) -------
+
+    it('muqattaat: each phoneme is coloured by its OWN rule, not the cell madd smeared', () => {
+        // الٓمٓ-style lām letter: لٓ sounds [l, aː, m] where the closing mīm merges
+        // into the next mīm (idgham shafawi). The muqattaat carrier is a `madd` cell
+        // (its glyph + underline come from the cell main tag, madd_lazim); a leading
+        // alif base makes this a real multi-cell word. phonemeRuleTags carries the
+        // per-phoneme rule: l → null (uncoloured), aː → madd_lazim, m → idgham_shafawi.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'ʔ', start: 0, end: 0.05 },  // leading alif (base, uncoloured)
+            { phone: 'l', start: 0.05, end: 0.1 },
+            { phone: 'a:', start: 0.1, end: 0.7 },
+            { phone: 'm', start: 0.7, end: 1.0 },
+        ];
+        const word = w(
+            [{ char: 'ا', start: 0, end: 0.05, silent: false }, { char: 'ل', start: 0.05, end: 1.0, silent: false }],
+            [
+                base(0, [0], { chars: 'ا' }),
+                {
+                    chars: 'لٓ', role: 'madd', status: 'present', phonemeIndices: [1, 2, 3],
+                    sourceLetterIndex: 1, tag: 'madd_lazim', shareGroup: null,
+                    phonemeRuleTags: [null, 'madd_lazim', 'idgham_shafawi'],
+                },
+            ],
+            [0, 1, 2, 3],
+        );
+        const { container } = mount([word], intervals);
+        // The letter underline uses the cell main tag (madd_lazim) — on the لٓ carrier.
+        const carrier = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .find((e) => e.textContent === 'لٓ')!;
+        expect(carrier.dataset.tj).toBe('1');
+        expect(carrier.style.getPropertyValue('--tj-badge')).toContain('madd-lazim');
+        // Per-phoneme colours: l uncoloured, aː = madd-lazim hue, m = idgham-shafawi hue.
+        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
+        expect(ph(1).dataset.tj).toBeUndefined();
+        expect(ph(2).dataset.tj).toBe('1');
+        expect(ph(2).style.getPropertyValue('--tj-badge')).toContain('madd-lazim');
+        expect(ph(3).dataset.tj).toBe('1');
+        const shafawi = ph(3).style.getPropertyValue('--tj-badge');
+        expect(shafawi).toContain('idgham-shafawi');
+        // The merged nasal hue is DISTINCT from the long-vowel madd hue.
+        expect(shafawi).not.toBe(ph(2).style.getPropertyValue('--tj-badge'));
+    });
+
+    it('muqattaat: ṭabīʿī and qalqala per-phoneme tags map to NO colour (locked palette)', () => {
+        // A muqattaat cell may emit madd_tabii / qalqala as phonemeRuleTags, but the
+        // FE palette leaves them uncoloured — those phonemes get no badge while a
+        // coloured rule on the same cell still paints its phoneme.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'd', start: 0, end: 0.1 },     // qalqala consonant (kāf/sād family stand-in)
+            { phone: 'a:', start: 0.1, end: 0.5 },  // ṭabīʿī long vowel
+            { phone: 'n', start: 0.5, end: 0.8 },   // ikhfaa nasal (coloured)
+        ];
+        const word = w(
+            [{ char: 'د', start: 0, end: 0.8, silent: false }],
+            [
+                base(0, [], { chars: 'د', status: 'dropped' }), // anchor base; the carrier sounds
+                {
+                    chars: 'دٓ', role: 'madd', status: 'present', phonemeIndices: [0, 1, 2],
+                    sourceLetterIndex: 0, tag: 'madd_tabii', shareGroup: null,
+                    phonemeRuleTags: ['qalqala', 'madd_tabii', 'ikhfaa_noon'],
+                },
+            ],
+            [0, 1, 2],
+        );
+        const { container } = mount([word], intervals);
+        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
+        // qalqala + ṭabīʿī → no badge.
+        expect(ph(0).dataset.tj).toBeUndefined();
+        expect(ph(1).dataset.tj).toBeUndefined();
+        // the coloured rule on the same cell still paints its phoneme.
+        expect(ph(2).dataset.tj).toBe('1');
+        expect(ph(2).style.getPropertyValue('--tj-badge')).toContain('ikhfaa');
+    });
 });
 
 /**
