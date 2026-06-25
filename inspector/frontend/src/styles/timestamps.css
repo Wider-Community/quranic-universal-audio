@@ -223,13 +223,15 @@
     /* Fill the column (or span) so the cluster shares its grapheme's edges; the
        phonemes inside centre. A lone phoneme under a single grapheme grows to fill
        (.fill) so the two boxes are the same size; a multi-sound or spanned cluster
-       keeps natural-width phonemes and centres them across the unit. */
+       keeps natural-width phonemes and centres them across the unit. The cluster
+       holds ONE cell's phonemes (e.g. an ikhfaa tanwīn's [vowel, nasal]) — they're
+       one unit, packed tight; cell-to-cell spacing is the grid, not this gap. */
     justify-self: stretch;
     display: flex;
     direction: rtl;
     align-items: center;
     justify-content: center;
-    gap: var(--phoneme-box-gap, 2px);
+    gap: 0;
 }
 .cell-group > .phoneme-cluster.fill > .mega-phoneme {
     flex: 1 1 auto;
