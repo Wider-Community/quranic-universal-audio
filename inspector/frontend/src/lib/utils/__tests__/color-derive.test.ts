@@ -1,3 +1,5 @@
+import { describe, expect, it } from 'vitest';
+
 import { analogousTriad, inkFor } from '../color-derive';
 
 const HEX6 = /^#[0-9a-f]{6}$/;
