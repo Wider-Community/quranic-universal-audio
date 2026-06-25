@@ -698,6 +698,49 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(meem.dataset.cellEnd).toBe('0.1');
     });
 
+    it('idgham shafawi into a long vowel (مَّا): the receiving meem co-lights, not greyed', () => {
+        // …م مَّا — the receiving meem owns NO phoneme and the following long vowel sits
+        // on its own alef (aː), so the meem must still link to the source meem and
+        // co-light via the merger union [0, 0.2], NOT grey out as a silent letter.
+        const intervals: PhonemeInterval[] = [
+            { phone: 'm̃', start: 0, end: 0.2 },    // merged nasal (source meem)
+            { phone: 'a:', start: 0.2, end: 0.5 },  // the long vowel, on the alef
+        ];
+        const him = w(
+            [{ char: 'م', start: 0, end: 0.2, silent: false }],
+            [base(0, [0], { chars: 'م', tag: 'idgham_shafawi', shareGroup: 5 })],
+            [0],
+        );
+        const maa = w(
+            [
+                { char: 'م', start: 0.2, end: 0.5, silent: false },
+                { char: 'ا', start: 0.2, end: 0.5, silent: false },
+            ],
+            [
+                base(0, [], { chars: 'م', status: 'dropped', shareGroup: 5 }), // receiver: co-lit via union
+                { chars: 'َ', role: 'haraka', status: 'present', phonemeIndices: [1], sourceLetterIndex: 0, tag: null, shareGroup: 6 },
+                { chars: 'ا', role: 'madd', status: 'present', phonemeIndices: [1], sourceLetterIndex: 1, tag: null, shareGroup: 6 },
+            ],
+            [1],
+        );
+        const { container } = mount([him, maa], intervals);
+        const meems = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .filter((el) => el.textContent === 'م');
+        expect(meems.length).toBe(2);
+        for (const m of meems) {
+            expect(m.classList.contains('silent')).toBe(false); // co-lit, not greyed
+            expect(m.dataset.cellTimed).toBe('1');
+            expect(m.dataset.cellStart).toBe('0');
+            expect(m.dataset.cellEnd).toBe('0.2'); // the m̃ union, not the aː
+        }
+        // the aː rides the alef (its own long-vowel group), not the meem.
+        expect(container.querySelector<HTMLElement>('.mega-letter')!).toBeTruthy();
+        const alef = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter'))
+            .find((el) => el.textContent === 'ا')!;
+        expect(alef.dataset.cellStart).toBe('0.2');
+        expect(alef.dataset.cellEnd).toBe('0.5');
+    });
+
     it('idgham noon cross-word: the noon base co-lights with the receiver as a NORMAL (non-greyed) cell', () => {
         // مَن يَقُول — the noon of مَن has no own phone (dropped: the merged sound is
         // on يقول's receiving yaa, which carries j̃) but shares a group (5) with it.
