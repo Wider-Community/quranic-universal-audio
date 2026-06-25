@@ -18,6 +18,11 @@ const VITE_PORT = Number(process.env.INSPECTOR_VITE_PORT) || 5173;
 const BACKEND_PORT = Number(process.env.INSPECTOR_BACKEND_PORT) || 5000;
 const BACKEND_HOST = process.env.INSPECTOR_BACKEND_HOST || '127.0.0.1';
 const BACKEND_TARGET = `http://${BACKEND_HOST}:${BACKEND_PORT}`;
+// Render-harness / inspection mode: point the `/api` proxy at a remote origin
+// (e.g. the dev Space) so the analysis-render harness can fetch shards without a
+// local Flask. `INSPECTOR_API_TARGET=https://hetchyy-quranic-inspector-dev.hf.space`.
+const API_TARGET = process.env.INSPECTOR_API_TARGET || BACKEND_TARGET;
+const API_REMOTE = Boolean(process.env.INSPECTOR_API_TARGET);
 
 export default defineConfig(({ mode }) => ({
   root: here,
@@ -43,8 +48,8 @@ export default defineConfig(({ mode }) => ({
     port: VITE_PORT,
     strictPort: true,
     proxy: {
-      '/api': { target: BACKEND_TARGET, changeOrigin: false },
-      '/audio': { target: BACKEND_TARGET, changeOrigin: false },
+      '/api': { target: API_TARGET, changeOrigin: API_REMOTE, secure: true },
+      '/audio': { target: API_TARGET, changeOrigin: API_REMOTE, secure: true },
     },
   },
 }));
