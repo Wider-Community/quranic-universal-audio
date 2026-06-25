@@ -38,7 +38,9 @@
         recitationAyahAt,
         recitationAyahs,
         recitationAyahStarts,
+        recitationConfigStore,
     } from '../../recitation-animation/recitation-settings';
+    import { accentVarText } from '../../utils/accent-override';
     import { loadVbrChapters } from '../../recitation-data/ts-source';
     import {
         loadPersistedSlice,
@@ -587,7 +589,11 @@
         && !!urls[String($playerContext.surahNum)];
 </script>
 
-<div class="player" class:has-reciter={$playerContext.reciter !== null}>
+<div
+    class="player"
+    class:has-reciter={$playerContext.reciter !== null}
+    style={accentVarText($recitationConfigStore.highlightColor)}
+>
     <PlayerProgress
         positionMs={$playerContext.positionMs}
         durationMs={$playerContext.durationMs}
