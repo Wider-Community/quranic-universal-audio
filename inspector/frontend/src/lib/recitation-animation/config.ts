@@ -11,6 +11,8 @@
  * `--t-*`) so the section blends with the live dark theme.
  */
 
+import { inkFor } from '../utils/color-derive';
+
 export type Granularity = 'word' | 'char';
 export type FilmstripMotion = 'hybrid' | 'tuner' | 'snap';
 
@@ -182,9 +184,15 @@ function outlineShadow(px: number, color: string): string {
 export function cssVars(cfg: RecitationAnimConfig): Record<string, string> {
     const isChar = cfg.granularity === 'char';
     const baseOutline = outlineShadow(cfg.baseStrokePx, cfg.baseStrokeColor);
+    // The ACTIVE word/char is coloured with the highlight on the dark page, so
+    // its outline auto-contrasts with that highlight: a light accent gets a dark
+    // crisp, a dark accent a white lift — so the lit unit always separates from
+    // the background whatever colour the user picks. An explicit activeStroke
+    // (px > 0) is honoured verbatim; otherwise we recolour the base-width
+    // silhouette to the contrast halo.
     const activeOutline = cfg.activeStrokePx > 0
         ? outlineShadow(cfg.activeStrokePx, cfg.activeStrokeColor)
-        : baseOutline;
+        : outlineShadow(cfg.baseStrokePx, inkFor(cfg.highlightColor));
     const glow = cfg.activeGlowPx > 0 ? `0 0 ${cfg.activeGlowPx}px ${cfg.highlightColor}` : '';
     // Vertical headroom so an active word scaled by `activeScale` (>1) isn't
     // clipped by the fixed-height, overflow-hidden line box. Round up to a
