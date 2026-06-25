@@ -8,6 +8,7 @@ import {
     LEGEND_KEYS,
     silentTooltip,
     tajweedColorVar,
+    tjKubraColor,
     tjRuleNames,
     tjShadow,
     type TjBadge,
@@ -79,9 +80,25 @@ describe('tajweed-rules — tjShadow', () => {
         expect(shadow).toBe('inset 0 -2px 0 var(--tj-idgham-bila), inset 0 -4px 0 var(--tj-tafkheem)');
     });
 
-    it('gives qalqala kubrā a taller bottom fill', () => {
-        const shadow = tjShadow(badgesForTags(['qalqala_kubra']), all);
-        expect(shadow).toBe('inset 0 -9px 0 var(--tj-qalqala)');
+    it('draws qalqala kubrā as a side-bleeding ::after, not an inset bar', () => {
+        const k = badgesForTags(['qalqala_kubra']);
+        expect(tjShadow(k, all)).toBe(''); // no inset bar — the ::after draws it
+        expect(tjKubraColor(k, all)).toBe('var(--tj-qalqala)');
+        // ṣughrā is a normal inset bar with no kubrā ::after
+        const s = badgesForTags(['qalqala_sughra']);
+        expect(tjShadow(s, all)).toBe('inset 0 -2px 0 var(--tj-qalqala)');
+        expect(tjKubraColor(s, all)).toBe('');
+    });
+
+    it('a disabled qalqala drops both its kubrā bleed and the inset', () => {
+        const k = badgesForTags(['qalqala_kubra']);
+        expect(tjKubraColor(k, none)).toBe('');
+    });
+
+    it('stacks tafkheem above a kubrā bleed — kubrā reserves its height, tafkheem insets', () => {
+        const kt = badgesForTags(['qalqala_kubra', 'tafkheem']);
+        expect(tjShadow(kt, all)).toBe('inset 0 -4px 0 var(--tj-tafkheem)');
+        expect(tjKubraColor(kt, all)).toBe('var(--tj-qalqala)');
     });
 
     it('filters by the enabled set (a disabled rule drops its bar)', () => {

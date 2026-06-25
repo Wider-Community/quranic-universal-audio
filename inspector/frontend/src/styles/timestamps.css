@@ -705,6 +705,24 @@
    diacritic cells, and phoneme boxes (incl. the cross-word bridge tile). Colours are
    the `--tj-*` custom props (overridable per-rule by the settings store). */
 
+/* Qalqala kubrā — same-thickness bar as ṣughrā, but its edges bleed past the
+   cell sides (a wider underline), drawn as a ::after so it can overhang. Sits at
+   the cell's bottom; a stacked tafkheem bar (box-shadow) rides above it. */
+.tj-kubra {
+    position: relative;
+}
+.tj-kubra::after {
+    content: '';
+    position: absolute;
+    left: -3px;
+    right: -3px;
+    bottom: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--tj-kubra);
+    pointer-events: none;
+}
+
 /* Active states */
 .mega-phoneme.active {
     background: var(--ts-phoneme-color, #4361ee);

@@ -1270,6 +1270,57 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(letter.dataset.tjRules).toBe('Qalqala Sughra\nTafkheem');
     });
 
+    it('qalqala underlines the render-only Q echo phoneme, not the consonant phoneme', () => {
+        const iv: PhonemeInterval[] = [
+            { phone: 'q', start: 0, end: 0.1 }, { phone: 'Q', start: 0.1, end: 0.15 },
+        ];
+        const word = w(
+            [{ char: 'ق', start: 0, end: 0.15, silent: false }],
+            [base(0, [0], { chars: 'ق', tag: 'qalqala_sughra' })],
+            [0, 1], // both the consonant phone and its Q echo render
+        );
+        const { container } = mount([word], iv);
+        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`);
+        expect(ph(0)?.style.boxShadow ?? '').toBe('');           // consonant: no qalqala
+        expect(ph(1)!.style.boxShadow).toContain('qalqala');     // Q echo: qalqala
+        // the letter itself still carries the qalqala underline
+        const letter = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === 'ق')!;
+        expect(letter.style.boxShadow).toContain('qalqala');
+    });
+
+    it('a trailing dropped ḥaraka at a stop shows the "Waqf" tooltip, no underline', () => {
+        const iv: PhonemeInterval[] = [{ phone: 'n', start: 0, end: 0.2 }];
+        const word = w(
+            [{ char: 'ن', start: 0, end: 0.2, silent: false }],
+            [
+                base(0, [0], { chars: 'ن' }),
+                { chars: 'َ', role: 'haraka', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 0, tag: null, shareGroup: null },
+            ],
+            [0],
+        );
+        const drop = mount([word], iv).container.querySelector<HTMLElement>('.haraka-cell')!;
+        expect(drop.dataset.tjRules).toBe('Waqf');
+        expect(drop.style.boxShadow).toBe('');
+    });
+
+    it('a silent ʿiwaḍ alef after a tanwīn (waṣl) shows "Madd \'Iwad Wasl"', () => {
+        const iv: PhonemeInterval[] = [
+            { phone: 'm', start: 0, end: 0.1 }, { phone: 'a', start: 0.1, end: 0.15 }, { phone: 'n', start: 0.15, end: 0.2 },
+        ];
+        const word = w(
+            [{ char: 'م', start: 0, end: 0.1, silent: false }, { char: 'ا', start: null, end: null, silent: true }],
+            [
+                base(0, [0], { chars: 'م' }),
+                { chars: 'ً', role: 'tanween', status: 'present', phonemeIndices: [1, 2], sourceLetterIndex: 0, tag: null, shareGroup: null },
+                { chars: 'ا', role: 'base', status: 'dropped', phonemeIndices: [], sourceLetterIndex: 1, tag: 'silent_unclassified', shareGroup: null },
+            ],
+            [0, 1, 2],
+        );
+        const { container } = mount([word], iv);
+        const alef = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === 'ا')!;
+        expect(alef.dataset.tjRules).toBe("Madd 'Iwad Wasl");
+    });
+
     it('a silent-rule letter (lām shamsiyyah) shows a rule tooltip with no underline', () => {
         const iv: PhonemeInterval[] = [{ phone: 'ʃ', start: 0, end: 0.2 }];
         const word = w(

@@ -42,6 +42,7 @@
         badgesForTags,
         isBridgeTag,
         silentTooltip,
+        tjKubraColor,
         tjRuleNames,
         tjShadow,
         type TjBadge,
@@ -650,9 +651,29 @@
             const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
             return badgesForTags([c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag]);
         };
-        // A cell's silent-rule hover names (lām shamsiyyah, hamzat-waṣl, iltiqaa …) —
-        // these draw no underline, only a tooltip line.
+        // Context-derived silent-rule names (need the cell's neighbours): a trailing
+        // dropped ḥaraka/tanwīn with nothing sounding after it is the word-final
+        // vowel silenced at the stop → "Waqf"; a silent alef/maqṣūra right after a
+        // tanwīn is the otiose ʿiwaḍ alef at waṣl → "Madd 'Iwad Wasl".
+        const extraSilent = new Map<TsCell, string>();
+        {
+            let lastSounding = -1;
+            cells.forEach((c, i) => { if (c.phonemeIndices.length) lastSounding = i; });
+            cells.forEach((c, i) => {
+                if ((c.role === 'haraka' || c.role === 'tanween') && c.status === 'dropped'
+                    && c.phonemeIndices.length === 0 && i > lastSounding) {
+                    extraSilent.set(c, 'Waqf');
+                } else if (c.role === 'base' && c.phonemeIndices.length === 0
+                    && (c.chars === 'ا' || c.chars === 'ى') && cells[i - 1]?.role === 'tanween') {
+                    extraSilent.set(c, "Madd 'Iwad Wasl");
+                }
+            });
+        }
+        // A cell's silent-rule hover names (lām shamsiyyah, hamzat-waṣl, iltiqaa, the
+        // context cases above) — these draw no underline, only a tooltip line.
         const cellSilent = (c: TsCell): string[] => {
+            const extra = extraSilent.get(c);
+            if (extra) return [extra];
             const n = silentTooltip(c.tag);
             return n ? [n] : [];
         };
@@ -1229,6 +1250,18 @@
             // through its share group below.
             if (isBridgeTag(c.tag)) continue;
             const groupTag = c.shareGroup != null ? idghamGroupTags.get(c.shareGroup) : undefined;
+            // Qalqala underlines the render-only echo `Q` (the bounce), NOT the
+            // consonant phoneme — its consonant keeps only its other rules (tafkheem).
+            if (QALQALA_TAGS.has(c.tag ?? '') && c.phonemeIndices.length) {
+                const echo = Math.max(...c.phonemeIndices) + 1;
+                if (intervals[echo]?.phone === 'Q') {
+                    const qb = badgesForTags([c.tag]);
+                    if (qb.length) phonemeBadges.set(echo, qb);
+                }
+                const rest = badgesForTags([...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag]);
+                if (rest.length) for (const fi of c.phonemeIndices) phonemeBadges.set(fi, rest);
+                continue;
+            }
             const badges = badgesForTags([c.tag, ...(c.secondaryTags ?? []), izharCellTag.get(c), groupTag]);
             if (!badges.length) continue;
             const idxs = c.role === 'tanween' && c.phonemeIndices.length > 1
@@ -1956,6 +1989,9 @@
     function tjTitleFor(badges: TjBadge[], silent: string[], settings: TajweedSettings): string {
         return tjRuleNames(badges, silent, (k) => isRuleEnabled(settings, k));
     }
+    function tjKubraFor(badges: TjBadge[], settings: TajweedSettings): string {
+        return tjKubraColor(badges, (k) => isRuleEnabled(settings, k));
+    }
 
     // DEV-only highlight-transition perf A/B/C harness (remove before merge).
     // Sets `data-ts-perf` on <html>; the variants live in timestamps.css.
@@ -2038,6 +2074,8 @@
                         class:geminate={ph.interval.geminate_start}
                         data-index={ph.index}
                         style:box-shadow={tjShadowFor(ph.tjBadges, $tajweedSettings)}
+                        class:tj-kubra={!!tjKubraFor(ph.tjBadges, $tajweedSettings)}
+                        style:--tj-kubra={tjKubraFor(ph.tjBadges, $tajweedSettings)}
                         data-tj-rules={tjTitleFor(ph.tjBadges, [], $tajweedSettings) || null}
                         on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, part.wordIndex)}
                         on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, part.wordIndex)}
@@ -2120,6 +2158,8 @@
                                             data-cell-end={f.cellEnd}
                                             data-word-index={block.wordIndex}
                                             style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
+                                            class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
+                                            style:--tj-kubra={tjKubraFor(f.tjBadges, $tajweedSettings)}
                                             data-tj-rules={tjTitleFor(f.tjBadges, f.silentRules, $tajweedSettings) || null}
                                             on:click={(e) => onCellClick(e, f.cellStart)}
                                             on:dblclick|stopPropagation
@@ -2135,6 +2175,8 @@
                                             class:silent={f.silent}
                                             style="grid-column:{ci + 1}; justify-self:stretch"
                                             style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
+                                            class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
+                                            style:--tj-kubra={tjKubraFor(f.tjBadges, $tajweedSettings)}
                                             data-tj-rules={tjTitleFor(f.tjBadges, f.silentRules, $tajweedSettings) || null}
                                             on:click|stopPropagation
                                             on:mouseenter={(e) => onCellEnter(e, null, null)}
@@ -2160,6 +2202,8 @@
                                             data-word-index={block.wordIndex}
                                             data-letter-index={f.letterIndex}
                                             style:box-shadow={tjShadowFor(f.tjBadges, $tajweedSettings)}
+                                            class:tj-kubra={!!tjKubraFor(f.tjBadges, $tajweedSettings)}
+                                            style:--tj-kubra={tjKubraFor(f.tjBadges, $tajweedSettings)}
                                             data-tj-rules={tjTitleFor(f.tjBadges, f.silentRules, $tajweedSettings) || null}
                                             on:click={(e) =>
                                                 onLetterClick(e, f.letterStart ?? 0, f.letterEnd ?? 0, block.wordIndex, f.letterIndex)}
@@ -2186,6 +2230,8 @@
                                             data-word-index={block.wordIndex}
                                             data-dia-loop-idx={c.phoneIdx.length ? c.phoneIdx[0] : undefined}
                                             style:box-shadow={tjShadowFor(c.tjBadges, $tajweedSettings)}
+                                            class:tj-kubra={!!tjKubraFor(c.tjBadges, $tajweedSettings)}
+                                            style:--tj-kubra={tjKubraFor(c.tjBadges, $tajweedSettings)}
                                             data-tj-rules={tjTitleFor(c.tjBadges, c.silentRules, $tajweedSettings) || null}
                                             on:click={(e) => onDiacriticClick(e, c.cellStart, c.cellEnd, block.wordIndex, c.phoneIdx[0])}
                                             on:dblclick={(e) => onDiacriticDblClick(e, c.cellStart, c.cellEnd, block.wordIndex, c.phoneIdx[0])}
@@ -2217,6 +2263,8 @@
                                             class:geminate={ph.interval.geminate_start}
                                             data-index={ph.index}
                                             style:box-shadow={tjShadowFor(ph.tjBadges, $tajweedSettings)}
+                        class:tj-kubra={!!tjKubraFor(ph.tjBadges, $tajweedSettings)}
+                        style:--tj-kubra={tjKubraFor(ph.tjBadges, $tajweedSettings)}
                                             data-tj-rules={tjTitleFor(ph.tjBadges, [], $tajweedSettings) || null}
                                             on:click={(e) => onPhonemeClick(e, ph.interval, ph.index, block.wordIndex)}
                                             on:dblclick={(e) => onPhonemeDblClick(e, ph.interval, ph.index, block.wordIndex)}

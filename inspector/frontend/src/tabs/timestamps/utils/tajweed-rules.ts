@@ -133,27 +133,34 @@ export function silentTooltip(tag: string | null | undefined): string | null {
 
 /** Thin bar thickness (px) for a normal underline / each stacked layer. */
 const BAR_PX = 2;
-/** Qalqala-kubrā fill height (px) — flows up into the cell (≈30% of cell height)
- *  rather than a thin bar, so kubrā reads heavier than ṣughrā at a glance. */
-const KUBRA_PX = 9;
 
 /**
  * Compose the per-cell underline `box-shadow` from its badges, keeping only the
  * rules whose legend toggle is enabled. Stacked inset bottom-shadows accumulate
  * from the cell's bottom edge upward — the base rule is the lowest bar, tafkheem
- * the bar above it; a qalqala-kubrā base draws a taller fill. Empty string when no
- * enabled badge applies (clears the underline). Uses the inset-box-shadow channel
- * so the bars survive the `.active` highlight fill (background + border-color).
+ * the bar above it. A qalqala-**kubrā** bar is the SAME thickness but bleeds past
+ * the cell's side edges, so it is drawn as a `::after` (see `tjKubraColor`) and
+ * only RESERVES its height here. Empty string when no enabled badge draws an inset
+ * bar. Uses the inset-box-shadow channel so bars survive the `.active` fill.
  */
 export function tjShadow(badges: TjBadge[], isEnabled: (legendKey: string) => boolean): string {
     let offset = 0;
     const shadows: string[] = [];
     for (const b of badges) {
         if (!isEnabled(b.legendKey)) continue;
-        offset += b.kubra ? KUBRA_PX : BAR_PX;
+        offset += BAR_PX;
+        if (b.kubra) continue; // drawn by the side-bleeding ::after, not an inset bar
         shadows.push(`inset 0 -${offset}px 0 var(${b.colorVar})`);
     }
     return shadows.join(', ');
+}
+
+/** The colour of an enabled qalqala-kubrā badge on this cell (for the side-bleeding
+ *  `::after`), or '' if none — kubrā's bar is the same thickness as ṣughrā but its
+ *  edges spill past the cell sides. */
+export function tjKubraColor(badges: TjBadge[], isEnabled: (legendKey: string) => boolean): string {
+    const b = badges.find((x) => x.kubra && isEnabled(x.legendKey));
+    return b ? `var(${b.colorVar})` : '';
 }
 
 /** Tooltip rule names for a cell: the enabled coloured badges plus the always-on
