@@ -236,7 +236,7 @@
                         on:input={(e) => submitWizard.update((s) => ({ ...s, playlistUrl: (e.currentTarget as HTMLInputElement).value }))}
                     />
                     <span class="playlist-hint">
-                        For a Drive folder, make sure it is public and name the files so chapter order is unambiguous (001.mp3 ... 114.mp3).
+                        For a Drive folder, make sure it is publically accessible.
                     </span>
                 </label>
             {/if}
