@@ -703,7 +703,7 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         // on its own alef (aː), so the meem must still link to the source meem and
         // co-light via the merger union [0, 0.2], NOT grey out as a silent letter.
         const intervals: PhonemeInterval[] = [
-            { phone: 'm̃', start: 0, end: 0.2 },    // merged nasal (source meem)
+            { phone: 'm̃', start: 0, end: 0.2, bridge: 'idgham_shafawi' }, // merged nasal, lifted to the bridge
             { phone: 'a:', start: 0.2, end: 0.5 },  // the long vowel, on the alef
         ];
         const him = w(

@@ -63,8 +63,12 @@ def ts_config():
 # Bodies are pre-gzipped (`mtime=0`, deterministic). Sent without a
 # `Content-Encoding: gzip` header — the frontend decompresses with
 # `DecompressionStream('gzip')` so the same code path handles bucket + local.
-# Shards are immutable per published reciter, so they keep the long cache.
-_GZIP_HEADERS = {"Cache-Control": "public, max-age=86400"}
+# A shard mutates in place at a stable URL (re-stamp / edit) and the FE already
+# holds the active chapter in an in-memory LRU (`ts-source._shards`), so verse
+# changes never refetch — the browser HTTP cache only adds staleness with no
+# benefit for a body this small. `no-store`: never cached, always fresh on a
+# real fetch (chapter switch / reload).
+_GZIP_HEADERS = {"Cache-Control": "no-store"}
 
 # The manifest changes whenever a reciter is published/unpublished. The server
 # rebuilds it on the next request after any lifecycle transition (state.py
