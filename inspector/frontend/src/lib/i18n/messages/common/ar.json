@@ -211,5 +211,8 @@
   "common_external_links_releases_label": "الإصدارات",
   "common_external_links_dataset_label": "مجموعة البيانات",
   "common_speed_control_label": "السرعة:",
-  "common_picker_switch_reciter_title": "تغيير القارئ"
+  "common_picker_switch_reciter_title": "تغيير القارئ",
+  "common_nav_tab_dashboard": "لوحة التحكم",
+  "common_nav_tab_timestamps": "الطوابع الزمنية",
+  "common_nav_tab_segments": "التقطيعات"
 }

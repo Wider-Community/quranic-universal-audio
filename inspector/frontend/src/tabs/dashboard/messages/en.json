@@ -43,6 +43,15 @@
   "dashboard_catalog_filters_label": "Filters",
   "dashboard_catalog_clear_filter_aria_label": "Clear filter",
   "dashboard_catalog_clear_search_aria_label": "Clear search",
+  "dashboard_admin_dashboard_button": "Admin dashboard",
+  "dashboard_facet_axis_status": "Status",
+  "dashboard_facet_axis_riwayah": "Riwayah",
+  "dashboard_facet_axis_style": "Style",
+  "dashboard_facet_axis_coverage": "Mushaf coverage",
+  "dashboard_facet_axis_recording_context": "Recording context",
+  "dashboard_facet_axis_channel": "Channel",
+  "dashboard_facet_coverage_full": "Full mushaf",
+  "dashboard_facet_coverage_partial": "Partial",
   "dashboard_detail_delivery_count": [
     {
       "declarations": [

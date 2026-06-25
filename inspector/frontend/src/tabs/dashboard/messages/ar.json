@@ -47,6 +47,15 @@
   "dashboard_catalog_filters_label": "التصفية",
   "dashboard_catalog_clear_filter_aria_label": "مسح التصفية",
   "dashboard_catalog_clear_search_aria_label": "مسح البحث",
+  "dashboard_admin_dashboard_button": "لوحة تحكم الإدارة",
+  "dashboard_facet_axis_status": "الحالة",
+  "dashboard_facet_axis_riwayah": "الرواية",
+  "dashboard_facet_axis_style": "الأسلوب",
+  "dashboard_facet_axis_coverage": "تغطية المصحف",
+  "dashboard_facet_axis_recording_context": "سياق التسجيل",
+  "dashboard_facet_axis_channel": "القناة",
+  "dashboard_facet_coverage_full": "المصحف كامل",
+  "dashboard_facet_coverage_partial": "جزئي",
   "dashboard_detail_delivery_count": [
     {
       "declarations": [

@@ -4,6 +4,9 @@
     import { signIn, signOut } from './lib/api/auth-client';
     import { common_auth_sign_in_with_hf } from './lib/paraglide/messages/common_auth_sign_in_with_hf';
     import { common_auth_sign_out } from './lib/paraglide/messages/common_auth_sign_out';
+    import { common_nav_tab_dashboard } from './lib/paraglide/messages/common_nav_tab_dashboard';
+    import { common_nav_tab_segments } from './lib/paraglide/messages/common_nav_tab_segments';
+    import { common_nav_tab_timestamps } from './lib/paraglide/messages/common_nav_tab_timestamps';
     import { localeStore, tr } from './lib/i18n/locale-store';
     import BookmarksPanel from './lib/components/BookmarksPanel.svelte';
     import ClaimConfirmModal from './lib/components/ClaimConfirmModal.svelte';
@@ -55,6 +58,9 @@
     // re-evaluates when the locale switches in-place.
     $: signInLabel = tr($localeStore, common_auth_sign_in_with_hf());
     $: signOutLabel = tr($localeStore, common_auth_sign_out());
+    $: dashboardTabLabel = tr($localeStore, common_nav_tab_dashboard());
+    $: timestampsTabLabel = tr($localeStore, common_nav_tab_timestamps());
+    $: segmentsTabLabel = tr($localeStore, common_nav_tab_segments());
 
     function applyTabSideEffects(tab: string): void {
         if (!tab) return;
@@ -126,9 +132,9 @@
     <header>
         <ExternalLinks />
         <div class="tab-bar">
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => setActiveTab(TAB_NAMES.DASHBOARD)}>Dashboard</button>
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => setActiveTab(TAB_NAMES.TIMESTAMPS)}>Timestamps</button>
-            <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => setActiveTab(TAB_NAMES.SEGMENTS)}>Segments</button>
+            <button class="tab-btn" class:active={activeTab === TAB_NAMES.DASHBOARD} data-tab={TAB_NAMES.DASHBOARD} on:click={() => setActiveTab(TAB_NAMES.DASHBOARD)}>{dashboardTabLabel}</button>
+            <button class="tab-btn" class:active={activeTab === TAB_NAMES.TIMESTAMPS} data-tab={TAB_NAMES.TIMESTAMPS} on:click={() => setActiveTab(TAB_NAMES.TIMESTAMPS)}>{timestampsTabLabel}</button>
+            <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => setActiveTab(TAB_NAMES.SEGMENTS)}>{segmentsTabLabel}</button>
         </div>
         <div class="auth-controls">
             <LocaleSwitcher />

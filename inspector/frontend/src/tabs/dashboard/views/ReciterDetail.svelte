@@ -291,6 +291,7 @@
 
     // Locale-reactive chrome strings (legacy Svelte-4 `$:` idiom).
     $: lang = $localeStore;
+    $: loadingLabel = tr(lang, m.common_state_loading());
     $: regionAriaLabel = tr(lang, m.dashboard_detail_region_aria_label());
     $: notFoundLabel = tr(lang, m.dashboard_detail_not_found());
     $: retryLabel = tr(lang, m.common_action_retry());
@@ -315,7 +316,7 @@
 <Modal {open} title={null} on:close={closeDetail}>
     <div class="detail" role="region" aria-label={regionAriaLabel}>
         {#if loading}
-            <div class="state">Loading…</div>
+            <div class="state">{loadingLabel}</div>
         {:else if notFound}
             <div class="state">
                 <p>{notFoundLabel}</p>

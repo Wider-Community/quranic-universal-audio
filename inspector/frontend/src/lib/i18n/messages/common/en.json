@@ -195,5 +195,8 @@
   "common_external_links_releases_label": "Releases",
   "common_external_links_dataset_label": "Dataset",
   "common_speed_control_label": "Speed:",
-  "common_picker_switch_reciter_title": "Switch reciter"
+  "common_picker_switch_reciter_title": "Switch reciter",
+  "common_nav_tab_dashboard": "Dashboard",
+  "common_nav_tab_timestamps": "Timestamps",
+  "common_nav_tab_segments": "Segments"
 }
