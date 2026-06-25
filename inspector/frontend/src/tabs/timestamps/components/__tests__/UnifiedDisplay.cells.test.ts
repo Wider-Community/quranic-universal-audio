@@ -1129,6 +1129,55 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(ph(2).dataset.tj).toBe('1');
         expect(ph(2).style.getPropertyValue('--tj-badge')).toContain('ikhfaa');
     });
+
+    it('muqattaat with NO base cell (كٓهيعٓصٓ-style) renders carrier underlines + per-cell phonemes', () => {
+        // Muqattaat not led by alif (كٓهيعٓصٓ, عٓسٓقٓ, صٓ, قٓ …) have ZERO base cells —
+        // every letter is a `madd` carrier. They must still render through the main
+        // per-cell path (carrier glyph + madd underline + phonemes under their own
+        // cell), NOT the synthetic fallback that drops real carriers. Regression for
+        // the all-`madd` anchor case (alif-led الٓمٓ has a base, so it never hit this).
+        const intervals: PhonemeInterval[] = [
+            { phone: 'k', start: 0, end: 0.1 },
+            { phone: 'a:', start: 0.1, end: 0.6 },   // kāf long vowel → madd_lazim
+            { phone: 'f', start: 0.6, end: 0.7 },
+            { phone: 'ʕ', start: 0.7, end: 0.8 },
+            { phone: 'a', start: 0.8, end: 0.85 },
+            { phone: 'j', start: 0.85, end: 1.2 },    // ʿayn leen-glide → madd_lazim
+            { phone: 'ŋ', start: 1.2, end: 1.5 },     // ʿayn ikhfaa nasal → ikhfaa_noon
+        ];
+        const word = w(
+            [{ char: 'ك', start: 0, end: 0.7, silent: false }, { char: 'ع', start: 0.7, end: 1.5, silent: false }],
+            [
+                {
+                    chars: 'كٓ', role: 'madd', status: 'present', phonemeIndices: [0, 1, 2],
+                    sourceLetterIndex: 0, tag: 'madd_lazim', shareGroup: null,
+                    phonemeRuleTags: [null, 'madd_lazim', null],
+                },
+                {
+                    chars: 'عٓ', role: 'madd', status: 'present', phonemeIndices: [3, 4, 5, 6],
+                    sourceLetterIndex: 1, tag: 'madd_lazim', shareGroup: null,
+                    phonemeRuleTags: [null, null, 'madd_lazim', 'ikhfaa_noon'],
+                },
+            ],
+            [0, 1, 2, 3, 4, 5, 6],
+        );
+        const { container } = mount([word], intervals);
+        const letter = (ch: string) =>
+            Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((e) => e.textContent === ch)!;
+        // Both carriers render with their madd-lazim underline (NOT dropped to a tag-less fallback).
+        expect(letter('كٓ').dataset.tj).toBe('1');
+        expect(letter('كٓ').style.getPropertyValue('--tj-badge')).toContain('madd-lazim');
+        expect(letter('عٓ').dataset.tj).toBe('1');
+        expect(letter('عٓ').style.getPropertyValue('--tj-badge')).toContain('madd-lazim');
+        // Per-phoneme: kāf aː + ʿayn leen-glide j = madd-lazim; ŋ = ikhfaa; consonants uncoloured.
+        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`)!;
+        expect(ph(0).dataset.tj).toBeUndefined(); // k
+        expect(ph(1).style.getPropertyValue('--tj-badge')).toContain('madd-lazim'); // aː
+        expect(ph(2).dataset.tj).toBeUndefined(); // f
+        expect(ph(3).dataset.tj).toBeUndefined(); // ʕ
+        expect(ph(5).style.getPropertyValue('--tj-badge')).toContain('madd-lazim'); // j leen-glide
+        expect(ph(6).style.getPropertyValue('--tj-badge')).toContain('ikhfaa'); // ŋ
+    });
 });
 
 /**

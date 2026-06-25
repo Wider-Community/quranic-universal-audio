@@ -529,7 +529,15 @@
         const cells = (word.cells ?? []).filter(
             (c) => !(liftIltiqaa && c.tag === 'iltiqaa_kasra'),
         );
-        const hasBase = cells.some((c) => c.role === 'base');
+        // A renderable anchor is a base cell OR a real madd carrier (chars != '').
+        // Muqattaat whose letters are all spelled-out names (كٓهيعٓصٓ, عٓسٓقٓ, صٓ, قٓ …)
+        // carry no base cell but ARE full graphemes — they render through the main
+        // per-cell loop (carriers via pushFullGrapheme → madd underline + columns),
+        // exactly like alif-led muqattaat (الٓمٓ). Only a truly anchor-less word
+        // (diacritic-only fixtures) drops to the synthetic fallback below.
+        const hasAnchor = cells.some(
+            (c) => c.role === 'base' || (c.role === 'madd' && c.chars !== ''),
+        );
         const groups: RenderedGroup[] = [];
 
         // Share-groups that contain a madd carrier = long-vowel units (the haraka
@@ -733,7 +741,7 @@
             noteShare(g, c);
         };
 
-        if (hasBase) {
+        if (hasAnchor) {
             let curBase: RenderedGroup | null = null;
             const vowelGroups = new Map<number, RenderedGroup>();
             const vowelGroupFor = (sg: number): RenderedGroup => {
@@ -804,8 +812,9 @@
             return groups;
         }
 
-        // --- Synthetic-base fallback: no base cells (test fixtures). One group
-        //     per folded letter, with the word's diacritic cells attached. ---
+        // --- Synthetic-base fallback: no base AND no real carrier cells
+        //     (diacritic-only fixtures). One group per folded letter, with the
+        //     word's diacritic cells attached. ---
         const groupByFold: RenderedGroup[] = folded.map((fl, i) => {
             const g = newGroup('base');
             g.full.push({
