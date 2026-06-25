@@ -1563,6 +1563,31 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(ph(2).style.boxShadow).toContain('ikhfaa');  // ikhfaa coloured
     });
 
+    it('muqattaat qalqala on a consonant rides its render-only Q echo, not the consonant', () => {
+        const iv: PhonemeInterval[] = [
+            { phone: 'd', start: 0, end: 0.1 }, { phone: 'Q', start: 0.1, end: 0.15 },
+        ];
+        const word = w(
+            [{ char: 'دٓ', start: 0, end: 0.15, silent: false }],
+            [
+                base(0, [], { chars: 'د', status: 'dropped' }),
+                {
+                    chars: 'دٓ', role: 'madd', status: 'present', phonemeIndices: [0],
+                    sourceLetterIndex: 0, tag: 'madd_lazim', shareGroup: null,
+                    phonemeRuleTags: ['qalqala_kubra'],
+                },
+            ],
+            [0, 1], // the consonant + its render-only Q echo
+        );
+        const { container } = mount([word], iv);
+        const ph = (i: number) => container.querySelector<HTMLElement>(`.mega-phoneme[data-index="${i}"]`);
+        // qalqala kubrā renders as the side-wrap ::after (the --tj-kubra var + class),
+        // not a box-shadow bar
+        expect(ph(0)!.classList.contains('tj-kubra')).toBe(false);            // consonant bare
+        expect(ph(1)!.classList.contains('tj-kubra')).toBe(true);            // Q echo carries the bracket
+        expect(ph(1)!.style.getPropertyValue('--tj-kubra')).toContain('qalqala');
+    });
+
     it('muqattaat with NO base cell (كٓهيعٓصٓ-style) renders carrier underlines + per-cell phonemes', () => {
         // Muqattaat not led by alif (كٓهيعٓصٓ, عٓسٓقٓ, صٓ, قٓ …) have ZERO base cells —
         // every letter is a `madd` carrier. They must still render through the main

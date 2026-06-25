@@ -1239,7 +1239,16 @@
         for (const c of allCells) {
             if (c.phonemeRuleTags) {
                 c.phonemeIndices.forEach((fi, i) => {
-                    const b = badgesForTags([c.phonemeRuleTags![i]]);
+                    const t = c.phonemeRuleTags![i];
+                    // Qalqala on a muqattaat consonant rides its render-only Q echo
+                    // (fi+1) — the echo has no shard slot, so the tag travels on the
+                    // consonant and the renderer moves it here (regular-path parity).
+                    if (QALQALA_TAGS.has(t ?? '') && intervals[fi + 1]?.phone === 'Q') {
+                        const qb = badgesForTags([t]);
+                        if (qb.length) phonemeBadges.set(fi + 1, qb);
+                        return;
+                    }
+                    const b = badgesForTags([t]);
                     if (b.length) phonemeBadges.set(fi, b);
                 });
                 continue;
