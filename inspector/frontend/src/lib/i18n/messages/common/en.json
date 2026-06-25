@@ -1,0 +1,19 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "common_action_save": "Save",
+  "common_action_cancel": "Cancel",
+  "common_auth_sign_in": "Sign in",
+  "common_auth_sign_out": "Sign out",
+  "common_auth_sign_in_with_hf": "Sign in with HF",
+  "common_auth_continue_with_hf": "Continue with Hugging Face",
+  "common_signin_edit_title": "Sign in to edit",
+  "common_signin_edit_body": "Editing segments requires a Hugging Face account. Sign in to claim this reciter and start contributing.",
+  "common_signin_claim_title": "Sign in to claim",
+  "common_signin_claim_body": "Claiming a reciter requires a Hugging Face account. Sign in to start contributing.",
+  "common_signin_request_title": "Sign in to request",
+  "common_signin_request_body": "Submitting a recitation request requires a Hugging Face account.",
+  "common_signin_save_title": "Session expired",
+  "common_signin_save_body": "Your session expired before changes could be saved. Sign in again to continue.",
+  "common_signin_claim_expired_title": "Sign in to continue",
+  "common_signin_claim_expired_body": "Your session expired. Sign in again to continue claiming reciters."
+}

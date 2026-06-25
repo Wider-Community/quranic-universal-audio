@@ -1,0 +1,19 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "common_action_save": "حفظ",
+  "common_action_cancel": "إلغاء",
+  "common_auth_sign_in": "تسجيل الدخول",
+  "common_auth_sign_out": "تسجيل الخروج",
+  "common_auth_sign_in_with_hf": "تسجيل الدخول عبر Hugging Face",
+  "common_auth_continue_with_hf": "المتابعة عبر Hugging Face",
+  "common_signin_edit_title": "سجّل الدخول للتعديل",
+  "common_signin_edit_body": "يتطلب تعديل المقاطع حساباً على Hugging Face. سجّل الدخول للمطالبة بهذا القارئ والبدء في المساهمة.",
+  "common_signin_claim_title": "سجّل الدخول للمطالبة",
+  "common_signin_claim_body": "تتطلب المطالبة بقارئ حساباً على Hugging Face. سجّل الدخول للبدء في المساهمة.",
+  "common_signin_request_title": "سجّل الدخول لتقديم طلب",
+  "common_signin_request_body": "يتطلب تقديم طلب تلاوة حساباً على Hugging Face.",
+  "common_signin_save_title": "انتهت الجلسة",
+  "common_signin_save_body": "انتهت جلستك قبل حفظ التغييرات. سجّل الدخول مرة أخرى للمتابعة.",
+  "common_signin_claim_expired_title": "سجّل الدخول للمتابعة",
+  "common_signin_claim_expired_body": "انتهت جلستك. سجّل الدخول مرة أخرى لمتابعة المطالبة بالقرّاء."
+}

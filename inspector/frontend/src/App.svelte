@@ -2,12 +2,16 @@
     import { onMount } from 'svelte';
 
     import { signIn, signOut } from './lib/api/auth-client';
+    import { common_auth_sign_in_with_hf } from './lib/paraglide/messages/common_auth_sign_in_with_hf';
+    import { common_auth_sign_out } from './lib/paraglide/messages/common_auth_sign_out';
+    import { localeStore, tr } from './lib/i18n/locale-store';
     import BookmarksPanel from './lib/components/BookmarksPanel.svelte';
     import ClaimConfirmModal from './lib/components/ClaimConfirmModal.svelte';
     import DevRoleSwitcher from './lib/components/DevRoleSwitcher.svelte';
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
     import ExternalLinks from './lib/components/ExternalLinks.svelte';
     import InfoModal from './lib/components/info/InfoModal.svelte';
+    import LocaleSwitcher from './lib/components/LocaleSwitcher.svelte';
     import BottomPlayer from './lib/components/player/BottomPlayer.svelte';
     import NowReciting from './lib/components/player/NowReciting.svelte';
     import PlayerMetaChip from './lib/components/player/PlayerMetaChip.svelte';
@@ -44,6 +48,13 @@
     // button or external setActiveTab. Persist the choice and pause the ports
     // of the tabs being left (pause is a no-op when nothing's playing).
     $: applyTabSideEffects(activeTab);
+
+    // Localized auth labels. Gating the message reads on `$localeStore` is the
+    // legacy Svelte-4 reactivity idiom (mirrors `$: activeTab = $activeTabStore`
+    // above): `tr` makes the statement depend on the store so the copy
+    // re-evaluates when the locale switches in-place.
+    $: signInLabel = tr($localeStore, common_auth_sign_in_with_hf());
+    $: signOutLabel = tr($localeStore, common_auth_sign_out());
 
     function applyTabSideEffects(tab: string): void {
         if (!tab) return;
@@ -120,6 +131,7 @@
             <button class="tab-btn" class:active={activeTab === TAB_NAMES.SEGMENTS} data-tab={TAB_NAMES.SEGMENTS} on:click={() => setActiveTab(TAB_NAMES.SEGMENTS)}>Segments</button>
         </div>
         <div class="auth-controls">
+            <LocaleSwitcher />
             {#if $currentUser.dev_mode}
                 <!-- Local dev only — never rendered on the deployed Space. -->
                 <DevRoleSwitcher />
@@ -130,10 +142,10 @@
                         <span class="auth-role">·{$currentUser.role}</span>
                     {/if}
                 </span>
-                <button type="button" class="auth-btn" on:click={_onSignOut}>Sign out</button>
+                <button type="button" class="auth-btn" on:click={_onSignOut}>{signOutLabel}</button>
             {:else}
                 <button type="button" class="auth-btn auth-btn--cta" on:click={_onSignIn}>
-                    Sign in with HF
+                    {signInLabel}
                 </button>
             {/if}
         </div>

@@ -16,6 +16,8 @@ export default [
             // "unused", which then made `schema-codegen-check` fail on every
             // push that ran autofix. Treat the dir as off-limits to ESLint.
             'src/lib/types/generated/**',
+            // Paraglide JS codegen output — regenerated on every build/dev.
+            'src/lib/paraglide/**',
         ],
     },
     js.configs.recommended,

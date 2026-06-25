@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
 
@@ -22,7 +23,24 @@ const BACKEND_TARGET = `http://${BACKEND_HOST}:${BACKEND_PORT}`;
 export default defineConfig(({ mode }) => ({
   root: here,
   publicDir: 'public',
-  plugins: [svelte()],
+  resolve: {
+    alias: {
+      $lib: resolve(here, 'src/lib'),
+    },
+  },
+  plugins: [
+    paraglideVitePlugin({
+      project: './project.inlang',
+      outdir: './src/lib/paraglide',
+      strategy: ['localStorage', 'preferredLanguage', 'baseLocale'],
+      localStorageKey: 'insp_locale',
+      outputStructure: 'message-modules',
+      // Emit .d.ts companions so the pre-`tsc`/`svelte-check` step (and the
+      // strict `allowJs: false` tsconfig) can type the generated `.js` modules.
+      emitTsDeclarations: true,
+    }),
+    svelte(),
+  ],
   build: {
     outDir: 'dist',
     emptyOutDir: true,

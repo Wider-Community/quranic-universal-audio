@@ -23,7 +23,13 @@ import './styles/combination-picker.css';
 import { mount } from 'svelte';
 
 import App from './App.svelte';
+import { initLocale } from './lib/i18n/locale.svelte';
 import { installAudioWarmup } from './lib/utils/audio-warmup';
+
+// Sync <html dir/lang> with the locale Paraglide resolved (localStorage →
+// preferredLanguage → baseLocale) before the first paint, so an Arabic visitor
+// gets RTL immediately. index.html ships lang="en"; the rune corrects it here.
+initLocale();
 
 // Hook the first user gesture to warm the browser's audio decoder + output
 // device, so the first chapter Play click doesn't pay that cold cost.

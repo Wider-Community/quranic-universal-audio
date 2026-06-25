@@ -112,6 +112,7 @@ Deep, agent-facing reference docs live in `docs/reference/` (flat). **Read the o
 | [`segments-editor.md`](docs/reference/segments-editor.md) | command grammar, normalized state, identity, save flow, edit_history, undo |
 | [`validation.md`](docs/reference/validation.md) | validation engine, categories, persisted classifier fields, bench/drift harness |
 | [`frontend.md`](docs/reference/frontend.md) | Svelte 5 SPA — dashboard/timestamps/segments tabs, lib, stores, charts |
+| [`i18n.md`](docs/reference/i18n.md) | frontend i18n (Paraglide JS 2.x) — split-by-area message files + flat prefixed keys, compile/build-order wiring, locale rune + dir/lang plumbing, generated-output exclusions, do/don't-translate boundary, verification; strings-only now, RTL flip is a later workflow |
 | [`keyboard-shortcuts.md`](docs/reference/keyboard-shortcuts.md) | Segments user-editable, context-scoped keyboard shortcuts — catalogue, binding store, dispatcher, active-row registry, accordion nav/auto-scroll, footer rebind popover |
 | [`accordion-guides.md`](docs/reference/accordion-guides.md) | validation accordion help-modal guide templates |
 | [`dataset-and-releases.md`](docs/reference/dataset-and-releases.md) | dataset releasing — bucket-as-canonical + 3 adapter formats (HF, GH release tiers, future API), `releases` table, publish state model, schema |
