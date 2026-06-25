@@ -6,6 +6,7 @@
     import ClaimConfirmModal from './lib/components/ClaimConfirmModal.svelte';
     import DevRoleSwitcher from './lib/components/DevRoleSwitcher.svelte';
     import EditAffordancePopover from './lib/components/EditAffordancePopover.svelte';
+    import AccentLab from './lib/devtools/AccentLab.svelte';
     import ExternalLinks from './lib/components/ExternalLinks.svelte';
     import InfoModal from './lib/components/info/InfoModal.svelte';
     import BottomPlayer from './lib/components/player/BottomPlayer.svelte';
@@ -26,6 +27,12 @@
     import TimestampsFooterFlags from './tabs/timestamps/components/TimestampsFooterFlags.svelte';
     import TimestampsFooterLeft from './tabs/timestamps/components/TimestampsFooterLeft.svelte';
     import TimestampsTab from './tabs/timestamps/TimestampsTab.svelte';
+
+    // Dev-only Accent Lab playground: live in `npm run dev`, or via `?accent-lab=1`
+    // on a dev Space. `import.meta.env.DEV` is statically false in production
+    // builds, so the panel + its code tree-shake out of the shipped bundle.
+    const devLab = import.meta.env.DEV
+        || (typeof location !== 'undefined' && new URLSearchParams(location.search).has('accent-lab'));
 
     // `activeTab` follows the shared store so external navigation (e.g. the
     // Bookmarks sidebar calling setActiveTab) switches tabs here too.
@@ -211,6 +218,11 @@
 
 <!-- Quran.Foundation bookmarks sidebar. -->
 <BookmarksPanel />
+
+<!-- Dev-only accent playground (tree-shaken from production builds). -->
+{#if devLab}
+    <AccentLab />
+{/if}
 
 <style>
     header {

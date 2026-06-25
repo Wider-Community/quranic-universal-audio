@@ -438,7 +438,7 @@
                 >{ch.text}</span>{/each}{:else}{w.clean}{/if}{#each w.trailing as d, di (di)}<span
                     class="ra-decorator ra-decorator--{d.role}"
                     aria-hidden="true"
-                >{ZWSP}{d.glyph}</span>{/each}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker">{AYAH_END}{toArabicNumeral(u.ayah)}</span>{/if}
+                >{ZWSP}{d.glyph}</span>{/each}</span>{#if config.showAyahMarker && u && ayahRanges.get(u.ayahKey)?.[1] === pageStart + i + 1}{' '}<span class="ra-ayah-marker"><span class="ay-glyph">{AYAH_END}</span><span class="ay-num">{toArabicNumeral(u.ayah)}</span></span>{/if}
     {/each}
 </div>
 
