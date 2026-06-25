@@ -40,6 +40,7 @@
     } from '../utils/tajweed-script';
     import { isBridgeTag, tajweedColorVar } from '../utils/tajweed-colors';
     import {
+        applyHamzaWaslMadd,
         iqlabNoonMiniMeem,
         iqlabNoonSilentBase,
         shedSilahMaddah,
@@ -607,9 +608,11 @@
     ): RenderedGroup[] {
         const { folded, srcToFold } = foldedLettersFor(word);
         // The iltiqaa-kasra cell is lifted into a cross-word bridge — drop it from
-        // the word's own letter row so it renders only between the two words.
-        const cells = (word.cells ?? []).filter(
-            (c) => !(liftIltiqaa && c.tag === 'iltiqaa_kasra'),
+        // the word's own letter row so it renders only between the two words. The
+        // hamza-waṣl ibtidaa madd (ٱئْتُونِى) re-pairs its kasra + dropped seat into a
+        // shared vowel group — see cell-special-cases (no-op for other words).
+        const cells = applyHamzaWaslMadd(
+            (word.cells ?? []).filter((c) => !(liftIltiqaa && c.tag === 'iltiqaa_kasra')),
         );
         // A renderable anchor is a base cell OR a real madd carrier (chars != '').
         // Muqattaat whose letters are all spelled-out names (كٓهيعٓصٓ, عٓسٓقٓ, صٓ, قٓ …)

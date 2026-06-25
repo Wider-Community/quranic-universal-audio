@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TsCell } from '../../../../lib/types/ts-client';
 import {
+    applyHamzaWaslMadd,
     iqlabNoonMiniMeem,
     iqlabNoonSilentBase,
     shedSilahMaddah,
@@ -62,5 +63,37 @@ describe('cell-special-cases — silah madd', () => {
     it('relocates the maddah glyph off the base onto the carrier', () => {
         expect(shedSilahMaddah('ه' + MADDAH)).toBe('ه');
         expect(wearSilahMaddah('ۥ')).toBe('ۥ' + MADDAH);
+    });
+});
+
+describe('cell-special-cases — hamza-waṣl ibtidaa madd', () => {
+    it('re-pairs the synthetic kasra + dropped ئ seat into one shared madd group', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'ٱ', phonemeIndices: [0], sourceLetterIndex: 0 }),
+            cell({ chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [1], tag: 'hamza_wasl_vowel', sourceLetterIndex: 0 }),
+            cell({ chars: 'ئ', role: 'base', status: 'dropped', phonemeIndices: [], tag: 'silent_unclassified', sourceLetterIndex: 1 }),
+            cell({ chars: 'ت', phonemeIndices: [2], sourceLetterIndex: 2 }),
+        ];
+        const out = applyHamzaWaslMadd(cells);
+        // the synthetic kasra + the ئ seat now share a fresh group
+        expect(out[1]!.shareGroup).not.toBeNull();
+        expect(out[2]!.shareGroup).toBe(out[1]!.shareGroup);
+        // the seat is re-cast as a co-lit madd carrier sounding the kasra's iː (no new phone)
+        expect(out[2]!.role).toBe('madd');
+        expect(out[2]!.status).toBe('present');
+        expect(out[2]!.phonemeIndices).toEqual([1]);
+        expect(out[2]!.tag).toBe('madd_tabii');
+        // ٱ and ت are untouched
+        expect(out[0]).toEqual(cells[0]);
+        expect(out[3]).toEqual(cells[3]);
+    });
+
+    it('is a no-op for a normal hamza-waṣl (next base sounds, not a dropped seat)', () => {
+        const cells: TsCell[] = [
+            cell({ chars: 'ٱ', phonemeIndices: [0], sourceLetterIndex: 0 }),
+            cell({ chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [1], tag: 'hamza_wasl_vowel', sourceLetterIndex: 0 }),
+            cell({ chars: 'ق', role: 'base', phonemeIndices: [2], sourceLetterIndex: 1 }),
+        ];
+        expect(applyHamzaWaslMadd(cells)).toBe(cells); // same reference — untouched
     });
 });

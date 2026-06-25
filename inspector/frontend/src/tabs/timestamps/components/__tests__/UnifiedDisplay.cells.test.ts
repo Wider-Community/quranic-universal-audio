@@ -444,6 +444,46 @@ describe('UnifiedDisplay — diacritic cells (cell-group model)', () => {
         expect(letters).toContain('ۥ' + MADDAH);
     });
 
+    it('hamza-waṣl ibtidaa madd (ٱئْتُونِى started-on): kasra + ئ are one co-lit vowel group', () => {
+        // ٱ sounds ʔ; the synthetic helping kasra (iː) + the dropped ئ seat form ONE
+        // shared [kasra, carrier] vowel group — the ئ co-lights the iː (not greyed),
+        // mirroring the final ـِى. (Start form; cells as the phonemizer stamps them.)
+        const intervals: PhonemeInterval[] = [
+            { phone: 'ʔ', start: 0, end: 0.1 },
+            { phone: 'i:', start: 0.1, end: 0.4 },
+            { phone: 't', start: 0.4, end: 0.5 },
+        ];
+        const word = w(
+            [
+                { char: 'ٱ', start: 0, end: 0.1, silent: false },
+                { char: 'ئ', start: 0.1, end: 0.4, silent: false },
+                { char: 'ت', start: 0.4, end: 0.5, silent: false },
+            ],
+            [
+                base(0, [0], { chars: 'ٱ' }),
+                { chars: '', role: 'haraka', status: 'inserted', phonemeIndices: [1], sourceLetterIndex: 0, tag: 'hamza_wasl_vowel', shareGroup: null },
+                base(1, [], { chars: 'ئ', status: 'dropped', tag: 'silent_unclassified' }),
+                { chars: 'ْ', role: 'haraka', status: 'present', phonemeIndices: [], sourceLetterIndex: 1, tag: null, shareGroup: null },
+                base(2, [2], { chars: 'ت' }),
+            ],
+            [0, 1, 2],
+        );
+        const { container } = mount([word], intervals);
+        // the kasra + ئ form a vowel group; the ئ carrier co-lights (not greyed silent).
+        const vowel = Array.from(container.querySelectorAll<HTMLElement>('.cell-group'))
+            .find((g) => g.classList.contains('vowel') && g.querySelector('.mega-letter')?.textContent === 'ئ')!;
+        expect(vowel).toBeTruthy();
+        const carrier = vowel.querySelector<HTMLElement>('.mega-letter')!;
+        expect(carrier.classList.contains('silent')).toBe(false);
+        expect(carrier.dataset.cellTimed).toBe('1');
+        // the synthetic helping vowel renders as an inserted small KASRA in that group.
+        const small = vowel.querySelector<HTMLElement>('.haraka-cell.dia-inserted .g')!;
+        expect(small.textContent).toBe('ِ');
+        // ٱ stays its own base sounding ʔ — separate from the [kasra, ئ] unit.
+        const alif = Array.from(container.querySelectorAll<HTMLElement>('.mega-letter')).find((l) => l.textContent === 'ٱ')!;
+        expect(alif.dataset.cellTimed).toBe('1');
+    });
+
     it('groups a long vowel as [diacritic, carrier] with its base SEPARATED', () => {
         // مِي → base م in its OWN group; the kasra + ي carrier form a `vowel` group.
         const intervals: PhonemeInterval[] = [

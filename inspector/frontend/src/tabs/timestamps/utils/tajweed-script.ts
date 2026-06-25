@@ -76,8 +76,10 @@ export function cellGlyph(chars: string, tag: string | null, phone: string | und
     if (tag === 'allah_dagger_alef') return DAGGER;
     if (tag === 'madd_iwad') return ALEF; // the added alef (full cell)
     if (tag === 'iltiqaa_kasra' || tag === 'iltiqaa') return KASRA;
-    // hamza-waṣl connecting vowel: pick the haraka by the sounded vowel.
-    return phone === 'i' ? KASRA : phone === 'u' ? DAMMA : FATHA;
+    // hamza-waṣl connecting vowel: pick the haraka by the sounded vowel. Match the
+    // BASE vowel (first char) so the long ibtidaa form (i:/u:, ٱئْتُونِى) maps too.
+    const v = phone?.[0];
+    return v === 'i' ? KASRA : v === 'u' ? DAMMA : FATHA;
 }
 
 /** The FULL-cell glyph for an implicit madd (chars==='') — dagger / alef. */
